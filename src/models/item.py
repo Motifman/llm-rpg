@@ -1,11 +1,14 @@
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
 class Item:
-    def __init__(self, item_id: str, name: str, description: str):
-        self.item_id = item_id
-        self.name = name
-        self.description = description
+    """アイテム"""
+    item_id: str
+    description: str
 
     def __str__(self):
-        return f"{self.name} - {self.description}"
+        return f"{self.item_id} - {self.description}"
     
     def __repr__(self):
-        return f"Item(item_id={self.item_id}, name={self.name}, description={self.description})"
+        return f"Item(item_id={self.item_id}, description={self.description})"
