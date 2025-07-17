@@ -1,6 +1,6 @@
 from typing import Dict, List
-from ai_rpg_world.src.models.spot import Spot
-from ai_rpg_world.src.models.agent import Agent
+from ..models.spot import Spot
+from ..models.agent import Agent
 
 
 class World:

@@ -49,7 +49,7 @@ ai_rpg_world/
 ### 1. Spotクラスの機能テスト
 
 ```bash
-python -m ai_rpg_world.tests.test_spot
+python -m tests.test_spot
 ```
 
 **内容**: 
@@ -60,7 +60,7 @@ python -m ai_rpg_world.tests.test_spot
 ### 2. Worldクラスのインタラクティブテスト
 
 ```bash
-python -m ai_rpg_world.tests.test_world
+python -m tests.test_world
 ```
 
 **内容**:
@@ -71,7 +71,7 @@ python -m ai_rpg_world.tests.test_world
 ### 3. Worldクラスの自動デモテスト
 
 ```bash
-python -m ai_rpg_world.tests.test_world_demo
+python -m tests.test_world_demo
 ```
 
 **内容**:
@@ -84,9 +84,9 @@ python -m ai_rpg_world.tests.test_world_demo
 ### 基本的な使用方法
 
 ```python
-from ai_rpg_world.src.models.spot import Spot
-from ai_rpg_world.src.models.agent import Agent
-from ai_rpg_world.src.systems.world import World
+from src.models.spot import Spot
+from src.models.agent import Agent
+from src.systems.world import World
 
 # ワールドを作成
 world = World()
