@@ -109,8 +109,26 @@ class Spot:
         self.available_movements.append(movement)
 
     def get_available_movements(self) -> List[Movement]:
-        """可能な移動行動を全て取得"""
-        return self.available_movements
+        """可能な移動行動を全て取得（手動追加 + 階層移動）"""
+        movements = self.available_movements.copy()
+        
+        # 親スポットに戻る移動を追加
+        if self.exit_to_parent:
+            movements.append(Movement(
+                description="外に出る",
+                direction="外に出る",
+                target_spot_id=self.exit_to_parent
+            ))
+        
+        # 子スポットへの入口移動を追加
+        for entrance_name, target_spot_id in self.entry_points.items():
+            movements.append(Movement(
+                description=f"{entrance_name}に入る",
+                direction=f"{entrance_name}に入る",
+                target_spot_id=target_spot_id
+            ))
+        
+        return movements
     
     def add_exploration(self, exploration: Exploration):
         """可能な探索行動を追加"""
