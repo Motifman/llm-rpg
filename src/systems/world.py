@@ -1,6 +1,7 @@
 from typing import Dict, List
 from ..models.spot import Spot
 from ..models.agent import Agent
+from ..models.action import Movement, Exploration, Action
 
 
 class World:
@@ -37,20 +38,42 @@ class World:
         """すべてのエージェントを取得"""
         return list(self.agents.values())
 
-    def execute_agent_movement(self, agent_id: str, action: str) -> bool:
+    def execute_agent_movement(self, agent_id: str, movement: Movement):
         """
-        エージェントの現在の位置を指定されたアクションで移動
-        移動の成否を返す
+        移動行動を実行し、エージェントの現在の位置を更新
         """
         agent = self.get_agent(agent_id)
-        current_spot_id = agent.get_current_spot_id()
-        current_spot = self.get_spot(current_spot_id)
-        
-        # 階層的移動システムを使用
-        available_movements = current_spot.get_available_movements()
-        if action not in available_movements:
-            return False
-        
-        new_spot_id = available_movements[action]
-        agent.set_current_spot_id(new_spot_id)
-        return True
+        agent.set_current_spot_id(movement.target_spot_id)
+    
+    def execute_agent_exploration(self, agent_id: str, exploration: Exploration):
+        """
+        探索行動を実行し、探索の結果をエージェントの状態に反映
+        - アイテムを取得する場合はエージェントのアイテムリストに追加
+        - 探索情報を取得する場合はエージェントの探索情報リストに追加
+        - 経験値を取得する場合はエージェントの経験値を更新
+        - お金を取得する場合はエージェントの所持金を更新
+        """
+        agent = self.get_agent(agent_id)
+        if exploration.item_id:
+            spot = self.get_spot(agent.get_current_spot_id())
+            item = spot.get_item_by_id(exploration.item_id)
+            if item:
+                spot.remove_item(item)
+                agent.add_item(item)
+        if exploration.discovered_info:
+            agent.add_discovered_info(exploration.discovered_info)
+        if exploration.experience_points:
+            agent.add_experience_points(exploration.experience_points)
+        if exploration.money:
+            agent.add_money(exploration.money)
+            
+    def execute_action(self, agent_id: str, action: Action):
+        """
+        行動を実行し、行動の結果をAgentの状態, Spotの状態に反映
+        """
+        if isinstance(action, Movement):
+            self.execute_agent_movement(agent_id, action)
+        elif isinstance(action, Exploration):
+            self.execute_agent_exploration(agent_id, action)
+        else:
+            raise ValueError(f"不明な行動: {action}")
