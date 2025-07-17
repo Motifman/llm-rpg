@@ -96,10 +96,13 @@ class Spot:
     def get_items(self) -> List[Item]:
         """アイテムリストを取得"""
         return self.items
-
-    def add_movement_by_description(self, description: str, direction: str, target_spot_id: str):
-        """可能な移動行動を追加"""
-        self.available_movements.append(Movement(description=description, direction=direction, target_spot_id=target_spot_id))
+    
+    def get_item_by_id(self, item_id: str) -> Optional[Item]:
+        """アイテムをIDで取得"""
+        for item in self.items:
+            if item.item_id == item_id:
+                return item
+        return None
     
     def add_movement(self, movement: Movement):
         """可能な移動行動を追加"""
@@ -108,12 +111,6 @@ class Spot:
     def get_available_movements(self) -> List[Movement]:
         """可能な移動行動を全て取得"""
         return self.available_movements
-    
-    def add_exploration_by_description(self, description: str, item_id: Optional[str], discovered_info: Optional[str], experience_points: Optional[int], money: Optional[int]):
-        """可能な探索行動を追加"""
-        self.available_explorations.append(
-            Exploration(description=description, item_id=item_id, discovered_info=discovered_info, experience_points=experience_points, money=money)
-        )
     
     def add_exploration(self, exploration: Exploration):
         """可能な探索行動を追加"""
