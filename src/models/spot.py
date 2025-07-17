@@ -11,10 +11,11 @@ class Spot:
         self.parent_spot_id = parent_spot_id
         self.items: List[Item] = []
         
-        # 基本的な接続（同階層間の移動）
-        self.connections: Dict[str, str] = {}
+        # Spot内で可能な行動を管理
+        self.available_movements: List[Movement] = []
+        self.available_explorations: List[Exploration] = []
         
-        # 階層管理用の新しい属性
+        # 階層管理用
         self.child_spots: Set[str] = set()  # 子スポットのID一覧
         self.entry_points: Dict[str, str] = {}  # 入口名 -> そこに入った時の最初のspot_id
         self.exit_to_parent: Optional[str] = None  # 親スポットに戻る時の接続先spot_id
@@ -43,14 +44,6 @@ class Spot:
         """親スポットIDを取得"""
         return self.parent_spot_id
 
-    def get_connections(self) -> Dict[str, str]:
-        """接続先を取得"""
-        return self.connections
-    
-    def add_connection(self, direction: str, target_spot_id: str):
-        """同階層間の通常の移動接続を追加"""
-        self.connections[direction] = target_spot_id
-    
     def add_child_spot(self, child_spot_id: str):
         """子スポットを追加"""
         self.child_spots.add(child_spot_id)
@@ -104,29 +97,29 @@ class Spot:
         """アイテムリストを取得"""
         return self.items
 
-    def get_available_movements(self) -> Dict[str, str]:
-        """利用可能な移動先を全て取得"""
-        movements = self.connections.copy()
-        
-        # 親スポットへの移動を追加
-        if self.exit_to_parent:
-            movements["外に出る"] = self.exit_to_parent  # TODO Spotは出入りがある施設とは限らないので、文言を調整する必要がありそう
-        
-        # 子スポットへの移動を追加
-        for entrance_name, target_spot_id in self.entry_points.items():
-            movements[f"{entrance_name}に入る"] = target_spot_id
-        
-        return movements
+    def add_movement_by_description(self, description: str, direction: str, target_spot_id: str):
+        """可能な移動行動を追加"""
+        self.available_movements.append(Movement(description=description, direction=direction, target_spot_id=target_spot_id))
     
-    # def get_available_explorations(self) -> List[Exploration]:
-    #     """利用可能な探索を全て取得"""
-    #     return [Exploration(f"{item.name}を探索", item.item_id, item.description) for item in self.items]
+    def add_movement(self, movement: Movement):
+        """可能な移動行動を追加"""
+        self.available_movements.append(movement)
+
+    def get_available_movements(self) -> List[Movement]:
+        """可能な移動行動を全て取得"""
+        return self.available_movements
     
-    # def get_available_movements(self) -> List[Movement]:
-    #     """利用可能な移動を全て取得"""
-    #     movements = self.connections.copy()
-    #     if self.exit_to_parent:
-    #         movements["外に出る"] = self.exit_to_parent  # TODO Spotは出入りがある施設とは限らないので、文言を調整する必要がありそう
-    #     for entrance_name, target_spot_id in self.entry_points.items():
-    #         movements[f"{entrance_name}に入る"] = target_spot_id
-    #     return [Movement(f"{direction}に移動", direction, target_spot_id) for direction, target_spot_id in movements.items()]
+    def add_exploration_by_description(self, description: str, item_id: Optional[str], discovered_info: Optional[str], experience_points: Optional[int], money: Optional[int]):
+        """可能な探索行動を追加"""
+        self.available_explorations.append(
+            Exploration(description=description, item_id=item_id, discovered_info=discovered_info, experience_points=experience_points, money=money)
+        )
+    
+    def add_exploration(self, exploration: Exploration):
+        """可能な探索行動を追加"""
+        self.available_explorations.append(exploration)
+    
+    def get_available_explorations(self) -> List[Exploration]:
+        """可能な探索行動を全て取得"""
+        return self.available_explorations
+    
