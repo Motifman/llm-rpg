@@ -1,4 +1,5 @@
 from src.models.spot import Spot
+from src.models.action import Movement
 
 
 def create_rpg_world_example():
@@ -52,8 +53,8 @@ def create_rpg_world_example():
     # === 接続関係の設定 ===
     
     # 街の中心部の接続
-    town_center.add_connection("南", "vegetable_shop")
-    town_center.add_connection("北", "school")
+    town_center.add_movement(Movement("南に移動", "南", "vegetable_shop"))
+    town_center.add_movement(Movement("北に移動", "北", "school"))
     
     # 学校への入口設定
     school.add_entry_point("正面玄関", "school_1f_hall")
@@ -65,19 +66,19 @@ def create_rpg_world_example():
     school.add_child_spot("classroom_2a")
     
     # 八百屋への接続
-    vegetable_shop.add_connection("北", "town_center")
+    vegetable_shop.add_movement(Movement("北に移動", "北", "town_center"))
     
     # 学校内部の接続
-    school_1f_hall.add_connection("上", "school_2f_hall")  # 階段
-    school_1f_hall.add_connection("東", "classroom_1a")
-    school_1f_hall.add_connection("西", "school_back_entrance")
+    school_1f_hall.add_movement(Movement("上に移動", "上", "school_2f_hall"))  # 階段
+    school_1f_hall.add_movement(Movement("東に移動", "東", "classroom_1a"))
+    school_1f_hall.add_movement(Movement("西に移動", "西", "school_back_entrance"))
     
-    school_2f_hall.add_connection("下", "school_1f_hall")  # 階段
-    school_2f_hall.add_connection("東", "classroom_2a")
+    school_2f_hall.add_movement(Movement("下に移動", "下", "school_1f_hall"))  # 階段
+    school_2f_hall.add_movement(Movement("東に移動", "東", "classroom_2a"))
     
-    classroom_1a.add_connection("西", "school_1f_hall")
-    classroom_2a.add_connection("西", "school_2f_hall")
-    school_back_entrance.add_connection("東", "school_1f_hall")
+    classroom_1a.add_movement(Movement("西に移動", "西", "school_1f_hall"))
+    classroom_2a.add_movement(Movement("西に移動", "西", "school_2f_hall"))
+    school_back_entrance.add_movement(Movement("東に移動", "東", "school_1f_hall"))
     
     return spots
 
@@ -101,9 +102,9 @@ def demonstrate_movement(spots):
     
     movements = current_spot.get_available_movements()
     print("利用可能な移動先:")
-    for direction, target_id in movements.items():
-        target_spot = spots[target_id]
-        print(f"  {direction} -> {target_spot.name}")
+    for movement in movements:
+        target_spot = spots[movement.target_spot_id]
+        print(f"  {movement.direction} -> {target_spot.name}")
     
     # Step 2: 廊下に移動
     current_spot_id = "school_1f_hall"
@@ -113,9 +114,9 @@ def demonstrate_movement(spots):
     current_spot = spots[current_spot_id]
     movements = current_spot.get_available_movements()
     print("利用可能な移動先:")
-    for direction, target_id in movements.items():
-        target_spot = spots[target_id]
-        print(f"  {direction} -> {target_spot.name}")
+    for movement in movements:
+        target_spot = spots[movement.target_spot_id]
+        print(f"  {movement.direction} -> {target_spot.name}")
     
     # Step 4: 街の中心部に移動
     current_spot_id = "town_center"
@@ -126,9 +127,9 @@ def demonstrate_movement(spots):
     current_spot = spots[current_spot_id]
     movements = current_spot.get_available_movements()
     print("利用可能な移動先:")
-    for direction, target_id in movements.items():
-        target_spot = spots[target_id]
-        print(f"  {direction} -> {target_spot.name}")
+    for movement in movements:
+        target_spot = spots[movement.target_spot_id]
+        print(f"  {movement.direction} -> {target_spot.name}")
     
     current_spot_id = "vegetable_shop"
     print(f"\n移動: 南 -> {spots[current_spot_id].name}")
@@ -153,9 +154,9 @@ def demonstrate_blocked_movement(spots):
     if not movements:
         print("  （移動先がありません）")
     else:
-        for direction, target_id in movements.items():
-            target_spot = spots[target_id]
-            print(f"  {direction} -> {target_spot.name}")
+        for movement in movements:
+            target_spot = spots[movement.target_spot_id]
+            print(f"  {movement.direction} -> {target_spot.name}")
     
     print("\n👆 2階の教室からは直接外に出ることができません！")
     print("廊下に出て、階段で1階に降りてから外に出る必要があります。")

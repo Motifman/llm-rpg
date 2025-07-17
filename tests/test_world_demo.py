@@ -1,5 +1,6 @@
 from src.models.spot import Spot
 from src.models.agent import Agent
+from src.models.action import Movement
 from src.systems.world import World
 
 
@@ -51,8 +52,8 @@ def create_test_world():
     # === 接続関係の設定 ===
     
     # 街の中心部の接続
-    town_center.add_connection("南", "vegetable_shop")
-    town_center.add_connection("北", "school")
+    town_center.add_movement(Movement("南に移動", "南", "vegetable_shop"))
+    town_center.add_movement(Movement("北に移動", "北", "school"))
     
     # 学校への入口設定
     school.add_entry_point("正面玄関", "school_1f_hall")
@@ -64,19 +65,19 @@ def create_test_world():
     school.add_child_spot("classroom_2a")
     
     # 八百屋への接続
-    vegetable_shop.add_connection("北", "town_center")
+    vegetable_shop.add_movement(Movement("北に移動", "北", "town_center"))
     
     # 学校内部の接続
-    school_1f_hall.add_connection("上", "school_2f_hall")  # 階段
-    school_1f_hall.add_connection("東", "classroom_1a")
-    school_1f_hall.add_connection("西", "school_back_entrance")
+    school_1f_hall.add_movement(Movement("上に移動", "上", "school_2f_hall"))  # 階段
+    school_1f_hall.add_movement(Movement("東に移動", "東", "classroom_1a"))
+    school_1f_hall.add_movement(Movement("西に移動", "西", "school_back_entrance"))
     
-    school_2f_hall.add_connection("下", "school_1f_hall")  # 階段
-    school_2f_hall.add_connection("東", "classroom_2a")
+    school_2f_hall.add_movement(Movement("下に移動", "下", "school_1f_hall"))  # 階段
+    school_2f_hall.add_movement(Movement("東に移動", "東", "classroom_2a"))
     
-    classroom_1a.add_connection("西", "school_1f_hall")
-    classroom_2a.add_connection("西", "school_2f_hall")
-    school_back_entrance.add_connection("東", "school_1f_hall")
+    classroom_1a.add_movement(Movement("西に移動", "西", "school_1f_hall"))
+    classroom_2a.add_movement(Movement("西に移動", "西", "school_2f_hall"))
+    school_back_entrance.add_movement(Movement("東に移動", "東", "school_1f_hall"))
     
     # === エージェントの作成と配置 ===
     
@@ -123,9 +124,9 @@ def display_available_movements(world: World, agent_id: str):
     print("\n🚶‍♂️ 利用可能な行動:")
     print("-" * 40)
     
-    for action, target_spot_id in available_movements.items():
-        target_spot = world.get_spot(target_spot_id)
-        print(f"  {action} → {target_spot.name}")
+    for movement in available_movements:
+        target_spot = world.get_spot(movement.target_spot_id)
+        print(f"  {movement.direction} → {target_spot.name}")
     
     return available_movements
 
@@ -138,16 +139,27 @@ def execute_movement(world: World, agent_id: str, action: str, step_num: int):
     agent = world.get_agent(agent_id)
     old_spot = world.get_spot(agent.get_current_spot_id())
     
-    # 移動実行
-    success = world.execute_agent_movement(agent_id, action)
+    # 現在地から該当するMovementオブジェクトを取得
+    available_movements = old_spot.get_available_movements()
+    movement_obj = None
+    for movement in available_movements:
+        if movement.direction == action:
+            movement_obj = movement
+            break
     
-    if success:
+    if movement_obj is None:
+        print(f"❌ 移動失敗: '{action}'は利用可能な移動ではありません")
+        return False
+    
+    # 移動実行
+    try:
+        world.execute_agent_movement(agent_id, movement_obj)
         new_spot = world.get_spot(agent.get_current_spot_id())
         print(f"✅ 移動成功: {old_spot.name} → {new_spot.name}")
-    else:
-        print(f"❌ 移動失敗: '{action}'は実行できませんでした")
-    
-    return success
+        return True
+    except Exception as e:
+        print(f"❌ 移動失敗: '{action}' - エラー: {e}")
+        return False
 
 
 def demo_scenario_1():
@@ -262,7 +274,7 @@ def demo_scenario_3():
         available_movements = display_available_movements(world, agent_id)
         
         # 正面玄関と裏口の両方が表示されることを確認
-        entrances = [action for action in available_movements.keys() if "に入る" in action]
+        entrances = [movement.direction for movement in available_movements if "に入る" in movement.direction]
         print(f"\n🚪 確認された入口: {entrances}")
         
         if len(entrances) >= 2:
