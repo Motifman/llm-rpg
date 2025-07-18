@@ -1,6 +1,7 @@
 from .agent import Agent
 from .item import Item
-from .action import InteractionType, Interaction, ActionReward
+from .action import InteractionType, Interaction, Movement
+from .reward import ActionReward
 from typing import List, Dict, Any, Optional
 from abc import ABC, abstractmethod
 
@@ -113,11 +114,20 @@ class Door(InteractableObject):
             return True
         return False
     
+    def creates_movement_when_opened(self) -> Optional[Movement]:
+        """ドアを開いた時に作成されるMovement情報を返す"""
+        if self.get_state("is_open"):
+            return Movement(
+                description=f"{self.name}を通って移動",
+                direction=f"{self.name}を通る",
+                target_spot_id=self.target_spot_id
+            )
+        return None
+    
     def get_available_interactions(self) -> List[Interaction]:
         """利用可能な相互作用を取得"""
         interactions = []
         
-        from .reward import ActionReward
         examine_reward = ActionReward(
             information=[f"{self.name}の詳細: {self.description}"]
         )

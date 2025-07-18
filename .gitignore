@@ -1,0 +1,67 @@
+# 実装計画書・開発メモ（個人用、git管理外）
+plan_*.md
+memo_*.md
+draft_*.md
+TODO_*.md
+
+# Python関連
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# 仮想環境
+venv/
+env/
+ENV/
+
+# IDEファイル
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# システムファイル
+.DS_Store
+Thumbs.db
+
+# ログファイル
+*.log
+logs/
+
+# 一時ファイル
+*.tmp
+*.temp
+temp/
+
+# 設定ファイル（機密情報を含む可能性）
+.env
+config.local.*
+secrets.json
+
+# キャッシュ
+cache/
+.cache/
+
+# テストカバレッジ
+.coverage
+htmlcov/
+.pytest_cache/ 

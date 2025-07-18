@@ -16,6 +16,9 @@ class Spot:
         self.available_movements: List[Movement] = []
         self.available_explorations: List[Exploration] = []
         
+        # 動的に追加される移動（ドアを開けた時など）
+        self.dynamic_movements: List[Movement] = []
+        
         # 相互作用可能オブジェクトの管理
         self.interactables: Dict[str, InteractableObject] = {}
         
@@ -112,9 +115,33 @@ class Spot:
         """可能な移動行動を追加"""
         self.available_movements.append(movement)
 
+    def add_dynamic_movement(self, movement: Movement):
+        """動的に移動先を追加（重複チェック付き）"""
+        # 重複チェック：同じtarget_spot_idとdirectionの組み合わせは追加しない
+        for existing_movement in self.dynamic_movements:
+            if (existing_movement.target_spot_id == movement.target_spot_id and 
+                existing_movement.direction == movement.direction):
+                return  # 既に存在する場合は追加しない
+        
+        self.dynamic_movements.append(movement)
+    
+    def remove_dynamic_movement(self, target_spot_id: str, direction: str):
+        """動的移動を削除"""
+        self.dynamic_movements = [
+            movement for movement in self.dynamic_movements
+            if not (movement.target_spot_id == target_spot_id and movement.direction == direction)
+        ]
+    
+    def get_dynamic_movements(self) -> List[Movement]:
+        """動的移動のリストを取得"""
+        return self.dynamic_movements.copy()
+
     def get_available_movements(self) -> List[Movement]:
-        """可能な移動行動を全て取得（手動追加 + 階層移動）"""
+        """可能な移動行動を全て取得（静的 + 動的 + 階層移動）"""
         movements = self.available_movements.copy()
+        
+        # 動的に追加された移動を追加
+        movements.extend(self.dynamic_movements)
         
         # 親スポットに戻る移動を追加
         if self.exit_to_parent:
