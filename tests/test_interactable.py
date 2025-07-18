@@ -138,7 +138,7 @@ def execute_interaction_step(world: World, agent_id: str, interaction: Interacti
     old_info_count = len(agent.discovered_info)
     
     try:
-        world.execute_agent_interaction(agent, interaction)
+        world.execute_agent_interaction(agent_id, interaction)
         
         # 変化の確認
         money_gained = agent.money - old_money
@@ -252,7 +252,7 @@ def test_interaction_types():
                           if i.interaction_type == InteractionType.EXAMINE]
     
     if examine_interactions:
-        world.execute_agent_interaction(agent, examine_interactions[0])
+        world.execute_agent_interaction(agent_id, examine_interactions[0])
         if len(agent.discovered_info) > initial_info:
             print("✅ EXAMINE相互作用: 成功")
         else:
@@ -264,7 +264,7 @@ def test_interaction_types():
                         if i.interaction_type == InteractionType.OPEN]
     
     if open_interactions:
-        world.execute_agent_interaction(agent, open_interactions[0])
+        world.execute_agent_interaction(agent_id, open_interactions[0])
         if len(agent.items) > initial_items:
             print("✅ OPEN相互作用: 成功")
         else:
