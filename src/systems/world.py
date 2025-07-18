@@ -1,7 +1,8 @@
 from typing import Dict, List
 from ..models.spot import Spot
 from ..models.agent import Agent
-from ..models.action import Movement, Exploration, Action, Interaction
+from ..models.action import Movement, Exploration, Action, Interaction, InteractionType
+from ..models.interactable import Door
 
 
 class World:
@@ -84,6 +85,11 @@ class World:
             else:
                 raise ValueError(f"この相互作用は実行できません: {interaction.description}")
         
+        # オブジェクトの状態変更
+        for key, value in interaction.state_changes.items():
+            interactable.set_state(key, value)
+        
+        # 報酬の付与
         reward = interaction.reward
         for item_id in reward.items:
             if hasattr(interactable, 'items'):
@@ -107,8 +113,27 @@ class World:
         for info in reward.information:
             agent.add_discovered_info(info)
         
-        for key, value in interaction.state_changes.items():
-            interactable.set_state(key, value)
+        # ドアのOPEN処理時の特別な処理
+        if (isinstance(interactable, Door) and 
+            interaction.interaction_type == InteractionType.OPEN):
+            # ドアを開いた後、双方向の移動を追加
+            self._add_bidirectional_door_movement(spot, interactable)
+    
+    def _add_bidirectional_door_movement(self, current_spot: Spot, door: Door):
+        """ドア開放時に双方向の移動を追加"""
+        # 現在のSpotから目標Spotへの移動
+        forward_movement = door.creates_movement_when_opened()
+        if forward_movement:
+            current_spot.add_dynamic_movement(forward_movement)
+        
+        # 目標Spotから現在のSpotへの戻り移動
+        target_spot = self.get_spot(door.target_spot_id)
+        backward_movement = Movement(
+            description=f"{door.name}を通って戻る",
+            direction=f"{door.name}を通って戻る", 
+            target_spot_id=current_spot.spot_id
+        )
+        target_spot.add_dynamic_movement(backward_movement)
     
     def execute_action(self, agent_id: str, action: Action):
         """
