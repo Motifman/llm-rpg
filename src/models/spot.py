@@ -1,6 +1,7 @@
 from typing import Optional, List, Dict, Set
 from .item import Item
-from .action import Movement, Exploration
+from .action import Movement, Exploration, Interaction
+from .interactable import InteractableObject
 
 
 class Spot:
@@ -14,6 +15,9 @@ class Spot:
         # Spot内で可能な行動を管理
         self.available_movements: List[Movement] = []
         self.available_explorations: List[Exploration] = []
+        
+        # 相互作用可能オブジェクトの管理
+        self.interactables: Dict[str, InteractableObject] = {}
         
         # 階層管理用
         self.child_spots: Set[str] = set()  # 子スポットのID一覧
@@ -103,7 +107,7 @@ class Spot:
             if item.item_id == item_id:
                 return item
         return None
-    
+
     def add_movement(self, movement: Movement):
         """可能な移動行動を追加"""
         self.available_movements.append(movement)
@@ -138,3 +142,28 @@ class Spot:
         """可能な探索行動を全て取得"""
         return self.available_explorations
     
+    # === Interactableオブジェクト管理 ===
+    
+    def add_interactable(self, interactable: InteractableObject):
+        """相互作用可能オブジェクトを追加"""
+        self.interactables[interactable.object_id] = interactable
+    
+    def remove_interactable(self, object_id: str):
+        """相互作用可能オブジェクトを削除"""
+        if object_id in self.interactables:
+            del self.interactables[object_id]
+    
+    def get_interactable_by_id(self, object_id: str) -> Optional[InteractableObject]:
+        """IDで相互作用可能オブジェクトを取得"""
+        return self.interactables.get(object_id)
+    
+    def get_all_interactables(self) -> List[InteractableObject]:
+        """全ての相互作用可能オブジェクトを取得"""
+        return list(self.interactables.values())
+    
+    def get_available_interactions(self) -> List[Interaction]:
+        """このSpotで利用可能な全ての相互作用を取得"""
+        all_interactions = []
+        for interactable in self.interactables.values():
+            all_interactions.extend(interactable.get_available_interactions())
+        return all_interactions
