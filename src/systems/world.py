@@ -1,8 +1,9 @@
 from typing import Dict, List
 from ..models.spot import Spot
 from ..models.agent import Agent
-from ..models.action import Movement, Exploration, Action, Interaction, InteractionType
+from ..models.action import Movement, Exploration, Action, Interaction, InteractionType, ItemUsage
 from ..models.interactable import Door
+from ..models.item import ConsumableItem
 
 
 class World:
@@ -119,6 +120,38 @@ class World:
             # ドアを開いた後、双方向の移動を追加
             self._add_bidirectional_door_movement(spot, interactable)
     
+    def execute_agent_item_usage(self, agent_id: str, item_usage: ItemUsage):
+        """
+        アイテム使用行動を実行し、アイテムの効果をエージェントに適用
+        """
+        agent = self.get_agent(agent_id)
+        
+        # 使用可能性チェック
+        if not item_usage.is_valid(agent):
+            item_count = agent.get_item_count(item_usage.item_id)
+            if item_count == 0:
+                raise ValueError(f"アイテム '{item_usage.item_id}' を所持していません")
+            else:
+                raise ValueError(f"アイテム '{item_usage.item_id}' が不足しています（必要: {item_usage.count}個、所持: {item_count}個）")
+        
+        # 使用するアイテムを取得
+        item = agent.get_item_by_id(item_usage.item_id)
+        if not item:
+            raise ValueError(f"アイテム '{item_usage.item_id}' が見つかりません")
+        
+        # 消費可能アイテムかチェック
+        if not isinstance(item, ConsumableItem):
+            raise ValueError(f"アイテム '{item_usage.item_id}' は消費できません")
+        
+        # アイテムを消費
+        removed_count = agent.remove_item_by_id(item_usage.item_id, item_usage.count)
+        if removed_count != item_usage.count:
+            raise ValueError(f"アイテムの削除に失敗しました（削除予定: {item_usage.count}個、実際の削除: {removed_count}個）")
+        
+        # 効果を適用（使用回数分）
+        for _ in range(item_usage.count):
+            agent.apply_item_effect(item.effect)
+    
     def _add_bidirectional_door_movement(self, current_spot: Spot, door: Door):
         """ドア開放時に双方向の移動を追加"""
         # 現在のSpotから目標Spotへの移動
@@ -145,5 +178,7 @@ class World:
             self.execute_agent_exploration(agent_id, action)
         elif isinstance(action, Interaction):
             self.execute_agent_interaction(agent_id, action)
+        elif isinstance(action, ItemUsage):
+            self.execute_agent_item_usage(agent_id, action)
         else:
             raise ValueError(f"不明な行動: {action}")

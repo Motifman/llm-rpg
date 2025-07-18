@@ -1,8 +1,11 @@
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 from abc import ABC
 from enum import Enum
 from .reward import ActionReward
+
+if TYPE_CHECKING:
+    from .agent import Agent
 
 
 class InteractionType(Enum):
@@ -20,6 +23,8 @@ class Action(ABC):
     """行動の基底クラス"""
     description: str
 
+
+# === Spot依存の行動 ===
 
 @dataclass(frozen=True)
 class Movement(Action):
@@ -65,3 +70,24 @@ class Interaction(Action):
     reward: ActionReward = field(default_factory=ActionReward)
     required_item_id: Optional[str] = None  # 必要アイテム（簡易条件）
     state_changes: Dict[str, Any] = field(default_factory=dict)  # オブジェクトの状態変化
+
+
+# === Agent依存の行動 ===
+
+@dataclass(frozen=True)
+class ItemUsage(Action):
+    """アイテム使用行動（Agent依存）"""
+    item_id: str
+    count: int = 1  # 使用個数
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """使用可能かチェック"""
+        if not agent.has_item(self.item_id):
+            return False
+        
+        item_count = agent.get_item_count(self.item_id)
+        return item_count >= self.count
+    
+    def get_required_item_count(self) -> int:
+        """必要なアイテム数を取得"""
+        return self.count
