@@ -1,5 +1,5 @@
 from typing import List
-from .item import Item
+from .item import Item, ItemEffect
 
 
 class Agent:
@@ -12,6 +12,14 @@ class Agent:
         self.current_spot_id: str = ""
         self.experience_points: int = 0
         self.money: int = 0
+        
+        # RPG基本ステータス
+        self.max_hp: int = 100
+        self.current_hp: int = 100
+        self.max_mp: int = 50
+        self.current_mp: int = 50
+        self.attack: int = 10
+        self.defense: int = 5
 
     def add_item(self, item: Item):
         self.items.append(item)
@@ -19,9 +27,36 @@ class Agent:
     def remove_item(self, item: Item):
         self.items.remove(item)
     
+    def remove_item_by_id(self, item_id: str, count: int = 1) -> int:
+        """IDでアイテムを安全に削除（重複対応）
+        
+        Args:
+            item_id: 削除するアイテムのID
+            count: 削除する個数
+            
+        Returns:
+            実際に削除された個数
+        """
+        removed_count = 0
+        items_to_remove = []
+        
+        for item in self.items:
+            if item.item_id == item_id and removed_count < count:
+                items_to_remove.append(item)
+                removed_count += 1
+        
+        for item in items_to_remove:
+            self.items.remove(item)
+        
+        return removed_count
+    
     # TODO アイテムの所持状況を確認するメソッド、アイテムが重複所持が許さない場合にこれを使用する
     def has_item(self, item_id: str) -> bool:
         return any(item.item_id == item_id for item in self.items)
+    
+    def get_item_count(self, item_id: str) -> int:
+        """特定のアイテムの所持数を取得"""
+        return sum(1 for item in self.items if item.item_id == item_id)
     
     def get_items(self) -> List[Item]:
         return self.items
@@ -60,6 +95,97 @@ class Agent:
         self.money += money
         if self.money < 0:
             self.money = 0
+    
+    # === RPGステータス管理 ===
+    
+    def get_hp(self) -> tuple[int, int]:
+        """現在HP、最大HPを取得"""
+        return self.current_hp, self.max_hp
+    
+    def get_mp(self) -> tuple[int, int]:
+        """現在MP、最大MPを取得"""
+        return self.current_mp, self.max_mp
+    
+    def get_attack(self) -> int:
+        """攻撃力を取得"""
+        return self.attack
+    
+    def get_defense(self) -> int:
+        """防御力を取得"""
+        return self.defense
+    
+    def set_hp(self, hp: int):
+        """HPを設定（上限・下限チェック付き）"""
+        self.current_hp = max(0, min(hp, self.max_hp))
+    
+    def set_mp(self, mp: int):
+        """MPを設定（上限・下限チェック付き）"""
+        self.current_mp = max(0, min(mp, self.max_mp))
+    
+    def set_max_hp(self, max_hp: int):
+        """最大HPを設定"""
+        if max_hp > 0:
+            self.max_hp = max_hp
+            # 現在HPが最大HPを超えている場合は調整
+            if self.current_hp > self.max_hp:
+                self.current_hp = self.max_hp
+    
+    def set_max_mp(self, max_mp: int):
+        """最大MPを設定"""
+        if max_mp > 0:
+            self.max_mp = max_mp
+            # 現在MPが最大MPを超えている場合は調整
+            if self.current_mp > self.max_mp:
+                self.current_mp = self.max_mp
+    
+    def set_attack(self, attack: int):
+        """攻撃力を設定"""
+        self.attack = max(0, attack)
+    
+    def set_defense(self, defense: int):
+        """防御力を設定"""
+        self.defense = max(0, defense)
+    
+    def apply_item_effect(self, effect: ItemEffect):
+        """アイテム効果を適用"""
+        # HP/MP変更
+        if effect.hp_change != 0:
+            new_hp = self.current_hp + effect.hp_change
+            self.set_hp(new_hp)
+        
+        if effect.mp_change != 0:
+            new_mp = self.current_mp + effect.mp_change
+            self.set_mp(new_mp)
+        
+        # ステータス変更
+        if effect.attack_change != 0:
+            new_attack = self.attack + effect.attack_change
+            self.set_attack(new_attack)
+        
+        if effect.defense_change != 0:
+            new_defense = self.defense + effect.defense_change
+            self.set_defense(new_defense)
+        
+        # 既存のステータス変更
+        if effect.money_change != 0:
+            self.add_money(effect.money_change)
+        
+        if effect.experience_change != 0:
+            self.add_experience_points(effect.experience_change)
+        
+        # 一時的効果（将来の拡張用）
+        # temporary_effectsは現在は記録のみで、実際の効果は今後実装
+    
+    def is_alive(self) -> bool:
+        """生存判定"""
+        return self.current_hp > 0
+    
+    def get_status_summary(self) -> str:
+        """ステータスの要約を取得"""
+        return (f"HP: {self.current_hp}/{self.max_hp}, "
+                f"MP: {self.current_mp}/{self.max_mp}, "
+                f"攻撃: {self.attack}, 防御: {self.defense}, "
+                f"所持金: {self.money}, 経験値: {self.experience_points}")
     
     def __str__(self):
         return f"Agent(agent_id={self.agent_id}, name={self.name}, items={self.items}, current_spot_id={self.current_spot_id}, experience_points={self.experience_points}, money={self.money})"
