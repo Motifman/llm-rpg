@@ -1,6 +1,6 @@
 from .agent import Agent
 from .item import Item
-from .action import InteractionType, Interaction
+from .action import InteractionType, Interaction, ActionReward
 from typing import List, Dict, Any, Optional
 from abc import ABC, abstractmethod
 
@@ -45,30 +45,25 @@ class Chest(InteractableObject):
         self.key_item_id = key_item_id
         self.items: List[Item] = items or []
         
-        # 状態管理
         self.set_state("is_locked", key_item_id is not None)
         self.set_state("is_opened", False)
         
     def can_interact(self, agent: Agent, interaction_type: InteractionType) -> bool:
         """相互作用の実行可否をチェック"""
         if interaction_type == InteractionType.OPEN:
-            # 既に開いている場合は開けない
             if self.get_state("is_opened"):
                 return False
-            # 鍵がかかっている場合は、鍵を持っているかチェック
             if self.get_state("is_locked") and self.key_item_id:
                 return agent.has_item(self.key_item_id)
             return True
         elif interaction_type == InteractionType.EXAMINE:
-            return True  # 調べるのは常に可能
+            return True
         return False
     
     def get_available_interactions(self) -> List[Interaction]:
         """利用可能な相互作用を取得"""
         interactions = []
         
-        # 調べる（常に可能）
-        from .reward import ActionReward
         examine_reward = ActionReward(
             information=["宝箱の詳細情報を確認した"]
         )
@@ -79,7 +74,6 @@ class Chest(InteractableObject):
             reward=examine_reward
         ))
         
-        # 開ける（条件による）
         if not self.get_state("is_opened"):
             open_reward = ActionReward(
                 items=[item.item_id for item in self.items],
@@ -106,7 +100,6 @@ class Door(InteractableObject):
         self.target_spot_id = target_spot_id
         self.key_item_id = key_item_id
         
-        # 状態管理
         self.set_state("is_locked", key_item_id is not None)
         self.set_state("is_open", False)
     
@@ -124,7 +117,6 @@ class Door(InteractableObject):
         """利用可能な相互作用を取得"""
         interactions = []
         
-        # 調べる
         from .reward import ActionReward
         examine_reward = ActionReward(
             information=[f"{self.name}の詳細: {self.description}"]
@@ -136,7 +128,6 @@ class Door(InteractableObject):
             reward=examine_reward
         ))
         
-        # 開ける
         if not self.get_state("is_open"):
             open_reward = ActionReward(
                 information=[f"{self.name}を開けた"]
