@@ -12,6 +12,15 @@ class NotificationType(Enum):
     REPLY = "reply"
 
 
+class PostVisibility(Enum):
+    """投稿可視性レベル"""
+    PUBLIC = "public"                    # 全ユーザーが閲覧可能
+    FOLLOWERS_ONLY = "followers_only"    # フォロワーのみ閲覧可能
+    MUTUAL_FOLLOWS_ONLY = "mutual_follows_only"  # 相互フォローのみ閲覧可能
+    SPECIFIED_USERS = "specified_users"  # 指定ユーザーのみ閲覧可能
+    PRIVATE = "private"                  # 本人のみ閲覧可能
+
+
 @dataclass(frozen=True)
 class SnsUser:
     """SNSユーザー"""
@@ -34,17 +43,23 @@ class Post:
     user_id: str
     content: str
     hashtags: List[str] = field(default_factory=list)
+    visibility: PostVisibility = PostVisibility.PUBLIC
+    allowed_users: List[str] = field(default_factory=list)  # SPECIFIED_USERS用
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
     
     @classmethod
-    def create(cls, user_id: str, content: str, hashtags: Optional[List[str]] = None) -> "Post":
+    def create(cls, user_id: str, content: str, hashtags: Optional[List[str]] = None, 
+               visibility: PostVisibility = PostVisibility.PUBLIC, 
+               allowed_users: Optional[List[str]] = None) -> "Post":
         """新しい投稿を作成"""
         return cls(
             post_id=str(uuid.uuid4()),
             user_id=user_id,
             content=content,
             hashtags=hashtags or [],
+            visibility=visibility,
+            allowed_users=allowed_users or [],
         )
     
     def extract_hashtags_from_content(self) -> List[str]:
@@ -53,11 +68,42 @@ class Post:
         hashtag_pattern = r'#\w+'
         return re.findall(hashtag_pattern, self.content)
     
+    def is_public(self) -> bool:
+        """パブリック投稿かどうか"""
+        return self.visibility == PostVisibility.PUBLIC
+    
+    def is_private(self) -> bool:
+        """プライベート投稿かどうか"""
+        return self.visibility == PostVisibility.PRIVATE
+    
+    def is_followers_only(self) -> bool:
+        """フォロワー限定投稿かどうか"""
+        return self.visibility == PostVisibility.FOLLOWERS_ONLY
+    
+    def is_mutual_follows_only(self) -> bool:
+        """相互フォロー限定投稿かどうか"""
+        return self.visibility == PostVisibility.MUTUAL_FOLLOWS_ONLY
+    
+    def is_specified_users_only(self) -> bool:
+        """指定ユーザー限定投稿かどうか"""
+        return self.visibility == PostVisibility.SPECIFIED_USERS
+    
+    def get_visibility_label(self) -> str:
+        """可視性ラベルを取得"""
+        labels = {
+            PostVisibility.PUBLIC: "🌍 パブリック",
+            PostVisibility.FOLLOWERS_ONLY: "👥 フォロワー限定",
+            PostVisibility.MUTUAL_FOLLOWS_ONLY: "🤝 相互フォロー限定",
+            PostVisibility.SPECIFIED_USERS: "🎯 指定ユーザー限定",
+            PostVisibility.PRIVATE: "🔒 プライベート"
+        }
+        return labels.get(self.visibility, "❓ 不明")
+    
     def __str__(self):
-        return f"Post(post_id={self.post_id}, user_id={self.user_id}, content={self.content[:50]}...)"
+        return f"Post(post_id={self.post_id}, user_id={self.user_id}, content={self.content[:50]}..., visibility={self.visibility.value})"
     
     def __repr__(self):
-        return f"Post(post_id={self.post_id}, user_id={self.user_id}, content={self.content})"
+        return f"Post(post_id={self.post_id}, user_id={self.user_id}, content={self.content}, visibility={self.visibility})"
 
 
 @dataclass(frozen=True)
