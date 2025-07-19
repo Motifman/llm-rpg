@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict, Any, Set
 from datetime import datetime
-from ..models.sns import SnsUser, Post, Follow, Like, Reply, Notification, NotificationType, Block, PostVisibility
+from ..models.sns import SnsUser, Post, Follow, Like, Reply, Notification, NotificationType, Block, PostVisibility, Mention
 from ..models.agent import Agent
 
 
@@ -16,6 +16,7 @@ class SnsSystem:
         self.replies: List[Reply] = []
         self.notifications: List[Notification] = []
         self.blocks: List[Block] = []
+        self.mentions: List[Mention] = []
     
     # === ユーザー管理 ===
     
@@ -83,6 +84,11 @@ class SnsSystem:
             post = replace(post, hashtags=all_hashtags)
         
         self.posts[post.post_id] = post
+        
+        # メンション処理（投稿がパブリックまたは適切な可視性を持つ場合のみ）
+        if post.visibility in [PostVisibility.PUBLIC, PostVisibility.FOLLOWERS_ONLY, PostVisibility.MUTUAL_FOLLOWS_ONLY]:
+            self._process_mentions_in_content(content, user_id, post.post_id)
+        
         return post
     
     def get_post(self, post_id: str) -> Optional[Post]:
@@ -412,6 +418,9 @@ class SnsSystem:
             )
             self.notifications.append(notification)
         
+        # メンション処理
+        self._process_mentions_in_content(content, user_id, post_id, reply.reply_id)
+        
         return reply
     
     def get_post_replies(self, post_id: str, limit: int = 50) -> List[Reply]:
@@ -469,5 +478,61 @@ class SnsSystem:
             "total_replies": len(self.replies),
             "total_notifications": len(self.notifications),
             "total_blocks": len(self.blocks),
+            "total_mentions": len(self.mentions),
             "posts_by_visibility": visibility_counts,
         } 
+    
+    # === メンション機能 ===
+    
+    def _process_mentions_in_content(self, content: str, user_id: str, post_id: str, reply_id: Optional[str] = None) -> List[str]:
+        """コンテンツ内のメンションを処理し、通知を送信"""
+        import re
+        mention_pattern = r'@(\w+)'
+        mentioned_usernames = re.findall(mention_pattern, content)
+        
+        processed_mentions = []
+        for username in mentioned_usernames:
+            # ユーザー名からユーザーIDを検索
+            mentioned_user_id = self._find_user_by_name(username)
+            if mentioned_user_id and mentioned_user_id != user_id:  # 自分自身へのメンションは除外
+                # ブロック関係をチェック
+                if not self.is_blocked(user_id, mentioned_user_id):
+                    # メンションレコードを作成
+                    mention = Mention.create(
+                        user_id=user_id,
+                        mentioned_user_id=mentioned_user_id,
+                        post_id=post_id,
+                        reply_id=reply_id
+                    )
+                    self.mentions.append(mention)
+                    
+                    # メンション通知を作成
+                    notification = Notification.create_mention_notification(
+                        user_id=mentioned_user_id,
+                        from_user_id=user_id,
+                        post_id=post_id,
+                        reply_id=reply_id
+                    )
+                    self.notifications.append(notification)
+                    processed_mentions.append(mentioned_user_id)
+        
+        return processed_mentions
+    
+    def _find_user_by_name(self, name: str) -> Optional[str]:
+        """ユーザー名からユーザーIDを検索"""
+        for user_id, user in self.users.items():
+            if user.name == name:
+                return user_id
+        return None
+    
+    def get_mentions_for_user(self, user_id: str) -> List[Mention]:
+        """ユーザーがメンションされた記録を取得"""
+        return [mention for mention in self.mentions if mention.mentioned_user_id == user_id]
+    
+    def get_mentions_by_user(self, user_id: str) -> List[Mention]:
+        """ユーザーが行ったメンションを取得"""
+        return [mention for mention in self.mentions if mention.user_id == user_id]
+    
+    def get_mentions_for_post(self, post_id: str) -> List[Mention]:
+        """特定の投稿に含まれるメンションを取得"""
+        return [mention for mention in self.mentions if mention.post_id == post_id] 

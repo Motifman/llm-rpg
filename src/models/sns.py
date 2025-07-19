@@ -10,6 +10,7 @@ class NotificationType(Enum):
     FOLLOW = "follow"
     LIKE = "like"
     REPLY = "reply"
+    MENTION = "mention"
 
 
 class PostVisibility(Enum):
@@ -67,6 +68,13 @@ class Post:
         import re
         hashtag_pattern = r'#\w+'
         return re.findall(hashtag_pattern, self.content)
+    
+    def extract_mentions_from_content(self) -> List[str]:
+        """投稿内容からメンション（@ユーザー名）を抽出"""
+        import re
+        mention_pattern = r'@(\w+)'
+        matches = re.findall(mention_pattern, self.content)
+        return matches
     
     def is_public(self) -> bool:
         """パブリック投稿かどうか"""
@@ -177,11 +185,46 @@ class Reply:
             content=content,
         )
     
+    def extract_mentions_from_content(self) -> List[str]:
+        """返信内容からメンション（@ユーザー名）を抽出"""
+        import re
+        mention_pattern = r'@(\w+)'
+        matches = re.findall(mention_pattern, self.content)
+        return matches
+    
     def __str__(self):
         return f"Reply(user_id={self.user_id}, post_id={self.post_id}, content={self.content[:30]}...)"
     
     def __repr__(self):
         return f"Reply(reply_id={self.reply_id}, user_id={self.user_id}, post_id={self.post_id}, content={self.content})"
+
+
+@dataclass(frozen=True)
+class Mention:
+    """メンション"""
+    mention_id: str
+    user_id: str  # メンションした人
+    mentioned_user_id: str  # メンションされた人
+    post_id: str  # メンションが含まれる投稿ID
+    reply_id: Optional[str] = None  # メンションが含まれる返信ID（返信内でのメンションの場合）
+    created_at: datetime = field(default_factory=datetime.now)
+    
+    @classmethod
+    def create(cls, user_id: str, mentioned_user_id: str, post_id: str, reply_id: Optional[str] = None) -> "Mention":
+        """新しいメンションを作成"""
+        return cls(
+            mention_id=str(uuid.uuid4()),
+            user_id=user_id,
+            mentioned_user_id=mentioned_user_id,
+            post_id=post_id,
+            reply_id=reply_id,
+        )
+    
+    def __str__(self):
+        return f"Mention(user_id={self.user_id}, mentioned_user_id={self.mentioned_user_id}, post_id={self.post_id})"
+    
+    def __repr__(self):
+        return f"Mention(mention_id={self.mention_id}, user_id={self.user_id}, mentioned_user_id={self.mentioned_user_id}, post_id={self.post_id})"
 
 
 @dataclass(frozen=True)
@@ -229,6 +272,23 @@ class Notification:
             from_user_id=from_user_id,
             post_id=post_id,
             content=f"{from_user_id}があなたの投稿に返信しました: {reply_content[:30]}...",
+        )
+    
+    @classmethod
+    def create_mention_notification(cls, user_id: str, from_user_id: str, post_id: str, reply_id: Optional[str] = None) -> "Notification":
+        """メンション通知を作成"""
+        if reply_id:
+            content = f"{from_user_id}があなたを返信でメンションしました"
+        else:
+            content = f"{from_user_id}があなたを投稿でメンションしました"
+        
+        return cls(
+            notification_id=str(uuid.uuid4()),
+            user_id=user_id,
+            type=NotificationType.MENTION,
+            from_user_id=from_user_id,
+            post_id=post_id,
+            content=content,
         )
     
     def mark_as_read(self) -> "Notification":
