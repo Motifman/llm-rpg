@@ -6,6 +6,7 @@ from .reward import ActionReward
 
 if TYPE_CHECKING:
     from .agent import Agent
+    from .trade import TradeType
 
 
 class InteractionType(Enum):
@@ -91,3 +92,102 @@ class ItemUsage(Action):
     def get_required_item_count(self) -> int:
         """必要なアイテム数を取得"""
         return self.count
+
+
+@dataclass(frozen=True)
+class PostTrade(Action):
+    """取引出品行動（Agent依存）"""
+    offered_item_id: str
+    offered_item_count: int = 1
+    requested_money: int = 0
+    requested_item_id: Optional[str] = None
+    requested_item_count: int = 1
+    trade_type: Optional["TradeType"] = None
+    target_agent_id: Optional[str] = None
+    
+    def get_trade_type(self) -> "TradeType":
+        """取引タイプを取得（デフォルト値対応）"""
+        if self.trade_type is None:
+            from .trade import TradeType
+            return TradeType.GLOBAL
+        return self.trade_type
+    
+    def is_money_trade(self) -> bool:
+        """お金との取引かどうか"""
+        return self.requested_item_id is None and self.requested_money > 0
+    
+    def is_item_trade(self) -> bool:
+        """アイテム同士の取引かどうか"""
+        return self.requested_item_id is not None
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """出品可能かチェック"""
+        # 出品するアイテムを所持しているかチェック
+        if not agent.has_item(self.offered_item_id):
+            return False
+        
+        item_count = agent.get_item_count(self.offered_item_id)
+        if item_count < self.offered_item_count:
+            return False
+        
+        # 取引内容が有効かチェック
+        if not self.is_money_trade() and not self.is_item_trade():
+            return False  # お金もアイテムも要求していない
+        
+        return True
+
+
+@dataclass(frozen=True)
+class ViewTrades(Action):
+    """取引閲覧行動（Agent依存）"""
+    filter_offered_item_id: Optional[str] = None
+    filter_requested_item_id: Optional[str] = None
+    max_price: Optional[int] = None
+    min_price: Optional[int] = None
+    trade_type: Optional["TradeType"] = None
+    show_own_trades: bool = False
+    
+    def get_filters(self, agent_id: str) -> Dict[str, Any]:
+        """フィルタ条件を辞書形式で取得"""
+        filters = {}
+        
+        if self.filter_offered_item_id:
+            filters["offered_item_id"] = self.filter_offered_item_id
+        
+        if self.filter_requested_item_id:
+            filters["requested_item_id"] = self.filter_requested_item_id
+        
+        if self.max_price is not None:
+            filters["max_price"] = self.max_price
+        
+        if self.min_price is not None:
+            filters["min_price"] = self.min_price
+        
+        if self.trade_type is not None:
+            filters["trade_type"] = self.trade_type
+        
+        if not self.show_own_trades:
+            # 自分の出品を除外するフィルタ
+            filters["buyer_id"] = agent_id
+        
+        return filters
+
+
+@dataclass(frozen=True)
+class AcceptTrade(Action):
+    """取引受託行動（Agent依存）"""
+    trade_id: str
+    
+    def get_trade_id(self) -> str:
+        """取引IDを取得"""
+        return self.trade_id
+
+
+@dataclass(frozen=True)
+class CancelTrade(Action):
+    """取引キャンセル行動（Agent依存）"""
+    trade_id: str
+    
+    def get_trade_id(self) -> str:
+        """取引IDを取得"""
+        return self.trade_id
