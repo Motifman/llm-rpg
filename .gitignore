@@ -65,3 +65,6 @@ cache/
 .coverage
 htmlcov/
 .pytest_cache/ 
+
+# cursor
+.cursor/
