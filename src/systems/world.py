@@ -1,9 +1,11 @@
 from typing import Dict, List
 from ..models.spot import Spot
 from ..models.agent import Agent
-from ..models.action import Movement, Exploration, Action, Interaction, InteractionType, ItemUsage
+from ..models.action import Movement, Exploration, Action, Interaction, InteractionType, ItemUsage, PostTrade, ViewTrades, AcceptTrade, CancelTrade
 from ..models.interactable import Door
 from ..models.item import ConsumableItem
+from ..models.trade import TradeOffer
+from ..systems.trading_post import TradingPost
 
 
 class World:
@@ -15,6 +17,7 @@ class World:
     def __init__(self):
         self.spots: Dict[str, Spot] = {}
         self.agents: Dict[str, Agent] = {}
+        self.trading_post: TradingPost = TradingPost()  # グローバル取引所
         
     def add_spot(self, spot: Spot):
         """スポットを追加"""
@@ -39,6 +42,10 @@ class World:
     def get_all_agents(self) -> List[Agent]:
         """すべてのエージェントを取得"""
         return list(self.agents.values())
+
+    def get_trading_post(self) -> TradingPost:
+        """取引所を取得"""
+        return self.trading_post
 
     def execute_agent_movement(self, agent_id: str, movement: Movement):
         """
@@ -152,6 +159,162 @@ class World:
         for _ in range(item_usage.count):
             agent.apply_item_effect(item.effect)
     
+    def execute_agent_post_trade(self, agent_id: str, post_trade: PostTrade) -> str:
+        """
+        取引出品行動を実行し、取引所に出品する
+        
+        Returns:
+            取引ID
+        """
+        agent = self.get_agent(agent_id)
+        
+        # 出品可能性チェック
+        if not post_trade.is_valid(agent):
+            item_count = agent.get_item_count(post_trade.offered_item_id)
+            if item_count == 0:
+                raise ValueError(f"アイテム '{post_trade.offered_item_id}' を所持していません")
+            elif item_count < post_trade.offered_item_count:
+                raise ValueError(f"アイテム '{post_trade.offered_item_id}' が不足しています（必要: {post_trade.offered_item_count}個、所持: {item_count}個）")
+            else:
+                raise ValueError("無効な取引内容です")
+        
+        # TradeOfferを作成
+        if post_trade.is_money_trade():
+            trade_offer = TradeOffer.create_money_trade(
+                seller_id=agent_id,
+                offered_item_id=post_trade.offered_item_id,
+                offered_item_count=post_trade.offered_item_count,
+                requested_money=post_trade.requested_money,
+                trade_type=post_trade.get_trade_type(),
+                target_agent_id=post_trade.target_agent_id
+            )
+        else:
+            trade_offer = TradeOffer.create_item_trade(
+                seller_id=agent_id,
+                offered_item_id=post_trade.offered_item_id,
+                offered_item_count=post_trade.offered_item_count,
+                requested_item_id=post_trade.requested_item_id,
+                requested_item_count=post_trade.requested_item_count,
+                trade_type=post_trade.get_trade_type(),
+                target_agent_id=post_trade.target_agent_id
+            )
+        
+        # 取引所に出品
+        success = self.trading_post.post_trade(trade_offer)
+        if not success:
+            raise ValueError("取引の出品に失敗しました")
+        
+        # 出品したアイテムをエージェントから削除（エスクロー）
+        removed_count = agent.remove_item_by_id(post_trade.offered_item_id, post_trade.offered_item_count)
+        if removed_count != post_trade.offered_item_count:
+            # 出品をキャンセルして元に戻す
+            self.trading_post.cancel_trade(trade_offer.trade_id, agent_id)
+            raise ValueError("アイテムの出品処理に失敗しました")
+        
+        return trade_offer.trade_id
+    
+    def execute_agent_view_trades(self, agent_id: str, view_trades: ViewTrades) -> List[TradeOffer]:
+        """
+        取引閲覧行動を実行し、フィルタリングされた取引一覧を返す
+        """
+        filters = view_trades.get_filters(agent_id)
+        return self.trading_post.view_trades(filters)
+    
+    def execute_agent_accept_trade(self, agent_id: str, accept_trade: AcceptTrade) -> TradeOffer:
+        """
+        取引受託行動を実行し、取引を成立させる
+        """
+        agent = self.get_agent(agent_id)
+        trade_id = accept_trade.get_trade_id()
+        
+        # 取引を取得
+        trade = self.trading_post.get_trade(trade_id)
+        if not trade:
+            raise ValueError(f"取引 {trade_id} が見つかりません")
+        
+        # 受託可能性チェック
+        if not trade.can_be_accepted_by(agent_id):
+            if trade.seller_id == agent_id:
+                raise ValueError("自分の出品は受託できません")
+            else:
+                raise ValueError("この取引は受託できません")
+        
+        # 支払い能力チェック
+        if trade.is_money_trade():
+            if agent.get_money() < trade.requested_money:
+                raise ValueError(f"所持金が不足しています（必要: {trade.requested_money}ゴールド、所持: {agent.get_money()}ゴールド）")
+        else:
+            # アイテム取引の場合
+            if not agent.has_item(trade.requested_item_id):
+                raise ValueError(f"アイテム '{trade.requested_item_id}' を所持していません")
+            
+            item_count = agent.get_item_count(trade.requested_item_id)
+            if item_count < trade.requested_item_count:
+                raise ValueError(f"アイテム '{trade.requested_item_id}' が不足しています（必要: {trade.requested_item_count}個、所持: {item_count}個）")
+        
+        # 取引所で取引を成立させる
+        completed_trade = self.trading_post.accept_trade(trade_id, agent_id)
+        
+        # 売り手と買い手を取得
+        seller = self.get_agent(trade.seller_id)
+        buyer = agent
+        
+        # アイテムと金銭の移動
+        try:
+            if trade.is_money_trade():
+                # お金での取引
+                buyer.add_money(-trade.requested_money)
+                seller.add_money(trade.requested_money)
+            else:
+                # アイテム取引
+                buyer.remove_item_by_id(trade.requested_item_id, trade.requested_item_count)
+                # 売り手に要求されたアイテムを渡す
+                requested_item = buyer.get_item_by_id(trade.requested_item_id)
+                if requested_item:
+                    for _ in range(trade.requested_item_count):
+                        seller.add_item(requested_item)
+            
+            # 買い手に出品されたアイテムを渡す
+            offered_item = seller.get_item_by_id(trade.offered_item_id)
+            if offered_item:
+                for _ in range(trade.offered_item_count):
+                    buyer.add_item(offered_item)
+            
+        except Exception as e:
+            # 取引に失敗した場合は取引をキャンセル状態に戻す
+            raise ValueError(f"取引の処理中にエラーが発生しました: {e}")
+        
+        return completed_trade
+    
+    def execute_agent_cancel_trade(self, agent_id: str, cancel_trade: CancelTrade) -> bool:
+        """
+        取引キャンセル行動を実行し、出品をキャンセルする
+        """
+        agent = self.get_agent(agent_id)
+        trade_id = cancel_trade.get_trade_id()
+        
+        # 取引を取得
+        trade = self.trading_post.get_trade(trade_id)
+        if not trade:
+            raise ValueError(f"取引 {trade_id} が見つかりません")
+        
+        # キャンセル権限チェック
+        if trade.seller_id != agent_id:
+            raise ValueError("自分の出品のみキャンセルできます")
+        
+        # 取引所でキャンセル
+        success = self.trading_post.cancel_trade(trade_id, agent_id)
+        if not success:
+            raise ValueError("取引のキャンセルに失敗しました")
+        
+        # エスクローされていたアイテムを返却
+        offered_item = agent.get_item_by_id(trade.offered_item_id)
+        if offered_item:
+            for _ in range(trade.offered_item_count):
+                agent.add_item(offered_item)
+        
+        return True
+    
     def _add_bidirectional_door_movement(self, current_spot: Spot, door: Door):
         """ドア開放時に双方向の移動を追加"""
         # 現在のSpotから目標Spotへの移動
@@ -180,5 +343,13 @@ class World:
             self.execute_agent_interaction(agent_id, action)
         elif isinstance(action, ItemUsage):
             self.execute_agent_item_usage(agent_id, action)
+        elif isinstance(action, PostTrade):
+            return self.execute_agent_post_trade(agent_id, action)
+        elif isinstance(action, ViewTrades):
+            return self.execute_agent_view_trades(agent_id, action)
+        elif isinstance(action, AcceptTrade):
+            return self.execute_agent_accept_trade(agent_id, action)
+        elif isinstance(action, CancelTrade):
+            return self.execute_agent_cancel_trade(agent_id, action)
         else:
             raise ValueError(f"不明な行動: {action}")
