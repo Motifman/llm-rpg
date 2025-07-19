@@ -191,3 +191,24 @@ class CancelTrade(Action):
     def get_trade_id(self) -> str:
         """取引IDを取得"""
         return self.trade_id
+
+
+# === 会話システム関連の行動 ===
+
+@dataclass(frozen=True)
+class Conversation(Action):
+    """会話行動"""
+    content: str  # 送信するメッセージ内容
+    target_agent_id: Optional[str] = None  # 特定のエージェントに送信する場合（Noneは全体発言）
+    
+    def is_broadcast(self) -> bool:
+        """全体発言かどうか"""
+        return self.target_agent_id is None
+    
+    def get_target_agent_id(self) -> Optional[str]:
+        """対象エージェントIDを取得"""
+        return self.target_agent_id
+    
+    def get_content(self) -> str:
+        """メッセージ内容を取得"""
+        return self.content

@@ -1,11 +1,12 @@
 from typing import Dict, List
 from ..models.spot import Spot
 from ..models.agent import Agent
-from ..models.action import Movement, Exploration, Action, Interaction, InteractionType, ItemUsage, PostTrade, ViewTrades, AcceptTrade, CancelTrade
+from ..models.action import Movement, Exploration, Action, Interaction, InteractionType, ItemUsage, PostTrade, ViewTrades, AcceptTrade, CancelTrade, Conversation
 from ..models.interactable import Door
 from ..models.item import ConsumableItem
 from ..models.trade import TradeOffer
 from ..systems.trading_post import TradingPost
+from ..systems.message import LocationChatMessage
 
 
 class World:
@@ -331,6 +332,50 @@ class World:
         )
         target_spot.add_dynamic_movement(backward_movement)
     
+    def get_agents_in_spot(self, spot_id: str) -> List[Agent]:
+        """指定されたスポットにいるエージェントのリストを取得"""
+        agents_in_spot = []
+        for agent in self.agents.values():
+            if agent.get_current_spot_id() == spot_id:
+                agents_in_spot.append(agent)
+        return agents_in_spot
+    
+    def execute_agent_conversation(self, agent_id: str, conversation: Conversation):
+        """
+        会話行動を実行し、同じスポットにいるエージェントにメッセージを配信
+        """
+        sender = self.get_agent(agent_id)
+        current_spot_id = sender.get_current_spot_id()
+        
+        # メッセージを作成
+        message = LocationChatMessage(
+            sender_id=agent_id,
+            spot_id=current_spot_id,
+            content=conversation.get_content(),
+            target_agent_id=conversation.get_target_agent_id()
+        )
+        
+        # 同じスポットにいるエージェントを取得
+        agents_in_spot = self.get_agents_in_spot(current_spot_id)
+        
+        # メッセージを配信
+        for agent in agents_in_spot:
+            # 送信者自身には送らない
+            if agent.agent_id == agent_id:
+                continue
+                
+            # 特定のエージェント宛てのメッセージの場合、対象者のみに送信
+            if message.is_targeted() and agent.agent_id != message.get_target_agent_id():
+                continue
+            
+            # メッセージを受信
+            agent.receive_message(message)
+        
+        # 送信者の会話履歴にも記録（自分の発言として）
+        sender.conversation_history.append(message)
+        
+        return message
+    
     def execute_action(self, agent_id: str, action: Action):
         """
         行動を実行し、行動の結果をAgentの状態とSpotの状態に反映
@@ -351,5 +396,7 @@ class World:
             return self.execute_agent_accept_trade(agent_id, action)
         elif isinstance(action, CancelTrade):
             return self.execute_agent_cancel_trade(agent_id, action)
+        elif isinstance(action, Conversation):
+            return self.execute_agent_conversation(agent_id, action)
         else:
             raise ValueError(f"不明な行動: {action}")

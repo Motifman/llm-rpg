@@ -148,3 +148,49 @@ class GameEventMessage(AbstractMessage):
     
     def __str__(self) -> str:
         return f"GameEventMessage(id={self.message_id[:8]}...)"
+
+
+class LocationChatMessage(AbstractMessage):
+    """
+    LocationChatMessage は同じスポット内でのエージェント間会話メッセージ。
+    特定のスポットにいるエージェント間でのみ送受信される。
+    """
+    def __init__(self, sender_id: str, spot_id: str, content: str, target_agent_id: str = None):
+        super().__init__()
+        self.sender_id = sender_id
+        self.spot_id = spot_id  # メッセージが送信されたスポット
+        self.content = content
+        self.target_agent_id = target_agent_id  # Noneの場合は同じスポットの全エージェント
+
+    def is_broadcast(self) -> bool:
+        """スポット内全体への発言かどうか"""
+        return self.target_agent_id is None
+    
+    def is_targeted(self) -> bool:
+        """特定のエージェントへの発言かどうか"""
+        return self.target_agent_id is not None
+    
+    def get_target_agent_id(self) -> str:
+        """対象エージェントIDを取得"""
+        return self.target_agent_id
+    
+    def get_spot_id(self) -> str:
+        """送信スポットIDを取得"""
+        return self.spot_id
+
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        data.update({
+            "sender_id": self.sender_id,
+            "spot_id": self.spot_id,
+            "content": self.content,
+            "target_agent_id": self.target_agent_id,
+            "message_type": self.message_type,
+        })
+        return data
+    
+    def __repr__(self) -> str:
+        return f"LocationChatMessage(id={self.message_id[:8]}...)"
+    
+    def __str__(self) -> str:
+        return f"LocationChatMessage(id={self.message_id[:8]}...)"
