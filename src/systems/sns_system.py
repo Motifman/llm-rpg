@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict, Any, Set
 from datetime import datetime
-from ..models.sns import SnsUser, Post, Follow, Like, Reply, Notification, NotificationType
+from ..models.sns import SnsUser, Post, Follow, Like, Reply, Notification, NotificationType, Block
 from ..models.agent import Agent
 
 
@@ -15,6 +15,7 @@ class SnsSystem:
         self.likes: List[Like] = []
         self.replies: List[Reply] = []
         self.notifications: List[Notification] = []
+        self.blocks: List[Block] = []
     
     # === ユーザー管理 ===
     
@@ -78,23 +79,33 @@ class SnsSystem:
     
     # === タイムライン機能 ===
     
-    def get_global_timeline(self, limit: int = 50) -> List[Post]:
+    def get_global_timeline(self, viewer_id: Optional[str] = None, limit: int = 50) -> List[Post]:
         """グローバルタイムライン（全体の最新投稿）を取得"""
         all_posts = list(self.posts.values())
-        all_posts.sort(key=lambda p: p.created_at, reverse=True)
-        return all_posts[:limit]
+        
+        # ブロック制限を適用（viewer_idが指定されている場合）
+        if viewer_id:
+            filtered_posts = [
+                post for post in all_posts 
+                if self._is_content_accessible(viewer_id, post.user_id)
+            ]
+        else:
+            filtered_posts = all_posts
+        
+        filtered_posts.sort(key=lambda p: p.created_at, reverse=True)
+        return filtered_posts[:limit]
     
     def get_following_timeline(self, user_id: str, limit: int = 50) -> List[Post]:
         """フォロー中のユーザーのタイムラインを取得"""
         following_ids = self.get_following_list(user_id)
         following_posts = [
             post for post in self.posts.values() 
-            if post.user_id in following_ids
+            if post.user_id in following_ids and self._is_content_accessible(user_id, post.user_id)
         ]
         following_posts.sort(key=lambda p: p.created_at, reverse=True)
         return following_posts[:limit]
     
-    def get_hashtag_timeline(self, hashtag: str, limit: int = 50) -> List[Post]:
+    def get_hashtag_timeline(self, hashtag: str, viewer_id: Optional[str] = None, limit: int = 50) -> List[Post]:
         """特定のハッシュタグの投稿を取得"""
         # ハッシュタグの正規化（#記号の有無を統一）
         normalized_hashtag = hashtag if hashtag.startswith('#') else f'#{hashtag}'
@@ -103,6 +114,14 @@ class SnsSystem:
             post for post in self.posts.values() 
             if normalized_hashtag in post.hashtags
         ]
+        
+        # ブロック制限を適用（viewer_idが指定されている場合）
+        if viewer_id:
+            hashtag_posts = [
+                post for post in hashtag_posts 
+                if self._is_content_accessible(viewer_id, post.user_id)
+            ]
+        
         hashtag_posts.sort(key=lambda p: p.created_at, reverse=True)
         return hashtag_posts[:limit]
     
@@ -116,6 +135,10 @@ class SnsSystem:
         
         if follower_id == following_id:
             return False  # 自分自身はフォローできない
+        
+        # ブロック関係チェック
+        if self.is_blocked(follower_id, following_id) or self.is_blocked(following_id, follower_id):
+            return False  # ブロック関係がある場合はフォローできない
         
         # 既にフォローしているかチェック
         if self.is_following(follower_id, following_id):
@@ -173,11 +196,96 @@ class SnsSystem:
         """フォロー中数を取得"""
         return len(self.get_following_list(user_id))
     
+    # === ブロック機能 ===
+    
+    def block_user(self, blocker_id: str, blocked_id: str) -> bool:
+        """ユーザーをブロック"""
+        # 基本的なバリデーション
+        if not self.user_exists(blocker_id) or not self.user_exists(blocked_id):
+            return False
+        
+        if blocker_id == blocked_id:
+            return False  # 自分自身はブロックできない
+        
+        # 既にブロックしているかチェック
+        if self.is_blocked(blocker_id, blocked_id):
+            return False
+        
+        # ブロック関係を作成
+        block = Block(blocker_id=blocker_id, blocked_id=blocked_id)
+        self.blocks.append(block)
+        
+        # ブロックした相手をフォローしている場合は自動的にアンフォロー
+        if self.is_following(blocker_id, blocked_id):
+            self.unfollow_user(blocker_id, blocked_id)
+        
+        # ブロックした相手からフォローされている場合も自動的にアンフォロー
+        if self.is_following(blocked_id, blocker_id):
+            self.unfollow_user(blocked_id, blocker_id)
+        
+        return True
+    
+    def unblock_user(self, blocker_id: str, blocked_id: str) -> bool:
+        """ユーザーのブロックを解除"""
+        for i, block in enumerate(self.blocks):
+            if block.blocker_id == blocker_id and block.blocked_id == blocked_id:
+                del self.blocks[i]
+                return True
+        return False
+    
+    def is_blocked(self, blocker_id: str, blocked_id: str) -> bool:
+        """ブロック関係をチェック"""
+        return any(
+            block.blocker_id == blocker_id and block.blocked_id == blocked_id
+            for block in self.blocks
+        )
+    
+    def get_blocked_list(self, user_id: str, limit: int = 100) -> List[str]:
+        """ブロックしているユーザーリストを取得"""
+        blocked = [
+            block.blocked_id for block in self.blocks 
+            if block.blocker_id == user_id
+        ]
+        return blocked[:limit]
+    
+    def get_blocked_by_list(self, user_id: str, limit: int = 100) -> List[str]:
+        """このユーザーをブロックしているユーザーリストを取得"""
+        blocked_by = [
+            block.blocker_id for block in self.blocks 
+            if block.blocked_id == user_id
+        ]
+        return blocked_by[:limit]
+    
+    def get_blocked_count(self, user_id: str) -> int:
+        """ブロックしているユーザー数を取得"""
+        return len(self.get_blocked_list(user_id))
+    
+    def _is_content_accessible(self, viewer_id: str, author_id: str) -> bool:
+        """コンテンツへのアクセス権限をチェック"""
+        # 自分のコンテンツは常にアクセス可能
+        if viewer_id == author_id:
+            return True
+        
+        # 投稿者が閲覧者をブロックしている場合はアクセス不可
+        if self.is_blocked(author_id, viewer_id):
+            return False
+        
+        # 閲覧者が投稿者をブロックしている場合はアクセス不可
+        if self.is_blocked(viewer_id, author_id):
+            return False
+        
+        return True
+    
     # === いいね機能 ===
     
     def like_post(self, user_id: str, post_id: str) -> bool:
         """投稿にいいね"""
-        if not self.user_exists(user_id) or not self.get_post(post_id):
+        post = self.get_post(post_id)
+        if not self.user_exists(user_id) or not post:
+            return False
+        
+        # コンテンツアクセス権限チェック
+        if not self._is_content_accessible(user_id, post.user_id):
             return False
         
         # 既にいいねしているかチェック
@@ -189,8 +297,7 @@ class SnsSystem:
         self.likes.append(like)
         
         # いいね通知を作成（自分の投稿以外）
-        post = self.get_post(post_id)
-        if post and post.user_id != user_id:
+        if post.user_id != user_id:
             notification = Notification.create_like_notification(
                 user_id=post.user_id,
                 from_user_id=user_id,
@@ -223,7 +330,12 @@ class SnsSystem:
     
     def reply_to_post(self, user_id: str, post_id: str, content: str) -> Optional[Reply]:
         """投稿に返信"""
-        if not self.user_exists(user_id) or not self.get_post(post_id):
+        post = self.get_post(post_id)
+        if not self.user_exists(user_id) or not post:
+            return None
+        
+        # コンテンツアクセス権限チェック
+        if not self._is_content_accessible(user_id, post.user_id):
             return None
         
         # 返信を作成
@@ -231,8 +343,7 @@ class SnsSystem:
         self.replies.append(reply)
         
         # 返信通知を作成（自分の投稿以外）
-        post = self.get_post(post_id)
-        if post and post.user_id != user_id:
+        if post.user_id != user_id:
             notification = Notification.create_reply_notification(
                 user_id=post.user_id,
                 from_user_id=user_id,
@@ -291,4 +402,5 @@ class SnsSystem:
             "total_likes": len(self.likes),
             "total_replies": len(self.replies),
             "total_notifications": len(self.notifications),
+            "total_blocks": len(self.blocks),
         } 

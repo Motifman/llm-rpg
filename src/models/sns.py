@@ -75,6 +75,20 @@ class Follow:
 
 
 @dataclass(frozen=True)
+class Block:
+    """ブロック関係"""
+    blocker_id: str  # ブロックする人
+    blocked_id: str  # ブロックされる人
+    created_at: datetime = field(default_factory=datetime.now)
+    
+    def __str__(self):
+        return f"Block(blocker={self.blocker_id}, blocked={self.blocked_id})"
+    
+    def __repr__(self):
+        return f"Block(blocker_id={self.blocker_id}, blocked_id={self.blocked_id})"
+
+
+@dataclass(frozen=True)
 class Like:
     """いいね"""
     like_id: str

@@ -198,11 +198,72 @@ def main():
     print(f"- 総いいね数: {system_stats['total_likes']}")
     print(f"- 総返信数: {system_stats['total_replies']}")
     print(f"- 総通知数: {system_stats['total_notifications']}")
+    print(f"- 総ブロック数: {system_stats['total_blocks']}")
     
+    print_separator("11. ブロック機能のデモ")
+    
+    # 問題ユーザーとしてダミーエージェントを作成
+    david = Agent("david", "デイビッド")
+    sns_adapter.register_agent_as_sns_user(david, "迷惑な投稿をするユーザー")
+    
+    # デイビッドが迷惑な投稿
+    spam_post = sns_adapter.agent_post(david, "スパム投稿です！みんな無視してください！ #スパム")
+    
+    print("✅ 問題ユーザー（デイビッド）が迷惑投稿をしました")
+    
+    # アリスがデイビッドをブロック
+    result = sns_adapter.agent_block_user(alice, david)
+    print(f"📛 アリスがデイビッドをブロック: {result}")
+    
+    # ブロック後のタイムライン（デイビッドの投稿は表示されない）
+    alice_timeline_after_block = sns_adapter.get_agent_timeline(alice, "global", limit=10)
+    print(f"\n📱 ブロック後のアリスのタイムライン:")
+    blocked_user_posts = [post for post in alice_timeline_after_block if post.user_id == "david"]
+    print(f"- デイビッドの投稿数: {len(blocked_user_posts)} (ブロックにより非表示)")
+    
+    # デイビッドからのインタラクション試行（全て拒否される）
+    alice_post_for_block_test = sns_adapter.agent_post(alice, "ブロックテスト用投稿")
+    
+    david_like_result = sns_adapter.agent_like_post(david, alice_post_for_block_test.post_id)
+    david_reply_result = sns_adapter.agent_reply_to_post(david, alice_post_for_block_test.post_id, "返信試行")
+    david_follow_result = sns_adapter.agent_follow(david, alice)
+    
+    print(f"\n🚫 ブロック制限の効果:")
+    print(f"- デイビッドからのいいね: {'拒否' if not david_like_result else '許可'}")
+    print(f"- デイビッドからの返信: {'拒否' if david_reply_result is None else '許可'}")
+    print(f"- デイビッドからのフォロー: {'拒否' if not david_follow_result else '許可'}")
+    
+    # ブロックリストと関係性の表示
+    alice_blocked_list = sns_adapter.get_agent_blocked_list(alice)
+    alice_david_relation = sns_adapter.get_agent_relationship_status(alice, david)
+    
+    print(f"\n📋 アリスのブロックリスト:")
+    for blocked_id in alice_blocked_list:
+        blocked_user = sns_adapter.get_agent_sns_profile(Agent(blocked_id, blocked_id))
+        print(f"- {blocked_user.name} ({blocked_id})")
+    
+    print(f"\n👥 アリスとデイビッドの関係性:")
+    print(f"- アリス → デイビッド: {'ブロック中' if alice_david_relation['is_blocking'] else 'ブロックしていない'}")
+    print(f"- デイビッド → アリス: {'ブロックされている' if alice_david_relation['is_blocked_by'] else 'ブロックされていない'}")
+    
+    # ブロック解除のデモ
+    print(f"\n🔓 ブロック解除のテスト:")
+    unblock_result = sns_adapter.agent_unblock_user(alice, david)
+    print(f"- ブロック解除: {'成功' if unblock_result else '失敗'}")
+    
+    # ブロック解除後はインタラクションが再び可能
+    david_like_after_unblock = sns_adapter.agent_like_post(david, alice_post_for_block_test.post_id)
+    print(f"- ブロック解除後のいいね: {'成功' if david_like_after_unblock else '失敗'}")
+
     print_separator("デモ完了")
     print("🎊 SNSシステムのデモンストレーションが完了しました！")
-    print("エージェント同士が投稿、フォロー、いいね、返信、通知などの")
+    print("エージェント同士が投稿、フォロー、いいね、返信、通知、ブロックなどの")
     print("様々なSNS機能を利用できることが確認できました。")
+    print("\n新機能：")
+    print("✅ ブロック機能により迷惑ユーザーからの干渉を防止")
+    print("✅ ブロック時の自動フォロー解除")
+    print("✅ ブロック制限によるタイムラインフィルタリング")
+    print("✅ ブロック/アンブロック機能")
 
 
 if __name__ == "__main__":

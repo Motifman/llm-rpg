@@ -1,7 +1,7 @@
 from typing import List, Optional, Dict, Any
 from .sns_system import SnsSystem
 from ..models.agent import Agent
-from ..models.sns import SnsUser, Post, Follow, Like, Reply, Notification
+from ..models.sns import SnsUser, Post, Follow, Like, Reply, Notification, Block
 
 
 class SnsAdapter:
@@ -78,6 +78,34 @@ class SnsAdapter:
         
         return self.sns_system.reply_to_post(agent.agent_id, post_id, content)
     
+    # === ブロック機能 ===
+    
+    def agent_block_user(self, blocker_agent: Agent, target_agent: Agent) -> bool:
+        """エージェントが他のエージェントをブロック"""
+        # 両方のエージェントがSNSに登録されているかチェック
+        if not self.is_agent_registered(blocker_agent):
+            self.register_agent_as_sns_user(blocker_agent)
+        if not self.is_agent_registered(target_agent):
+            self.register_agent_as_sns_user(target_agent)
+        
+        return self.sns_system.block_user(blocker_agent.agent_id, target_agent.agent_id)
+    
+    def agent_unblock_user(self, blocker_agent: Agent, target_agent: Agent) -> bool:
+        """エージェントがブロックを解除"""
+        return self.sns_system.unblock_user(blocker_agent.agent_id, target_agent.agent_id)
+    
+    def is_agent_blocked(self, blocker_agent: Agent, target_agent: Agent) -> bool:
+        """エージェント間のブロック関係をチェック"""
+        return self.sns_system.is_blocked(blocker_agent.agent_id, target_agent.agent_id)
+    
+    def get_agent_blocked_list(self, agent: Agent, limit: int = 100) -> List[str]:
+        """エージェントがブロックしているユーザーリストを取得"""
+        return self.sns_system.get_blocked_list(agent.agent_id, limit)
+    
+    def get_agent_blocked_count(self, agent: Agent) -> int:
+        """エージェントがブロックしているユーザー数を取得"""
+        return self.sns_system.get_blocked_count(agent.agent_id)
+    
     # === エージェント向け情報取得 ===
     
     def get_agent_timeline(self, agent: Agent, timeline_type: str = "global", limit: int = 50) -> List[Post]:
@@ -93,7 +121,7 @@ class SnsAdapter:
         elif timeline_type == "user":
             return self.sns_system.get_user_posts(agent.agent_id, limit)
         else:  # "global"
-            return self.sns_system.get_global_timeline(limit)
+            return self.sns_system.get_global_timeline(viewer_id=agent.agent_id, limit=limit)
     
     def get_agent_notifications(self, agent: Agent, unread_only: bool = False, limit: int = 50) -> List[Notification]:
         """エージェントの通知を取得"""
@@ -136,9 +164,10 @@ class SnsAdapter:
     
     # === ハッシュタグ機能 ===
     
-    def get_hashtag_timeline(self, hashtag: str, limit: int = 50) -> List[Post]:
+    def get_hashtag_timeline(self, hashtag: str, viewer_agent: Optional[Agent] = None, limit: int = 50) -> List[Post]:
         """ハッシュタグタイムラインを取得"""
-        return self.sns_system.get_hashtag_timeline(hashtag, limit)
+        viewer_id = viewer_agent.agent_id if viewer_agent else None
+        return self.sns_system.get_hashtag_timeline(hashtag, viewer_id=viewer_id, limit=limit)
     
     def get_trending_hashtags(self, limit: int = 10) -> List[Dict[str, Any]]:
         """トレンドハッシュタグを取得（投稿数順）"""
@@ -232,5 +261,7 @@ class SnsAdapter:
         return {
             "is_following": self.sns_system.is_following(agent.agent_id, target_agent.agent_id),
             "is_followed_by": self.sns_system.is_following(target_agent.agent_id, agent.agent_id),
-            "is_mutual": self.get_mutual_follows(agent, target_agent)
+            "is_mutual": self.get_mutual_follows(agent, target_agent),
+            "is_blocking": self.sns_system.is_blocked(agent.agent_id, target_agent.agent_id),
+            "is_blocked_by": self.sns_system.is_blocked(target_agent.agent_id, agent.agent_id)
         } 
