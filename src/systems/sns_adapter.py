@@ -1,7 +1,7 @@
 from typing import List, Optional, Dict, Any
 from .sns_system import SnsSystem
 from ..models.agent import Agent
-from ..models.sns import SnsUser, Post, Follow, Like, Reply, Notification, Block
+from ..models.sns import SnsUser, Post, Follow, Like, Reply, Notification, Block, PostVisibility
 
 
 class SnsAdapter:
@@ -38,13 +38,26 @@ class SnsAdapter:
     
     # === エージェント向けSNS操作 ===
     
-    def agent_post(self, agent: Agent, content: str, hashtags: Optional[List[str]] = None) -> Optional[Post]:
+    def agent_post(self, agent: Agent, content: str, hashtags: Optional[List[str]] = None, 
+                   visibility: PostVisibility = PostVisibility.PUBLIC, 
+                   allowed_agents: Optional[List[Agent]] = None) -> Optional[Post]:
         """エージェントが投稿する"""
         # SNSユーザーとして未登録の場合は自動登録
         if not self.is_agent_registered(agent):
             self.register_agent_as_sns_user(agent)
         
-        return self.sns_system.create_post(agent.agent_id, content, hashtags)
+        # 許可エージェントリストをユーザーIDリストに変換
+        allowed_users = None
+        if allowed_agents:
+            # 許可エージェントも自動登録
+            for allowed_agent in allowed_agents:
+                if not self.is_agent_registered(allowed_agent):
+                    self.register_agent_as_sns_user(allowed_agent)
+            allowed_users = [a.agent_id for a in allowed_agents]
+        
+        return self.sns_system.create_post(
+            agent.agent_id, content, hashtags, visibility, allowed_users
+        )
     
     def agent_follow(self, follower_agent: Agent, target_agent: Agent) -> bool:
         """エージェントが他のエージェントをフォロー"""
@@ -105,6 +118,43 @@ class SnsAdapter:
     def get_agent_blocked_count(self, agent: Agent) -> int:
         """エージェントがブロックしているユーザー数を取得"""
         return self.sns_system.get_blocked_count(agent.agent_id)
+    
+    # === プライベート投稿関連のヘルパーメソッド ===
+    
+    def agent_create_private_post(self, agent: Agent, content: str, hashtags: Optional[List[str]] = None) -> Optional[Post]:
+        """エージェントがプライベート投稿を作成"""
+        return self.agent_post(agent, content, hashtags, PostVisibility.PRIVATE)
+    
+    def agent_create_followers_only_post(self, agent: Agent, content: str, hashtags: Optional[List[str]] = None) -> Optional[Post]:
+        """エージェントがフォロワー限定投稿を作成"""
+        return self.agent_post(agent, content, hashtags, PostVisibility.FOLLOWERS_ONLY)
+    
+    def agent_create_mutual_follows_post(self, agent: Agent, content: str, hashtags: Optional[List[str]] = None) -> Optional[Post]:
+        """エージェントが相互フォロー限定投稿を作成"""
+        return self.agent_post(agent, content, hashtags, PostVisibility.MUTUAL_FOLLOWS_ONLY)
+    
+    def agent_create_specified_users_post(self, agent: Agent, content: str, 
+                                        allowed_agents: List[Agent], 
+                                        hashtags: Optional[List[str]] = None) -> Optional[Post]:
+        """エージェントが指定ユーザー限定投稿を作成"""
+        return self.agent_post(agent, content, hashtags, PostVisibility.SPECIFIED_USERS, allowed_agents)
+    
+    def get_agent_posts_by_visibility(self, agent: Agent, visibility: PostVisibility, limit: int = 50) -> List[Post]:
+        """エージェントの特定可視性レベルの投稿を取得"""
+        user_posts = self.sns_system.get_user_posts(agent.agent_id, limit=1000)  # 多めに取得
+        filtered_posts = [post for post in user_posts if post.visibility == visibility]
+        return filtered_posts[:limit]
+    
+    def get_agent_visibility_stats(self, agent: Agent) -> Dict[str, int]:
+        """エージェントの可視性別投稿統計を取得"""
+        user_posts = self.sns_system.get_user_posts(agent.agent_id, limit=1000)
+        visibility_counts = {}
+        
+        for post in user_posts:
+            visibility = post.visibility.value
+            visibility_counts[visibility] = visibility_counts.get(visibility, 0) + 1
+        
+        return visibility_counts
     
     # === エージェント向け情報取得 ===
     

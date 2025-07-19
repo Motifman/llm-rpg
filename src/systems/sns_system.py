@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict, Any, Set
 from datetime import datetime
-from ..models.sns import SnsUser, Post, Follow, Like, Reply, Notification, NotificationType, Block
+from ..models.sns import SnsUser, Post, Follow, Like, Reply, Notification, NotificationType, Block, PostVisibility
 from ..models.agent import Agent
 
 
@@ -50,12 +50,30 @@ class SnsSystem:
     
     # === 投稿機能 ===
     
-    def create_post(self, user_id: str, content: str, hashtags: Optional[List[str]] = None) -> Optional[Post]:
+    def create_post(self, user_id: str, content: str, hashtags: Optional[List[str]] = None, 
+                   visibility: PostVisibility = PostVisibility.PUBLIC, 
+                   allowed_users: Optional[List[str]] = None) -> Optional[Post]:
         """新しい投稿を作成"""
         if not self.user_exists(user_id):
             return None
         
-        post = Post.create(user_id=user_id, content=content, hashtags=hashtags)
+        # 指定ユーザー限定の場合、allowed_usersの妥当性をチェック
+        if visibility == PostVisibility.SPECIFIED_USERS:
+            if not allowed_users:
+                return None  # 指定ユーザーが空の場合は作成失敗
+            # 存在しないユーザーを除外
+            valid_users = [uid for uid in allowed_users if self.user_exists(uid)]
+            if not valid_users:
+                return None  # 有効なユーザーがいない場合は作成失敗
+            allowed_users = valid_users
+        
+        post = Post.create(
+            user_id=user_id, 
+            content=content, 
+            hashtags=hashtags,
+            visibility=visibility,
+            allowed_users=allowed_users
+        )
         
         # 投稿内容からハッシュタグを自動抽出
         extracted_hashtags = post.extract_hashtags_from_content()
@@ -83,14 +101,18 @@ class SnsSystem:
         """グローバルタイムライン（全体の最新投稿）を取得"""
         all_posts = list(self.posts.values())
         
-        # ブロック制限を適用（viewer_idが指定されている場合）
+        # 可視性制限を適用（viewer_idが指定されている場合）
         if viewer_id:
             filtered_posts = [
                 post for post in all_posts 
-                if self._is_content_accessible(viewer_id, post.user_id)
+                if self._is_post_visible(post, viewer_id)
             ]
         else:
-            filtered_posts = all_posts
+            # 閲覧者が指定されていない場合はパブリック投稿のみ
+            filtered_posts = [
+                post for post in all_posts 
+                if post.visibility == PostVisibility.PUBLIC
+            ]
         
         filtered_posts.sort(key=lambda p: p.created_at, reverse=True)
         return filtered_posts[:limit]
@@ -100,7 +122,7 @@ class SnsSystem:
         following_ids = self.get_following_list(user_id)
         following_posts = [
             post for post in self.posts.values() 
-            if post.user_id in following_ids and self._is_content_accessible(user_id, post.user_id)
+            if post.user_id in following_ids and self._is_post_visible(post, user_id)
         ]
         following_posts.sort(key=lambda p: p.created_at, reverse=True)
         return following_posts[:limit]
@@ -115,11 +137,17 @@ class SnsSystem:
             if normalized_hashtag in post.hashtags
         ]
         
-        # ブロック制限を適用（viewer_idが指定されている場合）
+        # 可視性制限を適用
         if viewer_id:
             hashtag_posts = [
                 post for post in hashtag_posts 
-                if self._is_content_accessible(viewer_id, post.user_id)
+                if self._is_post_visible(post, viewer_id)
+            ]
+        else:
+            # 閲覧者が指定されていない場合はパブリック投稿のみ
+            hashtag_posts = [
+                post for post in hashtag_posts 
+                if post.visibility == PostVisibility.PUBLIC
             ]
         
         hashtag_posts.sort(key=lambda p: p.created_at, reverse=True)
@@ -261,7 +289,7 @@ class SnsSystem:
         return len(self.get_blocked_list(user_id))
     
     def _is_content_accessible(self, viewer_id: str, author_id: str) -> bool:
-        """コンテンツへのアクセス権限をチェック"""
+        """コンテンツへのアクセス権限をチェック（ブロック関係のみ）"""
         # 自分のコンテンツは常にアクセス可能
         if viewer_id == author_id:
             return True
@@ -276,6 +304,38 @@ class SnsSystem:
         
         return True
     
+    def _is_post_visible(self, post: Post, viewer_id: str) -> bool:
+        """投稿の可視性をチェック（ブロック + プライバシー設定）"""
+        # ブロック関係のチェック
+        if not self._is_content_accessible(viewer_id, post.user_id):
+            return False
+        
+        # 自分の投稿は常に閲覧可能
+        if viewer_id == post.user_id:
+            return True
+        
+        # 可視性設定によるチェック
+        if post.visibility == PostVisibility.PUBLIC:
+            return True
+        
+        elif post.visibility == PostVisibility.PRIVATE:
+            return False  # 本人以外は閲覧不可
+        
+        elif post.visibility == PostVisibility.FOLLOWERS_ONLY:
+            # フォロワーのみ閲覧可能
+            return self.is_following(viewer_id, post.user_id)
+        
+        elif post.visibility == PostVisibility.MUTUAL_FOLLOWS_ONLY:
+            # 相互フォローのみ閲覧可能
+            return (self.is_following(viewer_id, post.user_id) and 
+                    self.is_following(post.user_id, viewer_id))
+        
+        elif post.visibility == PostVisibility.SPECIFIED_USERS:
+            # 指定ユーザーのみ閲覧可能
+            return viewer_id in post.allowed_users
+        
+        return False
+    
     # === いいね機能 ===
     
     def like_post(self, user_id: str, post_id: str) -> bool:
@@ -284,8 +344,8 @@ class SnsSystem:
         if not self.user_exists(user_id) or not post:
             return False
         
-        # コンテンツアクセス権限チェック
-        if not self._is_content_accessible(user_id, post.user_id):
+        # 投稿可視性チェック
+        if not self._is_post_visible(post, user_id):
             return False
         
         # 既にいいねしているかチェック
@@ -334,8 +394,8 @@ class SnsSystem:
         if not self.user_exists(user_id) or not post:
             return None
         
-        # コンテンツアクセス権限チェック
-        if not self._is_content_accessible(user_id, post.user_id):
+        # 投稿可視性チェック
+        if not self._is_post_visible(post, user_id):
             return None
         
         # 返信を作成
@@ -395,6 +455,12 @@ class SnsSystem:
     
     def get_system_stats(self) -> Dict[str, Any]:
         """システム全体の統計情報を取得"""
+        # 可視性別の投稿数を計算
+        visibility_counts = {}
+        for post in self.posts.values():
+            visibility = post.visibility.value
+            visibility_counts[visibility] = visibility_counts.get(visibility, 0) + 1
+        
         return {
             "total_users": len(self.users),
             "total_posts": len(self.posts),
@@ -403,4 +469,5 @@ class SnsSystem:
             "total_replies": len(self.replies),
             "total_notifications": len(self.notifications),
             "total_blocks": len(self.blocks),
+            "posts_by_visibility": visibility_counts,
         } 
