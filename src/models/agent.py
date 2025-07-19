@@ -20,6 +20,10 @@ class Agent:
         self.current_mp: int = 50
         self.attack: int = 10
         self.defense: int = 5
+        
+        # 会話システム関連
+        self.received_messages: List = []  # 受信したメッセージのリスト
+        self.conversation_history: List = []  # 会話履歴（全体的な記録）
 
     def add_item(self, item: Item):
         self.items.append(item)
@@ -187,6 +191,46 @@ class Agent:
                 f"攻撃: {self.attack}, 防御: {self.defense}, "
                 f"所持金: {self.money}, 経験値: {self.experience_points}")
     
+    # === 会話システム関連メソッド ===
+    
+    def receive_message(self, message):
+        """メッセージを受信する"""
+        self.received_messages.append(message)
+        self.conversation_history.append(message)
+    
+    def get_received_messages(self):
+        """受信したメッセージを取得"""
+        return self.received_messages.copy()
+    
+    def clear_received_messages(self):
+        """受信済みメッセージをクリア（読み取り済みとしてマーク）"""
+        self.received_messages.clear()
+    
+    def get_conversation_history(self, limit: int = None):
+        """会話履歴を取得"""
+        if limit is None:
+            return self.conversation_history.copy()
+        else:
+            return self.conversation_history[-limit:] if limit > 0 else []
+    
+    def get_recent_conversation_context(self, max_messages: int = 10):
+        """最近の会話コンテキストを取得（LLM統合準備）"""
+        recent_messages = self.get_conversation_history(max_messages)
+        context = {
+            "agent_id": self.agent_id,
+            "agent_name": self.name,
+            "current_spot_id": self.current_spot_id,
+            "status": self.get_status_summary(),
+            "recent_messages": [msg.to_dict() if hasattr(msg, 'to_dict') else str(msg) for msg in recent_messages],
+            "items": [item.item_id for item in self.items],
+            "discovered_info": self.discovered_info.copy()
+        }
+        return context
+    
+    def has_unread_messages(self) -> bool:
+        """未読メッセージがあるかどうか"""
+        return len(self.received_messages) > 0
+
     def __str__(self):
         return f"Agent(agent_id={self.agent_id}, name={self.name}, items={self.items}, current_spot_id={self.current_spot_id}, experience_points={self.experience_points}, money={self.money})"
     
