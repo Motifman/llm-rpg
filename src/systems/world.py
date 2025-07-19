@@ -18,7 +18,7 @@ class World:
     def __init__(self):
         self.spots: Dict[str, Spot] = {}
         self.agents: Dict[str, Agent] = {}
-        self.trading_post: TradingPost = TradingPost()  # グローバル取引所
+        self.trading_post: TradingPost = TradingPost()
         
     def add_spot(self, spot: Spot):
         """スポットを追加"""
@@ -346,32 +346,23 @@ class World:
         """
         sender = self.get_agent(agent_id)
         current_spot_id = sender.get_current_spot_id()
-        
-        # メッセージを作成
+
         message = LocationChatMessage(
             sender_id=agent_id,
             spot_id=current_spot_id,
             content=conversation.get_content(),
             target_agent_id=conversation.get_target_agent_id()
         )
-        
-        # 同じスポットにいるエージェントを取得
+
         agents_in_spot = self.get_agents_in_spot(current_spot_id)
-        
-        # メッセージを配信
+
         for agent in agents_in_spot:
-            # 送信者自身には送らない
             if agent.agent_id == agent_id:
                 continue
-                
-            # 特定のエージェント宛てのメッセージの場合、対象者のみに送信
             if message.is_targeted() and agent.agent_id != message.get_target_agent_id():
                 continue
-            
-            # メッセージを受信
             agent.receive_message(message)
         
-        # 送信者の会話履歴にも記録（自分の発言として）
         sender.conversation_history.append(message)
         
         return message
