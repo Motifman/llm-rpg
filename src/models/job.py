@@ -2,7 +2,7 @@ from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
 from enum import Enum
 from .agent import Agent
-from .item import Item
+from .item import Item, ConsumableItem, ItemEffect
 
 
 class JobType(Enum):
@@ -25,6 +25,9 @@ class Recipe:
     required_job_level: int = 1
     job_experience_gain: int = 10
     success_rate: float = 1.0  # 成功率（0.0-1.0）
+    produced_item_type: str = "item"  # "item" または "consumable"
+    item_effect: Optional[ItemEffect] = None  # ConsumableItem用の効果
+    max_stack: int = 1  # ConsumableItem用のスタック数
     
     def can_craft(self, agent: "JobAgent") -> bool:
         """レシピを実行可能かチェック"""
@@ -229,8 +232,19 @@ class CraftsmanAgent(JobAgent):
             # 成功判定
             import random
             if random.random() <= recipe.success_rate:
-                # 成功: アイテム作成
-                created_item = Item(recipe.produced_item_id, f"{recipe.name}で作成")
+                # 成功: アイテム作成（通常アイテムか消費可能アイテムかを判定）
+                if recipe.produced_item_type == "consumable" and recipe.item_effect:
+                    # ConsumableItemを作成
+                    created_item = ConsumableItem(
+                        item_id=recipe.produced_item_id,
+                        description=f"{recipe.name}で作成",
+                        effect=recipe.item_effect,
+                        max_stack=recipe.max_stack
+                    )
+                else:
+                    # 通常のItemを作成（既存の動作）
+                    created_item = Item(recipe.produced_item_id, f"{recipe.name}で作成")
+                
                 for _ in range(recipe.produced_count):
                     self.add_item(created_item)
                     result["created_items"].append(created_item)
