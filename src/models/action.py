@@ -29,12 +29,9 @@ class Action(ABC):
 
 @dataclass(frozen=True)
 class Movement(Action):
-    """移動行動（spot依存）"""
-    destination_spot_id: str
-    
-    def get_destination_spot_id(self) -> str:
-        """移動先のspot_idを取得"""
-        return self.destination_spot_id
+    """移動行動"""
+    direction: str
+    target_spot_id: str
 
 
 @dataclass(frozen=True)
@@ -122,12 +119,38 @@ class PostTrade(Action):
 
 @dataclass(frozen=True)
 class ViewTrades(Action):
-    """取引一覧取得行動（Agent依存）"""
-    filters: Optional[Dict[str, Any]] = None
+    """取引閲覧行動（Agent依存）"""
+    filter_offered_item_id: Optional[str] = None
+    filter_requested_item_id: Optional[str] = None
+    max_price: Optional[int] = None
+    min_price: Optional[int] = None
+    trade_type: Optional["TradeType"] = None
+    show_own_trades: bool = False
     
-    def get_filters(self) -> Dict[str, Any]:
-        """フィルタを取得"""
-        return self.filters or {}
+    def get_filters(self, agent_id: str) -> Dict[str, Any]:
+        """フィルタ条件を辞書形式で取得"""
+        filters = {}
+        
+        if self.filter_offered_item_id:
+            filters["offered_item_id"] = self.filter_offered_item_id
+        
+        if self.filter_requested_item_id:
+            filters["requested_item_id"] = self.filter_requested_item_id
+        
+        if self.max_price is not None:
+            filters["max_price"] = self.max_price
+        
+        if self.min_price is not None:
+            filters["min_price"] = self.min_price
+        
+        if self.trade_type is not None:
+            filters["trade_type"] = self.trade_type
+        
+        if not self.show_own_trades:
+            # 自分の出品を除外するフィルタ
+            filters["buyer_id"] = agent_id
+        
+        return filters
 
 
 @dataclass(frozen=True)
@@ -196,7 +219,11 @@ class JoinBattle(Action):
 @dataclass(frozen=True)
 class AttackMonster(Action):
     """モンスター攻撃行動"""
-    pass  # 現在は追加のパラメータ不要
+    monster_id: str
+    
+    def get_monster_id(self) -> str:
+        """対象モンスターIDを取得"""
+        return self.monster_id
 
 
 @dataclass(frozen=True)
