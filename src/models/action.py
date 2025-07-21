@@ -369,3 +369,95 @@ class AdvancedCombat(Action):
         # MP消費などのチェックをここで行う
         mp_cost = self.skill_level * 10
         return agent.current_mp >= mp_cost
+
+
+# === クエストシステム関連の行動 ===
+
+@dataclass(frozen=True)
+class ViewAvailableQuests(Action):
+    """受注可能クエスト表示行動"""
+    description: str = "受注可能なクエストを確認する"
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """表示可能かチェック"""
+        from .job import AdventurerAgent
+        return isinstance(agent, AdventurerAgent)
+
+
+@dataclass(frozen=True)
+class AcceptQuest(Action):
+    """クエスト受注行動"""
+    description: str
+    quest_id: str
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """受注可能かチェック"""
+        from .job import AdventurerAgent
+        return isinstance(agent, AdventurerAgent)
+
+
+@dataclass(frozen=True)
+class CancelQuest(Action):
+    """クエストキャンセル行動"""
+    description: str
+    quest_id: str
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """キャンセル可能かチェック"""
+        from .job import AdventurerAgent
+        return isinstance(agent, AdventurerAgent)
+
+
+@dataclass(frozen=True)
+class ViewQuestProgress(Action):
+    """クエスト進捗確認行動"""
+    description: str = "クエストの進捗を確認する"
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """確認可能かチェック"""
+        from .job import AdventurerAgent
+        return isinstance(agent, AdventurerAgent)
+
+
+@dataclass(frozen=True)
+class SubmitQuest(Action):
+    """クエスト提出行動（完了報告）"""
+    description: str
+    quest_id: str
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """提出可能かチェック"""
+        from .job import AdventurerAgent
+        return isinstance(agent, AdventurerAgent)
+
+
+@dataclass(frozen=True)
+class RegisterToGuild(Action):
+    """ギルド登録行動"""
+    description: str
+    guild_id: str
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """登録可能かチェック"""
+        from .job import AdventurerAgent
+        return isinstance(agent, AdventurerAgent)
+
+
+@dataclass(frozen=True)
+class PostQuestToGuild(Action):
+    """ギルドへのクエスト依頼行動（NPCが使用）"""
+    description: str
+    guild_id: str
+    quest_name: str
+    quest_description: str
+    quest_type: str  # "monster_hunt", "item_collection", "exploration"
+    target: str      # モンスターID、アイテムID、場所IDなど
+    target_count: int = 1
+    difficulty: str = "D"  # "E", "D", "C", "B", "A", "S"
+    reward_money: int = 100
+    deadline_hours: int = 72
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """依頼可能かチェック"""
+        # 依頼料を所持しているかチェック
+        return agent.get_money() >= self.reward_money
