@@ -17,6 +17,8 @@ class InteractionType(Enum):
     EXAMINE = "examine" # 調べる（詳細情報取得）
     TAKE = "take"      # 取る（アイテム収集）
     GIVE = "give"      # 渡す（アイテム供与）
+    READ = "read"      # 読む（日記、本など）
+    SLEEP = "sleep"    # 睡眠（ベッドなど）
 
 
 @dataclass(frozen=True)
@@ -488,3 +490,38 @@ class PostQuestToGuild(Action):
         """依頼可能かチェック"""
         # 依頼料を所持しているかチェック
         return agent.get_money() >= self.reward_money
+
+
+# === 家システム関連の行動 ===
+
+@dataclass(frozen=True)
+class WriteDiary(Action):
+    """日記記入行動"""
+    content: str
+    date: str
+
+@dataclass(frozen=True)
+class ReadDiary(Action):
+    """日記読み取り行動"""
+    target_date: Optional[str] = None  # 特定の日付を指定、Noneで全て読む
+
+@dataclass(frozen=True)
+class Sleep(Action):
+    """睡眠行動"""
+    duration: int = 8  # 睡眠時間（時間）
+
+@dataclass(frozen=True)
+class GrantHomePermission(Action):
+    """家の権限付与行動"""
+    target_agent_id: str
+    permission_level: str  # "visitor" or "owner"
+
+@dataclass(frozen=True)
+class StoreItem(Action):
+    """アイテム保管行動"""
+    item_id: str
+    
+@dataclass(frozen=True)
+class RetrieveItem(Action):
+    """アイテム取得行動"""
+    item_id: str

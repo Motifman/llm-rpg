@@ -1,13 +1,15 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from ..models.spot import Spot
 from ..models.agent import Agent
-from ..models.action import Movement, Exploration, Action, Interaction, InteractionType, ItemUsage, PostTrade, ViewTrades, AcceptTrade, CancelTrade, Conversation, AttackMonster, DefendBattle, EscapeBattle, StartBattle, JoinBattle, CraftItem, EnhanceItem, LearnRecipe, SetupShop, ProvideService, PriceNegotiation, GatherResource, ProcessMaterial, ManageFarm, AdvancedCombat, ViewAvailableQuests, AcceptQuest, CancelQuest, ViewQuestProgress, SubmitQuest, RegisterToGuild, PostQuestToGuild
+from ..models.action import Movement, Exploration, Action, Interaction, InteractionType, ItemUsage, PostTrade, ViewTrades, AcceptTrade, CancelTrade, Conversation, AttackMonster, DefendBattle, EscapeBattle, StartBattle, JoinBattle, CraftItem, EnhanceItem, LearnRecipe, SetupShop, ProvideService, PriceNegotiation, GatherResource, ProcessMaterial, ManageFarm, AdvancedCombat, ViewAvailableQuests, AcceptQuest, CancelQuest, ViewQuestProgress, SubmitQuest, RegisterToGuild, PostQuestToGuild, WriteDiary, ReadDiary, Sleep, GrantHomePermission, StoreItem, RetrieveItem
 from ..models.interactable import Door
 from ..models.item import ConsumableItem
 from ..models.trade import TradeOffer
 from ..models.monster import Monster, MonsterType
 from ..models.job import JobAgent, CraftsmanAgent, MerchantAgent, AdventurerAgent, ProducerAgent
 from ..models.quest import Quest, QuestType, QuestDifficulty
+from ..models.home import Home, HomePermission
+from ..models.home_interactables import Bed, Desk
 from ..systems.trading_post import TradingPost
 from ..systems.message import LocationChatMessage
 from ..systems.battle import BattleManager, Battle, BattleResult
@@ -630,6 +632,19 @@ class World:
             return self.execute_agent_register_to_guild(agent_id, action)
         elif isinstance(action, PostQuestToGuild):
             return self.execute_agent_post_quest_to_guild(agent_id, action)
+        # 家システム関連の行動
+        elif isinstance(action, WriteDiary):
+            return self.execute_agent_write_diary(agent_id, action)
+        elif isinstance(action, ReadDiary):
+            return self.execute_agent_read_diary(agent_id, action)
+        elif isinstance(action, Sleep):
+            return self.execute_agent_sleep(agent_id, action)
+        elif isinstance(action, GrantHomePermission):
+            return self.execute_agent_grant_home_permission(agent_id, action)
+        elif isinstance(action, StoreItem):
+            return self.execute_agent_store_item(agent_id, action)
+        elif isinstance(action, RetrieveItem):
+            return self.execute_agent_retrieve_item(agent_id, action)
         else:
             raise ValueError(f"不明な行動: {action}")
     
@@ -1085,3 +1100,270 @@ class World:
             if completion_result and completion_result["success"]:
                 agent = self.get_agent(agent_id)
                 agent.add_discovered_info(f"クエスト '{quest.name}' が完了しました！ギルドで報酬を受け取ってください。")
+    
+    # === 家システム関連メソッド ===
+    
+    def create_home(self, home_id: str, name: str, description: str, 
+                   owner_agent_id: str, price: int = 0, parent_spot_id: Optional[str] = None) -> Home:
+        """家を作成してワールドに追加"""
+        home = Home(home_id, name, description, owner_agent_id, price, parent_spot_id)
+        
+        # 自動的に自分の部屋を作成
+        bedroom_id = f"{home_id}_bedroom"
+        bedroom = Spot(bedroom_id, f"{name}の寝室", "家の主人の寝室。ベッドと机がある。", home_id)
+        
+        # ベッドと机を追加
+        bed = Bed(f"{bedroom_id}_bed", "ベッド", "快適そうなベッド。ゆっくりと休むことができそうだ。")
+        desk = Desk(f"{bedroom_id}_desk", "机", "木製の机。日記や書類を書くのに適している。")
+        
+        bedroom.add_interactable(bed)
+        bedroom.add_interactable(desk)
+        
+        # スポットとして追加
+        self.add_spot(home)
+        self.add_spot(bedroom)
+        
+        # 親子関係を設定
+        home.add_child_spot(bedroom_id)
+        home.add_entry_point("正面玄関", bedroom_id)
+        bedroom.set_exit_to_parent(home_id)
+        bedroom.set_as_entrance("正面玄関")
+        
+        # 価格を更新
+        home.update_price()
+        
+        return home
+    
+    def execute_agent_write_diary(self, agent_id: str, action: WriteDiary) -> Dict[str, Any]:
+        """日記記入行動を実行"""
+        agent = self.get_agent(agent_id)
+        current_spot = self.get_spot(agent.get_current_spot_id())
+        
+        # 現在の場所が家かどうかチェック
+        if isinstance(current_spot, Home):
+            home = current_spot
+        else:
+            # 親スポットが家かどうかチェック
+            parent_spot_id = current_spot.get_parent_spot_id()
+            if parent_spot_id and isinstance(self.get_spot(parent_spot_id), Home):
+                home = self.get_spot(parent_spot_id)
+            else:
+                return {"success": False, "message": "家の中でのみ日記を書くことができます。"}
+        
+        # 権限チェック
+        if not home.has_owner_permission(agent_id):
+            return {"success": False, "message": "この家で日記を書く権限がありません。"}
+        
+        # 日記エントリを追加
+        success = home.add_diary_entry(agent_id, action.content, action.date)
+        
+        if success:
+            agent.add_experience_points(3)
+            return {
+                "success": True, 
+                "message": f"日記を書きました: {action.content[:50]}{'...' if len(action.content) > 50 else ''}"
+            }
+        else:
+            return {"success": False, "message": "日記の記入に失敗しました。"}
+    
+    def execute_agent_read_diary(self, agent_id: str, action: ReadDiary) -> Dict[str, Any]:
+        """日記読み取り行動を実行"""
+        agent = self.get_agent(agent_id)
+        current_spot = self.get_spot(agent.get_current_spot_id())
+        
+        # 現在の場所が家かどうかチェック
+        if isinstance(current_spot, Home):
+            home = current_spot
+        else:
+            # 親スポットが家かどうかチェック
+            parent_spot_id = current_spot.get_parent_spot_id()
+            if parent_spot_id and isinstance(self.get_spot(parent_spot_id), Home):
+                home = self.get_spot(parent_spot_id)
+            else:
+                return {"success": False, "message": "家の中でのみ日記を読むことができます。"}
+        
+        # 権限チェック
+        if not home.has_visitor_permission(agent_id):
+            return {"success": False, "message": "この家で日記を読む権限がありません。"}
+        
+        # 日記エントリを取得
+        entries = home.get_diary_entries(agent_id)
+        
+        if not entries:
+            return {"success": True, "message": "日記にはまだ何も書かれていません。", "entries": []}
+        
+        # 特定の日付が指定されている場合
+        if action.target_date:
+            entries = [entry for entry in entries if entry["date"] == action.target_date]
+            if not entries:
+                return {
+                    "success": True, 
+                    "message": f"{action.target_date}の日記は見つかりませんでした。", 
+                    "entries": []
+                }
+        
+        agent.add_experience_points(1)
+        return {
+            "success": True, 
+            "message": f"{len(entries)}件の日記エントリを読みました。",
+            "entries": entries
+        }
+    
+    def execute_agent_sleep(self, agent_id: str, action: Sleep) -> Dict[str, Any]:
+        """睡眠行動を実行"""
+        agent = self.get_agent(agent_id)
+        current_spot = self.get_spot(agent.get_current_spot_id())
+        
+        # 現在の場所が家かどうかチェック
+        if isinstance(current_spot, Home):
+            home = current_spot
+        else:
+            # 親スポットが家かどうかチェック
+            parent_spot_id = current_spot.get_parent_spot_id()
+            if parent_spot_id and isinstance(self.get_spot(parent_spot_id), Home):
+                home = self.get_spot(parent_spot_id)
+            else:
+                return {"success": False, "message": "家の中でのみ睡眠できます。"}
+        
+        # 権限チェック
+        if not home.has_owner_permission(agent_id):
+            return {"success": False, "message": "この家で睡眠する権限がありません。"}
+        
+        # ベッドを探す
+        bed = None
+        for interactable in current_spot.get_all_interactables():
+            if isinstance(interactable, Bed):
+                bed = interactable
+                break
+        
+        if not bed:
+            return {"success": False, "message": "この場所にはベッドがありません。"}
+        
+        # 睡眠実行
+        success = bed.sleep(agent)
+        
+        if success:
+            agent.add_experience_points(5)
+            return {
+                "success": True, 
+                "message": f"ゆっくりと{action.duration}時間眠りました。体力と魔力が全回復しました。",
+                "hp_recovered": agent.max_hp - agent.current_hp,
+                "mp_recovered": agent.max_mp - agent.current_mp
+            }
+        else:
+            return {"success": False, "message": "ベッドが使用中です。"}
+    
+    def execute_agent_grant_home_permission(self, agent_id: str, action: GrantHomePermission) -> Dict[str, Any]:
+        """家の権限付与行動を実行"""
+        agent = self.get_agent(agent_id)
+        current_spot = self.get_spot(agent.get_current_spot_id())
+        
+        # 現在の場所が家かどうかチェック
+        if isinstance(current_spot, Home):
+            home = current_spot
+        else:
+            # 親スポットが家かどうかチェック
+            parent_spot_id = current_spot.get_parent_spot_id()
+            if parent_spot_id and isinstance(self.get_spot(parent_spot_id), Home):
+                home = self.get_spot(parent_spot_id)
+            else:
+                return {"success": False, "message": "家の中でのみ権限を付与できます。"}
+        
+        # 所有者権限チェック
+        if not home.has_owner_permission(agent_id):
+            return {"success": False, "message": "権限を付与する権限がありません。"}
+        
+        # 対象エージェントの存在チェック
+        if action.target_agent_id not in self.agents:
+            return {"success": False, "message": "指定されたエージェントが見つかりません。"}
+        
+        # 権限設定
+        if action.permission_level == "visitor":
+            permission = HomePermission.VISITOR
+        elif action.permission_level == "owner":
+            permission = HomePermission.OWNER
+        else:
+            return {"success": False, "message": "無効な権限レベルです。"}
+        
+        home.set_permission(action.target_agent_id, permission)
+        target_agent = self.get_agent(action.target_agent_id)
+        
+        return {
+            "success": True, 
+            "message": f"{target_agent.name}に{action.permission_level}権限を付与しました。"
+        }
+    
+    def execute_agent_store_item(self, agent_id: str, action: StoreItem) -> Dict[str, Any]:
+        """アイテム保管行動を実行"""
+        agent = self.get_agent(agent_id)
+        current_spot = self.get_spot(agent.get_current_spot_id())
+        
+        # 現在の場所が家かどうかチェック
+        if isinstance(current_spot, Home):
+            home = current_spot
+        else:
+            # 親スポットが家かどうかチェック
+            parent_spot_id = current_spot.get_parent_spot_id()
+            if parent_spot_id and isinstance(self.get_spot(parent_spot_id), Home):
+                home = self.get_spot(parent_spot_id)
+            else:
+                return {"success": False, "message": "家の中でのみアイテムを保管できます。"}
+        
+        # 権限チェック
+        if not home.has_owner_permission(agent_id):
+            return {"success": False, "message": "この家でアイテムを保管する権限がありません。"}
+        
+        # アイテムの所持チェック
+        item = agent.get_item_by_id(action.item_id)
+        if not item:
+            return {"success": False, "message": "指定されたアイテムを所持していません。"}
+        
+        # アイテムをエージェントから削除し、家に保管
+        agent.remove_item(item)
+        success = home.store_item(agent_id, item)
+        
+        if success:
+            return {"success": True, "message": f"{item.item_id}を家に保管しました。"}
+        else:
+            # 失敗した場合はアイテムを戻す
+            agent.add_item(item)
+            return {"success": False, "message": "アイテムの保管に失敗しました。"}
+    
+    def execute_agent_retrieve_item(self, agent_id: str, action: RetrieveItem) -> Dict[str, Any]:
+        """アイテム取得行動を実行"""
+        agent = self.get_agent(agent_id)
+        current_spot = self.get_spot(agent.get_current_spot_id())
+        
+        # 現在の場所が家かどうかチェック
+        if isinstance(current_spot, Home):
+            home = current_spot
+        else:
+            # 親スポットが家かどうかチェック
+            parent_spot_id = current_spot.get_parent_spot_id()
+            if parent_spot_id and isinstance(self.get_spot(parent_spot_id), Home):
+                home = self.get_spot(parent_spot_id)
+            else:
+                return {"success": False, "message": "家の中でのみアイテムを取得できます。"}
+        
+        # 権限チェック
+        if not home.has_owner_permission(agent_id):
+            return {"success": False, "message": "この家でアイテムを取得する権限がありません。"}
+        
+        # 保管されたアイテムから検索
+        stored_items = home.get_stored_items(agent_id)
+        target_item = None
+        for item in stored_items:
+            if item.item_id == action.item_id:
+                target_item = item
+                break
+        
+        if not target_item:
+            return {"success": False, "message": "指定されたアイテムは保管されていません。"}
+        
+        # アイテムを家から削除し、エージェントに追加
+        success = home.retrieve_item(agent_id, target_item)
+        if success:
+            agent.add_item(target_item)
+            return {"success": True, "message": f"{target_item.item_id}を家から取得しました。"}
+        else:
+            return {"success": False, "message": "アイテムの取得に失敗しました。"}
