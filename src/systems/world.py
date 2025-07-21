@@ -1,15 +1,17 @@
 from typing import Dict, List, Optional
 from ..models.spot import Spot
 from ..models.agent import Agent
-from ..models.action import Movement, Exploration, Action, Interaction, InteractionType, ItemUsage, PostTrade, ViewTrades, AcceptTrade, CancelTrade, Conversation, AttackMonster, DefendBattle, EscapeBattle, StartBattle, JoinBattle, CraftItem, EnhanceItem, LearnRecipe, SetupShop, ProvideService, PriceNegotiation, GatherResource, ProcessMaterial, ManageFarm, AdvancedCombat
+from ..models.action import Movement, Exploration, Action, Interaction, InteractionType, ItemUsage, PostTrade, ViewTrades, AcceptTrade, CancelTrade, Conversation, AttackMonster, DefendBattle, EscapeBattle, StartBattle, JoinBattle, CraftItem, EnhanceItem, LearnRecipe, SetupShop, ProvideService, PriceNegotiation, GatherResource, ProcessMaterial, ManageFarm, AdvancedCombat, ViewAvailableQuests, AcceptQuest, CancelQuest, ViewQuestProgress, SubmitQuest, RegisterToGuild, PostQuestToGuild
 from ..models.interactable import Door
 from ..models.item import ConsumableItem
 from ..models.trade import TradeOffer
 from ..models.monster import Monster, MonsterType
 from ..models.job import JobAgent, CraftsmanAgent, MerchantAgent, AdventurerAgent, ProducerAgent
+from ..models.quest import Quest, QuestType, QuestDifficulty
 from ..systems.trading_post import TradingPost
 from ..systems.message import LocationChatMessage
 from ..systems.battle import BattleManager, Battle, BattleResult
+from ..systems.quest_system import QuestSystem
 
 
 class World:
@@ -24,6 +26,7 @@ class World:
         self.trading_post: TradingPost = TradingPost()
         self.battle_manager: BattleManager = BattleManager()
         self.monsters: Dict[str, Monster] = {}  # グローバルモンスター管理
+        self.quest_system: QuestSystem = QuestSystem()  # クエストシステム
         
     def add_spot(self, spot: Spot):
         """スポットを追加"""
@@ -71,6 +74,10 @@ class World:
         """バトルマネージャーを取得"""
         return self.battle_manager
 
+    def get_quest_system(self) -> QuestSystem:
+        """クエストシステムを取得"""
+        return self.quest_system
+
     def execute_agent_movement(self, agent_id: str, movement: Movement):
         """
         移動行動を実行し、エージェントの現在の位置を更新
@@ -96,12 +103,17 @@ class World:
             if item:
                 spot.remove_item(item)
                 agent.add_item(item)
+                # アイテム取得時のクエスト進捗更新
+                self._update_quest_progress_on_item_get(agent_id, exploration.item_id)
         if exploration.discovered_info:
             agent.add_discovered_info(exploration.discovered_info)
         if exploration.experience_points:
             agent.add_experience_points(exploration.experience_points)
         if exploration.money:
             agent.add_money(exploration.money)
+        
+        # 場所訪問時のクエスト進捗更新
+        self._update_quest_progress_on_location_visit(agent_id, agent.get_current_spot_id())
         
         # モンスター発見機能
         self._check_for_hidden_monsters(agent, spot)
@@ -512,6 +524,9 @@ class World:
                 # 勝利情報を追加
                 victory_info = f"{result.defeated_monster.name} を倒した！"
                 agent.add_discovered_info(victory_info)
+                
+                # クエスト進捗更新
+                self._update_quest_progress_on_monster_kill(participant_id, result.defeated_monster.monster_id)
             
             # モンスターをスポットから削除
             for spot in self.spots.values():
@@ -600,6 +615,21 @@ class World:
             return self.execute_agent_manage_farm(agent_id, action)
         elif isinstance(action, AdvancedCombat):
             return self.execute_agent_advanced_combat(agent_id, action)
+        # クエストシステム関連の行動
+        elif isinstance(action, ViewAvailableQuests):
+            return self.execute_agent_view_available_quests(agent_id, action)
+        elif isinstance(action, AcceptQuest):
+            return self.execute_agent_accept_quest(agent_id, action)
+        elif isinstance(action, CancelQuest):
+            return self.execute_agent_cancel_quest(agent_id, action)
+        elif isinstance(action, ViewQuestProgress):
+            return self.execute_agent_view_quest_progress(agent_id, action)
+        elif isinstance(action, SubmitQuest):
+            return self.execute_agent_submit_quest(agent_id, action)
+        elif isinstance(action, RegisterToGuild):
+            return self.execute_agent_register_to_guild(agent_id, action)
+        elif isinstance(action, PostQuestToGuild):
+            return self.execute_agent_post_quest_to_guild(agent_id, action)
         else:
             raise ValueError(f"不明な行動: {action}")
     
@@ -842,3 +872,205 @@ class World:
             raise ValueError("戦闘スキル使用条件を満たしていません")
         
         return agent.use_combat_skill(combat_action.combat_skill, combat_action.target_id)
+    
+    # === クエストシステム関連の行動実行メソッド ===
+    
+    def execute_agent_view_available_quests(self, agent_id: str, action: ViewAvailableQuests) -> Dict:
+        """受注可能クエスト表示行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, AdventurerAgent):
+            return {"success": False, "message": "冒険者のみクエストを受注できます"}
+        
+        quests = self.quest_system.get_available_quests(agent_id)
+        quest_data = [quest.to_dict() for quest in quests]
+        
+        return {
+            "success": True,
+            "available_quests": quest_data,
+            "count": len(quests)
+        }
+    
+    def execute_agent_accept_quest(self, agent_id: str, action: AcceptQuest) -> Dict:
+        """クエスト受注行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, AdventurerAgent):
+            return {"success": False, "message": "冒険者のみクエストを受注できます"}
+        
+        if agent.has_active_quest():
+            return {"success": False, "message": "既にアクティブなクエストがあります"}
+        
+        success = self.quest_system.accept_quest(agent_id, action.quest_id)
+        if success:
+            agent.accept_quest(action.quest_id)
+            quest = self.quest_system.get_quest_by_id(action.quest_id)
+            return {
+                "success": True,
+                "message": f"クエスト '{quest.name}' を受注しました",
+                "quest": quest.to_dict() if quest else None
+            }
+        else:
+            return {"success": False, "message": "クエストの受注に失敗しました"}
+    
+    def execute_agent_cancel_quest(self, agent_id: str, action: CancelQuest) -> Dict:
+        """クエストキャンセル行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, AdventurerAgent):
+            return {"success": False, "message": "冒険者のみクエストをキャンセルできます"}
+        
+        if not agent.has_active_quest():
+            return {"success": False, "message": "アクティブなクエストがありません"}
+        
+        success = self.quest_system.cancel_quest(agent_id, action.quest_id)
+        if success:
+            agent.cancel_quest(action.quest_id)
+            return {"success": True, "message": "クエストをキャンセルしました"}
+        else:
+            return {"success": False, "message": "クエストのキャンセルに失敗しました"}
+    
+    def execute_agent_view_quest_progress(self, agent_id: str, action: ViewQuestProgress) -> Dict:
+        """クエスト進捗確認行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, AdventurerAgent):
+            return {"success": False, "message": "冒険者のみクエスト進捗を確認できます"}
+        
+        quest = self.quest_system.get_active_quest(agent_id)
+        if not quest:
+            return {"success": False, "message": "アクティブなクエストがありません"}
+        
+        return {
+            "success": True,
+            "quest": quest.to_dict(),
+            "progress": quest.get_progress_summary()
+        }
+    
+    def execute_agent_submit_quest(self, agent_id: str, action: SubmitQuest) -> Dict:
+        """クエスト提出行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, AdventurerAgent):
+            return {"success": False, "message": "冒険者のみクエストを提出できます"}
+        
+        # クエスト完了チェックと報酬配布
+        result = self.quest_system.check_quest_completion(agent_id)
+        if not result:
+            return {"success": False, "message": "完了可能なクエストがありません"}
+        
+        if result["success"]:
+            # エージェントにも完了を記録
+            agent.complete_quest(action.quest_id)
+            
+            # 報酬を配布
+            agent.add_money(result["reward_money"])
+            agent.add_experience_points(result["experience_gained"])
+            
+            return {
+                "success": True,
+                "message": result["message"],
+                "reward_money": result["reward_money"],
+                "guild_fee": result["guild_fee"],
+                "experience_gained": result["experience_gained"],
+                "reputation_gained": result["reputation_gained"]
+            }
+        else:
+            return {"success": False, "message": result["message"]}
+    
+    def execute_agent_register_to_guild(self, agent_id: str, action: RegisterToGuild) -> Dict:
+        """ギルド登録行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, AdventurerAgent):
+            return {"success": False, "message": "冒険者のみギルドに登録できます"}
+        
+        # 既に別のギルドに所属していないかチェック
+        current_guild = self.quest_system.get_agent_guild(agent_id)
+        if current_guild:
+            return {"success": False, "message": f"既に {current_guild.name} に所属しています"}
+        
+        success = self.quest_system.register_agent_to_guild(agent, action.guild_id)
+        if success:
+            guild = self.quest_system.get_guild(action.guild_id)
+            return {
+                "success": True,
+                "message": f"ギルド '{guild.name}' に登録しました",
+                "guild_info": guild.get_guild_stats()
+            }
+        else:
+            return {"success": False, "message": "ギルド登録に失敗しました"}
+    
+    def execute_agent_post_quest_to_guild(self, agent_id: str, action: PostQuestToGuild) -> Dict:
+        """ギルドへのクエスト依頼行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not action.is_valid(agent):
+            return {"success": False, "message": "依頼料が不足しています"}
+        
+        # クエストタイプに応じてクエストを生成
+        quest_difficulty = QuestDifficulty(action.difficulty)
+        
+        if action.quest_type == "monster_hunt":
+            quest = self.quest_system.create_monster_hunt_quest_for_guild(
+                action.guild_id, action.quest_name, action.quest_description,
+                action.target, action.target_count, quest_difficulty,
+                agent_id, action.reward_money, action.deadline_hours
+            )
+        elif action.quest_type == "item_collection":
+            quest = self.quest_system.create_item_collection_quest_for_guild(
+                action.guild_id, action.quest_name, action.quest_description,
+                action.target, action.target_count, quest_difficulty,
+                agent_id, action.reward_money, action.deadline_hours
+            )
+        elif action.quest_type == "exploration":
+            quest = self.quest_system.create_exploration_quest_for_guild(
+                action.guild_id, action.quest_name, action.quest_description,
+                action.target, quest_difficulty, agent_id,
+                action.reward_money, action.deadline_hours
+            )
+        else:
+            return {"success": False, "message": "不明なクエストタイプです"}
+        
+        # ギルドにクエストを依頼
+        success = self.quest_system.post_quest_to_guild(action.guild_id, quest, agent)
+        if success:
+            return {
+                "success": True,
+                "message": f"クエスト '{quest.name}' をギルドに依頼しました",
+                "quest": quest.to_dict()
+            }
+        else:
+            return {"success": False, "message": "クエストの依頼に失敗しました"}
+    
+    # === クエスト進捗の自動更新 ===
+    
+    def _update_quest_progress_on_monster_kill(self, agent_id: str, monster_id: str):
+        """モンスター討伐時のクエスト進捗更新"""
+        quest = self.quest_system.handle_monster_kill(agent_id, monster_id)
+        if quest:
+            # 完了チェック
+            completion_result = self.quest_system.check_quest_completion(agent_id)
+            if completion_result and completion_result["success"]:
+                agent = self.get_agent(agent_id)
+                agent.add_discovered_info(f"クエスト '{quest.name}' が完了しました！ギルドで報酬を受け取ってください。")
+    
+    def _update_quest_progress_on_item_get(self, agent_id: str, item_id: str, count: int = 1):
+        """アイテム取得時のクエスト進捗更新"""
+        quest = self.quest_system.handle_item_collection(agent_id, item_id, count)
+        if quest:
+            # 完了チェック
+            completion_result = self.quest_system.check_quest_completion(agent_id)
+            if completion_result and completion_result["success"]:
+                agent = self.get_agent(agent_id)
+                agent.add_discovered_info(f"クエスト '{quest.name}' が完了しました！ギルドで報酬を受け取ってください。")
+    
+    def _update_quest_progress_on_location_visit(self, agent_id: str, spot_id: str):
+        """場所訪問時のクエスト進捗更新"""
+        quest = self.quest_system.handle_location_visit(agent_id, spot_id)
+        if quest:
+            # 完了チェック
+            completion_result = self.quest_system.check_quest_completion(agent_id)
+            if completion_result and completion_result["success"]:
+                agent = self.get_agent(agent_id)
+                agent.add_discovered_info(f"クエスト '{quest.name}' が完了しました！ギルドで報酬を受け取ってください。")

@@ -407,6 +407,11 @@ class AdventurerAgent(JobAgent):
         self.combat_experience = 0
         self.combat_skills: List[str] = []
         
+        # クエスト関連の追加属性
+        self.current_quest_id: Optional[str] = None
+        self.completed_quests: List[str] = []  # 完了したクエストのIDリスト
+        self.quest_reputation: int = 0  # クエスト実績による評判
+        
         # 戦闘クラスによる追加ボーナス
         self._apply_combat_bonuses()
     
@@ -486,6 +491,75 @@ class AdventurerAgent(JobAgent):
             result["messages"].append("MPが不足しています")
         
         return result
+    
+    # === クエスト関連メソッド ===
+    
+    def accept_quest(self, quest_id: str) -> bool:
+        """クエストを受注"""
+        if self.current_quest_id is not None:
+            return False  # 既にクエストを受注している
+        
+        self.current_quest_id = quest_id
+        return True
+    
+    def complete_quest(self, quest_id: str) -> bool:
+        """クエストを完了"""
+        if self.current_quest_id != quest_id:
+            return False
+        
+        self.completed_quests.append(quest_id)
+        self.current_quest_id = None
+        self.quest_reputation += 10  # 基本評判上昇
+        return True
+    
+    def cancel_quest(self, quest_id: str) -> bool:
+        """クエストをキャンセル"""
+        if self.current_quest_id != quest_id:
+            return False
+        
+        self.current_quest_id = None
+        # 評判に軽微なペナルティ
+        self.quest_reputation = max(0, self.quest_reputation - 2)
+        return True
+    
+    def has_active_quest(self) -> bool:
+        """アクティブなクエストがあるかチェック"""
+        return self.current_quest_id is not None
+    
+    def get_current_quest_id(self) -> Optional[str]:
+        """現在のクエストIDを取得"""
+        return self.current_quest_id
+    
+    def get_completed_quest_count(self) -> int:
+        """完了したクエスト数を取得"""
+        return len(self.completed_quests)
+    
+    def get_quest_reputation(self) -> int:
+        """クエスト評判を取得"""
+        return self.quest_reputation
+    
+    def can_accept_quest_difficulty(self, difficulty: str) -> bool:
+        """指定された危険度のクエストを受注可能かチェック"""
+        # 評判に基づく制限（簡易実装）
+        difficulty_requirements = {
+            "E": 0,
+            "D": 10,
+            "C": 30,
+            "B": 70,
+            "A": 150,
+            "S": 300
+        }
+        
+        required_rep = difficulty_requirements.get(difficulty, 0)
+        return self.quest_reputation >= required_rep
+    
+    def get_adventurer_summary(self) -> str:
+        """冒険者ステータスの要約を取得"""
+        base_summary = self.get_job_status_summary()
+        quest_summary = (f"アクティブクエスト: {self.current_quest_id or 'なし'}, "
+                        f"完了クエスト数: {len(self.completed_quests)}, "
+                        f"クエスト評判: {self.quest_reputation}")
+        return f"{base_summary}, {quest_summary}"
 
 
 class ProducerAgent(JobAgent):
