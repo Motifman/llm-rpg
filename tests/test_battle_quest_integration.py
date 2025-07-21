@@ -366,7 +366,7 @@ class TestBattleQuestIntegration:
             
             if current_actor == agent_id:
                 # プレイヤーの攻撃
-                attack_action = AttackMonster(description="モンスターを攻撃する")
+                attack_action = AttackMonster(description="モンスターを攻撃する", monster_id=monster_id)
                 result = self.world.execute_action(agent_id, attack_action)
                 
                 if "戦闘終了" in str(result):
