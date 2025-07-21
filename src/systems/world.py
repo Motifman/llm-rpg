@@ -1,12 +1,12 @@
 from typing import Dict, List, Optional, Any
 from ..models.spot import Spot
 from ..models.agent import Agent
-from ..models.action import Movement, Exploration, Action, Interaction, InteractionType, ItemUsage, PostTrade, ViewTrades, AcceptTrade, CancelTrade, Conversation, AttackMonster, DefendBattle, EscapeBattle, StartBattle, JoinBattle, CraftItem, EnhanceItem, LearnRecipe, SetupShop, ProvideService, PriceNegotiation, GatherResource, ProcessMaterial, ManageFarm, AdvancedCombat, ViewAvailableQuests, AcceptQuest, CancelQuest, ViewQuestProgress, SubmitQuest, RegisterToGuild, PostQuestToGuild, WriteDiary, ReadDiary, Sleep, GrantHomePermission, StoreItem, RetrieveItem
+from ..models.action import Movement, Exploration, Action, Interaction, InteractionType, ItemUsage, PostTrade, ViewTrades, AcceptTrade, CancelTrade, Conversation, AttackMonster, DefendBattle, EscapeBattle, StartBattle, JoinBattle, CraftItem, EnhanceItem, LearnRecipe, SetupShop, ProvideService, PriceNegotiation, GatherResource, ProcessMaterial, ManageFarm, AdvancedCombat, ViewAvailableQuests, AcceptQuest, CancelQuest, ViewQuestProgress, SubmitQuest, RegisterToGuild, PostQuestToGuild, WriteDiary, ReadDiary, Sleep, GrantHomePermission, StoreItem, RetrieveItem, SellItem, BuyItem, SetItemPrice, ManageInventory, ProvideLodging, ProvideDance, ProvidePrayer
 from ..models.interactable import Door
 from ..models.item import ConsumableItem
 from ..models.trade import TradeOffer
 from ..models.monster import Monster, MonsterType
-from ..models.job import JobAgent, CraftsmanAgent, MerchantAgent, AdventurerAgent, ProducerAgent
+from ..models.job import JobAgent, CraftsmanAgent, MerchantAgent, AdventurerAgent, ProducerAgent, ServiceProviderAgent, TraderAgent
 from ..models.quest import Quest, QuestType, QuestDifficulty
 from ..models.home import Home, HomePermission
 from ..models.home_interactables import Bed, Desk
@@ -609,6 +609,21 @@ class World:
             return self.execute_agent_provide_service(agent_id, action)
         elif isinstance(action, PriceNegotiation):
             return self.execute_agent_price_negotiation(agent_id, action)
+        # 新しい商人システム関連の行動
+        elif isinstance(action, SellItem):
+            return self.execute_agent_sell_item(agent_id, action)
+        elif isinstance(action, BuyItem):
+            return self.execute_agent_buy_item(agent_id, action)
+        elif isinstance(action, SetItemPrice):
+            return self.execute_agent_set_item_price(agent_id, action)
+        elif isinstance(action, ManageInventory):
+            return self.execute_agent_manage_inventory(agent_id, action)
+        elif isinstance(action, ProvideLodging):
+            return self.execute_agent_provide_lodging(agent_id, action)
+        elif isinstance(action, ProvideDance):
+            return self.execute_agent_provide_dance(agent_id, action)
+        elif isinstance(action, ProvidePrayer):
+            return self.execute_agent_provide_prayer(agent_id, action)
         elif isinstance(action, GatherResource):
             return self.execute_agent_gather_resource(agent_id, action)
         elif isinstance(action, ProcessMaterial):
@@ -888,6 +903,268 @@ class World:
         
         return agent.use_combat_skill(combat_action.combat_skill, combat_action.target_id)
     
+    # === 新しい商人システム関連の行動実行メソッド ===
+    
+    def execute_agent_sell_item(self, agent_id: str, sell_action: SellItem) -> Dict:
+        """アイテム販売行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, TraderAgent):
+            raise ValueError(f"エージェント {agent_id} は商人ではありません")
+        
+        if not sell_action.is_valid(agent):
+            # デバッグ情報を追加
+            item_count = agent.get_item_count(sell_action.item_id)
+            raise ValueError(f"販売条件を満たしていません - アイテム: {sell_action.item_id}, 必要: {sell_action.quantity}, 所持: {item_count}")
+        
+        # 顧客エージェントを取得
+        customer = self.get_agent(sell_action.customer_agent_id)
+        if not customer:
+            raise ValueError(f"顧客エージェント {sell_action.customer_agent_id} が見つかりません")
+        
+        # 同じスポットにいるかチェック
+        if agent.get_current_spot_id() != customer.get_current_spot_id():
+            raise ValueError("顧客と同じスポットにいません")
+        
+        # 顧客の支払い能力チェック
+        total_price = sell_action.get_total_price()
+        if customer.get_money() < total_price:
+            return {
+                "success": False,
+                "message": f"顧客の資金不足: 必要{total_price}ゴールド、所持{customer.get_money()}ゴールド"
+            }
+        
+        # 販売実行
+        result = agent.sell_item_to_customer(
+            sell_action.customer_agent_id,
+            sell_action.item_id,
+            sell_action.quantity,
+            sell_action.price_per_item
+        )
+        
+        if result["success"]:
+            # 顧客にアイテムを転送し、支払いを処理
+            from ..models.item import Item
+            for _ in range(sell_action.quantity):
+                item = Item(sell_action.item_id, f"{agent.name}から購入")
+                customer.add_item(item)
+            
+            customer.add_money(-total_price)
+            result["messages"].append(f"顧客に{total_price}ゴールドを請求しました")
+        
+        return result
+    
+    def execute_agent_buy_item(self, agent_id: str, buy_action: BuyItem) -> Dict:
+        """アイテム購入行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, TraderAgent):
+            raise ValueError(f"エージェント {agent_id} は商人ではありません")
+        
+        if not buy_action.is_valid(agent):
+            raise ValueError("購入条件を満たしていません")
+        
+        # 顧客エージェントを取得
+        customer = self.get_agent(buy_action.customer_agent_id)
+        if not customer:
+            raise ValueError(f"顧客エージェント {buy_action.customer_agent_id} が見つかりません")
+        
+        # 同じスポットにいるかチェック
+        if agent.get_current_spot_id() != customer.get_current_spot_id():
+            raise ValueError("顧客と同じスポットにいません")
+        
+        # 顧客のアイテム所持チェック
+        if customer.get_item_count(buy_action.item_id) < buy_action.quantity:
+            return {
+                "success": False,
+                "message": f"顧客のアイテム不足: {buy_action.item_id} x {buy_action.quantity}"
+            }
+        
+        # 購入実行
+        result = agent.buy_item_from_customer(
+            buy_action.customer_agent_id,
+            buy_action.item_id,
+            buy_action.quantity,
+            buy_action.price_per_item
+        )
+        
+        if result["success"]:
+            # 顧客からアイテムを受け取り、支払いを処理
+            for _ in range(buy_action.quantity):
+                customer.remove_item_by_id(buy_action.item_id, 1)
+            
+            total_price = buy_action.get_total_price()
+            customer.add_money(total_price)
+            result["messages"].append(f"顧客に{total_price}ゴールドを支払いました")
+        
+        return result
+    
+    def execute_agent_set_item_price(self, agent_id: str, price_action: SetItemPrice) -> Dict:
+        """商品価格設定行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, TraderAgent):
+            raise ValueError(f"エージェント {agent_id} は商人ではありません")
+        
+        if not price_action.is_valid(agent):
+            raise ValueError("価格設定条件を満たしていません")
+        
+        return agent.set_item_price(price_action.item_id, price_action.price)
+    
+    def execute_agent_manage_inventory(self, agent_id: str, inventory_action: ManageInventory) -> Dict:
+        """店舗在庫管理行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, TraderAgent):
+            raise ValueError(f"エージェント {agent_id} は商人ではありません")
+        
+        if not inventory_action.is_valid(agent):
+            raise ValueError("在庫管理条件を満たしていません")
+        
+        return agent.manage_shop_inventory(
+            inventory_action.action_type,
+            inventory_action.item_id,
+            inventory_action.quantity
+        )
+    
+    def execute_agent_provide_lodging(self, agent_id: str, lodging_action: ProvideLodging) -> Dict:
+        """宿泊サービス提供行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, ServiceProviderAgent):
+            raise ValueError(f"エージェント {agent_id} はサービス提供者ではありません")
+        
+        if not lodging_action.is_valid(agent):
+            raise ValueError("宿泊サービス提供条件を満たしていません")
+        
+        # ゲストエージェントを取得
+        guest = self.get_agent(lodging_action.guest_agent_id)
+        if not guest:
+            raise ValueError(f"ゲストエージェント {lodging_action.guest_agent_id} が見つかりません")
+        
+        # 同じスポットにいるかチェック
+        if agent.get_current_spot_id() != guest.get_current_spot_id():
+            raise ValueError("ゲストと同じスポットにいません")
+        
+        # ゲストの支払い能力チェック
+        total_cost = lodging_action.get_total_price()
+        if guest.get_money() < total_cost:
+            return {
+                "success": False,
+                "message": f"ゲストの資金不足: 必要{total_cost}ゴールド、所持{guest.get_money()}ゴールド"
+            }
+        
+        # 宿泊サービス実行
+        result = agent.provide_lodging_service(
+            lodging_action.guest_agent_id,
+            lodging_action.nights,
+            lodging_action.room_type
+        )
+        
+        if result["success"]:
+            # ゲストを一時的に宿屋スポットに移動（簡易実装）
+            guest.original_spot_id = guest.get_current_spot_id()  # 元の場所を記録
+            # 支払い処理
+            guest.add_money(-total_cost)
+            # HP/MP全回復効果を適用
+            guest.set_hp(guest.max_hp)
+            guest.set_mp(guest.max_mp)
+            result["messages"].append(f"ゲストのHP/MPが全回復しました")
+            result["messages"].append(f"ゲストが{total_cost}ゴールドを支払いました")
+        
+        return result
+    
+    def execute_agent_provide_dance(self, agent_id: str, dance_action: ProvideDance) -> Dict:
+        """舞サービス提供行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, ServiceProviderAgent):
+            raise ValueError(f"エージェント {agent_id} はサービス提供者ではありません")
+        
+        if not dance_action.is_valid(agent):
+            raise ValueError("舞サービス提供条件を満たしていません")
+        
+        # 対象エージェントを取得
+        target = self.get_agent(dance_action.target_agent_id)
+        if not target:
+            raise ValueError(f"対象エージェント {dance_action.target_agent_id} が見つかりません")
+        
+        # 同じスポットにいるかチェック
+        if agent.get_current_spot_id() != target.get_current_spot_id():
+            raise ValueError("対象と同じスポットにいません")
+        
+        # 対象の支払い能力チェック
+        if target.get_money() < dance_action.price:
+            return {
+                "success": False,
+                "message": f"対象の資金不足: 必要{dance_action.price}ゴールド、所持{target.get_money()}ゴールド"
+            }
+        
+        # 舞サービス実行
+        result = agent.provide_dance_service(dance_action.target_agent_id, dance_action.dance_type)
+        
+        if result["success"]:
+            # 効果を対象に適用
+            effects = result["effects"]
+            if "mp_recovery" in effects:
+                mp_recovery = effects["mp_recovery"]
+                target.set_mp(min(target.max_mp, target.current_mp + mp_recovery))
+                result["messages"].append(f"対象のMPが{mp_recovery}回復しました")
+            
+            # 支払い処理
+            target.add_money(-result["price"])
+            result["messages"].append(f"対象が{result['price']}ゴールドを支払いました")
+        
+        return result
+    
+    def execute_agent_provide_prayer(self, agent_id: str, prayer_action: ProvidePrayer) -> Dict:
+        """祈祷サービス提供行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, ServiceProviderAgent):
+            raise ValueError(f"エージェント {agent_id} はサービス提供者ではありません")
+        
+        if not prayer_action.is_valid(agent):
+            raise ValueError("祈祷サービス提供条件を満たしていません")
+        
+        # 対象エージェントを取得
+        target = self.get_agent(prayer_action.target_agent_id)
+        if not target:
+            raise ValueError(f"対象エージェント {prayer_action.target_agent_id} が見つかりません")
+        
+        # 同じスポットにいるかチェック
+        if agent.get_current_spot_id() != target.get_current_spot_id():
+            raise ValueError("対象と同じスポットにいません")
+        
+        # 対象の支払い能力チェック
+        if target.get_money() < prayer_action.price:
+            return {
+                "success": False,
+                "message": f"対象の資金不足: 必要{prayer_action.price}ゴールド、所持{target.get_money()}ゴールド"
+            }
+        
+        # 祈祷サービス実行
+        result = agent.provide_prayer_service(prayer_action.target_agent_id, prayer_action.prayer_type)
+        
+        if result["success"]:
+            # 効果を対象に適用
+            effects = result["effects"]
+            if "hp_recovery" in effects:
+                hp_recovery = effects["hp_recovery"]
+                target.set_hp(min(target.max_hp, target.current_hp + hp_recovery))
+                result["messages"].append(f"対象のHPが{hp_recovery}回復しました")
+            
+            if "mp_recovery" in effects:
+                mp_recovery = effects["mp_recovery"]
+                target.set_mp(min(target.max_mp, target.current_mp + mp_recovery))
+                result["messages"].append(f"対象のMPが{mp_recovery}回復しました")
+            
+            # 支払い処理
+            target.add_money(-result["price"])
+            result["messages"].append(f"対象が{result['price']}ゴールドを支払いました")
+        
+        return result
+
     # === クエストシステム関連の行動実行メソッド ===
     
     def execute_agent_view_available_quests(self, agent_id: str, action: ViewAvailableQuests) -> Dict:

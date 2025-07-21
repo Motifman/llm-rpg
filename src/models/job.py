@@ -412,6 +412,467 @@ class MerchantAgent(JobAgent):
         return max(1, final_price)  # 最低1ゴールド
 
 
+class ServiceProviderAgent(JobAgent):
+    """サービス提供専門エージェント - 宿泊・娯楽・回復サービス"""
+    
+    def __init__(self, agent_id: str, name: str, service_type: str = "innkeeper"):
+        super().__init__(agent_id, name, JobType.MERCHANT)
+        self.service_type = service_type  # "innkeeper", "dancer", "priest" など
+        self.service_quality = 1.0  # サービス品質倍率
+        self.customer_satisfaction = 1.0  # 顧客満足度
+        self.active_guests: Dict[str, Dict[str, Any]] = {}  # 現在のゲスト情報
+        
+        # サービスタイプによる追加ボーナス
+        self._apply_service_bonuses()
+    
+    def _apply_service_bonuses(self):
+        """サービスタイプによる追加ボーナス"""
+        if self.service_type == "innkeeper":
+            self.job_skills.append("宿泊サービス")
+            self.job_skills.append("接客術")
+            self.service_quality += 0.1
+        elif self.service_type == "dancer":
+            self.job_skills.append("舞踊技術")
+            self.job_skills.append("芸能知識")
+            self.max_mp += 15
+            self.current_mp = self.max_mp
+        elif self.service_type == "priest":
+            self.job_skills.append("祈祷術")
+            self.job_skills.append("治癒知識")
+            self.max_mp += 20
+            self.current_mp = self.max_mp
+    
+    def provide_lodging_service(self, guest_agent_id: str, nights: int = 1, 
+                               room_type: str = "standard") -> Dict[str, Any]:
+        """宿泊サービスを提供する"""
+        result = {
+            "success": False,
+            "guest_agent_id": guest_agent_id,
+            "nights": nights,
+            "room_type": room_type,
+            "total_cost": 0,
+            "services_provided": [],
+            "experience_gained": 0,
+            "messages": []
+        }
+        
+        if "宿泊サービス" not in self.job_skills:
+            result["messages"].append("宿泊サービスを提供できません")
+            return result
+        
+        # 料金計算
+        base_price = {"standard": 50, "deluxe": 80, "suite": 120}
+        price_per_night = base_price.get(room_type, 50)
+        total_cost = int(price_per_night * nights * self.service_quality)
+        
+        # ゲスト情報を記録
+        guest_info = {
+            "check_in_spot": self.current_spot_id,
+            "nights_remaining": nights,
+            "room_type": room_type,
+            "total_paid": total_cost
+        }
+        self.active_guests[guest_agent_id] = guest_info
+        
+        # サービス効果（HP/MP全回復）
+        healing_effects = {
+            "hp_recovery": "full",
+            "mp_recovery": "full",
+            "safe_rest": True
+        }
+        
+        result["success"] = True
+        result["total_cost"] = total_cost
+        result["services_provided"].append("安全な宿泊")
+        result["services_provided"].append("HP/MP全回復")
+        result["messages"].append(f"{guest_agent_id}に{nights}泊の宿泊サービスを提供")
+        
+        # 経験値獲得
+        exp_gain = nights * 10
+        self.add_job_experience(exp_gain)
+        result["experience_gained"] = exp_gain
+        
+        # 収入獲得
+        self.add_money(total_cost)
+        
+        return result
+    
+    def provide_dance_service(self, target_agent_id: str, dance_type: str = "healing_dance") -> Dict[str, Any]:
+        """舞サービスを提供する"""
+        result = {
+            "success": False,
+            "target_agent_id": target_agent_id,
+            "dance_type": dance_type,
+            "effects": {},
+            "price": 0,
+            "experience_gained": 0,
+            "mp_consumed": 0,
+            "messages": []
+        }
+        
+        if "舞踊技術" not in self.job_skills:
+            result["messages"].append("舞サービスを提供できません")
+            return result
+        
+        # MPコストチェック
+        mp_cost = {"healing_dance": 15, "energy_dance": 20, "spiritual_dance": 25}
+        required_mp = mp_cost.get(dance_type, 15)
+        
+        if self.current_mp < required_mp:
+            result["messages"].append("MPが不足しています")
+            return result
+        
+        # 舞の効果
+        dance_effects = {
+            "healing_dance": {"mp_recovery": 40, "mood_boost": 1.2},
+            "energy_dance": {"mp_recovery": 60, "energy_boost": 1.5},
+            "spiritual_dance": {"mp_recovery": 50, "spiritual_power": 1.3}
+        }
+        
+        effect = dance_effects.get(dance_type, dance_effects["healing_dance"])
+        price = 30 + (required_mp * 2)  # MPコストに応じた価格
+        
+        # MP消費
+        self.set_mp(self.current_mp - required_mp)
+        
+        result["success"] = True
+        result["effects"] = effect
+        result["price"] = price
+        result["mp_consumed"] = required_mp
+        result["messages"].append(f"{target_agent_id}に{dance_type}を披露しました")
+        
+        # 経験値獲得
+        exp_gain = 12
+        self.add_job_experience(exp_gain)
+        result["experience_gained"] = exp_gain
+        
+        # 収入獲得
+        self.add_money(price)
+        
+        return result
+    
+    def provide_prayer_service(self, target_agent_id: str, prayer_type: str = "healing_prayer") -> Dict[str, Any]:
+        """祈祷サービスを提供する"""
+        result = {
+            "success": False,
+            "target_agent_id": target_agent_id,
+            "prayer_type": prayer_type,
+            "effects": {},
+            "price": 0,
+            "experience_gained": 0,
+            "mp_consumed": 0,
+            "messages": []
+        }
+        
+        if "祈祷術" not in self.job_skills:
+            result["messages"].append("祈祷サービスを提供できません")
+            return result
+        
+        # MPコストチェック
+        mp_cost = {"healing_prayer": 18, "blessing": 25, "purification": 30}
+        required_mp = mp_cost.get(prayer_type, 18)
+        
+        if self.current_mp < required_mp:
+            result["messages"].append("MPが不足しています")
+            return result
+        
+        # 祈祷の効果
+        prayer_effects = {
+            "healing_prayer": {"hp_recovery": 50, "status_cleanse": True},
+            "blessing": {"hp_recovery": 30, "mp_recovery": 30, "blessing_buff": 1.2},
+            "purification": {"status_cleanse": True, "debuff_removal": True, "protection": 1.1}
+        }
+        
+        effect = prayer_effects.get(prayer_type, prayer_effects["healing_prayer"])
+        price = 40 + (required_mp * 2)  # MPコストに応じた価格
+        
+        # MP消費
+        self.set_mp(self.current_mp - required_mp)
+        
+        result["success"] = True
+        result["effects"] = effect
+        result["price"] = price
+        result["mp_consumed"] = required_mp
+        result["messages"].append(f"{target_agent_id}のために{prayer_type}を捧げました")
+        
+        # 経験値獲得
+        exp_gain = 15
+        self.add_job_experience(exp_gain)
+        result["experience_gained"] = exp_gain
+        
+        # 収入獲得
+        self.add_money(price)
+        
+        return result
+    
+    def check_out_guest(self, guest_agent_id: str) -> Dict[str, Any]:
+        """ゲストのチェックアウト処理"""
+        result = {
+            "success": False,
+            "guest_agent_id": guest_agent_id,
+            "final_bill": 0,
+            "messages": []
+        }
+        
+        if guest_agent_id not in self.active_guests:
+            result["messages"].append(f"{guest_agent_id}は宿泊していません")
+            return result
+        
+        guest_info = self.active_guests[guest_agent_id]
+        result["success"] = True
+        result["final_bill"] = guest_info["total_paid"]
+        result["messages"].append(f"{guest_agent_id}がチェックアウトしました")
+        
+        # ゲスト情報削除
+        del self.active_guests[guest_agent_id]
+        
+        return result
+
+
+class TraderAgent(JobAgent):
+    """商品売買専門エージェント - 店舗経営・物品取引"""
+    
+    def __init__(self, agent_id: str, name: str, trade_specialty: str = "general"):
+        super().__init__(agent_id, name, JobType.MERCHANT)
+        self.trade_specialty = trade_specialty  # "general", "weapons", "potions", "food" など
+        self.negotiation_skill = 1.0  # 交渉スキル（MerchantAgentから継承）
+        self.shop_inventory: Dict[str, Dict[str, Any]] = {}  # item_id -> {quantity, price, description}
+        self.item_prices: Dict[str, int] = {}  # item_id -> price
+        self.sales_record: List[Dict[str, Any]] = []  # 売上記録
+        self.purchase_record: List[Dict[str, Any]] = []  # 購入記録
+        
+        # 取引専門分野による追加ボーナス
+        self._apply_trade_bonuses()
+    
+    def _apply_trade_bonuses(self):
+        """取引専門分野による追加ボーナス"""
+        if self.trade_specialty == "weapons":
+            self.job_skills.append("武器鑑定")
+            self.job_skills.append("武器知識")
+            self.negotiation_skill += 0.1
+        elif self.trade_specialty == "potions":
+            self.job_skills.append("薬品知識")
+            self.job_skills.append("品質鑑定")
+        elif self.trade_specialty == "food":
+            self.job_skills.append("食材知識")
+            self.job_skills.append("保存技術")
+        
+        # 一般的な商人スキル
+        self.job_skills.append("価格交渉")
+        self.job_skills.append("商品管理")
+    
+    def sell_item_to_customer(self, customer_agent_id: str, item_id: str, 
+                             quantity: int = 1, price_per_item: Optional[int] = None) -> Dict[str, Any]:
+        """顧客にアイテムを販売する"""
+        result = {
+            "success": False,
+            "customer_agent_id": customer_agent_id,
+            "item_id": item_id,
+            "quantity": quantity,
+            "price_per_item": 0,
+            "total_price": 0,
+            "experience_gained": 0,
+            "messages": []
+        }
+        
+        # 在庫チェック
+        if self.get_item_count(item_id) < quantity:
+            result["messages"].append(f"在庫不足: {item_id} x {quantity}")
+            return result
+        
+        # 価格設定
+        if price_per_item is None:
+            price_per_item = self.item_prices.get(item_id, 10)  # デフォルト価格
+        
+        total_price = price_per_item * quantity
+        
+        # アイテム転送
+        for _ in range(quantity):
+            item = self.get_item_by_id(item_id)
+            if item:
+                self.remove_item_by_id(item_id, 1)
+        
+        result["success"] = True
+        result["price_per_item"] = price_per_item
+        result["total_price"] = total_price
+        result["messages"].append(f"{customer_agent_id}に{item_id} x {quantity}を販売")
+        
+        # 売上記録
+        sale_record = {
+            "customer_id": customer_agent_id,
+            "item_id": item_id,
+            "quantity": quantity,
+            "price_per_item": price_per_item,
+            "total_price": total_price,
+            "timestamp": "now"  # 実際の実装では現在時刻
+        }
+        self.sales_record.append(sale_record)
+        
+        # 収入獲得
+        self.add_money(total_price)
+        
+        # 経験値獲得
+        exp_gain = quantity * 5
+        self.add_job_experience(exp_gain)
+        result["experience_gained"] = exp_gain
+        
+        return result
+    
+    def buy_item_from_customer(self, customer_agent_id: str, item_id: str, 
+                              quantity: int = 1, price_per_item: int = 5) -> Dict[str, Any]:
+        """顧客からアイテムを購入する"""
+        result = {
+            "success": False,
+            "customer_agent_id": customer_agent_id,
+            "item_id": item_id,
+            "quantity": quantity,
+            "price_per_item": price_per_item,
+            "total_price": 0,
+            "experience_gained": 0,
+            "messages": []
+        }
+        
+        total_cost = price_per_item * quantity
+        
+        # 資金チェック
+        if self.get_money() < total_cost:
+            result["messages"].append(f"資金不足: 必要{total_cost}ゴールド、所持{self.get_money()}ゴールド")
+            return result
+        
+        # 購入処理（実際の実装では顧客からアイテムを受け取る処理が必要）
+        from .item import Item
+        purchased_item = Item(item_id, f"{customer_agent_id}から購入")
+        for _ in range(quantity):
+            self.add_item(purchased_item)
+        
+        result["success"] = True
+        result["total_price"] = total_cost
+        result["messages"].append(f"{customer_agent_id}から{item_id} x {quantity}を購入")
+        
+        # 購入記録
+        purchase_record = {
+            "seller_id": customer_agent_id,
+            "item_id": item_id,
+            "quantity": quantity,
+            "price_per_item": price_per_item,
+            "total_cost": total_cost,
+            "timestamp": "now"
+        }
+        self.purchase_record.append(purchase_record)
+        
+        # 支払い
+        self.add_money(-total_cost)
+        
+        # 経験値獲得
+        exp_gain = quantity * 3
+        self.add_job_experience(exp_gain)
+        result["experience_gained"] = exp_gain
+        
+        return result
+    
+    def set_item_price(self, item_id: str, price: int) -> Dict[str, Any]:
+        """商品価格を設定する"""
+        result = {
+            "success": False,
+            "item_id": item_id,
+            "old_price": 0,
+            "new_price": price,
+            "messages": []
+        }
+        
+        if price <= 0:
+            result["messages"].append("価格は1ゴールド以上である必要があります")
+            return result
+        
+        old_price = self.item_prices.get(item_id, 0)
+        self.item_prices[item_id] = price
+        
+        result["success"] = True
+        result["old_price"] = old_price
+        result["messages"].append(f"{item_id}の価格を{old_price} → {price}ゴールドに変更")
+        
+        return result
+    
+    def manage_shop_inventory(self, action_type: str, item_id: Optional[str] = None, 
+                             quantity: int = 1) -> Dict[str, Any]:
+        """店舗在庫を管理する"""
+        result = {
+            "success": False,
+            "action_type": action_type,
+            "item_id": item_id,
+            "quantity": quantity,
+            "inventory_status": {},
+            "messages": []
+        }
+        
+        if action_type == "view_inventory":
+            # 在庫表示
+            inventory_summary = {}
+            # Agentクラスのitemsから在庫集計
+            item_counts = {}
+            for item in self.items:
+                item_id = item.item_id
+                item_counts[item_id] = item_counts.get(item_id, 0) + 1
+            
+            for item_id, count in item_counts.items():
+                inventory_summary[item_id] = {
+                    "quantity": count,
+                    "price": self.item_prices.get(item_id, "未設定")
+                }
+            
+            result["success"] = True
+            result["inventory_status"] = inventory_summary
+            result["messages"].append("在庫状況を表示しました")
+            
+        elif action_type == "add_to_shop":
+            if not item_id:
+                result["messages"].append("アイテムIDが指定されていません")
+                return result
+            
+            if self.get_item_count(item_id) < quantity:
+                result["messages"].append(f"所持数不足: {item_id} x {quantity}")
+                return result
+            
+            # ショップ在庫として登録（価格未設定の場合はデフォルト設定）
+            if item_id not in self.item_prices:
+                self.item_prices[item_id] = 10  # デフォルト価格
+            
+            result["success"] = True
+            result["messages"].append(f"{item_id} x {quantity}を店舗在庫に追加")
+            
+        elif action_type == "remove_from_shop":
+            if not item_id:
+                result["messages"].append("アイテムIDが指定されていません")
+                return result
+            
+            if self.get_item_count(item_id) < quantity:
+                result["messages"].append(f"在庫不足: {item_id} x {quantity}")
+                return result
+            
+            # 在庫から削除
+            for _ in range(quantity):
+                self.remove_item_by_id(item_id, 1)
+            
+            result["success"] = True
+            result["messages"].append(f"{item_id} x {quantity}を店舗在庫から削除")
+        
+        return result
+    
+    def get_sales_summary(self) -> Dict[str, Any]:
+        """売上サマリーを取得"""
+        total_sales = sum(record["total_price"] for record in self.sales_record)
+        total_purchases = sum(record["total_cost"] for record in self.purchase_record)
+        net_profit = total_sales - total_purchases
+        
+        return {
+            "total_sales": total_sales,
+            "total_purchases": total_purchases,
+            "net_profit": net_profit,
+            "sales_count": len(self.sales_record),
+            "purchase_count": len(self.purchase_record)
+        }
+
+
 class AdventurerAgent(JobAgent):
     """冒険者エージェント - 戦闘・探索専門"""
     
