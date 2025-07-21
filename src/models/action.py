@@ -25,52 +25,35 @@ class Action(ABC):
     description: str
 
 
-# === Spot依存の行動 ===
+# === ロケーション依存の行動 ===
 
 @dataclass(frozen=True)
 class Movement(Action):
-    """移動行動"""
-    direction: str
-    target_spot_id: str
+    """移動行動（spot依存）"""
+    destination_spot_id: str
+    
+    def get_destination_spot_id(self) -> str:
+        """移動先のspot_idを取得"""
+        return self.destination_spot_id
 
 
 @dataclass(frozen=True)
 class Exploration(Action):
-    """探索行動"""
-    # 互換性のための個別フィールド（将来的には削除予定）
+    """探索行動（spot依存）"""
     item_id: Optional[str] = None
     discovered_info: Optional[str] = None
-    experience_points: Optional[int] = None
-    money: Optional[int] = None
-    
-    # 新しい統一報酬システム
-    reward: Optional[ActionReward] = None
-    
-    def get_unified_reward(self) -> ActionReward:
-        """統一報酬形式で取得（互換性維持）"""
-        if self.reward:
-            return self.reward
-        
-        # 旧形式から新形式への変換
-        items = [self.item_id] if self.item_id else []
-        information = [self.discovered_info] if self.discovered_info else []
-        
-        return ActionReward(
-            items=items,
-            money=self.money or 0,
-            experience=self.experience_points or 0,
-            information=information
-        )
+    experience_points: int = 0
+    money: int = 0
 
 
 @dataclass(frozen=True)
 class Interaction(Action):
-    """オブジェクトとの相互作用行動"""
+    """相互作用行動（spot内のオブジェクト依存）"""
     object_id: str
     interaction_type: InteractionType
+    state_changes: Dict[str, Any] = field(default_factory=dict)
+    required_item_id: Optional[str] = None
     reward: ActionReward = field(default_factory=ActionReward)
-    required_item_id: Optional[str] = None  # 必要アイテム（簡易条件）
-    state_changes: Dict[str, Any] = field(default_factory=dict)  # オブジェクトの状態変化
 
 
 # === Agent依存の行動 ===
@@ -139,38 +122,12 @@ class PostTrade(Action):
 
 @dataclass(frozen=True)
 class ViewTrades(Action):
-    """取引閲覧行動（Agent依存）"""
-    filter_offered_item_id: Optional[str] = None
-    filter_requested_item_id: Optional[str] = None
-    max_price: Optional[int] = None
-    min_price: Optional[int] = None
-    trade_type: Optional["TradeType"] = None
-    show_own_trades: bool = False
+    """取引一覧取得行動（Agent依存）"""
+    filters: Optional[Dict[str, Any]] = None
     
-    def get_filters(self, agent_id: str) -> Dict[str, Any]:
-        """フィルタ条件を辞書形式で取得"""
-        filters = {}
-        
-        if self.filter_offered_item_id:
-            filters["offered_item_id"] = self.filter_offered_item_id
-        
-        if self.filter_requested_item_id:
-            filters["requested_item_id"] = self.filter_requested_item_id
-        
-        if self.max_price is not None:
-            filters["max_price"] = self.max_price
-        
-        if self.min_price is not None:
-            filters["min_price"] = self.min_price
-        
-        if self.trade_type is not None:
-            filters["trade_type"] = self.trade_type
-        
-        if not self.show_own_trades:
-            # 自分の出品を除外するフィルタ
-            filters["buyer_id"] = agent_id
-        
-        return filters
+    def get_filters(self) -> Dict[str, Any]:
+        """フィルタを取得"""
+        return self.filters or {}
 
 
 @dataclass(frozen=True)
@@ -214,21 +171,37 @@ class Conversation(Action):
         return self.content
 
 
-# === バトルシステム関連の行動 ===
+# === 戦闘システム関連の行動 ===
 
 @dataclass(frozen=True)
-class AttackMonster(Action):
-    """モンスター攻撃行動"""
+class StartBattle(Action):
+    """戦闘開始行動"""
     monster_id: str
     
     def get_monster_id(self) -> str:
-        """対象モンスターIDを取得"""
+        """モンスターIDを取得"""
         return self.monster_id
 
 
 @dataclass(frozen=True)
+class JoinBattle(Action):
+    """戦闘参加行動"""
+    battle_id: str
+    
+    def get_battle_id(self) -> str:
+        """戦闘IDを取得"""
+        return self.battle_id
+
+
+@dataclass(frozen=True)
+class AttackMonster(Action):
+    """モンスター攻撃行動"""
+    pass  # 現在は追加のパラメータ不要
+
+
+@dataclass(frozen=True)
 class DefendBattle(Action):
-    """戦闘時防御行動"""
+    """戦闘防御行動"""
     pass  # 現在は追加のパラメータ不要
 
 
@@ -238,21 +211,161 @@ class EscapeBattle(Action):
     pass  # 現在は追加のパラメータ不要
 
 
+# === 職業システム関連の行動 ===
+
 @dataclass(frozen=True)
-class StartBattle(Action):
-    """戦闘開始行動（モンスターとの戦闘を開始）"""
-    monster_id: str
+class CraftItem(Action):
+    """アイテム合成行動（職人向け）"""
+    recipe_id: str
+    quantity: int = 1  # 作成回数
     
-    def get_monster_id(self) -> str:
-        """対象モンスターIDを取得"""
-        return self.monster_id
+    def is_valid(self, agent: "Agent") -> bool:
+        """合成可能かチェック"""
+        from .job import JobAgent
+        if not isinstance(agent, JobAgent):
+            return False
+        
+        recipe = agent.get_recipe_by_id(self.recipe_id)
+        if not recipe:
+            return False
+        
+        return recipe.can_craft(agent)
 
 
 @dataclass(frozen=True)
-class JoinBattle(Action):
-    """戦闘参加行動（進行中の戦闘に参加）"""
-    battle_id: str
+class EnhanceItem(Action):
+    """アイテム強化行動（職人向け）"""
+    item_id: str
+    enhancement_materials: Dict[str, int]  # 強化材料
+    enhancement_level: int = 1  # 強化レベル
     
-    def get_battle_id(self) -> str:
-        """対象バトルIDを取得"""
-        return self.battle_id
+    def is_valid(self, agent: "Agent") -> bool:
+        """強化可能かチェック"""
+        # 対象アイテムを所持しているかチェック
+        if not agent.has_item(self.item_id):
+            return False
+        
+        # 強化材料を所持しているかチェック
+        for material_id, count in self.enhancement_materials.items():
+            if agent.get_item_count(material_id) < count:
+                return False
+        
+        return True
+
+
+@dataclass(frozen=True)
+class LearnRecipe(Action):
+    """レシピ習得行動（職人向け）"""
+    recipe_id: str
+    teacher_agent_id: Optional[str] = None  # 教師エージェント
+    required_materials: Dict[str, int] = field(default_factory=dict)  # 習得に必要な材料
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """習得可能かチェック"""
+        from .job import JobAgent
+        if not isinstance(agent, JobAgent):
+            return False
+        
+        # 必要材料のチェック
+        for material_id, count in self.required_materials.items():
+            if agent.get_item_count(material_id) < count:
+                return False
+        
+        return True
+
+
+@dataclass(frozen=True)
+class SetupShop(Action):
+    """店舗設営行動（商人向け）"""
+    shop_name: str
+    shop_type: str  # "item_shop", "service_shop", "restaurant" など
+    offered_items: Dict[str, int] = field(default_factory=dict)  # item_id -> price
+    offered_services: List[str] = field(default_factory=list)  # service_id のリスト
+
+
+@dataclass(frozen=True)
+class ProvideService(Action):
+    """サービス提供行動（商人向け）"""
+    service_id: str
+    target_agent_id: str
+    custom_price: Optional[int] = None  # カスタム価格（交渉結果）
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """サービス提供可能かチェック"""
+        from .job import JobAgent
+        if not isinstance(agent, JobAgent):
+            return False
+        
+        service = agent.get_service_by_id(self.service_id)
+        if not service:
+            return False
+        
+        return service.can_provide(agent)
+
+
+@dataclass(frozen=True)
+class PriceNegotiation(Action):
+    """価格交渉行動（商人向け）"""
+    target_agent_id: str
+    item_or_service_id: str
+    proposed_price: int
+    original_price: int
+
+
+@dataclass(frozen=True)
+class GatherResource(Action):
+    """資源採集行動（一次産業者向け）"""
+    resource_type: str  # "wood", "ore", "herb", "fish" など
+    tool_item_id: Optional[str] = None  # 使用する道具
+    duration_minutes: int = 60  # 採集時間（分）
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """採集可能かチェック"""
+        # 道具が必要な場合のチェック
+        if self.tool_item_id:
+            if not agent.has_item(self.tool_item_id):
+                return False
+        
+        return True
+
+
+@dataclass(frozen=True)
+class ProcessMaterial(Action):
+    """材料加工行動（一次産業者向け）"""
+    raw_material_id: str
+    processed_item_id: str
+    quantity: int = 1
+    processing_time_minutes: int = 30
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """加工可能かチェック"""
+        return agent.get_item_count(self.raw_material_id) >= self.quantity
+
+
+@dataclass(frozen=True)
+class ManageFarm(Action):
+    """農場管理行動（一次産業者向け）"""
+    farm_action: str  # "plant", "water", "harvest"
+    crop_type: str
+    plot_id: str  # 畑の区画ID
+    seed_item_id: Optional[str] = None  # 種のアイテムID（植える場合）
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """農場管理可能かチェック"""
+        if self.farm_action == "plant" and self.seed_item_id:
+            return agent.has_item(self.seed_item_id)
+        return True
+
+
+@dataclass(frozen=True)
+class AdvancedCombat(Action):
+    """高度戦闘行動（冒険者向け）"""
+    combat_skill: str  # "power_attack", "heal_ally", "magic_spell", "defend_ally"
+    target_id: Optional[str] = None  # 対象（味方支援の場合）
+    skill_level: int = 1
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """スキル使用可能かチェック"""
+        # MP消費などのチェックをここで行う
+        mp_cost = self.skill_level * 10
+        return agent.current_mp >= mp_cost

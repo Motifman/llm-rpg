@@ -1,11 +1,12 @@
 from typing import Dict, List, Optional
 from ..models.spot import Spot
 from ..models.agent import Agent
-from ..models.action import Movement, Exploration, Action, Interaction, InteractionType, ItemUsage, PostTrade, ViewTrades, AcceptTrade, CancelTrade, Conversation, AttackMonster, DefendBattle, EscapeBattle, StartBattle, JoinBattle
+from ..models.action import Movement, Exploration, Action, Interaction, InteractionType, ItemUsage, PostTrade, ViewTrades, AcceptTrade, CancelTrade, Conversation, AttackMonster, DefendBattle, EscapeBattle, StartBattle, JoinBattle, CraftItem, EnhanceItem, LearnRecipe, SetupShop, ProvideService, PriceNegotiation, GatherResource, ProcessMaterial, ManageFarm, AdvancedCombat
 from ..models.interactable import Door
 from ..models.item import ConsumableItem
 from ..models.trade import TradeOffer
 from ..models.monster import Monster, MonsterType
+from ..models.job import JobAgent, CraftsmanAgent, MerchantAgent, AdventurerAgent, ProducerAgent
 from ..systems.trading_post import TradingPost
 from ..systems.message import LocationChatMessage
 from ..systems.battle import BattleManager, Battle, BattleResult
@@ -578,5 +579,266 @@ class World:
             self.execute_agent_join_battle(agent_id, action)
         elif isinstance(action, (AttackMonster, DefendBattle, EscapeBattle)):
             return self.execute_agent_battle_action(agent_id, action)
+        # 職業システム関連の行動
+        elif isinstance(action, CraftItem):
+            return self.execute_agent_craft_item(agent_id, action)
+        elif isinstance(action, EnhanceItem):
+            return self.execute_agent_enhance_item(agent_id, action)
+        elif isinstance(action, LearnRecipe):
+            return self.execute_agent_learn_recipe(agent_id, action)
+        elif isinstance(action, SetupShop):
+            return self.execute_agent_setup_shop(agent_id, action)
+        elif isinstance(action, ProvideService):
+            return self.execute_agent_provide_service(agent_id, action)
+        elif isinstance(action, PriceNegotiation):
+            return self.execute_agent_price_negotiation(agent_id, action)
+        elif isinstance(action, GatherResource):
+            return self.execute_agent_gather_resource(agent_id, action)
+        elif isinstance(action, ProcessMaterial):
+            return self.execute_agent_process_material(agent_id, action)
+        elif isinstance(action, ManageFarm):
+            return self.execute_agent_manage_farm(agent_id, action)
+        elif isinstance(action, AdvancedCombat):
+            return self.execute_agent_advanced_combat(agent_id, action)
         else:
             raise ValueError(f"不明な行動: {action}")
+    
+    # === 職業システム関連の行動実行メソッド ===
+    
+    def execute_agent_craft_item(self, agent_id: str, craft_action: CraftItem) -> Dict:
+        """アイテム合成行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, CraftsmanAgent):
+            raise ValueError(f"エージェント {agent_id} は職人ではありません")
+        
+        if not craft_action.is_valid(agent):
+            raise ValueError("合成条件を満たしていません")
+        
+        recipe = agent.get_recipe_by_id(craft_action.recipe_id)
+        if not recipe:
+            raise ValueError(f"レシピ {craft_action.recipe_id} が見つかりません")
+        
+        return agent.craft_item(recipe, craft_action.quantity)
+    
+    def execute_agent_enhance_item(self, agent_id: str, enhance_action: EnhanceItem) -> Dict:
+        """アイテム強化行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, CraftsmanAgent):
+            raise ValueError(f"エージェント {agent_id} は職人ではありません")
+        
+        if not enhance_action.is_valid(agent):
+            raise ValueError("強化条件を満たしていません")
+        
+        return agent.enhance_item(enhance_action.item_id, enhance_action.enhancement_materials)
+    
+    def execute_agent_learn_recipe(self, agent_id: str, learn_action: LearnRecipe) -> Dict:
+        """レシピ習得行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, JobAgent):
+            raise ValueError(f"エージェント {agent_id} は職業エージェントではありません")
+        
+        if not learn_action.is_valid(agent):
+            raise ValueError("レシピ習得条件を満たしていません")
+        
+        # TODO: レシピデータベースから取得する実装が必要
+        # 現在は簡易実装
+        result = {
+            "success": False,
+            "recipe_learned": None,
+            "materials_consumed": {},
+            "messages": []
+        }
+        
+        # 材料消費
+        for material_id, count in learn_action.required_materials.items():
+            removed = agent.remove_item_by_id(material_id, count)
+            result["materials_consumed"][material_id] = removed
+        
+        # レシピ習得（簡易実装）
+        from ..models.job import Recipe
+        new_recipe = Recipe(
+            recipe_id=learn_action.recipe_id,
+            name=f"習得レシピ_{learn_action.recipe_id}",
+            description="習得したレシピ",
+            required_materials={"material": 1},
+            produced_item_id="product",
+            required_job_level=1
+        )
+        
+        success = agent.learn_recipe(new_recipe)
+        if success:
+            result["success"] = True
+            result["recipe_learned"] = new_recipe
+            result["messages"].append(f"レシピ {learn_action.recipe_id} を習得しました")
+            agent.add_job_experience(25)
+        else:
+            result["messages"].append("レシピの習得に失敗しました")
+        
+        return result
+    
+    def execute_agent_setup_shop(self, agent_id: str, shop_action: SetupShop) -> Dict:
+        """店舗設営行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, MerchantAgent):
+            raise ValueError(f"エージェント {agent_id} は商人ではありません")
+        
+        return agent.setup_shop(
+            shop_action.shop_name,
+            shop_action.shop_type,
+            shop_action.offered_items,
+            shop_action.offered_services
+        )
+    
+    def execute_agent_provide_service(self, agent_id: str, service_action: ProvideService) -> Dict:
+        """サービス提供行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, MerchantAgent):
+            raise ValueError(f"エージェント {agent_id} は商人ではありません")
+        
+        if not service_action.is_valid(agent):
+            raise ValueError("サービス提供条件を満たしていません")
+        
+        # 対象エージェントをチェック
+        target_agent = self.get_agent(service_action.target_agent_id)
+        if not target_agent:
+            raise ValueError(f"対象エージェント {service_action.target_agent_id} が見つかりません")
+        
+        result = agent.provide_service(
+            service_action.service_id,
+            service_action.target_agent_id,
+            service_action.custom_price
+        )
+        
+        # 支払い処理
+        if result["success"]:
+            price = result["price_charged"]
+            if target_agent.get_money() >= price:
+                target_agent.add_money(-price)
+                agent.add_money(price)
+                result["messages"].append(f"{price}ゴールドが支払われました")
+            else:
+                result["success"] = False
+                result["messages"].append("支払い能力が不足しています")
+        
+        return result
+    
+    def execute_agent_price_negotiation(self, agent_id: str, negotiation_action: PriceNegotiation) -> Dict:
+        """価格交渉行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, MerchantAgent):
+            raise ValueError(f"エージェント {agent_id} は商人ではありません")
+        
+        target_agent = self.get_agent(negotiation_action.target_agent_id)
+        if not target_agent:
+            raise ValueError(f"対象エージェント {negotiation_action.target_agent_id} が見つかりません")
+        
+        # 交渉結果を計算
+        target_reputation = 1.0  # 簡易実装
+        final_price = agent.negotiate_price(negotiation_action.original_price, target_reputation)
+        
+        result = {
+            "success": True,
+            "original_price": negotiation_action.original_price,
+            "proposed_price": negotiation_action.proposed_price,
+            "final_price": final_price,
+            "negotiation_successful": final_price <= negotiation_action.proposed_price,
+            "messages": [f"価格交渉の結果: {negotiation_action.original_price} → {final_price}ゴールド"]
+        }
+        
+        # 経験値獲得
+        agent.add_job_experience(5)
+        
+        return result
+    
+    def execute_agent_gather_resource(self, agent_id: str, gather_action: GatherResource) -> Dict:
+        """資源採集行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, ProducerAgent):
+            raise ValueError(f"エージェント {agent_id} は一次産業者ではありません")
+        
+        if not gather_action.is_valid(agent):
+            raise ValueError("採集条件を満たしていません")
+        
+        return agent.gather_resource(
+            gather_action.resource_type,
+            gather_action.tool_item_id,
+            gather_action.duration_minutes
+        )
+    
+    def execute_agent_process_material(self, agent_id: str, process_action: ProcessMaterial) -> Dict:
+        """材料加工行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, ProducerAgent):
+            raise ValueError(f"エージェント {agent_id} は一次産業者ではありません")
+        
+        if not process_action.is_valid(agent):
+            raise ValueError("加工条件を満たしていません")
+        
+        return agent.process_material(
+            process_action.raw_material_id,
+            process_action.processed_item_id,
+            process_action.quantity
+        )
+    
+    def execute_agent_manage_farm(self, agent_id: str, farm_action: ManageFarm) -> Dict:
+        """農場管理行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, ProducerAgent):
+            raise ValueError(f"エージェント {agent_id} は一次産業者ではありません")
+        
+        if not farm_action.is_valid(agent):
+            raise ValueError("農場管理条件を満たしていません")
+        
+        # 簡易農場管理実装
+        result = {
+            "success": True,
+            "farm_action": farm_action.farm_action,
+            "crop_type": farm_action.crop_type,
+            "plot_id": farm_action.plot_id,
+            "experience_gained": 0,
+            "items_produced": [],
+            "messages": []
+        }
+        
+        if farm_action.farm_action == "plant":
+            if farm_action.seed_item_id:
+                agent.remove_item_by_id(farm_action.seed_item_id, 1)
+                result["messages"].append(f"{farm_action.crop_type}の種を植えました")
+                agent.add_job_experience(5)
+                result["experience_gained"] = 5
+        elif farm_action.farm_action == "harvest":
+            # 収穫物生成
+            from ..models.item import Item
+            harvest_item = Item(f"{farm_action.crop_type}_harvest", f"収穫した{farm_action.crop_type}")
+            agent.add_item(harvest_item)
+            result["items_produced"].append(harvest_item)
+            result["messages"].append(f"{farm_action.crop_type}を収穫しました")
+            agent.add_job_experience(10)
+            result["experience_gained"] = 10
+        elif farm_action.farm_action == "water":
+            result["messages"].append(f"{farm_action.crop_type}に水をやりました")
+            agent.add_job_experience(3)
+            result["experience_gained"] = 3
+        
+        return result
+    
+    def execute_agent_advanced_combat(self, agent_id: str, combat_action: AdvancedCombat) -> Dict:
+        """高度戦闘行動を実行"""
+        agent = self.get_agent(agent_id)
+        
+        if not isinstance(agent, AdventurerAgent):
+            raise ValueError(f"エージェント {agent_id} は冒険者ではありません")
+        
+        if not combat_action.is_valid(agent):
+            raise ValueError("戦闘スキル使用条件を満たしていません")
+        
+        return agent.use_combat_skill(combat_action.combat_skill, combat_action.target_id)
