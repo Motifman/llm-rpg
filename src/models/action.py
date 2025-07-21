@@ -341,6 +341,126 @@ class PriceNegotiation(Action):
     original_price: int
 
 
+# === 新しい商人システム関連の行動 ===
+
+@dataclass(frozen=True)
+class SellItem(Action):
+    """アイテム販売行動（商人→顧客）"""
+    description: str
+    customer_agent_id: str
+    item_id: str
+    quantity: int = 1
+    price_per_item: int = 10
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """販売可能かチェック"""
+        return agent.get_item_count(self.item_id) >= self.quantity
+    
+    def get_total_price(self) -> int:
+        """総額を取得"""
+        return self.price_per_item * self.quantity
+
+
+@dataclass(frozen=True)
+class BuyItem(Action):
+    """アイテム購入行動（商人←顧客）"""
+    description: str
+    customer_agent_id: str
+    item_id: str
+    quantity: int = 1
+    price_per_item: int = 10
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """購入可能かチェック（資金確認）"""
+        total_cost = self.price_per_item * self.quantity
+        return agent.get_money() >= total_cost
+    
+    def get_total_price(self) -> int:
+        """総額を取得"""
+        return self.price_per_item * self.quantity
+
+
+@dataclass(frozen=True)
+class SetItemPrice(Action):
+    """商品価格設定行動（商人向け）"""
+    description: str
+    item_id: str
+    price: int
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """価格設定可能かチェック"""
+        return self.price > 0
+
+
+@dataclass(frozen=True)
+class ManageInventory(Action):
+    """店舗在庫管理行動（商人向け）"""
+    description: str
+    action_type: str  # "add_to_shop", "remove_from_shop", "view_inventory"
+    item_id: Optional[str] = None
+    quantity: int = 1
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """在庫管理可能かチェック"""
+        if self.action_type == "add_to_shop":
+            return self.item_id is not None and agent.has_item(self.item_id)
+        return True
+
+
+@dataclass(frozen=True)
+class ProvideLodging(Action):
+    """宿泊サービス提供行動（サービス提供者向け）"""
+    description: str
+    guest_agent_id: str
+    nights: int = 1
+    price_per_night: int = 50
+    room_type: str = "standard"  # "standard", "deluxe", "suite"
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """宿泊サービス提供可能かチェック"""
+        from .job import JobAgent
+        if not isinstance(agent, JobAgent):
+            return False
+        # 宿泊サービスが利用可能かチェック
+        return "宿泊サービス" in agent.job_skills
+    
+    def get_total_price(self) -> int:
+        """総宿泊費を取得"""
+        return self.price_per_night * self.nights
+
+
+@dataclass(frozen=True)
+class ProvideDance(Action):
+    """舞サービス提供行動（サービス提供者向け）"""
+    description: str
+    target_agent_id: str
+    dance_type: str = "healing_dance"  # "healing_dance", "energy_dance", "spiritual_dance"
+    price: int = 30
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """舞サービス提供可能かチェック"""
+        from .job import JobAgent
+        if not isinstance(agent, JobAgent):
+            return False
+        return "舞踊技術" in agent.job_skills
+
+
+@dataclass(frozen=True)
+class ProvidePrayer(Action):
+    """祈祷サービス提供行動（サービス提供者向け）"""
+    description: str
+    target_agent_id: str
+    prayer_type: str = "healing_prayer"  # "healing_prayer", "blessing", "purification"
+    price: int = 40
+    
+    def is_valid(self, agent: "Agent") -> bool:
+        """祈祷サービス提供可能かチェック"""
+        from .job import JobAgent
+        if not isinstance(agent, JobAgent):
+            return False
+        return "祈祷術" in agent.job_skills
+
+
 @dataclass(frozen=True)
 class GatherResource(Action):
     """資源採集行動（一次産業者向け）"""
