@@ -212,3 +212,47 @@ class Conversation(Action):
     def get_content(self) -> str:
         """メッセージ内容を取得"""
         return self.content
+
+
+# === バトルシステム関連の行動 ===
+
+@dataclass(frozen=True)
+class AttackMonster(Action):
+    """モンスター攻撃行動"""
+    monster_id: str
+    
+    def get_monster_id(self) -> str:
+        """対象モンスターIDを取得"""
+        return self.monster_id
+
+
+@dataclass(frozen=True)
+class DefendBattle(Action):
+    """戦闘時防御行動"""
+    pass  # 現在は追加のパラメータ不要
+
+
+@dataclass(frozen=True)
+class EscapeBattle(Action):
+    """戦闘逃走行動"""
+    pass  # 現在は追加のパラメータ不要
+
+
+@dataclass(frozen=True)
+class StartBattle(Action):
+    """戦闘開始行動（モンスターとの戦闘を開始）"""
+    monster_id: str
+    
+    def get_monster_id(self) -> str:
+        """対象モンスターIDを取得"""
+        return self.monster_id
+
+
+@dataclass(frozen=True)
+class JoinBattle(Action):
+    """戦闘参加行動（進行中の戦闘に参加）"""
+    battle_id: str
+    
+    def get_battle_id(self) -> str:
+        """対象バトルIDを取得"""
+        return self.battle_id

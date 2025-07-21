@@ -1,12 +1,14 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 from ..models.spot import Spot
 from ..models.agent import Agent
-from ..models.action import Movement, Exploration, Action, Interaction, InteractionType, ItemUsage, PostTrade, ViewTrades, AcceptTrade, CancelTrade, Conversation
+from ..models.action import Movement, Exploration, Action, Interaction, InteractionType, ItemUsage, PostTrade, ViewTrades, AcceptTrade, CancelTrade, Conversation, AttackMonster, DefendBattle, EscapeBattle, StartBattle, JoinBattle
 from ..models.interactable import Door
 from ..models.item import ConsumableItem
 from ..models.trade import TradeOffer
+from ..models.monster import Monster, MonsterType
 from ..systems.trading_post import TradingPost
 from ..systems.message import LocationChatMessage
+from ..systems.battle import BattleManager, Battle, BattleResult
 
 
 class World:
@@ -19,6 +21,8 @@ class World:
         self.spots: Dict[str, Spot] = {}
         self.agents: Dict[str, Agent] = {}
         self.trading_post: TradingPost = TradingPost()
+        self.battle_manager: BattleManager = BattleManager()
+        self.monsters: Dict[str, Monster] = {}  # グローバルモンスター管理
         
     def add_spot(self, spot: Spot):
         """スポットを追加"""
@@ -48,6 +52,24 @@ class World:
         """取引所を取得"""
         return self.trading_post
 
+    def add_monster(self, monster: Monster, spot_id: str):
+        """モンスターを追加"""
+        self.monsters[monster.monster_id] = monster
+        spot = self.get_spot(spot_id)
+        spot.add_monster(monster)
+
+    def get_monster(self, monster_id: str) -> Monster:
+        """モンスターを取得"""
+        return self.monsters[monster_id]
+
+    def get_all_monsters(self) -> List[Monster]:
+        """すべてのモンスターを取得"""
+        return list(self.monsters.values())
+
+    def get_battle_manager(self) -> BattleManager:
+        """バトルマネージャーを取得"""
+        return self.battle_manager
+
     def execute_agent_movement(self, agent_id: str, movement: Movement):
         """
         移動行動を実行し、エージェントの現在の位置を更新
@@ -62,10 +84,13 @@ class World:
         - 探索情報を取得する場合はエージェントの探索情報リストに追加
         - 経験値を取得する場合はエージェントの経験値を更新
         - お金を取得する場合はエージェントの所持金を更新
+        - 隠れているモンスターを発見する場合がある
         """
         agent = self.get_agent(agent_id)
+        spot = self.get_spot(agent.get_current_spot_id())
+        
+        # 既存の探索機能
         if exploration.item_id:
-            spot = self.get_spot(agent.get_current_spot_id())
             item = spot.get_item_by_id(exploration.item_id)
             if item:
                 spot.remove_item(item)
@@ -76,6 +101,29 @@ class World:
             agent.add_experience_points(exploration.experience_points)
         if exploration.money:
             agent.add_money(exploration.money)
+        
+        # モンスター発見機能
+        self._check_for_hidden_monsters(agent, spot)
+    
+    def _check_for_hidden_monsters(self, agent: Agent, spot: Spot):
+        """探索時に隠れているモンスターを発見する可能性をチェック"""
+        import random
+        
+        # 隠れているモンスターがいる場合
+        if spot.hidden_monsters:
+            # 30%の確率でモンスターを発見
+            if random.random() < 0.3:
+                # ランダムに隠れているモンスターを1体発見
+                hidden_monster_ids = list(spot.hidden_monsters.keys())
+                discovered_monster_id = random.choice(hidden_monster_ids)
+                
+                # モンスターを発見状態にする
+                spot.reveal_hidden_monster(discovered_monster_id)
+                monster = spot.get_monster_by_id(discovered_monster_id)
+                
+                # エージェントに発見情報を追加
+                discovery_info = f"探索中に {monster.name} を発見した！"
+                agent.add_discovered_info(discovery_info)
     
     def execute_agent_interaction(self, agent_id: str, interaction: Interaction):
         """
@@ -367,12 +415,147 @@ class World:
         
         return message
     
+    # === バトルシステム関連 ===
+    
+    def execute_agent_start_battle(self, agent_id: str, start_battle: StartBattle) -> str:
+        """戦闘開始行動を実行"""
+        agent = self.get_agent(agent_id)
+        spot = self.get_spot(agent.get_current_spot_id())
+        monster = spot.get_monster_by_id(start_battle.get_monster_id())
+        
+        if not monster:
+            raise ValueError(f"モンスター {start_battle.get_monster_id()} が見つかりません")
+        
+        if not monster.is_alive:
+            raise ValueError(f"{monster.name} は既に倒されています")
+        
+        # 戦闘を開始
+        battle_id = self.battle_manager.start_battle(spot.spot_id, monster, agent)
+        
+        # 同じスポットの他のエージェントに戦闘開始を通知
+        agents_in_spot = self.get_agents_in_spot(spot.spot_id)
+        for other_agent in agents_in_spot:
+            if other_agent.agent_id != agent_id:
+                notification = f"{agent.name} が {monster.name} との戦闘を開始しました！参加するには戦闘参加行動を選択してください。"
+                other_agent.add_discovered_info(notification)
+        
+        return battle_id
+    
+    def execute_agent_join_battle(self, agent_id: str, join_battle: JoinBattle):
+        """戦闘参加行動を実行"""
+        agent = self.get_agent(agent_id)
+        battle = self.battle_manager.get_battle(join_battle.get_battle_id())
+        
+        if not battle:
+            raise ValueError(f"戦闘 {join_battle.get_battle_id()} が見つかりません")
+        
+        if battle.spot_id != agent.get_current_spot_id():
+            raise ValueError("同じスポットにいないため戦闘に参加できません")
+        
+        # 戦闘に参加
+        battle.add_participant(agent)
+    
+    def execute_agent_battle_action(self, agent_id: str, action) -> str:
+        """戦闘中の行動を実行"""
+        agent = self.get_agent(agent_id)
+        current_spot_id = agent.get_current_spot_id()
+        
+        # 現在のスポットで進行中の戦闘を取得
+        battle = self.battle_manager.get_battle_by_spot(current_spot_id)
+        if not battle:
+            raise ValueError("現在戦闘中ではありません")
+        
+        if agent_id not in battle.participants:
+            raise ValueError("この戦闘に参加していません")
+        
+        # 戦闘行動を実行
+        turn_action = battle.execute_agent_action(agent_id, action)
+        
+        # ターンを進める
+        battle.advance_turn()
+        
+        # モンスターのターンの場合は自動実行
+        if battle.is_monster_turn() and not battle.is_battle_finished():
+            monster_action = battle.execute_monster_turn()
+            battle.advance_turn()
+        
+        # 戦闘が終了した場合の処理
+        if battle.is_battle_finished():
+            result = self.battle_manager.finish_battle(battle.battle_id)
+            self._handle_battle_result(result)
+            return f"戦闘終了: {result.victory}"
+        
+        return f"戦闘継続中: {turn_action.message}"
+    
+    def _handle_battle_result(self, result: BattleResult):
+        """戦闘結果の処理"""
+        if result.victory and result.defeated_monster:
+            # 勝利時の報酬配布
+            for participant_id in result.participants:
+                agent = self.get_agent(participant_id)
+                
+                # 報酬を配布
+                if result.rewards:
+                    for item in result.rewards.items:
+                        agent.add_item(item)
+                    
+                    if result.rewards.money > 0:
+                        agent.add_money(result.rewards.money)
+                    
+                    if result.rewards.experience > 0:
+                        agent.add_experience_points(result.rewards.experience)
+                    
+                    for info in result.rewards.information:
+                        agent.add_discovered_info(info)
+                
+                # 勝利情報を追加
+                victory_info = f"{result.defeated_monster.name} を倒した！"
+                agent.add_discovered_info(victory_info)
+            
+            # モンスターをスポットから削除
+            for spot in self.spots.values():
+                if result.defeated_monster.monster_id in spot.monsters:
+                    spot.remove_monster(result.defeated_monster.monster_id)
+                    break
+            
+            # グローバルモンスターリストからも削除
+            if result.defeated_monster.monster_id in self.monsters:
+                del self.monsters[result.defeated_monster.monster_id]
+    
+    def check_aggressive_monster_encounters(self, agent_id: str):
+        """エージェントの移動時に攻撃的なモンスターとの強制戦闘をチェック"""
+        agent = self.get_agent(agent_id)
+        spot = self.get_spot(agent.get_current_spot_id())
+        
+        # 攻撃的なモンスターがいる場合は強制戦闘
+        aggressive_monsters = spot.get_aggressive_monsters()
+        if aggressive_monsters:
+            # 最初の攻撃的なモンスターと戦闘開始
+            monster = aggressive_monsters[0]
+            battle_id = self.battle_manager.start_battle(spot.spot_id, monster, agent)
+            
+            # エージェントに強制戦闘の情報を追加
+            force_battle_info = f"{monster.name} が襲いかかってきた！強制的に戦闘が開始されました。"
+            agent.add_discovered_info(force_battle_info)
+            
+            # 戦闘の最初のターンを処理（モンスターが先制の場合）
+            battle = self.battle_manager.get_battle(battle_id)
+            if battle and battle.is_monster_turn():
+                monster_action = battle.execute_monster_turn()
+                battle.advance_turn()
+            
+            return battle_id
+        
+        return None
+    
     def execute_action(self, agent_id: str, action: Action):
         """
         行動を実行し、行動の結果をAgentの状態とSpotの状態に反映
         """
         if isinstance(action, Movement):
             self.execute_agent_movement(agent_id, action)
+            # 移動後に攻撃的なモンスターとの強制戦闘をチェック
+            self.check_aggressive_monster_encounters(agent_id)
         elif isinstance(action, Exploration):
             self.execute_agent_exploration(agent_id, action)
         elif isinstance(action, Interaction):
@@ -389,5 +572,11 @@ class World:
             return self.execute_agent_cancel_trade(agent_id, action)
         elif isinstance(action, Conversation):
             return self.execute_agent_conversation(agent_id, action)
+        elif isinstance(action, StartBattle):
+            return self.execute_agent_start_battle(agent_id, action)
+        elif isinstance(action, JoinBattle):
+            self.execute_agent_join_battle(agent_id, action)
+        elif isinstance(action, (AttackMonster, DefendBattle, EscapeBattle)):
+            return self.execute_agent_battle_action(agent_id, action)
         else:
             raise ValueError(f"不明な行動: {action}")

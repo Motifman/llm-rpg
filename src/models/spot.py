@@ -22,6 +22,10 @@ class Spot:
         # 相互作用可能オブジェクトの管理
         self.interactables: Dict[str, InteractableObject] = {}
         
+        # モンスター管理
+        self.monsters: Dict[str, 'Monster'] = {}  # monster_id -> Monster
+        self.hidden_monsters: Dict[str, 'Monster'] = {}  # 隠れているモンスター
+        
         # 階層管理用
         self.child_spots: Set[str] = set()  # 子スポットのID一覧
         self.entry_points: Dict[str, str] = {}  # 入口名 -> そこに入った時の最初のspot_id
@@ -183,6 +187,68 @@ class Spot:
     def get_interactable_by_id(self, object_id: str) -> Optional[InteractableObject]:
         """IDで相互作用可能オブジェクトを取得"""
         return self.interactables.get(object_id)
+    
+    # === モンスター管理 ===
+    
+    def add_monster(self, monster: 'Monster'):
+        """モンスターを追加"""
+        from .monster import MonsterType
+        monster.set_current_spot(self.spot_id)
+        
+        if monster.monster_type == MonsterType.HIDDEN:
+            # 隠れているモンスターは探索で発見されるまで見えない
+            self.hidden_monsters[monster.monster_id] = monster
+        else:
+            # 通常のモンスター（見える状態）
+            self.monsters[monster.monster_id] = monster
+    
+    def remove_monster(self, monster_id: str):
+        """モンスターを削除（倒された場合など）"""
+        if monster_id in self.monsters:
+            del self.monsters[monster_id]
+        if monster_id in self.hidden_monsters:
+            del self.hidden_monsters[monster_id]
+    
+    def get_monster_by_id(self, monster_id: str) -> Optional['Monster']:
+        """IDでモンスターを取得"""
+        if monster_id in self.monsters:
+            return self.monsters[monster_id]
+        if monster_id in self.hidden_monsters:
+            return self.hidden_monsters[monster_id]
+        return None
+    
+    def get_visible_monsters(self) -> List['Monster']:
+        """見えているモンスターのリストを取得"""
+        return list(self.monsters.values())
+    
+    def get_all_monsters(self) -> List['Monster']:
+        """すべてのモンスター（隠れているものも含む）を取得"""
+        all_monsters = list(self.monsters.values())
+        all_monsters.extend(self.hidden_monsters.values())
+        return all_monsters
+    
+    def reveal_hidden_monster(self, monster_id: str) -> bool:
+        """隠れているモンスターを発見する（探索時に使用）"""
+        if monster_id in self.hidden_monsters:
+            monster = self.hidden_monsters[monster_id]
+            del self.hidden_monsters[monster_id]
+            self.monsters[monster_id] = monster
+            return True
+        return False
+    
+    def has_aggressive_monsters(self) -> bool:
+        """攻撃的なモンスターがいるかどうか"""
+        from .monster import MonsterType
+        for monster in self.monsters.values():
+            if monster.monster_type == MonsterType.AGGRESSIVE:
+                return True
+        return False
+    
+    def get_aggressive_monsters(self) -> List['Monster']:
+        """攻撃的なモンスターのリストを取得"""
+        from .monster import MonsterType
+        return [monster for monster in self.monsters.values() 
+                if monster.monster_type == MonsterType.AGGRESSIVE]
     
     def get_all_interactables(self) -> List[InteractableObject]:
         """全ての相互作用可能オブジェクトを取得"""
