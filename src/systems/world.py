@@ -1049,11 +1049,22 @@ class World:
         """モンスター討伐時のクエスト進捗更新"""
         quest = self.quest_system.handle_monster_kill(agent_id, monster_id)
         if quest:
-            # 完了チェック
-            completion_result = self.quest_system.check_quest_completion(agent_id)
-            if completion_result and completion_result["success"]:
-                agent = self.get_agent(agent_id)
-                agent.add_discovered_info(f"クエスト '{quest.name}' が完了しました！ギルドで報酬を受け取ってください。")
+            # クエストが完了したかチェック
+            if quest.check_completion():
+                # クエストを完了状態にする
+                completion_result = self.quest_system.check_quest_completion(agent_id)
+                if completion_result and completion_result["success"]:
+                    agent = self.get_agent(agent_id)
+                    # エージェントにも完了を記録
+                    if hasattr(agent, 'complete_quest'):
+                        agent.complete_quest(quest.quest_id)
+                    agent.add_discovered_info(f"クエスト '{quest.name}' が完了しました！報酬を受け取りました。")
+                else:
+                    # 完了処理が既に実行済みの場合でも、エージェントには通知
+                    agent = self.get_agent(agent_id)
+                    if hasattr(agent, 'complete_quest'):
+                        agent.complete_quest(quest.quest_id)
+                    agent.add_discovered_info(f"クエスト '{quest.name}' が完了しました！")
     
     def _update_quest_progress_on_item_get(self, agent_id: str, item_id: str, count: int = 1):
         """アイテム取得時のクエスト進捗更新"""
