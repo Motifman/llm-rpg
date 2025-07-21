@@ -20,6 +20,7 @@ class Agent:
         self.current_mp: int = 50
         self.attack: int = 10
         self.defense: int = 5
+        self.speed: int = 7  # バトルシステム用の素早さ
         
         # 会話システム関連
         self.received_messages: List = []  # 受信したメッセージのリスト
@@ -118,6 +119,10 @@ class Agent:
         """防御力を取得"""
         return self.defense
     
+    def get_speed(self) -> int:
+        """素早さを取得"""
+        return self.speed
+    
     def set_hp(self, hp: int):
         """HPを設定（上限・下限チェック付き）"""
         self.current_hp = max(0, min(hp, self.max_hp))
@@ -149,6 +154,10 @@ class Agent:
     def set_defense(self, defense: int):
         """防御力を設定"""
         self.defense = max(0, defense)
+    
+    def set_speed(self, speed: int):
+        """素早さを設定"""
+        self.speed = max(0, speed)
     
     def apply_item_effect(self, effect: ItemEffect):
         """アイテム効果を適用"""
@@ -188,7 +197,7 @@ class Agent:
         """ステータスの要約を取得"""
         return (f"HP: {self.current_hp}/{self.max_hp}, "
                 f"MP: {self.current_mp}/{self.max_mp}, "
-                f"攻撃: {self.attack}, 防御: {self.defense}, "
+                f"攻撃: {self.attack}, 防御: {self.defense}, 素早さ: {self.speed}, "
                 f"所持金: {self.money}, 経験値: {self.experience_points}")
     
     # === 会話システム関連メソッド ===
