@@ -22,6 +22,7 @@ class TurnActionType(Enum):
     DEFEND = "defend"
     ESCAPE = "escape"
     MONSTER_ACTION = "monster_action"
+    STATUS_EFFECT = "status_effect"
 
 
 @dataclass
@@ -33,6 +34,10 @@ class TurnAction:
     damage: int = 0
     success: bool = True
     message: str = ""
+    critical: bool = False  # クリティカルヒット
+    evaded: bool = False   # 回避
+    counter_attack: bool = False  # 反撃
+    status_effects_applied: List = field(default_factory=list)  # 適用された状態異常
 
 
 @dataclass
@@ -141,6 +146,15 @@ class Battle:
         
         agent = self.participants[agent_id]
         
+        # 状態異常チェック
+        if not self._can_agent_act(agent):
+            return TurnAction(
+                actor_id=agent_id,
+                action_type=TurnActionType.STATUS_EFFECT,
+                success=False,
+                message=f"{agent.name} は行動できない状態です"
+            )
+        
         if isinstance(action, AttackMonster):
             return self._execute_attack(agent, self.monster)
         elif isinstance(action, DefendBattle):
@@ -150,17 +164,56 @@ class Battle:
         else:
             raise ValueError(f"不明な戦闘行動: {action}")
     
+    def _can_agent_act(self, agent: Agent) -> bool:
+        """エージェントが行動可能かチェック"""
+        from ..models.weapon import StatusEffect
+        
+        # 麻痺、睡眠の場合は行動不可
+        if (agent.has_status_condition(StatusEffect.PARALYSIS) or 
+            agent.has_status_condition(StatusEffect.SLEEP)):
+            return False
+        
+        return agent.is_alive()
+    
     def _execute_attack(self, attacker: Agent, target: Monster) -> TurnAction:
-        """攻撃行動を実行"""
-        damage = max(1, attacker.get_attack() - target.defense)
-        target.take_damage(damage)
+        """攻撃行動を実行（拡張版）"""
+        # 混乱チェック
+        if self._is_confused_attack(attacker):
+            return self._execute_confused_attack(attacker)
+        
+        # 回避チェック
+        if self._check_evasion(target):
+            return TurnAction(
+                actor_id=attacker.agent_id,
+                action_type=TurnActionType.ATTACK,
+                target_id=target.monster_id,
+                damage=0,
+                success=True,
+                evaded=True,
+                message=f"{target.name} が攻撃を回避した！"
+            )
+        
+        # 基本ダメージ計算
+        base_damage = self._calculate_attack_damage(attacker, target)
+        
+        # クリティカルチェック
+        is_critical = self._check_critical_hit(attacker)
+        if is_critical:
+            base_damage = int(base_damage * 1.5)  # クリティカル倍率
+        
+        target.take_damage(base_damage)
+        
+        # 状態異常付与チェック
+        applied_status_effects = self._apply_weapon_status_effects(attacker, target)
         
         action = TurnAction(
             actor_id=attacker.agent_id,
             action_type=TurnActionType.ATTACK,
             target_id=target.monster_id,
-            damage=damage,
-            message=f"{attacker.name} が {target.name} に {damage} のダメージを与えた"
+            damage=base_damage,
+            critical=is_critical,
+            status_effects_applied=applied_status_effects,
+            message=self._create_attack_message(attacker, target, base_damage, is_critical, applied_status_effects)
         )
         
         self.log_message(action.message)
@@ -172,13 +225,101 @@ class Battle:
         
         return action
     
+    def _is_confused_attack(self, attacker: Agent) -> bool:
+        """混乱による誤攻撃チェック"""
+        from ..models.weapon import StatusEffect
+        return attacker.has_status_condition(StatusEffect.CONFUSION)
+    
+    def _execute_confused_attack(self, attacker: Agent) -> TurnAction:
+        """混乱時の攻撃（味方攻撃）"""
+        # 混乱時は自分自身にダメージ
+        confusion_damage = max(1, attacker.get_attack() // 4)
+        attacker.set_hp(attacker.current_hp - confusion_damage)
+        
+        return TurnAction(
+            actor_id=attacker.agent_id,
+            action_type=TurnActionType.ATTACK,
+            target_id=attacker.agent_id,
+            damage=confusion_damage,
+            message=f"{attacker.name} は混乱して自分を攻撃してしまった！ {confusion_damage} のダメージ"
+        )
+    
+    def _check_evasion(self, target) -> bool:
+        """回避チェック"""
+        # モンスターの場合は基本回避率のみ
+        if isinstance(target, Monster):
+            base_evasion = 0.05  # 5%
+            return random.random() < base_evasion
+        
+        # エージェントの場合は装備補正込み
+        if isinstance(target, Agent):
+            return random.random() < target.get_evasion_rate()
+        
+        return False
+    
+    def _check_critical_hit(self, attacker: Agent) -> bool:
+        """クリティカルヒットチェック"""
+        return random.random() < attacker.get_critical_rate()
+    
+    def _calculate_attack_damage(self, attacker: Agent, target: Monster) -> int:
+        """攻撃ダメージ計算（武器効果込み）"""
+        base_damage = max(1, attacker.get_attack() - target.defense)
+        
+        # 武器の特殊効果を適用
+        weapon = attacker.equipment.weapon
+        if weapon:
+            # 種族特攻チェック
+            weapon_damage = weapon.calculate_damage(attacker.base_attack, target.race)
+            # 装備補正を考慮
+            total_damage = weapon_damage + attacker.equipment.get_total_attack_bonus() - target.defense
+            return max(1, total_damage)
+        
+        return base_damage
+    
+    def _apply_weapon_status_effects(self, attacker: Agent, target: Monster) -> List:
+        """武器の状態異常効果を適用"""
+        from ..models.weapon import StatusCondition
+        applied_effects = []
+        
+        weapon = attacker.equipment.weapon
+        if weapon and weapon.effect.status_effects and weapon.effect.status_chance > 0:
+            if random.random() < weapon.effect.status_chance:
+                for status_effect in weapon.effect.status_effects:
+                    # 新しいStatusConditionを作成
+                    condition = StatusCondition(
+                        effect=status_effect.effect,
+                        duration=status_effect.duration,
+                        value=status_effect.value
+                    )
+                    target.add_status_condition(condition)
+                    applied_effects.append(condition)
+        
+        return applied_effects
+    
+    def _create_attack_message(self, attacker: Agent, target: Monster, damage: int, is_critical: bool, status_effects: List) -> str:
+        """攻撃メッセージの生成"""
+        message = f"{attacker.name} が {target.name} に"
+        
+        if is_critical:
+            message += " クリティカルヒットで"
+        
+        message += f" {damage} のダメージを与えた"
+        
+        if status_effects:
+            effect_names = [str(effect) for effect in status_effects]
+            message += f"！さらに {', '.join(effect_names)} を付与した"
+        
+        return message + "！"
+    
     def _execute_defend(self, defender: Agent) -> TurnAction:
-        """防御行動を実行"""
-        # TODO: 防御効果の実装（ダメージ軽減など）
+        """防御行動を実行（拡張版）"""
+        # 防御時の効果（ダメージ軽減率上昇など）
+        defend_bonus = 0.5  # 50%ダメージ軽減
+        
         action = TurnAction(
             actor_id=defender.agent_id,
             action_type=TurnActionType.DEFEND,
-            message=f"{defender.name} は身を守っている"
+            message=f"{defender.name} は身を守っている（ダメージ{defend_bonus:.0%}軽減）"
         )
         
         self.log_message(action.message)
@@ -186,8 +327,12 @@ class Battle:
     
     def _execute_escape(self, escaper: Agent) -> TurnAction:
         """逃走行動を実行"""
-        # TODO: 逃走成功率の計算
-        escape_success = random.random() < 0.8  # 80%の成功率
+        # 逃走成功率の計算（素早さ差を考慮）
+        escape_base_rate = 0.6
+        speed_diff = escaper.get_speed() - self.monster.speed
+        escape_rate = min(0.95, escape_base_rate + (speed_diff * 0.05))
+        
+        escape_success = random.random() < escape_rate
         
         if escape_success:
             self.remove_participant(escaper.agent_id)
@@ -209,9 +354,17 @@ class Battle:
         return action
     
     def execute_monster_turn(self) -> TurnAction:
-        """モンスターのターンを実行"""
+        """モンスターのターンを実行（拡張版）"""
         if self.state != BattleState.ACTIVE or not self.monster.is_alive:
             raise ValueError("モンスターは行動できません")
+        
+        # 状態異常チェック
+        if not self.monster.can_act():
+            return TurnAction(
+                actor_id=self.monster.monster_id,
+                action_type=TurnActionType.STATUS_EFFECT,
+                message=f"{self.monster.name} は行動できない状態です"
+            )
         
         if not self.participants:
             # 参加者がいない場合は何もしない
@@ -221,7 +374,11 @@ class Battle:
                 message=f"{self.monster.name} は様子を見ている"
             )
         
-        # 固定パターンで行動決定
+        # 混乱チェック
+        if self.monster.is_confused():
+            return self._execute_confused_monster_action()
+        
+        # 行動決定
         monster_action = self.monster.get_battle_action()
         
         if monster_action == "attack":
@@ -232,21 +389,57 @@ class Battle:
             # 防御
             return self._execute_monster_defend()
     
+    def _execute_confused_monster_action(self) -> TurnAction:
+        """混乱時のモンスター行動"""
+        # 混乱時は自分にダメージ
+        confusion_damage = max(1, self.monster.attack // 4)
+        self.monster.take_damage(confusion_damage)
+        
+        return TurnAction(
+            actor_id=self.monster.monster_id,
+            action_type=TurnActionType.MONSTER_ACTION,
+            damage=confusion_damage,
+            message=f"{self.monster.name} は混乱して自分を攻撃してしまった！ {confusion_damage} のダメージ"
+        )
+    
     def _execute_monster_attack(self, target: Agent) -> TurnAction:
-        """モンスターの攻撃を実行"""
+        """モンスターの攻撃を実行（拡張版）"""
+        # 回避チェック
+        if self._check_evasion(target):
+            return TurnAction(
+                actor_id=self.monster.monster_id,
+                action_type=TurnActionType.MONSTER_ACTION,
+                target_id=target.agent_id,
+                damage=0,
+                evaded=True,
+                message=f"{target.name} が {self.monster.name} の攻撃を回避した！"
+            )
+        
         damage = max(1, self.monster.attack - target.get_defense())
-        new_hp = target.current_hp - damage
-        target.set_hp(new_hp)
+        
+        # 防具の特殊効果適用
+        from ..models.weapon import DamageType
+        damage = self._apply_armor_effects(target, damage, DamageType.PHYSICAL)
+        
+        target.set_hp(target.current_hp - damage)
+        
+        # 反撃チェック
+        counter_action = self._check_counter_attack(target, self.monster)
         
         action = TurnAction(
             actor_id=self.monster.monster_id,
             action_type=TurnActionType.MONSTER_ACTION,
             target_id=target.agent_id,
             damage=damage,
+            counter_attack=counter_action is not None,
             message=f"{self.monster.name} が {target.name} に {damage} のダメージを与えた"
         )
         
         self.log_message(action.message)
+        
+        # 反撃処理
+        if counter_action:
+            self.log_message(counter_action)
         
         # エージェントが倒された場合
         if not target.is_alive():
@@ -254,6 +447,35 @@ class Battle:
             # TODO: エージェントの戦闘不能処理
         
         return action
+    
+    def _apply_armor_effects(self, target: Agent, damage: int, damage_type) -> int:
+        """防具効果を適用してダメージを計算"""
+        from ..models.weapon import DamageType
+        
+        total_reduction = 0.0
+        for armor in target.equipment.get_equipped_armors():
+            total_reduction += armor.get_damage_reduction(damage_type)
+        
+        # ダメージ軽減を適用
+        final_damage = damage * (1.0 - min(total_reduction, 0.8))  # 最大80%軽減
+        return max(1, int(final_damage))
+    
+    def _check_counter_attack(self, defender: Agent, attacker: Monster) -> Optional[str]:
+        """反撃チェック"""
+        for armor in defender.equipment.get_equipped_armors():
+            if armor.get_counter_chance() > 0 and random.random() < armor.get_counter_chance():
+                counter_damage = armor.get_counter_damage()
+                attacker.take_damage(counter_damage)
+                
+                message = f"{defender.name} の {armor.item_id} が反撃！ {attacker.name} に {counter_damage} のダメージ"
+                
+                if not attacker.is_alive:
+                    message += f" {attacker.name} を倒した！"
+                    self.state = BattleState.FINISHED
+                
+                return message
+        
+        return None
     
     def _execute_monster_defend(self) -> TurnAction:
         """モンスターの防御を実行"""
@@ -267,11 +489,23 @@ class Battle:
         return action
     
     def advance_turn(self):
-        """ターンを進める"""
+        """ターンを進める（拡張版）"""
+        # 状態異常の処理
+        self._process_all_status_effects()
+        
         if self.state == BattleState.ACTIVE and self.turn_order:
             self.current_turn_index = (self.current_turn_index + 1) % len(self.turn_order)
             if self.current_turn_index == 0:
                 self.current_turn += 1
+    
+    def _process_all_status_effects(self):
+        """全員の状態異常を処理"""
+        # エージェントの状態異常処理
+        for agent in self.participants.values():
+            agent.process_status_effects()
+        
+        # モンスターの状態異常処理
+        self.monster.process_status_effects()
     
     def is_battle_finished(self) -> bool:
         """戦闘が終了しているかどうか"""
