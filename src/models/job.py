@@ -90,21 +90,21 @@ class JobAgent(Agent):
         """職業による初期ボーナスを適用"""
         if self.job_type == JobType.ADVENTURER:
             # 冒険者は戦闘ステータスにボーナス
-            self.max_hp += 20
+            self.set_max_hp(self.max_hp + 20)
             self.current_hp = self.max_hp
-            self.attack += 5
+            self.set_base_attack(self.base_attack + 5)
         elif self.job_type == JobType.CRAFTSMAN:
             # 職人は器用さ（MP）にボーナス
-            self.max_mp += 20
+            self.set_max_mp(self.max_mp + 20)
             self.current_mp = self.max_mp
         elif self.job_type == JobType.MERCHANT:
             # 商人は初期資金にボーナス
             self.money += 100
         elif self.job_type == JobType.PRODUCER:
             # 一次産業者は体力にボーナス
-            self.max_hp += 10
+            self.set_max_hp(self.max_hp + 10)
             self.current_hp = self.max_hp
-            self.defense += 3
+            self.set_base_defense(self.base_defense + 3)
     
     def add_job_experience(self, exp: int):
         """職業経験値を追加"""
@@ -122,14 +122,14 @@ class JobAgent(Agent):
     def _apply_level_up_bonus(self):
         """レベルアップ時のボーナスを適用"""
         # 基本ステータスアップ
-        self.max_hp += 5
-        self.max_mp += 3
+        self.set_max_hp(self.max_hp + 5)
+        self.set_max_mp(self.max_mp + 3)
         
         # 職業別ボーナス
         if self.job_type == JobType.ADVENTURER:
-            self.attack += 2
+            self.set_base_attack(self.base_attack + 2)
         elif self.job_type == JobType.CRAFTSMAN:
-            self.max_mp += 5
+            self.set_max_mp(self.max_mp + 5)
         elif self.job_type == JobType.MERCHANT:
             # 商人は交渉力（経験値ボーナス）が上がる
             pass
@@ -434,12 +434,12 @@ class ServiceProviderAgent(JobAgent):
         elif self.service_type == "dancer":
             self.job_skills.append("舞踊技術")
             self.job_skills.append("芸能知識")
-            self.max_mp += 15
+            self.set_max_mp(self.max_mp + 15)
             self.current_mp = self.max_mp
         elif self.service_type == "priest":
             self.job_skills.append("祈祷術")
             self.job_skills.append("治癒知識")
-            self.max_mp += 20
+            self.set_max_mp(self.max_mp + 20)
             self.current_mp = self.max_mp
     
     def provide_lodging_service(self, guest_agent_id: str, nights: int = 1, 
@@ -893,23 +893,23 @@ class AdventurerAgent(JobAgent):
     def _apply_combat_bonuses(self):
         """戦闘クラスによる追加ボーナス"""
         if self.combat_class == "warrior":
-            self.attack += 5
+            self.set_base_attack(self.base_attack + 5)
             self.combat_skills.append("強攻撃")
             self.job_skills.append("武器熟練")
         elif self.combat_class == "mage":
-            self.max_mp += 30
+            self.set_max_mp(self.max_mp + 30)
             self.current_mp = self.max_mp
             self.combat_skills.append("魔法攻撃")
             self.job_skills.append("魔法知識")
         elif self.combat_class == "healer":
-            self.max_mp += 20
+            self.set_max_mp(self.max_mp + 20)
             self.current_mp = self.max_mp
             self.combat_skills.append("回復魔法")
             self.job_skills.append("治癒術")
         elif self.combat_class == "tank":
-            self.max_hp += 30
+            self.set_max_hp(self.max_hp + 30)
             self.current_hp = self.max_hp
-            self.defense += 5
+            self.set_base_defense(self.base_defense + 5)
             self.combat_skills.append("防御強化")
             self.job_skills.append("盾技術")
     
@@ -1060,12 +1060,12 @@ class ProducerAgent(JobAgent):
             self.job_skills.append("魚の知識")
             self.gathering_tools.append("fishing_rod")  # 釣り竿
         elif self.production_type == "miner":
-            self.defense += 2  # 鉱山は危険なので防御力アップ
+            self.set_base_defense(self.base_defense + 2)  # 鉱山は危険なので防御力アップ
             self.job_skills.append("鉱物知識")
             self.job_skills.append("採掘技術")
             self.gathering_tools.append("pickaxe")  # ツルハシ
         elif self.production_type == "woodcutter":
-            self.attack += 2  # 斧での戦闘も可能
+            self.set_base_attack(self.base_attack + 2)  # 斧での戦闘も可能
             self.job_skills.append("木材知識")
             self.job_skills.append("森林管理")
             self.gathering_tools.append("axe")  # 斧
