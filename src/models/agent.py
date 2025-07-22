@@ -315,6 +315,20 @@ class Agent:
         """ベース素早さを設定"""
         self.base_speed = max(0, speed)
     
+    # === 互換性メソッド（既存テスト用） ===
+    
+    def set_attack(self, attack: int):
+        """攻撃力を設定（互換性用）"""
+        self.set_base_attack(attack)
+    
+    def set_defense(self, defense: int):
+        """防御力を設定（互換性用）"""
+        self.set_base_defense(defense)
+    
+    def set_speed(self, speed: int):
+        """素早さを設定（互換性用）"""
+        self.set_base_speed(speed)
+    
     def apply_item_effect(self, effect: ItemEffect):
         """アイテム効果を適用"""
         # HP/MP変更
