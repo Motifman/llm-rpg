@@ -355,8 +355,16 @@ class Battle:
     
     def execute_monster_turn(self) -> TurnAction:
         """モンスターのターンを実行（拡張版）"""
-        if self.state != BattleState.ACTIVE or not self.monster.is_alive:
-            raise ValueError("モンスターは行動できません")
+        if self.state != BattleState.ACTIVE:
+            raise ValueError("戦闘が終了しています")
+        
+        # モンスターが死亡している場合
+        if not self.monster.is_alive:
+            return TurnAction(
+                actor_id=self.monster.monster_id,
+                action_type=TurnActionType.STATUS_EFFECT,
+                message=f"{self.monster.name} は既に倒されている"
+            )
         
         # 状態異常チェック
         if not self.monster.can_act():
@@ -492,6 +500,12 @@ class Battle:
         """ターンを進める（拡張版）"""
         # 状態異常の処理
         self._process_all_status_effects()
+        
+        # 状態異常でモンスターが死亡した場合の処理
+        if not self.monster.is_alive and self.state == BattleState.ACTIVE:
+            self.log_message(f"{self.monster.name} は状態異常により倒れた！")
+            self.state = BattleState.FINISHED
+            return
         
         if self.state == BattleState.ACTIVE and self.turn_order:
             self.current_turn_index = (self.current_turn_index + 1) % len(self.turn_order)
