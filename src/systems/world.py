@@ -608,17 +608,66 @@ class World:
     def execute_action(self, agent_id: str, action: Action):
         """
         行動を実行し、行動の結果をAgentの状態とSpotの状態に反映
+        新アーキテクチャでは行動をSpot固有とグローバルに分類して処理
         """
-        if isinstance(action, Movement):
-            self.execute_agent_movement(agent_id, action)
-            # 移動後に攻撃的なモンスターとの強制戦闘をチェック
-            self.check_aggressive_monster_encounters(agent_id)
-        elif isinstance(action, Exploration):
-            self.execute_agent_exploration(agent_id, action)
-        elif isinstance(action, Interaction):
-            self.execute_agent_interaction(agent_id, action)
-        elif isinstance(action, ItemUsage):
-            self.execute_agent_item_usage(agent_id, action)
+        # Spot固有行動かどうかを判定
+        if self._is_spot_action(action):
+            return self._execute_spot_action(agent_id, action)
+        else:
+            return self._execute_global_action(agent_id, action)
+    
+    def _is_spot_action(self, action: Action) -> bool:
+        """行動がSpot固有かどうかを判定"""
+        spot_action_types = (
+            Movement, Exploration, Interaction,
+            StartBattle, JoinBattle, AttackMonster, DefendBattle, EscapeBattle,
+            # Job関連行動（段階的にSpot固有に移行）
+            CraftItem, EnhanceItem, LearnRecipe, SetupShop, ProvideService, PriceNegotiation,
+            SellItem, BuyItem, SetItemPrice, ManageInventory, ProvideLodging, ProvideDance, ProvidePrayer,
+            GatherResource, ProcessMaterial, ManageFarm, AdvancedCombat,
+            # 家システム関連
+            WriteDiary, ReadDiary, Sleep, GrantHomePermission, StoreItem, RetrieveItem
+        )
+        return isinstance(action, spot_action_types)
+    
+    def _execute_spot_action(self, agent_id: str, action: Action):
+        """Spot固有行動を実行（Spotクラスに委譲）"""
+        agent = self.get_agent(agent_id)
+        
+        # エージェントがSpotにいるかチェック
+        current_spot_id = agent.get_current_spot_id()
+        if not current_spot_id or current_spot_id not in self.spots:
+            # Spotに配置されていない場合は、レガシーシステムで処理
+            return self._execute_legacy_action(agent_id, action)
+        
+        spot = self.get_spot(current_spot_id)
+        
+        # 基本的な行動（Movement, Exploration, Interaction）はSpotに委譲
+        if isinstance(action, (Movement, Exploration, Interaction)):
+            result = spot.execute_action(action, agent, self)
+            
+            # 特別な後処理
+            if isinstance(action, Movement) and hasattr(result, 'success') and result.success:
+                # 移動後の攻撃的モンスターとの遭遇チェック
+                self.check_aggressive_monster_encounters(agent_id)
+            elif isinstance(action, Exploration) and hasattr(result, 'success') and result.success:
+                # 探索後のクエスト進捗更新
+                if action.item_id:
+                    self._update_quest_progress_on_item_get(agent_id, action.item_id)
+                self._update_quest_progress_on_location_visit(agent_id, agent.get_current_spot_id())
+            
+            return result
+        
+        # その他のSpot固有行動は暫定的にレガシーシステムで処理（テスト互換性のため）
+        else:
+            return self._execute_legacy_action(agent_id, action)
+    
+    def _execute_global_action(self, agent_id: str, action: Action):
+        """グローバル行動を実行（Worldクラスで処理）"""
+        # アイテム使用（エージェント固有）
+        if isinstance(action, ItemUsage):
+            return self.execute_agent_item_usage(agent_id, action)
+        # 取引所関連（グローバルシステム）
         elif isinstance(action, PostTrade):
             return self.execute_agent_post_trade(agent_id, action)
         elif isinstance(action, ViewTrades):
@@ -627,12 +676,34 @@ class World:
             return self.execute_agent_accept_trade(agent_id, action)
         elif isinstance(action, CancelTrade):
             return self.execute_agent_cancel_trade(agent_id, action)
+        # SNS関連（グローバルシステム）
         elif isinstance(action, Conversation):
             return self.execute_agent_conversation(agent_id, action)
-        elif isinstance(action, StartBattle):
+        # クエストシステム関連（グローバルシステム）
+        elif isinstance(action, ViewAvailableQuests):
+            return self.execute_agent_view_available_quests(agent_id, action)
+        elif isinstance(action, AcceptQuest):
+            return self.execute_agent_accept_quest(agent_id, action)
+        elif isinstance(action, CancelQuest):
+            return self.execute_agent_cancel_quest(agent_id, action)
+        elif isinstance(action, ViewQuestProgress):
+            return self.execute_agent_view_quest_progress(agent_id, action)
+        elif isinstance(action, SubmitQuest):
+            return self.execute_agent_submit_quest(agent_id, action)
+        elif isinstance(action, RegisterToGuild):
+            return self.execute_agent_register_to_guild(agent_id, action)
+        elif isinstance(action, PostQuestToGuild):
+            return self.execute_agent_post_quest_to_guild(agent_id, action)
+        else:
+            raise ValueError(f"不明な行動: {action}")
+    
+    def _execute_legacy_action(self, agent_id: str, action: Action):
+        """レガシー行動を実行（暫定的な処理）"""
+        # 戦闘関連行動
+        if isinstance(action, StartBattle):
             return self.execute_agent_start_battle(agent_id, action)
         elif isinstance(action, JoinBattle):
-            self.execute_agent_join_battle(agent_id, action)
+            return self.execute_agent_join_battle(agent_id, action)
         elif isinstance(action, (AttackMonster, DefendBattle, EscapeBattle)):
             return self.execute_agent_battle_action(agent_id, action)
         # 職業システム関連の行動
@@ -671,21 +742,6 @@ class World:
             return self.execute_agent_manage_farm(agent_id, action)
         elif isinstance(action, AdvancedCombat):
             return self.execute_agent_advanced_combat(agent_id, action)
-        # クエストシステム関連の行動
-        elif isinstance(action, ViewAvailableQuests):
-            return self.execute_agent_view_available_quests(agent_id, action)
-        elif isinstance(action, AcceptQuest):
-            return self.execute_agent_accept_quest(agent_id, action)
-        elif isinstance(action, CancelQuest):
-            return self.execute_agent_cancel_quest(agent_id, action)
-        elif isinstance(action, ViewQuestProgress):
-            return self.execute_agent_view_quest_progress(agent_id, action)
-        elif isinstance(action, SubmitQuest):
-            return self.execute_agent_submit_quest(agent_id, action)
-        elif isinstance(action, RegisterToGuild):
-            return self.execute_agent_register_to_guild(agent_id, action)
-        elif isinstance(action, PostQuestToGuild):
-            return self.execute_agent_post_quest_to_guild(agent_id, action)
         # 家システム関連の行動
         elif isinstance(action, WriteDiary):
             return self.execute_agent_write_diary(agent_id, action)
@@ -700,7 +756,89 @@ class World:
         elif isinstance(action, RetrieveItem):
             return self.execute_agent_retrieve_item(agent_id, action)
         else:
-            raise ValueError(f"不明な行動: {action}")
+            raise ValueError(f"未実装のレガシー行動: {action}")
+    
+    # === 旧システム互換用メソッド（段階的に削除予定） ===
+    
+    def execute_agent_movement(self, agent_id: str, movement: Movement):
+        """旧システム互換用：移動行動を実行"""
+        agent = self.get_agent(agent_id)
+        agent.set_current_spot_id(movement.target_spot_id)
+    
+    def execute_agent_exploration(self, agent_id: str, exploration: Exploration):
+        """旧システム互換用：探索行動を実行"""
+        agent = self.get_agent(agent_id)
+        spot = self.get_spot(agent.get_current_spot_id())
+        
+        # 既存の探索機能
+        if exploration.item_id:
+            item = spot.get_item_by_id(exploration.item_id)
+            if item:
+                spot.remove_item(item)
+                agent.add_item(item)
+                # アイテム取得時のクエスト進捗更新
+                self._update_quest_progress_on_item_get(agent_id, exploration.item_id)
+        if exploration.discovered_info:
+            agent.add_discovered_info(exploration.discovered_info)
+        if exploration.experience_points:
+            agent.add_experience_points(exploration.experience_points)
+        if exploration.money:
+            agent.add_money(exploration.money)
+        
+        # 場所訪問時のクエスト進捗更新
+        self._update_quest_progress_on_location_visit(agent_id, agent.get_current_spot_id())
+        
+        # モンスター発見機能
+        self._check_for_hidden_monsters(agent, spot)
+    
+    def execute_agent_interaction(self, agent_id: str, interaction: Interaction):
+        """旧システム互換用：相互作用行動を実行"""
+        agent = self.get_agent(agent_id)
+        spot = self.get_spot(agent.get_current_spot_id())
+        interactable = spot.get_interactable_by_id(interaction.object_id)
+        
+        if not interactable:
+            raise ValueError(f"オブジェクト {interaction.object_id} が見つかりません")
+        
+        if not interactable.can_interact(agent, interaction.interaction_type):
+            if interaction.required_item_id and not agent.has_item(interaction.required_item_id):
+                raise ValueError(f"アイテム '{interaction.required_item_id}' が必要です")
+            else:
+                raise ValueError(f"この相互作用は実行できません: {interaction.description}")
+        
+        # オブジェクトの状態変更
+        for key, value in interaction.state_changes.items():
+            interactable.set_state(key, value)
+        
+        # 報酬の付与
+        reward = interaction.reward
+        for item_id in reward.items:
+            if hasattr(interactable, 'items'):
+                for item in interactable.items[:]:
+                    if item.item_id == item_id:
+                        interactable.items.remove(item)
+                        agent.add_item(item)
+                        break
+            else:
+                item = spot.get_item_by_id(item_id)
+                if item:
+                    spot.remove_item(item)
+                    agent.add_item(item)
+        
+        if reward.money > 0:
+            agent.add_money(reward.money)
+        
+        if reward.experience > 0:
+            agent.add_experience_points(reward.experience)
+        
+        for info in reward.information:
+            agent.add_discovered_info(info)
+        
+        # ドアのOPEN処理時の特別な処理
+        if (isinstance(interactable, Door) and 
+            interaction.interaction_type == InteractionType.OPEN):
+            # ドアを開いた後、双方向の移動を追加
+            self._add_bidirectional_door_movement(spot, interactable)
     
     # === 職業システム関連の行動実行メソッド ===
     
