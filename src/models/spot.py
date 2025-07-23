@@ -127,6 +127,210 @@ class Spot:
         
         return action.execute(agent, self, world)
     
+    def execute_action(self, action, agent, world=None):
+        """
+        旧Actionシステムとの統一インターフェース
+        旧形式のActionオブジェクトを受け取り、適切な処理に振り分ける
+        """
+        from .action import Movement, Exploration, Interaction
+        
+        # Movement行動の場合
+        if isinstance(action, Movement):
+            movement_action = MovementSpotAction(
+                action_id=f"movement_{action.direction}",
+                direction=action.direction,
+                target_spot_id=action.target_spot_id
+            )
+            result = movement_action.execute(agent, self, world)
+            
+            # 旧システム互換のため、エージェントの位置を直接更新
+            if result.success and world:
+                agent.set_current_spot_id(action.target_spot_id)
+                
+            return result
+        
+        # Exploration行動の場合
+        elif isinstance(action, Exploration):
+            exploration_action = ExplorationSpotAction("exploration_custom", "custom")
+            exploration_action.custom_exploration = action  # カスタム探索を設定
+            result = exploration_action.execute(agent, self, world)
+            
+            # 旧システム互換のため、直接効果を適用
+            if result.success:
+                if action.item_id:
+                    item = self.get_item_by_id(action.item_id)
+                    if item:
+                        self.remove_item(item)
+                        agent.add_item(item)
+                        
+                if action.discovered_info:
+                    agent.add_discovered_info(action.discovered_info)
+                    
+                if action.experience_points:
+                    agent.add_experience_points(action.experience_points)
+                    
+                if action.money:
+                    agent.add_money(action.money)
+                    
+            return result
+        
+        # Interaction行動の場合
+        elif isinstance(action, Interaction):
+            return self._execute_interaction(action, agent, world)
+        
+        # その他の行動（Job関連等）はWorldに委譲（段階的移行）
+        else:
+            if world:
+                # 旧システムのメソッドを直接呼び出し
+                return self._delegate_to_world(action, agent, world)
+            else:
+                from .spot_action import ActionResult
+                return ActionResult(
+                    success=False,
+                    message=f"未実装の行動タイプ: {type(action).__name__}",
+                    warnings=[],
+                    state_changes={}
+                )
+    
+    def _delegate_to_world(self, action, agent, world):
+        """World固有の処理に委譲（暫定的な実装）"""
+        from .spot_action import ActionResult
+        try:
+            # Worldの旧システムメソッドを呼び出し
+            result = world._execute_legacy_action(agent.agent_id, action)
+            
+            # 結果をActionResultに変換
+            if isinstance(result, dict):
+                return ActionResult(
+                    success=result.get("success", True),
+                    message=result.get("message", "行動を実行しました"),
+                    warnings=[],
+                    state_changes={},
+                    additional_data={"original_result": result}
+                )
+            elif isinstance(result, str):
+                # 戦闘IDなど特別な戻り値の場合
+                return ActionResult(
+                    success=True,
+                    message=f"{action.description} を実行しました",
+                    warnings=[],
+                    state_changes={},
+                    additional_data={"return_value": result}
+                )
+            else:
+                return ActionResult(
+                    success=True,
+                    message=f"{action.description} を実行しました",
+                    warnings=[],
+                    state_changes={},
+                    additional_data={"original_result": result}
+                )
+        except Exception as e:
+            return ActionResult(
+                success=False,
+                message=f"行動の実行中にエラーが発生しました: {str(e)}",
+                warnings=[],
+                state_changes={}
+            )
+    
+    def _execute_interaction(self, interaction, agent, world):
+        """相互作用行動を実行（旧システムからの移行用）"""
+        try:
+            interactable = self.get_interactable_by_id(interaction.object_id)
+            if not interactable:
+                return ActionResult(
+                    success=False,
+                    message=f"オブジェクト {interaction.object_id} が見つかりません",
+                    warnings=[],
+                    state_changes={}
+                )
+            
+            if not interactable.can_interact(agent, interaction.interaction_type):
+                if interaction.required_item_id and not agent.has_item(interaction.required_item_id):
+                    return ActionResult(
+                        success=False,
+                        message=f"アイテム '{interaction.required_item_id}' が必要です",
+                        warnings=[],
+                        state_changes={}
+                    )
+                else:
+                    return ActionResult(
+                        success=False,
+                        message=f"この相互作用は実行できません: {interaction.description}",
+                        warnings=[],
+                        state_changes={}
+                    )
+            
+            # オブジェクトの状態変更
+            for key, value in interaction.state_changes.items():
+                interactable.set_state(key, value)
+            
+            # 報酬の付与
+            reward = interaction.reward
+            for item_id in reward.items:
+                if hasattr(interactable, 'items'):
+                    for item in interactable.items[:]:
+                        if item.item_id == item_id:
+                            interactable.items.remove(item)
+                            agent.add_item(item)
+                            break
+                else:
+                    item = self.get_item_by_id(item_id)
+                    if item:
+                        self.remove_item(item)
+                        agent.add_item(item)
+            
+            if reward.money > 0:
+                agent.add_money(reward.money)
+            
+            if reward.experience > 0:
+                agent.add_experience_points(reward.experience)
+            
+            for info in reward.information:
+                agent.add_discovered_info(info)
+            
+            # ドアのOPEN処理時の特別な処理
+            from .interactable import Door
+            from .action import InteractionType
+            if (isinstance(interactable, Door) and 
+                interaction.interaction_type == InteractionType.OPEN):
+                # ドアを開いた後、双方向の移動を追加
+                self._add_bidirectional_door_movement(interactable, world)
+            
+            return ActionResult(
+                success=True,
+                message=f"{interaction.description} を実行しました",
+                warnings=[],
+                state_changes=interaction.state_changes
+            )
+            
+        except Exception as e:
+            return ActionResult(
+                success=False,
+                message=f"相互作用の実行中にエラーが発生しました: {str(e)}",
+                warnings=[],
+                state_changes={}
+            )
+    
+    def _add_bidirectional_door_movement(self, door, world):
+        """ドア開放時に双方向の移動を追加"""
+        from .action import Movement
+        
+        # 現在のSpotから目標Spotへの移動
+        forward_movement = door.creates_movement_when_opened()
+        if forward_movement:
+            self.add_dynamic_movement(forward_movement)
+        
+        # 目標Spotから現在のSpotへの戻り移動
+        if world:
+            target_spot = world.get_spot(door.target_spot_id)
+            backward_movement = Movement(
+                description=f"{door.name}を通って戻る",
+                direction=f"{door.name}を通って戻る", 
+                target_spot_id=self.spot_id
+            )
+            target_spot.add_dynamic_movement(backward_movement)
+    
     def set_role_permission(self, role, permission):
         """役職に対する権限を設定"""
         self.permission_checker.set_role_permission(role, permission)
