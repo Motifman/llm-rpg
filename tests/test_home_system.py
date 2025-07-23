@@ -49,14 +49,24 @@ def test_home_creation():
     for interactable in interactables:
         print(f"   - {interactable.name}: {type(interactable).__name__}")
     
-    return world, alice, home, bedroom
+    # 基本的なアサーションを追加
+    assert home is not None
+    assert home.get_owner_id() == "alice"
+    assert bedroom is not None
+    assert len(interactables) > 0
 
 
 def test_permission_system():
     """権限システムのテスト"""
     print("\n=== 権限システムテスト ===")
     
-    world, alice, home, bedroom = test_home_creation()
+    # 新しいワールドをセットアップ
+    world = World()
+    alice = Agent("alice", "アリス")
+    world.add_agent(alice)
+    home = world.create_home("alice_home", "アリスの家", "温かみのある小さな家", "alice")
+    bedroom_id = f"{home.spot_id}_bedroom"
+    bedroom = world.get_spot(bedroom_id)
     
     # 別のエージェントを作成
     bob = Agent("bob", "ボブ")
@@ -90,14 +100,34 @@ def test_permission_system():
     print(f"   ボブ: {'入室可能' if home.can_enter('bob') else '入室不可'}")
     print(f"   チャーリー: {'入室可能' if home.can_enter('charlie') else '入室不可'}")
     
-    return world, alice, bob, charlie, home, bedroom
+    # アサーションを追加
+    assert home.can_enter('alice'), "所有者が入室できません"
+    assert home.can_enter('bob'), "権限を付与されたボブが入室できません"
+    assert not home.can_enter('charlie'), "権限のないチャーリーが入室できてしまいます"
 
 
 def test_sleep_system():
     """睡眠システムのテスト"""
     print("\n=== 睡眠システムテスト ===")
     
-    world, alice, bob, charlie, home, bedroom = test_permission_system()
+    # 新しいワールドをセットアップ
+    world = World()
+    alice = Agent("alice", "アリス")
+    bob = Agent("bob", "ボブ")
+    world.add_agent(alice)
+    world.add_agent(bob)
+    home = world.create_home("alice_home", "アリスの家", "温かみのある小さな家", "alice")
+    bedroom_id = f"{home.spot_id}_bedroom"
+    bedroom = world.get_spot(bedroom_id)
+    
+    # ボブに訪問者権限を付与
+    alice.set_current_spot_id(home.spot_id)
+    permission_action = GrantHomePermission(
+        description="ボブに訪問者権限を付与",
+        target_agent_id="bob",
+        permission_level="visitor"
+    )
+    world.execute_agent_grant_home_permission("alice", permission_action)
     
     # アリスの体力を減らす
     alice.current_hp = 30
@@ -120,14 +150,32 @@ def test_sleep_system():
     result = world.execute_agent_sleep("bob", sleep_action)
     print(f"❌ ボブの睡眠試行: {result['message']}")
     
-    return world, alice, bob, charlie, home, bedroom
+    # アサーションを追加
+    assert alice.current_hp > 30, "睡眠でHPが回復されていません"
 
 
 def test_diary_system():
     """日記システムのテスト"""
     print("\n=== 日記システムテスト ===")
     
-    world, alice, bob, charlie, home, bedroom = test_sleep_system()
+    # 新しいワールドをセットアップ
+    world = World()
+    alice = Agent("alice", "アリス")
+    bob = Agent("bob", "ボブ")
+    world.add_agent(alice)
+    world.add_agent(bob)
+    home = world.create_home("alice_home", "アリスの家", "温かみのある小さな家", "alice")
+    bedroom_id = f"{home.spot_id}_bedroom"
+    bedroom = world.get_spot(bedroom_id)
+    
+    # ボブに訪問者権限を付与
+    alice.set_current_spot_id(home.spot_id)
+    permission_action = GrantHomePermission(
+        description="ボブに訪問者権限を付与",
+        target_agent_id="bob",
+        permission_level="visitor"
+    )
+    world.execute_agent_grant_home_permission("alice", permission_action)
     
     # 日記を書く
     today = datetime.now().strftime("%Y-%m-%d")
@@ -161,14 +209,34 @@ def test_diary_system():
     result = world.execute_agent_write_diary("bob", write_action)
     print(f"❌ ボブの日記記入試行: {result['message']}")
     
-    return world, alice, bob, charlie, home, bedroom
+    # アサーションを追加
+    alice_result = world.execute_agent_read_diary("alice", read_action)
+    assert alice_result['success'], "アリスが日記を読めません"
+    assert len(alice_result['entries']) > 0, "日記エントリが保存されていません"
 
 
 def test_item_storage_system():
     """アイテム保管システムのテスト"""
     print("\n=== アイテム保管システムテスト ===")
     
-    world, alice, bob, charlie, home, bedroom = test_diary_system()
+    # 新しいワールドをセットアップ
+    world = World()
+    alice = Agent("alice", "アリス")
+    bob = Agent("bob", "ボブ")
+    world.add_agent(alice)
+    world.add_agent(bob)
+    home = world.create_home("alice_home", "アリスの家", "温かみのある小さな家", "alice")
+    bedroom_id = f"{home.spot_id}_bedroom"
+    bedroom = world.get_spot(bedroom_id)
+    
+    # ボブに訪問者権限を付与
+    alice.set_current_spot_id(home.spot_id)
+    permission_action = GrantHomePermission(
+        description="ボブに訪問者権限を付与",
+        target_agent_id="bob",
+        permission_level="visitor"
+    )
+    world.execute_agent_grant_home_permission("alice", permission_action)
     
     # アイテムを作成してアリスに追加
     sword = Item("iron_sword", "鉄の剣 - よく切れる剣")
@@ -180,6 +248,8 @@ def test_item_storage_system():
     print(f"保管前のアリスの所持品: {len(alice.items)}個")
     for item in alice.items:
         print(f"   - {item.item_id}")
+    
+    initial_item_count = len(alice.items)
     
     # アイテムを保管
     alice.set_current_spot_id(bedroom.spot_id)
@@ -205,14 +275,22 @@ def test_item_storage_system():
     result = world.execute_agent_store_item("bob", store_action)
     print(f"❌ ボブの保管試行: {result['message']}")
     
-    return world, alice, bob, charlie, home, bedroom
+    # アサーションを追加
+    assert len(alice.items) == initial_item_count, "アイテムの保管・取得で数が変わりました"
+    assert alice.has_item("iron_sword"), "アイテムが正常に取得されていません"
 
 
 def test_error_handling():
     """エラーハンドリングのテスト"""
     print("\n=== エラーハンドリングテスト ===")
     
-    world, alice, bob, charlie, home, bedroom = test_item_storage_system()
+    # 新しいワールドをセットアップ
+    world = World()
+    alice = Agent("alice", "アリス")
+    world.add_agent(alice)
+    home = world.create_home("alice_home", "アリスの家", "温かみのある小さな家", "alice")
+    bedroom_id = f"{home.spot_id}_bedroom"
+    bedroom = world.get_spot(bedroom_id)
     
     # 家の外で日記を書こうとする
     town_square = world.spots.get("town_square")
