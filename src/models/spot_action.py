@@ -117,10 +117,10 @@ class ActionPermissionChecker:
         """既存JobTypeから権限への暫定マッピング"""
         from ..models.job import JobType
         mapping = {
-            JobType.MERCHANT: Permission.CUSTOMER,
-            JobType.CRAFTSMAN: Permission.CUSTOMER,
-            JobType.ADVENTURER: Permission.CUSTOMER,
-            JobType.PRODUCER: Permission.CUSTOMER,
+            JobType.MERCHANT: Permission.EMPLOYEE,    # 商人は従業員権限
+            JobType.CRAFTSMAN: Permission.EMPLOYEE,   # 職人は従業員権限  
+            JobType.ADVENTURER: Permission.CUSTOMER,  # 冒険者は顧客権限
+            JobType.PRODUCER: Permission.EMPLOYEE,    # 生産者は従業員権限
         }
         return mapping.get(job_type, Permission.GUEST)
     
@@ -192,6 +192,603 @@ class SpotAction(ABC):
             ))
         
         return warnings
+
+
+# === Job系SpotAction実装 ===
+
+class CraftingSpotAction(SpotAction):
+    """クラフト系行動の基底クラス"""
+    
+    def __init__(self, action_id: str, name: str, description: str, 
+                 required_permission: Permission = Permission.CUSTOMER):
+        super().__init__(action_id, name, description, required_permission)
+    
+    def check_crafting_requirements(self, agent, recipe_id: str = None) -> List[ActionWarning]:
+        """クラフト要件チェック（共通機能）"""
+        warnings = []
+        
+        # JobAgentかチェック
+        from ..models.job import JobAgent
+        if not isinstance(agent, JobAgent):
+            warnings.append(ActionWarning(
+                message="クラフト行動には職業エージェントが必要です",
+                warning_type="agent_type",
+                is_blocking=True
+            ))
+            return warnings
+        
+        # レシピ要件チェック（レシピIDが指定されている場合）
+        if recipe_id:
+            recipe = agent.get_recipe_by_id(recipe_id)
+            if not recipe:
+                warnings.append(ActionWarning(
+                    message=f"レシピ {recipe_id} を習得していません",
+                    warning_type="recipe",
+                    is_blocking=True
+                ))
+            elif not recipe.can_craft(agent):
+                missing = recipe.get_missing_materials(agent)
+                warnings.append(ActionWarning(
+                    message=f"材料不足: {missing}",
+                    warning_type="materials",
+                    is_blocking=True
+                ))
+        
+        return warnings
+
+
+class ItemCraftingSpotAction(CraftingSpotAction):
+    """アイテム合成SpotAction"""
+    
+    def __init__(self, recipe_id: str, quantity: int = 1):
+        super().__init__(
+            action_id=f"craft_{recipe_id}",
+            name=f"アイテム合成({recipe_id})",
+            description=f"{recipe_id}を{quantity}個合成する",
+            required_permission=Permission.CUSTOMER
+        )
+        self.recipe_id = recipe_id
+        self.quantity = quantity
+    
+    def can_execute(self, agent, spot, world=None) -> List[ActionWarning]:
+        warnings = []
+        
+        # 権限チェック
+        warnings.extend(self.check_permission(agent, spot.permission_checker))
+        
+        # クラフト要件チェック
+        warnings.extend(self.check_crafting_requirements(agent, self.recipe_id))
+        
+        return warnings
+    
+    def execute(self, agent, spot, world=None) -> ActionResult:
+        from ..models.job import JobAgent
+        
+        # 実行可能性チェック
+        warnings = self.can_execute(agent, spot, world)
+        blocking_warnings = [w for w in warnings if w.is_blocking]
+        
+        if blocking_warnings:
+            return ActionResult(
+                success=False,
+                message=f"アイテム合成を実行できません: {blocking_warnings[0].message}",
+                warnings=warnings,
+                state_changes={}
+            )
+        
+        # JobAgentのcraft_itemメソッドを使用
+        recipe = agent.get_recipe_by_id(self.recipe_id)
+        craft_result = agent.craft_item(recipe, self.quantity)
+        
+        # 結果をActionResultに変換
+        return ActionResult(
+            success=craft_result["success"],
+            message=f"合成結果: {', '.join(craft_result['messages'])}",
+            warnings=warnings,
+            state_changes={"consumed_materials": craft_result["consumed_materials"]},
+            items_gained=[item.item_id for item in craft_result["created_items"]],
+            experience_gained=craft_result["experience_gained"],
+            additional_data={"craft_result": craft_result}
+        )
+
+
+class ItemEnhancementSpotAction(CraftingSpotAction):
+    """アイテム強化SpotAction"""
+    
+    def __init__(self, target_item_id: str, enhancement_materials: Dict[str, int]):
+        super().__init__(
+            action_id=f"enhance_{target_item_id}",
+            name=f"アイテム強化({target_item_id})",
+            description=f"{target_item_id}を強化する",
+            required_permission=Permission.CUSTOMER
+        )
+        self.target_item_id = target_item_id
+        self.enhancement_materials = enhancement_materials
+    
+    def can_execute(self, agent, spot, world=None) -> List[ActionWarning]:
+        warnings = []
+        
+        # 権限チェック
+        warnings.extend(self.check_permission(agent, spot.permission_checker))
+        
+        # 基本要件チェック
+        warnings.extend(self.check_crafting_requirements(agent))
+        
+        # 対象アイテムチェック
+        if not agent.has_item(self.target_item_id):
+            warnings.append(ActionWarning(
+                message=f"強化対象アイテム {self.target_item_id} を所持していません",
+                warning_type="item",
+                is_blocking=True
+            ))
+        
+        # 強化材料チェック
+        for material_id, count in self.enhancement_materials.items():
+            if agent.get_item_count(material_id) < count:
+                warnings.append(ActionWarning(
+                    message=f"強化材料 {material_id} が不足（必要: {count}個）",
+                    warning_type="materials",
+                    is_blocking=True
+                ))
+        
+        return warnings
+    
+    def execute(self, agent, spot, world=None) -> ActionResult:
+        # 実行可能性チェック
+        warnings = self.can_execute(agent, spot, world)
+        blocking_warnings = [w for w in warnings if w.is_blocking]
+        
+        if blocking_warnings:
+            return ActionResult(
+                success=False,
+                message=f"アイテム強化を実行できません: {blocking_warnings[0].message}",
+                warnings=warnings,
+                state_changes={}
+            )
+        
+        # JobAgentのenhance_itemメソッドを使用
+        enhance_result = agent.enhance_item(self.target_item_id, self.enhancement_materials)
+        
+        # 結果をActionResultに変換
+        return ActionResult(
+            success=enhance_result["success"],
+            message=f"強化結果: {', '.join(enhance_result['messages'])}",
+            warnings=warnings,
+            state_changes={"consumed_materials": enhance_result["consumed_materials"]},
+            experience_gained=enhance_result["experience_gained"],
+            additional_data={"enhance_result": enhance_result}
+        )
+
+
+class TradeSpotAction(SpotAction):
+    """商取引SpotAction（売買統合）"""
+    
+    def __init__(self, trade_type: str, item_id: str, quantity: int, 
+                 price_per_item: int, counterpart_agent_id: str):
+        action_id = f"{trade_type}_{item_id}_{counterpart_agent_id}"
+        name = f"アイテム{'売却' if trade_type == 'sell' else '購入'}"
+        description = f"{item_id}を{quantity}個{'売却' if trade_type == 'sell' else '購入'}する"
+        
+        super().__init__(action_id, name, description, Permission.CUSTOMER)
+        self.trade_type = trade_type  # "sell" or "buy"
+        self.item_id = item_id
+        self.quantity = quantity
+        self.price_per_item = price_per_item
+        self.counterpart_agent_id = counterpart_agent_id
+    
+    def can_execute(self, agent, spot, world=None) -> List[ActionWarning]:
+        warnings = []
+        
+        # 権限チェック
+        warnings.extend(self.check_permission(agent, spot.permission_checker))
+        
+        # JobAgentかチェック
+        from ..models.job import JobAgent
+        if not isinstance(agent, JobAgent):
+            warnings.append(ActionWarning(
+                message="取引行動には職業エージェントが必要です",
+                warning_type="agent_type",
+                is_blocking=True
+            ))
+            return warnings
+        
+        # 取引相手の存在チェック
+        if world and self.counterpart_agent_id not in world.agents:
+            warnings.append(ActionWarning(
+                message=f"取引相手 {self.counterpart_agent_id} が見つかりません",
+                warning_type="counterpart",
+                is_blocking=True
+            ))
+        
+        # 売却の場合：アイテム所持チェック
+        if self.trade_type == "sell":
+            if agent.get_item_count(self.item_id) < self.quantity:
+                warnings.append(ActionWarning(
+                    message=f"アイテム {self.item_id} が不足（必要: {self.quantity}個）",
+                    warning_type="item",
+                    is_blocking=True
+                ))
+        
+        # 購入の場合：資金チェック
+        elif self.trade_type == "buy":
+            total_cost = self.price_per_item * self.quantity
+            if agent.get_money() < total_cost:
+                warnings.append(ActionWarning(
+                    message=f"資金不足（必要: {total_cost}ゴールド、所持: {agent.get_money()}ゴールド）",
+                    warning_type="money",
+                    is_blocking=True
+                ))
+        
+        return warnings
+    
+    def execute(self, agent, spot, world=None) -> ActionResult:
+        # 実行可能性チェック
+        warnings = self.can_execute(agent, spot, world)
+        blocking_warnings = [w for w in warnings if w.is_blocking]
+        
+        if blocking_warnings:
+            return ActionResult(
+                success=False,
+                message=f"取引を実行できません: {blocking_warnings[0].message}",
+                warnings=warnings,
+                state_changes={}
+            )
+        
+        # 取引実行
+        if self.trade_type == "sell":
+            result = agent.sell_item_to_customer(
+                self.counterpart_agent_id, self.item_id, 
+                self.quantity, self.price_per_item
+            )
+        else:  # "buy"
+            result = agent.buy_item_from_customer(
+                self.counterpart_agent_id, self.item_id,
+                self.quantity, self.price_per_item
+            )
+        
+        # 結果をActionResultに変換
+        total_price = self.price_per_item * self.quantity
+        return ActionResult(
+            success=result["success"],
+            message=f"取引結果: {', '.join(result['messages'])}",
+            warnings=warnings,
+            state_changes={},
+            items_gained=[self.item_id] * self.quantity if self.trade_type == "buy" else [],
+            items_lost=[self.item_id] * self.quantity if self.trade_type == "sell" else [],
+            money_change=total_price if self.trade_type == "sell" else -total_price,
+            experience_gained=result.get("experience_gained", 0),
+            additional_data={"trade_result": result}
+        )
+
+
+class ServiceProvisionSpotAction(SpotAction):
+    """サービス提供SpotAction"""
+    
+    def __init__(self, service_id: str, target_agent_id: str, 
+                 custom_price: Optional[int] = None):
+        super().__init__(
+            action_id=f"service_{service_id}_{target_agent_id}",
+            name=f"サービス提供({service_id})",
+            description=f"{target_agent_id}にサービス{service_id}を提供する",
+            required_permission=Permission.EMPLOYEE
+        )
+        self.service_id = service_id
+        self.target_agent_id = target_agent_id
+        self.custom_price = custom_price
+    
+    def can_execute(self, agent, spot, world=None) -> List[ActionWarning]:
+        warnings = []
+        
+        # 権限チェック
+        warnings.extend(self.check_permission(agent, spot.permission_checker))
+        
+        # JobAgentかチェック
+        from ..models.job import JobAgent
+        if not isinstance(agent, JobAgent):
+            warnings.append(ActionWarning(
+                message="サービス提供行動には職業エージェントが必要です",
+                warning_type="agent_type",
+                is_blocking=True
+            ))
+            return warnings
+        
+        # サービス提供可能かチェック
+        service = agent.get_service_by_id(self.service_id)
+        if not service:
+            warnings.append(ActionWarning(
+                message=f"サービス {self.service_id} を提供できません",
+                warning_type="service",
+                is_blocking=True
+            ))
+        elif not service.can_provide(agent):
+            warnings.append(ActionWarning(
+                message=f"サービス {self.service_id} の提供条件を満たしていません",
+                warning_type="requirements",
+                is_blocking=True
+            ))
+        
+        # 対象エージェントの存在チェック
+        if world and self.target_agent_id not in world.agents:
+            warnings.append(ActionWarning(
+                message=f"対象エージェント {self.target_agent_id} が見つかりません",
+                warning_type="target",
+                is_blocking=True
+            ))
+        
+        return warnings
+    
+    def execute(self, agent, spot, world=None) -> ActionResult:
+        # 実行可能性チェック
+        warnings = self.can_execute(agent, spot, world)
+        blocking_warnings = [w for w in warnings if w.is_blocking]
+        
+        if blocking_warnings:
+            return ActionResult(
+                success=False,
+                message=f"サービス提供を実行できません: {blocking_warnings[0].message}",
+                warnings=warnings,
+                state_changes={}
+            )
+        
+        # サービス提供実行
+        result = agent.provide_service(
+            self.service_id, self.target_agent_id, self.custom_price
+        )
+        
+        # 支払い処理
+        if result["success"] and world:
+            price = result["price_charged"]
+            target_agent = world.get_agent(self.target_agent_id)
+            if target_agent.get_money() >= price:
+                target_agent.add_money(-price)
+                agent.add_money(price)
+                result["messages"].append(f"{price}ゴールドが支払われました")
+            else:
+                result["success"] = False
+                result["messages"].append("支払い能力が不足しています")
+        
+        # 結果をActionResultに変換
+        return ActionResult(
+            success=result["success"],
+            message=f"サービス提供結果: {', '.join(result['messages'])}",
+            warnings=warnings,
+            state_changes={},
+            money_change=result.get("price_charged", 0),
+            experience_gained=result.get("experience_gained", 0),
+            additional_data={"service_result": result}
+        )
+
+
+class BattleSpotAction(SpotAction):
+    """戦闘系行動の基底クラス"""
+    
+    def __init__(self, action_id: str, name: str, description: str,
+                 required_permission: Permission = Permission.CUSTOMER):
+        super().__init__(action_id, name, description, required_permission)
+    
+    def check_battle_requirements(self, agent, spot, world=None) -> List[ActionWarning]:
+        """戦闘要件チェック（共通機能）"""
+        warnings = []
+        
+        # エージェントが生存しているかチェック
+        if not agent.is_alive():
+            warnings.append(ActionWarning(
+                message="戦闘不能状態では戦闘行動を実行できません",
+                warning_type="agent_state",
+                is_blocking=True
+            ))
+        
+        return warnings
+
+
+class BattleInitiationSpotAction(BattleSpotAction):
+    """戦闘開始・参加SpotAction"""
+    
+    def __init__(self, action_type: str, monster_id: str = None, battle_id: str = None):
+        if action_type == "start":
+            action_id = f"start_battle_{monster_id}"
+            name = "戦闘開始"
+            description = f"{monster_id}との戦闘を開始する"
+        else:  # "join"
+            action_id = f"join_battle_{battle_id}"
+            name = "戦闘参加"
+            description = f"戦闘{battle_id}に参加する"
+        
+        super().__init__(action_id, name, description, Permission.CUSTOMER)
+        self.action_type = action_type
+        self.monster_id = monster_id
+        self.battle_id = battle_id
+    
+    def can_execute(self, agent, spot, world=None) -> List[ActionWarning]:
+        warnings = []
+        
+        # 権限チェック
+        warnings.extend(self.check_permission(agent, spot.permission_checker))
+        
+        # 戦闘要件チェック
+        warnings.extend(self.check_battle_requirements(agent, spot, world))
+        
+        if self.action_type == "start":
+            # モンスター存在チェック
+            monster = spot.get_monster_by_id(self.monster_id) if self.monster_id else None
+            if not monster:
+                warnings.append(ActionWarning(
+                    message=f"モンスター {self.monster_id} が見つかりません",
+                    warning_type="monster",
+                    is_blocking=True
+                ))
+            elif not monster.is_alive:
+                warnings.append(ActionWarning(
+                    message=f"{monster.name} は既に倒されています",
+                    warning_type="monster_state",
+                    is_blocking=True
+                ))
+        
+        elif self.action_type == "join":
+            # 戦闘存在チェック
+            if world:
+                battle = world.battle_manager.get_battle(self.battle_id) if self.battle_id else None
+                if not battle:
+                    warnings.append(ActionWarning(
+                        message=f"戦闘 {self.battle_id} が見つかりません",
+                        warning_type="battle",
+                        is_blocking=True
+                    ))
+                elif battle.spot_id != spot.spot_id:
+                    warnings.append(ActionWarning(
+                        message="同じスポットにいないため戦闘に参加できません",
+                        warning_type="location",
+                        is_blocking=True
+                    ))
+        
+        return warnings
+    
+    def execute(self, agent, spot, world=None) -> ActionResult:
+        # 実行可能性チェック
+        warnings = self.can_execute(agent, spot, world)
+        blocking_warnings = [w for w in warnings if w.is_blocking]
+        
+        if blocking_warnings:
+            return ActionResult(
+                success=False,
+                message=f"戦闘行動を実行できません: {blocking_warnings[0].message}",
+                warnings=warnings,
+                state_changes={}
+            )
+        
+        if self.action_type == "start":
+            # 戦闘開始
+            monster = spot.get_monster_by_id(self.monster_id)
+            battle_id = world.battle_manager.start_battle(spot.spot_id, monster, agent)
+            
+            # 同じスポットの他のエージェントに通知
+            agents_in_spot = world.get_agents_in_spot(spot.spot_id)
+            for other_agent in agents_in_spot:
+                if other_agent.agent_id != agent.agent_id:
+                    notification = f"{agent.name} が {monster.name} との戦闘を開始しました！"
+                    other_agent.add_discovered_info(notification)
+            
+            return ActionResult(
+                success=True,
+                message=f"戦闘開始: {monster.name}",
+                warnings=warnings,
+                state_changes={"battle_started": True},
+                additional_data={"battle_id": battle_id}
+            )
+        
+        else:  # "join"
+            # 戦闘参加
+            battle = world.battle_manager.get_battle(self.battle_id)
+            battle.add_participant(agent)
+            
+            return ActionResult(
+                success=True,
+                message=f"戦闘に参加しました",
+                warnings=warnings,
+                state_changes={"battle_joined": True},
+                additional_data={"battle_id": self.battle_id}
+            )
+
+
+class BattleActionSpotAction(BattleSpotAction):
+    """戦闘中の行動SpotAction"""
+    
+    def __init__(self, battle_action_type: str, target_id: str = None):
+        action_id = f"battle_{battle_action_type}"
+        if battle_action_type == "attack":
+            name = "攻撃"
+            description = f"{target_id}を攻撃する"
+        elif battle_action_type == "defend":
+            name = "防御"
+            description = "防御態勢を取る"
+        else:  # "escape"
+            name = "逃走"
+            description = "戦闘から逃走する"
+        
+        super().__init__(action_id, name, description, Permission.CUSTOMER)
+        self.battle_action_type = battle_action_type
+        self.target_id = target_id
+    
+    def can_execute(self, agent, spot, world=None) -> List[ActionWarning]:
+        warnings = []
+        
+        # 権限チェック
+        warnings.extend(self.check_permission(agent, spot.permission_checker))
+        
+        # 戦闘要件チェック
+        warnings.extend(self.check_battle_requirements(agent, spot, world))
+        
+        # 進行中戦闘チェック
+        if world:
+            battle = world.battle_manager.get_battle_by_spot(spot.spot_id)
+            if not battle:
+                warnings.append(ActionWarning(
+                    message="現在戦闘中ではありません",
+                    warning_type="battle_state",
+                    is_blocking=True
+                ))
+            elif agent.agent_id not in battle.participants:
+                warnings.append(ActionWarning(
+                    message="この戦闘に参加していません",
+                    warning_type="battle_participation",
+                    is_blocking=True
+                ))
+        
+        return warnings
+    
+    def execute(self, agent, spot, world=None) -> ActionResult:
+        # 実行可能性チェック
+        warnings = self.can_execute(agent, spot, world)
+        blocking_warnings = [w for w in warnings if w.is_blocking]
+        
+        if blocking_warnings:
+            return ActionResult(
+                success=False,
+                message=f"戦闘行動を実行できません: {blocking_warnings[0].message}",
+                warnings=warnings,
+                state_changes={}
+            )
+        
+        # 戦闘行動実行
+        battle = world.battle_manager.get_battle_by_spot(spot.spot_id)
+        
+        # 行動オブジェクトを作成（旧システムとの互換性のため）
+        from ..models.action import AttackMonster, DefendBattle, EscapeBattle
+        if self.battle_action_type == "attack":
+            action = AttackMonster("モンスターを攻撃", self.target_id)
+        elif self.battle_action_type == "defend":
+            action = DefendBattle("防御")
+        else:  # "escape"
+            action = EscapeBattle("逃走")
+        
+        # 戦闘行動を実行
+        turn_action = battle.execute_agent_action(agent.agent_id, action)
+        battle.advance_turn()
+        
+        # モンスターのターンの場合は自動実行
+        if battle.is_monster_turn() and not battle.is_battle_finished():
+            monster_action = battle.execute_monster_turn()
+            battle.advance_turn()
+        
+        # 戦闘終了チェック
+        if battle.is_battle_finished():
+            result = world.battle_manager.finish_battle(battle.battle_id)
+            world._handle_battle_result(result)
+            return ActionResult(
+                success=True,
+                message=f"戦闘終了: {result.victory}",
+                warnings=warnings,
+                state_changes={"battle_finished": True},
+                additional_data={"battle_result": result}
+            )
+        
+        return ActionResult(
+            success=True,
+            message=f"戦闘継続中: {turn_action.message}",
+            warnings=warnings,
+            state_changes={"turn_completed": True},
+            additional_data={"turn_action": turn_action}
+        )
 
 
 class MovementSpotAction(SpotAction):
