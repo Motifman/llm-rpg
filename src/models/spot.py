@@ -178,7 +178,11 @@ class Spot:
         elif isinstance(action, Interaction):
             return self._execute_interaction(action, agent, world)
         
-        # その他の行動（Job関連等）はWorldに委譲（段階的移行）
+        # Job関連行動をSpotActionに変換
+        elif self._is_job_action(action):
+            return self._execute_job_action(action, agent, world)
+        
+        # その他の行動（未実装）はWorldに委譲（段階的移行）
         else:
             if world:
                 # 旧システムのメソッドを直接呼び出し
@@ -191,6 +195,98 @@ class Spot:
                     warnings=[],
                     state_changes={}
                 )
+    
+    def _is_job_action(self, action):
+        """Job関連行動かどうかを判定"""
+        from .action import (CraftItem, EnhanceItem, LearnRecipe, 
+                            SellItem, BuyItem, ProvideService, SetupShop, PriceNegotiation,
+                            ProvideLodging, ProvideDance, ProvidePrayer,
+                            StartBattle, JoinBattle, AttackMonster, DefendBattle, EscapeBattle)
+        return isinstance(action, (CraftItem, EnhanceItem, LearnRecipe,
+                                  SellItem, BuyItem, ProvideService, SetupShop, PriceNegotiation,
+                                  ProvideLodging, ProvideDance, ProvidePrayer,
+                                  StartBattle, JoinBattle, AttackMonster, DefendBattle, EscapeBattle))
+    
+    def _execute_job_action(self, action, agent, world):
+        """Job関連行動をSpotActionに変換して実行"""
+        from .action import (CraftItem, EnhanceItem, LearnRecipe, 
+                            SellItem, BuyItem, ProvideService, SetupShop, PriceNegotiation,
+                            ProvideLodging, ProvideDance, ProvidePrayer,
+                            StartBattle, JoinBattle, AttackMonster, DefendBattle, EscapeBattle)
+        from .spot_action import (ItemCraftingSpotAction, ItemEnhancementSpotAction, 
+                                 TradeSpotAction, ServiceProvisionSpotAction, 
+                                 BattleInitiationSpotAction, BattleActionSpotAction, ActionResult)
+        
+        if isinstance(action, CraftItem):
+            # CraftItemをItemCraftingSpotActionに変換
+            spot_action = ItemCraftingSpotAction(action.recipe_id, action.quantity)
+            return spot_action.execute(agent, self, world)
+            
+        elif isinstance(action, EnhanceItem):
+            # EnhanceItemをItemEnhancementSpotActionに変換
+            spot_action = ItemEnhancementSpotAction(action.item_id, action.enhancement_materials)
+            return spot_action.execute(agent, self, world)
+            
+        elif isinstance(action, SellItem):
+            # SellItemをTradeSpotActionに変換
+            spot_action = TradeSpotAction(
+                "sell", action.item_id, action.quantity, 
+                action.price_per_item, action.customer_agent_id
+            )
+            return spot_action.execute(agent, self, world)
+            
+        elif isinstance(action, BuyItem):
+            # BuyItemをTradeSpotActionに変換
+            spot_action = TradeSpotAction(
+                "buy", action.item_id, action.quantity,
+                action.price_per_item, action.customer_agent_id
+            )
+            return spot_action.execute(agent, self, world)
+            
+        elif isinstance(action, ProvideService):
+            # ProvideServiceをServiceProvisionSpotActionに変換
+            spot_action = ServiceProvisionSpotAction(
+                action.service_id, action.target_agent_id, action.custom_price
+            )
+            return spot_action.execute(agent, self, world)
+            
+        elif isinstance(action, StartBattle):
+            # StartBattleをBattleInitiationSpotActionに変換
+            spot_action = BattleInitiationSpotAction("start", action.monster_id)
+            return spot_action.execute(agent, self, world)
+            
+        elif isinstance(action, JoinBattle):
+            # JoinBattleをBattleInitiationSpotActionに変換
+            spot_action = BattleInitiationSpotAction("join", battle_id=action.battle_id)
+            return spot_action.execute(agent, self, world)
+            
+        elif isinstance(action, AttackMonster):
+            # AttackMonsterをBattleActionSpotActionに変換
+            spot_action = BattleActionSpotAction("attack", action.monster_id)
+            return spot_action.execute(agent, self, world)
+            
+        elif isinstance(action, DefendBattle):
+            # DefendBattleをBattleActionSpotActionに変換
+            spot_action = BattleActionSpotAction("defend")
+            return spot_action.execute(agent, self, world)
+            
+        elif isinstance(action, EscapeBattle):
+            # EscapeBattleをBattleActionSpotActionに変換
+            spot_action = BattleActionSpotAction("escape")
+            return spot_action.execute(agent, self, world)
+            
+        elif isinstance(action, (LearnRecipe, SetupShop, PriceNegotiation, 
+                                ProvideLodging, ProvideDance, ProvidePrayer)):
+            # まだSpotAction化していない行動は暫定的に旧システムで処理
+            return self._delegate_to_world(action, agent, world)
+            
+        else:
+            return ActionResult(
+                success=False,
+                message=f"未実装のJob行動: {type(action).__name__}",
+                warnings=[],
+                state_changes={}
+            )
     
     def _delegate_to_world(self, action, agent, world):
         """World固有の処理に委譲（暫定的な実装）"""

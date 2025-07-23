@@ -612,9 +612,62 @@ class World:
         """
         # Spot固有行動かどうかを判定
         if self._is_spot_action(action):
-            return self._execute_spot_action(agent_id, action)
+            result = self._execute_spot_action(agent_id, action)
+            # ActionResultの場合は旧形式互換のため、必要に応じて変換
+            return self._convert_result_for_compatibility(result, action)
         else:
             return self._execute_global_action(agent_id, action)
+    
+    def _convert_result_for_compatibility(self, result, action):
+        """ActionResultを旧形式に変換（後方互換性のため）"""
+        from ..models.spot_action import ActionResult
+        from ..models.action import (CraftItem, EnhanceItem, SellItem, BuyItem, ProvideService,
+                                    StartBattle, JoinBattle, AttackMonster, DefendBattle, EscapeBattle)
+        
+        # ActionResultの場合のみ変換
+        if isinstance(result, ActionResult):
+            # 戦闘開始行動の場合は特別処理（battle_idを返す）
+            if isinstance(action, StartBattle) and result.success:
+                return result.additional_data.get("battle_id", "unknown_battle_id")
+            
+            # Job系行動の場合はdict形式に変換
+            elif isinstance(action, (CraftItem, EnhanceItem, SellItem, BuyItem, ProvideService)):
+                legacy_result = {
+                    "success": result.success,
+                    "message": result.message,
+                    "messages": [result.message],  # 複数メッセージ対応
+                    "experience_gained": result.experience_gained,
+                }
+                
+                # 行動別の追加情報
+                if isinstance(action, CraftItem) and result.additional_data:
+                    craft_result = result.additional_data.get("craft_result", {})
+                    legacy_result.update({
+                        "created_items": craft_result.get("created_items", []),
+                        "consumed_materials": craft_result.get("consumed_materials", {}),
+                    })
+                elif isinstance(action, (SellItem, BuyItem)) and result.additional_data:
+                    trade_result = result.additional_data.get("trade_result", {})
+                    legacy_result.update(trade_result)
+                elif isinstance(action, ProvideService) and result.additional_data:
+                    service_result = result.additional_data.get("service_result", {})
+                    legacy_result.update({
+                        "price_charged": service_result.get("price_charged", 0),
+                        "service_provided": service_result.get("service_provided"),
+                    })
+                
+                return legacy_result
+            
+            # 戦闘行動の場合は結果メッセージを返す
+            elif isinstance(action, (AttackMonster, DefendBattle, EscapeBattle)):
+                return result.message
+            
+            # その他はActionResultをそのまま返す
+            else:
+                return result
+        
+        # ActionResult以外はそのまま返す
+        return result
     
     def _is_spot_action(self, action: Action) -> bool:
         """行動がSpot固有かどうかを判定"""
@@ -637,8 +690,11 @@ class World:
         # エージェントがSpotにいるかチェック
         current_spot_id = agent.get_current_spot_id()
         if not current_spot_id or current_spot_id not in self.spots:
-            # Spotに配置されていない場合は、レガシーシステムで処理
-            return self._execute_legacy_action(agent_id, action)
+            # Spotに配置されていない場合：Job系行動は仮想Spotで処理、それ以外はレガシーシステム
+            if self._is_job_action_type(action):
+                return self._execute_job_action_without_spot(agent_id, action)
+            else:
+                return self._execute_legacy_action(agent_id, action)
         
         spot = self.get_spot(current_spot_id)
         
@@ -658,9 +714,36 @@ class World:
             
             return result
         
-        # その他のSpot固有行動は暫定的にレガシーシステムで処理（テスト互換性のため）
+        # その他のSpot固有行動はSpotのexecute_actionに委譲
         else:
-            return self._execute_legacy_action(agent_id, action)
+            return spot.execute_action(action, agent, self)
+    
+    def _is_job_action_type(self, action):
+        """Job系行動タイプかどうかを判定（Spotに配置されていない場合用）"""
+        from ..models.action import (CraftItem, EnhanceItem, SellItem, BuyItem, ProvideService,
+                                    StartBattle, JoinBattle, AttackMonster, DefendBattle, EscapeBattle)
+        return isinstance(action, (CraftItem, EnhanceItem, SellItem, BuyItem, ProvideService,
+                                  StartBattle, JoinBattle, AttackMonster, DefendBattle, EscapeBattle))
+    
+    def _execute_job_action_without_spot(self, agent_id: str, action):
+        """Spotに配置されていないエージェントのJob系行動を実行"""
+        from ..models.spot_action import ActionResult
+        
+        # 仮想的なSpotを作成して処理
+        from ..models.spot import Spot
+        virtual_spot = Spot("virtual", "仮想作業場", "作業用の仮想スペース")
+        
+        try:
+            # 仮想SpotでJob行動を実行
+            agent = self.get_agent(agent_id)
+            return virtual_spot.execute_action(action, agent, self)
+        except Exception as e:
+            return ActionResult(
+                success=False,
+                message=f"Job行動の実行に失敗しました: {str(e)}",
+                warnings=[],
+                state_changes={}
+            )
     
     def _execute_global_action(self, agent_id: str, action: Action):
         """グローバル行動を実行（Worldクラスで処理）"""
@@ -698,32 +781,14 @@ class World:
             raise ValueError(f"不明な行動: {action}")
     
     def _execute_legacy_action(self, agent_id: str, action: Action):
-        """レガシー行動を実行（暫定的な処理）"""
-        # 戦闘関連行動
-        if isinstance(action, StartBattle):
-            return self.execute_agent_start_battle(agent_id, action)
-        elif isinstance(action, JoinBattle):
-            return self.execute_agent_join_battle(agent_id, action)
-        elif isinstance(action, (AttackMonster, DefendBattle, EscapeBattle)):
-            return self.execute_agent_battle_action(agent_id, action)
-        # 職業システム関連の行動
-        elif isinstance(action, CraftItem):
-            return self.execute_agent_craft_item(agent_id, action)
-        elif isinstance(action, EnhanceItem):
-            return self.execute_agent_enhance_item(agent_id, action)
-        elif isinstance(action, LearnRecipe):
+        """レガシー行動を実行（段階的廃止中）"""
+        # まだSpotAction化されていない行動のみ処理
+        if isinstance(action, LearnRecipe):
             return self.execute_agent_learn_recipe(agent_id, action)
         elif isinstance(action, SetupShop):
             return self.execute_agent_setup_shop(agent_id, action)
-        elif isinstance(action, ProvideService):
-            return self.execute_agent_provide_service(agent_id, action)
         elif isinstance(action, PriceNegotiation):
             return self.execute_agent_price_negotiation(agent_id, action)
-        # 新しい商人システム関連の行動
-        elif isinstance(action, SellItem):
-            return self.execute_agent_sell_item(agent_id, action)
-        elif isinstance(action, BuyItem):
-            return self.execute_agent_buy_item(agent_id, action)
         elif isinstance(action, SetItemPrice):
             return self.execute_agent_set_item_price(agent_id, action)
         elif isinstance(action, ManageInventory):
@@ -757,6 +822,19 @@ class World:
             return self.execute_agent_retrieve_item(agent_id, action)
         else:
             raise ValueError(f"未実装のレガシー行動: {action}")
+        
+    # === 廃止予定のメソッド群（SpotAction化済み） ===
+    # 以下のメソッドは既にSpotAction化されているため使用されていません
+    # 後方互換性のため一時的に保持していますが、今後削除予定です
+    
+    # execute_agent_craft_item() - ItemCraftingSpotActionに移行済み
+    # execute_agent_enhance_item() - ItemEnhancementSpotActionに移行済み  
+    # execute_agent_sell_item() - TradeSpotActionに移行済み
+    # execute_agent_buy_item() - TradeSpotActionに移行済み
+    # execute_agent_provide_service() - ServiceProvisionSpotActionに移行済み
+    # execute_agent_start_battle() - BattleInitiationSpotActionに移行済み
+    # execute_agent_join_battle() - BattleInitiationSpotActionに移行済み
+    # execute_agent_battle_action() - BattleActionSpotActionに移行済み
     
     # === 旧システム互換用メソッド（段階的に削除予定） ===
     
