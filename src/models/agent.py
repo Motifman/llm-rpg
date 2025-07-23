@@ -1,9 +1,10 @@
 from typing import List
 from .item import Item, ItemEffect
+from .spot_action import Role
 
 
 class Agent:
-    def __init__(self, agent_id: str, name: str):
+    def __init__(self, agent_id: str, name: str, role: Role = Role.CITIZEN):
         self.agent_id = agent_id
         self.name = name
         # エージェントの状態
@@ -12,6 +13,9 @@ class Agent:
         self.current_spot_id: str = ""
         self.experience_points: int = 0
         self.money: int = 0
+        
+        # 新権限システム
+        self.role: Role = role  # 新しい役職システム
         
         # RPG基本ステータス（ベース値）
         self.base_max_hp: int = 100
@@ -32,6 +36,20 @@ class Agent:
         # 会話システム関連
         self.received_messages: List = []  # 受信したメッセージのリスト
         self.conversation_history: List = []  # 会話履歴（全体的な記録）
+
+    # === 役職システム関連 ===
+    
+    def get_role(self) -> Role:
+        """役職を取得"""
+        return self.role
+    
+    def set_role(self, role: Role):
+        """役職を設定"""
+        self.role = role
+    
+    def is_role(self, role: Role) -> bool:
+        """指定された役職かどうかチェック"""
+        return self.role == role
 
     # === 装備システム関連 ===
     
