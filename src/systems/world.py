@@ -10,6 +10,7 @@ from ..models.job import JobAgent, CraftsmanAgent, MerchantAgent, AdventurerAgen
 from ..models.quest import Quest, QuestType, QuestDifficulty
 from ..models.home import Home, HomePermission
 from ..models.home_interactables import Bed, Desk
+from ..models.spot_action import ActionResult
 from ..systems.trading_post import TradingPost
 from ..systems.message import LocationChatMessage
 from ..systems.battle import BattleManager, Battle, BattleResult
@@ -30,6 +31,44 @@ class World:
         self.monsters: Dict[str, Monster] = {}  # グローバルモンスター管理
         self.quest_system: QuestSystem = QuestSystem()  # クエストシステム
         
+    # === SpotActionシステム統合 ===
+    
+    def get_available_actions_for_agent(self, agent_id: str) -> Dict[str, Any]:
+        """エージェントが現在のSpotで実行可能な全ての行動を取得"""
+        agent = self.get_agent(agent_id)
+        spot = self.get_spot(agent.get_current_spot_id())
+        
+        # 新SpotActionシステムからの行動
+        spot_actions = spot.get_available_spot_actions(agent, self)
+        
+        # 結果をまとめて返す
+        return {
+            "agent_id": agent_id,
+            "current_spot": {
+                "spot_id": spot.spot_id,
+                "name": spot.name,
+                "description": spot.description
+            },
+            "available_actions": spot_actions,
+            "total_actions": len(spot_actions)
+        }
+    
+    def execute_spot_action(self, agent_id: str, action_id: str) -> ActionResult:
+        """SpotAction経由で行動を実行"""
+        agent = self.get_agent(agent_id)
+        spot = self.get_spot(agent.get_current_spot_id())
+        
+        # Spot経由で行動実行
+        result = spot.execute_spot_action(action_id, agent, self)
+        
+        # 移動後の攻撃的モンスターとの遭遇チェック
+        if result.success and action_id.startswith("movement_"):
+            self.check_aggressive_monster_encounters(agent_id)
+        
+        return result
+
+    # === 既存メソッドはそのまま維持 ===
+
     def add_spot(self, spot: Spot):
         """スポットを追加"""
         self.spots[spot.spot_id] = spot
