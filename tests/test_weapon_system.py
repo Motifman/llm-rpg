@@ -248,21 +248,45 @@ class TestBattleSystemIntegration:
         battle_id = self.battle_manager.start_battle("test_spot", self.monster, self.agent)
         battle = self.battle_manager.get_battle(battle_id)
         
-        # 攻撃実行（複数回試して効果確認）
+        # 攻撃実行（回避を考慮して複数回試行）
         from src.models.action import AttackMonster
         attack_action = AttackMonster("ゴブリンを攻撃", "goblin")
         
-        # 最初のターンは戦士なので攻撃可能
-        result = battle.execute_agent_action("warrior", attack_action)
+        # 回避される可能性があるため、最大10回まで攻撃を試行
+        successful_attack = False
+        damage_dealt = 0
         
-        # 攻撃が成功したことを確認
-        assert result.damage > 0
-        # クリティカル率が高いので、おそらくクリティカル
-        # 状態異常が100%付与されるので確認
+        for attempt in range(10):
+            # 戦闘をリセットして再開
+            if attempt > 0:
+                self.setup_method()  # テストセットアップをやり直し
+                self.agent.add_item(sword)
+                self.agent.equip_weapon(sword)
+                battle_id = self.battle_manager.start_battle("test_spot", self.monster, self.agent)
+                battle = self.battle_manager.get_battle(battle_id)
+            
+            # 最初のターンは戦士なので攻撃可能
+            result = battle.execute_agent_action("warrior", attack_action)
+            
+            if not result.evaded and result.damage > 0:
+                successful_attack = True
+                damage_dealt = result.damage
+                print(f"攻撃成功（{attempt + 1}回目）: {result.message}")
+                print(f"ダメージ: {damage_dealt}")
+                print(f"モンスターHP: {self.monster.current_hp}/{self.monster.max_hp}")
+                print(f"モンスター状態異常: {self.monster.status_conditions}")
+                break
+            else:
+                print(f"攻撃失敗（{attempt + 1}回目）: {result.message}")
         
-        print(f"攻撃結果: {result.message}")
-        print(f"モンスターHP: {self.monster.current_hp}/{self.monster.max_hp}")
-        print(f"モンスター状態異常: {self.monster.status_conditions}")
+        # 10回試行しても成功しなかった場合はテスト失敗
+        assert successful_attack, "10回攻撃を試行しても1回も成功しませんでした（回避率が異常に高い可能性があります）"
+        
+        # 攻撃が成功した場合の確認
+        assert damage_dealt > 0, "攻撃は成功したがダメージが0です"
+        
+        # 毒状態異常が付与されているか確認（状態異常付与率100%）
+        assert self.monster.has_status_condition(StatusEffect.POISON), "毒状態異常が付与されていません"
     
     def test_armor_effects_in_battle(self):
         """防具効果の戦闘テスト"""
