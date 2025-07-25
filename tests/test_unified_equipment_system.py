@@ -32,7 +32,7 @@ class TestUnifiedEquipmentSystem:
         self.armor = Armor(
             item_id="test_armor",
             description="テスト用のアーマー",
-            armor_type=ArmorType.ARMOR,
+            armor_type=ArmorType.CHEST,
             effect=ArmorEffect(defense_bonus=8, speed_bonus=1)
         )
     
@@ -40,7 +40,7 @@ class TestUnifiedEquipmentSystem:
         """EquipmentSlotの列挙値が正しく定義されていることを確認"""
         assert EquipmentSlot.WEAPON.value == "weapon"
         assert EquipmentSlot.HELMET.value == "helmet"
-        assert EquipmentSlot.ARMOR.value == "armor"
+        assert EquipmentSlot.CHEST.value == "armor"
         assert EquipmentSlot.SHOES.value == "shoes"
         assert EquipmentSlot.GLOVES.value == "gloves"
     
@@ -66,7 +66,7 @@ class TestUnifiedEquipmentSystem:
         assert len(available_slots) == 5
         assert EquipmentSlot.WEAPON in available_slots
         assert EquipmentSlot.HELMET in available_slots
-        assert EquipmentSlot.ARMOR in available_slots
+        assert EquipmentSlot.CHEST in available_slots
         assert EquipmentSlot.SHOES in available_slots
         assert EquipmentSlot.GLOVES in available_slots
     
@@ -74,7 +74,7 @@ class TestUnifiedEquipmentSystem:
         """get_slot_nameが正しい日本語名を返すことを確認"""
         assert self.equipment.get_slot_name(EquipmentSlot.WEAPON) == "武器"
         assert self.equipment.get_slot_name(EquipmentSlot.HELMET) == "ヘルメット"
-        assert self.equipment.get_slot_name(EquipmentSlot.ARMOR) == "アーマー"
+        assert self.equipment.get_slot_name(EquipmentSlot.CHEST) == "アーマー"
         assert self.equipment.get_slot_name(EquipmentSlot.SHOES) == "シューズ"
         assert self.equipment.get_slot_name(EquipmentSlot.GLOVES) == "グローブ"
     

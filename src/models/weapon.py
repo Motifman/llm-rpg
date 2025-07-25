@@ -298,7 +298,7 @@ class EquipmentSet:
         if armor.armor_type == ArmorType.HELMET:
             previous = self.helmet
             self.helmet = armor
-        elif armor.armor_type == ArmorType.ARMOR:
+        elif armor.armor_type == ArmorType.CHEST:
             previous = self.armor
             self.armor = armor
         elif armor.armor_type == ArmorType.SHOES:
@@ -321,7 +321,7 @@ class EquipmentSet:
             armor = self.helmet
             self.helmet = None
             return armor
-        elif armor_type == ArmorType.ARMOR:
+        elif armor_type == ArmorType.CHEST:
             armor = self.armor
             self.armor = None
             return armor

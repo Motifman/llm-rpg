@@ -36,6 +36,9 @@ class Inventory:
         if item_id not in self.item_counts:
             return 0
         
+        if count <= 0:
+            return 0
+        
         current_count = self.item_counts[item_id]
         removed_count = min(count, current_count)
         
