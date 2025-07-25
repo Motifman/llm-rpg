@@ -68,3 +68,6 @@ htmlcov/
 
 # cursor
 .cursor/
+
+# plan
+plans/
