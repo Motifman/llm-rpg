@@ -46,38 +46,31 @@ class TestItemEffect:
         effect = ItemEffect(hp_change=50, mp_change=20)
         assert effect.hp_change == 50
         assert effect.mp_change == 20
-        assert effect.attack_change == 0
-        assert effect.defense_change == 0
     
     def test_item_effect_with_all_parameters(self):
         """全パラメータでのアイテム効果作成テスト"""
         effect = ItemEffect(
             hp_change=100,
             mp_change=50,
-            attack_change=10,
-            defense_change=5,
             money_change=1000,
             experience_change=500
         )
         assert effect.hp_change == 100
         assert effect.mp_change == 50
-        assert effect.attack_change == 10
-        assert effect.defense_change == 5
         assert effect.money_change == 1000
         assert effect.experience_change == 500
     
     def test_item_effect_str_representation(self):
         """アイテム効果の文字列表現テスト"""
-        effect = ItemEffect(hp_change=50, mp_change=20, attack_change=5)
+        effect = ItemEffect(hp_change=50, mp_change=20)
         assert "HP+50" in str(effect)
         assert "MP+20" in str(effect)
-        assert "攻撃力+5" in str(effect)
     
     def test_item_effect_str_with_negative_values(self):
         """負の値での文字列表現テスト"""
-        effect = ItemEffect(hp_change=-20, attack_change=-5)
+        effect = ItemEffect(hp_change=-20, mp_change=-10)
         assert "HP-20" in str(effect)
-        assert "攻撃力-5" in str(effect)
+        assert "MP-10" in str(effect)
     
     def test_item_effect_str_with_temporary_effects(self):
         """一時効果付きの文字列表現テスト"""

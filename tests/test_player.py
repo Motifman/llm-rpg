@@ -12,6 +12,7 @@ from game.item.item import Item
 from game.item.equipment_item import Weapon, Armor, WeaponEffect, ArmorEffect
 from game.item.consumable_item import ConsumableItem, ItemEffect
 from game.enums import Role, EquipmentSlot, WeaponType, ArmorType, Element, Race, StatusEffectType
+from game.player.status import StatusEffect
 
 
 class TestPlayer:
@@ -33,10 +34,12 @@ class TestPlayer:
         self.leather_armor = Armor("leather_armor", "革の鎧", ArmorType.CHEST, armor_effect)
         
         # テスト用消費アイテムを作成
-        effect = ItemEffect(hp_restore=50, mp_restore=20)
+        effect = ItemEffect(hp_change=50, mp_change=20)
         self.healing_potion = ConsumableItem("healing_potion", "回復薬", effect)
         
-        effect2 = ItemEffect(hp_restore=100, attack_boost=10, duration=3)
+        # 一時的な攻撃力上昇効果を作成
+        attack_boost = StatusEffect(StatusEffectType.ATTACK_UP, duration=3, value=10)
+        effect2 = ItemEffect(hp_change=100, temporary_effects=[attack_boost])
         self.power_potion = ConsumableItem("power_potion", "パワーポーション", effect2)
     
     def test_player_initialization(self):
@@ -209,7 +212,7 @@ class TestPlayer:
     def test_use_item_cannot_consume(self):
         """使用条件を満たさないアイテム使用テスト"""
         # 使用条件を満たさない消費アイテムを作成
-        effect = ItemEffect(hp_restore=50, mp_cost=1000)  # MPが足りない
+        effect = ItemEffect(hp_change=50, mp_change=1000)  # MPが足りない
         high_mp_potion = ConsumableItem("high_mp_potion", "高MP消費薬", effect)
         
         self.player.inventory.add_item(high_mp_potion)

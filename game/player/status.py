@@ -187,8 +187,6 @@ class Status:
     def apply_item_effect(self, effect: ItemEffect):
         self.add_hp(effect.hp_change)
         self.add_mp(effect.mp_change)
-        self.add_attack(effect.attack_change)
-        self.add_defense(effect.defense_change)
         self.add_money(effect.money_change)
         self.add_experience_points(effect.experience_change)
         for status_effect in effect.temporary_effects:
