@@ -263,9 +263,14 @@ class Agent:
         return self.experience_points
     
     def add_experience_points(self, experience_points: int):
+        """経験値を追加"""
         self.experience_points += experience_points
-        if self.experience_points < 0:
-            self.experience_points = 0
+    
+    def get_level(self) -> int:
+        """レベルを取得（簡易計算）"""
+        # 経験値からレベルを計算（簡易実装）
+        # レベル1: 0-99, レベル2: 100-199, レベル3: 200-299, ...
+        return (self.experience_points // 100) + 1
     
     def get_money(self) -> int:
         return self.money
