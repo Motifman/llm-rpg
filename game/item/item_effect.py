@@ -9,8 +9,6 @@ if TYPE_CHECKING:
 class ItemEffect:
     hp_change: int = 0
     mp_change: int = 0
-    attack_change: int = 0
-    defense_change: int = 0
     money_change: int = 0
     experience_change: int = 0
     temporary_effects: List["StatusEffect"] = field(default_factory=list)
@@ -21,10 +19,6 @@ class ItemEffect:
             effects.append(f"HP{self.hp_change:+d}")
         if self.mp_change != 0:
             effects.append(f"MP{self.mp_change:+d}")
-        if self.attack_change != 0:
-            effects.append(f"攻撃力{self.attack_change:+d}")
-        if self.defense_change != 0:
-            effects.append(f"防御力{self.defense_change:+d}")
         if self.money_change != 0:
             effects.append(f"所持金{self.money_change:+d}")
         if self.experience_change != 0:
@@ -36,4 +30,4 @@ class ItemEffect:
         return "効果: " + ", ".join(effects) if effects else "効果なし"
     
     def __repr__(self):
-        return f"ItemEffect(hp_change={self.hp_change}, mp_change={self.mp_change}, attack_change={self.attack_change}, defense_change={self.defense_change}, money_change={self.money_change}, experience_change={self.experience_change}, temporary_effects={self.temporary_effects})" 
+        return f"ItemEffect(hp_change={self.hp_change}, mp_change={self.mp_change}, money_change={self.money_change}, experience_change={self.experience_change}, temporary_effects={self.temporary_effects})" 
