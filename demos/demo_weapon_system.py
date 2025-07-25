@@ -95,7 +95,7 @@ def create_legendary_armors():
         status_resistance={StatusEffect.POISON: 0.8}
     )
     armors["dragon_scale_armor"] = Armor(
-        "dragon_scale_armor", "ドラゴンスケイルアーマー", ArmorType.ARMOR, dragon_scale_effect, "legendary"
+        "dragon_scale_armor", "ドラゴンスケイルアーマー", ArmorType.CHEST, dragon_scale_effect, "legendary"
     )
     
     # 影のクローク（回避特化）
@@ -106,7 +106,7 @@ def create_legendary_armors():
         status_resistance={StatusEffect.CONFUSION: 0.6, StatusEffect.SLEEP: 0.9}
     )
     armors["shadow_cloak"] = Armor(
-        "shadow_cloak", "影のクローク", ArmorType.ARMOR, shadow_cloak_effect, "epic"
+        "shadow_cloak", "影のクローク", ArmorType.CHEST, shadow_cloak_effect, "epic"
     )
     
     # 守護者のヘルム（状態異常耐性）

@@ -67,7 +67,7 @@ class EquipmentSet:
         return {
             EquipmentSlot.WEAPON: self.weapon,
             EquipmentSlot.HELMET: self.helmet,
-            EquipmentSlot.ARMOR: self.armor,
+            EquipmentSlot.CHEST: self.armor,
             EquipmentSlot.SHOES: self.shoes,
             EquipmentSlot.GLOVES: self.gloves,
         }
@@ -80,7 +80,7 @@ class EquipmentSet:
         if self.helmet:
             equipped_slots.append(EquipmentSlot.HELMET)
         if self.armor:
-            equipped_slots.append(EquipmentSlot.ARMOR)
+            equipped_slots.append(EquipmentSlot.CHEST)
         if self.shoes:
             equipped_slots.append(EquipmentSlot.SHOES)
         if self.gloves:
@@ -96,7 +96,7 @@ class EquipmentSet:
         slot_names = {
             EquipmentSlot.WEAPON: "武器",
             EquipmentSlot.HELMET: "ヘルメット",
-            EquipmentSlot.ARMOR: "アーマー",
+            EquipmentSlot.CHEST: "アーマー",
             EquipmentSlot.SHOES: "シューズ",
             EquipmentSlot.GLOVES: "グローブ",
         }
@@ -112,7 +112,7 @@ class EquipmentSet:
         if armor.armor_type == ArmorType.HELMET:
             previous = self.helmet
             self.helmet = armor
-        elif armor.armor_type == ArmorType.ARMOR:
+        elif armor.armor_type == ArmorType.CHEST:
             previous = self.armor
             self.armor = armor
         elif armor.armor_type == ArmorType.SHOES:
@@ -133,7 +133,7 @@ class EquipmentSet:
             armor = self.helmet
             self.helmet = None
             return armor
-        elif armor_type == ArmorType.ARMOR:
+        elif armor_type == ArmorType.CHEST:
             armor = self.armor
             self.armor = None
             return armor
@@ -153,8 +153,8 @@ class EquipmentSet:
             return self.unequip_weapon()
         elif slot == EquipmentSlot.HELMET:
             return self.unequip_armor(ArmorType.HELMET)
-        elif slot == EquipmentSlot.ARMOR:
-            return self.unequip_armor(ArmorType.ARMOR)
+        elif slot == EquipmentSlot.CHEST:
+            return self.unequip_armor(ArmorType.CHEST)
         elif slot == EquipmentSlot.SHOES:
             return self.unequip_armor(ArmorType.SHOES)
         elif slot == EquipmentSlot.GLOVES:

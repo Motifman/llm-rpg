@@ -47,11 +47,12 @@ class Weapon(Item):
     rarity: str = "common" 
     
     def calculate_damage(self, base_attack: int, target_race: Optional[Race] = None) -> int:
-        total_damage = base_attack + self.effect.attack_bonus
+        base_damage = base_attack + self.effect.attack_bonus
         
         if target_race and target_race in self.effect.effective_races:
-            total_damage = int(total_damage * self.effect.race_damage_multiplier)
+            base_damage = int(base_damage * self.effect.race_damage_multiplier)
         
+        total_damage = base_damage
         if self.effect.element and self.effect.element != Element.PHYSICAL:
             total_damage += self.effect.element_damage
         

@@ -47,12 +47,12 @@ class TestWeaponSystem:
         armor = Armor(
             item_id="steel_armor",
             description="鋼の鎧",
-            armor_type=ArmorType.ARMOR,
+            armor_type=ArmorType.CHEST,
             effect=armor_effect
         )
         
         assert armor.item_id == "steel_armor"
-        assert armor.armor_type == ArmorType.ARMOR
+        assert armor.armor_type == ArmorType.CHEST
         assert armor.effect.defense_bonus == 10
         assert armor.get_counter_chance() == 0.2
         assert armor.get_evasion_bonus() == 0.1
@@ -68,7 +68,7 @@ class TestWeaponSystem:
         helmet = Armor("helmet", "ヘルメット", ArmorType.HELMET, helmet_effect)
         
         armor_effect = ArmorEffect(defense_bonus=15, speed_bonus=2)
-        armor = Armor("armor", "鎧", ArmorType.ARMOR, armor_effect)
+        armor = Armor("armor", "鎧", ArmorType.CHEST, armor_effect)
         
         # 装備セット
         equipment = EquipmentSet()
@@ -93,7 +93,7 @@ class TestWeaponSystem:
         
         # 防具を作成してインベントリに追加
         armor_effect = ArmorEffect(defense_bonus=10)
-        armor = Armor("steel_armor", "鋼の鎧", ArmorType.ARMOR, armor_effect)
+        armor = Armor("steel_armor", "鋼の鎧", ArmorType.CHEST, armor_effect)
         agent.add_item(armor)
         
         # ベースステータス確認
@@ -204,7 +204,7 @@ class TestWeaponSystem:
         magic_cloak = Armor(
             "magic_cloak",
             "魔法のマント",
-            ArmorType.ARMOR,
+            ArmorType.CHEST,
             magic_resistance_effect
         )
         
@@ -297,7 +297,7 @@ class TestBattleSystemIntegration:
             counter_chance=1.0,  # 100%反撃
             evasion_bonus=0.3    # 30%回避
         )
-        counter_armor = Armor("counter_armor", "反撃の鎧", ArmorType.ARMOR, counter_armor_effect)
+        counter_armor = Armor("counter_armor", "反撃の鎧", ArmorType.CHEST, counter_armor_effect)
         
         self.agent.add_item(counter_armor)
         self.agent.equip_armor(counter_armor)

@@ -33,4 +33,7 @@ class ItemEffect:
             for effect in self.temporary_effects:
                 effects.append(f"{effect.effect.value}: {effect.duration}ターン")
         
-        return "効果: " + ", ".join(effects) if effects else "効果なし" 
+        return "効果: " + ", ".join(effects) if effects else "効果なし"
+    
+    def __repr__(self):
+        return f"ItemEffect(hp_change={self.hp_change}, mp_change={self.mp_change}, attack_change={self.attack_change}, defense_change={self.defense_change}, money_change={self.money_change}, experience_change={self.experience_change}, temporary_effects={self.temporary_effects})" 

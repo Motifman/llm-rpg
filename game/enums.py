@@ -50,7 +50,7 @@ class WeaponType(Enum):
 class ArmorType(Enum):
     """防具タイプ"""
     HELMET = "helmet"   
-    ARMOR = "armor"     
+    CHEST = "chest"     
     SHOES = "shoes"     
     GLOVES = "gloves"   
 
@@ -59,7 +59,7 @@ class EquipmentSlot(Enum):
     """装備スロット（統一的な装備管理用）"""
     WEAPON = "weapon"
     HELMET = "helmet"
-    ARMOR = "armor"
+    CHEST = "chest"
     SHOES = "shoes"
     GLOVES = "gloves"
 
