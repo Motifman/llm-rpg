@@ -101,7 +101,7 @@ class Player:
     def preview_item_effect(self, item_id: str) -> Optional['ItemEffect']:
         from game.action.actions.item_action import ConsumableItem, ItemEffect
         
-        item = self.inventory.get_item(item_id)
+        item = self.inventory.get_item_by_id(item_id)
         if item is None or not isinstance(item, ConsumableItem):
             return None
         return item.effect
@@ -117,17 +117,15 @@ class Player:
             return EquipItemResult(False, "アイテムが見つかりません", str(self.equipment), item_id, None)
         self.inventory.remove_item_by_id(item.item_id, 1)
         if isinstance(item, Weapon):
-            weapon = self.equipment.equip_weapon(item)
-            if weapon:
-                self.inventory.add_item(weapon)
-            weapon_id = weapon.item_id if weapon else None
-            return EquipItemResult(True, "武器を装備しました", str(self.equipment), item.item_id, weapon_id)
+            old_weapon = self.equipment.equip_weapon(item)
+            if old_weapon:
+                self.inventory.add_item(old_weapon)
+            return EquipItemResult(True, "武器を装備しました", str(self.equipment), item.item_id, old_weapon.item_id if old_weapon else None)
         elif isinstance(item, Armor):
-            armor = self.equipment.equip_armor(item)
-            if armor:
-                self.inventory.add_item(armor)
-            armor_id = armor.item_id if armor else None
-            return EquipItemResult(True, "防具を装備しました", str(self.equipment), item.item_id, armor_id)
+            old_armor = self.equipment.equip_armor(item)
+            if old_armor:
+                self.inventory.add_item(old_armor)
+            return EquipItemResult(True, "防具を装備しました", str(self.equipment), item.item_id, old_armor.item_id if old_armor else None)
         else:
             return EquipItemResult(False, "アイテムを装備できません", str(self.equipment), item.item_id, None)  
     
