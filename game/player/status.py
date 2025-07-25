@@ -35,6 +35,10 @@ class Status:
     
     def get_max_hp(self) -> int:
         return self.max_hp
+    
+    def set_max_hp(self, max_hp: int):
+        self.max_hp = max(0, max_hp)
+        self.hp = min(self.hp, self.max_hp)
 
     def set_hp(self, hp: int):
         self.hp = max(0, min(hp, self.max_hp))
@@ -47,6 +51,10 @@ class Status:
     
     def get_max_mp(self) -> int:
         return self.max_mp
+    
+    def set_max_mp(self, max_mp: int):
+        self.max_mp = max(0, max_mp)
+        self.mp = min(self.mp, self.max_mp)
     
     def set_mp(self, mp: int):
         self.mp = max(0, min(mp, self.max_mp))
@@ -166,13 +174,16 @@ class Status:
         self._decrease_all_status_effect_durations()
 
     def get_attack_bonus(self) -> int:
-        return self.status_effects.get(StatusEffectType.ATTACK_UP, 0).value
+        status_effect = self.status_effects.get(StatusEffectType.ATTACK_UP)
+        return status_effect.value if status_effect else 0
     
     def get_defense_bonus(self) -> int:
-        return self.status_effects.get(StatusEffectType.DEFENSE_UP, 0).value
+        status_effect = self.status_effects.get(StatusEffectType.DEFENSE_UP)
+        return status_effect.value if status_effect else 0
     
     def get_speed_bonus(self) -> int:
-        return self.status_effects.get(StatusEffectType.SPEED_UP, 0).value
+        status_effect = self.status_effects.get(StatusEffectType.SPEED_UP)
+        return status_effect.value if status_effect else 0
 
     def is_alive(self) -> bool:
         return self.hp > 0
