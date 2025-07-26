@@ -10,7 +10,7 @@ class PlayerManager:
         self.players[player.get_player_id()] = player
 
     def get_player(self, player_id: str) -> Player:
-        return self.players[player_id]
+        return self.players.get(player_id)
     
     def get_all_players(self) -> List[Player]:
         return list(self.players.values())

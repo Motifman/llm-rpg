@@ -1,6 +1,7 @@
 from typing import List
 from collections import deque
 from game.object.interactable import InteractableObject
+from game.action.actions.interactable_action import WriteBulletinBoardStrategy, ReadBulletinBoardStrategy
 
 
 class BulletinBoard(InteractableObject):
@@ -10,6 +11,10 @@ class BulletinBoard(InteractableObject):
         super().__init__(object_id, description)
         self._posts = deque(maxlen=4)  # 最大4つの投稿を保持
         self.display_name = "掲示板"
+        
+        # 可能なアクションを登録
+        self._possible_actions[WriteBulletinBoardStrategy().get_name()] = WriteBulletinBoardStrategy()
+        self._possible_actions[ReadBulletinBoardStrategy().get_name()] = ReadBulletinBoardStrategy()
     
     def get_display_name(self) -> str:
         return self.display_name
