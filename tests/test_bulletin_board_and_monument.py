@@ -1,5 +1,6 @@
 import pytest
-from game.object.interactable import BulletinBoard, Monument
+from game.object.bulletin_board import BulletinBoard
+from game.object.monument import Monument
 from game.action.actions.interactable_action import (
     WriteBulletinBoardCommand, ReadBulletinBoardCommand, ReadMonumentCommand,
     WriteBulletinBoardResult, ReadBulletinBoardResult, ReadMonumentResult
