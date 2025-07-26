@@ -15,7 +15,10 @@ class SpotManager:
         self.movement_graph.add_spot(spot)
 
     def get_spot(self, spot_id: str) -> Spot:
-        return self.movement_graph.get_spot(spot_id)
+        try:
+            return self.movement_graph.get_spot(spot_id)
+        except KeyError:
+            return None
     
     def get_all_spots(self) -> List[Spot]:
         return list(self.movement_graph.get_all_spots())
@@ -28,3 +31,6 @@ class SpotManager:
     
     def get_movement_validator(self) -> MovementValidator:
         return self.movement_validator
+
+    def get_destination_spot_ids(self, spot_id: str) -> List[str]:
+        return self.movement_graph.get_destination_spot_ids(spot_id)
