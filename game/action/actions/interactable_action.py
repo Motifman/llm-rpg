@@ -184,7 +184,7 @@ class WriteBulletinBoardStrategy(ActionStrategy):
         
         available_boards = []
         for interactable in current_spot.get_all_interactables():
-            from game.object.interactable import BulletinBoard
+            from game.object.bulletin_board import BulletinBoard
             if isinstance(interactable, BulletinBoard):
                 available_boards.append(interactable.get_display_name())
         
@@ -197,7 +197,7 @@ class WriteBulletinBoardStrategy(ActionStrategy):
             return False
         
         for interactable in current_spot.get_all_interactables():
-            from game.object.interactable import BulletinBoard
+            from game.object.bulletin_board import BulletinBoard
             if isinstance(interactable, BulletinBoard):
                 return True
         return False
@@ -226,7 +226,7 @@ class WriteBulletinBoardCommand(ActionCommand):
         
         available_boards = []
         for interactable in current_spot.get_all_interactables():
-            from game.object.interactable import BulletinBoard
+            from game.object.bulletin_board import BulletinBoard
             if isinstance(interactable, BulletinBoard):
                 available_boards.append(interactable)
         
@@ -286,7 +286,7 @@ class ReadBulletinBoardStrategy(ActionStrategy):
         
         available_boards = []
         for interactable in current_spot.get_all_interactables():
-            from game.object.interactable import BulletinBoard
+            from game.object.bulletin_board import BulletinBoard
             if isinstance(interactable, BulletinBoard):
                 available_boards.append(interactable.get_display_name())
         
@@ -299,7 +299,7 @@ class ReadBulletinBoardStrategy(ActionStrategy):
             return False
         
         for interactable in current_spot.get_all_interactables():
-            from game.object.interactable import BulletinBoard
+            from game.object.bulletin_board import BulletinBoard
             if isinstance(interactable, BulletinBoard):
                 return True
         return False
@@ -326,7 +326,7 @@ class ReadBulletinBoardCommand(ActionCommand):
         
         available_boards = []
         for interactable in current_spot.get_all_interactables():
-            from game.object.interactable import BulletinBoard
+            from game.object.bulletin_board import BulletinBoard
             if isinstance(interactable, BulletinBoard):
                 available_boards.append(interactable)
         
@@ -388,7 +388,7 @@ class ReadMonumentStrategy(ActionStrategy):
         
         available_monuments = []
         for interactable in current_spot.get_all_interactables():
-            from game.object.interactable import Monument
+            from game.object.monument import Monument
             if isinstance(interactable, Monument):
                 available_monuments.append(interactable.get_display_name())
         
@@ -401,7 +401,7 @@ class ReadMonumentStrategy(ActionStrategy):
             return False
         
         for interactable in current_spot.get_all_interactables():
-            from game.object.interactable import Monument
+            from game.object.monument import Monument
             if isinstance(interactable, Monument):
                 return True
         return False
@@ -428,7 +428,7 @@ class ReadMonumentCommand(ActionCommand):
         
         available_monuments = []
         for interactable in current_spot.get_all_interactables():
-            from game.object.interactable import Monument
+            from game.object.monument import Monument
             if isinstance(interactable, Monument):
                 available_monuments.append(interactable)
         
