@@ -24,6 +24,9 @@ class MovementStrategy(ActionStrategy):
         super().__init__("移動")
 
     def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[str]:
+        if game_context is None or game_context.get_spot_manager() is None:
+            return []
+        
         current_spot_id = acting_player.get_current_spot_id()
         spot_manager = game_context.get_spot_manager()
         return spot_manager.get_destination_spot_ids(current_spot_id)
@@ -42,7 +45,15 @@ class MovementCommand(ActionCommand):
 
     def execute(self, acting_player: Player, game_context: GameContext) -> MovementResult:
         old_spot_id = acting_player.get_current_spot_id()
+        
+        # ゲームコンテキストの妥当性チェック
+        if game_context is None:
+            return MovementResult(False, "ゲームコンテキストが無効です", old_spot_id, self.target_spot_id)
+        
         spot_manager = game_context.get_spot_manager()
+        if spot_manager is None:
+            return MovementResult(False, "スポットマネージャーが無効です", old_spot_id, self.target_spot_id)
+        
         spot = spot_manager.get_spot(self.target_spot_id)
         if spot is None:
             return MovementResult(False, "移動先のスポットが見つかりません", old_spot_id, self.target_spot_id)
