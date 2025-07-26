@@ -165,10 +165,13 @@ class TestOpenChestStrategy:
         self.spot.add_interactable(chest1)
         self.spot.add_interactable(chest2)
         
-        arguments = self.strategy.get_required_arguments(self.player, self.game_context)
-        assert len(arguments) == 2
-        assert "宝箱1" in arguments
-        assert "宝箱2" in arguments
+        argument_infos = self.strategy.get_required_arguments(self.player, self.game_context)
+        assert len(argument_infos) == 1
+        argument_info = argument_infos[0]
+        assert argument_info.name == "chest_name"
+        assert argument_info.description == "開ける宝箱を選択してください"
+        assert "宝箱1" in argument_info.candidates
+        assert "宝箱2" in argument_info.candidates
     
     def test_get_required_arguments_with_opened_chest(self):
         """開かれた宝箱がある場合の引数取得テスト"""
@@ -176,8 +179,8 @@ class TestOpenChestStrategy:
         chest.open()  # 宝箱を開く
         self.spot.add_interactable(chest)
         
-        arguments = self.strategy.get_required_arguments(self.player, self.game_context)
-        assert arguments == []  # 開かれた宝箱は含まれない
+        argument_infos = self.strategy.get_required_arguments(self.player, self.game_context)
+        assert argument_infos == []  # 開かれた宝箱は含まれない
     
     def test_can_execute_no_chests(self):
         """宝箱がない場合の実行可能性テスト"""

@@ -71,11 +71,17 @@ class TestMoveAction:
     def test_get_required_arguments_normal_case(self):
         """正常な場合の必須引数取得テスト"""
         # 街の広場から移動可能な場所を取得
-        destinations = self.movement_strategy.get_required_arguments(self.player, self.game_context)
+        argument_infos = self.movement_strategy.get_required_arguments(self.player, self.game_context)
         expected_destinations = ["inn", "shop", "forest"]
         
+        # ArgumentInfoオブジェクトから候補値を取得
+        assert len(argument_infos) == 1
+        argument_info = argument_infos[0]
+        assert argument_info.name == "target_spot_id"
+        assert argument_info.description == "移動先のスポットを選択してください"
+        
         # 順序は重要ではないので、セットで比較
-        assert set(destinations) == set(expected_destinations)
+        assert set(argument_info.candidates) == set(expected_destinations)
     
     def test_get_required_arguments_no_connections(self):
         """接続がない場合の必須引数取得テスト"""
@@ -83,8 +89,8 @@ class TestMoveAction:
         isolated_spot = Spot("isolated_spot", "孤立した場所", "どこにも接続していない場所")
         self.spot_manager.add_spot(isolated_spot)
         self.player.set_current_spot_id("isolated_spot")
-        destinations = self.movement_strategy.get_required_arguments(self.player, self.game_context)
-        assert destinations == []
+        argument_infos = self.movement_strategy.get_required_arguments(self.player, self.game_context)
+        assert argument_infos == []
     
     def test_can_execute_with_connections(self):
         """接続がある場合の実行可能判定テスト"""
@@ -235,10 +241,12 @@ class TestMoveAction:
         """包括的な移動シナリオテスト"""
         # 1. 初期位置確認
         assert self.player.get_current_spot_id() == "town_square"
-        
+    
         # 2. 利用可能な移動先を確認
-        destinations = self.movement_strategy.get_required_arguments(self.player, self.game_context)
-        assert set(destinations) == set(["inn", "shop", "forest"])
+        argument_infos = self.movement_strategy.get_required_arguments(self.player, self.game_context)
+        assert len(argument_infos) == 1
+        argument_info = argument_infos[0]
+        assert set(argument_info.candidates) == set(["inn", "shop", "forest"])
         
         # 3. 宿屋への移動
         command1 = MovementCommand("inn")
@@ -284,8 +292,10 @@ class TestMoveAction:
         self.player_manager.add_player(player2)
         
         # プレイヤー2の移動可能先を確認
-        destinations = self.movement_strategy.get_required_arguments(player2, self.game_context)
-        assert destinations == ["town_square"]
+        argument_infos = self.movement_strategy.get_required_arguments(player2, self.game_context)
+        assert len(argument_infos) == 1
+        argument_info = argument_infos[0]
+        assert argument_info.candidates == ["town_square"]
         
         # プレイヤー2の移動を実行
         command = MovementCommand("town_square")
@@ -314,8 +324,8 @@ class TestMoveAction:
     
     def test_get_required_arguments_with_none_game_context(self):
         """Noneゲームコンテキストでの必須引数取得テスト"""
-        destinations = self.movement_strategy.get_required_arguments(self.player, None)
-        assert destinations == []
+        argument_infos = self.movement_strategy.get_required_arguments(self.player, None)
+        assert argument_infos == []
     
     def test_get_required_arguments_with_none_spot_manager(self):
         """Noneスポットマネージャーでの必須引数取得テスト"""

@@ -1,7 +1,7 @@
 from typing import List, Dict, TYPE_CHECKING
 from game.action.action_command import ActionCommand
 from game.action.action_result import ActionResult
-from game.action.action_strategy import ActionStrategy
+from game.action.action_strategy import ActionStrategy, ArgumentInfo
 from game.player.player import Player
 from game.core.game_context import GameContext
 
@@ -29,7 +29,7 @@ class OpenChestStrategy(ActionStrategy):
     def __init__(self):
         super().__init__("宝箱を開ける")
     
-    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[str]:
+    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[ArgumentInfo]:
         """利用可能なチェストの表示名を返す"""
         current_spot_id = acting_player.get_current_spot_id()
         current_spot = game_context.get_spot_manager().get_spot(current_spot_id)
@@ -42,7 +42,14 @@ class OpenChestStrategy(ActionStrategy):
             if isinstance(interactable, Chest) and not interactable.is_opened:
                 available_chests.append(interactable.get_display_name())
         
-        return available_chests
+        if available_chests:
+            return [ArgumentInfo(
+                name="chest_name",
+                description="開ける宝箱を選択してください",
+                candidates=available_chests
+            )]
+        else:
+            return []
     
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
         current_spot_id = acting_player.get_current_spot_id()
@@ -175,20 +182,38 @@ class WriteBulletinBoardStrategy(ActionStrategy):
     def __init__(self):
         super().__init__("掲示板に書き込む")
     
-    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[str]:
-        """利用可能な掲示板の表示名を返す"""
+    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[ArgumentInfo]:
+        """利用可能な掲示板と投稿内容の情報を返す"""
         current_spot_id = acting_player.get_current_spot_id()
         current_spot = game_context.get_spot_manager().get_spot(current_spot_id)
         if not current_spot:
             return []
         
+        # 掲示板の候補を取得
         available_boards = []
         for interactable in current_spot.get_all_interactables():
             from game.object.bulletin_board import BulletinBoard
             if isinstance(interactable, BulletinBoard):
                 available_boards.append(interactable.get_display_name())
         
-        return available_boards
+        arguments = []
+        
+        # 掲示板選択の引数
+        if available_boards:
+            arguments.append(ArgumentInfo(
+                name="board_name",
+                description="書き込む掲示板を選択してください",
+                candidates=available_boards
+            ))
+        
+        # 投稿内容の引数
+        arguments.append(ArgumentInfo(
+            name="content",
+            description="掲示板に書き込む内容を入力してください",
+            candidates=None  # 自由入力
+        ))
+        
+        return arguments
     
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
         current_spot_id = acting_player.get_current_spot_id()
@@ -277,7 +302,7 @@ class ReadBulletinBoardStrategy(ActionStrategy):
     def __init__(self):
         super().__init__("掲示板を読む")
     
-    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[str]:
+    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[ArgumentInfo]:
         """利用可能な掲示板の表示名を返す"""
         current_spot_id = acting_player.get_current_spot_id()
         current_spot = game_context.get_spot_manager().get_spot(current_spot_id)
@@ -290,7 +315,14 @@ class ReadBulletinBoardStrategy(ActionStrategy):
             if isinstance(interactable, BulletinBoard):
                 available_boards.append(interactable.get_display_name())
         
-        return available_boards
+        if available_boards:
+            return [ArgumentInfo(
+                name="board_name",
+                description="読む掲示板を選択してください",
+                candidates=available_boards
+            )]
+        else:
+            return []
     
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
         current_spot_id = acting_player.get_current_spot_id()
@@ -379,7 +411,7 @@ class ReadMonumentStrategy(ActionStrategy):
     def __init__(self):
         super().__init__("石碑を読む")
     
-    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[str]:
+    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[ArgumentInfo]:
         """利用可能な石碑の表示名を返す"""
         current_spot_id = acting_player.get_current_spot_id()
         current_spot = game_context.get_spot_manager().get_spot(current_spot_id)
@@ -392,7 +424,14 @@ class ReadMonumentStrategy(ActionStrategy):
             if isinstance(interactable, Monument):
                 available_monuments.append(interactable.get_display_name())
         
-        return available_monuments
+        if available_monuments:
+            return [ArgumentInfo(
+                name="monument_name",
+                description="読む石碑を選択してください",
+                candidates=available_monuments
+            )]
+        else:
+            return []
     
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
         current_spot_id = acting_player.get_current_spot_id()

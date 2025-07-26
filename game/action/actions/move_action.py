@@ -1,7 +1,7 @@
 from typing import List
 from game.action.action_command import ActionCommand
 from game.action.action_result import ActionResult
-from game.action.action_strategy import ActionStrategy
+from game.action.action_strategy import ActionStrategy, ArgumentInfo
 from game.player.player import Player
 from game.core.game_context import GameContext
 
@@ -23,13 +23,22 @@ class MovementStrategy(ActionStrategy):
     def __init__(self):
         super().__init__("移動")
 
-    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[str]:
+    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[ArgumentInfo]:
         if game_context is None or game_context.get_spot_manager() is None:
             return []
         
         current_spot_id = acting_player.get_current_spot_id()
         spot_manager = game_context.get_spot_manager()
-        return spot_manager.get_destination_spot_ids(current_spot_id)
+        destination_spot_ids = spot_manager.get_destination_spot_ids(current_spot_id)
+        
+        if destination_spot_ids:
+            return [ArgumentInfo(
+                name="target_spot_id",
+                description="移動先のスポットを選択してください",
+                candidates=destination_spot_ids
+            )]
+        else:
+            return []
 
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
         return len(self.get_required_arguments(acting_player, game_context)) > 0

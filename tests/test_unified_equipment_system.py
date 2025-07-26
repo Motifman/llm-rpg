@@ -132,7 +132,10 @@ class TestUnifiedEquipmentSystem:
         
         required_args = strategy.get_required_arguments(self.player, None)
         assert len(required_args) == 1
-        assert "weapon" in required_args
+        argument_info = required_args[0]
+        assert argument_info.name == "slot_name"
+        assert argument_info.description == "装備を外すスロットを選択してください"
+        assert "weapon" in argument_info.candidates
     
     def test_unequip_item_command_valid_slot(self):
         """有効なスロットでのUnequipItemCommand"""

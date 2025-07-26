@@ -2,7 +2,7 @@ from typing import List, Optional
 from game.enums import EquipmentSlot
 from game.action.action_command import ActionCommand
 from game.action.action_result import ActionResult
-from game.action.action_strategy import ActionStrategy
+from game.action.action_strategy import ActionStrategy, ArgumentInfo
 from game.player.player import Player
 from game.core.game_context import GameContext
 
@@ -56,8 +56,8 @@ class EquipmentSetCheckStrategy(ActionStrategy):
     def __init__(self):
         super().__init__("装備確認")
         
-    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[str]:
-        return []
+    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[ArgumentInfo]:
+        return []  # 引数不要
     
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
         return True
@@ -70,8 +70,17 @@ class EquipItemStrategy(ActionStrategy):
     def __init__(self):
         super().__init__("装備変更")
     
-    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[str]:
-        return acting_player.get_all_equipment_item_ids()
+    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[ArgumentInfo]:
+        equipment_item_ids = acting_player.get_all_equipment_item_ids()
+        
+        if equipment_item_ids:
+            return [ArgumentInfo(
+                name="item_id",
+                description="装備するアイテムを選択してください",
+                candidates=equipment_item_ids
+            )]
+        else:
+            return []
     
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
         return True
@@ -84,9 +93,18 @@ class UnequipItemStrategy(ActionStrategy):
     def __init__(self):
         super().__init__("装備解除")
         
-    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[str]:
+    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[ArgumentInfo]:
         equipped_slots = acting_player.get_equipped_slots()
-        return [slot.value for slot in equipped_slots]
+        slot_names = [slot.value for slot in equipped_slots]
+        
+        if slot_names:
+            return [ArgumentInfo(
+                name="slot_name",
+                description="装備を外すスロットを選択してください",
+                candidates=slot_names
+            )]
+        else:
+            return []
     
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
         return True
