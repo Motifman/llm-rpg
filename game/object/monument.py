@@ -1,4 +1,5 @@
 from game.object.interactable import InteractableObject
+from game.action.actions.interactable_action import ReadMonumentStrategy
 
 
 class Monument(InteractableObject):
@@ -8,6 +9,9 @@ class Monument(InteractableObject):
         super().__init__(object_id, description)
         self.historical_text = historical_text
         self.display_name = "石碑"
+        
+        # 可能なアクションを登録
+        self._possible_actions[ReadMonumentStrategy().get_name()] = ReadMonumentStrategy()
     
     def get_display_name(self) -> str:
         return self.display_name
