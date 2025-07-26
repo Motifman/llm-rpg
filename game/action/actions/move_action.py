@@ -46,7 +46,6 @@ class MovementCommand(ActionCommand):
     def execute(self, acting_player: Player, game_context: GameContext) -> MovementResult:
         old_spot_id = acting_player.get_current_spot_id()
         
-        # ゲームコンテキストの妥当性チェック
         if game_context is None:
             return MovementResult(False, "ゲームコンテキストが無効です", old_spot_id, self.target_spot_id)
         
