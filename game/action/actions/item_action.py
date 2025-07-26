@@ -1,7 +1,7 @@
 from typing import List, Optional
 from game.action.action_command import ActionCommand
 from game.action.action_result import ActionResult
-from game.action.action_strategy import ActionStrategy
+from game.action.action_strategy import ActionStrategy, ArgumentInfo
 from game.player.player import Player
 from game.core.game_context import GameContext
 from game.item.item_effect import ItemEffect
@@ -85,8 +85,17 @@ class UseItemStrategy(ActionStrategy):
     def __init__(self):
         super().__init__("消費アイテムの使用")
 
-    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[str]:
-        return acting_player.get_all_consumable_item_ids()
+    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[ArgumentInfo]:
+        consumable_item_ids = acting_player.get_all_consumable_item_ids()
+        
+        if consumable_item_ids:
+            return [ArgumentInfo(
+                name="item_id",
+                description="使用する消費アイテムを選択してください",
+                candidates=consumable_item_ids
+            )]
+        else:
+            return []
     
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
         return len(self.get_required_arguments(acting_player, game_context)) > 0
@@ -99,8 +108,17 @@ class PreviewItemEffectStrategy(ActionStrategy):
     def __init__(self):
         super().__init__("アイテム効果の確認")
 
-    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[str]:
-        return acting_player.get_all_consumable_item_ids()
+    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[ArgumentInfo]:
+        consumable_item_ids = acting_player.get_all_consumable_item_ids()
+        
+        if consumable_item_ids:
+            return [ArgumentInfo(
+                name="item_id",
+                description="効果を確認する消費アイテムを選択してください",
+                candidates=consumable_item_ids
+            )]
+        else:
+            return []
     
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
         return len(self.get_required_arguments(acting_player, game_context)) > 0

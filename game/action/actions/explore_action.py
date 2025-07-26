@@ -1,7 +1,7 @@
 from typing import List
 from game.action.action_command import ActionCommand
 from game.action.action_result import ActionResult
-from game.action.action_strategy import ActionStrategy
+from game.action.action_strategy import ActionStrategy, ArgumentInfo
 from game.player.player import Player
 from game.core.game_context import GameContext
 
@@ -22,8 +22,8 @@ class ExploreActionStrategy(ActionStrategy):
     def __init__(self):
         super().__init__("探索")
 
-    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[str]:
-        return []
+    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[ArgumentInfo]:
+        return []  # 引数不要
     
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
         return True
