@@ -98,3 +98,19 @@ class Role(Enum):
     FISHER = "fisher"            
     MINER = "miner"              
     WOODCUTTER = "woodcutter"    
+
+
+class NotificationType(Enum):
+    FOLLOW = "follow"
+    LIKE = "like"
+    REPLY = "reply"
+    MENTION = "mention"
+
+
+class PostVisibility(Enum):
+    PUBLIC = "public"                    # 全ユーザーが閲覧可能
+    FOLLOWERS_ONLY = "followers_only"    # フォロワーのみ閲覧可能
+    MUTUAL_FOLLOWS_ONLY = "mutual_follows_only"  # 相互フォローのみ閲覧可能
+    SPECIFIED_USERS = "specified_users"  # 指定ユーザーのみ閲覧可能
+    PRIVATE = "private"                  # 本人のみ閲覧可能
+
