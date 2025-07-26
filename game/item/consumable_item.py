@@ -13,8 +13,8 @@ class ConsumableItem(Item):
     effect: ItemEffect
     max_stack: int = 1 
     
-    def can_consume(self, agent: "Player") -> bool:
-        return agent.get_inventory().has_item(self.item_id)
+    def can_consume(self, player: "Player") -> bool:
+        return player.has_item(self.item_id)
     
     def __str__(self):
         return f"{self.item_id} - {self.description} ({self.effect})"

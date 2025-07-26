@@ -1,5 +1,4 @@
 from typing import List, Optional
-from game.item.equipment_item import Weapon, Armor
 from game.enums import EquipmentSlot
 from game.action.action_command import ActionCommand
 from game.action.action_result import ActionResult
@@ -72,7 +71,7 @@ class EquipItemStrategy(ActionStrategy):
         super().__init__("装備変更")
     
     def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[str]:
-        return acting_player.get_inventory().get_all_equipment_item_ids()
+        return acting_player.get_all_equipment_item_ids()
     
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
         return True
@@ -86,7 +85,7 @@ class UnequipItemStrategy(ActionStrategy):
         super().__init__("装備解除")
         
     def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[str]:
-        equipped_slots = acting_player.get_equipment().get_equipped_slots()
+        equipped_slots = acting_player.get_equipped_slots()
         return [slot.value for slot in equipped_slots]
     
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:

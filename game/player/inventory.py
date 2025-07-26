@@ -1,6 +1,7 @@
 from typing import List, Dict
 from game.item.item import Item
 from game.item.equipment_item import Weapon, Armor
+from game.item.consumable_item import ConsumableItem
 
 
 class Inventory:
@@ -85,5 +86,13 @@ class Inventory:
         for item_id in self.item_counts.keys():
             item = self.item_references[item_id]
             if isinstance(item, Weapon) or isinstance(item, Armor):
+                item_ids.append(item_id)
+        return item_ids
+
+    def get_all_consumable_item_ids(self) -> List[str]:
+        item_ids = []
+        for item_id in self.item_counts.keys():
+            item = self.item_references[item_id]
+            if isinstance(item, ConsumableItem):
                 item_ids.append(item_id)
         return item_ids

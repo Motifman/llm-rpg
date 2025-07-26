@@ -1,4 +1,4 @@
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, List
 from game.player.inventory import Inventory
 from game.player.equipment_set import EquipmentSet
 from game.player.status import Status
@@ -68,9 +68,17 @@ class Player:
             'money': self.status.get_money(),
             'experience_points': self.status.get_experience_points()
         }
+    
+    def add_item(self, item: Item):
+        self.inventory.add_item(item)
+    
+    def remove_item(self, item_id: str, count: int = 1) -> int:
+        return self.inventory.remove_item_by_id(item_id, count=count)
 
     def use_item(self, item_id: str) -> 'ItemUseResult':
-        from game.action.actions.item_action import ItemUseResult, ConsumableItem, ItemEffect
+        from game.action.actions.item_action import ItemUseResult
+        from game.item.consumable_item import ConsumableItem
+        from game.item.item_effect import ItemEffect
         
         item = self.inventory.get_item_by_id(item_id)
         if item is None:
@@ -99,7 +107,8 @@ class Player:
         )
     
     def preview_item_effect(self, item_id: str) -> Optional['ItemEffect']:
-        from game.action.actions.item_action import ConsumableItem, ItemEffect
+        from game.item.consumable_item import ConsumableItem
+        from game.item.item_effect import ItemEffect
         
         item = self.inventory.get_item_by_id(item_id)
         if item is None or not isinstance(item, ConsumableItem):
@@ -140,6 +149,34 @@ class Player:
         else:
             slot_name = self.equipment.get_slot_name(slot)
             return UnequipItemResult(False, f"{slot_name}を装備していないため外せません", str(self.equipment), None)
+    
+    def get_all_equipment_item_ids(self) -> List[str]:
+        """装備可能なアイテムのIDリストを取得"""
+        return self.inventory.get_all_equipment_item_ids()
+    
+    def get_all_consumable_item_ids(self) -> List[str]:
+        """消費可能なアイテムのIDリストを取得"""
+        return self.inventory.get_all_consumable_item_ids()
+    
+    def get_equipped_slots(self) -> List[EquipmentSlot]:
+        """装備中のスロットリストを取得"""
+        return self.equipment.get_equipped_slots()
+    
+    def get_available_equipment_slots(self) -> List[EquipmentSlot]:
+        """利用可能な装備スロットを取得"""
+        return self.equipment.get_available_slots()
+    
+    def get_equipped_item(self, slot: EquipmentSlot) -> Optional[Item]:
+        """指定スロットの装備アイテムを取得"""
+        return self.equipment.get_equipped_item(slot)
+    
+    def get_inventory_items(self) -> List[Item]:
+        """インベントリ内の全アイテムを取得"""
+        return self.inventory.get_all_items()
+    
+    def get_inventory_item_count(self, item_id: str) -> int:
+        """指定アイテムの所持数を取得"""
+        return self.inventory.get_item_count(item_id)
     
     @property
     def hp(self) -> int:

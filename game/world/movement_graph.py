@@ -30,6 +30,9 @@ class MovementGraph:
         if spot.spot_id not in self.edges:
             self.edges[spot.spot_id] = []
     
+    def get_destination_spot_ids(self, spot_id: str) -> List[str]:
+        return [edge.to_spot_id for edge in self.edges[spot_id]]
+    
     def add_connection(
         self,
         from_spot_id: str,

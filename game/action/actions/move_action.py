@@ -26,10 +26,7 @@ class MovementStrategy(ActionStrategy):
     def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[str]:
         current_spot_id = acting_player.get_current_spot_id()
         spot_manager = game_context.get_spot_manager()
-        spot = spot_manager.get_spot(current_spot_id)
-        if spot is None:
-            return []
-        return [connection.to_spot_id for connection in spot.get_connections()]
+        return spot_manager.get_destination_spot_ids(current_spot_id)
 
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
         return len(self.get_required_arguments(acting_player, game_context)) > 0
