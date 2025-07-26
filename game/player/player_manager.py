@@ -7,7 +7,7 @@ class PlayerManager:
         self.players = {}
 
     def add_player(self, player: Player):
-        self.players[player.id] = player
+        self.players[player.get_player_id()] = player
 
     def get_player(self, player_id: str) -> Player:
         return self.players[player_id]

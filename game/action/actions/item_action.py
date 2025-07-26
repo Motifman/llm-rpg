@@ -4,7 +4,7 @@ from game.action.action_result import ActionResult
 from game.action.action_strategy import ActionStrategy
 from game.player.player import Player
 from game.core.game_context import GameContext
-from game.item.consumable_item import ConsumableItem, ItemEffect
+from game.item.item_effect import ItemEffect
 
 
 class ItemUseResult(ActionResult):
@@ -86,8 +86,7 @@ class UseItemStrategy(ActionStrategy):
         super().__init__("消費アイテムの使用")
 
     def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[str]:
-        player_inventory = acting_player.get_inventory()
-        return [item.item_id for item in player_inventory if isinstance(item, ConsumableItem)]
+        return acting_player.get_all_consumable_item_ids()
     
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
         return len(self.get_required_arguments(acting_player, game_context)) > 0
@@ -101,8 +100,7 @@ class PreviewItemEffectStrategy(ActionStrategy):
         super().__init__("アイテム効果の確認")
 
     def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[str]:
-        player_inventory = acting_player.get_inventory()
-        return [item.item_id for item in player_inventory.get_items() if isinstance(item, ConsumableItem)]
+        return acting_player.get_all_consumable_item_ids()
     
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
         return len(self.get_required_arguments(acting_player, game_context)) > 0

@@ -116,14 +116,12 @@ class TestConsumableItem:
         
         # モックプレイヤーを作成
         mock_player = Mock()
-        mock_inventory = Mock()
-        mock_inventory.has_item.return_value = True
-        mock_player.get_inventory.return_value = mock_inventory
+        mock_player.has_item.return_value = True
         
         assert item.can_consume(mock_player) == True
         
         # インベントリにアイテムがない場合
-        mock_inventory.has_item.return_value = False
+        mock_player.has_item.return_value = False
         assert item.can_consume(mock_player) == False
     
     def test_consumable_item_str_representation(self):
@@ -438,7 +436,7 @@ class TestArmor:
         armor_effect = ArmorEffect(defense_bonus=25, evasion_bonus=0.1)
         armor = Armor("iron_armor", "鉄の鎧", ArmorType.CHEST, armor_effect)
         
-        assert "iron_armor (armor) - 鉄の鎧" in str(armor)
+        assert "iron_armor (chest) - 鉄の鎧" in str(armor)
         assert "防御力+25" in str(armor)
         assert "回避+10.0%" in str(armor)
 

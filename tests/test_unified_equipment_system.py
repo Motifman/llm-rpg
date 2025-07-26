@@ -40,7 +40,7 @@ class TestUnifiedEquipmentSystem:
         """EquipmentSlotの列挙値が正しく定義されていることを確認"""
         assert EquipmentSlot.WEAPON.value == "weapon"
         assert EquipmentSlot.HELMET.value == "helmet"
-        assert EquipmentSlot.CHEST.value == "armor"
+        assert EquipmentSlot.CHEST.value == "chest"
         assert EquipmentSlot.SHOES.value == "shoes"
         assert EquipmentSlot.GLOVES.value == "gloves"
     

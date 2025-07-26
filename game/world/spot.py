@@ -18,7 +18,7 @@ class Spot:
         self.interactables: Dict[str, InteractableObject] = {}
         self.monsters: Dict[str, Monster] = {}
         self.hidden_monsters: Dict[str, Monster] = {}
-        self._possible_actions: List['ActionStrategy'] = []
+        self._possible_actions: Dict[str, 'ActionStrategy'] = {}
 
     def add_interactable(self, interactable: InteractableObject):
         self.interactables[interactable.object_id] = interactable
@@ -32,6 +32,19 @@ class Spot:
     
     def get_all_interactables(self) -> List[InteractableObject]:
         return list(self.interactables.values())
+
+    def get_unique_interactables_by_type(self) -> List[InteractableObject]:
+        unique_interactable_types = []
+        unique_interactables = []
+        for interactable in self.interactables.values():
+            interactable_type = type(interactable)
+            if interactable_type not in unique_interactable_types:
+                unique_interactable_types.append(interactable_type)
+                unique_interactables.append(interactable)
+        return unique_interactables
+
+    def get_interactables_of_type(self, interactable_type: type) -> List[InteractableObject]:
+        return [obj for obj in self.interactables.values() if isinstance(obj, interactable_type)]
 
     def add_monster(self, monster: Monster):
         monster.set_current_spot(self.spot_id)
@@ -64,10 +77,22 @@ class Spot:
         return False
     
     def add_action(self, action: 'ActionStrategy'):
-        self._possible_actions.append(action)
+        self._possible_actions[action.get_name()] = action
     
-    def get_possible_actions(self) -> List['ActionStrategy']:
-        all_actions = list(self._possible_actions)
-        for obj in self.interactables.values():
-            all_actions.extend(obj.get_possible_actions())
+    def get_possible_actions(self) -> Dict[str, 'ActionStrategy']:
+        all_actions = self._possible_actions.copy()
+        for obj in self.get_unique_interactables_by_type():
+            all_actions.update(obj.get_possible_actions())
         return all_actions
+
+    def get_exploration_summary(self) -> str:
+        summary = f"周囲の状況:\n"
+        if self.interactables:
+            summary += f"インタラクト可能なオブジェクト:\n"
+            for obj in self.interactables.values():
+                summary += f"- {obj.get_description()}\n"
+        if self.monsters:
+            summary += f"モンスター:\n"
+            for monster in self.monsters.values():
+                summary += f"- {monster.get_description()}\n"
+        return summary
