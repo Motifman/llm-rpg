@@ -114,3 +114,13 @@ class PostVisibility(Enum):
     SPECIFIED_USERS = "specified_users"  # 指定ユーザーのみ閲覧可能
     PRIVATE = "private"                  # 本人のみ閲覧可能
 
+
+class TradeType(Enum):
+    GLOBAL = "global"     # グローバル取引所
+    DIRECT = "direct"     # 直接取引（同一Spot）
+
+
+class TradeStatus(Enum):
+    ACTIVE = "active"         # 募集中
+    COMPLETED = "completed"   # 成立
+    CANCELLED = "cancelled"   # キャンセル
