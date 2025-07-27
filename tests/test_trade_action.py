@@ -735,3 +735,108 @@ class TestTradeActionWithUniqueItems:
         assert len(get_result.trades) == 1  # 300ゴールドの取引のみ
         assert get_result.trades[0].requested_money == 300
         assert get_result.trades[0].offered_item_id == "leather_armor" 
+
+
+class TestTradeActionWithNonTradeableItems:
+    """取引不可能アイテムの取引アクションテスト"""
+    
+    def setup_method(self):
+        """テスト用のプレイヤーとアイテムをセットアップ"""
+        # プレイヤーマネージャーを作成
+        self.player_manager = PlayerManager()
+        
+        # テスト用プレイヤーを作成
+        self.seller = Player("seller1", "売り手", Role.ADVENTURER)
+        self.buyer = Player("buyer1", "買い手", Role.ADVENTURER)
+        
+        # プレイヤーをマネージャーに登録
+        self.player_manager.add_player(self.seller)
+        self.player_manager.add_player(self.buyer)
+        
+        # 初期アイテムを追加
+        self._setup_test_items()
+        
+        # ゲームコンテキストを作成
+        self.trade_manager = TradeManager()
+        self.game_context = GameContext(
+            player_manager=self.player_manager,
+            spot_manager=None,
+            trade_manager=self.trade_manager
+        )
+    
+    def _setup_test_items(self):
+        """テスト用アイテムをセットアップ"""
+        # 取引不可能なアイテムを作成
+        class QuestItem(Item):
+            def can_be_traded(self) -> bool:
+                return False
+        
+        class BoundItem(Item):
+            def can_be_traded(self) -> bool:
+                return False
+        
+        # 取引可能なアイテムを作成（比較用）
+        self.tradeable_item = StackableItem("tradeable_item", "取引可能アイテム", "取引可能なアイテム", max_stack=10)
+        
+        # 取引不可能なアイテムを作成
+        self.quest_item = QuestItem("quest_item", "クエストアイテム", "重要なクエストアイテム")
+        self.bound_item = BoundItem("bound_item", "バインドアイテム", "プレイヤーにバインドされたアイテム")
+        
+        # 売り手にアイテムを追加
+        self.seller.add_item(self.tradeable_item)
+        self.seller.add_item(self.quest_item)
+        self.seller.add_item(self.bound_item)
+        
+        # 買い手にお金を追加
+        self.buyer.status.add_money(1000)
+    
+    def test_post_trade_with_non_tradeable_quest_item(self):
+        """クエストアイテムの取引出品失敗テスト"""
+        # クエストアイテムで取引を試行
+        command = PostTradeCommand("quest_item", 1, 1000, trade_type="global")
+        result = command.execute(self.seller, self.game_context)
+        
+        # 結果を検証（取引不可能なアイテムは出品できない）
+        assert result.success is False
+        assert "取引不可能なアイテムです" in result.message
+    
+    def test_post_trade_with_non_tradeable_bound_item(self):
+        """バインドアイテムの取引出品失敗テスト"""
+        # バインドアイテムで取引を試行
+        command = PostTradeCommand("bound_item", 1, 500, trade_type="global")
+        result = command.execute(self.seller, self.game_context)
+        
+        # 結果を検証（取引不可能なアイテムは出品できない）
+        assert result.success is False
+        assert "取引不可能なアイテムです" in result.message
+    
+    def test_post_trade_with_tradeable_item_success(self):
+        """取引可能アイテムの取引出品成功テスト（比較用）"""
+        # 取引可能アイテムで取引を試行
+        command = PostTradeCommand("tradeable_item", 1, 100, trade_type="global")
+        result = command.execute(self.seller, self.game_context)
+        
+        # 結果を検証（取引可能なアイテムは出品できる）
+        if not result.success:
+            print(f"取引失敗: {result.message}")
+        assert result.success is True
+        assert result.trade_id is not None
+        assert "tradeable_item x1 ⇄ 100ゴールド" in result.trade_details
+    
+    def test_non_tradeable_item_in_inventory_display(self):
+        """取引不可能アイテムがインベントリに正しく表示されるテスト"""
+        # 売り手のインベントリを確認
+        inventory_display = self.seller.inventory.get_inventory_display()
+        
+        # 取引不可能アイテムがインベントリに存在することを確認
+        assert "quest_item" in inventory_display
+        assert "bound_item" in inventory_display
+        assert "tradeable_item" in inventory_display
+    
+    def test_non_tradeable_item_has_item_check(self):
+        """取引不可能アイテムの所持チェックテスト"""
+        # 売り手が取引不可能アイテムを所持していることを確認
+        assert self.seller.has_item("quest_item") is True
+        assert self.seller.has_item("bound_item") is True
+        assert self.seller.get_inventory_item_count("quest_item") == 1
+        assert self.seller.get_inventory_item_count("bound_item") == 1 

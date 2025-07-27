@@ -14,6 +14,11 @@ class Item:
     
     def __repr__(self):
         return f"Item(item_id={self.item_id}, name={self.name}, description={self.description})"
+    
+    def can_be_traded(self) -> bool:
+        """アイテムが取引可能かどうかを判定"""
+        # デフォルトでは取引可能
+        return True
 
 
 class StackableItem(Item, ABC):
@@ -26,6 +31,11 @@ class StackableItem(Item, ABC):
     def can_stack_with(self, other: 'StackableItem') -> bool:
         return (self.item_id == other.item_id and 
                 self.max_stack == other.max_stack)
+    
+    def can_be_traded(self) -> bool:
+        """アイテムが取引可能かどうかを判定"""
+        # デフォルトでは取引可能
+        return True
 
 
 class UniqueItem(Item, ABC):
