@@ -154,9 +154,10 @@ class TestConversationManager:
         
         assert session_id == original_session_id
         session = self.manager.sessions[session_id]
-        # record_messageは参加者を自動追加しないため、player2は参加者リストに含まれない
-        assert self.player2_id not in session.participants
+        # record_messageは新しいプレイヤーを自動的に参加者として追加する
+        assert self.player2_id in session.participants
         assert self.player1_id in session.participants
+        assert len(session.participants) == 2
     
     # === セッション情報取得のテスト ===
     
@@ -357,6 +358,76 @@ class TestConversationSession:
         self.session.update_activity()
         
         assert self.session.last_activity > original_activity
+    
+    def test_add_message_to_history(self):
+        """会話履歴にメッセージ追加テスト"""
+        message = LocationChatMessage("player_003", "test_spot_002", "テストメッセージ")
+        
+        self.session.add_message_to_history(message)
+        
+        history = self.session.get_conversation_history()
+        assert len(history) == 1
+        assert history[0].content == "テストメッセージ"
+        assert history[0].sender_id == "player_003"
+    
+    def test_get_conversation_history_as_text(self):
+        """会話履歴の文字列変換テスト"""
+        # メッセージを追加
+        messages = [
+            LocationChatMessage("player_001", "test_spot_001", "こんにちは！"),
+            LocationChatMessage("player_002", "test_spot_001", "よろしくお願いします！")
+        ]
+        
+        for message in messages:
+            self.session.add_message_to_history(message)
+        
+        # 文字列として履歴を取得
+        history_text = self.session.get_conversation_history_as_text()
+        assert "こんにちは！" in history_text
+        assert "よろしくお願いします！" in history_text
+        assert "player_001" in history_text
+        assert "player_002" in history_text
+    
+    def test_get_conversation_history_as_text_with_limit(self):
+        """制限付き会話履歴の文字列変換テスト"""
+        # 複数のメッセージを追加
+        for i in range(5):
+            message = LocationChatMessage(f"player_{i}", "test_spot_001", f"メッセージ{i}")
+            self.session.add_message_to_history(message)
+        
+        # 最近の3件のみを文字列として取得
+        history_text = self.session.get_conversation_history_as_text(max_messages=3)
+        assert "メッセージ2" in history_text
+        assert "メッセージ3" in history_text
+        assert "メッセージ4" in history_text
+        assert "メッセージ0" not in history_text
+        assert "メッセージ1" not in history_text
+    
+    def test_get_recent_messages(self):
+        """最近のメッセージ取得テスト"""
+        # 複数のメッセージを追加
+        for i in range(10):
+            message = LocationChatMessage(f"player_{i}", "test_spot_001", f"メッセージ{i}")
+            self.session.add_message_to_history(message)
+        
+        # 最近の5件を取得
+        recent_messages = self.session.get_recent_messages(5)
+        assert len(recent_messages) == 5
+        assert recent_messages[-1].content == "メッセージ9"
+        assert recent_messages[0].content == "メッセージ5"
+    
+    def test_clear_history(self):
+        """会話履歴クリアテスト"""
+        # メッセージを追加
+        message = LocationChatMessage("player_001", "test_spot_001", "テストメッセージ")
+        self.session.add_message_to_history(message)
+        
+        # 履歴をクリア
+        self.session.clear_history()
+        
+        # 履歴が空になっていることを確認
+        history = self.session.get_conversation_history()
+        assert len(history) == 0
 
 
 class TestMessageData:
@@ -611,4 +682,210 @@ class TestConversationSystemIntegration:
         # 統計情報確認
         stats = self.manager.get_conversation_stats()
         assert stats["active_sessions"] == 0
-        assert stats["total_sessions"] == 0 
+        assert stats["total_sessions"] == 0
+    
+    def test_private_conversation_with_history(self):
+        """個人宛セッションでの会話履歴テスト"""
+        # 個人宛セッションを作成
+        session_id = self.manager.start_private_conversation(self.player1_id, self.spot_id)
+        
+        # メッセージを送信
+        message = LocationChatMessage(self.player1_id, self.spot_id, "個人宛メッセージ")
+        self.manager.record_message(message)
+        
+        # 履歴を確認
+        history = self.manager.get_conversation_history(session_id)
+        assert len(history) == 1
+        assert history[0].content == "個人宛メッセージ"
+        
+        # 文字列として履歴を取得
+        history_text = self.manager.get_conversation_history_as_text(session_id)
+        assert "個人宛メッセージ" in history_text
+    
+    def test_mixed_public_and_private_sessions(self):
+        """公開セッションと個人宛セッションの混在テスト"""
+        # 公開セッションを作成
+        public_session_id = self.manager.start_conversation_session(self.spot_id, self.player1_id)
+        
+        # 個人宛セッションを作成
+        private_session_id = self.manager.start_private_conversation(self.player2_id, self.spot_id)
+        
+        # 公開セッションにメッセージを送信
+        public_message = LocationChatMessage(self.player1_id, self.spot_id, "公開メッセージ")
+        self.manager.record_message(public_message)
+        
+        # 個人宛セッションにメッセージを送信
+        private_message = LocationChatMessage(self.player2_id, self.spot_id, "個人宛メッセージ")
+        self.manager.record_message(private_message)
+        
+        # 各セッションの履歴を確認
+        public_history = self.manager.get_conversation_history(public_session_id)
+        private_history = self.manager.get_conversation_history(private_session_id)
+        
+        assert len(public_history) == 1
+        assert len(private_history) == 1
+        assert public_history[0].content == "公開メッセージ"
+        assert private_history[0].content == "個人宛メッセージ"
+        
+        # スポットのアクティブセッションは公開セッションのみ
+        active_session = self.manager.get_active_session_for_spot(self.spot_id)
+        assert active_session is not None
+        assert active_session.session_id == public_session_id
+        assert not active_session.is_private
+    
+    # === 個人宛セッションのテスト ===
+    
+    def test_start_private_conversation(self):
+        """個人宛セッション開始テスト"""
+        session_id = self.manager.start_private_conversation(self.player1_id, self.spot_id)
+        
+        assert session_id is not None
+        session = self.manager.sessions[session_id]
+        assert session.is_private is True
+        assert session.spot_id == self.spot_id
+        assert self.player1_id in session.participants
+        
+        # 個人宛セッションはspot_sessionsに登録されない
+        assert self.spot_id not in self.manager.spot_sessions
+    
+    def test_join_private_conversation_fails(self):
+        """個人宛セッションへの参加失敗テスト"""
+        # 個人宛セッションを作成
+        session_id = self.manager.start_private_conversation(self.player1_id, self.spot_id)
+        
+        # 他のプレイヤーが参加を試行
+        result = self.manager.join_conversation(self.player2_id, self.spot_id)
+        assert result is None
+        
+        # セッションは変更されていない
+        session = self.manager.sessions[session_id]
+        assert len(session.participants) == 1
+        assert self.player2_id not in session.participants
+    
+    def test_get_active_session_for_spot_excludes_private(self):
+        """スポットのアクティブセッション取得で個人宛セッションを除外するテスト"""
+        # 個人宛セッションを作成
+        self.manager.start_private_conversation(self.player1_id, self.spot_id)
+        
+        # スポットのアクティブセッションを取得
+        session = self.manager.get_active_session_for_spot(self.spot_id)
+        assert session is None
+    
+    def test_get_player_private_sessions(self):
+        """プレイヤーの個人宛セッション取得テスト"""
+        # 個人宛セッションを作成
+        session_id = self.manager.start_private_conversation(self.player1_id, self.spot_id)
+        
+        # プレイヤーの個人宛セッションを取得
+        private_sessions = self.manager.get_player_private_sessions(self.player1_id)
+        assert len(private_sessions) == 1
+        assert private_sessions[0].session_id == session_id
+        assert private_sessions[0].is_private is True
+    
+    def test_get_player_private_sessions_empty(self):
+        """プレイヤーの個人宛セッション取得（空の場合）テスト"""
+        private_sessions = self.manager.get_player_private_sessions(self.player1_id)
+        assert len(private_sessions) == 0
+    
+    # === 会話履歴のテスト ===
+    
+    def test_record_message_adds_to_history(self):
+        """メッセージ記録が履歴に追加されるテスト"""
+        # セッションを作成
+        session_id = self.manager.start_conversation_session(self.spot_id, self.player1_id)
+        
+        # メッセージを送信
+        message = LocationChatMessage(self.player1_id, self.spot_id, "こんにちは！")
+        self.manager.record_message(message)
+        
+        # 履歴を確認
+        history = self.manager.get_conversation_history(session_id)
+        assert len(history) == 1
+        assert history[0].content == "こんにちは！"
+        assert history[0].sender_id == self.player1_id
+    
+    def test_conversation_history_multiple_messages(self):
+        """複数メッセージの会話履歴テスト"""
+        # セッションを作成
+        session_id = self.manager.start_conversation_session(self.spot_id, self.player1_id)
+        
+        # 複数のメッセージを送信
+        messages = [
+            LocationChatMessage(self.player1_id, self.spot_id, "こんにちは！"),
+            LocationChatMessage(self.player2_id, self.spot_id, "よろしくお願いします！"),
+            LocationChatMessage(self.player1_id, self.spot_id, "ありがとうございます！")
+        ]
+        
+        for message in messages:
+            self.manager.record_message(message)
+        
+        # 履歴を確認
+        history = self.manager.get_conversation_history(session_id)
+        assert len(history) == 3
+        assert history[0].content == "こんにちは！"
+        assert history[1].content == "よろしくお願いします！"
+        assert history[2].content == "ありがとうございます！"
+    
+    def test_get_conversation_history_as_text(self):
+        """会話履歴の文字列変換テスト"""
+        # セッションを作成
+        session_id = self.manager.start_conversation_session(self.spot_id, self.player1_id)
+        
+        # メッセージを送信
+        message = LocationChatMessage(self.player1_id, self.spot_id, "こんにちは！")
+        self.manager.record_message(message)
+        
+        # 文字列として履歴を取得
+        history_text = self.manager.get_conversation_history_as_text(session_id)
+        assert "こんにちは！" in history_text
+        assert self.player1_id in history_text
+    
+    def test_get_conversation_history_as_text_empty(self):
+        """空の会話履歴の文字列変換テスト"""
+        # セッションを作成
+        session_id = self.manager.start_conversation_session(self.spot_id, self.player1_id)
+        
+        # 文字列として履歴を取得
+        history_text = self.manager.get_conversation_history_as_text(session_id)
+        assert "会話履歴がありません" in history_text
+    
+    def test_get_recent_messages(self):
+        """最近のメッセージ取得テスト"""
+        # セッションを作成
+        session_id = self.manager.start_conversation_session(self.spot_id, self.player1_id)
+        
+        # 複数のメッセージを送信
+        for i in range(15):
+            message = LocationChatMessage(self.player1_id, self.spot_id, f"メッセージ{i}")
+            self.manager.record_message(message)
+        
+        # 最近の10件を取得
+        recent_messages = self.manager.get_recent_messages(session_id, 10)
+        assert len(recent_messages) == 10
+        assert recent_messages[-1].content == "メッセージ14"
+    
+    def test_clear_conversation_history(self):
+        """会話履歴クリアテスト"""
+        # セッションを作成
+        session_id = self.manager.start_conversation_session(self.spot_id, self.player1_id)
+        
+        # メッセージを送信
+        message = LocationChatMessage(self.player1_id, self.spot_id, "こんにちは！")
+        self.manager.record_message(message)
+        
+        # 履歴をクリア
+        self.manager.clear_conversation_history(session_id)
+        
+        # 履歴が空になっていることを確認
+        history = self.manager.get_conversation_history(session_id)
+        assert len(history) == 0
+    
+    def test_get_conversation_history_nonexistent_session(self):
+        """存在しないセッションの履歴取得テスト"""
+        history = self.manager.get_conversation_history("nonexistent_session")
+        assert len(history) == 0
+    
+    def test_get_conversation_history_as_text_nonexistent_session(self):
+        """存在しないセッションの履歴文字列取得テスト"""
+        history_text = self.manager.get_conversation_history_as_text("nonexistent_session")
+        assert "セッションが見つかりません" in history_text 
