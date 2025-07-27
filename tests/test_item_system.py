@@ -15,24 +15,25 @@ class TestItem:
     
     def test_item_creation(self):
         """アイテムの作成テスト"""
-        item = Item("test_item", "テストアイテム")
+        item = Item("test_item", "テストアイテム", "テスト用のアイテム")
         assert item.item_id == "test_item"
-        assert item.description == "テストアイテム"
+        assert item.name == "テストアイテム"
+        assert item.description == "テスト用のアイテム"
     
     def test_item_str_representation(self):
         """アイテムの文字列表現テスト"""
-        item = Item("sword", "鉄の剣")
-        assert str(item) == "sword - 鉄の剣"
+        item = Item("sword", "鉄の剣", "鉄の剣")
+        assert str(item) == "鉄の剣 (sword) - 鉄の剣"
     
     def test_item_repr_representation(self):
         """アイテムのrepr表現テスト"""
-        item = Item("potion", "回復薬")
-        expected = "Item(item_id=potion, description=回復薬)"
+        item = Item("potion", "回復薬", "回復薬")
+        expected = "Item(item_id=potion, name=回復薬, description=回復薬)"
         assert repr(item) == expected
     
     def test_item_immutability(self):
         """アイテムの不変性テスト"""
-        item = Item("test", "テスト")
+        item = Item("test", "テスト", "テストアイテム")
         # frozen=Trueなので属性変更はできない
         with pytest.raises(Exception):
             item.item_id = "new_id"
@@ -97,22 +98,23 @@ class TestConsumableItem:
     def test_consumable_item_creation(self):
         """消費アイテムの作成テスト"""
         effect = ItemEffect(hp_change=50)
-        item = ConsumableItem("potion", "回復薬", effect)
+        item = ConsumableItem("potion", "回復薬", "HPを回復する薬", effect)
         assert item.item_id == "potion"
-        assert item.description == "回復薬"
+        assert item.name == "回復薬"
+        assert item.description == "HPを回復する薬"
         assert item.effect == effect
         assert item.max_stack == 1
     
     def test_consumable_item_with_custom_stack(self):
         """カスタムスタック数での消費アイテム作成テスト"""
         effect = ItemEffect(hp_change=30)
-        item = ConsumableItem("herb", "薬草", effect, max_stack=10)
+        item = ConsumableItem("herb", "薬草", "薬草", effect, max_stack=10)
         assert item.max_stack == 10
     
     def test_consumable_item_can_consume(self):
         """消費可能判定テスト"""
         effect = ItemEffect(hp_change=50)
-        item = ConsumableItem("potion", "回復薬", effect)
+        item = ConsumableItem("potion", "回復薬", "HPを回復する薬", effect)
         
         # モックプレイヤーを作成
         mock_player = Mock()
@@ -127,16 +129,16 @@ class TestConsumableItem:
     def test_consumable_item_str_representation(self):
         """消費アイテムの文字列表現テスト"""
         effect = ItemEffect(hp_change=50, mp_change=20)
-        item = ConsumableItem("elixir", "万能薬", effect)
-        assert "elixir - 万能薬" in str(item)
+        item = ConsumableItem("elixir", "万能薬", "HPとMPを回復する薬", effect)
+        assert "万能薬 (elixir) - HPとMPを回復する薬" in str(item)
         assert "HP+50" in str(item)
         assert "MP+20" in str(item)
     
     def test_consumable_item_repr_representation(self):
         """消費アイテムのrepr表現テスト"""
         effect = ItemEffect(hp_change=50)
-        item = ConsumableItem("potion", "回復薬", effect, max_stack=5)
-        expected = "ConsumableItem(item_id=potion, description=回復薬, effect=効果: HP+50, max_stack=5)"
+        item = ConsumableItem("potion", "回復薬", "HPを回復する薬", effect, max_stack=5)
+        expected = "ConsumableItem(item_id=potion, name=回復薬, description=HPを回復する薬, effect=効果: HP+50, max_stack=5)"
         assert repr(item) == expected
 
 
@@ -224,8 +226,9 @@ class TestWeapon:
     def test_weapon_creation(self):
         """武器の作成テスト"""
         weapon_effect = WeaponEffect(attack_bonus=15)
-        weapon = Weapon("iron_sword", "鉄の剣", WeaponType.SWORD, weapon_effect)
+        weapon = Weapon("iron_sword", "鉄の剣", "鉄の剣", WeaponType.SWORD, weapon_effect)
         assert weapon.item_id == "iron_sword"
+        assert weapon.name == "鉄の剣"
         assert weapon.description == "鉄の剣"
         assert weapon.weapon_type == WeaponType.SWORD
         assert weapon.effect == weapon_effect
@@ -234,13 +237,13 @@ class TestWeapon:
     def test_weapon_with_custom_rarity(self):
         """カスタムレアリティでの武器作成テスト"""
         weapon_effect = WeaponEffect(attack_bonus=30)
-        weapon = Weapon("legendary_sword", "伝説の剣", WeaponType.SWORD, weapon_effect, "legendary")
+        weapon = Weapon("legendary_sword", "伝説の剣", "伝説の剣", WeaponType.SWORD, weapon_effect, "legendary")
         assert weapon.rarity == "legendary"
     
     def test_weapon_calculate_damage_basic(self):
         """基本的なダメージ計算テスト"""
         weapon_effect = WeaponEffect(attack_bonus=20)
-        weapon = Weapon("sword", "剣", WeaponType.SWORD, weapon_effect)
+        weapon = Weapon("sword", "剣", "剣", WeaponType.SWORD, weapon_effect)
         
         damage = weapon.calculate_damage(50)  # 基本攻撃力50
         assert damage == 70  # 50 + 20
@@ -252,7 +255,7 @@ class TestWeapon:
             element=Element.FIRE,
             element_damage=25
         )
-        weapon = Weapon("fire_sword", "炎の剣", WeaponType.SWORD, weapon_effect)
+        weapon = Weapon("fire_sword", "炎の剣", "炎の剣", WeaponType.SWORD, weapon_effect)
         
         damage = weapon.calculate_damage(40)  # 基本攻撃力40
         assert damage == 80  # 40 + 15 + 25
@@ -264,7 +267,7 @@ class TestWeapon:
             effective_races={Race.DRAGON},
             race_damage_multiplier=2.0
         )
-        weapon = Weapon("dragon_slayer", "竜殺し", WeaponType.SWORD, weapon_effect)
+        weapon = Weapon("dragon_slayer", "竜殺し", "竜殺し", WeaponType.SWORD, weapon_effect)
         
         # 竜族へのダメージ
         damage = weapon.calculate_damage(30, Race.DRAGON)
@@ -277,16 +280,16 @@ class TestWeapon:
     def test_weapon_get_critical_rate(self):
         """武器のクリティカル率取得テスト"""
         weapon_effect = WeaponEffect(critical_rate_bonus=0.25)
-        weapon = Weapon("critical_sword", "クリティカル剣", WeaponType.SWORD, weapon_effect)
+        weapon = Weapon("critical_sword", "クリティカル剣", "クリティカル剣", WeaponType.SWORD, weapon_effect)
         
         assert weapon.get_critical_rate() == 0.25
     
     def test_weapon_str_representation(self):
         """武器の文字列表現テスト"""
         weapon_effect = WeaponEffect(attack_bonus=20, element=Element.FIRE, element_damage=15)
-        weapon = Weapon("fire_sword", "炎の剣", WeaponType.SWORD, weapon_effect)
+        weapon = Weapon("fire_sword", "炎の剣", "炎の剣", WeaponType.SWORD, weapon_effect)
         
-        assert "fire_sword (sword) - 炎の剣" in str(weapon)
+        assert "炎の剣 (sword) - 炎の剣" in str(weapon)
         assert "攻撃力+20" in str(weapon)
         assert "fire属性+15" in str(weapon)
 
@@ -367,8 +370,9 @@ class TestArmor:
     def test_armor_creation(self):
         """防具の作成テスト"""
         armor_effect = ArmorEffect(defense_bonus=20)
-        armor = Armor("iron_armor", "鉄の鎧", ArmorType.CHEST, armor_effect)
+        armor = Armor("iron_armor", "鉄の鎧", "鉄の鎧", ArmorType.CHEST, armor_effect)
         assert armor.item_id == "iron_armor"
+        assert armor.name == "鉄の鎧"
         assert armor.description == "鉄の鎧"
         assert armor.armor_type == ArmorType.CHEST
         assert armor.effect == armor_effect
@@ -377,20 +381,20 @@ class TestArmor:
     def test_armor_with_custom_rarity(self):
         """カスタムレアリティでの防具作成テスト"""
         armor_effect = ArmorEffect(defense_bonus=30)
-        armor = Armor("legendary_armor", "伝説の鎧", ArmorType.CHEST, armor_effect, "legendary")
+        armor = Armor("legendary_armor", "伝説の鎧", "伝説の鎧", ArmorType.CHEST, armor_effect, "legendary")
         assert armor.rarity == "legendary"
     
     def test_armor_calculate_defense_bonus(self):
         """防具の防御ボーナス計算テスト"""
         armor_effect = ArmorEffect(defense_bonus=25)
-        armor = Armor("armor", "鎧", ArmorType.CHEST, armor_effect)
+        armor = Armor("armor", "鎧", "鎧", ArmorType.CHEST, armor_effect)
         
         assert armor.calculate_defense_bonus() == 25
     
     def test_armor_get_damage_reduction(self):
         """防具のダメージ軽減取得テスト"""
         armor_effect = ArmorEffect(damage_reduction={DamageType.MAGICAL: 0.4})
-        armor = Armor("magic_armor", "魔法の鎧", ArmorType.CHEST, armor_effect)
+        armor = Armor("magic_armor", "魔法の鎧", "魔法の鎧", ArmorType.CHEST, armor_effect)
         
         assert armor.get_damage_reduction(DamageType.MAGICAL) == 0.4
         assert armor.get_damage_reduction(DamageType.PHYSICAL) == 0.0  # 設定されていない
@@ -398,7 +402,7 @@ class TestArmor:
     def test_armor_get_status_resistance(self):
         """防具の状態異常耐性取得テスト"""
         armor_effect = ArmorEffect(status_resistance={StatusEffectType.POISON: 0.5})
-        armor = Armor("poison_armor", "毒耐性鎧", ArmorType.CHEST, armor_effect)
+        armor = Armor("poison_armor", "毒耐性鎧", "毒耐性鎧", ArmorType.CHEST, armor_effect)
         
         assert armor.get_status_resistance(StatusEffectType.POISON) == 0.5
         assert armor.get_status_resistance(StatusEffectType.PARALYSIS) == 0.0  # 設定されていない
@@ -406,37 +410,37 @@ class TestArmor:
     def test_armor_get_counter_chance(self):
         """防具の反撃確率取得テスト"""
         armor_effect = ArmorEffect(counter_chance=0.3)
-        armor = Armor("counter_armor", "反撃鎧", ArmorType.CHEST, armor_effect)
+        armor = Armor("counter_armor", "反撃鎧", "反撃鎧", ArmorType.CHEST, armor_effect)
         
         assert armor.get_counter_chance() == 0.3
     
     def test_armor_get_counter_damage(self):
         """防具の反撃ダメージ取得テスト"""
         armor_effect = ArmorEffect(counter_damage=40)
-        armor = Armor("counter_armor", "反撃鎧", ArmorType.CHEST, armor_effect)
+        armor = Armor("counter_armor", "反撃鎧", "反撃鎧", ArmorType.CHEST, armor_effect)
         
         assert armor.get_counter_damage() == 40
     
     def test_armor_get_evasion_bonus(self):
         """防具の回避ボーナス取得テスト"""
         armor_effect = ArmorEffect(evasion_bonus=0.2)
-        armor = Armor("evasion_armor", "回避鎧", ArmorType.CHEST, armor_effect)
+        armor = Armor("evasion_armor", "回避鎧", "回避鎧", ArmorType.CHEST, armor_effect)
         
         assert armor.get_evasion_bonus() == 0.2
     
     def test_armor_get_speed_bonus(self):
         """防具の素早さボーナス取得テスト"""
         armor_effect = ArmorEffect(speed_bonus=10)
-        armor = Armor("speed_armor", "素早さ鎧", ArmorType.CHEST, armor_effect)
+        armor = Armor("speed_armor", "素早さ鎧", "素早さ鎧", ArmorType.CHEST, armor_effect)
         
         assert armor.get_speed_bonus() == 10
     
     def test_armor_str_representation(self):
         """防具の文字列表現テスト"""
         armor_effect = ArmorEffect(defense_bonus=25, evasion_bonus=0.1)
-        armor = Armor("iron_armor", "鉄の鎧", ArmorType.CHEST, armor_effect)
+        armor = Armor("iron_armor", "鉄の鎧", "鉄の鎧", ArmorType.CHEST, armor_effect)
         
-        assert "iron_armor (chest) - 鉄の鎧" in str(armor)
+        assert "鉄の鎧 (chest) - 鉄の鎧" in str(armor)
         assert "防御力+25" in str(armor)
         assert "回避+10.0%" in str(armor)
 
@@ -451,7 +455,7 @@ class TestItemIntegration:
             hp_change=50,
             temporary_effects=[status_effect]
         )
-        item = ConsumableItem("poison_potion", "毒薬", item_effect)
+        item = ConsumableItem("poison_potion", "毒薬", "毒薬", item_effect)
         
         assert item.effect.hp_change == 50
         assert len(item.effect.temporary_effects) == 1
@@ -469,7 +473,7 @@ class TestItemIntegration:
             status_chance=0.4,
             critical_rate_bonus=0.2
         )
-        weapon = Weapon("thunder_sword", "雷の剣", WeaponType.SWORD, weapon_effect)
+        weapon = Weapon("thunder_sword", "雷の剣", "雷の剣", WeaponType.SWORD, weapon_effect)
         
         # 基本ダメージ計算
         damage = weapon.calculate_damage(40)
@@ -499,7 +503,7 @@ class TestItemIntegration:
             evasion_bonus=0.15,
             speed_bonus=8
         )
-        armor = Armor("legendary_armor", "伝説の鎧", ArmorType.CHEST, armor_effect)
+        armor = Armor("legendary_armor", "伝説の鎧", "伝説の鎧", ArmorType.CHEST, armor_effect)
         
         assert armor.calculate_defense_bonus() == 30
         assert armor.get_counter_chance() == 0.25

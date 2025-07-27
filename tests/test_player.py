@@ -23,24 +23,24 @@ class TestPlayer:
         self.player = Player("test_player_001", "テストプレイヤー", Role.ADVENTURER)
         
         # テスト用アイテムを作成
-        self.sword = Item("sword", "鉄の剣")
-        self.potion = Item("potion", "回復薬")
+        self.sword = Item("sword", "鉄の剣", "鉄の剣")
+        self.potion = Item("potion", "回復薬", "回復薬")
         
         # テスト用装備アイテムを作成
         weapon_effect = WeaponEffect(attack_bonus=15, element=Element.FIRE, element_damage=5)
-        self.fire_sword = Weapon("fire_sword", "炎の剣", WeaponType.SWORD, weapon_effect)
+        self.fire_sword = Weapon("fire_sword", "炎の剣", "炎の剣", WeaponType.SWORD, weapon_effect)
         
         armor_effect = ArmorEffect(defense_bonus=8, evasion_bonus=0.1)
-        self.leather_armor = Armor("leather_armor", "革の鎧", ArmorType.CHEST, armor_effect)
+        self.leather_armor = Armor("leather_armor", "革の鎧", "革の鎧", ArmorType.CHEST, armor_effect)
         
         # テスト用消費アイテムを作成
         effect = ItemEffect(hp_change=50, mp_change=20)
-        self.healing_potion = ConsumableItem("healing_potion", "回復薬", effect)
+        self.healing_potion = ConsumableItem("healing_potion", "回復薬", "HPとMPを回復する薬", effect)
         
         # 一時的な攻撃力上昇効果を作成
         attack_boost = StatusEffect(StatusEffectType.ATTACK_UP, duration=3, value=10)
         effect2 = ItemEffect(hp_change=100, temporary_effects=[attack_boost])
-        self.power_potion = ConsumableItem("power_potion", "パワーポーション", effect2)
+        self.power_potion = ConsumableItem("power_potion", "パワーポーション", "攻撃力を一時的に上昇させる薬", effect2)
     
     def test_player_initialization(self):
         """プレイヤーの初期化テスト"""
@@ -308,7 +308,7 @@ class TestPlayer:
         
         # 新しい武器を作成して装備
         new_weapon_effect = WeaponEffect(attack_bonus=20, element=Element.ICE)
-        new_weapon = Weapon("ice_sword", "氷の剣", WeaponType.SWORD, new_weapon_effect)
+        new_weapon = Weapon("ice_sword", "氷の剣", "氷の剣", WeaponType.SWORD, new_weapon_effect)
         self.player.inventory.add_item(new_weapon)
         
         result = self.player.equip_item("ice_sword")
