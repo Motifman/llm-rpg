@@ -142,8 +142,10 @@ class ConversationManager:
             
             # 個人宛のセッションでない場合のみ参加
             if not session.is_private and session.is_active:
-                session.add_participant(sender_id)
-                self.player_sessions[sender_id] = session_id
+                # システムメッセージの場合は参加者として追加しない
+                if sender_id != "System":
+                    session.add_participant(sender_id)
+                    self.player_sessions[sender_id] = session_id
                 session.update_activity()
                 session.add_message_to_history(message)
                 return session_id
@@ -151,6 +153,9 @@ class ConversationManager:
         # セッションが存在しない場合は自動で作成
         session_id = self.start_conversation_session(spot_id, sender_id)
         session = self.sessions[session_id]
+        # システムメッセージの場合は参加者として追加しない
+        if sender_id == "System":
+            session.participants.discard(sender_id)
         session.add_message_to_history(message)
         
         return session_id

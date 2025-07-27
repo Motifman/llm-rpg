@@ -25,6 +25,9 @@ class Player:
     
     def get_player_id(self) -> str:
         return self.player_id
+    
+    def get_name(self) -> str:
+        return self.name
 
     def get_current_spot_id(self) -> str:
         return self.current_spot_id
