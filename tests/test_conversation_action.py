@@ -5,14 +5,10 @@ from game.action.actions.conversation_action import (
     JoinSpotConversationCommand,
     SpeakInConversationCommand,
     LeaveConversationCommand,
-    GetConversationHistoryCommand,
-    GetConversationParticipantsCommand,
     StartConversationResult,
     JoinConversationResult,
     SpeakResult,
-    LeaveConversationResult,
-    GetConversationHistoryResult,
-    GetConversationParticipantsResult
+    LeaveConversationResult
 )
 from game.conversation.conversation_manager import ConversationManager
 from game.conversation.message_data import LocationChatMessage
@@ -65,6 +61,8 @@ class TestConversationAction:
         assert result.success is True
         assert result.session_id is not None
         assert "tavern_01" in result.message
+        assert result.participants is not None
+        assert result.history is not None
         
         # セッションが作成されていることを確認
         session = self.conversation_manager.sessions.get(result.session_id)
@@ -86,6 +84,8 @@ class TestConversationAction:
         assert isinstance(result2, StartConversationResult)
         assert result2.success is False
         assert "既に他の会話に参加しています" in result2.message
+        assert result2.participants == []
+        assert result2.history == ""
     
     def test_start_private_conversation_success(self):
         """個人会話開始の成功テスト"""
@@ -96,6 +96,8 @@ class TestConversationAction:
         assert result.success is True
         assert result.session_id is not None
         assert "player_002" in result.message
+        assert result.participants is not None
+        assert result.history is not None
         
         # 個人宛セッションが作成されていることを確認
         session = self.conversation_manager.sessions.get(result.session_id)
@@ -117,6 +119,8 @@ class TestConversationAction:
         assert isinstance(join_result, JoinConversationResult)
         assert join_result.success is True
         assert join_result.session_id == start_result.session_id
+        assert join_result.participants is not None
+        assert join_result.history is not None
         
         # 両方のプレイヤーが参加者リストに含まれていることを確認
         session = self.conversation_manager.sessions.get(join_result.session_id)
@@ -131,6 +135,8 @@ class TestConversationAction:
         assert isinstance(result, JoinConversationResult)
         assert result.success is False
         assert "アクティブな会話セッションがありません" in result.message
+        assert result.participants == []
+        assert result.history == ""
     
     def test_join_spot_conversation_already_in_conversation(self):
         """既に会話に参加している場合のテスト"""
@@ -151,6 +157,8 @@ class TestConversationAction:
         assert isinstance(join_result, JoinConversationResult)
         assert join_result.success is False
         assert "既に他の会話に参加しています" in join_result.message
+        assert join_result.participants == []
+        assert join_result.history == ""
     
     def test_speak_in_conversation_success(self):
         """会話発言の成功テスト"""
@@ -166,6 +174,8 @@ class TestConversationAction:
         assert isinstance(speak_result, SpeakResult)
         assert speak_result.success is True
         assert speak_result.session_id == start_result.session_id
+        assert speak_result.participants is not None
+        assert speak_result.history is not None
         
         # メッセージが記録されていることを確認
         session = self.conversation_manager.sessions.get(speak_result.session_id)
@@ -185,6 +195,8 @@ class TestConversationAction:
         assert isinstance(result, SpeakResult)
         assert result.success is False
         assert "会話に参加していません" in result.message
+        assert result.participants == []
+        assert result.history == ""
     
     def test_speak_in_conversation_targeted_message(self):
         """特定プレイヤーへの発言テスト"""
@@ -204,6 +216,8 @@ class TestConversationAction:
         
         assert isinstance(speak_result, SpeakResult)
         assert speak_result.success is True
+        assert speak_result.participants is not None
+        assert speak_result.history is not None
         
         # メッセージが記録されていることを確認
         session = self.conversation_manager.sessions.get(speak_result.session_id)
@@ -230,6 +244,8 @@ class TestConversationAction:
         
         assert isinstance(leave_result, LeaveConversationResult)
         assert leave_result.success is True
+        assert leave_result.participants is not None
+        assert leave_result.history is not None
         
         # プレイヤー1が参加者リストから削除されていることを確認
         session = self.conversation_manager.sessions.get(leave_result.session_id)
@@ -244,6 +260,8 @@ class TestConversationAction:
         assert isinstance(result, LeaveConversationResult)
         assert result.success is False
         assert "会話に参加していません" in result.message
+        assert result.participants == []
+        assert result.history == ""
     
     def test_leave_conversation_session_end(self):
         """最後の参加者が離脱した場合のセッション終了テスト"""
@@ -258,73 +276,12 @@ class TestConversationAction:
         
         assert isinstance(leave_result, LeaveConversationResult)
         assert leave_result.success is True
+        assert leave_result.participants is not None
+        assert leave_result.history is not None
         
         # セッションが終了していることを確認
         session = self.conversation_manager.sessions.get(leave_result.session_id)
         assert session is None or session.is_active is False
-    
-    def test_get_conversation_history_success(self):
-        """会話履歴取得の成功テスト"""
-        # プレイヤー1が会話を開始
-        start_command = StartSpotConversationCommand("tavern_01")
-        start_result = start_command.execute(self.player1, self.game_context)
-        assert start_result.success is True
-        
-        # プレイヤー1が発言
-        speak_command = SpeakInConversationCommand("こんにちは！")
-        speak_result = speak_command.execute(self.player1, self.game_context)
-        assert speak_result.success is True
-        
-        # 会話履歴を取得
-        history_command = GetConversationHistoryCommand()
-        history_result = history_command.execute(self.player1, self.game_context)
-        
-        assert isinstance(history_result, GetConversationHistoryResult)
-        assert history_result.success is True
-        assert "こんにちは！" in history_result.history
-        assert self.player1.get_name() in history_result.history
-    
-    def test_get_conversation_history_not_in_conversation(self):
-        """会話に参加していない場合のテスト"""
-        command = GetConversationHistoryCommand()
-        result = command.execute(self.player1, self.game_context)
-        
-        assert isinstance(result, GetConversationHistoryResult)
-        assert result.success is False
-        assert "会話に参加していません" in result.message
-    
-    def test_get_conversation_participants_success(self):
-        """会話参加者取得の成功テスト"""
-        # プレイヤー1が会話を開始
-        start_command = StartSpotConversationCommand("tavern_01")
-        start_result = start_command.execute(self.player1, self.game_context)
-        assert start_result.success is True
-        
-        # プレイヤー2が会話に参加
-        join_command = JoinSpotConversationCommand("tavern_01")
-        join_result = join_command.execute(self.player2, self.game_context)
-        assert join_result.success is True
-        
-        # 会話参加者を取得
-        participants_command = GetConversationParticipantsCommand()
-        participants_result = participants_command.execute(self.player1, self.game_context)
-        
-        assert isinstance(participants_result, GetConversationParticipantsResult)
-        assert participants_result.success is True
-        # システムメッセージを除外して参加者を確認
-        actual_participants = [p for p in participants_result.participants if p != "System"]
-        assert len(actual_participants) == 2
-        assert self.player1.get_player_id() in actual_participants
-        assert self.player2.get_player_id() in actual_participants
-    
-    def test_get_conversation_participants_not_in_conversation(self):
-        """会話に参加していない場合のテスト"""
-        command = GetConversationParticipantsCommand()
-        result = command.execute(self.player1, self.game_context)
-        
-        assert isinstance(result, GetConversationParticipantsResult)
-        assert result.success is False
-        assert "会話に参加していません" in result.message
     
     def test_conversation_flow_integration(self):
         """完全な会話フローの統合テスト"""
@@ -333,47 +290,52 @@ class TestConversationAction:
         start_result = start_command.execute(self.player1, self.game_context)
         assert start_result.success is True
         session_id = start_result.session_id
+        assert start_result.participants is not None
+        assert start_result.history is not None
         
         # 2. プレイヤー2が会話に参加
         join_command = JoinSpotConversationCommand("tavern_01")
         join_result = join_command.execute(self.player2, self.game_context)
         assert join_result.success is True
         assert join_result.session_id == session_id
+        assert join_result.participants is not None
+        assert join_result.history is not None
         
         # 3. プレイヤー1が発言
         speak1_command = SpeakInConversationCommand("こんにちは！")
         speak1_result = speak1_command.execute(self.player1, self.game_context)
         assert speak1_result.success is True
+        assert speak1_result.participants is not None
+        assert speak1_result.history is not None
         
         # 4. プレイヤー2が発言
         speak2_command = SpeakInConversationCommand("よろしくお願いします！")
         speak2_result = speak2_command.execute(self.player2, self.game_context)
         assert speak2_result.success is True
+        assert speak2_result.participants is not None
+        assert speak2_result.history is not None
         
-        # 5. 会話履歴を確認
-        history_command = GetConversationHistoryCommand()
-        history_result = history_command.execute(self.player1, self.game_context)
-        assert history_result.success is True
-        assert "こんにちは！" in history_result.history
-        assert "よろしくお願いします！" in history_result.history
+        # 5. 会話履歴に発言内容が含まれていることを確認
+        assert "こんにちは！" in speak2_result.history
+        assert "よろしくお願いします！" in speak2_result.history
         
         # 6. 参加者リストを確認
-        participants_command = GetConversationParticipantsCommand()
-        participants_result = participants_command.execute(self.player1, self.game_context)
-        assert participants_result.success is True
-        # システムメッセージを除外して参加者を確認
-        actual_participants = [p for p in participants_result.participants if p != "System"]
+        actual_participants = [p for p in speak2_result.participants if p != "System"]
         assert len(actual_participants) == 2
         
         # 7. プレイヤー1が離脱
         leave_command = LeaveConversationCommand()
         leave_result = leave_command.execute(self.player1, self.game_context)
         assert leave_result.success is True
+        assert leave_result.participants is not None
+        assert leave_result.history is not None
         
         # 8. プレイヤー2が離脱（セッション終了）
         leave2_command = LeaveConversationCommand()
         leave2_result = leave2_command.execute(self.player2, self.game_context)
         assert leave2_result.success is True
+        assert leave2_result.participants is not None
+        assert leave2_result.history is not None
         
         # 9. セッションが終了していることを確認
         session = self.conversation_manager.sessions.get(session_id)
@@ -425,12 +387,12 @@ class TestConversationAction:
             StartPrivateConversationCommand("player_002", "tavern_01"),
             JoinSpotConversationCommand("tavern_01"),
             SpeakInConversationCommand("こんにちは！"),
-            LeaveConversationCommand(),
-            GetConversationHistoryCommand(),
-            GetConversationParticipantsCommand()
+            LeaveConversationCommand()
         ]
         
         for command in commands:
             result = command.execute(self.player1, game_context_no_conversation)
             assert result.success is False
-            assert "会話システムが利用できません" in result.message 
+            assert "会話システムが利用できません" in result.message
+            assert result.participants == []
+            assert result.history == "" 
