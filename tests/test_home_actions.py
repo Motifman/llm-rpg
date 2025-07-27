@@ -14,19 +14,17 @@ class TestHomeActions:
     
     def setup_method(self):
         """各テストメソッドの前に実行"""
-        self.mock_player = Mock(spec=Player)
-        self.mock_player.player_id = "test_player"
-        self.mock_player.name = "テストプレイヤー"
-        self.mock_player.health = 100
-        self.mock_player.max_health = 100
-        self.mock_player.mana = 50
-        self.mock_player.max_mana = 100
-        self.mock_player.experience = 0
+        from game.player.player import Player
+        from game.player.status import Status
+        from game.enums import Role
         
-        # プレイヤーのメソッドをモック
-        self.mock_player.restore_health = Mock()
-        self.mock_player.restore_mana = Mock()
-        self.mock_player.gain_experience = Mock()
+        # 実際のPlayerオブジェクトを作成
+        self.player = Player("test_player", "テストプレイヤー", Role.ADVENTURER)
+        self.player.status = Status()
+        # 初期状態を設定
+        self.player.status.set_hp(80)  # 体力を少し減らしておく
+        self.player.status.set_mp(30)  # マナを少し減らしておく
+        self.player.status.set_experience_points(0)
         
         self.mock_game_context = Mock(spec=GameContext)
     
@@ -34,18 +32,27 @@ class TestHomeActions:
         """睡眠コマンドの実行テスト"""
         sleep_command = SleepActionCommand()
         
-        result = sleep_command.execute(self.mock_player, self.mock_game_context)
+        # 実行前の状態を記録
+        initial_hp = self.player.status.get_hp()
+        initial_mp = self.player.status.get_mp()
+        
+        result = sleep_command.execute(self.player, self.mock_game_context)
         
         # 結果の確認
         assert isinstance(result, SleepActionResult)
         assert result.success is True
         assert "ベッドで眠り" in result.message
-        assert result.health_restored == 50
-        assert result.mana_restored == 30
         
-        # プレイヤーの状態が更新されているか
-        self.mock_player.restore_health.assert_called_once_with(50)
-        self.mock_player.restore_mana.assert_called_once_with(30)
+        # 実際の回復量を確認
+        final_hp = self.player.status.get_hp()
+        final_mp = self.player.status.get_mp()
+        actual_hp_restored = final_hp - initial_hp
+        actual_mp_restored = final_mp - initial_mp
+        
+        assert actual_hp_restored > 0
+        assert actual_mp_restored > 0
+        assert result.health_restored == actual_hp_restored
+        assert result.mana_restored == actual_mp_restored
     
     def test_sleep_action_result_feedback(self):
         """睡眠アクション結果のフィードバックテスト"""
@@ -66,7 +73,10 @@ class TestHomeActions:
         content = "今日は冒険に行きました。"
         diary_command = WriteDiaryActionCommand(content)
         
-        result = diary_command.execute(self.mock_player, self.mock_game_context)
+        # 実行前の状態を記録
+        initial_exp = self.player.status.get_experience_points()
+        
+        result = diary_command.execute(self.player, self.mock_game_context)
         
         # 結果の確認
         assert isinstance(result, WriteDiaryActionResult)
@@ -75,8 +85,11 @@ class TestHomeActions:
         assert result.content == content
         assert result.exp_gained == 10
         
-        # プレイヤーの経験値が更新されているか
-        self.mock_player.gain_experience.assert_called_once_with(10)
+        # 実際の経験値増加を確認
+        final_exp = self.player.status.get_experience_points()
+        actual_exp_gained = final_exp - initial_exp
+        
+        assert actual_exp_gained == 10
     
     def test_write_diary_action_result_feedback(self):
         """日記を書くアクション結果のフィードバックテスト"""
@@ -95,7 +108,7 @@ class TestHomeActions:
         """睡眠アクション戦略のコマンド構築テスト"""
         sleep_strategy = SleepActionStrategy()
         
-        command = sleep_strategy.build_action_command(self.mock_player, self.mock_game_context)
+        command = sleep_strategy.build_action_command(self.player, self.mock_game_context)
         
         assert isinstance(command, SleepActionCommand)
         assert command.get_action_name() == "睡眠"
@@ -105,7 +118,7 @@ class TestHomeActions:
         diary_strategy = WriteDiaryActionStrategy()
         
         command = diary_strategy.build_action_command(
-            self.mock_player, 
+            self.player, 
             self.mock_game_context, 
             content="今日は冒険に行きました。"
         )

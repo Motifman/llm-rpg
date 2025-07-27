@@ -32,14 +32,29 @@ class SleepActionCommand(ActionCommand):
         health_restored = 50
         mana_restored = 30
         
-        acting_player.restore_health(health_restored)
-        acting_player.restore_mana(mana_restored)
+        # 現在のHPとMPを取得
+        current_hp = acting_player.status.get_hp()
+        current_mp = acting_player.status.get_mp()
+        max_hp = acting_player.status.get_max_hp()
+        max_mp = acting_player.status.get_max_mp()
+        
+        # HPとMPを回復（最大値を超えないように）
+        new_hp = min(current_hp + health_restored, max_hp)
+        new_mp = min(current_mp + mana_restored, max_mp)
+        
+        # 実際に回復した量を計算
+        actual_health_restored = new_hp - current_hp
+        actual_mana_restored = new_mp - current_mp
+        
+        # プレイヤーの状態を更新
+        acting_player.status.set_hp(new_hp)
+        acting_player.status.set_mp(new_mp)
         
         return SleepActionResult(
             success=True,
             message=f"{acting_player.name}はベッドで眠り、体力を回復しました。",
-            health_restored=health_restored,
-            mana_restored=mana_restored
+            health_restored=actual_health_restored,
+            mana_restored=actual_mana_restored
         )
 
 
@@ -90,7 +105,11 @@ class WriteDiaryActionCommand(ActionCommand):
         # 日記を書く効果を実装
         exp_gained = 10
         
-        acting_player.gain_experience(exp_gained)
+        # 現在の経験値を取得
+        current_exp = acting_player.status.get_experience_points()
+        
+        # 経験値を追加
+        acting_player.status.add_experience_points(exp_gained)
         
         return WriteDiaryActionResult(
             success=True,
