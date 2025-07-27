@@ -5,10 +5,6 @@ from game.action.actions.move_action import MovementStrategy
 from game.action.actions.item_action import UseItemStrategy, PreviewItemEffectStrategy
 from game.action.actions.equipment_action import EquipmentSetCheckStrategy, EquipItemStrategy, UnequipItemStrategy
 from game.action.actions.inventory_action import InventoryCheckStrategy
-from game.action.actions.interactable_action import (
-    OpenChestStrategy, WriteBulletinBoardStrategy, 
-    ReadBulletinBoardStrategy, ReadMonumentStrategy
-)
 from game.action.actions.explore_action import ExploreActionStrategy
 from game.action.actions.sns_action import SnsGetUserInfoStrategy
 from game.action.action_result import ActionResult, ErrorActionResult
