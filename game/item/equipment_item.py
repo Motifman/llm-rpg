@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
 
-from game.item.item import Item
+from game.item.item import UniqueItem
 from game.enums import Element, Race, StatusEffectType, DamageType, WeaponType, ArmorType
 from game.player.status import StatusEffect
 
@@ -39,16 +39,17 @@ class WeaponEffect:
         return " / ".join(effects) if effects else "特殊効果なし"
 
 
-@dataclass(frozen=True)
-class Weapon(Item):
+class Weapon(UniqueItem):
     """武器アイテム"""
-    weapon_type: WeaponType
-    effect: WeaponEffect
-    rarity: str = "common" 
     
-    def __post_init__(self):
-        # 親クラスのItemコンストラクタを正しく呼び出す
-        super().__init__(self.item_id, self.name, self.description)
+    def __init__(self, item_id: str, name: str, description: str, weapon_type: WeaponType, 
+                 effect: WeaponEffect, rarity: str = "common", max_durability: int = 100):
+        super().__init__(item_id, name, description)
+        self.weapon_type = weapon_type
+        self.effect = effect
+        self.rarity = rarity
+        self.max_durability = max_durability
+        self.current_durability = max_durability
     
     def calculate_damage(self, base_attack: int, target_race: Optional[Race] = None) -> int:
         base_damage = base_attack + self.effect.attack_bonus
@@ -64,6 +65,28 @@ class Weapon(Item):
     
     def get_critical_rate(self) -> float:
         return self.effect.critical_rate_bonus
+    
+    def get_status_description(self) -> str:
+        durability_percent = (self.current_durability / self.max_durability) * 100
+        return f"{self.weapon_type.value} - 耐久度: {self.current_durability}/{self.max_durability} ({durability_percent:.0f}%)"
+    
+    def use_durability(self, amount: int = 1) -> bool:
+        """耐久度を消費し、破損した場合はTrueを返す"""
+        self.current_durability = max(0, self.current_durability - amount)
+        return self.current_durability <= 0
+    
+    def repair(self, amount: int = None) -> int:
+        """耐久度を回復し、回復した量を返す"""
+        if amount is None:
+            amount = self.max_durability - self.current_durability
+        
+        old_durability = self.current_durability
+        self.current_durability = min(self.max_durability, self.current_durability + amount)
+        return self.current_durability - old_durability
+    
+    def is_broken(self) -> bool:
+        """破損しているかどうか"""
+        return self.current_durability <= 0
     
     def __str__(self):
         return f"{self.name} ({self.weapon_type.value}) - {self.description} [{self.effect}]"
@@ -102,16 +125,17 @@ class ArmorEffect:
         return " / ".join(effects) if effects else "特殊効果なし"
 
 
-@dataclass(frozen=True)
-class Armor(Item):
+class Armor(UniqueItem):
     """防具アイテム"""
-    armor_type: ArmorType
-    effect: ArmorEffect
-    rarity: str = "common" 
     
-    def __post_init__(self):
-        # 親クラスのItemコンストラクタを正しく呼び出す
-        super().__init__(self.item_id, self.name, self.description)
+    def __init__(self, item_id: str, name: str, description: str, armor_type: ArmorType, 
+                 effect: ArmorEffect, rarity: str = "common", max_durability: int = 100):
+        super().__init__(item_id, name, description)
+        self.armor_type = armor_type
+        self.effect = effect
+        self.rarity = rarity
+        self.max_durability = max_durability
+        self.current_durability = max_durability
     
     def calculate_defense_bonus(self) -> int:
         return self.effect.defense_bonus
@@ -133,6 +157,28 @@ class Armor(Item):
     
     def get_speed_bonus(self) -> int:
         return self.effect.speed_bonus
+    
+    def get_status_description(self) -> str:
+        durability_percent = (self.current_durability / self.max_durability) * 100
+        return f"{self.armor_type.value} - 耐久度: {self.current_durability}/{self.max_durability} ({durability_percent:.0f}%)"
+    
+    def use_durability(self, amount: int = 1) -> bool:
+        """耐久度を消費し、破損した場合はTrueを返す"""
+        self.current_durability = max(0, self.current_durability - amount)
+        return self.current_durability <= 0
+    
+    def repair(self, amount: int = None) -> int:
+        """耐久度を回復し、回復した量を返す"""
+        if amount is None:
+            amount = self.max_durability - self.current_durability
+        
+        old_durability = self.current_durability
+        self.current_durability = min(self.max_durability, self.current_durability + amount)
+        return self.current_durability - old_durability
+    
+    def is_broken(self) -> bool:
+        """破損しているかどうか"""
+        return self.current_durability <= 0
     
     def __str__(self):
         return f"{self.name} ({self.armor_type.value}) - {self.description} [{self.effect}]"

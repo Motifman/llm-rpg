@@ -1,21 +1,19 @@
 from dataclasses import dataclass, field
 from typing import List, TYPE_CHECKING, Optional
 
-from game.item.item import Item
+from game.item.item import StackableItem
 from game.item.item_effect import ItemEffect
 
 if TYPE_CHECKING:
     from game.player.player import Player
 
 
-@dataclass(frozen=True)
-class ConsumableItem(Item):
+class ConsumableItem(StackableItem):
     effect: ItemEffect
-    max_stack: int = 1 
     
-    def __post_init__(self):
-        # 親クラスのItemコンストラクタを正しく呼び出す
-        super().__init__(self.item_id, self.name, self.description)
+    def __init__(self, item_id: str, name: str, description: str, effect: ItemEffect, max_stack: int = 1):
+        super().__init__(item_id, name, description, max_stack)
+        self.effect = effect
     
     def can_consume(self, player: "Player") -> bool:
         return player.has_item(self.item_id)

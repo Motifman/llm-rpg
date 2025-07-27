@@ -1,14 +1,14 @@
 from typing import List, Dict, Optional
-from game.item.item import Item
+from game.item.item import Item, StackableItem, UniqueItem
 from game.item.equipment_item import Weapon, Armor
 from game.item.consumable_item import ConsumableItem
-from game.item.unique_item import UniqueItem
 
 
 class Inventory:
     def __init__(self):
+        # スタック可能アイテム用
         self.item_counts: Dict[str, int] = {}
-        self.item_references: Dict[str, Item] = {}
+        self.item_references: Dict[str, StackableItem] = {}
         # 固有アイテム用
         self.unique_items: Dict[str, UniqueItem] = {}
 
@@ -16,13 +16,23 @@ class Inventory:
         # 固有アイテムの場合は特別処理
         if isinstance(item, UniqueItem):
             self._add_unique_item(item)
+        elif isinstance(item, StackableItem):
+            self._add_stackable_item(item)
         else:
-            # 通常のアイテム
+            # 通常のアイテム（後方互換性のため）
             if item.item_id in self.item_counts:
                 self.item_counts[item.item_id] += 1
             else:
                 self.item_counts[item.item_id] = 1
                 self.item_references[item.item_id] = item
+    
+    def _add_stackable_item(self, item: StackableItem):
+        """スタック可能アイテムを追加"""
+        if item.item_id in self.item_counts:
+            self.item_counts[item.item_id] += 1
+        else:
+            self.item_counts[item.item_id] = 1
+            self.item_references[item.item_id] = item
     
     def _add_unique_item(self, item: UniqueItem):
         """固有アイテムを追加"""
@@ -30,7 +40,10 @@ class Inventory:
         self.unique_items[item.get_unique_id()] = item
 
     def remove_item(self, item: Item):
-        self.remove_item_by_id(item.item_id, 1)
+        if isinstance(item, UniqueItem):
+            self.remove_item_by_id(item.item_id, 1, item.get_unique_id())
+        else:
+            self.remove_item_by_id(item.item_id, 1)
     
     def remove_item_by_id(self, item_id: str, count: int = 1, unique_id: Optional[str] = None) -> int:
         # 固有アイテムの場合は特別処理
@@ -51,7 +64,7 @@ class Inventory:
                 else:
                     return 0
         
-        # 通常のアイテム
+        # スタック可能アイテム
         if item_id not in self.item_counts:
             return 0
         
@@ -83,7 +96,7 @@ class Inventory:
             if item.item_id == item_id:
                 return item
         
-        # 通常のアイテム
+        # スタック可能アイテム
         return self.item_references.get(item_id)
     
     def get_item_count(self, item_id: str) -> int:
@@ -92,7 +105,7 @@ class Inventory:
             if item.item_id == item_id:
                 return 1
         
-        # 通常のアイテム
+        # スタック可能アイテム
         return self.item_counts.get(item_id, 0)
     
     def has_item(self, item_id: str, unique_id: Optional[str] = None) -> bool:
@@ -104,7 +117,7 @@ class Inventory:
             if item.item_id == item_id:
                 return True
         
-        # 通常のアイテム
+        # スタック可能アイテム
         return item_id in self.item_counts and self.item_counts[item_id] > 0
     
     def get_items(self) -> List[Item]:
@@ -113,7 +126,7 @@ class Inventory:
         # 固有アイテムを追加
         items.extend(self.unique_items.values())
         
-        # 通常のアイテムを追加
+        # スタック可能アイテムを追加
         for item_id, count in self.item_counts.items():
             item = self.item_references[item_id]
             for _ in range(count):
@@ -139,7 +152,7 @@ class Inventory:
         
         display_lines = ["=== インベントリ ==="]
         
-        # 通常アイテム
+        # スタック可能アイテム
         for item_id, count in sorted(self.item_counts.items()):
             item = self.item_references[item_id]
             display_lines.append(f"• {item.item_id} x{count}")
