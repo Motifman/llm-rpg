@@ -50,7 +50,8 @@ class SnsGetTimelineResult(ActionResult):
         
     def to_feedback_message(self, player_name: str) -> str:
         if self.success:
-            return f"{player_name} はタイムラインを取得しました\n\t{'\n'.join(self.posts)}"
+            posts_text = '\n'.join(self.posts)
+            return f"{player_name} はタイムラインを取得しました\n\t{posts_text}"
         else:
             return f"{player_name} はタイムラインを取得できませんでした\n\t理由:{self.message}"
 
@@ -99,7 +100,8 @@ class SnsGetNotificationsResult(ActionResult):
         
     def to_feedback_message(self, player_name: str) -> str:
         if self.success:
-            return f"{player_name} は通知を取得しました\n\t{'\n'.join(self.notifications)}"
+            notifications_text = '\n'.join(self.notifications)
+            return f"{player_name} は通知を取得しました\n\t{notifications_text}"
         else:
             return f"{player_name} は通知を取得できませんでした\n\t理由:{self.message}"
 
@@ -172,7 +174,7 @@ class SnsPostStrategy(ActionStrategy):
             ArgumentInfo(
                 name="visibility",
                 description="投稿の可視性を選択してください",
-                candidates=PostVisibility.values()
+                candidates=[v.value for v in PostVisibility]
             ),
             ArgumentInfo(
                 name="allowed_users",
@@ -184,8 +186,19 @@ class SnsPostStrategy(ActionStrategy):
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
         return True
 
-    def build_action_command(self, acting_player: Player, game_context: GameContext, content: str) -> ActionCommand:
-        return SnsPostCommand(content)
+    def build_action_command(self, acting_player: Player, game_context: GameContext, content: str, hashtags: List[str] = None, visibility: str = "public", allowed_users: List[str] = None) -> ActionCommand:
+        if hashtags is None:
+            hashtags = []
+        if allowed_users is None:
+            allowed_users = []
+        
+        # 文字列をPostVisibilityに変換
+        try:
+            visibility_enum = PostVisibility(visibility)
+        except ValueError:
+            visibility_enum = PostVisibility.PUBLIC
+        
+        return SnsPostCommand(content, hashtags, visibility_enum, allowed_users)
 
 
 class SnsGetTimelineStrategy(ActionStrategy):
@@ -338,7 +351,7 @@ class SnsUpdateUserBioCommand(ActionCommand):
 
     def execute(self, acting_player: Player, game_context: GameContext) -> SnsUpdateUserBioResult:
         sns_manager = game_context.get_sns_manager()
-        sns_manager.update_user_bio(acting_player.get_id(), self.bio)
+        sns_manager.update_user_bio(acting_player.get_player_id(), self.bio)
         return SnsUpdateUserBioResult(True, "ユーザー情報を更新しました")
 
 
@@ -352,8 +365,11 @@ class SnsPostCommand(ActionCommand):
 
     def execute(self, acting_player: Player, game_context: GameContext) -> SnsPostResult:
         sns_manager = game_context.get_sns_manager()
-        post_id = sns_manager.create_post(acting_player.get_id(), self.content, self.hashtags, self.visibility, self.allowed_users)
-        return SnsPostResult(True, "投稿を作成しました", post_id)
+        post = sns_manager.create_post(acting_player.get_player_id(), self.content, self.hashtags, self.visibility, self.allowed_users)
+        if post:
+            return SnsPostResult(True, "投稿を作成しました", post.post_id)
+        else:
+            return SnsPostResult(False, "投稿の作成に失敗しました", "")
 
 
 class SnsGetTimelineCommand(ActionCommand):
