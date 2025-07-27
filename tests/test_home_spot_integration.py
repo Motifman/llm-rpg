@@ -13,27 +13,22 @@ class TestHomeSpotIntegration:
     
     def setup_method(self):
         """各テストメソッドの前に実行"""
-        # プレイヤーの作成
-        self.player = Mock(spec=Player)
-        self.player.player_id = "owner_player"
-        self.player.name = "オーナー"
-        self.player.health = 80
-        self.player.max_health = 100
-        self.player.mana = 30
-        self.player.max_mana = 100
-        self.player.experience = 0
+        from game.player.player import Player
+        from game.player.status import Status
+        from game.enums import Role
         
-        # プレイヤーのメソッドをモック
-        self.player.restore_health = Mock()
-        self.player.restore_mana = Mock()
-        self.player.gain_experience = Mock()
-        self.player.get_current_spot_id = Mock(return_value="home_spot")
+        # オーナープレイヤーの作成
+        self.player = Player("owner_player", "オーナー", Role.ADVENTURER)
+        self.player.status = Status()
+        self.player.status.set_hp(80)  # 体力を少し減らしておく
+        self.player.status.set_mp(30)  # マナを少し減らしておく
+        self.player.status.set_experience_points(0)
+        self.player.set_current_spot_id("home_spot")
         
         # ゲストプレイヤーの作成
-        self.guest_player = Mock(spec=Player)
-        self.guest_player.player_id = "guest_player"
-        self.guest_player.name = "ゲスト"
-        self.guest_player.get_current_spot_id = Mock(return_value="home_spot")
+        self.guest_player = Player("guest_player", "ゲスト", Role.ADVENTURER)
+        self.guest_player.status = Status()
+        self.guest_player.set_current_spot_id("home_spot")
         
         # GameContextの作成
         self.game_context = Mock(spec=GameContext)
@@ -51,6 +46,10 @@ class TestHomeSpotIntegration:
         # 権限チェック
         assert sleep_strategy.can_execute(self.player, self.game_context)
         
+        # 実行前の状態を記録
+        initial_hp = self.player.status.get_hp()
+        initial_mp = self.player.status.get_mp()
+        
         # コマンド構築
         command = sleep_strategy.build_action_command(self.player, self.game_context)
         
@@ -60,8 +59,12 @@ class TestHomeSpotIntegration:
         # 結果の確認
         assert result.success is True
         assert "ベッドで眠り" in result.message
-        self.player.restore_health.assert_called_once_with(50)
-        self.player.restore_mana.assert_called_once_with(30)
+        
+        # 実際の回復を確認
+        final_hp = self.player.status.get_hp()
+        final_mp = self.player.status.get_mp()
+        assert final_hp > initial_hp
+        assert final_mp > initial_mp
     
     def test_owner_can_write_diary(self):
         """オーナーが日記を書けるかテスト"""
@@ -69,6 +72,9 @@ class TestHomeSpotIntegration:
         
         # 権限チェック
         assert diary_strategy.can_execute(self.player, self.game_context)
+        
+        # 実行前の状態を記録
+        initial_exp = self.player.status.get_experience_points()
         
         # コマンド構築
         command = diary_strategy.build_action_command(
@@ -83,7 +89,10 @@ class TestHomeSpotIntegration:
         # 結果の確認
         assert result.success is True
         assert "日記を書きました" in result.message
-        self.player.gain_experience.assert_called_once_with(10)
+        
+        # 実際の経験値増加を確認
+        final_exp = self.player.status.get_experience_points()
+        assert final_exp == initial_exp + 10
     
     def test_guest_cannot_sleep(self):
         """ゲストが睡眠できないかテスト"""
@@ -127,10 +136,12 @@ class TestHomeSpotIntegration:
     
     def test_permission_hierarchy(self):
         """権限階層のテスト"""
+        from game.player.player import Player
+        from game.enums import Role
+        
         # EMPLOYEE権限を持つプレイヤー
-        employee_player = Mock(spec=Player)
-        employee_player.player_id = "employee_player"
-        employee_player.get_current_spot_id = Mock(return_value="home_spot")
+        employee_player = Player("employee_player", "従業員", Role.ADVENTURER)
+        employee_player.set_current_spot_id("home_spot")
         
         self.home_spot.set_player_permission("employee_player", Permission.EMPLOYEE)
         
