@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Set
+from typing import Dict, Optional, Set, List
 from datetime import datetime
 from game.conversation.conversation_data import ConversationSession
 from game.conversation.message_data import LocationChatMessage
@@ -24,19 +24,20 @@ class ConversationManager:
         self.session_counter += 1
         return f"session_{self.session_counter:04d}"
     
-    def start_conversation_session(self, spot_id: str, initiator_player_id: str) -> str:
+    def start_conversation_session(self, spot_id: str, initiator_player_id: str, is_private: bool = False) -> str:
         """
         会話セッションを開始
         
         Args:
             spot_id: 会話が行われるスポットID
             initiator_player_id: 会話を開始したプレイヤーID
+            is_private: 個人宛のセッションかどうか
             
         Returns:
             作成されたセッションID
         """
-        # 既存のセッションがある場合は参加者として追加
-        if spot_id in self.spot_sessions:
+        # 個人宛のセッションの場合は、既存セッションをチェックしない
+        if not is_private and spot_id in self.spot_sessions:
             session_id = self.spot_sessions[spot_id]
             session = self.sessions[session_id]
             session.add_participant(initiator_player_id)
@@ -50,18 +51,21 @@ class ConversationManager:
             spot_id=spot_id,
             participants={initiator_player_id},
             start_time=datetime.now(),
-            last_activity=datetime.now()
+            last_activity=datetime.now(),
+            is_private=is_private
         )
         
         self.sessions[session_id] = session
-        self.spot_sessions[spot_id] = session_id
+        # 個人宛のセッションはspot_sessionsに登録しない
+        if not is_private:
+            self.spot_sessions[spot_id] = session_id
         self.player_sessions[initiator_player_id] = session_id
         
         return session_id
     
     def join_conversation(self, player_id: str, spot_id: str) -> Optional[str]:
         """
-        既存の会話セッションに参加
+        既存の会話セッションに参加（個人宛のセッションには参加できない）
         
         Args:
             player_id: 参加するプレイヤーID
@@ -75,6 +79,10 @@ class ConversationManager:
         
         session_id = self.spot_sessions[spot_id]
         session = self.sessions[session_id]
+        
+        # 個人宛のセッションには参加できない
+        if session.is_private:
+            return None
         
         if session.is_active:
             session.add_participant(player_id)
@@ -114,20 +122,42 @@ class ConversationManager:
             関連するセッションID（セッションが存在しない場合はNone）
         """
         spot_id = message.get_spot_id()
+        sender_id = message.sender_id
         
-        # セッションが存在しない場合は自動で作成
-        if spot_id not in self.spot_sessions:
-            session_id = self.start_conversation_session(spot_id, message.sender_id)
-        else:
+        # まず、送信者が既に参加しているセッションを探す
+        if sender_id in self.player_sessions:
+            session_id = self.player_sessions[sender_id]
+            session = self.sessions[session_id]
+            
+            # 同じスポットのセッションであれば、そのセッションにメッセージを追加
+            if session.spot_id == spot_id and session.is_active:
+                session.update_activity()
+                session.add_message_to_history(message)
+                return session_id
+        
+        # 送信者が参加していない場合は、スポットの公開セッションを探す
+        if spot_id in self.spot_sessions:
             session_id = self.spot_sessions[spot_id]
             session = self.sessions[session_id]
-            session.update_activity()
+            
+            # 個人宛のセッションでない場合のみ参加
+            if not session.is_private and session.is_active:
+                session.add_participant(sender_id)
+                self.player_sessions[sender_id] = session_id
+                session.update_activity()
+                session.add_message_to_history(message)
+                return session_id
+        
+        # セッションが存在しない場合は自動で作成
+        session_id = self.start_conversation_session(spot_id, sender_id)
+        session = self.sessions[session_id]
+        session.add_message_to_history(message)
         
         return session_id
     
     def get_active_session_for_spot(self, spot_id: str) -> Optional[ConversationSession]:
         """
-        指定されたスポットのアクティブな会話セッションを取得
+        指定されたスポットのアクティブな会話セッションを取得（個人宛のセッションは除外）
         
         Args:
             spot_id: スポットID
@@ -140,6 +170,10 @@ class ConversationManager:
         
         session_id = self.spot_sessions[spot_id]
         session = self.sessions[session_id]
+        
+        # 個人宛のセッションは除外
+        if session.is_private:
+            return None
         
         return session if session.is_active else None
     
@@ -169,6 +203,96 @@ class ConversationManager:
             会話に参加している場合True
         """
         return player_id in self.player_sessions
+    
+    def start_private_conversation(self, player_id: str, spot_id: str) -> str:
+        """
+        個人宛の会話セッションを開始
+        
+        Args:
+            player_id: 会話を開始するプレイヤーID
+            spot_id: 会話が行われるスポットID
+            
+        Returns:
+            作成されたセッションID
+        """
+        return self.start_conversation_session(spot_id, player_id, is_private=True)
+    
+    def get_player_private_sessions(self, player_id: str) -> List[ConversationSession]:
+        """
+        プレイヤーの個人宛セッションを取得
+        
+        Args:
+            player_id: プレイヤーID
+            
+        Returns:
+            個人宛セッションのリスト
+        """
+        private_sessions = []
+        for session in self.sessions.values():
+            if session.is_private and session.is_active and player_id in session.participants:
+                private_sessions.append(session)
+        return private_sessions
+    
+    def get_conversation_history(self, session_id: str) -> List[LocationChatMessage]:
+        """
+        セッションの会話履歴を取得
+        
+        Args:
+            session_id: セッションID
+            
+        Returns:
+            会話履歴のリスト
+        """
+        if session_id not in self.sessions:
+            return []
+        
+        session = self.sessions[session_id]
+        return session.get_conversation_history()
+    
+    def get_conversation_history_as_text(self, session_id: str, max_messages: Optional[int] = None) -> str:
+        """
+        セッションの会話履歴を文字列として取得
+        
+        Args:
+            session_id: セッションID
+            max_messages: 取得する最大メッセージ数
+            
+        Returns:
+            会話履歴の文字列表現
+        """
+        if session_id not in self.sessions:
+            return "セッションが見つかりません。"
+        
+        session = self.sessions[session_id]
+        return session.get_conversation_history_as_text(max_messages)
+    
+    def get_recent_messages(self, session_id: str, count: int = 10) -> List[LocationChatMessage]:
+        """
+        セッションの最近のメッセージを取得
+        
+        Args:
+            session_id: セッションID
+            count: 取得するメッセージ数
+            
+        Returns:
+            最近のメッセージのリスト
+        """
+        if session_id not in self.sessions:
+            return []
+        
+        session = self.sessions[session_id]
+        return session.get_recent_messages(count)
+    
+    def clear_conversation_history(self, session_id: str):
+        """
+        セッションの会話履歴をクリア
+        
+        Args:
+            session_id: セッションID
+        """
+        if session_id in self.sessions:
+            session = self.sessions[session_id]
+            session.clear_history()
     
     def _cleanup_session(self, session_id: str):
         """
