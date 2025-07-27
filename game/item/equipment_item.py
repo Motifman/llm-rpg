@@ -46,6 +46,10 @@ class Weapon(Item):
     effect: WeaponEffect
     rarity: str = "common" 
     
+    def __post_init__(self):
+        # 親クラスのItemコンストラクタを正しく呼び出す
+        super().__init__(self.item_id, self.name, self.description)
+    
     def calculate_damage(self, base_attack: int, target_race: Optional[Race] = None) -> int:
         base_damage = base_attack + self.effect.attack_bonus
         
@@ -62,7 +66,7 @@ class Weapon(Item):
         return self.effect.critical_rate_bonus
     
     def __str__(self):
-        return f"{self.item_id} ({self.weapon_type.value}) - {self.description} [{self.effect}]"
+        return f"{self.name} ({self.weapon_type.value}) - {self.description} [{self.effect}]"
 
 
 @dataclass
@@ -105,6 +109,10 @@ class Armor(Item):
     effect: ArmorEffect
     rarity: str = "common" 
     
+    def __post_init__(self):
+        # 親クラスのItemコンストラクタを正しく呼び出す
+        super().__init__(self.item_id, self.name, self.description)
+    
     def calculate_defense_bonus(self) -> int:
         return self.effect.defense_bonus
     
@@ -127,4 +135,4 @@ class Armor(Item):
         return self.effect.speed_bonus
     
     def __str__(self):
-        return f"{self.item_id} ({self.armor_type.value}) - {self.description} [{self.effect}]"
+        return f"{self.name} ({self.armor_type.value}) - {self.description} [{self.effect}]"

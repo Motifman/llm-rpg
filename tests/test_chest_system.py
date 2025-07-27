@@ -28,7 +28,7 @@ class TestChest:
     
     def test_chest_creation_with_contents(self):
         """アイテム付き宝箱の作成テスト"""
-        items = [Item("sword", "鉄の剣"), Item("potion", "回復薬")]
+        items = [Item("sword", "鉄の剣", "鉄の剣"), Item("potion", "回復薬", "回復薬")]
         chest = Chest("treasure_chest", "宝物箱", contents=items)
         assert len(chest.contents) == 2
         assert chest.contents[0].item_id == "sword"
@@ -77,7 +77,7 @@ class TestChest:
     
     def test_chest_open_unlocked_with_contents(self):
         """アイテム付きアンロック宝箱を開けるテスト"""
-        items = [Item("sword", "鉄の剣"), Item("potion", "回復薬")]
+        items = [Item("sword", "鉄の剣", "鉄の剣"), Item("potion", "回復薬", "回復薬")]
         chest = Chest("treasure_chest", "宝物箱", contents=items)
         
         opened_items = chest.open()
@@ -96,7 +96,7 @@ class TestChest:
     
     def test_chest_open_already_opened(self):
         """既に開かれた宝箱を開けるテスト"""
-        items = [Item("sword", "鉄の剣")]
+        items = [Item("sword", "鉄の剣", "鉄の剣")]
         chest = Chest("opened_chest", "開かれた宝箱", contents=items)
         chest.open()  # 一度開く
         
@@ -108,7 +108,7 @@ class TestChest:
     def test_chest_set_contents(self):
         """宝箱の内容設定テスト"""
         chest = Chest("empty_chest", "空の宝箱")
-        new_items = [Item("magic_ring", "魔法の指輪")]
+        new_items = [Item("magic_ring", "魔法の指輪", "魔法の指輪")]
         
         chest.set_contents(new_items)
         assert len(chest.contents) == 1
@@ -117,7 +117,7 @@ class TestChest:
     
     def test_chest_get_remaining_contents(self):
         """宝箱の残り内容取得テスト"""
-        items = [Item("sword", "鉄の剣"), Item("potion", "回復薬")]
+        items = [Item("sword", "鉄の剣", "鉄の剣"), Item("potion", "回復薬", "回復薬")]
         chest = Chest("treasure_chest", "宝物箱", contents=items)
         
         # 開く前
@@ -284,7 +284,7 @@ class TestOpenChestCommand:
         self.spot.add_interactable(chest)
         
         # 鍵をプレイヤーに追加
-        key = Item("golden_key", "黄金の鍵")
+        key = Item("golden_key", "黄金の鍵", "黄金の鍵")
         self.player.add_item(key)
         
         command = OpenChestCommand("ロック宝箱")
@@ -296,7 +296,7 @@ class TestOpenChestCommand:
     
     def test_execute_unlocked_chest_with_contents(self):
         """アンロックされた宝箱を開けるテスト（アイテムあり）"""
-        items = [Item("sword", "鉄の剣"), Item("potion", "回復薬")]
+        items = [Item("sword", "鉄の剣", "鉄の剣"), Item("potion", "回復薬", "回復薬")]
         chest = Chest("treasure_chest", "宝物箱", contents=items)
         self.spot.add_interactable(chest)
         
@@ -328,8 +328,8 @@ class TestOpenChestCommand:
     
     def test_execute_first_chest_no_name(self):
         """名前指定なしで最初の宝箱を開けるテスト"""
-        chest1 = Chest("chest_1", "宝箱1", contents=[Item("sword", "鉄の剣")])
-        chest2 = Chest("chest_2", "宝箱2", contents=[Item("potion", "回復薬")])
+        chest1 = Chest("chest_1", "宝箱1", contents=[Item("sword", "鉄の剣", "鉄の剣")])
+        chest2 = Chest("chest_2", "宝箱2", contents=[Item("potion", "回復薬", "回復薬")])
         self.spot.add_interactable(chest1)
         self.spot.add_interactable(chest2)
         
@@ -407,10 +407,10 @@ class TestChestIntegration:
     def test_multiple_chests_scenario(self):
         """複数宝箱のシナリオテスト"""
         # 複数の宝箱を作成
-        chest1 = Chest("chest_1", "古い宝箱", contents=[Item("sword", "鉄の剣")])
-        chest2 = Chest("chest_2", "銀の宝箱", contents=[Item("magic_ring", "魔法の指輪")], 
+        chest1 = Chest("chest_1", "古い宝箱", contents=[Item("sword", "鉄の剣", "鉄の剣")])
+        chest2 = Chest("chest_2", "銀の宝箱", contents=[Item("magic_ring", "魔法の指輪", "魔法の指輪")], 
                       is_locked=True, required_item_id="silver_key")
-        chest3 = Chest("chest_3", "黄金の宝箱", contents=[Item("gold_coin", "金貨")], 
+        chest3 = Chest("chest_3", "黄金の宝箱", contents=[Item("gold_coin", "金貨", "金貨")], 
                       is_locked=True, required_item_id="golden_key")
         
         self.spot.add_interactable(chest1)
@@ -433,7 +433,7 @@ class TestChestIntegration:
         assert "silver_key" in result.message
         
         # 3. 銀の鍵を入手して銀の宝箱を開ける
-        silver_key = Item("silver_key", "銀の鍵")
+        silver_key = Item("silver_key", "銀の鍵", "銀の鍵")
         self.player.add_item(silver_key)
         
         command = OpenChestCommand("銀の宝箱")
@@ -453,7 +453,7 @@ class TestChestIntegration:
     
     def test_chest_reopening_attempt(self):
         """既に開かれた宝箱を再度開こうとするテスト"""
-        chest = Chest("test_chest", "テスト宝箱", contents=[Item("sword", "鉄の剣")])
+        chest = Chest("test_chest", "テスト宝箱", contents=[Item("sword", "鉄の剣", "鉄の剣")])
         self.spot.add_interactable(chest)
         
         # 1回目：宝箱を開ける

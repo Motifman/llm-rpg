@@ -18,17 +18,17 @@ class TestInventory:
         self.inventory = Inventory()
         
         # テスト用アイテムを作成
-        self.sword = Item("sword", "鉄の剣 - 攻撃力+10")
-        self.potion = Item("potion", "回復薬 - HPを50回復")
-        self.shield = Item("shield", "木の盾 - 防御力+5")
-        self.arrow = Item("arrow", "矢 - 遠距離攻撃用")
+        self.sword = Item("sword", "鉄の剣", "鉄の剣 - 攻撃力+10")
+        self.potion = Item("potion", "回復薬", "回復薬 - HPを50回復")
+        self.shield = Item("shield", "木の盾", "木の盾 - 防御力+5")
+        self.arrow = Item("arrow", "矢", "矢 - 遠距離攻撃用")
         
         # 装備アイテムを作成
         weapon_effect = WeaponEffect(attack_bonus=15, element=Element.FIRE, element_damage=5)
-        self.fire_sword = Weapon("fire_sword", "炎の剣", WeaponType.SWORD, weapon_effect)
+        self.fire_sword = Weapon("fire_sword", "炎の剣", "炎の剣 - 火属性攻撃", WeaponType.SWORD, weapon_effect)
         
         armor_effect = ArmorEffect(defense_bonus=8, evasion_bonus=0.1)
-        self.leather_armor = Armor("leather_armor", "革の鎧", ArmorType.CHEST, armor_effect)
+        self.leather_armor = Armor("leather_armor", "革の鎧", "革の鎧 - 軽量で動きやすい", ArmorType.CHEST, armor_effect)
     
     def test_inventory_initialization(self):
         """インベントリの初期化テスト"""
@@ -120,6 +120,7 @@ class TestInventory:
         item = self.inventory.get_item_by_id("sword")
         assert item is not None
         assert item.item_id == "sword"
+        assert item.name == "鉄の剣"
         assert item.description == "鉄の剣 - 攻撃力+10"
     
     def test_get_item_by_id_nonexistent(self):

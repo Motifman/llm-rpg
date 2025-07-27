@@ -23,6 +23,7 @@ class TestEquipmentSet:
         
         self.weapon = Weapon(
             item_id="test_sword",
+            name="テスト用の剣",
             description="テスト用の剣",
             weapon_type=WeaponType.SWORD,
             effect=self.weapon_effect
@@ -38,6 +39,7 @@ class TestEquipmentSet:
         
         self.helmet = Armor(
             item_id="test_helmet",
+            name="テスト用のヘルメット",
             description="テスト用のヘルメット",
             armor_type=ArmorType.HELMET,
             effect=self.helmet_effect
@@ -52,6 +54,7 @@ class TestEquipmentSet:
         
         self.armor = Armor(
             item_id="test_armor",
+            name="テスト用のアーマー",
             description="テスト用のアーマー",
             armor_type=ArmorType.CHEST,
             effect=self.armor_effect
@@ -65,6 +68,7 @@ class TestEquipmentSet:
         
         self.shoes = Armor(
             item_id="test_shoes",
+            name="テスト用のシューズ",
             description="テスト用のシューズ",
             armor_type=ArmorType.SHOES,
             effect=self.shoes_effect
@@ -79,6 +83,7 @@ class TestEquipmentSet:
         
         self.gloves = Armor(
             item_id="test_gloves",
+            name="テスト用のグローブ",
             description="テスト用のグローブ",
             armor_type=ArmorType.GLOVES,
             effect=self.gloves_effect
@@ -146,6 +151,7 @@ class TestEquipmentSet:
         high_evasion_effect = ArmorEffect(evasion_bonus=1.0)  # 上限値を超える値
         high_evasion_armor = Armor(
             item_id="high_evasion",
+            name="高回避防具",
             description="高回避防具",
             armor_type=ArmorType.CHEST,
             effect=high_evasion_effect
@@ -174,6 +180,7 @@ class TestEquipmentSet:
         high_resistance_effect = ArmorEffect(status_resistance={StatusEffectType.POISON: 1.0})  # 上限値を超える値
         high_resistance_armor = Armor(
             item_id="high_resistance",
+            name="高耐性防具",
             description="高耐性防具",
             armor_type=ArmorType.CHEST,
             effect=high_resistance_effect
@@ -277,6 +284,7 @@ class TestEquipmentSet:
         new_weapon_effect = WeaponEffect(attack_bonus=20)
         new_weapon = Weapon(
             item_id="new_sword",
+            name="新しい剣",
             description="新しい剣",
             weapon_type=WeaponType.SWORD,
             effect=new_weapon_effect
@@ -320,6 +328,7 @@ class TestEquipmentSet:
         new_helmet_effect = ArmorEffect(defense_bonus=10)
         new_helmet = Armor(
             item_id="new_helmet",
+            name="新しいヘルメット",
             description="新しいヘルメット",
             armor_type=ArmorType.HELMET,
             effect=new_helmet_effect

@@ -17,6 +17,7 @@ class TestUnifiedEquipmentSystem:
         # テスト用の装備アイテムを作成
         self.weapon = Weapon(
             item_id="test_sword",
+            name="テスト用の剣",
             description="テスト用の剣",
             weapon_type=WeaponType.SWORD,
             effect=WeaponEffect(attack_bonus=10, critical_rate_bonus=0.1)
@@ -24,6 +25,7 @@ class TestUnifiedEquipmentSystem:
         
         self.helmet = Armor(
             item_id="test_helmet",
+            name="テスト用のヘルメット",
             description="テスト用のヘルメット",
             armor_type=ArmorType.HELMET,
             effect=ArmorEffect(defense_bonus=5, speed_bonus=2)
@@ -31,6 +33,7 @@ class TestUnifiedEquipmentSystem:
         
         self.armor = Armor(
             item_id="test_armor",
+            name="テスト用のアーマー",
             description="テスト用のアーマー",
             armor_type=ArmorType.CHEST,
             effect=ArmorEffect(defense_bonus=8, speed_bonus=1)

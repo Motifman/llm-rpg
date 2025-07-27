@@ -13,11 +13,15 @@ class ConsumableItem(Item):
     effect: ItemEffect
     max_stack: int = 1 
     
+    def __post_init__(self):
+        # 親クラスのItemコンストラクタを正しく呼び出す
+        super().__init__(self.item_id, self.name, self.description)
+    
     def can_consume(self, player: "Player") -> bool:
         return player.has_item(self.item_id)
     
     def __str__(self):
-        return f"{self.item_id} - {self.description} ({self.effect})"
+        return f"{self.name} ({self.item_id}) - {self.description} ({self.effect})"
     
     def __repr__(self):
-        return f"ConsumableItem(item_id={self.item_id}, description={self.description}, effect={self.effect}, max_stack={self.max_stack})"
+        return f"ConsumableItem(item_id={self.item_id}, name={self.name}, description={self.description}, effect={self.effect}, max_stack={self.max_stack})"
