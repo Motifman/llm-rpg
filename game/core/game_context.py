@@ -1,13 +1,15 @@
 from game.player.player_manager import PlayerManager
 from game.world.spot_manager import SpotManager
 from game.sns.sns_manager import SnsManager
+from game.conversation.conversation_manager import ConversationManager
 
 
 class GameContext:
-    def __init__(self, player_manager: PlayerManager, spot_manager: SpotManager, sns_manager: SnsManager = None):
+    def __init__(self, player_manager: PlayerManager, spot_manager: SpotManager, sns_manager: SnsManager = None, conversation_manager: ConversationManager = None):
         self.player_manager = player_manager
         self.spot_manager = spot_manager
         self.sns_manager = sns_manager
+        self.conversation_manager = conversation_manager
 
     @classmethod
     def create_basic(cls, player_manager: PlayerManager, spot_manager: SpotManager):
@@ -25,6 +27,9 @@ class GameContext:
     
     def get_sns_manager(self) -> SnsManager:
         return self.sns_manager
+    
+    def get_conversation_manager(self) -> ConversationManager:
+        return self.conversation_manager
 
 
 class GameContextBuilder:
@@ -32,6 +37,7 @@ class GameContextBuilder:
         self.player_manager = None
         self.spot_manager = None
         self.sns_manager = None
+        self.conversation_manager = None
     
     def with_player_manager(self, player_manager: PlayerManager) -> 'GameContextBuilder':
         self.player_manager = player_manager
@@ -45,7 +51,11 @@ class GameContextBuilder:
         self.sns_manager = sns_manager
         return self
     
+    def with_conversation_manager(self, conversation_manager: ConversationManager) -> 'GameContextBuilder':
+        self.conversation_manager = conversation_manager
+        return self
+    
     def build(self) -> GameContext:
         if self.player_manager is None or self.spot_manager is None:
             raise ValueError("player_manager and spot_manager are required")
-        return GameContext(self.player_manager, self.spot_manager, self.sns_manager)
+        return GameContext(self.player_manager, self.spot_manager, self.sns_manager, self.conversation_manager)
