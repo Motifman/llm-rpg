@@ -6,7 +6,11 @@ from game.action.actions.item_action import UseItemStrategy, PreviewItemEffectSt
 from game.action.actions.equipment_action import EquipmentSetCheckStrategy, EquipItemStrategy, UnequipItemStrategy
 from game.action.actions.inventory_action import InventoryCheckStrategy
 from game.action.actions.explore_action import ExploreActionStrategy
-from game.action.actions.sns_action import SnsGetUserInfoStrategy
+from game.action.actions.sns_action import (
+    SnsGetUserInfoStrategy, SnsUpdateUserBioStrategy, SnsPostStrategy, 
+    SnsGetTimelineStrategy, SnsLikeStrategy, SnsUnlikeStrategy, 
+    SnsReplyStrategy, SnsGetNotificationsStrategy, SnsMarkNotificationReadStrategy
+)
 from game.action.action_result import ActionResult, ErrorActionResult
 
 
@@ -25,6 +29,14 @@ class ActionOrchestrator:
             InventoryCheckStrategy().get_name(): InventoryCheckStrategy(),
             ExploreActionStrategy().get_name(): ExploreActionStrategy(),
             SnsGetUserInfoStrategy().get_name(): SnsGetUserInfoStrategy(),
+            SnsUpdateUserBioStrategy().get_name(): SnsUpdateUserBioStrategy(),
+            SnsPostStrategy().get_name(): SnsPostStrategy(),
+            SnsGetTimelineStrategy().get_name(): SnsGetTimelineStrategy(),
+            SnsLikeStrategy().get_name(): SnsLikeStrategy(),
+            SnsUnlikeStrategy().get_name(): SnsUnlikeStrategy(),
+            SnsReplyStrategy().get_name(): SnsReplyStrategy(),
+            SnsGetNotificationsStrategy().get_name(): SnsGetNotificationsStrategy(),
+            SnsMarkNotificationReadStrategy().get_name(): SnsMarkNotificationReadStrategy(),
         }
 
     def get_action_candidates_for_llm(self, acting_player_id: str) -> List[Dict[str, Any]]:
@@ -107,6 +119,14 @@ class ActionOrchestrator:
             "所持アイテム確認": "所持アイテムを確認します",
             "探索": "現在の場所を探索します",
             "SNSユーザー情報取得": "SNSユーザーの情報を取得します",
+            "SNSユーザー情報更新": "SNSユーザーの一言コメントを更新します",
+            "SNS投稿": "SNSに投稿を作成します",
+            "SNSタイムライン取得": "SNSのタイムラインを取得します",
+            "SNS投稿にいいね": "SNS投稿にいいねします",
+            "SNS投稿のいいね解除": "SNS投稿のいいねを解除します",
+            "SNS投稿に返信": "SNS投稿に返信します",
+            "SNS通知取得": "SNSの通知を取得します",
+            "SNS通知を既読にする": "SNSの通知を既読にします",
             "宝箱を開ける": "宝箱を開けてアイテムを入手します",
             "掲示板に書き込む": "掲示板に投稿を書き込みます",
             "掲示板を読む": "掲示板の投稿を読みます",
