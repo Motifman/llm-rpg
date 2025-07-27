@@ -19,12 +19,16 @@ class TradeOffer:
     target_player_id: Optional[str] = None  # 直接取引用
     status: TradeStatus = TradeStatus.ACTIVE
     created_at: datetime = field(default_factory=datetime.now)
+    # 固有アイテム用
+    offered_unique_id: Optional[str] = None
+    requested_unique_id: Optional[str] = None
     
     @classmethod
     def create_money_trade(cls, seller_id: str, offered_item_id: str, 
                           offered_item_count: int, requested_money: int,
                           trade_type: TradeType = TradeType.GLOBAL,
-                          target_player_id: Optional[str] = None) -> "TradeOffer":
+                          target_player_id: Optional[str] = None,
+                          offered_unique_id: Optional[str] = None) -> "TradeOffer":
         """お金との取引オファーを作成"""
         return cls(
             trade_id=str(uuid.uuid4()),
@@ -33,7 +37,8 @@ class TradeOffer:
             offered_item_count=offered_item_count,
             requested_money=requested_money,
             trade_type=trade_type,
-            target_player_id=target_player_id
+            target_player_id=target_player_id,
+            offered_unique_id=offered_unique_id
         )
     
     @classmethod
@@ -41,7 +46,9 @@ class TradeOffer:
                          offered_item_count: int, requested_item_id: str,
                          requested_item_count: int = 1,
                          trade_type: TradeType = TradeType.GLOBAL,
-                         target_player_id: Optional[str] = None) -> "TradeOffer":
+                         target_player_id: Optional[str] = None,
+                         offered_unique_id: Optional[str] = None,
+                         requested_unique_id: Optional[str] = None) -> "TradeOffer":
         """アイテム同士の取引オファーを作成"""
         return cls(
             trade_id=str(uuid.uuid4()),
@@ -52,7 +59,9 @@ class TradeOffer:
             requested_item_id=requested_item_id,
             requested_item_count=requested_item_count,
             trade_type=trade_type,
-            target_player_id=target_player_id
+            target_player_id=target_player_id,
+            offered_unique_id=offered_unique_id,
+            requested_unique_id=requested_unique_id
         )
     
     def is_money_trade(self) -> bool:
@@ -84,11 +93,15 @@ class TradeOffer:
     def get_trade_summary(self) -> str:
         """取引内容の要約を取得"""
         offered = f"{self.offered_item_id} x{self.offered_item_count}"
+        if self.offered_unique_id:
+            offered += f" (固有ID:{self.offered_unique_id})"
         
         if self.is_money_trade():
             requested = f"{self.requested_money}ゴールド"
         else:
             requested = f"{self.requested_item_id} x{self.requested_item_count}"
+            if self.requested_unique_id:
+                requested += f" (固有ID:{self.requested_unique_id})"
         
         trade_type_str = "直接取引" if self.is_direct_trade() else "グローバル取引"
         return f"[{trade_type_str}] {offered} ⇄ {requested}"

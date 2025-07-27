@@ -285,6 +285,19 @@ class PostTradeCommand(ActionCommand):
             return PostTradeResult(False, "取引システムが利用できません", None, "")
         
         try:
+            # アイテムの所持チェック
+            if not acting_player.has_item(self.offered_item_id):
+                return PostTradeResult(False, f"アイテム {self.offered_item_id} を所持していません", None, "")
+            
+            item_count = acting_player.get_inventory_item_count(self.offered_item_id)
+            if item_count < self.offered_item_count:
+                return PostTradeResult(False, f"アイテム {self.offered_item_id} が不足しています（所持: {item_count}, 必要: {self.offered_item_count}）", None, "")
+            
+            # お金の所持チェック（アイテム取引の場合）
+            if self.requested_item_id and self.requested_money > 0:
+                if acting_player.status.get_money() < self.requested_money:
+                    return PostTradeResult(False, f"お金が不足しています（所持: {acting_player.status.get_money()}, 必要: {self.requested_money}）", None, "")
+            
             # TradeOfferを作成
             if self.requested_item_id:
                 # アイテム同士の取引
@@ -329,13 +342,24 @@ class AcceptTradeCommand(ActionCommand):
     def execute(self, acting_player: Player, game_context: GameContext) -> AcceptTradeResult:
         player_id = acting_player.get_player_id()
         trade_manager = game_context.get_trade_manager()
+        player_manager = game_context.get_player_manager()
         
         if trade_manager is None:
             return AcceptTradeResult(False, "取引システムが利用できません", None, "")
         
         try:
-            # 取引を受託
-            completed_trade = trade_manager.accept_trade(self.trade_id, player_id)
+            # 取引情報を取得
+            trade = trade_manager.get_trade(self.trade_id)
+            if trade is None:
+                return AcceptTradeResult(False, f"取引 {self.trade_id} が見つかりません", None, "")
+            
+            # 出品者を取得
+            seller = player_manager.get_player(trade.seller_id)
+            if seller is None:
+                return AcceptTradeResult(False, f"出品者 {trade.seller_id} が見つかりません", None, "")
+            
+            # 取引を受託（アイテム・お金のやり取りを含む）
+            completed_trade = trade_manager.accept_trade(self.trade_id, player_id, seller, acting_player)
             return AcceptTradeResult(True, "取引を受託しました", completed_trade.trade_id, completed_trade.get_trade_summary())
             
         except ValueError as e:
