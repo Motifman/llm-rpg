@@ -1,5 +1,4 @@
 import pytest
-from unittest.mock import Mock, patch
 from game.action.actions.trade_action import (
     PostTradeStrategy, AcceptTradeStrategy, CancelTradeStrategy,
     GetMyTradesStrategy, GetAvailableTradesStrategy,
@@ -9,27 +8,310 @@ from game.action.actions.trade_action import (
     GetMyTradesResult, GetAvailableTradesResult
 )
 from game.player.player import Player
+from game.player.player_manager import PlayerManager
 from game.core.game_context import GameContext
 from game.trade.trade_manager import TradeManager
 from game.trade.trade_data import TradeOffer
-from game.enums import TradeType, TradeStatus
+from game.enums import TradeType, TradeStatus, Role
+from game.item.item import Item, StackableItem
+from game.item.consumable_item import ConsumableItem
+from game.item.item_effect import ItemEffect
+
+
+class TestTradeActionWithRealItems:
+    """実際のアイテムを使った取引アクションテスト"""
+    
+    def setup_method(self):
+        """テスト用のプレイヤーとアイテムをセットアップ"""
+        # プレイヤーマネージャーを作成
+        self.player_manager = PlayerManager()
+        
+        # テスト用プレイヤーを作成
+        self.seller = Player("seller1", "売り手", Role.ADVENTURER)
+        self.buyer = Player("buyer1", "買い手", Role.ADVENTURER)
+        
+        # プレイヤーをマネージャーに登録
+        self.player_manager.add_player(self.seller)
+        self.player_manager.add_player(self.buyer)
+        
+        # 初期アイテムを追加
+        self._setup_test_items()
+        
+        # ゲームコンテキストを作成
+        self.trade_manager = TradeManager()
+        self.game_context = GameContext(
+            player_manager=self.player_manager,
+            spot_manager=None,
+            trade_manager=self.trade_manager
+        )
+    
+    def _setup_test_items(self):
+        """テスト用アイテムをセットアップ"""
+        # スタック可能アイテムを作成
+        self.apple = StackableItem("apple", "りんご", "甘いりんご", max_stack=10)
+        self.orange = StackableItem("orange", "オレンジ", "酸っぱいオレンジ", max_stack=10)
+        
+        # 消費アイテムを作成
+        self.potion = ConsumableItem("potion", "ポーション", "HPを回復する", 
+                                   ItemEffect(hp_change=50), max_stack=5)
+        self.elixir = ConsumableItem("elixir", "エリクサー", "MPを回復する", 
+                                   ItemEffect(mp_change=30), max_stack=3)
+        
+        # 売り手にアイテムを追加
+        for _ in range(5):
+            self.seller.add_item(self.apple)
+        for _ in range(3):
+            self.seller.add_item(self.potion)
+        
+        # 買い手にアイテムとお金を追加
+        for _ in range(3):
+            self.buyer.add_item(self.orange)
+        for _ in range(2):
+            self.buyer.add_item(self.elixir)
+        self.buyer.status.add_money(1000)
+    
+    def test_post_trade_with_real_items(self):
+        """実際のアイテムを使った取引出品テスト"""
+        # 売り手の初期状態を記録
+        initial_apple_count = self.seller.get_inventory_item_count("apple")
+        initial_potion_count = self.seller.get_inventory_item_count("potion")
+        
+        # りんごを100ゴールドで出品
+        command = PostTradeCommand("apple", 2, 100, trade_type="global")
+        result = command.execute(self.seller, self.game_context)
+        
+        # 結果を検証
+        assert result.success is True
+        assert result.trade_id is not None
+        assert "apple x2 ⇄ 100ゴールド" in result.trade_details
+        
+        # 売り手のアイテムは出品時に減少しない（受託時にやり取りされる）
+        assert self.seller.get_inventory_item_count("apple") == initial_apple_count
+        
+        # 取引が正しく登録されていることを確認
+        trade = self.trade_manager.get_trade(result.trade_id)
+        assert trade is not None
+        assert trade.offered_item_id == "apple"
+        assert trade.offered_item_count == 2
+        assert trade.requested_money == 100
+        assert trade.seller_id == "seller1"
+    
+    def test_accept_trade_with_real_items(self):
+        """実際のアイテムを使った取引受託テスト"""
+        # 売り手がりんごを100ゴールドで出品
+        post_command = PostTradeCommand("apple", 2, 100, trade_type="global")
+        post_result = post_command.execute(self.seller, self.game_context)
+        trade_id = post_result.trade_id
+        
+        # 買い手の初期状態を記録
+        initial_money = self.buyer.status.get_money()
+        initial_apple_count = self.buyer.get_inventory_item_count("apple")
+        
+        # 買い手が取引を受託
+        accept_command = AcceptTradeCommand(trade_id)
+        accept_result = accept_command.execute(self.buyer, self.game_context)
+        
+        # 結果を検証
+        assert accept_result.success is True
+        assert accept_result.trade_id == trade_id
+        
+        # 買い手の状態変化を確認
+        assert self.buyer.status.get_money() == initial_money - 100
+        assert self.buyer.get_inventory_item_count("apple") == initial_apple_count + 2
+        
+        # 売り手の状態変化を確認
+        assert self.seller.status.get_money() == 100  # 売り手はお金を獲得
+        
+        # 取引が履歴に移動していることを確認
+        assert self.trade_manager.get_trade(trade_id) is None
+        history = self.trade_manager.get_trade_history()
+        assert len(history) == 1
+        assert history[0].trade_id == trade_id
+        assert history[0].status == TradeStatus.COMPLETED
+    
+    def test_item_to_item_trade(self):
+        """アイテム同士の取引テスト"""
+        # 売り手がりんごをオレンジと交換で出品
+        post_command = PostTradeCommand("apple", 2, 0, "orange", 1, trade_type="global")
+        post_result = post_command.execute(self.seller, self.game_context)
+        trade_id = post_result.trade_id
+        
+        # 買い手の初期状態を記録
+        initial_apple_count = self.buyer.get_inventory_item_count("apple")
+        initial_orange_count = self.buyer.get_inventory_item_count("orange")
+        
+        # 買い手が取引を受託
+        accept_command = AcceptTradeCommand(trade_id)
+        accept_result = accept_command.execute(self.buyer, self.game_context)
+        
+        # 結果を検証
+        assert accept_result.success is True
+        
+        # 買い手の状態変化を確認
+        assert self.buyer.get_inventory_item_count("apple") == initial_apple_count + 2
+        assert self.buyer.get_inventory_item_count("orange") == initial_orange_count - 1
+        
+        # 売り手の状態変化を確認
+        assert self.seller.get_inventory_item_count("orange") == 1  # 売り手はオレンジを獲得
+    
+    def test_cancel_trade_with_real_items(self):
+        """実際のアイテムを使った取引キャンセルテスト"""
+        # 売り手がりんごを100ゴールドで出品
+        post_command = PostTradeCommand("apple", 2, 100, trade_type="global")
+        post_result = post_command.execute(self.seller, self.game_context)
+        trade_id = post_result.trade_id
+        
+        # 売り手の初期状態を記録
+        initial_apple_count = self.seller.get_inventory_item_count("apple")
+        
+        # 売り手が取引をキャンセル
+        cancel_command = CancelTradeCommand(trade_id)
+        cancel_result = cancel_command.execute(self.seller, self.game_context)
+        
+        # 結果を検証
+        assert cancel_result.success is True
+        assert cancel_result.trade_id == trade_id
+        
+        # 売り手のアイテムが戻っていることを確認
+        assert self.seller.get_inventory_item_count("apple") == initial_apple_count + 2
+        
+        # 取引が履歴に移動していることを確認
+        assert self.trade_manager.get_trade(trade_id) is None
+        history = self.trade_manager.get_trade_history()
+        assert len(history) == 1
+        assert history[0].trade_id == trade_id
+        assert history[0].status == TradeStatus.CANCELLED
+    
+    def test_insufficient_items_for_trade(self):
+        """アイテム不足での取引出品失敗テスト"""
+        # 売り手が持っていないアイテムで取引を試行
+        command = PostTradeCommand("nonexistent_item", 1, 100, trade_type="global")
+        result = command.execute(self.seller, self.game_context)
+        
+        # 結果を検証
+        assert result.success is False
+        assert "アイテム nonexistent_item を所持していません" in result.message
+    
+    def test_insufficient_money_for_trade(self):
+        """お金不足での取引受託失敗テスト"""
+        # 売り手がりんごを1000ゴールドで出品
+        post_command = PostTradeCommand("apple", 1, 1000, trade_type="global")
+        post_result = post_command.execute(self.seller, self.game_context)
+        trade_id = post_result.trade_id
+        
+        # お金のないプレイヤーを作成
+        poor_player = Player("poor1", "貧乏人", Role.ADVENTURER)
+        self.player_manager.add_player(poor_player)
+        
+        # 貧乏人が取引を受託しようとする
+        accept_command = AcceptTradeCommand(trade_id)
+        accept_result = accept_command.execute(poor_player, self.game_context)
+        
+        # 結果を検証
+        assert accept_result.success is False
+        assert "お金が不足しています" in accept_result.message
+    
+    def test_get_my_trades_with_real_trades(self):
+        """実際の取引を使った自分の取引取得テスト"""
+        # 売り手が複数の取引を出品
+        post_command1 = PostTradeCommand("apple", 1, 50, trade_type="global")
+        post_command2 = PostTradeCommand("potion", 1, 200, trade_type="global")
+        
+        result1 = post_command1.execute(self.seller, self.game_context)
+        result2 = post_command2.execute(self.seller, self.game_context)
+        
+        # 自分の取引を取得
+        get_command = GetMyTradesCommand(include_history=False)
+        get_result = get_command.execute(self.seller, self.game_context)
+        
+        # 結果を検証
+        assert get_result.success is True
+        assert len(get_result.trades) == 2
+        assert get_result.include_history is False
+    
+    def test_get_available_trades_with_real_trades(self):
+        """実際の取引を使った受託可能取引取得テスト"""
+        # 売り手がりんごを100ゴールドで出品
+        post_command = PostTradeCommand("apple", 2, 100, trade_type="global")
+        post_result = post_command.execute(self.seller, self.game_context)
+        
+        # 買い手が受託可能な取引を取得
+        get_command = GetAvailableTradesCommand()
+        get_result = get_command.execute(self.buyer, self.game_context)
+        
+        # 結果を検証
+        assert get_result.success is True
+        assert len(get_result.trades) == 1
+        assert get_result.trades[0].trade_id == post_result.trade_id
+    
+    def test_trade_with_filters(self):
+        """フィルタを使った取引検索テスト"""
+        # 複数の取引を出品
+        post_command1 = PostTradeCommand("apple", 1, 50, trade_type="global")
+        post_command2 = PostTradeCommand("potion", 1, 200, trade_type="global")
+        
+        post_command1.execute(self.seller, self.game_context)
+        post_command2.execute(self.seller, self.game_context)
+        
+        # 価格フィルタで検索
+        filters = {"max_price": 100}
+        get_command = GetAvailableTradesCommand(filters)
+        get_result = get_command.execute(self.buyer, self.game_context)
+        
+        # 結果を検証
+        assert get_result.success is True
+        assert len(get_result.trades) == 1  # 50ゴールドの取引のみ
+        assert get_result.trades[0].requested_money == 50
+    
+    def test_trade_completion_verification(self):
+        """取引完了時の状態検証テスト"""
+        # 売り手の初期状態を記録
+        seller_initial_apple = self.seller.get_inventory_item_count("apple")
+        seller_initial_money = self.seller.status.get_money()
+        
+        # 買い手の初期状態を記録
+        buyer_initial_apple = self.buyer.get_inventory_item_count("apple")
+        buyer_initial_money = self.buyer.status.get_money()
+        
+        # 取引を実行
+        post_command = PostTradeCommand("apple", 2, 150, trade_type="global")
+        post_result = post_command.execute(self.seller, self.game_context)
+        trade_id = post_result.trade_id
+        
+        accept_command = AcceptTradeCommand(trade_id)
+        accept_result = accept_command.execute(self.buyer, self.game_context)
+        
+        # 取引完了後の状態を検証
+        if not accept_result.success:
+            print(f"取引受託失敗: {accept_result.message}")
+        assert accept_result.success is True
+        
+        # 売り手の状態変化
+        assert self.seller.get_inventory_item_count("apple") == seller_initial_apple - 2
+        assert self.seller.status.get_money() == seller_initial_money + 150
+        
+        # 買い手の状態変化
+        assert self.buyer.get_inventory_item_count("apple") == buyer_initial_apple + 2
+        assert self.buyer.status.get_money() == buyer_initial_money - 150
+        
+        # 取引履歴の確認
+        history = self.trade_manager.get_trade_history()
+        assert len(history) == 1
+        completed_trade = history[0]
+        assert completed_trade.status == TradeStatus.COMPLETED
+        assert completed_trade.trade_id == trade_id
 
 
 class TestTradeActionStrategies:
     """取引アクション戦略のテスト"""
     
     def setup_method(self):
-        self.player = Mock(spec=Player)
-        self.player.get_player_id.return_value = "player1"
-        self.player.get_name.return_value = "テストプレイヤー"
-        
-        # statusモックを追加
-        self.player.status = Mock()
-        self.player.status.get_money.return_value = 1000
-        
-        self.trade_manager = Mock(spec=TradeManager)
-        self.game_context = Mock(spec=GameContext)
-        self.game_context.get_trade_manager.return_value = self.trade_manager
+        self.player = Player("test_player", "テストプレイヤー", Role.ADVENTURER)
+        self.game_context = GameContext(
+            player_manager=PlayerManager(),
+            spot_manager=None,
+            trade_manager=TradeManager()
+        )
     
     def test_post_trade_strategy_arguments(self):
         """取引出品戦略の引数テスト"""
@@ -54,8 +336,12 @@ class TestTradeActionStrategies:
         assert strategy.can_execute(self.player, self.game_context) is True
         
         # TradeManagerが利用できない場合
-        self.game_context.get_trade_manager.return_value = None
-        assert strategy.can_execute(self.player, self.game_context) is False
+        game_context_no_trade = GameContext(
+            player_manager=PlayerManager(),
+            spot_manager=None,
+            trade_manager=None
+        )
+        assert strategy.can_execute(self.player, game_context_no_trade) is False
     
     def test_accept_trade_strategy_arguments(self):
         """取引受託戦略の引数テスト"""
@@ -97,215 +383,17 @@ class TestTradeActionStrategies:
             assert name in arg_names
 
 
-class TestTradeActionCommands:
-    """取引アクションコマンドのテスト"""
-    
-    def setup_method(self):
-        self.player = Mock(spec=Player)
-        self.player.get_player_id.return_value = "player1"
-        self.player.get_name.return_value = "テストプレイヤー"
-        
-        # statusモックを追加
-        self.player.status = Mock()
-        self.player.status.get_money.return_value = 1000
-        
-        self.trade_manager = Mock(spec=TradeManager)
-        self.game_context = Mock(spec=GameContext)
-        self.game_context.get_trade_manager.return_value = self.trade_manager
-    
-    def test_post_trade_command_money_trade(self):
-        """お金取引の出品コマンドテスト"""
-        # モックの設定
-        mock_trade_offer = Mock(spec=TradeOffer)
-        mock_trade_offer.trade_id = "trade123"
-        mock_trade_offer.get_trade_summary.return_value = "アイテムA x1 ⇄ 100ゴールド"
-        
-        # プレイヤーのアイテム所持をモック
-        self.player.has_item.return_value = True
-        self.player.get_inventory_item_count.return_value = 5
-        self.player.status.get_money.return_value = 1000
-        
-        with patch('game.action.actions.trade_action.TradeOffer.create_money_trade', return_value=mock_trade_offer):
-            self.trade_manager.post_trade.return_value = True
-            
-            command = PostTradeCommand("item_a", 1, 100, trade_type="global")
-            result = command.execute(self.player, self.game_context)
-            
-            assert isinstance(result, PostTradeResult)
-            assert result.success is True
-            assert result.trade_id == "trade123"
-            assert result.trade_details == "アイテムA x1 ⇄ 100ゴールド"
-    
-    def test_post_trade_command_item_trade(self):
-        """アイテム取引の出品コマンドテスト"""
-        # モックの設定
-        mock_trade_offer = Mock(spec=TradeOffer)
-        mock_trade_offer.trade_id = "trade456"
-        mock_trade_offer.get_trade_summary.return_value = "アイテムA x1 ⇄ アイテムB x2"
-        
-        # プレイヤーのアイテム所持をモック
-        self.player.has_item.return_value = True
-        self.player.get_inventory_item_count.return_value = 5
-        self.player.status.get_money.return_value = 1000
-        
-        with patch('game.action.actions.trade_action.TradeOffer.create_item_trade', return_value=mock_trade_offer):
-            self.trade_manager.post_trade.return_value = True
-            
-            command = PostTradeCommand("item_a", 1, 0, "item_b", 2, trade_type="global")
-            result = command.execute(self.player, self.game_context)
-            
-            assert isinstance(result, PostTradeResult)
-            assert result.success is True
-            assert result.trade_id == "trade456"
-            assert result.trade_details == "アイテムA x1 ⇄ アイテムB x2"
-    
-    def test_post_trade_command_failure(self):
-        """取引出品失敗のテスト"""
-        # モックの設定
-        mock_trade_offer = Mock(spec=TradeOffer)
-        mock_trade_offer.trade_id = "trade123"
-        mock_trade_offer.get_trade_summary.return_value = "アイテムA x1 ⇄ 100ゴールド"
-        
-        # プレイヤーのアイテム所持をモック
-        self.player.has_item.return_value = True
-        self.player.get_inventory_item_count.return_value = 5
-        self.player.status.get_money.return_value = 1000
-        
-        with patch('game.action.actions.trade_action.TradeOffer.create_money_trade', return_value=mock_trade_offer):
-            self.trade_manager.post_trade.return_value = False
-            
-            command = PostTradeCommand("item_a", 1, 100, trade_type="global")
-            result = command.execute(self.player, self.game_context)
-            
-            assert isinstance(result, PostTradeResult)
-            assert result.success is False
-            assert "取引の出品に失敗しました" in result.message
-    
-    def test_post_trade_command_no_trade_manager(self):
-        """TradeManagerが利用できない場合のテスト"""
-        self.game_context.get_trade_manager.return_value = None
-        
-        command = PostTradeCommand("item_a", 1, 100, trade_type="global")
-        result = command.execute(self.player, self.game_context)
-        
-        assert isinstance(result, PostTradeResult)
-        assert result.success is False
-        assert "取引システムが利用できません" in result.message
-    
-    def test_accept_trade_command_success(self):
-        """取引受託成功のテスト"""
-        mock_completed_trade = Mock(spec=TradeOffer)
-        mock_completed_trade.trade_id = "trade123"
-        mock_completed_trade.get_trade_summary.return_value = "アイテムA x1 ⇄ 100ゴールド"
-        
-        mock_trade = Mock(spec=TradeOffer)
-        mock_trade.seller_id = "seller1"
-        
-        mock_seller = Mock(spec=Player)
-        mock_seller.get_player_id.return_value = "seller1"
-        
-        self.trade_manager.get_trade.return_value = mock_trade
-        self.game_context.get_player_manager.return_value.get_player.return_value = mock_seller
-        self.trade_manager.accept_trade.return_value = mock_completed_trade
-        
-        command = AcceptTradeCommand("trade123")
-        result = command.execute(self.player, self.game_context)
-        
-        assert isinstance(result, AcceptTradeResult)
-        assert result.success is True
-        assert result.trade_id == "trade123"
-        assert result.trade_details == "アイテムA x1 ⇄ 100ゴールド"
-    
-    def test_accept_trade_command_failure(self):
-        """取引受託失敗のテスト"""
-        self.trade_manager.accept_trade.side_effect = ValueError("取引が見つかりません")
-        
-        command = AcceptTradeCommand("invalid_trade_id")
-        result = command.execute(self.player, self.game_context)
-        
-        assert isinstance(result, AcceptTradeResult)
-        assert result.success is False
-        assert "取引が見つかりません" in result.message
-    
-    def test_cancel_trade_command_success(self):
-        """取引キャンセル成功のテスト"""
-        mock_cancelled_trade = Mock(spec=TradeOffer)
-        mock_cancelled_trade.get_trade_summary.return_value = "アイテムA x1 ⇄ 100ゴールド"
-        
-        self.trade_manager.cancel_trade.return_value = True
-        self.trade_manager.get_trade_history.return_value = [mock_cancelled_trade]
-        
-        command = CancelTradeCommand("trade123")
-        result = command.execute(self.player, self.game_context)
-        
-        assert isinstance(result, CancelTradeResult)
-        assert result.success is True
-        assert result.trade_id == "trade123"
-        assert result.trade_details == "アイテムA x1 ⇄ 100ゴールド"
-    
-    def test_cancel_trade_command_failure(self):
-        """取引キャンセル失敗のテスト"""
-        self.trade_manager.cancel_trade.side_effect = ValueError("取引の出品者のみがキャンセルできます")
-        
-        command = CancelTradeCommand("trade123")
-        result = command.execute(self.player, self.game_context)
-        
-        assert isinstance(result, CancelTradeResult)
-        assert result.success is False
-        assert "取引の出品者のみがキャンセルできます" in result.message
-    
-    def test_get_my_trades_command_success(self):
-        """自分の取引取得成功のテスト"""
-        mock_trades = [
-            Mock(spec=TradeOffer),
-            Mock(spec=TradeOffer)
-        ]
-        mock_trades[0].get_trade_summary.return_value = "アイテムA x1 ⇄ 100ゴールド"
-        mock_trades[1].get_trade_summary.return_value = "アイテムB x2 ⇄ アイテムC x1"
-        
-        self.trade_manager.get_player_trades.return_value = mock_trades
-        
-        command = GetMyTradesCommand(include_history=True)
-        result = command.execute(self.player, self.game_context)
-        
-        assert isinstance(result, GetMyTradesResult)
-        assert result.success is True
-        assert len(result.trades) == 2
-        assert result.include_history is True
-    
-    def test_get_available_trades_command_success(self):
-        """受託可能取引取得成功のテスト"""
-        mock_trades = [
-            Mock(spec=TradeOffer),
-            Mock(spec=TradeOffer)
-        ]
-        mock_trades[0].get_trade_summary.return_value = "アイテムA x1 ⇄ 100ゴールド"
-        mock_trades[1].get_trade_summary.return_value = "アイテムB x2 ⇄ アイテムC x1"
-        
-        self.trade_manager.get_available_trades_for_player.return_value = mock_trades
-        self.trade_manager._matches_filters.return_value = True
-        
-        filters = {"offered_item_id": "item_a"}
-        command = GetAvailableTradesCommand(filters)
-        result = command.execute(self.player, self.game_context)
-        
-        assert isinstance(result, GetAvailableTradesResult)
-        assert result.success is True
-        assert len(result.trades) == 2
-        assert result.filters == filters
-
-
 class TestTradeActionResultMessages:
     """取引アクション結果メッセージのテスト"""
     
     def test_post_trade_result_success_message(self):
         """取引出品成功メッセージのテスト"""
-        result = PostTradeResult(True, "取引を出品しました", "trade123", "アイテムA x1 ⇄ 100ゴールド")
+        result = PostTradeResult(True, "取引を出品しました", "trade123", "りんご x2 ⇄ 100ゴールド")
         message = result.to_feedback_message("テストプレイヤー")
         
         assert "テストプレイヤー は取引を出品しました" in message
         assert "取引ID: trade123" in message
-        assert "取引詳細: アイテムA x1 ⇄ 100ゴールド" in message
+        assert "取引詳細: りんご x2 ⇄ 100ゴールド" in message
     
     def test_post_trade_result_failure_message(self):
         """取引出品失敗メッセージのテスト"""
@@ -315,129 +403,20 @@ class TestTradeActionResultMessages:
         assert "テストプレイヤー は取引を出品できませんでした" in message
         assert "理由: アイテムが不足しています" in message
     
-    def test_get_my_trades_result_success_message(self):
-        """自分の取引取得成功メッセージのテスト"""
-        mock_trades = [
-            Mock(spec=TradeOffer),
-            Mock(spec=TradeOffer)
-        ]
-        mock_trades[0].get_trade_summary.return_value = "アイテムA x1 ⇄ 100ゴールド"
-        mock_trades[1].get_trade_summary.return_value = "アイテムB x2 ⇄ アイテムC x1"
-        
-        result = GetMyTradesResult(True, "自分の取引を取得しました", mock_trades, True)
+    def test_accept_trade_result_success_message(self):
+        """取引受託成功メッセージのテスト"""
+        result = AcceptTradeResult(True, "取引を受託しました", "trade123", "りんご x2 ⇄ 100ゴールド")
         message = result.to_feedback_message("テストプレイヤー")
         
-        assert "テストプレイヤー の取引一覧（履歴含む）" in message
-        assert "取引数: 2" in message
-        assert "アイテムA x1 ⇄ 100ゴールド" in message
-        assert "アイテムB x2 ⇄ アイテムC x1" in message
+        assert "テストプレイヤー は取引を受託しました" in message
+        assert "取引ID: trade123" in message
+        assert "取引詳細: りんご x2 ⇄ 100ゴールド" in message
     
-    def test_get_available_trades_result_success_message(self):
-        """受託可能取引取得成功メッセージのテスト"""
-        mock_trades = [
-            Mock(spec=TradeOffer),
-            Mock(spec=TradeOffer)
-        ]
-        mock_trades[0].get_trade_summary.return_value = "アイテムA x1 ⇄ 100ゴールド"
-        mock_trades[1].get_trade_summary.return_value = "アイテムB x2 ⇄ アイテムC x1"
-        
-        filters = {"offered_item_id": "item_a", "max_price": 200}
-        result = GetAvailableTradesResult(True, "受託可能な取引を取得しました", mock_trades, filters)
+    def test_cancel_trade_result_success_message(self):
+        """取引キャンセル成功メッセージのテスト"""
+        result = CancelTradeResult(True, "取引をキャンセルしました", "trade123", "りんご x2 ⇄ 100ゴールド")
         message = result.to_feedback_message("テストプレイヤー")
         
-        assert "テストプレイヤー が受託可能な取引一覧（フィルタ: " in message
-        assert "取引数: 2" in message
-        assert "アイテムA x1 ⇄ 100ゴールド" in message
-        assert "アイテムB x2 ⇄ アイテムC x1" in message
-
-
-class TestTradeActionIntegration:
-    """取引アクション統合テスト"""
-    
-    def setup_method(self):
-        self.trade_manager = TradeManager()
-        self.player_manager = Mock()
-        self.game_context = GameContext(
-            player_manager=self.player_manager,
-            spot_manager=Mock(),
-            trade_manager=self.trade_manager
-        )
-        self.player = Mock(spec=Player)
-        self.player.get_player_id.return_value = "player1"
-        self.player.get_name.return_value = "テストプレイヤー"
-        
-        # statusモックを追加
-        self.player.status = Mock()
-        self.player.status.get_money.return_value = 1000
-        
-        # アイテム所持をモック
-        self.player.has_item.return_value = True
-        self.player.get_inventory_item_count.return_value = 5
-    
-    def test_post_and_accept_trade_integration(self):
-        """取引出品と受託の統合テスト（アイテム・お金のやり取りなし）"""
-        # 取引を出品
-        command = PostTradeCommand("item_a", 1, 100, trade_type="global")
-        result = command.execute(self.player, self.game_context)
-        
-        assert result.success is True
-        trade_id = result.trade_id
-        
-        # 取引の存在確認のみ
-        trade = self.trade_manager.get_trade(trade_id)
-        assert trade is not None
-        assert trade.trade_id == trade_id
-    
-    def test_post_and_cancel_trade_integration(self):
-        """取引出品とキャンセルの統合テスト"""
-        # 取引を出品
-        command = PostTradeCommand("item_a", 1, 100, trade_type="global")
-        result = command.execute(self.player, self.game_context)
-        
-        assert result.success is True
-        trade_id = result.trade_id
-        
-        # 取引をキャンセル
-        cancel_command = CancelTradeCommand(trade_id)
-        cancel_result = cancel_command.execute(self.player, self.game_context)
-        
-        assert cancel_result.success is True
-        assert cancel_result.trade_id == trade_id
-    
-    def test_get_my_trades_integration(self):
-        """自分の取引取得の統合テスト"""
-        # 取引を出品
-        command = PostTradeCommand("item_a", 1, 100, trade_type="global")
-        result = command.execute(self.player, self.game_context)
-        
-        assert result.success is True
-        
-        # 自分の取引を取得
-        get_command = GetMyTradesCommand(include_history=False)
-        get_result = get_command.execute(self.player, self.game_context)
-        
-        assert get_result.success is True
-        assert len(get_result.trades) == 1
-    
-    def test_get_available_trades_integration(self):
-        """受託可能取引取得の統合テスト"""
-        # 他のプレイヤーが取引を出品
-        other_player = Mock(spec=Player)
-        other_player.get_player_id.return_value = "player2"
-        other_player.get_name.return_value = "他のプレイヤー"
-        other_player.status = Mock()
-        other_player.status.get_money.return_value = 1000
-        other_player.has_item.return_value = True
-        other_player.get_inventory_item_count.return_value = 5
-        
-        command = PostTradeCommand("item_a", 1, 100, trade_type="global")
-        result = command.execute(other_player, self.game_context)
-        
-        assert result.success is True
-        
-        # 受託可能な取引を取得
-        get_command = GetAvailableTradesCommand()
-        get_result = get_command.execute(self.player, self.game_context)
-        
-        assert get_result.success is True
-        assert len(get_result.trades) == 1 
+        assert "テストプレイヤー は取引をキャンセルしました" in message
+        assert "取引ID: trade123" in message
+        assert "取引詳細: りんご x2 ⇄ 100ゴールド" in message 

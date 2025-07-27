@@ -253,7 +253,7 @@ class TradeManager:
             if buyer.status.get_money() < trade.requested_money:
                 raise ValueError(f"購入者のお金が不足しています（所持: {buyer.status.get_money()}, 必要: {trade.requested_money}）")
     
-    def cancel_trade(self, trade_id: str, seller_id: str) -> bool:
+    def cancel_trade(self, trade_id: str, seller_id: str, seller: 'Player' = None) -> bool:
         """取引をキャンセル"""
         if trade_id not in self.active_trades:
             return False
@@ -262,6 +262,10 @@ class TradeManager:
         
         if trade.seller_id != seller_id:
             raise ValueError("取引の出品者のみがキャンセルできます")
+        
+        # 出品者にアイテムを返却
+        if seller:
+            self._return_items_to_seller(trade, seller)
         
         # 取引をキャンセル状態に変更
         cancelled_trade = TradeOffer(
@@ -283,6 +287,22 @@ class TradeManager:
         self.trade_history.append(cancelled_trade)
         
         return True
+    
+    def _return_items_to_seller(self, trade: TradeOffer, seller: 'Player'):
+        """出品者にアイテムを返却"""
+        # 出品アイテムを返却
+        if trade.offered_item_id:
+            # スタック可能アイテムの場合
+            if trade.offered_unique_id is None:
+                for _ in range(trade.offered_item_count):
+                    item = seller.inventory.get_item_by_id(trade.offered_item_id)
+                    if item:
+                        seller.add_item(item)
+            # 固有アイテムの場合
+            else:
+                item = seller.inventory.get_item_by_id(trade.offered_item_id, trade.offered_unique_id)
+                if item:
+                    seller.add_item(item)
     
     def get_trade_history(self, filters: Optional[Dict[str, Any]] = None) -> List[TradeOffer]:
         """取引履歴を取得（フィルタリング可能）"""

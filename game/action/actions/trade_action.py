@@ -377,13 +377,14 @@ class CancelTradeCommand(ActionCommand):
     def execute(self, acting_player: Player, game_context: GameContext) -> CancelTradeResult:
         player_id = acting_player.get_player_id()
         trade_manager = game_context.get_trade_manager()
+        player_manager = game_context.get_player_manager()
         
         if trade_manager is None:
             return CancelTradeResult(False, "取引システムが利用できません", None, "")
         
         try:
-            # 取引をキャンセル
-            success = trade_manager.cancel_trade(self.trade_id, player_id)
+            # 取引をキャンセル（出品者を渡す）
+            success = trade_manager.cancel_trade(self.trade_id, player_id, acting_player)
             
             if success:
                 # キャンセルされた取引の詳細を取得
