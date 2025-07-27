@@ -91,6 +91,76 @@ class Post:
         }
         return labels.get(self.visibility, "❓ 不明")
     
+    def format_post(self, author_name: str = None, include_metadata: bool = True) -> str:
+        """投稿の情報を整形して文字列として返す
+        
+        Args:
+            author_name: 投稿者の名前（Noneの場合はuser_idを使用）
+            include_metadata: メタデータ（投稿日時、可視性、ハッシュタグ）を含めるかどうか
+        
+        Returns:
+            整形された投稿の文字列
+        """
+        # 投稿者の名前を決定
+        display_name = author_name or self.user_id
+        
+        # 基本の投稿内容
+        formatted_post = f"📝 {display_name}の投稿\n"
+        formatted_post += f"{'=' * 40}\n"
+        formatted_post += f"{self.content}\n"
+        
+        if include_metadata:
+            # ハッシュタグの表示
+            if self.hashtags:
+                hashtag_text = " ".join([f"#{tag}" for tag in self.hashtags])
+                formatted_post += f"\n🏷️ {hashtag_text}\n"
+            
+            # 可視性の表示
+            visibility_label = self.get_visibility_label()
+            formatted_post += f"\n{visibility_label}\n"
+            
+            # 投稿日時の表示
+            created_str = self.created_at.strftime("%Y年%m月%d日 %H:%M")
+            formatted_post += f"📅 {created_str}\n"
+            
+            # 更新日時が作成日時と異なる場合
+            if self.updated_at != self.created_at:
+                updated_str = self.updated_at.strftime("%Y年%m月%d日 %H:%M")
+                formatted_post += f"✏️ 編集: {updated_str}\n"
+            
+            # 指定ユーザー限定の場合、許可されたユーザーを表示
+            if self.visibility == PostVisibility.SPECIFIED_USERS and self.allowed_users:
+                allowed_users_str = ", ".join(self.allowed_users)
+                formatted_post += f"👥 許可ユーザー: {allowed_users_str}\n"
+        
+        formatted_post += f"{'=' * 40}"
+        
+        return formatted_post
+    
+    def format_compact(self) -> str:
+        """投稿をコンパクトに整形して返す（短縮版）"""
+        display_name = self.user_id
+        content_preview = self.content[:50] + "..." if len(self.content) > 50 else self.content
+        
+        return f"📝 {display_name}: {content_preview} [{self.get_visibility_label()}]"
+    
+    def format_for_timeline(self, author_name: str = None) -> str:
+        """タイムライン表示用に整形して返す"""
+        display_name = author_name or self.user_id
+        created_str = self.created_at.strftime("%m/%d %H:%M")
+        
+        formatted = f"📝 {display_name} ({created_str})\n"
+        formatted += f"{self.content}\n"
+        
+        if self.hashtags:
+            hashtag_text = " ".join([f"#{tag}" for tag in self.hashtags])
+            formatted += f"🏷️ {hashtag_text}\n"
+        
+        formatted += f"{self.get_visibility_label()}\n"
+        formatted += "-" * 30
+        
+        return formatted
+    
     def __str__(self):
         return f"Post(post_id={self.post_id}, user_id={self.user_id}, content={self.content[:50]}..., visibility={self.visibility.value})"
     
