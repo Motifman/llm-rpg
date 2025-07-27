@@ -19,6 +19,13 @@ class SnsUser:
     
     def __repr__(self):
         return f"SnsUser(user_id={self.user_id}, name={self.name}, bio={self.bio})"
+    
+    def format_for_display(self) -> str:
+        """ユーザー情報を見やすい形式で表示"""
+        formatted = f"👤 {self.name} (@{self.user_id})"
+        if self.bio:
+            formatted += f"\n📝 {self.bio}"
+        return formatted
 
 
 @dataclass(frozen=True)
