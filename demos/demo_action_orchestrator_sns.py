@@ -113,7 +113,7 @@ def demo_sns_user_info_action():
     print(f"実行結果: {'成功' if result.success else '失敗'}")
     print(f"メッセージ: {result.message}")
     if result.success:
-        print(f"ユーザー情報: {result.user_info}")
+        print(f"ユーザー情報: {result.user_info.format_for_display()}")
 
 
 def demo_sns_post_action():

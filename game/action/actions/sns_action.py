@@ -15,9 +15,10 @@ class SnsGetUserInfoResult(ActionResult):
         
     def to_feedback_message(self, player_name: str) -> str:
         if self.success:
-            return f"{player_name} は {self.user_info.name} の情報を取得しました\n\t{repr(self.user_info)}"
+            user_display = self.user_info.format_for_display()
+            return f"{player_name} はユーザー情報を取得しました\n\t{user_display}"
         else:
-            return f"{player_name} は {self.user_info.name} の情報を取得できませんでした\n\t理由:{self.message}"
+            return f"{player_name} はユーザー情報を取得できませんでした\n\t理由:{self.message}"
 
 
 class SnsUpdateUserBioResult(ActionResult):
