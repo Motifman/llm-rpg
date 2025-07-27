@@ -71,3 +71,6 @@ htmlcov/
 
 # plan
 plans/
+
+# システム実装詳細ドキュメント
+docs/system_implementations/
