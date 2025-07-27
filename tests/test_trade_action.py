@@ -12,10 +12,11 @@ from game.player.player_manager import PlayerManager
 from game.core.game_context import GameContext
 from game.trade.trade_manager import TradeManager
 from game.trade.trade_data import TradeOffer
-from game.enums import TradeType, TradeStatus, Role
+from game.enums import TradeType, TradeStatus, Role, WeaponType, ArmorType, Element, Race, StatusEffectType, DamageType
 from game.item.item import Item, StackableItem
 from game.item.consumable_item import ConsumableItem
 from game.item.item_effect import ItemEffect
+from game.item.equipment_item import Weapon, Armor, WeaponEffect, ArmorEffect
 
 
 class TestTradeActionWithRealItems:
@@ -420,3 +421,317 @@ class TestTradeActionResultMessages:
         assert "テストプレイヤー は取引をキャンセルしました" in message
         assert "取引ID: trade123" in message
         assert "取引詳細: りんご x2 ⇄ 100ゴールド" in message 
+
+
+class TestTradeActionWithUniqueItems:
+    """UniqueItem（WeaponやArmor）を使った取引アクションテスト"""
+    
+    def setup_method(self):
+        """テスト用のプレイヤーとUniqueItemをセットアップ"""
+        # プレイヤーマネージャーを作成
+        self.player_manager = PlayerManager()
+        
+        # テスト用プレイヤーを作成
+        self.seller = Player("seller1", "売り手", Role.ADVENTURER)
+        self.buyer = Player("buyer1", "買い手", Role.ADVENTURER)
+        
+        # プレイヤーをマネージャーに登録
+        self.player_manager.add_player(self.seller)
+        self.player_manager.add_player(self.buyer)
+        
+        # 初期UniqueItemを追加
+        self._setup_test_unique_items()
+        
+        # ゲームコンテキストを作成
+        self.trade_manager = TradeManager()
+        self.game_context = GameContext(
+            player_manager=self.player_manager,
+            spot_manager=None,
+            trade_manager=self.trade_manager
+        )
+    
+    def _setup_test_unique_items(self):
+        """テスト用UniqueItemをセットアップ"""
+        # 武器を作成
+        weapon_effect = WeaponEffect(
+            attack_bonus=15,
+            critical_rate_bonus=0.1,
+            element=Element.FIRE,
+            element_damage=10,
+            effective_races={Race.DRAGON},
+            race_damage_multiplier=1.5
+        )
+        self.fire_sword = Weapon(
+            "fire_sword", "炎の剣", "火属性の強力な剣", 
+            WeaponType.SWORD, weapon_effect
+        )
+        
+        # 防具を作成
+        armor_effect = ArmorEffect(
+            defense_bonus=12,
+            speed_bonus=3,
+            evasion_bonus=0.05,
+            status_resistance={StatusEffectType.POISON: 0.3},
+            damage_reduction={Element.FIRE: 0.2}
+        )
+        self.leather_armor = Armor(
+            "leather_armor", "革の鎧", "軽量で動きやすい鎧",
+            ArmorType.CHEST, armor_effect
+        )
+        
+        # 別の武器を作成
+        ice_weapon_effect = WeaponEffect(
+            attack_bonus=12,
+            element=Element.ICE,
+            element_damage=8
+        )
+        self.ice_dagger = Weapon(
+            "ice_dagger", "氷の短剣", "氷属性の短剣",
+            WeaponType.SWORD, ice_weapon_effect
+        )
+        
+        # 売り手にUniqueItemを追加
+        self.seller.add_item(self.fire_sword)
+        self.seller.add_item(self.leather_armor)
+        
+        # 買い手にUniqueItemとお金を追加
+        self.buyer.add_item(self.ice_dagger)
+        self.buyer.status.add_money(2000)
+    
+    def test_post_trade_with_unique_weapon(self):
+        """UniqueItemの武器を使った取引出品テスト"""
+        # 売り手の初期状態を記録
+        initial_weapon_count = self.seller.get_inventory_item_count("fire_sword")
+        
+        # 炎の剣を500ゴールドで出品
+        command = PostTradeCommand("fire_sword", 1, 500, trade_type="global")
+        result = command.execute(self.seller, self.game_context)
+        
+        # 結果を検証
+        assert result.success is True
+        assert result.trade_id is not None
+        assert "fire_sword x1 ⇄ 500ゴールド" in result.trade_details
+        
+        # 売り手のアイテムは出品時に減少しない（受託時にやり取りされる）
+        assert self.seller.get_inventory_item_count("fire_sword") == initial_weapon_count
+        
+        # 取引が正しく登録されていることを確認
+        trade = self.trade_manager.get_trade(result.trade_id)
+        assert trade is not None
+        assert trade.offered_item_id == "fire_sword"
+        assert trade.offered_item_count == 1
+        assert trade.requested_money == 500
+        assert trade.seller_id == "seller1"
+    
+    def test_post_trade_with_unique_armor(self):
+        """UniqueItemの防具を使った取引出品テスト"""
+        # 革の鎧を300ゴールドで出品
+        command = PostTradeCommand("leather_armor", 1, 300, trade_type="global")
+        result = command.execute(self.seller, self.game_context)
+        
+        # 結果を検証
+        assert result.success is True
+        assert result.trade_id is not None
+        assert "leather_armor x1 ⇄ 300ゴールド" in result.trade_details
+        
+        # 取引が正しく登録されていることを確認
+        trade = self.trade_manager.get_trade(result.trade_id)
+        assert trade is not None
+        assert trade.offered_item_id == "leather_armor"
+        assert trade.offered_item_count == 1
+        assert trade.requested_money == 300
+    
+    def test_accept_trade_with_unique_weapon(self):
+        """UniqueItemの武器を使った取引受託テスト"""
+        # 売り手が炎の剣を500ゴールドで出品
+        post_command = PostTradeCommand("fire_sword", 1, 500, trade_type="global")
+        post_result = post_command.execute(self.seller, self.game_context)
+        trade_id = post_result.trade_id
+        
+        # 買い手の初期状態を記録
+        initial_money = self.buyer.status.get_money()
+        initial_weapon_count = self.buyer.get_inventory_item_count("fire_sword")
+        
+        # 買い手が取引を受託
+        accept_command = AcceptTradeCommand(trade_id)
+        accept_result = accept_command.execute(self.buyer, self.game_context)
+        
+        # 結果を検証
+        assert accept_result.success is True
+        assert accept_result.trade_id == trade_id
+        
+        # 買い手の状態変化を確認
+        assert self.buyer.status.get_money() == initial_money - 500
+        assert self.buyer.get_inventory_item_count("fire_sword") == initial_weapon_count + 1
+        
+        # 売り手の状態変化を確認
+        assert self.seller.status.get_money() == 500  # 売り手はお金を獲得
+        assert self.seller.get_inventory_item_count("fire_sword") == 0  # 売り手は武器を失う
+        
+        # 取引が履歴に移動していることを確認
+        assert self.trade_manager.get_trade(trade_id) is None
+        history = self.trade_manager.get_trade_history()
+        assert len(history) == 1
+        assert history[0].trade_id == trade_id
+        assert history[0].status == TradeStatus.COMPLETED
+    
+    def test_accept_trade_with_unique_armor(self):
+        """UniqueItemの防具を使った取引受託テスト"""
+        # 売り手が革の鎧を300ゴールドで出品
+        post_command = PostTradeCommand("leather_armor", 1, 300, trade_type="global")
+        post_result = post_command.execute(self.seller, self.game_context)
+        trade_id = post_result.trade_id
+        
+        # 買い手の初期状態を記録
+        initial_money = self.buyer.status.get_money()
+        initial_armor_count = self.buyer.get_inventory_item_count("leather_armor")
+        
+        # 買い手が取引を受託
+        accept_command = AcceptTradeCommand(trade_id)
+        accept_result = accept_command.execute(self.buyer, self.game_context)
+        
+        # 結果を検証
+        assert accept_result.success is True
+        
+        # 買い手の状態変化を確認
+        assert self.buyer.status.get_money() == initial_money - 300
+        assert self.buyer.get_inventory_item_count("leather_armor") == initial_armor_count + 1
+        
+        # 売り手の状態変化を確認
+        assert self.seller.status.get_money() == 300
+        assert self.seller.get_inventory_item_count("leather_armor") == 0
+    
+    def test_unique_item_to_unique_item_trade(self):
+        """UniqueItem同士の取引テスト"""
+        # 売り手が炎の剣を氷の短剣と交換で出品
+        post_command = PostTradeCommand("fire_sword", 1, 0, "ice_dagger", 1, trade_type="global")
+        post_result = post_command.execute(self.seller, self.game_context)
+        trade_id = post_result.trade_id
+        
+        # 買い手の初期状態を記録
+        initial_fire_sword_count = self.buyer.get_inventory_item_count("fire_sword")
+        initial_ice_dagger_count = self.buyer.get_inventory_item_count("ice_dagger")
+        
+        # 買い手が取引を受託
+        accept_command = AcceptTradeCommand(trade_id)
+        accept_result = accept_command.execute(self.buyer, self.game_context)
+        
+        # 結果を検証
+        assert accept_result.success is True
+        
+        # 買い手の状態変化を確認
+        assert self.buyer.get_inventory_item_count("fire_sword") == initial_fire_sword_count + 1
+        assert self.buyer.get_inventory_item_count("ice_dagger") == initial_ice_dagger_count - 1
+        
+        # 売り手の状態変化を確認
+        assert self.seller.get_inventory_item_count("ice_dagger") == 1  # 売り手は氷の短剣を獲得
+        assert self.seller.get_inventory_item_count("fire_sword") == 0  # 売り手は炎の剣を失う
+    
+    def test_cancel_trade_with_unique_item(self):
+        """UniqueItemを使った取引キャンセルテスト"""
+        # 売り手が炎の剣を500ゴールドで出品
+        post_command = PostTradeCommand("fire_sword", 1, 500, trade_type="global")
+        post_result = post_command.execute(self.seller, self.game_context)
+        trade_id = post_result.trade_id
+        
+        # 売り手の初期状態を記録
+        initial_weapon_count = self.seller.get_inventory_item_count("fire_sword")
+        
+        # 売り手が取引をキャンセル
+        cancel_command = CancelTradeCommand(trade_id)
+        cancel_result = cancel_command.execute(self.seller, self.game_context)
+        
+        # 結果を検証
+        assert cancel_result.success is True
+        assert cancel_result.trade_id == trade_id
+        
+        # 売り手のアイテムが戻っていることを確認（キャンセル時はアイテムは既にインベントリにあるため変化なし）
+        assert self.seller.get_inventory_item_count("fire_sword") == initial_weapon_count
+        
+        # 取引が履歴に移動していることを確認
+        assert self.trade_manager.get_trade(trade_id) is None
+        history = self.trade_manager.get_trade_history()
+        assert len(history) == 1
+        assert history[0].trade_id == trade_id
+        assert history[0].status == TradeStatus.CANCELLED
+    
+    def test_insufficient_unique_items_for_trade(self):
+        """UniqueItem不足での取引出品失敗テスト"""
+        # 売り手が持っていないUniqueItemで取引を試行
+        command = PostTradeCommand("nonexistent_weapon", 1, 100, trade_type="global")
+        result = command.execute(self.seller, self.game_context)
+        
+        # 結果を検証
+        assert result.success is False
+        assert "アイテム nonexistent_weapon を所持していません" in result.message
+    
+    def test_unique_item_trade_with_equipment(self):
+        """装備中のUniqueItemの取引テスト"""
+        # 売り手が炎の剣を装備
+        self.seller.equip_item("fire_sword")
+        
+        # 装備中のアイテムで取引を試行（失敗するはず）
+        command = PostTradeCommand("fire_sword", 1, 500, trade_type="global")
+        result = command.execute(self.seller, self.game_context)
+        
+        # 結果を検証（装備中のアイテムは取引できない）
+        assert result.success is False
+        assert "アイテム fire_sword を所持していません" in result.message
+    
+    def test_unique_item_trade_completion_verification(self):
+        """UniqueItem取引完了時の状態検証テスト"""
+        # 売り手の初期状態を記録
+        seller_initial_weapon = self.seller.get_inventory_item_count("fire_sword")
+        seller_initial_money = self.seller.status.get_money()
+        
+        # 買い手の初期状態を記録
+        buyer_initial_weapon = self.buyer.get_inventory_item_count("fire_sword")
+        buyer_initial_money = self.buyer.status.get_money()
+        
+        # 取引を実行
+        post_command = PostTradeCommand("fire_sword", 1, 600, trade_type="global")
+        post_result = post_command.execute(self.seller, self.game_context)
+        trade_id = post_result.trade_id
+        
+        accept_command = AcceptTradeCommand(trade_id)
+        accept_result = accept_command.execute(self.buyer, self.game_context)
+        
+        # 取引完了後の状態を検証
+        if not accept_result.success:
+            print(f"取引受託失敗: {accept_result.message}")
+        assert accept_result.success is True
+        
+        # 売り手の状態変化
+        assert self.seller.get_inventory_item_count("fire_sword") == seller_initial_weapon - 1
+        assert self.seller.status.get_money() == seller_initial_money + 600
+        
+        # 買い手の状態変化
+        assert self.buyer.get_inventory_item_count("fire_sword") == buyer_initial_weapon + 1
+        assert self.buyer.status.get_money() == buyer_initial_money - 600
+        
+        # 取引履歴の確認
+        history = self.trade_manager.get_trade_history()
+        assert len(history) == 1
+        completed_trade = history[0]
+        assert completed_trade.status == TradeStatus.COMPLETED
+        assert completed_trade.trade_id == trade_id
+    
+    def test_unique_item_trade_with_filters(self):
+        """フィルタを使ったUniqueItem取引検索テスト"""
+        # 複数のUniqueItem取引を出品
+        post_command1 = PostTradeCommand("fire_sword", 1, 500, trade_type="global")
+        post_command2 = PostTradeCommand("leather_armor", 1, 300, trade_type="global")
+        
+        post_command1.execute(self.seller, self.game_context)
+        post_command2.execute(self.seller, self.game_context)
+        
+        # 価格フィルタで検索
+        filters = {"max_price": 400}
+        get_command = GetAvailableTradesCommand(filters)
+        get_result = get_command.execute(self.buyer, self.game_context)
+        
+        # 結果を検証
+        assert get_result.success is True
+        assert len(get_result.trades) == 1  # 300ゴールドの取引のみ
+        assert get_result.trades[0].requested_money == 300
+        assert get_result.trades[0].offered_item_id == "leather_armor" 

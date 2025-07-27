@@ -100,10 +100,14 @@ class Inventory:
         return self.item_references.get(item_id)
     
     def get_item_count(self, item_id: str) -> int:
-        # 固有アイテムの場合は1または0
+        # 固有アイテムの場合は該当するアイテム数をカウント
+        unique_count = 0
         for item in self.unique_items.values():
             if item.item_id == item_id:
-                return 1
+                unique_count += 1
+        
+        if unique_count > 0:
+            return unique_count
         
         # スタック可能アイテム
         return self.item_counts.get(item_id, 0)
@@ -161,7 +165,7 @@ class Inventory:
         
         # 固有アイテム
         for unique_item in self.unique_items.values():
-            display_lines.append(f"• {unique_item.get_status_description()}")
+            display_lines.append(f"• {unique_item.name} - {unique_item.get_status_description()}")
             display_lines.append(f"  {unique_item.description}")
             display_lines.append("")
         

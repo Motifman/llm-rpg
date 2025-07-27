@@ -88,6 +88,11 @@ class Weapon(UniqueItem):
         """破損しているかどうか"""
         return self.current_durability <= 0
     
+    def can_be_traded(self) -> bool:
+        """武器が取引可能かどうかを判定"""
+        # 破損していない場合のみ取引可能
+        return not self.is_broken()
+    
     def __str__(self):
         return f"{self.name} ({self.weapon_type.value}) - {self.description} [{self.effect}]"
 
@@ -179,6 +184,11 @@ class Armor(UniqueItem):
     def is_broken(self) -> bool:
         """破損しているかどうか"""
         return self.current_durability <= 0
+    
+    def can_be_traded(self) -> bool:
+        """防具が取引可能かどうかを判定"""
+        # 破損していない場合のみ取引可能
+        return not self.is_broken()
     
     def __str__(self):
         return f"{self.name} ({self.armor_type.value}) - {self.description} [{self.effect}]"

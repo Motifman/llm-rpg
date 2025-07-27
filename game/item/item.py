@@ -44,5 +44,10 @@ class UniqueItem(Item, ABC):
         """アイテムの状態を表す文字列を取得"""
         pass
     
+    def can_be_traded(self) -> bool:
+        """アイテムが取引可能かどうかを判定"""
+        # デフォルトでは取引可能
+        return True
+    
     def __str__(self):
         return f"{self.name} ({self.item_id}) - {self.description} [{self.get_status_description()}]"
