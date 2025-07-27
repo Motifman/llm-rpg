@@ -10,16 +10,19 @@ from game.conversation.message_data import LocationChatMessage
 
 class ConversationActionResult(ActionResult):
     """会話アクションの基底結果クラス"""
-    def __init__(self, success: bool, message: str, session_id: str = None):
+    def __init__(self, success: bool, message: str, session_id: str = None, participants: List[str] = None, history: str = ""):
         super().__init__(success, message)
         self.session_id = session_id
+        self.participants = participants or []
+        self.history = history
 
 
 class StartConversationResult(ConversationActionResult):
     """会話開始結果"""
     def to_feedback_message(self, player_name: str) -> str:
         if self.success:
-            return f"{player_name} は会話を開始しました\n\tセッションID: {self.session_id}"
+            participants_text = ", ".join(self.participants) if self.participants else "なし"
+            return f"{player_name} は会話を開始しました\n\tセッションID: {self.session_id}\n\t参加者: {participants_text}\n\t会話履歴:\n{self.history}"
         else:
             return f"{player_name} は会話を開始できませんでした\n\t理由: {self.message}"
 
@@ -28,7 +31,8 @@ class JoinConversationResult(ConversationActionResult):
     """会話参加結果"""
     def to_feedback_message(self, player_name: str) -> str:
         if self.success:
-            return f"{player_name} は会話に参加しました\n\tセッションID: {self.session_id}"
+            participants_text = ", ".join(self.participants) if self.participants else "なし"
+            return f"{player_name} は会話に参加しました\n\tセッションID: {self.session_id}\n\t参加者: {participants_text}\n\t会話履歴:\n{self.history}"
         else:
             return f"{player_name} は会話に参加できませんでした\n\t理由: {self.message}"
 
@@ -37,7 +41,8 @@ class SpeakResult(ConversationActionResult):
     """発言結果"""
     def to_feedback_message(self, player_name: str) -> str:
         if self.success:
-            return f"{player_name} は発言しました\n\tセッションID: {self.session_id}"
+            participants_text = ", ".join(self.participants) if self.participants else "なし"
+            return f"{player_name} は発言しました\n\tセッションID: {self.session_id}\n\t参加者: {participants_text}\n\t会話履歴:\n{self.history}"
         else:
             return f"{player_name} は発言できませんでした\n\t理由: {self.message}"
 
@@ -46,36 +51,10 @@ class LeaveConversationResult(ConversationActionResult):
     """会話離脱結果"""
     def to_feedback_message(self, player_name: str) -> str:
         if self.success:
-            return f"{player_name} は会話から離脱しました\n\tセッションID: {self.session_id}"
+            participants_text = ", ".join(self.participants) if self.participants else "なし"
+            return f"{player_name} は会話から離脱しました\n\tセッションID: {self.session_id}\n\t参加者: {participants_text}\n\t会話履歴:\n{self.history}"
         else:
             return f"{player_name} は会話から離脱できませんでした\n\t理由: {self.message}"
-
-
-class GetConversationHistoryResult(ConversationActionResult):
-    """会話履歴取得結果"""
-    def __init__(self, success: bool, message: str, history: str = "", session_id: str = None):
-        super().__init__(success, message, session_id)
-        self.history = history
-    
-    def to_feedback_message(self, player_name: str) -> str:
-        if self.success:
-            return f"{player_name} は会話履歴を取得しました\n\t{self.history}"
-        else:
-            return f"{player_name} は会話履歴を取得できませんでした\n\t理由: {self.message}"
-
-
-class GetConversationParticipantsResult(ConversationActionResult):
-    """会話参加者取得結果"""
-    def __init__(self, success: bool, message: str, participants: List[str] = None, session_id: str = None):
-        super().__init__(success, message, session_id)
-        self.participants = participants or []
-    
-    def to_feedback_message(self, player_name: str) -> str:
-        if self.success:
-            participants_text = ", ".join(self.participants)
-            return f"{player_name} は会話参加者を取得しました\n\t参加者: {participants_text}"
-        else:
-            return f"{player_name} は会話参加者を取得できませんでした\n\t理由: {self.message}"
 
 
 # ActionStrategy クラス
@@ -189,46 +168,6 @@ class LeaveConversationStrategy(ActionStrategy):
         return LeaveConversationCommand()
 
 
-class GetConversationHistoryStrategy(ActionStrategy):
-    """会話履歴取得戦略"""
-    def __init__(self):
-        super().__init__("会話履歴取得")
-
-    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[ArgumentInfo]:
-        return [
-            ArgumentInfo(
-                name="max_messages",
-                description="取得する最大メッセージ数を入力してください（空欄の場合は全件）",
-                candidates=None  # 自由入力
-            )
-        ]
-
-    def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
-        return True
-
-    def build_action_command(self, acting_player: Player, game_context: GameContext, max_messages: str = "") -> ActionCommand:
-        try:
-            max_count = int(max_messages) if max_messages.strip() else None
-        except ValueError:
-            max_count = None
-        return GetConversationHistoryCommand(max_count)
-
-
-class GetConversationParticipantsStrategy(ActionStrategy):
-    """会話参加者取得戦略"""
-    def __init__(self):
-        super().__init__("会話参加者取得")
-
-    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[ArgumentInfo]:
-        return []
-
-    def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
-        return True
-
-    def build_action_command(self, acting_player: Player, game_context: GameContext) -> ActionCommand:
-        return GetConversationParticipantsCommand()
-
-
 # ActionCommand クラス
 
 class StartSpotConversationCommand(ActionCommand):
@@ -242,11 +181,11 @@ class StartSpotConversationCommand(ActionCommand):
         conversation_manager = game_context.get_conversation_manager()
         
         if conversation_manager is None:
-            return StartConversationResult(False, "会話システムが利用できません", None)
+            return StartConversationResult(False, "会話システムが利用できません", None, [], "")
         
         # 既に会話に参加しているかチェック
         if conversation_manager.is_player_in_conversation(player_id):
-            return StartConversationResult(False, "既に他の会話に参加しています", None)
+            return StartConversationResult(False, "既に他の会話に参加しています", None, [], "")
         
         # セッション開始
         session_id = conversation_manager.start_conversation_session(self.spot_id, player_id)
@@ -260,7 +199,11 @@ class StartSpotConversationCommand(ActionCommand):
         )
         conversation_manager.record_message(join_message)
         
-        return StartConversationResult(True, f"{self.spot_id} で会話を開始しました", session_id)
+        # 参加者と会話履歴を取得
+        participants = list(conversation_manager.get_session_participants(session_id))
+        history = conversation_manager.get_conversation_history_as_text(session_id)
+        
+        return StartConversationResult(True, f"{self.spot_id} で会話を開始しました", session_id, participants, history)
 
 
 class StartPrivateConversationCommand(ActionCommand):
@@ -275,16 +218,20 @@ class StartPrivateConversationCommand(ActionCommand):
         conversation_manager = game_context.get_conversation_manager()
         
         if conversation_manager is None:
-            return StartConversationResult(False, "会話システムが利用できません", None)
+            return StartConversationResult(False, "会話システムが利用できません", None, [], "")
         
         # 既に会話に参加しているかチェック
         if conversation_manager.is_player_in_conversation(player_id):
-            return StartConversationResult(False, "既に他の会話に参加しています", None)
+            return StartConversationResult(False, "既に他の会話に参加しています", None, [], "")
         
         # 個人宛セッション開始
         session_id = conversation_manager.start_private_conversation(player_id, self.spot_id)
         
-        return StartConversationResult(True, f"{self.target_player_id} との個人会話を開始しました", session_id)
+        # 参加者と会話履歴を取得
+        participants = list(conversation_manager.get_session_participants(session_id))
+        history = conversation_manager.get_conversation_history_as_text(session_id)
+        
+        return StartConversationResult(True, f"{self.target_player_id} との個人会話を開始しました", session_id, participants, history)
 
 
 class JoinSpotConversationCommand(ActionCommand):
@@ -298,21 +245,21 @@ class JoinSpotConversationCommand(ActionCommand):
         conversation_manager = game_context.get_conversation_manager()
         
         if conversation_manager is None:
-            return JoinConversationResult(False, "会話システムが利用できません", None)
+            return JoinConversationResult(False, "会話システムが利用できません", None, [], "")
         
         # 既に会話に参加しているかチェック
         if conversation_manager.is_player_in_conversation(player_id):
-            return JoinConversationResult(False, "既に他の会話に参加しています", None)
+            return JoinConversationResult(False, "既に他の会話に参加しています", None, [], "")
         
         # スポットにアクティブなセッションがあるかチェック
         active_session = conversation_manager.get_active_session_for_spot(self.spot_id)
         if active_session is None:
-            return JoinConversationResult(False, f"{self.spot_id} にアクティブな会話セッションがありません", None)
+            return JoinConversationResult(False, f"{self.spot_id} にアクティブな会話セッションがありません", None, [], "")
         
         # セッションに参加
         session_id = conversation_manager.join_conversation(player_id, self.spot_id)
         if session_id is None:
-            return JoinConversationResult(False, "会話セッションに参加できませんでした", None)
+            return JoinConversationResult(False, "会話セッションに参加できませんでした", None, [], "")
         
         # 参加メッセージを記録
         join_message = LocationChatMessage(
@@ -323,7 +270,11 @@ class JoinSpotConversationCommand(ActionCommand):
         )
         conversation_manager.record_message(join_message)
         
-        return JoinConversationResult(True, f"{self.spot_id} の会話に参加しました", session_id)
+        # 参加者と会話履歴を取得
+        participants = list(conversation_manager.get_session_participants(session_id))
+        history = conversation_manager.get_conversation_history_as_text(session_id)
+        
+        return JoinConversationResult(True, f"{self.spot_id} の会話に参加しました", session_id, participants, history)
 
 
 class SpeakInConversationCommand(ActionCommand):
@@ -338,11 +289,11 @@ class SpeakInConversationCommand(ActionCommand):
         conversation_manager = game_context.get_conversation_manager()
         
         if conversation_manager is None:
-            return SpeakResult(False, "会話システムが利用できません", None)
+            return SpeakResult(False, "会話システムが利用できません", None, [], "")
         
         # 会話に参加しているかチェック
         if not conversation_manager.is_player_in_conversation(player_id):
-            return SpeakResult(False, "会話に参加していません", None)
+            return SpeakResult(False, "会話に参加していません", None, [], "")
         
         # メッセージを作成
         message = LocationChatMessage(
@@ -355,7 +306,11 @@ class SpeakInConversationCommand(ActionCommand):
         # メッセージを記録
         session_id = conversation_manager.record_message(message)
         
-        return SpeakResult(True, "発言しました", session_id)
+        # 参加者と会話履歴を取得
+        participants = list(conversation_manager.get_session_participants(session_id))
+        history = conversation_manager.get_conversation_history_as_text(session_id)
+        
+        return SpeakResult(True, "発言しました", session_id, participants, history)
 
 
 class LeaveConversationCommand(ActionCommand):
@@ -368,11 +323,11 @@ class LeaveConversationCommand(ActionCommand):
         conversation_manager = game_context.get_conversation_manager()
         
         if conversation_manager is None:
-            return LeaveConversationResult(False, "会話システムが利用できません", None)
+            return LeaveConversationResult(False, "会話システムが利用できません", None, [], "")
         
         # 会話に参加しているかチェック
         if not conversation_manager.is_player_in_conversation(player_id):
-            return LeaveConversationResult(False, "会話に参加していません", None)
+            return LeaveConversationResult(False, "会話に参加していません", None, [], "")
         
         # 現在のセッション情報を取得
         session_id = conversation_manager.player_sessions.get(player_id)
@@ -387,62 +342,11 @@ class LeaveConversationCommand(ActionCommand):
         )
         conversation_manager.record_message(leave_message)
         
+        # 参加者と会話履歴を取得（離脱前）
+        participants = list(conversation_manager.get_session_participants(session_id))
+        history = conversation_manager.get_conversation_history_as_text(session_id)
+        
         # セッションから離脱
         conversation_manager.leave_conversation(player_id)
         
-        return LeaveConversationResult(True, "会話から離脱しました", session_id)
-
-
-class GetConversationHistoryCommand(ActionCommand):
-    """会話履歴取得コマンド"""
-    def __init__(self, max_messages: Optional[int] = None):
-        super().__init__("会話履歴取得")
-        self.max_messages = max_messages
-
-    def execute(self, acting_player: Player, game_context: GameContext) -> GetConversationHistoryResult:
-        player_id = acting_player.get_player_id()
-        conversation_manager = game_context.get_conversation_manager()
-        
-        if conversation_manager is None:
-            return GetConversationHistoryResult(False, "会話システムが利用できません", "", None)
-        
-        # 会話に参加しているかチェック
-        if not conversation_manager.is_player_in_conversation(player_id):
-            return GetConversationHistoryResult(False, "会話に参加していません", "", None)
-        
-        # 現在のセッションIDを取得
-        session_id = conversation_manager.player_sessions.get(player_id)
-        if session_id is None:
-            return GetConversationHistoryResult(False, "セッション情報が見つかりません", "", None)
-        
-        # 会話履歴を取得
-        history = conversation_manager.get_conversation_history_as_text(session_id, self.max_messages)
-        
-        return GetConversationHistoryResult(True, "会話履歴を取得しました", history, session_id)
-
-
-class GetConversationParticipantsCommand(ActionCommand):
-    """会話参加者取得コマンド"""
-    def __init__(self):
-        super().__init__("会話参加者取得")
-
-    def execute(self, acting_player: Player, game_context: GameContext) -> GetConversationParticipantsResult:
-        player_id = acting_player.get_player_id()
-        conversation_manager = game_context.get_conversation_manager()
-        
-        if conversation_manager is None:
-            return GetConversationParticipantsResult(False, "会話システムが利用できません", [], None)
-        
-        # 会話に参加しているかチェック
-        if not conversation_manager.is_player_in_conversation(player_id):
-            return GetConversationParticipantsResult(False, "会話に参加していません", [], None)
-        
-        # 現在のセッションIDを取得
-        session_id = conversation_manager.player_sessions.get(player_id)
-        if session_id is None:
-            return GetConversationParticipantsResult(False, "セッション情報が見つかりません", [], None)
-        
-        # 参加者リストを取得
-        participants = list(conversation_manager.get_session_participants(session_id))
-        
-        return GetConversationParticipantsResult(True, "会話参加者を取得しました", participants, session_id)
+        return LeaveConversationResult(True, "会話から離脱しました", session_id, participants, history)
