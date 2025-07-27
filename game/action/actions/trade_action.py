@@ -289,6 +289,14 @@ class PostTradeCommand(ActionCommand):
             if not acting_player.has_item(self.offered_item_id):
                 return PostTradeResult(False, f"アイテム {self.offered_item_id} を所持していません", None, "")
             
+            # アイテムの取引可能性チェック
+            item = acting_player.inventory.get_item_by_id(self.offered_item_id)
+            if item is None:
+                return PostTradeResult(False, f"アイテム {self.offered_item_id} が見つかりません", None, "")
+            
+            if not item.can_be_traded():
+                return PostTradeResult(False, f"アイテム {self.offered_item_id} は取引不可能なアイテムです", None, "")
+            
             item_count = acting_player.get_inventory_item_count(self.offered_item_id)
             if item_count < self.offered_item_count:
                 return PostTradeResult(False, f"アイテム {self.offered_item_id} が不足しています（所持: {item_count}, 必要: {self.offered_item_count}）", None, "")
