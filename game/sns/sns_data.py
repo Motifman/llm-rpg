@@ -149,7 +149,7 @@ class Post:
         display_name = author_name or self.user_id
         created_str = self.created_at.strftime("%m/%d %H:%M")
         
-        formatted = f"📝 {display_name} ({created_str})\n"
+        formatted = f"📝 {display_name} ({created_str}) [ID: {self.post_id}]\n"
         formatted += f"{self.content}\n"
         
         if self.hashtags:

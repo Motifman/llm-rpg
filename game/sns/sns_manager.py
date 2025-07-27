@@ -397,6 +397,10 @@ class SnsManager:
         if not self._is_post_visible(post, user_id):
             return None
         
+        # 空の内容チェック
+        if not content.strip():
+            return None
+        
         # 返信を作成
         reply = Reply.create(user_id=user_id, post_id=post_id, content=content)
         self.replies.append(reply)
