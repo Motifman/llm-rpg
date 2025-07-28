@@ -11,6 +11,11 @@ from game.action.actions.sns_action import (
     SnsGetTimelineStrategy, SnsLikeStrategy, SnsUnlikeStrategy, 
     SnsReplyStrategy, SnsGetNotificationsStrategy, SnsMarkNotificationReadStrategy
 )
+from game.action.actions.quest_action import (
+    QuestGetGuildListStrategy, QuestCreateMonsterHuntStrategy, QuestCreateItemCollectionStrategy,
+    QuestCreateExplorationStrategy, QuestGetAvailableQuestsStrategy, QuestAcceptQuestStrategy,
+    QuestGetActiveQuestStrategy
+)
 from game.action.action_result import ActionResult, ErrorActionResult
 
 
@@ -37,6 +42,13 @@ class ActionOrchestrator:
             SnsReplyStrategy().get_name(): SnsReplyStrategy(),
             SnsGetNotificationsStrategy().get_name(): SnsGetNotificationsStrategy(),
             SnsMarkNotificationReadStrategy().get_name(): SnsMarkNotificationReadStrategy(),
+            QuestGetGuildListStrategy().get_name(): QuestGetGuildListStrategy(),
+            QuestCreateMonsterHuntStrategy().get_name(): QuestCreateMonsterHuntStrategy(),
+            QuestCreateItemCollectionStrategy().get_name(): QuestCreateItemCollectionStrategy(),
+            QuestCreateExplorationStrategy().get_name(): QuestCreateExplorationStrategy(),
+            QuestGetAvailableQuestsStrategy().get_name(): QuestGetAvailableQuestsStrategy(),
+            QuestAcceptQuestStrategy().get_name(): QuestAcceptQuestStrategy(),
+            QuestGetActiveQuestStrategy().get_name(): QuestGetActiveQuestStrategy(),
         }
 
     def get_action_candidates_for_llm(self, acting_player_id: str) -> List[Dict[str, Any]]:
@@ -127,6 +139,13 @@ class ActionOrchestrator:
             "SNS投稿に返信": "SNS投稿に返信します",
             "SNS通知取得": "SNSの通知を取得します",
             "SNS通知を既読にする": "SNSの通知を既読にします",
+            "ギルド一覧確認": "利用可能なギルドの一覧を確認します",
+            "モンスタークエスト依頼": "モンスター討伐クエストをギルドに依頼します",
+            "アイテムクエスト依頼": "アイテム収集クエストをギルドに依頼します",
+            "探索クエスト依頼": "探索クエストをギルドに依頼します",
+            "利用可能クエスト取得": "受注可能なクエストの一覧を取得します",
+            "クエスト受注": "利用可能なクエストを受注します",
+            "アクティブクエスト取得": "現在進行中のクエストを確認します",
             "宝箱を開ける": "宝箱を開けてアイテムを入手します",
             "掲示板に書き込む": "掲示板に投稿を書き込みます",
             "掲示板を読む": "掲示板の投稿を読みます",
