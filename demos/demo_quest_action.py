@@ -318,12 +318,14 @@ def demo_quest_action_integration():
     
     # 利用可能なアクションを取得
     available_actions = orchestrator.get_action_candidates_for_llm(player.get_player_id())
-    quest_actions = [action for action in available_actions if 'quest' in action['action_name'].lower() or 'ギルド' in action['action_name']]
+    quest_actions = [action for action in available_actions if 'quest' in action['action_name'].lower() or 'ギルド' in action['action_name'] or 'クエスト' in action['action_name']]
     
     print(f"利用可能なQuest関連アクション数: {len(quest_actions)}")
+    print(f"全アクション数: {len(available_actions)}")
     for action in quest_actions:
         print(f"  - {action['action_name']}: {action['action_description']}")
-    print()
+    
+
     
     # ギルド一覧確認を実行
     print("--- ギルド一覧確認実行 ---")
