@@ -69,5 +69,29 @@
     {"from": "staircase", "to": "corridor_2f", "description": "階段から2階廊下へ"},
     {"from": "corridor_2f", "to": "classroom_2a", "description": "2階廊下から2年A組教室へ"},
     {"from": "corridor_2f", "to": "classroom_2b", "description": "2階廊下から2年B組教室へ"}
+  ],
+  "entrances": [
+    {
+      "id": "school_main_entrance",
+      "name": "正門",
+      "description": "学校の正門",
+      "from_group_id": "school_grounds",
+      "to_group_id": "outside",
+      "from_spot_id": "school_gate",
+      "to_spot_id": "outside",
+      "is_bidirectional": true,
+      "is_locked": false
+    },
+    {
+      "id": "school_back_entrance",
+      "name": "裏門",
+      "description": "学校の裏門",
+      "from_group_id": "school_grounds",
+      "to_group_id": "outside",
+      "from_spot_id": "back_gate",
+      "to_spot_id": "outside",
+      "is_bidirectional": true,
+      "is_locked": false
+    }
   ]
 } 
