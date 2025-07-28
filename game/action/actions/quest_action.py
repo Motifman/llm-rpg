@@ -21,9 +21,9 @@ class QuestGetGuildListResult(ActionResult):
             for guild in self.guilds:
                 guild_info.append(f"ID: {guild['guild_id']}, 名前: {guild['name']}, 所在地: {guild['location']}")
             guilds_text = '\n'.join(guild_info)
-            return f"{player_name} はギルド一覧を取得しました\n\t{guilds_text}"
+            return f"{player_name} はギルド一覧を取得しました\n{guilds_text}"
         else:
-            return f"{player_name} はギルド一覧を取得できませんでした\n\t理由:{self.message}"
+            return f"{player_name} はギルド一覧を取得できませんでした\n理由:{self.message}"
 
 
 class QuestCreateMonsterHuntResult(ActionResult):
@@ -33,9 +33,9 @@ class QuestCreateMonsterHuntResult(ActionResult):
         
     def to_feedback_message(self, player_name: str) -> str:
         if self.success:
-            return f"{player_name} はモンスター討伐クエストを作成しました\n\tクエストID: {self.quest_id}"
+            return f"{player_name} はモンスター討伐クエストを作成しました\nクエストID: {self.quest_id}"
         else:
-            return f"{player_name} はモンスター討伐クエストを作成できませんでした\n\t理由:{self.message}"
+            return f"{player_name} はモンスター討伐クエストを作成できませんでした\n理由:{self.message}"
 
 
 class QuestCreateItemCollectionResult(ActionResult):
@@ -45,9 +45,9 @@ class QuestCreateItemCollectionResult(ActionResult):
         
     def to_feedback_message(self, player_name: str) -> str:
         if self.success:
-            return f"{player_name} はアイテム収集クエストを作成しました\n\tクエストID: {self.quest_id}"
+            return f"{player_name} はアイテム収集クエストを作成しました\nクエストID: {self.quest_id}"
         else:
-            return f"{player_name} はアイテム収集クエストを作成できませんでした\n\t理由:{self.message}"
+            return f"{player_name} はアイテム収集クエストを作成できませんでした\n理由:{self.message}"
 
 
 class QuestCreateExplorationResult(ActionResult):
@@ -57,9 +57,9 @@ class QuestCreateExplorationResult(ActionResult):
         
     def to_feedback_message(self, player_name: str) -> str:
         if self.success:
-            return f"{player_name} は探索クエストを作成しました\n\tクエストID: {self.quest_id}"
+            return f"{player_name} は探索クエストを作成しました\nクエストID: {self.quest_id}"
         else:
-            return f"{player_name} は探索クエストを作成できませんでした\n\t理由:{self.message}"
+            return f"{player_name} は探索クエストを作成できませんでした\n理由:{self.message}"
 
 
 class QuestGetAvailableQuestsResult(ActionResult):
@@ -75,9 +75,9 @@ class QuestGetAvailableQuestsResult(ActionResult):
             for quest in self.quests:
                 quest_info.append(f"ID: {quest['quest_id']}, 名前: {quest['name']}, 報酬: {quest['reward_money']}G")
             quests_text = '\n'.join(quest_info)
-            return f"{player_name} は利用可能なクエストを取得しました\n\t{quests_text}"
+            return f"{player_name} は利用可能なクエストを取得しました\n{quests_text}"
         else:
-            return f"{player_name} は利用可能なクエストを取得できませんでした\n\t理由:{self.message}"
+            return f"{player_name} は利用可能なクエストを取得できませんでした\n理由:{self.message}"
 
 
 class QuestAcceptQuestResult(ActionResult):
@@ -116,7 +116,9 @@ class QuestGetGuildListStrategy(ActionStrategy):
         return []  # 引数不要
     
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
-        return True
+        # QuestSystemが利用可能かチェック
+        quest_system = game_context.get_quest_system()
+        return quest_system is not None
     
     def build_action_command(self, acting_player: Player, game_context: GameContext) -> ActionCommand:
         return QuestGetGuildListCommand()
@@ -171,7 +173,9 @@ class QuestCreateMonsterHuntStrategy(ActionStrategy):
         ]
 
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
-        return True
+        # QuestSystemが利用可能かチェック
+        quest_system = game_context.get_quest_system()
+        return quest_system is not None
 
     def build_action_command(self, acting_player: Player, game_context: GameContext, guild_id: str, name: str, description: str, monster_id: str, monster_count: str, difficulty: str, reward_money: str, deadline_hours: str = "72") -> ActionCommand:
         try:
@@ -238,7 +242,9 @@ class QuestCreateItemCollectionStrategy(ActionStrategy):
         ]
 
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
-        return True
+        # QuestSystemが利用可能かチェック
+        quest_system = game_context.get_quest_system()
+        return quest_system is not None
 
     def build_action_command(self, acting_player: Player, game_context: GameContext, guild_id: str, name: str, description: str, item_id: str, item_count: str, difficulty: str, reward_money: str, deadline_hours: str = "48") -> ActionCommand:
         try:
@@ -300,7 +306,9 @@ class QuestCreateExplorationStrategy(ActionStrategy):
         ]
 
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
-        return True
+        # QuestSystemが利用可能かチェック
+        quest_system = game_context.get_quest_system()
+        return quest_system is not None
 
     def build_action_command(self, acting_player: Player, game_context: GameContext, guild_id: str, name: str, description: str, target_spot_id: str, difficulty: str, reward_money: str, deadline_hours: str = "24") -> ActionCommand:
         try:
@@ -324,7 +332,9 @@ class QuestGetAvailableQuestsStrategy(ActionStrategy):
         return []  # 引数不要
     
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
-        return True
+        # QuestSystemが利用可能かチェック
+        quest_system = game_context.get_quest_system()
+        return quest_system is not None
     
     def build_action_command(self, acting_player: Player, game_context: GameContext) -> ActionCommand:
         return QuestGetAvailableQuestsCommand()
@@ -344,7 +354,9 @@ class QuestAcceptQuestStrategy(ActionStrategy):
         ]
 
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
-        return True
+        # QuestSystemが利用可能かチェック
+        quest_system = game_context.get_quest_system()
+        return quest_system is not None
 
     def build_action_command(self, acting_player: Player, game_context: GameContext, quest_id: str) -> ActionCommand:
         return QuestAcceptQuestCommand(quest_id)
@@ -358,7 +370,9 @@ class QuestGetActiveQuestStrategy(ActionStrategy):
         return []  # 引数不要
     
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
-        return True
+        # QuestSystemが利用可能かチェック
+        quest_system = game_context.get_quest_system()
+        return quest_system is not None
     
     def build_action_command(self, acting_player: Player, game_context: GameContext) -> ActionCommand:
         return QuestGetActiveQuestCommand()
@@ -419,11 +433,11 @@ class QuestCreateMonsterHuntCommand(ActionCommand):
             )
             
             # クエストをギルドに投稿
-            success = quest_system.post_quest_to_guild(self.guild_id, quest, acting_player)
+            success, message = quest_system.post_quest_to_guild(self.guild_id, quest, acting_player)
             if success:
                 return QuestCreateMonsterHuntResult(True, "モンスター討伐クエストを作成しました", quest.quest_id)
             else:
-                return QuestCreateMonsterHuntResult(False, "クエストの投稿に失敗しました")
+                return QuestCreateMonsterHuntResult(False, message)
         except Exception as e:
             return QuestCreateMonsterHuntResult(False, f"クエスト作成中にエラーが発生しました: {e}")
 
@@ -460,11 +474,11 @@ class QuestCreateItemCollectionCommand(ActionCommand):
             )
             
             # クエストをギルドに投稿
-            success = quest_system.post_quest_to_guild(self.guild_id, quest, acting_player)
+            success, message = quest_system.post_quest_to_guild(self.guild_id, quest, acting_player)
             if success:
                 return QuestCreateItemCollectionResult(True, "アイテム収集クエストを作成しました", quest.quest_id)
             else:
-                return QuestCreateItemCollectionResult(False, "クエストの投稿に失敗しました")
+                return QuestCreateItemCollectionResult(False, message)
         except Exception as e:
             return QuestCreateItemCollectionResult(False, f"クエスト作成中にエラーが発生しました: {e}")
 
@@ -499,11 +513,11 @@ class QuestCreateExplorationCommand(ActionCommand):
             )
             
             # クエストをギルドに投稿
-            success = quest_system.post_quest_to_guild(self.guild_id, quest, acting_player)
+            success, message = quest_system.post_quest_to_guild(self.guild_id, quest, acting_player)
             if success:
                 return QuestCreateExplorationResult(True, "探索クエストを作成しました", quest.quest_id)
             else:
-                return QuestCreateExplorationResult(False, "クエストの投稿に失敗しました")
+                return QuestCreateExplorationResult(False, message)
         except Exception as e:
             return QuestCreateExplorationResult(False, f"クエスト作成中にエラーが発生しました: {e}")
 
@@ -546,11 +560,11 @@ class QuestAcceptQuestCommand(ActionCommand):
         
         try:
             player_id = acting_player.get_player_id()
-            success = quest_system.accept_quest(player_id, self.quest_id)
+            success, message = quest_system.accept_quest(player_id, self.quest_id)
             if success:
                 return QuestAcceptQuestResult(True, "クエストを受注しました", self.quest_id)
             else:
-                return QuestAcceptQuestResult(False, "クエストの受注に失敗しました", self.quest_id)
+                return QuestAcceptQuestResult(False, message, self.quest_id)
         except Exception as e:
             return QuestAcceptQuestResult(False, f"クエスト受注中にエラーが発生しました: {e}", self.quest_id)
 

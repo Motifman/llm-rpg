@@ -176,7 +176,8 @@ class TestQuestAction(unittest.TestCase):
             "test_guild", "テストクエスト", "テスト説明",
             "goblin", 3, QuestDifficulty.E, "client_001", 100, 72
         )
-        self.quest_system.post_quest_to_guild("test_guild", quest, self.player)
+        success, message = self.quest_system.post_quest_to_guild("test_guild", quest, self.player)
+        self.assertTrue(success, f"クエスト投稿に失敗: {message}")
         
         command = QuestGetAvailableQuestsCommand()
         result = command.execute(self.player, self.game_context)
@@ -208,7 +209,8 @@ class TestQuestAction(unittest.TestCase):
             "test_guild", "テストクエスト", "テスト説明",
             "goblin", 3, QuestDifficulty.E, "client_001", 100, 72
         )
-        self.quest_system.post_quest_to_guild("test_guild", quest, self.player)
+        success, message = self.quest_system.post_quest_to_guild("test_guild", quest, self.player)
+        self.assertTrue(success, f"クエスト投稿に失敗: {message}")
         
         command = QuestAcceptQuestCommand(quest.quest_id)
         result = command.execute(self.player, self.game_context)
@@ -247,8 +249,10 @@ class TestQuestAction(unittest.TestCase):
             "test_guild", "テストクエスト", "テスト説明",
             "goblin", 3, QuestDifficulty.E, "client_001", 100, 72
         )
-        self.quest_system.post_quest_to_guild("test_guild", quest, self.player)
-        self.quest_system.accept_quest(self.player.get_player_id(), quest.quest_id)
+        success, message = self.quest_system.post_quest_to_guild("test_guild", quest, self.player)
+        self.assertTrue(success, f"クエスト投稿に失敗: {message}")
+        success, message = self.quest_system.accept_quest(self.player.get_player_id(), quest.quest_id)
+        self.assertTrue(success, f"クエスト受注に失敗: {message}")
         
         command = QuestGetActiveQuestCommand()
         result = command.execute(self.player, self.game_context)

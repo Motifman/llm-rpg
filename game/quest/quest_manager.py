@@ -64,21 +64,25 @@ class QuestSystem:
         self.quest_id_counter += 1
         return f"quest_{self.quest_id_counter:06d}"
     
-    def post_quest_to_guild(self, guild_id: str, quest: Quest, client_player: Player) -> bool:
+    def post_quest_to_guild(self, guild_id: str, quest: Quest, client_player: Player) -> tuple[bool, str]:
         """ギルドにクエストを依頼"""
         guild = self.get_guild(guild_id)
         if not guild:
-            return False
+            return False, f"ギルド {guild_id} が存在しません"
         
         # 依頼者の資金チェック
         if client_player.get_money() < quest.reward_money:
-            return False
+            return False, f"資金が不足しています。必要額: {quest.reward_money}G, 所持金: {client_player.get_money()}G"
         
         # 依頼手数料を支払い
         client_player.add_money(-quest.reward_money)
         
         # ギルドにクエストを掲示
-        return guild.post_quest(quest, quest.reward_money)
+        success = guild.post_quest(quest, quest.reward_money)
+        if success:
+            return True, "クエストの投稿に成功しました"
+        else:
+            return False, "ギルドでのクエスト投稿に失敗しました"
     
     def get_available_quests(self, player_id: str) -> List[Quest]:
         """プレイヤーが受注可能なクエストを取得"""
@@ -88,13 +92,24 @@ class QuestSystem:
         
         return guild.get_available_quests(player_id)
     
-    def accept_quest(self, player_id: str, quest_id: str) -> bool:
+    def accept_quest(self, player_id: str, quest_id: str) -> tuple[bool, str]:
         """クエストを受注"""
         guild = self.get_player_guild(player_id)
         if not guild:
-            return False
+            return False, "プレイヤーがギルドに所属していません"
         
-        return guild.accept_quest(quest_id, player_id)
+        success = guild.accept_quest(quest_id, player_id)
+        if success:
+            return True, "クエストの受注に成功しました"
+        else:
+            # クエストが存在しないか、既に受注済みか、他の理由で失敗
+            quest = self.get_quest_by_id(quest_id)
+            if quest is None:
+                return False, f"クエスト {quest_id} が存在しません"
+            elif quest.status.value in ["ACCEPTED", "IN_PROGRESS", "COMPLETED"]:
+                return False, f"クエスト {quest_id} は既に受注済みまたは進行中です"
+            else:
+                return False, f"クエスト {quest_id} の受注に失敗しました"
     
     def cancel_quest(self, player_id: str, quest_id: str) -> bool:
         """クエストをキャンセル"""
