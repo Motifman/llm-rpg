@@ -1,0 +1,11 @@
+{
+  "connections": [
+    {"from": "school_gate", "to": "city_street", "description": "校門から市街地へ"},
+    {"from": "back_gate", "to": "city_street", "description": "裏門から市街地へ"},
+    {"from": "mall_entrance", "to": "city_street", "description": "モール入口から市街地へ"},
+    {"from": "city_street", "to": "school_gate", "description": "市街地から校門へ"},
+    {"from": "city_street", "to": "mall_entrance", "description": "市街地からモール入口へ"},
+    {"from": "playground", "to": "mall_parking", "description": "校庭からモール駐車場へ（近道）"},
+    {"from": "mall_parking", "to": "playground", "description": "モール駐車場から校庭へ（近道）"}
+  ]
+} 

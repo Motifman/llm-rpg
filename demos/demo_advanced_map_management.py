@@ -279,6 +279,52 @@ def demo_advanced_features():
     
     if not spot_manager.is_entrance_locked("main_entrance"):
         print("正門はロックされていません")
+    
+    # === 新機能: spot_idから位置情報を取得 ===
+    print("\n=== spot_idから位置情報を取得 ===")
+    
+    # 校門の位置情報
+    print("校門の位置情報:")
+    print(spot_manager.get_spot_location_summary("school_gate"))
+    
+    # 1年A組教室の位置情報
+    print("\n1年A組教室の位置情報:")
+    print(spot_manager.get_spot_location_summary("classroom_1a"))
+    
+    # 図書館の位置情報
+    print("\n図書館の位置情報:")
+    print(spot_manager.get_spot_location_summary("library"))
+    
+    # 存在しないスポットの位置情報
+    print("\n存在しないスポットの位置情報:")
+    print(spot_manager.get_spot_location_summary("nonexistent_spot"))
+    
+    # 利用可能な出口の取得
+    print("\n=== 利用可能な出口の取得 ===")
+    available_exits = spot_manager.get_available_exits_from_spot("school_gate")
+    print(f"校門から利用可能な出口: {len(available_exits)}個")
+    for exit_entrance in available_exits:
+        print(f"- {exit_entrance.name}: {exit_entrance.description}")
+    
+    # グループ階層の取得
+    print("\n=== グループ階層の取得 ===")
+    hierarchy = spot_manager.get_spot_group_hierarchy("classroom_1a")
+    print(f"classroom_1aの所属グループ階層:")
+    for i, group in enumerate(hierarchy, 1):
+        print(f"{i}. {group.config.name} ({len(group.get_all_spots())}スポット): {group.config.description}")
+    
+    # 位置情報の詳細取得
+    print("\n=== 位置情報の詳細取得 ===")
+    location_info = spot_manager.get_spot_location_info("school_gate")
+    print(f"校門の詳細情報:")
+    print(f"- スポットID: {location_info['spot_id']}")
+    print(f"- スポット名: {location_info['spot'].name}")
+    print(f"- 所属グループ数: {len(location_info['groups'])}")
+    for group in location_info['groups']:
+        print(f"- {group.get_summary()}")
+    print(f"- 入り口スポットか: {location_info['is_entrance_spot']}")
+    print(f"- 出口スポットか: {location_info['is_exit_spot']}")
+    print(f"- 関連出入り口数: {len(location_info['entrances'])}")
 
 
 def main():

@@ -7,7 +7,7 @@ class HomeSpot(SpecialSpot):
     """家のSpot - ベッドでの睡眠、机での日記書き込みが可能"""
     
     def __init__(self, spot_id: str, owner_id: str):
-        super().__init__(spot_id, "家", "あなたの家です。ベッドと机があります。")
+        super().__init__(spot_id, "家", "家、ベッドと机がある")
         
         # オーナーの権限を設定
         self.set_player_permission(owner_id, Permission.OWNER)

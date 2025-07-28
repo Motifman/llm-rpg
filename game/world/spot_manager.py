@@ -1,3 +1,5 @@
+import json
+import yaml
 from typing import List, Dict, Optional
 from game.world.spot import Spot
 from game.world.movement_graph import MovementGraph
@@ -116,6 +118,99 @@ class SpotManager:
         # 構築されたマップをSpotManagerに統合
         self._integrate_map_builder()
     
+    # === マップ拡張機能 ===
+    
+    def extend_map_from_json(self, file_path: str):
+        """JSONファイルからマップを拡張"""
+        self.map_builder.load_from_json(file_path)
+        # 既存のマップに統合（上書きではなく追加）
+        self._extend_map_builder()
+    
+    def extend_map_from_yaml(self, file_path: str):
+        """YAMLファイルからマップを拡張"""
+        self.map_builder.load_from_yaml(file_path)
+        # 既存のマップに統合（上書きではなく追加）
+        self._extend_map_builder()
+    
+    def load_connections_from_json(self, file_path: str):
+        """JSONファイルから接続のみを読み込み"""
+        with open(file_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        self._load_connections_only(config)
+    
+    def load_connections_from_yaml(self, file_path: str):
+        """YAMLファイルから接続のみを読み込み"""
+        with open(file_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+        self._load_connections_only(config)
+    
+    def _extend_map_builder(self):
+        """MapBuilderの内容を既存のマップに追加統合"""
+        # MovementGraphを統合
+        builder_graph = self.map_builder.get_movement_graph()
+        
+        # スポットを統合（既存のスポットは上書きしない）
+        for spot in builder_graph.get_all_spots():
+            if not self.get_spot(spot.spot_id):  # 存在しない場合のみ追加
+                self.add_spot(spot)
+        
+        # 接続を統合
+        for spot_id in builder_graph.nodes:
+            if spot_id in builder_graph.edges:
+                for edge in builder_graph.edges[spot_id]:
+                    # 接続が既に存在するかチェック
+                    existing_destinations = self.get_destination_spot_ids(spot_id)
+                    if edge.to_spot_id not in existing_destinations:
+                        self.movement_graph.add_connection(
+                            from_spot_id=edge.from_spot_id,
+                            to_spot_id=edge.to_spot_id,
+                            description=edge.description,
+                            is_bidirectional=edge.is_bidirectional,
+                            conditions=edge.conditions,
+                            is_dynamic=edge.is_dynamic
+                        )
+        
+        # グループを統合（既存のグループは上書きしない）
+        for group in self.map_builder.get_all_groups():
+            if group.group_id not in self.groups:  # 存在しない場合のみ追加
+                self.groups[group.group_id] = group
+                # グループにスポットを追加
+                for spot in group.get_all_spots():
+                    group.add_spot(spot)
+    
+    def _load_connections_only(self, config: Dict):
+        """接続のみを読み込み"""
+        if 'connections' in config:
+            for connection in config['connections']:
+                # スポットが存在するかチェック
+                if (self.get_spot(connection['from']) and 
+                    self.get_spot(connection['to'])):
+                    
+                    # 接続が既に存在するかチェック
+                    existing_destinations = self.get_destination_spot_ids(connection['from'])
+                    if connection['to'] not in existing_destinations:
+                        self.movement_graph.add_connection(
+                            from_spot_id=connection['from'],
+                            to_spot_id=connection['to'],
+                            description=connection['description'],
+                            is_bidirectional=connection.get('bidirectional', True),
+                            conditions=connection.get('conditions'),
+                            is_dynamic=connection.get('dynamic', False)
+                        )
+    
+    def get_map_extension_summary(self) -> str:
+        """マップ拡張の概要を取得"""
+        summary = "=== マップ拡張機能概要 ===\n"
+        summary += f"現在のスポット数: {len(self.get_all_spots())}\n"
+        summary += f"現在のグループ数: {len(self.groups)}\n"
+        summary += f"現在の接続数: {sum(len(edges) for edges in self.movement_graph.edges.values())}\n"
+        
+        summary += "\n=== グループ別スポット数 ===\n"
+        for group in self.groups.values():
+            summary += f"- {group.config.name}: {len(group.get_all_spots())}スポット\n"
+        
+        return summary
+    
     def _integrate_map_builder(self):
         """MapBuilderの内容をSpotManagerに統合"""
         # MovementGraphを統合
@@ -185,3 +280,105 @@ class SpotManager:
         errors.extend(entrance_errors)
         
         return errors
+    
+    # === spot_idから情報を取得する機能 ===
+    
+    def get_spot_location_info(self, spot_id: str) -> Dict[str, any]:
+        """spot_idから位置情報を取得"""
+        info = {
+            "spot_id": spot_id,
+            "spot": self.get_spot(spot_id),
+            "groups": [],
+            "entrances": [],
+            "is_entrance_spot": False,
+            "is_exit_spot": False
+        }
+        
+        if not info["spot"]:
+            return info
+        
+        # 所属グループを取得
+        groups = self.get_groups_containing_spot(spot_id)
+        info["groups"] = groups
+        
+        # 各グループでの役割を確認
+        for group in groups:
+            if group.is_entrance_spot(spot_id):
+                info["is_entrance_spot"] = True
+            if group.is_exit_spot(spot_id):
+                info["is_exit_spot"] = True
+        
+        # 関連する出入り口を取得
+        for group in groups:
+            entrances = self.get_entrances_for_group(group.group_id)
+            for entrance in entrances:
+                if entrance.from_spot_id == spot_id or entrance.to_spot_id == spot_id:
+                    info["entrances"].append(entrance)
+        
+        return info
+    
+    def get_spot_location_summary(self, spot_id: str) -> str:
+        """spot_idから位置情報の概要を取得"""
+        info = self.get_spot_location_info(spot_id)
+        
+        if not info["spot"]:
+            return f"スポット {spot_id} は存在しません"
+        
+        summary = f"=== {info['spot'].name} ({spot_id}) ===\n"
+        summary += f"説明: {info['spot'].description}\n"
+        
+        if info["groups"]:
+            summary += f"\n所属グループ:\n"
+            for group in info["groups"]:
+                summary += f"- {group.config.name}: {group.config.description}\n"
+                if group.is_entrance_spot(spot_id):
+                    summary += f"  → このグループの入り口スポット\n"
+                if group.is_exit_spot(spot_id):
+                    summary += f"  → このグループの出口スポット\n"
+        else:
+            summary += f"\n所属グループ: なし\n"
+        
+        if info["entrances"]:
+            summary += f"\n関連する出入り口:\n"
+            for entrance in info["entrances"]:
+                status = "🔒" if self.is_entrance_locked(entrance.entrance_id) else "🔓"
+                direction = "↔" if entrance.is_bidirectional else "→"
+                summary += f"- {status} {entrance.name} ({entrance.entrance_id})\n"
+                summary += f"  {direction} {entrance.from_group_id}:{entrance.from_spot_id} → {entrance.to_group_id}:{entrance.to_spot_id}\n"
+                summary += f"  {entrance.description}\n"
+        else:
+            summary += f"\n関連する出入り口: なし\n"
+        
+        # 移動可能なスポット
+        destinations = self.get_destination_spot_ids(spot_id)
+        if destinations:
+            summary += f"\n移動可能なスポット:\n"
+            for dest_id in destinations:
+                dest_spot = self.get_spot(dest_id)
+                if dest_spot:
+                    summary += f"- {dest_spot.name} ({dest_id})\n"
+        else:
+            summary += f"\n移動可能なスポット: なし\n"
+        
+        return summary
+    
+    def get_available_exits_from_spot(self, spot_id: str) -> List[EntranceConfig]:
+        """spot_idから利用可能な出口を取得"""
+        info = self.get_spot_location_info(spot_id)
+        available_exits = []
+        
+        for entrance in info["entrances"]:
+            # ロックされていない出入り口のみ
+            if not self.is_entrance_locked(entrance.entrance_id):
+                available_exits.append(entrance)
+        
+        return available_exits
+    
+    def get_spot_group_hierarchy(self, spot_id: str) -> List[SpotGroup]:
+        """spot_idの所属グループを階層順に取得（大きいグループから小さいグループへ）"""
+        groups = self.get_groups_containing_spot(spot_id)
+        
+        # スポット数でソート（大きいグループから）
+        groups.sort(key=lambda g: len(g.get_all_spots()), reverse=True)
+        
+        return groups

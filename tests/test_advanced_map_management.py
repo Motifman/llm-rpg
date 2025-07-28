@@ -379,6 +379,310 @@ class TestSpotManagerExtension:
         errors = spot_manager.validate_map()
         assert len(errors) > 0
         assert any("存在しないスポット" in error for error in errors)
+    
+    def test_spot_manager_location_info(self):
+        """SpotManagerの位置情報取得テスト"""
+        spot_manager = SpotManager()
+        
+        # スポットを作成
+        spot1 = Spot("spot1", "スポット1", "テストスポット1")
+        spot2 = Spot("spot2", "スポット2", "テストスポット2")
+        spot_manager.add_spot(spot1)
+        spot_manager.add_spot(spot2)
+        
+        # 接続を追加
+        spot_manager.movement_graph.add_connection("spot1", "spot2", "スポット1からスポット2へ")
+        
+        # グループを作成
+        config = SpotGroupConfig(
+            group_id="test_group",
+            name="テストグループ",
+            description="テスト用のグループ",
+            spot_ids=["spot1", "spot2"],
+            entrance_spot_ids=["spot1"],
+            tags=["test"]
+        )
+        
+        group = spot_manager.create_group(config)
+        spot_manager.add_spot_to_group(spot1, "test_group")
+        spot_manager.add_spot_to_group(spot2, "test_group")
+        
+        # 出入り口を作成
+        entrance_config = EntranceConfig(
+            entrance_id="entrance1",
+            name="テスト出入り口",
+            description="テスト用の出入り口",
+            from_group_id="test_group",
+            to_group_id="outside",
+            from_spot_id="spot1",
+            to_spot_id="outside",
+            is_bidirectional=True
+        )
+        spot_manager.add_entrance(entrance_config)
+        
+        # 位置情報の取得テスト
+        location_info = spot_manager.get_spot_location_info("spot1")
+        
+        assert location_info["spot_id"] == "spot1"
+        assert location_info["spot"] == spot1
+        assert len(location_info["groups"]) == 1
+        assert location_info["is_entrance_spot"] is True
+        assert location_info["is_exit_spot"] is False
+        assert len(location_info["entrances"]) == 1
+        
+        # 概要の取得テスト
+        summary = spot_manager.get_spot_location_summary("spot1")
+        assert "スポット1" in summary
+        assert "テストグループ" in summary
+        assert "入り口スポット" in summary
+        
+        # 存在しないスポットのテスト
+        location_info_nonexistent = spot_manager.get_spot_location_info("nonexistent")
+        assert location_info_nonexistent["spot"] is None
+        
+        summary_nonexistent = spot_manager.get_spot_location_summary("nonexistent")
+        assert "存在しません" in summary_nonexistent
+    
+    def test_spot_manager_available_exits(self):
+        """SpotManagerの利用可能な出口取得テスト"""
+        spot_manager = SpotManager()
+        
+        # スポットを作成
+        spot1 = Spot("spot1", "スポット1", "テストスポット1")
+        spot_manager.add_spot(spot1)
+        
+        # グループを作成
+        config = SpotGroupConfig(
+            group_id="test_group",
+            name="テストグループ",
+            description="テスト用のグループ",
+            spot_ids=["spot1"],
+            tags=["test"]
+        )
+        
+        spot_manager.create_group(config)
+        spot_manager.add_spot_to_group(spot1, "test_group")
+        
+        # 出入り口を作成
+        entrance_config = EntranceConfig(
+            entrance_id="entrance1",
+            name="テスト出入り口",
+            description="テスト用の出入り口",
+            from_group_id="test_group",
+            to_group_id="outside",
+            from_spot_id="spot1",
+            to_spot_id="outside",
+            is_bidirectional=True
+        )
+        spot_manager.add_entrance(entrance_config)
+        
+        # 利用可能な出口の取得テスト
+        available_exits = spot_manager.get_available_exits_from_spot("spot1")
+        assert len(available_exits) == 1
+        assert available_exits[0].entrance_id == "entrance1"
+        
+        # ロック後のテスト
+        spot_manager.lock_entrance("entrance1")
+        available_exits_locked = spot_manager.get_available_exits_from_spot("spot1")
+        assert len(available_exits_locked) == 0
+    
+    def test_spot_manager_group_hierarchy(self):
+        """SpotManagerのグループ階層取得テスト"""
+        spot_manager = SpotManager()
+        
+        # スポットを作成
+        spot1 = Spot("spot1", "スポット1", "テストスポット1")
+        spot_manager.add_spot(spot1)
+        
+        # 大きなグループを作成
+        large_config = SpotGroupConfig(
+            group_id="large_group",
+            name="大きなグループ",
+            description="大きなテストグループ",
+            spot_ids=["spot1", "spot2", "spot3"],
+            tags=["large"]
+        )
+        
+        # 小さなグループを作成
+        small_config = SpotGroupConfig(
+            group_id="small_group",
+            name="小さなグループ",
+            description="小さなテストグループ",
+            spot_ids=["spot1"],
+            tags=["small"]
+        )
+        
+        spot_manager.create_group(large_config)
+        spot_manager.create_group(small_config)
+        spot_manager.add_spot_to_group(spot1, "large_group")
+        spot_manager.add_spot_to_group(spot1, "small_group")
+        
+        # 階層の取得テスト
+        hierarchy = spot_manager.get_spot_group_hierarchy("spot1")
+        assert len(hierarchy) == 2
+        
+        # 大きいグループが先に来ることを確認
+        assert hierarchy[0].config.group_id == "large_group"
+        assert hierarchy[1].config.group_id == "small_group"
+    
+    def test_spot_manager_map_extension(self):
+        """SpotManagerのマップ拡張機能テスト"""
+        spot_manager = SpotManager()
+        
+        # 基本マップを読み込み
+        basic_config = {
+            "spots": [
+                {"id": "spot1", "name": "スポット1", "description": "テストスポット1"},
+                {"id": "spot2", "name": "スポット2", "description": "テストスポット2"}
+            ],
+            "groups": [
+                {
+                    "id": "group1",
+                    "name": "グループ1",
+                    "description": "テストグループ1",
+                    "spot_ids": ["spot1", "spot2"],
+                    "tags": ["test"]
+                }
+            ],
+            "connections": [
+                {"from": "spot1", "to": "spot2", "description": "スポット1からスポット2へ"}
+            ]
+        }
+        
+        # 一時ファイルを作成
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(basic_config, f, ensure_ascii=False, indent=2)
+            temp_file = f.name
+        
+        try:
+            spot_manager.load_map_from_json(temp_file)
+            initial_spots = len(spot_manager.get_all_spots())
+            initial_groups = len(spot_manager.groups)
+            
+            # 拡張マップを読み込み
+            extension_config = {
+                "spots": [
+                    {"id": "spot3", "name": "スポット3", "description": "テストスポット3"},
+                    {"id": "spot4", "name": "スポット4", "description": "テストスポット4"}
+                ],
+                "groups": [
+                    {
+                        "id": "group2",
+                        "name": "グループ2",
+                        "description": "テストグループ2",
+                        "spot_ids": ["spot3", "spot4"],
+                        "tags": ["test", "extension"]
+                    }
+                ],
+                "connections": [
+                    {"from": "spot2", "to": "spot3", "description": "スポット2からスポット3へ"},
+                    {"from": "spot3", "to": "spot4", "description": "スポット3からスポット4へ"}
+                ]
+            }
+            
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f2:
+                json.dump(extension_config, f2, ensure_ascii=False, indent=2)
+                temp_file2 = f2.name
+            
+            try:
+                spot_manager.extend_map_from_json(temp_file2)
+                
+                # 拡張後の確認
+                assert len(spot_manager.get_all_spots()) == initial_spots + 2
+                assert len(spot_manager.groups) == initial_groups + 1
+                
+                # 新しいスポットが存在することを確認
+                assert spot_manager.get_spot("spot3") is not None
+                assert spot_manager.get_spot("spot4") is not None
+                
+                # 新しいグループが存在することを確認
+                assert "group2" in spot_manager.groups
+                
+                # 接続が追加されていることを確認
+                destinations = spot_manager.get_destination_spot_ids("spot2")
+                assert "spot3" in destinations
+                
+            finally:
+                os.unlink(temp_file2)
+                
+        finally:
+            os.unlink(temp_file)
+    
+    def test_spot_manager_connection_only_loading(self):
+        """SpotManagerの接続のみ読み込みテスト"""
+        spot_manager = SpotManager()
+        
+        # 基本スポットを作成
+        from game.world.spot import Spot
+        spot1 = Spot("spot1", "スポット1", "テストスポット1")
+        spot2 = Spot("spot2", "スポット2", "テストスポット2")
+        spot_manager.add_spot(spot1)
+        spot_manager.add_spot(spot2)
+        
+        # 接続のみを読み込み
+        connections_config = {
+            "connections": [
+                {"from": "spot1", "to": "spot2", "description": "スポット1からスポット2へ"}
+            ]
+        }
+        
+        # 一時ファイルを作成
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(connections_config, f, ensure_ascii=False, indent=2)
+            temp_file = f.name
+        
+        try:
+            spot_manager.load_connections_from_json(temp_file)
+            
+            # 接続が追加されていることを確認
+            destinations = spot_manager.get_destination_spot_ids("spot1")
+            assert "spot2" in destinations
+            
+            # スポット数は変わらないことを確認
+            assert len(spot_manager.get_all_spots()) == 2
+            
+        finally:
+            os.unlink(temp_file)
+    
+    def test_spot_manager_extension_summary(self):
+        """SpotManagerの拡張概要取得テスト"""
+        spot_manager = SpotManager()
+        
+        # 基本マップを読み込み
+        basic_config = {
+            "spots": [
+                {"id": "spot1", "name": "スポット1", "description": "テストスポット1"}
+            ],
+            "groups": [
+                {
+                    "id": "group1",
+                    "name": "グループ1",
+                    "description": "テストグループ1",
+                    "spot_ids": ["spot1"],
+                    "tags": ["test"]
+                }
+            ]
+        }
+        
+        # 一時ファイルを作成
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(basic_config, f, ensure_ascii=False, indent=2)
+            temp_file = f.name
+        
+        try:
+            spot_manager.load_map_from_json(temp_file)
+            
+            summary = spot_manager.get_map_extension_summary()
+            assert "マップ拡張機能概要" in summary
+            assert "現在のスポット数: 1" in summary
+            assert "現在のグループ数: 1" in summary
+            assert "グループ1: 1スポット" in summary
+            
+        finally:
+            os.unlink(temp_file)
 
 
 if __name__ == "__main__":
