@@ -61,6 +61,18 @@ class Player:
     
     def set_status(self, status: Status):
         self.status = status
+    
+    def get_money(self) -> int:
+        return self.status.get_money()
+    
+    def add_money(self, amount: int):
+        self.status.add_money(amount)
+    
+    def get_experience_points(self) -> int:
+        return self.status.get_experience_points()
+    
+    def add_experience_points(self, amount: int):
+        self.status.add_experience_points(amount)
 
     def get_current_status_snapshot(self) -> dict:
         return {
