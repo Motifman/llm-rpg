@@ -5,7 +5,11 @@
     {"id": "park", "name": "公園", "description": "緑豊かな公園。子供たちが遊んでいる。"},
     {"id": "convenience_store", "name": "コンビニ", "description": "24時間営業のコンビニエンスストア。"},
     {"id": "post_office", "name": "郵便局", "description": "郵便物の配達や手続きができる郵便局。"},
-    {"id": "outside", "name": "外部", "description": "都市の外部。他の地域への入口。"}
+    {"id": "city_street", "name": "市街地", "description": "賑やかな市街地。人々が行き交っている。"},
+    {"id": "bus_stop", "name": "バス停", "description": "市街地のバス停。多くの人が待っている。"},
+    {"id": "park", "name": "公園", "description": "緑豊かな公園。子供たちが遊んでいる。"},
+    {"id": "convenience_store", "name": "コンビニ", "description": "24時間営業のコンビニエンスストア。"},
+    {"id": "post_office", "name": "郵便局", "description": "郵便物の配達や手続きができる郵便局。"}
   ],
   "groups": [
     {
@@ -29,13 +33,6 @@
       "description": "商業施設が集まるエリア",
       "spot_ids": ["convenience_store"],
       "tags": ["commercial", "retail"]
-    },
-    {
-      "id": "outside",
-      "name": "外部エリア",
-      "description": "都市の外部エリア",
-      "spot_ids": ["outside"],
-      "tags": ["external", "outside"]
     }
   ],
   "connections": [
@@ -47,17 +44,5 @@
     {"from": "bus_stop", "to": "convenience_store", "description": "バス停からコンビニへ"},
     {"from": "convenience_store", "to": "post_office", "description": "コンビニから郵便局へ"}
   ],
-  "entrances": [
-    {
-      "id": "city_main_entrance",
-      "name": "市街地入口",
-      "description": "市街地のメイン入口",
-      "from_group_id": "city_area",
-      "to_group_id": "outside",
-      "from_spot_id": "city_street",
-      "to_spot_id": "outside",
-      "is_bidirectional": true,
-      "is_locked": false
-    }
-  ]
+  "entrances": []
 } 

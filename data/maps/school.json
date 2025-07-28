@@ -76,9 +76,9 @@
       "name": "正門",
       "description": "学校の正門",
       "from_group_id": "school_grounds",
-      "to_group_id": "outside",
+      "to_group_id": "city_area",
       "from_spot_id": "school_gate",
-      "to_spot_id": "outside",
+      "to_spot_id": "city_street",
       "is_bidirectional": true,
       "is_locked": false
     },
@@ -87,9 +87,9 @@
       "name": "裏門",
       "description": "学校の裏門",
       "from_group_id": "school_grounds",
-      "to_group_id": "outside",
+      "to_group_id": "city_area",
       "from_spot_id": "back_gate",
-      "to_spot_id": "outside",
+      "to_spot_id": "city_street",
       "is_bidirectional": true,
       "is_locked": false
     }
