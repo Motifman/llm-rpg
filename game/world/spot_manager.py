@@ -272,11 +272,9 @@ class SpotManager:
         """マップの整合性をチェック"""
         errors = []
         
-        # MovementGraphの整合性チェック（外部エリアの孤立は除外）
+        # MovementGraphの整合性チェック
         graph_errors = self.movement_graph.validate_graph()
-        # "outside"スポットの孤立エラーを除外
-        filtered_graph_errors = [error for error in graph_errors if "outside" not in error]
-        errors.extend(filtered_graph_errors)
+        errors.extend(graph_errors)
         
         # グループの整合性チェック
         for group in self.groups.values():
@@ -287,16 +285,6 @@ class SpotManager:
         # 出入り口の整合性チェック
         entrance_errors = self.entrance_manager.validate_entrances(self.groups)
         errors.extend(entrance_errors)
-        
-        # 外部エリア以外の孤立スポットをチェック
-        isolated_spots = []
-        for spot in self.get_all_spots():
-            destinations = self.get_destination_spot_ids(spot.spot_id)
-            if not destinations and spot.spot_id != "outside":
-                isolated_spots.append(spot.spot_id)
-        
-        for spot_id in isolated_spots:
-            errors.append(f"Spot {spot_id} は孤立しています")
         
         return errors
     

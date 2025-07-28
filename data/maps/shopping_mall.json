@@ -72,9 +72,9 @@
       "name": "モール入口",
       "description": "ショッピングモールのメイン入口",
       "from_group_id": "shopping_mall",
-      "to_group_id": "outside",
+      "to_group_id": "city_area",
       "from_spot_id": "mall_entrance",
-      "to_spot_id": "outside",
+      "to_spot_id": "city_street",
       "is_bidirectional": true,
       "is_locked": false
     }
