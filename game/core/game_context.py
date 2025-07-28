@@ -3,15 +3,17 @@ from game.world.spot_manager import SpotManager
 from game.sns.sns_manager import SnsManager
 from game.conversation.conversation_manager import ConversationManager
 from game.trade.trade_manager import TradeManager
+from game.quest.quest_manager import QuestSystem
 
 
 class GameContext:
-    def __init__(self, player_manager: PlayerManager, spot_manager: SpotManager, sns_manager: SnsManager = None, conversation_manager: ConversationManager = None, trade_manager: TradeManager = None):
+    def __init__(self, player_manager: PlayerManager, spot_manager: SpotManager, sns_manager: SnsManager = None, conversation_manager: ConversationManager = None, trade_manager: TradeManager = None, quest_system: QuestSystem = None):
         self.player_manager = player_manager
         self.spot_manager = spot_manager
         self.sns_manager = sns_manager
         self.conversation_manager = conversation_manager
         self.trade_manager = trade_manager
+        self.quest_system = quest_system
 
     @classmethod
     def create_basic(cls, player_manager: PlayerManager, spot_manager: SpotManager):
@@ -35,6 +37,9 @@ class GameContext:
     
     def get_trade_manager(self) -> TradeManager:
         return self.trade_manager
+    
+    def get_quest_system(self) -> QuestSystem:
+        return self.quest_system
 
 
 class GameContextBuilder:
@@ -44,6 +49,7 @@ class GameContextBuilder:
         self.sns_manager = None
         self.conversation_manager = None
         self.trade_manager = None
+        self.quest_system = None
     
     def with_player_manager(self, player_manager: PlayerManager) -> 'GameContextBuilder':
         self.player_manager = player_manager
@@ -65,7 +71,11 @@ class GameContextBuilder:
         self.trade_manager = trade_manager
         return self
     
+    def with_quest_system(self, quest_system: QuestSystem) -> 'GameContextBuilder':
+        self.quest_system = quest_system
+        return self
+    
     def build(self) -> GameContext:
         if self.player_manager is None or self.spot_manager is None:
             raise ValueError("player_manager and spot_manager are required")
-        return GameContext(self.player_manager, self.spot_manager, self.sns_manager, self.conversation_manager, self.trade_manager)
+        return GameContext(self.player_manager, self.spot_manager, self.sns_manager, self.conversation_manager, self.trade_manager, self.quest_system)
