@@ -1,0 +1,73 @@
+{
+  "spots": [
+    {"id": "school_gate", "name": "校門", "description": "学校の正門。警備員が立っている。"},
+    {"id": "back_gate", "name": "裏門", "description": "学校の裏門。生徒の通学路として使われている。"},
+    {"id": "playground", "name": "校庭", "description": "広い校庭。体育の授業や部活動で使用される。"},
+    {"id": "corridor_1f", "name": "1階廊下", "description": "1階の廊下。教室への通路。"},
+    {"id": "corridor_2f", "name": "2階廊下", "description": "2階の廊下。教室への通路。"},
+    {"id": "classroom_1a", "name": "1年A組教室", "description": "1年A組の教室。机が整然と並んでいる。"},
+    {"id": "classroom_1b", "name": "1年B組教室", "description": "1年B組の教室。机が整然と並んでいる。"},
+    {"id": "classroom_2a", "name": "2年A組教室", "description": "2年A組の教室。机が整然と並んでいる。"},
+    {"id": "classroom_2b", "name": "2年B組教室", "description": "2年B組の教室。机が整然と並んでいる。"},
+    {"id": "staircase", "name": "階段", "description": "1階と2階を結ぶ階段。"},
+    {"id": "library", "name": "図書館", "description": "静かな図書館。多くの本が並んでいる。"},
+    {"id": "gym", "name": "体育館", "description": "大きな体育館。体育の授業や集会で使用される。"},
+    {"id": "cafeteria", "name": "食堂", "description": "生徒が昼食を取る食堂。"},
+    {"id": "teacher_room", "name": "職員室", "description": "先生たちが集まる職員室。"}
+  ],
+  "groups": [
+    {
+      "id": "school_grounds",
+      "name": "学校敷地",
+      "description": "学校の敷地全体",
+      "spot_ids": ["school_gate", "back_gate", "playground", "corridor_1f", "corridor_2f", 
+                  "classroom_1a", "classroom_1b", "classroom_2a", "classroom_2b", 
+                  "staircase", "library", "gym", "cafeteria", "teacher_room"],
+      "entrance_spot_ids": ["school_gate", "back_gate"],
+      "tags": ["school", "main_area"]
+    },
+    {
+      "id": "first_floor",
+      "name": "1階",
+      "description": "学校の1階部分",
+      "spot_ids": ["corridor_1f", "classroom_1a", "classroom_1b", "library", "gym", "cafeteria", "teacher_room"],
+      "tags": ["floor", "first_floor"]
+    },
+    {
+      "id": "second_floor",
+      "name": "2階",
+      "description": "学校の2階部分",
+      "spot_ids": ["corridor_2f", "classroom_2a", "classroom_2b"],
+      "tags": ["floor", "second_floor"]
+    },
+    {
+      "id": "classrooms",
+      "name": "教室群",
+      "description": "全ての教室",
+      "spot_ids": ["classroom_1a", "classroom_1b", "classroom_2a", "classroom_2b"],
+      "tags": ["academic", "classroom"]
+    },
+    {
+      "id": "facilities",
+      "name": "施設群",
+      "description": "学校の主要施設",
+      "spot_ids": ["library", "gym", "cafeteria", "teacher_room"],
+      "tags": ["facility"]
+    }
+  ],
+  "connections": [
+    {"from": "school_gate", "to": "playground", "description": "校門から校庭へ"},
+    {"from": "back_gate", "to": "playground", "description": "裏門から校庭へ"},
+    {"from": "playground", "to": "corridor_1f", "description": "校庭から1階廊下へ"},
+    {"from": "corridor_1f", "to": "classroom_1a", "description": "1階廊下から1年A組教室へ"},
+    {"from": "corridor_1f", "to": "classroom_1b", "description": "1階廊下から1年B組教室へ"},
+    {"from": "corridor_1f", "to": "library", "description": "1階廊下から図書館へ"},
+    {"from": "corridor_1f", "to": "gym", "description": "1階廊下から体育館へ"},
+    {"from": "corridor_1f", "to": "cafeteria", "description": "1階廊下から食堂へ"},
+    {"from": "corridor_1f", "to": "teacher_room", "description": "1階廊下から職員室へ"},
+    {"from": "corridor_1f", "to": "staircase", "description": "1階廊下から階段へ"},
+    {"from": "staircase", "to": "corridor_2f", "description": "階段から2階廊下へ"},
+    {"from": "corridor_2f", "to": "classroom_2a", "description": "2階廊下から2年A組教室へ"},
+    {"from": "corridor_2f", "to": "classroom_2b", "description": "2階廊下から2年B組教室へ"}
+  ]
+} 
