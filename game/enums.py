@@ -124,3 +124,44 @@ class TradeStatus(Enum):
     ACTIVE = "active"         # 募集中
     COMPLETED = "completed"   # 成立
     CANCELLED = "cancelled"   # キャンセル
+
+
+class QuestType(Enum):
+    """クエストタイプ"""
+    MONSTER_HUNT = "monster_hunt"      # モンスター討伐
+    ITEM_COLLECTION = "item_collection" # アイテム収集
+    EXPLORATION = "exploration"         # 探索
+    DELIVERY = "delivery"              # 配達
+    RESCUE = "rescue"                  # 救出
+    CUSTOM = "custom"                  # カスタム（その他）
+
+
+class QuestStatus(Enum):
+    """クエストステータス"""
+    AVAILABLE = "available"    # 受注可能
+    ACCEPTED = "accepted"      # 受注済み
+    IN_PROGRESS = "in_progress" # 進行中
+    COMPLETED = "completed"    # 完了
+    FAILED = "failed"          # 失敗
+    CANCELLED = "cancelled"    # キャンセル済み
+
+
+class QuestDifficulty(Enum):
+    """クエスト危険度"""
+    E = "E"  # 初心者向け
+    D = "D"  # 易しい
+    C = "C"  # 普通
+    B = "B"  # 難しい
+    A = "A"  # とても難しい
+    S = "S"  # 極めて危険
+
+
+class GuildRank(Enum):
+    """ギルドランク"""
+    F = "F"  # 初心者
+    E = "E"  # 新人
+    D = "D"  # 一般
+    C = "C"  # 上級
+    B = "B"  # エキスパート
+    A = "A"  # ベテラン
+    S = "S"  # マスター
