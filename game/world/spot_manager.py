@@ -177,6 +177,11 @@ class SpotManager:
                 # グループにスポットを追加
                 for spot in group.get_all_spots():
                     group.add_spot(spot)
+        
+        # 出入り口を統合（既存の出入り口は上書きしない）
+        for entrance in self.map_builder.get_all_entrances():
+            if not self.entrance_manager.get_entrance(entrance.entrance_id):  # 存在しない場合のみ追加
+                self.entrance_manager.add_entrance(entrance)
     
     def _load_connections_only(self, config: Dict):
         """接続のみを読み込み"""
@@ -244,7 +249,9 @@ class SpotManager:
             for spot in group.get_all_spots():
                 group.add_spot(spot)
         
-        # 出入り口を統合（MapBuilderからは直接取得できないので、別途設定が必要）
+        # 出入り口を統合
+        for entrance in self.map_builder.get_all_entrances():
+            self.entrance_manager.add_entrance(entrance)
     
     def get_map_summary(self) -> str:
         """マップの概要を取得"""
@@ -265,9 +272,11 @@ class SpotManager:
         """マップの整合性をチェック"""
         errors = []
         
-        # MovementGraphの整合性チェック
+        # MovementGraphの整合性チェック（外部エリアの孤立は除外）
         graph_errors = self.movement_graph.validate_graph()
-        errors.extend(graph_errors)
+        # "outside"スポットの孤立エラーを除外
+        filtered_graph_errors = [error for error in graph_errors if "outside" not in error]
+        errors.extend(filtered_graph_errors)
         
         # グループの整合性チェック
         for group in self.groups.values():
@@ -278,6 +287,16 @@ class SpotManager:
         # 出入り口の整合性チェック
         entrance_errors = self.entrance_manager.validate_entrances(self.groups)
         errors.extend(entrance_errors)
+        
+        # 外部エリア以外の孤立スポットをチェック
+        isolated_spots = []
+        for spot in self.get_all_spots():
+            destinations = self.get_destination_spot_ids(spot.spot_id)
+            if not destinations and spot.spot_id != "outside":
+                isolated_spots.append(spot.spot_id)
+        
+        for spot_id in isolated_spots:
+            errors.append(f"Spot {spot_id} は孤立しています")
         
         return errors
     

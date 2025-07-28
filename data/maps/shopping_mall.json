@@ -65,5 +65,18 @@
     {"from": "mall_2f", "to": "food_court", "description": "モール2階からフードコートへ"},
     {"from": "mall_2f", "to": "cinema", "description": "モール2階から映画館へ"},
     {"from": "mall_2f", "to": "game_center", "description": "モール2階からゲームセンターへ"}
+  ],
+  "entrances": [
+    {
+      "id": "mall_main_entrance",
+      "name": "モール入口",
+      "description": "ショッピングモールのメイン入口",
+      "from_group_id": "shopping_mall",
+      "to_group_id": "outside",
+      "from_spot_id": "mall_entrance",
+      "to_spot_id": "outside",
+      "is_bidirectional": true,
+      "is_locked": false
+    }
   ]
 } 

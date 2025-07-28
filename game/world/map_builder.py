@@ -5,6 +5,7 @@ from pathlib import Path
 from game.world.spot import Spot
 from game.world.spot_group import SpotGroup, SpotGroupConfig
 from game.world.movement_graph import MovementGraph
+from game.world.entrance_manager import EntranceConfig
 
 
 class MapBuilder:
@@ -14,6 +15,7 @@ class MapBuilder:
         self.spots: Dict[str, Spot] = {}
         self.groups: Dict[str, SpotGroup] = {}
         self.movement_graph = MovementGraph()
+        self.entrances: List[EntranceConfig] = []
     
     def load_from_json(self, file_path: str) -> 'MapBuilder':
         """JSONファイルからマップ設定を読み込み"""
@@ -72,6 +74,24 @@ class MapBuilder:
                     is_dynamic=connection.get('dynamic', False)
                 )
         
+        # 出入り口の作成
+        if 'entrances' in config:
+            for entrance_config in config['entrances']:
+                entrance = EntranceConfig(
+                    entrance_id=entrance_config['id'],
+                    name=entrance_config['name'],
+                    description=entrance_config['description'],
+                    from_group_id=entrance_config['from_group_id'],
+                    to_group_id=entrance_config['to_group_id'],
+                    from_spot_id=entrance_config['from_spot_id'],
+                    to_spot_id=entrance_config['to_spot_id'],
+                    conditions=entrance_config.get('conditions'),
+                    is_bidirectional=entrance_config.get('is_bidirectional', True),
+                    is_locked=entrance_config.get('is_locked', False),
+                    lock_conditions=entrance_config.get('lock_conditions')
+                )
+                self.entrances.append(entrance)
+        
         return self
     
     def get_spot(self, spot_id: str) -> Optional[Spot]:
@@ -101,6 +121,10 @@ class MapBuilder:
     def get_movement_graph(self) -> MovementGraph:
         """MovementGraphを取得"""
         return self.movement_graph
+    
+    def get_all_entrances(self) -> List[EntranceConfig]:
+        """全ての出入り口を取得"""
+        return self.entrances.copy()
     
     def get_map_summary(self) -> str:
         """マップの概要を取得"""
