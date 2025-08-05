@@ -141,8 +141,8 @@ class TestPlayer:
         snapshot = self.player.get_current_status_snapshot()
         assert 'hp' in snapshot
         assert 'mp' in snapshot
-        assert 'attack' in snapshot
-        assert 'defense' in snapshot
+        assert 'base_attack' in snapshot
+        assert 'base_defense' in snapshot
         assert 'money' in snapshot
         assert 'experience_points' in snapshot
         
@@ -159,8 +159,8 @@ class TestPlayer:
         snapshot2 = self.player.get_current_status_snapshot()
         assert snapshot2['hp'] == 150
         assert snapshot2['mp'] == 100
-        assert snapshot2['attack'] == 25
-        assert snapshot2['defense'] == 15
+        assert snapshot2['base_attack'] == 25
+        assert snapshot2['base_defense'] == 15
         assert snapshot2['money'] == 1000
         assert snapshot2['experience_points'] == 500
     
@@ -364,64 +364,37 @@ class TestPlayer:
         """HPプロパティテスト"""
         self.player.status.set_max_hp(200)
         self.player.status.set_hp(150)
-        assert self.player.hp == 150
+        assert self.player.get_hp() == 150
     
     def test_property_mp(self):
         """MPプロパティテスト"""
         self.player.status.set_mp(100)
-        assert self.player.mp == 100
+        assert self.player.get_mp() == 100
     
-    def test_property_attack(self):
-        """攻撃力プロパティテスト"""
+    def test_property_base_attack(self):
+        """基本攻撃力プロパティテスト"""
         self.player.status.set_attack(20)
-        assert self.player.attack == 20
-        
-        # 装備ボーナスを追加
-        self.player.inventory.add_item(self.fire_sword)
-        self.player.equip_item("fire_sword")
-        assert self.player.attack == 20 + 15  # 基本攻撃力 + 武器ボーナス
+        assert self.player.get_base_attack() == 20
     
-    def test_property_defense(self):
-        """防御力プロパティテスト"""
+    def test_property_base_defense(self):
+        """基本防御力プロパティテスト"""
         self.player.status.set_defense(15)
-        assert self.player.defense == 15
-        
-        # 装備ボーナスを追加
-        self.player.inventory.add_item(self.leather_armor)
-        self.player.equip_item("leather_armor")
-        assert self.player.defense == 15 + 8  # 基本防御力 + 防具ボーナス
+        assert self.player.get_base_defense() == 15
     
-    def test_property_speed(self):
-        """素早さプロパティテスト"""
+    def test_property_base_speed(self):
+        """基本素早さプロパティテスト"""
         self.player.status.set_speed(10)
-        assert self.player.speed == 10
-        
-        # 装備ボーナスを追加
-        self.player.inventory.add_item(self.leather_armor)
-        self.player.equip_item("leather_armor")
-        # 防具に素早さボーナスがない場合は基本値のまま
-        assert self.player.speed == 10
+        assert self.player.get_base_speed() == 10
     
-    def test_property_critical_rate(self):
-        """クリティカル率プロパティテスト"""
+    def test_property_base_critical_rate(self):
+        """基本クリティカル率プロパティテスト"""
         self.player.status.set_critical_rate(0.1)
-        assert self.player.critical_rate == 0.1
-        
-        # 装備ボーナスを追加
-        self.player.inventory.add_item(self.fire_sword)
-        self.player.equip_item("fire_sword")
-        # 武器にクリティカル率ボーナスがない場合は基本値のまま
-        assert self.player.critical_rate == 0.1
+        assert self.player.get_base_critical_rate() == 0.1
     
-    def test_property_evasion_rate(self):
-        """回避率プロパティテスト"""
+    def test_property_base_evasion_rate(self):
+        """基本回避率プロパティテスト"""
         self.player.status.set_evasion_rate(0.05)
-        assert self.player.evasion_rate == 0.05
-        
-        # 装備ボーナスを追加
-        self.player.inventory.add_item(self.leather_armor)
-        self.player.equip_item("leather_armor")
-        assert self.player.evasion_rate == 0.05 + 0.1  # 基本回避率 + 防具ボーナス
+        assert self.player.get_base_evasion_rate() == 0.05
     
     def test_get_status_summary(self):
         """ステータスサマリー取得テスト"""
@@ -439,9 +412,9 @@ class TestPlayer:
         
         assert "HP: 150/" in summary
         assert "MP: 100/" in summary
-        assert "攻撃: 25" in summary
-        assert "防御: 15" in summary
-        assert "素早さ: 10" in summary
+        assert "基本攻撃: 25" in summary
+        assert "基本防御: 15" in summary
+        assert "基本素早さ: 10" in summary
         assert "クリティカル: 10.0%" in summary
         assert "回避: 5.0%" in summary
     
@@ -449,8 +422,8 @@ class TestPlayer:
         """包括的なシナリオテスト"""
         # 1. プレイヤーの初期状態確認
         assert self.player.role == Role.ADVENTURER
-        assert self.player.hp == self.player.status.get_hp()
-        assert self.player.mp == self.player.status.get_mp()
+        assert self.player.get_hp() == self.player.status.get_hp()
+        assert self.player.get_mp() == self.player.status.get_mp()
         
         # 2. アイテムをインベントリに追加
         self.player.inventory.add_item(self.healing_potion)
@@ -462,20 +435,20 @@ class TestPlayer:
         assert self.player.has_item("leather_armor")
         
         # 3. アイテムを使用
-        hp_before = self.player.hp
+        hp_before = self.player.get_hp()
         result = self.player.use_item("healing_potion")
         assert result.success
-        assert self.player.hp == min(hp_before + 50, 100)  # max_hpが100なので制限される
+        assert self.player.get_hp() == min(hp_before + 50, 100)  # max_hpが100なので制限される
         assert not self.player.has_item("healing_potion")
         
         # 4. 装備を装着
         result = self.player.equip_item("fire_sword")
         assert result.success
-        assert self.player.attack > 0  # 装備ボーナスが反映される
+        assert self.player.equipment.weapon is not None  # 装備が反映される
         
         result = self.player.equip_item("leather_armor")
         assert result.success
-        assert self.player.defense > 0  # 装備ボーナスが反映される
+        assert self.player.equipment.armor is not None  # 装備が反映される
         
         # 5. 装備を外す
         result = self.player.unequip_slot(EquipmentSlot.WEAPON)
@@ -486,8 +459,8 @@ class TestPlayer:
         summary = self.player.get_status_summary()
         assert "HP:" in summary
         assert "MP:" in summary
-        assert "攻撃:" in summary
-        assert "防御:" in summary
+        assert "基本攻撃:" in summary
+        assert "基本防御:" in summary
     
     def test_edge_cases(self):
         """エッジケーステスト"""

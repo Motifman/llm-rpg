@@ -97,55 +97,42 @@ class TestEquipmentSet:
         assert self.equipment.shoes is None
         assert self.equipment.gloves is None
     
-    def test_get_total_attack_bonus_empty(self):
-        """装備なしの場合の攻撃力ボーナス"""
-        assert self.equipment.get_total_attack_bonus() == 0
+    def test_get_equipment_bonuses_empty(self):
+        """装備なしの場合のボーナス"""
+        bonuses = self.equipment.get_equipment_bonuses()
+        assert bonuses['attack_bonus'] == 0
+        assert bonuses['defense_bonus'] == 0
+        assert bonuses['speed_bonus'] == 0
+        assert bonuses['critical_rate'] == 0.0
+        assert bonuses['evasion_rate'] == 0.0
+        assert len(bonuses['status_resistance']) == 0
     
-    def test_get_total_attack_bonus_with_weapon(self):
-        """武器装備時の攻撃力ボーナス"""
+    def test_get_equipment_bonuses_with_weapon(self):
+        """武器装備時のボーナス"""
         self.equipment.equip_weapon(self.weapon)
-        assert self.equipment.get_total_attack_bonus() == 15
+        bonuses = self.equipment.get_equipment_bonuses()
+        assert bonuses['attack_bonus'] == 15
+        assert bonuses['critical_rate'] == 0.15
     
-    def test_get_total_defense_bonus_empty(self):
-        """装備なしの場合の防御力ボーナス"""
-        assert self.equipment.get_total_defense_bonus() == 0
-    
-    def test_get_total_defense_bonus_with_armor(self):
-        """防具装備時の防御力ボーナス"""
+    def test_get_equipment_bonuses_with_armor(self):
+        """防具装備時のボーナス"""
         self.equipment.equip_armor(self.helmet)
         self.equipment.equip_armor(self.armor)
-        assert self.equipment.get_total_defense_bonus() == 20  # 8 + 12
+        bonuses = self.equipment.get_equipment_bonuses()
+        assert bonuses['defense_bonus'] == 20  # 8 + 12
+        assert bonuses['speed_bonus'] == 4  # ヘルメット(3) + アーマー(1)
+        assert bonuses['evasion_rate'] == 0.08  # ヘルメット(0.05) + アーマー(0.03)
+        assert bonuses['status_resistance'][StatusEffectType.POISON] == 0.3  # ヘルメットのみ
     
-    def test_get_total_speed_bonus_empty(self):
-        """装備なしの場合の素早さボーナス"""
-        assert self.equipment.get_total_speed_bonus() == 0
-    
-    def test_get_total_speed_bonus_with_armor(self):
-        """防具装備時の素早さボーナス"""
+    def test_get_equipment_bonuses_with_multiple_armor(self):
+        """複数防具装備時のボーナス"""
         self.equipment.equip_armor(self.helmet)
         self.equipment.equip_armor(self.shoes)
-        assert self.equipment.get_total_speed_bonus() == 11  # 3 + 8
+        bonuses = self.equipment.get_equipment_bonuses()
+        assert bonuses['speed_bonus'] == 11  # 3 + 8
+        assert bonuses['evasion_rate'] == 0.13  # 0.05 + 0.08
     
-    def test_get_total_critical_rate_empty(self):
-        """装備なしの場合のクリティカル率"""
-        assert self.equipment.get_total_critical_rate() == 0.0
-    
-    def test_get_total_critical_rate_with_weapon(self):
-        """武器装備時のクリティカル率"""
-        self.equipment.equip_weapon(self.weapon)
-        assert self.equipment.get_total_critical_rate() == 0.15
-    
-    def test_get_total_evasion_rate_empty(self):
-        """装備なしの場合の回避率"""
-        assert self.equipment.get_total_evasion_rate() == 0.0
-    
-    def test_get_total_evasion_rate_with_armor(self):
-        """防具装備時の回避率"""
-        self.equipment.equip_armor(self.helmet)
-        self.equipment.equip_armor(self.shoes)
-        assert self.equipment.get_total_evasion_rate() == 0.13  # 0.05 + 0.08
-    
-    def test_get_total_evasion_rate_capped(self):
+    def test_get_equipment_bonuses_evasion_capped(self):
         """回避率の上限テスト"""
         # 上限を超える回避率を持つ防具を作成
         high_evasion_effect = ArmorEffect(evasion_bonus=1.0)  # 上限値を超える値
@@ -158,24 +145,21 @@ class TestEquipmentSet:
         )
         
         self.equipment.equip_armor(high_evasion_armor)
-        assert self.equipment.get_total_evasion_rate() == 0.95  # 上限値
+        bonuses = self.equipment.get_equipment_bonuses()
+        assert bonuses['evasion_rate'] == 0.95  # 上限値
     
-    def test_get_total_status_resistance_empty(self):
-        """装備なしの場合の状態異常耐性"""
-        assert self.equipment.get_total_status_resistance(StatusEffectType.POISON) == 0.0
-    
-    def test_get_total_status_resistance_with_armor(self):
-        """防具装備時の状態異常耐性"""
+    def test_get_equipment_bonuses_status_resistance(self):
+        """状態異常耐性のテスト"""
         self.equipment.equip_armor(self.helmet)
         self.equipment.equip_armor(self.gloves)
         
+        bonuses = self.equipment.get_equipment_bonuses()
         # 毒耐性（ヘルメットのみ）
-        assert self.equipment.get_total_status_resistance(StatusEffectType.POISON) == 0.3
-        
+        assert bonuses['status_resistance'][StatusEffectType.POISON] == 0.3
         # 混乱耐性（グローブのみ）
-        assert self.equipment.get_total_status_resistance(StatusEffectType.CONFUSION) == 0.4
+        assert bonuses['status_resistance'][StatusEffectType.CONFUSION] == 0.4
     
-    def test_get_total_status_resistance_capped(self):
+    def test_get_equipment_bonuses_status_resistance_capped(self):
         """状態異常耐性の上限テスト"""
         high_resistance_effect = ArmorEffect(status_resistance={StatusEffectType.POISON: 1.0})  # 上限値を超える値
         high_resistance_armor = Armor(
@@ -187,7 +171,8 @@ class TestEquipmentSet:
         )
         
         self.equipment.equip_armor(high_resistance_armor)
-        assert self.equipment.get_total_status_resistance(StatusEffectType.POISON) == 0.95  # 上限値
+        bonuses = self.equipment.get_equipment_bonuses()
+        assert bonuses['status_resistance'][StatusEffectType.POISON] == 0.95  # 上限値
     
     def test_get_equipped_weapons_empty(self):
         """装備なしの場合の装備武器リスト"""
@@ -462,15 +447,18 @@ class TestEquipmentSet:
         self.equipment.equip_armor(self.shoes)
         self.equipment.equip_armor(self.gloves)
         
+        # ボーナス計算
+        bonuses = self.equipment.get_equipment_bonuses()
+        
         # 各ボーナスの検証
-        assert self.equipment.get_total_attack_bonus() == 15
-        assert self.equipment.get_total_defense_bonus() == 28  # 8+12+5+3
-        assert self.equipment.get_total_speed_bonus() == 14   # 3+1+8+2
-        assert self.equipment.get_total_critical_rate() == 0.15
-        assert self.equipment.get_total_evasion_rate() == 0.18  # 0.05+0.03+0.08+0.02
+        assert bonuses['attack_bonus'] == 15
+        assert bonuses['defense_bonus'] == 28  # 8+12+5+3
+        assert bonuses['speed_bonus'] == 14   # 3+1+8+2
+        assert bonuses['critical_rate'] == 0.15
+        assert bonuses['evasion_rate'] == 0.18  # 0.05+0.03+0.08+0.02
         
         # 状態異常耐性の検証
-        assert self.equipment.get_total_status_resistance(StatusEffectType.POISON) == 0.3
-        assert self.equipment.get_total_status_resistance(StatusEffectType.PARALYSIS) == 0.2
-        assert self.equipment.get_total_status_resistance(StatusEffectType.CONFUSION) == 0.4
-        assert self.equipment.get_total_status_resistance(StatusEffectType.SLEEP) == 0.0 
+        assert bonuses['status_resistance'][StatusEffectType.POISON] == 0.3
+        assert bonuses['status_resistance'][StatusEffectType.PARALYSIS] == 0.2
+        assert bonuses['status_resistance'][StatusEffectType.CONFUSION] == 0.4
+        assert StatusEffectType.SLEEP not in bonuses['status_resistance'] 

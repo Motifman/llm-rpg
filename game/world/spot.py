@@ -47,7 +47,7 @@ class Spot:
         return [obj for obj in self.interactables.values() if isinstance(obj, interactable_type)]
 
     def add_monster(self, monster: Monster):
-        monster.set_current_spot(self.spot_id)
+        monster.set_current_spot_id(self.spot_id)
         
         if monster.monster_type == MonsterType.HIDDEN:
             self.hidden_monsters[monster.monster_id] = monster

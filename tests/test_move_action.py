@@ -218,8 +218,34 @@ class TestMoveAction:
         assert "鍵" in result.message and "が必要です" in result.message
     
     def test_movement_with_level_requirement(self):
-        """レベル要求付き移動のテスト（Playerクラスにget_levelメソッドがないためスキップ）"""
-        pytest.skip("Playerクラスにget_levelメソッドが実装されていないため、このテストはスキップします")
+        """レベル要求付き移動のテスト"""
+        # 新しいスポットを追加
+        boss_room = Spot("boss_room", "ボス部屋", "強力な敵が待ち構える場所")
+        self.spot_manager.add_spot(boss_room)
+        
+        # レベル要求付きの移動を設定
+        movement_graph = self.spot_manager.get_movement_graph()
+        movement_graph.add_connection(
+            "cave", "boss_room", "ボス部屋への扉",
+            conditions={"required_level": 5}
+        )
+        
+        # レベル不足で移動を試行
+        self.player.set_current_spot_id("cave")
+        self.player.set_level(3)  # レベル3
+        command = MovementCommand("boss_room")
+        result = command.execute(self.player, self.game_context)
+        
+        assert result.success == False
+        assert "レベル" in result.message and "が必要です" in result.message
+        
+        # レベルを上げて移動を試行
+        self.player.set_level(5)  # レベル5
+        command = MovementCommand("boss_room")
+        result = command.execute(self.player, self.game_context)
+        
+        assert result.success == True
+        assert self.player.get_current_spot_id() == "boss_room"
     
     def test_edge_case_empty_spot_id(self):
         """空のスポットIDのエッジケーステスト"""

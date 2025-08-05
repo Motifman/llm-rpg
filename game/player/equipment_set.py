@@ -13,47 +13,49 @@ class EquipmentSet:
     shoes: Optional[Armor] = None
     gloves: Optional[Armor] = None
     
-    def get_total_attack_bonus(self) -> int:
-        total = 0
+    def get_equipment_bonuses(self) -> dict:
+        """装備によるボーナスを取得（戦闘計算用）"""
+        bonuses = {
+            'attack_bonus': 0,
+            'defense_bonus': 0,
+            'speed_bonus': 0,
+            'critical_rate': 0.0,
+            'evasion_rate': 0.0,
+            'status_resistance': {}
+        }
+        
+        # 武器ボーナス
         if self.weapon:
-            total += self.weapon.effect.attack_bonus
-        return total
-    
-    def get_total_defense_bonus(self) -> int:
-        total = 0
+            bonuses['attack_bonus'] += self.weapon.get_attack_bonus()
+            bonuses['critical_rate'] += self.weapon.get_critical_rate()
+        
+        # 防具ボーナス
         for armor in [self.helmet, self.armor, self.shoes, self.gloves]:
             if armor:
-                total += armor.effect.defense_bonus
-        return total
-    
-    def get_total_speed_bonus(self) -> int:
-        total = 0
-        for armor in [self.helmet, self.armor, self.shoes, self.gloves]:
-            if armor:
-                total += armor.effect.speed_bonus
-        return total
-    
-    def get_total_critical_rate(self) -> float:
-        if self.weapon:
-            return self.weapon.get_critical_rate()
-        return 0.0
-    
-    def get_total_evasion_rate(self) -> float:
-        total = 0.0
-        for armor in [self.helmet, self.armor, self.shoes, self.gloves]:
-            if armor:
-                total += armor.get_evasion_bonus()
-        return min(total, 0.95) 
-
-    def get_total_status_resistance(self, status_effect_type: StatusEffectType) -> float:
-        total = 0.0
-        for armor in [self.helmet, self.armor, self.shoes, self.gloves]:
-            if armor:
-                total += armor.get_status_resistance(status_effect_type)
-        return min(total, 0.95)
+                bonuses['defense_bonus'] += armor.get_defense_bonus()
+                bonuses['speed_bonus'] += armor.get_speed_bonus()
+                bonuses['evasion_rate'] += armor.get_evasion_bonus()
+                
+                # 状態異常耐性
+                for status_type in StatusEffectType:
+                    resistance = armor.get_status_resistance(status_type)
+                    if resistance > 0:
+                        if status_type not in bonuses['status_resistance']:
+                            bonuses['status_resistance'][status_type] = 0.0
+                        bonuses['status_resistance'][status_type] += resistance
+        
+        # 上限調整
+        bonuses['evasion_rate'] = min(bonuses['evasion_rate'], 0.95)
+        for status_type in bonuses['status_resistance']:
+            bonuses['status_resistance'][status_type] = min(bonuses['status_resistance'][status_type], 0.95)
+        
+        return bonuses
 
     def get_equipped_weapons(self) -> List[Weapon]:
         return [self.weapon] if self.weapon else []
+    
+    def get_equipped_weapon(self) -> Optional[Weapon]:
+        return self.weapon
     
     def get_equipped_armors(self) -> List[Armor]:
         armors = []
