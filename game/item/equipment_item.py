@@ -51,20 +51,18 @@ class Weapon(UniqueItem):
         self.max_durability = max_durability
         self.current_durability = max_durability
     
-    def calculate_damage(self, base_attack: int, target_race: Optional[Race] = None) -> int:
-        base_damage = base_attack + self.effect.attack_bonus
-        
-        if target_race and target_race in self.effect.effective_races:
-            base_damage = int(base_damage * self.effect.race_damage_multiplier)
-        
-        total_damage = base_damage
-        if self.effect.element and self.effect.element != Element.PHYSICAL:
-            total_damage += self.effect.element_damage
-        
-        return total_damage
-    
+    def get_attack_bonus(self) -> int:
+        return self.effect.attack_bonus
+
     def get_critical_rate(self) -> float:
         return self.effect.critical_rate_bonus
+    
+
+    
+    @property
+    def status_effects(self) -> List[StatusEffect]:
+        """状態異常効果のリストを取得"""
+        return list(self.effect.status_effects.values())
     
     def get_status_description(self) -> str:
         durability_percent = (self.current_durability / self.max_durability) * 100
@@ -85,12 +83,9 @@ class Weapon(UniqueItem):
         return self.current_durability - old_durability
     
     def is_broken(self) -> bool:
-        """破損しているかどうか"""
         return self.current_durability <= 0
     
     def can_be_traded(self) -> bool:
-        """武器が取引可能かどうかを判定"""
-        # 破損していない場合のみ取引可能
         return not self.is_broken()
     
     def __str__(self):
@@ -101,14 +96,13 @@ class Weapon(UniqueItem):
 class ArmorEffect:
     """防具効果"""
     defense_bonus: int = 0
+    evasion_bonus: float = 0.0 
+    speed_bonus: int = 0 
     counter_damage: int = 0
     counter_chance: float = 0.0 
     
-    status_resistance: Dict[StatusEffect, float] = field(default_factory=dict) 
+    status_resistance: Dict[StatusEffectType, float] = field(default_factory=dict) 
     damage_reduction: Dict[DamageType, float] = field(default_factory=dict) 
-
-    evasion_bonus: float = 0.0 
-    speed_bonus: int = 0 
     
     def __str__(self):
         effects = []
@@ -142,8 +136,14 @@ class Armor(UniqueItem):
         self.max_durability = max_durability
         self.current_durability = max_durability
     
-    def calculate_defense_bonus(self) -> int:
+    def get_defense_bonus(self) -> int:
         return self.effect.defense_bonus
+
+    def get_evasion_bonus(self) -> float:
+        return self.effect.evasion_bonus
+    
+    def get_speed_bonus(self) -> int:
+        return self.effect.speed_bonus
     
     def get_damage_reduction(self, damage_type: DamageType) -> float:
         return self.effect.damage_reduction.get(damage_type, 0.0)
@@ -156,12 +156,6 @@ class Armor(UniqueItem):
     
     def get_counter_damage(self) -> int:
         return self.effect.counter_damage
-    
-    def get_evasion_bonus(self) -> float:
-        return self.effect.evasion_bonus
-    
-    def get_speed_bonus(self) -> int:
-        return self.effect.speed_bonus
     
     def get_status_description(self) -> str:
         durability_percent = (self.current_durability / self.max_durability) * 100
@@ -176,7 +170,6 @@ class Armor(UniqueItem):
         """耐久度を回復し、回復した量を返す"""
         if amount is None:
             amount = self.max_durability - self.current_durability
-        
         old_durability = self.current_durability
         self.current_durability = min(self.max_durability, self.current_durability + amount)
         return self.current_durability - old_durability

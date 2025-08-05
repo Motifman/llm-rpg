@@ -165,3 +165,19 @@ class GuildRank(Enum):
     B = "B"  # エキスパート
     A = "A"  # ベテラン
     S = "S"  # マスター
+
+
+class BattleState(Enum):
+    """戦闘状態"""
+    ACTIVE = "active"       # 戦闘中
+    FINISHED = "finished"   # 戦闘終了
+    ESCAPED = "escaped"     # 逃走による終了
+
+
+class TurnActionType(Enum):
+    """ターン中の行動タイプ"""
+    ATTACK = "attack"
+    DEFEND = "defend"
+    ESCAPE = "escape"
+    MONSTER_ACTION = "monster_action"
+    STATUS_EFFECT = "status_effect"

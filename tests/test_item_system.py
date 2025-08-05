@@ -240,16 +240,15 @@ class TestWeapon:
         weapon = Weapon("legendary_sword", "伝説の剣", "伝説の剣", WeaponType.SWORD, weapon_effect, "legendary")
         assert weapon.rarity == "legendary"
     
-    def test_weapon_calculate_damage_basic(self):
-        """基本的なダメージ計算テスト"""
+    def test_weapon_get_attack_bonus(self):
+        """武器の攻撃力ボーナス取得テスト"""
         weapon_effect = WeaponEffect(attack_bonus=20)
         weapon = Weapon("sword", "剣", "剣", WeaponType.SWORD, weapon_effect)
         
-        damage = weapon.calculate_damage(50)  # 基本攻撃力50
-        assert damage == 70  # 50 + 20
+        assert weapon.get_attack_bonus() == 20
     
-    def test_weapon_calculate_damage_with_element(self):
-        """属性ダメージ付きのダメージ計算テスト"""
+    def test_weapon_get_attack_bonus_with_element(self):
+        """属性付き武器の攻撃力ボーナス取得テスト"""
         weapon_effect = WeaponEffect(
             attack_bonus=15,
             element=Element.FIRE,
@@ -257,11 +256,12 @@ class TestWeapon:
         )
         weapon = Weapon("fire_sword", "炎の剣", "炎の剣", WeaponType.SWORD, weapon_effect)
         
-        damage = weapon.calculate_damage(40)  # 基本攻撃力40
-        assert damage == 80  # 40 + 15 + 25
+        assert weapon.get_attack_bonus() == 15
+        assert weapon.effect.element == Element.FIRE
+        assert weapon.effect.element_damage == 25
     
-    def test_weapon_calculate_damage_with_race_effectiveness(self):
-        """種族特攻付きのダメージ計算テスト"""
+    def test_weapon_get_attack_bonus_with_race_effectiveness(self):
+        """種族特攻付き武器の攻撃力ボーナス取得テスト"""
         weapon_effect = WeaponEffect(
             attack_bonus=10,
             effective_races={Race.DRAGON},
@@ -269,13 +269,9 @@ class TestWeapon:
         )
         weapon = Weapon("dragon_slayer", "竜殺し", "竜殺し", WeaponType.SWORD, weapon_effect)
         
-        # 竜族へのダメージ
-        damage = weapon.calculate_damage(30, Race.DRAGON)
-        assert damage == 80  # (30 + 10) * 2.0
-        
-        # 他の種族へのダメージ
-        damage = weapon.calculate_damage(30, Race.HUMAN)
-        assert damage == 40  # 30 + 10（特攻なし）
+        assert weapon.get_attack_bonus() == 10
+        assert Race.DRAGON in weapon.effect.effective_races
+        assert weapon.effect.race_damage_multiplier == 2.0
     
     def test_weapon_get_critical_rate(self):
         """武器のクリティカル率取得テスト"""
@@ -384,12 +380,12 @@ class TestArmor:
         armor = Armor("legendary_armor", "伝説の鎧", "伝説の鎧", ArmorType.CHEST, armor_effect, "legendary")
         assert armor.rarity == "legendary"
     
-    def test_armor_calculate_defense_bonus(self):
-        """防具の防御ボーナス計算テスト"""
+    def test_armor_get_defense_bonus(self):
+        """防具の防御ボーナス取得テスト"""
         armor_effect = ArmorEffect(defense_bonus=25)
         armor = Armor("armor", "鎧", "鎧", ArmorType.CHEST, armor_effect)
         
-        assert armor.calculate_defense_bonus() == 25
+        assert armor.get_defense_bonus() == 25
     
     def test_armor_get_damage_reduction(self):
         """防具のダメージ軽減取得テスト"""
@@ -475,16 +471,14 @@ class TestItemIntegration:
         )
         weapon = Weapon("thunder_sword", "雷の剣", "雷の剣", WeaponType.SWORD, weapon_effect)
         
-        # 基本ダメージ計算
-        damage = weapon.calculate_damage(40)
-        assert damage == 95  # 40 + 25 + 30
-        
-        # 種族特攻ダメージ計算
-        damage = weapon.calculate_damage(40, Race.UNDEAD)
-        assert damage == 127  # (40 + 25) * 1.5 + 30 = 97.5 + 30 = 127.5 (切り捨て)
-        
-        # クリティカル率
+        # 効果データの検証
+        assert weapon.get_attack_bonus() == 25
+        assert weapon.effect.element == Element.THUNDER
+        assert weapon.effect.element_damage == 30
+        assert Race.UNDEAD in weapon.effect.effective_races
+        assert weapon.effect.status_chance == 0.4
         assert weapon.get_critical_rate() == 0.2
+        assert StatusEffectType.PARALYSIS in weapon.effect.status_effects
     
     def test_armor_with_complex_effects(self):
         """複雑な効果付き防具のテスト"""
@@ -505,7 +499,7 @@ class TestItemIntegration:
         )
         armor = Armor("legendary_armor", "伝説の鎧", "伝説の鎧", ArmorType.CHEST, armor_effect)
         
-        assert armor.calculate_defense_bonus() == 30
+        assert armor.get_defense_bonus() == 30
         assert armor.get_counter_chance() == 0.25
         assert armor.get_counter_damage() == 50
         assert armor.get_status_resistance(StatusEffectType.POISON) == 0.8

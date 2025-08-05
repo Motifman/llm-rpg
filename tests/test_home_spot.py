@@ -15,7 +15,7 @@ class TestHomeSpot:
         """初期化のテスト"""
         assert self.home_spot.spot_id == "home_spot"
         assert self.home_spot.name == "家"
-        assert self.home_spot.description == "あなたの家です。ベッドと机があります。"
+        assert self.home_spot.description == "家、ベッドと机がある"
         
         # オーナーの権限が設定されているか
         assert self.home_spot.get_player_permission("owner_player") == Permission.OWNER
