@@ -24,57 +24,83 @@ class Player:
         self.equipment = EquipmentSet()
         self.status = Status()
     
+    # ===== 基本情報 =====
     def get_player_id(self) -> str:
+        """プレイヤーIDを取得"""
         return self.player_id
     
     def get_name(self) -> str:
+        """プレイヤー名を取得"""
         return self.name
 
     def get_current_spot_id(self) -> str:
+        """現在のスポットIDを取得"""
         return self.current_spot_id
     
     def set_current_spot_id(self, spot_id: str):
+        """現在のスポットIDを設定"""
         self.current_spot_id = spot_id
     
     def get_role(self) -> Role:
+        """ロールを取得"""
         return self.role
     
     def set_role(self, role: Role):
+        """ロールを設定"""
         self.role = role
     
     def is_role(self, role: Role) -> bool:
+        """指定されたロールかどうか"""
         return self.role == role
     
-    # インベントリ管理
+    # ===== インベントリ管理 =====
     def get_inventory(self) -> Inventory:
+        """インベントリを取得"""
         return self.inventory
     
     def set_inventory(self, inventory: Inventory):
+        """インベントリを設定"""
         self.inventory = inventory
     
     def add_item(self, item: Item):
+        """アイテムを追加"""
         self.inventory.add_item(item)
     
     def remove_item(self, item_id: str, count: int = 1) -> int:
+        """アイテムを削除"""
         return self.inventory.remove_item_by_id(item_id, count=count)
     
     def has_item(self, item_id: str) -> bool:
+        """アイテムを所持しているか"""
         return self.inventory.has_item(item_id)
     
     def get_inventory_items(self) -> List[Item]:
+        """インベントリ内のアイテム一覧を取得"""
         return self.inventory.get_items()
     
     def get_inventory_item_count(self, item_id: str) -> int:
+        """インベントリ内のアイテム数を取得"""
         return self.inventory.get_item_count(item_id)
     
-    # 装備管理
+    def get_all_equipment_item_ids(self) -> List[str]:
+        """装備可能アイテムのID一覧を取得"""
+        return self.inventory.get_all_equipment_item_ids()
+    
+    def get_all_consumable_item_ids(self) -> List[str]:
+        """消費可能アイテムのID一覧を取得"""
+        return self.inventory.get_all_consumable_item_ids()
+    
+    # ===== 装備管理 =====
     def get_equipment(self) -> EquipmentSet:
+        """装備セットを取得"""
         return self.equipment
     
     def set_equipment(self, equipment: EquipmentSet):
+        """装備セットを設定"""
         self.equipment = equipment
     
     def equip_item(self, item_id: str) -> 'EquipItemResult':
+        """アイテムを装備"""
         from game.action.actions.equipment_action import EquipItemResult
         
         item = self.inventory.get_item_by_id(item_id)
@@ -96,6 +122,7 @@ class Player:
             return EquipItemResult(False, "アイテムを装備できません", str(self.equipment), item.item_id, None)
     
     def unequip_slot(self, slot: EquipmentSlot) -> 'UnequipItemResult':
+        """スロットから装備を外す"""
         from game.action.actions.equipment_action import UnequipItemResult
         
         item = self.equipment.unequip_slot(slot)
@@ -108,28 +135,34 @@ class Player:
             return UnequipItemResult(False, f"{slot_name}を装備していないため外せません", str(self.equipment), None)
     
     def get_equipped_slots(self) -> List[EquipmentSlot]:
+        """装備中のスロット一覧を取得"""
         return self.equipment.get_equipped_slots()
     
     def get_available_equipment_slots(self) -> List[EquipmentSlot]:
+        """利用可能な装備スロット一覧を取得"""
         return self.equipment.get_available_slots()
     
     def get_equipped_item(self, slot: EquipmentSlot) -> Optional[Item]:
+        """指定スロットの装備アイテムを取得"""
         return self.equipment.get_equipped_item(slot)
     
-    def get_all_equipment_item_ids(self) -> List[str]:
-        return self.inventory.get_all_equipment_item_ids()
+    def get_equipped_weapon(self) -> Optional[Weapon]:
+        """装備中の武器を取得"""
+        return self.equipment.get_equipped_weapon()
     
-    def get_all_consumable_item_ids(self) -> List[str]:
-        return self.inventory.get_all_consumable_item_ids()
+    def get_equipped_armors(self) -> List[Armor]:
+        """装備中の防具一覧を取得"""
+        return self.equipment.get_equipped_armors()
     
-    # ステータス管理（基本値のみ）
+    # ===== ステータス管理（基本値） =====
     def get_status(self) -> Status:
+        """ステータスを取得"""
         return self.status
     
     def set_status(self, status: Status):
+        """ステータスを設定"""
         self.status = status
     
-    # 基本ステータス値の取得（装備ボーナスなし）
     def get_hp(self) -> int:
         """現在のHPを取得"""
         return self.status.get_hp()
@@ -166,7 +199,7 @@ class Player:
         """基本回避率を取得"""
         return self.status.get_evasion_rate()
     
-    # 装備ボーナス込みのステータス値取得
+    # ===== 装備ボーナス込みのステータス値取得 =====
     def get_attack(self) -> int:
         """攻撃力を取得（装備ボーナス込み）"""
         base_attack = self.get_base_attack()
@@ -202,27 +235,43 @@ class Player:
         equipment_bonuses = self.equipment.get_equipment_bonuses()
         return equipment_bonuses['status_resistance'].get(status_effect_type, 0.0)
     
-    # 装備情報の取得
-    def get_equipped_weapon(self) -> Optional[Weapon]:
-        """装備中の武器を取得"""
-        return self.equipment.get_equipped_weapon()
+    # ===== お金・経験値管理 =====
+    def get_gold(self) -> int:
+        """所持金を取得"""
+        return self.status.get_gold()
     
-    def get_equipped_armors(self) -> List[Armor]:
-        """装備中の防具を取得"""
-        return self.equipment.get_equipped_armors()
+    def add_gold(self, amount: int):
+        """所持金を追加"""
+        self.status.add_gold(amount)
     
-    def is_alive(self) -> bool:
-        return self.status.is_alive()
+    def get_experience_points(self) -> int:
+        """経験値を取得"""
+        return self.status.get_experience_points()
     
-    # 状態異常管理
+    def add_experience_points(self, amount: int):
+        """経験値を追加"""
+        self.status.add_experience_points(amount)
+    
+    def get_level(self) -> int:
+        """レベルを取得"""
+        return self.status.get_level()
+    
+    def set_level(self, level: int):
+        """レベルを設定"""
+        self.status.set_level(level)
+    
+    # ===== 状態異常管理 =====
     def has_status_condition(self, status_effect_type: StatusEffectType) -> bool:
+        """状態異常を持っているかどうか"""
         return self.status.has_status_effect_type(status_effect_type)
     
     def process_status_effects(self):
+        """状態異常を処理"""
         self.status.process_status_effects()
     
-    # アイテム使用
+    # ===== アイテム使用 =====
     def use_item(self, item_id: str) -> 'ItemUseResult':
+        """アイテムを使用"""
         from game.action.actions.item_action import ItemUseResult
         from game.item.consumable_item import ConsumableItem
         from game.item.item_effect import ItemEffect
@@ -254,6 +303,7 @@ class Player:
         )
     
     def preview_item_effect(self, item_id: str) -> Optional['ItemEffect']:
+        """アイテムの効果をプレビュー"""
         from game.item.consumable_item import ConsumableItem
         from game.item.item_effect import ItemEffect
         
@@ -262,7 +312,26 @@ class Player:
             return None
         return item.effect
     
+    # ===== 戦闘関連 =====
+    def is_defending(self) -> bool:
+        """防御状態かどうか"""
+        return self.status.is_defending()
+
+    def set_defending(self, defending: bool):
+        """防御状態を設定"""
+        self.status.set_defending(defending)
+        
+    def take_damage(self, damage: int):
+        """ダメージを受ける"""
+        self.status.add_hp(-damage)
+
+    def is_alive(self) -> bool:
+        """生存しているかどうか"""
+        return self.status.is_alive()
+    
+    # ===== ユーティリティ =====
     def get_current_status_snapshot(self) -> dict:
+        """現在のステータスのスナップショットを取得"""
         return {
             'hp': self.get_hp(),
             'mp': self.get_mp(),
@@ -280,34 +349,6 @@ class Player:
             'experience_points': self.status.get_experience_points()
         }
     
-    def get_gold(self) -> int:
-        return self.status.get_gold()
-    
-    def add_gold(self, amount: int):
-        self.status.add_gold(amount)
-    
-    def get_experience_points(self) -> int:
-        return self.status.get_experience_points()
-    
-    def add_experience_points(self, amount: int):
-        self.status.add_experience_points(amount)
-    
-    def get_level(self) -> int:
-        """レベルを取得"""
-        return self.status.get_level()
-    
-    def set_level(self, level: int):
-        """レベルを設定"""
-        self.status.set_level(level)
-        
-    def is_defending(self) -> bool:
-        return self.status.is_defending()
-
-    def set_defending(self, defending: bool):
-        self.status.set_defending(defending)
-        
-    def take_damage(self, damage: int):
-        self.status.add_hp(-damage)
-    
     def get_status_summary(self) -> str:
+        """ステータスの要約を取得"""
         return self.status.get_status_summary() 

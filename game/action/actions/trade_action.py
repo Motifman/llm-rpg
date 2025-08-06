@@ -6,7 +6,7 @@ from game.player.player import Player
 from game.core.game_context import GameContext
 from game.trade.trade_manager import TradeManager
 from game.trade.trade_data import TradeOffer
-from game.enums import TradeType, TradeStatus
+from game.enums import TradeType
 
 
 class TradeActionResult(ActionResult):
@@ -303,8 +303,8 @@ class PostTradeCommand(ActionCommand):
             
             # お金の所持チェック（アイテム取引の場合）
             if self.requested_item_id and self.requested_money > 0:
-                if acting_player.status.get_gold() < self.requested_money:
-                    return PostTradeResult(False, f"お金が不足しています（所持: {acting_player.status.get_gold()}, 必要: {self.requested_money}）", None, "")
+                if acting_player.get_gold() < self.requested_money:
+                    return PostTradeResult(False, f"お金が不足しています（所持: {acting_player.get_gold()}, 必要: {self.requested_money}）", None, "")
             
             # TradeOfferを作成
             if self.requested_item_id:
