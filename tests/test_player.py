@@ -143,7 +143,7 @@ class TestPlayer:
         assert 'mp' in snapshot
         assert 'base_attack' in snapshot
         assert 'base_defense' in snapshot
-        assert 'money' in snapshot
+        assert 'gold' in snapshot
         assert 'experience_points' in snapshot
         
         # ステータス変更後のスナップショット
@@ -153,7 +153,7 @@ class TestPlayer:
         self.player.status.set_mp(100)
         self.player.status.set_attack(25)
         self.player.status.set_defense(15)
-        self.player.status.set_money(1000)
+        self.player.status.set_gold(1000)
         self.player.status.set_experience_points(500)
         
         snapshot2 = self.player.get_current_status_snapshot()
@@ -161,7 +161,7 @@ class TestPlayer:
         assert snapshot2['mp'] == 100
         assert snapshot2['base_attack'] == 25
         assert snapshot2['base_defense'] == 15
-        assert snapshot2['money'] == 1000
+        assert snapshot2['gold'] == 1000
         assert snapshot2['experience_points'] == 500
     
     def test_use_item_success(self):

@@ -448,7 +448,7 @@ class TestQuestSystem:
         self.quest_system = QuestSystem()
         self.player = Player("player_001", "テストプレイヤー", Role.ADVENTURER)
         self.client_player = Player("client_001", "依頼者", Role.CITIZEN)
-        self.client_player.add_money(1000)  # 依頼用資金
+        self.client_player.add_gold(1000)  # 依頼用資金
     
     def test_quest_system_creation(self):
         """QuestSystem作成テスト"""
@@ -698,7 +698,7 @@ class TestQuestSystemIntegration:
         self.quest_system = QuestSystem()
         self.adventurer = Player("adv_001", "冒険者", Role.ADVENTURER)
         self.client = Player("client_001", "依頼者", Role.CITIZEN)
-        self.client.add_money(2000)
+        self.client.add_gold(2000)
     
     def test_complete_quest_workflow(self):
         """完全なクエストワークフローテスト"""

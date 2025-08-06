@@ -169,11 +169,11 @@ class TradeManager:
         
         # 購入者のお金を減らす（お金取引の場合）
         if trade.is_money_trade():
-            buyer.status.add_money(-trade.requested_money)
+            buyer.status.add_gold(-trade.requested_money)
         
         # 出品者にお金を渡す（お金取引の場合）
         if trade.is_money_trade():
-            seller.status.add_money(trade.requested_money)
+            seller.status.add_gold(trade.requested_money)
         
         # 出品者に要求アイテムを渡す（アイテム取引の場合）
         if trade.is_item_trade() and buyer_item:
@@ -250,8 +250,8 @@ class TradeManager:
         
         # 購入者のお金所持チェック（お金取引の場合）
         if trade.is_money_trade():
-            if buyer.status.get_money() < trade.requested_money:
-                raise ValueError(f"購入者のお金が不足しています（所持: {buyer.status.get_money()}, 必要: {trade.requested_money}）")
+            if buyer.status.get_gold() < trade.requested_money:
+                raise ValueError(f"購入者のお金が不足しています（所持: {buyer.status.get_gold()}, 必要: {trade.requested_money}）")
     
     def cancel_trade(self, trade_id: str, seller_id: str, seller: 'Player' = None) -> bool:
         """取引をキャンセル"""

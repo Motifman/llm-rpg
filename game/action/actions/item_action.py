@@ -44,9 +44,9 @@ class ItemUseResult(ActionResult):
             change = self.status_after['defense'] - self.status_before['defense']
             changes.append(f"防御力: {self.status_before['defense']} → {self.status_after['defense']} ({change:+d})")
         
-        if self.status_after['money'] != self.status_before['money']:
-            change = self.status_after['money'] - self.status_before['money']
-            changes.append(f"所持金: {self.status_before['money']} → {self.status_after['money']} ({change:+d})")
+        if self.status_after['gold'] != self.status_before['gold']:
+            change = self.status_after['gold'] - self.status_before['gold']
+            changes.append(f"所持金: {self.status_before['gold']} → {self.status_after['gold']} ({change:+d})")
         
         if self.status_after['experience_points'] != self.status_before['experience_points']:
             change = self.status_after['experience_points'] - self.status_before['experience_points']

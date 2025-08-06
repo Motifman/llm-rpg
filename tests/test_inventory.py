@@ -521,7 +521,7 @@ class TestInventoryTradeIntegration:
         # 初期アイテムを設定
         self.seller.add_item(self.fire_sword)
         self.buyer.add_item(self.leather_armor)
-        self.buyer.status.add_money(1000)
+        self.buyer.status.add_gold(1000)
     
     def test_trade_unique_item_inventory_consistency(self):
         """UniqueItem取引時のインベントリ整合性テスト"""

@@ -28,7 +28,7 @@ class Status:
         self.evasion_rate = 0.0
         self.experience_points = 0
         self.level = 1
-        self.money = 0
+        self.gold = 0
         self.status_effects: Dict[StatusEffectType, StatusEffect] = {}
         self.defending = False
 
@@ -188,17 +188,17 @@ class Status:
             self.hp = self.max_hp
             self.mp = self.max_mp
     
-    def get_money(self) -> int:
+    def get_gold(self) -> int:
         """所持金を取得"""
-        return self.money
+        return self.gold
     
-    def set_money(self, money: int):
+    def set_gold(self, gold: int):
         """所持金を設定"""
-        self.money = max(0, money)
+        self.gold = max(0, gold)
     
-    def add_money(self, money: int):
+    def add_gold(self, gold: int):
         """所持金を追加"""
-        self.money = max(0, self.money + money)
+        self.gold = max(0, self.gold + gold)
         
     def set_defending(self, defending: bool):
         """防御状態を設定"""
@@ -282,14 +282,14 @@ class Status:
         return (f"HP: {self.hp}/{self.max_hp}, "
                 f"MP: {self.mp}/{self.max_mp}, "
                 f"基本攻撃: {self.attack}, 基本防御: {self.defense}, 基本素早さ: {self.speed}, "
-                f"所持金: {self.money}, 経験値: {self.experience_points}, "
+                f"所持金: {self.gold}, 経験値: {self.experience_points}, "
                 f"クリティカル: {self.get_critical_rate():.1%}, 回避: {self.get_evasion_rate():.1%}")
 
     def apply_item_effect(self, effect: 'ItemEffect'):
         """アイテム効果を適用"""
         self.add_hp(effect.hp_change)
         self.add_mp(effect.mp_change)
-        self.add_money(effect.money_change)
+        self.add_gold(effect.gold_change)
         self.add_experience_points(effect.experience_change)
         for status_effect in effect.temporary_effects:
             self.add_status_effect(status_effect)

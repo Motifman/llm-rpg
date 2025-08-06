@@ -53,12 +53,12 @@ class TestItemEffect:
         effect = ItemEffect(
             hp_change=100,
             mp_change=50,
-            money_change=1000,
+            gold_change=1000,
             experience_change=500
         )
         assert effect.hp_change == 100
         assert effect.mp_change == 50
-        assert effect.money_change == 1000
+        assert effect.gold_change == 1000
         assert effect.experience_change == 500
     
     def test_item_effect_str_representation(self):
