@@ -13,7 +13,7 @@ from game.core.game_context import GameContext
 from game.world.spot_manager import SpotManager
 from game.battle.battle_manager import BattleManager
 from game.monster.monster import Monster
-from game.enums import TurnActionType, BattleState, MonsterType, Race, Element, Role
+from game.enums import TurnActionType, MonsterType, Race, Element, Role
 from game.world.spot import Spot
 
 
@@ -162,7 +162,7 @@ def demo_battle_complete():
     print(f"\n=== プレイヤー最終状態 ===")
     print(f"HP: {player.get_hp()}/{player.get_max_hp()}")
     print(f"経験値: {player.get_experience_points()}")
-    print(f"ゴールド: {player.get_money()}")
+    print(f"ゴールド: {player.get_gold()}")
     print(f"インベントリアイテム数: {len(player.get_inventory_items())}")
     
     # 戦闘ログを出力
