@@ -19,7 +19,7 @@ from game.enums import QuestDifficulty, QuestType, Role
 class TestQuestAction(unittest.TestCase):
     def setUp(self):
         self.player = Player("test_player", "テストプレイヤー", Role.ADVENTURER)
-        self.player.add_money(1000)  # テスト用に資金を追加
+        self.player.add_gold(1000)  # テスト用に資金を追加
         
         # Mock managers
         self.player_manager = Mock()

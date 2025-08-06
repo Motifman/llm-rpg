@@ -62,7 +62,7 @@ class Player:
         return self.inventory.has_item(item_id)
     
     def get_inventory_items(self) -> List[Item]:
-        return self.inventory.get_all_items()
+        return self.inventory.get_items()
     
     def get_inventory_item_count(self, item_id: str) -> int:
         return self.inventory.get_item_count(item_id)
@@ -276,15 +276,15 @@ class Player:
             'speed': self.get_speed(),
             'critical_rate': self.get_critical_rate(),
             'evasion_rate': self.get_evasion_rate(),
-            'money': self.status.get_money(),
+            'gold': self.get_gold(),
             'experience_points': self.status.get_experience_points()
         }
     
-    def get_money(self) -> int:
-        return self.status.get_money()
+    def get_gold(self) -> int:
+        return self.status.get_gold()
     
-    def add_money(self, amount: int):
-        self.status.add_money(amount)
+    def add_gold(self, amount: int):
+        self.status.add_gold(amount)
     
     def get_experience_points(self) -> int:
         return self.status.get_experience_points()

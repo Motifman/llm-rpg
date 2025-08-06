@@ -69,7 +69,7 @@ class TestTradeActionWithRealItems:
             self.buyer.add_item(self.orange)
         for _ in range(2):
             self.buyer.add_item(self.elixir)
-        self.buyer.status.add_money(1000)
+        self.buyer.status.add_gold(1000)
     
     def test_post_trade_with_real_items(self):
         """実際のアイテムを使った取引出品テスト"""
@@ -105,7 +105,7 @@ class TestTradeActionWithRealItems:
         trade_id = post_result.trade_id
         
         # 買い手の初期状態を記録
-        initial_money = self.buyer.status.get_money()
+        initial_money = self.buyer.status.get_gold()
         initial_apple_count = self.buyer.get_inventory_item_count("apple")
         
         # 買い手が取引を受託
@@ -117,11 +117,11 @@ class TestTradeActionWithRealItems:
         assert accept_result.trade_id == trade_id
         
         # 買い手の状態変化を確認
-        assert self.buyer.status.get_money() == initial_money - 100
+        assert self.buyer.status.get_gold() == initial_money - 100
         assert self.buyer.get_inventory_item_count("apple") == initial_apple_count + 2
         
         # 売り手の状態変化を確認
-        assert self.seller.status.get_money() == 100  # 売り手はお金を獲得
+        assert self.seller.status.get_gold() == 100  # 売り手はお金を獲得
         
         # 取引が履歴に移動していることを確認
         assert self.trade_manager.get_trade(trade_id) is None
@@ -268,11 +268,11 @@ class TestTradeActionWithRealItems:
         """取引完了時の状態検証テスト"""
         # 売り手の初期状態を記録
         seller_initial_apple = self.seller.get_inventory_item_count("apple")
-        seller_initial_money = self.seller.status.get_money()
+        seller_initial_money = self.seller.status.get_gold()
         
         # 買い手の初期状態を記録
         buyer_initial_apple = self.buyer.get_inventory_item_count("apple")
-        buyer_initial_money = self.buyer.status.get_money()
+        buyer_initial_money = self.buyer.status.get_gold()
         
         # 取引を実行
         post_command = PostTradeCommand("apple", 2, 150, trade_type="global")
@@ -289,11 +289,11 @@ class TestTradeActionWithRealItems:
         
         # 売り手の状態変化
         assert self.seller.get_inventory_item_count("apple") == seller_initial_apple - 2
-        assert self.seller.status.get_money() == seller_initial_money + 150
+        assert self.seller.status.get_gold() == seller_initial_money + 150
         
         # 買い手の状態変化
         assert self.buyer.get_inventory_item_count("apple") == buyer_initial_apple + 2
-        assert self.buyer.status.get_money() == buyer_initial_money - 150
+        assert self.buyer.status.get_gold() == buyer_initial_money - 150
         
         # 取引履歴の確認
         history = self.trade_manager.get_trade_history()
@@ -496,7 +496,7 @@ class TestTradeActionWithUniqueItems:
         
         # 買い手にUniqueItemとお金を追加
         self.buyer.add_item(self.ice_dagger)
-        self.buyer.status.add_money(2000)
+        self.buyer.status.add_gold(2000)
     
     def test_post_trade_with_unique_weapon(self):
         """UniqueItemの武器を使った取引出品テスト"""
@@ -549,7 +549,7 @@ class TestTradeActionWithUniqueItems:
         trade_id = post_result.trade_id
         
         # 買い手の初期状態を記録
-        initial_money = self.buyer.status.get_money()
+        initial_money = self.buyer.status.get_gold()
         initial_weapon_count = self.buyer.get_inventory_item_count("fire_sword")
         
         # 買い手が取引を受託
@@ -561,11 +561,11 @@ class TestTradeActionWithUniqueItems:
         assert accept_result.trade_id == trade_id
         
         # 買い手の状態変化を確認
-        assert self.buyer.status.get_money() == initial_money - 500
+        assert self.buyer.status.get_gold() == initial_money - 500
         assert self.buyer.get_inventory_item_count("fire_sword") == initial_weapon_count + 1
         
         # 売り手の状態変化を確認
-        assert self.seller.status.get_money() == 500  # 売り手はお金を獲得
+        assert self.seller.status.get_gold() == 500  # 売り手はお金を獲得
         assert self.seller.get_inventory_item_count("fire_sword") == 0  # 売り手は武器を失う
         
         # 取引が履歴に移動していることを確認
@@ -583,7 +583,7 @@ class TestTradeActionWithUniqueItems:
         trade_id = post_result.trade_id
         
         # 買い手の初期状態を記録
-        initial_money = self.buyer.status.get_money()
+        initial_money = self.buyer.status.get_gold()
         initial_armor_count = self.buyer.get_inventory_item_count("leather_armor")
         
         # 買い手が取引を受託
@@ -594,11 +594,11 @@ class TestTradeActionWithUniqueItems:
         assert accept_result.success is True
         
         # 買い手の状態変化を確認
-        assert self.buyer.status.get_money() == initial_money - 300
+        assert self.buyer.status.get_gold() == initial_money - 300
         assert self.buyer.get_inventory_item_count("leather_armor") == initial_armor_count + 1
         
         # 売り手の状態変化を確認
-        assert self.seller.status.get_money() == 300
+        assert self.seller.status.get_gold() == 300
         assert self.seller.get_inventory_item_count("leather_armor") == 0
     
     def test_unique_item_to_unique_item_trade(self):
@@ -682,11 +682,11 @@ class TestTradeActionWithUniqueItems:
         """UniqueItem取引完了時の状態検証テスト"""
         # 売り手の初期状態を記録
         seller_initial_weapon = self.seller.get_inventory_item_count("fire_sword")
-        seller_initial_money = self.seller.status.get_money()
+        seller_initial_money = self.seller.status.get_gold()
         
         # 買い手の初期状態を記録
         buyer_initial_weapon = self.buyer.get_inventory_item_count("fire_sword")
-        buyer_initial_money = self.buyer.status.get_money()
+        buyer_initial_money = self.buyer.status.get_gold()
         
         # 取引を実行
         post_command = PostTradeCommand("fire_sword", 1, 600, trade_type="global")
@@ -703,11 +703,11 @@ class TestTradeActionWithUniqueItems:
         
         # 売り手の状態変化
         assert self.seller.get_inventory_item_count("fire_sword") == seller_initial_weapon - 1
-        assert self.seller.status.get_money() == seller_initial_money + 600
+        assert self.seller.status.get_gold() == seller_initial_money + 600
         
         # 買い手の状態変化
         assert self.buyer.get_inventory_item_count("fire_sword") == buyer_initial_weapon + 1
-        assert self.buyer.status.get_money() == buyer_initial_money - 600
+        assert self.buyer.status.get_gold() == buyer_initial_money - 600
         
         # 取引履歴の確認
         history = self.trade_manager.get_trade_history()
@@ -788,7 +788,7 @@ class TestTradeActionWithNonTradeableItems:
         self.seller.add_item(self.bound_item)
         
         # 買い手にお金を追加
-        self.buyer.status.add_money(1000)
+        self.buyer.status.add_gold(1000)
     
     def test_post_trade_with_non_tradeable_quest_item(self):
         """クエストアイテムの取引出品失敗テスト"""

@@ -62,7 +62,7 @@ def setup_demo_environment():
         alice.add_item(apple)
     for _ in range(5):
         alice.add_item(potion)
-    alice.status.add_money(500)
+    alice.status.add_gold(500)
     print(f"アリス: りんご x10, ポーション x5, お金 500ゴールド")
     
     # ボブ（買い手）
@@ -70,13 +70,13 @@ def setup_demo_environment():
         bob.add_item(orange)
     for _ in range(3):
         bob.add_item(elixir)
-    bob.status.add_money(1000)
+    bob.status.add_gold(1000)
     print(f"ボブ: オレンジ x8, エリクサー x3, お金 1000ゴールド")
     
     # チャーリー（別の買い手）
     for _ in range(5):
         charlie.add_item(bread)
-    charlie.status.add_money(800)
+    charlie.status.add_gold(800)
     print(f"チャーリー: パン x5, お金 800ゴールド")
     
     # ゲームコンテキストを作成
@@ -115,8 +115,8 @@ def demo_money_trade(game_context, alice, bob):
         if accept_result.success:
             print(f"✓ 取引受託成功: {accept_result.trade_details}")
             print(f"  ボブのりんご: {bob.get_inventory_item_count('apple')}個")
-            print(f"  ボブのお金: {bob.status.get_money()}ゴールド")
-            print(f"  アリスのお金: {alice.status.get_money()}ゴールド")
+            print(f"  ボブのお金: {bob.status.get_gold()}ゴールド")
+            print(f"  アリスのお金: {alice.status.get_gold()}ゴールド")
         else:
             print(f"✗ 取引受託失敗: {accept_result.message}")
     else:

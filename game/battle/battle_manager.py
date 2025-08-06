@@ -1293,10 +1293,10 @@ class BattleManager:
             battle_result = battle.get_battle_result()
             
             # 勝利の場合、参加プレイヤーに報酬を分配
-            if battle_result.result_type == "victory":
+            if battle_result.victory:
                 try:
                     # 貢献度ベースの報酬計算
-                    distributed_rewards = battle._calculate_contribution_based_rewards(battle_result.rewards)
+                    distributed_rewards = battle._calculate_contribution_based_rewards(battle_result.total_rewards)
                     
                     # 各プレイヤーに報酬を分配
                     for player_id, distributed_reward in distributed_rewards.items():
@@ -1305,24 +1305,24 @@ class BattleManager:
                             
                             # 経験値とゴールドを追加
                             if distributed_reward.experience > 0:
-                                player.add_experience(distributed_reward.experience)
+                                player.add_experience_points(distributed_reward.experience)
                             
-                            if distributed_reward.gold > 0:
-                                player.add_gold(distributed_reward.gold)
+                            if distributed_reward.money > 0:
+                                player.add_gold(distributed_reward.money)
                             
                             # アイテムを追加
                             for item in distributed_reward.items:
-                                player.inventory.add_item(item)
+                                player.add_item(item)
                             
                             # 戦闘イベントログに報酬分配を記録
                             battle._create_battle_event(
                                 event_type="reward_distribution",
                                 actor_id="system",
-                                message=f"{player.name} に報酬を分配しました (経験値: {distributed_reward.experience}, ゴールド: {distributed_reward.gold}, アイテム: {len(distributed_reward.items)}個)",
+                                message=f"{player.name} に報酬を分配しました (経験値: {distributed_reward.experience}, ゴールド: {distributed_reward.money}, アイテム: {len(distributed_reward.items)}個)",
                                 structured_data={
                                     "player_id": player_id,
                                     "experience": distributed_reward.experience,
-                                    "gold": distributed_reward.gold,
+                                    "money": distributed_reward.money,
                                     "items_count": len(distributed_reward.items)
                                 }
                             )

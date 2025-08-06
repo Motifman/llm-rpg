@@ -71,11 +71,11 @@ class QuestSystem:
             return False, f"ギルド {guild_id} が存在しません"
         
         # 依頼者の資金チェック
-        if client_player.get_money() < quest.reward_money:
-            return False, f"資金が不足しています。必要額: {quest.reward_money}G, 所持金: {client_player.get_money()}G"
+        if client_player.get_gold() < quest.reward_money:
+            return False, f"資金が不足しています。必要額: {quest.reward_money}G, 所持金: {client_player.get_gold()}G"
         
         # 依頼手数料を支払い
-        client_player.add_money(-quest.reward_money)
+        client_player.add_gold(-quest.reward_money)
         
         # ギルドにクエストを掲示
         success = guild.post_quest(quest, quest.reward_money)

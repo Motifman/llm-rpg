@@ -55,13 +55,11 @@ class BattleStartStrategy(ActionStrategy):
         return []
 
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
-        # プレイヤーのいるSpotにモンスターが存在するかをチェック
         spot_manager = game_context.get_spot_manager()
         current_spot = spot_manager.get_spot(acting_player.get_current_spot_id())
         if current_spot is None:
             return False
         
-        # Spotにモンスターが存在するかチェック
         monsters = current_spot.get_visible_monsters()
         return len(monsters) > 0
 
@@ -77,7 +75,6 @@ class BattleJoinStrategy(ActionStrategy):
         return []
 
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
-        # プレイヤーのいるSpotで戦闘が起きているかをチェック
         battle_manager = game_context.get_battle_manager()
         if battle_manager is None:
             return False
@@ -124,7 +121,6 @@ class BattleActionStrategy(ActionStrategy):
         ]
 
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
-        # プレイヤーがそのSpotでの戦闘に参加しているかをチェック
         battle_manager = game_context.get_battle_manager()
         if battle_manager is None:
             return False
@@ -241,7 +237,10 @@ class BattleActionCommand(ActionCommand):
             # 戦闘終了チェック
             if battle.is_battle_finished():
                 battle_result = battle.get_battle_result()
-                message = f"行動を実行しました。戦闘が終了しました: {battle_result.result_type}"
+                result_text = "勝利" if battle_result.victory else "敗北"
+                if battle_result.escaped:
+                    result_text = "逃走"
+                message = f"行動を実行しました。戦闘が終了しました: {result_text}"
             else:
                 message = f"行動を実行しました: {turn_action.message}"
             
