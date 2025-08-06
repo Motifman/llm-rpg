@@ -6,6 +6,7 @@ from game.player.player import Player
 from game.core.game_context import GameContext
 from game.conversation.conversation_manager import ConversationManager
 from game.conversation.message_data import LocationChatMessage
+from game.enums import PlayerState
 
 
 class ConversationActionResult(ActionResult):
@@ -74,7 +75,8 @@ class StartSpotConversationStrategy(ActionStrategy):
         ]
     
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
-        return True
+        # 通常状態の時のみ会話を開始できる
+        return acting_player.is_in_normal_state()
     
     def build_action_command(self, acting_player: Player, game_context: GameContext, spot_id: str) -> ActionCommand:
         return StartSpotConversationCommand(spot_id)
@@ -100,7 +102,8 @@ class StartPrivateConversationStrategy(ActionStrategy):
         ]
 
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
-        return True
+        # 通常状態の時のみ会話を開始できる
+        return acting_player.is_in_normal_state()
 
     def build_action_command(self, acting_player: Player, game_context: GameContext, target_player_id: str, spot_id: str) -> ActionCommand:
         return StartPrivateConversationCommand(target_player_id, spot_id)
@@ -121,7 +124,8 @@ class JoinSpotConversationStrategy(ActionStrategy):
         ]
 
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
-        return True
+        # 通常状態の時のみ会話に参加できる
+        return acting_player.is_in_normal_state()
 
     def build_action_command(self, acting_player: Player, game_context: GameContext, spot_id: str) -> ActionCommand:
         return JoinSpotConversationCommand(spot_id)
@@ -147,7 +151,8 @@ class SpeakInConversationStrategy(ActionStrategy):
         ]
 
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
-        return True
+        # 会話状態の時のみ発言できる
+        return acting_player.is_in_conversation_state()
 
     def build_action_command(self, acting_player: Player, game_context: GameContext, message: str, target_player_id: str = None) -> ActionCommand:
         return SpeakInConversationCommand(message, target_player_id)
@@ -162,7 +167,8 @@ class LeaveConversationStrategy(ActionStrategy):
         return []  # 引数不要
 
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
-        return True
+        # 会話状態の時のみ離脱できる
+        return acting_player.is_in_conversation_state()
 
     def build_action_command(self, acting_player: Player, game_context: GameContext) -> ActionCommand:
         return LeaveConversationCommand()
@@ -189,6 +195,9 @@ class StartSpotConversationCommand(ActionCommand):
         
         # セッション開始
         session_id = conversation_manager.start_conversation_session(self.spot_id, player_id)
+        
+        # プレイヤーの状態を会話状態に変更
+        acting_player.set_player_state(PlayerState.CONVERSATION)
         
         # 参加メッセージを記録
         join_message = LocationChatMessage(
@@ -227,6 +236,9 @@ class StartPrivateConversationCommand(ActionCommand):
         # 個人宛セッション開始
         session_id = conversation_manager.start_private_conversation(player_id, self.spot_id)
         
+        # プレイヤーの状態を会話状態に変更
+        acting_player.set_player_state(PlayerState.CONVERSATION)
+        
         # 参加者と会話履歴を取得
         participants = list(conversation_manager.get_session_participants(session_id))
         history = conversation_manager.get_conversation_history_as_text(session_id)
@@ -260,6 +272,9 @@ class JoinSpotConversationCommand(ActionCommand):
         session_id = conversation_manager.join_conversation(player_id, self.spot_id)
         if session_id is None:
             return JoinConversationResult(False, "会話セッションに参加できませんでした", None, [], "")
+        
+        # プレイヤーの状態を会話状態に変更
+        acting_player.set_player_state(PlayerState.CONVERSATION)
         
         # 参加メッセージを記録
         join_message = LocationChatMessage(
@@ -348,5 +363,8 @@ class LeaveConversationCommand(ActionCommand):
         
         # セッションから離脱
         conversation_manager.leave_conversation(player_id)
+        
+        # プレイヤーの状態を通常状態に変更
+        acting_player.set_player_state(PlayerState.NORMAL)
         
         return LeaveConversationResult(True, "会話から離脱しました", session_id, participants, history)

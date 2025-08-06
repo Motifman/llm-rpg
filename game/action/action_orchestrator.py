@@ -16,6 +16,19 @@ from game.action.actions.quest_action import (
     QuestCreateExplorationStrategy, QuestGetAvailableQuestsStrategy, QuestAcceptQuestStrategy,
     QuestGetActiveQuestStrategy
 )
+from game.action.actions.sns_action import SnsOpenStrategy, SnsCloseStrategy
+from game.action.actions.state_transition_action import (
+    TradingOpenStrategy, TradingCloseStrategy, ConversationLeaveStrategy
+)
+from game.action.actions.battle_action import BattleStartStrategy, BattleJoinStrategy, BattleActionStrategy
+from game.action.actions.conversation_action import (
+    StartSpotConversationStrategy, StartPrivateConversationStrategy, 
+    JoinSpotConversationStrategy, SpeakInConversationStrategy
+)
+from game.action.actions.trade_action import (
+    PostTradeStrategy, AcceptTradeStrategy, CancelTradeStrategy, GetAvailableTradesStrategy
+)
+from game.enums import PlayerState
 from game.action.action_result import ActionResult, ErrorActionResult
 
 
@@ -23,8 +36,15 @@ class ActionOrchestrator:
     def __init__(self, game_context: GameContext):
         self.game_context = game_context
         
-        # グローバルアクション（場所に依存しない）
-        self.global_strategies: Dict[str, ActionStrategy] = {
+        # 状態別の行動を定義
+        self._initialize_state_strategies()
+
+    def _initialize_state_strategies(self):
+        """状態別の行動戦略を初期化"""
+        
+        # 通常状態で利用可能な行動
+        self.normal_state_strategies: Dict[str, ActionStrategy] = {
+            # 基本行動
             MovementStrategy().get_name(): MovementStrategy(),
             UseItemStrategy().get_name(): UseItemStrategy(),
             PreviewItemEffectStrategy().get_name(): PreviewItemEffectStrategy(),
@@ -33,6 +53,25 @@ class ActionOrchestrator:
             UnequipItemStrategy().get_name(): UnequipItemStrategy(),
             InventoryCheckStrategy().get_name(): InventoryCheckStrategy(),
             ExploreActionStrategy().get_name(): ExploreActionStrategy(),
+            
+            # 状態遷移行動
+            SnsOpenStrategy().get_name(): SnsOpenStrategy(),
+            TradingOpenStrategy().get_name(): TradingOpenStrategy(),
+            StartSpotConversationStrategy().get_name(): StartSpotConversationStrategy(),
+            StartPrivateConversationStrategy().get_name(): StartPrivateConversationStrategy(),
+            JoinSpotConversationStrategy().get_name(): JoinSpotConversationStrategy(),
+            BattleStartStrategy().get_name(): BattleStartStrategy(),
+            BattleJoinStrategy().get_name(): BattleJoinStrategy(),
+        }
+        
+        # 会話状態で利用可能な行動
+        self.conversation_state_strategies: Dict[str, ActionStrategy] = {
+            SpeakInConversationStrategy().get_name(): SpeakInConversationStrategy(),
+            ConversationLeaveStrategy().get_name(): ConversationLeaveStrategy(),
+        }
+        
+        # SNS状態で利用可能な行動
+        self.sns_state_strategies: Dict[str, ActionStrategy] = {
             SnsGetUserInfoStrategy().get_name(): SnsGetUserInfoStrategy(),
             SnsUpdateUserBioStrategy().get_name(): SnsUpdateUserBioStrategy(),
             SnsPostStrategy().get_name(): SnsPostStrategy(),
@@ -42,19 +81,27 @@ class ActionOrchestrator:
             SnsReplyStrategy().get_name(): SnsReplyStrategy(),
             SnsGetNotificationsStrategy().get_name(): SnsGetNotificationsStrategy(),
             SnsMarkNotificationReadStrategy().get_name(): SnsMarkNotificationReadStrategy(),
-            QuestGetGuildListStrategy().get_name(): QuestGetGuildListStrategy(),
-            QuestCreateMonsterHuntStrategy().get_name(): QuestCreateMonsterHuntStrategy(),
-            QuestCreateItemCollectionStrategy().get_name(): QuestCreateItemCollectionStrategy(),
-            QuestCreateExplorationStrategy().get_name(): QuestCreateExplorationStrategy(),
-            QuestGetAvailableQuestsStrategy().get_name(): QuestGetAvailableQuestsStrategy(),
-            QuestAcceptQuestStrategy().get_name(): QuestAcceptQuestStrategy(),
-            QuestGetActiveQuestStrategy().get_name(): QuestGetActiveQuestStrategy(),
+            SnsCloseStrategy().get_name(): SnsCloseStrategy(),
+        }
+        
+        # 戦闘状態で利用可能な行動
+        self.battle_state_strategies: Dict[str, ActionStrategy] = {
+            BattleActionStrategy().get_name(): BattleActionStrategy(),
+        }
+        
+        # 取引状態で利用可能な行動
+        self.trading_state_strategies: Dict[str, ActionStrategy] = {
+            PostTradeStrategy().get_name(): PostTradeStrategy(),
+            AcceptTradeStrategy().get_name(): AcceptTradeStrategy(),
+            CancelTradeStrategy().get_name(): CancelTradeStrategy(),
+            GetAvailableTradesStrategy().get_name(): GetAvailableTradesStrategy(),
+            TradingCloseStrategy().get_name(): TradingCloseStrategy(),
         }
 
     def get_action_candidates_for_llm(self, acting_player_id: str) -> List[Dict[str, Any]]:
         """
         LLMが行動選択を行うための候補アクションを取得
-        新しいArgumentInfo構造に対応した形式で返す
+        プレイヤーの状態に応じて行動を提案する
         """
         acting_player = self.game_context.get_player_manager().get_player(acting_player_id)
         if not acting_player: 
@@ -67,34 +114,55 @@ class ActionOrchestrator:
         if not current_spot: 
             return []
 
-        # スポット固有のアクションを取得
-        possible_actions_at_spot = current_spot.get_possible_actions()
-        
         candidates = []
         
-        # スポット固有のアクションを処理
-        for strategy in possible_actions_at_spot.values():
+        # プレイヤーの状態に応じて利用可能な行動を取得
+        available_strategies = self._get_strategies_for_player_state(acting_player.get_player_state())
+        
+        # 状態に応じた行動を処理
+        for strategy in available_strategies.values():
             if strategy.can_execute(acting_player, self.game_context):
                 required_arguments = strategy.get_required_arguments(acting_player, self.game_context)
                 candidates.append({
                     'action_name': strategy.get_name(),
                     'action_description': self._get_action_description(strategy.get_name()),
                     'required_arguments': self._format_arguments_for_llm(required_arguments),
-                    'action_type': 'spot_specific'
+                    'action_type': 'state_specific',
+                    'player_state': acting_player.get_player_state().value
                 })
         
-        # グローバルアクションを処理
-        for strategy in self.global_strategies.values():
-            if strategy.can_execute(acting_player, self.game_context):
-                required_arguments = strategy.get_required_arguments(acting_player, self.game_context)
-                candidates.append({
-                    'action_name': strategy.get_name(),
-                    'action_description': self._get_action_description(strategy.get_name()),
-                    'required_arguments': self._format_arguments_for_llm(required_arguments),
-                    'action_type': 'global'
-                })
+        # 通常状態の場合のみスポット固有のアクションを追加
+        # （クエスト関連は将来Spot固有として実装予定のため除外）
+        if acting_player.is_in_normal_state():
+            possible_actions_at_spot = current_spot.get_possible_actions()
+            for strategy in possible_actions_at_spot.values():
+                # クエスト関連の行動は除外
+                if not strategy.get_name().startswith("クエスト"):
+                    if strategy.can_execute(acting_player, self.game_context):
+                        required_arguments = strategy.get_required_arguments(acting_player, self.game_context)
+                        candidates.append({
+                            'action_name': strategy.get_name(),
+                            'action_description': self._get_action_description(strategy.get_name()),
+                            'required_arguments': self._format_arguments_for_llm(required_arguments),
+                            'action_type': 'spot_specific'
+                        })
         
         return candidates
+
+    def _get_strategies_for_player_state(self, player_state: PlayerState) -> Dict[str, ActionStrategy]:
+        """プレイヤーの状態に応じた行動戦略を取得"""
+        if player_state == PlayerState.NORMAL:
+            return self.normal_state_strategies
+        elif player_state == PlayerState.CONVERSATION:
+            return self.conversation_state_strategies
+        elif player_state == PlayerState.SNS:
+            return self.sns_state_strategies
+        elif player_state == PlayerState.BATTLE:
+            return self.battle_state_strategies
+        elif player_state == PlayerState.TRADING:
+            return self.trading_state_strategies
+        else:
+            return {}
 
     def _format_arguments_for_llm(self, argument_infos: List[ArgumentInfo]) -> List[Dict[str, Any]]:
         """
@@ -150,6 +218,22 @@ class ActionOrchestrator:
             "掲示板に書き込む": "掲示板に投稿を書き込みます",
             "掲示板を読む": "掲示板の投稿を読みます",
             "石碑を読む": "石碑の内容を読みます",
+            "SNSを開く": "SNSアプリケーションを開きます",
+            "SNSを閉じる": "SNSアプリケーションを閉じます",
+            "取引所を開く": "取引所を開きます",
+            "取引所を閉じる": "取引所を閉じます",
+            "会話を離脱する": "現在の会話から離脱します",
+            "戦闘開始": "モンスターとの戦闘を開始します",
+            "戦闘に参加": "進行中の戦闘に参加します",
+            "戦闘時の行動": "戦闘中に行動を実行します",
+            "スポット会話開始": "現在の場所で会話を開始します",
+            "個人会話開始": "特定のプレイヤーと個人会話を開始します",
+            "スポット会話参加": "進行中の会話に参加します",
+            "会話発言": "会話中に発言します",
+            "取引出品": "アイテムを取引に出品します",
+            "取引受託": "出品された取引を受託します",
+            "取引キャンセル": "自分が出品した取引をキャンセルします",
+            "受託可能取引取得": "現在受託可能な取引一覧を取得します",
         }
         return descriptions.get(action_name, f"{action_name}を実行します")
 
@@ -168,9 +252,10 @@ class ActionOrchestrator:
         if not current_spot: 
             return ErrorActionResult(f"プレイヤー {acting_player_id} の現在地が見つかりません。")
 
-        # スポット固有のアクションとグローバルアクションを統合
+        # プレイヤーの状態に応じた行動とスポット固有のアクションを統合
+        available_strategies = self._get_strategies_for_player_state(acting_player.get_player_state())
         possible_actions_at_spot = current_spot.get_possible_actions()
-        all_available_actions = {**possible_actions_at_spot, **self.global_strategies}
+        all_available_actions = {**available_strategies, **possible_actions_at_spot}
     
         strategy = all_available_actions.get(action_name)
         if not strategy:

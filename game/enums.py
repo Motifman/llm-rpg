@@ -181,3 +181,12 @@ class TurnActionType(Enum):
     ESCAPE = "escape"
     MONSTER_ACTION = "monster_action"
     STATUS_EFFECT = "status_effect"
+
+
+class PlayerState(Enum):
+    """プレイヤーの状態"""
+    NORMAL = "normal"           # 通常状態
+    CONVERSATION = "conversation"  # 会話状態
+    SNS = "sns"                # SNS状態
+    BATTLE = "battle"          # 戦闘状態
+    TRADING = "trading"        # 取引状態

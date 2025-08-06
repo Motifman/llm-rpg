@@ -5,7 +5,7 @@ from game.action.action_strategy import ActionStrategy, ArgumentInfo
 from game.player.player import Player
 from game.core.game_context import GameContext
 from game.sns.sns_data import SnsUser, Post, Reply, Notification
-from game.enums import PostVisibility, NotificationType
+from game.enums import PostVisibility, NotificationType, PlayerState
 
 
 class SnsGetUserInfoResult(ActionResult):
@@ -531,3 +531,87 @@ class SnsMarkNotificationReadCommand(ActionCommand):
                 return SnsMarkNotificationReadResult(False, "通知が見つからないか、既に既読です", self.notification_id)
         except Exception as e:
             return SnsMarkNotificationReadResult(False, f"既読処理中にエラーが発生しました: {e}", self.notification_id)
+
+
+# ===== 状態遷移関連の行動 =====
+
+class SnsOpenResult(ActionResult):
+    """SNSを開く結果"""
+    def __init__(self, success: bool, message: str):
+        super().__init__(success, message)
+        
+    def to_feedback_message(self, player_name: str) -> str:
+        if self.success:
+            return f"{player_name} はSNSを開きました"
+        else:
+            return f"{player_name} はSNSを開けませんでした\n\t理由:{self.message}"
+
+
+class SnsCloseResult(ActionResult):
+    """SNSを閉じる結果"""
+    def __init__(self, success: bool, message: str):
+        super().__init__(success, message)
+        
+    def to_feedback_message(self, player_name: str) -> str:
+        if self.success:
+            return f"{player_name} はSNSを閉じました"
+        else:
+            return f"{player_name} はSNSを閉じることができませんでした\n\t理由:{self.message}"
+
+
+class SnsOpenCommand(ActionCommand):
+    """SNSを開くコマンド"""
+    
+    def __init__(self):
+        pass
+
+    def execute(self, acting_player: Player, game_context: GameContext) -> SnsOpenResult:
+        # プレイヤーの状態をSNSに変更
+        acting_player.set_player_state(PlayerState.SNS)
+        return SnsOpenResult(True, "SNSを開きました")
+
+
+class SnsCloseCommand(ActionCommand):
+    """SNSを閉じるコマンド"""
+    
+    def __init__(self):
+        pass
+
+    def execute(self, acting_player: Player, game_context: GameContext) -> SnsCloseResult:
+        # プレイヤーの状態を通常に変更
+        acting_player.set_player_state(PlayerState.NORMAL)
+        return SnsCloseResult(True, "SNSを閉じました")
+
+
+class SnsOpenStrategy(ActionStrategy):
+    """SNSを開く戦略"""
+    
+    def __init__(self):
+        super().__init__("SNSを開く")
+    
+    def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
+        # 通常状態の時のみSNSを開ける
+        return acting_player.is_in_normal_state()
+    
+    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[ArgumentInfo]:
+        return []
+    
+    def build_action_command(self, acting_player: Player, game_context: GameContext, **kwargs) -> SnsOpenCommand:
+        return SnsOpenCommand()
+
+
+class SnsCloseStrategy(ActionStrategy):
+    """SNSを閉じる戦略"""
+    
+    def __init__(self):
+        super().__init__("SNSを閉じる")
+    
+    def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
+        # SNS状態の時のみSNSを閉じられる
+        return acting_player.is_in_sns_state()
+    
+    def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[ArgumentInfo]:
+        return []
+    
+    def build_action_command(self, acting_player: Player, game_context: GameContext, **kwargs) -> SnsCloseCommand:
+        return SnsCloseCommand()
