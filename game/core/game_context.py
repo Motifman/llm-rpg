@@ -1,3 +1,4 @@
+from typing import Optional, TYPE_CHECKING
 from game.player.player_manager import PlayerManager
 from game.world.spot_manager import SpotManager
 from game.sns.sns_manager import SnsManager
@@ -6,9 +7,22 @@ from game.trade.trade_manager import TradeManager
 from game.quest.quest_manager import QuestSystem
 from game.battle.battle_manager import BattleManager
 
+if TYPE_CHECKING:
+    from game.world.poi_manager import POIManager
+
 
 class GameContext:
-    def __init__(self, player_manager: PlayerManager, spot_manager: SpotManager, sns_manager: SnsManager = None, conversation_manager: ConversationManager = None, trade_manager: TradeManager = None, quest_system: QuestSystem = None, battle_manager: BattleManager = None):
+    def __init__(
+        self,
+        player_manager: PlayerManager,
+        spot_manager: SpotManager,
+        sns_manager: SnsManager = None,
+        conversation_manager: ConversationManager = None,
+        trade_manager: TradeManager = None,
+        quest_system: QuestSystem = None,
+        battle_manager: BattleManager = None,
+        poi_manager: Optional['POIManager'] = None
+    ):
         self.player_manager = player_manager
         self.spot_manager = spot_manager
         self.sns_manager = sns_manager
@@ -16,6 +30,7 @@ class GameContext:
         self.trade_manager = trade_manager
         self.quest_system = quest_system
         self.battle_manager = battle_manager
+        self.poi_manager = poi_manager
 
     @classmethod
     def create_basic(cls, player_manager: PlayerManager, spot_manager: SpotManager):
@@ -46,6 +61,9 @@ class GameContext:
     def get_battle_manager(self) -> BattleManager:
         return self.battle_manager
 
+    def get_poi_manager(self) -> 'POIManager':
+        return self.poi_manager
+
 
 class GameContextBuilder:
     def __init__(self):
@@ -56,6 +74,7 @@ class GameContextBuilder:
         self.trade_manager = None
         self.quest_system = None
         self.battle_manager = None
+        self.poi_manager = None
     
     def with_player_manager(self, player_manager: PlayerManager) -> 'GameContextBuilder':
         self.player_manager = player_manager
@@ -85,7 +104,20 @@ class GameContextBuilder:
         self.battle_manager = battle_manager
         return self
     
+    def with_poi_manager(self, poi_manager: 'POIManager') -> 'GameContextBuilder':
+        self.poi_manager = poi_manager
+        return self
+
     def build(self) -> GameContext:
         if self.player_manager is None or self.spot_manager is None:
             raise ValueError("player_manager and spot_manager are required")
-        return GameContext(self.player_manager, self.spot_manager, self.sns_manager, self.conversation_manager, self.trade_manager, self.quest_system, self.battle_manager)
+        return GameContext(
+            self.player_manager,
+            self.spot_manager,
+            self.sns_manager,
+            self.conversation_manager,
+            self.trade_manager,
+            self.quest_system,
+            self.battle_manager,
+            self.poi_manager
+        )
