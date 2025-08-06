@@ -4,9 +4,11 @@ from game.player.player import Player
 from game.player.inventory import Inventory
 from game.object.interactable import InteractableObject
 from game.enums import MonsterType
+from game.world.poi import POI
 
 if TYPE_CHECKING:
     from game.action.action_strategy import ActionStrategy
+    from game.core.game_context import GameContext
 
 
 class Spot:
@@ -19,6 +21,7 @@ class Spot:
         self.monsters: Dict[str, Monster] = {}
         self.hidden_monsters: Dict[str, Monster] = {}
         self._possible_actions: Dict[str, 'ActionStrategy'] = {}
+        self._pois: Dict[str, POI] = {}
 
     def add_interactable(self, interactable: InteractableObject):
         self.interactables[interactable.object_id] = interactable
@@ -85,14 +88,54 @@ class Spot:
             all_actions.update(obj.get_possible_actions())
         return all_actions
 
-    def get_exploration_summary(self) -> str:
+    def add_poi(self, poi: POI):
+        """SpotにPOIを追加"""
+        self._pois[poi.poi_id] = poi
+
+    def get_poi(self, poi_id: str) -> Optional[POI]:
+        """POIを取得"""
+        return self._pois.get(poi_id)
+
+    def get_all_pois(self) -> List[POI]:
+        """全てのPOIを取得"""
+        return list(self._pois.values())
+
+    def get_exploration_summary(self, player: Optional[Player] = None, game_context: Optional['GameContext'] = None) -> str:
+        """
+        探索サマリーを取得
+        player と game_context が指定された場合は、プレイヤー固有の探索状況も含める
+        """
         summary = f"周囲の状況:\n"
+        
+        # 基本的な情報
         if self.interactables:
-            summary += f"インタラクト可能なオブジェクト:\n"
+            summary += f"オブジェクト:\n"
             for obj in self.interactables.values():
                 summary += f"- {obj.get_description()}\n"
-        if self.monsters:
+                
+        if self.get_visible_monsters():
             summary += f"モンスター:\n"
-            for monster in self.monsters.values():
+            for monster in self.get_visible_monsters():
                 summary += f"- {monster.get_description()}\n"
+                
+        # プレイヤー固有の探索情報
+        if player and game_context:
+            poi_manager = game_context.get_poi_manager()
+            
+            # 調査可能なPOI
+            available_pois = poi_manager.get_available_pois(self.spot_id, player)
+            if available_pois:
+                summary += f"\n調査可能な場所:\n"
+                for poi in available_pois:
+                    summary += f"- {poi.name}: {poi.description}\n"
+            
+            # 既に調査したPOI
+            discovered_pois = poi_manager.get_discovered_pois(self.spot_id, player)
+            if discovered_pois:
+                summary += f"\n調査済みの場所:\n"
+                for poi in discovered_pois:
+                    result = poi_manager.get_exploration_history(self.spot_id, poi.poi_id, player)
+                    if result:
+                        summary += f"- {poi.name}: {result.description}\n"
+        
         return summary
