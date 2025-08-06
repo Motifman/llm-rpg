@@ -4,7 +4,7 @@ from game.player.equipment_set import EquipmentSet
 from game.player.status import Status
 from game.item.item import Item
 from game.item.equipment_item import Weapon, Armor
-from game.enums import Role, EquipmentSlot, StatusEffectType
+from game.enums import Role, EquipmentSlot, StatusEffectType, PlayerState
 
 # 型ヒントの遅延インポート
 if TYPE_CHECKING:
@@ -23,6 +23,7 @@ class Player:
         self.inventory = Inventory()
         self.equipment = EquipmentSet()
         self.status = Status()
+        self.player_state = PlayerState.NORMAL  # 初期状態は通常状態
     
     # ===== 基本情報 =====
     def get_player_id(self) -> str:
@@ -52,6 +53,39 @@ class Player:
     def is_role(self, role: Role) -> bool:
         """指定されたロールかどうか"""
         return self.role == role
+    
+    # ===== 状態管理 =====
+    def get_player_state(self) -> PlayerState:
+        """プレイヤーの状態を取得"""
+        return self.player_state
+    
+    def set_player_state(self, state: PlayerState):
+        """プレイヤーの状態を設定"""
+        self.player_state = state
+    
+    def is_in_state(self, state: PlayerState) -> bool:
+        """指定された状態かどうか"""
+        return self.player_state == state
+    
+    def is_in_normal_state(self) -> bool:
+        """通常状態かどうか"""
+        return self.player_state == PlayerState.NORMAL
+    
+    def is_in_conversation_state(self) -> bool:
+        """会話状態かどうか"""
+        return self.player_state == PlayerState.CONVERSATION
+        
+    def is_in_sns_state(self) -> bool:
+        """SNS状態かどうか"""
+        return self.player_state == PlayerState.SNS
+        
+    def is_in_battle_state(self) -> bool:
+        """戦闘状態かどうか"""
+        return self.player_state == PlayerState.BATTLE
+        
+    def is_in_trading_state(self) -> bool:
+        """取引状態かどうか"""
+        return self.player_state == PlayerState.TRADING
     
     # ===== インベントリ管理 =====
     def get_inventory(self) -> Inventory:

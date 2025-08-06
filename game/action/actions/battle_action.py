@@ -5,7 +5,7 @@ from game.action.action_strategy import ActionStrategy, ArgumentInfo
 from game.player.player import Player
 from game.core.game_context import GameContext
 from game.battle.battle_manager import BattleManager
-from game.enums import TurnActionType, BattleState
+from game.enums import TurnActionType, BattleState, PlayerState
 
 
 class BattleStartResult(ActionResult):
@@ -55,6 +55,10 @@ class BattleStartStrategy(ActionStrategy):
         return []
 
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
+        # 通常状態の時のみ戦闘を開始できる
+        if not acting_player.is_in_normal_state():
+            return False
+            
         spot_manager = game_context.get_spot_manager()
         current_spot = spot_manager.get_spot(acting_player.get_current_spot_id())
         if current_spot is None:
@@ -75,6 +79,10 @@ class BattleJoinStrategy(ActionStrategy):
         return []
 
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
+        # 通常状態の時のみ戦闘に参加できる
+        if not acting_player.is_in_normal_state():
+            return False
+            
         battle_manager = game_context.get_battle_manager()
         if battle_manager is None:
             return False
@@ -121,6 +129,10 @@ class BattleActionStrategy(ActionStrategy):
         ]
 
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
+        # 戦闘状態の時のみ戦闘行動ができる
+        if not acting_player.is_in_battle_state():
+            return False
+            
         battle_manager = game_context.get_battle_manager()
         if battle_manager is None:
             return False
@@ -162,6 +174,8 @@ class BattleStartCommand(ActionCommand):
         
         try:
             battle_id = battle_manager.start_battle(acting_player.get_current_spot_id(), monsters, acting_player)
+            # プレイヤーの状態を戦闘状態に変更
+            acting_player.set_player_state(PlayerState.BATTLE)
             return BattleStartResult(True, "戦闘を開始しました", battle_id)
         except Exception as e:
             return BattleStartResult(False, f"戦闘開始に失敗しました: {e}", "")
@@ -190,6 +204,8 @@ class BattleJoinCommand(ActionCommand):
         
         try:
             battle_manager.join_battle(battle.battle_id, acting_player)
+            # プレイヤーの状態を戦闘状態に変更
+            acting_player.set_player_state(PlayerState.BATTLE)
             return BattleJoinResult(True, "戦闘に参加しました", battle.battle_id)
         except Exception as e:
             return BattleJoinResult(False, f"戦闘参加に失敗しました: {e}", battle.battle_id)
@@ -240,6 +256,14 @@ class BattleActionCommand(ActionCommand):
                 result_text = "勝利" if battle_result.victory else "敗北"
                 if battle_result.escaped:
                     result_text = "逃走"
+                
+                # 戦闘に参加している全プレイヤーの状態を通常状態に戻す
+                player_manager = game_context.get_player_manager()
+                for participant_id in battle.participants:
+                    participant = player_manager.get_player(participant_id)
+                    if participant:
+                        participant.set_player_state(PlayerState.NORMAL)
+                
                 message = f"行動を実行しました。戦闘が終了しました: {result_text}"
             else:
                 message = f"行動を実行しました: {turn_action.message}"
