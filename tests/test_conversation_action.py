@@ -54,7 +54,7 @@ class TestConversationAction:
     
     def test_start_spot_conversation_success(self):
         """スポット会話開始の成功テスト"""
-        command = StartSpotConversationCommand("tavern_01")
+        command = StartSpotConversationCommand()
         result = command.execute(self.player1, self.game_context)
         
         assert isinstance(result, StartConversationResult)
@@ -73,12 +73,13 @@ class TestConversationAction:
     def test_start_spot_conversation_already_in_conversation(self):
         """既に会話に参加している場合のテスト"""
         # 最初の会話を開始
-        command1 = StartSpotConversationCommand("tavern_01")
+        command1 = StartSpotConversationCommand()
         result1 = command1.execute(self.player1, self.game_context)
         assert result1.success is True
         
         # 同じプレイヤーが別の会話を開始しようとする
-        command2 = StartSpotConversationCommand("shop_01")
+        self.player1.set_current_spot_id("shop_01")
+        command2 = StartSpotConversationCommand()
         result2 = command2.execute(self.player1, self.game_context)
         
         assert isinstance(result2, StartConversationResult)
@@ -89,7 +90,7 @@ class TestConversationAction:
     
     def test_start_private_conversation_success(self):
         """個人会話開始の成功テスト"""
-        command = StartPrivateConversationCommand("player_002", "tavern_01")
+        command = StartPrivateConversationCommand("player_002")
         result = command.execute(self.player1, self.game_context)
         
         assert isinstance(result, StartConversationResult)
@@ -108,12 +109,12 @@ class TestConversationAction:
     def test_join_spot_conversation_success(self):
         """スポット会話参加の成功テスト"""
         # プレイヤー1が会話を開始
-        start_command = StartSpotConversationCommand("tavern_01")
+        start_command = StartSpotConversationCommand()
         start_result = start_command.execute(self.player1, self.game_context)
         assert start_result.success is True
         
         # プレイヤー2が会話に参加
-        join_command = JoinSpotConversationCommand("tavern_01")
+        join_command = JoinSpotConversationCommand()
         join_result = join_command.execute(self.player2, self.game_context)
         
         assert isinstance(join_result, JoinConversationResult)
@@ -129,7 +130,7 @@ class TestConversationAction:
     
     def test_join_spot_conversation_no_active_session(self):
         """アクティブなセッションがない場合のテスト"""
-        command = JoinSpotConversationCommand("tavern_01")
+        command = JoinSpotConversationCommand()
         result = command.execute(self.player1, self.game_context)
         
         assert isinstance(result, JoinConversationResult)
@@ -141,17 +142,18 @@ class TestConversationAction:
     def test_join_spot_conversation_already_in_conversation(self):
         """既に会話に参加している場合のテスト"""
         # プレイヤー1が会話を開始
-        start_command = StartSpotConversationCommand("tavern_01")
+        start_command = StartSpotConversationCommand()
         start_result = start_command.execute(self.player1, self.game_context)
         assert start_result.success is True
         
         # プレイヤー2が別の会話を開始
-        start_command2 = StartSpotConversationCommand("shop_01")
+        self.player2.set_current_spot_id("shop_01")
+        start_command2 = StartSpotConversationCommand()
         start_result2 = start_command2.execute(self.player2, self.game_context)
         assert start_result2.success is True
         
         # プレイヤー2が別の会話に参加しようとする
-        join_command = JoinSpotConversationCommand("tavern_01")
+        join_command = JoinSpotConversationCommand()
         join_result = join_command.execute(self.player2, self.game_context)
         
         assert isinstance(join_result, JoinConversationResult)
@@ -163,7 +165,7 @@ class TestConversationAction:
     def test_speak_in_conversation_success(self):
         """会話発言の成功テスト"""
         # プレイヤー1が会話を開始
-        start_command = StartSpotConversationCommand("tavern_01")
+        start_command = StartSpotConversationCommand()
         start_result = start_command.execute(self.player1, self.game_context)
         assert start_result.success is True
         
@@ -201,12 +203,12 @@ class TestConversationAction:
     def test_speak_in_conversation_targeted_message(self):
         """特定プレイヤーへの発言テスト"""
         # プレイヤー1が会話を開始
-        start_command = StartSpotConversationCommand("tavern_01")
+        start_command = StartSpotConversationCommand()
         start_result = start_command.execute(self.player1, self.game_context)
         assert start_result.success is True
         
         # プレイヤー2が会話に参加
-        join_command = JoinSpotConversationCommand("tavern_01")
+        join_command = JoinSpotConversationCommand()
         join_result = join_command.execute(self.player2, self.game_context)
         assert join_result.success is True
         
@@ -229,12 +231,12 @@ class TestConversationAction:
     def test_leave_conversation_success(self):
         """会話離脱の成功テスト"""
         # プレイヤー1が会話を開始
-        start_command = StartSpotConversationCommand("tavern_01")
+        start_command = StartSpotConversationCommand()
         start_result = start_command.execute(self.player1, self.game_context)
         assert start_result.success is True
         
         # プレイヤー2が会話に参加
-        join_command = JoinSpotConversationCommand("tavern_01")
+        join_command = JoinSpotConversationCommand()
         join_result = join_command.execute(self.player2, self.game_context)
         assert join_result.success is True
         
@@ -266,7 +268,7 @@ class TestConversationAction:
     def test_leave_conversation_session_end(self):
         """最後の参加者が離脱した場合のセッション終了テスト"""
         # プレイヤー1が会話を開始
-        start_command = StartSpotConversationCommand("tavern_01")
+        start_command = StartSpotConversationCommand()
         start_result = start_command.execute(self.player1, self.game_context)
         assert start_result.success is True
         
@@ -286,7 +288,7 @@ class TestConversationAction:
     def test_conversation_flow_integration(self):
         """完全な会話フローの統合テスト"""
         # 1. プレイヤー1が会話を開始
-        start_command = StartSpotConversationCommand("tavern_01")
+        start_command = StartSpotConversationCommand()
         start_result = start_command.execute(self.player1, self.game_context)
         assert start_result.success is True
         session_id = start_result.session_id
@@ -294,7 +296,7 @@ class TestConversationAction:
         assert start_result.history is not None
         
         # 2. プレイヤー2が会話に参加
-        join_command = JoinSpotConversationCommand("tavern_01")
+        join_command = JoinSpotConversationCommand()
         join_result = join_command.execute(self.player2, self.game_context)
         assert join_result.success is True
         assert join_result.session_id == session_id
@@ -344,12 +346,12 @@ class TestConversationAction:
     def test_system_messages_recording(self):
         """システムメッセージ記録のテスト"""
         # プレイヤー1が会話を開始
-        start_command = StartSpotConversationCommand("tavern_01")
+        start_command = StartSpotConversationCommand()
         start_result = start_command.execute(self.player1, self.game_context)
         assert start_result.success is True
         
         # プレイヤー2が会話に参加
-        join_command = JoinSpotConversationCommand("tavern_01")
+        join_command = JoinSpotConversationCommand()
         join_result = join_command.execute(self.player2, self.game_context)
         assert join_result.success is True
         
@@ -383,9 +385,9 @@ class TestConversationAction:
         
         # 各アクションがエラーを返すことを確認
         commands = [
-            StartSpotConversationCommand("tavern_01"),
-            StartPrivateConversationCommand("player_002", "tavern_01"),
-            JoinSpotConversationCommand("tavern_01"),
+            StartSpotConversationCommand(),
+            StartPrivateConversationCommand("player_002"),
+            JoinSpotConversationCommand(),
             SpeakInConversationCommand("こんにちは！"),
             LeaveConversationCommand()
         ]
