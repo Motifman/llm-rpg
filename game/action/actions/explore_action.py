@@ -58,7 +58,7 @@ class ExploreActionStrategy(ActionStrategy):
         return [
             ArgumentInfo(
                 name="poi_id",
-                description="調査する場所のID",
+                description="調査する場所のIDを入力してください",
                 candidates=[poi.poi_id for poi in available_pois]
             )
         ]
