@@ -78,7 +78,7 @@ class POIManager:
         # アイテムの取得処理
         found_items = []
         for item in discovery['items']:
-            player.get_inventory().add_item(item)
+            player.add_item(item)
             found_items.append(item.item_id)
             
         # モンスターとの戦闘処理

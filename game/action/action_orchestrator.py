@@ -83,7 +83,7 @@ class ActionOrchestrator:
             SnsMarkNotificationReadStrategy().get_name(): SnsMarkNotificationReadStrategy(),
             SnsCloseStrategy().get_name(): SnsCloseStrategy(),
         }
-        
+   
         # 戦闘状態で利用可能な行動
         self.battle_state_strategies: Dict[str, ActionStrategy] = {
             BattleActionStrategy().get_name(): BattleActionStrategy(),
