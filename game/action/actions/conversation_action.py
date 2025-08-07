@@ -66,20 +66,14 @@ class StartSpotConversationStrategy(ActionStrategy):
         super().__init__("スポット会話開始")
 
     def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[ArgumentInfo]:
-        return [
-            ArgumentInfo(
-                name="spot_id",
-                description="会話を開始するスポットIDを入力してください",
-                candidates=None  # 自由入力
-            )
-        ]
+        return []
     
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
         # 通常状態の時のみ会話を開始できる
         return acting_player.is_in_normal_state()
     
-    def build_action_command(self, acting_player: Player, game_context: GameContext, spot_id: str) -> ActionCommand:
-        return StartSpotConversationCommand(spot_id)
+    def build_action_command(self, acting_player: Player, game_context: GameContext) -> ActionCommand:
+        return StartSpotConversationCommand()
 
 
 class StartPrivateConversationStrategy(ActionStrategy):
@@ -93,11 +87,6 @@ class StartPrivateConversationStrategy(ActionStrategy):
                 name="target_player_id",
                 description="会話を開始する対象プレイヤーIDを入力してください",
                 candidates=None  # 自由入力
-            ),
-            ArgumentInfo(
-                name="spot_id",
-                description="会話を行うスポットIDを入力してください",
-                candidates=None  # 自由入力
             )
         ]
 
@@ -105,8 +94,8 @@ class StartPrivateConversationStrategy(ActionStrategy):
         # 通常状態の時のみ会話を開始できる
         return acting_player.is_in_normal_state()
 
-    def build_action_command(self, acting_player: Player, game_context: GameContext, target_player_id: str, spot_id: str) -> ActionCommand:
-        return StartPrivateConversationCommand(target_player_id, spot_id)
+    def build_action_command(self, acting_player: Player, game_context: GameContext, target_player_id: str) -> ActionCommand:
+        return StartPrivateConversationCommand(target_player_id)
 
 
 class JoinSpotConversationStrategy(ActionStrategy):
@@ -115,20 +104,14 @@ class JoinSpotConversationStrategy(ActionStrategy):
         super().__init__("スポット会話参加")
 
     def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[ArgumentInfo]:
-        return [
-            ArgumentInfo(
-                name="spot_id",
-                description="参加するスポットのIDを入力してください",
-                candidates=None  # 自由入力
-            )
-        ]
+        return []
 
     def can_execute(self, acting_player: Player, game_context: GameContext) -> bool:
         # 通常状態の時のみ会話に参加できる
         return acting_player.is_in_normal_state()
 
-    def build_action_command(self, acting_player: Player, game_context: GameContext, spot_id: str) -> ActionCommand:
-        return JoinSpotConversationCommand(spot_id)
+    def build_action_command(self, acting_player: Player, game_context: GameContext) -> ActionCommand:
+        return JoinSpotConversationCommand()
 
 
 class SpeakInConversationStrategy(ActionStrategy):
@@ -178,9 +161,8 @@ class LeaveConversationStrategy(ActionStrategy):
 
 class StartSpotConversationCommand(ActionCommand):
     """スポット全体向け会話セッション開始コマンド"""
-    def __init__(self, spot_id: str):
+    def __init__(self):
         super().__init__("スポット会話開始")
-        self.spot_id = spot_id
 
     def execute(self, acting_player: Player, game_context: GameContext) -> StartConversationResult:
         player_id = acting_player.get_player_id()
@@ -193,8 +175,12 @@ class StartSpotConversationCommand(ActionCommand):
         if conversation_manager.is_player_in_conversation(player_id):
             return StartConversationResult(False, "既に他の会話に参加しています", None, [], "")
         
-        # セッション開始
-        session_id = conversation_manager.start_conversation_session(self.spot_id, player_id)
+        # 現在地のスポットでセッション開始
+        current_spot_id = acting_player.get_current_spot_id()
+        if not current_spot_id:
+            return StartConversationResult(False, "現在地が不明のため会話を開始できません", None, [], "")
+
+        session_id = conversation_manager.start_conversation_session(current_spot_id, player_id)
         
         # プレイヤーの状態を会話状態に変更
         acting_player.set_player_state(PlayerState.CONVERSATION)
@@ -202,7 +188,7 @@ class StartSpotConversationCommand(ActionCommand):
         # 参加メッセージを記録
         join_message = LocationChatMessage(
             sender_id="System",
-            spot_id=self.spot_id,
+            spot_id=current_spot_id,
             content=f"{acting_player.get_name()} が会話を開始しました",
             target_player_id=None
         )
@@ -212,15 +198,14 @@ class StartSpotConversationCommand(ActionCommand):
         participants = list(conversation_manager.get_session_participants(session_id))
         history = conversation_manager.get_conversation_history_as_text(session_id)
         
-        return StartConversationResult(True, f"{self.spot_id} で会話を開始しました", session_id, participants, history)
+        return StartConversationResult(True, f"{current_spot_id} で会話を開始しました", session_id, participants, history)
 
 
 class StartPrivateConversationCommand(ActionCommand):
     """特定プレイヤーとの会話セッション開始コマンド"""
-    def __init__(self, target_player_id: str, spot_id: str):
+    def __init__(self, target_player_id: str):
         super().__init__("個人会話開始")
         self.target_player_id = target_player_id
-        self.spot_id = spot_id
 
     def execute(self, acting_player: Player, game_context: GameContext) -> StartConversationResult:
         player_id = acting_player.get_player_id()
@@ -233,8 +218,12 @@ class StartPrivateConversationCommand(ActionCommand):
         if conversation_manager.is_player_in_conversation(player_id):
             return StartConversationResult(False, "既に他の会話に参加しています", None, [], "")
         
-        # 個人宛セッション開始
-        session_id = conversation_manager.start_private_conversation(player_id, self.spot_id)
+        # 個人宛セッション開始（現在地のスポット）
+        current_spot_id = acting_player.get_current_spot_id()
+        if not current_spot_id:
+            return StartConversationResult(False, "現在地が不明のため個人会話を開始できません", None, [], "")
+
+        session_id = conversation_manager.start_private_conversation(player_id, current_spot_id)
         
         # プレイヤーの状態を会話状態に変更
         acting_player.set_player_state(PlayerState.CONVERSATION)
@@ -248,9 +237,8 @@ class StartPrivateConversationCommand(ActionCommand):
 
 class JoinSpotConversationCommand(ActionCommand):
     """スポット会話セッション参加コマンド"""
-    def __init__(self, spot_id: str):
+    def __init__(self):
         super().__init__("スポット会話参加")
-        self.spot_id = spot_id
 
     def execute(self, acting_player: Player, game_context: GameContext) -> JoinConversationResult:
         player_id = acting_player.get_player_id()
@@ -263,13 +251,17 @@ class JoinSpotConversationCommand(ActionCommand):
         if conversation_manager.is_player_in_conversation(player_id):
             return JoinConversationResult(False, "既に他の会話に参加しています", None, [], "")
         
-        # スポットにアクティブなセッションがあるかチェック
-        active_session = conversation_manager.get_active_session_for_spot(self.spot_id)
+        # 現在地のスポットにアクティブなセッションがあるかチェック
+        current_spot_id = acting_player.get_current_spot_id()
+        if not current_spot_id:
+            return JoinConversationResult(False, "現在地が不明のため会話に参加できません", None, [], "")
+
+        active_session = conversation_manager.get_active_session_for_spot(current_spot_id)
         if active_session is None:
-            return JoinConversationResult(False, f"{self.spot_id} にアクティブな会話セッションがありません", None, [], "")
+            return JoinConversationResult(False, f"{current_spot_id} にアクティブな会話セッションがありません", None, [], "")
         
         # セッションに参加
-        session_id = conversation_manager.join_conversation(player_id, self.spot_id)
+        session_id = conversation_manager.join_conversation(player_id, current_spot_id)
         if session_id is None:
             return JoinConversationResult(False, "会話セッションに参加できませんでした", None, [], "")
         
@@ -279,7 +271,7 @@ class JoinSpotConversationCommand(ActionCommand):
         # 参加メッセージを記録
         join_message = LocationChatMessage(
             sender_id="System",
-            spot_id=self.spot_id,
+            spot_id=current_spot_id,
             content=f"{acting_player.get_name()} が会話に参加しました",
             target_player_id=None
         )
@@ -289,7 +281,7 @@ class JoinSpotConversationCommand(ActionCommand):
         participants = list(conversation_manager.get_session_participants(session_id))
         history = conversation_manager.get_conversation_history_as_text(session_id)
         
-        return JoinConversationResult(True, f"{self.spot_id} の会話に参加しました", session_id, participants, history)
+        return JoinConversationResult(True, f"{current_spot_id} の会話に参加しました", session_id, participants, history)
 
 
 class SpeakInConversationCommand(ActionCommand):
