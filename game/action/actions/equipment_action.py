@@ -66,6 +66,16 @@ class EquipmentSetCheckStrategy(ActionStrategy):
         return EquipmentSetCheckCommand()
 
 
+class EquipmentSetCheckCommand(ActionCommand):
+    def __init__(self):
+        super().__init__("装備確認")
+
+    def execute(self, acting_player: Player, game_context: GameContext) -> EquipmentSetCheckResult:
+        equipment = acting_player.get_equipment()
+        equipment_summary = str(equipment)
+        return EquipmentSetCheckResult(True, "装備を確認しました", equipment_summary)
+
+
 class EquipItemStrategy(ActionStrategy):
     def __init__(self):
         super().__init__("装備変更")
@@ -87,6 +97,15 @@ class EquipItemStrategy(ActionStrategy):
     
     def build_action_command(self, acting_player: Player, game_context: GameContext, item_id: str) -> ActionCommand:
         return EquipItemCommand(item_id)
+
+
+class EquipItemCommand(ActionCommand):
+    def __init__(self, item_id: str):
+        super().__init__("装備変更")
+        self.item_id = item_id
+
+    def execute(self, acting_player: Player, game_context: GameContext) -> EquipItemResult:
+        return acting_player.equip_item(self.item_id)
 
 
 class UnequipItemStrategy(ActionStrategy):
@@ -115,25 +134,6 @@ class UnequipItemStrategy(ActionStrategy):
             return UnequipItemCommand(slot)
         except ValueError:
             return UnequipItemCommand(None)
-
-
-class EquipmentSetCheckCommand(ActionCommand):
-    def __init__(self):
-        super().__init__("装備確認")
-
-    def execute(self, acting_player: Player, game_context: GameContext) -> EquipmentSetCheckResult:
-        equipment = acting_player.get_equipment()
-        equipment_summary = str(equipment)
-        return EquipmentSetCheckResult(True, "装備を確認しました", equipment_summary)
-
-
-class EquipItemCommand(ActionCommand):
-    def __init__(self, item_id: str):
-        super().__init__("装備変更")
-        self.item_id = item_id
-
-    def execute(self, acting_player: Player, game_context: GameContext) -> EquipItemResult:
-        return acting_player.equip_item(self.item_id)
 
 
 class UnequipItemCommand(ActionCommand):

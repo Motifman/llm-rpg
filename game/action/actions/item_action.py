@@ -104,6 +104,16 @@ class UseItemStrategy(ActionStrategy):
         return UseItemCommand(item_id)
 
 
+class UseItemCommand(ActionCommand):
+    def __init__(self, item_id: str):
+        super().__init__("消費アイテムの使用")
+        self.item_id = item_id
+
+    def execute(self, acting_player: Player, game_context: GameContext) -> ItemUseResult:
+        item_use_result = acting_player.use_item(self.item_id)
+        return item_use_result
+
+
 class PreviewItemEffectStrategy(ActionStrategy):
     def __init__(self):
         super().__init__("アイテム効果の確認")
@@ -125,16 +135,6 @@ class PreviewItemEffectStrategy(ActionStrategy):
 
     def build_action_command(self, acting_player: Player, game_context: GameContext, item_id: str) -> ActionCommand:
         return PreviewItemEffectCommand(item_id)
-
-
-class UseItemCommand(ActionCommand):
-    def __init__(self, item_id: str):
-        super().__init__("消費アイテムの使用")
-        self.item_id = item_id
-
-    def execute(self, acting_player: Player, game_context: GameContext) -> ItemUseResult:
-        item_use_result = acting_player.use_item(self.item_id)
-        return item_use_result
 
 
 class PreviewItemEffectCommand(ActionCommand):
