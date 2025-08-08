@@ -83,7 +83,13 @@ class LLMDecisionEngine:
         self._orchestrator = orchestrator
         self._memory_store = memory_store
         self._settings = get_settings()
-        self._client = LiteLLMClient(model=self._settings.model)
+        # LLMクライアントは遅延初期化（デモでmessagesのみ確認する用途のため）
+        self._client: Optional[LiteLLMClient] = None
+
+    def _ensure_client(self) -> LiteLLMClient:
+        if self._client is None:
+            self._client = LiteLLMClient(model=self._settings.model)
+        return self._client
 
     def _build_messages(self, d: DecisionInput) -> List[Dict[str, str]]:
         # 簡易プロンプト（日本語）。本番は prompts/ を読み込む想定
@@ -154,7 +160,7 @@ class LLMDecisionEngine:
             memory=memory,
             help_info=help_info,
         ))
-        raw = self._client.complete_json(
+        raw = self._ensure_client().complete_json(
             messages=messages,
             temperature=self._settings.temperature,
             max_tokens=self._settings.max_tokens,
@@ -184,7 +190,7 @@ class LLMDecisionEngine:
             ))
 
         batch_messages = [self._build_messages(d) for d in inputs]
-        raws = self._client.batch_complete_json(
+        raws = self._ensure_client().batch_complete_json(
             batch_messages=batch_messages,
             temperature=self._settings.temperature,
             max_tokens=self._settings.max_tokens,
@@ -200,5 +206,22 @@ class LLMDecisionEngine:
                 fallback_action = d.candidates[0]["action_name"] if d.candidates else ""
                 outputs[d.player_id] = DecisionOutput(thought="fallback", action=fallback_action, arguments={})
         return outputs
+
+    # --- Demo/Debug helper ---
+    def get_messages_preview(self, player_id: str, system_prompt: Optional[str] = None) -> List[Dict[str, str]]:
+        """LLMに渡す直前の messages を生成して返す（実際のLLM呼び出しは行わない）。"""
+        candidates = self._orchestrator.get_action_candidates_for_llm(player_id)
+        if hasattr(self._orchestrator, "build_action_help_from_candidates"):
+            help_info = self._orchestrator.build_action_help_from_candidates(candidates)  # type: ignore[attr-defined]
+        else:
+            help_info = self._orchestrator.get_action_help_for_llm(player_id)
+        memory = self._memory_store.get_for_token_budget(player_id, token_budget=2048)
+        return self._build_messages(DecisionInput(
+            player_id=player_id,
+            candidates=candidates,
+            memory=memory,
+            help_info=help_info,
+            system_prompt=system_prompt,
+        ))
 
 
