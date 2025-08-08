@@ -12,9 +12,9 @@ from game.llm.memory import PlayerMemoryStore, MessageBase
 
 
 class DecisionOutput(BaseModel):
-    action_name: str = Field(..., description="ActionOrchestratorに渡す行動名")
-    action_args: Dict[str, Any] = Field(default_factory=dict)
-    rationale: Optional[str] = Field(default=None)
+    thought: str = Field(..., description="なぜこの行動を選んだのか、あなたの思考プロセスを記述してください。")
+    action: str = Field(..., description="実行する行動の名前（例: 'move', 'list_item'）")
+    arguments: Dict[str, Any] = Field(..., description="選択した行動に必要な引数をキーと値のペアで指定してください。")
 
 
 @dataclass
@@ -34,10 +34,16 @@ class LiteLLMClient:
     """
 
     def __init__(self, model: Optional[str] = None):
-        from litellm import completion, batch_completion  # lazy import
-        self._completion = completion
-        self._batch_completion = batch_completion
+        # 実行時に動的ロードするため、テストでsys.modulesにダミーを注入可能
+        import importlib
+        litellm = importlib.import_module("litellm")
+        self._completion = getattr(litellm, "completion")
+        self._batch_completion = getattr(litellm, "batch_completion")
         self._model = model or get_settings().model
+
+    def _json_schema_response_format(self) -> Dict[str, Any]:
+        schema = DecisionOutput.model_json_schema()
+        return {"type": "json_schema", "json_schema": {"name": "DecisionOutput", "schema": schema}}
 
     def complete_json(self, messages: List[Dict[str, str]], temperature: float, max_tokens: int) -> str:
         resp = self._completion(
@@ -45,9 +51,8 @@ class LiteLLMClient:
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
-            response_format={"type": "json_object"},
+            response_format=self._json_schema_response_format(),
         )
-        # OpenAI 互換の戻り
         return resp["choices"][0]["message"]["content"]
 
     def batch_complete_json(self, batch_messages: List[List[Dict[str, str]]], temperature: float, max_tokens: int) -> List[str]:
@@ -56,7 +61,7 @@ class LiteLLMClient:
             messages=batch_messages,
             temperature=temperature,
             max_tokens=max_tokens,
-            response_format={"type": "json_object"},
+            response_format=self._json_schema_response_format(),
         )
         outputs: List[str] = []
         for r in resps:
@@ -120,8 +125,8 @@ class LLMDecisionEngine:
             return DecisionOutput.model_validate(data)
         except (json.JSONDecodeError, ValidationError):
             # フォールバック: 最初の候補を選ぶ
-            fallback = candidates[0] if candidates else {"action_name": "", "required_arguments": []}
-            return DecisionOutput(action_name=fallback.get("action_name", ""), action_args={}, rationale="fallback")
+            fallback_action = candidates[0]["action_name"] if candidates else ""
+            return DecisionOutput(thought="fallback", action=fallback_action, arguments={})
 
     def decide_for_players_batch(self, player_ids: Sequence[str]) -> Dict[str, DecisionOutput]:
         inputs: List[DecisionInput] = []
@@ -146,8 +151,8 @@ class LLMDecisionEngine:
                 data = json.loads(raw)
                 outputs[d.player_id] = DecisionOutput.model_validate(data)
             except (json.JSONDecodeError, ValidationError):
-                fallback = d.candidates[0] if d.candidates else {"action_name": ""}
-                outputs[d.player_id] = DecisionOutput(action_name=fallback.get("action_name", ""), action_args={}, rationale="fallback")
+                fallback_action = d.candidates[0]["action_name"] if d.candidates else ""
+                outputs[d.player_id] = DecisionOutput(thought="fallback", action=fallback_action, arguments={})
         return outputs
 
 

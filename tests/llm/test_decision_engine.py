@@ -23,11 +23,12 @@ class _DummyOrchestrator:
 def test_decide_for_player_with_litellm_monkeypatch(monkeypatch):
     # litellm.completion をモック
     def fake_completion(**kwargs):
+        # response_format には pydantic schema が渡ってくる想定
         return {
             "choices": [{"message": {"content": json.dumps({
-                "action_name": "移動",
-                "action_args": {"target_spot_id": "A"},
-                "rationale": "テスト",
+                "thought": "テスト",
+                "action": "移動",
+                "arguments": {"target_spot_id": "A"},
             }, ensure_ascii=False)}}]
         }
 
@@ -43,8 +44,8 @@ def test_decide_for_player_with_litellm_monkeypatch(monkeypatch):
     out = engine.decide_for_player("p1")
 
     assert isinstance(out, DecisionOutput)
-    assert out.action_name == "移動"
-    assert out.action_args == {"target_spot_id": "A"}
+    assert out.action == "移動"
+    assert out.arguments == {"target_spot_id": "A"}
 
 
 def test_decide_for_players_batch(monkeypatch):
@@ -55,8 +56,9 @@ def test_decide_for_players_batch(monkeypatch):
         for _ in messages:
             responses.append({
                 "choices": [{"message": {"content": json.dumps({
-                    "action_name": "移動",
-                    "action_args": {"target_spot_id": "B"},
+                    "thought": "batch",
+                    "action": "移動",
+                    "arguments": {"target_spot_id": "B"},
                 }, ensure_ascii=False)}}]
             })
         return responses
