@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
 from game.core.game_context import GameContext
 from game.action.action_strategy import ActionStrategy, ArgumentInfo
 from game.action.actions.move_action import MovementStrategy
@@ -29,6 +29,7 @@ from game.action.actions.trade_action import (
     PostTradeStrategy, AcceptTradeStrategy, CancelTradeStrategy, GetAvailableTradesStrategy
 )
 from game.enums import PlayerState
+from game.action.candidates import ActionCandidates, ActionCandidate, ActionArgument
 from game.action.action_result import ActionResult, ErrorActionResult
 
 
@@ -98,23 +99,23 @@ class ActionOrchestrator:
             TradingCloseStrategy().get_name(): TradingCloseStrategy(),
         }
 
-    def get_action_candidates_for_llm(self, acting_player_id: str) -> List[Dict[str, Any]]:
+    def get_action_candidates_for_llm(self, acting_player_id: str) -> ActionCandidates:
         """
         LLMが行動選択を行うための候補アクションを取得
         プレイヤーの状態に応じて行動を提案する
         """
         acting_player = self.game_context.get_player_manager().get_player(acting_player_id)
         if not acting_player: 
-            return []
+            return ActionCandidates(items=[])
 
         current_spot_id = acting_player.get_current_spot_id()
         spot_manager = self.game_context.get_spot_manager()
         current_spot = spot_manager.get_spot(current_spot_id)
 
         if not current_spot: 
-            return []
+            return ActionCandidates(items=[])
 
-        candidates = []
+        candidates: List[ActionCandidate] = []
         
         # プレイヤーの状態に応じて利用可能な行動を取得
         available_strategies = self._get_strategies_for_player_state(acting_player.get_player_state())
@@ -123,13 +124,17 @@ class ActionOrchestrator:
         for strategy in available_strategies.values():
             if strategy.can_execute(acting_player, self.game_context):
                 required_arguments = strategy.get_required_arguments(acting_player, self.game_context)
-                candidates.append({
-                    'action_name': strategy.get_name(),
-                    'action_description': self._get_action_description(strategy.get_name()),
-                    'required_arguments': self._format_arguments_for_llm(required_arguments),
-                    'action_type': 'state_specific',
-                    'player_state': acting_player.get_player_state().value
-                })
+                candidates.append(ActionCandidate(
+                    action_name=strategy.get_name(),
+                    action_description=self._get_action_description(strategy.get_name()),
+                    required_arguments=[
+                        ActionArgument(
+                            name=a['name'], description=a['description'], type=a['type'], candidates=a.get('candidates', [])
+                        ) for a in self._format_arguments_for_llm(required_arguments)
+                    ],
+                    action_type='state_specific',
+                    player_state=acting_player.get_player_state().value,
+                ))
         
         # 通常状態の場合のみスポット固有のアクションを追加
         # （クエスト関連は将来Spot固有として実装予定のため除外）
@@ -140,14 +145,18 @@ class ActionOrchestrator:
                 if not strategy.get_name().startswith("クエスト"):
                     if strategy.can_execute(acting_player, self.game_context):
                         required_arguments = strategy.get_required_arguments(acting_player, self.game_context)
-                        candidates.append({
-                            'action_name': strategy.get_name(),
-                            'action_description': self._get_action_description(strategy.get_name()),
-                            'required_arguments': self._format_arguments_for_llm(required_arguments),
-                            'action_type': 'spot_specific'
-                        })
+                        candidates.append(ActionCandidate(
+                            action_name=strategy.get_name(),
+                            action_description=self._get_action_description(strategy.get_name()),
+                            required_arguments=[
+                                ActionArgument(
+                                    name=a['name'], description=a['description'], type=a['type'], candidates=a.get('candidates', [])
+                                ) for a in self._format_arguments_for_llm(required_arguments)
+                            ],
+                            action_type='spot_specific',
+                        ))
         
-        return candidates
+        return ActionCandidates(items=candidates)
 
     def _get_strategies_for_player_state(self, player_state: PlayerState) -> Dict[str, ActionStrategy]:
         """プレイヤーの状態に応じた行動戦略を取得"""
@@ -278,12 +287,20 @@ class ActionOrchestrator:
         LLMが行動選択を行う際のヘルプ情報を提供
         """
         candidates = self.get_action_candidates_for_llm(acting_player_id)
-        
-        help_info = {
-            'available_actions_count': len(candidates),
+        return self.build_action_help_from_candidates(candidates)
+
+    def build_action_help_from_candidates(self, candidates: Union[ActionCandidates, List[Dict[str, Any]]]) -> Dict[str, Any]:
+        """すでに生成済みの候補からヘルプ情報を構築する（候補の再生成を避ける）。"""
+        # 統一のため辞書リストへ正規化
+        if isinstance(candidates, ActionCandidates):
+            cand_dicts = candidates.to_dicts()
+        else:
+            cand_dicts = candidates
+        return {
+            'available_actions_count': len(cand_dicts),
             'action_types': {
-                'spot_specific': len([c for c in candidates if c['action_type'] == 'spot_specific']),
-                'state_specific': len([c for c in candidates if c['action_type'] == 'state_specific'])
+                'spot_specific': len([c for c in cand_dicts if c.get('action_type') == 'spot_specific']),
+                'state_specific': len([c for c in cand_dicts if c.get('action_type') == 'state_specific'])
             },
             'usage_instructions': {
                 'action_selection': '利用可能なアクションから1つを選択してください',
@@ -294,5 +311,3 @@ class ActionOrchestrator:
                 }
             }
         }
-        
-        return help_info

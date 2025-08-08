@@ -5,14 +5,15 @@ import types
 from pydantic import ValidationError
 
 from game.llm.policy.llm_decision_engine import LLMDecisionEngine, DecisionOutput
+from game.action.candidates import ActionCandidates
 from game.llm.memory import PlayerMemoryStore, ObservationMessage
 
 
 class _DummyOrchestrator:
     def __init__(self):
-        self._candidates = [
+        self._candidates = ActionCandidates.from_dicts([
             {"action_name": "移動", "required_arguments": [{"name": "target_spot_id", "type": "choice", "candidates": ["A", "B"]}]}
-        ]
+        ])
 
     def get_action_candidates_for_llm(self, pid):
         return self._candidates

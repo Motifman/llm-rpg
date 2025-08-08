@@ -48,7 +48,8 @@ class TestActionOrchestrator:
         """基本的なアクション候補取得テスト"""
         candidates = self.orchestrator.get_action_candidates_for_llm("test_player")
         
-        assert isinstance(candidates, list)
+        # 型はリスト互換のコンテナ（ActionCandidates）
+        assert hasattr(candidates, "__iter__")
         assert len(candidates) > 0
         
         # グローバルアクションが含まれていることを確認
