@@ -1,5 +1,6 @@
 import json
-from types import SimpleNamespace
+import sys
+import types
 
 from pydantic import ValidationError
 
@@ -31,10 +32,11 @@ def test_decide_for_player_with_litellm_monkeypatch(monkeypatch):
                 "arguments": {"target_spot_id": "A"},
             }, ensure_ascii=False)}}]
         }
-
-    monkeypatch.setitem(__import__("litellm").__dict__, "completion", fake_completion)
-    # batch はここでは未使用
-    monkeypatch.setitem(__import__("litellm").__dict__, "batch_completion", lambda **kwargs: [])
+    # ダミー litellm モジュールを sys.modules に注入
+    dummy = types.ModuleType("litellm")
+    dummy.completion = fake_completion
+    dummy.batch_completion = lambda **kwargs: []
+    sys.modules["litellm"] = dummy
 
     orchestrator = _DummyOrchestrator()
     memory = PlayerMemoryStore()
@@ -66,9 +68,11 @@ def test_decide_for_players_batch(monkeypatch):
     def fake_completion(**kwargs):
         return {"choices": [{"message": {"content": "{}"}}]}
 
-    ll = __import__("litellm")
-    monkeypatch.setitem(ll.__dict__, "batch_completion", fake_batch_completion)
-    monkeypatch.setitem(ll.__dict__, "completion", fake_completion)
+    # ダミー litellm を注入
+    dummy = types.ModuleType("litellm")
+    dummy.batch_completion = fake_batch_completion
+    dummy.completion = fake_completion
+    sys.modules["litellm"] = dummy
 
     orchestrator = _DummyOrchestrator()
     memory = PlayerMemoryStore()
@@ -77,6 +81,6 @@ def test_decide_for_players_batch(monkeypatch):
     outs = engine.decide_for_players_batch(["p1", "p2", "p3"])
     assert set(outs.keys()) == {"p1", "p2", "p3"}
     for o in outs.values():
-        assert o.action_args == {"target_spot_id": "B"}
+        assert o.arguments == {"target_spot_id": "B"}
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Type, Optional as TypingOptional
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -41,27 +41,35 @@ class LiteLLMClient:
         self._batch_completion = getattr(litellm, "batch_completion")
         self._model = model or get_settings().model
 
-    def _json_schema_response_format(self) -> Dict[str, Any]:
-        schema = DecisionOutput.model_json_schema()
-        return {"type": "json_schema", "json_schema": {"name": "DecisionOutput", "schema": schema}}
-
-    def complete_json(self, messages: List[Dict[str, str]], temperature: float, max_tokens: int) -> str:
+    def complete_json(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float,
+        max_tokens: int,
+        response_model: TypingOptional[Type[BaseModel]] = None,
+    ) -> str:
         resp = self._completion(
             model=self._model,
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
-            response_format=self._json_schema_response_format(),
+            response_format=response_model or DecisionOutput,
         )
         return resp["choices"][0]["message"]["content"]
 
-    def batch_complete_json(self, batch_messages: List[List[Dict[str, str]]], temperature: float, max_tokens: int) -> List[str]:
+    def batch_complete_json(
+        self,
+        batch_messages: List[List[Dict[str, str]]],
+        temperature: float,
+        max_tokens: int,
+        response_model: TypingOptional[Type[BaseModel]] = None,
+    ) -> List[str]:
         resps = self._batch_completion(
             model=self._model,
             messages=batch_messages,
             temperature=temperature,
             max_tokens=max_tokens,
-            response_format=self._json_schema_response_format(),
+            response_format=response_model or DecisionOutput,
         )
         outputs: List[str] = []
         for r in resps:
@@ -119,6 +127,7 @@ class LLMDecisionEngine:
             messages=messages,
             temperature=self._settings.temperature,
             max_tokens=self._settings.max_tokens,
+            response_model=DecisionOutput,
         )
         try:
             data = json.loads(raw)
@@ -143,6 +152,7 @@ class LLMDecisionEngine:
             batch_messages=batch_messages,
             temperature=self._settings.temperature,
             max_tokens=self._settings.max_tokens,
+            response_model=DecisionOutput,
         )
 
         outputs: Dict[str, DecisionOutput] = {}
