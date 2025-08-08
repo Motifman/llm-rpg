@@ -20,8 +20,9 @@ class MessageBase:
     - importance: 重要度（0-10）。削除・要約の優先度に利用
     """
 
-    type: MessageType
     content: str
+    # type はサブクラスで設定するため init から外す
+    type: MessageType = field(init=False)
     metadata: Dict[str, str] = field(default_factory=dict)
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     tokens_estimate: int = 0
@@ -36,21 +37,26 @@ class MessageBase:
 
 @dataclass
 class ObservationMessage(MessageBase):
-    type: MessageType = "observation"
+    def __post_init__(self) -> None:
+        self.type = "observation"
 
 
 @dataclass
 class ActionMessage(MessageBase):
-    type: MessageType = "action"
     action_name: Optional[str] = None
     action_args: Optional[Dict[str, str]] = None
+
+    def __post_init__(self) -> None:
+        self.type = "action"
 
 
 @dataclass
 class OutcomeMessage(MessageBase):
-    type: MessageType = "outcome"
     success: Optional[bool] = None
     error: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        self.type = "outcome"
 
 
 def total_tokens(messages: List[MessageBase]) -> int:
