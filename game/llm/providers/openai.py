@@ -43,14 +43,22 @@ class OpenAIClient(LLMClient):
                 "temperature": request.temperature,
                 "max_tokens": request.max_tokens,
             }
-            if request.json_schema:
+            if request.json_schema is not None:
                 # 一部SDKでは response_format={"type":"json_object"} でJSON化
                 kwargs["response_format"] = {"type": "json_object"}
 
-            resp = client.chat.completions.create(**kwargs)
+            completions_obj = client.chat.completions
+            # SDKの形状差異に対応: .create が直下にある場合/更にネストされている場合
+            create_fn = getattr(completions_obj, "create", None)
+            if callable(create_fn):
+                resp = create_fn(**kwargs)
+            elif hasattr(completions_obj, "completions") and callable(getattr(completions_obj.completions, "create", None)):
+                resp = completions_obj.completions.create(**kwargs)
+            else:
+                raise RuntimeError("OpenAIクライアントの completions.create が見つかりませんでした。")
             choice = resp.choices[0]
             text = choice.message.content or ""
-            if request.json_schema:
+            if request.json_schema is not None:
                 try:
                     response_json = json.loads(text)
                 except Exception:
