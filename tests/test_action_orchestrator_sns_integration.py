@@ -62,6 +62,8 @@ class TestActionOrchestratorSnsIntegration:
     
     def test_get_sns_action_candidates(self):
         """SNS関連のアクション候補を取得するテスト"""
+        # SNSを開いてSNS状態に遷移させる
+        self.orchestrator.execute_llm_action("test_player", "SNSを開く", {})
         candidates = self.orchestrator.get_action_candidates_for_llm("test_player")
         
         # SNS関連のアクションが含まれているかチェック
@@ -87,10 +89,13 @@ class TestActionOrchestratorSnsIntegration:
             if candidate['action_name'] in sns_action_names:
                 assert 'action_description' in candidate
                 assert 'required_arguments' in candidate
-                assert candidate['action_type'] == 'global'
+                # 状態ベースのため state_specific であること
+                assert candidate['action_type'] == 'state_specific'
     
     def test_sns_get_user_info_action(self):
         """SNSユーザー情報取得アクションのテスト"""
+        # SNSを開く（状態遷移）
+        self.orchestrator.execute_llm_action("test_player", "SNSを開く", {})
         # アクション候補を取得
         candidates = self.orchestrator.get_action_candidates_for_llm("test_player")
         
@@ -112,6 +117,8 @@ class TestActionOrchestratorSnsIntegration:
     
     def test_sns_update_user_bio_action(self):
         """SNSユーザー情報更新アクションのテスト"""
+        # SNSを開く（状態遷移）
+        self.orchestrator.execute_llm_action("test_player", "SNSを開く", {})
         # アクションを実行
         action_args = {"bio": "新しい一言コメントに更新しました！"}
         result = self.orchestrator.execute_llm_action("test_player", "SNSユーザー情報更新", action_args)
@@ -124,6 +131,8 @@ class TestActionOrchestratorSnsIntegration:
     
     def test_sns_post_action(self):
         """SNS投稿アクションのテスト"""
+        # SNSを開く（状態遷移）
+        self.orchestrator.execute_llm_action("test_player", "SNSを開く", {})
         # アクションを実行
         action_args = {
             "content": "テスト投稿です！ #テスト",
@@ -147,6 +156,8 @@ class TestActionOrchestratorSnsIntegration:
         self.sns_manager.create_post("alice", "アリスの投稿")
         self.sns_manager.create_post("bob", "ボブの投稿")
         
+        # SNSを開く（状態遷移）
+        self.orchestrator.execute_llm_action("test_player", "SNSを開く", {})
         # アクションを実行
         action_args = {
             "timeline_type": "global",
@@ -163,6 +174,8 @@ class TestActionOrchestratorSnsIntegration:
         # テスト用の投稿を作成
         post = self.sns_manager.create_post("alice", "いいねテスト投稿")
         
+        # SNSを開く（状態遷移）
+        self.orchestrator.execute_llm_action("test_player", "SNSを開く", {})
         # アクションを実行
         action_args = {"post_id": post.post_id}
         result = self.orchestrator.execute_llm_action("test_player", "SNS投稿にいいね", action_args)
@@ -180,6 +193,8 @@ class TestActionOrchestratorSnsIntegration:
         post = self.sns_manager.create_post("alice", "いいね解除テスト投稿")
         self.sns_manager.like_post("test_player", post.post_id)
         
+        # SNSを開く（状態遷移）
+        self.orchestrator.execute_llm_action("test_player", "SNSを開く", {})
         # アクションを実行
         action_args = {"post_id": post.post_id}
         result = self.orchestrator.execute_llm_action("test_player", "SNS投稿のいいね解除", action_args)
@@ -195,6 +210,8 @@ class TestActionOrchestratorSnsIntegration:
         # テスト用の投稿を作成
         post = self.sns_manager.create_post("alice", "返信テスト投稿")
         
+        # SNSを開く（状態遷移）
+        self.orchestrator.execute_llm_action("test_player", "SNSを開く", {})
         # アクションを実行
         action_args = {
             "post_id": post.post_id,
@@ -218,6 +235,8 @@ class TestActionOrchestratorSnsIntegration:
         post = self.sns_manager.create_post("alice", "通知テスト投稿")
         self.sns_manager.like_post("bob", post.post_id)
         
+        # SNSを開く（状態遷移）
+        self.orchestrator.execute_llm_action("test_player", "SNSを開く", {})
         # アクションを実行
         action_args = {"unread_only": "false"}
         result = self.orchestrator.execute_llm_action("test_player", "SNS通知取得", action_args)
@@ -235,6 +254,8 @@ class TestActionOrchestratorSnsIntegration:
         if notifications:
             notification_id = notifications[0].notification_id
             
+            # SNSを開く（状態遷移）
+            self.orchestrator.execute_llm_action("test_player", "SNSを開く", {})
             # アクションを実行
             action_args = {"notification_id": notification_id}
             result = self.orchestrator.execute_llm_action("test_player", "SNS通知を既読にする", action_args)
@@ -244,6 +265,8 @@ class TestActionOrchestratorSnsIntegration:
     
     def test_sns_action_error_handling(self):
         """SNSアクションのエラーハンドリングテスト"""
+        # SNSを開く（状態遷移）
+        self.orchestrator.execute_llm_action("test_player", "SNSを開く", {})
         # 存在しない投稿IDでいいねを試行
         action_args = {"post_id": "invalid_post_id"}
         result = self.orchestrator.execute_llm_action("test_player", "SNS投稿にいいね", action_args)
@@ -265,6 +288,8 @@ class TestActionOrchestratorSnsIntegration:
     
     def test_sns_action_help_info(self):
         """SNSアクションのヘルプ情報テスト"""
+        # SNSを開く（状態遷移）
+        self.orchestrator.execute_llm_action("test_player", "SNSを開く", {})
         help_info = self.orchestrator.get_action_help_for_llm("test_player")
         
         assert 'available_actions_count' in help_info
@@ -278,6 +303,8 @@ class TestActionOrchestratorSnsIntegration:
     
     def test_sns_action_integration_flow(self):
         """SNSアクションの統合フローテスト"""
+        # SNSを開く（状態遷移）
+        self.orchestrator.execute_llm_action("test_player", "SNSを開く", {})
         # 1. 投稿を作成
         post_action_args = {
             "content": "統合テスト投稿です！ #テスト",
