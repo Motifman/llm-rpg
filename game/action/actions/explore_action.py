@@ -50,6 +50,9 @@ class ExploreActionStrategy(ActionStrategy):
     def get_required_arguments(self, acting_player: Player, game_context: GameContext) -> List[ArgumentInfo]:
         current_spot = game_context.get_spot_manager().get_spot(acting_player.get_current_spot_id())
         poi_manager = game_context.get_poi_manager()
+        # POIマネージャーが未設定の場合は引数不要として扱う
+        if poi_manager is None or current_spot is None:
+            return []
         available_pois = poi_manager.get_available_pois(current_spot.spot_id, acting_player)
         
         if not available_pois:
