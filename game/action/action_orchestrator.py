@@ -235,7 +235,7 @@ class ActionOrchestrator:
             "取引キャンセル": "自分が出品した取引をキャンセルします",
             "受託可能取引取得": "現在受託可能な取引一覧を取得します",
         }
-        return descriptions.get(action_name, f"{action_name}を実行します")
+        return descriptions.get(action_name, "未知のアクションを実行します")
 
     def execute_llm_action(self, acting_player_id: str, action_name: str, action_args: dict) -> ActionResult:
         """
@@ -283,7 +283,7 @@ class ActionOrchestrator:
             'available_actions_count': len(candidates),
             'action_types': {
                 'spot_specific': len([c for c in candidates if c['action_type'] == 'spot_specific']),
-                'global': len([c for c in candidates if c['action_type'] == 'global'])
+                'state_specific': len([c for c in candidates if c['action_type'] == 'state_specific'])
             },
             'usage_instructions': {
                 'action_selection': '利用可能なアクションから1つを選択してください',

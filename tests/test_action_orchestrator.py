@@ -38,9 +38,11 @@ class TestActionOrchestrator:
     def test_action_orchestrator_initialization(self):
         """ActionOrchestratorの初期化テスト"""
         assert self.orchestrator.game_context == self.game_context
-        assert len(self.orchestrator.global_strategies) > 0
-        assert "移動" in self.orchestrator.global_strategies
-        assert "消費アイテムの使用" in self.orchestrator.global_strategies
+        # 状態ベースの設計に合わせ、候補を経由して確認
+        candidates = self.orchestrator.get_action_candidates_for_llm("test_player")
+        action_names = [c['action_name'] for c in candidates]
+        assert "移動" in action_names
+        assert "所持アイテム確認" in action_names
 
     def test_get_action_candidates_for_llm_basic(self):
         """基本的なアクション候補取得テスト"""
@@ -170,7 +172,8 @@ class TestActionOrchestrator:
         assert 'action_types' in help_info
         assert 'usage_instructions' in help_info
         
-        assert help_info['action_types']['global'] > 0
+        # 状態ベースに変更されたため state_specific を確認
+        assert help_info['action_types']['state_specific'] > 0
         assert 'action_selection' in help_info['usage_instructions']
         assert 'argument_format' in help_info['usage_instructions']
 
