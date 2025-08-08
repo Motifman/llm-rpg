@@ -53,7 +53,7 @@ class LiteLLMClient:
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
-            response_format=response_model or DecisionOutput,
+            response_format=response_model,
         )
         return resp["choices"][0]["message"]["content"]
 
@@ -69,7 +69,7 @@ class LiteLLMClient:
             messages=batch_messages,
             temperature=temperature,
             max_tokens=max_tokens,
-            response_format=response_model or DecisionOutput,
+            response_format=response_model,
         )
         outputs: List[str] = []
         for r in resps:
