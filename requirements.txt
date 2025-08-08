@@ -9,3 +9,5 @@ pytest-cov==6.2.1
 PyYAML==6.0.1
 tomli==2.2.1
 typing_extensions==4.14.1
+litellm==1.44.9
+pydantic==2.8.2
