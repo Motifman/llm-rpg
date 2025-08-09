@@ -5,6 +5,9 @@ from game.action.actions.move_action import MovementStrategy
 from game.action.actions.item_action import UseItemStrategy, PreviewItemEffectStrategy
 from game.action.actions.equipment_action import EquipmentSetCheckStrategy, EquipItemStrategy, UnequipItemStrategy
 from game.action.actions.inventory_action import InventoryCheckStrategy
+from game.action.actions.clothing_action import (
+    AppearanceCheckStrategy, EquipClothingStrategy, UnequipClothingStrategy,
+)
 from game.action.actions.explore_action import ExploreActionStrategy
 from game.action.actions.sns_action import (
     SnsGetUserInfoStrategy, SnsUpdateUserBioStrategy, SnsPostStrategy, 
@@ -53,6 +56,9 @@ class ActionOrchestrator:
             EquipItemStrategy().get_name(): EquipItemStrategy(),
             UnequipItemStrategy().get_name(): UnequipItemStrategy(),
             InventoryCheckStrategy().get_name(): InventoryCheckStrategy(),
+            AppearanceCheckStrategy().get_name(): AppearanceCheckStrategy(),
+            EquipClothingStrategy().get_name(): EquipClothingStrategy(),
+            UnequipClothingStrategy().get_name(): UnequipClothingStrategy(),
             ExploreActionStrategy().get_name(): ExploreActionStrategy(),
             
             # 状態遷移行動
@@ -206,6 +212,9 @@ class ActionOrchestrator:
             "装備変更": "アイテムを装備します",
             "装備解除": "装備を外します",
             "所持アイテム確認": "所持アイテムを確認します",
+            "見た目確認": "現在の見た目（ベース容姿と服飾）を確認します",
+            "服飾装着": "服飾アイテムを装着します",
+            "服飾解除": "服飾アイテムを外します",
             "探索": "現在の場所を探索します",
             "SNSユーザー情報取得": "SNSユーザーの情報を取得します",
             "SNSユーザー情報更新": "SNSユーザーの一言コメントを更新します",
