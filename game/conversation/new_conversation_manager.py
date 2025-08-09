@@ -85,7 +85,7 @@ class ConversationDispatcher:
                 message.sender_id,
                 message.spot_id,
                 message.content,
-                message.audience_kind,
+                message.audience_kind.value,
                 message.is_shout,
                 datetime.datetime.now(datetime.timezone.utc).isoformat(),
             ),
