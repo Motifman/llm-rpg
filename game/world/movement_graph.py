@@ -95,7 +95,6 @@ class MovementGraph:
                 return True
         return False
     
-    # TODO lavelはPlayerに未実装
     def _check_movement_conditions(self, edge: MovementEdge, player: Player) -> bool:
         if not edge.conditions:
             return True

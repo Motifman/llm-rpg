@@ -23,7 +23,6 @@ class DecisionInput:
     player_id: str
     candidates: ActionCandidates
     memory: List[MessageBase]
-    help_info: Dict[str, Any]
     system_prompt: Optional[str] = None
 
 
@@ -92,9 +91,16 @@ class LLMDecisionEngine:
         return self._client
 
     def _build_messages(self, d: DecisionInput) -> List[Dict[str, str]]:
-        # 簡易プロンプト（日本語）。本番は prompts/ を読み込む想定
         system_prompt = d.system_prompt or (
-            "あなたはRPGの行動選択アシスタントです。候補から1つを選び、JSONのみを出力してください。"
+            "あなたはRPGにおけるプレイヤーの次行動を選ぶアシスタントです。\n"
+            "以下のルールに必ず従って、JSONのみを出力してください。\n"
+            "\n"
+            "[役割と目的]\n"
+            "- 与えられた候補アクションと最近の出来事を読み取り、最も妥当な次の1手を選ぶ。\n"
+            "\n"
+            "[制約]\n"
+            "- 候補にないアクションや引数を捏造しない。\n"
+            "- 出力は厳密にJSONのみ（前後の解説・余白テキスト禁止）。\n"
         )
 
         # 候補を読みやすいテキストに整形
@@ -109,35 +115,11 @@ class LLMDecisionEngine:
             memory_lines.append(f"- [{tag}] {content}{meta}")
         memory_text = "\n".join(memory_lines) if memory_lines else "(履歴なし)"
 
-        # ヘルプ情報を読みやすい形式に整形
-        help_info = d.help_info or {}
-        help_lines: List[str] = [
-            f"利用可能アクション数: {help_info.get('available_actions_count', 0)}",
-        ]
-        types_info = help_info.get('action_types') or {}
-        help_lines.append(
-            f"  種別内訳: state_specific={types_info.get('state_specific', 0)}, spot_specific={types_info.get('spot_specific', 0)}"
-        )
-        usage = (help_info.get('usage_instructions') or {})
-        if usage:
-            help_lines.append("  使い方:")
-            if usage.get('action_selection'):
-                help_lines.append(f"    - {usage.get('action_selection')}")
-            if usage.get('argument_format'):
-                help_lines.append(f"    - {usage.get('argument_format')}")
-            arg_types = usage.get('argument_types') or {}
-            if arg_types:
-                help_lines.append("    - 引数タイプ: choice=候補から選択, free_input=自由入力")
-        help_text = "\n".join(help_lines)
-
-        # ユーザーブロックを可読な文章で
+        # 実際の入力（ユーザー側メッセージ）: 状況のみを渡す
         user_text = (
-            "以下は現在の状況と候補アクション情報です。これを踏まえて最適な1手を選び、指定スキーマに従うJSONを返してください。\n\n"
+            "以下が現在の状況です。候補から次の1手を選んで、指定仕様のJSONのみを返してください。\n\n"
+            "[最近の出来事]\n" + memory_text + "\n"
             "[候補アクション]\n" + candidates_text + "\n\n"
-            "[補助情報]\n" + help_text + "\n\n"
-            "[最近の出来事]\n" + memory_text + "\n\n"
-            "[出力スキーマ]\n"
-            "{\n  \"thought\": string,\n  \"action\": string,\n  \"arguments\": object\n}"
         )
 
         user_block = {"role": "user", "content": user_text}
@@ -148,17 +130,11 @@ class LLMDecisionEngine:
 
     def decide_for_player(self, player_id: str) -> DecisionOutput:
         candidates = self._orchestrator.get_action_candidates_for_llm(player_id)
-        # 同じ候補からヘルプを派生させて重複処理を回避（後方互換フォールバック）
-        if hasattr(self._orchestrator, "build_action_help_from_candidates"):
-            help_info = self._orchestrator.build_action_help_from_candidates(candidates)  # type: ignore[attr-defined]
-        else:
-            help_info = self._orchestrator.get_action_help_for_llm(player_id)
         memory = self._memory_store.get_for_token_budget(player_id, token_budget=2048)
         messages = self._build_messages(DecisionInput(
             player_id=player_id,
             candidates=candidates,
             memory=memory,
-            help_info=help_info,
         ))
         raw = self._ensure_client().complete_json(
             messages=messages,
@@ -178,14 +154,9 @@ class LLMDecisionEngine:
         inputs: List[DecisionInput] = []
         for pid in player_ids:
             cands = self._orchestrator.get_action_candidates_for_llm(pid)
-            if hasattr(self._orchestrator, "build_action_help_from_candidates"):
-                help_info = self._orchestrator.build_action_help_from_candidates(cands)  # type: ignore[attr-defined]
-            else:
-                help_info = self._orchestrator.get_action_help_for_llm(pid)
             inputs.append(DecisionInput(
                 player_id=pid,
                 candidates=cands,
-                help_info=help_info,
                 memory=self._memory_store.get_for_token_budget(pid, token_budget=2048),
             ))
 
@@ -211,16 +182,11 @@ class LLMDecisionEngine:
     def get_messages_preview(self, player_id: str, system_prompt: Optional[str] = None) -> List[Dict[str, str]]:
         """LLMに渡す直前の messages を生成して返す（実際のLLM呼び出しは行わない）。"""
         candidates = self._orchestrator.get_action_candidates_for_llm(player_id)
-        if hasattr(self._orchestrator, "build_action_help_from_candidates"):
-            help_info = self._orchestrator.build_action_help_from_candidates(candidates)  # type: ignore[attr-defined]
-        else:
-            help_info = self._orchestrator.get_action_help_for_llm(player_id)
         memory = self._memory_store.get_for_token_budget(player_id, token_budget=2048)
         return self._build_messages(DecisionInput(
             player_id=player_id,
             candidates=candidates,
             memory=memory,
-            help_info=help_info,
             system_prompt=system_prompt,
         ))
 

@@ -103,7 +103,6 @@ class Player:
         """服飾アイテムを装着（スロットはアイテムが保持）。
         インベントリから取り出し、既存はインベントリに戻す。
         戻り値: 外したアイテムID（存在しなければNone）
-        エラー処理: AppearanceItemであること、slotが適切なEnumであること
         """
         item = self.inventory.get_item_by_id(item_id)
         if item is None or not isinstance(item, AppearanceItem):
