@@ -13,3 +13,4 @@ from . import interactable_action
 from . import home_action
 from . import permission_checked_action
 from . import state_transition_action
+from . import clothing_action
