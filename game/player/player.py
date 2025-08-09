@@ -4,7 +4,9 @@ from game.player.equipment_set import EquipmentSet
 from game.player.status import Status
 from game.item.item import Item
 from game.item.equipment_item import Weapon, Armor
-from game.enums import Role, EquipmentSlot, StatusEffectType, PlayerState
+from game.enums import Role, EquipmentSlot, StatusEffectType, PlayerState, AppearanceSlot
+from game.player.appearance import AppearanceSet
+from game.item.item import AppearanceItem
 
 # 型ヒントの遅延インポート
 if TYPE_CHECKING:
@@ -23,7 +25,9 @@ class Player:
         self.inventory = Inventory()
         self.equipment = EquipmentSet()
         self.status = Status()
-        self.player_state = PlayerState.NORMAL  # 初期状態は通常状態
+        self.player_state = PlayerState.NORMAL
+        # 見た目（服飾）
+        self.appearance = AppearanceSet()
     
     # ===== 基本情報 =====
     def get_player_id(self) -> str:
@@ -86,6 +90,41 @@ class Player:
     def is_in_trading_state(self) -> bool:
         """取引状態かどうか"""
         return self.player_state == PlayerState.TRADING
+
+    # ===== 見た目（服飾）管理 =====
+    def set_base_appearance(self, description: str):
+        """服飾とは独立した基本の容姿テキストを設定"""
+        self.appearance.set_base_description(description)
+
+    def get_appearance_text(self) -> str:
+        """現在の見た目（基本容姿 + 服飾）を取得"""
+        return self.appearance.get_appearance_description()
+
+    def equip_clothing(self, slot: AppearanceSlot, item_id: str) -> Optional[str]:
+        """服飾アイテムを装着。インベントリから取り出し、既存はインベントリに戻す。
+        戻り値: 外したアイテムID（存在しなければNone）
+        """
+        item = self.inventory.get_item_by_id(item_id)
+        if item is None or not isinstance(item, AppearanceItem):
+            return None
+        # インベントリから1つ減らす
+        removed = self.inventory.remove_item_by_id(item.item_id, 1)
+        if removed <= 0:
+            return None
+        previous = self.appearance.equip(slot, item)
+        if previous:
+            # 外したものはインベントリへ戻す
+            self.inventory.add_item(previous)
+            return previous.item_id
+        return None
+
+    def unequip_clothing(self, slot: AppearanceSlot) -> Optional[str]:
+        """服飾アイテムを外し、インベントリへ戻す。戻り値: 外したアイテムID"""
+        previous = self.appearance.unequip(slot)
+        if previous:
+            self.inventory.add_item(previous)
+            return previous.item_id
+        return None
     
     # ===== インベントリ管理 =====
     def get_inventory(self) -> Inventory:

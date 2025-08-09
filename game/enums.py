@@ -64,6 +64,17 @@ class EquipmentSlot(Enum):
     GLOVES = "gloves"
 
 
+class AppearanceSlot(Enum):
+    """外見用の服飾スロット（戦闘性能に影響しない見た目専用）"""
+    HAIR = "hair"           # 髪型・髪色（服飾外だが外見構成要素として扱う）
+    FACE = "face"           # 顔の特徴
+    HEADWEAR = "headwear"   # 帽子・飾り
+    TOP = "top"             # 上衣
+    BOTTOM = "bottom"       # 下衣
+    SHOES = "shoes"         # 靴（戦闘装備の靴とは別概念）
+    ACCESSORY = "accessory" # 装飾品
+
+
 class MonsterType(Enum):
     """モンスターのタイプ"""
     NORMAL = "normal"
