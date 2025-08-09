@@ -61,3 +61,14 @@ class UniqueItem(Item, ABC):
     
     def __str__(self):
         return f"{self.name} ({self.item_id}) - {self.description} [{self.get_status_description()}]"
+
+
+@dataclass(frozen=True)
+class AppearanceItem(Item):
+    """戦闘性能に影響しない外見用アイテム。
+    Playerの見た目スロットに装着されることを想定。
+    """
+    appearance_text: str = ""
+
+    def can_be_traded(self) -> bool:
+        return True
