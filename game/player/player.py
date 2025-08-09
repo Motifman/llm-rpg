@@ -4,7 +4,7 @@ from game.player.equipment_set import EquipmentSet
 from game.player.status import Status
 from game.item.item import Item
 from game.item.equipment_item import Weapon, Armor
-from game.enums import Role, EquipmentSlot, StatusEffectType, PlayerState, AppearanceSlot
+from game.enums import Role, EquipmentSlot, StatusEffectType, PlayerState
 from game.player.appearance import AppearanceSet
 from game.item.item import AppearanceItem
 
@@ -26,7 +26,6 @@ class Player:
         self.equipment = EquipmentSet()
         self.status = Status()
         self.player_state = PlayerState.NORMAL
-        # 見た目（服飾）
         self.appearance = AppearanceSet()
     
     # ===== 基本情報 =====
@@ -100,25 +99,35 @@ class Player:
         """現在の見た目（基本容姿 + 服飾）を取得"""
         return self.appearance.get_appearance_description()
 
-    def equip_clothing(self, slot: AppearanceSlot, item_id: str) -> Optional[str]:
-        """服飾アイテムを装着。インベントリから取り出し、既存はインベントリに戻す。
+    def equip_clothing(self, item_id: str) -> Optional[str]:
+        """服飾アイテムを装着（スロットはアイテムが保持）。
+        インベントリから取り出し、既存はインベントリに戻す。
         戻り値: 外したアイテムID（存在しなければNone）
+        エラー処理: AppearanceItemであること、slotが適切なEnumであること
         """
         item = self.inventory.get_item_by_id(item_id)
         if item is None or not isinstance(item, AppearanceItem):
             return None
-        # インベントリから1つ減らす
-        removed = self.inventory.remove_item_by_id(item.item_id, 1)
-        if removed <= 0:
+        slot = getattr(item, 'slot', None)
+        # Enum妥当性
+        try:
+            from game.enums import AppearanceSlot  # 局所インポートで循環回避
+            if not isinstance(slot, AppearanceSlot):
+                return None
+        except Exception:
             return None
+
+        removed_count = self.inventory.remove_item_by_id(item.item_id, 1)
+        if removed_count <= 0:
+            return None
+
         previous = self.appearance.equip(slot, item)
         if previous:
-            # 外したものはインベントリへ戻す
             self.inventory.add_item(previous)
             return previous.item_id
         return None
 
-    def unequip_clothing(self, slot: AppearanceSlot) -> Optional[str]:
+    def unequip_clothing(self, slot: "AppearanceSlot") -> Optional[str]:
         """服飾アイテムを外し、インベントリへ戻す。戻り値: 外したアイテムID"""
         previous = self.appearance.unequip(slot)
         if previous:
