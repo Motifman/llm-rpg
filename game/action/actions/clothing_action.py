@@ -31,9 +31,9 @@ class EquipClothingResult(ActionResult):
     def to_feedback_message(self, player_name: str) -> str:
         if self.success:
             if self.previous_item_id:
-                return f"{player_name} は {self.previous_item_id} から {self.item_id} に服飾を変更しました\n\t{self.appearance_text}"
+                return f"{player_name} は {self.previous_item_id} から {self.item_id} に服飾を変更しました"
             else:
-                return f"{player_name} は {self.item_id} を装着しました\n\t{self.appearance_text}"
+                return f"{player_name} は {self.item_id} を装着しました"
         else:
             return f"{player_name} は {self.item_id} を装着できませんでした\n\t理由:{self.message}"
 
@@ -47,7 +47,7 @@ class UnequipClothingResult(ActionResult):
 
     def to_feedback_message(self, player_name: str) -> str:
         if self.success:
-            return f"{player_name} は {self.slot_name} の {self.item_id} を外しました\n\t{self.appearance_text}"
+            return f"{player_name} は {self.slot_name} の {self.item_id} を外しました"
         else:
             return f"{player_name} は {self.slot_name} の服飾を外せませんでした\n\t理由:{self.message}"
 
