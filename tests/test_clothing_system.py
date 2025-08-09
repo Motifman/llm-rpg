@@ -12,8 +12,8 @@ def test_clothing_basic_flow():
     player.set_base_appearance("黒髪の青年")
 
     # 服飾アイテム作成
-    hat = AppearanceItem(item_id="hat_simple", name="シンプルな帽子", description="布の帽子", appearance_text="小さな帽子")
-    top = AppearanceItem(item_id="top_shirt", name="シャツ", description="白いシャツ", appearance_text="白いシャツ")
+    hat = AppearanceItem(item_id="hat_simple", name="シンプルな帽子", description="布の帽子", slot=AppearanceSlot.HEADWEAR, appearance_text="小さな帽子")
+    top = AppearanceItem(item_id="top_shirt", name="シャツ", description="白いシャツ", slot=AppearanceSlot.TOP, appearance_text="白いシャツ")
 
     # インベントリに追加
     player.add_item(hat)
@@ -23,12 +23,12 @@ def test_clothing_basic_flow():
     assert player.get_inventory_item_count("top_shirt") == 1
 
     # 装着（HEADWEAR）
-    removed_id = player.equip_clothing(AppearanceSlot.HEADWEAR, "hat_simple")
+    removed_id = player.equip_clothing("hat_simple")
     assert removed_id is None  # 既存なし
     assert player.get_inventory_item_count("hat_simple") == 0
 
     # 装着（TOP）
-    player.equip_clothing(AppearanceSlot.TOP, "top_shirt")
+    player.equip_clothing("top_shirt")
     assert player.get_inventory_item_count("top_shirt") == 0
 
     # 見た目テキスト

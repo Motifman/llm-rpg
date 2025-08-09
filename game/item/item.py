@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 import uuid
+from game.enums import AppearanceSlot
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,7 @@ class AppearanceItem(Item):
     """戦闘性能に影響しない外見用アイテム。
     Playerの見た目スロットに装着されることを想定。
     """
+    slot: AppearanceSlot
     appearance_text: str = ""
 
     def can_be_traded(self) -> bool:
