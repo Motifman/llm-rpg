@@ -1,4 +1,4 @@
-import sqlite3
+import time
 import logging
 import uuid
 import datetime
@@ -38,25 +38,23 @@ class ConversationDispatcher:
                     spot_id      TEXT NOT NULL,
                     content      TEXT NOT NULL,
                     audience_kind TEXT NOT NULL,
-                    is_shout     BOOLEAN NOT NULL DEFAULT FALSE,
-                    created_at   TEXT NOT NULL,
+                    is_shout     INTEGER NOT NULL DEFAULT 0,
+                    created_at   INTEGER NOT NULL,
                     CHECK (audience_kind IN ('spot_all','players'))
                 );
+                
+                CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON messages(sender_id);
+                CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
 
                 CREATE TABLE IF NOT EXISTS message_recipients (
-                    message_id    TEXT NOT NULL,
-                    recipient_id  TEXT NOT NULL,
-                    status        TEXT NOT NULL,
-                    delivered_at  TEXT,
-                    read_at       TEXT,
-                    created_at    TEXT NOT NULL,
-                    PRIMARY KEY (message_id, recipient_id),
-                    FOREIGN KEY (message_id) REFERENCES messages(message_id) ON DELETE CASCADE,
-                    CHECK (status IN ('pending','delivered','read'))
+                    message_id   TEXT NOT NULL REFERENCES messages(message_id) ON DELETE CASCADE,
+                    recipient_id TEXT NOT NULL,
+                    status       TEXT NOT NULL CHECK (status IN ('pending','delivered','read')),
+                    delivered_at INTEGER,
+                    read_at      INTEGER,
+                    created_at   INTEGER NOT NULL,
+                    PRIMARY KEY (message_id, recipient_id)
                 );
-
-                CREATE INDEX IF NOT EXISTS idx_message_recipients_msg
-                ON message_recipients(message_id);
 
                 CREATE INDEX IF NOT EXISTS idx_inbox
                 ON message_recipients(recipient_id, status, created_at);
@@ -74,44 +72,52 @@ class ConversationDispatcher:
             self.db.close()
 
     def speak(self, message: OutgoingMessage) -> str:
+        """メッセージをDBに保存し、受信者情報を一括で登録する"""
         message_id = str(uuid.uuid4())
-        self.cursor.execute(
-            """
-            INSERT INTO messages (message_id, sender_id, spot_id, content, audience_kind, is_shout, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                message_id,
-                message.sender_id,
-                message.spot_id,
-                message.content,
-                message.audience_kind.value,
-                message.is_shout,
-                datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            ),
-        )
-        for audience_id in message.audience_ids:
-            self.cursor.execute(
-                """
-                INSERT INTO message_recipients (message_id, recipient_id, status, created_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                (
-                    message_id,
-                    audience_id,
-                    DeliveryStatus.PENDING.value,
-                    datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                ),
-            )
-        self.db_conn.commit()
-        return message_id
+        now = int(time.time()) # 現在時刻をUnixエポックタイムで取得
+
+        try:
+            with self.db.transaction("IMMEDIATE"):
+                self.cursor.execute(
+                    """
+                    INSERT INTO messages (message_id, sender_id, spot_id, content, audience_kind, is_shout, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        message_id,
+                        message.sender_id,
+                        message.spot_id,
+                        message.content,
+                        message.audience_kind.value,
+                        1 if message.is_shout else 0,
+                        now,
+                    ),
+                )
+
+                recipients_data = [
+                    (message_id, audience_id, DeliveryStatus.PENDING.value, now)
+                    for audience_id in message.audience_ids
+                ]
+                self.cursor.executemany(
+                    """
+                    INSERT INTO message_recipients (message_id, recipient_id, status, created_at)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    recipients_data,
+                )
+            
+            logger.info(f"Message {message_id} and its recipients saved successfully.")
+            return message_id
+
+        except Exception as e:
+            logger.error(f"Failed to speak message: {e}")
+            raise e
 
     def dispatch(self, player_id: str) -> List[ReceivedMessage]:
         """
         プレイヤーが未読のメッセージを取得する
         """
         try:
-            # 競合を避けるため、取得〜既読反映を同一トランザクションで行う
             with self.db.transaction("IMMEDIATE"):
                 self.cursor.execute(
                     """
