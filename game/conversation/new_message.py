@@ -23,18 +23,9 @@ class OutgoingMessage:
     sender_id: str
     spot_id: str
     content: str
-    shout_level: int  # (0: 通常, 1: シャウト)
-
-
-@dataclass(frozen=True)
-class PendingMessage:
-    sender_id: str
-    spot_id: str
-    content: str
     audience_kind: AudienceKind
-    audience_ids: Optional[List[str]]
-    shout_level: int  # (0: 通常, 1: シャウト)
-    created_at: datetime.datetime
+    audience_ids: List[str]  # 作成時点で既に送信先は解決されている
+    is_shout: bool = False
 
 
 @dataclass(frozen=True)
@@ -43,5 +34,5 @@ class ReceivedMessage:
     sender_id: str
     spot_id: str
     content: str
-    created_at: datetime.datetime
-    is_direct: bool
+    audience_kind: AudienceKind
+    is_shout: bool
