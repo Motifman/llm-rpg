@@ -169,17 +169,21 @@ class SnsManager:
     def update_user_bio(self, user_id: str, new_bio: str) -> Optional[SnsUser]:
         """ユーザーの一言コメントを更新"""
         logger.debug("update_user_bio: user_id=%s", user_id)
-        self.cursor.execute(
-            """
-            UPDATE users
-            SET bio = ?
-            WHERE user_id = ?
-            """,
-            (new_bio, user_id)
-        )
-        self.db_conn.commit()
-        logger.info("update_user_bio: success user_id=%s", user_id)
-        return self.get_user(user_id)
+        try:
+            with self.db.transaction("IMMEDIATE"):
+                self.cursor.execute(
+                    """
+                    UPDATE users
+                    SET bio = ?
+                    WHERE user_id = ?
+                    """,
+                    (new_bio, user_id)
+                )
+            logger.info("update_user_bio: success user_id=%s", user_id)
+            return self.get_user(user_id)
+        except sqlite3.Error as e:
+            logger.exception("update_user_bio: failed user_id=%s: %s", user_id, e)
+            return None
     
     def user_exists(self, user_id: str) -> bool:
         """ユーザーが存在するかチェック"""
@@ -242,7 +246,8 @@ class SnsManager:
                 tuple(unique_tokens),
             )
             direct_rows = self.cursor.fetchall()
-        except Exception:
+        except sqlite3.Error as e:
+            logger.warning("_resolve_mention_token_to_user_ids: failed direct id query: %s", e)
             direct_rows = []
 
         matched_id_tokens: Set[str] = set()
@@ -260,7 +265,8 @@ class SnsManager:
                     tuple(name_tokens),
                 )
                 name_rows = self.cursor.fetchall()
-            except Exception:
+            except sqlite3.Error as e:
+                logger.warning("_resolve_mention_token_to_user_ids: failed name query: %s", e)
                 name_rows = []
 
             for row in name_rows:
