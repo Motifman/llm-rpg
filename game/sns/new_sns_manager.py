@@ -1,4 +1,5 @@
 import uuid
+import sqlite3
 import time
 import logging
 from typing import List, Optional, Dict, Any, Set
@@ -126,16 +127,26 @@ class SnsManager:
         """新しいユーザーを作成"""
         logger.debug("create_user: user_id=%s name=%s", user_id, name)
         now = int(time.time())
-        self.cursor.execute(
-            """
-            INSERT INTO users (user_id, name, bio, created_at)
-            VALUES (?, ?, ?, ?)
-            """,
-            (user_id, name, bio, now)
-        )
-        self.db_conn.commit()
-        logger.info("create_user: success user_id=%s", user_id)
-        return SnsUser(user_id=user_id, name=name, bio=bio, created_at=now)
+        # 事前に存在チェック（速やかなエラー応答）。並行競合はDB整合性で担保。
+        if self.user_exists(user_id):
+            logger.warning("create_user: duplicate user_id detected before insert: %s", user_id)
+            raise ValueError(f"ユーザーID '{user_id}' は既に存在します")
+
+        try:
+            with self.db.transaction("IMMEDIATE"):
+                self.cursor.execute(
+                    """
+                    INSERT INTO users (user_id, name, bio, created_at)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (user_id, name, bio, now)
+                )
+            logger.info("create_user: success user_id=%s", user_id)
+            return SnsUser(user_id=user_id, name=name, bio=bio, created_at=now)
+        except sqlite3.IntegrityError as e:
+            # PK衝突など
+            logger.warning("create_user: integrity error user_id=%s: %s", user_id, e)
+            raise ValueError(f"ユーザーID '{user_id}' は既に存在します") from e
     
     def get_user(self, user_id: str) -> Optional[SnsUser]:
         """ユーザーを取得"""
@@ -158,17 +169,21 @@ class SnsManager:
     def update_user_bio(self, user_id: str, new_bio: str) -> Optional[SnsUser]:
         """ユーザーの一言コメントを更新"""
         logger.debug("update_user_bio: user_id=%s", user_id)
-        self.cursor.execute(
-            """
-            UPDATE users
-            SET bio = ?
-            WHERE user_id = ?
-            """,
-            (new_bio, user_id)
-        )
-        self.db_conn.commit()
-        logger.info("update_user_bio: success user_id=%s", user_id)
-        return self.get_user(user_id)
+        try:
+            with self.db.transaction("IMMEDIATE"):
+                self.cursor.execute(
+                    """
+                    UPDATE users
+                    SET bio = ?
+                    WHERE user_id = ?
+                    """,
+                    (new_bio, user_id)
+                )
+            logger.info("update_user_bio: success user_id=%s", user_id)
+            return self.get_user(user_id)
+        except sqlite3.Error as e:
+            logger.exception("update_user_bio: failed user_id=%s: %s", user_id, e)
+            return None
     
     def user_exists(self, user_id: str) -> bool:
         """ユーザーが存在するかチェック"""
@@ -231,7 +246,8 @@ class SnsManager:
                 tuple(unique_tokens),
             )
             direct_rows = self.cursor.fetchall()
-        except Exception:
+        except sqlite3.Error as e:
+            logger.warning("_resolve_mention_token_to_user_ids: failed direct id query: %s", e)
             direct_rows = []
 
         matched_id_tokens: Set[str] = set()
@@ -249,7 +265,8 @@ class SnsManager:
                     tuple(name_tokens),
                 )
                 name_rows = self.cursor.fetchall()
-            except Exception:
+            except sqlite3.Error as e:
+                logger.warning("_resolve_mention_token_to_user_ids: failed name query: %s", e)
                 name_rows = []
 
             for row in name_rows:
