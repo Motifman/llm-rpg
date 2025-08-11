@@ -41,6 +41,13 @@ def test_user_crud(sns: SnsManager):
     assert updated is not None and updated.bio.startswith("新しい一言")
 
 
+def test_create_user_conflict_raises(sns: SnsManager):
+    # 既に存在するIDで作成を試みると ValueError
+    import pytest
+    with pytest.raises(ValueError):
+        sns.create_user("user1", "だぶり")
+
+
 # === 投稿 ===
 
 def test_create_post_and_get_user_posts(sns: SnsManager):
