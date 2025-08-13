@@ -12,7 +12,7 @@ class DynamicStatus:
         mp: int,
         max_hp: int,
         max_mp: int,
-        experience_points: int = 0,
+        exp: int = 0,
         level: int = 1,
         gold: int = 0,
         status_effects: Optional[Dict[StatusEffectType, StatusEffect]] = None,
@@ -22,7 +22,7 @@ class DynamicStatus:
         assert mp > 0, "mp must be greater than 0"
         assert max_hp > 0, "max_hp must be greater than 0"
         assert max_mp > 0, "max_mp must be greater than 0"
-        assert experience_points >= 0, "experience_points must be greater than or equal to 0"
+        assert exp >= 0, "exp must be greater than or equal to 0"
         assert level >= 1, "level must be greater than or equal to 1"
         assert gold >= 0, "gold must be greater than or equal to 0"
 
@@ -30,7 +30,7 @@ class DynamicStatus:
         self._mp = mp
         self._max_hp = max_hp
         self._max_mp = max_mp
-        self._experience_points = experience_points
+        self._exp = exp
         self._level = level
         self._gold = gold
         self._status_effects = {} if status_effects is None else dict(status_effects)
@@ -57,9 +57,9 @@ class DynamicStatus:
         return self._max_mp
     
     @property
-    def experience_points(self) -> int:
+    def exp(self) -> int:
         """経験値を取得"""
-        return self._experience_points
+        return self._exp
     
     @property
     def level(self) -> int:
@@ -98,9 +98,9 @@ class DynamicStatus:
         """所持金を追加"""
         self._gold = max(0, self._gold + amount)
     
-    def add_experience_points(self, amount: int):
+    def add_exp(self, amount: int):
         """経験値を追加"""
-        self._experience_points = max(0, self._experience_points + amount)
+        self._exp = max(0, self._exp + amount)
     
     def level_up(self):
         """レベルアップ"""
@@ -114,9 +114,9 @@ class DynamicStatus:
         """防御解除"""
         self._defending = False
 
-    def add_status_effect(self, status_effect: StatusEffect):
+    def add_status_effect(self, status_effect_type: StatusEffectType, duration: int, value: int):
         """状態異常を追加"""
-        self._status_effects[status_effect.effect] = status_effect
+        self._status_effects[status_effect_type] = StatusEffect(status_effect_type, duration, value)
     
     def remove_status_effect_by_type(self, status_effect_type: StatusEffectType):
         """状態異常を削除"""
