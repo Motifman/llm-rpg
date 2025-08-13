@@ -12,7 +12,16 @@ class TradeRepository:
 
     def get_for_update(self, trade_id: str) -> object:
         """取引をロックしつつ取得（雛形：実装時に楽観ロック/状態確認）。"""
-        return type("TradeRow", (), {"trade_id": trade_id, "seller_id": "", "requested_money": 0, "offered_item_id": "", "offered_item_count": 0})()
+        rows = self._db.query(
+            """
+            SELECT * FROM trade WHERE trade_id = ?
+            """,
+            (trade_id,),
+        )
+        if not rows:
+            raise ValueError(f"trade not found: {trade_id}")
+        row = dict(rows[0])
+        return row
 
     def mark_completed(self, trade_id: str, buyer_id: str) -> None:
         """取引をCOMPLETEDへ更新（雛形）。"""

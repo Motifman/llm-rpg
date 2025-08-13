@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS area(
+    area_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_area_name ON area(name);
