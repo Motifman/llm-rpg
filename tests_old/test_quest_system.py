@@ -1,12 +1,12 @@
 import pytest
 from datetime import datetime, timedelta
-from src.models.quest import Quest, QuestType, QuestDifficulty, QuestStatus, QuestCondition, create_monster_hunt_quest, create_item_collection_quest, create_exploration_quest
-from src.models.guild import AdventurerGuild, GuildMember, GuildRank
-from src.models.job import AdventurerAgent
-from src.systems.quest_system import QuestSystem
-from src.systems.world import World
-from src.models.action import RegisterToGuild, ViewAvailableQuests, AcceptQuest, SubmitQuest, PostQuestToGuild
-from src.models.spot import Spot
+from src_old.models.quest import Quest, QuestType, QuestDifficulty, QuestStatus, QuestCondition, create_monster_hunt_quest, create_item_collection_quest, create_exploration_quest
+from src_old.models.guild import AdventurerGuild, GuildMember, GuildRank
+from src_old.models.job import AdventurerAgent
+from src_old.systems.quest_system import QuestSystem
+from src_old.systems.world import World
+from src_old.models.action import RegisterToGuild, ViewAvailableQuests, AcceptQuest, SubmitQuest, PostQuestToGuild
+from src_old.models.spot import Spot
 
 
 class TestQuest:

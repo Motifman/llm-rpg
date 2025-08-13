@@ -5,17 +5,17 @@ Jobシステムのデモプログラム
 各職業の特徴的な行動を実演し、RPG世界での経済循環を示します。
 """
 
-from src.models.job import (
+from src_old.models.job import (
     JobAgent, JobType, Recipe, Service,
     CraftsmanAgent, MerchantAgent, AdventurerAgent, ProducerAgent
 )
-from src.models.item import Item
-from src.models.action import (
+from src_old.models.item import Item
+from src_old.models.action import (
     CraftItem, EnhanceItem, SetupShop, ProvideService,
     GatherResource, ProcessMaterial, ManageFarm, AdvancedCombat
 )
-from src.models.spot import Spot
-from src.systems.world import World
+from src_old.models.spot import Spot
+from src_old.systems.world import World
 
 
 def create_demo_world():

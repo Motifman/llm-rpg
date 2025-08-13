@@ -1,8 +1,8 @@
-from src.models.spot import Spot
-from src.models.agent import Agent
-from src.models.item import Item
-from src.models.action import Movement, Exploration
-from src.systems.world import World
+from src_old.models.spot import Spot
+from src_old.models.agent import Agent
+from src_old.models.item import Item
+from src_old.models.action import Movement, Exploration
+from src_old.systems.world import World
 
 
 def create_exploration_test_world():

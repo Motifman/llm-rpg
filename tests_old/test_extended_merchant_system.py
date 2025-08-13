@@ -1,8 +1,8 @@
 import pytest
-from src.models.job import ServiceProviderAgent, TraderAgent
-from src.models.action import SellItem, BuyItem, SetItemPrice, ManageInventory, ProvideLodging, ProvideDance, ProvidePrayer
-from src.models.item import Item
-from src.systems.world import World
+from src_old.models.job import ServiceProviderAgent, TraderAgent
+from src_old.models.action import SellItem, BuyItem, SetItemPrice, ManageInventory, ProvideLodging, ProvideDance, ProvidePrayer
+from src_old.models.item import Item
+from src_old.systems.world import World
 
 
 class TestServiceProviderAgent:
@@ -215,7 +215,7 @@ class TestWorldIntegration:
         world = World()
         
         # スポットとエージェントを追加
-        from src.models.spot import Spot
+        from src_old.models.spot import Spot
         tavern = Spot("tavern", "賑やかな酒場", "町の中心にある酒場")
         world.add_spot(tavern)
         
@@ -224,7 +224,7 @@ class TestWorldIntegration:
         innkeeper.set_current_spot_id("tavern")
         world.add_agent(innkeeper)
         
-        from src.models.agent import Agent
+        from src_old.models.agent import Agent
         guest = Agent("guest1", "疲れた旅人")
         guest.set_current_spot_id("tavern")
         guest.add_money(200)
@@ -244,7 +244,7 @@ class TestWorldIntegration:
         world = World()
         
         # スポットとエージェントを追加
-        from src.models.spot import Spot
+        from src_old.models.spot import Spot
         market = Spot("market", "活気ある市場", "商人が集まる市場")
         world.add_spot(market)
         
@@ -255,7 +255,7 @@ class TestWorldIntegration:
         trader.set_item_price("sword", 60)
         world.add_agent(trader)
         
-        from src.models.agent import Agent
+        from src_old.models.agent import Agent
         customer = Agent("customer1", "冒険者")
         customer.set_current_spot_id("market")
         customer.add_money(100)
@@ -275,7 +275,7 @@ class TestWorldIntegration:
         world = World()
         
         # 通常のエージェントでサービス提供を試す
-        from src.models.agent import Agent
+        from src_old.models.agent import Agent
         normal_agent = Agent("normal1", "普通の人")
         world.add_agent(normal_agent)
         
@@ -289,7 +289,7 @@ class TestWorldIntegration:
         world = World()
         
         # 通常のエージェントで販売を試す
-        from src.models.agent import Agent
+        from src_old.models.agent import Agent
         normal_agent = Agent("normal1", "普通の人")
         world.add_agent(normal_agent)
         
@@ -303,7 +303,7 @@ class TestWorldIntegration:
         world = World()
         
         # スポット設定
-        from src.models.spot import Spot
+        from src_old.models.spot import Spot
         temple = Spot("temple", "静寂な神殿", "祈りを捧げる神殿")
         world.add_spot(temple)
         
@@ -317,7 +317,7 @@ class TestWorldIntegration:
         world.add_agent(dancer)
         
         # 顧客
-        from src.models.agent import Agent
+        from src_old.models.agent import Agent
         customer = Agent("customer1", "富裕な商人")
         customer.set_current_spot_id("temple")
         customer.add_money(500)

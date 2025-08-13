@@ -3,10 +3,10 @@
 個別機能を詳細にテストする
 """
 
-from src.models.agent import Agent
-from src.models.item import Item, ConsumableItem, ItemEffect
-from src.models.action import ItemUsage
-from src.systems.world import World
+from src_old.models.agent import Agent
+from src_old.models.item import Item, ConsumableItem, ItemEffect
+from src_old.models.action import ItemUsage
+from src_old.systems.world import World
 
 
 def test_item_effect_creation():
