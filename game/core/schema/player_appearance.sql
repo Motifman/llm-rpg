@@ -1,0 +1,7 @@
+-- CREATE TABLE IF NOT EXISTS player_appearance (
+--   player_id INTEGER NOT NULL REFERENCES player(player_id) ON DELETE CASCADE,
+--   slot      TEXT NOT NULL,
+--   value     TEXT NOT NULL,
+--   PRIMARY KEY (player_id, slot)
+-- );
+-- TODO: 定まっていないので一旦コメントアウト, おそらくアイテムのタイプに見た目を変えるものを新設する, 見た目を変えるアイテムはユニークアイテムにする
