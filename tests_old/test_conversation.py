@@ -8,12 +8,12 @@
 - ConversationManagerの動作確認
 """
 
-from src.systems.world import World
-from src.models.spot import Spot
-from src.models.agent import Agent
-from src.models.action import Conversation
-from src.systems.message import LocationChatMessage
-from src.systems.conversation import ConversationManager
+from src_old.systems.world import World
+from src_old.models.spot import Spot
+from src_old.models.agent import Agent
+from src_old.models.action import Conversation
+from src_old.systems.message import LocationChatMessage
+from src_old.systems.conversation import ConversationManager
 
 
 def setup_test_world():

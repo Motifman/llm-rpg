@@ -8,10 +8,10 @@
 4. 状態管理の簡素化
 """
 
-from src.systems.world_improved import ImprovedWorld
-from src.models.spot import Spot
-from src.models.agent import Agent
-from src.models.monster import Monster, MonsterType
+from src_old.systems.world_improved import ImprovedWorld
+from src_old.models.spot import Spot
+from src_old.models.agent import Agent
+from src_old.models.monster import Monster, MonsterType
 
 
 def create_improved_world():
@@ -257,7 +257,7 @@ def demonstrate_advanced_features(world: ImprovedWorld):
     player = world.get_agent("player_1")
     
     # 鍵を追加
-    from src.models.item import Item
+    from src_old.models.item import Item
     secret_key = Item("secret_key", "秘密の鍵")
     player.add_item(secret_key)
     

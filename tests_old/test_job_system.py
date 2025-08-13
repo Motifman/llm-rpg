@@ -1,8 +1,8 @@
 import pytest
-from src.models.job import JobAgent, JobType, Recipe, Service, CraftsmanAgent, MerchantAgent, AdventurerAgent, ProducerAgent
-from src.models.item import Item
-from src.models.action import CraftItem, EnhanceItem, LearnRecipe, SetupShop, ProvideService, GatherResource, ProcessMaterial, ManageFarm, AdvancedCombat
-from src.systems.world import World
+from src_old.models.job import JobAgent, JobType, Recipe, Service, CraftsmanAgent, MerchantAgent, AdventurerAgent, ProducerAgent
+from src_old.models.item import Item
+from src_old.models.action import CraftItem, EnhanceItem, LearnRecipe, SetupShop, ProvideService, GatherResource, ProcessMaterial, ManageFarm, AdvancedCombat
+from src_old.systems.world import World
 
 
 class TestJobAgent:

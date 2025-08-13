@@ -3,12 +3,12 @@ ConsumableItem合成機能のデモンストレーション
 CraftsmanAgentがConsumableItemを作成し、それを使用する一連の流れを実演
 """
 
-from src.models.spot import Spot
-from src.models.agent import Agent
-from src.models.item import Item, ConsumableItem, ItemEffect
-from src.models.job import CraftsmanAgent, AdventurerAgent, Recipe
-from src.models.action import CraftItem, ItemUsage
-from src.systems.world import World
+from src_old.models.spot import Spot
+from src_old.models.agent import Agent
+from src_old.models.item import Item, ConsumableItem, ItemEffect
+from src_old.models.job import CraftsmanAgent, AdventurerAgent, Recipe
+from src_old.models.action import CraftItem, ItemUsage
+from src_old.systems.world import World
 
 
 def create_demo_world():

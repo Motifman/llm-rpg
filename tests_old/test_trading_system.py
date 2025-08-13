@@ -3,12 +3,12 @@
 基本取引、エラーハンドリング、フィルタリング機能を含む
 """
 
-from src.models.spot import Spot
-from src.models.agent import Agent
-from src.models.item import Item, ConsumableItem, ItemEffect
-from src.models.action import PostTrade, ViewTrades, AcceptTrade, CancelTrade
-from src.models.trade import TradeOffer, TradeType, TradeStatus
-from src.systems.world import World
+from src_old.models.spot import Spot
+from src_old.models.agent import Agent
+from src_old.models.item import Item, ConsumableItem, ItemEffect
+from src_old.models.action import PostTrade, ViewTrades, AcceptTrade, CancelTrade
+from src_old.models.trade import TradeOffer, TradeType, TradeStatus
+from src_old.systems.world import World
 
 
 def create_trading_test_world():

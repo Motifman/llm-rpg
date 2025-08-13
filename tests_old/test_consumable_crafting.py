@@ -3,11 +3,11 @@ ConsumableItem合成機能のテスト
 CraftsmanAgentがConsumableItemを作成できることを確認
 """
 
-from src.models.agent import Agent
-from src.models.item import Item, ConsumableItem, ItemEffect
-from src.models.job import JobAgent, CraftsmanAgent, Recipe, JobType
-from src.models.action import CraftItem
-from src.systems.world import World
+from src_old.models.agent import Agent
+from src_old.models.item import Item, ConsumableItem, ItemEffect
+from src_old.models.job import JobAgent, CraftsmanAgent, Recipe, JobType
+from src_old.models.action import CraftItem
+from src_old.systems.world import World
 
 
 def test_recipe_with_consumable_item():
@@ -172,7 +172,7 @@ def test_world_integration_consumable_crafting():
     print(f"📊 使用前: MP={agent.current_mp}, 攻撃力={agent.attack}")
     
     # ConsumableItemを使用
-    from src.models.action import ItemUsage
+    from src_old.models.action import ItemUsage
     usage_action = ItemUsage("マナポーション使用", "mana_potion", 1)
     world.execute_action("alchemist1", usage_action)
     

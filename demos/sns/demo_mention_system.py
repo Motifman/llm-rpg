@@ -12,8 +12,8 @@
 7. プライベート投稿での制限
 """
 
-from src.systems.sns_system import SnsSystem
-from src.models.sns import NotificationType, PostVisibility
+from src_old.systems.sns_system import SnsSystem
+from src_old.models.sns import NotificationType, PostVisibility
 from datetime import datetime
 
 
