@@ -1,5 +1,5 @@
-from src.models.spot import Spot
-from src.models.action import Movement
+from src_old.models.spot import Spot
+from src_old.models.action import Movement
 
 
 def create_rpg_world_example():

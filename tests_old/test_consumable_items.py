@@ -3,11 +3,11 @@
 基本消費、エラーハンドリング、重複アイテム、統合テストを含む
 """
 
-from src.models.spot import Spot
-from src.models.agent import Agent
-from src.models.item import Item, ConsumableItem, ItemEffect
-from src.models.action import ItemUsage
-from src.systems.world import World
+from src_old.models.spot import Spot
+from src_old.models.agent import Agent
+from src_old.models.item import Item, ConsumableItem, ItemEffect
+from src_old.models.action import ItemUsage
+from src_old.systems.world import World
 
 
 def create_consumable_items_test_world():

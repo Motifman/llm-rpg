@@ -1,7 +1,7 @@
 import pytest
 from datetime import datetime, timedelta
-from src.systems.sns_system import SnsSystem
-from src.models.sns import SnsUser, Post, Follow, Like, Reply, Notification, NotificationType
+from src_old.systems.sns_system import SnsSystem
+from src_old.models.sns import SnsUser, Post, Follow, Like, Reply, Notification, NotificationType
 
 
 class TestSnsSystem:

@@ -1,7 +1,7 @@
 import pytest
 from datetime import datetime
-from src.systems.sns_system import SnsSystem
-from src.models.sns import NotificationType, PostVisibility
+from src_old.systems.sns_system import SnsSystem
+from src_old.models.sns import NotificationType, PostVisibility
 
 
 class TestMentionSystem:

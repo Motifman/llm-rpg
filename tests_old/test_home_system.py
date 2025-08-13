@@ -11,12 +11,12 @@
 6. エラーハンドリング
 """
 
-from src.systems.world import World
-from src.models.agent import Agent
-from src.models.item import Item
-from src.models.home import Home, HomePermission
-from src.models.home_interactables import Bed, Desk
-from src.models.action import WriteDiary, ReadDiary, Sleep, GrantHomePermission, StoreItem, RetrieveItem
+from src_old.systems.world import World
+from src_old.models.agent import Agent
+from src_old.models.item import Item
+from src_old.models.home import Home, HomePermission
+from src_old.models.home_interactables import Bed, Desk
+from src_old.models.action import WriteDiary, ReadDiary, Sleep, GrantHomePermission, StoreItem, RetrieveItem
 from datetime import datetime
 
 
@@ -295,7 +295,7 @@ def test_error_handling():
     # 家の外で日記を書こうとする
     town_square = world.spots.get("town_square")
     if not town_square:
-        from src.models.spot import Spot
+        from src_old.models.spot import Spot
         town_square = Spot("town_square", "街の中心部", "賑やかな街の中心部")
         world.add_spot(town_square)
     
@@ -340,7 +340,7 @@ def test_home_pricing():
     
     # 部屋を追加
     living_room = world.spots["basic_home_bedroom"]  # 寝室を取得
-    from src.models.spot import Spot
+    from src_old.models.spot import Spot
     kitchen = Spot("basic_home_kitchen", "キッチン", "調理ができるキッチン", "basic_home")
     world.add_spot(kitchen)
     basic_home.add_child_spot("basic_home_kitchen")

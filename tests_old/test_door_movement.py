@@ -1,10 +1,10 @@
-from src.models.spot import Spot
-from src.models.agent import Agent
-from src.models.item import Item
-from src.models.action import Interaction, InteractionType
-from src.models.interactable import Door
-from src.models.reward import ActionReward
-from src.systems.world import World
+from src_old.models.spot import Spot
+from src_old.models.agent import Agent
+from src_old.models.item import Item
+from src_old.models.action import Interaction, InteractionType
+from src_old.models.interactable import Door
+from src_old.models.reward import ActionReward
+from src_old.systems.world import World
 
 
 def create_door_movement_test_world():

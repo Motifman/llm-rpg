@@ -6,13 +6,13 @@
 同等の経済循環をより直感的なシステムで実現。
 """
 
-from src.models.agent import Agent
-from src.models.item import Item
-from src.models.spot_action import Role, Permission
-from src.models.shop_spots import ItemShopSpot, WeaponShopSpot, InnSpot
-from src.models.job_migration import JobAgentAdapter, WorldJobMigrationHelper
-from src.models.job import CraftsmanAgent, MerchantAgent, AdventurerAgent, ProducerAgent
-from src.systems.world import World
+from src_old.models.agent import Agent
+from src_old.models.item import Item
+from src_old.models.spot_action import Role, Permission
+from src_old.models.shop_spots import ItemShopSpot, WeaponShopSpot, InnSpot
+from src_old.models.job_migration import JobAgentAdapter, WorldJobMigrationHelper
+from src_old.models.job import CraftsmanAgent, MerchantAgent, AdventurerAgent, ProducerAgent
+from src_old.systems.world import World
 
 
 def create_migrated_demo_world():
@@ -52,7 +52,7 @@ def create_migrated_demo_world():
     print(f"  🏠 {inn.name} を設置")
     
     # 4. 採取場所（Spotベースの資源管理）
-    from src.models.spot import Spot
+    from src_old.models.spot import Spot
     forest = Spot("forest", "薬草の森", "薬草が豊富に自生する森")
     # 薬草を配置
     for _ in range(20):

@@ -1,8 +1,8 @@
 import pytest
-from src.systems.sns_system import SnsSystem
-from src.systems.sns_adapter import SnsAdapter
-from src.models.agent import Agent
-from src.models.sns import PostVisibility
+from src_old.systems.sns_system import SnsSystem
+from src_old.systems.sns_adapter import SnsAdapter
+from src_old.models.agent import Agent
+from src_old.models.sns import PostVisibility
 
 
 class TestPrivatePosts:

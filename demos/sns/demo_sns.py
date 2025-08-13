@@ -5,9 +5,9 @@ SNSシステムのデモンストレーション
 エージェント同士のSNS機能を実際に動作させてみるデモスクリプト
 """
 
-from src.systems.sns_system import SnsSystem
-from src.systems.sns_adapter import SnsAdapter
-from src.models.agent import Agent
+from src_old.systems.sns_system import SnsSystem
+from src_old.systems.sns_adapter import SnsAdapter
+from src_old.models.agent import Agent
 
 
 def print_separator(title: str):

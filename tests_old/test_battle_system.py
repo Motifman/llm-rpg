@@ -9,12 +9,12 @@
 - 攻撃的なモンスターとの強制戦闘
 """
 
-from src.systems.world import World
-from src.models.spot import Spot
-from src.models.agent import Agent
-from src.models.monster import Monster, MonsterType, MonsterDropReward
-from src.models.item import Item
-from src.models.action import Exploration, Movement, StartBattle, JoinBattle, AttackMonster, DefendBattle, EscapeBattle
+from src_old.systems.world import World
+from src_old.models.spot import Spot
+from src_old.models.agent import Agent
+from src_old.models.monster import Monster, MonsterType, MonsterDropReward
+from src_old.models.item import Item
+from src_old.models.action import Exploration, Movement, StartBattle, JoinBattle, AttackMonster, DefendBattle, EscapeBattle
 
 
 def create_battle_test_world():

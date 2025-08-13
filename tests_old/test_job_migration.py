@@ -5,12 +5,12 @@ JobシステムからSpotActionシステムへの移行テスト
 """
 
 import pytest
-from src.models.agent import Agent
-from src.models.job import JobAgent, JobType, CraftsmanAgent, MerchantAgent, ServiceProviderAgent, TraderAgent, ProducerAgent, AdventurerAgent
-from src.models.spot_action import Role, Permission
-from src.models.job_migration import JobToRoleMapper, JobAgentAdapter, WorldJobMigrationHelper
-from src.models.item import Item
-from src.systems.world import World
+from src_old.models.agent import Agent
+from src_old.models.job import JobAgent, JobType, CraftsmanAgent, MerchantAgent, ServiceProviderAgent, TraderAgent, ProducerAgent, AdventurerAgent
+from src_old.models.spot_action import Role, Permission
+from src_old.models.job_migration import JobToRoleMapper, JobAgentAdapter, WorldJobMigrationHelper
+from src_old.models.item import Item
+from src_old.systems.world import World
 
 
 def test_job_to_role_mapper():
