@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS sns_user (
+    user_id   INTEGER PRIMARY KEY AUTOINCREMENT REFERENCES player(player_id) ON DELETE CASCADE,
+    name      TEXT NOT NULL UNIQUE,
+    bio       TEXT DEFAULT '',
+    created_at INTEGER NOT NULL
+);
