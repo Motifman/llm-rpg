@@ -6,11 +6,11 @@ SpotActionシステムのデモンストレーション
 従来のJobシステムに依存しない、Spot固有の商店・宿屋サービスを実演。
 """
 
-from src.models.agent import Agent
-from src.models.item import Item
-from src.models.spot_action import Role, Permission
-from src.models.shop_spots import ItemShopSpot, WeaponShopSpot, InnSpot
-from src.systems.world import World
+from src_old.models.agent import Agent
+from src_old.models.item import Item
+from src_old.models.spot_action import Role, Permission
+from src_old.models.shop_spots import ItemShopSpot, WeaponShopSpot, InnSpot
+from src_old.systems.world import World
 
 
 def create_demo_world():
@@ -230,7 +230,7 @@ def demo_permission_system(world, agents):
     
     # 店主による価格設定（店主のみ可能）
     print(f"\n1️⃣ {shop_keeper.name}(店主)が価格設定...")
-    from src.models.shop_actions import SetItemPriceSpotAction
+    from src_old.models.shop_actions import SetItemPriceSpotAction
     price_action = SetItemPriceSpotAction("new_item", 20, 12)
     item_shop.add_spot_action(price_action)
     

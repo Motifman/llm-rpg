@@ -5,13 +5,13 @@ WeaponShopSpot、ItemShopSpot、InnSpotの動作を検証
 """
 
 import pytest
-from src.models.agent import Agent
-from src.models.item import Item
-from src.models.spot_action import Role, Permission
-from src.models.shop_spots import ShopSpot, ItemShopSpot, WeaponShopSpot, InnSpot
-from src.models.shop_actions import BuyItemSpotAction, SellItemSpotAction, ViewInventorySpotAction
-from src.models.inn_actions import StayOvernightAction, HealingServiceAction
-from src.systems.world import World
+from src_old.models.agent import Agent
+from src_old.models.item import Item
+from src_old.models.spot_action import Role, Permission
+from src_old.models.shop_spots import ShopSpot, ItemShopSpot, WeaponShopSpot, InnSpot
+from src_old.models.shop_actions import BuyItemSpotAction, SellItemSpotAction, ViewInventorySpotAction
+from src_old.models.inn_actions import StayOvernightAction, HealingServiceAction
+from src_old.systems.world import World
 
 
 def test_shop_spot_basic():
@@ -148,7 +148,7 @@ def test_weapon_shop_spot():
     assert shop.item_prices["iron_sword"]["buy_price"] == 150
     
     # 鍛冶師の特別権限確認
-    from src.models.spot_action import ActionPermissionChecker
+    from src_old.models.spot_action import ActionPermissionChecker
     blacksmith = Agent("blacksmith", "鍛冶師", Role.BLACKSMITH)
     permission = shop.permission_checker.get_agent_permission(blacksmith)
     assert permission == Permission.EMPLOYEE

@@ -1,14 +1,14 @@
 import pytest
-from src.models.spot import Spot
-from src.models.monster import Monster, MonsterType, MonsterDropReward
-from src.models.item import Item
-from src.models.job import AdventurerAgent
-from src.models.quest import QuestDifficulty
-from src.models.action import (
+from src_old.models.spot import Spot
+from src_old.models.monster import Monster, MonsterType, MonsterDropReward
+from src_old.models.item import Item
+from src_old.models.job import AdventurerAgent
+from src_old.models.quest import QuestDifficulty
+from src_old.models.action import (
     RegisterToGuild, PostQuestToGuild, ViewAvailableQuests, 
     AcceptQuest, StartBattle, AttackMonster, SubmitQuest
 )
-from src.systems.world import World
+from src_old.systems.world import World
 
 
 class TestBattleQuestIntegration:

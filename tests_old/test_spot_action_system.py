@@ -5,15 +5,15 @@ SpotActionシステムのテストケース
 """
 
 import pytest
-from src.models.spot import Spot
-from src.models.agent import Agent
-from src.models.item import Item
-from src.models.action import Movement
-from src.models.spot_action import (
+from src_old.models.spot import Spot
+from src_old.models.agent import Agent
+from src_old.models.item import Item
+from src_old.models.action import Movement
+from src_old.models.spot_action import (
     Role, Permission, SpotAction, ActionResult, ActionWarning,
     MovementSpotAction, ExplorationSpotAction
 )
-from src.systems.world import World
+from src_old.systems.world import World
 
 
 def create_test_world_with_spot_actions():
@@ -57,7 +57,7 @@ def test_role_system():
 
 def test_permission_system():
     """権限システムのテスト"""
-    from src.models.spot_action import ActionPermissionChecker
+    from src_old.models.spot_action import ActionPermissionChecker
     
     checker = ActionPermissionChecker("test_spot")
     

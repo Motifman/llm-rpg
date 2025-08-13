@@ -1,12 +1,12 @@
 import pytest
-from src.models.agent import Agent
-from src.models.monster import Monster, MonsterType, MonsterDropReward
-from src.models.weapon import (
+from src_old.models.agent import Agent
+from src_old.models.monster import Monster, MonsterType, MonsterDropReward
+from src_old.models.weapon import (
     Weapon, Armor, EquipmentSet, WeaponType, ArmorType, Element, Race, 
     StatusEffect, StatusCondition, WeaponEffect, ArmorEffect, DamageType
 )
-from src.models.item import Item
-from src.systems.battle import BattleManager
+from src_old.models.item import Item
+from src_old.systems.battle import BattleManager
 
 
 class TestWeaponSystem:
@@ -249,7 +249,7 @@ class TestBattleSystemIntegration:
         battle = self.battle_manager.get_battle(battle_id)
         
         # 攻撃実行（回避を考慮して複数回試行）
-        from src.models.action import AttackMonster
+        from src_old.models.action import AttackMonster
         attack_action = AttackMonster("ゴブリンを攻撃", "goblin")
         
         # 回避される可能性があるため、最大10回まで攻撃を試行
@@ -348,7 +348,7 @@ class TestAdvancedBattleFeatures:
         battle = battle_manager.get_battle(battle_id)
         
         # 1ターン目：エージェントの攻撃（麻痺付与）
-        from src.models.action import AttackMonster
+        from src_old.models.action import AttackMonster
         attack_action = AttackMonster("オークを攻撃", "orc")
         result = battle.execute_agent_action("mage", attack_action)
         
@@ -382,7 +382,7 @@ class TestAdvancedBattleFeatures:
         battle = battle_manager.get_battle(battle_id)
         
         # 混乱時の攻撃（自分攻撃になるはず）
-        from src.models.action import AttackMonster
+        from src_old.models.action import AttackMonster
         attack_action = AttackMonster("ダミーを攻撃", "dummy")
         
         initial_hp = agent.current_hp

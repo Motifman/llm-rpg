@@ -6,15 +6,15 @@ ServiceProviderAgent（サービス提供者）とTraderAgent（商人）の
 機能を実演し、実際の経済活動が行われることを示します。
 """
 
-from src.models.job import ServiceProviderAgent, TraderAgent, CraftsmanAgent, ProducerAgent
-from src.models.action import (
+from src_old.models.job import ServiceProviderAgent, TraderAgent, CraftsmanAgent, ProducerAgent
+from src_old.models.action import (
     SellItem, BuyItem, SetItemPrice, ManageInventory,
     ProvideLodging, ProvideDance, ProvidePrayer
 )
-from src.models.item import Item, ConsumableItem, ItemEffect
-from src.models.spot import Spot
-from src.models.agent import Agent
-from src.systems.world import World
+from src_old.models.item import Item, ConsumableItem, ItemEffect
+from src_old.models.spot import Spot
+from src_old.models.agent import Agent
+from src_old.systems.world import World
 
 
 def create_world_and_agents():

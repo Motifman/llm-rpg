@@ -12,17 +12,17 @@
 
 """
 
-from src.models.agent import Agent
-from src.models.monster import Monster, MonsterType, MonsterDropReward
-from src.models.weapon import (
+from src_old.models.agent import Agent
+from src_old.models.monster import Monster, MonsterType, MonsterDropReward
+from src_old.models.weapon import (
     Weapon, Armor, EquipmentSet, WeaponType, ArmorType, Element, Race, 
     StatusEffect, StatusCondition, WeaponEffect, ArmorEffect, DamageType
 )
-from src.models.item import Item
-from src.models.action import AttackMonster, DefendBattle, EscapeBattle
-from src.systems.battle import BattleManager
-from src.systems.world import World
-from src.models.spot import Spot
+from src_old.models.item import Item
+from src_old.models.action import AttackMonster, DefendBattle, EscapeBattle
+from src_old.systems.battle import BattleManager
+from src_old.systems.world import World
+from src_old.models.spot import Spot
 
 
 def create_legendary_weapons():
@@ -390,7 +390,7 @@ def demo_epic_dragon_battle():
     print("=" * 50)
     
     # 戦闘開始
-    from src.models.action import StartBattle
+    from src_old.models.action import StartBattle
     battle_id = world.execute_agent_start_battle("dragon_slayer_warrior", StartBattle("古代ドラゴンとの戦闘開始", "ancient_dragon"))
     battle = world.get_battle_manager().get_battle(battle_id)
     
@@ -476,7 +476,7 @@ def demo_multi_agent_battle():
     print("👥 === パーティ戦闘デモ === 👥")
     print()
     
-    from src.models.action import StartBattle, JoinBattle
+    from src_old.models.action import StartBattle, JoinBattle
     world, weapons, armors, monsters = setup_battle_scenario()
     
     # 戦士と暗殺者を作成
@@ -499,7 +499,7 @@ def demo_multi_agent_battle():
     battle = world.get_battle_manager().get_battle(battle_id)
     
     # 暗殺者が戦闘に参加
-    from src.models.action import JoinBattle
+    from src_old.models.action import JoinBattle
     battle = world.get_battle_manager().get_battle(battle_id)
     battle.add_participant(world.get_agent("shadow_assassin"))
     
