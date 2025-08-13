@@ -64,9 +64,12 @@ class PlayerRepository:
         # unique items
         unique_rows = self._db.query(
             """
-            SELECT iu.unique_item_id, iu.item_id, iu.durability, iu.attack, iu.defense
-            FROM item_unique iu
-            JOIN player_inventory_unique pu ON pu.unique_item_id = iu.unique_item_id
+            SELECT iu.unique_item_id, iu.item_id, iu.durability, iu.attack, iu.defense, i.name, i.description
+            FROM item_unique AS iu
+            JOIN player_inventory_unique AS pu
+                ON pu.unique_item_id = iu.unique_item_id
+            JOIN item AS i
+                ON i.item_id = iu.item_id
             WHERE pu.player_id = ?
             """,
             (player_id,),
@@ -74,6 +77,8 @@ class PlayerRepository:
         unique_items: Dict[int, Dict[str, Any]] = {
             int(r["unique_item_id"]): {
                 "item_id": int(r["item_id"]),
+                "name": r["name"],
+                "description": r["description"],
                 "durability": int(r["durability"]),
                 "attack": None if r["attack"] is None else int(r["attack"]),
                 "defense": None if r["defense"] is None else int(r["defense"]),
@@ -84,9 +89,12 @@ class PlayerRepository:
         # equipment
         equip_rows = self._db.query(
             """
-            SELECT pe.slot, pe.unique_item_id, iu.item_id
-            FROM player_equipment pe
-            LEFT JOIN item_unique iu ON iu.unique_item_id = pe.unique_item_id
+            SELECT pe.slot, pe.unique_item_id, iu.item_id, i.name, i.description
+            FROM player_equipment AS pe
+            LEFT JOIN item_unique AS iu
+                ON iu.unique_item_id = pe.unique_item_id
+            LEFT JOIN item AS i
+                ON i.item_id = iu.item_id
             WHERE pe.player_id = ?
             """,
             (player_id,),
@@ -96,6 +104,8 @@ class PlayerRepository:
             equipment[str(r["slot"])] = {
                 "unique_item_id": int(r["unique_item_id"]),
                 "item_id": None if r["item_id"] is None else int(r["item_id"]),
+                "name": r["name"],
+                "description": r["description"],
             }
 
         return {
