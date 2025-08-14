@@ -1,6 +1,9 @@
-from typing import List
+from typing import List, Optional
+from domain.item.item import Item
+from domain.item.unique_item import UniqueItem
 from domain.player.base_status import BaseStatus
 from domain.player.dynamic_status import DynamicStatus
+from domain.player.inventory import Inventory
 from domain.player.enum import Role, PlayerState, StatusEffectType
 from application.battle.dtos import StatusEffectDto
 
@@ -17,6 +20,7 @@ class Player:
         current_spot_id: int,
         base_status: BaseStatus,
         dynamic_status: DynamicStatus,
+        inventory: Inventory,
     ):
         self._player_id = player_id
         self._name = name
@@ -25,8 +29,8 @@ class Player:
         self._current_spot_id = current_spot_id
         self._base_status = base_status
         self._dynamic_status = dynamic_status
+        self._inventory = inventory
         # あとで実装
-        # self._inventory = Inventory()
         # self._equipment = EquipmentSet()
         # self._appearance = AppearanceSet()
     
@@ -78,6 +82,7 @@ class Player:
         return base + effect_bonus
 
     # ===== ビジネスロジックの実装 =====
+    # ===== ステータス =====
     def take_damage(self, damage: int):
         """ダメージを受ける"""
         assert damage > 0, "damage must be greater than 0"
@@ -187,3 +192,32 @@ class Player:
         assert amount > 0, "amount must be greater than 0"
         assert self._dynamic_status.exp >= amount, "exp must be greater than or equal to amount"
         self._dynamic_status.add_exp(-amount)
+        
+    # ===== インベントリ =====
+    def add_stackable_item(self, item: Item, count: int = 1):
+        """スタック可能アイテムを追加"""
+        self._inventory.add_stackable(item, count)
+    
+    def remove_stackable_item(self, item_id: int, count: int = 1):
+        """スタック可能アイテムを削除"""
+        self._inventory.remove_stackable(item_id, count)
+    
+    def has_stackable_item(self, item_id: int, at_least: int = 1) -> bool:
+        """スタック可能アイテムを持っているかどうか"""
+        return self._inventory.has_stackable(item_id, at_least)
+    
+    def add_unique_item(self, unique_item: UniqueItem):
+        """ユニークアイテムを追加"""
+        self._inventory.add_unique(unique_item)
+    
+    def remove_unique_item(self, unique_item_id: int):
+        """ユニークアイテムを削除"""
+        self._inventory.remove_unique(unique_item_id)
+    
+    def has_unique_item(self, unique_item_id: int) -> bool:
+        """ユニークアイテムを持っているかどうか"""
+        return self._inventory.has_unique(unique_item_id)
+    
+    def get_inventory_display(self) -> str:
+        """インベントリの表示"""
+        return self._inventory.get_inventory_display()

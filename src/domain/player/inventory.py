@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import Dict, List, Optional
-
 from domain.item.item import Item
 from domain.item.unique_item import UniqueItem
 
@@ -24,6 +23,7 @@ class Inventory:
 
     # ===== スタック可能アイテム =====
     def add_stackable(self, item: Item, count: int = 1) -> None:
+        """スタック可能アイテムを追加"""
         assert count > 0, "count must be greater than 0"
         current = self._stackable_counts.get(item.item_id, 0)
         self._stackable_counts[item.item_id] = current + count
@@ -31,6 +31,7 @@ class Inventory:
             self._stackable_refs[item.item_id] = item
 
     def remove_stackable(self, item_id: int, count: int = 1) -> int:
+        """スタック可能アイテムを削除"""
         if count <= 0:
             return 0
         if item_id not in self._stackable_counts:
@@ -47,43 +48,54 @@ class Inventory:
         return removed
 
     def get_stackable_count(self, item_id: int) -> int:
+        """スタック可能アイテムの数を取得"""
         return self._stackable_counts.get(item_id, 0)
 
     def has_stackable(self, item_id: int, at_least: int = 1) -> bool:
+        """スタック可能アイテムを持っているかどうか"""
         assert at_least > 0, "at_least must be greater than 0"
         return self.get_stackable_count(item_id) >= at_least
 
     def get_stackable_item(self, item_id: int) -> Optional[Item]:
+        """スタック可能アイテムを取得"""
         return self._stackable_refs.get(item_id)
 
     # ===== ユニークアイテム =====
     def add_unique(self, unique_item: UniqueItem) -> None:
+        """ユニークアイテムを追加"""
         # 同じunique_idが既に存在していないことを前提
         self._unique_items[unique_item.id] = unique_item
 
     def remove_unique(self, unique_item_id: int) -> bool:
+        """ユニークアイテムを削除"""
         if unique_item_id in self._unique_items:
             del self._unique_items[unique_item_id]
             return True
         return False
 
     def get_unique(self, unique_item_id: int) -> Optional[UniqueItem]:
+        """ユニークアイテムを取得"""
         return self._unique_items.get(unique_item_id)
 
     def list_uniques_by_item_id(self, item_id: int) -> List[UniqueItem]:
+        """アイテムIDに紐づくユニークアイテムを取得"""
         return [u for u in self._unique_items.values() if u.item.item_id == item_id]
 
     def has_unique_by_item_id(self, item_id: int) -> bool:
+        """アイテムIDに紐づくユニークアイテムを持っているかどうか"""
         return any(u.item.item_id == item_id for u in self._unique_items.values())
 
     # ===== 集計/ユーティリティ =====
     def get_total_item_count(self) -> int:
+        """アイテムの総数を取得"""
         return sum(self._stackable_counts.values()) + len(self._unique_items)
 
     def is_empty(self) -> bool:
+        """インベントリが空かどうか"""
         return not self._stackable_counts and not self._unique_items
 
     def get_inventory_display(self) -> str:
+        """インベントリの表示"""
         if self.is_empty():
             return "インベントリは空です。"
         lines: List[str] = ["=== インベントリ ==="]
