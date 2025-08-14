@@ -4,11 +4,9 @@ from domain.item.unique_item import UniqueItem
 from domain.player.base_status import BaseStatus
 from domain.player.dynamic_status import DynamicStatus
 from domain.player.inventory import Inventory
+from domain.player.equipment_set import EquipmentSet
 from domain.player.enum import Role, PlayerState, StatusEffectType
 from application.battle.dtos import StatusEffectDto
-
-
-# TODO 装備の効果をのちに追加
 class Player:
     """プレイヤークラス"""
     
@@ -21,6 +19,7 @@ class Player:
         base_status: BaseStatus,
         dynamic_status: DynamicStatus,
         inventory: Inventory,
+        equipment_set: Optional[EquipmentSet] = None,
     ):
         self._player_id = player_id
         self._name = name
@@ -30,9 +29,8 @@ class Player:
         self._base_status = base_status
         self._dynamic_status = dynamic_status
         self._inventory = inventory
-        # あとで実装
-        # self._equipment = EquipmentSet()
-        # self._appearance = AppearanceSet()
+        self._equipment = equipment_set or EquipmentSet()
+        # self._appearance = AppearanceSet()  # 将来実装
     
     # ===== 基本情報 =====
     @property
@@ -62,24 +60,27 @@ class Player:
     
     @property
     def attack(self) -> int:
-        """攻撃力を取得"""
+        """攻撃力を取得（ベース + 装備ボーナス + 状態異常ボーナス）"""
         base = self._base_status.attack
+        equipment_bonus = self._equipment.get_attack_bonus()
         effect_bonus = self._dynamic_status.get_effect_bonus(StatusEffectType.ATTACK_UP)
-        return base + effect_bonus
+        return base + equipment_bonus + effect_bonus
     
     @property
     def defense(self) -> int:
-        """防御力を取得"""
+        """防御力を取得（ベース + 装備ボーナス + 状態異常ボーナス）"""
         base = self._base_status.defense
+        equipment_bonus = self._equipment.get_defense_bonus()
         effect_bonus = self._dynamic_status.get_effect_bonus(StatusEffectType.DEFENSE_UP)
-        return base + effect_bonus
+        return base + equipment_bonus + effect_bonus
     
     @property
     def speed(self) -> int:
-        """素早さを取得"""
+        """素早さを取得（ベース + 装備ボーナス + 状態異常ボーナス）"""
         base = self._base_status.speed
+        equipment_bonus = self._equipment.get_speed_bonus()
         effect_bonus = self._dynamic_status.get_effect_bonus(StatusEffectType.SPEED_UP)
-        return base + effect_bonus
+        return base + equipment_bonus + effect_bonus
 
     # ===== ビジネスロジックの実装 =====
     # ===== ステータス =====
@@ -216,8 +217,102 @@ class Player:
     
     def has_unique_item(self, unique_item_id: int) -> bool:
         """ユニークアイテムを持っているかどうか"""
-        return self._inventory.has_unique(unique_item_id)
+        return self._inventory.get_unique(unique_item_id) is not None
     
     def get_inventory_display(self) -> str:
         """インベントリの表示"""
         return self._inventory.get_inventory_display()
+    
+    # ===== 装備 =====
+    @property
+    def equipment(self) -> EquipmentSet:
+        """装備セットを取得"""
+        return self._equipment
+    
+    def equip_item_from_inventory(self, unique_item_id: int) -> bool:
+        """インベントリからアイテムを装備する
+        
+        Returns:
+            bool: 装備に成功した場合True
+        """
+        unique_item = self._inventory.get_unique(unique_item_id)
+        if not unique_item:
+            return False
+        
+        try:
+            # アイテムタイプに応じて装備
+            from domain.item.enum import ItemType
+            previous_equipment = None
+            
+            if unique_item.item.type == ItemType.HELMET:
+                previous_equipment = self._equipment.equip_helmet(unique_item)
+            elif unique_item.item.type == ItemType.CHEST:
+                previous_equipment = self._equipment.equip_chest(unique_item)
+            elif unique_item.item.type == ItemType.GLOVES:
+                previous_equipment = self._equipment.equip_gloves(unique_item)
+            elif unique_item.item.type == ItemType.SHOES:
+                previous_equipment = self._equipment.equip_shoes(unique_item)
+            else:
+                return False  # 装備できないタイプ
+            
+            # インベントリから削除
+            self._inventory.remove_unique(unique_item_id)
+            
+            # 外した装備があればインベントリに戻す
+            if previous_equipment:
+                self._inventory.add_unique(previous_equipment)
+            
+            return True
+            
+        except ValueError:
+            return False  # 装備に失敗（破損など）
+    
+    def unequip_item_to_inventory(self, slot_type: str) -> bool:
+        """装備を外してインベントリに戻す
+        
+        Args:
+            slot_type: "helmet", "chest", "gloves", "shoes"のいずれか
+            
+        Returns:
+            bool: 脱装に成功した場合True
+        """
+        removed_equipment = None
+        
+        if slot_type == "helmet":
+            removed_equipment = self._equipment.unequip_helmet()
+        elif slot_type == "chest":
+            removed_equipment = self._equipment.unequip_chest()
+        elif slot_type == "gloves":
+            removed_equipment = self._equipment.unequip_gloves()
+        elif slot_type == "shoes":
+            removed_equipment = self._equipment.unequip_shoes()
+        else:
+            return False  # 無効なスロットタイプ
+        
+        if removed_equipment:
+            self._inventory.add_unique(removed_equipment)
+            return True
+        
+        return False  # 何も装備していなかった
+    
+    def get_equipment_display(self) -> str:
+        """装備の表示"""
+        return self._equipment.get_equipment_display()
+    
+    def get_full_status_display(self) -> str:
+        """プレイヤーの全ステータス表示"""
+        lines = [f"=== {self.name} ({self.role.value}) ==="]
+        lines.append(f"HP: {self._dynamic_status.hp}/{self._dynamic_status.max_hp}")
+        lines.append(f"所持金: {self._dynamic_status.gold} G")
+        lines.append(f"経験値: {self._dynamic_status.exp}")
+        lines.append("")
+        lines.append("=== ステータス ===")
+        lines.append(f"攻撃力: {self.attack} (ベース:{self._base_status.attack} + 装備:{self._equipment.get_attack_bonus()} + 効果:{self._dynamic_status.get_effect_bonus(StatusEffectType.ATTACK_UP)})")
+        lines.append(f"防御力: {self.defense} (ベース:{self._base_status.defense} + 装備:{self._equipment.get_defense_bonus()} + 効果:{self._dynamic_status.get_effect_bonus(StatusEffectType.DEFENSE_UP)})")
+        lines.append(f"素早さ: {self.speed} (ベース:{self._base_status.speed} + 装備:{self._equipment.get_speed_bonus()} + 効果:{self._dynamic_status.get_effect_bonus(StatusEffectType.SPEED_UP)})")
+        lines.append("")
+        lines.append(self.get_equipment_display())
+        lines.append("")
+        lines.append(self.get_inventory_display())
+        
+        return "\n".join(lines)

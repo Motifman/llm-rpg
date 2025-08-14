@@ -2,6 +2,7 @@ import pytest
 
 from domain.player.base_status import BaseStatus
 from domain.player.dynamic_status import DynamicStatus
+from domain.player.inventory import Inventory
 from domain.player.enum import Role, StatusEffectType
 from domain.player.player import Player
 
@@ -12,7 +13,8 @@ def make_player(
 ):
     base = base or BaseStatus(attack=10, defense=5, speed=7, critical_rate=0.1, evasion_rate=0.05)
     dyn = dyn or DynamicStatus(hp=20, mp=10, max_hp=20, max_mp=10, exp=0, level=1, gold=0)
-    return Player(player_id=1, name="Hero", role=Role.ADVENTURER, current_spot_id=100, base_status=base, dynamic_status=dyn)
+    inventory = Inventory()
+    return Player(player_id=1, name="Hero", role=Role.ADVENTURER, current_spot_id=100, base_status=base, dynamic_status=dyn, inventory=inventory)
 
 
 @pytest.mark.unit
