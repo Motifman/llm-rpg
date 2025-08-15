@@ -55,19 +55,19 @@ class TestPlayerStatusBasics:
 
     def test_gold_and_exp_gate(self):
         player = make_player()
-        player.add_gold(10)
+        player.receive_gold(10)
         assert player._dynamic_status.gold == 10
-        player.spend_gold(3)
+        player.pay_gold(3)
         assert player._dynamic_status.gold == 7
         with pytest.raises(AssertionError):
-            player.spend_gold(100)
+            player.pay_gold(100)
 
-        player.add_exp(5)
+        player.receive_exp(5)
         assert player._dynamic_status.exp == 5
-        player.spend_exp(2)
+        player.pay_exp(2)
         assert player._dynamic_status.exp == 3
         with pytest.raises(AssertionError):
-            player.spend_exp(100)
+            player.pay_exp(100)
 
 
 @pytest.mark.unit
