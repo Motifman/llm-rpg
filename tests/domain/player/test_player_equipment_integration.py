@@ -94,7 +94,7 @@ class TestPlayerEquipmentIntegration:
         helmet = sample_equipment_items["helmet"]
         
         # インベントリに追加
-        sample_player.add_unique_item(helmet)
+        sample_player.add_item(helmet)
         assert sample_player.has_unique_item(helmet.id)
         
         # 装備実行
@@ -118,13 +118,13 @@ class TestPlayerEquipmentIntegration:
         helmet2 = UniqueItem(id=10, item=helmet2_item, durability=120, defense=8)
         
         # 最初のヘルメットを装備
-        sample_player.add_unique_item(helmet1)
+        sample_player.add_item(helmet1)
         sample_player.equip_item_from_inventory(helmet1.id)
         assert sample_player.equipment.helmet == helmet1
         assert sample_player.defense == 10  # 5 + 5
         
         # 2つ目のヘルメットに付け替え
-        sample_player.add_unique_item(helmet2)
+        sample_player.add_item(helmet2)
         sample_player.equip_item_from_inventory(helmet2.id)
         assert sample_player.equipment.helmet == helmet2
         assert sample_player.defense == 13  # 5 + 8
@@ -155,7 +155,7 @@ class TestPlayerEquipmentIntegration:
         )
         consumable = UniqueItem(id=20, item=consumable_item, durability=1)
         
-        sample_player.add_unique_item(consumable)
+        sample_player.add_item(consumable)
         
         # 装備しようとするが失敗
         success = sample_player.equip_item_from_inventory(consumable.id)
@@ -171,7 +171,7 @@ class TestPlayerEquipmentIntegration:
         )
         broken_helmet = UniqueItem(id=30, item=helmet_item, durability=0, defense=1)
         
-        sample_player.add_unique_item(broken_helmet)
+        sample_player.add_item(broken_helmet)
         
         # 装備しようとするが失敗
         success = sample_player.equip_item_from_inventory(broken_helmet.id)

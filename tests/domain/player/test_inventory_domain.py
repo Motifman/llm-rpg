@@ -24,7 +24,7 @@ class TestInventoryStackable:
         potion = make_item(1, name="Potion")
         inv.add_stackable(potion, count=3)
         assert inv.get_stackable_count(1) == 3
-        assert inv.get_stackable_item(1) == potion
+        assert inv.get_stackable(1) == potion
 
         removed = inv.remove_stackable(1, count=2)
         assert removed == 2
@@ -33,7 +33,7 @@ class TestInventoryStackable:
         removed = inv.remove_stackable(1, count=5)
         assert removed == 1
         assert inv.get_stackable_count(1) == 0
-        assert inv.get_stackable_item(1) is None
+        assert inv.get_stackable(1) is None
 
     def test_has_stackable_at_least(self):
         inv = Inventory()

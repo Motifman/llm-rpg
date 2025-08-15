@@ -56,7 +56,7 @@ class Inventory:
         assert at_least > 0, "at_least must be greater than 0"
         return self.get_stackable_count(item_id) >= at_least
 
-    def get_stackable_item(self, item_id: int) -> Optional[Item]:
+    def get_stackable(self, item_id: int) -> Optional[Item]:
         """スタック可能アイテムを取得"""
         return self._stackable_refs.get(item_id)
 
@@ -80,6 +80,10 @@ class Inventory:
     def list_uniques_by_item_id(self, item_id: int) -> List[UniqueItem]:
         """アイテムIDに紐づくユニークアイテムを取得"""
         return [u for u in self._unique_items.values() if u.item.item_id == item_id]
+
+    def has_unique(self, unique_item_id: int) -> bool:
+        """ユニークアイテムを持っているかどうか"""
+        return unique_item_id in self._unique_items
 
     def has_unique_by_item_id(self, item_id: int) -> bool:
         """アイテムIDに紐づくユニークアイテムを持っているかどうか"""

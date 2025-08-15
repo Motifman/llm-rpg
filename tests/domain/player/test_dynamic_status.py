@@ -37,13 +37,13 @@ class TestDynamicStatus:
 
     def test_gold_and_exp_never_negative(self):
         status = DynamicStatus(hp=5, mp=1, max_hp=5, max_mp=1, exp=10, gold=10)
-        status.add_gold(-5)
+        status.receive_gold(-5)
         assert status.gold == 5
-        status.add_gold(-100)
+        status.receive_gold(-100)
         assert status.gold == 0
-        status.add_exp(-3)
+        status.receive_exp(-3)
         assert status.exp == 7
-        status.add_exp(-100)
+        status.receive_exp(-100)
         assert status.exp == 0
 
     def test_defend_flags(self):
