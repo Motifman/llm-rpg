@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Union
 from domain.item.item import Item
 from domain.item.unique_item import UniqueItem
 from domain.player.base_status import BaseStatus
@@ -7,6 +7,9 @@ from domain.player.inventory import Inventory
 from domain.player.equipment_set import EquipmentSet
 from domain.player.enum import Role, PlayerState, StatusEffectType
 from application.battle.dtos import StatusEffectDto
+from domain.trade.trade import TradeItem
+
+
 class Player:
     """プレイヤークラス"""
     
@@ -172,56 +175,108 @@ class Player:
             return False
         return self.is_alive() and not self.is_defending()
         
-    def add_gold(self, amount: int):
+    def receive_gold(self, amount: int):
         """所持金を追加"""
         assert amount > 0, "amount must be greater than 0"
-        self._dynamic_status.add_gold(amount)
+        self._dynamic_status.receive_gold(amount)
     
-    def spend_gold(self, amount: int):
+    def pay_gold(self, amount: int):
         """所持金を支払う"""
         assert amount > 0, "amount must be greater than 0"
         assert self._dynamic_status.gold >= amount, "gold must be greater than or equal to amount"
-        self._dynamic_status.add_gold(-amount)
+        self._dynamic_status.pay_gold(amount)
     
-    def add_exp(self, amount: int):
+    def can_pay_gold(self, amount: int) -> bool:
+        """所持金が足りるかどうか"""
+        return self._dynamic_status.can_pay_gold(amount)
+
+    def receive_exp(self, amount: int):
         """経験値を追加"""
         assert amount > 0, "amount must be greater than 0"
-        self._dynamic_status.add_exp(amount)
+        self._dynamic_status.receive_exp(amount)
     
-    def spend_exp(self, amount: int):
+    def pay_exp(self, amount: int):
         """経験値を消費"""
         assert amount > 0, "amount must be greater than 0"
         assert self._dynamic_status.exp >= amount, "exp must be greater than or equal to amount"
-        self._dynamic_status.add_exp(-amount)
-        
+        self._dynamic_status.pay_exp(amount)
+    
+    def can_pay_exp(self, amount: int) -> bool:
+        """経験値が足りるかどうか"""
+        return self._dynamic_status.can_pay_exp(amount)
+    
     # ===== インベントリ =====
-    def add_stackable_item(self, item: Item, count: int = 1):
-        """スタック可能アイテムを追加"""
-        self._inventory.add_stackable(item, count)
+    def add_item(self, item: Union[Item, UniqueItem], count: int = 1):
+        """アイテムを追加"""
+        assert count > 0, "count must be greater than 0"
+        if isinstance(item, Item):
+            self._inventory.add_stackable(item, count)
+        elif isinstance(item, UniqueItem):
+            self._inventory.add_unique(item)
+        else:
+            raise ValueError("Invalid item type")
     
-    def remove_stackable_item(self, item_id: int, count: int = 1):
-        """スタック可能アイテムを削除"""
-        self._inventory.remove_stackable(item_id, count)
+    def remove_item(self, item_id: Optional[int] = None, count: Optional[int] = None, unique_item_id: Optional[int] = None):
+        """アイテムを削除"""
+        is_stackable = item_id is not None and count is not None
+        is_unique = unique_item_id is not None
+        assert is_stackable or is_unique, "item_id and count or unique_item_id must be provided"
+        assert not (is_stackable and is_unique), "item_id and count or unique_item_id must not be provided at the same time"
+        if is_stackable:
+            assert count > 0, "count must be greater than 0"
+            self._inventory.remove_stackable(item_id, count)
+        else:
+            self._inventory.remove_unique(unique_item_id)
     
-    def has_stackable_item(self, item_id: int, at_least: int = 1) -> bool:
-        """スタック可能アイテムを持っているかどうか"""
-        return self._inventory.has_stackable(item_id, at_least)
+    def get_stackable_item(self, item_id: int) -> Optional[Item]:
+        """スタック可能アイテムを取得"""
+        return self._inventory.get_stackable(item_id)
     
-    def add_unique_item(self, unique_item: UniqueItem):
-        """ユニークアイテムを追加"""
-        self._inventory.add_unique(unique_item)
-    
-    def remove_unique_item(self, unique_item_id: int):
-        """ユニークアイテムを削除"""
-        self._inventory.remove_unique(unique_item_id)
-    
-    def has_unique_item(self, unique_item_id: int) -> bool:
-        """ユニークアイテムを持っているかどうか"""
-        return self._inventory.get_unique(unique_item_id) is not None
+    def get_unique_item(self, unique_item_id: int) -> Optional[UniqueItem]:
+        """ユニークアイテムを取得"""
+        return self._inventory.get_unique(unique_item_id)
     
     def get_inventory_display(self) -> str:
         """インベントリの表示"""
         return self._inventory.get_inventory_display()
+
+    def has_stackable_item(self, item_id: int, count: int = 1) -> bool:
+        """スタック可能アイテムを持っているかどうか"""
+        return self._inventory.has_stackable(item_id, count)
+    
+    def has_unique_item(self, unique_item_id: int) -> bool:
+        """ユニークアイテムを持っているかどうか"""
+        return self._inventory.has_unique(unique_item_id)
+
+    # ===== 取引関連 =====
+    def can_offer_item(self, trade_item: TradeItem) -> bool:
+        """アイテムを取引できるかどうか"""
+        if trade_item.unique_id is not None:
+            return self.has_unique_item(trade_item.unique_id)
+        else:
+            return self.has_stackable_item(trade_item.item_id, trade_item.count)
+    
+    def transfer_item_to(self, player: "Player", trade_item: TradeItem):
+        """アイテムを別のプレイヤーに移動"""
+        if trade_item.unique_id is not None:
+            unique_item = self._inventory.get_unique(trade_item.unique_id)
+            if unique_item is None:
+                raise ValueError(f"Unique item not found: {trade_item.unique_id}")
+            player.add_item(unique_item)
+            self._inventory.remove_unique(trade_item.unique_id)
+        else:
+            stackable_item = self._inventory.get_stackable(trade_item.item_id)
+            if stackable_item is None:
+                raise ValueError(f"Stackable item not found: {trade_item.item_id}")
+            player.add_item(stackable_item, trade_item.count)
+            self._inventory.remove_stackable(trade_item.item_id, trade_item.count)
+    
+    def transfer_gold_to(self, player: "Player", amount: int):
+        """所持金を別のプレイヤーに移動"""
+        if not self.can_pay_gold(amount):
+            raise ValueError(f"Player does not have enough gold: {amount}")
+        self.pay_gold(amount)
+        player.receive_gold(amount)
     
     # ===== 装備 =====
     @property

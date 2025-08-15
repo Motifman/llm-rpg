@@ -94,13 +94,29 @@ class DynamicStatus:
         """生存しているかどうか"""
         return self._hp > 0
     
-    def add_gold(self, amount: int):
+    def receive_gold(self, amount: int):
         """所持金を追加"""
         self._gold = max(0, self._gold + amount)
     
-    def add_exp(self, amount: int):
+    def pay_gold(self, amount: int):
+        """所持金を支払う"""
+        self._gold = max(0, self._gold - amount)
+    
+    def can_pay_gold(self, amount: int) -> bool:
+        """所持金が足りるかどうか"""
+        return self._gold >= amount
+    
+    def receive_exp(self, amount: int):
         """経験値を追加"""
         self._exp = max(0, self._exp + amount)
+    
+    def pay_exp(self, amount: int):
+        """経験値を支払う"""
+        self._exp = max(0, self._exp - amount)
+    
+    def can_pay_exp(self, amount: int) -> bool:
+        """経験値が足りるかどうか"""
+        return self._exp >= amount
     
     def level_up(self):
         """レベルアップ"""
