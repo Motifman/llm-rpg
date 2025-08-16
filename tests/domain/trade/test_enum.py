@@ -1,5 +1,5 @@
 import pytest
-from domain.trade.trade_enum import TradeType, TradeStatus
+from src.domain.trade.trade_enum import TradeType, TradeStatus
 
 
 class TestTradeType:

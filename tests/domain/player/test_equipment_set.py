@@ -1,8 +1,8 @@
 import pytest
-from domain.item.item import Item
-from domain.item.unique_item import UniqueItem
-from domain.item.item_enum import ItemType, Rarity
-from domain.player.equipment_set import EquipmentSet
+from src.domain.item.item import Item
+from src.domain.item.unique_item import UniqueItem
+from src.domain.item.item_enum import ItemType, Rarity
+from src.domain.player.equipment_set import EquipmentSet
 
 
 class TestEquipmentSet:
