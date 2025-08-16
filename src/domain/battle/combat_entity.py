@@ -126,13 +126,13 @@ class CombatEntity(ABC):
         """ターン開始時に実行し、該当する状態異常のメッセージを返す"""
         results: List[StatusEffectResult] = []
         if self.has_status_effect(StatusEffectType.PARALYSIS):
-            results.append(StatusEffectResult(StatusEffectType.PARALYSIS, f"{self.name}は麻痺で動けない！"))
+            results.append(StatusEffectResult(status_effect_type=StatusEffectType.PARALYSIS, message=f"{self.name}は麻痺で動けない！"))
         if self.has_status_effect(StatusEffectType.SLEEP):
-            results.append(StatusEffectResult(StatusEffectType.SLEEP, f"{self.name}は眠っていて行動できない…"))
+            results.append(StatusEffectResult(status_effect_type=StatusEffectType.SLEEP, message=f"{self.name}は眠っていて行動できない…"))
         if self.has_status_effect(StatusEffectType.CONFUSION):
             damage = max(1, self.attack // 2)
             self._dynamic_status.take_damage(damage)
-            results.append(StatusEffectResult(StatusEffectType.CONFUSION, f"{self.name}は混乱して自分を攻撃！ {damage}のダメージ", damage_dealt=damage))
+            results.append(StatusEffectResult(status_effect_type=StatusEffectType.CONFUSION, message=f"{self.name}は混乱して自分を攻撃！ {damage}のダメージ", damage_dealt=damage))
         return results
 
     def process_status_effects_on_turn_end(self) -> List[StatusEffectResult]:
@@ -141,16 +141,16 @@ class CombatEntity(ABC):
         if self.has_status_effect(StatusEffectType.POISON):
             damage = self._dynamic_status.get_effect_damage(StatusEffectType.POISON)
             self._dynamic_status.take_damage(damage)
-            results.append(StatusEffectResult(StatusEffectType.POISON, f"{self.name}は毒により{damage}のダメージを受けた", damage_dealt=damage))
+            results.append(StatusEffectResult(status_effect_type=StatusEffectType.POISON, message=f"{self.name}は毒により{damage}のダメージを受けた", damage_dealt=damage))
         if self.has_status_effect(StatusEffectType.BURN):
             damage = self._dynamic_status.get_effect_damage(StatusEffectType.BURN)
             self._dynamic_status.take_damage(damage)
-            results.append(StatusEffectResult(StatusEffectType.BURN, f"{self.name}は火傷により{damage}のダメージを受けた", damage_dealt=damage))
+            results.append(StatusEffectResult(status_effect_type=StatusEffectType.BURN, message=f"{self.name}は火傷により{damage}のダメージを受けた", damage_dealt=damage))
         if self.has_status_effect(StatusEffectType.BLESSING):
             bonus = self._dynamic_status.get_effect_bonus(StatusEffectType.BLESSING)
             if bonus > 0:
                 self._dynamic_status.heal(bonus)
-                results.append(StatusEffectResult(StatusEffectType.BLESSING, f"{self.name}は加護により{bonus}回復した", healing_done=bonus))
+                results.append(StatusEffectResult(status_effect_type=StatusEffectType.BLESSING, message=f"{self.name}は加護により{bonus}回復した", healing_done=bonus))
         return results
 
     def progress_status_effects_on_turn_end(self) -> None:
