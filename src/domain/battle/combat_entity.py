@@ -3,7 +3,7 @@ from typing import List
 from src.domain.player.base_status import BaseStatus
 from src.domain.player.dynamic_status import DynamicStatus
 from src.domain.monster.monster_enum import Race
-from src.domain.battle.battle_enum import StatusEffectType
+from src.domain.battle.battle_enum import StatusEffectType, Element
 from src.domain.battle.status_effect_result import StatusEffectResult
 
 
@@ -14,12 +14,14 @@ class CombatEntity(ABC):
         self,
         name: str,
         race: Race,
+        element: Element,
         current_spot_id: int,
         base_status: BaseStatus,
         dynamic_status: DynamicStatus,
     ):
         self._name = name
         self._race = race
+        self._element = element
         self._current_spot_id = current_spot_id
         self._base_status = base_status
         self._dynamic_status = dynamic_status
@@ -34,6 +36,11 @@ class CombatEntity(ABC):
     def race(self) -> Race:
         """種族を取得"""
         return self._race
+    
+    @property
+    def element(self) -> Element:
+        """属性を取得"""
+        return self._element
     
     @property
     def current_spot_id(self) -> int:

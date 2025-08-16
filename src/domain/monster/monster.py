@@ -6,7 +6,6 @@ from src.domain.player.base_status import BaseStatus
 from src.domain.player.dynamic_status import DynamicStatus
 from src.domain.battle.battle_enum import StatusEffectType, Element
 from src.domain.battle.battle_action import BattleAction
-from src.domain.battle.status_effect_result import StatusEffectResult
 from src.domain.battle.combat_entity import CombatEntity
 
 
@@ -26,13 +25,12 @@ class Monster(CombatEntity):
         drop_reward: DropReward
     ):
         # 基底クラスの初期化
-        super().__init__(name, race, current_spot_id, base_status, dynamic_status)
+        super().__init__(name, race, element, current_spot_id, base_status, dynamic_status)
         
         # モンスター固有の属性
         self._monster_instance_id = monster_instance_id
         self._monster_type_id = monster_type_id
         self._description = description
-        self._element = element
         self._available_actions = available_actions
         self._drop_reward = drop_reward
     
@@ -47,12 +45,6 @@ class Monster(CombatEntity):
     @property
     def description(self) -> str:
         return self._description
-    
-    @property
-    def element(self) -> Element:
-        return self._element
-
-
 
     # ===== モンスター固有のメソッド =====
     

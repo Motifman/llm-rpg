@@ -9,7 +9,7 @@ from src.domain.player.player_enum import Role, PlayerState
 from src.domain.trade.trade import TradeItem
 from src.domain.conversation.message import Message
 from src.domain.conversation.message_box import MessageBox
-from src.domain.battle.battle_enum import StatusEffectType
+from src.domain.battle.battle_enum import StatusEffectType, Element
 from src.domain.battle.status_effect_result import StatusEffectResult
 from src.domain.battle.combat_entity import CombatEntity
 from src.domain.monster.monster_enum import Race
@@ -30,9 +30,10 @@ class Player(CombatEntity):
         equipment_set: EquipmentSet,
         message_box: MessageBox,
         race: Race = Race.HUMAN,
+        element: Element = Element.NEUTRAL,
     ):
         # 基底クラスの初期化
-        super().__init__(name, race, current_spot_id, base_status, dynamic_status)
+        super().__init__(name, race, element, current_spot_id, base_status, dynamic_status)
         
         # プレイヤー固有の属性
         self._player_id = player_id
