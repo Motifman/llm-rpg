@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
-from typing import Set, List, Dict
-from src.domain.player.player import Player
-from src.domain.spot.road import Road, Condition
+from typing import Set, List
+from src.domain.spot.road import Road
+from src.domain.spot.area import Area
 
 
 @dataclass
@@ -11,6 +11,7 @@ class Spot:
     description: str
     current_player_ids: Set[int] = field(default_factory=set)
     roads: List[Road] = field(default_factory=list)
+    area: Area = field(default_factory=None)
     
     # ===== プレイヤー管理 =====
     def add_player(self, player_id: int):
@@ -53,3 +54,8 @@ class Spot:
     
     def get_spot_summary(self) -> str:
         return f"{self.name} (id:{self.spot_id}) {self.description}"
+
+    def get_spot_summary_with_area(self) -> str:
+        if self.area is None:
+            return self.get_spot_summary()
+        return f"{self.name} (id:{self.spot_id}) {self.description} (area:{self.area.name})"
