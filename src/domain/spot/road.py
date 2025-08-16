@@ -53,8 +53,6 @@ class Condition:
             return ConditionCheckResult(
                 condition=self,
                 is_satisfied=is_satisfied,
-                current_value=current_level,
-                required_value=self.value,
                 message=message
             )
         elif self.condition_type == ConditionType.HAS_ITEM:
@@ -63,18 +61,15 @@ class Condition:
             return ConditionCheckResult(
                 condition=self,
                 is_satisfied=has_item,
-                required_value=self.value,
                 message=message
             )
         elif self.condition_type == ConditionType.HAS_GOLD:
-            current_gold = player.gold  # playerにgoldプロパティがあると仮定
+            current_gold = player.gold
             can_pay = player.can_pay_gold(self.value)
             message = f"ゴールド {self.value} 以上が必要 (現在: {current_gold})"
             return ConditionCheckResult(
                 condition=self,
                 is_satisfied=can_pay,
-                current_value=current_gold,
-                required_value=self.value,
                 message=message
             )
         elif self.condition_type == ConditionType.HAS_ROLE:
@@ -84,8 +79,6 @@ class Condition:
             return ConditionCheckResult(
                 condition=self,
                 is_satisfied=has_role,
-                current_value=current_role,
-                required_value=self.value,
                 message=message
             )
         else:

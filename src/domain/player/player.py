@@ -5,7 +5,7 @@ from src.domain.player.base_status import BaseStatus
 from src.domain.player.dynamic_status import DynamicStatus
 from src.domain.player.inventory import Inventory
 from src.domain.player.equipment_set import EquipmentSet
-from domain.player.player_enum import Role, PlayerState, StatusEffectType
+from src.domain.player.player_enum import Role, PlayerState, StatusEffectType
 from src.domain.trade.trade import TradeItem
 from src.application.battle.dtos import StatusEffectDto
 from src.domain.conversation.message import Message
@@ -88,6 +88,16 @@ class Player:
         equipment_bonus = self._equipment.get_speed_bonus()
         effect_bonus = self._dynamic_status.get_effect_bonus(StatusEffectType.SPEED_UP)
         return base + equipment_bonus + effect_bonus
+    
+    @property
+    def level(self) -> int:
+        """レベルを取得"""
+        return self._dynamic_status.level
+    
+    @property
+    def gold(self) -> int:
+        """所持金を取得"""
+        return self._dynamic_status.gold
 
     # ===== ビジネスロジックの実装 =====
     # ===== ステータス =====
@@ -308,7 +318,7 @@ class Player:
         
         try:
             # アイテムタイプに応じて装備
-            from domain.item.item_enum import ItemType
+            from src.domain.item.item_enum import ItemType
             previous_equipment = None
             
             if unique_item.item.type == ItemType.HELMET:
