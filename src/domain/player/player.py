@@ -209,6 +209,14 @@ class Player:
         """経験値が足りるかどうか"""
         return self._dynamic_status.can_pay_exp(amount)
     
+    def level_up(self):
+        """レベルアップ"""
+        self._dynamic_status.level_up()
+    
+    def level_is_above(self, level: int) -> bool:
+        """指定したレベルより上かどうか"""
+        return self._dynamic_status.level_is_above(level)
+    
     # ===== インベントリ =====
     def add_item(self, item: Union[Item, UniqueItem], count: int = 1):
         """アイテムを追加"""
