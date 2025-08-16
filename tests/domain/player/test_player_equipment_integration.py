@@ -6,6 +6,7 @@ from domain.player.base_status import BaseStatus
 from domain.player.dynamic_status import DynamicStatus
 from domain.player.inventory import Inventory
 from domain.player.equipment_set import EquipmentSet
+from domain.conversation.message_box import MessageBox
 from domain.player.player_enum import Role
 from src.domain.battle.battle_enum import StatusEffectType
 from domain.player.player import Player
@@ -20,6 +21,8 @@ class TestPlayerEquipmentIntegration:
         base_status = BaseStatus(attack=10, defense=5, speed=7, critical_rate=0.1, evasion_rate=0.05)
         dynamic_status = DynamicStatus(hp=100, mp=50, max_hp=100, max_mp=50, exp=0, level=1, gold=1000)
         inventory = Inventory()
+        equipment_set = EquipmentSet()
+        message_box = MessageBox()
         
         return Player(
             player_id=1,
@@ -28,7 +31,9 @@ class TestPlayerEquipmentIntegration:
             current_spot_id=100,
             base_status=base_status,
             dynamic_status=dynamic_status,
-            inventory=inventory
+            inventory=inventory,
+            equipment_set=equipment_set,
+            message_box=message_box
         )
     
     @pytest.fixture
