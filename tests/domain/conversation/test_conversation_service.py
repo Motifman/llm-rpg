@@ -4,6 +4,7 @@ from datetime import datetime
 from domain.player.base_status import BaseStatus
 from domain.player.dynamic_status import DynamicStatus
 from domain.player.inventory import Inventory
+from domain.player.equipment_set import EquipmentSet
 from domain.player.player_enum import Role
 from domain.player.player import Player
 from src.domain.conversation.conversation_service import ConversationService
@@ -15,6 +16,7 @@ def make_player(player_id: int, name: str, current_spot_id: int):
     base = BaseStatus(attack=10, defense=5, speed=7, critical_rate=0.1, evasion_rate=0.05)
     dyn = DynamicStatus(hp=20, mp=10, max_hp=20, max_mp=10, exp=0, level=1, gold=0)
     inventory = Inventory()
+    equipment_set = EquipmentSet()
     message_box = MessageBox()
     return Player(
         player_id=player_id,
@@ -24,6 +26,7 @@ def make_player(player_id: int, name: str, current_spot_id: int):
         base_status=base,
         dynamic_status=dyn,
         inventory=inventory,
+        equipment_set=equipment_set,
         message_box=message_box
     )
 
