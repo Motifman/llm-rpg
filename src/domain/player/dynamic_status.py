@@ -120,7 +120,11 @@ class DynamicStatus:
     
     def level_up(self):
         """レベルアップ"""
-        pass
+        self._level += 1
+    
+    def level_is_above(self, level: int) -> bool:
+        """指定したレベルより上かどうか"""
+        return self._level > level
     
     def defend(self):
         """防御"""
