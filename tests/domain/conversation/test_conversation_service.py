@@ -4,7 +4,7 @@ from datetime import datetime
 from domain.player.base_status import BaseStatus
 from domain.player.dynamic_status import DynamicStatus
 from domain.player.inventory import Inventory
-from domain.player.enum import Role
+from domain.player.player_enum import Role
 from domain.player.player import Player
 from src.domain.conversation.conversation_service import ConversationService
 from src.domain.conversation.message_box import MessageBox

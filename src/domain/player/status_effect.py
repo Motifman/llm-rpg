@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from domain.player.enum import StatusEffectType
+from domain.player.player_enum import StatusEffectType
  
 
 
