@@ -5,11 +5,12 @@ from src.domain.player.base_status import BaseStatus
 from src.domain.player.dynamic_status import DynamicStatus
 from src.domain.player.inventory import Inventory
 from src.domain.player.equipment_set import EquipmentSet
-from src.domain.player.player_enum import Role, PlayerState, StatusEffectType
+from src.domain.player.player_enum import Role, PlayerState
 from src.domain.trade.trade import TradeItem
-from src.application.battle.dtos import StatusEffectDto
 from src.domain.conversation.message import Message
 from src.domain.conversation.message_box import MessageBox
+from src.domain.battle.battle_enum import StatusEffectType
+from src.domain.battle.status_effect_result import StatusEffectResult
 
 
 class Player:
@@ -98,6 +99,31 @@ class Player:
     def gold(self) -> int:
         """所持金を取得"""
         return self._dynamic_status.gold
+    
+    @property
+    def hp(self) -> int:
+        """HPを取得"""
+        return self._dynamic_status.hp
+    
+    @property
+    def mp(self) -> int:
+        """MPを取得"""
+        return self._dynamic_status.mp
+    
+    @property
+    def max_hp(self) -> int:
+        """最大HPを取得"""
+        return self._dynamic_status.max_hp
+    
+    @property
+    def max_mp(self) -> int:
+        """最大MPを取得"""
+        return self._dynamic_status.max_mp
+    
+    @property
+    def exp(self) -> int:
+        """経験値を取得"""
+        return self._dynamic_status.exp
 
     # ===== ビジネスロジックの実装 =====
     # ===== ステータス =====
@@ -140,35 +166,35 @@ class Player:
         """防御解除"""
         self._dynamic_status.un_defend()
 
-    def process_status_effects_on_turn_start(self) -> List[StatusEffectDto]:
+    def process_status_effects_on_turn_start(self) -> List[StatusEffectResult]:
         """ターン開始時に実行し、該当する状態異常のメッセージを返す"""
-        results: List[StatusEffectDto] = []
+        results: List[StatusEffectResult] = []
         if self.has_status_effect(StatusEffectType.PARALYSIS):
-            results.append(StatusEffectDto(StatusEffectType.PARALYSIS, f"{self.name}は麻痺で動けない！"))
+            results.append(StatusEffectResult(StatusEffectType.PARALYSIS, f"{self.name}は麻痺で動けない！"))
         if self.has_status_effect(StatusEffectType.SLEEP):
-            results.append(StatusEffectDto(StatusEffectType.SLEEP, f"{self.name}は眠っていて行動できない…"))
+            results.append(StatusEffectResult(StatusEffectType.SLEEP, f"{self.name}は眠っていて行動できない…"))
         if self.has_status_effect(StatusEffectType.CONFUSION):
             damage = max(1, self.attack // 2)
             self._dynamic_status.take_damage(damage)
-            results.append(StatusEffectDto(StatusEffectType.CONFUSION, f"{self.name}は混乱して自分を攻撃！ {damage}のダメージ"))
+            results.append(StatusEffectResult(StatusEffectType.CONFUSION, f"{self.name}は混乱して自分を攻撃！ {damage}のダメージ"), damage_dealt=damage)
         return results
 
-    def process_status_effects_on_turn_end(self) -> List[StatusEffectDto]:
+    def process_status_effects_on_turn_end(self) -> List[StatusEffectResult]:
         """ターン終了時に実行し、該当する状態異常のメッセージを返す"""
-        results: List[StatusEffectDto] = []
+        results: List[StatusEffectResult] = []
         if self.has_status_effect(StatusEffectType.POISON):
             damage = self._dynamic_status.get_effect_damage(StatusEffectType.POISON)
             self._dynamic_status.take_damage(damage)
-            results.append(StatusEffectDto(StatusEffectType.POISON, f"{self.name}は毒により{damage}のダメージを受けた"))
+            results.append(StatusEffectResult(StatusEffectType.POISON, f"{self.name}は毒により{damage}のダメージを受けた"), damage_dealt=damage)
         if self.has_status_effect(StatusEffectType.BURN):
             damage = self._dynamic_status.get_effect_damage(StatusEffectType.BURN)
             self._dynamic_status.take_damage(damage)
-            results.append(StatusEffectDto(StatusEffectType.BURN, f"{self.name}は火傷により{damage}のダメージを受けた"))
+            results.append(StatusEffectResult(StatusEffectType.BURN, f"{self.name}は火傷により{damage}のダメージを受けた"), damage_dealt=damage)
         if self.has_status_effect(StatusEffectType.BLESSING):
             bonus = self._dynamic_status.get_effect_bonus(StatusEffectType.BLESSING)
             if bonus > 0:
                 self._dynamic_status.heal(bonus)
-                results.append(StatusEffectDto(StatusEffectType.BLESSING, f"{self.name}は加護により{bonus}回復した"))
+                results.append(StatusEffectResult(StatusEffectType.BLESSING, f"{self.name}は加護により{bonus}回復した"), healing_done=bonus)
         return results
 
     def progress_status_effects_on_turn_end(self) -> None:
@@ -379,9 +405,10 @@ class Player:
     def get_full_status_display(self) -> str:
         """プレイヤーの全ステータス表示"""
         lines = [f"=== {self.name} ({self.role.value}) ==="]
-        lines.append(f"HP: {self._dynamic_status.hp}/{self._dynamic_status.max_hp}")
-        lines.append(f"所持金: {self._dynamic_status.gold} G")
-        lines.append(f"経験値: {self._dynamic_status.exp}")
+        lines.append(f"HP: {self.hp}/{self.max_hp}")
+        lines.append(f"MP: {self.mp}/{self.max_mp}")
+        lines.append(f"所持金: {self.gold} G")
+        lines.append(f"経験値: {self.exp}")
         lines.append("")
         lines.append("=== ステータス ===")
         lines.append(f"攻撃力: {self.attack} (ベース:{self._base_status.attack} + 装備:{self._equipment.get_attack_bonus()} + 効果:{self._dynamic_status.get_effect_bonus(StatusEffectType.ATTACK_UP)})")
