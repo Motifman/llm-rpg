@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from domain.item.item import Item
+from src.domain.item.item import Item
 
 
 @dataclass
