@@ -1,12 +1,12 @@
 import pytest
 from domain.item.item import Item
 from domain.item.unique_item import UniqueItem
-from domain.item.enum import ItemType, Rarity
+from domain.item.item_enum import ItemType, Rarity
 from domain.player.base_status import BaseStatus
 from domain.player.dynamic_status import DynamicStatus
 from domain.player.inventory import Inventory
 from domain.player.equipment_set import EquipmentSet
-from domain.player.enum import Role, StatusEffectType
+from domain.player.player_enum import Role, StatusEffectType
 from domain.player.player import Player
 
 

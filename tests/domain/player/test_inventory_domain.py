@@ -1,6 +1,6 @@
 import pytest
 
-from domain.item.enum import ItemType, Rarity
+from domain.item.item_enum import ItemType, Rarity
 from domain.item.item import Item
 from domain.item.unique_item import UniqueItem
 from domain.player.inventory import Inventory

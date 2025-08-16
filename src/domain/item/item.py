@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from domain.item.enum import ItemType, Rarity
+from src.domain.item.item_enum import ItemType, Rarity
 
 
 @dataclass(frozen=True)
