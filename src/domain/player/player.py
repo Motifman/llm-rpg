@@ -395,3 +395,8 @@ class Player:
         if len(messages) == 0:
             return ""
         return "\n".join([message.display() for message in messages])
+
+    # ===== スポット移動 =====
+    def set_current_spot_id(self, spot_id: int):
+        """現在のスポットIDを設定"""
+        self._current_spot_id = spot_id
