@@ -1,6 +1,8 @@
 from dataclasses import dataclass
-from typing import List
-from src.domain.spot.spot import Spot
+from typing import List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.domain.spot.spot import Spot
 
 
 @dataclass(frozen=True)

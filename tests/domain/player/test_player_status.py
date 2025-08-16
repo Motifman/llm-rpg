@@ -3,7 +3,8 @@ import pytest
 from domain.player.base_status import BaseStatus
 from domain.player.dynamic_status import DynamicStatus
 from domain.player.inventory import Inventory
-from domain.player.player_enum import Role, StatusEffectType
+from domain.player.player_enum import Role
+from src.domain.battle.battle_enum import StatusEffectType
 from domain.player.player import Player
 
 
