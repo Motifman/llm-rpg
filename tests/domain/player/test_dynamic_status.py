@@ -1,7 +1,7 @@
 import pytest
 
 from domain.player.dynamic_status import DynamicStatus
-from domain.player.player_enum import StatusEffectType
+from src.domain.battle.battle_enum import StatusEffectType
 
 
 @pytest.mark.unit

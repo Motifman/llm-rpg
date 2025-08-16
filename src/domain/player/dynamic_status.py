@@ -1,6 +1,6 @@
 from typing import Dict, TYPE_CHECKING, Optional
-from src.domain.player.player_enum import StatusEffectType
-from src.domain.player.status_effect import StatusEffect
+from src.domain.battle.battle_enum import StatusEffectType
+from src.domain.battle.status_effect import StatusEffect
 
 
 class DynamicStatus:
