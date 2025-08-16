@@ -5,7 +5,7 @@ from src.domain.player.base_status import BaseStatus
 from src.domain.player.dynamic_status import DynamicStatus
 from src.domain.player.inventory import Inventory
 from src.domain.player.equipment_set import EquipmentSet
-from src.domain.player.enum import Role, PlayerState, StatusEffectType
+from domain.player.player_enum import Role, PlayerState, StatusEffectType
 from src.domain.trade.trade import TradeItem
 from src.application.battle.dtos import StatusEffectDto
 from src.domain.conversation.message import Message
@@ -24,8 +24,8 @@ class Player:
         base_status: BaseStatus,
         dynamic_status: DynamicStatus,
         inventory: Inventory,
-        equipment_set: Optional[EquipmentSet] = None,
-        message_box: Optional[MessageBox] = None,
+        equipment_set: EquipmentSet,
+        message_box: MessageBox,
     ):
         self._player_id = player_id
         self._name = name
@@ -35,8 +35,8 @@ class Player:
         self._base_status = base_status
         self._dynamic_status = dynamic_status
         self._inventory = inventory
-        self._equipment = equipment_set or EquipmentSet()
-        self._message_box = message_box or MessageBox()
+        self._equipment = equipment_set
+        self._message_box = message_box
         # self._appearance = AppearanceSet()  # 将来実装
     
     # ===== 基本情報 =====
@@ -308,7 +308,7 @@ class Player:
         
         try:
             # アイテムタイプに応じて装備
-            from domain.item.enum import ItemType
+            from domain.item.item_enum import ItemType
             previous_equipment = None
             
             if unique_item.item.type == ItemType.HELMET:
