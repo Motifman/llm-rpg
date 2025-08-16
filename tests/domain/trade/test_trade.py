@@ -2,7 +2,7 @@ import pytest
 from datetime import datetime
 from src.domain.trade.trade import TradeItem, TradeOffer
 from domain.trade.trade_enum import TradeType, TradeStatus
-from src.domain.trade.exception import (
+from domain.trade.trade_exception import (
     InvalidTradeStatusException,
     CannotAcceptOwnTradeException,
     CannotAcceptTradeWithOtherPlayerException,

@@ -1,5 +1,5 @@
 import pytest
-from src.domain.trade.exception import (
+from domain.trade.trade_exception import (
     TradeException,
     InvalidTradeStatusException,
     CannotAcceptOwnTradeException,

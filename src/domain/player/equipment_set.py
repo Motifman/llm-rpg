@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional, Dict, List
 from domain.item.item import Item
 from domain.item.unique_item import UniqueItem
-from domain.item.enum import ItemType
+from domain.item.item_enum import ItemType
 
 
 class EquipmentSet:
