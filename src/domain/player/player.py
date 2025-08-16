@@ -1,13 +1,15 @@
 from typing import List, Optional, Union
-from domain.item.item import Item
-from domain.item.unique_item import UniqueItem
-from domain.player.base_status import BaseStatus
-from domain.player.dynamic_status import DynamicStatus
-from domain.player.inventory import Inventory
-from domain.player.equipment_set import EquipmentSet
-from domain.player.enum import Role, PlayerState, StatusEffectType
-from application.battle.dtos import StatusEffectDto
-from domain.trade.trade import TradeItem
+from src.domain.item.item import Item
+from src.domain.item.unique_item import UniqueItem
+from src.domain.player.base_status import BaseStatus
+from src.domain.player.dynamic_status import DynamicStatus
+from src.domain.player.inventory import Inventory
+from src.domain.player.equipment_set import EquipmentSet
+from src.domain.player.enum import Role, PlayerState, StatusEffectType
+from src.domain.trade.trade import TradeItem
+from src.application.battle.dtos import StatusEffectDto
+from src.domain.conversation.message import Message
+from src.domain.conversation.message_box import MessageBox
 
 
 class Player:
@@ -23,6 +25,7 @@ class Player:
         dynamic_status: DynamicStatus,
         inventory: Inventory,
         equipment_set: Optional[EquipmentSet] = None,
+        message_box: Optional[MessageBox] = None,
     ):
         self._player_id = player_id
         self._name = name
@@ -33,6 +36,7 @@ class Player:
         self._dynamic_status = dynamic_status
         self._inventory = inventory
         self._equipment = equipment_set or EquipmentSet()
+        self._message_box = message_box or MessageBox()
         # self._appearance = AppearanceSet()  # 将来実装
     
     # ===== 基本情報 =====
@@ -371,3 +375,15 @@ class Player:
         lines.append(self.get_inventory_display())
         
         return "\n".join(lines)
+
+    # ===== メッセージ =====
+    def receive_message(self, message: Message):
+        """メッセージを受信"""
+        self._message_box.append(message)
+    
+    def read_messages(self) -> str:
+        """メッセージを既読にして表示"""
+        messages = self._message_box.read_all()
+        if len(messages) == 0:
+            return ""
+        return "\n".join([message.display() for message in messages])
