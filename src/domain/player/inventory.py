@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from typing import Dict, List, Optional
-from domain.item.item import Item
-from domain.item.unique_item import UniqueItem
+from src.domain.item.item import Item
+from src.domain.item.unique_item import UniqueItem
 
 
 class Inventory:

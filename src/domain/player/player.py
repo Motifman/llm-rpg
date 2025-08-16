@@ -1,6 +1,6 @@
 from typing import List, Optional, Union
-from domain.item.item import Item
-from domain.item.unique_item import UniqueItem
+from src.domain.item.item import Item
+from src.domain.item.unique_item import UniqueItem
 from src.domain.player.base_status import BaseStatus
 from src.domain.player.dynamic_status import DynamicStatus
 from src.domain.player.inventory import Inventory
@@ -233,7 +233,7 @@ class Player(CombatEntity):
         
         try:
             # アイテムタイプに応じて装備
-            from domain.item.item_enum import ItemType
+            from src.domain.item.item_enum import ItemType
             previous_equipment = None
             
             if unique_item.item.type == ItemType.HELMET:

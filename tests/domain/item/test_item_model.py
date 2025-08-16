@@ -1,8 +1,8 @@
 import pytest
 
-from domain.item.item_enum import ItemType, Rarity
-from domain.item.item import Item
-from domain.item.unique_item import UniqueItem
+from src.domain.item.item_enum import ItemType, Rarity
+from src.domain.item.item import Item
+from src.domain.item.unique_item import UniqueItem
 
 
 @pytest.mark.unit

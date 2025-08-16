@@ -1,6 +1,6 @@
 import pytest
 
-from domain.player.dynamic_status import DynamicStatus
+from src.domain.player.dynamic_status import DynamicStatus
 from src.domain.battle.battle_enum import StatusEffectType
 
 
