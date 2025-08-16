@@ -1,6 +1,6 @@
 from src.domain.trade.trade import TradeOffer
 from src.domain.player.player import Player
-from domain.trade.trade_exception import (
+from src.domain.trade.trade_exception import (
     InsufficientItemsException,
     InsufficientGoldException,
 )

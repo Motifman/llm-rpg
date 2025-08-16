@@ -1,12 +1,12 @@
 import pytest
 from datetime import datetime
 
-from domain.player.base_status import BaseStatus
-from domain.player.dynamic_status import DynamicStatus
-from domain.player.inventory import Inventory
-from domain.player.equipment_set import EquipmentSet
-from domain.player.player_enum import Role
-from domain.player.player import Player
+from src.domain.player.base_status import BaseStatus
+from src.domain.player.dynamic_status import DynamicStatus
+from src.domain.player.inventory import Inventory
+from src.domain.player.equipment_set import EquipmentSet
+from src.domain.player.player_enum import Role
+from src.domain.player.player import Player
 from src.domain.conversation.conversation_service import ConversationService
 from src.domain.conversation.message_box import MessageBox
 

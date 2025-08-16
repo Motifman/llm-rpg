@@ -1,15 +1,15 @@
 import pytest
-from domain.item.item import Item
-from domain.item.unique_item import UniqueItem
-from domain.item.item_enum import ItemType, Rarity
-from domain.player.base_status import BaseStatus
-from domain.player.dynamic_status import DynamicStatus
-from domain.player.inventory import Inventory
-from domain.player.equipment_set import EquipmentSet
-from domain.conversation.message_box import MessageBox
-from domain.player.player_enum import Role
+from src.domain.item.item import Item
+from src.domain.item.unique_item import UniqueItem
+from src.domain.item.item_enum import ItemType, Rarity
+from src.domain.player.base_status import BaseStatus
+from src.domain.player.dynamic_status import DynamicStatus
+from src.domain.player.inventory import Inventory
+from src.domain.player.equipment_set import EquipmentSet
+from src.domain.conversation.message_box import MessageBox
+from src.domain.player.player_enum import Role
 from src.domain.battle.battle_enum import StatusEffectType
-from domain.player.player import Player
+from src.domain.player.player import Player
 
 
 class TestPlayerEquipmentIntegration:
