@@ -3,8 +3,8 @@ from unittest.mock import Mock, patch
 from datetime import datetime
 from src.domain.trade.trade_service import TradeService
 from src.domain.trade.trade import TradeOffer, TradeItem
-from src.domain.trade.enum import TradeType, TradeStatus
-from src.domain.trade.exception import (
+from domain.trade.trade_enum import TradeType, TradeStatus
+from domain.trade.trade_exception import (
     InsufficientItemsException,
     InsufficientGoldException,
     InvalidTradeStatusException,

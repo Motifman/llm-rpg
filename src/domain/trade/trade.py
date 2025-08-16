@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import Optional
 from datetime import datetime
-from src.domain.trade.enum import TradeType, TradeStatus
-from src.domain.trade.exception import (
+from domain.trade.trade_enum import TradeType, TradeStatus
+from domain.trade.trade_exception import (
     InvalidTradeStatusException,
     CannotAcceptOwnTradeException,
     CannotAcceptTradeWithOtherPlayerException,
