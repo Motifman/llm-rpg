@@ -2,6 +2,7 @@ from enum import Enum
 from dataclasses import dataclass
 from typing import Optional
 from src.domain.battle.battle_enum import StatusEffectType, Element
+from src.domain.battle.status_effect import StatusEffect
 
 
 class ActionType(Enum):
@@ -27,9 +28,7 @@ class BattleAction:
     element: Optional[Element] = None
     
     # ステータス系
-    status_effect_type: Optional[StatusEffectType] = None
-    status_effect_duration: int = 0
-    status_effect_value: int = 0
+    status_effect: Optional[StatusEffect] = None
     
     # コスト
     mp_cost: int = 0
@@ -44,4 +43,5 @@ class BattleAction:
         assert 0 <= self.critical_rate <= 1.0, "critical_rate must be between 0 and 1"
         assert self.mp_cost >= 0, "mp_cost must be non-negative"
         assert self.damage >= 0, "damage must be non-negative"
-        assert self.status_effect_duration >= 0, "status_effect_duration must be non-negative"
+        if self.status_effect is not None:
+            assert self.status_effect.duration >= 0, "status_effect_duration must be non-negative"

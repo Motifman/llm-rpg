@@ -18,13 +18,13 @@ class TestItemCatalog:
         )
         assert item.can_be_traded() is True
 
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             Item(item_id=-1, name="n", description="d", price=0, type=ItemType.OTHER, rarity=Rarity.COMMON)
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             Item(item_id=1, name="", description="d", price=0, type=ItemType.OTHER, rarity=Rarity.COMMON)
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             Item(item_id=1, name="n", description="", price=0, type=ItemType.OTHER, rarity=Rarity.COMMON)
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             Item(item_id=1, name="n", description="d", price=-1, type=ItemType.OTHER, rarity=Rarity.COMMON)
 
 
