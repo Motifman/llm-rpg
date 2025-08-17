@@ -124,7 +124,7 @@ class TestPOI:
         condition = POIUnlockCondition(required_items={1})
         reward = POIReward(information="宝箱を発見", gold=100, exp=50)
         return POI(
-            poi_id="treasure_1",
+            poi_id=1,
             name="古い宝箱",
             description="苔むした古い宝箱が隠されている",
             poi_type=POIType.TREASURE,
@@ -134,7 +134,7 @@ class TestPOI:
     
     def test_poi_creation(self, sample_poi):
         """POIの作成"""
-        assert sample_poi._poi_id == "treasure_1"
+        assert sample_poi._poi_id == 1
         assert sample_poi._name == "古い宝箱"
         assert sample_poi._description == "苔むした古い宝箱が隠されている"
         assert sample_poi._poi_type == POIType.TREASURE
@@ -173,7 +173,7 @@ class TestPOI:
         
         # MONSTER_LAIR
         monster_poi = POI(
-            poi_id="monster_1",
+            poi_id=2,
             name="怪物の巣",
             description="恐ろしい怪物が潜んでいる",
             poi_type=POIType.MONSTER_LAIR,
@@ -184,7 +184,7 @@ class TestPOI:
         
         # SECRET_PASSAGE
         secret_poi = POI(
-            poi_id="secret_1",
+            poi_id=3,
             name="隠し通路",
             description="秘密の通路への入り口",
             poi_type=POIType.SECRET_PASSAGE,
@@ -195,7 +195,7 @@ class TestPOI:
         
         # INFORMATION
         info_poi = POI(
-            poi_id="info_1",
+            poi_id=4,
             name="古い石碑",
             description="古代文字が刻まれた石碑",
             poi_type=POIType.INFORMATION,
@@ -212,7 +212,7 @@ class TestPOI:
         )
         reward = POIReward(information="秘密を発見")
         poi = POI(
-            poi_id="complex_1",
+            poi_id=5,
             name="秘密の部屋",
             description="複雑な条件で開く秘密の部屋",
             poi_type=POIType.SECRET_PASSAGE,

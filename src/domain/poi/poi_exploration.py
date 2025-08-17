@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 @dataclass
 class POIExplorationResult:
     """探索結果（値オブジェクト）"""
-    poi_id: str
+    poi_id: int
     success: bool
     reward: POIReward
     timestamp: datetime
