@@ -21,7 +21,7 @@ class TestEquipmentSet:
             name="鉄のヘルメット",
             description="頑丈な鉄製のヘルメット",
             price=100,
-            type=ItemType.HELMET,
+            item_type=ItemType.HELMET,
             rarity=Rarity.COMMON
         )
         return UniqueItem(id=1, item=item, durability=100, defense=5)
@@ -34,7 +34,7 @@ class TestEquipmentSet:
             name="鉄のチェストプレート",
             description="頑丈な鉄製の胸当て",
             price=200,
-            type=ItemType.CHEST,
+            item_type=ItemType.CHEST,
             rarity=Rarity.COMMON
         )
         return UniqueItem(id=2, item=item, durability=150, defense=10)
@@ -47,7 +47,7 @@ class TestEquipmentSet:
             name="革のグローブ",
             description="柔軟な革製のグローブ",
             price=50,
-            type=ItemType.GLOVES,
+            item_type=ItemType.GLOVES,
             rarity=Rarity.COMMON
         )
         return UniqueItem(id=3, item=item, durability=80, attack=2, speed=1)
@@ -60,7 +60,7 @@ class TestEquipmentSet:
             name="革のブーツ",
             description="頑丈な革製のブーツ",
             price=75,
-            type=ItemType.SHOES,
+            item_type=ItemType.SHOES,
             rarity=Rarity.COMMON
         )
         return UniqueItem(id=4, item=item, durability=120, defense=3, speed=2)
@@ -73,7 +73,7 @@ class TestEquipmentSet:
             name="壊れたヘルメット",
             description="耐久度がゼロのヘルメット",
             price=10,
-            type=ItemType.HELMET,
+            item_type=ItemType.HELMET,
             rarity=Rarity.COMMON
         )
         return UniqueItem(id=5, item=item, durability=0, defense=1)
@@ -86,7 +86,7 @@ class TestEquipmentSet:
             name="消耗品",
             description="装備できないアイテム",
             price=5,
-            type=ItemType.CONSUMABLE,
+            item_type=ItemType.CONSUMABLE,
             rarity=Rarity.COMMON
         )
         return UniqueItem(id=6, item=item, durability=1)
@@ -152,7 +152,7 @@ class TestEquipmentSet:
             name="新しいヘルメット",
             description="より良いヘルメット",
             price=200,
-            type=ItemType.HELMET,
+            item_type=ItemType.HELMET,
             rarity=Rarity.UNCOMMON
         )
         new_helmet = UniqueItem(id=10, item=new_helmet_item, durability=120, defense=8)
@@ -248,7 +248,7 @@ class TestEquipmentSet:
             name="装飾用ヘルメット",
             description="見た目だけのヘルメット",
             price=10,
-            type=ItemType.HELMET,
+            item_type=ItemType.HELMET,
             rarity=Rarity.COMMON
         )
         # attack, defense, speed すべてNone
