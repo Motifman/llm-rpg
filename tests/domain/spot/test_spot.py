@@ -16,7 +16,7 @@ class TestSpot:
         assert spot.spot_id == 1
         assert spot.name == "テスト場所"
         assert spot.description == "テスト用の場所です"
-        assert spot.current_player_ids == set()
+        assert spot.get_current_player_ids() == set()
         assert spot.get_current_player_count() == 0
 
     def test_add_player(self):
@@ -29,13 +29,13 @@ class TestSpot:
         
         # プレイヤーを追加
         spot.add_player(100)
-        assert 100 in spot.current_player_ids
+        assert 100 in spot.get_current_player_ids()
         assert spot.get_current_player_count() == 1
         assert spot.is_player_in_spot(100) is True
         
         # 別のプレイヤーを追加
         spot.add_player(200)
-        assert 200 in spot.current_player_ids
+        assert 200 in spot.get_current_player_ids()
         assert spot.get_current_player_count() == 2
         assert spot.is_player_in_spot(200) is True
 
@@ -69,8 +69,8 @@ class TestSpot:
         assert spot.get_current_player_count() == 2
         
         spot.remove_player(100)
-        assert 100 not in spot.current_player_ids
-        assert 200 in spot.current_player_ids
+        assert 100 not in spot.get_current_player_ids()
+        assert 200 in spot.get_current_player_ids()
         assert spot.get_current_player_count() == 1
         assert spot.is_player_in_spot(100) is False
         assert spot.is_player_in_spot(200) is True
@@ -164,7 +164,7 @@ class TestSpot:
             current_player_ids=initial_players
         )
         
-        assert spot.current_player_ids == initial_players
+        assert spot.get_current_player_ids() == initial_players
         assert spot.get_current_player_count() == 3
         assert spot.is_player_in_spot(1) is True
         assert spot.is_player_in_spot(2) is True

@@ -22,3 +22,10 @@ class MonsterType(Enum):
     AGGRESSIVE = "aggressive"
     HIDDEN = "hidden"
     PASSIVE = "passive"
+
+
+class BehaviorPattern(Enum):
+    RANDOM_ATTACK = "random_attack"
+    DEFENSIVE = "defensive"
+    BERSERKER = "berserker"
+    TACTICAL = "tactical"

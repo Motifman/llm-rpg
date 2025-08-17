@@ -22,7 +22,8 @@ class Monster(CombatEntity):
         base_status: BaseStatus,
         dynamic_status: DynamicStatus,
         available_actions: List[BattleAction],
-        drop_reward: DropReward
+        drop_reward: DropReward,
+        allowed_areas: List[int]
     ):
         # 基底クラスの初期化
         super().__init__(name, race, element, current_spot_id, base_status, dynamic_status)
@@ -33,7 +34,8 @@ class Monster(CombatEntity):
         self._description = description
         self._available_actions = available_actions
         self._drop_reward = drop_reward
-    
+        self._allowed_areas = allowed_areas
+
     @property
     def monster_instance_id(self) -> int:
         return self._monster_instance_id
@@ -53,6 +55,9 @@ class Monster(CombatEntity):
     
     def get_available_actions(self) -> List[BattleAction]:
         return self._available_actions
+    
+    def can_appear_in_area(self, area_id: int) -> bool:
+        return area_id in self._allowed_areas
     
     # ===== ステータス表示 =====
     def get_full_status_display(self) -> str:
