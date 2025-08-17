@@ -19,7 +19,7 @@ class TestPlayerPOIState:
         """成功した探索結果"""
         reward = POIReward(information="宝箱発見", gold=100, exp=50)
         return POIExplorationResult(
-            poi_id="treasure_1",
+            poi_id=1,
             success=True,
             reward=reward,
             timestamp=datetime(2023, 1, 1, 12, 0, 0)
@@ -30,7 +30,7 @@ class TestPlayerPOIState:
         """失敗した探索結果"""
         empty_reward = POIReward()
         return POIExplorationResult(
-            poi_id="locked_treasure",
+            poi_id=2,
             success=False,
             reward=empty_reward,
             timestamp=datetime(2023, 1, 1, 12, 30, 0)
@@ -50,7 +50,7 @@ class TestPlayerPOIState:
         
         # 発見済みPOIに追加される
         assert spot_id in player_poi_state._discovered_pois
-        assert "treasure_1" in player_poi_state._discovered_pois[spot_id]
+        assert 1 in player_poi_state._discovered_pois[spot_id]
         
         # 探索履歴に追加される
         assert len(player_poi_state._exploration_history) == 1
@@ -75,7 +75,7 @@ class TestPlayerPOIState:
         
         # 最初のPOI発見
         result1 = POIExplorationResult(
-            poi_id="poi_1",
+            poi_id=10,
             success=True,
             reward=POIReward(information="発見1"),
             timestamp=datetime(2023, 1, 1, 10, 0, 0)
@@ -84,7 +84,7 @@ class TestPlayerPOIState:
         
         # 同じスポットで2つ目のPOI発見
         result2 = POIExplorationResult(
-            poi_id="poi_2",
+            poi_id=20,
             success=True,
             reward=POIReward(information="発見2"),
             timestamp=datetime(2023, 1, 1, 11, 0, 0)
@@ -93,8 +93,8 @@ class TestPlayerPOIState:
         
         # 両方のPOIが記録される
         assert len(player_poi_state._discovered_pois[spot_id]) == 2
-        assert "poi_1" in player_poi_state._discovered_pois[spot_id]
-        assert "poi_2" in player_poi_state._discovered_pois[spot_id]
+        assert 10 in player_poi_state._discovered_pois[spot_id]
+        assert 20 in player_poi_state._discovered_pois[spot_id]
         
         # 探索履歴も両方記録される
         assert len(player_poi_state._exploration_history) == 2
@@ -103,7 +103,7 @@ class TestPlayerPOIState:
         """異なるスポットでのPOI発見"""
         # スポット100でPOI発見
         result1 = POIExplorationResult(
-            poi_id="poi_100_1",
+            poi_id=101,
             success=True,
             reward=POIReward(information="スポット100の発見"),
             timestamp=datetime(2023, 1, 1, 10, 0, 0)
@@ -112,7 +112,7 @@ class TestPlayerPOIState:
         
         # スポット200でPOI発見
         result2 = POIExplorationResult(
-            poi_id="poi_200_1",
+            poi_id=201,
             success=True,
             reward=POIReward(information="スポット200の発見"),
             timestamp=datetime(2023, 1, 1, 11, 0, 0)
@@ -122,13 +122,13 @@ class TestPlayerPOIState:
         # 各スポットに対応するPOIが記録される
         assert 100 in player_poi_state._discovered_pois
         assert 200 in player_poi_state._discovered_pois
-        assert "poi_100_1" in player_poi_state._discovered_pois[100]
-        assert "poi_200_1" in player_poi_state._discovered_pois[200]
+        assert 101 in player_poi_state._discovered_pois[100]
+        assert 201 in player_poi_state._discovered_pois[200]
         
         # 探索履歴は時系列で記録される
         assert len(player_poi_state._exploration_history) == 2
-        assert player_poi_state._exploration_history[0].poi_id == "poi_100_1"
-        assert player_poi_state._exploration_history[1].poi_id == "poi_200_1"
+        assert player_poi_state._exploration_history[0].poi_id == 101
+        assert player_poi_state._exploration_history[1].poi_id == 201
     
     def test_mixed_success_and_failure_exploration(self, player_poi_state):
         """成功と失敗が混在する探索記録"""
@@ -136,7 +136,7 @@ class TestPlayerPOIState:
         
         # 成功した探索
         success_result = POIExplorationResult(
-            poi_id="accessible_poi",
+            poi_id=301,
             success=True,
             reward=POIReward(information="成功"),
             timestamp=datetime(2023, 1, 1, 10, 0, 0)
@@ -145,7 +145,7 @@ class TestPlayerPOIState:
         
         # 失敗した探索
         failure_result = POIExplorationResult(
-            poi_id="locked_poi",
+            poi_id=302,
             success=False,
             reward=POIReward(),
             timestamp=datetime(2023, 1, 1, 10, 30, 0)
@@ -154,7 +154,7 @@ class TestPlayerPOIState:
         
         # もう一つ成功した探索
         success_result2 = POIExplorationResult(
-            poi_id="another_accessible_poi",
+            poi_id=303,
             success=True,
             reward=POIReward(information="再度成功"),
             timestamp=datetime(2023, 1, 1, 11, 0, 0)
@@ -163,21 +163,21 @@ class TestPlayerPOIState:
         
         # 成功したもののみが発見済みPOIに記録される
         assert len(player_poi_state._discovered_pois[spot_id]) == 2
-        assert "accessible_poi" in player_poi_state._discovered_pois[spot_id]
-        assert "another_accessible_poi" in player_poi_state._discovered_pois[spot_id]
-        assert "locked_poi" not in player_poi_state._discovered_pois[spot_id]
+        assert 301 in player_poi_state._discovered_pois[spot_id]
+        assert 303 in player_poi_state._discovered_pois[spot_id]
+        assert 302 not in player_poi_state._discovered_pois[spot_id]
         
         # 全ての探索が履歴に記録される
         assert len(player_poi_state._exploration_history) == 3
         poi_ids_in_history = [result.poi_id for result in player_poi_state._exploration_history]
-        assert "accessible_poi" in poi_ids_in_history
-        assert "locked_poi" in poi_ids_in_history
-        assert "another_accessible_poi" in poi_ids_in_history
+        assert 301 in poi_ids_in_history
+        assert 302 in poi_ids_in_history
+        assert 303 in poi_ids_in_history
     
     def test_duplicate_poi_discovery_same_spot(self, player_poi_state):
         """同じスポットで同じPOIを重複発見した場合"""
         spot_id = 400
-        poi_id = "duplicate_poi"
+        poi_id = 401
         
         # 最初の発見
         result1 = POIExplorationResult(
@@ -214,7 +214,7 @@ class TestPlayerPOIState:
         
         for i, timestamp in enumerate(timestamps):
             result = POIExplorationResult(
-                poi_id=f"poi_{i}",
+                poi_id=500 + i,
                 success=True,
                 reward=POIReward(information=f"発見{i}"),
                 timestamp=timestamp
@@ -224,5 +224,5 @@ class TestPlayerPOIState:
         # 探索履歴は記録順序を保持する
         assert len(player_poi_state._exploration_history) == 3
         for i in range(3):
-            assert player_poi_state._exploration_history[i].poi_id == f"poi_{i}"
+            assert player_poi_state._exploration_history[i].poi_id == 500 + i
             assert player_poi_state._exploration_history[i].timestamp == timestamps[i]

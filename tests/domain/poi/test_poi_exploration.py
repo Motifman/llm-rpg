@@ -16,13 +16,13 @@ class TestPOIExplorationResult:
         timestamp = datetime(2023, 1, 1, 12, 0, 0)
         
         result = POIExplorationResult(
-            poi_id="treasure_1",
+            poi_id=1,
             success=True,
             reward=reward,
             timestamp=timestamp
         )
         
-        assert result.poi_id == "treasure_1"
+        assert result.poi_id == 1
         assert result.success is True
         assert result.reward == reward
         assert result.timestamp == timestamp
@@ -33,13 +33,13 @@ class TestPOIExplorationResult:
         timestamp = datetime(2023, 1, 1, 12, 0, 0)
         
         result = POIExplorationResult(
-            poi_id="locked_treasure",
+            poi_id=2,
             success=False,
             reward=empty_reward,
             timestamp=timestamp
         )
         
-        assert result.poi_id == "locked_treasure"
+        assert result.poi_id == 2
         assert result.success is False
         assert result.reward.gold == 0
         assert result.reward.exp == 0
@@ -61,7 +61,7 @@ class TestPOIExploration:
         condition = POIUnlockCondition(required_items={1})
         reward = POIReward(information="古い宝箱を発見", gold=200, exp=100, items=[5, 6])
         return POI(
-            poi_id="treasure_chest_1",
+            poi_id=3,
             name="古い宝箱",
             description="苔むした宝箱",
             poi_type=POIType.TREASURE,
@@ -78,7 +78,7 @@ class TestPOIExploration:
         result = poi_exploration.explore_poi(sample_poi, mock_player, discovered_pois)
         
         assert isinstance(result, POIExplorationResult)
-        assert result.poi_id == "treasure_chest_1"
+        assert result.poi_id == 3
         assert result.success is True
         assert result.reward.information == "古い宝箱を発見"
         assert result.reward.gold == 200
@@ -95,7 +95,7 @@ class TestPOIExploration:
         result = poi_exploration.explore_poi(sample_poi, mock_player, discovered_pois)
         
         assert isinstance(result, POIExplorationResult)
-        assert result.poi_id == "treasure_chest_1"
+        assert result.poi_id == 3
         assert result.success is False
         assert result.reward.information == ""
         assert result.reward.gold == 0
@@ -108,7 +108,7 @@ class TestPOIExploration:
         condition = POIUnlockCondition(required_poi_discoveries={10, 20})
         reward = POIReward(information="秘密の通路を発見", exp=150)
         poi = POI(
-            poi_id="secret_passage_1",
+            poi_id=4,
             name="秘密の通路",
             description="隠された通路",
             poi_type=POIType.SECRET_PASSAGE,
@@ -143,7 +143,7 @@ class TestPOIExploration:
             items=[10, 11, 12]
         )
         poi = POI(
-            poi_id="legendary_treasure",
+            poi_id=5,
             name="伝説の財宝",
             description="伝説に語り継がれる財宝",
             poi_type=POIType.TREASURE,
@@ -179,7 +179,7 @@ class TestPOIExploration:
         condition = POIUnlockCondition()  # 条件なし
         reward = POIReward(information="情報を入手")
         poi = POI(
-            poi_id="info_stone",
+            poi_id=6,
             name="情報石碑",
             description="誰でも読める石碑",
             poi_type=POIType.INFORMATION,
@@ -200,7 +200,7 @@ class TestPOIExploration:
         condition = POIUnlockCondition()
         reward = POIReward(information="テスト")
         poi = POI(
-            poi_id="test_poi",
+            poi_id=7,
             name="テスト",
             description="テスト用",
             poi_type=POIType.INFORMATION,

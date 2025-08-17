@@ -45,7 +45,7 @@ class POIReward:
 
 class POI:
     """調査可能な地点を表すクラス"""
-    def __init__(self, poi_id: str, name: str, description: str, poi_type: POIType, 
+    def __init__(self, poi_id: int, name: str, description: str, poi_type: POIType, 
                  unlock_condition: POIUnlockCondition, reward: POIReward):
         self._poi_id = poi_id
         self._name = name
@@ -55,7 +55,7 @@ class POI:
         self._reward = reward
     
     @property
-    def poi_id(self) -> str:
+    def poi_id(self) -> int:
         """POI ID取得"""
         return self._poi_id
     
