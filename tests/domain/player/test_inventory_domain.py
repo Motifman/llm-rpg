@@ -12,7 +12,7 @@ def make_item(item_id: int, name: str = "Item", price: int = 10) -> Item:
         name=name,
         description=f"desc-{name}",
         price=price,
-        type=ItemType.OTHER,
+        item_type=ItemType.OTHER,
         rarity=Rarity.COMMON,
     )
 

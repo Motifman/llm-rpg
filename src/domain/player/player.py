@@ -1,4 +1,7 @@
 from typing import List, Optional, Union
+from typing_extensions import deprecated
+from src.domain.item.item_effect import ItemEffect
+from src.domain.item.item_enum import ItemType
 from src.domain.item.item import Item
 from src.domain.item.unique_item import UniqueItem
 from src.domain.player.base_status import BaseStatus
@@ -94,8 +97,6 @@ class Player(CombatEntity):
         """所持金を取得"""
         return self._dynamic_status.gold
     
-
-    
     @property
     def exp(self) -> int:
         """経験値を取得"""
@@ -153,17 +154,46 @@ class Player(CombatEntity):
         else:
             raise ValueError("Invalid item type")
     
-    def remove_item(self, item_id: Optional[int] = None, count: Optional[int] = None, unique_item_id: Optional[int] = None):
-        """アイテムを削除"""
-        is_stackable = item_id is not None and count is not None
-        is_unique = unique_item_id is not None
-        assert is_stackable or is_unique, "item_id and count or unique_item_id must be provided"
-        assert not (is_stackable and is_unique), "item_id and count or unique_item_id must not be provided at the same time"
-        if is_stackable:
-            assert count > 0, "count must be greater than 0"
-            self._inventory.remove_stackable(item_id, count)
-        else:
-            self._inventory.remove_unique(unique_item_id)
+    def _remove_stackable(self, item: Item, count: int):
+        """スタック可能アイテムを削除"""
+        assert count > 0, "count must be greater than 0"
+        self._inventory.remove_stackable(item.item_id, count)
+    
+    def _remove_unique(self, item: UniqueItem):
+        """ユニークアイテムを削除"""
+        self._inventory.remove_unique(item.unique_item_id)
+    
+    def use_item(self, item: Item, count: int = 1):
+        """アイテムを使用"""
+        if not self.has_stackable_item(item.item_id, count):
+            raise ValueError("Player does not have enough items")
+        if item.item_type != ItemType.CONSUMABLE:
+            raise ValueError("Item is not consumable")
+        self._remove_stackable(item, count)
+        if item.item_effect is not None:
+            self._apply_item_effect(item.item_effect, count)
+    
+    def _apply_item_effect(self, item_effect: ItemEffect, count: int):
+        """アイテム効果を適用"""
+        # HP・MP変化
+        if item_effect.hp_delta > 0:
+            self._dynamic_status.heal(item_effect.hp_delta * count)
+        if item_effect.mp_delta > 0:
+            self._dynamic_status.recover_mp(item_effect.mp_delta * count)
+        
+        # 所持金・経験値変化
+        if item_effect.gold_delta > 0:
+            self._dynamic_status.receive_gold(item_effect.gold_delta * count)
+        if item_effect.exp_delta > 0:
+            self._dynamic_status.receive_exp(item_effect.exp_delta * count)
+        
+        # 状態異常効果
+        for status_effect in item_effect.temporary_effects:
+            self._dynamic_status.add_status_effect(
+                status_effect.effect_type, 
+                status_effect.duration, 
+                status_effect.value
+            )
     
     def get_stackable_item(self, item_id: int) -> Optional[Item]:
         """スタック可能アイテムを取得"""
@@ -200,13 +230,13 @@ class Player(CombatEntity):
             if unique_item is None:
                 raise ValueError(f"Unique item not found: {trade_item.unique_id}")
             player.add_item(unique_item)
-            self._inventory.remove_unique(trade_item.unique_id)
+            self._remove_unique(unique_item)
         else:
             stackable_item = self._inventory.get_stackable(trade_item.item_id)
             if stackable_item is None:
                 raise ValueError(f"Stackable item not found: {trade_item.item_id}")
             player.add_item(stackable_item, trade_item.count)
-            self._inventory.remove_stackable(trade_item.item_id, trade_item.count)
+            self._remove_stackable(stackable_item, trade_item.count)
     
     def transfer_gold_to(self, player: "Player", amount: int):
         """所持金を別のプレイヤーに移動"""
@@ -236,13 +266,13 @@ class Player(CombatEntity):
             from src.domain.item.item_enum import ItemType
             previous_equipment = None
             
-            if unique_item.item.type == ItemType.HELMET:
+            if unique_item.item.item_type == ItemType.HELMET:
                 previous_equipment = self._equipment.equip_helmet(unique_item)
-            elif unique_item.item.type == ItemType.CHEST:
+            elif unique_item.item.item_type == ItemType.CHEST:
                 previous_equipment = self._equipment.equip_chest(unique_item)
-            elif unique_item.item.type == ItemType.GLOVES:
+            elif unique_item.item.item_type == ItemType.GLOVES:
                 previous_equipment = self._equipment.equip_gloves(unique_item)
-            elif unique_item.item.type == ItemType.SHOES:
+            elif unique_item.item.item_type == ItemType.SHOES:
                 previous_equipment = self._equipment.equip_shoes(unique_item)
             else:
                 return False  # 装備できないタイプ
