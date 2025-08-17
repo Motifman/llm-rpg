@@ -13,19 +13,19 @@ class TestItemCatalog:
             name="Iron Sword",
             description="A basic iron sword",
             price=100,
-            type=ItemType.WEAPON,
+            item_type=ItemType.WEAPON,
             rarity=Rarity.COMMON,
         )
         assert item.can_be_traded() is True
 
         with pytest.raises(ValueError):
-            Item(item_id=-1, name="n", description="d", price=0, type=ItemType.OTHER, rarity=Rarity.COMMON)
+            Item(item_id=-1, name="n", description="d", price=0, item_type=ItemType.OTHER, rarity=Rarity.COMMON)
         with pytest.raises(ValueError):
-            Item(item_id=1, name="", description="d", price=0, type=ItemType.OTHER, rarity=Rarity.COMMON)
+            Item(item_id=1, name="", description="d", price=0, item_type=ItemType.OTHER, rarity=Rarity.COMMON)
         with pytest.raises(ValueError):
-            Item(item_id=1, name="n", description="", price=0, type=ItemType.OTHER, rarity=Rarity.COMMON)
+            Item(item_id=1, name="n", description="", price=0, item_type=ItemType.OTHER, rarity=Rarity.COMMON)
         with pytest.raises(ValueError):
-            Item(item_id=1, name="n", description="d", price=-1, type=ItemType.OTHER, rarity=Rarity.COMMON)
+            Item(item_id=1, name="n", description="d", price=-1, item_type=ItemType.OTHER, rarity=Rarity.COMMON)
 
 
 @pytest.mark.unit
@@ -36,7 +36,7 @@ class TestUniqueItem:
             name="Leather Armor",
             description="Simple armor",
             price=80,
-            type=ItemType.CHEST,
+            item_type=ItemType.CHEST,
             rarity=Rarity.UNCOMMON,
         )
         unique = UniqueItem(id=10, item=base, durability=5, defense=2, speed=1)

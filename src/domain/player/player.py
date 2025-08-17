@@ -94,8 +94,6 @@ class Player(CombatEntity):
         """所持金を取得"""
         return self._dynamic_status.gold
     
-
-    
     @property
     def exp(self) -> int:
         """経験値を取得"""
@@ -236,13 +234,13 @@ class Player(CombatEntity):
             from src.domain.item.item_enum import ItemType
             previous_equipment = None
             
-            if unique_item.item.type == ItemType.HELMET:
+            if unique_item.item.item_type == ItemType.HELMET:
                 previous_equipment = self._equipment.equip_helmet(unique_item)
-            elif unique_item.item.type == ItemType.CHEST:
+            elif unique_item.item.item_type == ItemType.CHEST:
                 previous_equipment = self._equipment.equip_chest(unique_item)
-            elif unique_item.item.type == ItemType.GLOVES:
+            elif unique_item.item.item_type == ItemType.GLOVES:
                 previous_equipment = self._equipment.equip_gloves(unique_item)
-            elif unique_item.item.type == ItemType.SHOES:
+            elif unique_item.item.item_type == ItemType.SHOES:
                 previous_equipment = self._equipment.equip_shoes(unique_item)
             else:
                 return False  # 装備できないタイプ

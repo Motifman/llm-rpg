@@ -41,25 +41,25 @@ class TestPlayerEquipmentIntegration:
         """サンプル装備アイテムを作成"""
         helmet_item = Item(
             item_id=1, name="鉄のヘルメット", description="頑丈なヘルメット",
-            price=100, type=ItemType.HELMET, rarity=Rarity.COMMON
+            price=100, item_type=ItemType.HELMET, rarity=Rarity.COMMON
         )
         helmet = UniqueItem(id=1, item=helmet_item, durability=100, defense=5)
         
         chest_item = Item(
             item_id=2, name="鉄の胸当て", description="頑丈な胸当て",
-            price=200, type=ItemType.CHEST, rarity=Rarity.COMMON
+            price=200, item_type=ItemType.CHEST, rarity=Rarity.COMMON
         )
         chest = UniqueItem(id=2, item=chest_item, durability=150, defense=10)
         
         gloves_item = Item(
             item_id=3, name="革手袋", description="器用さを上げる手袋",
-            price=50, type=ItemType.GLOVES, rarity=Rarity.COMMON
+            price=50, item_type=ItemType.GLOVES, rarity=Rarity.COMMON
         )
         gloves = UniqueItem(id=3, item=gloves_item, durability=80, attack=3, speed=2)
         
         shoes_item = Item(
             item_id=4, name="革靴", description="軽快な革靴",
-            price=75, type=ItemType.SHOES, rarity=Rarity.COMMON
+            price=75, item_type=ItemType.SHOES, rarity=Rarity.COMMON
         )
         shoes = UniqueItem(id=4, item=shoes_item, durability=120, defense=3, speed=1)
         
@@ -119,7 +119,7 @@ class TestPlayerEquipmentIntegration:
         # 新しいヘルメット作成
         helmet2_item = Item(
             item_id=10, name="銀のヘルメット", description="より良いヘルメット",
-            price=200, type=ItemType.HELMET, rarity=Rarity.UNCOMMON
+            price=200, item_type=ItemType.HELMET, rarity=Rarity.UNCOMMON
         )
         helmet2 = UniqueItem(id=10, item=helmet2_item, durability=120, defense=8)
         
@@ -157,7 +157,7 @@ class TestPlayerEquipmentIntegration:
         # 消耗品を作成
         consumable_item = Item(
             item_id=20, name="回復薬", description="HPを回復する薬",
-            price=50, type=ItemType.CONSUMABLE, rarity=Rarity.COMMON
+            price=50, item_type=ItemType.CONSUMABLE, rarity=Rarity.COMMON
         )
         consumable = UniqueItem(id=20, item=consumable_item, durability=1)
         
@@ -173,7 +173,7 @@ class TestPlayerEquipmentIntegration:
         # 破損したヘルメット作成
         helmet_item = Item(
             item_id=30, name="壊れたヘルメット", description="耐久度がゼロのヘルメット",
-            price=10, type=ItemType.HELMET, rarity=Rarity.COMMON
+            price=10, item_type=ItemType.HELMET, rarity=Rarity.COMMON
         )
         broken_helmet = UniqueItem(id=30, item=helmet_item, durability=0, defense=1)
         
