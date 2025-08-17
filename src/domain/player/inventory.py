@@ -114,5 +114,3 @@ class Inventory:
             lines.append(f"  耐久度:{unique.durability} 攻:{unique.attack or 0} 防:{unique.defense or 0} 速:{unique.speed or 0}")
             lines.append("")
         return "\n".join(lines)
-
-

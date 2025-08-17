@@ -192,7 +192,7 @@ class EquipmentSet:
     # ===== 内部メソッド =====
     def _can_equip(self, unique_item: UniqueItem, expected_type: ItemType) -> bool:
         """アイテムが指定されたタイプで装備可能かチェック"""
-        return unique_item.item.type == expected_type and not unique_item.is_broken()
+        return unique_item.item.item_type == expected_type and not unique_item.is_broken()
     
     def _get_all_equipment(self) -> List[Optional[UniqueItem]]:
         """全ての装備スロットのリストを取得"""
