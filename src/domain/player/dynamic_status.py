@@ -161,6 +161,6 @@ class DynamicStatus:
         for effect in self._status_effects.values():
             effect.duration -= 1
             if effect.duration <= 0:
-                to_remove.append(effect.effect)
+                to_remove.append(effect.effect_type)
         for effect_type in to_remove:
             self.remove_status_effect_by_type(effect_type)
