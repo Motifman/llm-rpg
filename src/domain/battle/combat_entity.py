@@ -101,6 +101,20 @@ class CombatEntity(ABC):
         assert amount > 0, "amount must be greater than 0"
         self._dynamic_status.heal(amount)
     
+    def recover_mp(self, amount: int):
+        """MP回復"""
+        assert amount > 0, "amount must be greater than 0"
+        self._dynamic_status.recover_mp(amount)
+    
+    def consume_mp(self, amount: int):
+        """MPを消費"""
+        assert amount > 0, "amount must be greater than 0"
+        self._dynamic_status.consume_mp(amount)
+    
+    def can_consume_mp(self, amount: int) -> bool:
+        """MPが足りるかどうか"""
+        return self._dynamic_status.can_consume_mp(amount)
+    
     def heal_status_effect(self, status_effect_type: StatusEffectType):
         """特定の状態異常を回復"""
         self._dynamic_status.remove_status_effect_by_type(status_effect_type)

@@ -76,4 +76,63 @@ class TestDynamicStatus:
         # blessing removed
         assert status.has_status_effect_type(StatusEffectType.BLESSING) is False
 
+    def test_recover_mp_with_max_cap(self):
+        """MP回復のテスト（最大値でキャップされる）"""
+        status = DynamicStatus(hp=10, mp=3, max_hp=10, max_mp=10)
+        
+        # 通常の回復
+        status.recover_mp(2)
+        assert status.mp == 5
+        
+        # 最大値を超える回復（キャップされる）
+        status.recover_mp(10)
+        assert status.mp == 10
+    
+    def test_consume_mp(self):
+        """MP消費のテスト"""
+        status = DynamicStatus(hp=10, mp=10, max_hp=10, max_mp=10)
+        
+        # 通常の消費
+        status.consume_mp(3)
+        assert status.mp == 7
+        
+        # MPが足りる場合の消費
+        status.consume_mp(5)
+        assert status.mp == 2
+        
+        # MPが足りない場合の消費（0でキャップされる）
+        status.consume_mp(5)
+        assert status.mp == 0
+    
+    def test_consume_mp_invalid_amount(self):
+        """MP消費で無効な値を指定した場合のエラーテスト"""
+        status = DynamicStatus(hp=10, mp=10, max_hp=10, max_mp=10)
+        
+        with pytest.raises(AssertionError, match="amount must be greater than 0"):
+            status.consume_mp(0)
+        
+        with pytest.raises(AssertionError, match="amount must be greater than 0"):
+            status.consume_mp(-1)
+    
+    def test_can_consume_mp(self):
+        """MP消費可能かどうかのテスト"""
+        status = DynamicStatus(hp=10, mp=5, max_hp=10, max_mp=10)
+        
+        # 十分なMPがある場合
+        assert status.can_consume_mp(3) is True
+        assert status.can_consume_mp(5) is True
+        
+        # MPが足りない場合
+        assert status.can_consume_mp(6) is False
+        assert status.can_consume_mp(10) is False
+        
+        # 境界値テスト
+        assert status.can_consume_mp(0) is True  # 0は常にTrue
+        
+        # MP消費後のテスト
+        status.consume_mp(3)
+        assert status.mp == 2
+        assert status.can_consume_mp(2) is True
+        assert status.can_consume_mp(3) is False
+
 

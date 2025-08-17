@@ -89,6 +89,19 @@ class DynamicStatus:
     def heal(self, amount: int):
         """回復"""
         self._hp = min(self._hp + amount, self._max_hp)
+    
+    def recover_mp(self, amount: int):
+        """MP回復"""
+        self._mp = min(self._mp + amount, self._max_mp)
+    
+    def consume_mp(self, amount: int):
+        """MPを消費"""
+        assert amount > 0, "amount must be greater than 0"
+        self._mp = max(0, self._mp - amount)
+    
+    def can_consume_mp(self, amount: int) -> bool:
+        """MPが足りるかどうか"""
+        return self._mp >= amount
 
     def is_alive(self) -> bool:
         """生存しているかどうか"""

@@ -14,14 +14,6 @@ class ItemEffect:
     temporary_effects: List["StatusEffect"] = field(default_factory=list)
     
     def __post_init__(self):
-        if self.hp_delta < 0:
-            raise ValueError(f"hp_delta must be >= 0. hp_delta: {self.hp_delta}")
-        if self.mp_delta < 0:
-            raise ValueError(f"mp_delta must be >= 0. mp_delta: {self.mp_delta}")
-        if self.gold_delta < 0:
-            raise ValueError(f"gold_delta must be >= 0. gold_delta: {self.gold_delta}")
-        if self.exp_delta < 0:
-            raise ValueError(f"exp_delta must be >= 0. exp_delta: {self.exp_delta}")
         if self.temporary_effects:
             for effect in self.temporary_effects:
                 if effect.duration < 0:

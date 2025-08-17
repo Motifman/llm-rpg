@@ -165,12 +165,11 @@ class Player(CombatEntity):
     
     def use_item(self, item: Item, count: int = 1):
         """アイテムを使用"""
-        assert count > 0, "count must be greater than 0"
+        if not self.has_stackable_item(item.item_id, count):
+            raise ValueError("Player does not have enough items")
         if item.item_type != ItemType.CONSUMABLE:
             raise ValueError("Item is not consumable")
-        if not self._inventory.has_stackable(item.item_id, count):
-            raise ValueError("Player does not have enough items")
-        self._inventory.remove_stackable(item.item_id, count)
+        self._remove_stackable(item, count)
         if item.item_effect is not None:
             self._apply_item_effect(item.item_effect, count)
     
