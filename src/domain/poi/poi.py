@@ -54,6 +54,11 @@ class POI:
         self._unlock_condition = unlock_condition
         self._reward = reward
     
+    @property
+    def poi_id(self) -> str:
+        """POI ID取得"""
+        return self._poi_id
+    
     def can_explore(self, player: 'Player', discovered_pois: Set[int]) -> bool:
         """探索可能性判定（ドメインロジック）"""
         return self._unlock_condition.is_satisfied(player, discovered_pois)
