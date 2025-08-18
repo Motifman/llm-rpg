@@ -25,7 +25,7 @@ from src.domain.spot.spot_exception import (
 )
 
 
-class MovementService:
+class MovementApplicationService:
     """移動アプリケーションサービス"""
     
     def __init__(

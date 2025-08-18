@@ -6,7 +6,7 @@
 
 from datetime import datetime
 from src.application.world.commands import MovePlayerCommand, GetPlayerLocationCommand, GetSpotInfoCommand
-from src.application.world.movement_service import MovementService
+from src.application.world.movement_service import MovementApplicationService
 from src.domain.spot.move_service import MoveService
 from src.domain.player.player_repository import PlayerRepository
 from src.domain.spot.spot_repository import SpotRepository
@@ -68,7 +68,7 @@ class MockSpotRepository(SpotRepository):
         return self._spots.get(spot_id)
     
     def save(self, spot: Spot):
-        self._spots[spot_id] = spot
+        self._spots[spot.spot_id] = spot
         return spot
     
     def delete(self, spot_id: int):
@@ -193,7 +193,7 @@ def demo_movement_service():
     
     # 移動サービスを作成
     move_service = MoveService()
-    movement_service = MovementService(move_service, player_repo, spot_repo)
+    movement_service = MovementApplicationService(move_service, player_repo, spot_repo)
     
     # 1. プレイヤーの現在位置を確認
     print("1. プレイヤーの現在位置を確認")

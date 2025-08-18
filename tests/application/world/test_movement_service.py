@@ -1,7 +1,7 @@
 import pytest
 from datetime import datetime
 from src.application.world.commands import MovePlayerCommand, GetPlayerLocationCommand
-from src.application.world.movement_service import MovementService
+from src.application.world.movement_service import MovementApplicationService
 from src.application.world.dtos import MoveResultDto, PlayerLocationDto
 from src.domain.spot.move_service import MoveService
 from src.domain.player.player_repository import PlayerRepository
@@ -152,7 +152,7 @@ def movement_service(sample_data):
     """移動サービスを作成"""
     player_repo, spot_repo = sample_data
     move_service = MoveService()
-    return MovementService(move_service, player_repo, spot_repo)
+    return MovementApplicationService(move_service, player_repo, spot_repo)
 
 
 class TestMovementService:

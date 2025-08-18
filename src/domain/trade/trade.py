@@ -1,5 +1,5 @@
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Optional, List
 from datetime import datetime
 from src.domain.trade.trade_enum import TradeType, TradeStatus
 from src.domain.trade.trade_exception import (
@@ -7,6 +7,12 @@ from src.domain.trade.trade_exception import (
     CannotAcceptOwnTradeException,
     CannotAcceptTradeWithOtherPlayerException,
     CannotCancelTradeWithOtherPlayerException,
+)
+from src.domain.trade.trade_events import (
+    TradeCreatedEvent,
+    TradeExecutedEvent,
+    TradeCancelledEvent,
+    DirectTradeOfferedEvent
 )
 
 
@@ -52,6 +58,7 @@ class TradeOffer:
     status: TradeStatus = TradeStatus.ACTIVE
     version: int = 0
     buyer_id: Optional[int] = None
+    _domain_events: List = field(default_factory=list, init=False)
     
     def __post_init__(self):
         """インスタンス生成後のバリデーション"""
@@ -84,6 +91,8 @@ class TradeOffer:
         target_player_id: Optional[int] = None,
         offered_item_count: Optional[int] = None,
         offered_unique_id: Optional[int] = None,
+        seller_name: str = None,
+        target_player_name: str = None,
     ) -> "TradeOffer":
         """お金との取引オファーを作成"""
         if offered_item_count is not None:
@@ -93,7 +102,7 @@ class TradeOffer:
         else:
             raise InvalidTradeStatusException(f"offered_item_count or offered_unique_id must be provided: {offered_item_id}, {offered_item_count}, {offered_unique_id}")
 
-        return cls(
+        trade_offer = cls(
             trade_id=trade_id,
             seller_id=seller_id,
             offered_item=trade_item,
@@ -102,6 +111,38 @@ class TradeOffer:
             target_player_id=target_player_id,
             created_at=created_at,
         )
+        
+        # ドメインイベントを発行
+        if seller_name:
+            if trade_type == TradeType.DIRECT and target_player_id and target_player_name:
+                # 直接取引の場合は専用イベント
+                event = DirectTradeOfferedEvent.create(
+                    trade_id=trade_id,
+                    seller_id=seller_id,
+                    seller_name=seller_name,
+                    target_player_id=target_player_id,
+                    target_player_name=target_player_name,
+                    offered_item_id=offered_item_id,
+                    offered_item_count=offered_item_count,
+                    offered_unique_id=offered_unique_id,
+                    requested_gold=requested_gold
+                )
+            else:
+                # グローバル取引の場合は通常の作成イベント
+                event = TradeCreatedEvent.create(
+                    trade_id=trade_id,
+                    seller_id=seller_id,
+                    seller_name=seller_name,
+                    offered_item_id=offered_item_id,
+                    offered_item_count=offered_item_count,
+                    offered_unique_id=offered_unique_id,
+                    requested_gold=requested_gold,
+                    trade_type=trade_type,
+                    target_player_id=target_player_id
+                )
+            trade_offer._domain_events.append(event)
+        
+        return trade_offer
     
     def is_active(self) -> bool:
         """取引がアクティブかどうか"""
@@ -134,7 +175,7 @@ class TradeOffer:
         trade_type_str = "直接取引" if self.is_direct_trade() else "グローバル取引"
         return f"[{trade_type_str}] {offered} ⇄ {requested}"
 
-    def accept_by(self, buyer_id: int):
+    def accept_by(self, buyer_id: int, buyer_name: str = None, seller_name: str = None):
         """取引を受託"""
         if self.status != TradeStatus.ACTIVE:
             raise InvalidTradeStatusException(f"Trade is not active: {self.status}")
@@ -145,14 +186,45 @@ class TradeOffer:
 
         self.buyer_id = buyer_id
         self.status = TradeStatus.COMPLETED
+        
+        # ドメインイベントを発行
+        if buyer_name and seller_name:
+            event = TradeExecutedEvent.create(
+                trade_id=self.trade_id,
+                seller_id=self.seller_id,
+                seller_name=seller_name,
+                buyer_id=buyer_id,
+                buyer_name=buyer_name,
+                offered_item_id=self.offered_item.item_id,
+                offered_item_count=self.offered_item.count,
+                offered_unique_id=self.offered_item.unique_id,
+                requested_gold=self.requested_gold,
+                trade_type=self.trade_type
+            )
+            self._domain_events.append(event)
 
-    def cancel_by(self, player_id: int) -> None:
+    def cancel_by(self, player_id: int, seller_name: str = None) -> None:
         """取引をキャンセル"""
         if self.status != TradeStatus.ACTIVE:
             raise InvalidTradeStatusException(f"Trade is already completed or cancelled: {self.status}")
         if self.seller_id != player_id:
             raise CannotCancelTradeWithOtherPlayerException(f"Cannot cancel trade with other player: {self.seller_id}, {player_id}")
         self.status = TradeStatus.CANCELLED
+        
+        # ドメインイベントを発行
+        if seller_name:
+            event = TradeCancelledEvent.create(
+                trade_id=self.trade_id,
+                seller_id=self.seller_id,
+                seller_name=seller_name,
+                offered_item_id=self.offered_item.item_id,
+                offered_item_count=self.offered_item.count,
+                offered_unique_id=self.offered_item.unique_id,
+                requested_gold=self.requested_gold,
+                trade_type=self.trade_type,
+                target_player_id=self.target_player_id
+            )
+            self._domain_events.append(event)
     
     def __str__(self):
         return f"TradeOffer({self.trade_id}): {self.get_trade_summary()}"
@@ -161,4 +233,12 @@ class TradeOffer:
         return (f"TradeOffer(trade_id={self.trade_id}, seller_id={self.seller_id}, "
                 f"offered={self.offered_item.item_id}x{self.offered_item.count}, "
                 f"requested={self.requested_gold} G, "
-                f"status={self.status.value})") 
+                f"status={self.status.value})")
+    
+    def get_domain_events(self) -> List:
+        """ドメインイベントを取得"""
+        return self._domain_events.copy()
+    
+    def clear_domain_events(self):
+        """ドメインイベントをクリア"""
+        self._domain_events.clear() 
