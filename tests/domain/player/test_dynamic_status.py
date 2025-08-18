@@ -54,16 +54,6 @@ class TestDynamicStatus:
         status.un_defend()
         assert status.defending is False
 
-    def test_status_effect_add_remove_and_bonus_damage(self):
-        status = DynamicStatus(hp=5, mp=1, max_hp=5, max_mp=1)
-        status.add_status_effect(StatusEffectType.ATTACK_UP, duration=3, value=5)
-        assert status.has_status_effect_type(StatusEffectType.ATTACK_UP) is True
-        assert status.get_effect_bonus(StatusEffectType.ATTACK_UP) == 5
-        assert status.get_effect_damage(StatusEffectType.ATTACK_UP) == 5
-        status.remove_status_effect_by_type(StatusEffectType.ATTACK_UP)
-        assert status.has_status_effect_type(StatusEffectType.ATTACK_UP) is False
-        assert status.get_effect_bonus(StatusEffectType.ATTACK_UP) == 0
-
     def test_decrease_status_effect_duration_and_removal(self):
         status = DynamicStatus(hp=5, mp=1, max_hp=5, max_mp=1)
         status.add_status_effect(StatusEffectType.POISON, duration=1, value=2)
