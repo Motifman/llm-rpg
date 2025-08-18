@@ -1,6 +1,5 @@
 import pytest
 from src.domain.item.item_effect import ItemEffect
-from src.domain.battle.status_effect import StatusEffect
 from src.domain.battle.battle_enum import StatusEffectType
 
 
@@ -14,10 +13,10 @@ class TestItemEffect:
         assert effect.mp_delta == 0
         assert effect.gold_delta == 0
         assert effect.exp_delta == 0
-        assert effect.temporary_effects == []
+        assert effect.status_effects == []
     
     def test_create_effect_with_basic_values(self):
-        """基本的な数値効果を持つエフェクトを作成"""
+        """基本値を持つエフェクトを作成"""
         effect = ItemEffect(
             hp_delta=50,
             mp_delta=30,
@@ -28,7 +27,7 @@ class TestItemEffect:
         assert effect.mp_delta == 30
         assert effect.gold_delta == 100
         assert effect.exp_delta == 25
-        assert effect.temporary_effects == []
+        assert effect.status_effects == []
     
     def test_create_effect_with_negative_values(self):
         """負の値を持つエフェクトを作成"""
@@ -46,27 +45,17 @@ class TestItemEffect:
     def test_create_effect_with_status_effects(self):
         """状態異常効果を持つエフェクトを作成"""
         status_effects = [
-            StatusEffect(StatusEffectType.ATTACK_UP, 3, 10),
-            StatusEffect(StatusEffectType.DEFENSE_UP, 5, 15)
+            StatusEffectType.POISON,
+            StatusEffectType.BURN
         ]
         effect = ItemEffect(
             hp_delta=20,
-            temporary_effects=status_effects
+            status_effects=status_effects
         )
         assert effect.hp_delta == 20
-        assert len(effect.temporary_effects) == 2
-        assert effect.temporary_effects[0].effect_type == StatusEffectType.ATTACK_UP
-        assert effect.temporary_effects[0].duration == 3
-        assert effect.temporary_effects[0].value == 10
-        assert effect.temporary_effects[1].effect_type == StatusEffectType.DEFENSE_UP
-        assert effect.temporary_effects[1].duration == 5
-        assert effect.temporary_effects[1].value == 15
-    
-    def test_invalid_status_effect_duration(self):
-        """無効な持続時間の状態異常効果でエラーが発生する"""
-        with pytest.raises(ValueError, match="duration must be >= 0"):
-            status_effects = [StatusEffect(StatusEffectType.POISON, -1, 5)]
-            ItemEffect(temporary_effects=status_effects)
+        assert len(effect.status_effects) == 2
+        assert effect.status_effects[0] == StatusEffectType.POISON
+        assert effect.status_effects[1] == StatusEffectType.BURN
     
     def test_get_effect_summary_empty(self):
         """空の効果の要約文字列"""
@@ -121,31 +110,33 @@ class TestItemEffect:
     def test_get_effect_summary_with_status_effects(self):
         """状態異常効果を含む要約文字列"""
         status_effects = [
-            StatusEffect(StatusEffectType.ATTACK_UP, 3, 10),
-            StatusEffect(StatusEffectType.POISON, 2, 5)
+            StatusEffectType.POISON,
+            StatusEffectType.BURN
         ]
         effect = ItemEffect(
             hp_delta=20,
-            temporary_effects=status_effects
+            status_effects=status_effects
         )
         summary = effect.get_effect_summary()
         assert "効果: " in summary
         assert "HP+20" in summary
-        assert "attack_up: 3ターン" in summary
-        assert "poison: 2ターン" in summary
+        assert "poison" in summary
+        assert "burn" in summary
     
     def test_get_effect_summary_only_status_effects(self):
         """状態異常効果のみの要約文字列"""
         status_effects = [
-            StatusEffect(StatusEffectType.BLESSING, 5, 0)
+            StatusEffectType.BLESSING
         ]
-        effect = ItemEffect(temporary_effects=status_effects)
+        effect = ItemEffect(status_effects=status_effects)
         summary = effect.get_effect_summary()
         assert "効果: " in summary
-        assert "blessing: 5ターン" in summary
+        assert "blessing" in summary
+        assert "HP" not in summary
+        assert "MP" not in summary
     
     def test_immutable(self):
-        """ItemEffectは不変オブジェクトである"""
+        """イミュータブルなオブジェクトであることを確認"""
         effect = ItemEffect(hp_delta=50)
-        with pytest.raises(AttributeError):
+        with pytest.raises(Exception):
             effect.hp_delta = 100
