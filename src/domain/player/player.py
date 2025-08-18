@@ -157,7 +157,7 @@ class Player(CombatEntity):
     
     def _remove_unique(self, item: UniqueItem):
         """ユニークアイテムを削除"""
-        self._inventory.remove_unique(item.unique_item_id)
+        self._inventory.remove_unique(item.id)
     
     def use_item(self, item: Item, count: int = 1):
         """アイテムを使用"""
