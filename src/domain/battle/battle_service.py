@@ -1,9 +1,9 @@
 import random
-from typing import List
+from typing import List, Dict, Any, Tuple
 from src.domain.battle.battle_action import ActionType, BattleAction
 from src.domain.battle.battle_result import BattleActionResult, TurnStartResult, TurnEndResult
 from src.domain.battle.battle_participant import BattleParticipant
-from src.domain.battle.battle_enum import BuffType, StatusEffectType
+from src.domain.battle.battle_enum import BuffType, StatusEffectType, ParticipantType
 from src.domain.battle.compatible_table import COMPATIBLE_TABLE
 
 
@@ -60,6 +60,33 @@ class BattleService:
         damage = max(damage - defence, 0)
 
         return int(damage)
+
+    def get_entity_stats(self, participant: BattleParticipant) -> Dict[str, Any]:
+        """エンティティの統計情報を取得"""
+        entity = participant.entity
+        
+        # PlayerとMonsterで異なるID属性を使用
+        if hasattr(entity, 'player_id'):
+            entity_id = entity.player_id
+        elif hasattr(entity, 'monster_instance_id'):
+            entity_id = entity.monster_instance_id
+        else:
+            entity_id = getattr(entity, 'entity_id', 0)
+        
+        return {
+            "entity_id": entity_id,
+            "name": entity.name,
+            "hp": entity.hp,
+            "max_hp": entity.max_hp,
+            "mp": entity.mp,
+            "max_mp": entity.max_mp,
+            "attack": entity.attack,
+            "defense": entity.defense,
+            "speed": entity.speed,
+            "level": getattr(entity, 'level', 1),
+            "status_effects": [effect.value for effect in participant.get_status_effects()],
+            "active_buffs": [buff.value for buff in participant.buffs_remaining_duration.keys()],
+        }
 
     def process_turn_start(self, attacker: BattleParticipant) -> TurnStartResult:
         """ターン開始時の処理"""
@@ -330,4 +357,25 @@ class BattleService:
             is_target_defeated=[False],
             hp_consumed=action.hp_cost or 0,
             mp_consumed=action.mp_cost or 0,
-        ) 
+        )
+    
+    def calculate_contribution_score(self, damage_dealt: int, healing_done: int, critical_hits: int, status_effects_applied: int) -> int:
+        """貢献度スコアを計算"""
+        base_score = damage_dealt + (healing_done * 2)  # 回復は2倍の価値
+        critical_bonus = critical_hits * 10  # クリティカル1回につき10点
+        status_bonus = status_effects_applied * 5  # 状態異常1つにつき5点
+        
+        return base_score + critical_bonus + status_bonus
+    
+    def get_battle_summary(self, participants: Dict[int, BattleParticipant], battle_statistics: Dict[str, Any]) -> Dict[str, Any]:
+        """戦闘要約を取得"""
+        return {
+            "total_participants": len(participants),
+            "player_count": len([p for p in participants.values() if p.participant_type == ParticipantType.PLAYER]),
+            "monster_count": len([p for p in participants.values() if p.participant_type == ParticipantType.MONSTER]),
+            "battle_statistics": battle_statistics,
+            "participant_stats": {
+                entity_id: self.get_entity_stats(participant)
+                for entity_id, participant in participants.items()
+            }
+        } 
