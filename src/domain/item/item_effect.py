@@ -1,8 +1,6 @@
 from dataclasses import dataclass, field
-from typing import List, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from src.domain.battle.status_effect import StatusEffect
+from typing import List
+from src.domain.battle.battle_enum import StatusEffectType
 
 
 @dataclass(frozen=True)
@@ -11,15 +9,11 @@ class ItemEffect:
     mp_delta: int = 0
     gold_delta: int = 0
     exp_delta: int = 0
-    temporary_effects: List["StatusEffect"] = field(default_factory=list)
+    status_effects: List[StatusEffectType] = field(default_factory=list)
     
     def __post_init__(self):
-        if self.temporary_effects:
-            for effect in self.temporary_effects:
-                if effect.duration < 0:
-                    raise ValueError(f"duration must be >= 0. duration: {effect.duration}")
-        if self.temporary_effects is None:
-            self.temporary_effects = []
+        if self.status_effects is None:
+            self.status_effects = []
     
     def get_effect_summary(self) -> str:
         effects: List[str] = []
@@ -31,8 +25,8 @@ class ItemEffect:
             effects.append(f"所持金{self.gold_delta:+d}")
         if self.exp_delta != 0:
             effects.append(f"経験値{self.exp_delta:+d}")
-        if self.temporary_effects:
-            for effect in self.temporary_effects:
-                effects.append(f"{effect.effect_type.value}: {effect.duration}ターン")
+        if self.status_effects:
+            for effect_type in self.status_effects:
+                effects.append(f"{effect_type.value}")
         
         return "効果: " + ", ".join(effects) if effects else "効果なし"

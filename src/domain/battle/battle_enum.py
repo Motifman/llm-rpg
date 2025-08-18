@@ -14,16 +14,15 @@ class StatusEffectType(Enum):
     CONFUSION = "confusion" 
     # 魔法攻撃不能
     SILENCE = "silence" 
-    # ステータスアップ
-    ATTACK_UP = "attack_up"
-    DEFENSE_UP = "defense_up"
-    SPEED_UP = "speed_up"    
-    # ステータスダウン
-    ATTACK_DOWN = "attack_down"
-    DEFENSE_DOWN = "defense_down"
-    SPEED_DOWN = "speed_down"
     # 特殊
     CURSE = "curse"
+
+
+class BuffType(Enum):
+    """バフ、デバフ"""
+    ATTACK = "attack"
+    DEFENSE = "defense"
+    SPEED = "speed"    
 
 
 class Element(Enum):
@@ -39,3 +38,22 @@ class Element(Enum):
     DARKNESS = "darkness"
     NEUTRAL = "neutral"
     POISON = "poison"
+
+
+class BattleResultType(Enum):
+    """戦闘結果"""
+    VICTORY = "victory"
+    DEFEAT = "defeat"
+    DRAW = "draw"
+
+
+class BattleState(Enum):
+    WAITING = "waiting"        # プレイヤー参加待ち
+    IN_PROGRESS = "in_progress"  # 戦闘中
+    COMPLETED = "completed"    # 戦闘終了
+
+
+class ParticipantType(Enum):
+    """参加者タイプ"""
+    PLAYER = "player"
+    MONSTER = "monster"

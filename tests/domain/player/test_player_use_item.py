@@ -150,37 +150,12 @@ class TestPlayerUseItem:
         # アイテムが消費されたことを確認
         assert not self.player.has_stackable_item(4)
     
-    def test_use_item_with_status_effects(self):
-        """状態異常効果を持つアイテムの使用テスト"""
-        # 攻撃力アップ効果を持つアイテムを作成
-        status_effects = [StatusEffect(StatusEffectType.ATTACK_UP, 3, 5)]
-        effect = ItemEffect(temporary_effects=status_effects)
-        buff_potion = self.create_consumable_item(5, "攻撃力強化薬", effect)
-        
-        # アイテムをインベントリに追加
-        self.player.add_item(buff_potion, 1)
-        
-        # 初期攻撃力確認
-        initial_attack = self.player.attack
-        
-        # アイテムを使用
-        self.player.use_item(buff_potion)
-        
-        # 攻撃力アップ効果を確認
-        assert self.player.attack == initial_attack + 5
-        # 状態異常が付与されたことを確認
-        assert self.player._dynamic_status.has_status_effect_type(StatusEffectType.ATTACK_UP)
-        # アイテムが消費されたことを確認
-        assert not self.player.has_stackable_item(5)
-    
     def test_use_item_multiple_effects(self):
         """複数の効果を持つアイテムの使用テスト"""
-        # HP回復 + 経験値増加 + 攻撃力アップの効果を持つアイテムを作成
-        status_effects = [StatusEffect(StatusEffectType.DEFENSE_UP, 2, 3)]
+        # HP回復 + 経験値増加の効果を持つアイテムを作成
         effect = ItemEffect(
             hp_delta=15,  # 30から15に変更（80 + 15 = 95なので最大値内）
-            exp_delta=25,
-            temporary_effects=status_effects
+            exp_delta=25
         )
         super_potion = self.create_consumable_item(6, "万能薬", effect)
         
@@ -190,7 +165,6 @@ class TestPlayerUseItem:
         # 初期値確認
         initial_hp = self.player.hp
         initial_exp = self.player.exp
-        initial_defense = self.player.defense
         
         # アイテムを使用
         self.player.use_item(super_potion)
@@ -198,7 +172,6 @@ class TestPlayerUseItem:
         # 全ての効果を確認
         assert self.player.hp == initial_hp + 15
         assert self.player.exp == initial_exp + 25
-        assert self.player.defense == initial_defense + 3
         # アイテムが消費されたことを確認
         assert not self.player.has_stackable_item(6)
     
@@ -233,7 +206,7 @@ class TestPlayerUseItem:
         self.player.add_item(potion, 1)
         
         # 2個使用しようとしてエラーが発生することを確認
-        with pytest.raises(ValueError, match="Player does not have enough items"):
+        with pytest.raises(AssertionError, match="Player does not have enough ポーション"):
             self.player.use_item(potion, 2)
         
         # アイテムが消費されていないことを確認
@@ -248,7 +221,7 @@ class TestPlayerUseItem:
         # インベントリにアイテムを追加しない
         
         # 存在しないアイテムを使用しようとしてエラーが発生することを確認
-        with pytest.raises(ValueError, match="Player does not have enough items"):
+        with pytest.raises(AssertionError, match="Player does not have enough 存在しないポーション"):
             self.player.use_item(potion)
     
     def test_use_item_not_consumable(self):
@@ -267,7 +240,7 @@ class TestPlayerUseItem:
         self.player.add_item(equipment_item, 1)
         
         # 消費アイテムでないアイテムを使用しようとしてエラーが発生することを確認
-        with pytest.raises(ValueError, match="Item is not consumable"):
+        with pytest.raises(AssertionError, match="Item type must be CONSUMABLE"):
             self.player.use_item(equipment_item)
         
         # アイテムが消費されていないことを確認

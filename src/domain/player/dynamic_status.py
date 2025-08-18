@@ -1,4 +1,4 @@
-from typing import Dict, TYPE_CHECKING, Optional
+from typing import Dict, Optional
 from src.domain.battle.battle_enum import StatusEffectType
 from src.domain.battle.status_effect import StatusEffect
 
@@ -148,28 +148,28 @@ class DynamicStatus:
         self._defending = False
 
     def add_status_effect(self, status_effect_type: StatusEffectType, duration: int, value: int):
-        """状態異常を追加"""
+        """状態異常を追加（非推奨）"""
         self._status_effects[status_effect_type] = StatusEffect(status_effect_type, duration, value)
     
     def remove_status_effect_by_type(self, status_effect_type: StatusEffectType):
-        """状態異常を削除"""
+        """状態異常を削除（非推奨）"""
         self._status_effects.pop(status_effect_type, None)
     
     def has_status_effect_type(self, status_effect_type: StatusEffectType) -> bool:
-        """特定の状態異常が存在するかどうか"""
+        """特定の状態異常が存在するかどうか（非推奨）"""
         return status_effect_type in self._status_effects
     
     def get_effect_bonus(self, status_effect_type: StatusEffectType) -> int:
-        """状態異常によるボーナスを取得"""
+        """状態異常によるボーナスを取得（非推奨）"""
         status_effect = self._status_effects.get(status_effect_type)
         return status_effect.value if status_effect else 0
     
     def get_effect_damage(self, status_effect_type: StatusEffectType) -> int:
-        """状態異常によるダメージを取得"""
+        """状態異常によるダメージを取得（非推奨）"""
         return self.get_effect_bonus(status_effect_type)
     
     def decrease_status_effect_duration(self):
-        """状態異常の残りターン数を減らす"""
+        """状態異常の残りターン数を減らす（非推奨）"""
         to_remove: list[StatusEffectType] = []
         for effect in self._status_effects.values():
             effect.duration -= 1
