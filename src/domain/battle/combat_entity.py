@@ -51,23 +51,17 @@ class CombatEntity(ABC):
     @property
     def attack(self) -> int:
         """攻撃力を取得（基本実装：ベース + 状態異常ボーナス）"""
-        base = self._base_status.attack
-        effect_bonus = self._dynamic_status.get_effect_bonus(StatusEffectType.ATTACK_UP)
-        return base + effect_bonus
+        return self._base_status.attack
     
     @property
     def defense(self) -> int:
         """防御力を取得（基本実装：ベース + 状態異常ボーナス）"""
-        base = self._base_status.defense
-        effect_bonus = self._dynamic_status.get_effect_bonus(StatusEffectType.DEFENSE_UP)
-        return base + effect_bonus
+        return self._base_status.defense
     
     @property
     def speed(self) -> int:
         """素早さを取得（基本実装：ベース + 状態異常ボーナス）"""
-        base = self._base_status.speed
-        effect_bonus = self._dynamic_status.get_effect_bonus(StatusEffectType.SPEED_UP)
-        return base + effect_bonus
+        return self._base_status.speed
     
     @property
     def hp(self) -> int:
@@ -89,11 +83,20 @@ class CombatEntity(ABC):
         """最大MPを取得"""
         return self._dynamic_status.max_mp
     
+    @property
+    def critical_rate(self) -> float:
+        """クリティカル率を取得"""
+        return self._base_status.critical_rate
+    
+    @property
+    def evasion_rate(self) -> float:
+        """回避率を取得"""
+        return self._base_status.evasion_rate
+    
     # ===== 戦闘関連メソッド =====
     def take_damage(self, damage: int):
         """ダメージを受ける"""
         assert damage > 0, "damage must be greater than 0"
-        damage = max(0, damage - self.defense)
         self._dynamic_status.take_damage(damage)
     
     def heal(self, amount: int):
@@ -116,15 +119,15 @@ class CombatEntity(ABC):
         return self._dynamic_status.can_consume_mp(amount)
     
     def heal_status_effect(self, status_effect_type: StatusEffectType):
-        """特定の状態異常を回復"""
+        """特定の状態異常を回復（非推奨）"""
         self._dynamic_status.remove_status_effect_by_type(status_effect_type)
     
     def add_status_effect(self, status_effect_type: StatusEffectType, duration: int, value: int):
-        """状態異常を追加"""
+        """状態異常を追加（非推奨）"""
         self._dynamic_status.add_status_effect(status_effect_type, duration, value)
     
     def has_status_effect(self, status_effect_type: StatusEffectType) -> bool:
-        """特定の状態異常を持っているかどうか"""
+        """特定の状態異常を持っているかどうか（非推奨）"""
         return self._dynamic_status.has_status_effect_type(status_effect_type)
     
     def is_alive(self) -> bool:
@@ -144,7 +147,7 @@ class CombatEntity(ABC):
         self._dynamic_status.un_defend()
 
     def process_status_effects_on_turn_start(self) -> List[StatusEffectResult]:
-        """ターン開始時に実行し、該当する状態異常のメッセージを返す"""
+        """ターン開始時に実行し、該当する状態異常のメッセージを返す（非推奨）"""
         results: List[StatusEffectResult] = []
         if self.has_status_effect(StatusEffectType.PARALYSIS):
             results.append(StatusEffectResult(status_effect_type=StatusEffectType.PARALYSIS, message=f"{self.name}は麻痺で動けない！"))
@@ -157,7 +160,7 @@ class CombatEntity(ABC):
         return results
 
     def process_status_effects_on_turn_end(self) -> List[StatusEffectResult]:
-        """ターン終了時に実行し、該当する状態異常のメッセージを返す"""
+        """ターン終了時に実行し、該当する状態異常のメッセージを返す（非推奨）"""
         results: List[StatusEffectResult] = []
         if self.has_status_effect(StatusEffectType.POISON):
             damage = self._dynamic_status.get_effect_damage(StatusEffectType.POISON)
@@ -175,7 +178,7 @@ class CombatEntity(ABC):
         return results
 
     def progress_status_effects_on_turn_end(self) -> None:
-        """ターン終了時に呼び出して、状態異常のターンを進める"""
+        """ターン終了時に呼び出して、状態異常のターンを進める（非推奨）"""
         self._dynamic_status.decrease_status_effect_duration()
     
     def can_act(self) -> bool:

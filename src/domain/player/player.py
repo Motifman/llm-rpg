@@ -13,7 +13,6 @@ from src.domain.trade.trade import TradeItem
 from src.domain.conversation.message import Message
 from src.domain.conversation.message_box import MessageBox
 from src.domain.battle.battle_enum import StatusEffectType, Element
-from src.domain.battle.status_effect_result import StatusEffectResult
 from src.domain.battle.combat_entity import CombatEntity
 from src.domain.monster.monster_enum import Race
 
