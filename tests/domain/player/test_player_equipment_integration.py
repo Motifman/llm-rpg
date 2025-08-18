@@ -184,21 +184,6 @@ class TestPlayerEquipmentIntegration:
         assert not success
         assert sample_player.has_unique_item(broken_helmet.id)  # インベントリに残る
 
-    def test_equipment_status_effects_combination(self, sample_player, sample_equipment_items):
-        """装備ボーナスと状態異常効果の組み合わせ"""
-        gloves = sample_equipment_items["gloves"]
-        
-        # グローブ装備（攻撃+3, 素早さ+2）
-        sample_player.equipment.equip_gloves(gloves)
-        
-        # 状態異常追加（攻撃+5, 3ターン）
-        sample_player.add_status_effect(StatusEffectType.ATTACK_UP, 3, 5)
-        
-        # 合計ステータス確認
-        assert sample_player.attack == 18  # ベース10 + 装備3 + 効果5
-        assert sample_player.speed == 9    # ベース7 + 装備2
-        assert sample_player.defense == 5  # ベース5のみ
-
     def test_full_equipment_display(self, sample_player, sample_equipment_items):
         """全装備表示のテスト"""
         # 全装備装着

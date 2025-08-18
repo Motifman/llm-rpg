@@ -1,10 +1,8 @@
 from abc import ABC
-from typing import List
 from src.domain.player.base_status import BaseStatus
 from src.domain.player.dynamic_status import DynamicStatus
 from src.domain.monster.monster_enum import Race
-from src.domain.battle.battle_enum import StatusEffectType, Element
-from src.domain.battle.status_effect_result import StatusEffectResult
+from src.domain.battle.battle_enum import Element
 
 
 class CombatEntity(ABC):
@@ -50,17 +48,17 @@ class CombatEntity(ABC):
     # ===== ステータスプロパティ =====
     @property
     def attack(self) -> int:
-        """攻撃力を取得（基本実装：ベース + 状態異常ボーナス）"""
+        """攻撃力を取得"""
         return self._base_status.attack
     
     @property
     def defense(self) -> int:
-        """防御力を取得（基本実装：ベース + 状態異常ボーナス）"""
+        """防御力を取得"""
         return self._base_status.defense
     
     @property
     def speed(self) -> int:
-        """素早さを取得（基本実装：ベース + 状態異常ボーナス）"""
+        """素早さを取得"""
         return self._base_status.speed
     
     @property
@@ -118,18 +116,6 @@ class CombatEntity(ABC):
         """MPが足りるかどうか"""
         return self._dynamic_status.can_consume_mp(amount)
     
-    def heal_status_effect(self, status_effect_type: StatusEffectType):
-        """特定の状態異常を回復（非推奨）"""
-        self._dynamic_status.remove_status_effect_by_type(status_effect_type)
-    
-    def add_status_effect(self, status_effect_type: StatusEffectType, duration: int, value: int):
-        """状態異常を追加（非推奨）"""
-        self._dynamic_status.add_status_effect(status_effect_type, duration, value)
-    
-    def has_status_effect(self, status_effect_type: StatusEffectType) -> bool:
-        """特定の状態異常を持っているかどうか（非推奨）"""
-        return self._dynamic_status.has_status_effect_type(status_effect_type)
-    
     def is_alive(self) -> bool:
         """生存しているかどうか"""
         return self._dynamic_status.is_alive()
@@ -145,55 +131,6 @@ class CombatEntity(ABC):
     def un_defend(self):
         """防御解除"""
         self._dynamic_status.un_defend()
-
-    def process_status_effects_on_turn_start(self) -> List[StatusEffectResult]:
-        """ターン開始時に実行し、該当する状態異常のメッセージを返す（非推奨）"""
-        results: List[StatusEffectResult] = []
-        if self.has_status_effect(StatusEffectType.PARALYSIS):
-            results.append(StatusEffectResult(status_effect_type=StatusEffectType.PARALYSIS, message=f"{self.name}は麻痺で動けない！"))
-        if self.has_status_effect(StatusEffectType.SLEEP):
-            results.append(StatusEffectResult(status_effect_type=StatusEffectType.SLEEP, message=f"{self.name}は眠っていて行動できない…"))
-        if self.has_status_effect(StatusEffectType.CONFUSION):
-            damage = max(1, self.attack // 2)
-            self._dynamic_status.take_damage(damage)
-            results.append(StatusEffectResult(status_effect_type=StatusEffectType.CONFUSION, message=f"{self.name}は混乱して自分を攻撃！ {damage}のダメージ", damage_dealt=damage))
-        return results
-
-    def process_status_effects_on_turn_end(self) -> List[StatusEffectResult]:
-        """ターン終了時に実行し、該当する状態異常のメッセージを返す（非推奨）"""
-        results: List[StatusEffectResult] = []
-        if self.has_status_effect(StatusEffectType.POISON):
-            damage = self._dynamic_status.get_effect_damage(StatusEffectType.POISON)
-            self._dynamic_status.take_damage(damage)
-            results.append(StatusEffectResult(status_effect_type=StatusEffectType.POISON, message=f"{self.name}は毒により{damage}のダメージを受けた", damage_dealt=damage))
-        if self.has_status_effect(StatusEffectType.BURN):
-            damage = self._dynamic_status.get_effect_damage(StatusEffectType.BURN)
-            self._dynamic_status.take_damage(damage)
-            results.append(StatusEffectResult(status_effect_type=StatusEffectType.BURN, message=f"{self.name}は火傷により{damage}のダメージを受けた", damage_dealt=damage))
-        if self.has_status_effect(StatusEffectType.BLESSING):
-            bonus = self._dynamic_status.get_effect_bonus(StatusEffectType.BLESSING)
-            if bonus > 0:
-                self._dynamic_status.heal(bonus)
-                results.append(StatusEffectResult(status_effect_type=StatusEffectType.BLESSING, message=f"{self.name}は加護により{bonus}回復した", healing_done=bonus))
-        return results
-
-    def progress_status_effects_on_turn_end(self) -> None:
-        """ターン終了時に呼び出して、状態異常のターンを進める（非推奨）"""
-        self._dynamic_status.decrease_status_effect_duration()
-    
-    def can_act(self) -> bool:
-        """行動可能かどうか"""
-        if self.has_status_effect(StatusEffectType.PARALYSIS):
-            return False
-        if self.has_status_effect(StatusEffectType.SLEEP):
-            return False
-        return self.is_alive() and not self.is_defending()
-    
-    def can_magic(self) -> bool:
-        """魔法攻撃可能かどうか"""
-        if self.has_status_effect(StatusEffectType.SILENCE):
-            return False
-        return self.is_alive() and not self.is_defending()
     
     # ===== スポット移動 =====
     def set_current_spot_id(self, spot_id: int):

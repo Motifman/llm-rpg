@@ -592,6 +592,16 @@ class TestBattleService:
         )
         evasive_defender = BattleParticipant.create(evasive_entity, 4)
         
+        # 回避率0%の防御者を作成
+        non_evasive_entity = MockCombatEntity(
+            name="防御者",
+            attack=15,
+            defense=10,
+            hp=80,
+            evasion_rate=0.0  # 回避しない
+        )
+        non_evasive_defender = BattleParticipant.create(non_evasive_entity, 5)
+        
         action = BattleAction(
             action_id=1,
             name="範囲攻撃",
@@ -600,13 +610,13 @@ class TestBattleService:
             damage_multiplier=1.0
         )
         
-        result = self.battle_service.execute_attack(self.attacker, [self.defender, evasive_defender], action)
+        result = self.battle_service.execute_attack(self.attacker, [non_evasive_defender, evasive_defender], action)
         
         assert result.success is True
         assert len(result.target_ids) == 2
-        assert result.target_ids == [2, 4]
+        assert result.target_ids == [5, 4]
         assert len(result.damages) == 2
-        assert result.damages[0] > 0  # 最初のdefenderはダメージを受ける
+        assert result.damages[0] > 0  # 回避しないdefenderはダメージを受ける
         assert result.damages[1] == 0  # 回避したdefenderはダメージ0
         assert len(result.messages) >= 2
         assert any("回避" in msg for msg in result.messages)
@@ -699,7 +709,8 @@ class TestBattleService:
             name="弱い敵",
             attack=5,
             defense=2,
-            hp=5  # 低いHP
+            hp=5,  # 低いHP
+            evasion_rate=0.0  # 回避しない
         )
         weak_defender = BattleParticipant.create(weak_entity, 5)
         

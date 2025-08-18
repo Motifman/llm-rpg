@@ -12,7 +12,7 @@ from src.domain.player.player_enum import Role, PlayerState
 from src.domain.trade.trade import TradeItem
 from src.domain.conversation.message import Message
 from src.domain.conversation.message_box import MessageBox
-from src.domain.battle.battle_enum import StatusEffectType, Element
+from src.domain.battle.battle_enum import Element
 from src.domain.battle.combat_entity import CombatEntity
 from src.domain.monster.monster_enum import Race
 
@@ -64,27 +64,24 @@ class Player(CombatEntity):
     
     @property
     def attack(self) -> int:
-        """攻撃力を取得（ベース + 装備ボーナス + 状態異常ボーナス）"""
+        """攻撃力を取得（ベース + 装備ボーナス）"""
         base = self._base_status.attack
         equipment_bonus = self._equipment.get_attack_bonus()
-        effect_bonus = self._dynamic_status.get_effect_bonus(StatusEffectType.ATTACK_UP)
-        return base + equipment_bonus + effect_bonus
+        return base + equipment_bonus
     
     @property
     def defense(self) -> int:
-        """防御力を取得（ベース + 装備ボーナス + 状態異常ボーナス）"""
+        """防御力を取得（ベース + 装備ボーナス）"""
         base = self._base_status.defense
         equipment_bonus = self._equipment.get_defense_bonus()
-        effect_bonus = self._dynamic_status.get_effect_bonus(StatusEffectType.DEFENSE_UP)
-        return base + equipment_bonus + effect_bonus
+        return base + equipment_bonus
     
     @property
     def speed(self) -> int:
-        """素早さを取得（ベース + 装備ボーナス + 状態異常ボーナス）"""
+        """素早さを取得（ベース + 装備ボーナス）"""
         base = self._base_status.speed
         equipment_bonus = self._equipment.get_speed_bonus()
-        effect_bonus = self._dynamic_status.get_effect_bonus(StatusEffectType.SPEED_UP)
-        return base + equipment_bonus + effect_bonus
+        return base + equipment_bonus
     
     @property
     def level(self) -> int:
@@ -164,13 +161,28 @@ class Player(CombatEntity):
     
     def use_item(self, item: Item, count: int = 1):
         """アイテムを使用"""
-        if not self.has_stackable_item(item.item_id, count):
-            raise ValueError("Player does not have enough items")
-        if item.item_type != ItemType.CONSUMABLE:
-            raise ValueError("Item is not consumable")
+        assert count > 0, "count must be greater than 0"
+        assert item.item_type == ItemType.CONSUMABLE, "Item type must be CONSUMABLE"
+        assert self._inventory.has_stackable(item.item_id, count), f"Player does not have enough {item.name}"
+        
+        # アイテムを削除
         self._remove_stackable(item, count)
-        if item.item_effect is not None:
-            self._apply_item_effect(item.item_effect, count)
+        
+        # アイテム効果を適用
+        item_effect = item.item_effect
+        
+        if item_effect is not None:
+            # HP・MP回復
+            if item_effect.hp_delta > 0:
+                self._dynamic_status.heal(item_effect.hp_delta * count)
+            if item_effect.mp_delta > 0:
+                self._dynamic_status.recover_mp(item_effect.mp_delta * count)
+            
+            # 所持金・経験値変化
+            if item_effect.gold_delta > 0:
+                self._dynamic_status.receive_gold(item_effect.gold_delta * count)
+            if item_effect.exp_delta > 0:
+                self._dynamic_status.receive_exp(item_effect.exp_delta * count)
     
     def _apply_item_effect(self, item_effect: ItemEffect, count: int):
         """アイテム効果を適用"""
@@ -185,14 +197,6 @@ class Player(CombatEntity):
             self._dynamic_status.receive_gold(item_effect.gold_delta * count)
         if item_effect.exp_delta > 0:
             self._dynamic_status.receive_exp(item_effect.exp_delta * count)
-        
-        # 状態異常効果
-        for status_effect in item_effect.temporary_effects:
-            self._dynamic_status.add_status_effect(
-                status_effect.effect_type, 
-                status_effect.duration, 
-                status_effect.value
-            )
     
     def get_stackable_item(self, item_id: int) -> Optional[Item]:
         """スタック可能アイテムを取得"""
@@ -329,9 +333,9 @@ class Player(CombatEntity):
         lines.append(f"経験値: {self.exp}")
         lines.append("")
         lines.append("=== ステータス ===")
-        lines.append(f"攻撃力: {self.attack} (ベース:{self._base_status.attack} + 装備:{self._equipment.get_attack_bonus()} + 効果:{self._dynamic_status.get_effect_bonus(StatusEffectType.ATTACK_UP)})")
-        lines.append(f"防御力: {self.defense} (ベース:{self._base_status.defense} + 装備:{self._equipment.get_defense_bonus()} + 効果:{self._dynamic_status.get_effect_bonus(StatusEffectType.DEFENSE_UP)})")
-        lines.append(f"素早さ: {self.speed} (ベース:{self._base_status.speed} + 装備:{self._equipment.get_speed_bonus()} + 効果:{self._dynamic_status.get_effect_bonus(StatusEffectType.SPEED_UP)})")
+        lines.append(f"攻撃力: {self.attack} (ベース:{self._base_status.attack} + 装備:{self._equipment.get_attack_bonus()})")
+        lines.append(f"防御力: {self.defense} (ベース:{self._base_status.defense} + 装備:{self._equipment.get_defense_bonus()})")
+        lines.append(f"素早さ: {self.speed} (ベース:{self._base_status.speed} + 装備:{self._equipment.get_speed_bonus()})")
         lines.append("")
         lines.append(self.get_equipment_display())
         lines.append("")
