@@ -66,7 +66,20 @@ class EquipmentSet:
 
     def calculate_status(self) -> BaseStatus:
         """装備によるステータスボーナスを計算"""
-        return self._weapon.base_status + self._helmet.base_status + self._chest.base_status + self._gloves.base_status + self._shoes.base_status
+        total_status = BaseStatus(attack=0, defense=0, speed=0, critical_rate=0.0, evasion_rate=0.0)
+        
+        if self._weapon:
+            total_status = total_status + self._weapon.base_status
+        if self._helmet:
+            total_status = total_status + self._helmet.base_status
+        if self._chest:
+            total_status = total_status + self._chest.base_status
+        if self._gloves:
+            total_status = total_status + self._gloves.base_status
+        if self._shoes:
+            total_status = total_status + self._shoes.base_status
+            
+        return total_status
 
 
 # class EquipmentSet:

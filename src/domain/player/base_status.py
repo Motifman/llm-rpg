@@ -11,12 +11,12 @@ class BaseStatus:
     evasion_rate: float
     
     def __post_init__(self):
-        if self.attack <= 0:
-            raise ValueError("attack must be greater than 0")
-        if self.defense <= 0:
-            raise ValueError("defense must be greater than 0")
-        if self.speed <= 0:
-            raise ValueError("speed must be greater than 0")
+        if self.attack < 0:
+            raise ValueError("attack must be greater than or equal to 0")
+        if self.defense < 0:
+            raise ValueError("defense must be greater than or equal to 0")
+        if self.speed < 0:
+            raise ValueError("speed must be greater than or equal to 0")
         if self.critical_rate < 0 or self.critical_rate > 1:
             raise ValueError("critical_rate must be between 0 and 1")
         if self.evasion_rate < 0 or self.evasion_rate > 1:

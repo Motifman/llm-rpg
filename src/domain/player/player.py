@@ -1,5 +1,4 @@
-
-from src.domain.aggregate_root import AggregateRoot
+from src.domain.common.aggregate_root import AggregateRoot
 from src.domain.item.consumable_item import ConsumableItem
 from src.domain.item.equipment_item import EquipmentItem
 from src.domain.item.item_enum import ItemType
@@ -18,7 +17,6 @@ from src.domain.conversation.message_box import MessageBox
 from src.domain.battle.battle_enum import Element
 from src.domain.battle.combat_entity import CombatEntity
 from src.domain.monster.monster_enum import Race
-from src.domain.spot.spot_id import SpotId
 from src.domain.player.gold import Gold
 from src.domain.player.exp import Exp
 
@@ -33,7 +31,7 @@ class Player(CombatEntity, AggregateRoot):
         player_id: int,
         name: str,
         role: Role,
-        current_spot_id: SpotId,
+        current_spot_id: int,
         base_status: BaseStatus,
         dynamic_status: DynamicStatus,
         inventory: Inventory,

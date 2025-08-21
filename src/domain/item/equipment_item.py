@@ -7,8 +7,8 @@ from src.domain.player.base_status import BaseStatus
 @dataclass(frozen=True)
 class EquipmentItem(UniqueItem):
     """装備品。UniqueItemの具体的な一種。"""
-    base_status: BaseStatus
-    durability: Durability
+    base_status: BaseStatus = None
+    durability: Durability = None
 
     def __post_init__(self):
         super().__post_init__()

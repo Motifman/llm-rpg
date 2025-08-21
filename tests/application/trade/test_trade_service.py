@@ -135,7 +135,6 @@ def sample_data():
         item_id=1,
         name="回復ポーション",
         description="HPを回復するポーション",
-        price=50,
         item_type=ItemType.CONSUMABLE,
         rarity=Rarity.COMMON
     )
@@ -143,7 +142,7 @@ def sample_data():
     # プレイヤーを作成
     base_status = BaseStatus(attack=10, defense=5, speed=7, critical_rate=0.1, evasion_rate=0.05)
     dynamic_status = DynamicStatus(hp=100, mp=50, max_hp=100, max_mp=50, exp=0, level=1, gold=1000)
-    inventory = Inventory()
+    inventory = Inventory.create_empty(20)
     equipment_set = EquipmentSet()
     message_box = MessageBox()
     
@@ -158,9 +157,6 @@ def sample_data():
         equipment_set=equipment_set,
         message_box=message_box
     )
-    
-    # プレイヤーにアイテムを追加
-    player.add_item(potion, 5)
     
     # プレイヤーをリポジトリに保存
     player_repo.save(player)
