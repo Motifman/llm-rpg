@@ -47,13 +47,13 @@ class InventorySlot:
     
     def add_stackable(self, item: ItemQuantity) -> None:
         """スタック可能アイテムを追加"""
-        if self.is_stackable():
-            if self.can_stack_with(item):
-                self.content = self.content.merge(item)
+        if self.can_stack_with(item):
+            if self.is_empty():
+                self.content = item
             else:
-                raise ValueError(f"Cannot stack {self.content} with {item}. max_quantity: {self.MAX_STACK_SIZE}")
+                self.content = self.content.merge(item)
         else:
-            raise ValueError(f"Slot does not contain a stackable item: {self.content}")
+            raise ValueError(f"Cannot stack {self.content} with {item}. max_quantity: {self.MAX_STACK_SIZE}")
     
     def add_unique(self, item: UniqueItem) -> None:
         """ユニークアイテムを追加"""
@@ -95,12 +95,16 @@ class InventorySlot:
     def remove_stackable(self, item_type_id: int, quantity: int) -> Optional[ItemQuantity]:
         """スタック可能アイテムを削除"""
         if self.has_stackable(item_type_id, quantity):
-            pop_item, remaining_item = self.content.split(quantity)
-            if remaining_item.quantity == 0:
+            if self.content.quantity == quantity:
+                # 全量削除の場合
+                pop_item = self.content
                 self.content = None
+                return pop_item
             else:
+                # 一部削除の場合
+                pop_item, remaining_item = self.content.split(quantity)
                 self.content = remaining_item
-            return pop_item
+                return pop_item
         return None
 
 
