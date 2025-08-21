@@ -16,18 +16,14 @@ class TradeService:
         取引オファー自体はバリデーション済み
         プレイヤーの所持品、取引内容と合致したプレイヤーかのバリデーションを行う
         """
-        # まず外部整合性（Playerの状態）をチェック
-        if not seller.can_offer_item(trade_offer.offered_item):
-            raise InsufficientItemsException("売り手はアイテムを所有していません。")
-        if not buyer.can_pay_gold(trade_offer.requested_gold):
-            raise InsufficientGoldException("買い手は所持金が足りません。")
-
         # すべてのチェックが通ったら、TradeOfferの内部整合性チェックと状態変更
         trade_offer.accept_by(buyer.player_id, buyer.name, seller.name)  # 例外が発生する可能性がある
         
         # アイテムと所持金の移動
-        seller.transfer_item_to(buyer, trade_offer.offered_item)
-        buyer.transfer_gold_to(seller, trade_offer.requested_gold)
+        buyer.pay_gold_for_trade(trade_offer.requested_gold)
+        seller.receive_gold_for_trade(trade_offer.requested_gold)
+        item_released = seller.release_item_for_trade(trade_offer.offered_item)
+        buyer.receive_item_for_trade(item_released)
         
         # ドメインイベントをディスパッチ
         if self._event_dispatcher:

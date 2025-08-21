@@ -18,14 +18,14 @@ from src.domain.trade.trade_events import (
 
 @dataclass
 class TradeItem:
-    item_id: Optional[int] = None
+    item_id: int
     count: Optional[int] = None
     unique_id: Optional[int] = None
 
     def __post_init__(self):
         """インスタンス生成後のバリデーション"""
-        is_stackable = self.item_id is not None and self.count is not None
-        is_unique = self.item_id is not None and self.unique_id is not None
+        is_stackable = self.count is not None
+        is_unique = self.unique_id is not None
         if not (is_stackable or is_unique):
             raise InvalidTradeStatusException(f"TradeItem must have either count or unique_id: {self.item_id}, {self.count}, {self.unique_id}")
         if is_stackable and is_unique:
@@ -43,6 +43,10 @@ class TradeItem:
         """固有アイテム用のファクトリメソッド"""
         return cls(item_id=item_id, count=None, unique_id=unique_id)
 
+    def is_stackable(self) -> bool:
+        """スタック可能アイテムかどうか"""
+        return self.count is not None
+    
 
 # TODO まずは簡易実装として物々交換を禁止
 @dataclass
@@ -85,23 +89,14 @@ class TradeOffer:
         trade_id: int,
         seller_id: int,
         requested_gold: int,
-        offered_item_id: int,
+        trade_item: TradeItem,
         created_at: datetime,
         trade_type: TradeType = TradeType.GLOBAL,
         target_player_id: Optional[int] = None,
-        offered_item_count: Optional[int] = None,
-        offered_unique_id: Optional[int] = None,
         seller_name: str = None,
         target_player_name: str = None,
     ) -> "TradeOffer":
         """お金との取引オファーを作成"""
-        if offered_item_count is not None:
-            trade_item = TradeItem.stackable(offered_item_id, offered_item_count)
-        elif offered_unique_id is not None:
-            trade_item = TradeItem.unique(offered_item_id, offered_unique_id)
-        else:
-            raise InvalidTradeStatusException(f"offered_item_count or offered_unique_id must be provided: {offered_item_id}, {offered_item_count}, {offered_unique_id}")
-
         trade_offer = cls(
             trade_id=trade_id,
             seller_id=seller_id,
@@ -122,9 +117,9 @@ class TradeOffer:
                     seller_name=seller_name,
                     target_player_id=target_player_id,
                     target_player_name=target_player_name,
-                    offered_item_id=offered_item_id,
-                    offered_item_count=offered_item_count,
-                    offered_unique_id=offered_unique_id,
+                    offered_item_id=trade_item.item_id,
+                    offered_item_count=trade_item.count,
+                    offered_unique_id=trade_item.unique_id,
                     requested_gold=requested_gold
                 )
             else:
@@ -133,9 +128,9 @@ class TradeOffer:
                     trade_id=trade_id,
                     seller_id=seller_id,
                     seller_name=seller_name,
-                    offered_item_id=offered_item_id,
-                    offered_item_count=offered_item_count,
-                    offered_unique_id=offered_unique_id,
+                    offered_item_id=trade_item.item_id,
+                    offered_item_count=trade_item.count,
+                    offered_unique_id=trade_item.unique_id,
                     requested_gold=requested_gold,
                     trade_type=trade_type,
                     target_player_id=target_player_id
