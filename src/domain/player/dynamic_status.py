@@ -1,6 +1,8 @@
-from typing import Dict, Optional
-from src.domain.battle.battle_enum import StatusEffectType
-from src.domain.battle.status_effect import StatusEffect
+from src.domain.player.hp import Hp
+from src.domain.player.mp import Mp
+from src.domain.player.exp import Exp
+from src.domain.player.level import Level
+from src.domain.player.gold import Gold
 
 
 class DynamicStatus:
@@ -8,136 +10,87 @@ class DynamicStatus:
     
     def __init__(
         self,
-        hp: int,
-        mp: int,
-        max_hp: int,
-        max_mp: int,
-        exp: int = 0,
-        level: int = 1,
-        gold: int = 0,
-        status_effects: Optional[Dict[StatusEffectType, StatusEffect]] = None,
+        hp: Hp,
+        mp: Mp,
+        exp: Exp,
+        level: Level,
+        gold: Gold,
         defending: bool = False,
     ):
-        assert hp > 0, "hp must be greater than 0"
-        assert mp > 0, "mp must be greater than 0"
-        assert max_hp > 0, "max_hp must be greater than 0"
-        assert max_mp > 0, "max_mp must be greater than 0"
-        assert exp >= 0, "exp must be greater than or equal to 0"
-        assert level >= 1, "level must be greater than or equal to 1"
-        assert gold >= 0, "gold must be greater than or equal to 0"
-
         self._hp = hp
         self._mp = mp
-        self._max_hp = max_hp
-        self._max_mp = max_mp
         self._exp = exp
         self._level = level
         self._gold = gold
-        self._status_effects = {} if status_effects is None else dict(status_effects)
         self._defending = defending
-    
-    @property
-    def hp(self) -> int:
-        """HPを取得"""
-        return self._hp
-    
-    @property
-    def mp(self) -> int:
-        """MPを取得"""
-        return self._mp
-    
-    @property
-    def max_hp(self) -> int:
-        """最大HPを取得"""
-        return self._max_hp
-    
-    @property
-    def max_mp(self) -> int:
-        """最大MPを取得"""
-        return self._max_mp
-    
-    @property
-    def exp(self) -> int:
-        """経験値を取得"""
-        return self._exp
-    
-    @property
-    def level(self) -> int:
-        """レベルを取得"""
-        return self._level
-    
-    @property
-    def status_effects(self) -> Dict[StatusEffectType, StatusEffect]:
-        """状態異常を取得"""
-        return self._status_effects
-    
-    @property
-    def gold(self) -> int:
-        """所持金を取得"""
-        return self._gold
-    
-    @property
-    def defending(self) -> bool:
-        """防御状態かどうか"""
-        return self._defending
+
+    @classmethod
+    def new_game(cls, max_hp: int, max_mp: int, max_exp: int, initial_level: int) -> 'DynamicStatus':
+        """新しいゲームを開始するときの初期ステータスを生成する"""
+        hp = Hp(value=max_hp, max_hp=max_hp)
+        mp = Mp(value=max_mp, max_mp=max_mp)
+        exp = Exp(value=0, max_exp=max_exp)
+        level = Level(value=initial_level)
+        gold = Gold(value=0)
+        
+        return cls(hp, mp, exp, level, gold)
 
     # == ビジネスロジックの実装 ==
     def take_damage(self, damage: int):
         """ダメージを受ける"""
-        self._hp = max(0, self._hp - damage)
+        self._hp = self._hp.damage(damage)
     
     def heal(self, amount: int):
         """回復"""
-        self._hp = min(self._hp + amount, self._max_hp)
+        self._hp = self._hp.heal(amount)
     
     def recover_mp(self, amount: int):
         """MP回復"""
-        self._mp = min(self._mp + amount, self._max_mp)
+        self._mp = self._mp.heal(amount)
     
     def consume_mp(self, amount: int):
         """MPを消費"""
-        assert amount > 0, "amount must be greater than 0"
-        self._mp = max(0, self._mp - amount)
+        self._mp = self._mp.damage(amount)
     
     def can_consume_mp(self, amount: int) -> bool:
         """MPが足りるかどうか"""
-        return self._mp >= amount
+        return self._mp.can_consume(amount)
 
     def is_alive(self) -> bool:
         """生存しているかどうか"""
-        return self._hp > 0
+        return not self._hp.is_dead()
     
-    def receive_gold(self, amount: int):
+    def receive_gold(self, gold: Gold):
         """所持金を追加"""
-        self._gold = max(0, self._gold + amount)
+        self._gold = self._gold + gold
     
-    def pay_gold(self, amount: int):
+    def pay_gold(self, gold: Gold):
         """所持金を支払う"""
-        self._gold = max(0, self._gold - amount)
+        self._gold = self._gold - gold
     
-    def can_pay_gold(self, amount: int) -> bool:
+    def can_pay_gold(self, gold: Gold) -> bool:
         """所持金が足りるかどうか"""
-        return self._gold >= amount
+        return self._gold >= gold
     
-    def receive_exp(self, amount: int):
+    def receive_exp(self, exp: Exp):
         """経験値を追加"""
-        self._exp = max(0, self._exp + amount)
+        self._exp = self._exp + exp
     
-    def pay_exp(self, amount: int):
+    def pay_exp(self, exp: Exp):
         """経験値を支払う"""
-        self._exp = max(0, self._exp - amount)
+        self._exp = self._exp - exp
     
-    def can_pay_exp(self, amount: int) -> bool:
+    def can_pay_exp(self, exp: Exp) -> bool:
         """経験値が足りるかどうか"""
-        return self._exp >= amount
+        return self._exp >= exp
     
     def level_up(self):
         """レベルアップ"""
-        self._level += 1
+        self._level = self._level.up()
     
-    def level_is_above(self, level: int) -> bool:
+    def level_is_above(self, level: Level) -> bool:
         """指定したレベルより上かどうか"""
-        return self._level > level
+        return self._level >= level
     
     def defend(self):
         """防御"""
@@ -146,34 +99,7 @@ class DynamicStatus:
     def un_defend(self):
         """防御解除"""
         self._defending = False
-
-    def add_status_effect(self, status_effect_type: StatusEffectType, duration: int, value: int):
-        """状態異常を追加（非推奨）"""
-        self._status_effects[status_effect_type] = StatusEffect(status_effect_type, duration, value)
     
-    def remove_status_effect_by_type(self, status_effect_type: StatusEffectType):
-        """状態異常を削除（非推奨）"""
-        self._status_effects.pop(status_effect_type, None)
-    
-    def has_status_effect_type(self, status_effect_type: StatusEffectType) -> bool:
-        """特定の状態異常が存在するかどうか（非推奨）"""
-        return status_effect_type in self._status_effects
-    
-    def get_effect_bonus(self, status_effect_type: StatusEffectType) -> int:
-        """状態異常によるボーナスを取得（非推奨）"""
-        status_effect = self._status_effects.get(status_effect_type)
-        return status_effect.value if status_effect else 0
-    
-    def get_effect_damage(self, status_effect_type: StatusEffectType) -> int:
-        """状態異常によるダメージを取得（非推奨）"""
-        return self.get_effect_bonus(status_effect_type)
-    
-    def decrease_status_effect_duration(self):
-        """状態異常の残りターン数を減らす（非推奨）"""
-        to_remove: list[StatusEffectType] = []
-        for effect in self._status_effects.values():
-            effect.duration -= 1
-            if effect.duration <= 0:
-                to_remove.append(effect.effect_type)
-        for effect_type in to_remove:
-            self.remove_status_effect_by_type(effect_type)
+    def is_defending(self) -> bool:
+        """防御状態かどうか"""
+        return self._defending

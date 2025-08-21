@@ -11,8 +11,27 @@ class BaseStatus:
     evasion_rate: float
     
     def __post_init__(self):
-        assert self.attack > 0, "attack must be greater than 0"
-        assert self.defense > 0, "defense must be greater than 0"
-        assert self.speed > 0, "speed must be greater than 0"
-        assert self.critical_rate >= 0 and self.critical_rate <= 1, "critical_rate must be between 0 and 1"
-        assert self.evasion_rate >= 0 and self.evasion_rate <= 1, "evasion_rate must be between 0 and 1"
+        if self.attack <= 0:
+            raise ValueError("attack must be greater than 0")
+        if self.defense <= 0:
+            raise ValueError("defense must be greater than 0")
+        if self.speed <= 0:
+            raise ValueError("speed must be greater than 0")
+        if self.critical_rate < 0 or self.critical_rate > 1:
+            raise ValueError("critical_rate must be between 0 and 1")
+        if self.evasion_rate < 0 or self.evasion_rate > 1:
+            raise ValueError("evasion_rate must be between 0 and 1")
+    
+    def __add__(self, other: 'BaseStatus') -> 'BaseStatus':
+        if not isinstance(other, BaseStatus):
+            raise TypeError(f"Invalid type: {type(other)}")
+        return BaseStatus(
+            attack=self.attack + other.attack,
+            defense=self.defense + other.defense,
+            speed=self.speed + other.speed,
+            critical_rate=self.critical_rate + other.critical_rate,
+            evasion_rate=self.evasion_rate + other.evasion_rate,
+        )
+
+
+EMPTY_STATUS = BaseStatus(0, 0, 0, 0.0, 0.0)
