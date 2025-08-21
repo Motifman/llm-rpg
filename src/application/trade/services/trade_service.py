@@ -1,13 +1,13 @@
 from typing import Optional, List
 from datetime import datetime
-from src.application.trade.commands import (
+from src.application.trade.contracts.commands import (
     CreateTradeCommand,
     ExecuteTradeCommand,
     CancelTradeCommand,
     GetPlayerTradesCommand,
     GetGlobalTradesCommand
 )
-from src.application.trade.dtos import (
+from src.application.trade.contracts.dtos import (
     CreateTradeResultDto,
     ExecuteTradeResultDto,
     CancelTradeResultDto,
@@ -28,6 +28,7 @@ from src.domain.trade.trade_exception import (
     CannotAcceptOwnTradeException,
     CannotAcceptTradeWithOtherPlayerException,
     CannotCancelTradeWithOtherPlayerException,
+    ItemNotTradeableException,
 )
 
 
@@ -66,25 +67,17 @@ class TradeApplicationService:
                 )
             
             # 2. アイテムの所有確認
-            trade_item = self._create_trade_item(command)
-            if not seller.can_offer_item(trade_item):
-                return CreateTradeResultDto(
-                    success=False,
-                    message="取引作成に失敗しました",
-                    error_message="売り手が提示アイテムを所有していません"
-                )
+            trade_item = seller.prepare_trade_offer(command)
             
             # 3. 取引オファーを作成
             trade_offer = TradeOffer.create_trade(
                 trade_id=self._trade_repository.generate_trade_id(),
                 seller_id=command.seller_id,
                 requested_gold=command.requested_gold,
-                offered_item_id=command.offered_item_id,
+                trade_item=trade_item,
                 created_at=datetime.now(),
                 trade_type=command.trade_type,
                 target_player_id=command.target_player_id,
-                offered_item_count=command.offered_item_count,
-                offered_unique_id=command.offered_unique_id,
                 seller_name=seller.name,
                 target_player_name=self._get_target_player_name(command.target_player_id) if command.target_player_id else None
             )
@@ -103,8 +96,8 @@ class TradeApplicationService:
                 trade_id=trade_offer.trade_id,
                 message=f"取引を作成しました (ID: {trade_offer.trade_id})"
             )
-            
-        except Exception as e:
+        
+        except (InsufficientItemsException, ItemNotTradeableException) as e:
             return CreateTradeResultDto(
                 success=False,
                 message="取引作成に失敗しました",
@@ -342,15 +335,6 @@ class TradeApplicationService:
         )
     
     # ===== プライベートメソッド =====
-    
-    def _create_trade_item(self, command: CreateTradeCommand) -> TradeItem:
-        """コマンドからTradeItemを作成"""
-        if command.offered_item_count is not None:
-            return TradeItem.stackable(command.offered_item_id, command.offered_item_count)
-        else:
-            return TradeItem.unique(command.offered_item_id, command.offered_unique_id)
-    
-
     
     def _get_target_player_name(self, target_player_id: int) -> str:
         """対象プレイヤーの名前を取得"""
