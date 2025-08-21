@@ -25,3 +25,10 @@ class InsufficientItemsException(TradeException):
 class InsufficientGoldException(TradeException):
     pass
 
+
+class ItemNotTradeableException(TradeException):
+    pass
+
+
+class InsufficientInventorySpaceException(TradeException):
+    pass

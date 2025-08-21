@@ -4,7 +4,7 @@ from src.domain.trade.trade_enum import TradeStatus
 from typing import Optional
 
 
-@dataclass
+@dataclass(frozen=True)
 class TradeResult:
     """取引結果"""
     trade_id: int
