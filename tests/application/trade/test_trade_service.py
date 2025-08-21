@@ -1,14 +1,14 @@
 import pytest
 from datetime import datetime
-from src.application.trade.commands import (
+from src.application.trade.contracts.commands import (
     CreateTradeCommand,
     ExecuteTradeCommand,
     CancelTradeCommand,
     GetPlayerTradesCommand,
     GetGlobalTradesCommand
 )
-from src.application.trade.trade_service import TradeApplicationService
-from src.application.trade.dtos import (
+from src.application.trade.services.trade_service import TradeApplicationService
+from src.application.trade.contracts.dtos import (
     CreateTradeResultDto,
     ExecuteTradeResultDto,
     CancelTradeResultDto,
