@@ -52,10 +52,12 @@ class ExpEffect(ItemEffect):
     def __init__(self, amount: int):
         if amount < 0:
             raise ValueError(f"Amount must be >= 0. amount: {amount}")
-        self.exp = Exp(amount)
+        self.amount = amount
 
     def apply(self, player: 'Player'):
-        player.receive_exp(self.exp)
+        # プレイヤーの現在のmax_expを使用してExpオブジェクトを作成
+        exp = Exp(self.amount, player._dynamic_status._exp.max_exp)
+        player.receive_exp(exp)
 
 
 class CompositeItemEffect(ItemEffect):

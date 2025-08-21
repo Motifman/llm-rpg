@@ -57,12 +57,12 @@ class TestTradeOffer:
     
     def test_create_stackable_trade_offer(self, sample_datetime):
         """スタック可能アイテムの取引オファー作成"""
+        trade_item = TradeItem.stackable(item_id=1, count=5)
         trade = TradeOffer.create_trade(
             trade_id=1,
             seller_id=100,
             requested_gold=500,
-            offered_item_id=1,
-            offered_item_count=5,
+            trade_item=trade_item,
             created_at=sample_datetime
         )
         
@@ -78,12 +78,12 @@ class TestTradeOffer:
     
     def test_create_unique_trade_offer(self, sample_datetime):
         """固有アイテムの取引オファー作成"""
+        trade_item = TradeItem.unique(item_id=2, unique_id=100)
         trade = TradeOffer.create_trade(
             trade_id=2,
             seller_id=200,
             requested_gold=1000,
-            offered_item_id=2,
-            offered_unique_id=100,
+            trade_item=trade_item,
             created_at=sample_datetime,
             trade_type=TradeType.DIRECT,
             target_player_id=300

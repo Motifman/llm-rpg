@@ -14,8 +14,8 @@ from src.domain.conversation.message_box import MessageBox
 def make_player(player_id: int, name: str, current_spot_id: int):
     """テスト用のPlayerオブジェクトを作成"""
     base = BaseStatus(attack=10, defense=5, speed=7, critical_rate=0.1, evasion_rate=0.05)
-    dyn = DynamicStatus(hp=20, mp=10, max_hp=20, max_mp=10, exp=0, level=1, gold=0)
-    inventory = Inventory()
+    dyn = DynamicStatus.new_game(max_hp=20, max_mp=10, max_exp=1000, initial_level=1)
+    inventory = Inventory.create_empty(20)
     equipment_set = EquipmentSet()
     message_box = MessageBox()
     return Player(

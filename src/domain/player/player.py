@@ -58,8 +58,15 @@ class Player(CombatEntity, AggregateRoot):
         item = self._inventory.search_item(command.offered_item_id, command.offered_unique_id)
         if item is None:
             raise InsufficientItemsException(f"Item not found. item_id: {command.offered_item_id}, unique_id: {command.offered_unique_id}")
-        if not item.is_tradeable():
-            raise ItemNotTradeableException(f"Item is not tradeable. item_id: {command.offered_item_id}, unique_id: {command.offered_unique_id}")
+        # 取引可能かどうかをチェック
+        if hasattr(item, 'is_tradeable'):
+            # UniqueItemの場合
+            if not item.is_tradeable:
+                raise ItemNotTradeableException(f"Item is not tradeable. item_id: {command.offered_item_id}, unique_id: {command.offered_unique_id}")
+        elif hasattr(item, 'item'):
+            # ItemQuantityの場合
+            if not item.item.is_tradeable:
+                raise ItemNotTradeableException(f"Item is not tradeable. item_id: {command.offered_item_id}, unique_id: {command.offered_unique_id}")
         if command.offered_item_count is not None:
             if self._inventory.has_stackable(command.offered_item_id, command.offered_item_count):
                 return TradeItem.stackable(command.offered_item_id, command.offered_item_count)

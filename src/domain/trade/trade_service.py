@@ -17,7 +17,7 @@ class TradeService:
         プレイヤーの所持品、取引内容と合致したプレイヤーかのバリデーションを行う
         """
         # すべてのチェックが通ったら、TradeOfferの内部整合性チェックと状態変更
-        trade_offer.accept_by(buyer.player_id, buyer.name, seller.name)  # 例外が発生する可能性がある
+        trade_offer.accept_by(buyer._player_id, buyer.name, seller.name)  # 例外が発生する可能性がある
         
         # アイテムと所持金の移動
         buyer.pay_gold_for_trade(trade_offer.requested_gold)
@@ -34,7 +34,7 @@ class TradeService:
         return True
     
     def cancel_trade(self, trade_offer: TradeOffer, player: Player):
-        trade_offer.cancel_by(player.player_id, player.name)
+        trade_offer.cancel_by(player._player_id, player.name)
         
         # ドメインイベントをディスパッチ
         if self._event_dispatcher:
