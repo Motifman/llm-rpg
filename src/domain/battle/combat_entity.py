@@ -28,7 +28,7 @@ class CombatEntity(ABC):
     @property
     def name(self) -> str:
         """名前を取得"""
-        return self._name.value
+        return self._name
     
     @property
     def race(self) -> Race:
