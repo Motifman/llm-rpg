@@ -9,9 +9,10 @@ from src.domain.item.item import Item
 @dataclass(frozen=True)
 class UniqueItem(Item):
     """ユニークIDで識別されるアイテム（エンティティ）の基底クラス"""
-    unique_id: int
+    unique_id: int = 0
     
     def __post_init__(self):
+        super().__post_init__()
         if self.unique_id < 0:
             raise ValueError(f"unique_id must be >= 0. unique_id: {self.unique_id}")
 

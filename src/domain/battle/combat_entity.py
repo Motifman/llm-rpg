@@ -3,8 +3,6 @@ from src.domain.player.base_status import BaseStatus
 from src.domain.player.dynamic_status import DynamicStatus
 from src.domain.monster.monster_enum import Race
 from src.domain.battle.battle_enum import Element
-from src.domain.spot.spot_id import SpotId
-from src.domain.player.player_name import PlayerName
 
 
 class CombatEntity(ABC):
@@ -12,10 +10,10 @@ class CombatEntity(ABC):
     
     def __init__(
         self,
-        name: PlayerName,
+        name: str,
         race: Race,
         element: Element,
-        current_spot_id: SpotId,
+        current_spot_id: int,
         base_status: BaseStatus,
         dynamic_status: DynamicStatus,
     ):
@@ -45,7 +43,7 @@ class CombatEntity(ABC):
     @property
     def current_spot_id(self) -> int:
         """現在のスポットIDを取得"""
-        return self._current_spot_id.value
+        return self._current_spot_id
     
     # ===== ステータスプロパティ =====
     @property

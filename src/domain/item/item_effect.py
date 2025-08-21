@@ -1,14 +1,16 @@
 from abc import ABC, abstractmethod
-from typing import List
-from src.domain.player.player import Player
+from typing import List, TYPE_CHECKING, Union
 from src.domain.player.gold import Gold
 from src.domain.player.exp import Exp
+
+if TYPE_CHECKING:
+    from src.domain.player.player import Player
 
 
 class ItemEffect(ABC):
     """アイテムの効果"""
     @abstractmethod
-    def apply(self, player: Player):
+    def apply(self, player: 'Player'):
         pass
 
 
@@ -19,7 +21,7 @@ class HealEffect(ItemEffect):
             raise ValueError(f"Amount must be >= 0. amount: {amount}")
         self.amount = amount
 
-    def apply(self, player: Player):
+    def apply(self, player: 'Player'):
         player.heal(self.amount)
 
 
@@ -30,7 +32,7 @@ class RecoverMpEffect(ItemEffect):
             raise ValueError(f"Amount must be >= 0. amount: {amount}")
         self.amount = amount
 
-    def apply(self, player: Player):
+    def apply(self, player: 'Player'):
         player.recover_mp(self.amount)
 
 
@@ -41,7 +43,7 @@ class GoldEffect(ItemEffect):
             raise ValueError(f"Amount must be >= 0. amount: {amount}")
         self.gold = Gold(amount)
 
-    def apply(self, player: Player):
+    def apply(self, player: 'Player'):
         player.receive_gold(self.gold)
 
 
@@ -52,7 +54,7 @@ class ExpEffect(ItemEffect):
             raise ValueError(f"Amount must be >= 0. amount: {amount}")
         self.exp = Exp(amount)
 
-    def apply(self, player: Player):
+    def apply(self, player: 'Player'):
         player.receive_exp(self.exp)
 
 
@@ -61,7 +63,7 @@ class CompositeItemEffect(ItemEffect):
     def __init__(self, effects: List[ItemEffect]):
         self.effects = effects
 
-    def apply(self, player: Player):
+    def apply(self, player: 'Player'):
         for effect in self.effects:
             effect.apply(player)
 

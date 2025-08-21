@@ -25,9 +25,7 @@ class Item:
         if self.description == "":
             raise ValueError(f"description must not be empty. description: {self.description}")
     
-    def is_tradeable(self) -> bool:
-        """取引可能かどうか"""
-        return self.is_tradeable
+
 
 
 # @dataclass(frozen=True)
