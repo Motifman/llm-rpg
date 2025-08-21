@@ -4,7 +4,7 @@ from src.domain.monster.monster_enum import Race
 from src.domain.monster.drop_reward import DropReward
 from src.domain.player.base_status import BaseStatus
 from src.domain.player.dynamic_status import DynamicStatus
-from src.domain.battle.battle_enum import StatusEffectType, Element
+from src.domain.battle.battle_enum import Element
 from src.domain.battle.battle_action import BattleAction
 from src.domain.battle.combat_entity import CombatEntity
 
@@ -58,17 +58,3 @@ class Monster(CombatEntity):
     
     def can_appear_in_area(self, area_id: int) -> bool:
         return area_id in self._allowed_areas
-    
-    # ===== ステータス表示 =====
-    def get_full_status_display(self) -> str:
-        lines = [f"=== {self.name} ==="]
-        lines.append(f"HP: {self.hp}/{self.max_hp}")
-        lines.append(f"MP: {self.mp}/{self.max_mp}")
-        lines.append("")
-        lines.append("=== ステータス ===")
-        lines.append(f"攻撃力: {self.attack} (ベース:{self._base_status.attack} + 効果:{self._dynamic_status.get_effect_bonus(StatusEffectType.ATTACK_UP)})")
-        lines.append(f"防御力: {self.defense} (ベース:{self._base_status.defense} + 効果:{self._dynamic_status.get_effect_bonus(StatusEffectType.DEFENSE_UP)})")
-        lines.append(f"素早さ: {self.speed} (ベース:{self._base_status.speed} + 効果:{self._dynamic_status.get_effect_bonus(StatusEffectType.SPEED_UP)})")
-        lines.append("")
-        
-        return "\n".join(lines)
