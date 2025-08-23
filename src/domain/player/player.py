@@ -1,3 +1,5 @@
+from datetime import datetime
+from typing import Optional
 from src.domain.common.aggregate_root import AggregateRoot
 from src.domain.item.consumable_item import ConsumableItem
 from src.domain.item.equipment_item import EquipmentItem
@@ -19,7 +21,7 @@ from src.domain.battle.combat_entity import CombatEntity
 from src.domain.monster.monster_enum import Race
 from src.domain.player.gold import Gold
 from src.domain.player.exp import Exp
-
+from src.domain.conversation.conversation_events import PlayerSpokeEvent
 from src.application.trade.contracts.commands import CreateTradeCommand
 
 
@@ -118,10 +120,25 @@ class Player(CombatEntity, AggregateRoot):
         item = self._inventory.search_item(item_id=item_id)
         if item is None:
             raise InsufficientItemsException(f"Item not found. item_id: {item_id}, count: {count}")
-        if isinstance(item, ConsumableItem):
+        
+        # ItemQuantityの場合はitemプロパティをチェック
+        if isinstance(item, ItemQuantity):
+            if isinstance(item.item, ConsumableItem):
+                if self._inventory.has_stackable(item_id, count):
+                    used_item = self._inventory.remove_item(item_id=item_id, quantity=count)
+                    # 指定した回数だけuseメソッドを呼ぶ
+                    for _ in range(count):
+                        used_item.item.use(self)
+                else:
+                    raise InsufficientItemsException(f"Item not found. item_id: {item_id}, count: {count}")
+            else:
+                raise ItemNotUsableException(f"Item is not usable. item_id: {item_id}")
+        elif isinstance(item, ConsumableItem):
             if self._inventory.has_stackable(item_id, count):
                 used_item = self._inventory.remove_item(item_id=item_id, quantity=count)
-                used_item.use(self)
+                # 指定した回数だけuseメソッドを呼ぶ
+                for _ in range(count):
+                    used_item.use(self)
             else:
                 raise InsufficientItemsException(f"Item not found. item_id: {item_id}, count: {count}")
         else:
@@ -148,7 +165,9 @@ class Player(CombatEntity, AggregateRoot):
         if not isinstance(item, EquipmentItem):
             raise ItemNotEquippableException(f"Item is not equippable. item_id: {item_id}, unique_id: {unique_id}")
         self._inventory.remove_item(item_id=item_id, unique_id=unique_id)
-        self._equipment.equip_item(item)
+        previous_equipment = self._equipment.equip_item(item)
+        if previous_equipment is not None:
+            self._inventory.add_item(previous_equipment)
     
     def unequip_item_to_inventory(self, item_type: ItemType):
         """アイテムを脱装"""
@@ -161,6 +180,16 @@ class Player(CombatEntity, AggregateRoot):
         return self._base_status + self._equipment.calculate_status()
 
     # ===== メッセージ関連の振る舞い =====
+    def speak(self, content: str, recipient: Optional["Player"] = None):
+        if recipient is not None:
+            if self._player_id == recipient._player_id:
+                raise ValueError("Cannot send message to yourself")
+            if self._current_spot_id != recipient._current_spot_id:
+                raise ValueError("Cannot send message to a player in a different spot")
+            self.add_event(PlayerSpokeEvent.create(self._player_id, content, recipient._player_id))
+        else:
+            self.add_event(PlayerSpokeEvent.create(self._player_id, content))
+    
     def receive_message(self, message: Message):
         """メッセージを受信"""
         self._message_box.append(message)
