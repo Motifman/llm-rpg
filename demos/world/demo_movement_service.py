@@ -7,7 +7,7 @@
 from datetime import datetime
 from src.application.world.commands import MovePlayerCommand, GetPlayerLocationCommand, GetSpotInfoCommand
 from src.application.world.movement_service import MovementApplicationService
-from src.domain.spot.move_service import MoveService
+from src.domain.spot.movement_service import MovementService
 from src.domain.player.player_repository import PlayerRepository
 from src.domain.spot.spot_repository import SpotRepository
 from src.domain.player.player import Player
@@ -17,10 +17,10 @@ from src.domain.player.base_status import BaseStatus
 from src.domain.player.dynamic_status import DynamicStatus
 from src.domain.player.inventory import Inventory
 from src.domain.player.equipment_set import EquipmentSet
-from src.domain.conversation.message_box import MessageBox
+from src.domain.player.message_box import MessageBox
 from src.domain.player.player_enum import Role
 from src.domain.spot.road_enum import ConditionType
-from src.domain.spot.road import Condition
+from src.domain.spot.condition import Condition
 
 
 class MockPlayerRepository(PlayerRepository):
@@ -192,7 +192,7 @@ def demo_movement_service():
     player_repo, spot_repo = create_sample_data()
     
     # 移動サービスを作成
-    move_service = MoveService()
+    move_service = MovementService()
     movement_service = MovementApplicationService(move_service, player_repo, spot_repo)
     
     # 1. プレイヤーの現在位置を確認

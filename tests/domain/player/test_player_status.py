@@ -5,7 +5,7 @@ from src.domain.player.dynamic_status import DynamicStatus
 from src.domain.player.inventory import Inventory
 from src.domain.player.equipment_set import EquipmentSet
 from src.domain.player.player_enum import Role
-from src.domain.conversation.message_box import MessageBox
+from src.domain.player.message_box import MessageBox
 from src.domain.player.hp import Hp
 from src.domain.player.mp import Mp
 from src.domain.player.exp import Exp

@@ -1,7 +1,7 @@
 import pytest
 import uuid
 from datetime import datetime
-from src.domain.conversation.message import Message
+from src.domain.player.message import Message
 
 
 class TestMessage:

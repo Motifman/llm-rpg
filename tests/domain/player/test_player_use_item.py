@@ -10,7 +10,7 @@ from src.domain.item.consumable_item import ConsumableItem
 from src.domain.item.item_quantity import ItemQuantity
 from src.domain.item.item_enum import ItemType, Rarity
 from src.domain.item.item_effect import HealEffect, RecoverMpEffect
-from src.domain.conversation.message_box import MessageBox
+from src.domain.player.message_box import MessageBox
 from src.domain.monster.monster_enum import Race
 from src.domain.battle.battle_enum import Element
 from src.domain.trade.trade_exception import InsufficientItemsException
