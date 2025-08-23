@@ -1,22 +1,26 @@
 import pytest
-from datetime import datetime
-from src.application.world.commands import MovePlayerCommand, GetPlayerLocationCommand
 from src.application.world.movement_service import MovementApplicationService
+from src.application.world.commands import MovePlayerCommand, GetPlayerLocationCommand
 from src.application.world.dtos import MoveResultDto, PlayerLocationDto
 from src.domain.spot.move_service import MoveService
-from src.domain.player.player_repository import PlayerRepository
-from src.domain.spot.spot_repository import SpotRepository
 from src.domain.player.player import Player
-from src.domain.spot.spot import Spot
-from src.domain.spot.road import Road
 from src.domain.player.base_status import BaseStatus
 from src.domain.player.dynamic_status import DynamicStatus
 from src.domain.player.inventory import Inventory
 from src.domain.player.equipment_set import EquipmentSet
-from src.domain.conversation.message_box import MessageBox
 from src.domain.player.player_enum import Role
-from src.domain.spot.road_enum import ConditionType
+from src.domain.conversation.message_box import MessageBox
+from src.domain.spot.spot import Spot
+from src.domain.spot.road import Road
 from src.domain.spot.road import Condition
+from src.domain.player.player_repository import PlayerRepository
+from src.domain.spot.spot_repository import SpotRepository
+from src.domain.player.hp import Hp
+from src.domain.player.mp import Mp
+from src.domain.player.exp import Exp
+from src.domain.player.level import Level
+from src.domain.player.gold import Gold
+from src.domain.spot.road_enum import ConditionType
 
 
 class MockPlayerRepository(PlayerRepository):
@@ -121,7 +125,12 @@ def sample_data():
     
     # プレイヤーを作成
     base_status = BaseStatus(attack=10, defense=5, speed=7, critical_rate=0.1, evasion_rate=0.05)
-    dynamic_status = DynamicStatus(hp=100, mp=50, max_hp=100, max_mp=50, exp=0, level=1, gold=1000)
+    hp = Hp(value=100, max_hp=100)
+    mp = Mp(value=50, max_mp=50)
+    exp = Exp(value=0, max_exp=1000)
+    level = Level(value=1)
+    gold = Gold(value=1000)
+    dynamic_status = DynamicStatus(hp=hp, mp=mp, exp=exp, level=level, gold=gold)
     inventory = Inventory()
     equipment_set = EquipmentSet()
     message_box = MessageBox()

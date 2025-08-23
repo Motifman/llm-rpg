@@ -17,6 +17,11 @@ from src.domain.monster.monster_enum import Race
 from src.domain.battle.battle_enum import Element
 from src.domain.monster.drop_reward import DropReward
 from src.domain.battle.battle_action import BattleAction
+from src.domain.player.hp import Hp
+from src.domain.player.mp import Mp
+from src.domain.player.exp import Exp
+from src.domain.player.level import Level
+from src.domain.player.gold import Gold
 
 
 class TestBattleEvents:
@@ -43,15 +48,13 @@ class TestBattleEvents:
             evasion_rate=0.05,
         )
         dynamic_status = DynamicStatus(
-            hp=100,
-            mp=50,
-            max_hp=100,
-            max_mp=50,
-            level=5,
-            exp=1000,
-            gold=500,
+            hp=Hp(value=100, max_hp=100),
+            mp=Mp(value=50, max_mp=50),
+            exp=Exp(value=1000, max_exp=1000),
+            level=Level(value=5),
+            gold=Gold(value=500),
         )
-        inventory = Inventory()
+        inventory = Inventory.create_empty(20)
         equipment_set = EquipmentSet()
         message_box = MessageBox()
         
@@ -76,13 +79,11 @@ class TestBattleEvents:
             evasion_rate=0.1,
         )
         monster_dynamic_status = DynamicStatus(
-            hp=80,
-            mp=30,
-            max_hp=80,
-            max_mp=30,
-            level=3,
-            exp=0,
-            gold=0,
+            hp=Hp(value=80, max_hp=80),
+            mp=Mp(value=30, max_mp=30),
+            exp=Exp(value=0, max_exp=0),
+            level=Level(value=3),
+            gold=Gold(value=0),
         )
         drop_reward = DropReward(gold=100, exp=50, items=[])
         available_actions = []

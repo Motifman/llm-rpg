@@ -1,7 +1,9 @@
 from dataclasses import dataclass, field
-from typing import List, Any, Dict
-from src.domain.player.player import Player
+from typing import List, Any, Dict, TYPE_CHECKING
 from src.domain.spot.road_enum import ConditionType
+
+if TYPE_CHECKING:
+    from src.domain.player.player import Player
 
 
 @dataclass(frozen=True)
@@ -32,7 +34,7 @@ class Condition:
         else:
             raise ValueError(f"Invalid condition type: {self.condition_type}")
     
-    def check(self, player: Player) -> bool:
+    def check(self, player: 'Player') -> bool:
         if self.condition_type == ConditionType.MIN_LEVEL:
             return player.level_is_above(self.value)
         elif self.condition_type == ConditionType.HAS_ITEM:
@@ -44,7 +46,7 @@ class Condition:
         else:
             raise ValueError(f"Invalid condition type: {self.condition_type}")
 
-    def check_with_details(self, player: Player) -> ConditionCheckResult:
+    def check_with_details(self, player: 'Player') -> ConditionCheckResult:
         """条件チェックの詳細な結果を返す"""
         if self.condition_type == ConditionType.MIN_LEVEL:
             current_level = player.level
@@ -108,7 +110,7 @@ class Road:
             conditions=conditions
         )
     
-    def is_available(self, player: Player) -> bool:
+    def is_available(self, player: 'Player') -> bool:
         if self.conditions is None:
             return True
         for condition in self.conditions:
@@ -116,7 +118,7 @@ class Road:
                 return False
         return True
 
-    def _check_availability_details(self, player: Player) -> Dict[str, Any]:
+    def _check_availability_details(self, player: 'Player') -> Dict[str, Any]:
         """道路の利用可能性の詳細な結果を返す"""
         if self.conditions is None:
             return {
@@ -140,7 +142,7 @@ class Road:
             "all_condition_results": condition_results
         }
 
-    def get_availability_message(self, player: Player) -> str:
+    def get_availability_message(self, player: 'Player') -> str:
         """利用可能性に関する詳細なメッセージを生成"""
         details = self._check_availability_details(player)
         

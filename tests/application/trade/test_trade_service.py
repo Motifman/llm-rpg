@@ -1,14 +1,14 @@
 import pytest
 from datetime import datetime
-from src.application.trade.commands import (
+from src.application.trade.contracts.commands import (
     CreateTradeCommand,
     ExecuteTradeCommand,
     CancelTradeCommand,
     GetPlayerTradesCommand,
     GetGlobalTradesCommand
 )
-from src.application.trade.trade_service import TradeApplicationService
-from src.application.trade.dtos import (
+from src.application.trade.services.trade_service import TradeApplicationService
+from src.application.trade.contracts.dtos import (
     CreateTradeResultDto,
     ExecuteTradeResultDto,
     CancelTradeResultDto,
@@ -44,7 +44,7 @@ class MockPlayerRepository(PlayerRepository):
         return self._players.get(player_id)
     
     def save(self, player: Player):
-        self._players[player.player_id] = player
+        self._players[player._player_id] = player
         return player
     
     def delete(self, player_id: int):
@@ -135,15 +135,14 @@ def sample_data():
         item_id=1,
         name="回復ポーション",
         description="HPを回復するポーション",
-        price=50,
         item_type=ItemType.CONSUMABLE,
         rarity=Rarity.COMMON
     )
     
     # プレイヤーを作成
     base_status = BaseStatus(attack=10, defense=5, speed=7, critical_rate=0.1, evasion_rate=0.05)
-    dynamic_status = DynamicStatus(hp=100, mp=50, max_hp=100, max_mp=50, exp=0, level=1, gold=1000)
-    inventory = Inventory()
+    dynamic_status = DynamicStatus.new_game(max_hp=100, max_mp=50, max_exp=1000, initial_level=1)
+    inventory = Inventory.create_empty(20)
     equipment_set = EquipmentSet()
     message_box = MessageBox()
     
@@ -160,7 +159,9 @@ def sample_data():
     )
     
     # プレイヤーにアイテムを追加
-    player.add_item(potion, 5)
+    from src.domain.item.item_quantity import ItemQuantity
+    item_quantity = ItemQuantity(potion, 5)
+    player._inventory.add_item(item_quantity)
     
     # プレイヤーをリポジトリに保存
     player_repo.save(player)
@@ -231,7 +232,7 @@ class TestTradeApplicationService:
         result = trade_service.create_trade(command)
         
         assert result.success is False
-        assert "所有していません" in result.error_message
+        assert "Item not found" in result.error_message
     
     def test_create_trade_invalid_command(self, trade_service):
         """無効なコマンドでの取引作成テスト"""
@@ -260,14 +261,18 @@ class TestTradeApplicationService:
         
         # 買い手プレイヤーを作成
         player_repo = trade_service._player_repository
+        buyer_dynamic_status = DynamicStatus.new_game(max_hp=80, max_mp=40, max_exp=1000, initial_level=1)
+        from src.domain.player.gold import Gold
+        buyer_dynamic_status.receive_gold(Gold(500))
+        
         buyer = Player(
             player_id=2,
             name="買い手",
             role=Role.ADVENTURER,
             current_spot_id=1,
             base_status=BaseStatus(attack=8, defense=3, speed=9, critical_rate=0.15, evasion_rate=0.1),
-            dynamic_status=DynamicStatus(hp=80, mp=40, max_hp=80, max_mp=40, exp=0, level=1, gold=500),
-            inventory=Inventory(),
+            dynamic_status=buyer_dynamic_status,
+            inventory=Inventory.create_empty(20),
             equipment_set=EquipmentSet(),
             message_box=MessageBox()
         )
