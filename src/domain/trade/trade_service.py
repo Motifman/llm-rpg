@@ -1,16 +1,9 @@
 from src.domain.trade.trade import TradeOffer
 from src.domain.player.player import Player
-from src.domain.trade.trade_exception import (
-    InsufficientItemsException,
-    InsufficientGoldException,
-)
-from src.domain.trade.trade_event_dispatcher import TradeEventDispatcher
+
 
 class TradeService:
-    def __init__(self, event_dispatcher: TradeEventDispatcher = None):
-        self._event_dispatcher = event_dispatcher
-    
-    def execute_trade(self, trade_offer: TradeOffer, buyer: Player, seller: Player) -> bool:
+    def execute_trade(self, trade_offer: TradeOffer, buyer: Player, seller: Player):
         """
         取引を実行する
         取引オファー自体はバリデーション済み
@@ -24,20 +17,6 @@ class TradeService:
         seller.receive_gold_for_trade(trade_offer.requested_gold)
         item_released = seller.release_item_for_trade(trade_offer.offered_item)
         buyer.receive_item_for_trade(item_released)
-        
-        # ドメインイベントをディスパッチ
-        if self._event_dispatcher:
-            events = trade_offer.get_domain_events()
-            self._event_dispatcher.dispatch_all_events(events)
-            trade_offer.clear_domain_events()
-        
-        return True
     
     def cancel_trade(self, trade_offer: TradeOffer, player: Player):
         trade_offer.cancel_by(player._player_id, player.name)
-        
-        # ドメインイベントをディスパッチ
-        if self._event_dispatcher:
-            events = trade_offer.get_domain_events()
-            self._event_dispatcher.dispatch_all_events(events)
-            trade_offer.clear_domain_events()
