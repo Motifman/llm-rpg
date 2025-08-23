@@ -47,73 +47,54 @@ class CombatEntity(ABC):
     
     # ===== ステータスプロパティ =====
     @property
-    def attack(self) -> int:
-        """攻撃力を取得"""
-        return self._base_status.attack
-    
-    @property
-    def defense(self) -> int:
-        """防御力を取得"""
-        return self._base_status.defense
-    
-    @property
-    def speed(self) -> int:
-        """素早さを取得"""
-        return self._base_status.speed
-    
-    @property
     def hp(self) -> int:
         """HPを取得"""
-        return self._dynamic_status.hp
+        return self._dynamic_status.hp.value
     
     @property
     def mp(self) -> int:
         """MPを取得"""
-        return self._dynamic_status.mp
+        return self._dynamic_status.mp.value
     
     @property
     def max_hp(self) -> int:
         """最大HPを取得"""
-        return self._dynamic_status.max_hp
+        return self._dynamic_status.hp.max_hp
     
     @property
     def max_mp(self) -> int:
         """最大MPを取得"""
-        return self._dynamic_status.max_mp
-    
-    @property
-    def critical_rate(self) -> float:
-        """クリティカル率を取得"""
-        return self._base_status.critical_rate
-    
-    @property
-    def evasion_rate(self) -> float:
-        """回避率を取得"""
-        return self._base_status.evasion_rate
+        return self._dynamic_status.mp.max_mp
     
     # ===== 戦闘関連メソッド =====
     def take_damage(self, damage: int):
         """ダメージを受ける"""
-        assert damage > 0, "damage must be greater than 0"
+        if damage < 0:
+            raise ValueError(f"Invalid damage: {damage}")
         self._dynamic_status.take_damage(damage)
     
     def heal(self, amount: int):
         """回復"""
-        assert amount > 0, "amount must be greater than 0"
+        if amount < 0:
+            raise ValueError(f"Invalid amount: {amount}")
         self._dynamic_status.heal(amount)
     
     def recover_mp(self, amount: int):
         """MP回復"""
-        assert amount > 0, "amount must be greater than 0"
+        if amount < 0:
+            raise ValueError(f"Invalid amount: {amount}")
         self._dynamic_status.recover_mp(amount)
     
     def consume_mp(self, amount: int):
         """MPを消費"""
-        assert amount > 0, "amount must be greater than 0"
+        if amount < 0:
+            raise ValueError(f"Invalid amount: {amount}")
         self._dynamic_status.consume_mp(amount)
     
     def can_consume_mp(self, amount: int) -> bool:
         """MPが足りるかどうか"""
+        if amount < 0:
+            raise ValueError(f"Invalid amount: {amount}")
         return self._dynamic_status.can_consume_mp(amount)
     
     def is_alive(self) -> bool:
@@ -122,7 +103,7 @@ class CombatEntity(ABC):
     
     def is_defending(self) -> bool:
         """防御状態かどうか"""
-        return self._dynamic_status.defending
+        return self._dynamic_status.is_defending()
     
     def defend(self):
         """防御状態にする"""
@@ -131,6 +112,10 @@ class CombatEntity(ABC):
     def un_defend(self):
         """防御解除"""
         self._dynamic_status.un_defend()
+    
+    def calculate_status(self) -> BaseStatus:
+        """ステータスを計算"""
+        return self._base_status
     
     # ===== スポット移動 =====
     def set_current_spot_id(self, spot_id: int):

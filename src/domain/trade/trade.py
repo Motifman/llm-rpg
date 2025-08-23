@@ -1,6 +1,7 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, List
 from datetime import datetime
+from src.domain.common.aggregate_root import AggregateRoot
 from src.domain.trade.trade_enum import TradeType, TradeStatus
 from src.domain.trade.trade_exception import (
     InvalidTradeStatusException,
@@ -18,14 +19,14 @@ from src.domain.trade.trade_events import (
 
 @dataclass
 class TradeItem:
-    item_id: Optional[int] = None
+    item_id: int
     count: Optional[int] = None
     unique_id: Optional[int] = None
 
     def __post_init__(self):
         """インスタンス生成後のバリデーション"""
-        is_stackable = self.item_id is not None and self.count is not None
-        is_unique = self.item_id is not None and self.unique_id is not None
+        is_stackable = self.count is not None
+        is_unique = self.unique_id is not None
         if not (is_stackable or is_unique):
             raise InvalidTradeStatusException(f"TradeItem must have either count or unique_id: {self.item_id}, {self.count}, {self.unique_id}")
         if is_stackable and is_unique:
@@ -43,41 +44,59 @@ class TradeItem:
         """固有アイテム用のファクトリメソッド"""
         return cls(item_id=item_id, count=None, unique_id=unique_id)
 
+    def is_stackable(self) -> bool:
+        """スタック可能アイテムかどうか"""
+        return self.count is not None
+    
 
 # TODO まずは簡易実装として物々交換を禁止
-@dataclass
-class TradeOffer:
+class TradeOffer(AggregateRoot):
     """取引オファー"""
-    trade_id: int
-    seller_id: int
-    offered_item: TradeItem
-    requested_gold: int
-    created_at: datetime
-    trade_type: TradeType = TradeType.GLOBAL
-    target_player_id: Optional[int] = None  # 直接取引用
-    status: TradeStatus = TradeStatus.ACTIVE
-    version: int = 0
-    buyer_id: Optional[int] = None
-    _domain_events: List = field(default_factory=list, init=False)
     
-    def __post_init__(self):
-        """インスタンス生成後のバリデーション"""
-        if self.trade_id is None:
+    def __init__(
+        self,
+        trade_id: int,
+        seller_id: int,
+        offered_item: TradeItem,
+        requested_gold: int,
+        created_at: datetime,
+        trade_type: TradeType = TradeType.GLOBAL,
+        target_player_id: Optional[int] = None,  # 直接取引用
+        status: TradeStatus = TradeStatus.ACTIVE,
+        version: int = 0,
+        buyer_id: Optional[int] = None,
+    ):
+        super().__init__()
+        
+        # 引数のバリデーション（元の __post_init__ と同じロジック）
+        if trade_id is None:
             raise ValueError("trade_id cannot be None.")
-        if self.seller_id is None:
+        if seller_id is None:
             raise ValueError("seller_id cannot be None.")
         # 初期化時はACTIVE状態のみ許可（COMPLETEDやCANCELLEDは不正）
-        if self.status != TradeStatus.ACTIVE:
-            raise InvalidTradeStatusException(f"status must be ACTIVE: {self.status}")
-        if self.buyer_id is not None:
-            raise InvalidTradeStatusException(f"buyer_id must be None when initializing: {self.buyer_id}")
+        if status != TradeStatus.ACTIVE:
+            raise InvalidTradeStatusException(f"status must be ACTIVE: {status}")
+        if buyer_id is not None:
+            raise InvalidTradeStatusException(f"buyer_id must be None when initializing: {buyer_id}")
         # DIRECTトレードの場合はtarget_player_idが必要、GLOBAL/その他の場合は不要
-        if self.trade_type == TradeType.DIRECT and self.target_player_id is None:
-            raise InvalidTradeStatusException(f"target_player_id is required for DIRECT trade: {self.target_player_id}, {self.trade_type}")
-        if self.trade_type != TradeType.DIRECT and self.target_player_id is not None:
-            raise InvalidTradeStatusException(f"target_player_id must be None when trade_type is not DIRECT: {self.target_player_id}, {self.trade_type}")
-        if self.requested_gold <= 0:
-            raise InvalidTradeStatusException(f"requested_gold must be greater than 0: {self.requested_gold}")
+        if trade_type == TradeType.DIRECT and target_player_id is None:
+            raise InvalidTradeStatusException(f"target_player_id is required for DIRECT trade: {target_player_id}, {trade_type}")
+        if trade_type != TradeType.DIRECT and target_player_id is not None:
+            raise InvalidTradeStatusException(f"target_player_id must be None when trade_type is not DIRECT: {target_player_id}, {trade_type}")
+        if requested_gold <= 0:
+            raise InvalidTradeStatusException(f"requested_gold must be greater than 0: {requested_gold}")
+        
+        # 属性の設定
+        self.trade_id = trade_id
+        self.seller_id = seller_id
+        self.offered_item = offered_item
+        self.requested_gold = requested_gold
+        self.created_at = created_at
+        self.trade_type = trade_type
+        self.target_player_id = target_player_id
+        self.status = status
+        self.version = version
+        self.buyer_id = buyer_id
     
     @classmethod
     def create_trade(
@@ -85,23 +104,14 @@ class TradeOffer:
         trade_id: int,
         seller_id: int,
         requested_gold: int,
-        offered_item_id: int,
+        trade_item: TradeItem,
         created_at: datetime,
         trade_type: TradeType = TradeType.GLOBAL,
         target_player_id: Optional[int] = None,
-        offered_item_count: Optional[int] = None,
-        offered_unique_id: Optional[int] = None,
         seller_name: str = None,
         target_player_name: str = None,
     ) -> "TradeOffer":
         """お金との取引オファーを作成"""
-        if offered_item_count is not None:
-            trade_item = TradeItem.stackable(offered_item_id, offered_item_count)
-        elif offered_unique_id is not None:
-            trade_item = TradeItem.unique(offered_item_id, offered_unique_id)
-        else:
-            raise InvalidTradeStatusException(f"offered_item_count or offered_unique_id must be provided: {offered_item_id}, {offered_item_count}, {offered_unique_id}")
-
         trade_offer = cls(
             trade_id=trade_id,
             seller_id=seller_id,
@@ -122,9 +132,9 @@ class TradeOffer:
                     seller_name=seller_name,
                     target_player_id=target_player_id,
                     target_player_name=target_player_name,
-                    offered_item_id=offered_item_id,
-                    offered_item_count=offered_item_count,
-                    offered_unique_id=offered_unique_id,
+                    offered_item_id=trade_item.item_id,
+                    offered_item_count=trade_item.count,
+                    offered_unique_id=trade_item.unique_id,
                     requested_gold=requested_gold
                 )
             else:
@@ -133,9 +143,9 @@ class TradeOffer:
                     trade_id=trade_id,
                     seller_id=seller_id,
                     seller_name=seller_name,
-                    offered_item_id=offered_item_id,
-                    offered_item_count=offered_item_count,
-                    offered_unique_id=offered_unique_id,
+                    offered_item_id=trade_item.item_id,
+                    offered_item_count=trade_item.count,
+                    offered_unique_id=trade_item.unique_id,
                     requested_gold=requested_gold,
                     trade_type=trade_type,
                     target_player_id=target_player_id
@@ -201,7 +211,7 @@ class TradeOffer:
                 requested_gold=self.requested_gold,
                 trade_type=self.trade_type
             )
-            self._domain_events.append(event)
+            self.add_event(event)
 
     def cancel_by(self, player_id: int, seller_name: str = None) -> None:
         """取引をキャンセル"""
@@ -224,7 +234,7 @@ class TradeOffer:
                 trade_type=self.trade_type,
                 target_player_id=self.target_player_id
             )
-            self._domain_events.append(event)
+            self.add_event(event)
     
     def __str__(self):
         return f"TradeOffer({self.trade_id}): {self.get_trade_summary()}"
@@ -234,11 +244,4 @@ class TradeOffer:
                 f"offered={self.offered_item.item_id}x{self.offered_item.count}, "
                 f"requested={self.requested_gold} G, "
                 f"status={self.status.value})")
-    
-    def get_domain_events(self) -> List:
-        """ドメインイベントを取得"""
-        return self._domain_events.copy()
-    
-    def clear_domain_events(self):
-        """ドメインイベントをクリア"""
-        self._domain_events.clear() 
+ 
