@@ -1,7 +1,7 @@
 import pytest
 from datetime import datetime
-from src.domain.conversation.message_box import MessageBox
-from src.domain.conversation.message import Message
+from src.domain.player.message_box import MessageBox
+from src.domain.player.message import Message
 
 
 class TestMessageBox:

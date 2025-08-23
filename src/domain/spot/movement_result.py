@@ -5,7 +5,7 @@ from src.domain.spot.road import Road
 
 
 @dataclass
-class MoveResult:
+class MovementResult:
     """移動結果"""
     player_id: int
     player_name: str

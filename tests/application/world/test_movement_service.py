@@ -2,17 +2,17 @@ import pytest
 from src.application.world.movement_service import MovementApplicationService
 from src.application.world.commands import MovePlayerCommand, GetPlayerLocationCommand
 from src.application.world.dtos import MoveResultDto, PlayerLocationDto
-from src.domain.spot.move_service import MoveService
+from src.domain.spot.movement_service import MovementService
 from src.domain.player.player import Player
 from src.domain.player.base_status import BaseStatus
 from src.domain.player.dynamic_status import DynamicStatus
 from src.domain.player.inventory import Inventory
 from src.domain.player.equipment_set import EquipmentSet
 from src.domain.player.player_enum import Role
-from src.domain.conversation.message_box import MessageBox
+from src.domain.player.message_box import MessageBox
 from src.domain.spot.spot import Spot
 from src.domain.spot.road import Road
-from src.domain.spot.road import Condition
+from src.domain.spot.condition import Condition
 from src.domain.player.player_repository import PlayerRepository
 from src.domain.spot.spot_repository import SpotRepository
 from src.domain.player.hp import Hp
@@ -160,7 +160,7 @@ def sample_data():
 def movement_service(sample_data):
     """移動サービスを作成"""
     player_repo, spot_repo = sample_data
-    move_service = MoveService()
+    move_service = MovementService()
     return MovementApplicationService(move_service, player_repo, spot_repo)
 
 

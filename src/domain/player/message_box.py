@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from typing import List
-from src.domain.conversation.message import Message
+from src.domain.player.message import Message
 
 
 @dataclass

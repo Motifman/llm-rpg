@@ -2,7 +2,7 @@ from datetime import datetime
 from src.domain.spot.spot import Spot
 from src.domain.spot.road import Road
 from src.domain.player.player import Player
-from src.domain.spot.move_result import MoveResult
+from src.domain.spot.movement_result import MovementResult
 from src.domain.spot.spot_exception import (
     PlayerNotMeetConditionException,
     PlayerAlreadyInToSpotException,
@@ -13,11 +13,11 @@ from src.domain.spot.spot_exception import (
 )
 
 
-class MoveService:
+class MovementService:
     def __init__(self):
         pass
     
-    def move_player_to_spot(self, player: Player, from_spot: Spot, to_spot: Spot, road: Road) -> MoveResult:
+    def move_player_to_spot(self, player: Player, from_spot: Spot, to_spot: Spot, road: Road) -> MovementResult:
         """プレイヤーをスポット間で移動させる
         
         Args:
@@ -58,7 +58,7 @@ class MoveService:
         to_spot.add_player(player.player_id)
         
         # 移動結果を返却
-        return MoveResult(
+        return MovementResult(
             player_id=player.player_id,
             player_name=player.name,
             from_spot_id=from_spot.spot_id,

@@ -12,7 +12,7 @@ from src.application.world.dtos import (
     AvailableMoveDto,
     PlayerMovementOptionsDto
 )
-from src.domain.spot.move_service import MoveService
+from src.domain.spot.movement_service import MovementService
 from src.domain.player.player_repository import PlayerRepository
 from src.domain.spot.spot_repository import SpotRepository
 from src.domain.spot.spot_exception import (
@@ -30,7 +30,7 @@ class MovementApplicationService:
     
     def __init__(
         self,
-        move_service: MoveService,
+        move_service: MovementService,
         player_repository: PlayerRepository,
         spot_repository: SpotRepository
     ):
