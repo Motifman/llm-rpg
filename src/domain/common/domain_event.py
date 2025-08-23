@@ -9,12 +9,12 @@ class DomainEvent(ABC):
     """ドメインイベントの基底クラス"""
     event_id: int
     occurred_at: datetime
-    aggregate_id: str
+    aggregate_id: int
     aggregate_type: str
     event_version: int = 1
     
     @classmethod
-    def create(cls, aggregate_id: str, aggregate_type: str, **kwargs):
+    def create(cls, aggregate_id: int, aggregate_type: str, **kwargs):
         return cls(
             event_id=int(uuid.uuid4()),
             occurred_at=datetime.now(),
