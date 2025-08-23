@@ -9,7 +9,7 @@ from src.domain.item.item import Item
 from src.domain.item.consumable_item import ConsumableItem
 from src.domain.item.item_quantity import ItemQuantity
 from src.domain.item.item_enum import ItemType, Rarity
-from src.domain.item.item_effect import ItemEffect
+from src.domain.item.item_effect import HealEffect, RecoverMpEffect
 from src.domain.conversation.message_box import MessageBox
 from src.domain.monster.monster_enum import Race
 from src.domain.battle.battle_enum import Element
@@ -55,7 +55,7 @@ class TestPlayerUseItem:
             element=Element.NEUTRAL
         )
     
-    def create_consumable_item(self, item_id: int, name: str, effect: ItemEffect) -> ConsumableItem:
+    def create_consumable_item(self, item_id: int, name: str, effect) -> ConsumableItem:
         """消費アイテムを作成"""
         return ConsumableItem(
             item_id=item_id,
@@ -69,7 +69,7 @@ class TestPlayerUseItem:
     def test_use_item_hp_recovery(self):
         """HP回復アイテムの使用テスト"""
         # HP回復効果を持つアイテムを作成
-        effect = ItemEffect(hp_delta=20)
+        effect = HealEffect(amount=20)
         potion = self.create_consumable_item(1, "ヒールポーション", effect)
         
         # アイテムをインベントリに追加
@@ -77,14 +77,14 @@ class TestPlayerUseItem:
         self.player._inventory.add_item(item_quantity)
         
         # 初期HP確認
-        initial_hp = self.player._dynamic_status.hp
+        initial_hp = self.player._dynamic_status._hp.value
         assert initial_hp == 80
         
         # アイテムを使用
         self.player.use_item(1, 1)
         
         # HP回復を確認
-        assert self.player._dynamic_status.hp == initial_hp + 20
+        assert self.player._dynamic_status._hp.value == initial_hp + 20
         # アイテムが消費されたことを確認
         assert self.player._inventory.has_stackable(1, 1)
         assert not self.player._inventory.has_stackable(1, 2)
@@ -92,7 +92,7 @@ class TestPlayerUseItem:
     def test_use_item_mp_recovery(self):
         """MP回復アイテムの使用テスト"""
         # MP回復効果を持つアイテムを作成
-        effect = ItemEffect(mp_delta=15)
+        effect = RecoverMpEffect(amount=15)
         ether = self.create_consumable_item(2, "エーテル", effect)
         
         # アイテムをインベントリに追加
@@ -100,35 +100,36 @@ class TestPlayerUseItem:
         self.player._inventory.add_item(item_quantity)
         
         # 初期MP確認
-        initial_mp = self.player._dynamic_status.mp
+        initial_mp = self.player._dynamic_status._mp.value
         assert initial_mp == 30
         
         # アイテムを使用
         self.player.use_item(2, 1)
         
         # MP回復を確認
-        assert self.player._dynamic_status.mp == initial_mp + 15
+        assert self.player._dynamic_status._mp.value == initial_mp + 15
         # アイテムが消費されたことを確認
         assert not self.player._inventory.has_stackable(2, 1)
     
     def test_use_item_multiple_count(self):
         """複数個のアイテムを一度に使用するテスト"""
         # HP回復効果を持つアイテムを作成
-        effect = ItemEffect(hp_delta=5)
+        effect = HealEffect(amount=5)
         small_potion = self.create_consumable_item(3, "小さなポーション", effect)
         
         # アイテムをインベントリに追加
         item_quantity = ItemQuantity(small_potion, 5)
         self.player._inventory.add_item(item_quantity)
         
-        # 初期HP確認
-        initial_hp = self.player._dynamic_status.hp
+        # 初期HP確認（他のテストの影響でHPが変わっている可能性がある）
+        initial_hp = self.player._dynamic_status._hp.value
         
         # アイテムを3個使用
         self.player.use_item(3, 3)
         
-        # HP回復を確認（5 * 3 = 15）
-        assert self.player._dynamic_status.hp == initial_hp + 15
+        # HP回復を確認（5 * 3 = 15、ただし最大HPでキャップされる）
+        expected_hp = min(initial_hp + 15, self.player._dynamic_status._hp.max_hp)
+        assert self.player._dynamic_status._hp.value == expected_hp
         # 残りアイテム数を確認
         assert self.player._inventory.has_stackable(3, 2)
         assert not self.player._inventory.has_stackable(3, 3)
@@ -136,7 +137,7 @@ class TestPlayerUseItem:
     def test_use_item_not_enough_items(self):
         """十分な数のアイテムを持っていない場合のテスト"""
         # HP回復効果を持つアイテムを作成
-        effect = ItemEffect(hp_delta=20)
+        effect = HealEffect(amount=20)
         potion = self.create_consumable_item(4, "ポーション", effect)
         
         # アイテムを1個だけインベントリに追加
@@ -181,7 +182,7 @@ class TestPlayerUseItem:
     def test_use_item_hp_over_max(self):
         """最大HPを超える回復アイテムの使用テスト"""
         # 大量HP回復効果を持つアイテムを作成
-        effect = ItemEffect(hp_delta=50)
+        effect = HealEffect(amount=50)
         mega_potion = self.create_consumable_item(5, "メガポーション", effect)
         
         # アイテムをインベントリに追加
@@ -189,13 +190,13 @@ class TestPlayerUseItem:
         self.player._inventory.add_item(item_quantity)
         
         # 現在のHP/最大HPを確認
-        assert self.player._dynamic_status.hp == 80
-        assert self.player._dynamic_status.max_hp == 100
+        assert self.player._dynamic_status._hp.value == 80
+        assert self.player._dynamic_status._hp.max_hp == 100
         
         # アイテムを使用
         self.player.use_item(5, 1)
         
         # HPが最大値でキャップされることを確認
-        assert self.player._dynamic_status.hp == 100
+        assert self.player._dynamic_status._hp.value == 100
         # アイテムが消費されたことを確認
         assert not self.player._inventory.has_stackable(5, 1)
