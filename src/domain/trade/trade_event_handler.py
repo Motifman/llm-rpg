@@ -7,7 +7,7 @@ from src.domain.trade.trade_events import (
     DirectTradeOfferedEvent
 )
 from src.domain.player.player_repository import PlayerRepository
-from src.domain.conversation.message import Message
+from src.domain.player.message import Message
 from datetime import datetime
 
 
