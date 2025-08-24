@@ -6,11 +6,11 @@ class PlayerNotMeetConditionException(SpotException):
     pass
 
 
-class PlayerAlreadyInToSpotException(SpotException):
+class PlayerAlreadyInSpotException(SpotException):
     pass
 
 
-class PlayerNotInFromSpotException(SpotException):
+class PlayerNotInSpotException(SpotException):
     pass
 
 

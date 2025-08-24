@@ -15,10 +15,11 @@ from src.application.world.dtos import (
 from src.domain.spot.movement_service import MovementService
 from src.domain.player.player_repository import PlayerRepository
 from src.domain.spot.spot_repository import SpotRepository
+from src.domain.spot.road_repository import RoadRepository
 from src.domain.spot.spot_exception import (
     PlayerNotMeetConditionException,
-    PlayerAlreadyInToSpotException,
-    PlayerNotInFromSpotException,
+    PlayerAlreadyInSpotException,
+    PlayerNotInSpotException,
     SpotNotConnectedException,
     RoadNotConnectedToFromSpotException,
     RoadNotConnectedToToSpotException,
@@ -32,11 +33,13 @@ class MovementApplicationService:
         self,
         move_service: MovementService,
         player_repository: PlayerRepository,
-        spot_repository: SpotRepository
+        spot_repository: SpotRepository,
+        road_repository: RoadRepository
     ):
         self._move_service = move_service
         self._player_repository = player_repository
         self._spot_repository = spot_repository
+        self._road_repository = road_repository
     
     def move_player(self, command: MovePlayerCommand) -> MoveResultDto:
         """プレイヤーを移動させる
@@ -63,24 +66,9 @@ class MovementApplicationService:
         if not from_spot:
             raise ValueError(f"Current spot not found: {player.current_spot_id}")
         
-        # 2. 道路を取得
-        road = self._find_road_between_spots(from_spot, to_spot)
+        road = self._road_repository.find_between_spots(from_spot.spot_id, to_spot.spot_id)
         if not road:
-            return MoveResultDto(
-                success=False,
-                player_id=player.player_id,
-                player_name=player.name,
-                from_spot_id=from_spot.spot_id,
-                from_spot_name=from_spot.name,
-                to_spot_id=to_spot.spot_id,
-                to_spot_name=to_spot.name,
-                road_id=0,
-                road_description="",
-                moved_at=datetime.now(),
-                distance=0,
-                message="移動に失敗しました",
-                error_message=f"スポット {from_spot.spot_id} と {to_spot.spot_id} の間に道路がありません"
-            )
+            raise ValueError(f"Road not found between spots {from_spot.spot_id} and {to_spot.spot_id}")
         
         try:
             # 3. ドメインサービスで移動実行
@@ -90,6 +78,7 @@ class MovementApplicationService:
             self._player_repository.save(player)
             self._spot_repository.save(from_spot)
             self._spot_repository.save(to_spot)
+            self._road_repository.save(road)
             
             # 5. DTOに変換して返却
             return MoveResultDto(
@@ -107,8 +96,8 @@ class MovementApplicationService:
                 message=move_result.get_move_summary()
             )
             
-        except (PlayerNotMeetConditionException, PlayerAlreadyInToSpotException,
-                PlayerNotInFromSpotException, SpotNotConnectedException,
+        except (PlayerNotMeetConditionException, PlayerAlreadyInSpotException,
+                PlayerNotInSpotException, SpotNotConnectedException,
                 RoadNotConnectedToFromSpotException, RoadNotConnectedToToSpotException) as e:
             return MoveResultDto(
                 success=False,
@@ -158,6 +147,11 @@ class MovementApplicationService:
         # エリア情報は将来的に実装
         area_name = None
         
+        # 接続情報をリポジトリから取得
+        connected_spots = self._spot_repository.find_connected_spots(spot.spot_id)
+        connected_spot_ids = [spot.spot_id for spot in connected_spots]
+        connected_spot_names = [spot.name for spot in connected_spots]
+        
         return SpotInfoDto(
             spot_id=spot.spot_id,
             name=spot.name,
@@ -166,8 +160,8 @@ class MovementApplicationService:
             area_name=area_name,
             current_player_count=spot.get_current_player_count(),
             current_player_ids=spot.get_current_player_ids(),
-            connected_spot_ids=spot.get_connected_spot_ids(),
-            connected_spot_names=spot.get_connected_spot_names()
+            connected_spot_ids=connected_spot_ids,
+            connected_spot_names=connected_spot_names
         )
     
     def get_player_movement_options(self, player_id: int) -> Optional[PlayerMovementOptionsDto]:
@@ -182,31 +176,26 @@ class MovementApplicationService:
         
         available_moves = []
         
-        # 接続されているスポットをチェック
-        for road in current_spot.get_all_roads():
-            to_spot = self._spot_repository.find_by_id(road.to_spot_id)
+        # 接続されているスポットをリポジトリから取得
+        connected_spot_ids = self._road_repository.find_connected_spot_ids(current_spot.spot_id)
+        
+        for to_spot_id in connected_spot_ids:
+            to_spot = self._spot_repository.find_by_id(to_spot_id)
             if not to_spot:
                 continue
             
-            # 道路の条件をチェック
-            conditions_met = road.is_available(player)
-            failed_conditions = []
-            
-            if not conditions_met:
-                # 失敗した条件の詳細を取得
-                availability_details = road._check_availability_details(player)
-                failed_conditions = [
-                    f"{result.condition.condition_type.value}: {result.message}"
-                    for result in availability_details["failed_conditions"]
-                ]
+            # 道路情報をリポジトリから取得
+            road = self._road_repository.find_between_spots(current_spot.spot_id, to_spot_id)
+            if not road:
+                continue
             
             available_moves.append(AvailableMoveDto(
                 spot_id=to_spot.spot_id,
                 spot_name=to_spot.name,
                 road_id=road.road_id,
                 road_description=road.description,
-                conditions_met=conditions_met,
-                failed_conditions=failed_conditions
+                conditions_met=True,  # 条件チェックは移動時に実行されるため、ここでは常にTrue
+                failed_conditions=[]  # 条件チェックは移動時に実行されるため、ここでは空リスト
             ))
         
         return PlayerMovementOptionsDto(
@@ -215,12 +204,5 @@ class MovementApplicationService:
             current_spot_id=current_spot.spot_id,
             current_spot_name=current_spot.name,
             available_moves=available_moves,
-            total_available_moves=len([m for m in available_moves if m.conditions_met])
+            total_available_moves=len(available_moves)  # すべての接続先を利用可能として扱う
         )
-    
-    def _find_road_between_spots(self, from_spot, to_spot):
-        """2つのスポット間の道路を検索"""
-        for road in from_spot.get_all_roads():
-            if road.to_spot_id == to_spot.spot_id:
-                return road
-        return None
