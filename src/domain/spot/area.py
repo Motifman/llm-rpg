@@ -1,17 +1,26 @@
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Set, Dict, field
+from typing import TYPE_CHECKING, Set, Dict
+from src.domain.common.aggregate_root import AggregateRoot
 
 if TYPE_CHECKING:
     from src.domain.spot.spot import Spot
 
-
-@dataclass
-class Area:
-    area_id: int
-    name: str
-    description: str
-    spot_ids: Set[int] = field(default_factory=set)
+class Area(AggregateRoot):
+    def __init__(
+        self,
+        area_id: int,
+        name: str,
+        description: str,
+    ):
+        super().__init__()
+        self._area_id = area_id
+        self._name = name
+        self._description = description
+        self._spot_ids = set()
     
+    @property
+    def area_id(self) -> int:
+        return self._area_id
+
     # エリア内のスポット管理
     def add_spot(self, spot_id: int):
         """エリアにスポットを追加"""
@@ -56,8 +65,3 @@ class Area:
             if spot_id in spots and spots[spot_id].is_player_in_spot(player_id):
                 return True
         return False
-    
-    # エリア情報
-    def get_area_summary(self) -> str:
-        """エリアの概要を取得"""
-        return f"{self.name} ({self.area_id}) - {self.description} (スポット数: {self.get_spot_count()})"

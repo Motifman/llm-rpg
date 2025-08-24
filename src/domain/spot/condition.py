@@ -1,84 +1,61 @@
-from dataclasses import dataclass
-from typing import Any
-from src.domain.spot.road_enum import ConditionType
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, List
+from src.domain.player.level import Level
+from src.domain.player.gold import Gold
+from src.domain.player.player_enum import Role
+from src.domain.spot.spot_exception import PlayerNotMeetConditionException
+
+if TYPE_CHECKING:
+    from src.domain.player.player import Player
 
 
-@dataclass(frozen=True)
-class ConditionCheckResult:
-    condition: "Condition"
-    is_satisfied: bool
-    message: str = ""
+class ConditionChecker(ABC):
+    @abstractmethod
+    def check(self, player: 'Player'):
+        pass
 
 
-@dataclass(frozen=True)
-class Condition:
-    condition_type: ConditionType
-    value: Any
+class LevelConditionChecker(ConditionChecker):
+    def __init__(self, value: int):
+        self.level = Level(value)
+
+    def check(self, player: 'Player'):
+        if not player.level_is_above(self.level):
+            raise PlayerNotMeetConditionException(f"Player {player.player_id} does not meet the level condition: {self.level}")
+
+
+class ItemConditionChecker(ConditionChecker):
+    def __init__(self, item_id: int, quantity: int):
+        self.item_id = item_id
+        self.quantity = quantity
     
-    def __post_init__(self):
-        if self.condition_type == ConditionType.HAS_GOLD:
-            if self.value < 0:
-                raise ValueError(f"Value must be greater than or equal to 0: {self.value}")
-        elif self.condition_type == ConditionType.HAS_ITEM:
-            if self.value < 0:
-                raise ValueError(f"Value must be greater than or equal to 0: {self.value}")
-        elif self.condition_type == ConditionType.HAS_ROLE:
-            if self.value is None:
-                raise ValueError(f"Value must be not None: {self.value}")
-        elif self.condition_type == ConditionType.MIN_LEVEL:
-            if self.value < 0:
-                raise ValueError(f"Value must be greater than or equal to 0: {self.value}")
-        else:
-            raise ValueError(f"Invalid condition type: {self.condition_type}")
-    
-    def check(self, player: 'Player') -> bool:
-        if self.condition_type == ConditionType.MIN_LEVEL:
-            return player.level_is_above(self.value)
-        elif self.condition_type == ConditionType.HAS_ITEM:
-            return player.has_stackable_item(self.value)
-        elif self.condition_type == ConditionType.HAS_GOLD:
-            return player.can_pay_gold(self.value)
-        elif self.condition_type == ConditionType.HAS_ROLE:
-            return player.role == self.value
-        else:
-            raise ValueError(f"Invalid condition type: {self.condition_type}")
+    def check(self, player: 'Player'):
+        if not player.has_item(self.item_id, self.quantity):
+            raise PlayerNotMeetConditionException(f"Player {player.player_id} does not meet the item condition: {self.item_id} {self.quantity}")
 
-    def check_with_details(self, player: 'Player') -> ConditionCheckResult:
-        """条件チェックの詳細な結果を返す"""
-        if self.condition_type == ConditionType.MIN_LEVEL:
-            current_level = player.level
-            is_satisfied = player.level_is_above(self.value)
-            message = f"レベル {self.value} 以上が必要 (現在: {current_level})"
-            return ConditionCheckResult(
-                condition=self,
-                is_satisfied=is_satisfied,
-                message=message
-            )
-        elif self.condition_type == ConditionType.HAS_ITEM:
-            has_item = player.has_stackable_item(self.value)
-            message = f"アイテム '{self.value}' が必要"
-            return ConditionCheckResult(
-                condition=self,
-                is_satisfied=has_item,
-                message=message
-            )
-        elif self.condition_type == ConditionType.HAS_GOLD:
-            current_gold = player.gold
-            can_pay = player.can_pay_gold(self.value)
-            message = f"ゴールド {self.value} 以上が必要 (現在: {current_gold})"
-            return ConditionCheckResult(
-                condition=self,
-                is_satisfied=can_pay,
-                message=message
-            )
-        elif self.condition_type == ConditionType.HAS_ROLE:
-            current_role = player.role
-            has_role = player.role == self.value
-            message = f"ロール '{self.value}' が必要 (現在: {current_role})"
-            return ConditionCheckResult(
-                condition=self,
-                is_satisfied=has_role,
-                message=message
-            )
-        else:
-            raise ValueError(f"Invalid condition type: {self.condition_type}")
+
+class GoldConditionChecker(ConditionChecker):
+    def __init__(self, value: int):
+        self.gold = Gold(value)
+
+    def check(self, player: 'Player'):
+        if not player.can_pay_gold(self.gold):
+            raise PlayerNotMeetConditionException(f"Player {player.player_id} does not meet the gold condition: {self.gold}")
+
+
+class RoleConditionChecker(ConditionChecker):
+    def __init__(self, role: Role):
+        self.role = role
+
+    def check(self, player: 'Player'):
+        if not player.is_role(self.role):
+            raise PlayerNotMeetConditionException(f"Player {player.player_id} does not meet the role condition: {self.role}")
+
+
+class CompositeConditionChecker(ConditionChecker):
+    def __init__(self, conditions: List[ConditionChecker]):
+        self.conditions = conditions
+
+    def check(self, player: 'Player'):
+        for condition in self.conditions:
+            condition.check(player)

@@ -1,5 +1,6 @@
 import pytest
 from src.domain.spot.spot import Spot
+from src.domain.spot.spot_exception import PlayerAlreadyInSpotException, PlayerNotInSpotException
 
 
 class TestSpot:
@@ -16,8 +17,23 @@ class TestSpot:
         assert spot.spot_id == 1
         assert spot.name == "テスト場所"
         assert spot.description == "テスト用の場所です"
+        assert spot.area_id is None
         assert spot.get_current_player_ids() == set()
         assert spot.get_current_player_count() == 0
+
+    def test_spot_initialization_with_area(self):
+        """エリアID付きのSpot初期化テスト"""
+        spot = Spot(
+            spot_id=1,
+            name="テスト場所",
+            description="テスト用の場所です",
+            area_id=10
+        )
+        
+        assert spot.spot_id == 1
+        assert spot.name == "テスト場所"
+        assert spot.description == "テスト用の場所です"
+        assert spot.area_id == 10
 
     def test_add_player(self):
         """プレイヤー追加のテスト"""
@@ -39,8 +55,8 @@ class TestSpot:
         assert spot.get_current_player_count() == 2
         assert spot.is_player_in_spot(200) is True
 
-    def test_add_duplicate_player(self):
-        """重複するプレイヤー追加のテスト"""
+    def test_add_duplicate_player_raises_exception(self):
+        """重複するプレイヤー追加で例外が発生するテスト"""
         spot = Spot(
             spot_id=1,
             name="テスト場所",
@@ -49,11 +65,12 @@ class TestSpot:
         
         # 同じプレイヤーを2回追加
         spot.add_player(100)
-        spot.add_player(100)
         
-        # setなので重複は無視される
+        with pytest.raises(PlayerAlreadyInSpotException) as exc_info:
+            spot.add_player(100)
+        
+        assert "Player 100 is already in the spot 1" in str(exc_info.value)
         assert spot.get_current_player_count() == 1
-        assert spot.is_player_in_spot(100) is True
 
     def test_remove_player(self):
         """プレイヤー削除のテスト"""
@@ -75,17 +92,18 @@ class TestSpot:
         assert spot.is_player_in_spot(100) is False
         assert spot.is_player_in_spot(200) is True
 
-    def test_remove_nonexistent_player(self):
-        """存在しないプレイヤーの削除テスト"""
+    def test_remove_nonexistent_player_raises_exception(self):
+        """存在しないプレイヤーの削除で例外が発生するテスト"""
         spot = Spot(
             spot_id=1,
             name="テスト場所",
             description="テスト用の場所です"
         )
         
-        # 存在しないプレイヤーを削除（エラーにならない）
-        spot.remove_player(999)
-        assert spot.get_current_player_count() == 0
+        with pytest.raises(PlayerNotInSpotException) as exc_info:
+            spot.remove_player(999)
+        
+        assert "Player 999 is not in the spot 1" in str(exc_info.value)
 
     def test_get_current_player_ids(self):
         """現在のプレイヤーID取得のテスト"""
@@ -154,6 +172,25 @@ class TestSpot:
         expected = "魔法の森 (42) 神秘的な力が宿る森"
         assert summary == expected
 
+    def test_get_spot_summary_with_area(self):
+        """エリア名付きスポット概要取得のテスト"""
+        spot = Spot(
+            spot_id=42,
+            name="魔法の森",
+            description="神秘的な力が宿る森",
+            area_id=5
+        )
+        
+        # エリア名なし
+        summary = spot.get_spot_summary_with_area()
+        expected = "魔法の森 (42) 神秘的な力が宿る森"
+        assert summary == expected
+        
+        # エリア名あり
+        summary_with_area = spot.get_spot_summary_with_area("魔法エリア")
+        expected_with_area = "魔法の森 (42) 神秘的な力が宿る森 (area:魔法エリア)"
+        assert summary_with_area == expected_with_area
+
     def test_spot_with_custom_player_ids(self):
         """カスタムプレイヤーIDセットでの初期化テスト"""
         initial_players = {1, 2, 3}
@@ -200,3 +237,31 @@ class TestSpot:
         # 残っているプレイヤーIDを確認
         remaining_players = spot.get_current_player_ids()
         assert remaining_players == {101, 103, 105}
+
+    def test_domain_events_are_raised(self):
+        """ドメインイベントが発生するテスト"""
+        spot = Spot(
+            spot_id=1,
+            name="テスト場所",
+            description="テスト用の場所です"
+        )
+        
+        # プレイヤー追加時のイベント
+        spot.add_player(100)
+        events = spot.get_events()
+        assert len(events) == 1
+        assert events[0].__class__.__name__ == "PlayerEnteredSpotEvent"
+        assert events[0].player_id == 100
+        assert events[0].spot_id == 1
+        
+        # イベントをクリア
+        spot.clear_events()
+        assert len(spot.get_events()) == 0
+        
+        # プレイヤー削除時のイベント
+        spot.remove_player(100)
+        events = spot.get_events()
+        assert len(events) == 1
+        assert events[0].__class__.__name__ == "PlayerExitedSpotEvent"
+        assert events[0].player_id == 100
+        assert events[0].spot_id == 1
