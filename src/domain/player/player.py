@@ -1,6 +1,4 @@
-from datetime import datetime
 from typing import Optional
-from src.domain.common.aggregate_root import AggregateRoot
 from src.domain.item.consumable_item import ConsumableItem
 from src.domain.item.equipment_item import EquipmentItem
 from src.domain.item.item_enum import ItemType
@@ -16,6 +14,7 @@ from src.domain.player.message import Message
 from src.domain.player.message_box import MessageBox
 from src.domain.player.gold import Gold
 from src.domain.player.exp import Exp
+from src.domain.player.level import Level
 from src.domain.player.conversation_events import PlayerSpokeEvent
 from src.domain.trade.trade import TradeItem
 from src.domain.trade.trade_exception import InsufficientItemsException, InsufficientGoldException, ItemNotTradeableException, InsufficientInventorySpaceException
@@ -25,7 +24,7 @@ from src.domain.monster.monster_enum import Race
 from src.application.trade.contracts.commands import CreateTradeCommand
 
 
-class Player(CombatEntity, AggregateRoot):
+class Player(CombatEntity):
     """プレイヤークラス"""
     
     def __init__(
@@ -53,6 +52,10 @@ class Player(CombatEntity, AggregateRoot):
         self._equipment = equipment_set
         self._message_box = message_box
         # self._appearance = AppearanceSet()  # 将来実装
+    
+    @property
+    def player_id(self) -> int:
+        return self._player_id
     
     # ===== 取引関連の振る舞いの実装 =====
     def prepare_trade_offer(self, command: CreateTradeCommand) -> TradeItem:
@@ -186,9 +189,18 @@ class Player(CombatEntity, AggregateRoot):
                 raise ValueError("Cannot send message to yourself")
             if self._current_spot_id != recipient._current_spot_id:
                 raise ValueError("Cannot send message to a player in a different spot")
-            self.add_event(PlayerSpokeEvent.create(self._player_id, content, recipient._player_id))
+            self.add_event(PlayerSpokeEvent(
+                aggregate_id=self._player_id,
+                aggregate_type="player",
+                content=content,
+                recipient_id=recipient._player_id,
+            ))
         else:
-            self.add_event(PlayerSpokeEvent.create(self._player_id, content))
+            self.add_event(PlayerSpokeEvent(
+                aggregate_id=self._player_id,
+                aggregate_type="player",
+                content=content,
+            ))
     
     def receive_message(self, message: Message):
         """メッセージを受信"""
@@ -200,3 +212,20 @@ class Player(CombatEntity, AggregateRoot):
         if len(messages) == 0:
             return ""
         return "\n".join([message.display() for message in messages])
+
+    # ===== プレイヤーの状態をチェックするメソッド =====
+    def level_is_above(self, level: Level) -> bool:
+        """プレイヤーのレベルが指定したレベルより上かどうかをチェック"""
+        return self._dynamic_status.level >= level
+
+    def has_item(self, item_id: int, quantity: int) -> bool:
+        """プレイヤーが指定したアイテムを持っているかどうかをチェック"""
+        return self._inventory.has_stackable(item_id, quantity)
+
+    def can_pay_gold(self, gold: Gold) -> bool:
+        """プレイヤーが指定した金額を支払えるかどうかをチェック"""
+        return self._dynamic_status.can_pay_gold(gold)
+
+    def is_role(self, role: Role) -> bool:
+        """プレイヤーの役割が指定した役割かどうかをチェック"""
+        return self._role == role
