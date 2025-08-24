@@ -1,11 +1,14 @@
-from abc import ABC
+from typing import Optional
+from src.domain.common.aggregate_root import AggregateRoot
 from src.domain.player.base_status import BaseStatus
 from src.domain.player.dynamic_status import DynamicStatus
 from src.domain.monster.monster_enum import Race
 from src.domain.battle.battle_enum import Element
+from src.domain.spot.spot_exception import PlayerAlreadyInSpotException
+from src.domain.spot.movement_events import PlayerMovedEvent
 
 
-class CombatEntity(ABC):
+class CombatEntity(AggregateRoot):
     """戦闘エンティティの基底クラス - PlayerとMonsterの共通機能"""
     
     def __init__(
@@ -16,6 +19,7 @@ class CombatEntity(ABC):
         current_spot_id: int,
         base_status: BaseStatus,
         dynamic_status: DynamicStatus,
+        previous_spot_id: Optional[int] = None,
     ):
         self._name = name
         self._race = race
@@ -23,6 +27,7 @@ class CombatEntity(ABC):
         self._current_spot_id = current_spot_id
         self._base_status = base_status
         self._dynamic_status = dynamic_status
+        self._previous_spot_id = previous_spot_id
     
     # ===== 基本プロパティ =====
     @property
@@ -117,7 +122,16 @@ class CombatEntity(ABC):
         """ステータスを計算"""
         return self._base_status
     
-    # ===== スポット移動 =====
-    def set_current_spot_id(self, spot_id: int):
-        """現在のスポットIDを設定"""
-        self._current_spot_id = spot_id
+    # ===== 移動関連のメソッド =====
+    def move_to_spot(self, to_spot_id: int):
+        if self._current_spot_id == to_spot_id:
+            raise PlayerAlreadyInSpotException(f"Player {self.player_id} is already in the spot {to_spot_id}")
+
+        self._previous_spot_id = self._current_spot_id
+        self._current_spot_id = to_spot_id
+
+        self.add_event(PlayerMovedEvent(
+            player_id=self.player_id,
+            from_spot_id=self._previous_spot_id,
+            to_spot_id=to_spot_id,
+        ))

@@ -16,3 +16,9 @@ class Gold:
 
     def __ge__(self, gold: "Gold") -> bool:
         return self.value >= gold.value
+    
+    def __str__(self) -> str:
+        return str(self.value)
+    
+    def __repr__(self) -> str:
+        return f"Gold({self.value})"
