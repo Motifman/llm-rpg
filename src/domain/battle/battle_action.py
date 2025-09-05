@@ -57,26 +57,26 @@ class HealAction(BattleAction):
     recovered_debuffs: Optional[List[BuffType]] = None
     
     def __post_init__(self):
-        super().__post_init__()
-        if self.heal_hp_amount is None and self.heal_mp_amount:
-            raise ValueError("both heal_hp_amount and heal_mp_amount do not exist")
+        if self.heal_hp_amount is None and self.heal_mp_amount is None:
+            raise ValueError("At least one of heal_hp_amount or heal_mp_amount must be specified")
         if self.heal_hp_amount is not None and self.heal_hp_amount <= 0:
             raise ValueError("heal_hp_amount must be positive value")
         if self.heal_mp_amount is not None and self.heal_mp_amount <= 0:
             raise ValueError("heal_mp_amount must be positive value")
-        if self.hp_cost is not None and self.hp_cost <= 0:
-            raise ValueError("hp_cost must be positive value")
-        if self.mp_cost is not None and self.mp_cost <= 0:
-            raise ValueError("mp_cost must be positive value")
+        if self.hp_cost is not None and self.hp_cost < 0:
+            raise ValueError("hp_cost must be non-negative")
+        if self.mp_cost is not None and self.mp_cost < 0:
+            raise ValueError("mp_cost must be non-negative")
     
     def _execute_core(self, actor: CombatState, targets: List[CombatState], context: "BattleLogicService", base_messages: List[str]) -> BattleActionResult:
         healing_hp_amount = self.heal_hp_amount or 0
         healing_mp_amount = self.heal_mp_amount or 0
 
-        actor_state_change = ActorStateChange(actor_id=actor.entity_id, mp_change=-(self.mp_cost or 0), hp_change=-(self.hp_cost or 0))
+        actor_state_change = ActorStateChange(actor_id=actor.entity_id, participant_type=actor.participant_type, mp_change=-(self.mp_cost or 0), hp_change=-(self.hp_cost or 0))
         target_state_changes = [
             TargetStateChange(
                 target_id=target.entity_id,
+                participant_type=target.participant_type,
                 hp_change=healing_hp_amount,
                 mp_change=healing_mp_amount,
                 status_effects_to_remove=self.recovered_status_effects,
@@ -122,6 +122,7 @@ class BuffInfo:
             raise ValueError(f"duration must be positive. duration: {self.duration}")
 
 
+@dataclass(frozen=True)
 class AttackAction(BattleAction):
     """攻撃系のアクション"""
     damage_multiplier: float = 1.0
@@ -135,7 +136,6 @@ class AttackAction(BattleAction):
     hit_rate: Optional[float] = None
     
     def __post_init__(self):
-        super().__post_init__()
         if self.hit_rate is not None and (self.hit_rate < 0 or self.hit_rate > 1.0):
             raise ValueError(f"hit_rate must be between 0 and 1. hit_rate: {self.hit_rate}")
         if self.mp_cost is not None and self.mp_cost < 0:
@@ -154,6 +154,7 @@ class AttackAction(BattleAction):
                 failure_reason="missed",
                 actor_state_change=ActorStateChange(
                     actor_id=actor.entity_id,
+                    participant_type=actor.participant_type,
                     mp_change=-(self.mp_cost or 0),
                     hp_change=-(self.hp_cost or 0)
                 )
@@ -161,47 +162,52 @@ class AttackAction(BattleAction):
         
         target_state_changes = []
         all_messages = base_messages.copy()
+        damage_results = []
 
         for defender in targets:
             if (defender.entity_id, defender.participant_type) in hit_result.evaded_targets:
                 all_messages.append(f"{defender.name}は攻撃を回避した！")
-                target_state_changes.append(TargetStateChange(target_id=defender.entity_id))
+                target_state_changes.append(TargetStateChange(target_id=defender.entity_id, participant_type=defender.participant_type))
                 continue
-            
+
             # ダメージ計算
             damage_result = context.damage_calculator.calculate_damage(actor, defender, self)
-            
+            damage_results.append(damage_result)
+
             # 効果適用
             effect_result = context.effect_applier.apply_effects(defender, self)
-            
+
             # 状態変更を作成
             target_state_changes.append(TargetStateChange(
                 target_id=defender.entity_id,
+                participant_type=defender.participant_type,
                 hp_change=damage_result.damage,
                 status_effects_to_add=effect_result.status_effects_to_add,
                 buffs_to_add=effect_result.buffs_to_add,
             ))
-            
+
             # メッセージ追加
             all_messages.extend(effect_result.messages)
             all_messages.append(f"{actor.name}は{defender.name}に{damage_result.damage}のダメージを与えた！{'クリティカル！' if damage_result.is_critical else ''}")
-        
+
         return BattleActionResult.create_success(
             messages=all_messages,
             actor_state_change=ActorStateChange(
                 actor_id=actor.entity_id,
+                participant_type=actor.participant_type,
                 mp_change=-(self.mp_cost or 0),
                 hp_change=-(self.hp_cost or 0)
             ),
             target_state_changes=target_state_changes,
             metadata=BattleActionMetadata(
-                critical_hits=[r.is_critical for r in damage_result],
-                compatibility_multipliers=[r.compatibility_multiplier for r in damage_result],
-                race_attack_multipliers=[r.race_attack_multiplier for r in damage_result]
+                critical_hits=[r.is_critical for r in damage_results],
+                compatibility_multipliers=[r.compatibility_multiplier for r in damage_results],
+                race_attack_multipliers=[r.race_attack_multiplier for r in damage_results]
             )
         )
 
 
+@dataclass(frozen=True)
 class StatusEffectApplyAction(BattleAction):
     """状態異常付与系のアクション"""
     status_effect_rate: Dict[StatusEffectType, float] = field(default_factory=dict)
@@ -210,7 +216,6 @@ class StatusEffectApplyAction(BattleAction):
     hit_rate: Optional[float] = None
     
     def __post_init__(self):
-        super().__post_init__()
         if self.hit_rate is not None and (self.hit_rate < 0 or self.hit_rate > 1.0):
             raise ValueError(f"hit_rate must be between 0 and 1. hit_rate: {self.hit_rate}")
         for rate in self.status_effect_rate.values():
@@ -233,6 +238,7 @@ class StatusEffectApplyAction(BattleAction):
                 failure_reason="missed",
                 actor_state_change=ActorStateChange(
                     actor_id=actor.entity_id,
+                    participant_type=actor.participant_type,
                     mp_change=-(self.mp_cost or 0),
                     hp_change=-(self.hp_cost or 0)
                 )
@@ -244,18 +250,19 @@ class StatusEffectApplyAction(BattleAction):
         for target in targets:
             if (target.entity_id, target.participant_type) in hit_result.evaded_targets:
                 all_messages.append(f"{target.name}には当たらなかった...")
-                target_state_changes.append(TargetStateChange(target_id=target.entity_id))
+                target_state_changes.append(TargetStateChange(target_id=target.entity_id, participant_type=target.participant_type))
                 continue
-            
+
             # 状態異常付与
             effect_result = context.effect_applier.apply_effects(target, self)
-            
+
             # 状態変更を作成
             target_state_changes.append(TargetStateChange(
                 target_id=target.entity_id,
+                participant_type=target.participant_type,
                 status_effects_to_add=effect_result.status_effects_to_add,
             ))
-            
+
             # メッセージ追加
             all_messages.extend(effect_result.messages)
             all_messages.append(f"{actor.name}は{target.name}に状態異常を付与した！")
@@ -264,6 +271,7 @@ class StatusEffectApplyAction(BattleAction):
             messages=all_messages,
             actor_state_change=ActorStateChange(
                 actor_id=actor.entity_id,
+                participant_type=actor.participant_type,
                 mp_change=-(self.mp_cost or 0),
                 hp_change=-(self.hp_cost or 0)
             ),
@@ -271,6 +279,7 @@ class StatusEffectApplyAction(BattleAction):
         )
 
 
+@dataclass(frozen=True)
 class BuffApplyAction(BattleAction):
     """バフ付与系のアクション"""
     buff_rate: Dict[BuffType, float] = field(default_factory=dict)
@@ -279,7 +288,6 @@ class BuffApplyAction(BattleAction):
     hit_rate: Optional[float] = None
     
     def __post_init__(self):
-        super().__post_init__()
         if self.hit_rate is not None and (self.hit_rate < 0 or self.hit_rate > 1.0):
             raise ValueError(f"hit_rate must be between 0 and 1. hit_rate: {self.hit_rate}")
         for rate in self.buff_rate.values():
@@ -313,18 +321,19 @@ class BuffApplyAction(BattleAction):
         for target in targets:
             if (target.entity_id, target.participant_type) in hit_result.evaded_targets:
                 all_messages.append(f"{target.name}には当たらなかった...")
-                target_state_changes.append(TargetStateChange(target_id=target.entity_id))
+                target_state_changes.append(TargetStateChange(target_id=target.entity_id, participant_type=target.participant_type))
                 continue
-            
+
             # バフ付与
             effect_result = context.effect_applier.apply_effects(target, self)
-            
+
             # 状態変更を作成
             target_state_changes.append(TargetStateChange(
                 target_id=target.entity_id,
+                participant_type=target.participant_type,
                 buffs_to_add=effect_result.buffs_to_add,
             ))
-            
+
             # メッセージ追加
             all_messages.extend(effect_result.messages)
             all_messages.append(f"{actor.name}は{target.name}にバフを付与した！")
@@ -333,6 +342,7 @@ class BuffApplyAction(BattleAction):
             messages=all_messages,
             actor_state_change=ActorStateChange(
                 actor_id=actor.entity_id,
+                participant_type=actor.participant_type,
                 mp_change=-(self.mp_cost or 0),
                 hp_change=-(self.hp_cost or 0)
             ),
@@ -347,7 +357,7 @@ class DefendAction(BattleAction):
         messages.append(f"{actor.name}は防御の構えを取った！")
         return BattleActionResult.create_success(
             messages=messages,
-            actor_state_change=ActorStateChange(actor_id=actor.entity_id, is_defend=True),
+            actor_state_change=ActorStateChange(actor_id=actor.entity_id, participant_type=actor.participant_type, is_defend=True),
         )
 
 
@@ -358,6 +368,7 @@ class EscapeAction(BattleAction):
         messages.append(f"{actor.name}は逃亡した！")
         return BattleActionResult.create_success(
             messages=messages,
+            actor_state_change=ActorStateChange(actor_id=actor.entity_id, participant_type=actor.participant_type),
         )
 
 
