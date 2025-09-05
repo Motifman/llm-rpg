@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from src.domain.item.consumable_item import ConsumableItem
 from src.domain.item.equipment_item import EquipmentItem
 from src.domain.item.item_enum import ItemType
@@ -12,19 +12,23 @@ from src.domain.player.equipment_set import EquipmentSet
 from src.domain.player.player_enum import Role, PlayerState
 from src.domain.player.message import Message
 from src.domain.player.message_box import MessageBox
-from src.domain.player.gold import Gold
-from src.domain.player.exp import Exp
-from src.domain.player.level import Level
+from src.domain.common.value_object import Exp, Gold, Level
 from src.domain.player.conversation_events import PlayerSpokeEvent
 from src.domain.trade.trade import TradeItem
 from src.domain.trade.trade_exception import InsufficientItemsException, InsufficientGoldException, ItemNotTradeableException, InsufficientInventorySpaceException
-from src.domain.battle.battle_enum import Element
-from src.domain.battle.combat_entity import CombatEntity
-from src.domain.monster.monster_enum import Race
+from src.domain.battle.battle_enum import Element, Race
+
+if TYPE_CHECKING:
+    from src.domain.battle.combat_state import CombatState
 from src.application.trade.contracts.commands import CreateTradeCommand
+from src.domain.common.aggregate_root import AggregateRoot
+from src.domain.spot.movement_events import PlayerMovedEvent
+from src.domain.spot.spot_exception import PlayerAlreadyInSpotException
+from src.domain.player.hp import Hp
+from src.domain.player.mp import Mp
 
 
-class Player(CombatEntity):
+class Player(AggregateRoot):
     """プレイヤークラス"""
     
     def __init__(
@@ -41,21 +45,57 @@ class Player(CombatEntity):
         race: Race = Race.HUMAN,
         element: Element = Element.NEUTRAL,
     ):
-        # 基底クラスの初期化
-        super().__init__(name, race, element, current_spot_id, base_status, dynamic_status)
-        
         # プレイヤー固有の属性
         self._player_id = player_id
+        self._name = name
         self._role = role
+        self._current_spot_id = current_spot_id
+        self._previous_spot_id = None
         self._player_state = PlayerState.NORMAL
         self._inventory = inventory
         self._equipment = equipment_set
         self._message_box = message_box
+        self._base_status = base_status
+        self._dynamic_status = dynamic_status
+        self._race = race
+        self._element = element
         # self._appearance = AppearanceSet()  # 将来実装
     
     @property
     def player_id(self) -> int:
         return self._player_id
+    
+    @property
+    def name(self) -> str:
+        return self._name
+    
+    @property
+    def role(self) -> Role:
+        return self._role
+    
+    @property
+    def current_spot_id(self) -> int:
+        return self._current_spot_id
+    
+    @property
+    def player_state(self) -> PlayerState:
+        return self._player_state
+    
+    @property
+    def race(self) -> Race:
+        return self._race
+    
+    @property
+    def element(self) -> Element:
+        return self._element
+    
+    @property
+    def hp(self) -> Hp:
+        return self._dynamic_status.hp
+    
+    @property
+    def mp(self) -> Mp:
+        return self._dynamic_status.mp
     
     # ===== 取引関連の振る舞いの実装 =====
     def prepare_trade_offer(self, command: CreateTradeCommand) -> TradeItem:
@@ -178,7 +218,7 @@ class Player(CombatEntity):
         if item is not None:
             self._inventory.add_item(item)
 
-    def calculate_status(self) -> BaseStatus:
+    def calculate_status_including_equipment(self) -> BaseStatus:
         """ステータスを計算"""
         return self._base_status + self._equipment.calculate_status()
 
@@ -229,3 +269,23 @@ class Player(CombatEntity):
     def is_role(self, role: Role) -> bool:
         """プレイヤーの役割が指定した役割かどうかをチェック"""
         return self._role == role
+
+    # ===== 移動関連のメソッド =====
+    def move_to_spot(self, to_spot_id: int):
+        if self._current_spot_id == to_spot_id:
+            raise PlayerAlreadyInSpotException(f"Player {self.player_id} is already in the spot {to_spot_id}")
+
+        self._previous_spot_id = self._current_spot_id
+        self._current_spot_id = to_spot_id
+
+        self.add_event(PlayerMovedEvent(
+            player_id=self.player_id,
+            from_spot_id=self._previous_spot_id,
+            to_spot_id=to_spot_id,
+        ))
+    
+    # ===== 戦闘後の状態を適用 =====
+    def apply_battle_result(self, combat_state: CombatState):
+        """戦闘後の状態を適用"""
+        self._dynamic_status.hp = combat_state.current_hp
+        self._dynamic_status.mp = combat_state.current_mp
