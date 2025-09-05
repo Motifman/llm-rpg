@@ -1,45 +1,40 @@
 
 from typing import List
-from src.domain.monster.monster_enum import Race
 from src.domain.monster.drop_reward import DropReward
 from src.domain.player.base_status import BaseStatus
-from src.domain.player.dynamic_status import DynamicStatus
-from src.domain.battle.battle_enum import Element
+from src.domain.battle.battle_enum import Element, Race
 from src.domain.battle.battle_action import BattleAction
-from src.domain.battle.combat_entity import CombatEntity
+from src.domain.common.aggregate_root import AggregateRoot
 
 
-class Monster(CombatEntity):
+class Monster(AggregateRoot):
     def __init__(
         self,
-        monster_instance_id: int,
         monster_type_id: int,
         name: str,
         description: str,
         race: Race,
         element: Element,
-        current_spot_id: int,
         base_status: BaseStatus,
-        dynamic_status: DynamicStatus,
+        max_hp: int,
+        max_mp: int,
         available_actions: List[BattleAction],
         drop_reward: DropReward,
         allowed_areas: List[int]
     ):
-        # 基底クラスの初期化
-        super().__init__(name, race, element, current_spot_id, base_status, dynamic_status)
-        
         # モンスター固有の属性
-        self._monster_instance_id = monster_instance_id
         self._monster_type_id = monster_type_id
+        self._name = name
         self._description = description
+        self._race = race
+        self._element = element
+        self._base_status = base_status
+        self._max_hp = max_hp
+        self._max_mp = max_mp
         self._available_actions = available_actions
         self._drop_reward = drop_reward
         self._allowed_areas = allowed_areas
 
-    @property
-    def monster_instance_id(self) -> int:
-        return self._monster_instance_id
-    
     @property
     def monster_type_id(self) -> int:
         return self._monster_type_id
@@ -48,8 +43,31 @@ class Monster(CombatEntity):
     def description(self) -> str:
         return self._description
 
-    # ===== モンスター固有のメソッド =====
+    @property
+    def name(self) -> str:
+        return self._name
     
+    @property
+    def race(self) -> Race:
+        return self._race
+    
+    @property
+    def element(self) -> Element:
+        return self._element
+    
+    @property
+    def base_status(self) -> BaseStatus:
+        return self._base_status
+    
+    @property
+    def max_hp(self) -> int:
+        return self._max_hp
+    
+    @property
+    def max_mp(self) -> int:
+        return self._max_mp
+
+    # ===== モンスター固有のメソッド =====
     def get_drop_reward(self) -> DropReward:
         return self._drop_reward
     
@@ -58,3 +76,7 @@ class Monster(CombatEntity):
     
     def can_appear_in_area(self, area_id: int) -> bool:
         return area_id in self._allowed_areas
+
+    def calculate_status_including_equipment(self) -> BaseStatus:
+        """モンスターのステータスを計算（装備なしなのでbase_statusをそのまま返す）"""
+        return self._base_status
