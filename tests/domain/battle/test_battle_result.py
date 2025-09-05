@@ -1,428 +1,379 @@
 import pytest
+from unittest.mock import Mock
+
 from src.domain.battle.battle_result import (
     TurnStartResult,
     TurnEndResult,
-    BattleActionResult
+    ActorStateChange,
+    TargetStateChange,
+    BattleActionMetadata,
+    BattleActionResult,
 )
-from src.domain.battle.battle_enum import StatusEffectType, BuffType
+from src.domain.battle.battle_enum import StatusEffectType, BuffType, ParticipantType
+from src.domain.battle.combat_state import CombatState
+from src.domain.player.hp import Hp
+from src.domain.player.mp import Mp
+
+
+@pytest.fixture
+def mock_combat_state():
+    """テスト用のCombatStateモック"""
+    return Mock(spec=CombatState)
+
+
+@pytest.fixture
+def sample_combat_state():
+    """テスト用のCombatStateインスタンス"""
+    return CombatState(
+        entity_id=1,
+        participant_type=ParticipantType.PLAYER,
+        name="Test Player",
+        race=Mock(),  # Race enumのモック
+        element=Mock(),  # Element enumのモック
+        current_hp=Hp(100, 100),
+        current_mp=Mp(50, 50),
+        status_effects={},
+        buffs={},
+        is_defending=False,
+        can_act=True,
+        attack=10,
+        defense=10,
+        speed=10,
+        critical_rate=0.1,
+        evasion_rate=0.1,
+    )
 
 
 class TestTurnStartResult:
-    """TurnStartResultのテストクラス"""
-    
-    def test_create_basic(self):
-        """基本的なTurnStartResultの作成テスト"""
-        result = TurnStartResult(can_act=True)
-        
-        assert result.can_act is True
-        assert len(result.messages) == 0
-        assert result.self_damage == 0
-        assert len(result.recovered_status_effects) == 0
-    
-    def test_create_with_all_fields(self):
-        """全てのフィールドを含むTurnStartResultの作成テスト"""
-        messages = ["眠りから覚めた！", "麻痺で動けない"]
-        recovered_effects = [StatusEffectType.SLEEP]
-        
+    def test_creation_with_valid_values(self):
+        """有効な値での作成テスト"""
         result = TurnStartResult(
-            can_act=False,
-            messages=messages,
-            self_damage=15,
-            recovered_status_effects=recovered_effects
+            actor_id=1,
+            participant_type=ParticipantType.PLAYER,
+            can_act=True,
+            damage=10,
+            healing=5,
+            messages=["Test message"],
+            status_effects_to_remove=[StatusEffectType.POISON],
+            buffs_to_remove=[BuffType.ATTACK]
         )
-        
-        assert result.can_act is False
-        assert result.messages == messages
-        assert result.self_damage == 15
-        assert result.recovered_status_effects == recovered_effects
-    
-    def test_immutable(self):
-        """不変性のテスト"""
-        result = TurnStartResult(can_act=True)
-        
-        # frozen=Trueなので変更できない
-        with pytest.raises(Exception):
-            result.can_act = False
+        assert result.actor_id == 1
+        assert result.participant_type == ParticipantType.PLAYER
+        assert result.can_act is True
+        assert result.damage == 10
+        assert result.healing == 5
+        assert result.messages == ["Test message"]
+        assert result.status_effects_to_remove == [StatusEffectType.POISON]
+        assert result.buffs_to_remove == [BuffType.ATTACK]
+
+    def test_validation_negative_damage_raises_error(self):
+        """負のダメージ値でエラーが発生することをテスト"""
+        with pytest.raises(ValueError, match="Damage must be non-negative"):
+            TurnStartResult(
+                actor_id=1,
+                participant_type=ParticipantType.PLAYER,
+                can_act=True,
+                damage=-5
+            )
+
+    def test_validation_negative_healing_raises_error(self):
+        """負の回復値でエラーが発生することをテスト"""
+        with pytest.raises(ValueError, match="Healing must be non-negative"):
+            TurnStartResult(
+                actor_id=1,
+                participant_type=ParticipantType.PLAYER,
+                can_act=True,
+                healing=-5
+            )
+
+    def test_apply_to_combat_state_success(self, sample_combat_state):
+        """CombatStateへの適用が成功することをテスト"""
+        result = TurnStartResult(
+            actor_id=1,
+            participant_type=ParticipantType.PLAYER,
+            can_act=True,
+            damage=10,
+            healing=5,
+            status_effects_to_remove=[],  # 空のリストに変更
+            buffs_to_remove=[]  # 空のリストに変更
+        )
+
+        # CombatStateのメソッドが呼ばれることを確認
+        new_state = result.apply_to_combat_state(sample_combat_state)
+
+        assert new_state is not sample_combat_state  # 新しいインスタンスが返される
+
+    def test_apply_to_combat_state_wrong_actor_id_raises_error(self, sample_combat_state):
+        """アクターIDが一致しない場合エラーが発生することをテスト"""
+        result = TurnStartResult(
+            actor_id=2,  # 異なるID
+            participant_type=ParticipantType.PLAYER,
+            can_act=True
+        )
+
+        with pytest.raises(ValueError, match="Actor ID does not match combat state"):
+            result.apply_to_combat_state(sample_combat_state)
 
 
 class TestTurnEndResult:
-    """TurnEndResultのテストクラス"""
-    
-    def test_create_basic(self):
-        """基本的なTurnEndResultの作成テスト"""
-        result = TurnEndResult()
-        
-        assert len(result.messages) == 0
-        assert result.is_attacker_defeated is False
-        assert result.damage_from_status_effects == 0
-        assert result.healing_from_status_effects == 0
-        assert len(result.expired_status_effects) == 0
-        assert len(result.expired_buffs) == 0
-    
-    def test_create_with_all_fields(self):
-        """全てのフィールドを含むTurnEndResultの作成テスト"""
-        messages = ["毒でダメージを受けた", "祝福で回復した"]
-        expired_status = [StatusEffectType.POISON]
-        expired_buffs = [BuffType.ATTACK]
-        
+    def test_creation_with_valid_values(self):
+        """有効な値での作成テスト"""
         result = TurnEndResult(
-            messages=messages,
-            is_attacker_defeated=True,
-            damage_from_status_effects=25,
-            healing_from_status_effects=30,
-            expired_status_effects=expired_status,
-            expired_buffs=expired_buffs
+            actor_id=1,
+            participant_type=ParticipantType.PLAYER,
+            messages=["Turn end message"],
+            damage=8,
+            healing=3,
+            status_effects_to_remove=[StatusEffectType.PARALYSIS],
+            buffs_to_remove=[BuffType.DEFENSE]
         )
-        
-        assert result.messages == messages
-        assert result.is_attacker_defeated is True
-        assert result.damage_from_status_effects == 25
-        assert result.healing_from_status_effects == 30
-        assert result.expired_status_effects == expired_status
-        assert result.expired_buffs == expired_buffs
-    
-    def test_immutable(self):
-        """不変性のテスト"""
-        result = TurnEndResult()
-        
-        # frozen=Trueなので変更できない
-        with pytest.raises(Exception):
-            result.is_attacker_defeated = True
+        assert result.actor_id == 1
+        assert result.participant_type == ParticipantType.PLAYER
+        assert result.messages == ["Turn end message"]
+        assert result.damage == 8
+        assert result.healing == 3
+        assert result.status_effects_to_remove == [StatusEffectType.PARALYSIS]
+        assert result.buffs_to_remove == [BuffType.DEFENSE]
+
+    def test_validation_negative_damage_raises_error(self):
+        """負のダメージ値でエラーが発生することをテスト"""
+        with pytest.raises(ValueError, match="Damage must be non-negative"):
+            TurnEndResult(
+                actor_id=1,
+                participant_type=ParticipantType.PLAYER,
+                damage=-5
+            )
+
+    def test_validation_negative_healing_raises_error(self):
+        """負の回復値でエラーが発生することをテスト"""
+        with pytest.raises(ValueError, match="Healing must be non-negative"):
+            TurnEndResult(
+                actor_id=1,
+                participant_type=ParticipantType.PLAYER,
+                healing=-5
+            )
+
+    def test_apply_to_combat_state_success(self, sample_combat_state):
+        """CombatStateへの適用が成功することをテスト"""
+        result = TurnEndResult(
+            actor_id=1,
+            participant_type=ParticipantType.PLAYER,
+            damage=5,
+            healing=2
+        )
+
+        new_state = result.apply_to_combat_state(sample_combat_state)
+
+        assert new_state is not sample_combat_state
+
+
+class TestActorStateChange:
+    def test_creation_with_negative_hp_mp_changes(self):
+        """負のHP/MP変更値での作成テスト（ダメージ/消費を表す）"""
+        change = ActorStateChange(
+            actor_id=1,
+            participant_type=ParticipantType.PLAYER,
+            hp_change=-20,  # ダメージ
+            mp_change=-10,  # MP消費
+            status_effects_to_add=[(StatusEffectType.POISON, 3)],
+            buffs_to_add=[(BuffType.ATTACK, 1.5, 2)],
+            is_defend=True
+        )
+        assert change.actor_id == 1
+        assert change.participant_type == ParticipantType.PLAYER
+        assert change.hp_change == -20
+        assert change.mp_change == -10
+        assert change.status_effects_to_add == [(StatusEffectType.POISON, 3)]
+        assert change.buffs_to_add == [(BuffType.ATTACK, 1.5, 2)]
+        assert change.is_defend is True
+
+    def test_creation_with_positive_hp_mp_changes(self):
+        """正のHP/MP変更値での作成テスト（回復を表す）"""
+        change = ActorStateChange(
+            actor_id=1,
+            participant_type=ParticipantType.PLAYER,
+            hp_change=15,  # 回復
+            mp_change=8,   # MP回復
+        )
+        assert change.hp_change == 15
+        assert change.mp_change == 8
+
+    def test_apply_damage_to_combat_state(self, sample_combat_state):
+        """ダメージ適用が正しく動作することをテスト"""
+        change = ActorStateChange(
+            actor_id=1,
+            participant_type=ParticipantType.PLAYER,
+            hp_change=-10  # ダメージ
+        )
+
+        # CombatStateのwith_hp_damagedが呼ばれることを確認
+        result_state = change.apply_to_combat_state(sample_combat_state)
+
+        assert result_state is not sample_combat_state
+
+    def test_apply_healing_to_combat_state(self, sample_combat_state):
+        """回復適用が正しく動作することをテスト"""
+        change = ActorStateChange(
+            actor_id=1,
+            participant_type=ParticipantType.PLAYER,
+            hp_change=10  # 回復
+        )
+
+        result_state = change.apply_to_combat_state(sample_combat_state)
+
+        assert result_state is not sample_combat_state
+
+    def test_apply_mp_consumption_to_combat_state(self, sample_combat_state):
+        """MP消費適用が正しく動作することをテスト"""
+        change = ActorStateChange(
+            actor_id=1,
+            participant_type=ParticipantType.PLAYER,
+            mp_change=-5  # MP消費
+        )
+
+        result_state = change.apply_to_combat_state(sample_combat_state)
+
+        assert result_state is not sample_combat_state
+
+    def test_apply_mp_healing_to_combat_state(self, sample_combat_state):
+        """MP回復適用が正しく動作することをテスト"""
+        change = ActorStateChange(
+            actor_id=1,
+            participant_type=ParticipantType.PLAYER,
+            mp_change=5  # MP回復
+        )
+
+        result_state = change.apply_to_combat_state(sample_combat_state)
+
+        assert result_state is not sample_combat_state
+
+
+class TestTargetStateChange:
+    def test_creation_with_negative_hp_mp_changes(self):
+        """負のHP/MP変更値での作成テスト"""
+        change = TargetStateChange(
+            target_id=2,
+            participant_type=ParticipantType.MONSTER,
+            hp_change=-25,  # ダメージ
+            mp_change=-8,   # MP消費
+            status_effects_to_add=[(StatusEffectType.SLEEP, 2)],
+            buffs_to_remove=[BuffType.DEFENSE]
+        )
+        assert change.target_id == 2
+        assert change.participant_type == ParticipantType.MONSTER
+        assert change.hp_change == -25
+        assert change.mp_change == -8
+        assert change.status_effects_to_add == [(StatusEffectType.SLEEP, 2)]
+        assert change.buffs_to_remove == [BuffType.DEFENSE]
+
+    def test_apply_damage_to_combat_state(self, sample_combat_state):
+        """ダメージ適用が正しく動作することをテスト"""
+        change = TargetStateChange(
+            target_id=1,
+            participant_type=ParticipantType.PLAYER,
+            hp_change=-15  # ダメージ
+        )
+
+        result_state = change.apply_to_combat_state(sample_combat_state)
+
+        assert result_state is not sample_combat_state
+
+
+class TestBattleActionMetadata:
+    def test_creation_with_valid_lists(self):
+        """有効なリストでの作成テスト"""
+        metadata = BattleActionMetadata(
+            critical_hits=[True, False, True],
+            compatibility_multipliers=[1.5, 1.0, 2.0],
+            race_attack_multipliers=[1.2, 1.0, 0.8]
+        )
+        assert metadata.critical_hits == [True, False, True]
+        assert metadata.compatibility_multipliers == [1.5, 1.0, 2.0]
+        assert metadata.race_attack_multipliers == [1.2, 1.0, 0.8]
+
+    def test_validation_list_length_mismatch_raises_error(self):
+        """リスト長が一致しない場合エラーが発生することをテスト"""
+        with pytest.raises(ValueError, match="critical_hits, compatibility_multipliers, race_attack_multipliersの長さが一致していません"):
+            BattleActionMetadata(
+                critical_hits=[True, False],
+                compatibility_multipliers=[1.5, 1.0, 2.0],  # 長さが異なる
+                race_attack_multipliers=[1.2, 1.0]
+            )
 
 
 class TestBattleActionResult:
-    """BattleActionResultのテストクラス"""
-    
-    def test_create_success_basic(self):
-        """基本的な成功時のBattleActionResultの作成テスト"""
-        messages = ["攻撃が命中した！"]
-        
-        result = BattleActionResult.create_success(messages)
-        
-        assert result.success is True
-        assert result.messages == messages
-        assert len(result.target_ids) == 0
-        assert len(result.damages) == 0
-        assert len(result.healing_amounts) == 0
-        assert len(result.is_target_defeated) == 0
-        assert len(result.applied_status_effects) == 0
-        assert len(result.applied_buffs) == 0
-        assert result.hp_consumed == 0
-        assert result.mp_consumed == 0
-        assert len(result.critical_hits) == 0
-        assert len(result.compatibility_multipliers) == 0
-        assert result.failure_reason is None
-    
-    def test_create_success_with_all_fields(self):
-        """全てのフィールドを含む成功時のBattleActionResultの作成テスト"""
-        messages = ["強力な攻撃！", "クリティカル！"]
-        target_ids = [1, 2]
-        damages = [25, 30]
-        healing_amounts = [0, 0]
-        is_target_defeated = [False, True]
-        applied_status_effects = [(1, StatusEffectType.POISON, 3)]
-        applied_buffs = [(2, BuffType.ATTACK, 1.5, 2)]
-        critical_hits = [True, False]
-        compatibility_multipliers = [1.5, 1.0]
-        
+    def test_create_success(self):
+        """成功時のBattleActionResult作成テスト"""
+        messages = ["攻撃成功", "クリティカルヒット"]
+        actor_change = ActorStateChange(
+            actor_id=1,
+            participant_type=ParticipantType.PLAYER,
+            mp_change=-5
+        )
+        target_changes = [
+            TargetStateChange(
+                target_id=2,
+                participant_type=ParticipantType.MONSTER,
+                hp_change=-30
+            )
+        ]
+        metadata = BattleActionMetadata(
+            critical_hits=[True],
+            compatibility_multipliers=[1.5],
+            race_attack_multipliers=[1.2]
+        )
+
         result = BattleActionResult.create_success(
             messages=messages,
-            target_ids=target_ids,
-            damages=damages,
-            healing_amounts=healing_amounts,
-            is_target_defeated=is_target_defeated,
-            applied_status_effects=applied_status_effects,
-            applied_buffs=applied_buffs,
-            hp_consumed=10,
-            mp_consumed=20,
-            critical_hits=critical_hits,
-            compatibility_multipliers=compatibility_multipliers
+            actor_state_change=actor_change,
+            target_state_changes=target_changes,
+            metadata=metadata
         )
-        
+
         assert result.success is True
         assert result.messages == messages
-        assert result.target_ids == target_ids
-        assert result.damages == damages
-        assert result.healing_amounts == healing_amounts
-        assert result.is_target_defeated == is_target_defeated
-        assert result.applied_status_effects == applied_status_effects
-        assert result.applied_buffs == applied_buffs
-        assert result.hp_consumed == 10
-        assert result.mp_consumed == 20
-        assert result.critical_hits == critical_hits
-        assert result.compatibility_multipliers == compatibility_multipliers
+        assert result.actor_state_change == actor_change
+        assert result.target_state_changes == target_changes
+        assert result.metadata == metadata
         assert result.failure_reason is None
-    
+
     def test_create_failure(self):
-        """失敗時のBattleActionResultの作成テスト"""
-        messages = ["MPが足りない"]
-        failure_reason = "insufficient_mp"
-        
+        """失敗時のBattleActionResult作成テスト"""
+        messages = ["攻撃失敗"]
+        failure_reason = "MPが不足しています"
+
         result = BattleActionResult.create_failure(
             messages=messages,
-            failure_reason=failure_reason,
-            hp_consumed=5,
-            mp_consumed=0
+            failure_reason=failure_reason
         )
-        
+
         assert result.success is False
         assert result.messages == messages
         assert result.failure_reason == failure_reason
-        assert result.hp_consumed == 5
-        assert result.mp_consumed == 0
-        
-        # 失敗時は空のリストが設定される
-        assert len(result.target_ids) == 0
-        assert len(result.damages) == 0
-        assert len(result.healing_amounts) == 0
-        assert len(result.is_target_defeated) == 0
-        assert len(result.applied_status_effects) == 0
-        assert len(result.applied_buffs) == 0
-        assert len(result.critical_hits) == 0
-        assert len(result.compatibility_multipliers) == 0
-    
-    def test_total_damage_property(self):
-        """total_damageプロパティのテスト"""
-        damages = [10, 15, 20]
-        
+        assert result.target_state_changes == []
+
+    def test_total_damage_dealt_calculation(self):
+        """与えたダメージ合計の計算テスト"""
         result = BattleActionResult.create_success(
-            messages=["テスト"],
-            target_ids=[1, 2, 3],
-            damages=damages,
-            healing_amounts=[0, 0, 0],
-            is_target_defeated=[False, False, False]
+            messages=["攻撃成功"],
+            target_state_changes=[
+                TargetStateChange(target_id=1, participant_type=ParticipantType.PLAYER, hp_change=-20),  # ダメージ
+                TargetStateChange(target_id=2, participant_type=ParticipantType.PLAYER, hp_change=10),   # 回復
+                TargetStateChange(target_id=3, participant_type=ParticipantType.PLAYER, hp_change=-15),  # ダメージ
+            ]
         )
-        
-        assert result.total_damage == 45  # 10 + 15 + 20
-    
-    def test_total_healing_property(self):
-        """total_healingプロパティのテスト"""
-        healing_amounts = [25, 30, 35]
-        
+
+        assert result.total_damage_dealt == 35  # 20 + 15
+
+    def test_total_healing_dealt_calculation(self):
+        """与えた回復合計の計算テスト"""
         result = BattleActionResult.create_success(
-            messages=["テスト"],
-            target_ids=[1, 2, 3],
-            damages=[0, 0, 0],
-            healing_amounts=healing_amounts,
-            is_target_defeated=[False, False, False]
+            messages=["回復成功"],
+            target_state_changes=[
+                TargetStateChange(target_id=1, participant_type=ParticipantType.PLAYER, hp_change=-10),  # ダメージ
+                TargetStateChange(target_id=2, participant_type=ParticipantType.PLAYER, hp_change=25),   # 回復
+                TargetStateChange(target_id=3, participant_type=ParticipantType.PLAYER, hp_change=15),   # 回復
+            ]
         )
-        
-        assert result.total_healing == 90  # 25 + 30 + 35
-    
-    def test_validation_target_count_mismatch(self):
-        """ターゲット数と配列長の不一致バリデーションテスト"""
-        messages = ["テスト"]
-        target_ids = [1, 2]
-        damages = [10]  # 長さが異なる
-        
-        with pytest.raises(ValueError, match="damages length \\(1\\) must match target_ids length \\(2\\)"):
-            BattleActionResult.create_success(
-                messages=messages,
-                target_ids=target_ids,
-                damages=damages
-            )
-    
-    def test_validation_healing_amounts_mismatch(self):
-        """回復量配列の長さ不一致バリデーションテスト"""
-        messages = ["テスト"]
-        target_ids = [1, 2]
-        healing_amounts = [10]  # 長さが異なる
-        
-        with pytest.raises(ValueError, match="damages length \\(0\\) must match target_ids length \\(2\\)"):
-            BattleActionResult.create_success(
-                messages=messages,
-                target_ids=target_ids,
-                damages=[],
-                healing_amounts=healing_amounts
-            )
-    
-    def test_validation_is_target_defeated_mismatch(self):
-        """撃破フラグ配列の長さ不一致バリデーションテスト"""
-        messages = ["テスト"]
-        target_ids = [1, 2]
-        is_target_defeated = [False]  # 長さが異なる
-        
-        with pytest.raises(ValueError, match="damages length \\(0\\) must match target_ids length \\(2\\)"):
-            BattleActionResult.create_success(
-                messages=messages,
-                target_ids=target_ids,
-                damages=[],
-                is_target_defeated=is_target_defeated
-            )
-    
-    def test_validation_critical_hits_mismatch(self):
-        """クリティカル配列の長さ不一致バリデーションテスト"""
-        messages = ["テスト"]
-        target_ids = [1, 2]
-        critical_hits = [True]  # 長さが異なる
-        
-        with pytest.raises(ValueError, match="damages length \\(0\\) must match target_ids length \\(2\\)"):
-            BattleActionResult.create_success(
-                messages=messages,
-                target_ids=target_ids,
-                damages=[],
-                critical_hits=critical_hits
-            )
-    
-    def test_validation_compatibility_multipliers_mismatch(self):
-        """相性倍率配列の長さ不一致バリデーションテスト"""
-        messages = ["テスト"]
-        target_ids = [1, 2]
-        compatibility_multipliers = [1.5]  # 長さが異なる
-        
-        with pytest.raises(ValueError, match="damages length \\(0\\) must match target_ids length \\(2\\)"):
-            BattleActionResult.create_success(
-                messages=messages,
-                target_ids=target_ids,
-                damages=[],
-                compatibility_multipliers=compatibility_multipliers
-            )
-    
-    def test_validation_empty_critical_hits_allowed(self):
-        """空のクリティカル配列は許可されるテスト"""
-        messages = ["テスト"]
-        target_ids = [1, 2]
-        damages = [10, 15]
-        critical_hits = []  # 空は許可
-        
-        result = BattleActionResult.create_success(
-            messages=messages,
-            target_ids=target_ids,
-            damages=damages,
-            healing_amounts=[0, 0],
-            is_target_defeated=[False, False],
-            critical_hits=critical_hits
-        )
-        
-        assert result.critical_hits == []
-    
-    def test_validation_empty_compatibility_multipliers_allowed(self):
-        """空の相性倍率配列は許可されるテスト"""
-        messages = ["テスト"]
-        target_ids = [1, 2]
-        damages = [10, 15]
-        compatibility_multipliers = []  # 空は許可
-        
-        result = BattleActionResult.create_success(
-            messages=messages,
-            target_ids=target_ids,
-            damages=damages,
-            healing_amounts=[0, 0],
-            is_target_defeated=[False, False],
-            compatibility_multipliers=compatibility_multipliers
-        )
-        
-        assert result.compatibility_multipliers == []
-    
-    def test_validation_matching_lengths(self):
-        """一致する長さでのバリデーションテスト"""
-        messages = ["テスト"]
-        target_ids = [1, 2, 3]
-        damages = [10, 15, 20]
-        healing_amounts = [0, 5, 0]
-        is_target_defeated = [False, False, True]
-        critical_hits = [True, False, True]
-        compatibility_multipliers = [1.5, 1.0, 0.8]
-        
-        result = BattleActionResult.create_success(
-            messages=messages,
-            target_ids=target_ids,
-            damages=damages,
-            healing_amounts=healing_amounts,
-            is_target_defeated=is_target_defeated,
-            critical_hits=critical_hits,
-            compatibility_multipliers=compatibility_multipliers
-        )
-        
-        assert len(result.target_ids) == 3
-        assert len(result.damages) == 3
-        assert len(result.healing_amounts) == 3
-        assert len(result.is_target_defeated) == 3
-        assert len(result.critical_hits) == 3
-        assert len(result.compatibility_multipliers) == 3
-    
-    def test_immutable(self):
-        """不変性のテスト"""
-        result = BattleActionResult.create_success(["テスト"])
-        
-        # frozen=Trueなので変更できない
-        with pytest.raises(Exception):
-            result.success = False
-    
-    def test_edge_cases(self):
-        """エッジケースのテスト"""
-        # 空の配列
-        result = BattleActionResult.create_success(
-            messages=[],
-            target_ids=[],
-            damages=[],
-            healing_amounts=[],
-            is_target_defeated=[]
-        )
-        
-        assert result.total_damage == 0
-        assert result.total_healing == 0
-        
-        # ゼロダメージ
-        result2 = BattleActionResult.create_success(
-            messages=["テスト"],
-            target_ids=[1, 2, 3],
-            damages=[0, 0, 0],
-            healing_amounts=[0, 0, 0],
-            is_target_defeated=[False, False, False]
-        )
-        
-        assert result2.total_damage == 0
-        
-        # ゼロ回復
-        result3 = BattleActionResult.create_success(
-            messages=["テスト"],
-            target_ids=[1, 2, 3],
-            damages=[0, 0, 0],
-            healing_amounts=[0, 0, 0],
-            is_target_defeated=[False, False, False]
-        )
-        
-        assert result3.total_healing == 0
-    
-    def test_status_effect_tuple_structure(self):
-        """状態異常タプルの構造テスト"""
-        applied_status_effects = [
-            (1, StatusEffectType.POISON, 3),
-            (2, StatusEffectType.BURN, 2)
-        ]
-        
-        result = BattleActionResult.create_success(
-            messages=["テスト"],
-            applied_status_effects=applied_status_effects
-        )
-        
-        assert len(result.applied_status_effects) == 2
-        assert result.applied_status_effects[0][0] == 1  # target_id
-        assert result.applied_status_effects[0][1] == StatusEffectType.POISON  # status_effect_type
-        assert result.applied_status_effects[0][2] == 3  # duration
-        assert result.applied_status_effects[1][0] == 2  # target_id
-        assert result.applied_status_effects[1][1] == StatusEffectType.BURN  # status_effect_type
-        assert result.applied_status_effects[1][2] == 2  # duration
-    
-    def test_buff_tuple_structure(self):
-        """バフタプルの構造テスト"""
-        applied_buffs = [
-            (1, BuffType.ATTACK, 1.5, 3),
-            (2, BuffType.DEFENSE, 1.2, 2)
-        ]
-        
-        result = BattleActionResult.create_success(
-            messages=["テスト"],
-            applied_buffs=applied_buffs
-        )
-        
-        assert len(result.applied_buffs) == 2
-        assert result.applied_buffs[0][0] == 1  # target_id
-        assert result.applied_buffs[0][1] == BuffType.ATTACK  # buff_type
-        assert result.applied_buffs[0][2] == 1.5  # multiplier
-        assert result.applied_buffs[0][3] == 3  # duration
-        assert result.applied_buffs[1][0] == 2  # target_id
-        assert result.applied_buffs[1][1] == BuffType.DEFENSE  # buff_type
-        assert result.applied_buffs[1][2] == 1.2  # multiplier
-        assert result.applied_buffs[1][3] == 2  # duration
+
+        assert result.total_healing_dealt == 40  # 25 + 15
