@@ -20,6 +20,8 @@ from src.domain.battle.battle_enum import Element, Race
 
 if TYPE_CHECKING:
     from src.domain.battle.combat_state import CombatState
+else:
+    from src.domain.battle.combat_state import CombatState
 from src.application.trade.contracts.commands import CreateTradeCommand
 from src.domain.common.aggregate_root import AggregateRoot
 from src.domain.spot.movement_events import PlayerMovedEvent
