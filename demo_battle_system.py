@@ -76,8 +76,9 @@ def demo_battle_flow():
             
             current_actor = battle.get_current_actor()
             if current_actor:
-                actor_type = "プレイヤー" if current_actor.participant_type == ParticipantType.PLAYER else "モンスター"
-                print(f"📊 現在のアクター: {actor_type} (ID: {current_actor.entity_id})")
+                participant_type, entity_id = current_actor.participant_key
+                actor_type = "プレイヤー" if participant_type == ParticipantType.PLAYER else "モンスター"
+                print(f"📊 現在のアクター: {actor_type} (ID: {entity_id})")
             print()
 
         # 2. プレイヤー2を戦闘に参加させる
@@ -100,9 +101,10 @@ def demo_battle_flow():
                 break
                 
             current_actor = battle.get_current_actor()
-            if current_actor.participant_type == ParticipantType.PLAYER:
+            participant_type, entity_id = current_actor.participant_key
+            if participant_type == ParticipantType.PLAYER:
                 # プレイヤーのターン - 基本攻撃を実行
-                print(f"プレイヤー{current_actor.entity_id}のターン")
+                print(f"プレイヤー{entity_id}のターン")
                 
                 # モンスターをターゲットにして基本攻撃
                 monster_states = [state for state in battle.get_combat_states().values() 
@@ -113,20 +115,20 @@ def demo_battle_flow():
                     
                     action_dto = PlayerActionDto(
                         battle_id=battle.battle_id,
-                        player_id=current_actor.entity_id,
+                        player_id=entity_id,
                         action_id=1,  # 基本攻撃
                         target_ids=[target_monster.entity_id],
                         target_participant_types=[ParticipantType.MONSTER]
                     )
                     
-                    battle_service.execute_player_action(battle.battle_id, current_actor.entity_id, action_dto)
-                    print(f"プレイヤー{current_actor.entity_id}が基本攻撃を実行")
+                    battle_service.execute_player_action(battle.battle_id, entity_id, action_dto)
+                    print(f"プレイヤー{entity_id}が基本攻撃を実行")
                 else:
                     print("攻撃可能なモンスターがいません")
                     break
             else:
                 # モンスターのターンは自動処理される
-                print(f"モンスター{current_actor.entity_id}のターン（自動処理）")
+                print(f"モンスター{entity_id}のターン（自動処理）")
             
             # 戦闘終了チェック
             battle_result = battle.check_battle_end_conditions()

@@ -1,4 +1,4 @@
-from typing import Set, Optional, List
+from typing import Set, Optional
 from src.domain.common.aggregate_root import AggregateRoot
 from src.domain.spot.spot_events import PlayerEnteredSpotEvent, PlayerExitedSpotEvent
 from src.domain.spot.spot_exception import PlayerAlreadyInSpotException, PlayerNotInSpotException

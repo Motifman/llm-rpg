@@ -16,15 +16,15 @@ class Mp:
             raise ValueError(f"Invalid amount: {amount}")
         return Mp(self.value + amount, self.max_mp)
 
-    def damage(self, amount: int) -> "Mp":
+    def consumed(self, amount: int) -> "Mp":
         if amount < 0:
             raise ValueError(f"Invalid amount: {amount}")
         return Mp(self.value - amount, self.max_mp)
-
-    def is_empty(self) -> bool:
-        return self.value <= 0
 
     def can_consume(self, amount: int) -> bool:
         if amount < 0:
             raise ValueError(f"Invalid amount: {amount}")
         return self.value >= amount
+    
+    def is_empty(self) -> bool:
+        return self.value <= 0

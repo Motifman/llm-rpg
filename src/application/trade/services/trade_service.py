@@ -87,9 +87,9 @@ class TradeApplicationService:
             
             # 5. ドメインイベントをディスパッチ
             if self._event_dispatcher:
-                events = trade_offer.get_domain_events()
+                events = trade_offer.get_events()
                 self._event_dispatcher.dispatch_all_events(events)
-                trade_offer.clear_domain_events()
+                trade_offer.clear_events()
             
             return CreateTradeResultDto(
                 success=True,
@@ -166,9 +166,9 @@ class TradeApplicationService:
             
             # 5. ドメインイベントをディスパッチ
             if self._event_dispatcher:
-                events = trade_offer.get_domain_events()
+                events = trade_offer.get_events()
                 self._event_dispatcher.dispatch_all_events(events)
-                trade_offer.clear_domain_events()
+                trade_offer.clear_events()
             
             return ExecuteTradeResultDto(
                 success=True,
@@ -234,9 +234,9 @@ class TradeApplicationService:
             
             # 5. ドメインイベントをディスパッチ
             if self._event_dispatcher:
-                events = trade_offer.get_domain_events()
+                events = trade_offer.get_events()
                 self._event_dispatcher.dispatch_all_events(events)
-                trade_offer.clear_domain_events()
+                trade_offer.clear_events()
             
             return CancelTradeResultDto(
                 success=True,

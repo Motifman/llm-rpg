@@ -13,6 +13,11 @@ class Repository(ABC, Generic[T]):
         pass
     
     @abstractmethod
+    def find_by_ids(self, entity_ids: List[int]) -> List[T]:
+        """IDのリストでエンティティを検索"""
+        pass
+    
+    @abstractmethod
     def save(self, entity: T) -> T:
         """エンティティを保存"""
         pass

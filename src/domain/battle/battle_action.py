@@ -3,13 +3,13 @@ from dataclasses import dataclass, field
 from typing import Optional, Dict, TYPE_CHECKING
 from src.domain.battle.battle_enum import StatusEffectType, Element, BuffType, Race, ActionType, TargetSelectionMethod
 from src.domain.battle.battle_result import BattleActionResult
-from src.domain.battle.combat_state import CombatState
 from typing import List
 from abc import abstractmethod, ABC
 from src.domain.battle.battle_result import ActorStateChange, TargetStateChange, BattleActionMetadata
 
 if TYPE_CHECKING:
     from src.domain.battle.battle_service import BattleLogicService
+    from src.domain.battle.combat_state import CombatState
 
 
 
@@ -25,7 +25,7 @@ class BattleAction(ABC):
     mp_cost: Optional[int] = None
     hp_cost: Optional[int] = None
     
-    def execute(self, actor: CombatState, specified_targets: Optional[List[CombatState]], context: "BattleLogicService", all_participants: List[CombatState]) -> BattleActionResult:
+    def execute(self, actor: "CombatState", specified_targets: Optional[List["CombatState"]], context: "BattleLogicService", all_participants: List["CombatState"]) -> BattleActionResult:
         """実行のメイン処理"""
         # 1. ターゲット選択
         targets = context.target_resolver.resolve_targets(actor, self, specified_targets, all_participants)
@@ -41,7 +41,7 @@ class BattleAction(ABC):
         return result
     
     @abstractmethod
-    def _execute_core(self, actor: CombatState, targets: List[CombatState], 
+    def _execute_core(self, actor: "CombatState", targets: List["CombatState"],
                      context: "BattleLogicService", base_messages: List[str]) -> BattleActionResult:
         """アクション固有の実行ロジック（サブクラスで実装）"""
         pass
@@ -68,7 +68,7 @@ class HealAction(BattleAction):
         if self.mp_cost is not None and self.mp_cost < 0:
             raise ValueError("mp_cost must be non-negative")
     
-    def _execute_core(self, actor: CombatState, targets: List[CombatState], context: "BattleLogicService", base_messages: List[str]) -> BattleActionResult:
+    def _execute_core(self, actor: "CombatState", targets: List["CombatState"], context: "BattleLogicService", base_messages: List[str]) -> BattleActionResult:
         healing_hp_amount = self.heal_hp_amount or 0
         healing_mp_amount = self.heal_mp_amount or 0
 
@@ -145,7 +145,7 @@ class AttackAction(BattleAction):
         if self.damage_multiplier < 0:
             raise ValueError(f"damage_multiplier must be non-negative. damage_multiplier: {self.damage_multiplier}")
 
-    def _execute_core(self, actor: CombatState, targets: List[CombatState], context: "BattleLogicService", base_messages: List[str]) -> BattleActionResult:
+    def _execute_core(self, actor: "CombatState", targets: List["CombatState"], context: "BattleLogicService", base_messages: List[str]) -> BattleActionResult:
         hit_result = context.hit_resolver.resolve_hits(actor, targets, self)
         
         if hit_result.missed or len(hit_result.evaded_targets) == len(targets):
@@ -229,7 +229,7 @@ class StatusEffectApplyAction(BattleAction):
         if self.hp_cost is not None and self.hp_cost < 0:
             raise ValueError(f"hp_cost must be non-negative. hp_cost: {self.hp_cost}")
     
-    def _execute_core(self, actor: CombatState, targets: List[CombatState], context: "BattleLogicService", base_messages: List[str]) -> BattleActionResult:
+    def _execute_core(self, actor: "CombatState", targets: List["CombatState"], context: "BattleLogicService", base_messages: List[str]) -> BattleActionResult:
         hit_result = context.hit_resolver.resolve_hits(actor, targets, self)
         
         if hit_result.missed or len(hit_result.evaded_targets) == len(targets):
@@ -301,7 +301,7 @@ class BuffApplyAction(BattleAction):
         if self.hp_cost is not None and self.hp_cost < 0:
             raise ValueError(f"hp_cost must be non-negative. hp_cost: {self.hp_cost}")
     
-    def _execute_core(self, actor: CombatState, targets: List[CombatState], context: "BattleLogicService", base_messages: List[str]) -> BattleActionResult:
+    def _execute_core(self, actor: "CombatState", targets: List["CombatState"], context: "BattleLogicService", base_messages: List[str]) -> BattleActionResult:
         hit_result = context.hit_resolver.resolve_hits(actor, targets, self)
         
         if hit_result.missed or len(hit_result.evaded_targets) == len(targets):
@@ -352,23 +352,12 @@ class BuffApplyAction(BattleAction):
 
 class DefendAction(BattleAction):
     """防御アクション"""
-    def _execute_core(self, actor: CombatState, targets: List[CombatState], context: "BattleLogicService", base_messages: List[str]) -> BattleActionResult:
+    def _execute_core(self, actor: "CombatState", targets: List["CombatState"], context: "BattleLogicService", base_messages: List[str]) -> BattleActionResult:
         messages = base_messages.copy()
         messages.append(f"{actor.name}は防御の構えを取った！")
         return BattleActionResult.create_success(
             messages=messages,
             actor_state_change=ActorStateChange(actor_id=actor.entity_id, participant_type=actor.participant_type, is_defend=True),
-        )
-
-
-class EscapeAction(BattleAction):
-    """逃亡アクション"""
-    def _execute_core(self, actor: CombatState, targets: List[CombatState], context: "BattleLogicService", base_messages: List[str]) -> BattleActionResult:
-        messages = base_messages.copy()
-        messages.append(f"{actor.name}は逃亡した！")
-        return BattleActionResult.create_success(
-            messages=messages,
-            actor_state_change=ActorStateChange(actor_id=actor.entity_id, participant_type=actor.participant_type),
         )
 
 

@@ -8,9 +8,7 @@ from src.domain.player.player_enum import Role
 from src.domain.player.message_box import MessageBox
 from src.domain.player.hp import Hp
 from src.domain.player.mp import Mp
-from src.domain.player.exp import Exp
-from src.domain.player.level import Level
-from src.domain.player.gold import Gold
+from src.domain.common.value_object import Exp, Gold, Level
 
 
 def make_player():

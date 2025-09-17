@@ -41,3 +41,8 @@ class BattleFullException(Exception):
 class PlayerAlreadyInBattleException(Exception):
     """プレイヤーが既に戦闘に参加している例外"""
     pass
+
+
+class ActorNotFoundException(Exception):
+    """アクターが見つからない例外"""
+    pass

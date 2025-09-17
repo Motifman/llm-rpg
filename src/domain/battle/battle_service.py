@@ -423,6 +423,7 @@ class BattleLogicService:
         self.effect_applier = EffectApplier()
         self.message_generator = MessageGenerator()
         self.effect_processor = EffectProcessor()
+        self.target_resolver = TargetResolver()
     
     def process_on_turn_start(self, combat_state: CombatState) -> TurnStartResult:
         """ターン開始時の処理"""
@@ -460,6 +461,7 @@ class BattleLogicService:
             status_effects_to_remove=list(chain.from_iterable(result.status_effects_to_remove for result in results)),
             buffs_to_remove=list(chain.from_iterable(result.buffs_to_remove for result in results)),
         )
+
 
 
 # # TODO: 副作用がない形で元の実装を修正

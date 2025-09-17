@@ -115,7 +115,7 @@ class RoundStartedEvent(DomainEvent):
     """ラウンド開始イベント"""
     battle_id: int = 0
     round_number: int = 0
-    turn_order: List[Tuple[int, ParticipantType]] = field(default_factory=list)  # (entity_id, participant_type)
+    turn_order: List[Tuple[ParticipantType, int]] = field(default_factory=list)  # (participant_type, entity_id)
     remaining_participants: Dict[ParticipantType, List[int]] = field(default_factory=dict)
     round_stats: Dict[str, Any] = field(default_factory=dict)  # ラウンド開始時の統計
 
@@ -126,7 +126,7 @@ class RoundEndedEvent(DomainEvent):
     battle_id: int = 0
     round_number: int = 0
     round_summary: Dict[str, Any] = field(default_factory=dict)  # ラウンドの要約統計
-    next_round_turn_order: List[Tuple[int, ParticipantType]] = field(default_factory=list)
+    next_round_turn_order: List[Tuple[ParticipantType, int]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

@@ -5,8 +5,8 @@
 """
 
 from datetime import datetime
-from src.application.world.commands import MovePlayerCommand, GetPlayerLocationCommand, GetSpotInfoCommand
-from src.application.world.movement_service import MovementApplicationService
+from src.application.world.contracts.commands import MovePlayerCommand, GetPlayerLocationCommand, GetSpotInfoCommand
+from src.application.world.services.movement_service import MovementApplicationService
 from src.domain.spot.movement_service import MovementService
 from src.domain.player.player_repository import PlayerRepository
 from src.domain.spot.spot_repository import SpotRepository
