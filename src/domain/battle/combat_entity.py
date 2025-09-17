@@ -2,7 +2,7 @@ from typing import Optional
 from src.domain.common.aggregate_root import AggregateRoot
 from src.domain.player.base_status import BaseStatus
 from src.domain.player.dynamic_status import DynamicStatus
-from src.domain.monster.monster_enum import Race
+from src.domain.battle.battle_enum import Race
 from src.domain.battle.battle_enum import Element
 from src.domain.spot.spot_exception import PlayerAlreadyInSpotException
 from src.domain.spot.movement_events import PlayerMovedEvent
@@ -102,6 +102,12 @@ class CombatEntity(AggregateRoot):
             raise ValueError(f"Invalid amount: {amount}")
         return self._dynamic_status.can_consume_mp(amount)
     
+    def can_consume_hp(self, amount: int) -> bool:
+        """HPが足りるかどうか"""
+        if amount < 0:
+            raise ValueError(f"Invalid amount: {amount}")
+        return self._dynamic_status.can_consume_hp(amount)
+    
     def is_alive(self) -> bool:
         """生存しているかどうか"""
         return self._dynamic_status.is_alive()
@@ -122,16 +128,3 @@ class CombatEntity(AggregateRoot):
         """ステータスを計算"""
         return self._base_status
     
-    # ===== 移動関連のメソッド =====
-    def move_to_spot(self, to_spot_id: int):
-        if self._current_spot_id == to_spot_id:
-            raise PlayerAlreadyInSpotException(f"Player {self.player_id} is already in the spot {to_spot_id}")
-
-        self._previous_spot_id = self._current_spot_id
-        self._current_spot_id = to_spot_id
-
-        self.add_event(PlayerMovedEvent(
-            player_id=self.player_id,
-            from_spot_id=self._previous_spot_id,
-            to_spot_id=to_spot_id,
-        ))

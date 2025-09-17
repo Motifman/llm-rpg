@@ -55,21 +55,26 @@ class Battle(AggregateRoot):
         
         self._battle_id = battle_id
         self._spot_id = spot_id
+        self._max_players = max_players
+        self._max_monsters = max_monsters
+        self._max_rounds = max_rounds
         self._combat_states: Dict[Tuple[ParticipantType, int], CombatState] = {}
         self._player_ids: Set[int] = set()
         self._monster_ids: Set[int] = set()
         self._monster_type_ids: Set[int] = set()
         self._monster_count_for_identification = 0  # 同一モンスターを識別するためのカウンター
 
+        # 貢献度スコア管理
+        self._contribution_scores: Dict[int, int] = {}
+
+        # 逃走管理
+        self._escaped_player_ids: Set[int] = set()
+
         for player in players:
             self._add_player(player)
         
         for monster in monsters:
             self._add_monster(monster)
-
-        self._max_players = max_players
-        self._max_monsters = max_monsters
-        self._max_rounds = max_rounds
         self._state = BattleState.WAITING
         
         self._turn_order_service = TurnOrderService()
@@ -78,12 +83,6 @@ class Battle(AggregateRoot):
         self._current_turn = 0
         self._current_round = 0
         self._current_turn_index = 0
-
-        # 貢献度スコア管理
-        self._contribution_scores: Dict[int, int] = {}
-
-        # 逃走管理
-        self._escaped_player_ids: Set[int] = set()
     
     @property
     def battle_id(self) -> int:
@@ -582,14 +581,14 @@ class Battle(AggregateRoot):
             round_number=self._current_round,
             actor_id=actor_entity_id,
             participant_type=actor_participant_type,
-            action_type=action_result.metadata.action_type if action_result.metadata else "",
-            action_name=action_result.metadata.action_name if action_result.metadata else "",
+            action_type="",  # TODO: アクションタイプ情報の追加
+            action_name="",  # TODO: アクション名情報の追加
             target_ids=[change.target_id for change in action_result.target_state_changes],
             target_participant_types=[change.participant_type for change in action_result.target_state_changes],
-            damage_dealt=action_result.total_damage,
-            healing_done=action_result.total_healing,
-            hp_consumed=action_result.metadata.hp_consumed if action_result.metadata else 0,
-            mp_consumed=action_result.metadata.mp_consumed if action_result.metadata else 0,
+            damage_dealt=action_result.total_damage_dealt,
+            healing_done=action_result.total_healing_dealt,
+            hp_consumed=0,  # TODO: HP消費情報の追加
+            mp_consumed=0,  # TODO: MP消費情報の追加
             critical_hits=action_result.metadata.critical_hits if action_result.metadata else [],
             compatibility_multipliers=action_result.metadata.compatibility_multipliers if action_result.metadata else [],
             applied_status_effects=[],  # TODO: アクション結果から取得

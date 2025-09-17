@@ -4,6 +4,7 @@ from src.domain.monster.drop_reward import DropReward
 from src.domain.player.base_status import BaseStatus
 from src.domain.battle.battle_enum import Element, Race
 from src.domain.battle.battle_action import BattleAction
+from src.domain.battle.action_deck import ActionDeck
 from src.domain.common.aggregate_root import AggregateRoot
 
 
@@ -18,9 +19,11 @@ class Monster(AggregateRoot):
         base_status: BaseStatus,
         max_hp: int,
         max_mp: int,
-        available_actions: List[BattleAction],
+        action_deck: ActionDeck,
         drop_reward: DropReward,
-        allowed_areas: List[int]
+        allowed_areas: List[int],
+        # 後方互換性のため残すが、将来的に削除予定
+        available_actions: List[BattleAction] = None,
     ):
         # モンスター固有の属性
         self._monster_type_id = monster_type_id
@@ -31,9 +34,11 @@ class Monster(AggregateRoot):
         self._base_status = base_status
         self._max_hp = max_hp
         self._max_mp = max_mp
-        self._available_actions = available_actions
+        self._action_deck = action_deck
         self._drop_reward = drop_reward
         self._allowed_areas = allowed_areas
+        # 後方互換性のため残すが、将来的に削除予定
+        self._available_actions = available_actions if available_actions is not None else []
 
     @property
     def monster_type_id(self) -> int:
@@ -66,12 +71,17 @@ class Monster(AggregateRoot):
     @property
     def max_mp(self) -> int:
         return self._max_mp
+    
+    @property
+    def action_deck(self) -> ActionDeck:
+        return self._action_deck
 
     # ===== モンスター固有のメソッド =====
     def get_drop_reward(self) -> DropReward:
         return self._drop_reward
     
     def get_available_actions(self) -> List[BattleAction]:
+        """後方互換性のため残すが、将来的に削除予定"""
         return self._available_actions
     
     def can_appear_in_area(self, area_id: int) -> bool:

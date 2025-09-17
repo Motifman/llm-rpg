@@ -10,6 +10,7 @@ from src.domain.monster.monster_repository import MonsterRepository
 from src.domain.battle.battle_exception import BattleAlreadyExistsException, AreaNotFoundException, BattleNotFoundException, ActorNotFoundException
 from src.domain.battle.turn_order_service import TurnEntry
 from src.domain.battle.battle_service import BattleLogicService
+from src.domain.battle.battle_enum import ParticipantType
 from src.domain.battle.services.monster_action_service import MonsterActionService
 from src.domain.common.notifier import Notifier
 from src.domain.common.event_publisher import EventPublisher
@@ -93,7 +94,7 @@ class BattleApplicationService:
             battle.start_battle()
 
             # イベントをパブリッシュ
-            self._event_publisher.publish_all(battle.events)
+            self._event_publisher.publish_all(battle.get_events())
 
             self._battle_repository.save(battle)
 
@@ -117,9 +118,10 @@ class BattleApplicationService:
         current_actor = battle.get_current_actor()
 
         # イベントをパブリッシュ
-        self._event_publisher.publish_all(battle.events)
+        self._event_publisher.publish_all(battle.get_events())
 
-        if current_actor.is_player():
+        participant_type, entity_id = current_actor.participant_key
+        if participant_type == ParticipantType.PLAYER:
             self._start_player_turn(battle, current_actor)
         else:
             self._start_monster_turn(battle, current_actor)
@@ -128,21 +130,22 @@ class BattleApplicationService:
         """
         プレイヤーのターンを開始する
         """
-        actor = battle.get_combat_state(actor.participant_type, actor.entity_id)
-        if not actor:
+        participant_type, entity_id = actor.participant_key
+        actor_combat_state = battle.get_combat_state(participant_type, entity_id)
+        if not actor_combat_state:
             raise ActorNotFoundException()
 
-        turn_start_result = self._battle_logic_service.process_on_turn_start(actor)
+        turn_start_result = self._battle_logic_service.process_on_turn_start(actor_combat_state)
         battle.apply_turn_start_result(turn_start_result)
 
         # イベントをパブリッシュ
-        self._event_publisher.publish_all(battle.events)
+        self._event_publisher.publish_all(battle.get_events())
 
         battle_result = battle.check_battle_end_conditions()
         if battle_result:
             battle.end_battle(battle_result)
             # イベントをパブリッシュ
-            self._event_publisher.publish_all(battle.events)
+            self._event_publisher.publish_all(battle.get_events())
             self._battle_repository.save(battle)
         else:
             if turn_start_result.can_act:
@@ -153,7 +156,7 @@ class BattleApplicationService:
                 battle.apply_turn_end_result(turn_end_result)
                 battle.advance_to_next_turn(turn_end_result)
                 # イベントをパブリッシュ
-                self._event_publisher.publish_all(battle.events)
+                self._event_publisher.publish_all(battle.get_events())
                 self._battle_repository.save(battle)
                 self.start_turn(battle.battle_id)
 
@@ -161,21 +164,22 @@ class BattleApplicationService:
         """
         モンスターのターンを開始する
         """
-        actor = battle.get_combat_state(actor.participant_type, actor.entity_id)
-        if not actor:
+        participant_type, entity_id = actor.participant_key
+        actor_combat_state = battle.get_combat_state(participant_type, entity_id)
+        if not actor_combat_state:
             raise ActorNotFoundException()
 
-        turn_start_result = self._battle_logic_service.process_on_turn_start(actor)
+        turn_start_result = self._battle_logic_service.process_on_turn_start(actor_combat_state)
         battle.apply_turn_start_result(turn_start_result)
 
         # イベントをパブリッシュ
-        self._event_publisher.publish_all(battle.events)
+        self._event_publisher.publish_all(battle.get_events())
 
         battle_result = battle.check_battle_end_conditions()
         if battle_result:
             battle.end_battle(battle_result)
             # イベントをパブリッシュ
-            self._event_publisher.publish_all(battle.events)
+            self._event_publisher.publish_all(battle.get_events())
             self._battle_repository.save(battle)
         else:
             if turn_start_result.can_act:
@@ -186,11 +190,11 @@ class BattleApplicationService:
                 # イベントハンドラーが通知を処理
                 pass
 
-            turn_end_result = self._battle_logic_service.process_on_turn_end(actor)
+            turn_end_result = self._battle_logic_service.process_on_turn_end(actor_combat_state)
             battle.apply_turn_end_result(turn_end_result)
             battle.advance_to_next_turn(turn_end_result)
             # イベントをパブリッシュ
-            self._event_publisher.publish_all(battle.events)
+            self._event_publisher.publish_all(battle.get_events())
             self._battle_repository.save(battle)
             self.start_turn(battle.battle_id)
 
@@ -199,9 +203,15 @@ class BattleApplicationService:
         モンスターの行動を実行する
         """
         try:
+            # モンスターの戦闘状態を取得
+            participant_type, entity_id = monster_actor.participant_key
+            monster_combat_state = battle.get_combat_state(participant_type, entity_id)
+            if not monster_combat_state:
+                raise ValueError("Monster combat state not found")
+            
             # 利用可能なアクションを取得（アプリケーション層の責務）
             available_actions = []
-            for action_id in monster_actor.available_action_ids:
+            for action_id in monster_combat_state.available_action_ids:
                 action = self._action_repository.find_by_id(action_id)
                 if action:
                     available_actions.append(action)
@@ -209,19 +219,21 @@ class BattleApplicationService:
             if not available_actions:
                 raise ValueError("No available actions for monster")
 
-            # モンスターの行動を選択（ドメインサービス）
+            # モンスターの行動とターゲットを選択（ドメインサービス）
             all_participants = list(battle.get_combat_states().values())
-            selected_action = self._monster_action_service.select_monster_action(
-                monster_actor, available_actions, all_participants
+            action_and_targets = self._monster_action_service.select_monster_action_with_targets(
+                monster_combat_state, available_actions, all_participants
             )
 
-            if not selected_action:
+            if not action_and_targets:
                 raise ValueError("Monster action selection failed")
+            
+            selected_action, selected_targets = action_and_targets
 
             # アクションを実行（BattleAction.execute()を使用）
             battle_action_result = selected_action.execute(
-                actor=monster_actor,
-                specified_targets=None,  # モンスターは自動選択
+                actor=monster_combat_state,
+                specified_targets=selected_targets,
                 context=self._battle_logic_service,
                 all_participants=all_participants
             )
@@ -230,14 +242,15 @@ class BattleApplicationService:
             battle.apply_battle_action_result(battle_action_result)
 
             # ターン実行イベントを発行
+            participant_type, entity_id = monster_actor.participant_key
             battle.execute_turn(
-                monster_actor.participant_type,
-                monster_actor.entity_id,
+                participant_type,
+                entity_id,
                 battle_action_result
             )
 
             # イベントをパブリッシュ
-            self._event_publisher.publish_all(battle.events)
+            self._event_publisher.publish_all(battle.get_events())
 
         except Exception as e:
             raise ValueError(f"Monster action execution failed: {e}")
@@ -273,9 +286,10 @@ class BattleApplicationService:
     def _validate_player_turn(self, battle: Battle, player_id: int):
         """現在のターンが正しいプレイヤーかチェック"""
         current_actor = battle.get_current_actor()
-        if (current_actor.participant_type != ParticipantType.PLAYER or
-            current_actor.entity_id != player_id):
-            raise ValueError(f"Invalid player turn. Expected: {current_actor.entity_id}, Got: {player_id}")
+        participant_type, entity_id = current_actor.participant_key
+        if (participant_type != ParticipantType.PLAYER or
+            entity_id != player_id):
+            raise ValueError(f"Invalid player turn. Expected: {entity_id}, Got: {player_id}")
 
     def _get_player_combat_state(self, battle: Battle, player_id: int):
         """プレイヤーの戦闘状態を取得"""
@@ -315,8 +329,8 @@ class BattleApplicationService:
 
             # 結果の適用とイベント処理
             battle.apply_battle_action_result(battle_action_result)
-            battle.execute_turn(player_actor.participant_type, player_actor.entity_id, battle_action_result)
-            self._event_publisher.publish_all(battle.events)
+            battle.execute_turn(ParticipantType.PLAYER, player_actor.entity_id, battle_action_result)
+            self._event_publisher.publish_all(battle.get_events())
 
             # 次のターンへ
             battle.advance_to_next_turn()
@@ -339,7 +353,7 @@ class BattleApplicationService:
         if battle_result:
             battle.end_battle(battle_result)
             # イベントをパブリッシュ
-            self._event_publisher.publish_all(battle.events)
+            self._event_publisher.publish_all(battle.get_events())
             self._battle_repository.save(battle)
         else:
             raise ValueError("Battle is not ready to end")
@@ -363,7 +377,7 @@ class BattleApplicationService:
         # 戦闘に参加
         battle.join_player(player, battle._current_turn)
         # イベントをパブリッシュ
-        self._event_publisher.publish_all(battle.events)
+        self._event_publisher.publish_all(battle.get_events())
         self._battle_repository.save(battle)
 
     def leave_battle(self, battle_id: int, player_id: int):
@@ -381,7 +395,7 @@ class BattleApplicationService:
         # 戦闘から離脱
         battle.player_escape(player)
         # イベントをパブリッシュ
-        self._event_publisher.publish_all(battle.events)
+        self._event_publisher.publish_all(battle.get_events())
         self._battle_repository.save(battle)
 
     def get_battle_status(self, battle_id: int) -> BattleStatusDto:

@@ -1,4 +1,4 @@
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Dict
 from src.domain.item.consumable_item import ConsumableItem
 from src.domain.item.equipment_item import EquipmentItem
 from src.domain.item.item_enum import ItemType
@@ -17,6 +17,9 @@ from src.domain.player.conversation_events import PlayerSpokeEvent
 from src.domain.trade.trade import TradeItem
 from src.domain.trade.trade_exception import InsufficientItemsException, InsufficientGoldException, ItemNotTradeableException, InsufficientInventorySpaceException
 from src.domain.battle.battle_enum import Element, Race
+from src.domain.battle.action_deck import ActionDeck
+from src.domain.battle.action_mastery import ActionMastery
+from src.domain.battle.action_slot import ActionSlot
 
 if TYPE_CHECKING:
     from src.domain.battle.combat_state import CombatState
@@ -44,6 +47,8 @@ class Player(AggregateRoot):
         inventory: Inventory,
         equipment_set: EquipmentSet,
         message_box: MessageBox,
+        action_deck: ActionDeck,
+        action_masteries: Dict[int, ActionMastery] = None,
         race: Race = Race.HUMAN,
         element: Element = Element.NEUTRAL,
     ):
@@ -61,6 +66,8 @@ class Player(AggregateRoot):
         self._dynamic_status = dynamic_status
         self._race = race
         self._element = element
+        self._action_deck = action_deck
+        self._action_masteries = action_masteries if action_masteries is not None else {}
         # self._appearance = AppearanceSet()  # 将来実装
     
     @property
@@ -98,6 +105,14 @@ class Player(AggregateRoot):
     @property
     def mp(self) -> Mp:
         return self._dynamic_status.mp
+    
+    @property
+    def action_deck(self) -> ActionDeck:
+        return self._action_deck
+    
+    @property
+    def action_masteries(self) -> Dict[int, ActionMastery]:
+        return self._action_masteries.copy()
     
     # ===== 取引関連の振る舞いの実装 =====
     def prepare_trade_offer(self, command: CreateTradeCommand) -> TradeItem:
@@ -285,6 +300,96 @@ class Player(AggregateRoot):
             from_spot_id=self._previous_spot_id,
             to_spot_id=to_spot_id,
         ))
+    
+    # ===== Actionデッキ関連の振る舞い =====
+    def learn_action(self, action_slot: ActionSlot) -> None:
+        """技を習得する（ドメインロジック）"""
+        # ビジネスルール: 既に習得済みの技は習得できない
+        if self._action_deck.has_action(action_slot.action_id):
+            raise ValueError(f"Action already learned. action_id: {action_slot.action_id}")
+        
+        # ビジネスルール: キャパシティ制限
+        if not self._action_deck.can_add_action(action_slot):
+            raise ValueError(f"Not enough capacity to learn action. action_id: {action_slot.action_id}")
+        
+        # デッキに技を追加
+        self._action_deck = self._action_deck.add_action(action_slot)
+        
+        # 習熟度を初期化
+        if action_slot.action_id not in self._action_masteries:
+            self._action_masteries[action_slot.action_id] = ActionMastery(action_slot.action_id, 0, 1)
+    
+    def forget_action(self, action_id: int, is_basic_action: bool) -> None:
+        """技を忘れる（ドメインロジック）"""
+        # ビジネスルール: 基本技は忘れることができない
+        if is_basic_action:
+            raise ValueError(f"Cannot forget basic action. action_id: {action_id}")
+        
+        # ビジネスルール: 習得していない技は忘れられない
+        if not self._action_deck.has_action(action_id):
+            raise ValueError(f"Action not learned. action_id: {action_id}")
+        
+        # デッキから技を削除
+        self._action_deck = self._action_deck.remove_action(action_id)
+        
+        # 習熟度も削除
+        if action_id in self._action_masteries:
+            del self._action_masteries[action_id]
+    
+    def evolve_action(self, action_id: int, evolved_action_id: int, evolved_cost: int) -> None:
+        """技を進化させる（ドメインロジック）"""
+        # ビジネスルール: 習熟度が存在しない技は進化できない
+        mastery = self._action_masteries.get(action_id)
+        if mastery is None:
+            raise ValueError(f"Action mastery not found. action_id: {action_id}")
+        
+        # ビジネスルール: デッキに存在しない技は進化できない
+        current_slot = self._action_deck.get_action_slot(action_id)
+        if current_slot is None:
+            raise ValueError(f"Action not found in deck. action_id: {action_id}")
+        
+        # 進化後の技スロットを作成（レベルは引き継ぎ）
+        evolved_slot = ActionSlot(evolved_action_id, current_slot.level, evolved_cost)
+        
+        # キャパシティチェック（一旦削除してから追加）
+        temp_deck = self._action_deck.remove_action(action_id)
+        if not temp_deck.can_add_action(evolved_slot):
+            raise ValueError(f"Not enough capacity for evolved action. evolved_action_id: {evolved_action_id}")
+        
+        # デッキを更新
+        self._action_deck = temp_deck.add_action(evolved_slot)
+        
+        # 習熟度を更新（進化時はリセット）
+        del self._action_masteries[action_id]
+        self._action_masteries[evolved_action_id] = ActionMastery(evolved_action_id, 0, 1)
+    
+    def gain_action_experience(self, action_id: int, experience: int) -> None:
+        """技の経験値を獲得"""
+        if action_id not in self._action_masteries:
+            raise ValueError(f"Action mastery not found. action_id: {action_id}")
+        
+        current_mastery = self._action_masteries[action_id]
+        new_mastery = current_mastery.gain_experience(experience)
+        self._action_masteries[action_id] = new_mastery
+    
+    def level_up_action(self, action_id: int) -> None:
+        """技のレベルを上げる"""
+        if action_id not in self._action_masteries:
+            raise ValueError(f"Action mastery not found. action_id: {action_id}")
+        
+        current_mastery = self._action_masteries[action_id]
+        new_mastery = current_mastery.level_up()
+        self._action_masteries[action_id] = new_mastery
+        
+        # デッキ内のスロットも更新
+        current_slot = self._action_deck.get_action_slot(action_id)
+        if current_slot is not None:
+            new_slot = current_slot.with_level(new_mastery.level)
+            self._action_deck = self._action_deck.update_action_slot(action_id, new_slot)
+    
+    def get_action_mastery(self, action_id: int) -> Optional[ActionMastery]:
+        """指定された技の習熟度を取得"""
+        return self._action_masteries.get(action_id)
     
     # ===== 戦闘後の状態を適用 =====
     def apply_battle_result(self, combat_state: CombatState):

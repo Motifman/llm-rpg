@@ -8,6 +8,8 @@ from src.domain.player.mp import Mp
 if TYPE_CHECKING:
     from src.domain.player.player import Player
     from src.domain.monster.monster import Monster
+    from src.domain.battle.battle_action import BattleAction
+    from src.domain.battle.action_repository import ActionRepository
 
 
 @dataclass(frozen=True)
@@ -74,6 +76,9 @@ class CombatState:
     critical_rate: float
     evasion_rate: float
     
+    # === アクション情報 ===
+    available_action_ids: List[int]
+    
     @classmethod
     def from_player(cls, player: "Player", player_id: int) -> "CombatState":
         """CombatEntityからCombatStateを生成"""
@@ -95,6 +100,7 @@ class CombatState:
             speed=base_status.speed,
             critical_rate=base_status.critical_rate,
             evasion_rate=base_status.evasion_rate,
+            available_action_ids=player.action_deck.get_action_ids(),
         )
     
     @classmethod
@@ -120,6 +126,7 @@ class CombatState:
             speed=base_status.speed,
             critical_rate=base_status.critical_rate,
             evasion_rate=base_status.evasion_rate,
+            available_action_ids=monster.action_deck.get_action_ids(),
         )
     
     # === 状態変更メソッド ===
