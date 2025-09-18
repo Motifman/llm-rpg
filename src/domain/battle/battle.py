@@ -26,8 +26,9 @@ from src.domain.battle.turn_order_service import TurnOrderService
 from src.domain.battle.turn_order_service import TurnEntry
 from src.domain.player.player import Player
 from src.domain.monster.monster import Monster
-from src.domain.monster.drop_reward import EMPTY_REWARD
+from src.domain.monster.drop_reward import DropReward
 from src.domain.battle.battle_exception import BattleNotStartedException, BattleFullException, PlayerAlreadyInBattleException
+from src.domain.battle.battle_action import BattleAction
 
 
 # TODO: 最低限の要素のみを一旦実装しなおす
@@ -216,21 +217,19 @@ class Battle(AggregateRoot):
     def _emit_round_started_event(self):
         """ラウンド開始イベントを発行"""
         turn_order_data = [(entry.participant_key[0], entry.participant_key[1]) for entry in self._turn_order]
-        remaining_participants = {
-            ParticipantType.PLAYER: [entity_id for participant_type, entity_id in self._combat_states.keys()
-                                   if participant_type == ParticipantType.PLAYER and
-                                   self._combat_states[(participant_type, entity_id)].is_alive()],
-            ParticipantType.MONSTER: [entity_id for participant_type, entity_id in self._combat_states.keys()
-                                    if participant_type == ParticipantType.MONSTER and
-                                    self._combat_states[(participant_type, entity_id)].is_alive()],
-        }
-
-        round_stats = {
-            "total_participants": len(self._turn_order),
-            "player_count": len(remaining_participants[ParticipantType.PLAYER]),
-            "monster_count": len(remaining_participants[ParticipantType.MONSTER]),
-            "round_number": self._current_round,
-        }
+        
+        # 全参加者の現在状態を取得
+        all_participants = []
+        remaining_players = []
+        remaining_monsters = []
+        
+        for (participant_type, entity_id), combat_state in self._combat_states.items():
+            if combat_state.is_alive():
+                all_participants.append(combat_state.to_participant_info())
+                if participant_type == ParticipantType.PLAYER:
+                    remaining_players.append(entity_id)
+                else:
+                    remaining_monsters.append(entity_id)
 
         self.add_event(RoundStartedEvent.create(
             aggregate_id=self._battle_id,
@@ -238,8 +237,10 @@ class Battle(AggregateRoot):
             battle_id=self._battle_id,
             round_number=self._current_round,
             turn_order=turn_order_data,
-            remaining_participants=remaining_participants,
-            round_stats=round_stats,
+            all_participants=all_participants,
+            remaining_players=remaining_players,
+            remaining_monsters=remaining_monsters,
+            messages=[f"ラウンド {self._current_round} 開始"],
         ))
 
     def start_turn(self) -> None:
@@ -269,23 +270,18 @@ class Battle(AggregateRoot):
         if not combat_state:
             return
 
-        # アクターの統計情報を取得
-        actor_stats = {
-            "entity_id": combat_state.entity_id,
-            "name": combat_state.name,
-            "hp": combat_state.current_hp.value,
-            "max_hp": combat_state.current_hp.max_hp,
-            "mp": combat_state.current_mp.value,
-            "max_mp": combat_state.current_mp.max_mp,
-            "attack": combat_state.attack,
-            "defense": combat_state.defense,
-            "speed": combat_state.speed,
-            "level": 1,  # TODO: レベル情報を追加する必要がある場合
-        }
-
-        # 状態異常とバフの情報を取得
-        status_effects = list(combat_state.status_effects.keys())
-        active_buffs = list(combat_state.buffs.keys())
+        # アクターの詳細情報を取得
+        actor_info = combat_state.to_participant_info()
+        
+        # 全参加者の現在状態を取得
+        all_participants = [
+            state.to_participant_info() 
+            for state in self._combat_states.values() 
+            if state.is_alive()
+        ]
+        
+        # 現在のターン順序を取得
+        turn_order = [(entry.participant_key[0], entry.participant_key[1]) for entry in self._turn_order]
 
         self.add_event(TurnStartedEvent.create(
             aggregate_id=self._battle_id,
@@ -295,11 +291,11 @@ class Battle(AggregateRoot):
             round_number=self._current_round,
             actor_id=entity_id,
             participant_type=participant_type,
-            actor_stats=actor_stats,
+            actor_info=actor_info,
+            all_participants=all_participants,
+            turn_order=turn_order,
             can_act=combat_state.can_act,
-            status_effects=status_effects,
-            active_buffs=active_buffs,
-            messages=[],
+            messages=[f"{actor_info.name} のターン"],
         ))
 
     def advance_to_next_turn(self, turn_end_result: Optional[TurnEndResult] = None) -> bool:
@@ -324,34 +320,27 @@ class Battle(AggregateRoot):
         if not combat_state:
             return
 
-        # 最終アクター統計を取得
-        final_actor_stats = {
-            "entity_id": combat_state.entity_id,
-            "name": combat_state.name,
-            "hp": combat_state.current_hp.value,
-            "max_hp": combat_state.current_hp.max_hp,
-            "mp": combat_state.current_mp.value,
-            "max_mp": combat_state.current_mp.max_mp,
-            "attack": combat_state.attack,
-            "defense": combat_state.defense,
-            "speed": combat_state.speed,
-            "level": 1,  # TODO: レベル情報を追加する必要がある場合
-        }
+        # アクターの最終状態を取得
+        actor_info_after = combat_state.to_participant_info()
+        
+        # 全参加者の最新状態を取得
+        all_participants_after = [
+            state.to_participant_info() 
+            for state in self._combat_states.values() 
+            if state.is_alive()
+        ]
+        
+        # 状態異常・バフの処理結果（実際の処理では計算される）
+        status_effect_triggers = []
+        expired_status_effects = []
+        expired_buffs = []
 
         # TurnEndResultから情報を取得
+        messages = []
         if turn_end_result:
-            damage_from_status_effects = turn_end_result.damage
-            healing_from_status_effects = turn_end_result.healing
-            expired_status_effects = turn_end_result.status_effects_to_remove
-            expired_buffs = turn_end_result.buffs_to_remove
-            messages = turn_end_result.messages
-        else:
-            damage_from_status_effects = 0
-            healing_from_status_effects = 0
-            expired_status_effects = []
-            expired_buffs = []
-            messages = []
-
+            # 状態異常の発動情報を構築（実際の実装では詳細な処理が必要）
+            messages = turn_end_result.messages if hasattr(turn_end_result, 'messages') else []
+        
         self.add_event(TurnEndedEvent.create(
             aggregate_id=self._battle_id,
             aggregate_type="battle",
@@ -360,12 +349,12 @@ class Battle(AggregateRoot):
             round_number=self._current_round,
             actor_id=entity_id,
             participant_type=participant_type,
-            is_actor_defeated=not combat_state.is_alive(),
-            damage_from_status_effects=damage_from_status_effects,
-            healing_from_status_effects=healing_from_status_effects,
+            status_effect_triggers=status_effect_triggers,
             expired_status_effects=expired_status_effects,
             expired_buffs=expired_buffs,
-            final_actor_stats=final_actor_stats,
+            is_actor_defeated=not combat_state.is_alive(),
+            actor_info_after=actor_info_after,
+            all_participants_after=all_participants_after,
             messages=messages,
         ))
     
@@ -589,10 +578,8 @@ class Battle(AggregateRoot):
             if entity_id in self._monster_ids:
                 self._monster_ids.remove(entity_id)
                 # ドロップ報酬の計算
-                drop_reward = {}
-                # モンスターのドロップ報酬は別途計算（CombatStateには元のエンティティ情報がない）
-                # 実際の実装では、MonsterRepositoryから取得するか、CombatStateに保持する
-                drop_reward = {"gold": 50, "exp": 25}  # 簡易実装
+                monster_state = self._combat_states.get((ParticipantType.MONSTER, entity_id))
+                drop_reward = monster_state.drop_reward
 
                 self.add_event(MonsterDefeatedEvent.create(
                     aggregate_id=self._battle_id,
@@ -611,13 +598,49 @@ class Battle(AggregateRoot):
         # 戦闘状態から削除
         self._combat_states.pop((participant_type, entity_id))
 
-    def execute_turn(self, actor_participant_type: ParticipantType, actor_entity_id: int, action_result: BattleActionResult):
+    def execute_turn(self, actor_participant_type: ParticipantType, actor_entity_id: int, action: BattleAction, action_result: BattleActionResult):
         """ターンを執行"""
         # 現在のアクターが正しいかチェック
         current_actor = self.get_current_actor()
         if not current_actor or current_actor.participant_key != (actor_participant_type, actor_entity_id):
             raise ValueError(f"Invalid actor: expected {(current_actor.participant_key if current_actor else None)}, got {(actor_participant_type, actor_entity_id)}")
 
+        # アクション情報を構築
+        from src.domain.battle.events.battle_events import ActionInfo, TargetResult
+        action_info = ActionInfo(
+            action_id=action.action_id,
+            name=action.name,
+            description=action.description,
+            action_type=action.action_type,
+            element=getattr(action, 'element', None),
+            mp_cost=action.mp_cost,
+            hp_cost=action.hp_cost
+        )
+        
+        # ターゲット結果を構築
+        target_results = []
+        for change in action_result.target_state_changes:
+            target_result = TargetResult(
+                target_id=change.target_id,
+                target_participant_type=change.participant_type,
+                damage_dealt=change.hp_change if change.hp_change < 0 else 0,
+                healing_done=change.hp_change if change.hp_change > 0 else 0,
+                was_critical=False,  # TODO: クリティカル判定の追加
+                compatibility_multiplier=1.0,  # TODO: 相性倍率の追加
+                hp_before=0,  # TODO: 変更前HP
+                hp_after=0,   # TODO: 変更後HP
+                mp_before=0,  # TODO: 変更前MP
+                mp_after=0,   # TODO: 変更後MP
+            )
+            target_results.append(target_result)
+        
+        # 全参加者の最新状態を取得
+        all_participants_after = [
+            state.to_participant_info() 
+            for state in self._combat_states.values() 
+            if state.is_alive()
+        ]
+        
         # ターン実行イベント発行
         self.add_event(TurnExecutedEvent.create(
             aggregate_id=self._battle_id,
@@ -627,18 +650,13 @@ class Battle(AggregateRoot):
             round_number=self._current_round,
             actor_id=actor_entity_id,
             participant_type=actor_participant_type,
-            action_type="",  # TODO: アクションタイプ情報の追加
-            action_name="",  # TODO: アクション名情報の追加
-            target_ids=[change.target_id for change in action_result.target_state_changes],
-            target_participant_types=[change.participant_type for change in action_result.target_state_changes],
-            damage_dealt=action_result.total_damage_dealt,
-            healing_done=action_result.total_healing_dealt,
-            hp_consumed=0,  # TODO: HP消費情報の追加
-            mp_consumed=0,  # TODO: MP消費情報の追加
-            critical_hits=action_result.metadata.critical_hits if action_result.metadata else [],
-            compatibility_multipliers=action_result.metadata.compatibility_multipliers if action_result.metadata else [],
+            action_info=action_info,
+            target_results=target_results,
+            hp_consumed=abs(action_result.actor_state_change.hp_change) if action_result.actor_state_change.hp_change < 0 else 0,
+            mp_consumed=abs(action_result.actor_state_change.mp_change) if action_result.actor_state_change.mp_change < 0 else 0,
             applied_status_effects=[],  # TODO: アクション結果から取得
             applied_buffs=[],  # TODO: アクション結果から取得
+            all_participants_after=all_participants_after,
             messages=action_result.messages,
             success=action_result.success,
             failure_reason=action_result.failure_reason,
@@ -690,21 +708,14 @@ class Battle(AggregateRoot):
         self._state = BattleState.COMPLETED
 
         # 勝利時のドロップ報酬計算
-        drop_rewards = {}
-        total_rewards = {"gold": 0, "exp": 0}
         if result_type == BattleResultType.VICTORY:
-            drop_rewards = EMPTY_REWARD
+            total_rewards = DropReward()
             for monster_id in self._monster_ids:
                 monster_state = self._combat_states.get((ParticipantType.MONSTER, monster_id))
                 if monster_state and not monster_state.is_alive():
-                    # 簡易実装: 実際の実装では MonsterRepository から取得
-                    from src.domain.monster.drop_reward import DropReward
-                    from src.domain.common.value_object import Gold, Exp
-                    monster_drop = DropReward(gold=Gold(50), exp=Exp(25))
-                    drop_rewards += monster_drop
-
-            # 報酬の計算（簡易版）
-            total_rewards = {"gold": 1000, "exp": 500}  # TODO: 実際の報酬計算ロジックを実装
+                    monster_drop_reward = monster_state.drop_reward
+                    if monster_drop_reward:
+                        total_rewards += monster_drop_reward
 
         # 勝者IDの取得
         winner_ids = []

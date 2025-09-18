@@ -254,6 +254,7 @@ class BattleApplicationService:
             battle.execute_turn(
                 participant_type,
                 entity_id,
+                selected_action,
                 battle_action_result
             )
 
@@ -338,7 +339,7 @@ class BattleApplicationService:
 
             # 結果の適用とイベント処理
             battle.apply_battle_action_result(battle_action_result)
-            battle.execute_turn(ParticipantType.PLAYER, player_actor.entity_id, battle_action_result)
+            battle.execute_turn(ParticipantType.PLAYER, player_actor.entity_id, action, battle_action_result)
             self._event_publisher.publish_all(battle.get_events())
             battle.clear_events()
 

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import Dict, List, TYPE_CHECKING
+from typing import Dict, List, TYPE_CHECKING, Optional
+from src.domain.monster.drop_reward import DropReward
 from src.domain.battle.battle_enum import Element, Race, ParticipantType, StatusEffectType, BuffType
 from src.domain.battle.constant import IF_DEFENDER_DEFENDING_MULTIPLIER as DEFENDER_DEFENDING_MULTIPLIER
 from src.domain.player.hp import Hp
@@ -10,6 +11,7 @@ if TYPE_CHECKING:
     from src.domain.monster.monster import Monster
     from src.domain.battle.battle_action import BattleAction
     from src.domain.battle.action_repository import ActionRepository
+    from src.domain.battle.events.battle_events import ParticipantInfo
 
 
 @dataclass(frozen=True)
@@ -79,6 +81,9 @@ class CombatState:
     # === アクション情報 ===
     available_action_ids: List[int]
     
+    # === ドロップ報酬（モンスターのみ） ===
+    drop_reward: Optional[DropReward]
+    
     @classmethod
     def from_player(cls, player: "Player", player_id: int) -> "CombatState":
         """CombatEntityからCombatStateを生成"""
@@ -101,6 +106,7 @@ class CombatState:
             critical_rate=base_status.critical_rate,
             evasion_rate=base_status.evasion_rate,
             available_action_ids=player.action_deck.get_action_ids(),
+            drop_reward=None,  # プレイヤーはドロップ報酬なし
         )
     
     @classmethod
@@ -127,6 +133,7 @@ class CombatState:
             critical_rate=base_status.critical_rate,
             evasion_rate=base_status.evasion_rate,
             available_action_ids=monster.action_deck.get_action_ids(),
+            drop_reward=monster.get_drop_reward(),
         )
     
     # === 状態変更メソッド ===
@@ -231,3 +238,40 @@ class CombatState:
     def is_alive(self) -> bool:
         """生存判定"""
         return self.current_hp.is_alive()
+    
+    # === UI表示用メソッド ===
+    def to_participant_info(self) -> "ParticipantInfo":
+        """UI表示用のParticipantInfo形式に変換"""
+        from src.domain.battle.events.battle_events import ParticipantInfo
+        
+        # 状態異常の情報を辞書形式に変換
+        status_effects_dict = {
+            effect_type: state.duration 
+            for effect_type, state in self.status_effects.items()
+        }
+        
+        # バフの情報を辞書形式に変換
+        buffs_dict = {
+            buff_type: (state.multiplier, state.duration)
+            for buff_type, state in self.buffs.items()
+        }
+        
+        return ParticipantInfo(
+            entity_id=self.entity_id,
+            participant_type=self.participant_type,
+            name=self.name,
+            race=self.race,
+            element=self.element,
+            current_hp=self.current_hp.value,
+            max_hp=self.current_hp.max_hp,
+            current_mp=self.current_mp.value,
+            max_mp=self.current_mp.max_mp,
+            attack=self.calculate_current_attack(),
+            defense=self.calculate_current_defense(),
+            speed=self.calculate_current_speed(),
+            is_defending=self.is_defending,
+            can_act=self.can_act,
+            status_effects=status_effects_dict,
+            buffs=buffs_dict,
+            available_action_ids=self.available_action_ids.copy()
+        )

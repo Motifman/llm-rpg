@@ -1,7 +1,8 @@
 from dataclasses import dataclass, field
 from typing import List, Optional, Any, Dict, Tuple
 from src.domain.common.domain_event import DomainEvent
-from src.domain.battle.battle_enum import BattleResultType, ParticipantType, StatusEffectType, BuffType
+from src.domain.battle.battle_enum import BattleResultType, ParticipantType, StatusEffectType, BuffType, Element, Race, ActionType
+from src.domain.monster.drop_reward import DropReward
 
 
 @dataclass(frozen=True)
@@ -54,6 +55,40 @@ class MonsterLeftBattleEvent(DomainEvent):
 
 
 @dataclass(frozen=True)
+class ParticipantInfo:
+    """参加者の情報（UI表示用）"""
+    entity_id: int
+    participant_type: ParticipantType
+    name: str
+    race: Race
+    element: Element
+    current_hp: int
+    max_hp: int
+    current_mp: int
+    max_mp: int
+    attack: int
+    defense: int
+    speed: int
+    is_defending: bool
+    can_act: bool
+    status_effects: Dict[StatusEffectType, int] = field(default_factory=dict)  # effect_type -> remaining_duration
+    buffs: Dict[BuffType, Tuple[float, int]] = field(default_factory=dict)  # buff_type -> (multiplier, remaining_duration)
+    available_action_ids: List[int] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ActionInfo:
+    """アクション情報（UI表示用）"""
+    action_id: int
+    name: str
+    description: str
+    action_type: ActionType
+    element: Optional[Element] = None
+    mp_cost: Optional[int] = None
+    hp_cost: Optional[int] = None
+
+
+@dataclass(frozen=True)
 class TurnStartedEvent(DomainEvent):
     """ターン開始イベント"""
     battle_id: int = 0
@@ -61,11 +96,48 @@ class TurnStartedEvent(DomainEvent):
     round_number: int = 0
     actor_id: int = 0
     participant_type: ParticipantType = ParticipantType.PLAYER
-    actor_stats: Dict[str, Any] = field(default_factory=dict)  # アクターの現在統計
+    actor_info: Optional[ParticipantInfo] = None  # アクターの詳細情報
+    all_participants: List[ParticipantInfo] = field(default_factory=list)  # 全参加者の現在状態
+    turn_order: List[Tuple[ParticipantType, int]] = field(default_factory=list)  # 現在のターン順序
     can_act: bool = True
-    status_effects: List[StatusEffectType] = field(default_factory=list)
-    active_buffs: List[BuffType] = field(default_factory=list)
     messages: List[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class StatusEffectApplication:
+    """状態異常適用情報"""
+    target_id: int
+    target_participant_type: ParticipantType
+    effect_type: StatusEffectType
+    duration: int
+    effect_value: Optional[int] = None  # 毒のダメージ量など
+
+
+@dataclass(frozen=True)
+class BuffApplication:
+    """バフ適用情報"""
+    target_id: int
+    target_participant_type: ParticipantType
+    buff_type: BuffType
+    multiplier: float
+    duration: int
+
+
+@dataclass(frozen=True)
+class TargetResult:
+    """各ターゲットへの結果"""
+    target_id: int
+    target_participant_type: ParticipantType
+    damage_dealt: int = 0
+    healing_done: int = 0
+    was_critical: bool = False
+    compatibility_multiplier: float = 1.0
+    was_evaded: bool = False
+    was_blocked: bool = False
+    hp_before: int = 0
+    hp_after: int = 0
+    mp_before: int = 0
+    mp_after: int = 0
 
 
 @dataclass(frozen=True)
@@ -76,21 +148,36 @@ class TurnExecutedEvent(DomainEvent):
     round_number: int = 0
     actor_id: int = 0
     participant_type: ParticipantType = ParticipantType.PLAYER
-    action_type: str = ""
-    action_name: str = ""
-    target_ids: List[int] = field(default_factory=list)
-    target_participant_types: List[ParticipantType] = field(default_factory=list)
-    damage_dealt: int = 0
-    healing_done: int = 0
+    
+    # アクション情報
+    action_info: Optional[ActionInfo] = None
+    
+    # 結果情報
+    target_results: List[TargetResult] = field(default_factory=list)
     hp_consumed: int = 0
     mp_consumed: int = 0
-    critical_hits: List[bool] = field(default_factory=list)
-    compatibility_multipliers: List[float] = field(default_factory=list)
-    applied_status_effects: List[Tuple[int, StatusEffectType, int]] = field(default_factory=list)
-    applied_buffs: List[Tuple[int, BuffType, float, int]] = field(default_factory=list)
+    
+    # 効果適用
+    applied_status_effects: List[StatusEffectApplication] = field(default_factory=list)
+    applied_buffs: List[BuffApplication] = field(default_factory=list)
+    
+    # 状態変化後の全参加者情報
+    all_participants_after: List[ParticipantInfo] = field(default_factory=list)
+    
+    # メッセージと結果
     messages: List[str] = field(default_factory=list)
     success: bool = True
     failure_reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class StatusEffectTrigger:
+    """状態異常発動情報"""
+    target_id: int
+    target_participant_type: ParticipantType
+    effect_type: StatusEffectType
+    damage_or_healing: int  # 正の値は回復、負の値はダメージ
+    remaining_duration: int
 
 
 @dataclass(frozen=True)
@@ -101,12 +188,19 @@ class TurnEndedEvent(DomainEvent):
     round_number: int = 0
     actor_id: int = 0
     participant_type: ParticipantType = ParticipantType.PLAYER
+    
+    # 状態異常・バフの処理結果
+    status_effect_triggers: List[StatusEffectTrigger] = field(default_factory=list)
+    expired_status_effects: List[Tuple[int, ParticipantType, StatusEffectType]] = field(default_factory=list)
+    expired_buffs: List[Tuple[int, ParticipantType, BuffType]] = field(default_factory=list)
+    
+    # アクター状態
     is_actor_defeated: bool = False
-    damage_from_status_effects: int = 0
-    healing_from_status_effects: int = 0
-    expired_status_effects: List[StatusEffectType] = field(default_factory=list)
-    expired_buffs: List[BuffType] = field(default_factory=list)
-    final_actor_stats: Dict[str, Any] = field(default_factory=dict)
+    actor_info_after: Optional[ParticipantInfo] = None
+    
+    # 全参加者の最新状態
+    all_participants_after: List[ParticipantInfo] = field(default_factory=list)
+    
     messages: List[str] = field(default_factory=list)
 
 
@@ -116,8 +210,19 @@ class RoundStartedEvent(DomainEvent):
     battle_id: int = 0
     round_number: int = 0
     turn_order: List[Tuple[ParticipantType, int]] = field(default_factory=list)  # (participant_type, entity_id)
-    remaining_participants: Dict[ParticipantType, List[int]] = field(default_factory=dict)
-    round_stats: Dict[str, Any] = field(default_factory=dict)  # ラウンド開始時の統計
+    all_participants: List[ParticipantInfo] = field(default_factory=list)  # ラウンド開始時の全参加者状態
+    remaining_players: List[int] = field(default_factory=list)
+    remaining_monsters: List[int] = field(default_factory=list)
+    messages: List[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class RoundSummary:
+    """ラウンド要約情報"""
+    total_damage_dealt: Dict[int, int] = field(default_factory=dict)  # entity_id -> total_damage
+    total_healing_done: Dict[int, int] = field(default_factory=dict)  # entity_id -> total_healing
+    actions_taken: Dict[int, int] = field(default_factory=dict)  # entity_id -> action_count
+    critical_hits: Dict[int, int] = field(default_factory=dict)  # entity_id -> critical_count
 
 
 @dataclass(frozen=True)
@@ -125,8 +230,10 @@ class RoundEndedEvent(DomainEvent):
     """ラウンド終了イベント"""
     battle_id: int = 0
     round_number: int = 0
-    round_summary: Dict[str, Any] = field(default_factory=dict)  # ラウンドの要約統計
+    round_summary: RoundSummary = field(default_factory=RoundSummary)
+    all_participants_at_end: List[ParticipantInfo] = field(default_factory=list)
     next_round_turn_order: List[Tuple[ParticipantType, int]] = field(default_factory=list)
+    messages: List[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -139,7 +246,7 @@ class BattleEndedEvent(DomainEvent):
     participant_ids: List[int] = field(default_factory=list)
     total_turns: int = 0
     total_rounds: int = 0
-    total_rewards: Dict[str, int] = field(default_factory=dict)  # {"gold": 1000, "exp": 500}
+    total_rewards: DropReward = field(default_factory=DropReward)  # {"gold": 1000, "exp": 500}  # DropRewardにする
     battle_statistics: Dict[str, Any] = field(default_factory=dict)  # 戦闘全体の統計
     contribution_scores: Dict[int, int] = field(default_factory=dict)  # player_id -> contribution_score
 
@@ -153,9 +260,12 @@ class MonsterDefeatedEvent(DomainEvent):
     defeated_by_player_id: int = 0
     defeat_turn: int = 0
     defeat_round: int = 0
-    drop_reward: Dict[str, Any] = field(default_factory=dict)
-    final_monster_stats: Dict[str, Any] = field(default_factory=dict)
+    drop_reward: DropReward = field(default_factory=DropReward)
+    final_monster_info: Optional[ParticipantInfo] = None
     damage_dealt_by_defeater: int = 0
+    total_damage_taken: int = 0
+    defeat_action_info: Optional[ActionInfo] = None  # 撃破に使用されたアクション
+    messages: List[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -166,8 +276,11 @@ class PlayerDefeatedEvent(DomainEvent):
     defeated_by_monster_id: int = 0
     defeat_turn: int = 0
     defeat_round: int = 0
-    final_player_stats: Dict[str, Any] = field(default_factory=dict)
+    final_player_info: Optional[ParticipantInfo] = None
     damage_dealt_by_defeater: int = 0
+    total_damage_taken: int = 0
+    defeat_action_info: Optional[ActionInfo] = None  # 撃破に使用されたアクション
+    messages: List[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
