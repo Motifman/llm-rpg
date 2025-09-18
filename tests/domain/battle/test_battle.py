@@ -482,3 +482,60 @@ class TestBattleUtilityMethods:
         battle.end_battle(BattleResultType.VICTORY)
 
         assert battle._state == BattleState.COMPLETED
+
+    def test_is_in_progress_when_waiting(self, battle):
+        """WAITING状態の時はis_in_progress()がFalseを返す"""
+        assert battle._state == BattleState.WAITING
+        assert battle.is_in_progress() is False
+
+    def test_is_in_progress_when_in_progress(self, battle):
+        """IN_PROGRESS状態の時はis_in_progress()がTrueを返す"""
+        battle._state = BattleState.IN_PROGRESS
+        assert battle.is_in_progress() is True
+
+    def test_is_in_progress_when_completed(self, battle):
+        """COMPLETED状態の時はis_in_progress()がFalseを返す"""
+        battle._state = BattleState.COMPLETED
+        assert battle.is_in_progress() is False
+    
+    def test_turn_lock_functionality(self, battle, mock_player):
+        """ターンロック機能のテスト"""
+        battle._add_player(mock_player)
+        battle.start_battle()
+        
+        # 初期状態ではロックされていない
+        assert battle.is_turn_locked() is False
+        assert battle.is_waiting_for_player_action() is False
+        assert battle.can_advance_turn() is True
+        
+        # プレイヤーターンをロック
+        player_id = 1
+        battle.lock_turn_for_player_action(player_id)
+        
+        # ロック状態を確認
+        assert battle.is_turn_locked() is True
+        assert battle.is_waiting_for_player_action() is True
+        assert battle.can_advance_turn() is False
+        
+        # ターンをアンロック
+        battle.unlock_turn_after_player_action(player_id)
+        
+        # アンロック状態を確認
+        assert battle.is_turn_locked() is False
+        assert battle.is_waiting_for_player_action() is False
+        assert battle.can_advance_turn() is True
+    
+    def test_lock_turn_invalid_player(self, battle, mock_player, mock_monster):
+        """無効なプレイヤーでのターンロックはエラー"""
+        battle._add_player(mock_player)
+        battle._add_monster(mock_monster)
+        battle.start_battle()
+        
+        # 現在のアクターがプレイヤー1だが、プレイヤー2でロックしようとする
+        with pytest.raises(ValueError, match="Cannot lock turn for player"):
+            battle.lock_turn_for_player_action(2)
+    
+    def test_unlock_turn_not_waiting(self, battle):
+        """待機中でない時のアンロックはエラー"""
+        with pytest.raises(ValueError, match="Not waiting for player action"):
+            battle.unlock_turn_after_player_action(1)

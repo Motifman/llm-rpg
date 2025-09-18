@@ -181,7 +181,7 @@ class AttackAction(BattleAction):
             target_state_changes.append(TargetStateChange(
                 target_id=defender.entity_id,
                 participant_type=defender.participant_type,
-                hp_change=damage_result.damage,
+                hp_change=-damage_result.damage,  # ダメージは負の値
                 status_effects_to_add=effect_result.status_effects_to_add,
                 buffs_to_add=effect_result.buffs_to_add,
             ))

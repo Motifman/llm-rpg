@@ -31,6 +31,42 @@ class DynamicStatus:
         
         return cls(hp, mp, exp, level, gold)
 
+    # == プロパティ ==
+    @property
+    def hp(self) -> Hp:
+        """HPを取得"""
+        return self._hp
+    
+    @hp.setter
+    def hp(self, value: Hp) -> None:
+        """HPを設定"""
+        self._hp = value
+    
+    @property
+    def mp(self) -> Mp:
+        """MPを取得"""
+        return self._mp
+    
+    @mp.setter
+    def mp(self, value: Mp) -> None:
+        """MPを設定"""
+        self._mp = value
+    
+    @property
+    def level(self) -> Level:
+        """レベルを取得"""
+        return self._level
+    
+    @property
+    def exp(self) -> Exp:
+        """経験値を取得"""
+        return self._exp
+    
+    @property
+    def gold(self) -> Gold:
+        """所持金を取得"""
+        return self._gold
+
     # == ビジネスロジックの実装 ==
     def receive_gold(self, gold: Gold):
         """所持金を追加"""
