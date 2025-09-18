@@ -304,7 +304,7 @@ class BattleLoopService:
             
             # 結果適用
             battle.apply_battle_action_result(battle_action_result)
-            battle.execute_turn(participant_type, entity_id, battle_action_result)
+            battle.execute_turn(participant_type, entity_id, selected_action, battle_action_result)
             
         except Exception as e:
             # エラーログを記録（実際の実装では適切なロガーを使用）

@@ -200,7 +200,7 @@ class EnhancedBattleApplicationService:
         
         # 結果の適用
         battle.apply_battle_action_result(battle_action_result)
-        battle.execute_turn(ParticipantType.PLAYER, player_id, battle_action_result)
+        battle.execute_turn(ParticipantType.PLAYER, player_id, action, battle_action_result)
         
         # イベント発行
         self._event_publisher.publish_all(battle.get_events())

@@ -118,10 +118,11 @@ class TurnExecutedNotificationHandler(EventHandler[TurnExecutedEvent]):
             self._notifier.send_notification_to_all(player_ids, message)
 
         # 成功/失敗の情報を追加で通知
+        action_name = event.action_info.name if event.action_info else "アクション"
         if event.success:
-            action_msg = f"{event.action_name}が成功しました。"
+            action_msg = f"{action_name}が成功しました。"
         else:
-            action_msg = f"{event.action_name}が失敗しました。理由: {event.failure_reason}"
+            action_msg = f"{action_name}が失敗しました。理由: {event.failure_reason}"
 
         self._notifier.send_notification_to_all(player_ids, action_msg)
 
