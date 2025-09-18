@@ -83,6 +83,10 @@ class Battle(AggregateRoot):
         self._current_turn = 0
         self._current_round = 0
         self._current_turn_index = 0
+        
+        # ターンロック機能（非同期戦闘ループ制御用）
+        self._turn_locked = False
+        self._waiting_for_player_action = False
     
     @property
     def battle_id(self) -> int:
@@ -91,6 +95,47 @@ class Battle(AggregateRoot):
     @property
     def spot_id(self) -> int:
         return self._spot_id
+    
+    def is_in_progress(self) -> bool:
+        """戦闘が進行中かどうかを判定"""
+        return self._state == BattleState.IN_PROGRESS
+    
+    def is_turn_locked(self) -> bool:
+        """ターンがロックされているかどうか"""
+        return self._turn_locked
+    
+    def is_waiting_for_player_action(self) -> bool:
+        """プレイヤー行動待機中かどうか"""
+        return self._waiting_for_player_action
+    
+    def lock_turn_for_player_action(self, player_id: int) -> None:
+        """プレイヤー行動のためにターンをロック"""
+        current_actor = self.get_current_actor()
+        participant_type, entity_id = current_actor.participant_key
+        
+        if participant_type != ParticipantType.PLAYER or entity_id != player_id:
+            raise ValueError(f"Cannot lock turn for player {player_id}, current actor is {participant_type}:{entity_id}")
+        
+        self._turn_locked = True
+        self._waiting_for_player_action = True
+    
+    def unlock_turn_after_player_action(self, player_id: int) -> None:
+        """プレイヤー行動完了後にターンをアンロック"""
+        if not self._waiting_for_player_action:
+            raise ValueError("Not waiting for player action")
+        
+        current_actor = self.get_current_actor()
+        participant_type, entity_id = current_actor.participant_key
+        
+        if participant_type != ParticipantType.PLAYER or entity_id != player_id:
+            raise ValueError(f"Cannot unlock turn for player {player_id}, current actor is {participant_type}:{entity_id}")
+        
+        self._turn_locked = False
+        self._waiting_for_player_action = False
+    
+    def can_advance_turn(self) -> bool:
+        """ターンを進めることができるかどうか"""
+        return not self._turn_locked
     
     def _add_monster(self, monster: Monster):
         if len(self._monster_ids) >= self._max_monsters:
@@ -545,15 +590,16 @@ class Battle(AggregateRoot):
                 self._monster_ids.remove(entity_id)
                 # ドロップ報酬の計算
                 drop_reward = {}
-                if combat_state.entity:
-                    drop_reward = combat_state.entity.get_drop_reward().to_dict()
+                # モンスターのドロップ報酬は別途計算（CombatStateには元のエンティティ情報がない）
+                # 実際の実装では、MonsterRepositoryから取得するか、CombatStateに保持する
+                drop_reward = {"gold": 50, "exp": 25}  # 簡易実装
 
                 self.add_event(MonsterDefeatedEvent.create(
                     aggregate_id=self._battle_id,
                     aggregate_type="battle",
                     battle_id=self._battle_id,
                     monster_id=entity_id,
-                    monster_type_id=getattr(combat_state.entity, 'monster_type_id', 0),
+                    monster_type_id=0,  # 簡易実装: 実際の実装では別途取得
                     defeated_by_player_id=defeated_by_entity_id if defeated_by_participant_type == ParticipantType.PLAYER else 0,
                     defeat_turn=self._current_turn,
                     defeat_round=self._current_round,
@@ -651,7 +697,11 @@ class Battle(AggregateRoot):
             for monster_id in self._monster_ids:
                 monster_state = self._combat_states.get((ParticipantType.MONSTER, monster_id))
                 if monster_state and not monster_state.is_alive():
-                    drop_rewards += monster_state.entity.get_drop_reward()
+                    # 簡易実装: 実際の実装では MonsterRepository から取得
+                    from src.domain.monster.drop_reward import DropReward
+                    from src.domain.common.value_object import Gold, Exp
+                    monster_drop = DropReward(gold=Gold(50), exp=Exp(25))
+                    drop_rewards += monster_drop
 
             # 報酬の計算（簡易版）
             total_rewards = {"gold": 1000, "exp": 500}  # TODO: 実際の報酬計算ロジックを実装

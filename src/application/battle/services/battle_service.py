@@ -95,6 +95,7 @@ class BattleApplicationService:
 
             # イベントをパブリッシュ
             self._event_publisher.publish_all(battle.get_events())
+            battle.clear_events()
 
             self._battle_repository.save(battle)
 
@@ -119,6 +120,7 @@ class BattleApplicationService:
 
         # イベントをパブリッシュ
         self._event_publisher.publish_all(battle.get_events())
+        battle.clear_events()
 
         participant_type, entity_id = current_actor.participant_key
         if participant_type == ParticipantType.PLAYER:
@@ -140,12 +142,14 @@ class BattleApplicationService:
 
         # イベントをパブリッシュ
         self._event_publisher.publish_all(battle.get_events())
+        battle.clear_events()
 
         battle_result = battle.check_battle_end_conditions()
         if battle_result:
             battle.end_battle(battle_result)
             # イベントをパブリッシュ
             self._event_publisher.publish_all(battle.get_events())
+            battle.clear_events()
             self._battle_repository.save(battle)
         else:
             if turn_start_result.can_act:
@@ -157,6 +161,7 @@ class BattleApplicationService:
                 battle.advance_to_next_turn(turn_end_result)
                 # イベントをパブリッシュ
                 self._event_publisher.publish_all(battle.get_events())
+                battle.clear_events()
                 self._battle_repository.save(battle)
                 self.start_turn(battle.battle_id)
 
@@ -174,12 +179,14 @@ class BattleApplicationService:
 
         # イベントをパブリッシュ
         self._event_publisher.publish_all(battle.get_events())
+        battle.clear_events()
 
         battle_result = battle.check_battle_end_conditions()
         if battle_result:
             battle.end_battle(battle_result)
             # イベントをパブリッシュ
             self._event_publisher.publish_all(battle.get_events())
+            battle.clear_events()
             self._battle_repository.save(battle)
         else:
             if turn_start_result.can_act:
@@ -195,6 +202,7 @@ class BattleApplicationService:
             battle.advance_to_next_turn(turn_end_result)
             # イベントをパブリッシュ
             self._event_publisher.publish_all(battle.get_events())
+            battle.clear_events()
             self._battle_repository.save(battle)
             self.start_turn(battle.battle_id)
 
@@ -251,6 +259,7 @@ class BattleApplicationService:
 
             # イベントをパブリッシュ
             self._event_publisher.publish_all(battle.get_events())
+            battle.clear_events()
 
         except Exception as e:
             raise ValueError(f"Monster action execution failed: {e}")
@@ -331,6 +340,7 @@ class BattleApplicationService:
             battle.apply_battle_action_result(battle_action_result)
             battle.execute_turn(ParticipantType.PLAYER, player_actor.entity_id, battle_action_result)
             self._event_publisher.publish_all(battle.get_events())
+            battle.clear_events()
 
             # 次のターンへ
             battle.advance_to_next_turn()
@@ -354,6 +364,7 @@ class BattleApplicationService:
             battle.end_battle(battle_result)
             # イベントをパブリッシュ
             self._event_publisher.publish_all(battle.get_events())
+            battle.clear_events()
             self._battle_repository.save(battle)
         else:
             raise ValueError("Battle is not ready to end")
@@ -378,6 +389,7 @@ class BattleApplicationService:
         battle.join_player(player, battle._current_turn)
         # イベントをパブリッシュ
         self._event_publisher.publish_all(battle.get_events())
+        battle.clear_events()
         self._battle_repository.save(battle)
 
     def leave_battle(self, battle_id: int, player_id: int):
@@ -396,6 +408,7 @@ class BattleApplicationService:
         battle.player_escape(player)
         # イベントをパブリッシュ
         self._event_publisher.publish_all(battle.get_events())
+        battle.clear_events()
         self._battle_repository.save(battle)
 
     def get_battle_status(self, battle_id: int) -> BattleStatusDto:

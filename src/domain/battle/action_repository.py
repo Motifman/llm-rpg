@@ -52,3 +52,7 @@ class ActionRepository(Protocol):
     def is_basic_action(self, action_id: int) -> bool:
         """基本アクション（全員が最初から使える）かどうか"""
         ...
+
+    def generate_action_id(self) -> int:
+        """アクションIDを生成"""
+        ...

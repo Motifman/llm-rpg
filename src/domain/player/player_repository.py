@@ -26,3 +26,8 @@ class PlayerRepository(Repository[Player]):
     def find_by_role(self, role) -> List[Player]:
         """指定されたロールのプレイヤーを検索"""
         pass
+
+    @abstractmethod
+    def generate_player_id(self) -> int:
+        """プレイヤーIDを生成"""
+        pass
