@@ -81,8 +81,11 @@ class CombatState:
     # === アクション情報 ===
     available_action_ids: List[int]
     
+    # === レベル情報（デフォルト値あり） ===
+    level: int = 1
+    
     # === ドロップ報酬（モンスターのみ） ===
-    drop_reward: Optional[DropReward]
+    drop_reward: Optional[DropReward] = None
     
     @classmethod
     def from_player(cls, player: "Player", player_id: int) -> "CombatState":
@@ -106,6 +109,7 @@ class CombatState:
             critical_rate=base_status.critical_rate,
             evasion_rate=base_status.evasion_rate,
             available_action_ids=player.action_deck.get_action_ids(),
+            level=player._dynamic_status.level,  # プレイヤーの実際のレベル
             drop_reward=None,  # プレイヤーはドロップ報酬なし
         )
     
@@ -133,6 +137,7 @@ class CombatState:
             critical_rate=base_status.critical_rate,
             evasion_rate=base_status.evasion_rate,
             available_action_ids=monster.action_deck.get_action_ids(),
+            level=getattr(monster, 'level', 1),  # モンスターのレベル（デフォルト1）
             drop_reward=monster.get_drop_reward(),
         )
     
@@ -271,6 +276,7 @@ class CombatState:
             speed=self.calculate_current_speed(),
             is_defending=self.is_defending,
             can_act=self.can_act,
+            level=self.level,  # 実際のレベル情報
             status_effects=status_effects_dict,
             buffs=buffs_dict,
             available_action_ids=self.available_action_ids.copy()
