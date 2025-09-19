@@ -71,6 +71,7 @@ class ParticipantInfo:
     speed: int
     is_defending: bool
     can_act: bool
+    level: int = 1  # レベル情報を追加
     status_effects: Dict[StatusEffectType, int] = field(default_factory=dict)  # effect_type -> remaining_duration
     buffs: Dict[BuffType, Tuple[float, int]] = field(default_factory=dict)  # buff_type -> (multiplier, remaining_duration)
     available_action_ids: List[int] = field(default_factory=list)

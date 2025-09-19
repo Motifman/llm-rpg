@@ -620,19 +620,75 @@ class Battle(AggregateRoot):
         # ターゲット結果を構築
         target_results = []
         for change in action_result.target_state_changes:
+            # ターゲットの現在状態を取得
+            target_state = self._combat_states.get((change.participant_type, change.target_id))
+            if target_state:
+                hp_before = target_state.current_hp.value
+                mp_before = target_state.current_mp.value
+                
+                # 変更後の値を計算
+                hp_after = max(0, hp_before + change.hp_change)
+                mp_after = max(0, mp_before + change.mp_change)
+                
+                # メタデータからクリティカル・相性情報を取得
+                was_critical = False
+                compatibility_multiplier = 1.0
+                if action_result.metadata:
+                    # ターゲットのインデックスを取得
+                    target_index = next(
+                        (i for i, target_change in enumerate(action_result.target_state_changes) 
+                         if target_change.target_id == change.target_id),
+                        0
+                    )
+                    if target_index < len(action_result.metadata.critical_hits):
+                        was_critical = action_result.metadata.critical_hits[target_index]
+                    if target_index < len(action_result.metadata.compatibility_multipliers):
+                        compatibility_multiplier = action_result.metadata.compatibility_multipliers[target_index]
+            else:
+                hp_before = hp_after = mp_before = mp_after = 0
+                was_critical = False
+                compatibility_multiplier = 1.0
+            
             target_result = TargetResult(
                 target_id=change.target_id,
                 target_participant_type=change.participant_type,
-                damage_dealt=change.hp_change if change.hp_change < 0 else 0,
+                damage_dealt=abs(change.hp_change) if change.hp_change < 0 else 0,
                 healing_done=change.hp_change if change.hp_change > 0 else 0,
-                was_critical=False,  # TODO: クリティカル判定の追加
-                compatibility_multiplier=1.0,  # TODO: 相性倍率の追加
-                hp_before=0,  # TODO: 変更前HP
-                hp_after=0,   # TODO: 変更後HP
-                mp_before=0,  # TODO: 変更前MP
-                mp_after=0,   # TODO: 変更後MP
+                was_critical=was_critical,
+                compatibility_multiplier=compatibility_multiplier,
+                was_evaded=False,  # TODO: 回避情報をaction_resultから取得
+                was_blocked=False,  # TODO: ブロック情報をaction_resultから取得
+                hp_before=hp_before,
+                hp_after=hp_after,
+                mp_before=mp_before,
+                mp_after=mp_after,
             )
             target_results.append(target_result)
+        
+        # 状態異常・バフ適用情報を抽出
+        from src.domain.battle.events.battle_events import StatusEffectApplication, BuffApplication
+        applied_status_effects = []
+        applied_buffs = []
+        
+        # ターゲットの状態異常・バフ適用情報を抽出
+        for target_change in action_result.target_state_changes:
+            for effect_type, duration in target_change.status_effects_to_add:
+                applied_status_effects.append(StatusEffectApplication(
+                    target_id=target_change.target_id,
+                    target_participant_type=target_change.participant_type,
+                    effect_type=effect_type,
+                    duration=duration,
+                    effect_value=None  # 現在は効果値なし
+                ))
+            
+            for buff_type, multiplier, duration in target_change.buffs_to_add:
+                applied_buffs.append(BuffApplication(
+                    target_id=target_change.target_id,
+                    target_participant_type=target_change.participant_type,
+                    buff_type=buff_type,
+                    multiplier=multiplier,
+                    duration=duration
+                ))
         
         # 全参加者の最新状態を取得
         all_participants_after = [
@@ -654,8 +710,8 @@ class Battle(AggregateRoot):
             target_results=target_results,
             hp_consumed=abs(action_result.actor_state_change.hp_change) if action_result.actor_state_change.hp_change < 0 else 0,
             mp_consumed=abs(action_result.actor_state_change.mp_change) if action_result.actor_state_change.mp_change < 0 else 0,
-            applied_status_effects=[],  # TODO: アクション結果から取得
-            applied_buffs=[],  # TODO: アクション結果から取得
+            applied_status_effects=applied_status_effects,
+            applied_buffs=applied_buffs,
             all_participants_after=all_participants_after,
             messages=action_result.messages,
             success=action_result.success,
