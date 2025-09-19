@@ -34,6 +34,8 @@ from src.domain.battle.battle_service import BattleLogicService
 from src.domain.battle.services.monster_action_service import MonsterActionService
 from src.domain.common.notifier import Notifier
 from src.domain.common.event_publisher import EventPublisher
+from src.infrastructure.notifier.console_notifier import ConsoleNotifier
+from src.infrastructure.events.event_publisher_impl import InMemoryEventPublisher
 from src.domain.battle.battle_enum import ParticipantType
 from src.domain.player.player_enum import Role
 
@@ -47,21 +49,7 @@ from src.application.battle.handlers.enhanced_ui_battle_handler import (
     EnhancedTurnEndedHandler,
     EnhancedBattleEndedHandler,
     EnhancedMonsterDefeatedHandler,
-    EnhancedPlayerDefeatedHandler,
-    EnhancedStatusEffectAppliedHandler,
-    EnhancedBuffAppliedHandler,
-    EnhancedDamageDealtHandler,
-    EnhancedHealingDoneHandler,
-    EnhancedCriticalHitHandler,
-    EnhancedEvasionHandler,
-    EnhancedBlockHandler,
-    EnhancedActionExecutedHandler,
-    EnhancedMonsterActionSelectedHandler,
-    EnhancedPlayerActionSelectedHandler,
-    EnhancedTurnOrderDeterminedHandler,
-    EnhancedBattleStateUpdatedHandler,
-    EnhancedActionResultHandler,
-    EnhancedMessageHandler
+    EnhancedPlayerDefeatedHandler
 )
 
 # Curses UIシステム
@@ -93,8 +81,8 @@ class CursesBattleDemo:
         monster_action_service = MonsterActionService()
         
         # イベントシステムの初期化
-        notifier = Notifier()
-        event_publisher = EventPublisher()
+        notifier = ConsoleNotifier()
+        event_publisher = InMemoryEventPublisher()
         
         # UI通知システムの初期化
         self.ui_notifier = UIBattleNotifier()
@@ -129,21 +117,7 @@ class CursesBattleDemo:
             EnhancedTurnEndedHandler(self.ui_notifier),
             EnhancedBattleEndedHandler(self.ui_notifier),
             EnhancedMonsterDefeatedHandler(self.ui_notifier),
-            EnhancedPlayerDefeatedHandler(self.ui_notifier),
-            EnhancedStatusEffectAppliedHandler(self.ui_notifier),
-            EnhancedBuffAppliedHandler(self.ui_notifier),
-            EnhancedDamageDealtHandler(self.ui_notifier),
-            EnhancedHealingDoneHandler(self.ui_notifier),
-            EnhancedCriticalHitHandler(self.ui_notifier),
-            EnhancedEvasionHandler(self.ui_notifier),
-            EnhancedBlockHandler(self.ui_notifier),
-            EnhancedActionExecutedHandler(self.ui_notifier),
-            EnhancedMonsterActionSelectedHandler(self.ui_notifier),
-            EnhancedPlayerActionSelectedHandler(self.ui_notifier),
-            EnhancedTurnOrderDeterminedHandler(self.ui_notifier),
-            EnhancedBattleStateUpdatedHandler(self.ui_notifier),
-            EnhancedActionResultHandler(self.ui_notifier),
-            EnhancedMessageHandler(self.ui_notifier)
+            EnhancedPlayerDefeatedHandler(self.ui_notifier)
         ]
         
         for handler in handlers:
@@ -245,7 +219,7 @@ class CursesBattleDemo:
                     target_entity_id=1
                 )
                 self.player_action_waiter.set_action(action_dto)
-                self.ui_notifier.notify_message("攻撃を実行します！")
+                self.ui_notifier.add_battle_message("攻撃を実行します！")
                 
             elif cmd == "fireball":
                 # ファイアボールコマンド
@@ -256,7 +230,7 @@ class CursesBattleDemo:
                     target_entity_id=1
                 )
                 self.player_action_waiter.set_action(action_dto)
-                self.ui_notifier.notify_message("ファイアボールを詠唱します！")
+                self.ui_notifier.add_battle_message("ファイアボールを詠唱します！")
                 
             elif cmd == "heal":
                 # ヒールコマンド
@@ -267,37 +241,37 @@ class CursesBattleDemo:
                     target_entity_id=1
                 )
                 self.player_action_waiter.set_action(action_dto)
-                self.ui_notifier.notify_message("ヒールを詠唱します！")
+                self.ui_notifier.add_battle_message("ヒールを詠唱します！")
                 
             elif cmd == "quit" or cmd == "q":
                 # 終了コマンド
-                self.ui_notifier.notify_message("戦闘を終了します...")
+                self.ui_notifier.add_battle_message("戦闘を終了します...")
                 return False
                 
             elif cmd == "help" or cmd == "h":
                 # ヘルプコマンド
-                self.ui_notifier.notify_message("利用可能なコマンド:")
-                self.ui_notifier.notify_message("  attack - 攻撃")
-                self.ui_notifier.notify_message("  fireball - ファイアボール")
-                self.ui_notifier.notify_message("  heal - ヒール")
-                self.ui_notifier.notify_message("  help - ヘルプ表示")
-                self.ui_notifier.notify_message("  quit - 終了")
+                self.ui_notifier.add_battle_message("利用可能なコマンド:")
+                self.ui_notifier.add_battle_message("  attack - 攻撃")
+                self.ui_notifier.add_battle_message("  fireball - ファイアボール")
+                self.ui_notifier.add_battle_message("  heal - ヒール")
+                self.ui_notifier.add_battle_message("  help - ヘルプ表示")
+                self.ui_notifier.add_battle_message("  quit - 終了")
                 
             else:
-                self.ui_notifier.notify_message(f"不明なコマンド: {cmd}")
-                self.ui_notifier.notify_message("'help' でコマンド一覧を表示")
+                self.ui_notifier.add_battle_message(f"不明なコマンド: {cmd}")
+                self.ui_notifier.add_battle_message("'help' でコマンド一覧を表示")
             
             return True
             
         except Exception as e:
-            self.ui_notifier.notify_message(f"コマンド処理エラー: {e}")
+            self.ui_notifier.add_battle_message(f"コマンド処理エラー: {e}")
             return True
     
     async def run_battle(self):
         """戦闘を実行"""
         try:
             # 戦闘開始
-            self.ui_notifier.notify_message("戦闘を開始します...")
+            self.ui_notifier.add_battle_message("戦闘を開始します...")
             
             battle_result = await self.battle_service.start_battle(
                 player_ids=[1],
@@ -323,7 +297,7 @@ class CursesBattleDemo:
                         )
                     else:
                         # タイムアウト
-                        self.ui_notifier.notify_message("タイムアウト: 自動で攻撃を実行します")
+                        self.ui_notifier.add_battle_message("タイムアウト: 自動で攻撃を実行します")
                         default_action = PlayerActionDto(
                             player_id=1,
                             action_id=1,
@@ -342,14 +316,14 @@ class CursesBattleDemo:
                         break
                     
                 except Exception as e:
-                    self.ui_notifier.notify_message(f"戦闘ループエラー: {e}")
+                    self.ui_notifier.add_battle_message(f"戦闘ループエラー: {e}")
                     break
             
             # 戦闘終了
-            self.ui_notifier.notify_message("戦闘が終了しました")
+            self.ui_notifier.add_battle_message("戦闘が終了しました")
             
         except Exception as e:
-            self.ui_notifier.notify_message(f"戦闘実行エラー: {e}")
+            self.ui_notifier.add_battle_message(f"戦闘実行エラー: {e}")
     
     def run_demo(self, stdscr):
         """デモを実行"""
@@ -367,8 +341,8 @@ class CursesBattleDemo:
             self.ui_adapter.set_input_callback(self.handle_user_input)
             
             # 初期メッセージ
-            self.ui_notifier.notify_message("Curses戦闘システムデモを開始します")
-            self.ui_notifier.notify_message("'help' でコマンド一覧を表示")
+            self.ui_notifier.add_battle_message("Curses戦闘システムデモを開始します")
+            self.ui_notifier.add_battle_message("'help' でコマンド一覧を表示")
             
             # 戦闘を非同期で開始
             import threading
@@ -381,7 +355,7 @@ class CursesBattleDemo:
         except Exception as e:
             # エラー表示
             if self.ui_notifier:
-                self.ui_notifier.notify_message(f"デモ実行エラー: {e}")
+                self.ui_notifier.add_battle_message(f"デモ実行エラー: {e}")
             else:
                 print(f"デモ実行エラー: {e}")
         finally:
@@ -400,11 +374,22 @@ def main(stdscr):
 if __name__ == "__main__":
     print("Curses戦闘システムデモを開始します...")
     print("画面サイズが80x20以上であることを確認してください")
-    print("Enterキーを押して開始...")
-    input()
+    print("3秒後に自動開始します...")
+    
+    import time
+    time.sleep(3)
     
     try:
-        curses.wrapper(main)
+        # より安全な方法でcursesを初期化
+        stdscr = curses.initscr()
+        try:
+            main(stdscr)
+        finally:
+            try:
+                curses.endwin()
+            except curses.error:
+                # endwin()が失敗した場合は無視
+                pass
     except Exception as e:
         print(f"エラーが発生しました: {e}")
         print("画面サイズが小さすぎる可能性があります")

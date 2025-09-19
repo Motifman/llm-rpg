@@ -46,20 +46,25 @@ class CursesBattleUI:
     def initialize(self, stdscr) -> None:
         """Curses初期化"""
         self._stdscr = stdscr
-        curses.curs_set(0)  # カーソルを非表示
-        curses.noecho()  # エコーを無効化
-        curses.cbreak()  # 行バッファリングを無効化
-        self._stdscr.keypad(True)  # 特殊キーを有効化
-        self._stdscr.timeout(100)  # 100msのタイムアウト
         
-        # 色の初期化
-        self._initialize_colors()
-        
-        # 画面サイズの取得とレイアウト調整
-        self._adjust_layout()
-        
-        self._is_initialized = True
-        self._draw_initial_screen()
+        try:
+            curses.curs_set(0)  # カーソルを非表示
+            curses.noecho()  # エコーを無効化
+            curses.cbreak()  # 行バッファリングを無効化
+            self._stdscr.keypad(True)  # 特殊キーを有効化
+            self._stdscr.timeout(100)  # 100msのタイムアウト
+            
+            # 色の初期化
+            self._initialize_colors()
+            
+            # 画面サイズの取得とレイアウト調整
+            self._adjust_layout()
+            
+            self._is_initialized = True
+            self._draw_initial_screen()
+            
+        except curses.error as e:
+            raise RuntimeError(f"Curses初期化エラー: {e}")
     
     def _initialize_colors(self) -> None:
         """色の初期化"""
@@ -531,12 +536,23 @@ class CursesBattleUI:
     
     def finalize(self) -> None:
         """UI終了処理"""
-        if self._stdscr and self._is_initialized:
-            curses.nocbreak()
-            self._stdscr.keypad(False)
-            curses.echo()
-            curses.endwin()
-            self._is_initialized = False
+        if self._is_initialized:
+            try:
+                if self._stdscr:
+                    self._stdscr.keypad(False)
+                curses.nocbreak()
+                curses.echo()
+                curses.curs_set(1)  # カーソルを表示に戻す
+                curses.endwin()
+            except curses.error:
+                # cursesが既に終了している場合は無視
+                pass
+            except Exception:
+                # その他のエラーも無視
+                pass
+            finally:
+                self._is_initialized = False
+                self._stdscr = None
 
 
 class CursesBattleUIManager:

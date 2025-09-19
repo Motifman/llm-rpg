@@ -13,8 +13,14 @@ from src.presentation.ui.curses_battle_ui import CursesBattleUI
 
 def test_curses_ui(stdscr):
     """Curses UIのテスト"""
-    ui = CursesBattleUI()
-    ui.initialize(stdscr)
+    try:
+        ui = CursesBattleUI()
+        ui.initialize(stdscr)
+    except Exception as e:
+        stdscr.addstr(0, 0, f"初期化エラー: {e}")
+        stdscr.refresh()
+        stdscr.getch()
+        return
     
     # テストメッセージ
     ui._battle_log = [
@@ -100,12 +106,28 @@ def test_curses_ui(stdscr):
 if __name__ == "__main__":
     print("Curses UIテストを開始します...")
     print("画面サイズが80x20以上であることを確認してください")
-    print("Enterキーを押して開始...")
-    input()
+    print("3秒後に自動開始します...")
+    
+    import time
+    time.sleep(3)
+    
+    # ターミナル環境をチェック
+    import os
+    print(f"TERM環境変数: {os.environ.get('TERM', '未設定')}")
+    print(f"COLUMNS: {os.environ.get('COLUMNS', '未設定')}")
+    print(f"LINES: {os.environ.get('LINES', '未設定')}")
     
     try:
-        curses.wrapper(test_curses_ui)
+        # より安全な方法でcursesを初期化
+        stdscr = curses.initscr()
+        try:
+            test_curses_ui(stdscr)
+        finally:
+            curses.endwin()
         print("テストが正常に終了しました")
     except Exception as e:
         print(f"エラーが発生しました: {e}")
+        print(f"エラータイプ: {type(e)}")
+        import traceback
+        traceback.print_exc()
         print("画面サイズが小さすぎる可能性があります")
