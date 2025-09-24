@@ -12,4 +12,4 @@ class Like:
             raise ValueError("user_id must be positive")
 
     def __hash__(self):
-        return hash(self.user_id)
+        return hash((self.user_id, self.created_at))
