@@ -22,7 +22,7 @@ from src.domain.battle.events.battle_events import (
     BuffApplication
 )
 from src.domain.common.event_handler import EventHandler
-from src.domain.battle.battle_enum import ParticipantType
+from src.domain.battle.battle_enum import ParticipantType, BattleResultType
 
 
 @dataclass
@@ -325,12 +325,14 @@ class EnhancedBattleEndedHandler(EventHandler[BattleEndedEvent]):
         self._ui_notifier.end_battle(result_data)
         
         # 結果メッセージ
-        if event.result_type.value == "VICTORY":
+        if event.result_type == BattleResultType.VICTORY:
             self._ui_notifier.add_battle_message("🎉 戦闘勝利！")
-        elif event.result_type.value == "DEFEAT":
+        elif event.result_type == BattleResultType.DEFEAT:
             self._ui_notifier.add_battle_message("💀 戦闘敗北...")
-        else:
+        elif event.result_type == BattleResultType.DRAW:
             self._ui_notifier.add_battle_message("🤝 戦闘引き分け")
+        else:
+            self._ui_notifier.add_battle_message("🤝 不明な結果")
         
         # 統計情報
         self._ui_notifier.add_battle_message(

@@ -80,7 +80,7 @@ class InMemoryPlayerRepository(PlayerRepository):
         # 基礎ステータス
         base_status = BaseStatus(
             attack=50,
-            defense=30,
+            defense=20,
             speed=20,
             critical_rate=0.1,
             evasion_rate=0.05

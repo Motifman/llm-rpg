@@ -42,7 +42,8 @@ class InMemoryMonsterRepository(MonsterRepository):
             ),
             drop_reward=DropReward(
                 gold=Gold(50),
-                exp=Exp(25)
+                exp=Exp(25),
+                information=["[スライムは沼地に生息する弱いモンスターだ]"]
             ),
             allowed_areas=[100, 101, 102]
         )
@@ -66,7 +67,8 @@ class InMemoryMonsterRepository(MonsterRepository):
             ),
             drop_reward=DropReward(
                 gold=Gold(80),
-                exp=Exp(40)
+                exp=Exp(40),
+                information=["[ゴブリンは小柄で狡猾な緑色のモンスターだ]"]
             ),
             allowed_areas=[100, 101]
         )
@@ -90,7 +92,8 @@ class InMemoryMonsterRepository(MonsterRepository):
             ),
             drop_reward=DropReward(
                 gold=Gold(150),
-                exp=Exp(75)
+                exp=Exp(75),
+                information=["[オークは力強い戦士タイプのモンスターだ]"]
             ),
             allowed_areas=[101, 102]
         )

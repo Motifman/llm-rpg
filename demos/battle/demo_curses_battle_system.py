@@ -2,22 +2,18 @@
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
 """
 Cursesベースの戦闘システムデモ
-新しいCurses UIを使用した戦闘システムのデモンストレーション
+curses_battle_ui.pyを使用した戦闘システムのデモンストレーション
 
 新機能:
-- Cursesライブラリを使用した動的UI更新
-- 実際のWebUIやGUIに近い操作感
-- リアルタイムでの戦闘状況表示
-- キーボード入力による操作
-- アニメーション効果
+- Cursesベースのリアルタイム戦闘UI
+- 外部入力なしでの自動戦闘デモ
+- 視覚的な戦闘状況表示
+- アニメーション付きのアクション結果表示
 """
-
-import curses
 import asyncio
-import time
+import curses
 from typing import List, Dict, Any, Optional
 from queue import Queue
 from threading import Event
@@ -34,12 +30,10 @@ from src.domain.battle.battle_service import BattleLogicService
 from src.domain.battle.services.monster_action_service import MonsterActionService
 from src.domain.common.notifier import Notifier
 from src.domain.common.event_publisher import EventPublisher
-from src.infrastructure.notifier.console_notifier import ConsoleNotifier
-from src.infrastructure.events.event_publisher_impl import InMemoryEventPublisher
 from src.domain.battle.battle_enum import ParticipantType
 from src.domain.player.player_enum import Role
 
-# 新しいUI統合システム
+# Curses UI統合システム
 from src.application.battle.handlers.enhanced_ui_battle_handler import (
     UIBattleNotifier,
     EnhancedBattleStartedHandler,
@@ -51,21 +45,94 @@ from src.application.battle.handlers.enhanced_ui_battle_handler import (
     EnhancedMonsterDefeatedHandler,
     EnhancedPlayerDefeatedHandler
 )
+from src.presentation.ui.curses_battle_ui import CursesBattleUIManager
+from src.domain.battle.events.battle_events import (
+    BattleStartedEvent,
+    RoundStartedEvent,
+    TurnStartedEvent,
+    TurnExecutedEvent,
+    TurnEndedEvent,
+    BattleEndedEvent,
+    MonsterDefeatedEvent,
+    PlayerDefeatedEvent
+)
 
-# Curses UIシステム
-from src.presentation.ui.battle_ui_adapter import BattleUIFactory
+
+class EnhancedDemoNotifier(Notifier):
+    """改善されたデモ用通知システム"""
+    
+    def __init__(self, show_notifications: bool = False):
+        self.show_notifications = show_notifications
+    
+    def send_notification(self, recipient_id: int, message: str) -> None:
+        """単一の受信者に通知を送信"""
+        if self.show_notifications:
+            print(f"📢 通知 (to {recipient_id}): {message}")
+    
+    def send_notification_to_all(self, recipient_ids: List[int], message: str) -> None:
+        """複数の受信者に通知を送信"""
+        if self.show_notifications:
+            print(f"📢 通知 (to {recipient_ids}): {message}")
+
+
+class EnhancedDemoEventPublisher(EventPublisher):
+    """改善されたデモ用イベントパブリッシャー"""
+    
+    def __init__(self, ui_notifier: UIBattleNotifier):
+        self._ui_notifier = ui_notifier
+        self._handlers = self._setup_ui_handlers()
+    
+    def _setup_ui_handlers(self):
+        """UI統合ハンドラーを設定"""
+        return {
+            BattleStartedEvent: EnhancedBattleStartedHandler(self._ui_notifier),
+            RoundStartedEvent: EnhancedRoundStartedHandler(self._ui_notifier),
+            TurnStartedEvent: EnhancedTurnStartedHandler(self._ui_notifier),
+            TurnExecutedEvent: EnhancedTurnExecutedHandler(self._ui_notifier),
+            TurnEndedEvent: EnhancedTurnEndedHandler(self._ui_notifier),
+            BattleEndedEvent: EnhancedBattleEndedHandler(self._ui_notifier),
+            MonsterDefeatedEvent: EnhancedMonsterDefeatedHandler(self._ui_notifier),
+            PlayerDefeatedEvent: EnhancedPlayerDefeatedHandler(self._ui_notifier),
+        }
+    
+    def register_handler(self, event_type, handler) -> None:
+        """イベントハンドラーを登録"""
+        if event_type not in self._handlers:
+            self._handlers[event_type] = []
+        elif not isinstance(self._handlers[event_type], list):
+            self._handlers[event_type] = [self._handlers[event_type]]
+        self._handlers[event_type].append(handler)
+    
+    def publish(self, event) -> None:
+        """単一イベントを発行"""
+        event_type = type(event)
+        handlers = self._handlers.get(event_type, [])
+        
+        if not isinstance(handlers, list):
+            handlers = [handlers]
+        
+        for handler in handlers:
+            try:
+                handler.handle(event)
+            except Exception as e:
+                print(f"⚠️ イベントハンドラーエラー ({event_type.__name__}): {e}")
+    
+    def publish_all(self, events: List) -> None:
+        """複数イベントを発行"""
+        for event in events:
+            self.publish(event)
 
 
 class CursesBattleDemo:
     """Curses戦闘デモクラス"""
     
     def __init__(self):
-        self.ui_adapter = None
+        self.ui_manager = None
         self.ui_notifier = None
         self.battle_service = None
-        self.player_action_waiter = None
-        self._is_running = False
-        self._current_battle_id = None
+        self.battle_repository = None
+        self.battle_id = None
+        self._is_running = True  # 初期値をTrueに変更
     
     def initialize_services(self):
         """サービスを初期化"""
@@ -76,320 +143,210 @@ class CursesBattleDemo:
         area_repository = InMemoryAreaRepository()
         battle_repository = InMemoryBattleRepository()
         
-        # ドメインサービスの初期化
+        # サービス初期化
+        notifier = EnhancedDemoNotifier(show_notifications=False)
+        self.ui_notifier = UIBattleNotifier()
+        event_publisher = EnhancedDemoEventPublisher(self.ui_notifier)
+        
         battle_logic_service = BattleLogicService()
         monster_action_service = MonsterActionService()
         
-        # イベントシステムの初期化
-        notifier = ConsoleNotifier()
-        event_publisher = InMemoryEventPublisher()
-        
-        # UI通知システムの初期化
-        self.ui_notifier = UIBattleNotifier()
-        
-        # イベントハンドラーの登録
-        self._register_event_handlers(notifier, event_publisher)
-        
-        # アプリケーションサービスの初期化
         self.battle_service = EnhancedBattleApplicationService(
+            battle_repository=battle_repository,
             player_repository=player_repository,
+            area_repository=area_repository,
             monster_repository=monster_repository,
             action_repository=action_repository,
-            area_repository=area_repository,
-            battle_repository=battle_repository,
             battle_logic_service=battle_logic_service,
             monster_action_service=monster_action_service,
             notifier=notifier,
             event_publisher=event_publisher
         )
         
-        # プレイヤーアクション待機システムの初期化
-        self.player_action_waiter = PlayerActionWaiter()
+        self.battle_repository = battle_repository
     
-    def _register_event_handlers(self, notifier: Notifier, event_publisher: EventPublisher):
-        """イベントハンドラーを登録"""
-        # UI通知システムにイベントハンドラーを登録
-        handlers = [
-            EnhancedBattleStartedHandler(self.ui_notifier),
-            EnhancedRoundStartedHandler(self.ui_notifier),
-            EnhancedTurnStartedHandler(self.ui_notifier),
-            EnhancedTurnExecutedHandler(self.ui_notifier),
-            EnhancedTurnEndedHandler(self.ui_notifier),
-            EnhancedBattleEndedHandler(self.ui_notifier),
-            EnhancedMonsterDefeatedHandler(self.ui_notifier),
-            EnhancedPlayerDefeatedHandler(self.ui_notifier)
-        ]
-        
-        for handler in handlers:
-            notifier.register_handler(handler)
-    
-    def setup_test_data(self):
-        """テストデータをセットアップ"""
-        # プレイヤーの作成
-        player_data = {
-            "player_id": 1,
-            "name": "勇者",
-            "role": Role.WARRIOR,
-            "level": 5,
-            "current_hp": 100,
-            "max_hp": 100,
-            "current_mp": 50,
-            "max_mp": 50,
-            "attack": 25,
-            "defense": 15,
-            "speed": 20,
-            "area_id": 1
-        }
-        
-        # モンスターの作成
-        monster_data = {
-            "monster_id": 1,
-            "name": "スライム",
-            "level": 3,
-            "current_hp": 60,
-            "max_hp": 60,
-            "current_mp": 20,
-            "max_mp": 20,
-            "attack": 15,
-            "defense": 8,
-            "speed": 12,
-            "area_id": 1
-        }
-        
-        # アクションの作成
-        actions_data = [
-            {
-                "action_id": 1,
-                "name": "攻撃",
-                "description": "基本的な物理攻撃",
-                "action_type": "attack",
-                "target_type": "enemy",
-                "base_damage": 20,
-                "mp_cost": 0,
-                "level_requirement": 1
-            },
-            {
-                "action_id": 2,
-                "name": "ファイアボール",
-                "description": "火の魔法攻撃",
-                "action_type": "magic",
-                "target_type": "enemy",
-                "base_damage": 30,
-                "mp_cost": 10,
-                "level_requirement": 3
-            },
-            {
-                "action_id": 3,
-                "name": "ヒール",
-                "description": "HPを回復する",
-                "action_type": "heal",
-                "target_type": "self",
-                "base_damage": -25,
-                "mp_cost": 15,
-                "level_requirement": 2
-            }
-        ]
-        
-        # データをリポジトリに保存
-        self.battle_service._player_repository.save_from_dict(player_data)
-        self.battle_service._monster_repository.save_from_dict(monster_data)
-        
-        for action_data in actions_data:
-            self.battle_service._action_repository.save_from_dict(action_data)
-    
-    def handle_user_input(self, command: str) -> bool:
-        """ユーザー入力を処理"""
-        if not self._is_running or not self._current_battle_id:
-            return True
-        
+    async def run_battle_demo(self):
+        """戦闘デモを実行"""
         try:
-            # コマンドの解析
-            parts = command.strip().split()
-            if not parts:
-                return True
+            print("🎮 戦闘デモ開始")  # デバッグ用
+            # シナリオ1: 戦闘開始
+            await self.battle_service.start_battle(1)
+            print("🎮 戦闘開始完了")  # デバッグ用
             
-            cmd = parts[0].lower()
-            
-            if cmd == "attack":
-                # 攻撃コマンド
-                action_dto = PlayerActionDto(
-                    player_id=1,
-                    action_id=1,
-                    target_participant_type=ParticipantType.MONSTER,
-                    target_entity_id=1
-                )
-                self.player_action_waiter.set_action(action_dto)
-                self.ui_notifier.add_battle_message("攻撃を実行します！")
-                
-            elif cmd == "fireball":
-                # ファイアボールコマンド
-                action_dto = PlayerActionDto(
-                    player_id=1,
-                    action_id=2,
-                    target_participant_type=ParticipantType.MONSTER,
-                    target_entity_id=1
-                )
-                self.player_action_waiter.set_action(action_dto)
-                self.ui_notifier.add_battle_message("ファイアボールを詠唱します！")
-                
-            elif cmd == "heal":
-                # ヒールコマンド
-                action_dto = PlayerActionDto(
-                    player_id=1,
-                    action_id=3,
-                    target_participant_type=ParticipantType.PLAYER,
-                    target_entity_id=1
-                )
-                self.player_action_waiter.set_action(action_dto)
-                self.ui_notifier.add_battle_message("ヒールを詠唱します！")
-                
-            elif cmd == "quit" or cmd == "q":
-                # 終了コマンド
-                self.ui_notifier.add_battle_message("戦闘を終了します...")
-                return False
-                
-            elif cmd == "help" or cmd == "h":
-                # ヘルプコマンド
-                self.ui_notifier.add_battle_message("利用可能なコマンド:")
-                self.ui_notifier.add_battle_message("  attack - 攻撃")
-                self.ui_notifier.add_battle_message("  fireball - ファイアボール")
-                self.ui_notifier.add_battle_message("  heal - ヒール")
-                self.ui_notifier.add_battle_message("  help - ヘルプ表示")
-                self.ui_notifier.add_battle_message("  quit - 終了")
-                
-            else:
-                self.ui_notifier.add_battle_message(f"不明なコマンド: {cmd}")
-                self.ui_notifier.add_battle_message("'help' でコマンド一覧を表示")
-            
-            return True
-            
-        except Exception as e:
-            self.ui_notifier.add_battle_message(f"コマンド処理エラー: {e}")
-            return True
-    
-    async def run_battle(self):
-        """戦闘を実行"""
-        try:
-            # 戦闘開始
-            self.ui_notifier.add_battle_message("戦闘を開始します...")
-            
-            battle_result = await self.battle_service.start_battle(
-                player_ids=[1],
-                monster_ids=[1],
-                area_id=1,
-                player_action_waiter=self.player_action_waiter
-            )
-            
-            self._current_battle_id = battle_result.battle_id
-            self._is_running = True
-            
-            # 戦闘ループ
-            while self._is_running:
-                try:
-                    # プレイヤーのアクションを待機
-                    action = await self.player_action_waiter.wait_for_action(timeout=30.0)
-                    
-                    if action:
-                        # アクションを実行
-                        await self.battle_service.execute_player_action(
-                            battle_id=self._current_battle_id,
-                            action=action
-                        )
-                    else:
-                        # タイムアウト
-                        self.ui_notifier.add_battle_message("タイムアウト: 自動で攻撃を実行します")
-                        default_action = PlayerActionDto(
-                            player_id=1,
-                            action_id=1,
-                            target_participant_type=ParticipantType.MONSTER,
-                            target_entity_id=1
-                        )
-                        await self.battle_service.execute_player_action(
-                            battle_id=self._current_battle_id,
-                            action=default_action
-                        )
-                    
-                    # 戦闘状態をチェック
-                    battle = self.battle_service._battle_repository.find_by_id(self._current_battle_id)
-                    if not battle or not battle.is_active:
-                        self._is_running = False
-                        break
-                    
-                except Exception as e:
-                    self.ui_notifier.add_battle_message(f"戦闘ループエラー: {e}")
+            # バトルを取得
+            battle = None
+            for battle_candidate in self.battle_repository._battles.values():
+                if 1 in battle_candidate.get_player_ids():
+                    battle = battle_candidate
                     break
             
-            # 戦闘終了
-            self.ui_notifier.add_battle_message("戦闘が終了しました")
+            if not battle:
+                return
+            
+            self.battle_id = battle.battle_id
+            
+            # 戦闘開始の確認時間
+            await asyncio.sleep(2)
+            
+            # シナリオ2: プレイヤーアクションのデモ
+            demo_actions = [
+                PlayerActionDto(
+                    battle_id=self.battle_id, 
+                    player_id=1, 
+                    action_id=1,
+                    target_ids=[1],
+                    target_participant_types=[ParticipantType.MONSTER]
+                ),
+                PlayerActionDto(
+                    battle_id=self.battle_id, 
+                    player_id=1, 
+                    action_id=2,
+                    target_ids=[2],
+                    target_participant_types=[ParticipantType.MONSTER]
+                ),
+                PlayerActionDto(
+                    battle_id=self.battle_id, 
+                    player_id=1, 
+                    action_id=3,
+                    target_ids=[2],
+                    target_participant_types=[ParticipantType.MONSTER]
+                ),
+                PlayerActionDto(
+                    battle_id=self.battle_id, 
+                    player_id=1, 
+                    action_id=6,
+                    target_ids=None,
+                    target_participant_types=None
+                ),
+            ]
+            
+            for i, action_dto in enumerate(demo_actions, 1):
+                try:
+                    await self.battle_service.execute_player_action(
+                        battle_id=action_dto.battle_id,
+                        player_id=action_dto.player_id,
+                        action_data=action_dto
+                    )
+                except Exception as e:
+                    pass  # エラーは無視して続行
+                
+                # UI更新の確認時間
+                await asyncio.sleep(2)
+                
+                # 戦闘終了チェック
+                updated_battle = self.battle_repository.find_by_id(self.battle_id)
+                if updated_battle and not updated_battle.is_in_progress():
+                    break
+            
+            # 最終結果表示時間
+            await asyncio.sleep(3)
             
         except Exception as e:
-            self.ui_notifier.add_battle_message(f"戦闘実行エラー: {e}")
-    
-    def run_demo(self, stdscr):
-        """デモを実行"""
-        try:
-            # サービスを初期化
-            self.initialize_services()
-            
-            # テストデータをセットアップ
-            self.setup_test_data()
-            
-            # UIアダプターを作成・初期化
-            self.ui_adapter = BattleUIFactory.create_curses_ui()
-            self.ui_adapter.initialize(self.ui_notifier, stdscr)
-            self.ui_adapter.configure_display(enabled=True, animation_delay=0.5)
-            self.ui_adapter.set_input_callback(self.handle_user_input)
-            
-            # 初期メッセージ
-            self.ui_notifier.add_battle_message("Curses戦闘システムデモを開始します")
-            self.ui_notifier.add_battle_message("'help' でコマンド一覧を表示")
-            
-            # 戦闘を非同期で開始
-            import threading
-            battle_thread = threading.Thread(target=lambda: asyncio.run(self.run_battle()), daemon=True)
-            battle_thread.start()
-            
-            # UIメインループを実行
-            self.ui_adapter.run_main_loop()
-            
-        except Exception as e:
-            # エラー表示
-            if self.ui_notifier:
-                self.ui_notifier.add_battle_message(f"デモ実行エラー: {e}")
-            else:
-                print(f"デモ実行エラー: {e}")
-        finally:
-            # 終了処理
-            self._is_running = False
-            if self.ui_adapter:
-                self.ui_adapter.finalize()
+            pass  # エラーは無視
 
 
-def main(stdscr):
-    """メイン関数"""
+def curses_main(stdscr):
+    """Cursesメイン関数"""
     demo = CursesBattleDemo()
-    demo.run_demo(stdscr)
+    
+    # サービスを先に初期化（ui_notifierを作成）
+    demo.initialize_services()
+    
+    # UI管理システムを初期化
+    demo.ui_manager = CursesBattleUIManager()
+    demo.ui_manager.initialize(demo.ui_notifier, stdscr)
+    demo.ui_manager.configure_display(enabled=True, animation_delay=1.0)
+    
+    # 非同期タスクを実行するためのイベントループ
+    async def run_demo():
+        try:
+            await demo.run_battle_demo()
+        except Exception as e:
+            print(f"戦闘デモエラー: {e}")
+        finally:
+            demo._is_running = False
+    
+    # 非同期タスクを開始
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    # デモをバックグラウンドで実行
+    import threading
+    demo_thread = threading.Thread(target=lambda: loop.run_until_complete(run_demo()))
+    demo_thread.daemon = True
+    demo_thread.start()
+    
+    # UIメインループ
+    try:
+        while demo._is_running:
+            if not demo.ui_manager.ui.process_input():
+                break
+            # 短い待機時間でCPU使用率を下げる
+            import time
+            time.sleep(0.01)
+        
+        # 戦闘終了後もUIを維持
+        if not demo._is_running:
+            # 戦闘終了メッセージを表示
+            demo.ui_notifier.add_battle_message("戦闘が終了しました。'q'キーで終了してください。")
+            
+            # 終了待機ループ
+            while True:
+                if not demo.ui_manager.ui.process_input():
+                    break
+                import time
+                time.sleep(0.01)
+                
+    except KeyboardInterrupt:
+        pass
+    finally:
+        demo._is_running = False
+        # イベントループをクリーンアップ
+        try:
+            loop.call_soon_threadsafe(loop.stop)
+            loop.close()
+        except Exception:
+            pass
+    # finalize()は呼ばない（curses.wrapperが自動的に処理する）
+
+
+async def demonstrate_curses_battle_system():
+    """Curses戦闘システムのデモ（非同期版）"""
+    print("🎮 Curses戦闘システムデモ")
+    print("=" * 50)
+    print("Curses UIを起動しています...")
+    print("戦闘が自動的に進行し、UIがリアルタイムで更新されます。")
+    print("'q'キーで終了できます。")
+    print("=" * 50)
+    
+    try:
+        # Curses UIを起動
+        curses.wrapper(curses_main)
+    except Exception as e:
+        print(f"❌ デモ実行エラー: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    print("\n🎉 デモ完了！")
+    print("=" * 50)
+    print("✨ 実現された機能:")
+    print("📊 Cursesベースのリアルタイム戦闘状況表示")
+    print("   - 全参加者の詳細ステータス（HP/MP/攻撃力/防御力/速度）")
+    print("   - ビジュアルHPバー・MPバーの表示")
+    print("   - 現在のアクター表示（⚡マーク）")
+    print("   - ターン順序の視覚的表示")
+    print("")
+    print("🎬 アニメーション機能")
+    print("   - アクション結果の段階的表示")
+    print("   - ダメージ・回復エフェクト")
+    print("   - 状態異常・バフの適用表示")
+    print("")
+    print("📱 Curses UI統合アーキテクチャ")
+    print("   - イベント駆動によるリアルタイム更新")
+    print("   - 外部入力なしでの自動戦闘デモ")
+    print("   - 詳細な戦闘情報の完全な取得・表示")
+    print("=" * 50)
 
 
 if __name__ == "__main__":
-    print("Curses戦闘システムデモを開始します...")
-    print("画面サイズが80x20以上であることを確認してください")
-    print("3秒後に自動開始します...")
-    
-    import time
-    time.sleep(3)
-    
-    try:
-        # より安全な方法でcursesを初期化
-        stdscr = curses.initscr()
-        try:
-            main(stdscr)
-        finally:
-            try:
-                curses.endwin()
-            except curses.error:
-                # endwin()が失敗した場合は無視
-                pass
-    except Exception as e:
-        print(f"エラーが発生しました: {e}")
-        print("画面サイズが小さすぎる可能性があります")
+    asyncio.run(demonstrate_curses_battle_system())

@@ -1,11 +1,10 @@
 import random
 from dataclasses import dataclass
-from typing import List, Dict, Any, Tuple, Optional, Callable
+from typing import List, Tuple, Optional
 from itertools import chain
 from src.domain.battle.battle_action import BattleAction
 from src.domain.battle.battle_enum import ActionType
-from src.domain.battle.battle_result import BattleActionResult, TurnStartResult, TurnEndResult, TargetStateChange, ActorStateChange, BattleActionMetadata
-from src.domain.battle.battle_participant import BattleParticipant
+from src.domain.battle.battle_result import TurnStartResult, TurnEndResult
 from src.domain.battle.battle_enum import BuffType, StatusEffectType, ParticipantType, TargetSelectionMethod
 from src.domain.battle.compatible_table import COMPATIBLE_TABLE
 from src.domain.battle.battle_exception import InsufficientMpException, InsufficientHpException, SilencedException, BlindedException

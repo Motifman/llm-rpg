@@ -210,8 +210,15 @@ async def demonstrate_enhanced_realistic_battle_system_fixed():
                 battle_id=battle_id, 
                 player_id=1, 
                 action_id=3,
-                target_ids=[1, 2],
-                target_participant_types=[ParticipantType.MONSTER, ParticipantType.MONSTER]
+                target_ids=[2],
+                target_participant_types=[ParticipantType.MONSTER]
+            ),
+            PlayerActionDto(
+                battle_id=battle_id, 
+                player_id=1, 
+                action_id=6,
+                target_ids=None,
+                target_participant_types=None
             ),
         ]
         

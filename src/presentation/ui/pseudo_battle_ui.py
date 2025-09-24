@@ -7,10 +7,11 @@
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 import time
+from src.domain.common.value_object import Gold, Exp
 from src.application.battle.handlers.enhanced_ui_battle_handler import (
     UIBattleState, UIActionResult, ParticipantInfo
 )
-from src.domain.battle.battle_enum import ParticipantType
+from src.domain.battle.battle_enum import ParticipantType, BattleResultType
 
 
 class PseudoBattleUI:
@@ -289,17 +290,15 @@ class PseudoBattleUI:
         
         # 結果表示
         result_type = result_data.get("result_type")
-        if hasattr(result_type, 'value'):
-            result_text = result_type.value
-        else:
-            result_text = str(result_type)
         
-        if result_text == "VICTORY":
+        if result_type == BattleResultType.VICTORY:
             print("🎉 勝利！")
-        elif result_text == "DEFEAT":
+        elif result_type == BattleResultType.DEFEAT:
             print("💀 敗北...")
-        else:
+        elif result_type == BattleResultType.DRAW:
             print("🤝 引き分け")
+        else:
+            print("🤝 不明な結果")
         
         # 統計情報
         print(f"📊 戦闘統計:")
@@ -315,12 +314,20 @@ class PseudoBattleUI:
         
         # 報酬
         rewards = result_data.get("rewards")
-        if rewards and (getattr(rewards, 'gold', 0) > 0 or getattr(rewards, 'exp', 0) > 0):
+        if rewards:
             print(f"💰 報酬:")
-            if getattr(rewards, 'gold', 0) > 0:
-                print(f"  ゴールド: {rewards.gold}")
-            if getattr(rewards, 'exp', 0) > 0:
-                print(f"  経験値: {rewards.exp}")
+            if hasattr(rewards, 'gold') and rewards.gold > Gold(0):
+                print(f"  ゴールド: {rewards.gold.value}")
+            if hasattr(rewards, 'exp') and rewards.exp > Exp(0):
+                print(f"  経験値: {rewards.exp.value}")
+            if hasattr(rewards, 'items') and rewards.items:
+                print(f"  アイテム:")
+                for item in rewards.items:
+                    print(f"    - {item.item.name} x{item.quantity}")
+            if hasattr(rewards, 'information') and rewards.information:
+                print(f"  情報:")
+                for info in rewards.information:
+                    print(f"    - {info}")
         
         print("=" * 80)
         

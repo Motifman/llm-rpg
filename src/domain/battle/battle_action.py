@@ -12,8 +12,6 @@ if TYPE_CHECKING:
     from src.domain.battle.combat_state import CombatState
 
 
-
-
 @dataclass(frozen=True)
 class BattleAction(ABC):
     """戦闘行動の基底クラス"""
@@ -167,7 +165,7 @@ class AttackAction(BattleAction):
         for defender in targets:
             if (defender.entity_id, defender.participant_type) in hit_result.evaded_targets:
                 all_messages.append(f"{defender.name}は攻撃を回避した！")
-                target_state_changes.append(TargetStateChange(target_id=defender.entity_id, participant_type=defender.participant_type))
+                target_state_changes.append(TargetStateChange(target_id=defender.entity_id, participant_type=defender.participant_type, was_evaded=True))
                 continue
 
             # ダメージ計算
@@ -249,8 +247,8 @@ class StatusEffectApplyAction(BattleAction):
 
         for target in targets:
             if (target.entity_id, target.participant_type) in hit_result.evaded_targets:
-                all_messages.append(f"{target.name}には当たらなかった...")
-                target_state_changes.append(TargetStateChange(target_id=target.entity_id, participant_type=target.participant_type))
+                all_messages.append(f"{target.name}は回避した！")
+                target_state_changes.append(TargetStateChange(target_id=target.entity_id, participant_type=target.participant_type, was_evaded=True))
                 continue
 
             # 状態異常付与
@@ -320,8 +318,8 @@ class BuffApplyAction(BattleAction):
 
         for target in targets:
             if (target.entity_id, target.participant_type) in hit_result.evaded_targets:
-                all_messages.append(f"{target.name}には当たらなかった...")
-                target_state_changes.append(TargetStateChange(target_id=target.entity_id, participant_type=target.participant_type))
+                all_messages.append(f"{target.name}は回避した！")
+                target_state_changes.append(TargetStateChange(target_id=target.entity_id, participant_type=target.participant_type, was_evaded=True))
                 continue
 
             # バフ付与

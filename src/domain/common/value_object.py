@@ -13,6 +13,9 @@ class Exp:
     
     def __sub__(self, exp: "Exp") -> "Exp":
         return Exp(self.value - exp.value)
+    
+    def __gt__(self, exp: "Exp") -> bool:
+        return self.value > exp.value
 
     def __ge__(self, exp: "Exp") -> bool:
         return self.value >= exp.value
@@ -31,6 +34,9 @@ class Gold:
 
     def __sub__(self, gold: "Gold") -> "Gold":
         return Gold(self.value - gold.value)
+    
+    def __gt__(self, gold: "Gold") -> bool:
+        return self.value > gold.value
 
     def __ge__(self, gold: "Gold") -> bool:
         return self.value >= gold.value
