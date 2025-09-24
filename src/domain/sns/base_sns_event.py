@@ -88,3 +88,9 @@ class SnsUserBlockedEvent(BaseSnsUserInteractionEvent):
 class SnsUserSubscribedEvent(BaseSnsUserInteractionEvent):
     """ユーザーサブスクライブイベント"""
     pass
+
+
+@dataclass(frozen=True)
+class SnsUserUnsubscribedEvent(BaseSnsUserInteractionEvent):
+    """ユーザーアンサブスクライブイベント"""
+    pass
