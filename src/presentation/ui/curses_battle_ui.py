@@ -48,10 +48,30 @@ class CursesBattleUI:
         self._stdscr = stdscr
         
         try:
-            curses.curs_set(0)  # カーソルを非表示
-            curses.noecho()  # エコーを無効化
-            curses.cbreak()  # 行バッファリングを無効化
-            self._stdscr.keypad(True)  # 特殊キーを有効化
+            # カーソル制御（サポートされていない場合は無視）
+            try:
+                curses.curs_set(0)  # カーソルを非表示
+            except curses.error:
+                pass  # カーソル制御がサポートされていない場合は無視
+            
+            # エコー制御（サポートされていない場合は無視）
+            try:
+                curses.noecho()  # エコーを無効化
+            except curses.error:
+                pass
+            
+            # 行バッファリング制御（サポートされていない場合は無視）
+            try:
+                curses.cbreak()  # 行バッファリングを無効化
+            except curses.error:
+                pass
+            
+            # キーボード設定（サポートされていない場合は無視）
+            try:
+                self._stdscr.keypad(True)  # 特殊キーを有効化
+            except curses.error:
+                pass
+            
             self._stdscr.timeout(100)  # 100msのタイムアウト
             
             # 色の初期化
@@ -122,7 +142,8 @@ class CursesBattleUI:
         
         # レイアウトの動的調整
         available_height = height - 2  # マージン分を引く
-        self._layout.status_height = min(12, available_height // 2)
+        # 参加者表示エリアを拡大（5人分の情報を表示するため）
+        self._layout.status_height = min(20, available_height - self._layout.header_height - self._layout.input_height - 4)
         self._layout.log_height = available_height - self._layout.header_height - self._layout.status_height - self._layout.input_height
     
     def set_display_enabled(self, enabled: bool) -> None:
@@ -539,14 +560,23 @@ class CursesBattleUI:
         if self._is_initialized:
             try:
                 if self._stdscr:
-                    self._stdscr.keypad(False)
-                curses.nocbreak()
-                curses.echo()
-                curses.curs_set(1)  # カーソルを表示に戻す
-                curses.endwin()
-            except curses.error:
-                # cursesが既に終了している場合は無視
-                pass
+                    try:
+                        self._stdscr.keypad(False)
+                    except curses.error:
+                        pass
+                try:
+                    curses.nocbreak()
+                except curses.error:
+                    pass
+                try:
+                    curses.echo()
+                except curses.error:
+                    pass
+                try:
+                    curses.curs_set(1)  # カーソルを表示に戻す
+                except curses.error:
+                    pass
+                # endwin()は呼ばない（curses.wrapperが自動的に処理する）
             except Exception:
                 # その他のエラーも無視
                 pass

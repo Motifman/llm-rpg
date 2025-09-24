@@ -31,8 +31,6 @@ from src.domain.battle.battle_exception import BattleNotStartedException, Battle
 from src.domain.battle.battle_action import BattleAction
 
 
-# TODO: 最低限の要素のみを一旦実装しなおす
-# TODO: イベント機能は一旦削除して、ドメインロジックのみを実装する
 class Battle(AggregateRoot):
     """戦闘の集約ルート"""
     
@@ -398,7 +396,7 @@ class Battle(AggregateRoot):
             next_round_turn_order=next_round_turn_order,
         ))
     
-    def join_player(self, player: Player, join_turn: int):  # TODO: モンスターにも対応
+    def join_player(self, player: Player, join_turn: int):
         """プレイヤーが戦闘に参加"""
         self._add_player(player)
 
@@ -422,7 +420,7 @@ class Battle(AggregateRoot):
             player_stats=player_stats,
         ))
     
-    def join_monster(self, monster: Monster, join_turn: int):  # TODO: プレイヤーにも対応
+    def join_monster(self, monster: Monster, join_turn: int):
         """モンスターが戦闘に参加"""
         self._add_monster(monster)
 
@@ -446,10 +444,10 @@ class Battle(AggregateRoot):
             monster_stats=monster_stats,
         ))
 
-    def player_escape(self, player: Player):  # TODO: モンスターにも対応
+    def player_escape(self, player: Player):
         """プレイヤーが戦闘から離脱"""
         if player.player_id not in self._player_ids:
-            raise ValueError("Player not in battle")  # TODO: カスタム例外を実装
+            raise ValueError("Player not in battle")
 
         self._combat_states.pop((ParticipantType.PLAYER, player.player_id))
         self._player_ids.remove(player.player_id)
@@ -656,7 +654,7 @@ class Battle(AggregateRoot):
                 healing_done=change.hp_change if change.hp_change > 0 else 0,
                 was_critical=was_critical,
                 compatibility_multiplier=compatibility_multiplier,
-                was_evaded=False,  # TODO: 回避情報をaction_resultから取得
+                was_evaded=change.was_evaded,
                 was_blocked=False,  # TODO: ブロック情報をaction_resultから取得
                 hp_before=hp_before,
                 hp_after=hp_after,

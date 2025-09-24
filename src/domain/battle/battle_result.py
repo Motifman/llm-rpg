@@ -135,6 +135,7 @@ class TargetStateChange:
     status_effects_to_remove: List[StatusEffectType] = field(default_factory=list)
     buffs_to_add: List[Tuple[BuffType, float, int]] = field(default_factory=list)
     buffs_to_remove: List[BuffType] = field(default_factory=list)
+    was_evaded: bool = False
 
     def __post_init__(self):
         pass
