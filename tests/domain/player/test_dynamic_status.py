@@ -3,9 +3,7 @@ import pytest
 from src.domain.player.dynamic_status import DynamicStatus
 from src.domain.player.hp import Hp
 from src.domain.player.mp import Mp
-from src.domain.player.exp import Exp
-from src.domain.player.level import Level
-from src.domain.player.gold import Gold
+from src.domain.common.value_object import Exp, Gold, Level
 from src.domain.battle.battle_enum import StatusEffectType
 
 

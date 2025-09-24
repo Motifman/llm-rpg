@@ -20,6 +20,11 @@ class Hp:
         if amount < 0:
             raise ValueError(f"Invalid amount: {amount}")
         return Hp(self.value - amount, self.max_hp)
+    
+    def can_consume(self, amount: int) -> bool:
+        if amount < 0:
+            raise ValueError(f"Invalid amount: {amount}")
+        return self.value >= amount
 
-    def is_dead(self) -> bool:
-        return self.value <= 0
+    def is_alive(self) -> bool:
+        return self.value > 0

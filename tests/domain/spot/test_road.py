@@ -1,8 +1,7 @@
 import pytest
 from src.domain.spot.road import Road
 from src.domain.spot.condition import LevelConditionChecker, ItemConditionChecker, GoldConditionChecker, RoleConditionChecker
-from src.domain.player.level import Level
-from src.domain.player.gold import Gold
+from src.domain.common.value_object import Gold, Level
 from src.domain.player.player_enum import Role
 from src.domain.spot.spot_exception import PlayerNotMeetConditionException
 

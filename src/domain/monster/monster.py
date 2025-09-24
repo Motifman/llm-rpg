@@ -1,45 +1,45 @@
 
 from typing import List
-from src.domain.monster.monster_enum import Race
 from src.domain.monster.drop_reward import DropReward
 from src.domain.player.base_status import BaseStatus
-from src.domain.player.dynamic_status import DynamicStatus
-from src.domain.battle.battle_enum import Element
+from src.domain.battle.battle_enum import Element, Race
 from src.domain.battle.battle_action import BattleAction
-from src.domain.battle.combat_entity import CombatEntity
+from src.domain.battle.action_deck import ActionDeck
+from src.domain.common.aggregate_root import AggregateRoot
 
 
-class Monster(CombatEntity):
+class Monster(AggregateRoot):
     def __init__(
         self,
-        monster_instance_id: int,
         monster_type_id: int,
         name: str,
         description: str,
         race: Race,
         element: Element,
-        current_spot_id: int,
         base_status: BaseStatus,
-        dynamic_status: DynamicStatus,
-        available_actions: List[BattleAction],
+        max_hp: int,
+        max_mp: int,
+        action_deck: ActionDeck,
         drop_reward: DropReward,
-        allowed_areas: List[int]
+        allowed_areas: List[int],
+        # 後方互換性のため残すが、将来的に削除予定
+        available_actions: List[BattleAction] = None,
     ):
-        # 基底クラスの初期化
-        super().__init__(name, race, element, current_spot_id, base_status, dynamic_status)
-        
         # モンスター固有の属性
-        self._monster_instance_id = monster_instance_id
         self._monster_type_id = monster_type_id
+        self._name = name
         self._description = description
-        self._available_actions = available_actions
+        self._race = race
+        self._element = element
+        self._base_status = base_status
+        self._max_hp = max_hp
+        self._max_mp = max_mp
+        self._action_deck = action_deck
         self._drop_reward = drop_reward
         self._allowed_areas = allowed_areas
+        # 後方互換性のため残すが、将来的に削除予定
+        self._available_actions = available_actions if available_actions is not None else []
 
-    @property
-    def monster_instance_id(self) -> int:
-        return self._monster_instance_id
-    
     @property
     def monster_type_id(self) -> int:
         return self._monster_type_id
@@ -48,13 +48,45 @@ class Monster(CombatEntity):
     def description(self) -> str:
         return self._description
 
-    # ===== モンスター固有のメソッド =====
+    @property
+    def name(self) -> str:
+        return self._name
     
+    @property
+    def race(self) -> Race:
+        return self._race
+    
+    @property
+    def element(self) -> Element:
+        return self._element
+    
+    @property
+    def base_status(self) -> BaseStatus:
+        return self._base_status
+    
+    @property
+    def max_hp(self) -> int:
+        return self._max_hp
+    
+    @property
+    def max_mp(self) -> int:
+        return self._max_mp
+    
+    @property
+    def action_deck(self) -> ActionDeck:
+        return self._action_deck
+
+    # ===== モンスター固有のメソッド =====
     def get_drop_reward(self) -> DropReward:
         return self._drop_reward
     
     def get_available_actions(self) -> List[BattleAction]:
+        """後方互換性のため残すが、将来的に削除予定"""
         return self._available_actions
     
     def can_appear_in_area(self, area_id: int) -> bool:
         return area_id in self._allowed_areas
+
+    def calculate_status_including_equipment(self) -> BaseStatus:
+        """モンスターのステータスを計算（装備なしなのでbase_statusをそのまま返す）"""
+        return self._base_status

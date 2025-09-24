@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List, TYPE_CHECKING, Union
-from src.domain.player.gold import Gold
-from src.domain.player.exp import Exp
+from src.domain.common.value_object import Exp, Gold
 
 if TYPE_CHECKING:
     from src.domain.player.player import Player
