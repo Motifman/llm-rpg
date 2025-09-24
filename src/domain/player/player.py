@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, TYPE_CHECKING, Dict
 from src.domain.item.consumable_item import ConsumableItem
 from src.domain.item.equipment_item import EquipmentItem
 from src.domain.item.item_enum import ItemType
@@ -12,19 +12,28 @@ from src.domain.player.equipment_set import EquipmentSet
 from src.domain.player.player_enum import Role, PlayerState
 from src.domain.player.message import Message
 from src.domain.player.message_box import MessageBox
-from src.domain.player.gold import Gold
-from src.domain.player.exp import Exp
-from src.domain.player.level import Level
+from src.domain.common.value_object import Exp, Gold, Level
 from src.domain.player.conversation_events import PlayerSpokeEvent
 from src.domain.trade.trade import TradeItem
 from src.domain.trade.trade_exception import InsufficientItemsException, InsufficientGoldException, ItemNotTradeableException, InsufficientInventorySpaceException
-from src.domain.battle.battle_enum import Element
-from src.domain.battle.combat_entity import CombatEntity
-from src.domain.monster.monster_enum import Race
+from src.domain.battle.battle_enum import Element, Race
+from src.domain.battle.action_deck import ActionDeck
+from src.domain.battle.action_mastery import ActionMastery
+from src.domain.battle.action_slot import ActionSlot
+
+if TYPE_CHECKING:
+    from src.domain.battle.combat_state import CombatState
+else:
+    from src.domain.battle.combat_state import CombatState
 from src.application.trade.contracts.commands import CreateTradeCommand
+from src.domain.common.aggregate_root import AggregateRoot
+from src.domain.spot.movement_events import PlayerMovedEvent
+from src.domain.spot.spot_exception import PlayerAlreadyInSpotException
+from src.domain.player.hp import Hp
+from src.domain.player.mp import Mp
 
 
-class Player(CombatEntity):
+class Player(AggregateRoot):
     """プレイヤークラス"""
     
     def __init__(
@@ -38,24 +47,72 @@ class Player(CombatEntity):
         inventory: Inventory,
         equipment_set: EquipmentSet,
         message_box: MessageBox,
+        action_deck: ActionDeck,
+        action_masteries: Dict[int, ActionMastery] = None,
         race: Race = Race.HUMAN,
         element: Element = Element.NEUTRAL,
     ):
-        # 基底クラスの初期化
-        super().__init__(name, race, element, current_spot_id, base_status, dynamic_status)
-        
         # プレイヤー固有の属性
         self._player_id = player_id
+        self._name = name
         self._role = role
+        self._current_spot_id = current_spot_id
+        self._previous_spot_id = None
         self._player_state = PlayerState.NORMAL
         self._inventory = inventory
         self._equipment = equipment_set
         self._message_box = message_box
+        self._base_status = base_status
+        self._dynamic_status = dynamic_status
+        self._race = race
+        self._element = element
+        self._action_deck = action_deck
+        self._action_masteries = action_masteries if action_masteries is not None else {}
         # self._appearance = AppearanceSet()  # 将来実装
     
     @property
     def player_id(self) -> int:
         return self._player_id
+    
+    @property
+    def name(self) -> str:
+        return self._name
+    
+    @property
+    def role(self) -> Role:
+        return self._role
+    
+    @property
+    def current_spot_id(self) -> int:
+        return self._current_spot_id
+    
+    @property
+    def player_state(self) -> PlayerState:
+        return self._player_state
+    
+    @property
+    def race(self) -> Race:
+        return self._race
+    
+    @property
+    def element(self) -> Element:
+        return self._element
+    
+    @property
+    def hp(self) -> Hp:
+        return self._dynamic_status.hp
+    
+    @property
+    def mp(self) -> Mp:
+        return self._dynamic_status.mp
+    
+    @property
+    def action_deck(self) -> ActionDeck:
+        return self._action_deck
+    
+    @property
+    def action_masteries(self) -> Dict[int, ActionMastery]:
+        return self._action_masteries.copy()
     
     # ===== 取引関連の振る舞いの実装 =====
     def prepare_trade_offer(self, command: CreateTradeCommand) -> TradeItem:
@@ -178,7 +235,7 @@ class Player(CombatEntity):
         if item is not None:
             self._inventory.add_item(item)
 
-    def calculate_status(self) -> BaseStatus:
+    def calculate_status_including_equipment(self) -> BaseStatus:
         """ステータスを計算"""
         return self._base_status + self._equipment.calculate_status()
 
@@ -229,3 +286,113 @@ class Player(CombatEntity):
     def is_role(self, role: Role) -> bool:
         """プレイヤーの役割が指定した役割かどうかをチェック"""
         return self._role == role
+
+    # ===== 移動関連のメソッド =====
+    def move_to_spot(self, to_spot_id: int):
+        if self._current_spot_id == to_spot_id:
+            raise PlayerAlreadyInSpotException(f"Player {self.player_id} is already in the spot {to_spot_id}")
+
+        self._previous_spot_id = self._current_spot_id
+        self._current_spot_id = to_spot_id
+
+        self.add_event(PlayerMovedEvent(
+            player_id=self.player_id,
+            from_spot_id=self._previous_spot_id,
+            to_spot_id=to_spot_id,
+        ))
+    
+    # ===== Actionデッキ関連の振る舞い =====
+    def learn_action(self, action_slot: ActionSlot) -> None:
+        """技を習得する（ドメインロジック）"""
+        # ビジネスルール: 既に習得済みの技は習得できない
+        if self._action_deck.has_action(action_slot.action_id):
+            raise ValueError(f"Action already learned. action_id: {action_slot.action_id}")
+        
+        # ビジネスルール: キャパシティ制限
+        if not self._action_deck.can_add_action(action_slot):
+            raise ValueError(f"Not enough capacity to learn action. action_id: {action_slot.action_id}")
+        
+        # デッキに技を追加
+        self._action_deck = self._action_deck.add_action(action_slot)
+        
+        # 習熟度を初期化
+        if action_slot.action_id not in self._action_masteries:
+            self._action_masteries[action_slot.action_id] = ActionMastery(action_slot.action_id, 0, 1)
+    
+    def forget_action(self, action_id: int, is_basic_action: bool) -> None:
+        """技を忘れる（ドメインロジック）"""
+        # ビジネスルール: 基本技は忘れることができない
+        if is_basic_action:
+            raise ValueError(f"Cannot forget basic action. action_id: {action_id}")
+        
+        # ビジネスルール: 習得していない技は忘れられない
+        if not self._action_deck.has_action(action_id):
+            raise ValueError(f"Action not learned. action_id: {action_id}")
+        
+        # デッキから技を削除
+        self._action_deck = self._action_deck.remove_action(action_id)
+        
+        # 習熟度も削除
+        if action_id in self._action_masteries:
+            del self._action_masteries[action_id]
+    
+    def evolve_action(self, action_id: int, evolved_action_id: int, evolved_cost: int) -> None:
+        """技を進化させる（ドメインロジック）"""
+        # ビジネスルール: 習熟度が存在しない技は進化できない
+        mastery = self._action_masteries.get(action_id)
+        if mastery is None:
+            raise ValueError(f"Action mastery not found. action_id: {action_id}")
+        
+        # ビジネスルール: デッキに存在しない技は進化できない
+        current_slot = self._action_deck.get_action_slot(action_id)
+        if current_slot is None:
+            raise ValueError(f"Action not found in deck. action_id: {action_id}")
+        
+        # 進化後の技スロットを作成（レベルは引き継ぎ）
+        evolved_slot = ActionSlot(evolved_action_id, current_slot.level, evolved_cost)
+        
+        # キャパシティチェック（一旦削除してから追加）
+        temp_deck = self._action_deck.remove_action(action_id)
+        if not temp_deck.can_add_action(evolved_slot):
+            raise ValueError(f"Not enough capacity for evolved action. evolved_action_id: {evolved_action_id}")
+        
+        # デッキを更新
+        self._action_deck = temp_deck.add_action(evolved_slot)
+        
+        # 習熟度を更新（進化時はリセット）
+        del self._action_masteries[action_id]
+        self._action_masteries[evolved_action_id] = ActionMastery(evolved_action_id, 0, 1)
+    
+    def gain_action_experience(self, action_id: int, experience: int) -> None:
+        """技の経験値を獲得"""
+        if action_id not in self._action_masteries:
+            raise ValueError(f"Action mastery not found. action_id: {action_id}")
+        
+        current_mastery = self._action_masteries[action_id]
+        new_mastery = current_mastery.gain_experience(experience)
+        self._action_masteries[action_id] = new_mastery
+    
+    def level_up_action(self, action_id: int) -> None:
+        """技のレベルを上げる"""
+        if action_id not in self._action_masteries:
+            raise ValueError(f"Action mastery not found. action_id: {action_id}")
+        
+        current_mastery = self._action_masteries[action_id]
+        new_mastery = current_mastery.level_up()
+        self._action_masteries[action_id] = new_mastery
+        
+        # デッキ内のスロットも更新
+        current_slot = self._action_deck.get_action_slot(action_id)
+        if current_slot is not None:
+            new_slot = current_slot.with_level(new_mastery.level)
+            self._action_deck = self._action_deck.update_action_slot(action_id, new_slot)
+    
+    def get_action_mastery(self, action_id: int) -> Optional[ActionMastery]:
+        """指定された技の習熟度を取得"""
+        return self._action_masteries.get(action_id)
+    
+    # ===== 戦闘後の状態を適用 =====
+    def apply_battle_result(self, combat_state: CombatState):
+        """戦闘後の状態を適用"""
+        self._dynamic_status.hp = combat_state.current_hp
+        self._dynamic_status.mp = combat_state.current_mp

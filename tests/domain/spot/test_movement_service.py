@@ -4,7 +4,7 @@ from src.domain.spot.movement_service import MovementService
 from src.domain.spot.spot import Spot
 from src.domain.spot.road import Road
 from src.domain.spot.condition import LevelConditionChecker
-from src.domain.player.level import Level
+from src.domain.common.value_object import Level
 from src.domain.spot.spot_exception import PlayerNotMeetConditionException
 
 

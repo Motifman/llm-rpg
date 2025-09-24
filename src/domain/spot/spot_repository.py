@@ -21,3 +21,8 @@ class SpotRepository(Repository[Spot]):
     def find_connected_spots(self, spot_id: int) -> List[Spot]:
         """指定されたスポットと接続されているスポットを検索"""
         pass
+
+    @abstractmethod
+    def generate_spot_id(self) -> int:
+        """スポットIDを生成"""
+        pass

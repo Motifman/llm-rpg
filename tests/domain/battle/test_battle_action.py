@@ -1,391 +1,637 @@
 import pytest
-from src.domain.battle.battle_action import BattleAction, ActionType
-from src.domain.battle.battle_enum import StatusEffectType, BuffType, Element
-from src.domain.monster.monster_enum import Race
+from unittest.mock import Mock, MagicMock
+from typing import List
+
+from src.domain.battle.battle_action import (
+    BattleAction,
+    HealAction,
+    AttackAction,
+    StatusEffectApplyAction,
+    BuffApplyAction,
+    DefendAction,
+    EscapeAction,
+    StatusEffectInfo,
+    BuffInfo,
+)
+from src.domain.battle.battle_enum import (
+    StatusEffectType,
+    BuffType,
+    Element,
+    Race,
+    ActionType,
+    TargetSelectionMethod,
+    ParticipantType,
+)
+from src.domain.battle.battle_result import BattleActionResult, ActorStateChange, TargetStateChange, BattleActionMetadata
+from src.domain.battle.combat_state import CombatState
+from src.domain.player.hp import Hp
+from src.domain.player.mp import Mp
+
+
+@pytest.fixture
+def mock_combat_state():
+    """テスト用のCombatStateモック"""
+    mock = Mock(spec=CombatState)
+    mock.entity_id = 1
+    mock.participant_type = ParticipantType.PLAYER
+    mock.name = "Test Player"
+    return mock
+
+
+@pytest.fixture
+def sample_combat_state():
+    """テスト用のCombatStateインスタンス"""
+    return CombatState(
+        entity_id=1,
+        participant_type=ParticipantType.PLAYER,
+        name="Test Player",
+        race=Race.HUMAN,
+        element=Element.NEUTRAL,
+        current_hp=Hp(100, 100),
+        current_mp=Mp(50, 50),
+        status_effects={},
+        buffs={},
+        is_defending=False,
+        can_act=True,
+        attack=10,
+        defense=10,
+        speed=10,
+        critical_rate=0.1,
+        evasion_rate=0.1,
+    )
+
+
+@pytest.fixture
+def mock_battle_service():
+    """テスト用のBattleLogicServiceモック"""
+    service = Mock()
+    service.target_resolver = Mock()
+    service.action_validator = Mock()
+    service.resource_consumer = Mock()
+    return service
 
 
 class TestBattleAction:
-    """BattleActionのテストクラス"""
-    
-    def test_create_basic_action(self):
-        """基本的なアクションの作成テスト"""
-        action = BattleAction(
+    """BattleAction基底クラスのテスト"""
+
+    def test_abstract_methods(self):
+        """抽象メソッドが正しく定義されていることを確認"""
+        # BattleActionは抽象クラスなので直接インスタンス化できない
+        with pytest.raises(TypeError):
+            BattleAction(
+                action_id=1,
+                name="Test Action",
+                description="Test Description",
+                action_type=ActionType.PHYSICAL,
+                target_selection_method=TargetSelectionMethod.SINGLE_TARGET,
+            )
+
+
+class TestHealAction:
+    """HealActionクラスのテスト"""
+
+    def test_creation_with_valid_hp_heal(self):
+        """有効なHP回復値での作成テスト"""
+        action = HealAction(
             action_id=1,
-            name="通常攻撃",
-            description="基本的な攻撃",
-            action_type=ActionType.ATTACK,
-            damage_multiplier=1.0
-        )
-        
-        assert action.action_id == 1
-        assert action.name == "通常攻撃"
-        assert action.description == "基本的な攻撃"
-        assert action.action_type == ActionType.ATTACK
-        assert action.damage_multiplier == 1.0
-        assert action.element is None
-        assert action.heal_amount is None
-        assert len(action.status_effect_rate) == 0
-        assert len(action.status_effect_duration) == 0
-        assert len(action.buff_multiplier) == 0
-        assert len(action.buff_duration) == 0
-        assert len(action.race_attack_multiplier) == 0
-        assert action.hp_cost is None
-        assert action.mp_cost is None
-        assert action.hit_rate is None
-    
-    def test_create_magic_action(self):
-        """魔法アクションの作成テスト"""
-        action = BattleAction(
-            action_id=2,
-            name="火の矢",
-            description="火属性の魔法攻撃",
+            name="Heal",
+            description="HP回復",
             action_type=ActionType.MAGIC,
+            target_selection_method=TargetSelectionMethod.SINGLE_TARGET,
+            heal_hp_amount=50,
+            mp_cost=10,
+        )
+        assert action.action_id == 1
+        assert action.name == "Heal"
+        assert action.heal_hp_amount == 50
+        assert action.mp_cost == 10
+
+    def test_creation_with_valid_mp_heal(self):
+        """有効なMP回復値での作成テスト"""
+        action = HealAction(
+            action_id=2,
+            name="Mana Restore",
+            description="MP回復",
+            action_type=ActionType.MAGIC,
+            target_selection_method=TargetSelectionMethod.SINGLE_TARGET,
+            heal_mp_amount=20,
+            mp_cost=5,
+        )
+        assert action.heal_mp_amount == 20
+
+    def test_creation_with_both_hp_and_mp_heal(self):
+        """HPとMP両方の回復での作成テスト"""
+        action = HealAction(
+            action_id=3,
+            name="Full Restore",
+            description="HP/MP回復",
+            action_type=ActionType.MAGIC,
+            target_selection_method=TargetSelectionMethod.SINGLE_TARGET,
+            heal_hp_amount=30,
+            heal_mp_amount=15,
+            mp_cost=15,
+        )
+        assert action.heal_hp_amount == 30
+        assert action.heal_mp_amount == 15
+
+    def test_creation_without_heal_amounts_raises_error(self):
+        """回復量が指定されていない場合エラーが発生することをテスト"""
+        with pytest.raises(ValueError, match="At least one of heal_hp_amount or heal_mp_amount must be specified"):
+            HealAction(
+                action_id=4,
+                name="Invalid Heal",
+                description="無効な回復",
+                action_type=ActionType.MAGIC,
+                target_selection_method=TargetSelectionMethod.SINGLE_TARGET,
+            )
+
+    def test_creation_with_negative_heal_amount_raises_error(self):
+        """負の回復量での作成テスト"""
+        with pytest.raises(ValueError, match="heal_hp_amount must be positive value"):
+            HealAction(
+                action_id=5,
+                name="Invalid Heal",
+                description="無効な回復",
+                action_type=ActionType.MAGIC,
+                target_selection_method=TargetSelectionMethod.SINGLE_TARGET,
+                heal_hp_amount=-10,
+            )
+
+    def test_creation_with_negative_mp_cost_raises_error(self):
+        """負のMPコストでの作成テスト"""
+        with pytest.raises(ValueError, match="mp_cost must be non-negative"):
+            HealAction(
+                action_id=6,
+                name="Invalid Heal",
+                description="無効な回復",
+                action_type=ActionType.MAGIC,
+                target_selection_method=TargetSelectionMethod.SINGLE_TARGET,
+                heal_hp_amount=50,
+                mp_cost=-5,
+            )
+
+    @pytest.mark.parametrize("heal_hp,heal_mp,expected_hp_change,expected_mp_change", [
+        (50, None, 50, 0),
+        (None, 20, 0, 20),
+        (30, 15, 30, 15),
+    ])
+    def test_execute_core_success(self, mock_combat_state, mock_battle_service, heal_hp, heal_mp, expected_hp_change, expected_mp_change):
+        """回復アクションの実行が成功することをテスト"""
+        # セットアップ
+        action = HealAction(
+            action_id=1,
+            name="Heal",
+            description="HP回復",
+            action_type=ActionType.MAGIC,
+            target_selection_method=TargetSelectionMethod.SINGLE_TARGET,
+            heal_hp_amount=heal_hp,
+            heal_mp_amount=heal_mp,
+            mp_cost=10,
+        )
+
+        targets = [mock_combat_state]
+        base_messages = ["回復を開始"]
+
+        # モックの設定
+        mock_battle_service.target_resolver.resolve_targets.return_value = targets
+        mock_battle_service.action_validator.validate_action.return_value = None
+        mock_battle_service.resource_consumer.consume_resource.return_value = Mock(messages=["MPを10消費"])
+
+        # 実行
+        result = action.execute(mock_combat_state, None, mock_battle_service, [mock_combat_state])
+
+        # 検証
+        assert result.success is True
+        assert len(result.target_state_changes) == 1
+        target_change = result.target_state_changes[0]
+        assert target_change.hp_change == expected_hp_change
+        assert target_change.mp_change == expected_mp_change
+        assert result.actor_state_change.mp_change == -10
+
+
+class TestAttackAction:
+    """AttackActionクラスのテスト"""
+
+    def test_creation_with_valid_parameters(self):
+        """有効なパラメータでの作成テスト"""
+        action = AttackAction(
+            action_id=1,
+            name="Sword Attack",
+            description="剣での攻撃",
+            action_type=ActionType.PHYSICAL,
+            target_selection_method=TargetSelectionMethod.SINGLE_TARGET,
             damage_multiplier=1.5,
             element=Element.FIRE,
-            mp_cost=10,
-            hit_rate=0.9
+            mp_cost=5,
+            hit_rate=0.9,
         )
-        
-        assert action.action_id == 2
-        assert action.name == "火の矢"
-        assert action.description == "火属性の魔法攻撃"
-        assert action.action_type == ActionType.MAGIC
+        assert action.action_id == 1
+        assert action.name == "Sword Attack"
+        # サブクラスのフィールドが正しく設定されていることを確認
         assert action.damage_multiplier == 1.5
         assert action.element == Element.FIRE
-        assert action.mp_cost == 10
         assert action.hit_rate == 0.9
-    
-    def test_create_heal_action(self):
-        """回復アクションの作成テスト"""
-        action = BattleAction(
-            action_id=3,
-            name="ヒール",
-            description="HPを回復する",
-            action_type=ActionType.MAGIC,
-            heal_amount=50,
-            mp_cost=15
-        )
-        
-        assert action.action_id == 3
-        assert action.name == "ヒール"
-        assert action.description == "HPを回復する"
-        assert action.action_type == ActionType.MAGIC
-        assert action.heal_amount == 50
-        assert action.mp_cost == 15
-        assert action.damage_multiplier == 1.0  # デフォルト値
-    
-    def test_create_status_effect_action(self):
-        """状態異常付きアクションの作成テスト"""
-        action = BattleAction(
-            action_id=4,
-            name="毒攻撃",
-            description="毒状態異常を付与する攻撃",
-            action_type=ActionType.ATTACK,
-            damage_multiplier=0.8,
-            status_effect_rate={StatusEffectType.POISON: 0.7},
-            status_effect_duration={StatusEffectType.POISON: 3}
-        )
-        
-        assert action.action_id == 4
-        assert action.name == "毒攻撃"
-        assert action.status_effect_rate[StatusEffectType.POISON] == 0.7
-        assert action.status_effect_duration[StatusEffectType.POISON] == 3
-    
-    def test_create_buff_action(self):
-        """バフ付きアクションの作成テスト"""
-        action = BattleAction(
-            action_id=5,
-            name="強化攻撃",
-            description="バフを付与する攻撃",
-            action_type=ActionType.ATTACK,
-            damage_multiplier=1.0,
-            buff_multiplier={BuffType.ATTACK: 1.5, BuffType.DEFENSE: 1.2},
-            buff_duration={BuffType.ATTACK: 2, BuffType.DEFENSE: 3}
-        )
-        
-        assert action.action_id == 5
-        assert action.name == "強化攻撃"
-        assert action.buff_multiplier[BuffType.ATTACK] == 1.5
-        assert action.buff_multiplier[BuffType.DEFENSE] == 1.2
-        assert action.buff_duration[BuffType.ATTACK] == 2
-        assert action.buff_duration[BuffType.DEFENSE] == 3
-    
-    def test_create_race_specific_action(self):
-        """種族特攻アクションの作成テスト"""
-        action = BattleAction(
-            action_id=6,
-            name="ゴブリン特攻",
-            description="ゴブリンに強い攻撃",
-            action_type=ActionType.ATTACK,
-            damage_multiplier=1.0,
-            race_attack_multiplier={Race.GOBLIN: 2.0, Race.ORC: 1.5}
-        )
-        
-        assert action.action_id == 6
-        assert action.name == "ゴブリン特攻"
-        assert action.race_attack_multiplier[Race.GOBLIN] == 2.0
-        assert action.race_attack_multiplier[Race.ORC] == 1.5
-    
-    def test_create_cost_action(self):
-        """コスト付きアクションの作成テスト"""
-        action = BattleAction(
-            action_id=7,
-            name="自己犠牲の攻撃",
-            description="HPとMPを消費する強力な攻撃",
-            action_type=ActionType.ATTACK,
-            damage_multiplier=2.0,
-            hp_cost=20,
-            mp_cost=30
-        )
-        
-        assert action.action_id == 7
-        assert action.name == "自己犠牲の攻撃"
-        assert action.hp_cost == 20
-        assert action.mp_cost == 30
-        assert action.damage_multiplier == 2.0
-    
-    def test_validation_hit_rate_invalid(self):
-        """無効な命中率でのバリデーションテスト"""
+
+    def test_creation_with_invalid_hit_rate_raises_error(self):
+        """無効な命中率での作成テスト"""
         with pytest.raises(ValueError, match="hit_rate must be between 0 and 1"):
-            BattleAction(
+            action = AttackAction(
                 action_id=1,
-                name="無効な命中率",
-                description="テスト",
-                action_type=ActionType.ATTACK,
-                hit_rate=-0.1
-            )
-        
-        with pytest.raises(ValueError, match="hit_rate must be between 0 and 1"):
-            BattleAction(
-                action_id=1,
-                name="無効な命中率",
-                description="テスト",
-                action_type=ActionType.ATTACK,
-                hit_rate=1.1
-            )
-    
-    def test_validation_mp_cost_invalid(self):
-        """無効なMPコストでのバリデーションテスト"""
-        with pytest.raises(ValueError, match="mp_cost must be non-negative"):
-            BattleAction(
-                action_id=1,
-                name="無効なMPコスト",
-                description="テスト",
-                action_type=ActionType.MAGIC,
-                mp_cost=-5
-            )
-    
-    def test_validation_hp_cost_invalid(self):
-        """無効なHPコストでのバリデーションテスト"""
-        with pytest.raises(ValueError, match="hp_cost must be non-negative"):
-            BattleAction(
-                action_id=1,
-                name="無効なHPコスト",
-                description="テスト",
-                action_type=ActionType.ATTACK,
-                hp_cost=-10
-            )
-    
-    def test_validation_damage_multiplier_invalid(self):
-        """無効なダメージ倍率でのバリデーションテスト"""
-        with pytest.raises(ValueError, match="damage_multiplier must be non-negative"):
-            BattleAction(
-                action_id=1,
-                name="無効なダメージ倍率",
-                description="テスト",
-                action_type=ActionType.ATTACK,
-                damage_multiplier=-1.0
-            )
-    
-    def test_validation_status_effect_rate_invalid(self):
-        """無効な状態異常確率でのバリデーションテスト"""
-        with pytest.raises(ValueError, match="status_effect_rate must be between 0 and 1.0"):
-            BattleAction(
-                action_id=1,
-                name="無効な状態異常確率",
-                description="テスト",
-                action_type=ActionType.ATTACK,
-                status_effect_rate={StatusEffectType.POISON: -0.1}
-            )
-        
-        with pytest.raises(ValueError, match="status_effect_rate must be between 0 and 1.0"):
-            BattleAction(
-                action_id=1,
-                name="無効な状態異常確率",
-                description="テスト",
-                action_type=ActionType.ATTACK,
-                status_effect_rate={StatusEffectType.POISON: 1.1}
-            )
-    
-    def test_validation_race_attack_multiplier_invalid(self):
-        """無効な種族特攻倍率でのバリデーションテスト"""
-        with pytest.raises(ValueError, match="race_attack_multiplier must be non-negative"):
-            BattleAction(
-                action_id=1,
-                name="無効な種族特攻倍率",
-                description="テスト",
-                action_type=ActionType.ATTACK,
-                race_attack_multiplier={Race.GOBLIN: -0.5}
-            )
-    
-    def test_validation_buff_multiplier_invalid(self):
-        """無効なバフ倍率でのバリデーションテスト"""
-        with pytest.raises(ValueError, match="buff_multiplier must be non-negative"):
-            BattleAction(
-                action_id=1,
-                name="無効なバフ倍率",
-                description="テスト",
-                action_type=ActionType.ATTACK,
-                buff_multiplier={BuffType.ATTACK: -1.0}
-            )
-    
-    def test_validation_multiple_errors(self):
-        """複数のバリデーションエラーのテスト"""
-        with pytest.raises(ValueError, match="hit_rate must be between 0 and 1"):
-            BattleAction(
-                action_id=1,
-                name="複数エラー",
-                description="テスト",
-                action_type=ActionType.ATTACK,
+                name="Invalid Attack",
+                description="無効な攻撃",
+                action_type=ActionType.PHYSICAL,
+                target_selection_method=TargetSelectionMethod.SINGLE_TARGET,
                 hit_rate=1.5,
-                mp_cost=-5,
-                damage_multiplier=-1.0
             )
-    
-    def test_valid_boundary_values(self):
-        """境界値でのバリデーションテスト"""
-        # 有効な境界値
-        action = BattleAction(
+
+    def test_execute_core_hit_success(self, mock_combat_state, mock_battle_service):
+        """攻撃が命中した場合のテスト"""
+        # セットアップ
+        action = AttackAction(
             action_id=1,
-            name="境界値テスト",
-            description="テスト",
-            action_type=ActionType.ATTACK,
-            hit_rate=0.0,  # 最小値
-            mp_cost=0,     # 最小値
-            hp_cost=0,     # 最小値
-            damage_multiplier=0.0  # 最小値
+            name="Attack",
+            description="攻撃",
+            action_type=ActionType.PHYSICAL,
+            target_selection_method=TargetSelectionMethod.SINGLE_TARGET,
         )
-        
-        assert action.hit_rate == 0.0
-        assert action.mp_cost == 0
-        assert action.hp_cost == 0
-        assert action.damage_multiplier == 0.0
-        
-        # 最大値
-        action2 = BattleAction(
-            action_id=2,
-            name="境界値テスト2",
-            description="テスト",
-            action_type=ActionType.ATTACK,
-            hit_rate=1.0,  # 最大値
-            damage_multiplier=999.0  # 大きな値
+
+        targets = [mock_combat_state]
+        base_messages = []
+
+        # モックの設定
+        mock_hit_result = Mock()
+        mock_hit_result.missed = False
+        mock_hit_result.evaded_targets = []
+        mock_battle_service.target_resolver.resolve_targets.return_value = targets
+        mock_battle_service.action_validator.validate_action.return_value = None
+        mock_battle_service.resource_consumer.consume_resource.return_value = Mock(messages=[])
+        mock_battle_service.hit_resolver.resolve_hits.return_value = mock_hit_result
+
+        # ダメージ計算のモック
+        mock_damage_result = Mock()
+        mock_damage_result.damage = -30
+        mock_damage_result.is_critical = True
+        mock_damage_result.compatibility_multiplier = 1.5
+        mock_damage_result.race_attack_multiplier = 1.2
+        mock_battle_service.damage_calculator.calculate_damage.return_value = mock_damage_result
+
+        # 効果適用のモック
+        mock_effect_result = Mock()
+        mock_effect_result.status_effects_to_add = []
+        mock_effect_result.buffs_to_add = []
+        mock_effect_result.messages = []
+        mock_battle_service.effect_applier.apply_effects.return_value = mock_effect_result
+
+        # 実行
+        result = action.execute(mock_combat_state, None, mock_battle_service, [mock_combat_state])
+
+        # 検証
+        assert result.success is True
+        assert len(result.target_state_changes) == 1
+        target_change = result.target_state_changes[0]
+        assert target_change.hp_change == -30
+        assert result.metadata.critical_hits == [True]
+        assert result.metadata.compatibility_multipliers == [1.5]
+        assert result.metadata.race_attack_multipliers == [1.2]
+
+    def test_execute_core_miss(self, mock_combat_state, mock_battle_service):
+        """攻撃が外れた場合のテスト"""
+        # セットアップ
+        action = AttackAction(
+            action_id=1,
+            name="Attack",
+            description="攻撃",
+            action_type=ActionType.PHYSICAL,
+            target_selection_method=TargetSelectionMethod.SINGLE_TARGET,
         )
-        
-        assert action2.hit_rate == 1.0
-        assert action2.damage_multiplier == 999.0
-    
-    def test_complex_action_creation(self):
-        """複雑なアクションの作成テスト"""
-        action = BattleAction(
-            action_id=8,
-            name="究極魔法",
-            description="全ての要素を含む究極の魔法",
+
+        targets = [mock_combat_state]
+        base_messages = []
+
+        # モックの設定
+        mock_hit_result = Mock()
+        mock_hit_result.missed = True
+        mock_hit_result.evaded_targets = []
+        mock_battle_service.target_resolver.resolve_targets.return_value = targets
+        mock_battle_service.action_validator.validate_action.return_value = None
+        mock_battle_service.resource_consumer.consume_resource.return_value = Mock(messages=[])
+        mock_battle_service.hit_resolver.resolve_hits.return_value = mock_hit_result
+
+        # 実行
+        result = action.execute(mock_combat_state, None, mock_battle_service, [mock_combat_state])
+
+        # 検証
+        assert result.success is False
+        assert result.failure_reason == "missed"
+        assert "攻撃が外れた！" in result.messages
+
+
+class TestStatusEffectApplyAction:
+    """StatusEffectApplyActionクラスのテスト"""
+
+    def test_creation_with_valid_parameters(self):
+        """有効なパラメータでの作成テスト"""
+        action = StatusEffectApplyAction(
+            action_id=1,
+            name="Poison",
+            description="毒を付与",
             action_type=ActionType.MAGIC,
-            damage_multiplier=3.0,
-            element=Element.THUNDER,
-            heal_amount=100,
-            status_effect_rate={
-                StatusEffectType.PARALYSIS: 0.8,
-                StatusEffectType.BURN: 0.5
-            },
-            status_effect_duration={
-                StatusEffectType.PARALYSIS: 2,
-                StatusEffectType.BURN: 3
-            },
-            buff_multiplier={
-                BuffType.ATTACK: 2.0,
-                BuffType.DEFENSE: 1.5,
-                BuffType.SPEED: 1.3
-            },
-            buff_duration={
-                BuffType.ATTACK: 4,
-                BuffType.DEFENSE: 3,
-                BuffType.SPEED: 2
-            },
-            race_attack_multiplier={
-                Race.DRAGON: 3.0,
-                Race.GHOST: 2.5
-            },
-            hp_cost=50,
-            mp_cost=100,
-            hit_rate=0.95
+            target_selection_method=TargetSelectionMethod.SINGLE_TARGET,
+            status_effect_rate={StatusEffectType.POISON: 0.8},
+            status_effect_duration={StatusEffectType.POISON: 3},
+            mp_cost=5,
         )
-        
-        # 基本プロパティ
-        assert action.action_id == 8
-        assert action.name == "究極魔法"
-        assert action.description == "全ての要素を含む究極の魔法"
-        assert action.action_type == ActionType.MAGIC
-        assert action.damage_multiplier == 3.0
-        assert action.element == Element.THUNDER
-        assert action.heal_amount == 100
-        assert action.hp_cost == 50
-        assert action.mp_cost == 100
-        assert action.hit_rate == 0.95
-        
-        # 状態異常
-        assert action.status_effect_rate[StatusEffectType.PARALYSIS] == 0.8
-        assert action.status_effect_rate[StatusEffectType.BURN] == 0.5
-        assert action.status_effect_duration[StatusEffectType.PARALYSIS] == 2
-        assert action.status_effect_duration[StatusEffectType.BURN] == 3
-        
-        # バフ
-        assert action.buff_multiplier[BuffType.ATTACK] == 2.0
-        assert action.buff_multiplier[BuffType.DEFENSE] == 1.5
-        assert action.buff_multiplier[BuffType.SPEED] == 1.3
-        assert action.buff_duration[BuffType.ATTACK] == 4
-        assert action.buff_duration[BuffType.DEFENSE] == 3
-        assert action.buff_duration[BuffType.SPEED] == 2
-        
-        # 種族特攻
-        assert action.race_attack_multiplier[Race.DRAGON] == 3.0
-        assert action.race_attack_multiplier[Race.GHOST] == 2.5
-    
-    def test_action_type_enum_values(self):
-        """ActionTypeの列挙値テスト"""
-        assert ActionType.ATTACK == ActionType.ATTACK
-        assert ActionType.MAGIC == ActionType.MAGIC
-        assert ActionType.DEFEND == ActionType.DEFEND
-        assert ActionType.ITEM == ActionType.ITEM
-        assert ActionType.ESCAPE == ActionType.ESCAPE
-        assert ActionType.STATUS_EFFECT == ActionType.STATUS_EFFECT
-        
-        # 文字列値の確認
-        assert ActionType.ATTACK.value == "attack"
-        assert ActionType.MAGIC.value == "magic"
-        assert ActionType.DEFEND.value == "defend"
-        assert ActionType.ITEM.value == "item"
-        assert ActionType.ESCAPE.value == "escape"
-        assert ActionType.STATUS_EFFECT.value == "status_effect"
-    
-    def test_immutable_properties(self):
-        """プロパティの不変性テスト"""
-        action = BattleAction(
+        assert hasattr(action, 'status_effect_rate') and action.status_effect_rate[StatusEffectType.POISON] == 0.8
+        assert hasattr(action, 'status_effect_duration') and action.status_effect_duration[StatusEffectType.POISON] == 3
+
+    def test_creation_with_invalid_rate_raises_error(self):
+        """無効な付与率での作成テスト"""
+        with pytest.raises(ValueError, match="status_effect_rate must be between 0 and 1.0"):
+            action = StatusEffectApplyAction(
+                action_id=1,
+                name="Invalid Poison",
+                description="無効な毒",
+                action_type=ActionType.MAGIC,
+                target_selection_method=TargetSelectionMethod.SINGLE_TARGET,
+                status_effect_rate={StatusEffectType.POISON: 1.5},
+                status_effect_duration={StatusEffectType.POISON: 3},
+            )
+
+    def test_execute_core_success(self, mock_combat_state, mock_battle_service):
+        """状態異常付与が成功する場合のテスト"""
+        # セットアップ
+        action = StatusEffectApplyAction(
             action_id=1,
-            name="テスト",
-            description="テスト",
-            action_type=ActionType.ATTACK
+            name="Poison",
+            description="毒を付与",
+            action_type=ActionType.MAGIC,
+            target_selection_method=TargetSelectionMethod.SINGLE_TARGET,
+            status_effect_rate={StatusEffectType.POISON: 1.0},
+            status_effect_duration={StatusEffectType.POISON: 3},
         )
-        
-        # プロパティは読み取り専用
+
+        targets = [mock_combat_state]
+        base_messages = []
+
+        # モックの設定
+        mock_hit_result = Mock()
+        mock_hit_result.missed = False
+        mock_hit_result.evaded_targets = []
+        mock_battle_service.target_resolver.resolve_targets.return_value = targets
+        mock_battle_service.action_validator.validate_action.return_value = None
+        mock_battle_service.resource_consumer.consume_resource.return_value = Mock(messages=[])
+        mock_battle_service.hit_resolver.resolve_hits.return_value = mock_hit_result
+
+        # 効果適用のモック
+        mock_effect_result = Mock()
+        mock_effect_result.status_effects_to_add = [(StatusEffectType.POISON, 3)]
+        mock_effect_result.messages = ["毒が付与された！"]
+        mock_battle_service.effect_applier.apply_effects.return_value = mock_effect_result
+
+        # 実行
+        result = action.execute(mock_combat_state, None, mock_battle_service, [mock_combat_state])
+
+        # 検証
+        assert result.success is True
+        assert len(result.target_state_changes) == 1
+        target_change = result.target_state_changes[0]
+        assert target_change.status_effects_to_add == [(StatusEffectType.POISON, 3)]
+        assert any("状態異常を付与した！" in msg for msg in result.messages)
+
+
+class TestBuffApplyAction:
+    """BuffApplyActionクラスのテスト"""
+
+    def test_creation_with_valid_parameters(self):
+        """有効なパラメータでの作成テスト"""
+        action = BuffApplyAction(
+            action_id=1,
+            name="Power Up",
+            description="攻撃力を上げる",
+            action_type=ActionType.MAGIC,
+            target_selection_method=TargetSelectionMethod.SINGLE_TARGET,
+            buff_rate={BuffType.ATTACK: 0.9},
+            buff_duration={BuffType.ATTACK: 3},
+            mp_cost=5,
+        )
+        assert hasattr(action, 'buff_rate') and action.buff_rate[BuffType.ATTACK] == 0.9
+        assert hasattr(action, 'buff_duration') and action.buff_duration[BuffType.ATTACK] == 3
+
+    def test_creation_with_invalid_rate_raises_error(self):
+        """無効なバフ率での作成テスト"""
+        with pytest.raises(ValueError, match="buff_rate must be between 0 and 1.0"):
+            action = BuffApplyAction(
+                action_id=1,
+                name="Invalid Buff",
+                description="無効なバフ",
+                action_type=ActionType.MAGIC,
+                target_selection_method=TargetSelectionMethod.SINGLE_TARGET,
+                buff_rate={BuffType.ATTACK: 1.2},
+                buff_duration={BuffType.ATTACK: 3},
+            )
+
+    def test_execute_core_success(self, mock_combat_state, mock_battle_service):
+        """バフ付与が成功する場合のテスト"""
+        # セットアップ
+        action = BuffApplyAction(
+            action_id=1,
+            name="Power Up",
+            description="攻撃力を上げる",
+            action_type=ActionType.MAGIC,
+            target_selection_method=TargetSelectionMethod.SINGLE_TARGET,
+            buff_rate={BuffType.ATTACK: 1.0},
+            buff_duration={BuffType.ATTACK: 3},
+        )
+
+        targets = [mock_combat_state]
+        base_messages = []
+
+        # モックの設定
+        mock_hit_result = Mock()
+        mock_hit_result.missed = False
+        mock_hit_result.evaded_targets = []
+        mock_battle_service.target_resolver.resolve_targets.return_value = targets
+        mock_battle_service.action_validator.validate_action.return_value = None
+        mock_battle_service.resource_consumer.consume_resource.return_value = Mock(messages=[])
+        mock_battle_service.hit_resolver.resolve_hits.return_value = mock_hit_result
+
+        # 効果適用のモック
+        mock_effect_result = Mock()
+        mock_effect_result.buffs_to_add = [(BuffType.ATTACK, 1.5, 3)]
+        mock_effect_result.messages = ["攻撃力が上がった！"]
+        mock_battle_service.effect_applier.apply_effects.return_value = mock_effect_result
+
+        # 実行
+        result = action.execute(mock_combat_state, None, mock_battle_service, [mock_combat_state])
+
+        # 検証
+        assert result.success is True
+        assert len(result.target_state_changes) == 1
+        target_change = result.target_state_changes[0]
+        assert target_change.buffs_to_add == [(BuffType.ATTACK, 1.5, 3)]
+        assert any("バフを付与した！" in msg for msg in result.messages)
+
+
+class TestDefendAction:
+    """DefendActionクラスのテスト"""
+
+    def test_creation(self):
+        """作成テスト"""
+        action = DefendAction(
+            action_id=1,
+            name="Defend",
+            description="防御",
+            action_type=ActionType.PHYSICAL,
+            target_selection_method=TargetSelectionMethod.SELF,
+        )
         assert action.action_id == 1
-        assert action.name == "テスト"
-        assert action.description == "テスト"
-        assert action.action_type == ActionType.ATTACK
-        
-        # 辞書は空だが存在する
-        assert isinstance(action.status_effect_rate, dict)
-        assert isinstance(action.status_effect_duration, dict)
-        assert isinstance(action.buff_multiplier, dict)
-        assert isinstance(action.buff_duration, dict)
-        assert isinstance(action.race_attack_multiplier, dict)
+        assert action.name == "Defend"
+
+    def test_execute_core_success(self, mock_combat_state, mock_battle_service):
+        """防御アクションの実行が成功することをテスト"""
+        # セットアップ
+        action = DefendAction(
+            action_id=1,
+            name="Defend",
+            description="防御",
+            action_type=ActionType.PHYSICAL,
+            target_selection_method=TargetSelectionMethod.SELF,
+        )
+
+        targets = [mock_combat_state]
+        base_messages = []
+
+        # モックの設定
+        mock_battle_service.target_resolver.resolve_targets.return_value = targets
+        mock_battle_service.action_validator.validate_action.return_value = None
+        mock_battle_service.resource_consumer.consume_resource.return_value = Mock(messages=[])
+
+        # 実行
+        result = action.execute(mock_combat_state, None, mock_battle_service, [mock_combat_state])
+
+        # 検証
+        assert result.success is True
+        assert result.actor_state_change.is_defend is True
+        assert any("防御の構えを取った！" in msg for msg in result.messages)
+
+
+class TestEscapeAction:
+    """EscapeActionクラスのテスト"""
+
+    def test_creation(self):
+        """作成テスト"""
+        action = EscapeAction(
+            action_id=1,
+            name="Escape",
+            description="逃亡",
+            action_type=ActionType.SPECIAL,
+            target_selection_method=TargetSelectionMethod.NONE,
+        )
+        assert action.action_id == 1
+        assert action.name == "Escape"
+
+    def test_execute_core_success(self, mock_combat_state, mock_battle_service):
+        """逃亡アクションの実行が成功することをテスト"""
+        # セットアップ
+        action = EscapeAction(
+            action_id=1,
+            name="Escape",
+            description="逃亡",
+            action_type=ActionType.SPECIAL,
+            target_selection_method=TargetSelectionMethod.NONE,
+        )
+
+        targets = []
+        base_messages = []
+
+        # モックの設定
+        mock_battle_service.target_resolver.resolve_targets.return_value = targets
+        mock_battle_service.action_validator.validate_action.return_value = None
+        mock_battle_service.resource_consumer.consume_resource.return_value = Mock(messages=[])
+
+        # 実行
+        result = action.execute(mock_combat_state, None, mock_battle_service, [mock_combat_state])
+
+        # 検証
+        assert result.success is True
+        assert any("逃亡した！" in msg for msg in result.messages)
+
+
+class TestStatusEffectInfo:
+    """StatusEffectInfoクラスのテスト"""
+
+    def test_creation_with_valid_parameters(self):
+        """有効なパラメータでの作成テスト"""
+        info = StatusEffectInfo(
+            effect_type=StatusEffectType.POISON,
+            apply_rate=0.8,
+            duration=3,
+        )
+        assert info.effect_type == StatusEffectType.POISON
+        assert info.apply_rate == 0.8
+        assert info.duration == 3
+
+    def test_creation_with_invalid_apply_rate_raises_error(self):
+        """無効な付与率での作成テスト"""
+        with pytest.raises(ValueError, match="apply_rate must be between 0 and 1"):
+            StatusEffectInfo(
+                effect_type=StatusEffectType.POISON,
+                apply_rate=1.5,
+                duration=3,
+            )
+
+    def test_creation_with_negative_duration_raises_error(self):
+        """負の持続時間での作成テスト"""
+        with pytest.raises(ValueError, match="duration must be positive"):
+            StatusEffectInfo(
+                effect_type=StatusEffectType.POISON,
+                apply_rate=0.8,
+                duration=-1,
+            )
+
+
+class TestBuffInfo:
+    """BuffInfoクラスのテスト"""
+
+    def test_creation_with_valid_parameters(self):
+        """有効なパラメータでの作成テスト"""
+        info = BuffInfo(
+            buff_type=BuffType.ATTACK,
+            apply_rate=0.9,
+            multiplier=1.5,
+            duration=3,
+        )
+        assert info.buff_type == BuffType.ATTACK
+        assert info.apply_rate == 0.9
+        assert info.multiplier == 1.5
+        assert info.duration == 3
+
+    def test_creation_with_invalid_apply_rate_raises_error(self):
+        """無効な付与率での作成テスト"""
+        with pytest.raises(ValueError, match="apply_rate must be between 0 and 1"):
+            BuffInfo(
+                buff_type=BuffType.ATTACK,
+                apply_rate=1.2,
+                multiplier=1.5,
+                duration=3,
+            )
+
+    def test_creation_with_invalid_multiplier_raises_error(self):
+        """無効な倍率での作成テスト"""
+        with pytest.raises(ValueError, match="multiplier must be positive"):
+            BuffInfo(
+                buff_type=BuffType.ATTACK,
+                apply_rate=0.9,
+                multiplier=-1.0,
+                duration=3,
+            )
+
+    def test_creation_with_negative_duration_raises_error(self):
+        """負の持続時間での作成テスト"""
+        with pytest.raises(ValueError, match="duration must be positive"):
+            BuffInfo(
+                buff_type=BuffType.ATTACK,
+                apply_rate=0.9,
+                multiplier=1.5,
+                duration=-1,
+            )

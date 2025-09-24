@@ -1,7 +1,7 @@
 import pytest
-from src.application.world.movement_service import MovementApplicationService
-from src.application.world.commands import MovePlayerCommand, GetPlayerLocationCommand
-from src.application.world.dtos import MoveResultDto, PlayerLocationDto
+from src.application.world.services.movement_service import MovementApplicationService
+from src.application.world.contracts.commands import MovePlayerCommand, GetPlayerLocationCommand
+from src.application.world.contracts.dtos import MoveResultDto, PlayerLocationDto
 from src.domain.spot.movement_service import MovementService
 from src.domain.player.player import Player
 from src.domain.player.base_status import BaseStatus
@@ -17,9 +17,7 @@ from src.domain.player.player_repository import PlayerRepository
 from src.domain.spot.spot_repository import SpotRepository
 from src.domain.player.hp import Hp
 from src.domain.player.mp import Mp
-from src.domain.player.exp import Exp
-from src.domain.player.level import Level
-from src.domain.player.gold import Gold
+from src.domain.common.value_object import Exp, Gold, Level
 from src.domain.spot.road_enum import ConditionType
 
 

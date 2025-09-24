@@ -15,8 +15,7 @@ from src.domain.monster.monster_enum import Race
 from src.domain.battle.battle_enum import Element
 from src.domain.trade.trade_exception import InsufficientItemsException
 from src.domain.item.item_exception import ItemNotUsableException
-from src.domain.player.exp import Exp
-from src.domain.player.gold import Gold
+from src.domain.common.value_object import Exp, Gold
 
 
 class TestPlayerUseItem:

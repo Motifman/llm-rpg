@@ -262,7 +262,7 @@ class TestTradeApplicationService:
         # 買い手プレイヤーを作成
         player_repo = trade_service._player_repository
         buyer_dynamic_status = DynamicStatus.new_game(max_hp=80, max_mp=40, max_exp=1000, initial_level=1)
-        from src.domain.player.gold import Gold
+        from src.domain.common.value_object import Gold
         buyer_dynamic_status.receive_gold(Gold(500))
         
         buyer = Player(

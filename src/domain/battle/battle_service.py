@@ -1,381 +1,655 @@
 import random
-from typing import List, Dict, Any, Tuple
-from src.domain.battle.battle_action import ActionType, BattleAction
-from src.domain.battle.battle_result import BattleActionResult, TurnStartResult, TurnEndResult
-from src.domain.battle.battle_participant import BattleParticipant
-from src.domain.battle.battle_enum import BuffType, StatusEffectType, ParticipantType
+from dataclasses import dataclass
+from typing import List, Tuple, Optional
+from itertools import chain
+from src.domain.battle.battle_action import BattleAction
+from src.domain.battle.battle_enum import ActionType
+from src.domain.battle.battle_result import TurnStartResult, TurnEndResult
+from src.domain.battle.battle_enum import BuffType, StatusEffectType, ParticipantType, TargetSelectionMethod
 from src.domain.battle.compatible_table import COMPATIBLE_TABLE
+from src.domain.battle.battle_exception import InsufficientMpException, InsufficientHpException, SilencedException, BlindedException
+from src.domain.battle.constant import CRITICAL_MULTIPLIER, WAKE_RATE, CONFUSION_DAMAGE_MULTIPLIER, POISON_DAMAGE_RATE, BURN_DAMAGE_AMOUNT, BLESSING_HEAL_AMOUNT
+from src.domain.battle.combat_state import CombatState
 
 
-class BattleService:
-    """複雑な戦闘ロジックを調整"""
-    CRITICAL_MULTIPLIER = 1.25
-    IF_DEFENDER_DEFENDING_MULTIPLIER = 0.5
-    BURN_DAMAGE_AMOUNT = 20
-    POISON_DAMAGE_RATE = 0.1
-    BLESSING_HEAL_AMOUNT = 20
-    WAKE_RATE = 0.1
-    CONFUSION_DAMAGE_MULTIPLIER = 0.5
+class TargetResolver:
+    """ターゲット解決サービス"""
+    
+    def resolve_targets(
+        self, 
+        actor: CombatState, 
+        action: BattleAction, 
+        specified_targets: Optional[List[CombatState]],
+        all_participants: List[CombatState]
+    ) -> List[CombatState]:
+        """ターゲットを解決する"""
+        
+        method = action.target_selection_method
+        
+        if method == TargetSelectionMethod.SINGLE_TARGET:
+            if not specified_targets or len(specified_targets) != 1:
+                raise ValueError("単一ターゲットが必要です")  # TODO: カスタム例外を実装
+            return specified_targets
+            
+        elif method == TargetSelectionMethod.ALL_ENEMIES:
+            return self._get_enemies(actor, all_participants)
+            
+        elif method == TargetSelectionMethod.ALL_ALLIES:
+            return self._get_allies(actor, all_participants)
+            
+        elif method == TargetSelectionMethod.RANDOM_ENEMY:
+            enemies = self._get_enemies(actor, all_participants)
+            return [random.choice(enemies)] if enemies else []
+            
+        elif method == TargetSelectionMethod.RANDOM_ALLY:
+            allies = self._get_allies(actor, all_participants)
+            return [random.choice(allies)] if allies else []
+            
+        elif method == TargetSelectionMethod.RANDOM_ALL:
+            return [random.choice(all_participants)] if all_participants else []
+            
+        elif method == TargetSelectionMethod.SELF:
+            return [actor]
+            
+        else:
+            raise ValueError(f"未対応のターゲット選択方法: {method}")  # TODO: カスタム例外を実装
+    
+    def _get_enemies(self, actor: CombatState, all_participants: List[CombatState]) -> List[CombatState]:
+        """敵を取得"""
+        return [p for p in all_participants if p.participant_type != actor.participant_type]
+    
+    def _get_allies(self, actor: CombatState, all_participants: List[CombatState]) -> List[CombatState]:
+        """味方を取得"""
+        return [p for p in all_participants if p.participant_type == actor.participant_type]
+
+
+class ActionValidator:
+    """アクション実行の事前チェック"""
+    
+    def validate_action(self, combat_state: CombatState, action: BattleAction) -> None:
+        """アクション実行可能かチェック"""
+        if not self._can_execute_magic_action(combat_state, action):
+            raise SilencedException(f"{combat_state.name}は沈黙状態で魔法が使えない")
+        if not self._can_execute_physical_action(combat_state, action):
+            raise BlindedException(f"{combat_state.name}は暗闇状態で物理攻撃ができない")
+        if not self._can_consume_mp(combat_state, action):
+            raise InsufficientMpException(f"{combat_state.name}はMPが不足している")
+        if not self._can_consume_hp(combat_state, action):
+            raise InsufficientHpException(f"{combat_state.name}はHPが不足している")
+    
+    def _can_execute_magic_action(self, combat_state: CombatState, action: BattleAction) -> bool:
+        is_silence = combat_state.has_status_effect(StatusEffectType.SILENCE)
+        action_is_magic = action.action_type == ActionType.MAGIC
+        return not (is_silence and action_is_magic)
+    
+    def _can_execute_physical_action(self, combat_state: CombatState, action: BattleAction) -> bool:
+        is_blinded = combat_state.has_status_effect(StatusEffectType.BLINDNESS)
+        action_is_physical = action.action_type == ActionType.PHYSICAL
+        return not (is_blinded and action_is_physical)
+    
+    def _can_consume_mp(self, combat_state: CombatState, action: BattleAction) -> bool:
+        if action.mp_cost is not None and not combat_state.current_mp.can_consume(action.mp_cost):
+            return False
+        return True
+    
+    def _can_consume_hp(self, combat_state: CombatState, action: BattleAction) -> bool:
+        if action.hp_cost is not None and not combat_state.current_hp.can_consume(action.hp_cost):
+            return False
+        return True
+
+
+@dataclass(frozen=True)
+class ResourceConsumptionResult:
+    mp_consumed: int
+    hp_consumed: int
+    messages: List[str]
+    
+    def __post_init__(self):
+        if self.mp_consumed < 0:
+            raise ValueError(f"Invalid mp_consumed: {self.mp_consumed}")
+        if self.hp_consumed < 0:
+            raise ValueError(f"Invalid hp_consumed: {self.hp_consumed}")
+
+
+class ResourceConsumer:
+    """リソース消費"""
+    
+    def consume_resource(self, combat_state: CombatState, action: BattleAction) -> ResourceConsumptionResult:
+        """消費したリソースとメッセージを返す"""
+        messages = []
+        
+        if action.mp_cost is not None and action.mp_cost > 0:
+            messages.append(f"{combat_state.name}は{action.mp_cost}MPを消費した！")
+
+        if action.hp_cost is not None and action.hp_cost > 0:
+            messages.append(f"{combat_state.name}は{action.hp_cost}HPを消費した！")
+        
+        return ResourceConsumptionResult(mp_consumed=action.mp_cost or 0, hp_consumed=action.hp_cost or 0, messages=messages)
+
+
+@dataclass(frozen=True)
+class HitResolutionResult:
+    missed: bool
+    evaded_targets: List[Tuple[int, ParticipantType]]
+
+
+class HitResolver:
+    """命中/回避判定"""
     
     def _check_rate(self, rate: float) -> bool:
         """確率チェック"""
         return random.random() < rate
     
-    def _check_compatible_multiplier(self, attacker_action: BattleAction, defender: BattleParticipant) -> float:
-        """相性チェック"""
-        return COMPATIBLE_TABLE.get((attacker_action.element, defender.entity.element), 1.0)
+    def resolve_hits(self, combat_state: CombatState, defenders: List[CombatState], action: BattleAction) -> HitResolutionResult:
+        """命中/回避判定"""
+        messages = []
+        if action.hit_rate is not None and not self._check_rate(action.hit_rate):
+            messages.append(f"{combat_state.name}の攻撃が外れた！")
+            return HitResolutionResult(missed=True, evaded_targets=[])
+        
+        # 回避率チェック
+        evaded_targets = []
+        for defender in defenders:
+            if self._check_rate(defender.evasion_rate):
+                evaded_targets.append((defender.entity_id, defender.participant_type))
+        
+        return HitResolutionResult(missed=False, evaded_targets=evaded_targets)
+
+
+@dataclass(frozen=True)
+class DamageCalculationResult:
+    damage: int
+    is_critical: bool
+    compatibility_multiplier: float
+    race_attack_multiplier: float
     
-    def _calculate_damage(self, attacker: BattleParticipant, defender: BattleParticipant, action: BattleAction, is_critical: bool) -> int:
-        """ダメージ計算"""
-        # 基本ダメージ計算
-        damage = attacker.entity.attack
-        damage *= action.damage_multiplier
-        
-        # バフチェック
-        multiplier = attacker.get_buff_multiplier(BuffType.ATTACK)
-        damage *= multiplier
+    def __post_init__(self):
+        if self.damage < 0:
+            raise ValueError(f"Invalid damage: {self.damage}")
+        if self.compatibility_multiplier < 0:
+            raise ValueError(f"Invalid compatibility_multiplier: {self.compatibility_multiplier}")
+        if self.race_attack_multiplier < 0:
+            raise ValueError(f"Invalid race_attack_multiplier: {self.race_attack_multiplier}")
 
-        # 相性チェック
-        multiplier = self._check_compatible_multiplier(action, defender)
-        damage *= multiplier
 
-        # 種族特攻チェック
-        multiplier = action.race_attack_multiplier.get(defender.entity.race, 1.0)
-        damage *= multiplier
+class DamageCalculator:
+    """ダメージ計算"""
+
+    def _check_rate(self, rate: float) -> bool:
+        """確率チェック"""
+        return random.random() < rate
+    
+    def _calculate_compatible_multiplier(self, action: BattleAction, defender: CombatState) -> float:
+        """相性倍率計算"""
+        return COMPATIBLE_TABLE.get((action.element, defender.element), 1.0)
+    
+    def _calculate_race_attack_multiplier(self, action: BattleAction, defender: CombatState) -> float:
+        """種族特攻倍率計算"""
+        return action.race_attack_multiplier.get(defender.race, 1.0)
+    
+    def calculate_damage(self, attacker: CombatState, defender: CombatState, action: BattleAction) -> DamageCalculationResult:
+        """ダメージを計算"""
+        is_critical = self._check_rate(attacker.critical_rate)
+        compatibility_multiplier = self._calculate_compatible_multiplier(action, defender)
+        race_attack_multiplier = self._calculate_race_attack_multiplier(action, defender)
         
-        # クリティカルダメージチェック
+        # 基本ダメージ
+        damage = attacker.calculate_current_attack() * action.damage_multiplier
+        
+        # 各種倍率適用
+        damage *= compatibility_multiplier
+        damage *= race_attack_multiplier
+        
         if is_critical:
-            damage *= self.CRITICAL_MULTIPLIER
-
-        # ディフェンスチェック
-        defence = defender.entity.defense
-        if defender.entity.is_defending():
-            defence *= self.IF_DEFENDER_DEFENDING_MULTIPLIER
+            damage *= CRITICAL_MULTIPLIER
         
-        # バフチェック
-        multiplier = defender.get_buff_multiplier(BuffType.DEFENSE)
-        defence *= multiplier
-
-        # ダメージ軽減
-        damage = max(damage - defence, 0)
-
-        return int(damage)
-
-    def get_entity_stats(self, participant: BattleParticipant) -> Dict[str, Any]:
-        """エンティティの統計情報を取得"""
-        entity = participant.entity
+        # 防御計算
+        defense = defender.calculate_current_defense()
+        damage = max(damage - defense, 0)
         
-        # PlayerとMonsterで異なるID属性を使用
-        if hasattr(entity, 'player_id'):
-            entity_id = entity.player_id
-        elif hasattr(entity, 'monster_instance_id'):
-            entity_id = entity.monster_instance_id
-        else:
-            entity_id = getattr(entity, 'entity_id', 0)
-        
-        return {
-            "entity_id": entity_id,
-            "name": entity.name,
-            "hp": entity.hp,
-            "max_hp": entity.max_hp,
-            "mp": entity.mp,
-            "max_mp": entity.max_mp,
-            "attack": entity.attack,
-            "defense": entity.defense,
-            "speed": entity.speed,
-            "level": getattr(entity, 'level', 1),
-            "status_effects": [effect.value for effect in participant.get_status_effects()],
-            "active_buffs": [buff.value for buff in participant.buffs_remaining_duration.keys()],
-        }
+        return DamageCalculationResult(
+            damage=int(damage),
+            is_critical=is_critical,
+            compatibility_multiplier=compatibility_multiplier,
+            race_attack_multiplier=race_attack_multiplier
+        )
 
-    def process_turn_start(self, attacker: BattleParticipant) -> TurnStartResult:
-        """ターン開始時の処理"""
-        attacker.entity.un_defend()
-        messages: List[str] = []
+
+class MessageGenerator:
+    """メッセージ生成"""
+    
+    def generate_messages(self, action: BattleAction, results: List[DamageCalculationResult]) -> List[str]:
+        """戦闘メッセージを生成"""
+        messages = []
+        for result in results:
+            crit_msg = "クリティカル！" if result.is_critical else ""
+            messages.append(f"ダメージ{result.damage}を与えた！{crit_msg}")
+        return messages
+
+
+@dataclass(frozen=True)
+class EffectApplicationResult:
+    status_effects_to_add: List[Tuple[StatusEffectType, int]]
+    buffs_to_add: List[Tuple[BuffType, float, int]]
+    messages: List[str]
+
+
+class EffectApplier:
+    """効果適用"""
+
+    def _check_rate(self, rate: float) -> bool:
+        """確率チェック"""
+        return random.random() < rate
+
+    def apply_effects(self, defender: CombatState, action: BattleAction) -> EffectApplicationResult:
+        """状態異常とバフを適用"""
+        messages = []
+        status_effects_to_add = []
+        buffs_to_add = []
+        
+        # 状態異常適用
+        if action.status_effect_infos:
+            for effect_info in action.status_effect_infos:
+                if self._check_rate(effect_info.apply_rate):
+                    duration = effect_info.duration
+                    status_effects_to_add.append((effect_info.effect_type, duration))
+                    messages.append(f"{defender.name}は「{effect_info.effect_type.value}」の状態異常を受けた！")
+        
+        # バフ適用
+        if action.buff_infos:
+            for buff_info in action.buff_infos:
+                duration = buff_info.duration
+                buffs_to_add.append((buff_info.buff_type, buff_info.multiplier, duration))
+                messages.append(f"{defender.name}は「{buff_info.buff_type.value}」のバフを受けた！")
+        
+        return EffectApplicationResult(
+            status_effects_to_add=status_effects_to_add,
+            buffs_to_add=buffs_to_add,
+            messages=messages
+        )
+
+
+class EffectProcessor:
+    """状態異常の効果計算"""
+    def process_sleep_on_turn_start(self, combat_state: CombatState) -> TurnStartResult:
+        """眠りの処理"""
         can_act = True
-        self_damage = 0
-        recovered_status_effects = []
+        messages = []
+        status_effects_to_remove = []
 
-        status_effects = attacker.get_status_effects()
-        for status_effect_type in status_effects:
-            if status_effect_type == StatusEffectType.SLEEP:
-                if self._check_rate(self.WAKE_RATE):
-                    attacker.recover_status_effects(status_effect_type)
-                    recovered_status_effects.append(status_effect_type)
-                    messages.append(f"{attacker.entity.name}は眠りから覚めた！")
-                else:
-                    messages.append(f"{attacker.entity.name}は眠っているようだ...")
-                    can_act = False
-            elif status_effect_type == StatusEffectType.PARALYSIS:
-                messages.append(f"{attacker.entity.name}は体が麻痺して動けないようだ...")
+        if combat_state.has_status_effect(StatusEffectType.SLEEP):
+            if random.random() < WAKE_RATE:
+                messages.append(f"{combat_state.name}は眠りから覚めた！")
+                status_effects_to_remove.append(StatusEffectType.SLEEP)
+            else:
+                messages.append(f"{combat_state.name}は眠っているようだ...")
                 can_act = False
-            elif status_effect_type == StatusEffectType.CONFUSION:
-                damage = int(attacker.entity.attack * self.CONFUSION_DAMAGE_MULTIPLIER)
-                attacker.entity.take_damage(damage)
-                self_damage += damage
-                messages.append(f"{attacker.entity.name}は混乱により自分に{damage}のダメージを与えた！")
-                can_act = False
-            elif status_effect_type == StatusEffectType.CURSE:
-                duration = attacker.get_status_effect_remaining_duration(StatusEffectType.CURSE)
-                messages.append(f"{attacker.entity.name}は残り{duration}ターンで死ぬ呪いにかかっている...")
 
-        attacker.process_status_effects_on_turn_start()
-        attacker.process_buffs_on_turn_start()
         return TurnStartResult(
+            actor_id=combat_state.entity_id,
+            participant_type=combat_state.participant_type,
             can_act=can_act,
             messages=messages,
-            self_damage=self_damage,
-            recovered_status_effects=recovered_status_effects,
+            status_effects_to_remove=status_effects_to_remove,
         )
 
-    def can_act(self, attacker: BattleParticipant) -> bool:
-        """行動可能かどうか"""
-        return True
+    def process_paralysis_on_turn_start(self, combat_state: CombatState) -> TurnStartResult:
+        """麻痺の処理"""
+        can_act = True
+        messages = []
+        status_effects_to_remove = []
 
-    def process_turn_end(self, attacker: BattleParticipant) -> TurnEndResult:
-        """ターン終了時の処理"""
-        messages: List[str] = []
-        damage_from_status_effects = 0
-        healing_from_status_effects = 0
-        expired_status_effects = []
-        expired_buffs = []
+        if combat_state.has_status_effect(StatusEffectType.PARALYSIS):
+            messages.append(f"{combat_state.name}は体が麻痺して動けないようだ...")
+            can_act = False
+
+        return TurnStartResult(
+            actor_id=combat_state.entity_id,
+            participant_type=combat_state.participant_type,
+            can_act=can_act,
+            messages=messages,
+            status_effects_to_remove=status_effects_to_remove,
+        )
+
+    def process_confusion_on_turn_start(self, combat_state: CombatState) -> TurnStartResult:
+        """混乱の処理"""
+        can_act = True
+        messages = []
+        damage = 0
+
+        if combat_state.has_status_effect(StatusEffectType.CONFUSION):
+            damage = int(combat_state.attack * CONFUSION_DAMAGE_MULTIPLIER)
+            messages.append(f"{combat_state.name}は混乱により自分に{damage}のダメージを与えた！")
+            can_act = False
+
+        return TurnStartResult(
+            actor_id=combat_state.entity_id,
+            participant_type=combat_state.participant_type,
+            can_act=can_act,
+            messages=messages,
+            damage=damage,
+        )
+
+    def process_curse_on_turn_start(self, combat_state: CombatState) -> TurnStartResult:
+        """呪いの処理"""
+        can_act = True
+        messages = []
         
-        if attacker.has_status_effect(StatusEffectType.BURN):
-            attacker.entity.take_damage(self.BURN_DAMAGE_AMOUNT)
-            damage_from_status_effects += self.BURN_DAMAGE_AMOUNT
-            messages.append(f"{attacker.entity.name}はやけどにより{self.BURN_DAMAGE_AMOUNT}のダメージを受けた！")
-        if attacker.has_status_effect(StatusEffectType.POISON):
-            damage = int(attacker.entity.hp * self.POISON_DAMAGE_RATE)
-            attacker.entity.take_damage(damage)
-            damage_from_status_effects += damage
-            messages.append(f"{attacker.entity.name}は毒により{damage}のダメージを受けた！")
-        if attacker.has_status_effect(StatusEffectType.BLESSING):
-            attacker.entity.heal(self.BLESSING_HEAL_AMOUNT)
-            healing_from_status_effects += self.BLESSING_HEAL_AMOUNT
-            messages.append(f"{attacker.entity.name}は神の加護により{self.BLESSING_HEAL_AMOUNT}HP回復した！")
-        if attacker.has_status_effect(StatusEffectType.CURSE):
-            if attacker.get_status_effect_remaining_duration(StatusEffectType.CURSE) == 0:
-                attacker.recover_status_effects(StatusEffectType.CURSE)
-                curse_damage = attacker.entity.hp
-                attacker.entity.take_damage(curse_damage)
-                damage_from_status_effects += curse_damage
-                expired_status_effects.append(StatusEffectType.CURSE)
-                messages.append(f"{attacker.entity.name}は呪いが発動し{curse_damage}のダメージを受けた！")
-        
-        # 期限切れになった状態異常とバフを記録
-        original_status_effects = set(attacker.get_status_effects())
-        original_buffs = set(attacker.buffs_remaining_duration.keys())
-        
-        attacker.process_status_effects_on_turn_end()
-        attacker.process_buffs_on_turn_end()
-        
-        # 期限切れになった状態異常を記録
-        current_status_effects = set(attacker.get_status_effects())
-        expired_status_effects.extend(list(original_status_effects - current_status_effects))
-        
-        # 期限切れになったバフを記録
-        current_buffs = set(attacker.buffs_remaining_duration.keys())
-        expired_buffs.extend(list(original_buffs - current_buffs))
-        
+        if combat_state.has_status_effect(StatusEffectType.CURSE):
+            duration = combat_state.get_status_effect_remaining_duration(StatusEffectType.CURSE)
+            messages.append(f"{combat_state.name}は呪いに体を蝕まれている... 残り{duration}ターン...")
+
+        return TurnStartResult(
+            actor_id=combat_state.entity_id,
+            participant_type=combat_state.participant_type,
+            can_act=can_act,
+            messages=messages,
+        )
+
+    def process_poison_on_turn_end(self, combat_state: CombatState) -> TurnEndResult:
+        """毒の処理"""
+        messages = []
+        damage = 0
+
+        if combat_state.has_status_effect(StatusEffectType.POISON):
+            damage = int(combat_state.current_hp.value * POISON_DAMAGE_RATE)
+            messages.append(f"{combat_state.name}は毒により{damage}のダメージを受けた！")
+
         return TurnEndResult(
+            actor_id=combat_state.entity_id,
+            participant_type=combat_state.participant_type,
             messages=messages,
-            is_attacker_defeated=not attacker.entity.is_alive(),
-            damage_from_status_effects=damage_from_status_effects,
-            healing_from_status_effects=healing_from_status_effects,
-            expired_status_effects=expired_status_effects,
-            expired_buffs=expired_buffs,
+            damage=damage,
         )
-    
-    def execute_attack(self, attacker: BattleParticipant, defenders: List[BattleParticipant], action: BattleAction) -> BattleActionResult:
-        """攻撃を実行"""
+
+    def process_burn_on_turn_end(self, combat_state: CombatState) -> TurnEndResult:
+        """やけどの処理"""
         messages = []
-        hp_consumed = action.hp_cost or 0
-        mp_consumed = action.mp_cost or 0
-        
-        # 魔法攻撃が可能かチェック
-        if attacker.has_status_effect(StatusEffectType.SILENCE) and action.action_type == ActionType.MAGIC:
-            return BattleActionResult.create_failure(
-                messages=[f"{attacker.entity.name}は沈黙しているようだ..."],
-                failure_reason="silenced",
-            )
-        
-        # MPチェック
-        if action.mp_cost is not None and not attacker.entity.can_consume_mp(action.mp_cost):
-            return BattleActionResult.create_failure(
-                messages=[f"{attacker.entity.name}はMPが足りず、{action.name}を実行できないようだ"],
-                failure_reason="insufficient_mp",
-            )
-        
-        # HP, MP消費
-        if action.mp_cost is not None:
-            attacker.entity.consume_mp(action.mp_cost)
-            messages.append(f"{attacker.entity.name}は{action.mp_cost}MPを消費した！")
-        if action.hp_cost is not None:
-            attacker.entity.take_damage(action.hp_cost)
-            messages.append(f"{attacker.entity.name}は{action.hp_cost}HPを消費した！")
+        damage = 0
 
-        # 命中率チェック
-        if action.hit_rate is not None and not self._check_rate(action.hit_rate):
-            messages.append(f"{attacker.entity.name}の攻撃が外れた！")
-            return BattleActionResult.create_failure(
-                messages=messages,
-                failure_reason="missed",
-                hp_consumed=hp_consumed,
-                mp_consumed=mp_consumed,
-            )
-        
-        # 回避率チェック（各defender個別にチェック）
-        evaded_defenders = []
-        for defender in defenders:
-            if self._check_rate(defender.entity.evasion_rate):
-                evaded_defenders.append(defender)
-                messages.append(f"{defender.entity.name}は攻撃を回避した！")
-        
-        # 全員が回避した場合は攻撃失敗
-        if len(evaded_defenders) == len(defenders):
-            return BattleActionResult.create_failure(
-                messages=messages,
-                failure_reason="evaded",
-                hp_consumed=hp_consumed,
-                mp_consumed=mp_consumed,
-            )
-        
-        # 収集用変数
-        target_ids = [defender.entity_id for defender in defenders]
-        damages = []
-        critical_hits = []
-        compatibility_multipliers = []
-        applied_status_effects = []
-        applied_buffs = []
-        
-        # ダメージ計算
-        for defender in defenders:
-            # 回避したdefenderはスキップ
-            if defender in evaded_defenders:
-                damages.append(0)
-                critical_hits.append(False)
-                compatibility_multipliers.append(1.0)
-                continue
-            
-            # クリティカル判定
-            is_critical = self._check_rate(attacker.entity.critical_rate)
-            critical_hits.append(is_critical)
-            
-            # 相性倍率を取得
-            compatibility_multiplier = self._check_compatible_multiplier(action, defender)
-            compatibility_multipliers.append(compatibility_multiplier)
-            
-            damage = self._calculate_damage(attacker, defender, action, is_critical)
-            damages.append(damage)
-            defender.entity.take_damage(damage)
-            
-            crit_msg = "クリティカル！" if is_critical else ""
-            messages.append(f"{attacker.entity.name}は{defender.entity.name}に{damage}のダメージを与えた！{crit_msg}")
+        if combat_state.has_status_effect(StatusEffectType.BURN):
+            damage = BURN_DAMAGE_AMOUNT
+            messages.append(f"{combat_state.name}はやけどにより{damage}のダメージを受けた！")
 
-        # 状態異常処理
-        if action.status_effect_rate:
-            for i, defender in enumerate(defenders):
-                # 回避したdefenderはスキップ
-                if defender in evaded_defenders:
-                    continue
-                for status_effect_type, rate in action.status_effect_rate.items():
-                    if self._check_rate(rate):
-                        duration = action.status_effect_duration[status_effect_type]
-                        defender.add_status_effect(status_effect_type, duration)
-                        applied_status_effects.append((target_ids[i], status_effect_type, duration))
-                        messages.append(f"{defender.entity.name}は「{status_effect_type.value}」の状態異常を受けた！")
-        
-        # バフ処理
-        if action.buff_multiplier:
-            for i, defender in enumerate(defenders):
-                # 回避したdefenderはスキップ
-                if defender in evaded_defenders:
-                    continue
-                for buff_type, multiplier in action.buff_multiplier.items():
-                    duration = action.buff_duration[buff_type]
-                    defender.add_buff(buff_type, duration, multiplier)
-                    applied_buffs.append((target_ids[i], buff_type, multiplier, duration))
-                    messages.append(f"{defender.entity.name}は「{buff_type.value}」のバフを受けた！")
-        
-        # 死亡判定
-        is_target_defeated = [not defender.entity.is_alive() for defender in defenders]
-
-        return BattleActionResult.create_success(
+        return TurnEndResult(
+            actor_id=combat_state.entity_id,
+            participant_type=combat_state.participant_type,
             messages=messages,
-            target_ids=target_ids,
-            damages=damages,
-            healing_amounts=[0] * len(target_ids),  # 攻撃では回復なし
-            is_target_defeated=is_target_defeated,
-            applied_status_effects=applied_status_effects,
-            applied_buffs=applied_buffs,
-            hp_consumed=hp_consumed,
-            mp_consumed=mp_consumed,
-            critical_hits=critical_hits,
-            compatibility_multipliers=compatibility_multipliers,
+            damage=damage,
         )
-    
-    def execute_defend(self, defender: BattleParticipant, action: BattleAction) -> BattleActionResult:
-        """防御を実行"""
-        defender.entity.defend()
-        return BattleActionResult.create_success(
-            messages=[f"{defender.entity.name}は守りの構えをとった！"],
-            target_ids=[defender.entity_id],
-            damages=[0],
-            healing_amounts=[0],
-            is_target_defeated=[False],
-        )
-    
-    def execute_heal(self, healer: BattleParticipant, target: BattleParticipant, action: BattleAction) -> BattleActionResult:
-        """回復を実行"""
+
+    def process_blessing_on_turn_end(self, combat_state: CombatState) -> TurnEndResult:
+        """加護の処理"""
         messages = []
-        # MPチェック
-        if not healer.entity.can_consume_mp(action.mp_cost):
-            return BattleActionResult.create_failure(
-                messages=[f"{healer.entity.name}はMPが足りず、「{action.name}」を実行できないようだ"],
-                failure_reason="insufficient_mp",
-            )
+        healing = 0
 
-        # HP, MP消費
-        if action.mp_cost is not None:
-            healer.entity.consume_mp(action.mp_cost)
-            messages.append(f"{healer.entity.name}は{action.mp_cost}MPを消費した！")
-        if action.hp_cost is not None:
-            healer.entity.take_damage(action.hp_cost)
-            messages.append(f"{healer.entity.name}は{action.hp_cost}HPを消費した！")
+        if combat_state.has_status_effect(StatusEffectType.BLESSING):
+            healing = BLESSING_HEAL_AMOUNT
+            messages.append(f"{combat_state.name}は加護によりHPが{healing}回復した！")
 
-        # 回復
-        heal_amount = action.heal_amount or 0
-        if heal_amount > 0:
-            target.entity.heal(heal_amount)
-            messages.append(f"{target.entity.name}は{heal_amount}HP回復した！")
-
-        return BattleActionResult.create_success(
+        return TurnEndResult(
+            actor_id=combat_state.entity_id,
+            participant_type=combat_state.participant_type,
             messages=messages,
-            target_ids=[target.entity_id],
-            damages=[0],  # 回復ではダメージなし
-            healing_amounts=[heal_amount],
-            is_target_defeated=[False],
-            hp_consumed=action.hp_cost or 0,
-            mp_consumed=action.mp_cost or 0,
+            healing=healing,
+        )
+
+    def process_curse_on_turn_end(self, combat_state: CombatState) -> TurnEndResult:
+        """呪いの処理"""
+        messages = []
+        damage = 0
+
+        if combat_state.has_status_effect(StatusEffectType.CURSE) and combat_state.get_status_effect_remaining_duration(StatusEffectType.CURSE) == 1:
+            damage = combat_state.current_hp.value
+            messages.append(f"{combat_state.name}は呪いに体を蝕まれて死んでしまった...")
+
+        return TurnEndResult(
+            actor_id=combat_state.entity_id,
+            participant_type=combat_state.participant_type,
+            messages=messages,
+            damage=damage,
+        )
+
+
+class BattleLogicService:
+    """戦闘ロジックサービス"""
+    
+    def __init__(self):
+        self.action_validator = ActionValidator()
+        self.resource_consumer = ResourceConsumer()
+        self.hit_resolver = HitResolver()
+        self.damage_calculator = DamageCalculator()
+        self.effect_applier = EffectApplier()
+        self.message_generator = MessageGenerator()
+        self.effect_processor = EffectProcessor()
+        self.target_resolver = TargetResolver()
+    
+    def process_on_turn_start(self, combat_state: CombatState) -> TurnStartResult:
+        """ターン開始時の処理"""
+        results = [
+            self.effect_processor.process_sleep_on_turn_start(combat_state),
+            self.effect_processor.process_paralysis_on_turn_start(combat_state),
+            self.effect_processor.process_confusion_on_turn_start(combat_state),
+            self.effect_processor.process_curse_on_turn_start(combat_state),
+        ]
+
+        return TurnStartResult(
+            actor_id=combat_state.entity_id,
+            participant_type=combat_state.participant_type,
+            can_act=all(result.can_act for result in results),
+            messages=list(chain.from_iterable(result.messages for result in results)),
+            damage=sum(result.damage for result in results),
+            status_effects_to_remove=list(chain.from_iterable(result.status_effects_to_remove for result in results)),
+            buffs_to_remove=list(chain.from_iterable(result.buffs_to_remove for result in results)),
         )
     
-    def calculate_contribution_score(self, damage_dealt: int, healing_done: int, critical_hits: int, status_effects_applied: int) -> int:
-        """貢献度スコアを計算"""
-        base_score = damage_dealt + (healing_done * 2)  # 回復は2倍の価値
-        critical_bonus = critical_hits * 10  # クリティカル1回につき10点
-        status_bonus = status_effects_applied * 5  # 状態異常1つにつき5点
+    def process_on_turn_end(self, combat_state: CombatState) -> TurnEndResult:
+        """ターン終了時の処理"""
+        results = [
+            self.effect_processor.process_poison_on_turn_end(combat_state),
+            self.effect_processor.process_burn_on_turn_end(combat_state),
+            self.effect_processor.process_blessing_on_turn_end(combat_state),
+            self.effect_processor.process_curse_on_turn_end(combat_state),
+        ]
+        return TurnEndResult(
+            actor_id=combat_state.entity_id,
+            participant_type=combat_state.participant_type,
+            messages=list(chain.from_iterable(result.messages for result in results)),
+            damage=sum(result.damage for result in results),
+            healing=sum(result.healing for result in results),
+            status_effects_to_remove=list(chain.from_iterable(result.status_effects_to_remove for result in results)),
+            buffs_to_remove=list(chain.from_iterable(result.buffs_to_remove for result in results)),
+        )
+
+
+
+# # TODO: 副作用がない形で元の実装を修正
+# # 責務の分散
+# class _BattleLogicService:
+#     """戦闘ロジックを調整"""
+
+#     def _check_rate(self, rate: float) -> bool:
+#         """確率チェック"""
+#         return random.random() < rate
+
+#     def _calculate_damage(
+#         self,
+#         attacker: BattleParticipant,
+#         defender: BattleParticipant,
+#         action: BattleAction,
+#         is_critical: bool,
+#         compatibility_multiplier: float,
+#         race_attack_multiplier: float,
+#     ) -> int:
+#         """ダメージ計算"""
+#         damage = attacker.calculate_base_damage(action)
         
-        return base_score + critical_bonus + status_bonus
+#         # 相性チェック
+#         damage *= compatibility_multiplier
+
+#         # 種族特攻チェック
+#         damage *= race_attack_multiplier
+        
+#         # クリティカルダメージチェック
+#         if is_critical:
+#             damage *= CRITICAL_MULTIPLIER
+#             damage = int(damage)
+
+#         # ディフェンスチェック
+#         defence = defender.calculate_defense()
+
+#         # ダメージ軽減
+#         damage = max(damage - defence, 0)
+
+#         return damage
+
+#     def _calculate_contribution_score(
+#         self,
+#         damage_dealt: int,
+#         healing_done: int,
+#         critical_hits: int,
+#         status_effects_applied: int,
+#         buffs_applied: int,
+#     ) -> int:
+#         """貢献度スコアを計算"""
+#         base_score = damage_dealt + (healing_done * 2)  # 回復は2倍の価値
+#         critical_bonus = critical_hits * 10  # クリティカル1回につき10点
+#         status_bonus = status_effects_applied * 5  # 状態異常1つにつき5点
+#         buff_bonus = buffs_applied * 3  # バフ1つにつき3点
+        
+#         return base_score + critical_bonus + status_bonus + buff_bonus
     
-    def get_battle_summary(self, participants: Dict[int, BattleParticipant], battle_statistics: Dict[str, Any]) -> Dict[str, Any]:
-        """戦闘要約を取得"""
-        return {
-            "total_participants": len(participants),
-            "player_count": len([p for p in participants.values() if p.participant_type == ParticipantType.PLAYER]),
-            "monster_count": len([p for p in participants.values() if p.participant_type == ParticipantType.MONSTER]),
-            "battle_statistics": battle_statistics,
-            "participant_stats": {
-                entity_id: self.get_entity_stats(participant)
-                for entity_id, participant in participants.items()
-            }
-        } 
+#     def execute_attack(self, attacker: BattleParticipant, defenders: List[BattleParticipant], action: BattleAction) -> BattleActionResult:
+#         messages = []
+#         hp_consumed = action.hp_cost or 0
+#         mp_consumed = action.mp_cost or 0
+
+#         # ======= 事前チェック可能な例外ケース =======
+#         if not attacker.can_magic_action(action):
+#             raise SilencedException(f"{attacker.entity.name}はMPが不足しているため魔法を使用できない")
+#         if not attacker.can_consume_mp(action):
+#             raise InsufficientMpException(f"{attacker.entity.name}はMPが不足しているため魔法を使用できない")
+#         if not attacker.can_consume_hp(action):
+#             raise InsufficientHpException(f"{attacker.entity.name}はHPが不足しているため魔法を使用できない")
+        
+#         # ======= リソース消費 =======
+#         if mp_consumed > 0:
+#             messages.append(f"{attacker.entity.name}は{mp_consumed}MPを消費した！")
+#         if hp_consumed > 0:
+#             messages.append(f"{attacker.entity.name}は{hp_consumed}HPを消費した！")
+#         actor_state_change = ActorStateChange(actor_id=attacker.entity_id, mp_change=-mp_consumed, hp_change=-hp_consumed)
+
+#         # ======= 命中率チェック =======
+#         if action.hit_rate is not None and not self._check_rate(action.hit_rate):
+#             messages.append(f"{attacker.entity.name}の攻撃が外れた！")
+#             return BattleActionResult.create_failure(
+#                 messages=messages,
+#                 failure_reason="missed",
+#                 actor_state_change=actor_state_change,
+#             )
+        
+#         # ======= 回避率チェック =======
+#         evaded_defenders = []
+#         for defender in defenders:
+#             if self._check_rate(defender.entity.evasion_rate):
+#                 evaded_defenders.append(defender)
+#                 messages.append(f"{defender.entity.name}は攻撃を回避した！")
+        
+#         # ======= 全員が回避した場合は攻撃失敗 =======
+#         if len(evaded_defenders) == len(defenders):
+#             return BattleActionResult.create_failure(
+#                 messages=messages,
+#                 failure_reason="evaded",
+#                 actor_state_change=actor_state_change,
+#             )
+        
+#         # ダメージ,状態異常,バフの計算
+#         critical_hits = []
+#         compatibility_multipliers = []
+#         race_attack_multipliers = []
+#         target_state_changes: List[TargetStateChange] = []
+
+#         for defender in defenders:
+#             # 回避したdefenderはスキップ
+#             if defender in evaded_defenders:
+#                 target_state_changes.append(TargetStateChange(target_id=defender.entity_id))
+#                 continue
+            
+#             is_critical = self._check_rate(attacker.entity.critical_rate)
+#             critical_hits.append(is_critical)
+#             compatibility_multiplier = self._calculate_compatible_multiplier(action, defender)
+#             compatibility_multipliers.append(compatibility_multiplier)
+#             race_attack_multiplier = self._calculate_race_attack_multiplier(action, defender)
+#             race_attack_multipliers.append(race_attack_multiplier)
+
+#             damage = self._calculate_damage(attacker, defender, action, is_critical, compatibility_multiplier, race_attack_multiplier)
+            
+#             status_effects_to_add = []
+#             if action.status_effect_rate:
+#                 for status_effect_type, rate in action.status_effect_rate.items():
+#                     if self._check_rate(rate):
+#                         duration = action.status_effect_duration[status_effect_type]
+#                         status_effects_to_add.append((status_effect_type, duration))
+#                         messages.append(f"{defender.entity.name}は「{status_effect_type.value}」の状態異常を受けた！")
+
+#             buffs_to_add = []
+#             if action.buff_multiplier:
+#                 for buff_type, multiplier in action.buff_multiplier.items():
+#                     duration = action.buff_duration[buff_type]
+#                     buffs_to_add.append((buff_type, multiplier, duration))
+#                     messages.append(f"{defender.entity.name}は「{buff_type.value}」のバフを受けた！")
+            
+#             target_state_changes.append(TargetStateChange(
+#                 target_id=defender.entity_id,
+#                 hp_change=damage,
+#                 mp_change=0,
+#                 status_effects_to_add=status_effects_to_add,
+#                 buffs_to_add=buffs_to_add,
+#             ))
+            
+#             crit_msg = "クリティカル！" if is_critical else ""
+#             messages.append(f"{attacker.entity.name}は{defender.entity.name}に{damage}のダメージを与えた！{crit_msg}")
+
+#         metadata = BattleActionMetadata(
+#             critical_hits=critical_hits,
+#             compatibility_multipliers=compatibility_multipliers,
+#             race_attack_multipliers=race_attack_multipliers,
+#         )
+
+#         return BattleActionResult.create_success(
+#             messages=messages,
+#             actor_state_change=actor_state_change,
+#             target_state_changes=target_state_changes,
+#             metadata=metadata,
+#         )
+
+#     def execute_heal(self, healer: BattleParticipant, targets: List[BattleParticipant], action: BattleAction) -> BattleActionResult:
+#         """回復を実行"""
+#         messages = []
+#         # MPチェック
+#         if not healer.can_consume_mp(action):
+#             raise InsufficientMpException(f"{healer.entity.name}はMPが不足しているため魔法を使用できない")
+
+#         # HP, MP消費
+#         mp_consumed = action.mp_cost or 0
+#         hp_consumed = action.hp_cost or 0
+#         if mp_consumed > 0:
+#             messages.append(f"{healer.entity.name}は{mp_consumed}MPを消費した！")
+#         if hp_consumed > 0:
+#             messages.append(f"{healer.entity.name}は{hp_consumed}HPを消費した！")
+
+#         # 回復
+#         heal_hp_amount = action.heal_hp_amount or 0
+#         heal_mp_amount = action.heal_mp_amount or 0
+#         target_state_changes: List[TargetStateChange] = []
+
+#         for target in targets:
+#             target_state_changes.append(TargetStateChange(target_id=target.entity_id, hp_change=heal_hp_amount, mp_change=heal_mp_amount))
+
+#         actor_state_change = ActorStateChange(actor_id=healer.entity_id, mp_change=-mp_consumed, hp_change=-hp_consumed)
+
+#         return BattleActionResult.create_success(
+#             messages=messages,
+#             actor_state_change=actor_state_change,
+#             target_state_changes=target_state_changes,
+#         )
