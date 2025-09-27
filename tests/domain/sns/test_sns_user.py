@@ -1,6 +1,7 @@
 import pytest
-from src.domain.sns.sns_user import SnsUser
-from src.domain.sns.user_profile import UserProfile
+from src.domain.sns.entity import SnsUser
+from src.domain.sns.value_object import UserProfile, UserId
+from src.domain.sns.exception import UserIdValidationException
 
 
 class TestSnsUser:
@@ -8,7 +9,7 @@ class TestSnsUser:
 
     def test_create_sns_user_success(self):
         """正常なSnsUserの作成テスト"""
-        user_id = 1
+        user_id = UserId(1)
         user_profile = UserProfile("testuser", "テストユーザー", "テストです")
 
         sns_user = SnsUser(user_id, user_profile)
@@ -18,27 +19,27 @@ class TestSnsUser:
 
     def test_invalid_user_id_raises_error(self):
         """無効なユーザーIDの場合のエラーテスト"""
-        with pytest.raises(ValueError, match="user_id must be positive"):
-            SnsUser(0, UserProfile("testuser", "テストユーザー", "テストです"))
+        with pytest.raises(UserIdValidationException):
+            SnsUser(UserId(0), UserProfile("testuser", "テストユーザー", "テストです"))
 
-        with pytest.raises(ValueError, match="user_id must be positive"):
-            SnsUser(-1, UserProfile("testuser", "テストユーザー", "テストです"))
+        with pytest.raises(UserIdValidationException):
+            SnsUser(UserId(-1), UserProfile("testuser", "テストユーザー", "テストです"))
 
     def test_boundary_user_id_values(self):
         """境界値のユーザーIDテスト"""
         # 最小値（1）
         user_profile = UserProfile("testuser", "テストユーザー", "テストです")
-        sns_user = SnsUser(1, user_profile)
-        assert sns_user.user_id == 1
+        sns_user = SnsUser(UserId(1), user_profile)
+        assert sns_user.user_id == UserId(1)
 
         # 大きな値
         large_user_id = 999999
-        sns_user = SnsUser(large_user_id, user_profile)
-        assert sns_user.user_id == large_user_id
+        sns_user = SnsUser(UserId(large_user_id), user_profile)
+        assert sns_user.user_id == UserId(large_user_id)
 
     def test_update_user_profile_success(self):
         """プロフィール更新のテスト"""
-        user_id = 1
+        user_id = UserId(1)
         original_profile = UserProfile("testuser", "元の表示名", "元のbio")
         sns_user = SnsUser(user_id, original_profile)
 
@@ -53,7 +54,7 @@ class TestSnsUser:
 
     def test_user_profile_immutability_after_creation(self):
         """作成後のプロフィールの不変性テスト"""
-        user_id = 1
+        user_id = UserId(1)
         user_profile = UserProfile("testuser", "表示名", "bio")
         sns_user = SnsUser(user_id, user_profile)
 
@@ -62,7 +63,7 @@ class TestSnsUser:
 
     def test_properties_are_readonly(self):
         """プロパティが読み取り専用であることを確認"""
-        user_id = 1
+        user_id = UserId(1)
         user_profile = UserProfile("testuser", "表示名", "bio")
         sns_user = SnsUser(user_id, user_profile)
 
@@ -72,7 +73,7 @@ class TestSnsUser:
 
     def test_different_instances_with_same_data(self):
         """同じデータを持つ異なるインスタンスのテスト"""
-        user_id = 1
+        user_id = UserId(1)
         user_profile = UserProfile("testuser", "表示名", "bio")
 
         sns_user1 = SnsUser(user_id, user_profile)
@@ -96,7 +97,7 @@ class TestSnsUser:
 
     def test_string_representation(self):
         """文字列表現のテスト"""
-        user_id = 1
+        user_id = UserId(1)
         user_profile = UserProfile("testuser", "表示名", "bio")
         sns_user = SnsUser(user_id, user_profile)
 

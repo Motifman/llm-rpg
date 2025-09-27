@@ -1,5 +1,10 @@
 import pytest
-from src.domain.sns.user_profile import UserProfile
+from src.domain.sns.value_object import UserProfile
+from src.domain.sns.exception import (
+    UserNameValidationException,
+    DisplayNameValidationException,
+    BioValidationException,
+)
 
 
 class TestUserProfile:
@@ -19,30 +24,30 @@ class TestUserProfile:
 
     def test_user_name_too_short_raises_error(self):
         """ユーザー名が短すぎる場合のエラーテスト"""
-        with pytest.raises(ValueError, match="ユーザー名は3-20文字である必要があります"):
+        with pytest.raises(UserNameValidationException):
             UserProfile("ab", "表示名", "bio")
 
     def test_user_name_too_long_raises_error(self):
         """ユーザー名が長すぎる場合のエラーテスト"""
         long_user_name = "a" * 21  # 21文字
-        with pytest.raises(ValueError, match="ユーザー名は3-20文字である必要があります"):
+        with pytest.raises(UserNameValidationException):
             UserProfile(long_user_name, "表示名", "bio")
 
     def test_display_name_too_short_raises_error(self):
         """表示名が短すぎる場合のエラーテスト"""
-        with pytest.raises(ValueError, match="表示名は1-30文字である必要があります"):
+        with pytest.raises(DisplayNameValidationException):
             UserProfile("testuser", "", "bio")
 
     def test_display_name_too_long_raises_error(self):
         """表示名が長すぎる場合のエラーテスト"""
         long_display_name = "a" * 31  # 31文字
-        with pytest.raises(ValueError, match="表示名は1-30文字である必要があります"):
+        with pytest.raises(DisplayNameValidationException):
             UserProfile("testuser", long_display_name, "bio")
 
     def test_bio_too_long_raises_error(self):
         """Bioが長すぎる場合のエラーテスト"""
         long_bio = "a" * 201  # 201文字
-        with pytest.raises(ValueError, match="Bioは200文字以内である必要があります"):
+        with pytest.raises(BioValidationException):
             UserProfile("testuser", "表示名", long_bio)
 
     def test_boundary_user_name_length(self):

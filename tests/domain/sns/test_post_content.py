@@ -1,7 +1,8 @@
 import pytest
 from datetime import datetime
-from src.domain.sns.post_content import PostContent
-from src.domain.sns.sns_enum import PostVisibility
+from src.domain.sns.value_object import PostContent
+from src.domain.sns.enum import PostVisibility
+from src.domain.sns.exception import ContentLengthValidationException, HashtagCountValidationException, VisibilityValidationException
 
 
 class TestPostContent:
@@ -33,19 +34,19 @@ class TestPostContent:
         """コンテンツが長すぎる場合のエラーテスト"""
         long_content = "a" * 281  # 281文字
 
-        with pytest.raises(ValueError, match="content must be less than 280 characters"):
+        with pytest.raises(ContentLengthValidationException, match="コンテンツは280文字以内でなければなりません"):
             PostContent(long_content)
 
     def test_hashtags_too_many_raises_error(self):
         """ハッシュタグが多すぎる場合のエラーテスト"""
         hashtags = [f"#tag{i}" for i in range(11)]  # 11個
 
-        with pytest.raises(ValueError, match="hashtags must be less than 10"):
+        with pytest.raises(HashtagCountValidationException, match="ハッシュタグは10個以内でなければなりません"):
             PostContent("content", hashtags)
 
     def test_invalid_visibility_raises_error(self):
         """無効な可視性のエラーテスト"""
-        with pytest.raises(ValueError, match="invalid visibility"):
+        with pytest.raises(VisibilityValidationException, match="可視性は有効な値である必要があります"):
             PostContent("content", [], "invalid_visibility")
 
     def test_immutability_after_creation(self):
