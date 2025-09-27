@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-SNSプロフィール管理システムのデモ
+SNSシステム総合デモ
 
 このデモでは、UserQueryServiceを使ってプロフィール確認機能を実装し、
 UserCommandServiceを使ってユーザーの関係を更新したり、新しいユーザーを追加したりする機能を実装しています。
+さらに、PostQueryServiceを使ってポストの表示機能を実装しています。
 サンプルデータの中の一人のユーザーとしてログインしている状態をシミュレーションします。
 
 機能:
@@ -23,6 +24,13 @@ UserCommandServiceを使ってユーザーの関係を更新したり、新し�
 - ユーザーをフォロー/フォロー解除
 - ユーザーをブロック/ブロック解除
 - ユーザーを購読/購読解除
+
+【ポスト表示機能 (PostQueryService)】
+- 自分のタイムライン表示
+- 他のユーザーのタイムライン表示
+- ホームタイムライン表示（フォロー中のユーザーのポスト）
+- 個別のポスト表示
+- 自分のプライベートポスト表示
 """
 
 import sys
@@ -34,10 +42,12 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 
 from src.domain.sns.value_object import UserId
 from src.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
+from src.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
 from src.infrastructure.events.event_publisher_impl import InMemoryEventPublisher
 from src.application.sns.services.user_query_service import UserQueryService
 from src.application.sns.services.user_command_service import UserCommandService
-from src.application.sns.contracts.dtos import UserProfileDto
+from src.application.sns.services.post_query_service import PostQueryService
+from src.application.sns.contracts.dtos import UserProfileDto, PostDto
 from src.application.sns.contracts.commands import (
     CreateUserCommand,
     UpdateUserProfileCommand,
@@ -49,15 +59,18 @@ from src.application.sns.contracts.commands import (
     UnsubscribeUserCommand
 )
 from src.application.sns.exceptions import UserQueryException, UserCommandException
+from src.application.sns.exceptions.query.post_query_exception import PostQueryException
 
 
 class SnsDemo:
-    """SNSプロフィール確認システムのデモ"""
+    """SNSシステム総合デモ"""
 
     def __init__(self):
         """初期化"""
         self.repository = InMemorySnsUserRepository()
+        self.post_repository = InMemoryPostRepository()
         self.user_query_service = UserQueryService(self.repository)
+        self.post_query_service = PostQueryService(self.post_repository, self.repository)
         self.event_publisher = InMemoryEventPublisher()
         self.user_command_service = UserCommandService(self.repository, self.event_publisher)
 
@@ -65,8 +78,15 @@ class SnsDemo:
         self.current_user_id: int = 1
         self.current_user_name: str = "勇者"
 
-        # メニューオプション
-        self.menu_options = {
+        # メインメニューオプション
+        self.main_menu_options = {
+            '1': ('ユーザー関係の表示・更新', self.show_user_relationships_menu),
+            '2': ('ポストの表示', self.show_posts_menu),
+            '0': ('終了', self.exit_demo),
+        }
+
+        # ユーザー関係サブメニュー
+        self.user_menu_options = {
             '1': ('自分のプロフィール表示', self.show_my_profile),
             '2': ('他のユーザーのプロフィール表示', self.show_other_user_profile),
             '3': ('フォロー中ユーザーの一覧', self.show_followees),
@@ -84,20 +104,30 @@ class SnsDemo:
             'F': ('ユーザーのブロックを解除', self.unblock_user),
             'G': ('ユーザーを購読', self.subscribe_user),
             'H': ('ユーザーの購読を解除', self.unsubscribe_user),
-            '0': ('終了', self.exit_demo),
+            '0': ('メインメニューに戻る', self.back_to_main_menu),
+        }
+
+        # ポスト表示サブメニュー
+        self.post_menu_options = {
+            '1': ('自分のタイムライン表示', self.show_my_timeline),
+            '2': ('他のユーザーのタイムライン表示', self.show_user_timeline),
+            '3': ('ホームタイムライン表示', self.show_home_timeline),
+            '4': ('個別のポスト表示', self.show_single_post),
+            '5': ('自分のプライベートポスト表示', self.show_private_posts),
+            '0': ('メインメニューに戻る', self.back_to_main_menu),
         }
 
     def display_header(self):
         """ヘッダーを表示"""
         print("=" * 60)
-        print("🔍 SNSプロフィール管理システム")
+        print("🔍 SNSシステム総合デモ")
         print(f"👤 現在のログイン: {self.current_user_name} (ID: {self.current_user_id})")
         print("=" * 60)
 
-    def display_menu(self):
-        """メインメニューを表示"""
-        print("\n📋 メニュー:")
-        for key, (description, _) in self.menu_options.items():
+    def display_menu(self, menu_options, menu_title="メニュー"):
+        """メニューを表示"""
+        print(f"\n📋 {menu_title}:")
+        for key, (description, _) in menu_options.items():
             if key == '0':
                 print(f"  {key}. {description}")
             elif key.isdigit():
@@ -105,6 +135,52 @@ class SnsDemo:
             else:
                 print(f"  {key}. {description}")
         print()
+
+    def show_user_relationships_menu(self):
+        """ユーザー関係の表示・更新サブメニューを表示"""
+        while True:
+            self.display_header()
+            self.display_menu(self.user_menu_options, "ユーザー関係メニュー")
+
+            choice = self.get_user_input("ユーザー関係メニューを選択してください: ", list(self.user_menu_options.keys()))
+
+            # 選択された機能を呼び出し
+            action_name, action_func = self.user_menu_options[choice]
+            print(f"\n🔄 {action_name}を実行中...")
+
+            action_func()
+
+            # メインメニューに戻る場合は終了
+            if choice == '0':
+                break
+
+            # 次の操作を促す
+            input("\n⏎  Enterキーを押してユーザー関係メニューに戻る...")
+
+    def show_posts_menu(self):
+        """ポスト表示サブメニューを表示"""
+        while True:
+            self.display_header()
+            self.display_menu(self.post_menu_options, "ポスト表示メニュー")
+
+            choice = self.get_user_input("ポスト表示メニューを選択してください: ", list(self.post_menu_options.keys()))
+
+            # 選択された機能を呼び出し
+            action_name, action_func = self.post_menu_options[choice]
+            print(f"\n🔄 {action_name}を実行中...")
+
+            action_func()
+
+            # メインメニューに戻る場合は終了
+            if choice == '0':
+                break
+
+            # 次の操作を促す
+            input("\n⏎  Enterキーを押してポスト表示メニューに戻る...")
+
+    def back_to_main_menu(self):
+        """メインメニューに戻る（何もしない）"""
+        pass
 
     def get_user_input(self, prompt: str, valid_options: Optional[list] = None) -> str:
         """ユーザー入力取得"""
@@ -312,6 +388,58 @@ class SnsDemo:
                 print("     購読中")
             if profile.is_subscribed_by:
                 print("     購読されています")
+
+    def display_post_info(self, post: PostDto):
+        """ポスト情報を表示"""
+        visibility_emoji = {
+            "public": "🌐",
+            "followers_only": "👥",
+            "private": "🔒"
+        }.get(post.visibility, "❓")
+
+        print(f"📝 ポストID: {post.post_id}")
+        print(f"👤 投稿者: {post.author_display_name} (@{post.author_user_name})")
+        print(f"📅 投稿日時: {post.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"👁️ 可視性: {visibility_emoji} {post.visibility}")
+        print(f"💬 内容: {post.content}")
+
+        if post.hashtags:
+            hashtags_str = " ".join(f"#{tag}" for tag in post.hashtags)
+            print(f"🏷️ ハッシュタグ: {hashtags_str}")
+
+        print(f"👍 いいね数: {post.like_count}")
+        print(f"💬 リプライ数: {post.reply_count}")
+
+        # 自分の反応状態
+        reactions = []
+        if post.is_liked_by_viewer:
+            reactions.append("いいね済み")
+        if post.is_replied_by_viewer:
+            reactions.append("リプライ済み")
+        if reactions:
+            print(f"✨ 自分の反応: {'、'.join(reactions)}")
+
+        if post.mentioned_users:
+            mentions_str = " ".join(f"@{user}" for user in post.mentioned_users)
+            print(f"📢 メンション: {mentions_str}")
+
+        if post.is_deleted:
+            print("🗑️ このポストは削除されています")
+
+        print("-" * 50)
+
+    def display_post_list(self, posts: list[PostDto], title: str):
+        """ポスト一覧を表示"""
+        if not posts:
+            print(f"📝 {title}は存在しません。")
+            return
+
+        print(f"📝 {title} ({len(posts)}件):")
+        print("=" * 60)
+
+        for i, post in enumerate(posts, 1):
+            print(f"\n{i}. ", end="")
+            self.display_post_info(post)
 
     def display_profile_list(self, profiles: list[UserProfileDto], title: str):
         """プロフィール一覧を表示"""
@@ -638,34 +766,138 @@ class SnsDemo:
         except Exception as e:
             print(f"❌ 予期しないエラー: {str(e)}")
 
+    def show_my_timeline(self):
+        """自分のタイムライン表示"""
+        print(f"\n📝 {self.current_user_name}のタイムライン:")
+        print("-" * 40)
+
+        try:
+            posts = self.post_query_service.get_user_timeline(self.current_user_id, self.current_user_id)
+            self.display_post_list(posts, f"{self.current_user_name}のタイムライン")
+
+        except PostQueryException as e:
+            print(f"❌ エラー: {e.message}")
+        except Exception as e:
+            print(f"❌ 予期しないエラー: {str(e)}")
+
+    def show_user_timeline(self):
+        """他のユーザーのタイムライン表示"""
+        print("\n📝 他のユーザーのタイムライン:")
+        print("-" * 40)
+
+        # 利用可能なユーザーを表示
+        all_users = self.repository.find_all()
+        print("利用可能なユーザー:")
+        for user in all_users:
+            profile_info = user.get_user_profile_info()
+            print(f"  ID: {user.user_id}, 名前: {profile_info['user_name']}, 表示名: {profile_info['display_name']}")
+
+        try:
+            target_id_str = self.get_user_input("タイムラインを表示するユーザーIDを入力: ")
+            target_id = int(target_id_str)
+
+            if target_id == self.current_user_id:
+                print("⚠️  自分のタイムラインはメニュー1から表示してください。")
+                return
+
+            posts = self.post_query_service.get_user_timeline(target_id, self.current_user_id)
+            user_name = "不明なユーザー"
+            # ユーザー名を取得
+            user = self.repository.find_by_id(UserId(target_id))
+            if user:
+                user_name = user.get_user_profile_info()['display_name']
+
+            self.display_post_list(posts, f"{user_name}のタイムライン")
+
+        except ValueError:
+            print("❌ 数値を入力してください。")
+        except PostQueryException as e:
+            print(f"❌ エラー: {e.message}")
+        except Exception as e:
+            print(f"❌ 予期しないエラー: {str(e)}")
+
+    def show_home_timeline(self):
+        """ホームタイムライン表示（フォロー中のユーザーのポスト）"""
+        print(f"\n🏠 {self.current_user_name}のホームタイムライン:")
+        print("-" * 40)
+
+        try:
+            posts = self.post_query_service.get_home_timeline(self.current_user_id)
+            self.display_post_list(posts, f"{self.current_user_name}のホームタイムライン")
+
+        except PostQueryException as e:
+            print(f"❌ エラー: {e.message}")
+        except Exception as e:
+            print(f"❌ 予期しないエラー: {str(e)}")
+
+    def show_single_post(self):
+        """個別のポスト表示"""
+        print("\n📝 個別のポスト表示:")
+        print("-" * 40)
+
+        try:
+            post_id_str = self.get_user_input("表示するポストIDを入力: ")
+            post_id = int(post_id_str)
+
+            post = self.post_query_service.get_post(post_id, self.current_user_id)
+
+            if post:
+                print(f"📝 ポスト詳細:")
+                print("=" * 60)
+                self.display_post_info(post)
+            else:
+                print("❌ 指定されたポストが見つかりません。")
+
+        except ValueError:
+            print("❌ 数値を入力してください。")
+        except PostQueryException as e:
+            print(f"❌ エラー: {e.message}")
+        except Exception as e:
+            print(f"❌ 予期しないエラー: {str(e)}")
+
+    def show_private_posts(self):
+        """自分のプライベートポスト表示"""
+        print(f"\n🔒 {self.current_user_name}のプライベートポスト:")
+        print("-" * 40)
+
+        try:
+            posts = self.post_query_service.get_private_posts(self.current_user_id)
+            self.display_post_list(posts, f"{self.current_user_name}のプライベートポスト")
+
+        except PostQueryException as e:
+            print(f"❌ エラー: {e.message}")
+        except Exception as e:
+            print(f"❌ 予期しないエラー: {str(e)}")
+
     def exit_demo(self):
         """デモ終了"""
-        print("\n👋 SNSプロフィール管理システムを終了します。")
+        print("\n👋 SNSシステム総合デモを終了します。")
         sys.exit(0)
 
     def run(self):
         """メインメソッド"""
-        print("🌟 SNSプロフィール管理システム デモ")
+        print("🌟 SNSシステム総合デモ")
         print("このデモでは、UserQueryServiceとUserCommandServiceを使って")
         print("プロフィールの確認とユーザー関係の管理機能を実装しています。")
+        print("さらに、PostQueryServiceを使ってポストの表示機能を実装しています。")
         print("サンプルデータの中の一人のユーザーとしてログインしている状態をシミュレーションします。\n")
 
         try:
             while True:
                 self.display_header()
-                self.display_menu()
+                self.display_menu(self.main_menu_options, "メインメニュー")
 
-                choice = self.get_user_input("メニューを選択してください: ", list(self.menu_options.keys()))
+                choice = self.get_user_input("メニューを選択してください: ", list(self.main_menu_options.keys()))
 
                 # 選択された機能を呼び出し
-                action_name, action_func = self.menu_options[choice]
+                action_name, action_func = self.main_menu_options[choice]
                 print(f"\n🔄 {action_name}を実行中...")
 
                 action_func()
 
-                # 次の操作を促す
+                # 次の操作を促す（終了以外）
                 if choice != '0':
-                    input("\n⏎  Enterキーを押してメニューに戻る...")
+                    input("\n⏎  Enterキーを押してメインメニューに戻る...")
 
         except KeyboardInterrupt:
             self.exit_demo()
