@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Set, Union
+from datetime import datetime
 from src.domain.common.aggregate_root import AggregateRoot
 from src.domain.sns.value_object import PostContent, Like, Mention, PostId, ReplyId, UserId
 from src.domain.sns.event import SnsContentLikedEvent, SnsContentDeletedEvent, SnsContentMentionedEvent
@@ -19,6 +20,7 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
         deleted: bool = False,
         parent_post_id: Optional[PostId] = None,
         parent_reply_id: Optional[ReplyId] = None,
+        created_at: Optional[datetime] = None,
     ):
         super().__init__()
         self._content_id = content_id
@@ -29,6 +31,7 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
         self._deleted = deleted
         self._parent_post_id = parent_post_id
         self._parent_reply_id = parent_reply_id
+        self._created_at = created_at if created_at is not None else datetime.now()
 
     @classmethod
     def create_from_db(
@@ -38,19 +41,18 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
         content: PostContent,
         likes: Set[Like],
         mentions: Set[Mention],
+        reply_ids: Set[ReplyId] = None,  # PostAggregate用（ReplyAggregateでは無視）
         deleted: bool = False,
         parent_post_id: Optional[PostId] = None,
-        parent_reply_id: Optional[ReplyId] = None
+        parent_reply_id: Optional[ReplyId] = None,
+        created_at: Optional[datetime] = None
     ):
         """データベースからの復元用ファクトリメソッド"""
-        # ReplyAggregateの場合、content_idの前にparent_post_idとparent_reply_idが必要
-        if isinstance(content_id, ReplyId):
-            return cls(content_id, parent_post_id, parent_reply_id, author_user_id, content, likes, mentions, deleted)
-        elif isinstance(content_id, PostId):
-            return cls(content_id, author_user_id, content, likes, mentions, deleted, parent_post_id, parent_reply_id)
-        else:
-            # デフォルトはPostAggregateの形式
-            return cls(content_id, author_user_id, content, likes, mentions, deleted, parent_post_id, parent_reply_id)
+        # 全てのケースでcreated_atを渡す
+        # reply_idsがNoneの場合は空のセットを使用（ReplyAggregate用）
+        if reply_ids is None:
+            reply_ids = set()
+        return cls(content_id, author_user_id, content, likes, mentions, reply_ids, deleted, parent_post_id, parent_reply_id, created_at)
 
     @property
     def content_id(self) -> Union[PostId, ReplyId]:
@@ -91,6 +93,11 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
     def parent_reply_id(self) -> Optional[ReplyId]:
         """親リプライID（リプライの場合）"""
         return self._parent_reply_id
+
+    @property
+    def created_at(self) -> datetime:
+        """作成日時"""
+        return self._created_at
 
     def like(self, user_id: UserId, content_type: str) -> None:
         """いいね機能（共通実装）"""
@@ -188,7 +195,12 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
                 aggregate_type=aggregate_type,
                 target_id=self._content_id,
                 mentioned_by_user_id=self._author_user_id,
-                mentioned_user_names=mentioned_users,
-                content_type=content_type
+            mentioned_user_names=mentioned_users,
+            content_type=content_type
             )
             self.add_event(event)
+
+    def can_be_viewed_by(self, viewer_user: "UserAggregate", author_user: "UserAggregate") -> bool:
+        """閲覧権限チェック"""
+        from src.domain.sns.service.post_visibility_domain_service import PostVisibilityDomainService
+        return PostVisibilityDomainService.can_view_post(self, viewer_user, author_user)

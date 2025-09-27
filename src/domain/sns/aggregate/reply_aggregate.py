@@ -1,4 +1,5 @@
 from typing import Set, Optional
+from datetime import datetime
 from src.domain.sns.aggregate.base_sns_aggregate import BaseSnsContentAggregate
 from src.domain.sns.value_object import PostContent, Like, Mention, PostId, ReplyId, UserId
 from src.domain.sns.event import SnsContentCreatedEvent
@@ -11,21 +12,22 @@ class ReplyAggregate(BaseSnsContentAggregate):
     def __init__(
         self,
         reply_id: ReplyId,
-        parent_post_id: Optional[PostId],
-        parent_reply_id: Optional[ReplyId],
         author_user_id: UserId,
         content: PostContent,
         likes: Set[Like],
         mentions: Set[Mention],
         deleted: bool = False,
+        parent_post_id: Optional[PostId] = None,
+        parent_reply_id: Optional[ReplyId] = None,
+        created_at: Optional[datetime] = None,
     ):
         # リプライは必ず親を持つことを保証
         if parent_post_id is None and parent_reply_id is None:
             raise InvalidParentReferenceException("リプライは親ポストまたは親リプライのどちらかを持つ必要があります。")
         if parent_post_id is not None and parent_reply_id is not None:
-            raise InvalidParentReferenceException()
+            raise InvalidParentReferenceException("親ポストIDと親リプライIDを同時に設定することはできません。")
 
-        super().__init__(reply_id, author_user_id, content, likes, mentions, deleted, parent_post_id, parent_reply_id)
+        super().__init__(reply_id, author_user_id, content, likes, mentions, deleted, parent_post_id, parent_reply_id, created_at)
 
     @classmethod
     def create_from_db(
@@ -37,9 +39,10 @@ class ReplyAggregate(BaseSnsContentAggregate):
         content: PostContent,
         likes: Set[Like],
         mentions: Set[Mention],
-        deleted: bool = False
+        deleted: bool = False,
+        created_at: Optional[datetime] = None
     ) -> "ReplyAggregate":
-        return super().create_from_db(reply_id, author_user_id, content, likes, mentions, deleted, parent_post_id, parent_reply_id)
+        return cls(reply_id, author_user_id, content, likes, mentions, deleted, parent_post_id, parent_reply_id, created_at)
 
     @classmethod
     def create(
@@ -53,13 +56,7 @@ class ReplyAggregate(BaseSnsContentAggregate):
         """リプライを作成"""
         mentions = cls._create_mentions_from_content_static(reply_id, content)
         likes = set()
-        reply = cls(reply_id, parent_post_id, parent_reply_id, author_user_id, content, likes, mentions)
-
-        # リプライ固有のバリデーション
-        if parent_post_id is None and parent_reply_id is None:
-            raise InvalidParentReferenceException("リプライは親ポストまたは親リプライのどちらかを持つ必要があります。")
-        if parent_post_id is not None and parent_reply_id is not None:
-            raise InvalidParentReferenceException()
+        reply = cls(reply_id, author_user_id, content, likes, mentions, deleted=False, parent_post_id=parent_post_id, parent_reply_id=parent_reply_id)
 
         # 作成イベントを発行
         event = SnsContentCreatedEvent.create(
