@@ -7,6 +7,7 @@ from src.domain.sns.exception.base_exceptions import UserProfileException
 
 class UserNotFoundException(UserProfileException):
     """ユーザーが見つからない場合の例外"""
+    error_code = "USER_NOT_FOUND"
 
     def __init__(self, user_id: int, message: str = None):
         self.user_id = user_id
@@ -17,6 +18,7 @@ class UserNotFoundException(UserProfileException):
 
 class UserIdValidationException(UserProfileException):
     """ユーザーIDバリデーション例外"""
+    error_code = "USER_ID_VALIDATION_ERROR"
 
     def __init__(self, user_id: int, message: str = None):
         self.user_id = user_id
@@ -27,6 +29,7 @@ class UserIdValidationException(UserProfileException):
 
 class UserNameValidationException(UserProfileException):
     """ユーザー名バリデーション例外"""
+    error_code = "USER_NAME_VALIDATION_ERROR"
 
     def __init__(self, user_name: str, message: str = None):
         self.user_name = user_name
@@ -37,6 +40,7 @@ class UserNameValidationException(UserProfileException):
 
 class DisplayNameValidationException(UserProfileException):
     """表示名バリデーション例外"""
+    error_code = "DISPLAY_NAME_VALIDATION_ERROR"
 
     def __init__(self, display_name: str, message: str = None):
         self.display_name = display_name
@@ -47,6 +51,7 @@ class DisplayNameValidationException(UserProfileException):
 
 class BioValidationException(UserProfileException):
     """Bioバリデーション例外"""
+    error_code = "BIO_VALIDATION_ERROR"
 
     def __init__(self, bio: str, message: str = None):
         self.bio = bio
@@ -57,6 +62,7 @@ class BioValidationException(UserProfileException):
 
 class ProfileUpdateValidationException(UserProfileException):
     """プロフィール更新時のバリデーション例外"""
+    error_code = "PROFILE_UPDATE_VALIDATION_ERROR"
 
     def __init__(self, message: str = None):
         if message is None:

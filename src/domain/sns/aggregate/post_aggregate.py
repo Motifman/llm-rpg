@@ -1,4 +1,5 @@
 from typing import Set, Optional
+from datetime import datetime
 from src.domain.sns.aggregate.base_sns_aggregate import BaseSnsContentAggregate
 from src.domain.sns.value_object import Like, PostContent, Mention, PostId, ReplyId, UserId
 from src.domain.sns.event import SnsContentCreatedEvent
@@ -15,15 +16,18 @@ class PostAggregate(BaseSnsContentAggregate):
         post_content: PostContent,
         likes: Set[Like],
         mentions: Set[Mention],
+        reply_ids: Set[ReplyId],  # リプライIDの一覧
         deleted: bool = False,
         parent_post_id: Optional[PostId] = None,
         parent_reply_id: Optional[ReplyId] = None,
+        created_at: Optional[datetime] = None,
     ):
         # ポストは親を持つことができない
         if parent_post_id is not None or parent_reply_id is not None:
             raise InvalidParentReferenceException("ポストは親ポストまたは親リプライを持つことはできません。")
 
-        super().__init__(post_id, author_user_id, post_content, likes, mentions, deleted, parent_post_id, parent_reply_id)
+        super().__init__(post_id, author_user_id, post_content, likes, mentions, deleted, parent_post_id, parent_reply_id, created_at)
+        self._reply_ids = reply_ids.copy()
 
     @classmethod
     def create_from_db(
@@ -33,16 +37,19 @@ class PostAggregate(BaseSnsContentAggregate):
         post_content: PostContent,
         likes: Set[Like],
         mentions: Set[Mention],
-        deleted: bool = False
+        reply_ids: Set[ReplyId],  # リプライIDの一覧
+        deleted: bool = False,
+        created_at: Optional[datetime] = None
     ) -> "PostAggregate":
-        return super().create_from_db(post_id, author_user_id, post_content, likes, mentions, deleted)
+        return super().create_from_db(post_id, author_user_id, post_content, likes, mentions, reply_ids, deleted, None, None, created_at)
 
     @classmethod
     def create(cls, post_id: PostId, author_user_id: UserId, post_content: PostContent) -> "PostAggregate":
         """投稿を作成"""
         mentions = cls._create_mentions_from_content_static(post_id, post_content)
         likes = set()
-        post = cls(post_id, author_user_id, post_content, likes, mentions)
+        reply_ids = set()  # 新しいポストなのでリプライは空
+        post = cls(post_id, author_user_id, post_content, likes, mentions, reply_ids)
 
         # ポスト固有のバリデーション
         if post._parent_post_id is not None or post._parent_reply_id is not None:
@@ -104,3 +111,41 @@ class PostAggregate(BaseSnsContentAggregate):
     def mentioned_users(self) -> Set[str]:
         """メンションされたユーザー一覧を取得"""
         return self.get_mentioned_users()
+
+    @property
+    def reply_ids(self) -> Set[ReplyId]:
+        """リプライIDの一覧を取得"""
+        return self._reply_ids.copy()
+
+    def get_reply_count(self) -> int:
+        """リプライ数を取得"""
+        return len(self._reply_ids)
+
+    def get_like_count(self) -> int:
+        """いいね数を取得"""
+        return len(self.likes)
+
+    def add_reply(self, reply_id: ReplyId) -> None:
+        """リプライを追加"""
+        self._reply_ids.add(reply_id)
+
+    def remove_reply(self, reply_id: ReplyId) -> None:
+        """リプライを削除"""
+        self._reply_ids.discard(reply_id)
+
+    def get_display_info(self, viewer_user_id: UserId) -> dict:
+        """表示用の情報をまとめて取得"""
+        return {
+            "post_id": self.post_id.value,
+            "author_user_id": self.author_user_id.value,
+            "content": self.post_content.content,
+            "hashtags": list(self.post_content.hashtags),
+            "visibility": self.post_content.visibility.value,
+            "created_at": self.created_at,
+            "like_count": self.get_like_count(),
+            "reply_count": self.get_reply_count(),
+            "is_liked_by_viewer": self.is_liked_by_user(viewer_user_id),
+            "is_replied_by_viewer": False,  # ポストには直接リプライできない
+            "mentioned_users": list(self.mentioned_users()),
+            "is_deleted": self.deleted
+        }

@@ -10,7 +10,7 @@ DDDの観点では、ドメイン層で汎用的なValueErrorを使用せず、
 
 class SnsDomainException(Exception):
     """SNSドメインの基底例外"""
-    pass
+    error_code: str = "DOMAIN_ERROR"
 
 
 class UserProfileException(SnsDomainException):

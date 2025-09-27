@@ -44,23 +44,13 @@ class PostRepository(Repository[PostAggregate]):
         pass
 
     @abstractmethod
+    def find_posts_by_hashtag(self, hashtag: str, limit: int = 20) -> List[PostAggregate]:
+        """指定ハッシュタグのポストを取得"""
+        pass
+
+    @abstractmethod
     def get_like_count(self, post_id: PostId) -> int:
         """特定のポストのいいね数を取得"""
-        pass
-
-    @abstractmethod
-    def find_posts_with_replies(self, post_ids: List[PostId]) -> Dict[PostId, List[ReplyId]]:
-        """複数のポストとそれらのリプライID一覧を取得"""
-        pass
-
-    @abstractmethod
-    def find_posts_excluding_blocked_users(
-        self,
-        user_id: UserId,
-        blocked_user_ids: List[UserId],
-        limit: int = 20
-    ) -> List[PostAggregate]:
-        """ブロックしたユーザーのポストを除外した一覧を取得"""
         pass
 
     @abstractmethod
