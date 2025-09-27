@@ -407,8 +407,9 @@ class TestBaseSnsContentAggregate:
         mentions = set()
         deleted = False
 
+        reply_ids = set()
         post = PostAggregate.create_from_db(
-            post_id, author_user_id, content, likes, mentions, deleted
+            post_id, author_user_id, content, likes, mentions, reply_ids, deleted
         )
 
         assert post.content_id == post_id
