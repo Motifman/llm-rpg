@@ -105,7 +105,7 @@ class TestUserCommandService:
             self.service.create_user(command)
 
         assert "ユーザー名" in str(exc_info.value)
-        assert exc_info.value.error_code == "USERNAMEVALIDATIONEXCEPTION"
+        assert exc_info.value.error_code == "USER_NAME_VALIDATION_ERROR"
 
     def test_create_user_with_long_username_raises_exception(self):
         """create_user - ユーザー名が長すぎる場合の異常系テスト"""
@@ -122,7 +122,7 @@ class TestUserCommandService:
             self.service.create_user(command)
 
         assert "ユーザー名" in str(exc_info.value)
-        assert exc_info.value.error_code == "USERNAMEVALIDATIONEXCEPTION"
+        assert exc_info.value.error_code == "USER_NAME_VALIDATION_ERROR"
 
     # update_user_profile テスト
     def test_update_user_profile_success(self):
@@ -199,7 +199,7 @@ class TestUserCommandService:
             self.service.update_user_profile(command)
 
         assert "表示名" in str(exc_info.value)
-        assert exc_info.value.error_code == "DISPLAYNAMEVALIDATIONEXCEPTION"
+        assert exc_info.value.error_code == "DISPLAY_NAME_VALIDATION_ERROR"
 
     # follow_user テスト
     def test_follow_user_success(self):
@@ -240,7 +240,7 @@ class TestUserCommandService:
         with pytest.raises(UserCommandException) as exc_info:
             self.service.follow_user(command)
 
-        assert exc_info.value.error_code == "SELFFOLLOWEXCEPTION"
+        assert exc_info.value.error_code == "SELF_FOLLOW_ERROR"
         assert "自分自身をフォロー" in str(exc_info.value)
 
     def test_follow_user_not_found_follower_raises_exception(self):
@@ -274,7 +274,7 @@ class TestUserCommandService:
         with pytest.raises(UserCommandException) as exc_info:
             self.service.follow_user(command)
 
-        assert exc_info.value.error_code == "CANNOTFOLLOWBLOCKEDUSEREXCEPTION"
+        assert exc_info.value.error_code == "CANNOT_FOLLOW_BLOCKED_USER"
         assert "ブロックされている" in str(exc_info.value)
 
     # unfollow_user テスト
@@ -316,7 +316,7 @@ class TestUserCommandService:
         with pytest.raises(UserCommandException) as exc_info:
             self.service.unfollow_user(command)
 
-        assert exc_info.value.error_code == "SELFUNFOLLOWEXCEPTION"
+        assert exc_info.value.error_code == "SELF_UNFOLLOW_ERROR"
         assert "自分自身をアンフォロー" in str(exc_info.value)
 
     def test_unfollow_user_not_found_follower_raises_exception(self):
@@ -350,7 +350,7 @@ class TestUserCommandService:
         with pytest.raises(UserCommandException) as exc_info:
             self.service.unfollow_user(command)
 
-        assert exc_info.value.error_code == "CANNOTUNFOLLOWNOTFOLLOWEDUSEREXCEPTION"
+        assert exc_info.value.error_code == "CANNOT_UNFOLLOW_NOT_FOLLOWED_USER"
         assert "フォローしていない" in str(exc_info.value)
 
     # block_user テスト
@@ -392,7 +392,7 @@ class TestUserCommandService:
         with pytest.raises(UserCommandException) as exc_info:
             self.service.block_user(command)
 
-        assert exc_info.value.error_code == "SELFBLOCKEXCEPTION"
+        assert exc_info.value.error_code == "SELF_BLOCK_ERROR"
         assert "自分自身をブロック" in str(exc_info.value)
 
     def test_block_user_not_found_blocker_raises_exception(self):
@@ -426,7 +426,7 @@ class TestUserCommandService:
         with pytest.raises(UserCommandException) as exc_info:
             self.service.block_user(command)
 
-        assert exc_info.value.error_code == "CANNOTBLOCKALREADYBLOCKEDUSEREXCEPTION"
+        assert exc_info.value.error_code == "CANNOT_BLOCK_ALREADY_BLOCKED_USER"
         assert "既にブロック" in str(exc_info.value)
 
     # unblock_user テスト
@@ -468,7 +468,7 @@ class TestUserCommandService:
         with pytest.raises(UserCommandException) as exc_info:
             self.service.unblock_user(command)
 
-        assert exc_info.value.error_code == "SELFUNBLOCKEXCEPTION"
+        assert exc_info.value.error_code == "SELF_UNBLOCK_ERROR"
         assert "自分自身をアンブロック" in str(exc_info.value)
 
     def test_unblock_user_not_found_blocker_raises_exception(self):
@@ -502,7 +502,7 @@ class TestUserCommandService:
         with pytest.raises(UserCommandException) as exc_info:
             self.service.unblock_user(command)
 
-        assert exc_info.value.error_code == "CANNOTUNBLOCKNOTBLOCKEDUSEREXCEPTION"
+        assert exc_info.value.error_code == "CANNOT_UNBLOCK_NOT_BLOCKED_USER"
         assert "ブロックしていない" in str(exc_info.value)
 
     # subscribe_user テスト
@@ -551,7 +551,7 @@ class TestUserCommandService:
         with pytest.raises(UserCommandException) as exc_info:
             self.service.subscribe_user(command)
 
-        assert exc_info.value.error_code == "SELFSUBSCRIBEEXCEPTION"
+        assert exc_info.value.error_code == "SELF_SUBSCRIBE_ERROR"
         assert "自分自身を購読" in str(exc_info.value)
 
     def test_subscribe_user_not_found_subscriber_raises_exception(self):
@@ -585,7 +585,7 @@ class TestUserCommandService:
         with pytest.raises(UserCommandException) as exc_info:
             self.service.subscribe_user(command)
 
-        assert exc_info.value.error_code == "CANNOTSUBSCRIBEALREADYSUBSCRIBEDUSEREXCEPTION"
+        assert exc_info.value.error_code == "CANNOT_SUBSCRIBE_ALREADY_SUBSCRIBED_USER"
         assert "既に購読" in str(exc_info.value)
 
     def test_subscribe_user_blocked_user_raises_exception(self):
@@ -601,7 +601,7 @@ class TestUserCommandService:
         with pytest.raises(UserCommandException) as exc_info:
             self.service.follow_user(follow_command)
 
-        assert exc_info.value.error_code == "CANNOTFOLLOWBLOCKEDUSEREXCEPTION"
+        assert exc_info.value.error_code == "CANNOT_FOLLOW_BLOCKED_USER"
         assert "ブロックされている" in str(exc_info.value)
 
     def test_subscribe_user_not_followed_raises_exception(self):
@@ -618,7 +618,7 @@ class TestUserCommandService:
         with pytest.raises(UserCommandException) as exc_info:
             self.service.subscribe_user(command)
 
-        assert exc_info.value.error_code == "CANNOTSUBSCRIBENOTFOLLOWEDUSEREXCEPTION"
+        assert exc_info.value.error_code == "CANNOT_SUBSCRIBE_NOT_FOLLOWED_USER"
         assert "フォローしていない" in str(exc_info.value)
 
     # unsubscribe_user テスト
@@ -660,7 +660,7 @@ class TestUserCommandService:
         with pytest.raises(UserCommandException) as exc_info:
             self.service.unsubscribe_user(command)
 
-        assert exc_info.value.error_code == "SELFUNSUBSCRIBEEXCEPTION"
+        assert exc_info.value.error_code == "SELF_UNSUBSCRIBE_ERROR"
         assert "自分自身をアンサブスクライブ" in str(exc_info.value)
 
     def test_unsubscribe_user_not_found_subscriber_raises_exception(self):
@@ -694,7 +694,7 @@ class TestUserCommandService:
         with pytest.raises(UserCommandException) as exc_info:
             self.service.unsubscribe_user(command)
 
-        assert exc_info.value.error_code == "CANNOTUNSUBSCRIBENOTSUBSCRIBEDUSEREXCEPTION"
+        assert exc_info.value.error_code == "CANNOT_UNSUBSCRIBE_NOT_SUBSCRIBED_USER"
         assert "購読していない" in str(exc_info.value)
 
     # エラーハンドリングとログテスト

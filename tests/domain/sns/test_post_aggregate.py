@@ -27,7 +27,7 @@ class TestPostAggregate:
         likes = set()
         mentions = set()
 
-        post = PostAggregate(post_id, author_user_id, content, likes, mentions)
+        post = PostAggregate(post_id, author_user_id, content, likes, mentions, set())
 
         assert post.content_id == post_id
         assert post.author_user_id == author_user_id
@@ -46,7 +46,7 @@ class TestPostAggregate:
         parent_post_id = PostId(2)
 
         with pytest.raises(InvalidParentReferenceException, match="ポストは親ポストまたは親リプライを持つことはできません"):
-            PostAggregate(post_id, author_user_id, content, set(), set(), False, parent_post_id)
+            PostAggregate(post_id, author_user_id, content, set(), set(), set(), False, parent_post_id)
 
     def test_create_method_success(self):
         """create()メソッドの正常動作テスト"""
@@ -78,8 +78,9 @@ class TestPostAggregate:
         mentions = {Mention("user1", post_id)}
         deleted = False
 
+        reply_ids = set()  # テスト用の空のreply_ids
         post = PostAggregate.create_from_db(
-            post_id, author_user_id, content, likes, mentions, deleted
+            post_id, author_user_id, content, likes, mentions, reply_ids, deleted
         )
 
         assert post.content_id == post_id
@@ -444,3 +445,92 @@ class TestPostAggregate:
         # 削除後もいいね状態は保持される（ビジネスルールによる）
         assert len(post.likes) == 1
         assert post.is_liked_by_user(user_id) is True
+
+    def test_reply_ids_management(self):
+        """リプライID管理機能のテスト"""
+        post_id = PostId(1)
+        author_user_id = UserId(1)
+        content = PostContent("テスト投稿")
+        post = PostAggregate.create(post_id, author_user_id, content)
+
+        # 初期状態：リプライなし
+        assert len(post.reply_ids) == 0
+        assert post.get_reply_count() == 0
+
+        # リプライ追加
+        from src.domain.sns.value_object import ReplyId
+        reply_id1 = ReplyId(1)
+        reply_id2 = ReplyId(2)
+
+        post.add_reply(reply_id1)
+        assert len(post.reply_ids) == 1
+        assert reply_id1 in post.reply_ids
+        assert post.get_reply_count() == 1
+
+        post.add_reply(reply_id2)
+        assert len(post.reply_ids) == 2
+        assert reply_id1 in post.reply_ids
+        assert reply_id2 in post.reply_ids
+        assert post.get_reply_count() == 2
+
+        # 同じリプライを追加しても変化なし
+        post.add_reply(reply_id1)
+        assert len(post.reply_ids) == 2
+        assert post.get_reply_count() == 2
+
+        # リプライ削除
+        post.remove_reply(reply_id1)
+        assert len(post.reply_ids) == 1
+        assert reply_id1 not in post.reply_ids
+        assert reply_id2 in post.reply_ids
+        assert post.get_reply_count() == 1
+
+        # 存在しないリプライを削除しても変化なし
+        post.remove_reply(ReplyId(999))
+        assert len(post.reply_ids) == 1
+        assert post.get_reply_count() == 1
+
+    def test_reply_ids_immutability(self):
+        """reply_idsの不変性テスト"""
+        post_id = PostId(1)
+        author_user_id = UserId(1)
+        content = PostContent("テスト投稿")
+        post = PostAggregate.create(post_id, author_user_id, content)
+
+        # コピーを取得
+        reply_ids_copy = post.reply_ids
+
+        # コピーを変更しても元のオブジェクトには影響がないことを確認
+        from src.domain.sns.value_object import ReplyId
+        reply_ids_copy.add(ReplyId(1))
+
+        assert len(post.reply_ids) == 0
+
+    def test_get_display_info(self):
+        """get_display_info()メソッドのテスト"""
+        from src.domain.sns.value_object import ReplyId
+        post_id = PostId(1)
+        author_user_id = UserId(1)
+        content = PostContent("テスト投稿", hashtags=("#test",), visibility=PostVisibility.PUBLIC)
+        post = PostAggregate.create(post_id, author_user_id, content)
+
+        # いいねとリプライを追加
+        user_id = UserId(2)
+        post.like_post(user_id)
+        post.add_reply(ReplyId(1))
+        post.add_reply(ReplyId(2))
+
+        viewer_user_id = UserId(3)
+        display_info = post.get_display_info(viewer_user_id)
+
+        assert display_info["post_id"] == 1
+        assert display_info["author_user_id"] == 1
+        assert display_info["content"] == "テスト投稿"
+        assert display_info["hashtags"] == ["#test"]
+        assert display_info["visibility"] == "public"
+        assert display_info["like_count"] == 1
+        assert display_info["reply_count"] == 2
+        assert display_info["is_liked_by_viewer"] is False  # viewerはいいねしていない
+        assert display_info["is_replied_by_viewer"] is False  # ポストには直接リプライできない
+        assert display_info["mentioned_users"] == []
+        assert display_info["is_deleted"] is False

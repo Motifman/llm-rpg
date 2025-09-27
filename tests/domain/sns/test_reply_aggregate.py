@@ -29,7 +29,7 @@ class TestReplyAggregate:
         likes = set()
         mentions = set()
 
-        reply = ReplyAggregate(reply_id, parent_post_id, None, author_user_id, content, likes, mentions)
+        reply = ReplyAggregate(reply_id, author_user_id, content, likes, mentions, deleted=False, parent_post_id=parent_post_id, parent_reply_id=None)
 
         assert reply.content_id == reply_id
         assert reply.author_user_id == author_user_id
@@ -49,7 +49,7 @@ class TestReplyAggregate:
         likes = set()
         mentions = set()
 
-        reply = ReplyAggregate(reply_id, None, parent_reply_id, author_user_id, content, likes, mentions)
+        reply = ReplyAggregate(reply_id, author_user_id, content, likes, mentions, deleted=False, parent_post_id=None, parent_reply_id=parent_reply_id)
 
         assert reply.content_id == reply_id
         assert reply.author_user_id == author_user_id
@@ -67,7 +67,7 @@ class TestReplyAggregate:
         content = PostContent("テスト返信")
 
         with pytest.raises(InvalidParentReferenceException, match="リプライは親ポストまたは親リプライのどちらかを持つ必要があります"):
-            ReplyAggregate(reply_id, None, None, author_user_id, content, set(), set())
+            ReplyAggregate(reply_id, author_user_id, content, set(), set(), deleted=False, parent_post_id=None, parent_reply_id=None)
 
     def test_constructor_with_both_parents_raises_error(self):
         """親ポストIDと親リプライIDの両方を指定すると例外が発生"""
@@ -78,22 +78,22 @@ class TestReplyAggregate:
         content = PostContent("テスト返信")
 
         with pytest.raises(InvalidParentReferenceException):
-            ReplyAggregate(reply_id, parent_post_id, parent_reply_id, author_user_id, content, set(), set())
+            ReplyAggregate(reply_id, author_user_id, content, set(), set(), deleted=False, parent_post_id=parent_post_id, parent_reply_id=parent_reply_id)
 
     def test_constructor_with_invalid_reply_id_raises_error(self):
         """無効なReplyIdでのコンストラクタが例外を発生"""
         with pytest.raises(ReplyIdValidationException):
-            ReplyAggregate(ReplyId(0), PostId(1), None, UserId(1), PostContent("テスト"), set(), set())
+            ReplyAggregate(ReplyId(0), UserId(1), PostContent("テスト"), set(), set(), deleted=False, parent_post_id=PostId(1), parent_reply_id=None)
 
     def test_constructor_with_invalid_post_id_raises_error(self):
         """無効なPostIdでのコンストラクタが例外を発生"""
         with pytest.raises(PostIdValidationException):
-            ReplyAggregate(ReplyId(1), PostId(0), None, UserId(1), PostContent("テスト"), set(), set())
+            ReplyAggregate(ReplyId(1), UserId(1), PostContent("テスト"), set(), set(), deleted=False, parent_post_id=PostId(0), parent_reply_id=None)
 
     def test_constructor_with_invalid_user_id_raises_error(self):
         """無効なUserIdでのコンストラクタが例外を発生"""
         with pytest.raises(UserIdValidationException):
-            ReplyAggregate(ReplyId(1), PostId(1), None, UserId(0), PostContent("テスト"), set(), set())
+            ReplyAggregate(ReplyId(1), UserId(0), PostContent("テスト"), set(), set(), deleted=False, parent_post_id=PostId(1), parent_reply_id=None)
 
     def test_create_with_parent_post_success(self):
         """create()メソッドで親ポストID付きリプライを正常に作成"""
