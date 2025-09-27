@@ -69,20 +69,9 @@ class UserCommandService:
 
     def _get_error_info_from_exception(self, exception: SnsDomainException) -> tuple[str, str]:
         """例外の種類に基づいてエラーコードとメッセージを取得"""
-        # 例外クラスの命名パターンから自動的に生成
-        class_name = type(exception).__name__
-
-        # 命名パターンに基づいてエラーコードを生成
-        if class_name.endswith("Exception"):
-            base_name = class_name[:-9]  # "Exception"を除去
-        else:
-            base_name = class_name
-
-        # スネークケースに変換
-        error_code = base_name.upper()
-
-        # デフォルトメッセージ
-        message = str(exception) or f"{base_name}が発生しました"
+        # Exceptionクラスに定義されたエラーコードを使用
+        error_code = getattr(exception, 'error_code', 'UNKNOWN_ERROR')
+        message = str(exception)
 
         return error_code, message
 

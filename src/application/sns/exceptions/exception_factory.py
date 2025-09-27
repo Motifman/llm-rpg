@@ -23,6 +23,12 @@ from src.application.sns.exceptions.command.relationship_command_exception impor
     UserBlockException,
     UserSubscribeException,
 )
+from src.application.sns.exceptions.query.post_query_exception import (
+    PostQueryException,
+    PostNotFoundException,
+    PostAccessDeniedException,
+    InvalidPostIdException,
+)
 
 
 class ApplicationExceptionFactory:
@@ -60,6 +66,11 @@ class ApplicationExceptionFactory:
         "SelfUnblockException": UserCommandException,
         "SelfSubscribeException": UserCommandException,
         "SelfUnsubscribeException": UserCommandException,
+
+        # ポスト関連例外
+        "PostIdValidationException": PostQueryException,
+        "InvalidParentReferenceException": PostQueryException,
+        "ContentOwnershipException": PostQueryException,
     }
 
     @classmethod
@@ -68,6 +79,7 @@ class ApplicationExceptionFactory:
         domain_exception: Exception,
         user_id: Optional[int] = None,
         target_user_id: Optional[int] = None,
+        post_id: Optional[int] = None,
         **additional_context
     ) -> ApplicationException:
         """
@@ -77,6 +89,7 @@ class ApplicationExceptionFactory:
             domain_exception: ドメイン例外
             user_id: ユーザーID
             target_user_id: 対象ユーザーID
+            post_id: ポストID
             **additional_context: 追加のコンテキスト情報
 
         Returns:
@@ -95,29 +108,35 @@ class ApplicationExceptionFactory:
         # コンテキストを構築
         context = additional_context.copy()
 
-        # user_id, target_user_idをコンテキストに追加
+        # user_id, target_user_id, post_idをコンテキストに追加
         if user_id is not None:
             context['user_id'] = user_id
         if target_user_id is not None:
             context['target_user_id'] = target_user_id
+        if post_id is not None:
+            context['post_id'] = post_id
 
         # ドメイン例外から特定のフィールドを抽出してコンテキストに追加
         if hasattr(domain_exception, 'user_id'):
             context['user_id'] = domain_exception.user_id
         if hasattr(domain_exception, 'relationship_type'):
             context['relationship_type'] = domain_exception.relationship_type
+        if hasattr(domain_exception, 'post_id'):
+            context['post_id'] = domain_exception.post_id
 
         # ドメイン例外の他の属性もコンテキストに追加
-        domain_attrs = ['error_detail', 'target_user_id', 'follower_id', 'followee_id']
+        domain_attrs = ['error_detail', 'target_user_id', 'follower_id', 'followee_id', 'content_id']
         for attr in domain_attrs:
             if hasattr(domain_exception, attr) and attr not in context:
                 context[attr] = getattr(domain_exception, attr)
 
         # アプリケーション例外を作成
+        # Exceptionクラスに定義されたエラーコードを使用
+        error_code = getattr(domain_exception, 'error_code', domain_class_name.upper())
         try:
             app_exception = app_exception_class(
                 message=str(domain_exception),
-                error_code=domain_class_name.upper(),
+                error_code=error_code,
                 **context
             )
         except TypeError:

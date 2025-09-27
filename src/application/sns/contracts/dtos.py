@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional, List
+from datetime import datetime
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,25 @@ class UserQueryResultDto:
     success: bool
     data: Optional[List[UserProfileDto]] = None
     error: Optional[ErrorResponseDto] = None
+
+
+@dataclass(frozen=True)
+class PostDto:
+    """ポスト表示用DTO"""
+    post_id: int
+    author_user_id: int
+    author_user_name: str
+    author_display_name: str
+    content: str
+    hashtags: List[str]
+    visibility: str
+    created_at: datetime
+    like_count: int
+    reply_count: int
+    is_liked_by_viewer: bool
+    is_replied_by_viewer: bool
+    mentioned_users: List[str]
+    is_deleted: bool
 
 
 @dataclass(frozen=True)
