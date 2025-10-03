@@ -6,6 +6,7 @@ from src.domain.item.item_quantity import ItemQuantity
 from src.domain.item.unique_item import UniqueItem
 from src.domain.item.item_exception import ItemNotFoundException, ItemNotUsableException, ItemNotEquippableException
 from src.domain.player.value_object.base_status import BaseStatus
+from src.domain.player.value_object.player_id import PlayerId
 from src.domain.player.entity.dynamic_status import DynamicStatus
 from src.domain.player.entity.inventory import Inventory
 from src.domain.player.entity.equipment_set import EquipmentSet
@@ -25,7 +26,7 @@ if TYPE_CHECKING:
     from src.domain.battle.combat_state import CombatState
 else:
     from src.domain.battle.combat_state import CombatState
-from src.application.trade.contracts.commands import CreateTradeCommand
+from typing import Optional
 from src.domain.common.aggregate_root import AggregateRoot
 from src.domain.spot.movement_events import PlayerMovedEvent
 from src.domain.spot.spot_exception import PlayerAlreadyInSpotException
@@ -38,7 +39,7 @@ class Player(AggregateRoot):
     
     def __init__(
         self,
-        player_id: int,
+        player_id: PlayerId,
         name: str,
         role: Role,
         current_spot_id: int,
@@ -72,7 +73,7 @@ class Player(AggregateRoot):
     
     @property
     def player_id(self) -> int:
-        return self._player_id
+        return self._player_id.value
     
     @property
     def name(self) -> str:
@@ -115,30 +116,30 @@ class Player(AggregateRoot):
         return self._action_masteries.copy()
     
     # ===== 取引関連の振る舞いの実装 =====
-    def prepare_trade_offer(self, command: CreateTradeCommand) -> TradeItem:
+    def prepare_trade_offer(self, offered_item_id: int, offered_item_count: Optional[int] = None, offered_unique_id: Optional[int] = None) -> TradeItem:
         """取引試行"""
-        item = self._inventory.search_item(command.offered_item_id, command.offered_unique_id)
+        item = self._inventory.search_item(offered_item_id, offered_unique_id)
         if item is None:
-            raise InsufficientItemsException(f"Item not found. item_id: {command.offered_item_id}, unique_id: {command.offered_unique_id}")
+            raise InsufficientItemsException(f"Item not found. item_id: {offered_item_id}, unique_id: {offered_unique_id}")
         # 取引可能かどうかをチェック
         if hasattr(item, 'is_tradeable'):
             # UniqueItemの場合
             if not item.is_tradeable:
-                raise ItemNotTradeableException(f"Item is not tradeable. item_id: {command.offered_item_id}, unique_id: {command.offered_unique_id}")
+                raise ItemNotTradeableException(f"Item is not tradeable. item_id: {offered_item_id}, unique_id: {offered_unique_id}")
         elif hasattr(item, 'item'):
             # ItemQuantityの場合
             if not item.item.is_tradeable:
-                raise ItemNotTradeableException(f"Item is not tradeable. item_id: {command.offered_item_id}, unique_id: {command.offered_unique_id}")
-        if command.offered_item_count is not None:
-            if self._inventory.has_stackable(command.offered_item_id, command.offered_item_count):
-                return TradeItem.stackable(command.offered_item_id, command.offered_item_count)
+                raise ItemNotTradeableException(f"Item is not tradeable. item_id: {offered_item_id}, unique_id: {offered_unique_id}")
+        if offered_item_count is not None:
+            if self._inventory.has_stackable(offered_item_id, offered_item_count):
+                return TradeItem.stackable(offered_item_id, offered_item_count)
             else:
-                raise InsufficientItemsException(f"Item not found. item_id: {command.offered_item_id}, count: {command.offered_item_count}")
+                raise InsufficientItemsException(f"Item not found. item_id: {offered_item_id}, count: {offered_item_count}")
         else:
-            if self._inventory.has_unique(command.offered_unique_id):
-                return TradeItem.unique(command.offered_item_id, command.offered_unique_id)
+            if self._inventory.has_unique(offered_unique_id):
+                return TradeItem.unique(offered_item_id, offered_unique_id)
             else:
-                raise InsufficientItemsException(f"Item not found. item_id: {command.offered_item_id}, unique_id: {command.offered_unique_id}")
+                raise InsufficientItemsException(f"Item not found. item_id: {offered_item_id}, unique_id: {offered_unique_id}")
 
     def release_item_for_trade(self, trade_item: TradeItem) -> ItemQuantity | UniqueItem:
         """取引を行ったときにアイテムを開放"""

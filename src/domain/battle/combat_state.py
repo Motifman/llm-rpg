@@ -3,11 +3,11 @@ from typing import Dict, List, TYPE_CHECKING, Optional
 from src.domain.monster.drop_reward import DropReward
 from src.domain.battle.battle_enum import Element, Race, ParticipantType, StatusEffectType, BuffType
 from src.domain.battle.constant import IF_DEFENDER_DEFENDING_MULTIPLIER as DEFENDER_DEFENDING_MULTIPLIER
-from src.domain.player.hp import Hp
-from src.domain.player.mp import Mp
+from src.domain.player.value_object.hp import Hp
+from src.domain.player.value_object.mp import Mp
 
 if TYPE_CHECKING:
-    from src.domain.player.player import Player
+    from src.domain.player.aggregate.player import Player
     from src.domain.monster.monster import Monster
     from src.domain.battle.battle_action import BattleAction
     from src.domain.battle.action_repository import ActionRepository
