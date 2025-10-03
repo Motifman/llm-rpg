@@ -313,7 +313,7 @@ class TestPostAggregate:
 
         # 作成イベントの確認
         creation_event = initial_events[0]
-        assert creation_event.__class__.__name__ == 'SnsContentCreatedEvent'
+        assert creation_event.__class__.__name__ == 'SnsPostCreatedEvent'
 
         # メンションイベントの確認
         mention_event = initial_events[1]

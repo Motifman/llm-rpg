@@ -13,7 +13,8 @@ from src.domain.sns.event import (
     SnsUserSubscribedEvent,
     SnsUserUnsubscribedEvent,
     # Post events
-    SnsContentCreatedEvent,
+    SnsPostCreatedEvent,
+    SnsReplyCreatedEvent,
     SnsContentLikedEvent,
     SnsContentDeletedEvent,
     SnsContentMentionedEvent,
@@ -152,8 +153,8 @@ class TestSnsUserProfileUpdatedEvent:
         assert event.new_display_name is None
 
 
-class TestSnsContentCreatedEvent:
-    """SnsContentCreatedEventのテスト"""
+class TestSnsPostCreatedEvent:
+    """SnsPostCreatedEventのテスト"""
 
     def test_create_post_event_success(self):
         """正常なポスト作成イベントの作成テスト"""
@@ -161,23 +162,23 @@ class TestSnsContentCreatedEvent:
         content = PostContent("テスト投稿です")
         mentions = {Mention(mentioned_user_name="testuser", post_id=post_id)}
 
-        event = SnsContentCreatedEvent.create(
+        event = SnsPostCreatedEvent.create(
             aggregate_id=post_id,
             aggregate_type="PostAggregate",
-            target_id=post_id,
+            post_id=post_id,
             author_user_id=UserId(1),
             content=content,
-            mentions=mentions,
-            content_type="post"
+            mentions=mentions
         )
 
-        assert event.target_id == post_id
+        assert event.post_id == post_id
         assert event.author_user_id == UserId(1)
         assert event.content == content
         assert event.mentions == mentions
-        assert event.content_type == "post"
-        assert event.parent_post_id is None
-        assert event.parent_reply_id is None
+
+
+class TestSnsReplyCreatedEvent:
+    """SnsReplyCreatedEventのテスト"""
 
     def test_create_reply_event_success(self):
         """正常なリプライ作成イベントの作成テスト"""
@@ -185,20 +186,20 @@ class TestSnsContentCreatedEvent:
         post_id = PostId(1)
         content = PostContent("テストリプライです")
 
-        event = SnsContentCreatedEvent.create(
+        event = SnsReplyCreatedEvent.create(
             aggregate_id=reply_id,
             aggregate_type="ReplyAggregate",
-            target_id=reply_id,
+            reply_id=reply_id,
             author_user_id=UserId(1),
             content=content,
-            parent_post_id=post_id,
-            content_type="reply"
+            parent_post_id=post_id
         )
 
-        assert event.target_id == reply_id
+        assert event.reply_id == reply_id
+        assert event.author_user_id == UserId(1)
+        assert event.content == content
         assert event.parent_post_id == post_id
         assert event.parent_reply_id is None
-        assert event.content_type == "reply"
 
 
 class TestSnsContentLikedEvent:
@@ -366,24 +367,22 @@ class TestEventTypeValidation:
 
     def test_content_events_have_correct_aggregate_type(self):
         """コンテンツイベントが正しい集約タイプを持つことをテスト"""
-        post_event = SnsContentCreatedEvent.create(
+        post_event = SnsPostCreatedEvent.create(
             aggregate_id=PostId(1),
             aggregate_type="PostAggregate",
-            target_id=PostId(1),
+            post_id=PostId(1),
             author_user_id=UserId(1),
-            content=PostContent("test"),
-            content_type="post"
+            content=PostContent("test")
         )
 
         assert post_event.aggregate_type == "PostAggregate"
 
-        reply_event = SnsContentCreatedEvent.create(
+        reply_event = SnsReplyCreatedEvent.create(
             aggregate_id=ReplyId(1),
             aggregate_type="ReplyAggregate",
-            target_id=ReplyId(1),
+            reply_id=ReplyId(1),
             author_user_id=UserId(1),
-            content=PostContent("test"),
-            content_type="reply"
+            content=PostContent("test")
         )
 
         assert reply_event.aggregate_type == "ReplyAggregate"

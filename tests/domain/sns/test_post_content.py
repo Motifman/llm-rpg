@@ -99,3 +99,47 @@ class TestPostContent:
         # 最小数（0個）
         no_hashtags = PostContent("content", ())
         assert len(no_hashtags.hashtags) == 0
+
+    def test_create_method_with_hashtag_extraction(self):
+        """createメソッドでのハッシュタグ自動抽出テスト"""
+        content = "今日は良い天気です #weather #sunny #happy"
+        visibility = PostVisibility.PUBLIC
+
+        post_content = PostContent.create(content, visibility)
+
+        assert post_content.content == content
+        assert post_content.visibility == visibility
+        assert post_content.hashtags == ("weather", "sunny", "happy")
+
+    def test_create_method_no_hashtags(self):
+        """createメソッドでハッシュタグなしのテスト"""
+        content = "ハッシュタグのない普通の投稿です"
+        visibility = PostVisibility.FOLLOWERS_ONLY
+
+        post_content = PostContent.create(content, visibility)
+
+        assert post_content.content == content
+        assert post_content.visibility == visibility
+        assert post_content.hashtags == ()
+
+    def test_create_method_special_hashtag_patterns(self):
+        """createメソッドでの特殊なハッシュタグパターン抽出テスト"""
+        content = "テスト #tag1 #tag-2 #tag_3 #tag.with.dots #123invalid"
+        visibility = PostVisibility.PRIVATE
+
+        post_content = PostContent.create(content, visibility)
+
+        assert post_content.content == content
+        assert post_content.visibility == visibility
+        # 正規表現(\w+)は英数字とアンダースコアのみなので、ハイフンやドットは区切り文字になる
+        assert post_content.hashtags == ("tag1", "tag", "tag_3", "tag", "123invalid")
+
+    def test_create_method_with_default_visibility(self):
+        """createメソッドでのデフォルト可視性テスト"""
+        content = "デフォルト可視性のテスト #default"
+
+        post_content = PostContent.create(content)
+
+        assert post_content.content == content
+        assert post_content.visibility == PostVisibility.PUBLIC
+        assert post_content.hashtags == ("default",)

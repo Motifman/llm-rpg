@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 from src.application.sns.services.user_command_service import UserCommandService
 from src.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
 from src.infrastructure.events.event_publisher_impl import InMemoryEventPublisher
+from src.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 from src.application.sns.contracts.commands import (
     CreateUserCommand,
     UpdateUserProfileCommand,
@@ -45,6 +46,16 @@ from src.domain.sns.exception import (
     ProfileUpdateValidationException,
 )
 from src.domain.sns.value_object.user_id import UserId
+from src.domain.sns.event.sns_user_event import (
+    SnsUserCreatedEvent,
+    SnsUserFollowedEvent,
+    SnsUserUnfollowedEvent,
+    SnsUserBlockedEvent,
+    SnsUserUnblockedEvent,
+    SnsUserProfileUpdatedEvent,
+    SnsUserSubscribedEvent,
+    SnsUserUnsubscribedEvent,
+)
 
 
 class TestUserCommandService:
@@ -53,14 +64,23 @@ class TestUserCommandService:
     def setup_method(self):
         """各テストメソッドの前に実行"""
         self.repository = InMemorySnsUserRepository()
-        self.event_publisher = InMemoryEventPublisher()
-        self.service = UserCommandService(self.repository, self.event_publisher)
+        # Unit of Workファクトリ関数を定義（別トランザクション用）
+        def create_uow():
+            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
+
+        # Unit of Workとイベントパブリッシャーを作成
+        self.unit_of_work, self.event_publisher = InMemoryUnitOfWork.create_with_event_publisher(
+            unit_of_work_factory=create_uow
+        )
+        self.service = UserCommandService(self.repository, self.event_publisher, self.unit_of_work)
         # ログ出力をテスト用に設定
         self.service.logger.setLevel(logging.DEBUG)
 
     def teardown_method(self):
         """各テストメソッドの後に実行"""
-        pass
+        # Unit of Workとイベントパブリッシャーをリセット
+        self.unit_of_work.clear_pending_events()
+        self.event_publisher.clear_events()
 
     # create_user テスト
     def test_create_user_success(self):
@@ -757,6 +777,7 @@ class TestUserCommandService:
     def test_event_publishing_on_user_creation(self):
         """ユーザー作成時にイベントが発行されることのテスト"""
         # Given
+        self.event_publisher.clear_events()
         command = CreateUserCommand(
             user_name="event_test_user",
             display_name="イベントテストユーザー",
@@ -767,17 +788,22 @@ class TestUserCommandService:
         result = self.service.create_user(command)
 
         # Then
-        # イベント発行が呼ばれたことを確認（実際のイベント内容は確認しにくいため、メソッドが呼ばれたことを確認）
-        # 実際のテストでは、イベントパブリッシャーのモックを使って発行されたイベントを検証する
-        created_user = self.repository.find_by_id(result.data["user_id"])
-        assert created_user is not None
+        # イベントが発行されていることを確認
+        events = self.event_publisher.get_published_events()
+        assert len(events) == 1
 
-        # イベントが発行された場合、ユーザーは保存されているはず
-        assert self.repository.exists_by_id(result.data["user_id"])
+        # SnsUserCreatedEventが発行されていることを確認
+        created_events = [e for e in events if isinstance(e, SnsUserCreatedEvent)]
+        assert len(created_events) == 1
+        assert created_events[0].aggregate_id == result.data["user_id"]
+        assert created_events[0].user_name == "event_test_user"
+        assert created_events[0].display_name == "イベントテストユーザー"
+        assert created_events[0].bio == "イベント発行テスト用ユーザーです"
 
     def test_event_publishing_on_profile_update(self):
         """プロフィール更新時にイベントが発行されることのテスト"""
         # Given
+        self.event_publisher.clear_events()
         user_id = 1
         command = UpdateUserProfileCommand(
             user_id=user_id,
@@ -789,15 +815,21 @@ class TestUserCommandService:
         result = self.service.update_user_profile(command)
 
         # Then
-        # イベント発行が呼ばれたことを確認
-        updated_user = self.repository.find_by_id(UserId(user_id))
-        assert updated_user is not None
-        assert updated_user.sns_user.user_profile.display_name == "更新された勇者"
-        assert updated_user.sns_user.user_profile.bio == "更新された自己紹介"
+        # イベントが発行されていることを確認
+        events = self.event_publisher.get_published_events()
+        assert len(events) == 1
+
+        # SnsUserProfileUpdatedEventが発行されていることを確認
+        updated_events = [e for e in events if isinstance(e, SnsUserProfileUpdatedEvent)]
+        assert len(updated_events) == 1
+        assert updated_events[0].aggregate_id == UserId(user_id)
+        assert updated_events[0].new_display_name == "更新された勇者"
+        assert updated_events[0].new_bio == "更新された自己紹介"
 
     def test_event_publishing_on_follow(self):
         """フォロー時にイベントが発行されることのテスト"""
         # Given
+        self.event_publisher.clear_events()
         follower_user_id = 3  # 戦士
         followee_user_id = 4  # 盗賊
         command = FollowUserCommand(
@@ -809,7 +841,284 @@ class TestUserCommandService:
         result = self.service.follow_user(command)
 
         # Then
-        # フォロー関係が正しく作成されたことを確認
-        follower_user = self.repository.find_by_id(UserId(follower_user_id))
-        assert follower_user is not None
-        assert follower_user.is_following(UserId(followee_user_id))
+        # イベントが発行されていることを確認
+        events = self.event_publisher.get_published_events()
+        assert len(events) == 1
+
+        # SnsUserFollowedEventが発行されていることを確認
+        followed_events = [e for e in events if isinstance(e, SnsUserFollowedEvent)]
+        assert len(followed_events) == 1
+        assert followed_events[0].aggregate_id == follower_user_id  # int型
+        assert followed_events[0].follower_user_id == UserId(follower_user_id)
+        assert followed_events[0].followee_user_id == UserId(followee_user_id)
+
+    def test_unfollow_user_success(self):
+        """unfollow_user - 正常系テスト"""
+        # Given
+        follower_user_id = 3  # 戦士
+        followee_user_id = 4  # 盗賊
+
+        # まずフォロー関係を作成
+        follow_command = FollowUserCommand(
+            follower_user_id=follower_user_id,
+            followee_user_id=followee_user_id
+        )
+        self.service.follow_user(follow_command)
+
+        # When - フォロー解除を実行
+        unfollow_command = UnfollowUserCommand(
+            follower_user_id=follower_user_id,
+            followee_user_id=followee_user_id
+        )
+        result = self.service.unfollow_user(unfollow_command)
+
+        # Then
+        assert result.success is True
+        assert result.message == "ユーザーのフォローを解除しました"
+        assert result.data["follower_user_id"] == follower_user_id
+        assert result.data["followee_user_id"] == followee_user_id
+
+    def test_event_publishing_on_unfollow(self):
+        """アンフォロー時にイベントが発行されることのテスト"""
+        # Given
+        # イベントパブリッシャーをクリア
+        self.event_publisher.clear_events()
+
+        # 既存のフォロー関係を使用（勇者（ID: 1）が魔法使い（ID: 2）をフォローしている）
+        follower_user_id = 1  # 勇者
+        followee_user_id = 2  # 魔法使い
+        command = UnfollowUserCommand(
+            follower_user_id=follower_user_id,
+            followee_user_id=followee_user_id
+        )
+
+        # When
+        result = self.service.unfollow_user(command)
+
+        # Then
+        # イベントが発行されていることを確認
+        events = self.event_publisher.get_published_events()
+        assert len(events) == 1
+
+        # SnsUserUnfollowedEventが発行されていることを確認
+        unfollowed_events = [e for e in events if isinstance(e, SnsUserUnfollowedEvent)]
+        assert len(unfollowed_events) == 1
+        assert unfollowed_events[0].aggregate_id == UserId(follower_user_id)
+        assert unfollowed_events[0].follower_user_id == UserId(follower_user_id)
+        assert unfollowed_events[0].followee_user_id == UserId(followee_user_id)
+
+    def test_event_publishing_on_block(self):
+        """ブロック時にイベントが発行されることのテスト"""
+        # Given
+        self.event_publisher.clear_events()
+        blocker_user_id = 3  # 戦士
+        blocked_user_id = 4  # 盗賊
+        command = BlockUserCommand(
+            blocker_user_id=blocker_user_id,
+            blocked_user_id=blocked_user_id
+        )
+
+        # When
+        result = self.service.block_user(command)
+
+        # Then
+        # イベントが発行されていることを確認
+        events = self.event_publisher.get_published_events()
+        assert len(events) == 1
+
+        # SnsUserBlockedEventが発行されていることを確認
+        blocked_events = [e for e in events if isinstance(e, SnsUserBlockedEvent)]
+        assert len(blocked_events) == 1
+        assert blocked_events[0].aggregate_id == UserId(blocker_user_id)
+        assert blocked_events[0].blocker_user_id == UserId(blocker_user_id)
+        assert blocked_events[0].blocked_user_id == UserId(blocked_user_id)
+
+    def test_event_publishing_on_unblock(self):
+        """アンブロック時にイベントが発行されることのテスト"""
+        # Given
+        self.event_publisher.clear_events()
+
+        # 既存のブロック関係を使用（魔法使い（ID: 2）が盗賊（ID: 4）をブロックしている）
+        blocker_user_id = 2  # 魔法使い
+        blocked_user_id = 4  # 盗賊
+        command = UnblockUserCommand(
+            blocker_user_id=blocker_user_id,
+            blocked_user_id=blocked_user_id
+        )
+
+        # When
+        result = self.service.unblock_user(command)
+
+        # Then
+        # イベントが発行されていることを確認
+        events = self.event_publisher.get_published_events()
+        assert len(events) == 1
+
+        # SnsUserUnblockedEventが発行されていることを確認
+        unblocked_events = [e for e in events if isinstance(e, SnsUserUnblockedEvent)]
+        assert len(unblocked_events) == 1
+        assert unblocked_events[0].aggregate_id == UserId(blocker_user_id)
+        assert unblocked_events[0].blocker_user_id == UserId(blocker_user_id)
+        assert unblocked_events[0].blocked_user_id == UserId(blocked_user_id)
+
+    def test_event_publishing_on_subscribe(self):
+        """購読時にイベントが発行されることのテスト"""
+        # Given
+        self.event_publisher.clear_events()
+
+        # 新しい購読関係を作成（戦士（ID: 3）が盗賊（ID: 4）を購読）
+        subscriber_user_id = 3  # 戦士
+        subscribed_user_id = 4  # 盗賊
+
+        # まずフォロー関係を作成（購読にはフォロー関係が必要）
+        follow_command = FollowUserCommand(
+            follower_user_id=subscriber_user_id,
+            followee_user_id=subscribed_user_id
+        )
+        self.service.follow_user(follow_command)
+
+        # イベントパブリッシャーをクリアしてからsubscribeを実行
+        self.event_publisher.clear_events()
+        command = SubscribeUserCommand(
+            subscriber_user_id=subscriber_user_id,
+            subscribed_user_id=subscribed_user_id
+        )
+
+        # When
+        result = self.service.subscribe_user(command)
+
+        # Then
+        # イベントが発行されていることを確認
+        events = self.event_publisher.get_published_events()
+        # SnsUserSubscribedEventが発行されていることを確認
+        subscribed_events = [e for e in events if isinstance(e, SnsUserSubscribedEvent)]
+        assert len(subscribed_events) == 1
+        assert subscribed_events[0].aggregate_id == UserId(subscriber_user_id)
+        assert subscribed_events[0].subscriber_user_id == UserId(subscriber_user_id)
+        assert subscribed_events[0].subscribed_user_id == UserId(subscribed_user_id)
+
+    def test_event_publishing_on_unsubscribe(self):
+        """購読解除時にイベントが発行されることのテスト"""
+        # Given
+        self.event_publisher.clear_events()
+
+        # 新しい購読関係を作成してから解除（戦士（ID: 3）が盗賊（ID: 4）を購読）
+        subscriber_user_id = 3  # 戦士
+        subscribed_user_id = 4  # 盗賊
+
+        # まずフォローと購読関係を作成
+        follow_command = FollowUserCommand(
+            follower_user_id=subscriber_user_id,
+            followee_user_id=subscribed_user_id
+        )
+        self.service.follow_user(follow_command)
+
+        subscribe_command = SubscribeUserCommand(
+            subscriber_user_id=subscriber_user_id,
+            subscribed_user_id=subscribed_user_id
+        )
+        self.service.subscribe_user(subscribe_command)
+
+        # イベントパブリッシャーをクリアしてからunsubscribeを実行
+        self.event_publisher.clear_events()
+        command = UnsubscribeUserCommand(
+            subscriber_user_id=subscriber_user_id,
+            subscribed_user_id=subscribed_user_id
+        )
+
+        # When
+        result = self.service.unsubscribe_user(command)
+
+        # Then
+        # イベントが発行されていることを確認
+        events = self.event_publisher.get_published_events()
+        # SnsUserUnsubscribedEventが発行されていることを確認
+        unsubscribed_events = [e for e in events if isinstance(e, SnsUserUnsubscribedEvent)]
+        assert len(unsubscribed_events) == 1
+        assert unsubscribed_events[0].aggregate_id == UserId(subscriber_user_id)
+        assert unsubscribed_events[0].subscriber_user_id == UserId(subscriber_user_id)
+        assert unsubscribed_events[0].subscribed_user_id == UserId(subscribed_user_id)
+
+    def test_unblock_user_success(self):
+        """unblock_user - 正常系テスト"""
+        # Given
+        blocker_user_id = 3  # 戦士
+        blocked_user_id = 4  # 盗賊
+
+        # まずブロック関係を作成
+        block_command = BlockUserCommand(
+            blocker_user_id=blocker_user_id,
+            blocked_user_id=blocked_user_id
+        )
+        self.service.block_user(block_command)
+
+        # When - ブロック解除を実行
+        unblock_command = UnblockUserCommand(
+            blocker_user_id=blocker_user_id,
+            blocked_user_id=blocked_user_id
+        )
+        result = self.service.unblock_user(unblock_command)
+
+        # Then
+        assert result.success is True
+        assert result.message == "ユーザーのブロックを解除しました"
+        assert result.data["blocker_user_id"] == blocker_user_id
+        assert result.data["blocked_user_id"] == blocked_user_id
+
+    def test_subscribe_user_success(self):
+        """subscribe_user - 正常系テスト"""
+        # Given
+        subscriber_user_id = 3  # 戦士
+        subscribed_user_id = 4  # 盗賊
+
+        # まずフォロー関係を作成（購読にはフォロー関係が必要）
+        follow_command = FollowUserCommand(
+            follower_user_id=subscriber_user_id,
+            followee_user_id=subscribed_user_id
+        )
+        self.service.follow_user(follow_command)
+
+        # When - 購読を実行
+        subscribe_command = SubscribeUserCommand(
+            subscriber_user_id=subscriber_user_id,
+            subscribed_user_id=subscribed_user_id
+        )
+        result = self.service.subscribe_user(subscribe_command)
+
+        # Then
+        assert result.success is True
+        assert result.message == "ユーザーを購読しました"
+        assert result.data["subscriber_user_id"] == subscriber_user_id
+        assert result.data["subscribed_user_id"] == subscribed_user_id
+
+    def test_unsubscribe_user_success(self):
+        """unsubscribe_user - 正常系テスト"""
+        # Given
+        subscriber_user_id = 3  # 戦士
+        subscribed_user_id = 4  # 盗賊
+
+        # まずフォローと購読関係を作成
+        follow_command = FollowUserCommand(
+            follower_user_id=subscriber_user_id,
+            followee_user_id=subscribed_user_id
+        )
+        self.service.follow_user(follow_command)
+
+        subscribe_command = SubscribeUserCommand(
+            subscriber_user_id=subscriber_user_id,
+            subscribed_user_id=subscribed_user_id
+        )
+        self.service.subscribe_user(subscribe_command)
+
+        # When - 購読解除を実行
+        unsubscribe_command = UnsubscribeUserCommand(
+            subscriber_user_id=subscriber_user_id,
+            subscribed_user_id=subscribed_user_id
+        )
+        result = self.service.unsubscribe_user(unsubscribe_command)
+
+        # Then
+        assert result.success is True
+        assert result.message == "ユーザーの購読を解除しました"
+        assert result.data["subscriber_user_id"] == subscriber_user_id
+        assert result.data["subscribed_user_id"] == subscribed_user_id

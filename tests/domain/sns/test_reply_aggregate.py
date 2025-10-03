@@ -28,8 +28,9 @@ class TestReplyAggregate:
         content = PostContent("テスト返信")
         likes = set()
         mentions = set()
+        reply_ids = set()
 
-        reply = ReplyAggregate(reply_id, author_user_id, content, likes, mentions, deleted=False, parent_post_id=parent_post_id, parent_reply_id=None)
+        reply = ReplyAggregate(reply_id, author_user_id, content, likes, mentions, reply_ids, deleted=False, parent_post_id=parent_post_id, parent_reply_id=None)
 
         assert reply.content_id == reply_id
         assert reply.author_user_id == author_user_id
@@ -48,8 +49,9 @@ class TestReplyAggregate:
         content = PostContent("テスト返信")
         likes = set()
         mentions = set()
+        reply_ids = set()
 
-        reply = ReplyAggregate(reply_id, author_user_id, content, likes, mentions, deleted=False, parent_post_id=None, parent_reply_id=parent_reply_id)
+        reply = ReplyAggregate(reply_id, author_user_id, content, likes, mentions, reply_ids, deleted=False, parent_post_id=None, parent_reply_id=parent_reply_id)
 
         assert reply.content_id == reply_id
         assert reply.author_user_id == author_user_id
@@ -67,7 +69,7 @@ class TestReplyAggregate:
         content = PostContent("テスト返信")
 
         with pytest.raises(InvalidParentReferenceException, match="リプライは親ポストまたは親リプライのどちらかを持つ必要があります"):
-            ReplyAggregate(reply_id, author_user_id, content, set(), set(), deleted=False, parent_post_id=None, parent_reply_id=None)
+            ReplyAggregate(reply_id, author_user_id, content, set(), set(), set(), deleted=False, parent_post_id=None, parent_reply_id=None)
 
     def test_constructor_with_both_parents_raises_error(self):
         """親ポストIDと親リプライIDの両方を指定すると例外が発生"""
@@ -78,22 +80,22 @@ class TestReplyAggregate:
         content = PostContent("テスト返信")
 
         with pytest.raises(InvalidParentReferenceException):
-            ReplyAggregate(reply_id, author_user_id, content, set(), set(), deleted=False, parent_post_id=parent_post_id, parent_reply_id=parent_reply_id)
+            ReplyAggregate(reply_id, author_user_id, content, set(), set(), set(), deleted=False, parent_post_id=parent_post_id, parent_reply_id=parent_reply_id)
 
     def test_constructor_with_invalid_reply_id_raises_error(self):
         """無効なReplyIdでのコンストラクタが例外を発生"""
         with pytest.raises(ReplyIdValidationException):
-            ReplyAggregate(ReplyId(0), UserId(1), PostContent("テスト"), set(), set(), deleted=False, parent_post_id=PostId(1), parent_reply_id=None)
+            ReplyAggregate(ReplyId(0), UserId(1), PostContent("テスト"), set(), set(), set(), deleted=False, parent_post_id=PostId(1), parent_reply_id=None)
 
     def test_constructor_with_invalid_post_id_raises_error(self):
         """無効なPostIdでのコンストラクタが例外を発生"""
         with pytest.raises(PostIdValidationException):
-            ReplyAggregate(ReplyId(1), UserId(1), PostContent("テスト"), set(), set(), deleted=False, parent_post_id=PostId(0), parent_reply_id=None)
+            ReplyAggregate(ReplyId(1), UserId(1), PostContent("テスト"), set(), set(), set(), deleted=False, parent_post_id=PostId(0), parent_reply_id=None)
 
     def test_constructor_with_invalid_user_id_raises_error(self):
         """無効なUserIdでのコンストラクタが例外を発生"""
         with pytest.raises(UserIdValidationException):
-            ReplyAggregate(ReplyId(1), UserId(0), PostContent("テスト"), set(), set(), deleted=False, parent_post_id=PostId(1), parent_reply_id=None)
+            ReplyAggregate(ReplyId(1), UserId(0), PostContent("テスト"), set(), set(), set(), deleted=False, parent_post_id=PostId(1), parent_reply_id=None)
 
     def test_create_with_parent_post_success(self):
         """create()メソッドで親ポストID付きリプライを正常に作成"""
@@ -102,7 +104,7 @@ class TestReplyAggregate:
         author_user_id = UserId(1)
         content = PostContent("@user1 @user2 テスト返信")
 
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
 
         assert reply.content_id == reply_id
         assert reply.author_user_id == author_user_id
@@ -124,7 +126,7 @@ class TestReplyAggregate:
         author_user_id = UserId(1)
         content = PostContent("テスト返信")
 
-        reply = ReplyAggregate.create(reply_id, None, parent_reply_id, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, None, parent_reply_id, UserId(2), author_user_id, content)
 
         assert reply.content_id == reply_id
         assert reply.author_user_id == author_user_id
@@ -144,7 +146,7 @@ class TestReplyAggregate:
         deleted = False
 
         reply = ReplyAggregate.create_from_db(
-            reply_id, parent_post_id, None, author_user_id, content, likes, mentions, deleted
+            reply_id, parent_post_id, None, author_user_id, content, likes, mentions, set(), deleted
         )
 
         assert reply.content_id == reply_id
@@ -162,7 +164,7 @@ class TestReplyAggregate:
         parent_post_id = PostId(1)
         author_user_id = UserId(1)
         content = PostContent("テスト返信")
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
 
         # ReplyAggregate固有のプロパティ
         assert reply.reply_id == reply_id
@@ -176,7 +178,7 @@ class TestReplyAggregate:
         parent_reply_id = ReplyId(2)
         author_user_id = UserId(1)
         content = PostContent("テスト返信")
-        reply = ReplyAggregate.create(reply_id, None, parent_reply_id, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, None, parent_reply_id, UserId(2), author_user_id, content)
 
         assert reply.get_parent_info() == (None, parent_reply_id)
 
@@ -186,7 +188,7 @@ class TestReplyAggregate:
         parent_post_id = PostId(1)
         author_user_id = UserId(1)
         content = PostContent("テスト返信")
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
 
         user_id = UserId(2)
 
@@ -206,7 +208,7 @@ class TestReplyAggregate:
         parent_post_id = PostId(1)
         author_user_id = UserId(1)
         content = PostContent("テスト返信")
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
 
         user1_id = UserId(2)
         user2_id = UserId(3)
@@ -233,7 +235,7 @@ class TestReplyAggregate:
         parent_post_id = PostId(1)
         author_user_id = UserId(1)
         content = PostContent("テスト返信")
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
 
         reply.delete_reply(author_user_id)
         assert reply.deleted is True
@@ -244,7 +246,7 @@ class TestReplyAggregate:
         parent_post_id = PostId(1)
         author_user_id = UserId(1)
         content = PostContent("テスト返信")
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
 
         other_user_id = UserId(2)
 
@@ -258,7 +260,7 @@ class TestReplyAggregate:
         author_user_id = UserId(1)
         content = PostContent("@user1 @user2 こんにちは！ #test")
 
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
 
         mentioned_users = reply.get_mentioned_users()
         assert "user1" in mentioned_users
@@ -272,7 +274,7 @@ class TestReplyAggregate:
         author_user_id = UserId(1)
         content = PostContent("メンションなしの返信")
 
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
 
         mentioned_users = reply.get_mentioned_users()
         assert len(mentioned_users) == 0
@@ -284,7 +286,7 @@ class TestReplyAggregate:
         author_user_id = UserId(1)
         content = PostContent("@user_name @user-name @user.name テスト")
 
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
 
         mentioned_users = reply.get_mentioned_users()
         assert "user_name" in mentioned_users
@@ -303,7 +305,7 @@ class TestReplyAggregate:
         content = PostContent(long_content)
 
         # 最大文字数では成功するはず
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
         assert reply.content.content == long_content
 
     def test_content_validation_over_max_length(self):
@@ -328,7 +330,7 @@ class TestReplyAggregate:
         hashtags = tuple(f"tag{i}" for i in range(10))
         content = PostContent("テスト", hashtags=hashtags)
 
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
         assert reply.content.hashtags == hashtags
 
     def test_content_validation_over_max_hashtags(self):
@@ -346,7 +348,7 @@ class TestReplyAggregate:
         author_user_id = UserId(1)
         content = PostContent("テスト返信")
 
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
 
         # 親情報は必ずどちらか一方が設定されている
         parent_post, parent_reply = reply.get_parent_info()
@@ -359,17 +361,16 @@ class TestReplyAggregate:
         author_user_id = UserId(1)
         content = PostContent("@user1 テスト返信")
 
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
 
         # イベントが発行されていることを確認
         events = reply.get_events()
-        assert len(events) >= 2  # SnsContentCreatedEvent + SnsContentMentionedEvent
+        assert len(events) >= 2  # SnsReplyCreatedEvent + SnsContentMentionedEvent
 
         # 作成イベントの確認
         created_event = events[0]
         assert created_event.aggregate_id == reply_id
         assert created_event.aggregate_type == "ReplyAggregate"
-        assert created_event.content_type == "reply"
 
     def test_like_event_emission(self):
         """いいね時のイベント発行テスト"""
@@ -377,7 +378,7 @@ class TestReplyAggregate:
         parent_post_id = PostId(1)
         author_user_id = UserId(1)
         content = PostContent("テスト返信")
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
 
         user_id = UserId(2)
         reply.like_reply(user_id)
@@ -393,7 +394,7 @@ class TestReplyAggregate:
         parent_post_id = PostId(1)
         author_user_id = UserId(1)
         content = PostContent("テスト返信")
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
 
         reply.delete_reply(author_user_id)
 
@@ -409,7 +410,7 @@ class TestReplyAggregate:
         author_user_id = UserId(1)
         content = PostContent("@user1 テスト返信")
 
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
 
         # メンションイベントが発行されていることを確認
         events = reply.get_events()
