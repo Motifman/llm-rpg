@@ -8,15 +8,24 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class SnsContentCreatedEvent(BaseDomainEvent[Union[PostId, ReplyId], "PostAggregate | ReplyAggregate"]):
-    """汎用コンテンツ作成イベント（ポスト・リプライ共通）"""
-    target_id: Union[PostId, ReplyId]
+class SnsPostCreatedEvent(BaseDomainEvent[PostId, "PostAggregate"]):
+    """ポスト作成イベント"""
+    post_id: PostId
+    author_user_id: UserId
+    content: PostContent
+    mentions: Set[Mention] = field(default_factory=set)
+
+
+@dataclass(frozen=True)
+class SnsReplyCreatedEvent(BaseDomainEvent[ReplyId, "ReplyAggregate"]):
+    """リプライ作成イベント"""
+    reply_id: ReplyId
     author_user_id: UserId
     content: PostContent
     mentions: Set[Mention] = field(default_factory=set)
     parent_post_id: Optional[PostId] = None
     parent_reply_id: Optional[ReplyId] = None
-    content_type: str = "post"  # "post" or "reply"
+    parent_author_id: Optional[UserId] = None  # 親コンテンツの作成者
 
 
 @dataclass(frozen=True)

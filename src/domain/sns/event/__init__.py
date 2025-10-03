@@ -1,7 +1,8 @@
 """SNSドメインイベントパッケージ"""
 
 from .post_event import (
-    SnsContentCreatedEvent,
+    SnsPostCreatedEvent,
+    SnsReplyCreatedEvent,
     SnsContentLikedEvent,
     SnsContentDeletedEvent,
     SnsContentMentionedEvent,
@@ -20,7 +21,8 @@ from .sns_user_event import (
 
 __all__ = [
     # Post events
-    "SnsContentCreatedEvent",
+    "SnsPostCreatedEvent",
+    "SnsReplyCreatedEvent",
     "SnsContentLikedEvent",
     "SnsContentDeletedEvent",
     "SnsContentMentionedEvent",

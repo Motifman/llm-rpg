@@ -122,3 +122,34 @@ class ContentTypeMismatchException(ContentTypeException):
         if message is None:
             message = f"コンテンツIDは「{expected_type}」である必要があります。実際のタイプ: 「{actual_type}」、content_id: {content_id}"
         super().__init__(message)
+
+
+class ContentAlreadyDeletedException(ContentValidationException):
+    """すでに削除済みのコンテンツを削除しようとした場合の例外"""
+    error_code = "CONTENT_ALREADY_DELETED"
+
+    def __init__(self, content_id: int, content_type: str, message: str = None):
+        self.content_id = content_id
+        self.content_type = content_type
+        if message is None:
+            message = f"すでに削除済みの{content_type}は削除できません。content_id: {content_id}"
+        super().__init__(message)
+
+
+class NotificationIdValidationException(ContentValidationException):
+    """通知IDバリデーション例外"""
+    error_code = "NOTIFICATION_ID_VALIDATION_ERROR"
+
+    def __init__(self, notification_id, message: str = None):
+        self.notification_id = notification_id
+        if message is None:
+            message = f"通知IDは正の数値である必要があります。入力値: {notification_id}"
+        super().__init__(message)
+
+
+class NotificationContentValidationException(ContentValidationException):
+    """通知コンテンツバリデーション例外"""
+    error_code = "NOTIFICATION_CONTENT_VALIDATION_ERROR"
+
+    def __init__(self, message: str):
+        super().__init__(message)

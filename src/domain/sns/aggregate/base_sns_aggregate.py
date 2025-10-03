@@ -4,7 +4,7 @@ from datetime import datetime
 from src.domain.common.aggregate_root import AggregateRoot
 from src.domain.sns.value_object import PostContent, Like, Mention, PostId, ReplyId, UserId
 from src.domain.sns.event import SnsContentLikedEvent, SnsContentDeletedEvent, SnsContentMentionedEvent
-from src.domain.sns.exception import InvalidContentTypeException, OwnershipException, ContentTypeException
+from src.domain.sns.exception import InvalidContentTypeException, OwnershipException, ContentTypeException, ContentAlreadyDeletedException
 
 
 class BaseSnsContentAggregate(AggregateRoot, ABC):
@@ -132,6 +132,11 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
 
         if user_id != self._author_user_id:
             raise OwnershipException(user_id.value, self._content_id.value, content_type)
+
+        # すでに削除済みかどうかのチェック
+        if self._deleted:
+            raise ContentAlreadyDeletedException(self._content_id.value, content_type)
+
         self._deleted = True
 
         # イベント発行
@@ -173,6 +178,11 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
         """親情報を取得（parent_post_id, parent_reply_id）"""
         pass
 
+    @abstractmethod
+    def get_display_info(self, viewer_user_id: UserId) -> dict:
+        """表示用の情報をまとめて取得"""
+        pass
+
     def _create_mentions_from_content(self, content: PostContent) -> Set[Mention]:
         """コンテンツからメンションを抽出"""
         import re
@@ -199,8 +209,3 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
             content_type=content_type
             )
             self.add_event(event)
-
-    def can_be_viewed_by(self, viewer_user: "UserAggregate", author_user: "UserAggregate") -> bool:
-        """閲覧権限チェック"""
-        from src.domain.sns.service.post_visibility_domain_service import PostVisibilityDomainService
-        return PostVisibilityDomainService.can_view_post(self, viewer_user, author_user)

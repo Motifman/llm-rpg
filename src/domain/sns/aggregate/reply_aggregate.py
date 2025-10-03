@@ -2,7 +2,7 @@ from typing import Set, Optional
 from datetime import datetime
 from src.domain.sns.aggregate.base_sns_aggregate import BaseSnsContentAggregate
 from src.domain.sns.value_object import PostContent, Like, Mention, PostId, ReplyId, UserId
-from src.domain.sns.event import SnsContentCreatedEvent
+from src.domain.sns.event import SnsReplyCreatedEvent
 from src.domain.sns.exception import InvalidContentTypeException, InvalidParentReferenceException, OwnershipException
 
 
@@ -16,6 +16,7 @@ class ReplyAggregate(BaseSnsContentAggregate):
         content: PostContent,
         likes: Set[Like],
         mentions: Set[Mention],
+        reply_ids: Set[ReplyId],  # 子リプライIDの一覧
         deleted: bool = False,
         parent_post_id: Optional[PostId] = None,
         parent_reply_id: Optional[ReplyId] = None,
@@ -28,6 +29,7 @@ class ReplyAggregate(BaseSnsContentAggregate):
             raise InvalidParentReferenceException("親ポストIDと親リプライIDを同時に設定することはできません。")
 
         super().__init__(reply_id, author_user_id, content, likes, mentions, deleted, parent_post_id, parent_reply_id, created_at)
+        self._reply_ids = reply_ids.copy()
 
     @classmethod
     def create_from_db(
@@ -39,10 +41,11 @@ class ReplyAggregate(BaseSnsContentAggregate):
         content: PostContent,
         likes: Set[Like],
         mentions: Set[Mention],
+        reply_ids: Set[ReplyId],  # 子リプライIDの一覧
         deleted: bool = False,
         created_at: Optional[datetime] = None
     ) -> "ReplyAggregate":
-        return cls(reply_id, author_user_id, content, likes, mentions, deleted, parent_post_id, parent_reply_id, created_at)
+        return cls(reply_id, author_user_id, content, likes, mentions, reply_ids, deleted, parent_post_id, parent_reply_id, created_at)
 
     @classmethod
     def create(
@@ -50,25 +53,27 @@ class ReplyAggregate(BaseSnsContentAggregate):
         reply_id: ReplyId,
         parent_post_id: Optional[PostId],
         parent_reply_id: Optional[ReplyId],
+        parent_author_id: Optional[UserId],
         author_user_id: UserId,
         content: PostContent
     ) -> "ReplyAggregate":
         """リプライを作成"""
         mentions = cls._create_mentions_from_content_static(reply_id, content)
         likes = set()
-        reply = cls(reply_id, author_user_id, content, likes, mentions, deleted=False, parent_post_id=parent_post_id, parent_reply_id=parent_reply_id)
+        reply_ids = set()  # 新しいリプライなので子リプライは空
+        reply = cls(reply_id, author_user_id, content, likes, mentions, reply_ids, deleted=False, parent_post_id=parent_post_id, parent_reply_id=parent_reply_id)
 
         # 作成イベントを発行
-        event = SnsContentCreatedEvent.create(
+        event = SnsReplyCreatedEvent.create(
             aggregate_id=reply_id,
             aggregate_type="ReplyAggregate",
-            target_id=reply_id,
+            reply_id=reply_id,
             author_user_id=author_user_id,
             content=content,
             mentions=mentions,
             parent_post_id=parent_post_id,
             parent_reply_id=parent_reply_id,
-            content_type="reply"
+            parent_author_id=parent_author_id
         )
         reply.add_event(event)
 
@@ -105,3 +110,39 @@ class ReplyAggregate(BaseSnsContentAggregate):
     def delete_reply(self, user_id: UserId):
         """リプライを削除"""
         self.delete(user_id, "reply")
+
+    @property
+    def reply_ids(self) -> Set[ReplyId]:
+        """子リプライIDの一覧を取得"""
+        return self._reply_ids.copy()
+
+    def get_reply_count(self) -> int:
+        """子リプライ数を取得"""
+        return len(self._reply_ids)
+
+    def add_reply(self, reply_id: ReplyId) -> None:
+        """子リプライを追加"""
+        self._reply_ids.add(reply_id)
+
+    def remove_reply(self, reply_id: ReplyId) -> None:
+        """子リプライを削除"""
+        self._reply_ids.discard(reply_id)
+
+    def get_display_info(self, viewer_user_id: UserId) -> dict:
+        """表示用の情報をまとめて取得"""
+        return {
+            "reply_id": self.reply_id.value,
+            "parent_post_id": self.parent_post_id.value if self.parent_post_id else None,
+            "parent_reply_id": self.parent_reply_id.value if self.parent_reply_id else None,
+            "author_user_id": self.author_user_id.value,
+            "content": self.content.content,
+            "hashtags": list(self.content.hashtags),
+            "visibility": self.content.visibility.value,
+            "created_at": self.created_at,
+            "like_count": len(self.likes),
+            "reply_count": self.get_reply_count(),
+            "is_liked_by_viewer": self.is_liked_by_user(viewer_user_id),
+            "mentioned_users": list(self.get_mentioned_users()),
+            "is_deleted": self.deleted,
+            "has_replies": self.get_reply_count() > 0,
+        }

@@ -18,3 +18,16 @@ class PostContent:
             raise HashtagCountValidationException(len(self.hashtags), 10)
         if not isinstance(self.visibility, PostVisibility):
             raise VisibilityValidationException(str(self.visibility))
+
+    @classmethod
+    def create(cls, content: str, visibility: PostVisibility = PostVisibility.PUBLIC) -> "PostContent":
+        """コンテンツと可視性からPostContentを作成（ハッシュタグは自動抽出）"""
+        hashtags = cls._extract_hashtags(content)
+        return cls(content=content, hashtags=hashtags, visibility=visibility)
+
+    @staticmethod
+    def _extract_hashtags(content: str) -> Tuple[str, ...]:
+        """コンテンツからハッシュタグを抽出"""
+        hashtag_pattern = r'#(\w+)'
+        matches = re.findall(hashtag_pattern, content)
+        return tuple(matches)
