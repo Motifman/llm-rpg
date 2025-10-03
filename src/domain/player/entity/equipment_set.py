@@ -4,7 +4,7 @@ from typing import Optional
 from src.domain.item.equipment_item import EquipmentItem
 from src.domain.item.item_enum import ItemType
 from src.domain.item.item_exception import ItemNotEquippableException
-from src.domain.player.base_status import BaseStatus
+from src.domain.player.value_object.base_status import BaseStatus
 
 
 class EquipmentSet:

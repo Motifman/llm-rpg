@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from typing import Optional, List
 from src.domain.common.repository import Repository
-from src.domain.player.player import Player
+from src.domain.player.aggregate.player import Player
 
 
 class PlayerRepository(Repository[Player]):

@@ -1,5 +1,5 @@
-from src.domain.player.hp import Hp
-from src.domain.player.mp import Mp
+from src.domain.player.value_object.hp import Hp
+from src.domain.player.value_object.mp import Mp
 from src.domain.common.value_object import Exp, Gold, Level
 
 
@@ -23,12 +23,12 @@ class DynamicStatus:
     @classmethod
     def new_game(cls, max_hp: int, max_mp: int, max_exp: int, initial_level: int) -> 'DynamicStatus':
         """新しいゲームを開始するときの初期ステータスを生成する"""
-        hp = Hp(value=max_hp, max_hp=max_hp)
-        mp = Mp(value=max_mp, max_mp=max_mp)
-        exp = Exp(value=0, max_exp=max_exp)
-        level = Level(value=initial_level)
+        hp = Hp.create(value=max_hp, max_hp=max_hp)
+        mp = Mp.create(value=max_mp, max_mp=max_mp)
+        exp = Exp(value=0)
+        level = Level.create(value=initial_level)
         gold = Gold(value=0)
-        
+
         return cls(hp, mp, exp, level, gold)
 
     # == プロパティ ==

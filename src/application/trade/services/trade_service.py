@@ -18,7 +18,7 @@ from src.application.trade.contracts.dtos import (
 )
 from src.domain.trade.trade_service import TradeService
 from src.domain.trade.trade import TradeOffer, TradeItem
-from src.domain.player.player_repository import PlayerRepository
+from src.domain.player.repository.player_repository import PlayerRepository
 from src.domain.trade.trade_repository import TradeRepository
 from src.domain.trade.trade_event_dispatcher import TradeEventDispatcher
 from src.domain.trade.trade_exception import (

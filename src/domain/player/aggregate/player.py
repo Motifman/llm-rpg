@@ -5,15 +5,15 @@ from src.domain.item.item_enum import ItemType
 from src.domain.item.item_quantity import ItemQuantity
 from src.domain.item.unique_item import UniqueItem
 from src.domain.item.item_exception import ItemNotFoundException, ItemNotUsableException, ItemNotEquippableException
-from src.domain.player.base_status import BaseStatus
-from src.domain.player.dynamic_status import DynamicStatus
-from src.domain.player.inventory import Inventory
-from src.domain.player.equipment_set import EquipmentSet
-from src.domain.player.player_enum import Role, PlayerState
-from src.domain.player.message import Message
-from src.domain.player.message_box import MessageBox
+from src.domain.player.value_object.base_status import BaseStatus
+from src.domain.player.entity.dynamic_status import DynamicStatus
+from src.domain.player.entity.inventory import Inventory
+from src.domain.player.entity.equipment_set import EquipmentSet
+from src.domain.player.enum.player_enum import Role, PlayerState
+from src.domain.player.value_object.message import Message
+from src.domain.player.entity.message_box import MessageBox
 from src.domain.common.value_object import Exp, Gold, Level
-from src.domain.player.conversation_events import PlayerSpokeEvent
+from src.domain.player.event.conversation_events import PlayerSpokeEvent
 from src.domain.trade.trade import TradeItem
 from src.domain.trade.trade_exception import InsufficientItemsException, InsufficientGoldException, ItemNotTradeableException, InsufficientInventorySpaceException
 from src.domain.battle.battle_enum import Element, Race
@@ -29,8 +29,8 @@ from src.application.trade.contracts.commands import CreateTradeCommand
 from src.domain.common.aggregate_root import AggregateRoot
 from src.domain.spot.movement_events import PlayerMovedEvent
 from src.domain.spot.spot_exception import PlayerAlreadyInSpotException
-from src.domain.player.hp import Hp
-from src.domain.player.mp import Mp
+from src.domain.player.value_object.hp import Hp
+from src.domain.player.value_object.mp import Mp
 
 
 class Player(AggregateRoot):
