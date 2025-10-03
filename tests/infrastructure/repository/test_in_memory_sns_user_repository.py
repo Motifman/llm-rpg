@@ -1,6 +1,6 @@
 import pytest
 from src.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
-from src.domain.sns.sns_enum import UserRelationshipType
+from src.domain.sns.enum.sns_enum import UserRelationshipType
 
 
 class TestInMemorySnsUserRepository:

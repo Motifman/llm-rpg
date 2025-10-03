@@ -166,3 +166,111 @@ class TestPostVisibilityDomainService:
 
         # Then: 現在の仕様では削除されたポストは誰にも見えない
         assert result is False
+
+    def test_can_view_deleted_post_for_reply_thread_by_owner(self, hero_user):
+        """自分の削除したポストはリプライツリー表示用に閲覧可能"""
+        # Given
+        post = self._create_post(1, 1, PostVisibility.PUBLIC, deleted=True)  # 削除された自分のポスト
+
+        # When
+        result = PostVisibilityDomainService.can_view_deleted_post_for_reply_thread(post, hero_user, hero_user)
+
+        # Then
+        assert result is True
+
+    def test_can_view_deleted_post_for_reply_thread_by_other(self, hero_user, mage_user):
+        """他人の削除したポストはリプライツリー表示用に閲覧可能（ブロック関係を除く）"""
+        # Given
+        post = self._create_post(1, 1, PostVisibility.PUBLIC, deleted=True)  # 削除された他人のポスト
+
+        # When
+        result = PostVisibilityDomainService.can_view_deleted_post_for_reply_thread(post, mage_user, hero_user)
+
+        # Then
+        assert result is True
+
+    def test_cannot_view_deleted_post_for_reply_thread_when_blocked(self, hero_user, mage_user):
+        """ブロックされている場合、削除されたポストもリプライツリー表示用に閲覧不可"""
+        # Given
+        post = self._create_post(1, 1, PostVisibility.PUBLIC, deleted=True)  # 削除されたポスト
+
+        # 魔法使いが勇者をブロック
+        mage_user.block(hero_user.user_id)
+
+        # When
+        result = PostVisibilityDomainService.can_view_deleted_post_for_reply_thread(post, mage_user, hero_user)
+
+        # Then
+        assert result is False
+
+    def test_can_view_deleted_reply_for_thread_by_owner(self, hero_user):
+        """自分の削除したリプライはスレッド表示用に閲覧可能"""
+        # Given: リプライを作成（PostAggregateの代わりに簡易的に作成）
+        from src.domain.sns.aggregate.reply_aggregate import ReplyAggregate
+        from src.domain.sns.value_object.reply_id import ReplyId
+
+        reply_content = PostContent("テストリプライ", (), PostVisibility.PUBLIC)
+        reply = ReplyAggregate.create(
+            reply_id=ReplyId(1),
+            parent_post_id=PostId(1),  # 親ポストを指定
+            parent_reply_id=None,
+            parent_author_id=hero_user.user_id,  # テストでは同じユーザー
+            author_user_id=hero_user.user_id,
+            content=reply_content
+        )
+        reply.delete(hero_user.user_id, "reply")  # 削除
+
+        # When
+        result = PostVisibilityDomainService.can_view_deleted_reply_for_thread(reply, hero_user, hero_user)
+
+        # Then
+        assert result is True
+
+    def test_can_view_deleted_reply_for_thread_by_other(self, hero_user, mage_user):
+        """他人の削除したリプライはスレッド表示用に閲覧可能（ブロック関係を除く）"""
+        # Given: リプライを作成
+        from src.domain.sns.aggregate.reply_aggregate import ReplyAggregate
+        from src.domain.sns.value_object.reply_id import ReplyId
+
+        reply_content = PostContent("テストリプライ", (), PostVisibility.PUBLIC)
+        reply = ReplyAggregate.create(
+            reply_id=ReplyId(1),
+            parent_post_id=PostId(1),  # 親ポストを指定
+            parent_reply_id=None,
+            parent_author_id=hero_user.user_id,  # テストでは同じユーザー
+            author_user_id=hero_user.user_id,
+            content=reply_content
+        )
+        reply.delete(hero_user.user_id, "reply")  # 削除
+
+        # When
+        result = PostVisibilityDomainService.can_view_deleted_reply_for_thread(reply, mage_user, hero_user)
+
+        # Then
+        assert result is True
+
+    def test_cannot_view_deleted_reply_for_thread_when_blocked(self, hero_user, mage_user):
+        """ブロックされている場合、削除されたリプライもスレッド表示用に閲覧不可"""
+        # Given: リプライを作成
+        from src.domain.sns.aggregate.reply_aggregate import ReplyAggregate
+        from src.domain.sns.value_object.reply_id import ReplyId
+
+        reply_content = PostContent("テストリプライ", (), PostVisibility.PUBLIC)
+        reply = ReplyAggregate.create(
+            reply_id=ReplyId(1),
+            parent_post_id=PostId(1),  # 親ポストを指定
+            parent_reply_id=None,
+            parent_author_id=hero_user.user_id,  # テストでは同じユーザー
+            author_user_id=hero_user.user_id,
+            content=reply_content
+        )
+        reply.delete(hero_user.user_id, "reply")  # 削除
+
+        # 魔法使いが勇者をブロック
+        mage_user.block(hero_user.user_id)
+
+        # When
+        result = PostVisibilityDomainService.can_view_deleted_reply_for_thread(reply, mage_user, hero_user)
+
+        # Then
+        assert result is False

@@ -14,7 +14,8 @@ from src.domain.sns.exception import (
     ContentLengthValidationException,
     HashtagCountValidationException,
     VisibilityValidationException,
-    MentionValidationException
+    MentionValidationException,
+    ContentAlreadyDeletedException
 )
 
 
@@ -45,7 +46,7 @@ class TestBaseSnsContentAggregate:
         author_user_id = UserId(1)
         content = PostContent("テスト返信")
 
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
 
         assert reply.content_id == reply_id
         assert reply.author_user_id == author_user_id
@@ -80,13 +81,47 @@ class TestBaseSnsContentAggregate:
         likes_copy.add("dummy")
         assert post.likes == set()
 
+    def test_post_aggregate_is_private(self):
+        """PostAggregateのis_privateメソッドテスト"""
+        post_id = PostId(1)
+        author_user_id = UserId(1)
+
+        # プライベートポストの作成
+        private_content = PostContent.create("プライベート投稿", PostVisibility.PRIVATE)
+        private_post = PostAggregate.create(post_id, author_user_id, private_content)
+
+        # パブリックポストの作成
+        public_content = PostContent.create("パブリック投稿", PostVisibility.PUBLIC)
+        public_post = PostAggregate.create(PostId(2), author_user_id, public_content)
+
+        # フォロワー限定ポストの作成
+        followers_content = PostContent.create("フォロワー限定投稿", PostVisibility.FOLLOWERS_ONLY)
+        followers_post = PostAggregate.create(PostId(3), author_user_id, followers_content)
+
+        # プライベート判定テスト
+        assert private_post.is_private() is True
+        assert public_post.is_private() is False
+        assert followers_post.is_private() is False
+
+    def test_post_aggregate_get_sort_key_by_created_at(self):
+        """PostAggregateのget_sort_key_by_created_atメソッドテスト"""
+        post_id = PostId(1)
+        author_user_id = UserId(1)
+        content = PostContent("テスト投稿")
+        post = PostAggregate.create(post_id, author_user_id, content)
+
+        # 作成日時を取得できること
+        sort_key = post.get_sort_key_by_created_at()
+        assert isinstance(sort_key, datetime)
+        assert sort_key == post.created_at
+
     def test_reply_aggregate_properties(self):
         """ReplyAggregateのプロパティテスト"""
         reply_id = ReplyId(1)
         parent_post_id = PostId(1)
         author_user_id = UserId(1)
         content = PostContent("テスト返信")
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
 
         assert reply.reply_id == reply_id
         assert reply.content_id == reply_id
@@ -176,7 +211,7 @@ class TestBaseSnsContentAggregate:
         parent_post_id = PostId(1)
         author_user_id = UserId(1)
         content = PostContent("テスト返信")
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
 
         user_id = UserId(2)
 
@@ -223,11 +258,42 @@ class TestBaseSnsContentAggregate:
         parent_post_id = PostId(1)
         author_user_id = UserId(1)
         content = PostContent("テスト返信")
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
 
         # 作成者が削除
         reply.delete_reply(author_user_id)
         assert reply.deleted is True
+
+    def test_delete_already_deleted_post_raises_error(self):
+        """すでに削除済みのPostAggregateを再度削除しようとするとエラーになるテスト"""
+        post_id = PostId(1)
+        author_user_id = UserId(1)
+        content = PostContent("テスト投稿")
+        post = PostAggregate.create(post_id, author_user_id, content)
+
+        # 1回目の削除（成功）
+        post.delete_post(author_user_id)
+        assert post.deleted is True
+
+        # 2回目の削除（すでに削除済みなのでエラー）
+        with pytest.raises(ContentAlreadyDeletedException, match="すでに削除済みのpostは削除できません"):
+            post.delete_post(author_user_id)
+
+    def test_delete_already_deleted_reply_raises_error(self):
+        """すでに削除済みのReplyAggregateを再度削除しようとするとエラーになるテスト"""
+        reply_id = ReplyId(1)
+        parent_post_id = PostId(1)
+        author_user_id = UserId(1)
+        content = PostContent("テスト返信")
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
+
+        # 1回目の削除（成功）
+        reply.delete_reply(author_user_id)
+        assert reply.deleted is True
+
+        # 2回目の削除（すでに削除済みなのでエラー）
+        with pytest.raises(ContentAlreadyDeletedException, match="すでに削除済みのreplyは削除できません"):
+            reply.delete_reply(author_user_id)
 
     def test_get_content_type_post(self):
         """PostAggregateのコンテンツタイプ取得テスト"""
@@ -244,7 +310,7 @@ class TestBaseSnsContentAggregate:
         parent_post_id = PostId(1)
         author_user_id = UserId(1)
         content = PostContent("テスト返信")
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
 
         assert reply.get_content_type() == "reply"
 
@@ -265,7 +331,7 @@ class TestBaseSnsContentAggregate:
         parent_post_id = PostId(1)
         author_user_id = UserId(1)
         content = PostContent("テスト返信")
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
 
         result_parent_post_id, result_parent_reply_id = reply.get_parent_info()
         assert result_parent_post_id == parent_post_id
@@ -277,7 +343,7 @@ class TestBaseSnsContentAggregate:
         reply_id = ReplyId(2)
         author_user_id = UserId(1)
         content = PostContent("テスト返信")
-        reply = ReplyAggregate.create(reply_id, None, parent_reply_id, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, None, parent_reply_id, UserId(2), author_user_id, content)
 
         result_parent_post_id, result_parent_reply_id = reply.get_parent_info()
         assert result_parent_post_id is None
@@ -430,7 +496,7 @@ class TestBaseSnsContentAggregate:
         deleted = False
 
         reply = ReplyAggregate.create_from_db(
-            reply_id, parent_post_id, None, author_user_id, content, likes, mentions, deleted
+            reply_id, parent_post_id, None, author_user_id, content, likes, mentions, set(), deleted
         )
 
         assert reply.content_id == reply_id
@@ -508,7 +574,7 @@ class TestBaseSnsContentAggregate:
         parent_post_id = PostId(1)
         author_user_id = UserId(1)
         content = PostContent("テスト返信")
-        reply = ReplyAggregate.create(reply_id, parent_post_id, None, author_user_id, content)
+        reply = ReplyAggregate.create(reply_id, parent_post_id, None, UserId(2), author_user_id, content)
 
         with pytest.raises(InvalidContentTypeException, match="コンテンツタイプは「post」または「reply」である必要があります"):
             reply.delete(author_user_id, "invalid_type")
@@ -522,7 +588,7 @@ class TestBaseSnsContentAggregate:
         content = PostContent("テスト返信")
 
         with pytest.raises(Exception):  # InvalidParentReferenceException
-            ReplyAggregate.create(reply_id, parent_post_id, parent_reply_id, author_user_id, content)
+            ReplyAggregate.create(reply_id, parent_post_id, parent_reply_id, UserId(2), author_user_id, content)
 
     def test_reply_creation_without_parent_raises_error(self):
         """親を持たないReplyAggregate作成エラーテスト"""
@@ -531,4 +597,4 @@ class TestBaseSnsContentAggregate:
         content = PostContent("テスト返信")
 
         with pytest.raises(Exception):  # InvalidParentReferenceException
-            ReplyAggregate.create(reply_id, None, None, author_user_id, content)
+            ReplyAggregate.create(reply_id, None, None, None, author_user_id, content)
