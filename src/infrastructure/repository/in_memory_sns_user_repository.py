@@ -297,6 +297,10 @@ class InMemorySnsUserRepository(UserRepository):
         # 現在のところ、全ての関係性が有効なので、単にユーザー数を返す
         return len(self._users)
 
+    def find_users_by_ids(self, user_ids: List[UserId]) -> List[UserAggregate]:
+        """複数のユーザーIDでユーザーを一括取得"""
+        return [self._users[user_id] for user_id in user_ids if user_id in self._users]
+
     def generate_user_id(self) -> UserId:
         """ユーザーIDを生成"""
         user_id = self._next_user_id
@@ -322,6 +326,13 @@ class InMemorySnsUserRepository(UserRepository):
                 del self._username_to_user_id[profile_info["user_name"]]
             return True
         return False
+
+    def find_by_display_name(self, display_name: str) -> Optional[UserAggregate]:
+        """表示名でユーザーを検索"""
+        for user in self._users.values():
+            if user.profile.display_name == display_name:
+                return user
+        return None
 
     def exists_by_id(self, user_id: UserId) -> bool:
         """ユーザーIDが存在するかチェック"""
