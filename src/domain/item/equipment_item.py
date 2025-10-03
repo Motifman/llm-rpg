@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from src.domain.item.durability import Durability
 from src.domain.item.unique_item import UniqueItem
-from src.domain.player.base_status import BaseStatus
+from src.domain.player.value_object.base_status import BaseStatus
 
 
 @dataclass(frozen=True)
