@@ -67,7 +67,11 @@ class TradeApplicationService:
                 )
             
             # 2. アイテムの所有確認
-            trade_item = seller.prepare_trade_offer(command)
+            trade_item = seller.prepare_trade_offer(
+                offered_item_id=command.offered_item_id,
+                offered_item_count=command.offered_item_count,
+                offered_unique_id=command.offered_unique_id
+            )
             
             # 3. 取引オファーを作成
             trade_offer = TradeOffer.create_trade(

@@ -46,3 +46,14 @@ class MessageValidationException(PlayerDomainException):
 
     def __init__(self, message: str):
         super().__init__(message)
+
+
+class PlayerInventoryIdValidationException(PlayerDomainException):
+    """プレイヤーインベントリIDバリデーション例外"""
+    error_code = "PLAYER_INVENTORY_ID_VALIDATION_ERROR"
+
+    def __init__(self, inventory_id, message: str = None):
+        self.inventory_id = inventory_id
+        if message is None:
+            message = f"プレイヤーインベントリIDは正の数値である必要があります。入力値: {inventory_id}"
+        super().__init__(message)
