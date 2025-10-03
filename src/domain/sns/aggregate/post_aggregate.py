@@ -2,7 +2,7 @@ from typing import Set, Optional
 from datetime import datetime
 from src.domain.sns.aggregate.base_sns_aggregate import BaseSnsContentAggregate
 from src.domain.sns.value_object import Like, PostContent, Mention, PostId, ReplyId, UserId
-from src.domain.sns.event import SnsContentCreatedEvent
+from src.domain.sns.event import SnsPostCreatedEvent
 from src.domain.sns.exception import InvalidContentTypeException, InvalidParentReferenceException, OwnershipException
 
 
@@ -56,16 +56,13 @@ class PostAggregate(BaseSnsContentAggregate):
             raise InvalidParentReferenceException()
 
         # 作成イベントを発行
-        event = SnsContentCreatedEvent.create(
+        event = SnsPostCreatedEvent.create(
             aggregate_id=post_id,
             aggregate_type="PostAggregate",
-            target_id=post_id,
+            post_id=post_id,
             author_user_id=author_user_id,
             content=post_content,
-            mentions=mentions,
-            parent_post_id=None,
-            parent_reply_id=None,
-            content_type="post"
+            mentions=mentions
         )
         post.add_event(event)
 
@@ -132,6 +129,15 @@ class PostAggregate(BaseSnsContentAggregate):
     def remove_reply(self, reply_id: ReplyId) -> None:
         """リプライを削除"""
         self._reply_ids.discard(reply_id)
+
+    def is_private(self) -> bool:
+        """ポストがプライベートかどうかを判定"""
+        from src.domain.sns.enum.sns_enum import PostVisibility
+        return self.post_content.visibility == PostVisibility.PRIVATE
+
+    def get_sort_key_by_created_at(self) -> datetime:
+        """ソート用の作成日時を取得"""
+        return self.created_at
 
     def get_display_info(self, viewer_user_id: UserId) -> dict:
         """表示用の情報をまとめて取得"""

@@ -8,6 +8,9 @@ from .block import BlockRelationShip
 from .follow import FollowRelationShip
 from .like import Like
 from .mention import Mention
+from .notification_content import NotificationContent
+from .notification_id import NotificationId
+from .notification_type import NotificationType
 from .post_content import PostContent
 from .post_id import PostId
 from .reply_id import ReplyId
@@ -20,6 +23,9 @@ __all__ = [
     "FollowRelationShip",
     "Like",
     "Mention",
+    "NotificationContent",
+    "NotificationId",
+    "NotificationType",
     "PostContent",
     "PostId",
     "ReplyId",

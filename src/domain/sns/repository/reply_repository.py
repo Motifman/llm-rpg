@@ -14,6 +14,11 @@ class ReplyRepository(Repository[ReplyAggregate]):
         pass
 
     @abstractmethod
+    def find_by_post_id_include_deleted(self, post_id: PostId, limit: int = 20, offset: int = 0) -> List[ReplyAggregate]:
+        """特定のポストへのリプライ一覧を取得（削除済みを含む）"""
+        pass
+
+    @abstractmethod
     def find_by_user_id(self, user_id: UserId, limit: int = 20, offset: int = 0) -> List[ReplyAggregate]:
         """特定のユーザーのリプライ一覧を取得"""
         pass
@@ -51,6 +56,11 @@ class ReplyRepository(Repository[ReplyAggregate]):
     @abstractmethod
     def find_thread_replies(self, root_post_id: PostId, max_depth: int = 3) -> Dict[PostId, List[ReplyAggregate]]:
         """ポストへのリプライツリーを取得（スレッド表示用）"""
+        pass
+
+    @abstractmethod
+    def find_thread_replies_include_deleted(self, root_post_id: PostId, max_depth: int = 3) -> Dict[PostId, List[ReplyAggregate]]:
+        """ポストへのリプライツリーを取得（スレッド表示用、削除済みを含む）"""
         pass
 
     @abstractmethod

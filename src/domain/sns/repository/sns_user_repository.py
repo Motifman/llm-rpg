@@ -14,6 +14,11 @@ class UserRepository(Repository[UserAggregate]):
         pass
 
     @abstractmethod
+    def find_by_display_name(self, display_name: str) -> Optional[UserAggregate]:
+        """表示名でユーザーを検索"""
+        pass
+
+    @abstractmethod
     def find_followers(self, user_id: UserId) -> List[UserId]:
         """指定ユーザーのフォロワー一覧を取得"""
         pass
@@ -91,6 +96,11 @@ class UserRepository(Repository[UserAggregate]):
     @abstractmethod
     def cleanup_broken_relationships(self) -> int:
         """無効な関係性をクリーンアップ"""
+        pass
+
+    @abstractmethod
+    def find_users_by_ids(self, user_ids: List[UserId]) -> List["UserAggregate"]:
+        """複数のユーザーIDでユーザーを一括取得"""
         pass
 
     @abstractmethod

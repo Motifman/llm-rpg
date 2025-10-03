@@ -83,6 +83,11 @@ class UserAggregate(AggregateRoot):
     @property
     def subscribe_relationships(self) -> List[SubscribeRelationShip]:
         return self._subscribe_relationships
+
+    @property
+    def profile(self) -> UserProfile:
+        """ユーザープロファイル（利便性のために追加）"""
+        return self._sns_user.user_profile
         
     def follow(self, followee_user_id: UserId):
         """ユーザーをフォロー"""
