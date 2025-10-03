@@ -1,10 +1,10 @@
-from src.domain.player.player_enum import Role
-from src.domain.player.base_status import BaseStatus
-from src.domain.player.dynamic_status import DynamicStatus
-from src.domain.player.inventory import Inventory
-from src.domain.player.equipment_set import EquipmentSet
-from src.domain.player.message_box import MessageBox
-from src.domain.player.player import Player
+from src.domain.player.enum.player_enum import Role
+from src.domain.player.value_object.base_status import BaseStatus
+from src.domain.player.entity.dynamic_status import DynamicStatus
+from src.domain.player.entity.inventory import Inventory
+from src.domain.player.entity.equipment_set import EquipmentSet
+from src.domain.player.entity.message_box import MessageBox
+from src.domain.player.aggregate.player import Player
 
 
 class PlayerBuilder:

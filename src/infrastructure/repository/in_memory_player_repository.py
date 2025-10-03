@@ -2,21 +2,21 @@
 InMemoryPlayerRepository - 実際のPlayerクラスを使用するインメモリ実装
 """
 from typing import List, Optional, Dict
-from src.domain.player.player_repository import PlayerRepository
-from src.domain.player.player import Player
-from src.domain.player.player_enum import Role, PlayerState
-from src.domain.player.base_status import BaseStatus
-from src.domain.player.dynamic_status import DynamicStatus
-from src.domain.player.inventory import Inventory, InventorySlot
-from src.domain.player.equipment_set import EquipmentSet
-from src.domain.player.message_box import MessageBox
+from src.domain.player.repository.player_repository import PlayerRepository
+from src.domain.player.aggregate.player import Player
+from src.domain.player.enum.player_enum import Role, PlayerState
+from src.domain.player.value_object.base_status import BaseStatus
+from src.domain.player.entity.dynamic_status import DynamicStatus
+from src.domain.player.entity.inventory import Inventory, InventorySlot
+from src.domain.player.entity.equipment_set import EquipmentSet
+from src.domain.player.entity.message_box import MessageBox
 from src.domain.battle.action_deck import ActionDeck
 from src.domain.battle.action_mastery import ActionMastery
 from src.domain.battle.action_slot import ActionSlot
 from src.domain.battle.skill_capacity import SkillCapacity
 from src.domain.battle.battle_enum import Race, Element
-from src.domain.player.hp import Hp
-from src.domain.player.mp import Mp
+from src.domain.player.value_object.hp import Hp
+from src.domain.player.value_object.mp import Mp
 from src.domain.common.value_object import Level, Exp, Gold
 
 

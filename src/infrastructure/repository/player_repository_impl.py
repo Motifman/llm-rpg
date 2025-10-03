@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any
-from src.domain.player.player_repository import PlayerRepository
+from src.domain.player.repository.player_repository import PlayerRepository
 from src.infrastructure.mocks.mock_player import MockPlayer, create_mock_players
 
 
