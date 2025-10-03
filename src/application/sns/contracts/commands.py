@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from src.domain.sns.enum import UserRelationshipType
+from src.domain.sns.enum import UserRelationshipType, PostVisibility
 from typing import Optional
 
 
@@ -66,3 +66,61 @@ class UnsubscribeUserCommand:
     """ユーザーサブスクライブ解除コマンド"""
     subscriber_user_id: int
     subscribed_user_id: int
+
+
+@dataclass(frozen=True)
+class CreatePostCommand:
+    """ポスト作成コマンド"""
+    user_id: int
+    content: str
+    visibility: PostVisibility = PostVisibility.PUBLIC
+
+
+@dataclass(frozen=True)
+class LikePostCommand:
+    """ポストいいねコマンド"""
+    post_id: int
+    user_id: int
+
+
+@dataclass(frozen=True)
+class DeletePostCommand:
+    """ポスト削除コマンド"""
+    post_id: int
+    user_id: int
+
+
+@dataclass(frozen=True)
+class CreateReplyCommand:
+    """リプライ作成コマンド"""
+    user_id: int
+    content: str
+    visibility: PostVisibility = PostVisibility.PUBLIC
+    parent_post_id: Optional[int] = None
+    parent_reply_id: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class LikeReplyCommand:
+    """リプライいいねコマンド"""
+    reply_id: int
+    user_id: int
+
+
+@dataclass(frozen=True)
+class DeleteReplyCommand:
+    """リプライ削除コマンド"""
+    reply_id: int
+    user_id: int
+
+
+@dataclass(frozen=True)
+class MarkNotificationAsReadCommand:
+    """通知既読コマンド"""
+    notification_id: int
+
+
+@dataclass(frozen=True)
+class MarkAllNotificationsAsReadCommand:
+    """全通知既読コマンド"""
+    user_id: int

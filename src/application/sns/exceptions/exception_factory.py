@@ -18,6 +18,12 @@ from src.application.sns.exceptions.command.user_command_exception import (
     UserCreationException,
     UserProfileUpdateException,
 )
+from src.application.sns.exceptions.command.post_command_exception import (
+    PostCommandException,
+)
+from src.application.sns.exceptions.command.notification_command_exception import (
+    NotificationCommandException,
+)
 from src.application.sns.exceptions.command.relationship_command_exception import (
     UserFollowException,
     UserBlockException,
@@ -28,6 +34,12 @@ from src.application.sns.exceptions.query.post_query_exception import (
     PostNotFoundException,
     PostAccessDeniedException,
     InvalidPostIdException,
+)
+from src.application.sns.exceptions.query.notification_query_exception import (
+    NotificationQueryException,
+    NotificationNotFoundException,
+    NotificationAccessDeniedException,
+    InvalidNotificationIdException,
 )
 
 
@@ -70,7 +82,17 @@ class ApplicationExceptionFactory:
         # ポスト関連例外
         "PostIdValidationException": PostQueryException,
         "InvalidParentReferenceException": PostQueryException,
-        "ContentOwnershipException": PostQueryException,
+        "ContentOwnershipException": PostCommandException,
+        "ContentLengthValidationException": PostCommandException,
+        "HashtagCountValidationException": PostCommandException,
+        "VisibilityValidationException": PostCommandException,
+        "ContentAlreadyDeletedException": PostCommandException,
+
+        # 通知関連例外
+        "NotificationIdValidationException": NotificationCommandException,
+        "NotificationOwnershipException": NotificationCommandException,
+        "NotificationAlreadyReadException": NotificationCommandException,
+        "NotificationNotFoundException": NotificationCommandException,
     }
 
     @classmethod

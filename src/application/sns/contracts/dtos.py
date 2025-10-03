@@ -54,6 +54,65 @@ class PostDto:
     is_replied_by_viewer: bool
     mentioned_users: List[str]
     is_deleted: bool
+    deletion_message: Optional[str] = None
+
+    def get_sort_key_by_created_at(self) -> datetime:
+        """ソート用の作成日時を取得"""
+        return self.created_at
+
+
+@dataclass(frozen=True)
+class ReplyDto:
+    """リプライ表示用DTO"""
+    reply_id: int
+    parent_post_id: Optional[int]  # 親ポストID
+    parent_reply_id: Optional[int]  # 親リプライID（ネスト用）
+    author_user_id: int
+    author_user_name: str
+    author_display_name: str
+    content: str
+    hashtags: List[str]
+    visibility: str
+    created_at: datetime
+    like_count: int
+    is_liked_by_viewer: bool
+    mentioned_users: List[str]
+    is_deleted: bool
+    deletion_message: Optional[str] = None
+    # ツリー構造表示用の情報
+    depth: int = 0  # ネストの深さ
+    has_replies: bool = False  # 子リプライがあるかどうか
+    reply_count: int = 0  # 子リプライの数
+
+    def get_sort_key_by_created_at(self) -> datetime:
+        """ソート用の作成日時を取得"""
+        return self.created_at
+
+
+@dataclass(frozen=True)
+class ReplyThreadDto:
+    """リプライスレッド表示用DTO（ポスト＋リプライツリー）"""
+    post: PostDto
+    replies: List[ReplyDto]  # フラットなリプライ一覧（ツリー構造はdepthで表現）
+
+
+@dataclass(frozen=True)
+class NotificationDto:
+    """通知表示用DTO"""
+    notification_id: int
+    user_id: int
+    notification_type: str
+    title: str
+    message: str
+    actor_user_id: int
+    actor_user_name: str
+    created_at: datetime
+    is_read: bool
+    related_post_id: Optional[int] = None
+    related_reply_id: Optional[int] = None
+    content_type: Optional[str] = None
+    content_text: Optional[str] = None
+    expires_at: Optional[datetime] = None
 
 
 @dataclass(frozen=True)

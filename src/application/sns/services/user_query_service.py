@@ -1,6 +1,9 @@
-from typing import List, Optional, Tuple, Callable
+from typing import List, Optional, Tuple, Callable, Any, TYPE_CHECKING
 import logging
 from functools import wraps
+
+if TYPE_CHECKING:
+    from src.domain.sns.aggregate.user_aggregate import UserAggregate
 from src.domain.sns.enum import UserRelationshipType
 from src.domain.sns.repository import UserRepository
 from src.domain.sns.value_object import UserId
@@ -25,97 +28,39 @@ class UserQueryService:
         self._user_repository = user_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _handle_domain_exception(self, exception: SnsDomainException, user_id: Optional[int] = None, target_user_id: Optional[int] = None) -> ErrorResponseDto:
-        """ドメイン例外を適切なエラーレスポンスに変換"""
-        # デフォルトのエラーコードとメッセージを取得
-        error_code, message = self._get_error_info_from_exception(exception)
+    def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
+        """共通の例外処理を実行"""
+        try:
+            return operation()
+        except ApplicationException as e:
+            # アプリケーション例外はそのまま再スロー
+            raise e
+        except SnsDomainException as e:
+            raise ApplicationExceptionFactory.create_from_domain_exception(
+                e,
+                user_id=context.get('user_id'),
+                target_user_id=context.get('target_user_id')
+            )
+        except Exception as e:
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+                             extra=context)
+            raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+                                     original_exception=e)
 
-        # ログに記録
-        self._logger.warning(
-            f"ドメイン例外が発生: {error_code} - {message}",
-            extra={
-                "error_type": type(exception).__name__,
-                "user_id": user_id,
-                "target_user_id": target_user_id,
-                "exception_message": str(exception),
+
+    
+    def show_my_profile(self, viewer_user_id: int) -> UserProfileDto:
+        """自分のプロフィールを表示"""
+        return self._execute_with_error_handling(
+            operation=lambda: self._show_my_profile_impl(viewer_user_id),
+            context={
+                "action": "show_my_profile",
+                "user_id": viewer_user_id
             }
         )
 
-        return ErrorResponseDto(
-            error_code=error_code,
-            message=message,
-            details=str(exception),
-            user_id=user_id,
-            target_user_id=target_user_id,
-        )
-
-    def _get_error_info_from_exception(self, exception: SnsDomainException) -> tuple[str, str]:
-        """例外の種類に基づいてエラーコードとメッセージを取得"""
-        # Exceptionクラスに定義されたエラーコードを使用
-        error_code = getattr(exception, 'error_code', 'UNKNOWN_ERROR')
-        message = str(exception)
-
-        return error_code, message
-
-    def _convert_to_application_exception(self, domain_exception: SnsDomainException, user_id: Optional[int] = None, target_user_id: Optional[int] = None) -> UserQueryException:
-        """ドメイン例外をアプリケーション例外に変換（簡素化）"""
-        return ApplicationExceptionFactory.create_from_domain_exception(
-            domain_exception,
-            user_id=user_id,
-            target_user_id=target_user_id
-        )
-
-    def _get_user_ids_from_params(self, *args, **kwargs) -> Tuple[Optional[int], Optional[int]]:
-        """パラメータからユーザーIDを取得"""
-        user_id = None
-        target_user_id = None
-
-        # 引数を確認
-        for arg in args:
-            if isinstance(arg, int):
-                if user_id is None:
-                    user_id = arg
-                elif target_user_id is None:
-                    target_user_id = arg
-                else:
-                    break  # 2つ以上見つかったら終了
-
-        # kwargsを確認
-        if 'viewer_user_id' in kwargs:
-            user_id = kwargs['viewer_user_id']
-        if 'other_user_id' in kwargs:
-            target_user_id = kwargs['other_user_id']
-
-        return user_id, target_user_id
-
-    def handle_domain_exceptions(method: Callable) -> Callable:
-        """ドメイン例外を処理するデコレータ"""
-        @wraps(method)
-        def wrapper(self, *args, **kwargs):
-            try:
-                return method(self, *args, **kwargs)
-            except ApplicationException as e:
-                # アプリケーション例外はそのまま再スロー
-                raise e
-            except SnsDomainException as e:
-                user_id, target_user_id = self._get_user_ids_from_params(*args, **kwargs)
-                app_exception = self._convert_to_application_exception(e, user_id=user_id, target_user_id=target_user_id)
-                error_response = self._handle_domain_exception(e, user_id=user_id, target_user_id=target_user_id)
-                self._logger.error(f"{method.__name__} failed: {error_response.message}", extra={"error": error_response})
-                raise app_exception
-            except Exception as e:
-                user_id, target_user_id = self._get_user_ids_from_params(*args, **kwargs)
-                self._logger.error(f"Unexpected error in {method.__name__}: {str(e)}", extra={
-                    "user_id": user_id,
-                    "target_user_id": target_user_id,
-                    "action": method.__name__
-                })
-                raise SystemErrorException(f"{method.__name__} failed: {str(e)}", original_exception=e)
-        return wrapper
-    
-    @handle_domain_exceptions
-    def show_my_profile(self, viewer_user_id: int) -> UserProfileDto:
-        """自分のプロフィールを表示"""
+    def _show_my_profile_impl(self, viewer_user_id: int) -> UserProfileDto:
+        """自分のプロフィールを表示の実装"""
         user_aggregate = self._user_repository.find_by_id(UserId(viewer_user_id))
         if user_aggregate is None:
             raise UserNotFoundException(viewer_user_id, f"ユーザーが見つかりません: {viewer_user_id}")
@@ -137,9 +82,19 @@ class UserQueryService:
             follower_count=follower_count,
         )
 
-    @handle_domain_exceptions
     def show_other_user_profile(self, other_user_id: int, viewer_user_id: int) -> UserProfileDto:
         """他のユーザーのプロフィールを表示"""
+        return self._execute_with_error_handling(
+            operation=lambda: self._show_other_user_profile_impl(other_user_id, viewer_user_id),
+            context={
+                "action": "show_other_user_profile",
+                "user_id": viewer_user_id,
+                "target_user_id": other_user_id
+            }
+        )
+
+    def _show_other_user_profile_impl(self, other_user_id: int, viewer_user_id: int) -> UserProfileDto:
+        """他のユーザーのプロフィールを表示の実装"""
         other_user_aggregate = self._user_repository.find_by_id(UserId(other_user_id))
         if other_user_aggregate is None:
             raise UserNotFoundException(other_user_id, f"ユーザーが見つかりません: {other_user_id}")
@@ -168,7 +123,6 @@ class UserQueryService:
             follower_count=other_user_follower_count,
         )
 
-    @handle_domain_exceptions
     def _get_users_profile_info(self, other_user_ids: List[UserId], viewer_user_id: int) -> List[UserProfileDto]:
         """複数のユーザーのプロフィール情報を取得（汎用）"""
         other_user_aggregates = self._user_repository.find_by_ids(other_user_ids)
@@ -196,7 +150,6 @@ class UserQueryService:
             follower_count=follower_count,
         ) for user_profile_info, rs_from_me, rs_to_me, followee_count, follower_count in zip(user_profile_infos, relationship_status_from_me, relationship_status_to_me, followee_counts, follower_counts)]
 
-    @handle_domain_exceptions
     def get_user_profiles(self, command: GetUserProfilesCommand) -> List[UserProfileDto]:
         """ユーザー関係性のプロフィール情報を取得（汎用）
 
@@ -206,6 +159,16 @@ class UserQueryService:
         Returns:
             関係性を持つユーザーのプロフィール情報リスト
         """
+        return self._execute_with_error_handling(
+            operation=lambda: self._get_user_profiles_impl(command),
+            context={
+                "action": "get_user_profiles",
+                "user_id": command.viewer_user_id
+            }
+        )
+
+    def _get_user_profiles_impl(self, command: GetUserProfilesCommand) -> List[UserProfileDto]:
+        """ユーザー関係性のプロフィール情報を取得の実装"""
         # リレーション取得関数を関係性タイプに基づいて選択
         relationship_getter = self._get_relationship_getter(command.relationship_type)
         viewer_user_id = command.viewer_user_id
