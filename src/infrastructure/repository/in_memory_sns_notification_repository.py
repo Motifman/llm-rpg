@@ -27,9 +27,10 @@ class InMemorySnsNotificationRepository(SnsNotificationRepository):
         self._next_notification_id = NotificationId(self._next_notification_id.value + 1)
         return notification_id
 
-    def save(self, notification: Notification) -> None:
+    def save(self, notification: Notification) -> Notification:
         """通知を保存"""
         self._notifications[notification.notification_id] = notification
+        return notification
 
     def find_by_id(self, notification_id: NotificationId) -> Optional[Notification]:
         """通知IDで通知を取得"""
@@ -109,3 +110,22 @@ class InMemorySnsNotificationRepository(SnsNotificationRepository):
             notification for notification in self._notifications.values()
             if notification.user_id == user_id and not notification.is_read
         ])
+
+    def find_by_ids(self, notification_ids: List[NotificationId]) -> List[Notification]:
+        """IDのリストで通知を検索"""
+        return [
+            self._notifications[notification_id]
+            for notification_id in notification_ids
+            if notification_id in self._notifications
+        ]
+
+    def delete(self, notification_id: NotificationId) -> bool:
+        """通知を削除"""
+        if notification_id in self._notifications:
+            del self._notifications[notification_id]
+            return True
+        return False
+
+    def find_all(self) -> List[Notification]:
+        """全ての通知を取得"""
+        return list(self._notifications.values())
