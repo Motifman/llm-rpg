@@ -1,7 +1,9 @@
-from .item_repository import ItemRepository
-from .unique_item_repository import UniqueItemRepository
+from .item_spec_repository import ItemSpecRepository
+from .item_instance_repository import ItemInstanceRepository
+from .recipe_repository import RecipeRepository
 
 __all__ = [
-    'ItemRepository',
-    'UniqueItemRepository',
+    'ItemSpecRepository',
+    'ItemInstanceRepository',
+    'RecipeRepository',
 ]

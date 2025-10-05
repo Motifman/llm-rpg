@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List, TYPE_CHECKING, Union
 from src.domain.common.value_object import Exp, Gold
+from src.domain.item.exception import ItemEffectValidationException
 
 if TYPE_CHECKING:
     from src.domain.player.player import Player
@@ -17,7 +18,11 @@ class HealEffect(ItemEffect):
     """回復効果"""
     def __init__(self, amount: int):
         if amount < 0:
-            raise ValueError(f"Amount must be >= 0. amount: {amount}")
+            raise ItemEffectValidationException(
+                effect_type="heal",
+                amount=amount,
+                reason="Amount must be >= 0"
+            )
         self.amount = amount
 
     def apply(self, player: 'Player'):
@@ -28,7 +33,11 @@ class RecoverMpEffect(ItemEffect):
     """MP回復効果"""
     def __init__(self, amount: int):
         if amount < 0:
-            raise ValueError(f"Amount must be >= 0. amount: {amount}")
+            raise ItemEffectValidationException(
+                effect_type="recover_mp",
+                amount=amount,
+                reason="Amount must be >= 0"
+            )
         self.amount = amount
 
     def apply(self, player: 'Player'):
@@ -39,7 +48,11 @@ class GoldEffect(ItemEffect):
     """所持金増加効果"""
     def __init__(self, amount: int):
         if amount < 0:
-            raise ValueError(f"Amount must be >= 0. amount: {amount}")
+            raise ItemEffectValidationException(
+                effect_type="gold",
+                amount=amount,
+                reason="Amount must be >= 0"
+            )
         self.gold = Gold(amount)
 
     def apply(self, player: 'Player'):
@@ -50,12 +63,16 @@ class ExpEffect(ItemEffect):
     """経験値増加効果"""
     def __init__(self, amount: int):
         if amount < 0:
-            raise ValueError(f"Amount must be >= 0. amount: {amount}")
+            raise ItemEffectValidationException(
+                effect_type="exp",
+                amount=amount,
+                reason="Amount must be >= 0"
+            )
         self.amount = amount
 
     def apply(self, player: 'Player'):
-        # プレイヤーの現在のmax_expを使用してExpオブジェクトを作成
-        exp = Exp(self.amount, player._dynamic_status._exp.max_exp)
+        # 経験値増加効果を適用
+        exp = Exp(self.amount)
         player.receive_exp(exp)
 
 
