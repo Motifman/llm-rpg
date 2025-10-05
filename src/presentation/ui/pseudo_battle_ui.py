@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 import time
 from src.domain.common.value_object import Gold, Exp
-from src.application.battle.handlers.enhanced_ui_battle_handler import (
+from src.application.combat.handlers.enhanced_ui_battle_handler import (
     UIBattleState, UIActionResult, ParticipantInfo
 )
 from src.domain.battle.battle_enum import ParticipantType, BattleResultType
