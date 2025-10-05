@@ -5,7 +5,7 @@ from src.domain.sns.aggregate import UserAggregate
 from src.domain.sns.value_object import UserId
 
 
-class UserRepository(Repository[UserAggregate]):
+class UserRepository(Repository[UserAggregate, UserId]):
     """UserAggregateのリポジトリインターフェース"""
 
     @abstractmethod
