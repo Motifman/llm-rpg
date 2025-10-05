@@ -25,9 +25,9 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
-from src.application.sns.services.user_query_service import UserQueryService
-from src.application.sns.contracts.dtos import UserProfileDto
-from src.application.sns.exceptions import UserQueryException
+from src.application.social.services.user_query_service import UserQueryService
+from src.application.social.contracts.dtos import UserProfileDto
+from src.application.social.exceptions import UserQueryException
 
 
 class SnsAutoTestDemo:
