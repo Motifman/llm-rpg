@@ -2,18 +2,19 @@ from abc import ABC, abstractmethod
 from typing import Optional, List, TypeVar, Generic
 
 T = TypeVar('T')
+ID = TypeVar('ID')
 
 
-class Repository(ABC, Generic[T]):
+class Repository(ABC, Generic[T, ID]):
     """リポジトリの基底インターフェース"""
     
     @abstractmethod
-    def find_by_id(self, entity_id: int) -> Optional[T]:
+    def find_by_id(self, entity_id: ID) -> Optional[T]:
         """IDでエンティティを検索"""
         pass
-    
+
     @abstractmethod
-    def find_by_ids(self, entity_ids: List[int]) -> List[T]:
+    def find_by_ids(self, entity_ids: List[ID]) -> List[T]:
         """IDのリストでエンティティを検索"""
         pass
     
@@ -23,7 +24,7 @@ class Repository(ABC, Generic[T]):
         pass
     
     @abstractmethod
-    def delete(self, entity_id: int) -> bool:
+    def delete(self, entity_id: ID) -> bool:
         """エンティティを削除"""
         pass
     

@@ -5,7 +5,7 @@ from src.domain.sns.aggregate import ReplyAggregate
 from src.domain.sns.value_object import Mention, PostId, ReplyId, UserId
 
 
-class ReplyRepository(Repository[ReplyAggregate]):
+class ReplyRepository(Repository[ReplyAggregate, ReplyId]):
     """ReplyAggregateのリポジトリインターフェース"""
 
     @abstractmethod
