@@ -372,11 +372,10 @@ class InMemoryReplyRepository(ReplyRepository):
         reply_ids = [ReplyId(rid) for rid in entity_ids]
         return [self._replies.get(rid) for rid in reply_ids if rid in self._replies and not self._replies[rid].deleted]
 
-    def delete(self, entity_id: int) -> bool:
+    def delete(self, entity_id: ReplyId) -> bool:
         """リプライを削除（論理削除）"""
-        reply_id = ReplyId(entity_id)
-        if reply_id in self._replies:
-            reply = self._replies[reply_id]
+        if entity_id in self._replies:
+            reply = self._replies[entity_id]
             if not reply.deleted:
                 reply.delete(reply.author_user_id, "reply")
                 return True
