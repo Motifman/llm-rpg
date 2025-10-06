@@ -45,7 +45,7 @@ class TestRecipeAggregate:
         return ItemSpec(
             item_spec_id=ItemSpecId(3),
             name="Wooden Sword",
-            item_type=ItemType.WEAPON,
+            item_type=ItemType.EQUIPMENT,
             rarity=Rarity.COMMON,
             description="A wooden sword",
             max_stack_size=MaxStackSize(1)
@@ -102,8 +102,8 @@ class TestRecipeAggregate:
                 )
             )
 
-        assert exc_info.value.recipe_id == 1
-        assert "name must not be empty" in exc_info.value.reason
+        assert "Recipe 1:" in str(exc_info.value)
+        assert "name must not be empty" in str(exc_info.value)
 
     def test_create_recipe_with_whitespace_name_raises_error(self, sample_item_spec_wood, sample_item_spec_sword):
         """空白のみの名前での作成はエラーになるテスト"""
@@ -124,8 +124,8 @@ class TestRecipeAggregate:
                 )
             )
 
-        assert exc_info.value.recipe_id == 1
-        assert "name must not be empty" in exc_info.value.reason
+        assert "Recipe 1:" in str(exc_info.value)
+        assert "name must not be empty" in str(exc_info.value)
 
     def test_create_recipe_with_empty_description_raises_error(self, sample_item_spec_wood, sample_item_spec_sword):
         """空の説明での作成はエラーになるテスト"""
@@ -146,8 +146,8 @@ class TestRecipeAggregate:
                 )
             )
 
-        assert exc_info.value.recipe_id == 1
-        assert "description must not be empty" in exc_info.value.reason
+        assert "Recipe 1:" in str(exc_info.value)
+        assert "description must not be empty" in str(exc_info.value)
 
     def test_create_recipe_with_empty_ingredients_raises_error(self, sample_item_spec_sword):
         """空の材料リストでの作成はエラーになるテスト"""
@@ -163,8 +163,8 @@ class TestRecipeAggregate:
                 )
             )
 
-        assert exc_info.value.recipe_id == 1
-        assert "ingredients must not be empty" in exc_info.value.reason
+        assert "Recipe 1:" in str(exc_info.value)
+        assert "ingredients must not be empty" in str(exc_info.value)
 
     def test_create_recipe_with_duplicate_ingredients_raises_error(self, sample_item_spec_wood, sample_item_spec_sword):
         """重複した材料での作成はエラーになるテスト"""
@@ -189,8 +189,8 @@ class TestRecipeAggregate:
                 )
             )
 
-        assert exc_info.value.recipe_id == 1
-        assert "ingredients must have unique item_spec_ids" in exc_info.value.reason
+        assert "Recipe 1:" in str(exc_info.value)
+        assert "ingredients must have unique item_spec_ids" in str(exc_info.value)
 
     def test_can_craft_with_sufficient_ingredients(self, sample_recipe, sample_item_spec_wood, sample_item_spec_stone):
         """十分な材料がある場合の合成可能チェック"""

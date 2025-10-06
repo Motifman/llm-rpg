@@ -30,6 +30,13 @@ class ItemAggregate(AggregateRoot):
         quantity: int = 1
     ) -> "ItemAggregate":
         """新しいアイテム集約を作成"""
+        # ビジネスルール: durability_maxがない場合にdurabilityを指定することはできない
+        if durability is not None and item_spec.durability_max is None:
+            from src.domain.item.exception import DurabilityValidationException
+            raise DurabilityValidationException(
+                f"Cannot specify durability for item spec without durability_max (current: {durability.current}, max: {durability.max_value})"
+            )
+
         item_instance = ItemInstance(
             item_instance_id=item_instance_id,
             item_spec=item_spec,
@@ -163,3 +170,22 @@ class ItemAggregate(AggregateRoot):
                 new_durability=self.durability
             )
             self.add_event(event)
+
+    def get_item_info(self) -> dict:
+        """アイテム情報を取得（DTO変換用）
+
+        Returns:
+            dict: アイテムの情報
+        """
+        return {
+            "item_spec_id": self.item_spec.item_spec_id.value,
+            "name": self.item_spec.name,
+            "item_type": self.item_spec.item_type,
+            "rarity": self.item_spec.rarity,
+            "description": self.item_spec.description,
+            "max_stack_size": self.item_spec.max_stack_size.value,
+            "durability_max": self.item_spec.durability_max,
+            "quantity": self.quantity,
+            "current_durability": self.durability.current if self.durability else None,
+            "is_broken": self.is_broken
+        }

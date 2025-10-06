@@ -36,8 +36,7 @@ class TestRecipeIngredient:
                 item_spec_id=sample_item_spec_id,
                 quantity=0
             )
-        assert exc_info.value.quantity == 0
-        assert "quantity must be positive" in str(exc_info.value)
+        assert "Recipe ingredient: quantity must be positive, got 0" in str(exc_info.value)
 
     def test_invalid_quantity_negative(self, sample_item_spec_id):
         """無効な数量（負の値）のテスト"""
@@ -46,8 +45,7 @@ class TestRecipeIngredient:
                 item_spec_id=sample_item_spec_id,
                 quantity=-1
             )
-        assert exc_info.value.quantity == -1
-        assert "quantity must be positive" in str(exc_info.value)
+        assert "Recipe ingredient: quantity must be positive, got -1" in str(exc_info.value)
 
     def test_str_representation(self, sample_item_spec_id):
         """文字列表現のテスト"""

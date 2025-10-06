@@ -25,23 +25,14 @@ class ItemSpec:
     def __post_init__(self):
         """バリデーションは__post_init__で実行"""
         if not self.name.strip():
-            raise ItemSpecValidationException(
-                field="name",
-                value=self.name,
-                reason="name must not be empty"
-            )
+            raise ItemSpecValidationException(f"Item spec: name must not be empty, got '{self.name}'")
         if not self.description.strip():
-            raise ItemSpecValidationException(
-                field="description",
-                value=self.description,
-                reason="description must not be empty"
-            )
+            raise ItemSpecValidationException(f"Item spec: description must not be empty, got '{self.description}'")
         if self.durability_max is not None and self.durability_max <= 0:
-            raise ItemSpecValidationException(
-                field="durability_max",
-                value=self.durability_max,
-                reason="durability_max must be positive"
-            )
+            raise ItemSpecValidationException(f"Item spec: durability_max must be positive, got {self.durability_max}")
+        # 耐久度が存在する場合、max_stack_sizeは1でなければならない
+        if self.durability_max is not None and self.max_stack_size.value != 1:
+            raise ItemSpecValidationException(f"Item spec: items with durability must have max_stack_size of 1, got {self.max_stack_size.value}")
 
     def can_create_durability(self) -> bool:
         """耐久度を作成可能かどうか"""

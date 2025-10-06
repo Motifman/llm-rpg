@@ -8,7 +8,7 @@ from src.domain.item.value_object.max_stack_size import MaxStackSize
 from src.domain.item.value_object.durability import Durability
 from src.domain.item.event.item_event import ItemUsedEvent, ItemBrokenEvent, ItemCraftedEvent, ItemRepairedEvent
 from src.domain.item.enum.item_enum import ItemType, Rarity
-from src.domain.item.exception import ItemSpecValidationException, DurabilityValidationException, QuantityValidationException, InsufficientQuantityException
+from src.domain.item.exception import ItemSpecValidationException, DurabilityValidationException, QuantityValidationException, InsufficientQuantityException, StackSizeExceededException
 
 
 class TestItemAggregate:
@@ -32,7 +32,7 @@ class TestItemAggregate:
         return ItemSpec(
             item_spec_id=ItemSpecId(2),
             name="Durable Item",
-            item_type=ItemType.WEAPON,
+            item_type=ItemType.EQUIPMENT,
             rarity=Rarity.UNCOMMON,
             description="A test item with durability",
             max_stack_size=MaxStackSize(1),
@@ -115,6 +115,35 @@ class TestItemAggregate:
 
         assert aggregate.durability == sample_durability_broken
         assert aggregate.is_broken
+
+    def test_create_with_invalid_durability_spec_mismatch(self, sample_item_spec_no_durability, sample_durability_full):
+        """durability_maxがないspecにdurabilityを指定した場合のエラーテスト"""
+        item_id = ItemInstanceId(33)
+
+        with pytest.raises(DurabilityValidationException) as exc_info:
+            ItemAggregate.create(
+                item_instance_id=item_id,
+                item_spec=sample_item_spec_no_durability,  # durability_max=None
+                durability=sample_durability_full,  # durabilityを指定
+                quantity=1
+            )
+
+        # エラーメッセージに適切な理由が含まれていることを確認
+        assert "Cannot specify durability for item spec without durability_max" in str(exc_info.value)
+
+    def test_create_with_quantity_exceeding_max_stack_size(self, sample_item_spec_no_durability):
+        """quantityがmax_stack_sizeを超える場合のエラーテスト"""
+        item_id = ItemInstanceId(34)
+
+        with pytest.raises(StackSizeExceededException) as exc_info:
+            ItemAggregate.create(
+                item_instance_id=item_id,
+                item_spec=sample_item_spec_no_durability,  # max_stack_size=64
+                quantity=100  # 64を超える
+            )
+
+        # エラーメッセージに適切な情報が含まれていることを確認
+        assert "Stack size exceeded: current 100, max 64" in str(exc_info.value)
 
     def test_create_by_crafting_emits_event(self, sample_item_spec_no_durability):
         """合成による作成時にItemCraftedEventを発行するテスト"""
@@ -429,13 +458,13 @@ class TestItemAggregate:
             item_instance_id=item_id,
             item_spec=sample_item_spec_with_durability,
             durability=sample_durability_full,
-            quantity=7
+            quantity=1  # 耐久度付きアイテムはquantity=1でなければならない
         )
 
         assert aggregate.item_instance_id == item_id
         assert aggregate.item_spec == sample_item_spec_with_durability
         assert aggregate.durability == sample_durability_full
-        assert aggregate.quantity == 7
+        assert aggregate.quantity == 1
         assert not aggregate.is_broken
 
     def test_is_broken_with_none_durability(self, sample_item_spec_no_durability):
@@ -503,3 +532,77 @@ class TestItemAggregate:
         events = aggregate.get_events()
         assert len(events) == 2
         assert all(isinstance(event, ItemUsedEvent) for event in events)
+
+    def test_get_item_info_no_durability(self, sample_item_spec_no_durability):
+        """耐久度なしアイテムの情報を取得できる"""
+        aggregate = ItemAggregate.create(
+            item_instance_id=ItemInstanceId(30),
+            item_spec=sample_item_spec_no_durability,
+            quantity=5
+        )
+
+        info = aggregate.get_item_info()
+
+        expected_info = {
+            "item_spec_id": 1,
+            "name": "Test Item",
+            "item_type": ItemType.MATERIAL,
+            "rarity": Rarity.COMMON,
+            "description": "A test item without durability",
+            "max_stack_size": 64,
+            "durability_max": None,
+            "quantity": 5,
+            "current_durability": None,
+            "is_broken": False
+        }
+        assert info == expected_info
+
+    def test_get_item_info_with_durability_full(self, sample_item_spec_with_durability):
+        """耐久度ありアイテム（満タン）の情報を取得できる"""
+        aggregate = ItemAggregate.create(
+            item_instance_id=ItemInstanceId(31),
+            item_spec=sample_item_spec_with_durability,
+            durability=Durability(current=100, max_value=100),
+            quantity=1
+        )
+
+        info = aggregate.get_item_info()
+
+        expected_info = {
+            "item_spec_id": 2,
+            "name": "Durable Item",
+            "item_type": ItemType.EQUIPMENT,
+            "rarity": Rarity.UNCOMMON,
+            "description": "A test item with durability",
+            "max_stack_size": 1,
+            "durability_max": 100,
+            "quantity": 1,
+            "current_durability": 100,
+            "is_broken": False
+        }
+        assert info == expected_info
+
+    def test_get_item_info_with_durability_broken(self, sample_item_spec_with_durability):
+        """耐久度ありアイテム（破損）の情報を取得できる"""
+        aggregate = ItemAggregate.create(
+            item_instance_id=ItemInstanceId(32),
+            item_spec=sample_item_spec_with_durability,
+            durability=Durability(current=0, max_value=100),
+            quantity=1
+        )
+
+        info = aggregate.get_item_info()
+
+        expected_info = {
+            "item_spec_id": 2,
+            "name": "Durable Item",
+            "item_type": ItemType.EQUIPMENT,
+            "rarity": Rarity.UNCOMMON,
+            "description": "A test item with durability",
+            "max_stack_size": 1,
+            "durability_max": 100,
+            "quantity": 1,
+            "current_durability": 0,
+            "is_broken": True
+        }
+        assert info == expected_info

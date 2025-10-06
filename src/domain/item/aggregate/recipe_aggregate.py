@@ -5,7 +5,7 @@ from src.domain.item.value_object.recipe_ingredient import RecipeIngredient
 from src.domain.item.value_object.recipe_result import RecipeResult
 from src.domain.item.value_object.item_spec_id import ItemSpecId
 from src.domain.item.aggregate.item_aggregate import ItemAggregate
-from src.domain.item.exception import InvalidRecipeException
+from src.domain.item.exception.item_exception import InvalidRecipeException
 
 
 class RecipeAggregate(AggregateRoot):
@@ -34,25 +34,13 @@ class RecipeAggregate(AggregateRoot):
     def _validate(self) -> None:
         """レシピの妥当性検証"""
         if not self._name.strip():
-            raise InvalidRecipeException(
-                recipe_id=self._recipe_id.value,
-                reason="name must not be empty"
-            )
+            raise InvalidRecipeException(f"Recipe {self._recipe_id.value}: name must not be empty")
         if not self._description.strip():
-            raise InvalidRecipeException(
-                recipe_id=self._recipe_id.value,
-                reason="description must not be empty"
-            )
+            raise InvalidRecipeException(f"Recipe {self._recipe_id.value}: description must not be empty")
         if not self._ingredients:
-            raise InvalidRecipeException(
-                recipe_id=self._recipe_id.value,
-                reason="ingredients must not be empty"
-            )
+            raise InvalidRecipeException(f"Recipe {self._recipe_id.value}: ingredients must not be empty")
         if len(self._ingredients) != len(set(ing.item_spec_id for ing in self._ingredients)):
-            raise InvalidRecipeException(
-                recipe_id=self._recipe_id.value,
-                reason="ingredients must have unique item_spec_ids"
-            )
+            raise InvalidRecipeException(f"Recipe {self._recipe_id.value}: ingredients must have unique item_spec_ids")
 
     @property
     def recipe_id(self) -> RecipeId:

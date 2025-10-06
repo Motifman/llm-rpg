@@ -129,8 +129,7 @@ class ItemStackingDomainService:
             # このスペックのアイテムが存在するかチェック
             if spec_id not in items_by_spec:
                 raise InsufficientIngredientsException(
-                    recipe_id=recipe.recipe_id.value,
-                    missing_ingredients={spec_id: required_quantity}
+                    f"Recipe {recipe.recipe_id.value}: missing ingredient {spec_id} (required: {required_quantity})"
                 )
 
             # このスペックのアイテムリストを取得
@@ -140,8 +139,7 @@ class ItemStackingDomainService:
             if total_available < required_quantity:
                 missing_quantity = required_quantity - total_available
                 raise InsufficientIngredientsException(
-                    recipe_id=recipe.recipe_id.value,
-                    missing_ingredients={spec_id: missing_quantity}
+                    f"Recipe {recipe.recipe_id.value}: insufficient quantity for ingredient {spec_id} (available: {total_available}, required: {required_quantity})"
                 )
 
             # アイテムを消費していく

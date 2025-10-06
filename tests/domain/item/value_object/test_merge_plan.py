@@ -53,8 +53,7 @@ class TestUpdateOperation:
                 item_instance_id=sample_item_instance_id,
                 new_quantity=0
             )
-        assert exc_info.value.quantity == 0
-        assert "new_quantity must be positive" in str(exc_info.value)
+        assert "Update operation: new_quantity must be positive, got 0" in str(exc_info.value)
 
     def test_invalid_new_quantity_negative(self, sample_item_instance_id):
         """無効なnew_quantity（負の値）のテスト"""
@@ -63,8 +62,7 @@ class TestUpdateOperation:
                 item_instance_id=sample_item_instance_id,
                 new_quantity=-1
             )
-        assert exc_info.value.quantity == -1
-        assert "new_quantity must be positive" in str(exc_info.value)
+        assert "Update operation: new_quantity must be positive, got -1" in str(exc_info.value)
 
 
 class TestCreateOperation:
@@ -78,7 +76,7 @@ class TestCreateOperation:
         return ItemSpec(
             item_spec_id=template_id,
             name="Test Item",
-            item_type=ItemType.WEAPON,
+            item_type=ItemType.EQUIPMENT,
             rarity=Rarity.COMMON,
             description="A test item",
             max_stack_size=max_stack
@@ -130,8 +128,7 @@ class TestCreateOperation:
                 item_spec=sample_item_spec,
                 quantity=0
             )
-        assert exc_info.value.quantity == 0
-        assert "quantity must be positive" in str(exc_info.value)
+        assert "Create operation: quantity must be positive, got 0" in str(exc_info.value)
 
     def test_invalid_quantity_negative(self, sample_item_spec):
         """無効なquantity（負の値）のテスト"""
@@ -140,8 +137,7 @@ class TestCreateOperation:
                 item_spec=sample_item_spec,
                 quantity=-5
             )
-        assert exc_info.value.quantity == -5
-        assert "quantity must be positive" in str(exc_info.value)
+        assert "Create operation: quantity must be positive, got -5" in str(exc_info.value)
 
 
 class TestDeleteOperation:
@@ -259,7 +255,7 @@ class TestMergePlan:
                 ItemSpec(
                     ItemSpecId(10),
                     "Item A",
-                    ItemType.WEAPON,
+                    ItemType.EQUIPMENT,
                     Rarity.COMMON,
                     "Item A desc",
                     MaxStackSize(64)
@@ -337,7 +333,7 @@ class TestConsumedItem:
                 consumed_quantity=0,
                 remaining_quantity=10
             )
-        assert "consumed_quantity must be positive" in str(exc_info.value)
+        assert "Consumed item: consumed_quantity must be positive" in str(exc_info.value)
 
     def test_invalid_consumed_quantity_negative(self, sample_item_instance_id):
         """無効なconsumed_quantity（負数）のテスト"""
@@ -347,7 +343,7 @@ class TestConsumedItem:
                 consumed_quantity=-1,
                 remaining_quantity=10
             )
-        assert "consumed_quantity must be positive" in str(exc_info.value)
+        assert "Consumed item: consumed_quantity must be positive" in str(exc_info.value)
 
     def test_invalid_remaining_quantity_negative(self, sample_item_instance_id):
         """無効なremaining_quantity（負数）のテスト"""
@@ -357,7 +353,7 @@ class TestConsumedItem:
                 consumed_quantity=5,
                 remaining_quantity=-1
             )
-        assert "remaining_quantity must be non-negative" in str(exc_info.value)
+        assert "Consumed item: remaining_quantity must be non-negative" in str(exc_info.value)
 
 
 class TestCraftingConsumptionPlan:

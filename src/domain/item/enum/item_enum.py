@@ -3,15 +3,14 @@ from enum import Enum
 
 class ItemType(Enum):
     """アイテム種別（将来のDBスキーマに準拠）"""
-    WEAPON = "weapon"
-    HELMET = "helmet"
-    CHEST = "chest"
-    SHOES = "shoes"
-    GLOVES = "gloves"
+    EQUIPMENT = "equipment"
     CONSUMABLE = "consumable"
     MATERIAL = "material"
     QUEST = "quest"
     OTHER = "other"
+    COSMETIC = "cosmetic"
+    TOOL = "tool"
+    KEY_ITEM = "key_item"
 
 
 class Rarity(Enum):

@@ -15,10 +15,7 @@ class UpdateOperation:
     def __post_init__(self):
         """バリデーションは__post_init__で実行"""
         if self.new_quantity <= 0:
-            raise QuantityValidationException(
-                quantity=self.new_quantity,
-                reason="new_quantity must be positive"
-            )
+            raise QuantityValidationException(f"Update operation: new_quantity must be positive, got {self.new_quantity}")
 
 
 @dataclass(frozen=True)
@@ -31,10 +28,7 @@ class CreateOperation:
     def __post_init__(self):
         """バリデーションは__post_init__で実行"""
         if self.quantity <= 0:
-            raise QuantityValidationException(
-                quantity=self.quantity,
-                reason="quantity must be positive"
-            )
+            raise QuantityValidationException(f"Create operation: quantity must be positive, got {self.quantity}")
 
 
 @dataclass(frozen=True)
@@ -67,15 +61,9 @@ class ConsumedItem:
     def __post_init__(self):
         """バリデーション"""
         if self.consumed_quantity <= 0:
-            raise QuantityValidationException(
-                quantity=self.consumed_quantity,
-                reason="consumed_quantity must be positive"
-            )
+            raise QuantityValidationException(f"Consumed item: consumed_quantity must be positive, got {self.consumed_quantity}")
         if self.remaining_quantity < 0:
-            raise QuantityValidationException(
-                quantity=self.remaining_quantity,
-                reason="remaining_quantity must be non-negative"
-            )
+            raise QuantityValidationException(f"Consumed item: remaining_quantity must be non-negative, got {self.remaining_quantity}")
 
 
 @dataclass(frozen=True)

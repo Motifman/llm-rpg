@@ -14,7 +14,7 @@ class ItemSpecId:
     def __post_init__(self):
         """バリデーションは__post_init__で実行"""
         if self.value <= 0:
-            raise ItemInstanceIdValidationException(self.value)
+            raise ItemInstanceIdValidationException(f"ItemSpecId must be positive, got {self.value}")
 
     @classmethod
     def create(cls, value: Union[int, str]) -> "ItemSpecId":
@@ -23,7 +23,7 @@ class ItemSpecId:
             try:
                 int_value = int(value)
             except ValueError:
-                raise ItemInstanceIdValidationException(value)
+                raise ItemInstanceIdValidationException(f"Invalid ItemSpecId format: {value}")
         else:
             int_value = value
 

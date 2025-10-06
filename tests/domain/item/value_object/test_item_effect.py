@@ -29,9 +29,7 @@ class TestHealEffect:
         """無効な負の回復量のテスト"""
         with pytest.raises(ItemEffectValidationException) as exc_info:
             HealEffect(amount=-1)
-        assert exc_info.value.effect_type == "heal"
-        assert exc_info.value.amount == -1
-        assert "Amount must be >= 0" in str(exc_info.value)
+        assert "Heal effect: amount must be >= 0, got -1" in str(exc_info.value)
 
     def test_apply_calls_player_heal(self):
         """applyメソッドがplayer.healを正しく呼ぶテスト"""
@@ -60,9 +58,7 @@ class TestRecoverMpEffect:
         """無効な負のMP回復量のテスト"""
         with pytest.raises(ItemEffectValidationException) as exc_info:
             RecoverMpEffect(amount=-5)
-        assert exc_info.value.effect_type == "recover_mp"
-        assert exc_info.value.amount == -5
-        assert "Amount must be >= 0" in str(exc_info.value)
+        assert "Recover MP effect: amount must be >= 0, got -5" in str(exc_info.value)
 
     def test_apply_calls_player_recover_mp(self):
         """applyメソッドがplayer.recover_mpを正しく呼ぶテスト"""
@@ -91,9 +87,7 @@ class TestGoldEffect:
         """無効な負のゴールド量のテスト"""
         with pytest.raises(ItemEffectValidationException) as exc_info:
             GoldEffect(amount=-10)
-        assert exc_info.value.effect_type == "gold"
-        assert exc_info.value.amount == -10
-        assert "Amount must be >= 0" in str(exc_info.value)
+        assert "Gold effect: amount must be >= 0, got -10" in str(exc_info.value)
 
     def test_apply_calls_player_receive_gold(self):
         """applyメソッドがplayer.receive_goldを正しく呼ぶテスト"""
@@ -122,9 +116,7 @@ class TestExpEffect:
         """無効な負の経験値量のテスト"""
         with pytest.raises(ItemEffectValidationException) as exc_info:
             ExpEffect(amount=-25)
-        assert exc_info.value.effect_type == "exp"
-        assert exc_info.value.amount == -25
-        assert "Amount must be >= 0" in str(exc_info.value)
+        assert "Exp effect: amount must be >= 0, got -25" in str(exc_info.value)
 
     def test_apply_calls_player_receive_exp(self):
         """applyメソッドがplayer.receive_expを正しく呼ぶテスト"""

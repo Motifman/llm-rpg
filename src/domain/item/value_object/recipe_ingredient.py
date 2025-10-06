@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from src.domain.item.value_object.item_spec_id import ItemSpecId
-from src.domain.item.exception import QuantityValidationException
+from src.domain.item.exception.item_exception import QuantityValidationException
 
 
 @dataclass(frozen=True)
@@ -15,10 +15,7 @@ class RecipeIngredient:
     def __post_init__(self):
         """バリデーションは__post_init__で実行"""
         if self.quantity <= 0:
-            raise QuantityValidationException(
-                quantity=self.quantity,
-                reason="quantity must be positive"
-            )
+            raise QuantityValidationException(f"Recipe ingredient: quantity must be positive, got {self.quantity}")
 
     def __str__(self) -> str:
         """文字列表現"""

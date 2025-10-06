@@ -50,7 +50,7 @@ class TestItemStackingDomainServiceCrafting:
         return ItemSpec(
             item_spec_id=ItemSpecId(3),
             name="Wooden Sword",
-            item_type=ItemType.WEAPON,
+            item_type=ItemType.EQUIPMENT,
             rarity=Rarity.COMMON,
             description="A wooden sword",
             max_stack_size=MaxStackSize(1)
@@ -236,8 +236,8 @@ class TestItemStackingDomainServiceCrafting:
                 sample_recipe, available_items
             )
 
-        assert exc_info.value.recipe_id == 1
-        assert len(exc_info.value.missing_ingredients) > 0
+        assert "Recipe 1:" in str(exc_info.value)
+        assert "missing ingredient" in str(exc_info.value)
 
     def test_plan_crafting_consumption_insufficient_quantity(
         self, sample_recipe, sample_item_spec_wood, sample_item_spec_stone
@@ -261,10 +261,8 @@ class TestItemStackingDomainServiceCrafting:
                 sample_recipe, available_items
             )
 
-        assert exc_info.value.recipe_id == 1
-        missing = exc_info.value.missing_ingredients
-        assert sample_item_spec_wood.item_spec_id in missing
-        assert missing[sample_item_spec_wood.item_spec_id] == 1  # 不足数量
+        assert "Recipe 1:" in str(exc_info.value)
+        assert "insufficient quantity for ingredient" in str(exc_info.value)
 
     def test_plan_crafting_consumption_empty_available_items(self, sample_recipe):
         """異常系：利用可能なアイテムが空の場合"""
@@ -335,7 +333,7 @@ class TestItemStackingDomainServiceStacking:
         return ItemSpec(
             item_spec_id=ItemSpecId(11),
             name="Non-Stackable Item",
-            item_type=ItemType.WEAPON,
+            item_type=ItemType.EQUIPMENT,
             rarity=Rarity.UNCOMMON,
             description="A non-stackable item",
             max_stack_size=MaxStackSize(1),
