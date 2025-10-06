@@ -57,7 +57,7 @@ class TestRecipeDomainService:
         return ItemSpec(
             item_spec_id=ItemSpecId(4),
             name="Wooden Sword",
-            item_type=ItemType.WEAPON,
+            item_type=ItemType.EQUIPMENT,
             rarity=Rarity.COMMON,
             description="A wooden sword",
             max_stack_size=MaxStackSize(1)

@@ -11,23 +11,11 @@ class Durability:
     def __post_init__(self):
         """バリデーションは__post_init__で実行"""
         if self.max_value <= 0:
-            raise DurabilityValidationException(
-                current=self.current,
-                max_value=self.max_value,
-                reason="max_value must be positive"
-            )
+            raise DurabilityValidationException(f"Durability: max_value must be positive, got {self.max_value}")
         if self.current < 0:
-            raise DurabilityValidationException(
-                current=self.current,
-                max_value=self.max_value,
-                reason="current must be >= 0"
-            )
+            raise DurabilityValidationException(f"Durability: current must be >= 0, got {self.current}")
         if self.current > self.max_value:
-            raise DurabilityValidationException(
-                current=self.current,
-                max_value=self.max_value,
-                reason="current must be <= max_value"
-            )
+            raise DurabilityValidationException(f"Durability: current ({self.current}) must be <= max_value ({self.max_value})")
 
     def use(self, amount: int = 1) -> tuple["Durability", bool]:
         """耐久度を使用する（新しいインスタンスを返す）

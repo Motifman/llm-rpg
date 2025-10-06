@@ -18,11 +18,7 @@ class HealEffect(ItemEffect):
     """回復効果"""
     def __init__(self, amount: int):
         if amount < 0:
-            raise ItemEffectValidationException(
-                effect_type="heal",
-                amount=amount,
-                reason="Amount must be >= 0"
-            )
+            raise ItemEffectValidationException(f"Heal effect: amount must be >= 0, got {amount}")
         self.amount = amount
 
     def apply(self, player: 'Player'):
@@ -33,11 +29,7 @@ class RecoverMpEffect(ItemEffect):
     """MP回復効果"""
     def __init__(self, amount: int):
         if amount < 0:
-            raise ItemEffectValidationException(
-                effect_type="recover_mp",
-                amount=amount,
-                reason="Amount must be >= 0"
-            )
+            raise ItemEffectValidationException(f"Recover MP effect: amount must be >= 0, got {amount}")
         self.amount = amount
 
     def apply(self, player: 'Player'):
@@ -48,11 +40,7 @@ class GoldEffect(ItemEffect):
     """所持金増加効果"""
     def __init__(self, amount: int):
         if amount < 0:
-            raise ItemEffectValidationException(
-                effect_type="gold",
-                amount=amount,
-                reason="Amount must be >= 0"
-            )
+            raise ItemEffectValidationException(f"Gold effect: amount must be >= 0, got {amount}")
         self.gold = Gold(amount)
 
     def apply(self, player: 'Player'):
@@ -63,11 +51,7 @@ class ExpEffect(ItemEffect):
     """経験値増加効果"""
     def __init__(self, amount: int):
         if amount < 0:
-            raise ItemEffectValidationException(
-                effect_type="exp",
-                amount=amount,
-                reason="Amount must be >= 0"
-            )
+            raise ItemEffectValidationException(f"Exp effect: amount must be >= 0, got {amount}")
         self.amount = amount
 
     def apply(self, player: 'Player'):

@@ -25,7 +25,7 @@ class TestItemInstance:
         return ItemSpec(
             item_spec_id=template_id,
             name="Test Sword",
-            item_type=ItemType.WEAPON,
+            item_type=ItemType.EQUIPMENT,
             rarity=Rarity.COMMON,
             description="A test sword for testing",
             max_stack_size=max_stack
@@ -49,7 +49,7 @@ class TestItemInstance:
         item_spec = ItemSpec(
             item_spec_id=template_id,
             name="Durable Sword",
-            item_type=ItemType.WEAPON,
+            item_type=ItemType.EQUIPMENT,
             rarity=Rarity.RARE,
             description="A durable sword for testing",
             max_stack_size=max_stack,
@@ -66,7 +66,7 @@ class TestItemInstance:
         """基本的なItemInstance作成のテスト"""
         assert sample_item_instance.item_instance_id.value == 1
         assert sample_item_instance.name == "Test Sword"
-        assert sample_item_instance.item_type == ItemType.WEAPON
+        assert sample_item_instance.item_type == ItemType.EQUIPMENT
         assert sample_item_instance.max_stack_size.value == 64
         assert sample_item_instance.quantity == 1
         assert sample_item_instance.durability is None
@@ -99,7 +99,7 @@ class TestItemInstance:
         spec = ItemSpec(
             item_spec_id=template_id,
             name="Broken Sword",
-            item_type=ItemType.WEAPON,
+            item_type=ItemType.EQUIPMENT,
             rarity=Rarity.COMMON,
             description="A broken sword",
             max_stack_size=max_stack,
@@ -137,7 +137,7 @@ class TestItemInstance:
         different_spec = ItemSpec(
             item_spec_id=ItemSpecId(999),
             name="Different Sword",
-            item_type=ItemType.WEAPON,
+            item_type=ItemType.EQUIPMENT,
             rarity=Rarity.COMMON,
             description="A different sword",
             max_stack_size=MaxStackSize(64)
@@ -196,10 +196,10 @@ class TestItemInstance:
         durable_spec = ItemSpec(
             item_spec_id=ItemSpecId(888),
             name="Durable Sword",
-            item_type=ItemType.WEAPON,
+            item_type=ItemType.EQUIPMENT,
             rarity=Rarity.RARE,
             description="A sword with durability",
-            max_stack_size=MaxStackSize(10),  # スタックサイズは大きいが耐久度があるのでスタック不可
+            max_stack_size=MaxStackSize(1),  # 耐久度付きアイテムはmax_stack_size=1でなければならない
             durability_max=100
         )
 
@@ -231,7 +231,7 @@ class TestItemInstance:
         spec = ItemSpec(
             item_spec_id=template_id,
             name="Test Item",
-            item_type=ItemType.WEAPON,
+            item_type=ItemType.EQUIPMENT,
             rarity=Rarity.COMMON,
             description="A test item",
             max_stack_size=max_stack
@@ -251,7 +251,7 @@ class TestItemInstance:
         spec = ItemSpec(
             item_spec_id=template_id,
             name="Non-durable Item",
-            item_type=ItemType.WEAPON,
+            item_type=ItemType.EQUIPMENT,
             rarity=Rarity.COMMON,
             description="An item without durability",
             max_stack_size=max_stack
@@ -273,7 +273,7 @@ class TestItemInstance:
         spec = ItemSpec(
             item_spec_id=template_id,
             name="Durable Item",
-            item_type=ItemType.WEAPON,
+            item_type=ItemType.EQUIPMENT,
             rarity=Rarity.UNCOMMON,
             description="An item with durability",
             max_stack_size=max_stack,
@@ -353,3 +353,52 @@ class TestItemInstance:
         assert "id=1" in repr_str
         assert "name=Test Sword" in repr_str
         assert "qty=1" in repr_str
+
+    def test_invalid_quantity_over_max_stack_size(self):
+        """quantityがmax_stack_sizeを超える場合のテスト"""
+        template_id = ItemSpecId(103)
+        max_stack = MaxStackSize(10)
+        spec = ItemSpec(
+            item_spec_id=template_id,
+            name="Limited Item",
+            item_type=ItemType.CONSUMABLE,
+            rarity=Rarity.COMMON,
+            description="An item with limited stack size",
+            max_stack_size=max_stack
+        )
+        item_id = ItemInstanceId(103)
+
+        with pytest.raises(StackSizeExceededException) as exc_info:
+            ItemInstance(
+                item_instance_id=item_id,
+                item_spec=spec,
+                quantity=15  # max_stack_size(10)を超える
+            )
+
+        # エラーメッセージに適切な情報が含まれていることを確認
+        assert "Stack size exceeded: current 15, max 10" in str(exc_info.value)
+
+    def test_durability_item_must_have_max_stack_size_one(self):
+        """耐久度付きアイテムはmax_stack_sizeが1であることをテスト"""
+        # 正常な耐久度付きアイテムの作成テスト
+        valid_spec = ItemSpec(
+            item_spec_id=ItemSpecId(104),
+            name="Valid Durable Item",
+            item_type=ItemType.EQUIPMENT,
+            rarity=Rarity.COMMON,
+            description="An item with durability and correct stack size",
+            max_stack_size=MaxStackSize(1),  # 正しい
+            durability_max=100
+        )
+
+        # このspecでは正常に作成できるはず
+        instance = ItemInstance(
+            item_instance_id=ItemInstanceId(104),
+            item_spec=valid_spec,
+            durability=Durability(max_value=100, current=100)
+        )
+        assert instance.durability is not None
+        assert instance.max_stack_size.value == 1
+
+        # ItemSpecレベルでmax_stack_size != 1の耐久度付きアイテムは作成できないので、
+        # ここでは正常系のテストのみ実施

@@ -36,18 +36,15 @@ class ItemInstance:
                 quantity=self._quantity,
                 reason="quantity must be >= 0"
             )
+        if self._quantity > self._item_spec.max_stack_size.value:
+            raise StackSizeExceededException(f"Stack size exceeded: current {self._quantity}, max {self._item_spec.max_stack_size.value}")
+        # 耐久度が存在する場合、max_stack_sizeは1でなければならない
+        if self._durability is not None and self._item_spec.max_stack_size.value != 1:
+            raise DurabilityValidationException(f"Items with durability must have max_stack_size of 1, but spec has {self._item_spec.max_stack_size.value}")
         if self._durability is not None and self._item_spec.durability_max is None:
-            raise DurabilityValidationException(
-                current=self._durability.current,
-                max_value=self._durability.max_value,
-                reason="Cannot have durability for item without durability_max in spec"
-            )
+            raise DurabilityValidationException(f"Cannot have durability for item without durability_max in spec")
         if self._durability is not None and self._durability.max_value != self._item_spec.durability_max:
-            raise DurabilityValidationException(
-                current=self._durability.current,
-                max_value=self._durability.max_value,
-                reason=f"Durability max_value ({self._durability.max_value}) must match spec durability_max ({self._item_spec.durability_max})"
-            )
+            raise DurabilityValidationException(f"Durability max_value ({self._durability.max_value}) must match spec durability_max ({self._item_spec.durability_max})")
 
     @property
     def item_instance_id(self) -> ItemInstanceId:
@@ -158,10 +155,7 @@ class ItemInstance:
 
         new_quantity = self._quantity + amount
         if new_quantity > self._item_spec.max_stack_size.value:
-            raise StackSizeExceededException(
-                current_quantity=self._quantity,
-                max_stack_size=self._item_spec.max_stack_size.value
-            )
+            raise StackSizeExceededException(f"Adding {amount} would exceed stack size: current {self._quantity}, max {self._item_spec.max_stack_size.value}")
 
         self._quantity = new_quantity
 
