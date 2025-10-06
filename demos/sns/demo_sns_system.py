@@ -88,18 +88,18 @@ from src.infrastructure.events.in_memory_event_publisher_with_uow import InMemor
 from src.infrastructure.events.sns_event_handler_registry import SnsEventHandlerRegistry
 from src.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 from src.infrastructure.di.container import DependencyInjectionContainer
-from src.application.sns.services.user_query_service import UserQueryService
-from src.application.sns.services.user_command_service import UserCommandService
-from src.application.sns.services.post_query_service import PostQueryService
-from src.application.sns.services.post_command_service import PostCommandService
-from src.application.sns.services.reply_query_service import ReplyQueryService
-from src.application.sns.services.reply_command_service import ReplyCommandService
-from src.application.sns.services.notification_query_service import NotificationQueryService
-from src.application.sns.services.notification_command_service import NotificationCommandService
-from src.application.sns.services.notification_event_handler_service import NotificationEventHandlerService
-from src.application.sns.services.relationship_event_handler_service import RelationshipEventHandlerService
-from src.application.sns.contracts.dtos import UserProfileDto, PostDto, ReplyDto, ReplyThreadDto, NotificationDto
-from src.application.sns.contracts.commands import (
+from src.application.social.services.user_query_service import UserQueryService
+from src.application.social.services.user_command_service import UserCommandService
+from src.application.social.services.post_query_service import PostQueryService
+from src.application.social.services.post_command_service import PostCommandService
+from src.application.social.services.reply_query_service import ReplyQueryService
+from src.application.social.services.reply_command_service import ReplyCommandService
+from src.application.social.services.notification_query_service import NotificationQueryService
+from src.application.social.services.notification_command_service import NotificationCommandService
+from src.application.social.services.notification_event_handler_service import NotificationEventHandlerService
+from src.application.social.services.relationship_event_handler_service import RelationshipEventHandlerService
+from src.application.social.contracts.dtos import UserProfileDto, PostDto, ReplyDto, ReplyThreadDto, NotificationDto
+from src.application.social.contracts.commands import (
     CreateUserCommand,
     UpdateUserProfileCommand,
     FollowUserCommand,
@@ -117,11 +117,11 @@ from src.application.sns.contracts.commands import (
     MarkNotificationAsReadCommand,
     MarkAllNotificationsAsReadCommand
 )
-from src.application.sns.exceptions import UserQueryException, UserCommandException
-from src.application.sns.exceptions.query.post_query_exception import PostQueryException
-from src.application.sns.exceptions.command.post_command_exception import PostCommandException
-from src.application.sns.exceptions.query.reply_query_exception import ReplyQueryException
-from src.application.sns.exceptions.command.reply_command_exception import ReplyCommandException
+from src.application.social.exceptions import UserQueryException, UserCommandException
+from src.application.social.exceptions.query.post_query_exception import PostQueryException
+from src.application.social.exceptions.command.post_command_exception import PostCommandException
+from src.application.social.exceptions.query.reply_query_exception import ReplyQueryException
+from src.application.social.exceptions.command.reply_command_exception import ReplyCommandException
 from src.domain.sns.enum import PostVisibility
 
 

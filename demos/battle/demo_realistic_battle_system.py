@@ -17,9 +17,9 @@ import asyncio
 import time
 from typing import List, Dict, Any
 
-from src.application.battle.services.enhanced_battle_service import EnhancedBattleApplicationService
-from src.application.battle.services.player_action_waiter import PlayerActionWaiter
-from src.application.battle.contracts.dtos import PlayerActionDto
+from src.application.combat.services.enhanced_battle_service import EnhancedBattleApplicationService
+from src.application.combat.services.player_action_waiter import PlayerActionWaiter
+from src.application.combat.contracts.dtos import PlayerActionDto
 from src.infrastructure.repository.in_memory_player_repository import InMemoryPlayerRepository
 from src.infrastructure.repository.in_memory_monster_repository import InMemoryMonsterRepository
 from src.infrastructure.repository.in_memory_action_repository import InMemoryActionRepository

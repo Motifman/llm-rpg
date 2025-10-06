@@ -4,13 +4,13 @@
 """
 
 from typing import List
-from src.domain.player.player_enum import Role
+from src.domain.player.enum.player_enum import Role
 from src.domain.battle.battle_enum import Element, Race
 from src.domain.battle.action_deck import ActionDeck
 from src.domain.battle.action_slot import ActionSlot
 from src.domain.battle.skill_capacity import SkillCapacity
-from src.domain.player.hp import Hp
-from src.domain.player.mp import Mp
+from src.domain.player.value_object.hp import Hp
+from src.domain.player.value_object.mp import Mp
 
 
 class MockPlayer:

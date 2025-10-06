@@ -1,12 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
 from datetime import datetime
+from src.domain.common.repository import Repository
 from src.domain.sns.value_object.user_id import UserId
 from src.domain.sns.value_object.notification_id import NotificationId
 from src.domain.sns.entity.notification import Notification
 
 
-class SnsNotificationRepository(ABC):
+class SnsNotificationRepository(Repository[Notification, NotificationId], ABC):
     """SNS通知リポジトリインターフェース"""
 
     @abstractmethod

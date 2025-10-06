@@ -9,7 +9,7 @@ import time
 from typing import Optional, Callable, Any
 from src.presentation.ui.curses_battle_ui import CursesBattleUIManager
 from src.presentation.ui.pseudo_battle_ui import PseudoBattleUI, BattleUIManager
-from src.application.battle.handlers.enhanced_ui_battle_handler import UIBattleNotifier
+from src.application.combat.handlers.enhanced_ui_battle_handler import UIBattleNotifier
 
 
 class BattleUIAdapter:
@@ -130,7 +130,7 @@ class BattleUIFactory:
 
 def curses_main(stdscr):
     """Cursesメイン関数（統合テスト用）"""
-    from src.application.battle.handlers.enhanced_ui_battle_handler import UIBattleNotifier
+    from src.application.combat.handlers.enhanced_ui_battle_handler import UIBattleNotifier
     
     # UI通知システムを作成
     ui_notifier = UIBattleNotifier()
@@ -153,7 +153,7 @@ def curses_main(stdscr):
     time.sleep(1)
     
     # ダミーの戦闘状態を作成
-    from src.application.battle.handlers.enhanced_ui_battle_handler import UIBattleState, ParticipantInfo
+    from src.application.combat.handlers.enhanced_ui_battle_handler import UIBattleState, ParticipantInfo
     from src.domain.battle.battle_enum import ParticipantType
     
     dummy_state = UIBattleState(
@@ -210,7 +210,7 @@ def curses_main(stdscr):
     ui_notifier.notify_message("勇者が攻撃！")
     
     # ダミーのアクション結果
-    from src.application.battle.handlers.enhanced_ui_battle_handler import UIActionResult, UIActionInfo, UITargetResult
+    from src.application.combat.handlers.enhanced_ui_battle_handler import UIActionResult, UIActionInfo, UITargetResult
     
     dummy_action_info = UIActionInfo(
         action_id=1,

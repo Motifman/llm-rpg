@@ -8,8 +8,8 @@ from src.domain.sns.event import (
     SnsContentLikedEvent,
     SnsUserBlockedEvent,
 )
-from src.application.sns.services.notification_event_handler_service import NotificationEventHandlerService
-from src.application.sns.services.relationship_event_handler_service import RelationshipEventHandlerService
+from src.application.social.services.notification_event_handler_service import NotificationEventHandlerService
+from src.application.social.services.relationship_event_handler_service import RelationshipEventHandlerService
 
 if TYPE_CHECKING:
     from src.domain.common.event_handler import EventHandler

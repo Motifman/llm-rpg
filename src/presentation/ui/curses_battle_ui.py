@@ -8,7 +8,7 @@ import time
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from src.domain.common.value_object import Gold, Exp
-from src.application.battle.handlers.enhanced_ui_battle_handler import (
+from src.application.combat.handlers.enhanced_ui_battle_handler import (
     UIBattleState, UIActionResult, ParticipantInfo
 )
 from src.domain.battle.battle_enum import ParticipantType, BattleResultType
@@ -651,7 +651,7 @@ def main(stdscr):
     time.sleep(1)
     
     # ダミーの戦闘状態
-    from src.application.battle.handlers.enhanced_ui_battle_handler import UIBattleState, ParticipantInfo
+    from src.application.combat.handlers.enhanced_ui_battle_handler import UIBattleState, ParticipantInfo
     from src.domain.battle.battle_enum import ParticipantType
     
     dummy_state = UIBattleState(
