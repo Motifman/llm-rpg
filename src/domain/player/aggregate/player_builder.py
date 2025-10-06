@@ -1,15 +1,16 @@
-from src.domain.player.player_enum import Role
-from src.domain.player.base_status import BaseStatus
-from src.domain.player.dynamic_status import DynamicStatus
-from src.domain.player.inventory import Inventory
-from src.domain.player.equipment_set import EquipmentSet
-from src.domain.player.message_box import MessageBox
-from src.domain.player.player import Player
+from src.domain.player.enum.player_enum import Role
+from src.domain.player.value_object.base_status import BaseStatus
+from src.domain.player.entity.dynamic_status import DynamicStatus
+from src.domain.player.entity.inventory import Inventory
+from src.domain.player.entity.equipment_set import EquipmentSet
+from src.domain.player.entity.message_box import MessageBox
+from src.domain.player.aggregate.player import Player
+from src.domain.player.value_object.player_id import PlayerId
 
 
 class PlayerBuilder:
     def __init__(self, player_id: int, name: str, role: Role, current_spot_id: int):
-        self._player_id: int = player_id
+        self._player_id: PlayerId = PlayerId(player_id)
         self._name: str = name
         self._role: Role = role
         self._current_spot_id: int = current_spot_id

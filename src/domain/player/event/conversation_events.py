@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Optional
 from datetime import datetime
 from src.domain.common.domain_event import DomainEvent
+from src.domain.player.value_object.message import Message
 
 
 @dataclass(frozen=True, kw_only=True)

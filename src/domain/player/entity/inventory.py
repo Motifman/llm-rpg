@@ -4,6 +4,7 @@ from typing import List, Optional, ClassVar, cast, Union, Dict
 from dataclasses import dataclass
 from src.domain.item.item_quantity import ItemQuantity
 from src.domain.item.unique_item import UniqueItem
+from src.domain.player.value_object.base_status import BaseStatus
 
 
 @dataclass

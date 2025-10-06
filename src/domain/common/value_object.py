@@ -56,17 +56,24 @@ class Level:
         if self.value < 1:
             raise ValueError(f"Invalid level: {self.value}")
         if self.value > 99:
-            # frozen=Trueなので、object.__setattr__を使用して値を設定
-            object.__setattr__(self, 'value', 99)
-    
+            raise ValueError(f"Level cannot exceed 99: {self.value}")
+
+    @classmethod
+    def create(cls, value: int) -> "Level":
+        """Levelを作成するファクトリメソッド。レベル99を超える場合は99に制限"""
+        if value < 1:
+            raise ValueError(f"Invalid level: {value}")
+        actual_value = min(value, 99)
+        return cls(actual_value)
+
     def up(self) -> "Level":
-        return Level(self.value + 1)
-    
+        return Level.create(self.value + 1)
+
     def __ge__(self, level: "Level") -> bool:
         return self.value >= level.value
-    
+
     def __str__(self) -> str:
         return str(self.value)
-    
+
     def __repr__(self) -> str:
         return f"Level({self.value})"

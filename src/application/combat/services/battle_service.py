@@ -4,7 +4,7 @@ from src.domain.battle.battle import Battle
 from src.domain.battle.battle_repository import BattleRepository
 from src.domain.battle.action_repository import ActionRepository
 from src.domain.battle.battle_action import BattleAction
-from src.domain.player.player_repository import PlayerRepository
+from src.domain.player.repository.player_repository import PlayerRepository
 from src.domain.spot.area_repository import AreaRepository
 from src.domain.monster.monster_repository import MonsterRepository
 from src.domain.battle.battle_exception import BattleAlreadyExistsException, AreaNotFoundException, BattleNotFoundException, ActorNotFoundException
