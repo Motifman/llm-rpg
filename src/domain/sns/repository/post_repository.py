@@ -5,7 +5,7 @@ from src.domain.sns.aggregate import PostAggregate
 from src.domain.sns.value_object import Mention, PostId, ReplyId, UserId
 
 
-class PostRepository(Repository[PostAggregate]):
+class PostRepository(Repository[PostAggregate, PostId]):
     """PostAggregateのリポジトリインターフェース"""
 
     @abstractmethod

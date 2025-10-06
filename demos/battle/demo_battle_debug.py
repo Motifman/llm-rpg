@@ -14,7 +14,7 @@ from src.domain.battle.battle import Battle
 from src.domain.battle.battle_service import BattleLogicService
 from src.domain.battle.combat_state import CombatState
 from src.domain.battle.battle_enum import ParticipantType
-from src.application.battle.contracts.dtos import PlayerActionDto
+from src.application.combat.contracts.dtos import PlayerActionDto
 
 
 async def debug_battle_system():

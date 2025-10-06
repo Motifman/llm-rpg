@@ -38,6 +38,8 @@ class InMemorySnsNotificationRepositoryWithUow(InMemorySnsNotificationRepository
             # トランザクション外の場合は即時実行（テスト用）
             save_operation()
 
+        return notification
+
     def mark_as_read(self, notification_id):
         """通知を既読にする（Unit of Work対応版）"""
         def mark_operation():
@@ -65,3 +67,48 @@ class InMemorySnsNotificationRepositoryWithUow(InMemorySnsNotificationRepository
         else:
             # トランザクション外の場合は即時実行（テスト用）
             mark_all_operation()
+
+    def find_by_ids(self, notification_ids):
+        """IDのリストで通知を検索（Unit of Work対応版）"""
+        def find_operation():
+            return [
+                self._notifications[notification_id]
+                for notification_id in notification_ids
+                if notification_id in self._notifications
+            ]
+
+        # トランザクション内では即時実行
+        if self._unit_of_work.is_in_transaction():
+            return find_operation()
+        else:
+            # トランザクション外の場合は即時実行（テスト用）
+            return find_operation()
+
+    def delete(self, notification_id):
+        """通知を削除（Unit of Work対応版）"""
+        def delete_operation():
+            if notification_id in self._notifications:
+                del self._notifications[notification_id]
+                return True
+            return False
+
+        # トランザクション内でのみ実行可能
+        if self._unit_of_work.is_in_transaction():
+            self._unit_of_work.add_operation(delete_operation)
+            # 削除操作の結果を即時返す（実際の削除はコミット時）
+            return delete_operation()
+        else:
+            # トランザクション外の場合は即時実行（テスト用）
+            return delete_operation()
+
+    def find_all(self):
+        """全ての通知を取得（Unit of Work対応版）"""
+        def find_all_operation():
+            return list(self._notifications.values())
+
+        # トランザクション内では即時実行
+        if self._unit_of_work.is_in_transaction():
+            return find_all_operation()
+        else:
+            # トランザクション外の場合は即時実行（テスト用）
+            return find_all_operation()

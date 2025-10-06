@@ -18,7 +18,7 @@ from src.application.trade.contracts.dtos import (
 )
 from src.domain.trade.trade_service import TradeService
 from src.domain.trade.trade import TradeOffer, TradeItem
-from src.domain.player.player_repository import PlayerRepository
+from src.domain.player.repository.player_repository import PlayerRepository
 from src.domain.trade.trade_repository import TradeRepository
 from src.domain.trade.trade_event_dispatcher import TradeEventDispatcher
 from src.domain.trade.trade_exception import (
@@ -67,7 +67,11 @@ class TradeApplicationService:
                 )
             
             # 2. アイテムの所有確認
-            trade_item = seller.prepare_trade_offer(command)
+            trade_item = seller.prepare_trade_offer(
+                offered_item_id=command.offered_item_id,
+                offered_item_count=command.offered_item_count,
+                offered_unique_id=command.offered_unique_id
+            )
             
             # 3. 取引オファーを作成
             trade_offer = TradeOffer.create_trade(

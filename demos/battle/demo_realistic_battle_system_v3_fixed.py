@@ -23,9 +23,9 @@ from typing import List, Dict, Any, Optional
 from queue import Queue
 from threading import Event
 
-from src.application.battle.services.enhanced_battle_service import EnhancedBattleApplicationService
-from src.application.battle.services.player_action_waiter import PlayerActionWaiter
-from src.application.battle.contracts.dtos import PlayerActionDto
+from src.application.combat.services.enhanced_battle_service import EnhancedBattleApplicationService
+from src.application.combat.services.player_action_waiter import PlayerActionWaiter
+from src.application.combat.contracts.dtos import PlayerActionDto
 from src.infrastructure.repository.in_memory_player_repository import InMemoryPlayerRepository
 from src.infrastructure.repository.in_memory_monster_repository import InMemoryMonsterRepository
 from src.infrastructure.repository.in_memory_action_repository import InMemoryActionRepository
@@ -39,7 +39,7 @@ from src.domain.battle.battle_enum import ParticipantType
 from src.domain.player.player_enum import Role
 
 # 新しいUI統合システム
-from src.application.battle.handlers.enhanced_ui_battle_handler import (
+from src.application.combat.handlers.enhanced_ui_battle_handler import (
     UIBattleNotifier,
     EnhancedBattleStartedHandler,
     EnhancedRoundStartedHandler,
