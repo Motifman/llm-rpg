@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Optional
 from src.domain.item.value_object.item_spec_id import ItemSpecId
 from src.domain.item.value_object.max_stack_size import MaxStackSize
-from src.domain.item.enum.item_enum import ItemType, Rarity
+from src.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
 from src.domain.item.exception import ItemSpecValidationException
 
 
@@ -21,6 +21,7 @@ class ItemSpec:
     description: str
     max_stack_size: MaxStackSize
     durability_max: Optional[int] = None
+    equipment_type: Optional[EquipmentType] = None
 
     def __post_init__(self):
         """バリデーションは__post_init__で実行"""
@@ -33,10 +34,25 @@ class ItemSpec:
         # 耐久度が存在する場合、max_stack_sizeは1でなければならない
         if self.durability_max is not None and self.max_stack_size.value != 1:
             raise ItemSpecValidationException(f"Item spec: items with durability must have max_stack_size of 1, got {self.max_stack_size.value}")
+        # 装備タイプのバリデーション
+        if self.item_type == ItemType.EQUIPMENT:
+            if self.equipment_type is None:
+                raise ItemSpecValidationException(f"Item spec: equipment items must have equipment_type, got None")
+        else:
+            if self.equipment_type is not None:
+                raise ItemSpecValidationException(f"Item spec: non-equipment items must not have equipment_type, got {self.equipment_type}")
 
     def can_create_durability(self) -> bool:
         """耐久度を作成可能かどうか"""
         return self.durability_max is not None
+
+    def is_equipment(self) -> bool:
+        """装備品かどうか"""
+        return self.item_type == ItemType.EQUIPMENT
+
+    def get_equipment_type(self) -> Optional[EquipmentType]:
+        """装備タイプを取得（装備品でない場合はNone）"""
+        return self.equipment_type
 
     def __eq__(self, other: object) -> bool:
         """等価性比較（スペックが同じかどうか）"""
