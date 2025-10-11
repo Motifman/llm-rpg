@@ -2,7 +2,7 @@ import pytest
 from src.domain.item.value_object.item_spec_id import ItemSpecId
 from src.domain.item.value_object.item_spec import ItemSpec
 from src.domain.item.value_object.max_stack_size import MaxStackSize
-from src.domain.item.enum.item_enum import ItemType, Rarity
+from src.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
 from src.domain.item.exception import ItemSpecValidationException
 
 
@@ -20,7 +20,8 @@ class TestItemSpec:
             item_type=ItemType.EQUIPMENT,
             rarity=Rarity.COMMON,
             description="A test sword for testing",
-            max_stack_size=max_stack
+            max_stack_size=max_stack,
+            equipment_type=EquipmentType.WEAPON
         )
 
     def test_create_basic_item_spec(self, sample_item_spec):
@@ -28,10 +29,13 @@ class TestItemSpec:
         assert sample_item_spec.item_spec_id.value == 1
         assert sample_item_spec.name == "Test Sword"
         assert sample_item_spec.item_type == ItemType.EQUIPMENT
+        assert sample_item_spec.equipment_type == EquipmentType.WEAPON
         assert sample_item_spec.description == "A test sword for testing"
         assert sample_item_spec.max_stack_size.value == 64
         assert sample_item_spec.durability_max is None
         assert not sample_item_spec.can_create_durability()
+        assert sample_item_spec.is_equipment()
+        assert sample_item_spec.get_equipment_type() == EquipmentType.WEAPON
 
     def test_create_with_durability_max_valid_stack_size(self):
         """耐久度最大値付きItemSpec作成のテスト（有効なスタックサイズ）"""
@@ -44,11 +48,13 @@ class TestItemSpec:
             rarity=Rarity.UNCOMMON,
             description="A durable sword",
             max_stack_size=max_stack,
-            durability_max=100
+            durability_max=100,
+            equipment_type=EquipmentType.WEAPON
         )
         assert spec.durability_max == 100
         assert spec.can_create_durability()
         assert spec.max_stack_size.value == 1
+        assert spec.equipment_type == EquipmentType.WEAPON
 
     def test_invalid_name_empty(self):
         """無効な名前（空文字）のテスト"""
@@ -140,6 +146,86 @@ class TestItemSpec:
         # エラーメッセージに適切な理由が含まれていることを確認
         assert "items with durability must have max_stack_size of 1" in str(exc_info.value)
 
+    def test_invalid_equipment_without_equipment_type(self):
+        """装備品なのにequipment_typeが指定されていない場合のテスト"""
+        template_id = ItemSpecId(9)
+        max_stack = MaxStackSize(1)
+        with pytest.raises(ItemSpecValidationException) as exc_info:
+            ItemSpec(
+                item_spec_id=template_id,
+                name="Sword without equipment type",
+                item_type=ItemType.EQUIPMENT,
+                rarity=Rarity.COMMON,
+                description="A sword",
+                max_stack_size=max_stack
+                # equipment_type=None (デフォルト値)
+            )
+
+        assert "equipment items must have equipment_type" in str(exc_info.value)
+
+    def test_invalid_non_equipment_with_equipment_type(self):
+        """非装備品なのにequipment_typeが指定されている場合のテスト"""
+        template_id = ItemSpecId(10)
+        max_stack = MaxStackSize(64)
+        with pytest.raises(ItemSpecValidationException) as exc_info:
+            ItemSpec(
+                item_spec_id=template_id,
+                name="Potion with equipment type",
+                item_type=ItemType.CONSUMABLE,
+                rarity=Rarity.COMMON,
+                description="A potion",
+                max_stack_size=max_stack,
+                equipment_type=EquipmentType.WEAPON  # 誤って指定
+            )
+
+        assert "non-equipment items must not have equipment_type" in str(exc_info.value)
+
+    def test_create_consumable_item(self):
+        """消費アイテム作成のテスト（equipment_typeはNone）"""
+        template_id = ItemSpecId(11)
+        max_stack = MaxStackSize(64)
+        spec = ItemSpec(
+            item_spec_id=template_id,
+            name="Health Potion",
+            item_type=ItemType.CONSUMABLE,
+            rarity=Rarity.COMMON,
+            description="Restores health",
+            max_stack_size=max_stack
+            # equipment_type=None (デフォルト値)
+        )
+        assert spec.item_type == ItemType.CONSUMABLE
+        assert spec.equipment_type is None
+        assert not spec.is_equipment()
+        assert spec.get_equipment_type() is None
+
+    def test_create_equipment_items_different_types(self):
+        """異なる装備タイプのアイテム作成テスト"""
+        # ヘルメット
+        helmet_spec = ItemSpec(
+            item_spec_id=ItemSpecId(12),
+            name="Iron Helmet",
+            item_type=ItemType.EQUIPMENT,
+            rarity=Rarity.COMMON,
+            description="Protects the head",
+            max_stack_size=MaxStackSize(1),
+            equipment_type=EquipmentType.HELMET
+        )
+        assert helmet_spec.equipment_type == EquipmentType.HELMET
+        assert helmet_spec.is_equipment()
+
+        # 鎧
+        armor_spec = ItemSpec(
+            item_spec_id=ItemSpecId(13),
+            name="Iron Armor",
+            item_type=ItemType.EQUIPMENT,
+            rarity=Rarity.COMMON,
+            description="Protects the body",
+            max_stack_size=MaxStackSize(1),
+            equipment_type=EquipmentType.ARMOR
+        )
+        assert armor_spec.equipment_type == EquipmentType.ARMOR
+        assert armor_spec.is_equipment()
+
     def test_equality_same_spec(self, sample_item_spec):
         """同じスペックの等価性テスト"""
         same_spec = ItemSpec(
@@ -160,7 +246,8 @@ class TestItemSpec:
             item_type=ItemType.EQUIPMENT,
             rarity=Rarity.COMMON,
             description="A test sword for testing",
-            max_stack_size=MaxStackSize(64)
+            max_stack_size=MaxStackSize(64),
+            equipment_type=EquipmentType.WEAPON
         )
         assert sample_item_spec != different_spec
 
@@ -173,6 +260,7 @@ class TestItemSpec:
             rarity=Rarity.RARE,
             description="Different description",
             max_stack_size=MaxStackSize(32)
+            # equipment_type=None (デフォルト値) - CONSUMABLEなのでNoneでOK
         )
 
         assert hash(sample_item_spec) == hash(same_spec)

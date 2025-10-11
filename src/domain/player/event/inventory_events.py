@@ -1,25 +1,78 @@
 from dataclasses import dataclass
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Dict
 from src.domain.common.domain_event import BaseDomainEvent
-from src.domain.player.value_object.player_inventory_id import PlayerInventoryId
+from src.domain.player.value_object.player_id import PlayerId
+from src.domain.player.value_object.slot_id import SlotId
+from src.domain.item.value_object.item_instance_id import ItemInstanceId
+from src.domain.player.enum.equipment_slot_type import EquipmentSlotType
+from src.domain.player.enum.inventory_sort_type import InventorySortType
 
 if TYPE_CHECKING:
     from src.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 
 
 @dataclass(frozen=True)
-class ItemAddedToInventoryEvent(BaseDomainEvent[PlayerInventoryId, "PlayerInventoryAggregate"]):
+class ItemAddedToInventoryEvent(BaseDomainEvent[PlayerId, "PlayerInventoryAggregate"]):
     """インベントリにアイテムが追加されたイベント"""
-    player_id: int
-    item_id: int
-    quantity: Optional[int] = None
-    unique_id: Optional[int] = None
+    item_instance_id: ItemInstanceId
 
 
 @dataclass(frozen=True)
-class ItemRemovedFromInventoryEvent(BaseDomainEvent[PlayerInventoryId, "PlayerInventoryAggregate"]):
+class ItemRemovedFromInventoryEvent(BaseDomainEvent[PlayerId, "PlayerInventoryAggregate"]):
     """インベントリからアイテムが削除されたイベント"""
-    player_id: int
-    item_id: int
-    quantity: Optional[int] = None
-    unique_id: Optional[int] = None
+    item_instance_id: ItemInstanceId
+
+
+@dataclass(frozen=True)
+class ItemDroppedFromInventoryEvent(BaseDomainEvent[PlayerId, "PlayerInventoryAggregate"]):
+    """インベントリからアイテムが捨てられたイベント"""
+    item_instance_id: ItemInstanceId
+    slot_id: SlotId
+
+
+@dataclass(frozen=True)
+class ItemEquippedEvent(BaseDomainEvent[PlayerId, "PlayerInventoryAggregate"]):
+    """アイテムが装備されたイベント"""
+    item_instance_id: ItemInstanceId
+    from_slot_id: SlotId
+    to_equipment_slot: EquipmentSlotType
+
+
+@dataclass(frozen=True)
+class ItemUnequippedEvent(BaseDomainEvent[PlayerId, "PlayerInventoryAggregate"]):
+    """アイテムが装備解除されたイベント"""
+    item_instance_id: ItemInstanceId
+    from_equipment_slot: EquipmentSlotType
+    to_slot_id: Optional[SlotId] = None  # Noneの場合はドロップ
+
+
+@dataclass(frozen=True)
+class ItemEquipRequestedEvent(BaseDomainEvent[PlayerId, "PlayerInventoryAggregate"]):
+    """アイテム装備要求イベント"""
+    inventory_slot_id: SlotId
+    item_instance_id: ItemInstanceId
+    target_equipment_slot: EquipmentSlotType
+
+
+@dataclass(frozen=True)
+class InventorySlotOverflowEvent(BaseDomainEvent[PlayerId, "PlayerInventoryAggregate"]):
+    """インベントリスロットが溢れたイベント"""
+    overflowed_item_instance_id: ItemInstanceId
+    reason: str  # "equip_replacement", "unequip_no_space" など
+
+
+@dataclass(frozen=True)
+class InventoryCompactionRequestedEvent(BaseDomainEvent[PlayerId, "PlayerInventoryAggregate"]):
+    """インベントリ整理要求イベント"""
+
+
+@dataclass(frozen=True)
+class InventoryCompactionCompletedEvent(BaseDomainEvent[PlayerId, "PlayerInventoryAggregate"]):
+    """インベントリ整理完了イベント"""
+    compacted_slots: Dict[SlotId, Optional[ItemInstanceId]]  # slot_id -> item_instance_id
+
+
+@dataclass(frozen=True)
+class InventorySortRequestedEvent(BaseDomainEvent[PlayerId, "PlayerInventoryAggregate"]):
+    """インベントリソート要求イベント"""
+    sort_criteria: InventorySortType
