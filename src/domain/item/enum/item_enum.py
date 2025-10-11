@@ -13,6 +13,16 @@ class ItemType(Enum):
     KEY_ITEM = "key_item"
 
 
+class EquipmentType(Enum):
+    """装備種別（装備品のサブタイプ）"""
+    WEAPON = "weapon"
+    HELMET = "helmet"
+    ARMOR = "armor"
+    SHIELD = "shield"
+    ACCESSORY = "accessory"
+    BOOTS = "boots"
+
+
 class Rarity(Enum):
     """レアリティ（将来のDBスキーマに準拠）"""
     COMMON = "common"

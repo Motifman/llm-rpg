@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Union
-from src.domain.player.exception import PlayerIdValidationException
+from src.domain.player.exception.player_exceptions import PlayerIdValidationException
 
 
 @dataclass(frozen=True)
