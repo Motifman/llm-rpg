@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from typing import Optional, List
 from datetime import datetime
 from src.domain.common.aggregate_root import AggregateRoot
@@ -15,42 +14,11 @@ from src.domain.trade.trade_events import (
     TradeCancelledEvent,
     DirectTradeOfferedEvent
 )
+from src.domain.trade.value_object.trade_item import TradeItem
 
-
-@dataclass
-class TradeItem:
-    item_id: int
-    count: Optional[int] = None
-    unique_id: Optional[int] = None
-
-    def __post_init__(self):
-        """インスタンス生成後のバリデーション"""
-        is_stackable = self.count is not None
-        is_unique = self.unique_id is not None
-        if not (is_stackable or is_unique):
-            raise InvalidTradeStatusException(f"TradeItem must have either count or unique_id: {self.item_id}, {self.count}, {self.unique_id}")
-        if is_stackable and is_unique:
-            raise InvalidTradeStatusException(f"TradeItem cannot have both count and unique_id: {self.item_id}, {self.count}, {self.unique_id}")
-        if is_stackable and self.count <= 0:
-            raise InvalidTradeStatusException(f"Count must be greater than 0: {self.item_id}, {self.count}, {self.unique_id}")
-    
-    @classmethod
-    def stackable(cls, item_id: int, count: int) -> "TradeItem":
-        """スタック可能アイテム用のファクトリメソッド"""
-        return cls(item_id=item_id, count=count, unique_id=None)
-
-    @classmethod
-    def unique(cls, item_id: int, unique_id: int) -> "TradeItem":
-        """固有アイテム用のファクトリメソッド"""
-        return cls(item_id=item_id, count=None, unique_id=unique_id)
-
-    def is_stackable(self) -> bool:
-        """スタック可能アイテムかどうか"""
-        return self.count is not None
-    
 
 # TODO まずは簡易実装として物々交換を禁止
-class TradeOffer(AggregateRoot):
+class Trade(AggregateRoot):
     """取引オファー"""
     
     def __init__(
@@ -110,7 +78,7 @@ class TradeOffer(AggregateRoot):
         target_player_id: Optional[int] = None,
         seller_name: str = None,
         target_player_name: str = None,
-    ) -> "TradeOffer":
+    ) -> "Trade":
         """お金との取引オファーを作成"""
         trade_offer = cls(
             trade_id=trade_id,
@@ -237,10 +205,10 @@ class TradeOffer(AggregateRoot):
             self.add_event(event)
     
     def __str__(self):
-        return f"TradeOffer({self.trade_id}): {self.get_trade_summary()}"
-    
+        return f"Trade({self.trade_id}): {self.get_trade_summary()}"
+
     def __repr__(self):
-        return (f"TradeOffer(trade_id={self.trade_id}, seller_id={self.seller_id}, "
+        return (f"Trade(trade_id={self.trade_id}, seller_id={self.seller_id}, "
                 f"offered={self.offered_item.item_id}x{self.offered_item.count}, "
                 f"requested={self.requested_gold} G, "
                 f"status={self.status.value})")
