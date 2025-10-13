@@ -1,22 +1,11 @@
 from abc import abstractmethod
-from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 from src.domain.common.repository import Repository
 from src.domain.trade.read_model.global_market_listing_read_model import GlobalMarketListingReadModel
 from src.domain.trade.value_object.trade_id import TradeId
-from src.domain.item.enum.item_enum import ItemType, Rarity
+from src.domain.trade.value_object.trade_search_filter import TradeSearchFilter
 from src.domain.trade.repository.cursor import ListingCursor
-
-
-@dataclass(frozen=True)
-class GlobalMarketFilter:
-    """グローバル取引所フィルタ条件"""
-    item_type: Optional[ItemType] = None
-    item_rarity: Optional[Rarity] = None
-    search_text: Optional[str] = None
-    min_price: Optional[int] = None
-    max_price: Optional[int] = None
 
 
 class GlobalMarketListingReadModelRepository(Repository[GlobalMarketListingReadModel, TradeId]):
@@ -25,7 +14,7 @@ class GlobalMarketListingReadModelRepository(Repository[GlobalMarketListingReadM
     @abstractmethod
     def find_listings(
         self,
-        filter_condition: GlobalMarketFilter,
+        filter_condition: TradeSearchFilter,
         limit: int = 50,
         cursor: Optional[ListingCursor] = None
     ) -> Tuple[List[GlobalMarketListingReadModel], Optional[ListingCursor]]:
@@ -42,7 +31,7 @@ class GlobalMarketListingReadModelRepository(Repository[GlobalMarketListingReadM
         pass
 
     @abstractmethod
-    def count_listings(self, filter_condition: GlobalMarketFilter) -> int:
+    def count_listings(self, filter_condition: TradeSearchFilter) -> int:
         """フィルタ条件に一致する出品数をカウント
 
         Args:

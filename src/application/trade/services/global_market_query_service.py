@@ -2,13 +2,14 @@ from typing import Optional
 import logging
 
 from src.domain.trade.repository.global_market_listing_read_model_repository import (
-    GlobalMarketListingReadModelRepository,
-    GlobalMarketFilter
+    GlobalMarketListingReadModelRepository
 )
+from src.domain.trade.value_object.trade_search_filter import TradeSearchFilter
+from src.domain.trade.enum.trade_enum import TradeStatus
 from src.domain.common.exception import DomainException
 
+from src.application.trade.contracts.dtos import TradeSearchFilterDto
 from src.application.trade.contracts.global_market_dtos import (
-    GlobalMarketFilterDto,
     GlobalMarketListingDto,
     GlobalMarketListDto
 )
@@ -43,7 +44,7 @@ class GlobalMarketQueryService:
 
     def get_market_listings(
         self,
-        filter_dto: Optional[GlobalMarketFilterDto] = None,
+        filter_dto: Optional[TradeSearchFilterDto] = None,
         limit: int = 50,
         cursor: Optional[str] = None
     ) -> GlobalMarketListDto:
@@ -71,7 +72,7 @@ class GlobalMarketQueryService:
             }
         )
 
-    def _get_market_listings_impl(self, filter_dto: Optional[GlobalMarketFilterDto], limit: int, cursor: Optional[str]) -> GlobalMarketListDto:
+    def _get_market_listings_impl(self, filter_dto: Optional[TradeSearchFilterDto], limit: int, cursor: Optional[str]) -> GlobalMarketListDto:
         """グローバル取引所出品取得の実装"""
         # DTOからドメインフィルタに変換
         filter_condition = self._convert_to_filter(filter_dto)
@@ -93,17 +94,22 @@ class GlobalMarketQueryService:
             next_cursor=next_cursor_encoded
         )
 
-    def _convert_to_filter(self, filter_dto: Optional[GlobalMarketFilterDto]) -> GlobalMarketFilter:
+    def _convert_to_filter(self, filter_dto: Optional[TradeSearchFilterDto]) -> TradeSearchFilter:
         """DTOからドメインフィルタに変換"""
-        if filter_dto is None:
-            return GlobalMarketFilter()
+        # グローバル取引所では常にアクティブな取引のみを表示
+        base_statuses = [TradeStatus.ACTIVE.value]
 
-        return GlobalMarketFilter(
-            item_type=filter_dto.item_type,
-            item_rarity=filter_dto.item_rarity,
-            search_text=filter_dto.search_text,
+        if filter_dto is None:
+            return TradeSearchFilter.from_primitives(statuses=base_statuses)
+
+        return TradeSearchFilter.from_primitives(
+            item_name=filter_dto.item_name,
+            item_types=filter_dto.item_types,
+            rarities=filter_dto.rarities,
+            equipment_types=filter_dto.equipment_types,
             min_price=filter_dto.min_price,
-            max_price=filter_dto.max_price
+            max_price=filter_dto.max_price,
+            statuses=base_statuses  # グローバル取引所では常にACTIVEステータスのみ
         )
 
     def _convert_to_listing_dto(self, read_model) -> GlobalMarketListingDto:
