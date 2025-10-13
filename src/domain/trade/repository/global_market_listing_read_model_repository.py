@@ -1,11 +1,12 @@
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from src.domain.common.repository import Repository
 from src.domain.trade.read_model.global_market_listing_read_model import GlobalMarketListingReadModel
 from src.domain.trade.value_object.trade_id import TradeId
 from src.domain.item.enum.item_enum import ItemType, Rarity
+from src.domain.trade.repository.cursor import ListingCursor
 
 
 @dataclass(frozen=True)
@@ -18,13 +19,6 @@ class GlobalMarketFilter:
     max_price: Optional[int] = None
 
 
-@dataclass(frozen=True)
-class PageSpec:
-    """ページング仕様"""
-    limit: int
-    offset: Optional[int] = None  # cursor-basedの場合はNone
-
-
 class GlobalMarketListingReadModelRepository(Repository[GlobalMarketListingReadModel, TradeId]):
     """グローバル取引所ReadModelリポジトリインターフェース"""
 
@@ -32,16 +26,18 @@ class GlobalMarketListingReadModelRepository(Repository[GlobalMarketListingReadM
     def find_listings(
         self,
         filter_condition: GlobalMarketFilter,
-        page_spec: PageSpec
-    ) -> tuple[List[GlobalMarketListingReadModel], bool]:
-        """フィルタ条件で出品を取得（ページング）
+        limit: int = 50,
+        cursor: Optional[ListingCursor] = None
+    ) -> Tuple[List[GlobalMarketListingReadModel], Optional[ListingCursor]]:
+        """フィルタ条件で出品を取得（カーソルベースページング）
 
         Args:
             filter_condition: フィルタ条件
-            page_spec: ページング仕様
+            limit: 取得する最大件数
+            cursor: ページングカーソル（Noneの場合は最初のページ）
 
         Returns:
-            (出品リスト, 次のページが存在するか)
+            (出品リスト, 次のページのカーソル)
         """
         pass
 

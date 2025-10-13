@@ -22,5 +22,4 @@ class PersonalTradeListingDto:
 class PersonalTradeListDto:
     """個別取引出品一覧DTO"""
     listings: List[PersonalTradeListingDto]
-    total_count: int
-    has_next_page: bool
+    next_cursor: Optional[str]

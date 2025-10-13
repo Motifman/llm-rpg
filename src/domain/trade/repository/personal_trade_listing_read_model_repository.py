@@ -1,18 +1,12 @@
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from src.domain.common.repository import Repository
 from src.domain.trade.read_model.personal_trade_listing_read_model import PersonalTradeListingReadModel
 from src.domain.trade.value_object.trade_id import TradeId
 from src.domain.player.value_object.player_id import PlayerId
-
-
-@dataclass(frozen=True)
-class PersonalTradePageSpec:
-    """個人取引ページング仕様"""
-    limit: int
-    offset: Optional[int] = None
+from src.domain.trade.repository.cursor import ListingCursor
 
 
 class PersonalTradeListingReadModelRepository(Repository[PersonalTradeListingReadModel, TradeId]):
@@ -22,16 +16,18 @@ class PersonalTradeListingReadModelRepository(Repository[PersonalTradeListingRea
     def find_for_player(
         self,
         player_id: PlayerId,
-        page_spec: PersonalTradePageSpec
-    ) -> tuple[List[PersonalTradeListingReadModel], bool]:
-        """プレイヤー宛の取引を取得（ページング）
+        limit: int = 20,
+        cursor: Optional[ListingCursor] = None
+    ) -> Tuple[List[PersonalTradeListingReadModel], Optional[ListingCursor]]:
+        """プレイヤー宛の取引を取得（カーソルベースページング）
 
         Args:
             player_id: プレイヤーID
-            page_spec: ページング仕様
+            limit: 取得する最大件数
+            cursor: ページングカーソル（Noneの場合は最初のページ）
 
         Returns:
-            (取引リスト, 次のページが存在するか)
+            (取引リスト, 次のページのカーソル)
         """
         pass
 

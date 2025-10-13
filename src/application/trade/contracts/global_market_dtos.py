@@ -33,5 +33,4 @@ class GlobalMarketListingDto:
 class GlobalMarketListDto:
     """グローバル取引所出品一覧DTO"""
     listings: List[GlobalMarketListingDto]
-    total_count: int
-    has_next_page: bool
+    next_cursor: Optional[str]
