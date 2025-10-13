@@ -9,7 +9,7 @@ from src.application.trade.contracts.trade_detail_dtos import (
     TradeDetailDto,
     TradeStatisticsDto
 )
-from src.application.trade.exceptions.trade_query_application_exception import TradeQueryApplicationException
+from src.application.trade.exceptions.trade_detail_query_application_exception import TradeDetailQueryApplicationException
 from src.application.common.exceptions import SystemErrorException
 
 
@@ -29,12 +29,12 @@ class TradeDetailQueryService:
         """共通の例外処理を実行"""
         try:
             return operation()
-        except TradeQueryApplicationException as e:
+        except TradeDetailQueryApplicationException as e:
             # アプリケーション例外はそのまま再スロー
             raise e
         except DomainException as e:
             # ドメイン例外をアプリケーション例外に変換
-            raise TradeQueryApplicationException.from_domain_error(e)
+            raise TradeDetailQueryApplicationException.from_domain_error(e)
         except Exception as e:
             # 不明な例外はシステムエラーとしてログ出力し、SystemErrorExceptionをスロー
             self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
@@ -53,7 +53,7 @@ class TradeDetailQueryService:
         """
         # 入力バリデーション: trade_idは正の整数であること
         if trade_id <= 0:
-            raise TradeQueryApplicationException.trade_not_found(trade_id)
+            raise TradeDetailQueryApplicationException.invalid_trade_id(trade_id)
 
         return self._execute_with_error_handling(
             operation=lambda: self._get_trade_detail_impl(trade_id),
@@ -71,12 +71,12 @@ class TradeDetailQueryService:
         # 取引詳細を取得
         trade_detail = self._trade_detail_repository.find_detail(domain_trade_id)
         if trade_detail is None:
-            raise TradeQueryApplicationException.trade_not_found(trade_id)
+            raise TradeDetailQueryApplicationException.trade_not_found(trade_id)
 
         # 統計情報を取得
         statistics = self._statistics_repository.find_statistics(trade_detail.item_spec_id)
         if statistics is None:
-            raise TradeQueryApplicationException.item_statistics_not_found(int(trade_detail.item_spec_id))
+            raise TradeDetailQueryApplicationException.item_statistics_not_found(int(trade_detail.item_spec_id))
 
         # DTOに変換
         statistics_dto = self._convert_to_statistics_dto(statistics)
