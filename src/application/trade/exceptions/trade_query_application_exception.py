@@ -23,7 +23,7 @@ class TradeQueryApplicationException(ApplicationException):
         return cls(f"Domain error in TradeQuery usecase: {e.error_code}", cause=e)
 
     @classmethod
-    def trade_not_found(cls, trade_id: str) -> "TradeQueryApplicationException":
+    def trade_not_found(cls, trade_id: int) -> "TradeQueryApplicationException":
         """取引が見つからない場合の例外
 
         Args:
@@ -38,8 +38,38 @@ class TradeQueryApplicationException(ApplicationException):
         )
 
     @classmethod
-    def invalid_request(cls, message: str, **context) -> "TradeQueryApplicationException":
-        """無効なリクエストの場合の例外
+    def invalid_player_id(cls, player_id: int) -> "TradeQueryApplicationException":
+        """無効なプレイヤーIDの場合の例外
+
+        Args:
+            player_id: プレイヤーID
+
+        Returns:
+            TradeQueryApplicationException: アプリケーション例外
+        """
+        return cls(
+            f"Invalid player ID: {player_id}",
+            player_id=player_id
+        )
+
+    @classmethod
+    def item_statistics_not_found(cls, item_spec_id: int) -> "TradeQueryApplicationException":
+        """アイテム統計情報が見つからない場合の例外
+
+        Args:
+            item_spec_id: アイテムスペックID
+
+        Returns:
+            TradeQueryApplicationException: アプリケーション例外
+        """
+        return cls(
+            f"Item statistics not found: {item_spec_id}",
+            item_spec_id=item_spec_id
+        )
+
+    @classmethod
+    def invalid_filter(cls, message: str, **context) -> "TradeQueryApplicationException":
+        """無効なフィルタ条件の場合の例外
 
         Args:
             message: エラーメッセージ
@@ -48,4 +78,4 @@ class TradeQueryApplicationException(ApplicationException):
         Returns:
             TradeQueryApplicationException: アプリケーション例外
         """
-        return cls(f"Invalid request: {message}", **context)
+        return cls(f"Invalid filter: {message}", **context)
