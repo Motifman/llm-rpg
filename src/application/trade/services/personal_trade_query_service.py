@@ -2,8 +2,7 @@ from typing import Optional
 import logging
 
 from src.domain.trade.repository.personal_trade_listing_read_model_repository import (
-    PersonalTradeListingReadModelRepository,
-    PersonalTradePageSpec
+    PersonalTradeListingReadModelRepository
 )
 from src.domain.player.value_object.player_id import PlayerId
 from src.domain.common.exception import DomainException
@@ -13,6 +12,7 @@ from src.application.trade.contracts.personal_trade_dtos import (
     PersonalTradeListDto
 )
 from src.application.trade.exceptions.trade_query_application_exception import TradeQueryApplicationException
+from src.application.trade.util.cursor_codec import CursorCodec
 from src.application.common.exceptions import SystemErrorException
 
 
@@ -40,12 +40,13 @@ class PersonalTradeQueryService:
             raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
                                      original_exception=e)
 
-    def get_personal_trades(self, player_id: int, limit: int = 20) -> PersonalTradeListDto:
-        """プレイヤー宛の取引を取得
+    def get_personal_trades(self, player_id: int, limit: int = 20, cursor: Optional[str] = None) -> PersonalTradeListDto:
+        """プレイヤー宛の取引を取得（カーソルベースページング）
 
         Args:
             player_id: プレイヤーID
             limit: 取得する最大件数
+            cursor: ページングカーソル（Noneの場合は最初のページ）
 
         Returns:
             PersonalTradeListDto: 個人取引一覧DTO
@@ -59,30 +60,35 @@ class PersonalTradeQueryService:
             raise TradeQueryApplicationException.invalid_filter(f"Limit must be between 1 and 50, got {limit}", limit=limit)
 
         return self._execute_with_error_handling(
-            operation=lambda: self._get_personal_trades_impl(player_id, limit),
+            operation=lambda: self._get_personal_trades_impl(player_id, limit, cursor),
             context={
                 "action": "get_personal_trades",
                 "player_id": player_id,
-                "limit": limit
+                "limit": limit,
+                "cursor": cursor
             }
         )
 
-    def _get_personal_trades_impl(self, player_id: int, limit: int) -> PersonalTradeListDto:
+    def _get_personal_trades_impl(self, player_id: int, limit: int, cursor: Optional[str]) -> PersonalTradeListDto:
         """個人取引取得の実装"""
         # ドメインオブジェクトに変換
         domain_player_id = PlayerId(player_id)
-        page_spec = PersonalTradePageSpec(limit=limit, offset=0)
+
+        # カーソルをデコード
+        domain_cursor = CursorCodec.decode_listing_cursor(cursor) if cursor else None
 
         # リポジトリからデータを取得
-        listings, has_next_page = self._repository.find_for_player(domain_player_id, page_spec)
+        listings, next_cursor = self._repository.find_for_player(domain_player_id, limit, domain_cursor)
 
         # ReadModelをDTOに変換
         listing_dtos = [self._convert_to_listing_dto(listing) for listing in listings]
 
+        # next_cursorをencode
+        next_cursor_encoded = CursorCodec.encode(next_cursor) if next_cursor else None
+
         return PersonalTradeListDto(
             listings=listing_dtos,
-            total_count=len(listing_dtos),
-            has_next_page=has_next_page
+            next_cursor=next_cursor_encoded
         )
 
     def _convert_to_listing_dto(self, read_model) -> PersonalTradeListingDto:
