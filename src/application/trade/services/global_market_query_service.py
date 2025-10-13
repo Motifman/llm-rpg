@@ -12,7 +12,7 @@ from src.application.trade.contracts.global_market_dtos import (
     GlobalMarketListingDto,
     GlobalMarketListDto
 )
-from src.application.trade.exceptions.trade_query_application_exception import TradeQueryApplicationException
+from src.application.trade.exceptions.global_market_query_application_exception import GlobalMarketQueryApplicationException
 from src.application.trade.util.cursor_codec import CursorCodec
 from src.application.common.exceptions import SystemErrorException
 
@@ -28,12 +28,12 @@ class GlobalMarketQueryService:
         """共通の例外処理を実行"""
         try:
             return operation()
-        except TradeQueryApplicationException as e:
+        except GlobalMarketQueryApplicationException as e:
             # アプリケーション例外はそのまま再スロー
             raise e
         except DomainException as e:
             # ドメイン例外をアプリケーション例外に変換
-            raise TradeQueryApplicationException.from_domain_error(e)
+            raise GlobalMarketQueryApplicationException.from_domain_error(e)
         except Exception as e:
             # 不明な例外はシステムエラーとしてログ出力し、SystemErrorExceptionをスロー
             self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
@@ -59,7 +59,7 @@ class GlobalMarketQueryService:
         """
         # 入力バリデーション: limitは0より大きく100以下であること
         if limit <= 0 or limit > 100:
-            raise TradeQueryApplicationException.invalid_filter(f"Limit must be between 1 and 100, got {limit}", limit=limit)
+            raise GlobalMarketQueryApplicationException.invalid_filter(f"Limit must be between 1 and 100, got {limit}", limit=limit)
 
         return self._execute_with_error_handling(
             operation=lambda: self._get_market_listings_impl(filter_dto, limit, cursor),

@@ -11,7 +11,7 @@ from src.application.trade.contracts.personal_trade_dtos import (
     PersonalTradeListingDto,
     PersonalTradeListDto
 )
-from src.application.trade.exceptions.trade_query_application_exception import TradeQueryApplicationException
+from src.application.trade.exceptions.personal_trade_query_application_exception import PersonalTradeQueryApplicationException
 from src.application.trade.util.cursor_codec import CursorCodec
 from src.application.common.exceptions import SystemErrorException
 
@@ -27,12 +27,12 @@ class PersonalTradeQueryService:
         """共通の例外処理を実行"""
         try:
             return operation()
-        except TradeQueryApplicationException as e:
+        except PersonalTradeQueryApplicationException as e:
             # アプリケーション例外はそのまま再スロー
             raise e
         except DomainException as e:
             # ドメイン例外をアプリケーション例外に変換
-            raise TradeQueryApplicationException.from_domain_error(e)
+            raise PersonalTradeQueryApplicationException.from_domain_error(e)
         except Exception as e:
             # 不明な例外はシステムエラーとしてログ出力し、SystemErrorExceptionをスロー
             self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
@@ -53,11 +53,11 @@ class PersonalTradeQueryService:
         """
         # 入力バリデーション: player_idは正の整数であること
         if player_id <= 0:
-            raise TradeQueryApplicationException.invalid_player_id(player_id)
+            raise PersonalTradeQueryApplicationException.invalid_player_id(player_id)
 
         # 入力バリデーション: limitは0より大きく50以下であること
         if limit <= 0 or limit > 50:
-            raise TradeQueryApplicationException.invalid_filter(f"Limit must be between 1 and 50, got {limit}", limit=limit)
+            raise PersonalTradeQueryApplicationException.invalid_limit(limit)
 
         return self._execute_with_error_handling(
             operation=lambda: self._get_personal_trades_impl(player_id, limit, cursor),
