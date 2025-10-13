@@ -18,7 +18,6 @@ from src.domain.player.event.inventory_events import (
     InventorySortRequestedEvent
 )
 from src.domain.player.exception.player_exceptions import (
-    InventoryFullException,
     InvalidSlotException,
     ItemNotInSlotException,
     EquipmentSlotValidationException
@@ -243,7 +242,7 @@ class TestPlayerInventoryAggregate:
         assert events[0].item_instance_id == item_id
 
     def test_acquire_item_inventory_full(self):
-        """インベントリが満杯の場合、アイテム入手で例外が発生すること"""
+        """インベントリが満杯の場合、オーバーフローイベントが発行されること"""
         # 全てのスロットを埋めたインベントリを作成
         occupied_slots = {i: 100 + i for i in range(5)}
         aggregate = create_test_inventory_aggregate(
@@ -252,12 +251,16 @@ class TestPlayerInventoryAggregate:
         )
         item_id = create_test_item_instance_id(200)
 
-        with pytest.raises(InventoryFullException):
-            aggregate.acquire_item(item_id)
+        # 例外が発生せず処理が完了すること
+        aggregate.acquire_item(item_id)
 
-        # イベントが発行されていないことを確認
+        # オーバーフローイベントが発行されていることを確認
         events = aggregate.get_events()
-        assert len(events) == 0
+        assert len(events) == 1
+        assert isinstance(events[0], InventorySlotOverflowEvent)
+        assert events[0].aggregate_id == aggregate.player_id
+        assert events[0].overflowed_item_instance_id == item_id
+        assert events[0].reason == "inventory_full_on_acquire"
 
     def test_move_item_normal(self):
         """アイテムを正常に移動できること"""
