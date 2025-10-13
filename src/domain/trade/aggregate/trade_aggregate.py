@@ -1,215 +1,140 @@
-from typing import Optional, List
+from typing import Optional
 from datetime import datetime
+
 from src.domain.common.aggregate_root import AggregateRoot
-from src.domain.trade.trade_enum import TradeType, TradeStatus
-from src.domain.trade.trade_exception import (
+from src.domain.trade.enum.trade_enum import TradeStatus
+from src.domain.trade.exception.trade_exception import (
     InvalidTradeStatusException,
     CannotAcceptOwnTradeException,
     CannotAcceptTradeWithOtherPlayerException,
     CannotCancelTradeWithOtherPlayerException,
 )
-from src.domain.trade.trade_events import (
-    TradeCreatedEvent,
-    TradeExecutedEvent,
+from src.domain.trade.event.trade_event import (
+    TradeOfferedEvent,
+    TradeAcceptedEvent,
     TradeCancelledEvent,
-    DirectTradeOfferedEvent
 )
-from src.domain.trade.value_object.trade_item import TradeItem
+from src.domain.trade.value_object.trade_id import TradeId
+from src.domain.item.value_object.item_instance_id import ItemInstanceId
+from src.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
+from src.domain.trade.value_object.trade_scope import TradeScope
+from src.domain.player.value_object.player_id import PlayerId
 
 
-# TODO まずは簡易実装として物々交換を禁止
-class Trade(AggregateRoot):
-    """取引オファー"""
-    
+class TradeAggregate(AggregateRoot):
+    """取引集約"""
+
     def __init__(
         self,
-        trade_id: int,
-        seller_id: int,
-        offered_item: TradeItem,
-        requested_gold: int,
+        trade_id: TradeId,
+        seller_id: PlayerId,
+        offered_item_id: ItemInstanceId,
+        requested_gold: TradeRequestedGold,
         created_at: datetime,
-        trade_type: TradeType = TradeType.GLOBAL,
-        target_player_id: Optional[int] = None,  # 直接取引用
-        status: TradeStatus = TradeStatus.ACTIVE,
+        trade_scope: TradeScope,
+        status: TradeStatus,
         version: int = 0,
-        buyer_id: Optional[int] = None,
+        buyer_id: Optional[PlayerId] = None,
     ):
         super().__init__()
-        
-        # 引数のバリデーション（元の __post_init__ と同じロジック）
-        if trade_id is None:
-            raise ValueError("trade_id cannot be None.")
-        if seller_id is None:
-            raise ValueError("seller_id cannot be None.")
-        # 初期化時はACTIVE状態のみ許可（COMPLETEDやCANCELLEDは不正）
-        if status != TradeStatus.ACTIVE:
-            raise InvalidTradeStatusException(f"status must be ACTIVE: {status}")
-        if buyer_id is not None:
-            raise InvalidTradeStatusException(f"buyer_id must be None when initializing: {buyer_id}")
-        # DIRECTトレードの場合はtarget_player_idが必要、GLOBAL/その他の場合は不要
-        if trade_type == TradeType.DIRECT and target_player_id is None:
-            raise InvalidTradeStatusException(f"target_player_id is required for DIRECT trade: {target_player_id}, {trade_type}")
-        if trade_type != TradeType.DIRECT and target_player_id is not None:
-            raise InvalidTradeStatusException(f"target_player_id must be None when trade_type is not DIRECT: {target_player_id}, {trade_type}")
-        if requested_gold <= 0:
-            raise InvalidTradeStatusException(f"requested_gold must be greater than 0: {requested_gold}")
-        
-        # 属性の設定
         self.trade_id = trade_id
         self.seller_id = seller_id
-        self.offered_item = offered_item
+        self.offered_item_id = offered_item_id
         self.requested_gold = requested_gold
         self.created_at = created_at
-        self.trade_type = trade_type
-        self.target_player_id = target_player_id
+        self.trade_scope = trade_scope
         self.status = status
         self.version = version
         self.buyer_id = buyer_id
-    
+
     @classmethod
-    def create_trade(
+    def create_new_trade(
         cls,
-        trade_id: int,
-        seller_id: int,
-        requested_gold: int,
-        trade_item: TradeItem,
+        trade_id: TradeId,
+        seller_id: PlayerId,
+        offered_item_id: ItemInstanceId,
+        requested_gold: TradeRequestedGold,
         created_at: datetime,
-        trade_type: TradeType = TradeType.GLOBAL,
-        target_player_id: Optional[int] = None,
-        seller_name: str = None,
-        target_player_name: str = None,
-    ) -> "Trade":
-        """お金との取引オファーを作成"""
-        trade_offer = cls(
+        trade_scope: TradeScope,
+    ) -> "TradeAggregate":
+        """新規取引作成"""
+        trade = cls(
             trade_id=trade_id,
             seller_id=seller_id,
-            offered_item=trade_item,
+            offered_item_id=offered_item_id,
             requested_gold=requested_gold,
-            trade_type=trade_type,
-            target_player_id=target_player_id,
             created_at=created_at,
+            trade_scope=trade_scope,
+            status=TradeStatus.ACTIVE,
+            buyer_id=None,
         )
-        
-        # ドメインイベントを発行
-        if seller_name:
-            if trade_type == TradeType.DIRECT and target_player_id and target_player_name:
-                # 直接取引の場合は専用イベント
-                event = DirectTradeOfferedEvent.create(
-                    trade_id=trade_id,
-                    seller_id=seller_id,
-                    seller_name=seller_name,
-                    target_player_id=target_player_id,
-                    target_player_name=target_player_name,
-                    offered_item_id=trade_item.item_id,
-                    offered_item_count=trade_item.count,
-                    offered_unique_id=trade_item.unique_id,
-                    requested_gold=requested_gold
-                )
-            else:
-                # グローバル取引の場合は通常の作成イベント
-                event = TradeCreatedEvent.create(
-                    trade_id=trade_id,
-                    seller_id=seller_id,
-                    seller_name=seller_name,
-                    offered_item_id=trade_item.item_id,
-                    offered_item_count=trade_item.count,
-                    offered_unique_id=trade_item.unique_id,
-                    requested_gold=requested_gold,
-                    trade_type=trade_type,
-                    target_player_id=target_player_id
-                )
-            trade_offer._domain_events.append(event)
-        
-        return trade_offer
-    
+
+        # ドメインイベント発行
+        event = TradeOfferedEvent.create(
+            aggregate_id=trade_id,
+            aggregate_type="TradeAggregate",
+            seller_id=seller_id,
+            offered_item_id=offered_item_id,
+            requested_gold=requested_gold,
+            trade_scope=trade_scope,
+        )
+        trade.add_event(event)
+
+        return trade
+
     def is_active(self) -> bool:
         """取引がアクティブかどうか"""
         return self.status == TradeStatus.ACTIVE
-    
+
     def is_direct_trade(self) -> bool:
         """プレイヤーを指定した直接取引かどうか"""
-        return self.trade_type == TradeType.DIRECT
-    
-    def is_for_player(self, player_id: int) -> bool:
+        return self.trade_scope.is_direct()
+
+    def is_for_player(self, player_id: PlayerId) -> bool:
         """特定のプレイヤー向けの取引かどうか"""
-        return self.target_player_id == player_id
-    
-    def can_be_accepted_by(self, player_id: int) -> bool:
+        return self.trade_scope.is_direct() and self.trade_scope.target_player_id == player_id
+
+    def can_be_accepted_by(self, player_id: PlayerId) -> bool:
         """指定プレイヤーが受託可能かどうか"""
         if self.status != TradeStatus.ACTIVE:
-            return False 
+            return False
         if self.seller_id == player_id:
             return False  # 自分の出品は受託できない
-        if self.target_player_id and self.target_player_id != player_id:
+        if self.trade_scope.is_direct() and self.trade_scope.target_player_id != player_id:
             return False  # 直接取引で対象外
         return True
-    
-    def get_trade_summary(self) -> str:
-        """取引内容の要約を取得"""
-        offered = f"{self.offered_item.item_id} x{self.offered_item.count}"
-        if self.offered_item.unique_id:
-            offered += f" (固有ID:{self.offered_item.unique_id})"
-        requested = f"{self.requested_gold} G"
-        trade_type_str = "直接取引" if self.is_direct_trade() else "グローバル取引"
-        return f"[{trade_type_str}] {offered} ⇄ {requested}"
 
-    def accept_by(self, buyer_id: int, buyer_name: str = None, seller_name: str = None):
+    def accept_by(self, buyer_id: PlayerId):
         """取引を受託"""
         if self.status != TradeStatus.ACTIVE:
             raise InvalidTradeStatusException(f"Trade is not active: {self.status}")
         if self.seller_id == buyer_id:
             raise CannotAcceptOwnTradeException(f"Cannot accept trade with yourself: {self.seller_id}, {buyer_id}")
-        if self.is_direct_trade() and self.target_player_id != buyer_id:
-            raise CannotAcceptTradeWithOtherPlayerException(f"Cannot accept trade with other player: {self.target_player_id}, {buyer_id}")
+        if self.is_direct_trade() and self.trade_scope.target_player_id != buyer_id:
+            raise CannotAcceptTradeWithOtherPlayerException(f"Cannot accept trade with other player: {self.trade_scope.target_player_id}, {buyer_id}")
 
         self.buyer_id = buyer_id
         self.status = TradeStatus.COMPLETED
-        
-        # ドメインイベントを発行
-        if buyer_name and seller_name:
-            event = TradeExecutedEvent.create(
-                trade_id=self.trade_id,
-                seller_id=self.seller_id,
-                seller_name=seller_name,
-                buyer_id=buyer_id,
-                buyer_name=buyer_name,
-                offered_item_id=self.offered_item.item_id,
-                offered_item_count=self.offered_item.count,
-                offered_unique_id=self.offered_item.unique_id,
-                requested_gold=self.requested_gold,
-                trade_type=self.trade_type
-            )
-            self.add_event(event)
 
-    def cancel_by(self, player_id: int, seller_name: str = None) -> None:
+        # ドメインイベント発行
+        event = TradeAcceptedEvent.create(
+            aggregate_id=self.trade_id,
+            aggregate_type="TradeAggregate",
+            buyer_id=buyer_id,
+        )
+        self.add_event(event)
+
+    def cancel_by(self, player_id: PlayerId) -> None:
         """取引をキャンセル"""
         if self.status != TradeStatus.ACTIVE:
             raise InvalidTradeStatusException(f"Trade is already completed or cancelled: {self.status}")
         if self.seller_id != player_id:
             raise CannotCancelTradeWithOtherPlayerException(f"Cannot cancel trade with other player: {self.seller_id}, {player_id}")
         self.status = TradeStatus.CANCELLED
-        
-        # ドメインイベントを発行
-        if seller_name:
-            event = TradeCancelledEvent.create(
-                trade_id=self.trade_id,
-                seller_id=self.seller_id,
-                seller_name=seller_name,
-                offered_item_id=self.offered_item.item_id,
-                offered_item_count=self.offered_item.count,
-                offered_unique_id=self.offered_item.unique_id,
-                requested_gold=self.requested_gold,
-                trade_type=self.trade_type,
-                target_player_id=self.target_player_id
-            )
-            self.add_event(event)
-    
-    def __str__(self):
-        return f"Trade({self.trade_id}): {self.get_trade_summary()}"
 
-    def __repr__(self):
-        return (f"Trade(trade_id={self.trade_id}, seller_id={self.seller_id}, "
-                f"offered={self.offered_item.item_id}x{self.offered_item.count}, "
-                f"requested={self.requested_gold} G, "
-                f"status={self.status.value})")
- 
+        # ドメインイベント発行
+        event = TradeCancelledEvent.create(
+            aggregate_id=self.trade_id,
+            aggregate_type="TradeAggregate",
+        )
+        self.add_event(event)

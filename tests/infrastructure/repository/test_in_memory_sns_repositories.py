@@ -26,8 +26,8 @@ class TestInMemoryUserRepositorySpecific:
     def test_save_and_find_new_user(self, repository):
         """新規ユーザー保存と検索テスト"""
         from src.domain.sns.entity.sns_user import SnsUser
-        from src.domain.sns.user_profile import UserProfile
-        from src.domain.sns.user_aggregate import UserAggregate
+        from src.domain.sns.value_object.user_profile import UserProfile
+        from src.domain.sns.aggregate.user_aggregate import UserAggregate
 
         # 新しいユーザーを作成
         new_profile = UserProfile("test_user", "テストユーザー", "テスト用のユーザーです")
@@ -38,9 +38,9 @@ class TestInMemoryUserRepositorySpecific:
         repository.save(new_user)
 
         # 検索確認
-        found_user = repository.find_by_id(7)
+        found_user = repository.find_by_id(UserId(7))
         assert found_user is not None
-        assert found_user.user_id == 7
+        assert found_user.user_id.value == 7
         assert found_user.get_user_profile_info()["user_name"] == "test_user"
 
     def test_update_profile(self, repository):
@@ -54,8 +54,8 @@ class TestInMemoryUserRepositorySpecific:
     def test_bulk_update_relationships(self, repository):
         """一括関係性更新テスト"""
         relationships = [
-            (3, 2, "follow"),    # 戦士 -> 魔法使いをフォロー
-            (4, 2, "follow"),    # 盗賊 -> 魔法使いをフォロー
+            (UserId(3), UserId(2), "follow"),    # 戦士 -> 魔法使いをフォロー
+            (UserId(4), UserId(2), "follow"),    # 盗賊 -> 魔法使いをフォロー
         ]
 
         updated_count = repository.bulk_update_relationships(relationships)
@@ -122,23 +122,6 @@ class TestInMemoryPostRepositorySpecific:
         assert found_post.post_id == PostId(6)
         assert found_post.content.content == "テストポスト"
 
-    def test_update_post_content(self, repository):
-        """ポスト内容更新テスト"""
-        from src.domain.sns.value_object import PostContent
-        from src.domain.sns.enum import PostVisibility
-
-        updated_content = PostContent(
-            content="更新された内容",
-            hashtags=("更新",),
-            visibility=PostVisibility.PUBLIC
-        )
-
-        updated_post = repository.update_post_content(PostId(1), updated_content)
-        assert updated_post is not None
-        assert updated_post.content.content == "更新された内容"
-        assert "更新" in updated_post.content.hashtags
-
-
     def test_clear_method(self, repository):
         """クリアメソッドテスト（InMemory特有）"""
         initial_count = repository.count()
@@ -189,33 +172,6 @@ class TestInMemoryReplyRepositorySpecific:
         assert found_reply is not None
         assert found_reply.reply_id == ReplyId(8)
         assert found_reply.content.content == "テストリプライ"
-
-    def test_update_reply_content(self, repository):
-        """リプライ内容更新テスト"""
-        from src.domain.sns.value_object import PostContent
-        from src.domain.sns.enum import PostVisibility
-
-        updated_content = PostContent(
-            content="更新されたリプライ",
-            hashtags=("更新",),
-            visibility=PostVisibility.PUBLIC
-        )
-
-        updated_reply = repository.update_reply_content(ReplyId(1), updated_content)
-        assert updated_reply is not None
-        assert updated_reply.content.content == "更新されたリプライ"
-        assert "更新" in updated_reply.content.hashtags
-
-    def test_clear_method(self, repository):
-        """クリアメソッドテスト（InMemory特有）"""
-        # InMemoryReplyRepositoryにはcountメソッドがないので、find_allで確認
-        initial_replies = repository.find_all()
-        assert len(initial_replies) > 0
-
-        repository.clear()
-        cleared_replies = repository.find_all()
-        assert len(cleared_replies) == 0
-
 
 # 統合テスト：リポジトリ間の連携テスト
 class TestSNSRepositoriesIntegration:

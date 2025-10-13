@@ -115,7 +115,15 @@ class PlayerInventoryAggregate(AggregateRoot):
         # 空きスロットを探す
         empty_slot = self._find_empty_inventory_slot()
         if empty_slot is None:
-            raise InventoryFullException("Inventory is full")
+            # インベントリが満杯の場合、オーバーフローイベントを発行
+            overflow_event = InventorySlotOverflowEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerInventoryAggregate",
+                overflowed_item_instance_id=item_instance_id,
+                reason="inventory_full_on_acquire"
+            )
+            self.add_event(overflow_event)
+            return
 
         # アイテムを配置
         self._inventory_slots[empty_slot] = item_instance_id

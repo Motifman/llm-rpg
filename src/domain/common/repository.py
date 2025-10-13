@@ -32,8 +32,3 @@ class Repository(ABC, Generic[T, ID]):
     def find_all(self) -> List[T]:
         """全てのエンティティを取得"""
         pass
-
-    @abstractmethod
-    def generate_id(self) -> ID:
-        """集約IDを生成"""
-        pass

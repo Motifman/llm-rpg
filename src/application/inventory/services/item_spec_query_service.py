@@ -11,8 +11,8 @@ from src.application.inventory.exceptions.item_info_query_application_exception 
 from src.application.common.exceptions import SystemErrorException
 
 
-class ItemInfoQueryService:
-    """アイテム情報検索サービス"""
+class ItemSpecQueryService:
+    """ItemSpec検索サービス"""
 
     def __init__(self, item_spec_repository: "ItemSpecRepository"):
         self._item_spec_repository = item_spec_repository
@@ -35,6 +35,18 @@ class ItemInfoQueryService:
             raise SystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
                                      original_exception=e)
 
+    def _convert_to_item_spec_dto(self, read_model) -> ItemSpecDto:
+        """ItemSpecReadModelをItemSpecDtoに変換"""
+        return ItemSpecDto(
+            item_spec_id=read_model.item_spec_id.value,
+            name=read_model.name,
+            item_type=read_model.item_type,
+            rarity=read_model.rarity,
+            description=read_model.description,
+            max_stack_size=read_model.max_stack_size.value,
+            durability_max=read_model.durability_max
+        )
+
     def get_item_spec(self, item_spec_id: int) -> ItemSpecDto:
         """アイテムスペックを取得"""
         return self._execute_with_error_handling(
@@ -51,15 +63,7 @@ class ItemInfoQueryService:
         if item_spec is None:
             raise ItemInfoQueryApplicationException.item_spec_not_found(item_spec_id)
 
-        return ItemSpecDto(
-            item_spec_id=item_spec.item_spec_id.value,
-            name=item_spec.name,
-            item_type=item_spec.item_type,
-            rarity=item_spec.rarity,
-            description=item_spec.description,
-            max_stack_size=item_spec.max_stack_size.value,
-            durability_max=item_spec.durability_max
-        )
+        return self._convert_to_item_spec_dto(item_spec)
 
     def search_items_by_type(self, item_type: ItemType) -> List[ItemSpecDto]:
         """アイテムタイプで検索"""
@@ -74,18 +78,7 @@ class ItemInfoQueryService:
     def _search_items_by_type_impl(self, item_type: ItemType) -> List[ItemSpecDto]:
         """アイテムタイプ検索の実装"""
         item_specs = self._item_spec_repository.find_by_type(item_type)
-        return [
-            ItemSpecDto(
-                item_spec_id=spec.item_spec_id.value,
-                name=spec.name,
-                item_type=spec.item_type,
-                rarity=spec.rarity,
-                description=spec.description,
-                max_stack_size=spec.max_stack_size.value,
-                durability_max=spec.durability_max
-            )
-            for spec in item_specs
-        ]
+        return [self._convert_to_item_spec_dto(spec) for spec in item_specs]
 
     def search_items_by_rarity(self, rarity: Rarity) -> List[ItemSpecDto]:
         """レアリティで検索"""
@@ -100,18 +93,7 @@ class ItemInfoQueryService:
     def _search_items_by_rarity_impl(self, rarity: Rarity) -> List[ItemSpecDto]:
         """レアリティ検索の実装"""
         item_specs = self._item_spec_repository.find_by_rarity(rarity)
-        return [
-            ItemSpecDto(
-                item_spec_id=spec.item_spec_id.value,
-                name=spec.name,
-                item_type=spec.item_type,
-                rarity=spec.rarity,
-                description=spec.description,
-                max_stack_size=spec.max_stack_size.value,
-                durability_max=spec.durability_max
-            )
-            for spec in item_specs
-        ]
+        return [self._convert_to_item_spec_dto(spec) for spec in item_specs]
 
     def find_tradeable_items(self) -> List[ItemSpecDto]:
         """取引可能なアイテムを取得"""
@@ -125,18 +107,7 @@ class ItemInfoQueryService:
     def _find_tradeable_items_impl(self) -> List[ItemSpecDto]:
         """取引可能アイテム取得の実装"""
         item_specs = self._item_spec_repository.find_tradeable_items()
-        return [
-            ItemSpecDto(
-                item_spec_id=spec.item_spec_id.value,
-                name=spec.name,
-                item_type=spec.item_type,
-                rarity=spec.rarity,
-                description=spec.description,
-                max_stack_size=spec.max_stack_size.value,
-                durability_max=spec.durability_max
-            )
-            for spec in item_specs
-        ]
+        return [self._convert_to_item_spec_dto(spec) for spec in item_specs]
 
     def find_item_by_name(self, name: str) -> Optional[ItemSpecDto]:
         """名前で検索"""
@@ -154,12 +125,4 @@ class ItemInfoQueryService:
         if item_spec is None:
             return None
 
-        return ItemSpecDto(
-            item_spec_id=item_spec.item_spec_id.value,
-            name=item_spec.name,
-            item_type=item_spec.item_type,
-            rarity=item_spec.rarity,
-            description=item_spec.description,
-            max_stack_size=item_spec.max_stack_size.value,
-            durability_max=item_spec.durability_max
-        )
+        return self._convert_to_item_spec_dto(item_spec)

@@ -334,6 +334,26 @@ class InMemorySnsUserRepository(UserRepository):
                 return user
         return None
 
+    def get_user_stats(self, user_id: UserId) -> Dict[str, int]:
+        """ユーザーの統計情報を取得"""
+        user = self._users.get(user_id)
+        if not user:
+            return {}
+
+        follower_count = len([f for f in self._users.values() if any(follow.followee_user_id == user_id for follow in f.follow_relationships)])
+        followee_count = len(user.follow_relationships)
+        blocked_count = len(user.block_relationships)
+        subscription_count = len(user.subscribe_relationships)
+        subscriber_count = len([s for s in self._users.values() if any(sub.subscribed_user_id == user_id for sub in s.subscribe_relationships)])
+
+        return {
+            "follower_count": follower_count,
+            "followee_count": followee_count,
+            "blocked_count": blocked_count,
+            "subscription_count": subscription_count,
+            "subscriber_count": subscriber_count
+        }
+
     def exists_by_id(self, user_id: UserId) -> bool:
         """ユーザーIDが存在するかチェック"""
         return user_id in self._users
