@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Set
 from src.domain.common.aggregate_root import AggregateRoot
 from src.domain.item.value_object.item_instance_id import ItemInstanceId
 from src.domain.item.enum.item_enum import EquipmentType
@@ -15,14 +15,19 @@ from src.domain.player.event.inventory_events import (
     InventorySlotOverflowEvent,
     InventoryCompactionRequestedEvent,
     InventoryCompactionCompletedEvent,
-    InventorySortRequestedEvent
+    InventorySortRequestedEvent,
+    ItemReservedForTradeEvent,
+    ItemReservationCancelledEvent
 )
 from src.domain.player.exception.player_exceptions import (
     InventoryFullException,
     InvalidSlotException,
     ItemNotInSlotException,
     EquipmentSlotOccupiedException,
-    EquipmentSlotValidationException
+    EquipmentSlotValidationException,
+    ItemReservedException,
+    ItemAlreadyReservedException,
+    ItemNotReservedException
 )
 
 
@@ -39,11 +44,15 @@ class PlayerInventoryAggregate(AggregateRoot):
         player_id: PlayerId,
         max_slots: int = DEFAULT_MAX_SLOTS,
         inventory_slots: Optional[Dict[SlotId, Optional[ItemInstanceId]]] = None,
-        equipment_slots: Optional[Dict[EquipmentSlotType, Optional[ItemInstanceId]]] = None
+        equipment_slots: Optional[Dict[EquipmentSlotType, Optional[ItemInstanceId]]] = None,
+        reserved_item_ids: Optional[Set[ItemInstanceId]] = None
     ):
         super().__init__()
         self._player_id = player_id
         self._max_slots = max_slots
+
+        # 予約中のアイテムID集合
+        self._reserved_item_ids = reserved_item_ids.copy() if reserved_item_ids is not None else set()
 
         # インベントリスロット: slot_id -> item_instance_id
         if inventory_slots is not None:
@@ -82,14 +91,16 @@ class PlayerInventoryAggregate(AggregateRoot):
         player_id: PlayerId,
         max_slots: int,
         inventory_slots: Dict[SlotId, Optional[ItemInstanceId]],
-        equipment_slots: Dict[EquipmentSlotType, Optional[ItemInstanceId]]
+        equipment_slots: Dict[EquipmentSlotType, Optional[ItemInstanceId]],
+        reserved_item_ids: Optional[Set[ItemInstanceId]] = None
     ) -> "PlayerInventoryAggregate":
         """既存データからインベントリを復元"""
         return cls(
             player_id=player_id,
             max_slots=max_slots,
             inventory_slots=inventory_slots,
-            equipment_slots=equipment_slots
+            equipment_slots=equipment_slots,
+            reserved_item_ids=reserved_item_ids
         )
 
     @property
@@ -99,6 +110,81 @@ class PlayerInventoryAggregate(AggregateRoot):
     @property
     def max_slots(self) -> int:
         return self._max_slots
+
+    @property
+    def reserved_item_ids(self) -> Set[ItemInstanceId]:
+        """予約中のアイテムID集合のコピーを取得"""
+        return self._reserved_item_ids.copy()
+
+    def is_item_reserved(self, item_id: ItemInstanceId) -> bool:
+        """アイテムが予約中かどうか"""
+        return item_id in self._reserved_item_ids
+
+    def reserve_item(self, slot_id: SlotId) -> ItemInstanceId:
+        """指定したスロットのアイテムを取引予約（ロック）する"""
+        item_id = self.get_item_instance_id_by_slot(slot_id)
+        if item_id is None:
+            raise ItemNotInSlotException(f"No item in slot {slot_id.value}")
+
+        if item_id in self._reserved_item_ids:
+            raise ItemAlreadyReservedException(f"Item {item_id} is already reserved")
+
+        self._reserved_item_ids.add(item_id)
+
+        # イベント発行
+        event = ItemReservedForTradeEvent.create(
+            aggregate_id=self._player_id,
+            aggregate_type="PlayerInventoryAggregate",
+            item_instance_id=item_id
+        )
+        self.add_event(event)
+
+        return item_id
+
+    def unreserve_item(self, item_id: ItemInstanceId) -> None:
+        """アイテムの予約を解除する（キャンセル時）"""
+        if item_id in self._reserved_item_ids:
+            self._reserved_item_ids.remove(item_id)
+
+            # イベント発行
+            event = ItemReservationCancelledEvent.create(
+                aggregate_id=self._player_id,
+                aggregate_type="PlayerInventoryAggregate",
+                item_instance_id=item_id
+            )
+            self.add_event(event)
+
+    def remove_reserved_item(self, item_id: ItemInstanceId) -> None:
+        """予約中のアイテムを削除する（取引成立時）"""
+        if item_id not in self._reserved_item_ids:
+            raise ItemNotReservedException(f"Item {item_id} is not reserved")
+
+        slot_id = self._find_slot_by_item_id(item_id)
+        if slot_id is None:
+            # 整合性エラー: 予約中なのにスロットに見つからない
+            # 本来は起こり得ないが、念のため解除して例外
+            self._reserved_item_ids.remove(item_id)
+            raise ItemNotInSlotException(f"Reserved item {item_id} not found in any slot")
+
+        # スロットを空にする
+        self._inventory_slots[slot_id] = None
+        self._reserved_item_ids.remove(item_id)
+
+        # 通常の削除イベントを発行
+        event = ItemDroppedFromInventoryEvent.create(
+            aggregate_id=self._player_id,
+            aggregate_type="PlayerInventoryAggregate",
+            item_instance_id=item_id,
+            slot_id=slot_id
+        )
+        self.add_event(event)
+
+    def _find_slot_by_item_id(self, item_id: ItemInstanceId) -> Optional[SlotId]:
+        """アイテムIDからスロットIDを探す"""
+        for slot_id, current_item_id in self._inventory_slots.items():
+            if current_item_id == item_id:
+                return slot_id
+        return None
 
     def get_item_instance_id_by_slot(self, slot_id: SlotId) -> Optional[ItemInstanceId]:
         """スロット番号からItemInstanceIdを取得"""
@@ -146,6 +232,10 @@ class PlayerInventoryAggregate(AggregateRoot):
         if from_item is None:
             raise ItemNotInSlotException(f"No item in slot {from_slot.value}")
 
+        # 予約チェック
+        if from_item in self._reserved_item_ids:
+            raise ItemReservedException(f"Item {from_item} is reserved and cannot be moved")
+
         # 移動先スロットのバリデーション
         to_item = self.get_item_instance_id_by_slot(to_slot)
         if to_item is not None:
@@ -160,6 +250,10 @@ class PlayerInventoryAggregate(AggregateRoot):
         item_instance_id = self.get_item_instance_id_by_slot(slot_id)
         if item_instance_id is None:
             raise ItemNotInSlotException(f"No item in slot {slot_id.value}")
+
+        # 予約チェック
+        if item_instance_id in self._reserved_item_ids:
+            raise ItemReservedException(f"Item {item_instance_id} is reserved and cannot be dropped")
 
         # スロットを空にする
         self._inventory_slots[slot_id] = None
@@ -180,6 +274,10 @@ class PlayerInventoryAggregate(AggregateRoot):
         if item_instance_id is None:
             raise ItemNotInSlotException(f"No item in inventory slot {inventory_slot_id.value}")
 
+        # 予約チェック
+        if item_instance_id in self._reserved_item_ids:
+            raise ItemReservedException(f"Item {item_instance_id} is reserved and cannot be equipped")
+
         # 装備要求イベントを発行（バリデーションはイベントハンドラで行う）
         event = ItemEquipRequestedEvent.create(
             aggregate_id=self._player_id,
@@ -192,6 +290,10 @@ class PlayerInventoryAggregate(AggregateRoot):
 
     def complete_equip_item(self, inventory_slot_id: SlotId, equipment_slot: EquipmentSlotType, item_instance_id: ItemInstanceId) -> None:
         """装備要求に対する実際の装備処理を実行"""
+        # 予約チェック
+        if item_instance_id in self._reserved_item_ids:
+            raise ItemReservedException(f"Item {item_instance_id} is reserved and cannot be equipped")
+
         # 現在の装備をチェック
         current_equipped = self._equipment_slots.get(equipment_slot)
         if current_equipped is not None:

@@ -141,3 +141,18 @@ class EquipmentSlotMismatchException(PlayerDomainException, BusinessRuleExceptio
 class EquipmentSlotValidationException(PlayerDomainException, ValidationException):
     """装備スロットバリデーション例外"""
     error_code = "PLAYER.EQUIPMENT_SLOT_VALIDATION"
+
+
+class ItemReservedException(PlayerDomainException, BusinessRuleException):
+    """アイテム予約済み例外"""
+    error_code = "PLAYER.ITEM_RESERVED"
+
+
+class ItemAlreadyReservedException(PlayerDomainException, BusinessRuleException):
+    """アイテム既に予約済み例外"""
+    error_code = "PLAYER.ITEM_ALREADY_RESERVED"
+
+
+class ItemNotReservedException(PlayerDomainException, BusinessRuleException):
+    """アイテム未予約例外"""
+    error_code = "PLAYER.ITEM_NOT_RESERVED"
