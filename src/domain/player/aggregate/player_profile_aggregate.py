@@ -26,6 +26,18 @@ class PlayerProfileAggregate(AggregateRoot):
         self._race = race
         self._element = element
 
+    @classmethod
+    def create(
+        cls,
+        player_id: PlayerId,
+        name: PlayerName,
+        role: Role = Role.CITIZEN,
+        race: Race = Race.HUMAN,
+        element: Element = Element.NEUTRAL,
+    ) -> "PlayerProfileAggregate":
+        """新しいプロフィール集約を作成"""
+        return cls(player_id, name, role, race, element)
+
     @property
     def player_id(self) -> PlayerId:
         """プレイヤーID"""

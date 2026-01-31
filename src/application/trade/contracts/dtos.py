@@ -47,3 +47,11 @@ class TradeSearchFilterDto:
     min_price: Optional[int] = None
     max_price: Optional[int] = None
     statuses: Optional[List[str]] = None
+
+
+@dataclass(frozen=True)
+class TradeCommandResultDto:
+    """取引コマンド実行結果DTO"""
+    success: bool
+    message: str
+    data: Optional[dict] = None

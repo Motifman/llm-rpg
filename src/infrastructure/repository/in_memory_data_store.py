@@ -42,7 +42,14 @@ class InMemoryDataStore:
         
         # Player Domain (TBD: リファクタリング後の集約に合わせる)
         self.players: Dict[Any, Any] = {}
+        self.player_profiles: Dict[PlayerId, Any] = {}
+        self.player_inventories: Dict[PlayerId, Any] = {}
+        self.player_statuses: Dict[PlayerId, Any] = {}
         self.next_player_id = 1
+        
+        # Trade Domain
+        self.trades: Dict[Any, Any] = {}
+        self.next_trade_id = 1
         
         # サンプルデータの投入
         self._setup_sample_data()

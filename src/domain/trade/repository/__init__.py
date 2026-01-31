@@ -3,11 +3,13 @@ from .global_market_listing_read_model_repository import GlobalMarketListingRead
 from .personal_trade_listing_read_model_repository import PersonalTradeListingReadModelRepository
 from .trade_detail_read_model_repository import TradeDetailReadModelRepository
 from .item_trade_statistics_read_model_repository import ItemTradeStatisticsReadModelRepository
+from .trade_repository import TradeRepository
 
 __all__ = [
     "RecentTradeReadModelRepository",
     "GlobalMarketListingReadModelRepository",
     "PersonalTradeListingReadModelRepository",
     "TradeDetailReadModelRepository",
-    "ItemTradeStatisticsReadModelRepository"
+    "ItemTradeStatisticsReadModelRepository",
+    "TradeRepository"
 ]
