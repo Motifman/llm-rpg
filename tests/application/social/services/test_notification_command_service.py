@@ -6,7 +6,8 @@ import logging
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch, MagicMock
 from src.application.social.services.notification_command_service import NotificationCommandService
-from src.infrastructure.repository.in_memory_sns_notification_repository_with_uow import InMemorySnsNotificationRepositoryWithUow
+from src.infrastructure.repository.in_memory_sns_notification_repository import InMemorySnsNotificationRepository
+from src.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from src.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 from src.application.social.contracts.commands import (
     MarkNotificationAsReadCommand,
@@ -40,7 +41,8 @@ class TestNotificationCommandService:
         """テスト用のサービスとリポジトリをセットアップ"""
         # Unit of Workを作成
         unit_of_work = InMemoryUnitOfWork(unit_of_work_factory=lambda: InMemoryUnitOfWork())
-        notification_repository = InMemorySnsNotificationRepositoryWithUow(unit_of_work)
+        data_store = InMemoryDataStore()
+        notification_repository = InMemorySnsNotificationRepository(data_store, unit_of_work)
 
         # サービスを作成
         service = NotificationCommandService(notification_repository, unit_of_work)

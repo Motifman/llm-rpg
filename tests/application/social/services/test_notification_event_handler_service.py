@@ -15,11 +15,11 @@ from src.domain.sns.event import (
 )
 from src.domain.sns.value_object import UserId, PostId, ReplyId, PostContent, Mention
 from src.domain.sns.value_object.notification_type import NotificationType
-from src.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
+from src.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
+from src.infrastructure.repository.in_memory_reply_repository import InMemoryReplyRepository
 from src.infrastructure.repository.in_memory_sns_notification_repository import InMemorySnsNotificationRepository
-from src.infrastructure.repository.in_memory_sns_notification_repository_with_uow import InMemorySnsNotificationRepositoryWithUow
-from src.infrastructure.repository.in_memory_post_repository_with_uow import InMemoryPostRepositoryWithUow
-from src.infrastructure.repository.in_memory_reply_repository_with_uow import InMemoryReplyRepositoryWithUow
+from src.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from src.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
 from src.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 from src.infrastructure.unit_of_work.unit_of_work_factory_impl import InMemoryUnitOfWorkFactory
 
@@ -33,27 +33,32 @@ class TestNotificationEventHandlerService:
         return InMemoryUnitOfWorkFactory()
 
     @pytest.fixture
-    def user_repository(self):
-        """テスト用のユーザーRepository（インメモリ）"""
-        return InMemorySnsUserRepository()
+    def data_store(self):
+        """共有データストア"""
+        return InMemoryDataStore()
 
     @pytest.fixture
-    def notification_repository(self, unit_of_work_factory):
+    def user_repository(self, data_store):
+        """テスト用のユーザーRepository（インメモリ）"""
+        return InMemorySnsUserRepository(data_store)
+
+    @pytest.fixture
+    def notification_repository(self, data_store, unit_of_work_factory):
         """テスト用の通知Repository（インメモリ、UoW対応）"""
         unit_of_work = unit_of_work_factory.create()
-        return InMemorySnsNotificationRepositoryWithUow(unit_of_work)
+        return InMemorySnsNotificationRepository(data_store, unit_of_work)
 
     @pytest.fixture
-    def post_repository(self, unit_of_work_factory):
+    def post_repository(self, data_store, unit_of_work_factory):
         """テスト用のPostRepository"""
         unit_of_work = unit_of_work_factory.create()
-        return InMemoryPostRepositoryWithUow(unit_of_work)
+        return InMemoryPostRepository(data_store, unit_of_work)
 
     @pytest.fixture
-    def reply_repository(self, unit_of_work_factory):
+    def reply_repository(self, data_store, unit_of_work_factory):
         """テスト用のReplyRepository"""
         unit_of_work = unit_of_work_factory.create()
-        return InMemoryReplyRepositoryWithUow(unit_of_work)
+        return InMemoryReplyRepository(data_store, unit_of_work)
 
     @pytest.fixture
     def service(self, user_repository, notification_repository, post_repository, reply_repository, unit_of_work_factory):
@@ -535,27 +540,32 @@ class TestNotificationEventHandlerServiceImprovements:
         return InMemoryUnitOfWorkFactory()
 
     @pytest.fixture
-    def user_repository(self):
-        """テスト用のユーザーRepository（インメモリ）"""
-        return InMemorySnsUserRepository()
+    def data_store(self):
+        """共有データストア"""
+        return InMemoryDataStore()
 
     @pytest.fixture
-    def notification_repository(self, unit_of_work_factory):
+    def user_repository(self, data_store):
+        """テスト用のユーザーRepository（インメモリ）"""
+        return InMemorySnsUserRepository(data_store)
+
+    @pytest.fixture
+    def notification_repository(self, data_store, unit_of_work_factory):
         """テスト用の通知Repository（インメモリ、UoW対応）"""
         unit_of_work = unit_of_work_factory.create()
-        return InMemorySnsNotificationRepositoryWithUow(unit_of_work)
+        return InMemorySnsNotificationRepository(data_store, unit_of_work)
 
     @pytest.fixture
-    def post_repository(self, unit_of_work_factory):
+    def post_repository(self, data_store, unit_of_work_factory):
         """テスト用のPostRepository"""
         unit_of_work = unit_of_work_factory.create()
-        return InMemoryPostRepositoryWithUow(unit_of_work)
+        return InMemoryPostRepository(data_store, unit_of_work)
 
     @pytest.fixture
-    def reply_repository(self, unit_of_work_factory):
+    def reply_repository(self, data_store, unit_of_work_factory):
         """テスト用のReplyRepository"""
         unit_of_work = unit_of_work_factory.create()
-        return InMemoryReplyRepositoryWithUow(unit_of_work)
+        return InMemoryReplyRepository(data_store, unit_of_work)
 
 
     @pytest.fixture

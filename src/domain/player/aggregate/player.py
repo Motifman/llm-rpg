@@ -1,9 +1,14 @@
-from typing import Optional, TYPE_CHECKING, Dict
-from src.domain.item.consumable_item import ConsumableItem
-from src.domain.item.equipment_item import EquipmentItem
-from src.domain.item.item_enum import ItemType
-from src.domain.item.item_quantity import ItemQuantity
-from src.domain.item.unique_item import UniqueItem
+from typing import Optional, TYPE_CHECKING, Dict, Any
+# from src.domain.item.consumable_item import ConsumableItem
+# from src.domain.item.equipment_item import EquipmentItem
+# from src.domain.item.item_enum import ItemType
+# from src.domain.item.item_quantity import ItemQuantity
+# from src.domain.item.unique_item import UniqueItem
+ConsumableItem = Any
+EquipmentItem = Any
+ItemQuantity = Any
+UniqueItem = Any
+from src.domain.item.enum.item_enum import ItemType
 from src.domain.item.item_exception import ItemNotFoundException, ItemNotUsableException, ItemNotEquippableException
 from src.domain.player.value_object.base_status import BaseStatus
 from src.domain.player.value_object.player_id import PlayerId
