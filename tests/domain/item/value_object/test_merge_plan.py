@@ -12,7 +12,7 @@ from src.domain.item.value_object.item_spec import ItemSpec
 from src.domain.item.value_object.item_spec_id import ItemSpecId
 from src.domain.item.value_object.max_stack_size import MaxStackSize
 from src.domain.item.value_object.durability import Durability
-from src.domain.item.enum.item_enum import ItemType, Rarity
+from src.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
 from src.domain.item.exception import QuantityValidationException
 
 
@@ -79,7 +79,8 @@ class TestCreateOperation:
             item_type=ItemType.EQUIPMENT,
             rarity=Rarity.COMMON,
             description="A test item",
-            max_stack_size=max_stack
+            max_stack_size=max_stack,
+            equipment_type=EquipmentType.WEAPON
         )
 
     @pytest.fixture
@@ -258,7 +259,8 @@ class TestMergePlan:
                     ItemType.EQUIPMENT,
                     Rarity.COMMON,
                     "Item A desc",
-                    MaxStackSize(64)
+                    MaxStackSize(64),
+                    equipment_type=EquipmentType.WEAPON
                 ),
                 5
             ),

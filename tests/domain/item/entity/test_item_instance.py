@@ -5,7 +5,7 @@ from src.domain.item.value_object.item_spec_id import ItemSpecId
 from src.domain.item.value_object.item_spec import ItemSpec
 from src.domain.item.value_object.max_stack_size import MaxStackSize
 from src.domain.item.value_object.durability import Durability
-from src.domain.item.enum.item_enum import ItemType, Rarity
+from src.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
 from src.domain.item.exception import (
     QuantityValidationException,
     DurabilityValidationException,
@@ -28,7 +28,8 @@ class TestItemInstance:
             item_type=ItemType.EQUIPMENT,
             rarity=Rarity.COMMON,
             description="A test sword for testing",
-            max_stack_size=max_stack
+            max_stack_size=max_stack,
+            equipment_type=EquipmentType.WEAPON
         )
 
     @pytest.fixture
@@ -53,7 +54,8 @@ class TestItemInstance:
             rarity=Rarity.RARE,
             description="A durable sword for testing",
             max_stack_size=max_stack,
-            durability_max=100
+            durability_max=100,
+            equipment_type=EquipmentType.WEAPON
         )
         durability = Durability(max_value=100, current=50)
         return ItemInstance(
@@ -103,7 +105,8 @@ class TestItemInstance:
             rarity=Rarity.COMMON,
             description="A broken sword",
             max_stack_size=max_stack,
-            durability_max=100
+            durability_max=100,
+            equipment_type=EquipmentType.WEAPON
         )
         durability = Durability(max_value=100, current=0)  # 破損済み
         item = ItemInstance(
@@ -140,7 +143,8 @@ class TestItemInstance:
             item_type=ItemType.EQUIPMENT,
             rarity=Rarity.COMMON,
             description="A different sword",
-            max_stack_size=MaxStackSize(64)
+            max_stack_size=MaxStackSize(64),
+            equipment_type=EquipmentType.WEAPON
         )
         item2 = ItemInstance(
             item_instance_id=ItemInstanceId(11),
@@ -200,7 +204,8 @@ class TestItemInstance:
             rarity=Rarity.RARE,
             description="A sword with durability",
             max_stack_size=MaxStackSize(1),  # 耐久度付きアイテムはmax_stack_size=1でなければならない
-            durability_max=100
+            durability_max=100,
+            equipment_type=EquipmentType.WEAPON
         )
 
         item1 = ItemInstance(
@@ -234,7 +239,8 @@ class TestItemInstance:
             item_type=ItemType.EQUIPMENT,
             rarity=Rarity.COMMON,
             description="A test item",
-            max_stack_size=max_stack
+            max_stack_size=max_stack,
+            equipment_type=EquipmentType.WEAPON
         )
         item_id = ItemInstanceId(100)
         with pytest.raises(QuantityValidationException):
@@ -254,7 +260,8 @@ class TestItemInstance:
             item_type=ItemType.EQUIPMENT,
             rarity=Rarity.COMMON,
             description="An item without durability",
-            max_stack_size=max_stack
+            max_stack_size=max_stack,
+            equipment_type=EquipmentType.WEAPON
             # durability_maxは設定しない
         )
         item_id = ItemInstanceId(101)
@@ -277,7 +284,8 @@ class TestItemInstance:
             rarity=Rarity.UNCOMMON,
             description="An item with durability",
             max_stack_size=max_stack,
-            durability_max=100
+            durability_max=100,
+            equipment_type=EquipmentType.WEAPON
         )
         item_id = ItemInstanceId(102)
         durability = Durability(max_value=200, current=200)  # スペックと一致しない
@@ -388,7 +396,8 @@ class TestItemInstance:
             rarity=Rarity.COMMON,
             description="An item with durability and correct stack size",
             max_stack_size=MaxStackSize(1),  # 正しい
-            durability_max=100
+            durability_max=100,
+            equipment_type=EquipmentType.WEAPON
         )
 
         # このspecでは正常に作成できるはず
