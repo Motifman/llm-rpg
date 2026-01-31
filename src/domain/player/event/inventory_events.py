@@ -76,3 +76,15 @@ class InventoryCompactionCompletedEvent(BaseDomainEvent[PlayerId, "PlayerInvento
 class InventorySortRequestedEvent(BaseDomainEvent[PlayerId, "PlayerInventoryAggregate"]):
     """インベントリソート要求イベント"""
     sort_criteria: InventorySortType
+
+
+@dataclass(frozen=True)
+class ItemReservedForTradeEvent(BaseDomainEvent[PlayerId, "PlayerInventoryAggregate"]):
+    """アイテムが取引のために予約されたイベント"""
+    item_instance_id: ItemInstanceId
+
+
+@dataclass(frozen=True)
+class ItemReservationCancelledEvent(BaseDomainEvent[PlayerId, "PlayerInventoryAggregate"]):
+    """アイテムの予約がキャンセルされたイベント"""
+    item_instance_id: ItemInstanceId
