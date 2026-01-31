@@ -1,333 +1,230 @@
 #!/usr/bin/env python3
 """
-取引システムデモ
+取引システム デモ
 
-このデモでは、実際のアイテムを使った取引システムの動作を確認できます。
-- アイテムとお金の取引
-- アイテム同士の取引
-- 取引のキャンセル
-- 取引履歴の確認
+このデモでは、リファクタリングされた取引システムの主要な機能を確認できます：
+1. 取引の出品 (Offer)
+2. 利用可能な取引の検索 (Query)
+3. 取引の受諾 (Accept)
+4. 取引のキャンセル (Cancel)
+5. ReadModelによる非正規化データの確認
+
+DDD原則に基づき、出品時のアイテム予約、受諾時のアトミックな所有権移転をシミュレートします。
 """
 
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from datetime import datetime
+from unittest.mock import MagicMock
 
-from game.player.player import Player
-from game.player.player_manager import PlayerManager
-from game.core.game_context import GameContext
-from game.trade.trade_manager import TradeManager
-from game.action.actions.trade_action import (
-    PostTradeCommand, AcceptTradeCommand, CancelTradeCommand,
-    GetMyTradesCommand, GetAvailableTradesCommand
-)
-from game.enums import Role
-from game.item.item import StackableItem
-from game.item.consumable_item import ConsumableItem
-from game.item.item_effect import ItemEffect
+# プロジェクトのルートディレクトリをPythonパスに追加
+# demos/trade/demo_trade_system.py から workspace root へのパス
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+# ドメイン
+from src.domain.player.value_object.player_id import PlayerId
+from src.domain.player.value_object.player_name import PlayerName
+from src.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
+from src.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
+from src.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from src.domain.player.value_object.gold import Gold
+from src.domain.player.value_object.hp import Hp
+from src.domain.player.value_object.mp import Mp
+from src.domain.player.value_object.stamina import Stamina
+from src.domain.player.value_object.base_stats import BaseStats
+from src.domain.player.value_object.stat_growth_factor import StatGrowthFactor
+from src.domain.player.value_object.exp_table import ExpTable
+from src.domain.player.value_object.growth import Growth
+from src.domain.item.value_object.item_instance_id import ItemInstanceId
+from src.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
+from src.domain.player.value_object.slot_id import SlotId
+from src.domain.trade.value_object.trade_id import TradeId
 
-def setup_demo_environment():
-    """デモ用の環境をセットアップ"""
-    print("=== 取引システムデモ環境のセットアップ ===")
+# アプリケーション
+from src.application.trade.services.trade_command_service import TradeCommandService
+from src.application.trade.services.trade_query_service import TradeQueryService
+from src.application.trade.contracts.commands import OfferItemCommand, AcceptTradeCommand, CancelTradeCommand
+from src.application.trade.handlers.trade_event_handler import TradeEventHandler
+
+# インフラ
+from src.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from src.infrastructure.repository.in_memory_trade_repository import InMemoryTradeRepository
+from src.infrastructure.repository.in_memory_player_inventory_repository import InMemoryPlayerInventoryRepository
+from src.infrastructure.repository.in_memory_player_status_repository import InMemoryPlayerStatusRepository
+from src.infrastructure.repository.in_memory_player_profile_repository import InMemoryPlayerProfileRepository
+from src.infrastructure.repository.in_memory_trade_read_model_repository import InMemoryTradeReadModelRepository
+from src.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from src.infrastructure.unit_of_work.unit_of_work_factory_impl import InMemoryUnitOfWorkFactory
+from src.infrastructure.events.trade_event_handler_registry import TradeEventHandlerRegistry
+
+def print_separator(title):
+    print("\n" + "="*20 + f" {title} " + "="*20)
+
+def setup_player(player_id, name, gold_amount, data_store, uow):
+    pid = PlayerId(player_id)
     
-    # プレイヤーマネージャーを作成
-    player_manager = PlayerManager()
+    # Profile
+    profile = PlayerProfileAggregate.create(pid, PlayerName(name))
+    profile_repo = InMemoryPlayerProfileRepository(data_store, uow)
+    profile_repo.save(profile)
     
-    # デモ用プレイヤーを作成
-    alice = Player("alice", "アリス", Role.ADVENTURER)
-    bob = Player("bob", "ボブ", Role.ADVENTURER)
-    charlie = Player("charlie", "チャーリー", Role.ADVENTURER)
-    
-    # プレイヤーをマネージャーに登録
-    player_manager.add_player(alice)
-    player_manager.add_player(bob)
-    player_manager.add_player(charlie)
-    
-    # デモ用アイテムを作成
-    apple = StackableItem("apple", "りんご", "甘いりんご", max_stack=10)
-    orange = StackableItem("orange", "オレンジ", "酸っぱいオレンジ", max_stack=10)
-    bread = StackableItem("bread", "パン", "美味しいパン", max_stack=5)
-    
-    potion = ConsumableItem("potion", "ポーション", "HPを回復する", 
-                           ItemEffect(hp_change=50), max_stack=5)
-    elixir = ConsumableItem("elixir", "エリクサー", "MPを回復する", 
-                           ItemEffect(mp_change=30), max_stack=3)
-    
-    # プレイヤーに初期アイテムを配布
-    print("プレイヤーに初期アイテムを配布中...")
-    
-    # アリス（売り手）
-    for _ in range(10):
-        alice.add_item(apple)
-    for _ in range(5):
-        alice.add_item(potion)
-    alice.status.add_gold(500)
-    print(f"アリス: りんご x10, ポーション x5, お金 500ゴールド")
-    
-    # ボブ（買い手）
-    for _ in range(8):
-        bob.add_item(orange)
-    for _ in range(3):
-        bob.add_item(elixir)
-    bob.status.add_gold(1000)
-    print(f"ボブ: オレンジ x8, エリクサー x3, お金 1000ゴールド")
-    
-    # チャーリー（別の買い手）
-    for _ in range(5):
-        charlie.add_item(bread)
-    charlie.status.add_gold(800)
-    print(f"チャーリー: パン x5, お金 800ゴールド")
-    
-    # ゲームコンテキストを作成
-    trade_manager = TradeManager()
-    game_context = GameContext(
-        player_manager=player_manager,
-        spot_manager=None,
-        trade_manager=trade_manager
+    # Status
+    exp_table = ExpTable(100, 1.5)
+    status = PlayerStatusAggregate(
+        player_id=pid,
+        base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
+        stat_growth_factor=StatGrowthFactor(1.1, 1.1, 1.1, 1.1, 1.1, 0.01, 0.01),
+        exp_table=exp_table,
+        growth=Growth(1, 0, exp_table),
+        gold=Gold(gold_amount),
+        hp=Hp.create(100, 100),
+        mp=Mp.create(50, 50),
+        stamina=Stamina.create(100, 100)
     )
+    status_repo = InMemoryPlayerStatusRepository(data_store, uow)
+    status_repo.save(status)
     
-    print("セットアップ完了！")
-    print()
+    # Inventory
+    inventory = PlayerInventoryAggregate.create_new_inventory(pid)
+    inventory_repo = InMemoryPlayerInventoryRepository(data_store, uow)
+    inventory_repo.save(inventory)
     
-    return game_context, alice, bob, charlie
-
-
-def demo_money_trade(game_context, alice, bob):
-    """お金取引のデモ"""
-    print("=== お金取引デモ ===")
-    
-    # アリスがりんごを100ゴールドで出品
-    print("アリスがりんごを100ゴールドで出品します...")
-    post_command = PostTradeCommand("apple", 3, 100, trade_type="global")
-    post_result = post_command.execute(alice, game_context)
-    
-    if post_result.success:
-        print(f"✓ 取引出品成功: {post_result.trade_details}")
-        print(f"  取引ID: {post_result.trade_id}")
-        print(f"  アリスのりんご: {alice.get_inventory_item_count('apple')}個")
-        
-        # ボブが取引を受託
-        print("\nボブが取引を受託します...")
-        accept_command = AcceptTradeCommand(post_result.trade_id)
-        accept_result = accept_command.execute(bob, game_context)
-        
-        if accept_result.success:
-            print(f"✓ 取引受託成功: {accept_result.trade_details}")
-            print(f"  ボブのりんご: {bob.get_inventory_item_count('apple')}個")
-            print(f"  ボブのお金: {bob.status.get_gold()}ゴールド")
-            print(f"  アリスのお金: {alice.status.get_gold()}ゴールド")
-        else:
-            print(f"✗ 取引受託失敗: {accept_result.message}")
-    else:
-        print(f"✗ 取引出品失敗: {post_result.message}")
-    
-    print()
-
-
-def demo_item_trade(game_context, alice, bob):
-    """アイテム同士の取引デモ"""
-    print("=== アイテム同士の取引デモ ===")
-    
-    # アリスがりんごをオレンジと交換で出品
-    print("アリスがりんごをオレンジと交換で出品します...")
-    post_command = PostTradeCommand("apple", 2, 0, "orange", 1, trade_type="global")
-    post_result = post_command.execute(alice, game_context)
-    
-    if post_result.success:
-        print(f"✓ 取引出品成功: {post_result.trade_details}")
-        print(f"  取引ID: {post_result.trade_id}")
-        
-        # ボブが取引を受託
-        print("\nボブが取引を受託します...")
-        accept_command = AcceptTradeCommand(post_result.trade_id)
-        accept_result = accept_command.execute(bob, game_context)
-        
-        if accept_result.success:
-            print(f"✓ 取引受託成功: {accept_result.trade_details}")
-            print(f"  アリスのオレンジ: {alice.get_inventory_item_count('orange')}個")
-            print(f"  ボブのりんご: {bob.get_inventory_item_count('apple')}個")
-            print(f"  ボブのオレンジ: {bob.get_inventory_item_count('orange')}個")
-        else:
-            print(f"✗ 取引受託失敗: {accept_result.message}")
-    else:
-        print(f"✗ 取引出品失敗: {post_result.message}")
-    
-    print()
-
-
-def demo_trade_cancellation(game_context, alice, charlie):
-    """取引キャンセルのデモ"""
-    print("=== 取引キャンセルデモ ===")
-    
-    # アリスがポーションを200ゴールドで出品
-    print("アリスがポーションを200ゴールドで出品します...")
-    post_command = PostTradeCommand("potion", 2, 200, trade_type="global")
-    post_result = post_command.execute(alice, game_context)
-    
-    if post_result.success:
-        print(f"✓ 取引出品成功: {post_result.trade_details}")
-        print(f"  取引ID: {post_result.trade_id}")
-        print(f"  アリスのポーション: {alice.get_inventory_item_count('potion')}個")
-        
-        # アリスが取引をキャンセル
-        print("\nアリスが取引をキャンセルします...")
-        cancel_command = CancelTradeCommand(post_result.trade_id)
-        cancel_result = cancel_command.execute(alice, game_context)
-        
-        if cancel_result.success:
-            print(f"✓ 取引キャンセル成功: {cancel_result.trade_details}")
-            print(f"  アリスのポーション: {alice.get_inventory_item_count('potion')}個")
-        else:
-            print(f"✗ 取引キャンセル失敗: {cancel_result.message}")
-    else:
-        print(f"✗ 取引出品失敗: {post_result.message}")
-    
-    print()
-
-
-def demo_trade_history(game_context, alice, bob):
-    """取引履歴のデモ"""
-    print("=== 取引履歴デモ ===")
-    
-    # 複数の取引を実行
-    print("複数の取引を実行中...")
-    
-    # 取引1: りんごを50ゴールドで
-    post1 = PostTradeCommand("apple", 1, 50, trade_type="global")
-    result1 = post1.execute(alice, game_context)
-    if result1.success:
-        accept1 = AcceptTradeCommand(result1.trade_id)
-        accept1.execute(bob, game_context)
-    
-    # 取引2: りんごを150ゴールドで
-    post2 = PostTradeCommand("apple", 2, 150, trade_type="global")
-    result2 = post2.execute(alice, game_context)
-    if result2.success:
-        accept2 = AcceptTradeCommand(result2.trade_id)
-        accept2.execute(bob, game_context)
-    
-    # 取引3: キャンセルされる取引
-    post3 = PostTradeCommand("potion", 1, 100, trade_type="global")
-    result3 = post3.execute(alice, game_context)
-    if result3.success:
-        cancel3 = CancelTradeCommand(result3.trade_id)
-        cancel3.execute(alice, game_context)
-    
-    # 取引履歴を確認
-    print("\n取引履歴を確認します...")
-    history = game_context.get_trade_manager().get_trade_history()
-    
-    print(f"取引履歴数: {len(history)}")
-    for i, trade in enumerate(history, 1):
-        print(f"  取引{i}: {trade.get_trade_summary()} (ステータス: {trade.status.value})")
-    
-    print()
-
-
-def demo_trade_search(game_context, alice, bob, charlie):
-    """取引検索のデモ"""
-    print("=== 取引検索デモ ===")
-    
-    # 複数の取引を出品
-    print("複数の取引を出品中...")
-    
-    # アリスが複数の取引を出品
-    post1 = PostTradeCommand("apple", 1, 50, trade_type="global")
-    post2 = PostTradeCommand("potion", 1, 200, trade_type="global")
-    post3 = PostTradeCommand("apple", 3, 300, trade_type="global")
-    
-    post1.execute(alice, game_context)
-    post2.execute(alice, game_context)
-    post3.execute(alice, game_context)
-    
-    # 全取引を取得
-    print("\n全取引を取得...")
-    get_all = GetAvailableTradesCommand()
-    all_result = get_all.execute(bob, game_context)
-    
-    if all_result.success:
-        print(f"利用可能な取引数: {len(all_result.trades)}")
-        for i, trade in enumerate(all_result.trades, 1):
-            print(f"  取引{i}: {trade.get_trade_summary()}")
-    
-    # 価格フィルタで検索
-    print("\n価格フィルタ（100ゴールド以下）で検索...")
-    filters = {"max_price": 100}
-    get_filtered = GetAvailableTradesCommand(filters)
-    filtered_result = get_filtered.execute(bob, game_context)
-    
-    if filtered_result.success:
-        print(f"フィルタ適用後の取引数: {len(filtered_result.trades)}")
-        for i, trade in enumerate(filtered_result.trades, 1):
-            print(f"  取引{i}: {trade.get_trade_summary()}")
-    
-    print()
-
-
-def demo_error_cases(game_context, alice, bob):
-    """エラーケースのデモ"""
-    print("=== エラーケースデモ ===")
-    
-    # アイテム不足での取引出品
-    print("アイテム不足での取引出品を試行...")
-    post_command = PostTradeCommand("nonexistent_item", 1, 100, trade_type="global")
-    result = post_command.execute(alice, game_context)
-    print(f"結果: {'成功' if result.success else '失敗'}")
-    if not result.success:
-        print(f"  エラーメッセージ: {result.message}")
-    
-    # お金不足での取引受託
-    print("\nお金不足での取引受託を試行...")
-    # まず取引を出品
-    post_command = PostTradeCommand("apple", 1, 2000, trade_type="global")
-    post_result = post_command.execute(alice, game_context)
-    
-    if post_result.success:
-        # お金のないプレイヤーで受託を試行
-        poor_player = Player("poor", "貧乏人", Role.ADVENTURER)
-        game_context.get_player_manager().add_player(poor_player)
-        
-        accept_command = AcceptTradeCommand(post_result.trade_id)
-        accept_result = accept_command.execute(poor_player, game_context)
-        print(f"結果: {'成功' if accept_result.success else '失敗'}")
-        if not accept_result.success:
-            print(f"  エラーメッセージ: {accept_result.message}")
-    
-    # 自分の取引を受託しようとする
-    print("\n自分の取引を受託しようとする...")
-    post_command = PostTradeCommand("apple", 1, 100, trade_type="global")
-    post_result = post_command.execute(alice, game_context)
-    
-    if post_result.success:
-        accept_command = AcceptTradeCommand(post_result.trade_id)
-        accept_result = accept_command.execute(alice, game_context)
-        print(f"結果: {'成功' if accept_result.success else '失敗'}")
-        if not accept_result.success:
-            print(f"  エラーメッセージ: {accept_result.message}")
-    
-    print()
-
+    return pid
 
 def main():
-    """メイン関数"""
-    print("取引システムデモを開始します...")
-    print()
+    print("取引システム総合デモを開始します...")
     
-    # デモ環境をセットアップ
-    game_context, alice, bob, charlie = setup_demo_environment()
-    
-    # 各デモを実行
-    demo_money_trade(game_context, alice, bob)
-    demo_item_trade(game_context, alice, bob)
-    demo_trade_cancellation(game_context, alice, charlie)
-    demo_trade_history(game_context, alice, bob)
-    demo_trade_search(game_context, alice, bob, charlie)
-    demo_error_cases(game_context, alice, bob)
-    
-    print("=== デモ完了 ===")
-    print("取引システムの動作確認が完了しました。")
+    # 1. セットアップ
+    data_store = InMemoryDataStore()
+    uow_factory = InMemoryUnitOfWorkFactory()
+    uow, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(uow_factory.create)
+    uow_factory._event_publisher = event_publisher
 
+    # リポジトリの初期化
+    trade_repo = InMemoryTradeRepository(data_store, uow)
+    inventory_repo = InMemoryPlayerInventoryRepository(data_store, uow)
+    status_repo = InMemoryPlayerStatusRepository(data_store, uow)
+    profile_repo = InMemoryPlayerProfileRepository(data_store, uow)
+    read_model_repo = InMemoryTradeReadModelRepository()
+    read_model_repo.clear()
+    
+    # アイテムリポジトリのモック
+    item_repo = MagicMock()
+    
+    # 2. プレイヤー作成
+    print_separator("プレイヤー作成")
+    alice_id = setup_player(1, "アリス・スミス", 1000, data_store, uow)
+    bob_id = setup_player(2, "ボブ・ブラッドリー", 1000, data_store, uow)
+    print(f"アリス (ID:{alice_id.value}) と ボブ (ID:{bob_id.value}) を作成しました。")
+    print(f"初期所持金: 各1000ゴールド")
+
+    # 3. アリスにアイテムを持たせる
+    alice_inv = inventory_repo.find_by_id(alice_id)
+    item_instance_id = ItemInstanceId(101)
+    alice_inv.acquire_item(item_instance_id)
+    inventory_repo.save(alice_inv)
+    print(f"アリスにアイテム「伝説の剣」(ID:{item_instance_id.value})をスロット0に付与しました。")
+
+    # 4. イベントハンドラの登録
+    mock_item = MagicMock()
+    mock_item.item_spec.name = "伝説の剣"
+    mock_item.item_spec.description = "とても強い剣"
+    mock_item.item_spec.item_type = ItemType.EQUIPMENT
+    mock_item.item_spec.rarity = Rarity.RARE
+    mock_item.item_spec.equipment_type = EquipmentType.WEAPON
+    mock_item.quantity = 1
+    mock_item.durability = MagicMock(current=100, max_value=100)
+    item_repo.find_by_id.return_value = mock_item
+
+    handler = TradeEventHandler(
+        read_model_repo, trade_repo, profile_repo, item_repo, uow_factory
+    )
+    registry = TradeEventHandlerRegistry(handler)
+    registry.register_handlers(event_publisher)
+
+    # 5. サービス初期化
+    command_service = TradeCommandService(trade_repo, inventory_repo, status_repo, uow)
+    query_service = TradeQueryService(read_model_repo)
+
+    # 6. アリスがアイテムを出品
+    print_separator("アイテム出品")
+    offer_cmd = OfferItemCommand(
+        seller_id=alice_id.value,
+        item_instance_id=item_instance_id.value,
+        slot_id=0,
+        requested_gold=500
+    )
+    result = command_service.offer_item(offer_cmd)
+    trade_id = result.data["trade_id"]
+    print(f"アリスが「伝説の剣」を500ゴールドで出品しました。取引ID: {trade_id}")
+    
+    alice_inv = inventory_repo.find_by_id(alice_id)
+    print(f"アリスのアイテム(ID:{item_instance_id.value})は現在: {'予約済み(ロック中)' if alice_inv.is_item_reserved(item_instance_id) else '未予約'}")
+
+    # 7. 市場の確認
+    print_separator("市場の確認")
+    market_trades = query_service.get_recent_trades()
+    print(f"市場に出品されている取引数: {len(market_trades.trades)}")
+    for t in market_trades.trades:
+        print(f"- [取引ID:{t.trade_id}] {t.item_name} (出品者: {t.seller_name}, 価格: {t.requested_gold}G, 状態: {t.status})")
+
+    # 8. 取引受諾
+    print_separator("取引受諾")
+    print(f"受諾前のボブの所持金: {status_repo.find_by_id(bob_id).gold.value}G")
+    
+    accept_cmd = AcceptTradeCommand(trade_id=trade_id, buyer_id=bob_id.value)
+    command_service.accept_trade(accept_cmd)
+    
+    print(f"ボブが取引を受諾しました。")
+    print(f"受諾後のボブの所持金: {status_repo.find_by_id(bob_id).gold.value}G (-500G)")
+    print(f"受諾後のアリスの所持金: {status_repo.find_by_id(alice_id).gold.value}G (+500G)")
+
+    bob_inv = inventory_repo.find_by_id(bob_id)
+    acquired_item = bob_inv.get_item_instance_id_by_slot(SlotId(0))
+    print(f"ボブのインベントリ(スロット0): {acquired_item.value if acquired_item else 'なし'}")
+    
+    alice_inv = inventory_repo.find_by_id(alice_id)
+    removed_item = alice_inv.get_item_instance_id_by_slot(SlotId(0))
+    print(f"アリスのインベントリ(スロット0): {removed_item.value if removed_item else '空（取引成立により消失）'}")
+
+    # 9. ReadModel更新確認
+    print_separator("ReadModelの事後確認")
+    updated_trade = read_model_repo.find_by_id(TradeId(trade_id))
+    print(f"取引ステータス: {updated_trade.status} (COMPLETEDに更新済み)")
+    print(f"購入者名: {updated_trade.buyer_name} (ボブが設定済み)")
+
+    # 10. 取引キャンセル
+    print_separator("取引キャンセル")
+    item_instance_id_2 = ItemInstanceId(102)
+    alice_inv.acquire_item(item_instance_id_2)
+    inventory_repo.save(alice_inv)
+    print(f"アリスが新しいアイテム「鋼の盾」(ID:{item_instance_id_2.value})を拾いました。")
+    
+    offer_cmd_2 = OfferItemCommand(
+        seller_id=alice_id.value,
+        item_instance_id=item_instance_id_2.value,
+        slot_id=0,
+        requested_gold=1000
+    )
+    result_2 = command_service.offer_item(offer_cmd_2)
+    trade_id_2 = result_2.data["trade_id"]
+    print(f"アリスが「鋼の盾」を1000ゴールドで出品しました。取引ID: {trade_id_2}")
+    
+    alice_inv = inventory_repo.find_by_id(alice_id)
+    print(f"出品直後のアリスのアイテム予約状態: {'予約済み' if alice_inv.is_item_reserved(item_instance_id_2) else '未予約'}")
+    
+    print("アリスがやっぱり売るのをやめてキャンセルします...")
+    cancel_cmd = CancelTradeCommand(trade_id=trade_id_2, player_id=alice_id.value)
+    command_service.cancel_trade(cancel_cmd)
+    
+    alice_inv = inventory_repo.find_by_id(alice_id)
+    print(f"キャンセル後のアリスのアイテム予約状態: {'予約済み' if alice_inv.is_item_reserved(item_instance_id_2) else '未予約（ロック解除）'}")
+    
+    updated_trade_2 = read_model_repo.find_by_id(TradeId(trade_id_2))
+    print(f"市場での取引ステータス: {updated_trade_2.status} (CANCELLEDに更新済み)")
+
+    print_separator("デモ完了")
+    print("取引システムの全主要機能が正しく動作しました。")
 
 if __name__ == "__main__":
-    main() 
+    main()
