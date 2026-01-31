@@ -1,10 +1,12 @@
 from typing import Optional
 from dataclasses import dataclass
+from datetime import datetime
 
 from src.domain.trade.value_object.trade_id import TradeId
 from src.domain.item.value_object.item_spec_id import ItemSpecId
 from src.domain.item.value_object.item_instance_id import ItemInstanceId
 from src.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
+from src.domain.trade.enum.trade_enum import TradeStatus
 
 
 @dataclass
@@ -25,6 +27,11 @@ class GlobalMarketListingReadModel:
     item_quantity: int
     item_type: ItemType
     item_rarity: Rarity
+    item_equipment_type: Optional[EquipmentType]
+
+    # 取引情報
+    status: TradeStatus
+    created_at: datetime
 
     # 耐久度情報（オプション）
     durability_current: Optional[int]
@@ -43,6 +50,9 @@ class GlobalMarketListingReadModel:
         item_quantity: int,
         item_type: ItemType,
         item_rarity: Rarity,
+        item_equipment_type: Optional[EquipmentType],
+        status: TradeStatus,
+        created_at: datetime,
         durability_current: Optional[int],
         durability_max: Optional[int],
         requested_gold: int
@@ -56,6 +66,9 @@ class GlobalMarketListingReadModel:
             item_quantity=item_quantity,
             item_type=item_type,
             item_rarity=item_rarity,
+            item_equipment_type=item_equipment_type,
+            status=status,
+            created_at=created_at,
             durability_current=durability_current,
             durability_max=durability_max,
             requested_gold=requested_gold
