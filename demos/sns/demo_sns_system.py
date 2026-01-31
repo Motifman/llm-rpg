@@ -80,10 +80,10 @@ from typing import Optional
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.domain.sns.value_object import UserId
-from src.infrastructure.repository.in_memory_sns_user_repository_with_uow import InMemorySnsUserRepositoryWithUow
-from src.infrastructure.repository.in_memory_post_repository_with_uow import InMemoryPostRepositoryWithUow
-from src.infrastructure.repository.in_memory_reply_repository_with_uow import InMemoryReplyRepositoryWithUow
-from src.infrastructure.repository.in_memory_sns_notification_repository_with_uow import InMemorySnsNotificationRepositoryWithUow
+from src.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
+from src.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
+from src.infrastructure.repository.in_memory_reply_repository import InMemoryReplyRepository
+from src.infrastructure.repository.in_memory_sns_notification_repository import InMemorySnsNotificationRepository
 from src.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
 from src.infrastructure.events.sns_event_handler_registry import SnsEventHandlerRegistry
 from src.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
@@ -139,11 +139,11 @@ class SnsDemo:
         # Unit of Workとイベントパブリッシャーを取得
         self.unit_of_work, self.event_publisher = container.get_unit_of_work_and_publisher()
 
-        # Unit of Work対応版のリポジトリを作成
-        self.repository = InMemorySnsUserRepositoryWithUow(self.unit_of_work)
-        self.post_repository = InMemoryPostRepositoryWithUow(self.unit_of_work)
-        self.reply_repository = InMemoryReplyRepositoryWithUow(self.unit_of_work)
-        self.notification_repository = InMemorySnsNotificationRepositoryWithUow(self.unit_of_work)
+        # コンテナからリポジトリを取得（これらは自動的に共有データストアとUOWを使用します）
+        self.repository = container.get_user_repository()
+        self.post_repository = container.get_post_repository()
+        self.reply_repository = container.get_reply_repository()
+        self.notification_repository = container.get_notification_repository()
 
         # サービスを作成
         self.user_query_service = UserQueryService(self.repository)

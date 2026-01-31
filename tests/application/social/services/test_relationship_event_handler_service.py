@@ -5,7 +5,8 @@ from src.application.social.services.relationship_event_handler_service import R
 from src.domain.sns.event import SnsUserBlockedEvent
 from src.domain.sns.value_object.user_id import UserId
 from src.domain.sns.aggregate.user_aggregate import UserAggregate
-from src.infrastructure.repository.in_memory_sns_user_repository_with_uow import InMemorySnsUserRepositoryWithUow
+from src.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
+from src.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from src.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 from src.infrastructure.unit_of_work.unit_of_work_factory_impl import InMemoryUnitOfWorkFactory
 
@@ -22,7 +23,8 @@ class TestRelationshipEventHandlerService:
     def user_repository(self, unit_of_work_factory):
         """テスト用のユーザーRepository（UoW対応）"""
         unit_of_work = unit_of_work_factory.create()
-        repo = InMemorySnsUserRepositoryWithUow(unit_of_work)
+        data_store = InMemoryDataStore()
+        repo = InMemorySnsUserRepository(data_store, unit_of_work)
         # テスト用ユーザーのセットアップ
         self._setup_test_users(repo)
         return repo
@@ -179,7 +181,8 @@ class TestRelationshipEventHandlerServiceImprovements:
     def user_repository_improvements(self, unit_of_work_improvements):
         """テスト用のユーザーRepository（UoW対応）"""
         # unit_of_work_improvementsはすでにUnit of Workインスタンスなので、そのまま使用
-        repo = InMemorySnsUserRepositoryWithUow(unit_of_work_improvements)
+        data_store = InMemoryDataStore()
+        repo = InMemorySnsUserRepository(data_store, unit_of_work_improvements)
         # テスト用ユーザーのセットアップ
         TestRelationshipEventHandlerServiceImprovements._setup_test_users(repo)
         return repo

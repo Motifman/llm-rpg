@@ -5,8 +5,9 @@ import pytest
 import logging
 from unittest.mock import Mock, patch
 from src.application.social.services.post_command_service import PostCommandService
-from src.infrastructure.repository.in_memory_post_repository_with_uow import InMemoryPostRepositoryWithUow
-from src.infrastructure.repository.in_memory_sns_user_repository_with_uow import InMemorySnsUserRepositoryWithUow
+from src.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
+from src.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
+from src.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from src.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
 from src.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 from src.application.social.contracts.commands import (
@@ -51,8 +52,9 @@ class TestPostCommandService:
             unit_of_work_factory=create_uow
         )
 
-        post_repository = InMemoryPostRepositoryWithUow(unit_of_work)
-        user_repository = InMemorySnsUserRepositoryWithUow(unit_of_work)
+        data_store = InMemoryDataStore()
+        post_repository = InMemoryPostRepository(data_store, unit_of_work)
+        user_repository = InMemorySnsUserRepository(data_store, unit_of_work)
 
         service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
 
