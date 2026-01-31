@@ -2,40 +2,40 @@ import pytest
 from datetime import datetime
 from unittest.mock import patch
 
-from src.application.trade.services.trade_command_service import TradeCommandService
-from src.application.trade.contracts.commands import OfferItemCommand, AcceptTradeCommand, CancelTradeCommand
-from src.application.trade.contracts.dtos import TradeCommandResultDto
-from src.application.trade.exceptions.command.trade_command_exception import (
+from ai_rpg_world.application.trade.services.trade_command_service import TradeCommandService
+from ai_rpg_world.application.trade.contracts.commands import OfferItemCommand, AcceptTradeCommand, CancelTradeCommand
+from ai_rpg_world.application.trade.contracts.dtos import TradeCommandResultDto
+from ai_rpg_world.application.trade.exceptions.command.trade_command_exception import (
     TradeCommandException,
     TradeCreationException,
     TradeNotFoundForCommandException,
     TradeAccessDeniedException
 )
-from src.domain.player.exception import InsufficientGoldException
-from src.domain.player.exception.player_exceptions import ItemNotInSlotException
-from src.infrastructure.repository.in_memory_trade_repository import InMemoryTradeRepository
-from src.infrastructure.repository.in_memory_player_inventory_repository import InMemoryPlayerInventoryRepository
-from src.infrastructure.repository.in_memory_player_status_repository import InMemoryPlayerStatusRepository
-from src.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from src.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
-from src.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
-from src.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
-from src.domain.player.value_object.player_id import PlayerId
-from src.domain.player.value_object.slot_id import SlotId
-from src.domain.item.value_object.item_instance_id import ItemInstanceId
-from src.domain.player.value_object.gold import Gold
-from src.domain.player.value_object.hp import Hp
-from src.domain.player.value_object.mp import Mp
-from src.domain.player.value_object.stamina import Stamina
-from src.domain.player.value_object.base_stats import BaseStats
-from src.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from src.domain.player.value_object.exp_table import ExpTable
-from src.domain.player.value_object.growth import Growth
-from src.domain.trade.enum.trade_enum import TradeStatus
-from src.domain.trade.aggregate.trade_aggregate import TradeAggregate
-from src.domain.trade.value_object.trade_id import TradeId
-from src.domain.trade.value_object.trade_scope import TradeScope
-from src.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
+from ai_rpg_world.domain.player.exception import InsufficientGoldException
+from ai_rpg_world.domain.player.exception.player_exceptions import ItemNotInSlotException
+from ai_rpg_world.infrastructure.repository.in_memory_trade_repository import InMemoryTradeRepository
+from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import InMemoryPlayerInventoryRepository
+from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import InMemoryPlayerStatusRepository
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.player.value_object.gold import Gold
+from ai_rpg_world.domain.player.value_object.hp import Hp
+from ai_rpg_world.domain.player.value_object.mp import Mp
+from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
+from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
+from ai_rpg_world.domain.player.value_object.growth import Growth
+from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
+from ai_rpg_world.domain.trade.aggregate.trade_aggregate import TradeAggregate
+from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
+from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
+from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
 
 
 class TestTradeCommandService:

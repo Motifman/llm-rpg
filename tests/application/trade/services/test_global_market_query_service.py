@@ -7,23 +7,23 @@ from datetime import datetime, timedelta
 import base64
 import json
 
-from src.application.trade.services.global_market_query_service import GlobalMarketQueryService
-from src.infrastructure.repository.in_memory_global_market_listing_read_model_repository import InMemoryGlobalMarketListingReadModelRepository
-from src.application.trade.contracts.global_market_dtos import (
+from ai_rpg_world.application.trade.services.global_market_query_service import GlobalMarketQueryService
+from ai_rpg_world.infrastructure.repository.in_memory_global_market_listing_read_model_repository import InMemoryGlobalMarketListingReadModelRepository
+from ai_rpg_world.application.trade.contracts.global_market_dtos import (
     GlobalMarketFilterDto,
     GlobalMarketListingDto,
     GlobalMarketListDto
 )
-from src.application.trade.exceptions.global_market_query_application_exception import GlobalMarketQueryApplicationException
-from src.application.common.exceptions import SystemErrorException
-from src.domain.common.exception import DomainException
-from src.domain.trade.exception.trade_exception import TradeSearchFilterValidationException
-from src.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
-from src.domain.trade.enum.trade_enum import TradeStatus
-from src.domain.trade.value_object.trade_id import TradeId
-from src.domain.item.value_object.item_spec_id import ItemSpecId
-from src.domain.item.value_object.item_instance_id import ItemInstanceId
-from src.domain.trade.read_model.global_market_listing_read_model import GlobalMarketListingReadModel
+from ai_rpg_world.application.trade.exceptions.global_market_query_application_exception import GlobalMarketQueryApplicationException
+from ai_rpg_world.application.common.exceptions import SystemErrorException
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.trade.exception.trade_exception import TradeSearchFilterValidationException
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
+from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
+from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.trade.read_model.global_market_listing_read_model import GlobalMarketListingReadModel
 
 
 class TestGlobalMarketQueryService:
@@ -279,7 +279,7 @@ class TestGlobalMarketQueryService:
     def test_execute_with_error_handling_domain_exception(self):
         """ドメイン例外が発生した場合、GlobalMarketQueryApplicationExceptionに変換される"""
         from unittest.mock import Mock
-        from src.domain.common.exception import StateException
+        from ai_rpg_world.domain.common.exception import StateException
 
         # モックを作成してDomainExceptionを発生させる
         mock_operation = Mock(side_effect=StateException("Test domain error"))

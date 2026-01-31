@@ -1,10 +1,10 @@
 import pytest
 from unittest.mock import MagicMock
 from typing import Set
-from src.domain.sns.aggregate import PostAggregate
-from src.domain.sns.value_object import PostContent, PostId, UserId, Like, Mention
-from src.domain.sns.enum import PostVisibility
-from src.domain.sns.exception import (
+from ai_rpg_world.domain.sns.aggregate import PostAggregate
+from ai_rpg_world.domain.sns.value_object import PostContent, PostId, UserId, Like, Mention
+from ai_rpg_world.domain.sns.enum import PostVisibility
+from ai_rpg_world.domain.sns.exception import (
     InvalidContentTypeException,
     InvalidParentReferenceException,
     OwnershipException,
@@ -458,7 +458,7 @@ class TestPostAggregate:
         assert post.get_reply_count() == 0
 
         # リプライ追加
-        from src.domain.sns.value_object import ReplyId
+        from ai_rpg_world.domain.sns.value_object import ReplyId
         reply_id1 = ReplyId(1)
         reply_id2 = ReplyId(2)
 
@@ -501,14 +501,14 @@ class TestPostAggregate:
         reply_ids_copy = post.reply_ids
 
         # コピーを変更しても元のオブジェクトには影響がないことを確認
-        from src.domain.sns.value_object import ReplyId
+        from ai_rpg_world.domain.sns.value_object import ReplyId
         reply_ids_copy.add(ReplyId(1))
 
         assert len(post.reply_ids) == 0
 
     def test_get_display_info(self):
         """get_display_info()メソッドのテスト"""
-        from src.domain.sns.value_object import ReplyId
+        from ai_rpg_world.domain.sns.value_object import ReplyId
         post_id = PostId(1)
         author_user_id = UserId(1)
         content = PostContent("テスト投稿", hashtags=("#test",), visibility=PostVisibility.PUBLIC)

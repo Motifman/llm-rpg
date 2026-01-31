@@ -5,32 +5,32 @@ import pytest
 import logging
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch, MagicMock
-from src.application.social.services.notification_command_service import NotificationCommandService
-from src.infrastructure.repository.in_memory_sns_notification_repository import InMemorySnsNotificationRepository
-from src.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from src.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
-from src.application.social.contracts.commands import (
+from ai_rpg_world.application.social.services.notification_command_service import NotificationCommandService
+from ai_rpg_world.infrastructure.repository.in_memory_sns_notification_repository import InMemorySnsNotificationRepository
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.application.social.contracts.commands import (
     MarkNotificationAsReadCommand,
     MarkAllNotificationsAsReadCommand
 )
-from src.application.social.contracts.dtos import CommandResultDto
-from src.application.social.exceptions.command.notification_command_exception import (
+from ai_rpg_world.application.social.contracts.dtos import CommandResultDto
+from ai_rpg_world.application.social.exceptions.command.notification_command_exception import (
     NotificationCommandException,
     NotificationMarkAsReadException,
     NotificationMarkAllAsReadException,
     NotificationNotFoundForCommandException,
     NotificationAccessDeniedException,
 )
-from src.application.social.exceptions.query.user_query_exception import UserQueryException
-from src.application.social.exceptions import SystemErrorException
-from src.domain.sns.exception import (
+from ai_rpg_world.application.social.exceptions.query.user_query_exception import UserQueryException
+from ai_rpg_world.application.social.exceptions import SystemErrorException
+from ai_rpg_world.domain.sns.exception import (
     UserNotFoundException,
     NotificationIdValidationException,
 )
-from src.domain.sns.value_object import UserId, NotificationId
-from src.domain.sns.value_object.notification_content import NotificationContent
-from src.domain.sns.value_object.notification_type import NotificationType
-from src.domain.sns.entity.notification import Notification
+from ai_rpg_world.domain.sns.value_object import UserId, NotificationId
+from ai_rpg_world.domain.sns.value_object.notification_content import NotificationContent
+from ai_rpg_world.domain.sns.value_object.notification_type import NotificationType
+from ai_rpg_world.domain.sns.entity.notification import Notification
 
 
 class TestNotificationCommandService:

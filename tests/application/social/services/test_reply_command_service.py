@@ -4,21 +4,21 @@ ReplyCommandServiceのテスト
 import pytest
 import logging
 from unittest.mock import Mock, patch
-from src.application.social.services.reply_command_service import ReplyCommandService
-from src.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
-from src.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
-from src.infrastructure.repository.in_memory_reply_repository import InMemoryReplyRepository
-from src.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from src.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
-from src.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
-from src.application.social.contracts.commands import (
+from ai_rpg_world.application.social.services.reply_command_service import ReplyCommandService
+from ai_rpg_world.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
+from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
+from ai_rpg_world.infrastructure.repository.in_memory_reply_repository import InMemoryReplyRepository
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.application.social.contracts.commands import (
     CreateReplyCommand,
     LikeReplyCommand,
     DeleteReplyCommand,
     CreatePostCommand
 )
-from src.application.social.contracts.dtos import CommandResultDto
-from src.application.social.exceptions.command.reply_command_exception import (
+from ai_rpg_world.application.social.contracts.dtos import CommandResultDto
+from ai_rpg_world.application.social.exceptions.command.reply_command_exception import (
     ReplyCommandException,
     ReplyCreationException,
     ReplyDeletionException,
@@ -26,17 +26,17 @@ from src.application.social.exceptions.command.reply_command_exception import (
     ReplyNotFoundForCommandException,
     ReplyOwnershipException,
 )
-from src.application.social.exceptions.query.user_query_exception import UserQueryException
-from src.application.social.exceptions import SystemErrorException
-from src.domain.sns.exception import (
+from ai_rpg_world.application.social.exceptions.query.user_query_exception import UserQueryException
+from ai_rpg_world.application.social.exceptions import SystemErrorException
+from ai_rpg_world.domain.sns.exception import (
     UserNotFoundException,
     ContentLengthValidationException,
     HashtagCountValidationException,
     VisibilityValidationException,
 )
-from src.domain.sns.value_object import UserId, PostId, ReplyId
-from src.domain.sns.enum import PostVisibility
-from src.domain.sns.event import SnsReplyCreatedEvent, SnsContentLikedEvent, SnsContentDeletedEvent, SnsContentMentionedEvent
+from ai_rpg_world.domain.sns.value_object import UserId, PostId, ReplyId
+from ai_rpg_world.domain.sns.enum import PostVisibility
+from ai_rpg_world.domain.sns.event import SnsReplyCreatedEvent, SnsContentLikedEvent, SnsContentDeletedEvent, SnsContentMentionedEvent
 
 
 class TestReplyCommandService:
@@ -68,7 +68,7 @@ class TestReplyCommandService:
         service, post_repository, user_repository, reply_repository, event_publisher, unit_of_work = setup_service
 
         # まずポストを作成
-        from src.application.social.services.post_command_service import PostCommandService
+        from ai_rpg_world.application.social.services.post_command_service import PostCommandService
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
         create_post_command = CreatePostCommand(
             user_id=1,
@@ -113,7 +113,7 @@ class TestReplyCommandService:
         service, post_repository, user_repository, reply_repository, event_publisher, unit_of_work = setup_service
 
         # まずポストを作成
-        from src.application.social.services.post_command_service import PostCommandService
+        from ai_rpg_world.application.social.services.post_command_service import PostCommandService
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
         create_post_command = CreatePostCommand(
             user_id=1,
@@ -168,7 +168,7 @@ class TestReplyCommandService:
         service, post_repository, user_repository, reply_repository, event_publisher, unit_of_work = setup_service
 
         # まずポストを作成
-        from src.application.social.services.post_command_service import PostCommandService
+        from ai_rpg_world.application.social.services.post_command_service import PostCommandService
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
         create_post_command = CreatePostCommand(
             user_id=1,
@@ -240,7 +240,7 @@ class TestReplyCommandService:
         service, post_repository, user_repository, reply_repository, event_publisher, unit_of_work = setup_service
 
         # まずポストとリプライを作成
-        from src.application.social.services.post_command_service import PostCommandService
+        from ai_rpg_world.application.social.services.post_command_service import PostCommandService
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
         create_post_command = CreatePostCommand(
             user_id=1,
@@ -295,7 +295,7 @@ class TestReplyCommandService:
         service, post_repository, user_repository, reply_repository, event_publisher, unit_of_work = setup_service
 
         # まずポストとリプライを作成
-        from src.application.social.services.post_command_service import PostCommandService
+        from ai_rpg_world.application.social.services.post_command_service import PostCommandService
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
         create_post_command = CreatePostCommand(
             user_id=1,
@@ -354,7 +354,7 @@ class TestReplyCommandService:
         service, post_repository, user_repository, reply_repository, event_publisher, unit_of_work = setup_service
 
         # まずポストとリプライを作成
-        from src.application.social.services.post_command_service import PostCommandService
+        from ai_rpg_world.application.social.services.post_command_service import PostCommandService
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
         create_post_command = CreatePostCommand(
             user_id=1,
@@ -387,7 +387,7 @@ class TestReplyCommandService:
         service, post_repository, user_repository, reply_repository, event_publisher, unit_of_work = setup_service
 
         # まずポストを作成
-        from src.application.social.services.post_command_service import PostCommandService
+        from ai_rpg_world.application.social.services.post_command_service import PostCommandService
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
         create_post_command = CreatePostCommand(
             user_id=1,
@@ -406,7 +406,7 @@ class TestReplyCommandService:
             visibility=PostVisibility.PUBLIC
         )
 
-        from src.application.social.exceptions.command.post_command_exception import PostCommandException
+        from ai_rpg_world.application.social.exceptions.command.post_command_exception import PostCommandException
         with pytest.raises(PostCommandException):  # ContentLengthValidationExceptionが変換される
             service.create_reply(command)
 
@@ -415,7 +415,7 @@ class TestReplyCommandService:
         service, post_repository, user_repository, reply_repository, event_publisher, unit_of_work = setup_service
 
         # まずポストを作成
-        from src.application.social.services.post_command_service import PostCommandService
+        from ai_rpg_world.application.social.services.post_command_service import PostCommandService
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
         create_post_command = CreatePostCommand(
             user_id=1,
@@ -432,7 +432,7 @@ class TestReplyCommandService:
             visibility="invalid_visibility"  # 無効な可視性
         )
 
-        from src.application.social.exceptions.command.post_command_exception import PostCommandException
+        from ai_rpg_world.application.social.exceptions.command.post_command_exception import PostCommandException
         with pytest.raises(PostCommandException):  # VisibilityValidationExceptionが変換される
             service.create_reply(command)
 
@@ -441,7 +441,7 @@ class TestReplyCommandService:
         service, post_repository, user_repository, reply_repository, event_publisher, unit_of_work = setup_service
 
         # まずポストを作成
-        from src.application.social.services.post_command_service import PostCommandService
+        from ai_rpg_world.application.social.services.post_command_service import PostCommandService
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
         create_post_command = CreatePostCommand(
             user_id=1,
@@ -481,7 +481,7 @@ class TestReplyCommandService:
         service, post_repository, user_repository, reply_repository, event_publisher, unit_of_work = setup_service
 
         # まずポストとリプライを作成
-        from src.application.social.services.post_command_service import PostCommandService
+        from ai_rpg_world.application.social.services.post_command_service import PostCommandService
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
         create_post_command = CreatePostCommand(
             user_id=1,
@@ -529,7 +529,7 @@ class TestReplyCommandService:
         service, post_repository, user_repository, reply_repository, event_publisher, unit_of_work = setup_service
 
         # まずポストとリプライを作成
-        from src.application.social.services.post_command_service import PostCommandService
+        from ai_rpg_world.application.social.services.post_command_service import PostCommandService
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
         create_post_command = CreatePostCommand(
             user_id=1,
@@ -577,7 +577,7 @@ class TestReplyCommandService:
         service, post_repository, user_repository, reply_repository, event_publisher, unit_of_work = setup_service
 
         # まずポストを作成
-        from src.application.social.services.post_command_service import PostCommandService
+        from ai_rpg_world.application.social.services.post_command_service import PostCommandService
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
         create_post_command = CreatePostCommand(
             user_id=1,
@@ -615,7 +615,7 @@ class TestReplyCommandService:
         service, post_repository, user_repository, reply_repository, event_publisher, unit_of_work = setup_service
 
         # まずポストとリプライを作成
-        from src.application.social.services.post_command_service import PostCommandService
+        from ai_rpg_world.application.social.services.post_command_service import PostCommandService
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
         create_post_command = CreatePostCommand(
             user_id=1,
@@ -660,7 +660,7 @@ class TestReplyCommandService:
         service, post_repository, user_repository, reply_repository, event_publisher, unit_of_work = setup_service
 
         # まずポストを作成
-        from src.application.social.services.post_command_service import PostCommandService
+        from ai_rpg_world.application.social.services.post_command_service import PostCommandService
         post_service = PostCommandService(post_repository, user_repository, event_publisher, unit_of_work)
         create_post_command = CreatePostCommand(
             user_id=1,
@@ -682,7 +682,7 @@ class TestReplyCommandService:
         )
 
         # 例外が発生することを確認
-        from src.application.social.exceptions.query.user_query_exception import UserQueryException
+        from ai_rpg_world.application.social.exceptions.query.user_query_exception import UserQueryException
         with pytest.raises(UserQueryException):
             service.create_reply(command)
 

@@ -1,6 +1,6 @@
 import pytest
-from src.domain.player.value_object.player_name import PlayerName
-from src.domain.player.exception.player_exceptions import PlayerNameValidationException
+from ai_rpg_world.domain.player.value_object.player_name import PlayerName
+from ai_rpg_world.domain.player.exception.player_exceptions import PlayerNameValidationException
 
 
 class TestPlayerName:

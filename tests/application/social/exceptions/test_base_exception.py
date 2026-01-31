@@ -2,7 +2,7 @@
 SNSアプリケーション層の基底例外テスト
 """
 import pytest
-from src.application.social.exceptions.base_exception import ApplicationException, SystemErrorException
+from ai_rpg_world.application.social.exceptions.base_exception import ApplicationException, SystemErrorException
 
 
 class TestApplicationException:

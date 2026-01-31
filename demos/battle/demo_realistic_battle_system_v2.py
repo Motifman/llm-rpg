@@ -20,20 +20,20 @@ from typing import List, Dict, Any, Optional
 from queue import Queue
 from threading import Event
 
-from src.application.combat.services.enhanced_battle_service import EnhancedBattleApplicationService
-from src.application.combat.services.player_action_waiter import PlayerActionWaiter
-from src.application.combat.contracts.dtos import PlayerActionDto
-from src.infrastructure.repository.in_memory_player_repository import InMemoryPlayerRepository
-from src.infrastructure.repository.in_memory_monster_repository import InMemoryMonsterRepository
-from src.infrastructure.repository.in_memory_action_repository import InMemoryActionRepository
-from src.infrastructure.repository.in_memory_area_repository import InMemoryAreaRepository
-from src.infrastructure.repository.in_memory_battle_repository import InMemoryBattleRepository
-from src.domain.battle.battle_service import BattleLogicService
-from src.domain.battle.services.monster_action_service import MonsterActionService
-from src.domain.common.notifier import Notifier
-from src.domain.common.event_publisher import EventPublisher
-from src.domain.battle.battle_enum import ParticipantType
-from src.domain.player.player_enum import Role
+from ai_rpg_world.application.combat.services.enhanced_battle_service import EnhancedBattleApplicationService
+from ai_rpg_world.application.combat.services.player_action_waiter import PlayerActionWaiter
+from ai_rpg_world.application.combat.contracts.dtos import PlayerActionDto
+from ai_rpg_world.infrastructure.repository.in_memory_player_repository import InMemoryPlayerRepository
+from ai_rpg_world.infrastructure.repository.in_memory_monster_repository import InMemoryMonsterRepository
+from ai_rpg_world.infrastructure.repository.in_memory_action_repository import InMemoryActionRepository
+from ai_rpg_world.infrastructure.repository.in_memory_area_repository import InMemoryAreaRepository
+from ai_rpg_world.infrastructure.repository.in_memory_battle_repository import InMemoryBattleRepository
+from ai_rpg_world.domain.battle.battle_service import BattleLogicService
+from ai_rpg_world.domain.battle.services.monster_action_service import MonsterActionService
+from ai_rpg_world.domain.common.notifier import Notifier
+from ai_rpg_world.domain.common.event_publisher import EventPublisher
+from ai_rpg_world.domain.battle.battle_enum import ParticipantType
+from ai_rpg_world.domain.player.player_enum import Role
 
 
 class DemoNotifier(Notifier):
@@ -415,7 +415,7 @@ async def demonstrate_turn_lock_features():
     player = players[0]
     
     # モックバトルを作成（ターンロック機能テスト用）
-    from src.domain.battle.battle import Battle
+    from ai_rpg_world.domain.battle.battle import Battle
     battle = Battle(
         battle_id=999,
         spot_id=100,

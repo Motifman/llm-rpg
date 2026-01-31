@@ -8,13 +8,13 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from src.domain.battle.battle import Battle
-from src.infrastructure.repository.in_memory_player_repository import InMemoryPlayerRepository
-from src.infrastructure.repository.in_memory_monster_repository import InMemoryMonsterRepository
-from src.infrastructure.repository.in_memory_action_repository import InMemoryActionRepository
-from src.infrastructure.repository.in_memory_area_repository import InMemoryAreaRepository
-from src.infrastructure.repository.in_memory_battle_repository import InMemoryBattleRepository
-from src.domain.battle.events.battle_events import (
+from ai_rpg_world.domain.battle.battle import Battle
+from ai_rpg_world.infrastructure.repository.in_memory_player_repository import InMemoryPlayerRepository
+from ai_rpg_world.infrastructure.repository.in_memory_monster_repository import InMemoryMonsterRepository
+from ai_rpg_world.infrastructure.repository.in_memory_action_repository import InMemoryActionRepository
+from ai_rpg_world.infrastructure.repository.in_memory_area_repository import InMemoryAreaRepository
+from ai_rpg_world.infrastructure.repository.in_memory_battle_repository import InMemoryBattleRepository
+from ai_rpg_world.domain.battle.events.battle_events import (
     BattleStartedEvent, TurnStartedEvent, TurnExecutedEvent, TurnEndedEvent,
     RoundStartedEvent, RoundEndedEvent, ParticipantInfo, ActionInfo
 )

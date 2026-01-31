@@ -6,17 +6,17 @@
 """
 import asyncio
 from unittest.mock import Mock
-from src.application.battle.services.enhanced_battle_service import EnhancedBattleApplicationService
-from src.application.battle.services.player_action_waiter import PlayerActionWaiter
-from src.application.battle.contracts.dtos import PlayerActionDto
-from src.domain.battle.battle_enum import ParticipantType, BattleState
-from src.domain.battle.battle_result import TurnStartResult, TurnEndResult
-from src.domain.battle.turn_order_service import TurnEntry
-from src.domain.battle.combat_state import CombatState
-from src.domain.player.hp import Hp
-from src.domain.player.mp import Mp
-from src.domain.player.base_status import BaseStatus
-from src.domain.battle.battle_enum import Element, Race
+from ai_rpg_world.application.battle.services.enhanced_battle_service import EnhancedBattleApplicationService
+from ai_rpg_world.application.battle.services.player_action_waiter import PlayerActionWaiter
+from ai_rpg_world.application.battle.contracts.dtos import PlayerActionDto
+from ai_rpg_world.domain.battle.battle_enum import ParticipantType, BattleState
+from ai_rpg_world.domain.battle.battle_result import TurnStartResult, TurnEndResult
+from ai_rpg_world.domain.battle.turn_order_service import TurnEntry
+from ai_rpg_world.domain.battle.combat_state import CombatState
+from ai_rpg_world.domain.player.hp import Hp
+from ai_rpg_world.domain.player.mp import Mp
+from ai_rpg_world.domain.player.base_status import BaseStatus
+from ai_rpg_world.domain.battle.battle_enum import Element, Race
 
 
 def create_mock_repositories():

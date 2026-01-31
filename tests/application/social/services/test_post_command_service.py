@@ -4,19 +4,19 @@ PostCommandServiceのテスト
 import pytest
 import logging
 from unittest.mock import Mock, patch
-from src.application.social.services.post_command_service import PostCommandService
-from src.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
-from src.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
-from src.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from src.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
-from src.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
-from src.application.social.contracts.commands import (
+from ai_rpg_world.application.social.services.post_command_service import PostCommandService
+from ai_rpg_world.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
+from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.application.social.contracts.commands import (
     CreatePostCommand,
     LikePostCommand,
     DeletePostCommand
 )
-from src.application.social.contracts.dtos import CommandResultDto
-from src.application.social.exceptions.command.post_command_exception import (
+from ai_rpg_world.application.social.contracts.dtos import CommandResultDto
+from ai_rpg_world.application.social.exceptions.command.post_command_exception import (
     PostCommandException,
     PostCreationException,
     PostDeletionException,
@@ -24,17 +24,17 @@ from src.application.social.exceptions.command.post_command_exception import (
     PostNotFoundForCommandException,
     PostOwnershipException,
 )
-from src.application.social.exceptions.query.user_query_exception import UserQueryException
-from src.application.social.exceptions import SystemErrorException
-from src.domain.sns.exception import (
+from ai_rpg_world.application.social.exceptions.query.user_query_exception import UserQueryException
+from ai_rpg_world.application.social.exceptions import SystemErrorException
+from ai_rpg_world.domain.sns.exception import (
     UserNotFoundException,
     ContentLengthValidationException,
     HashtagCountValidationException,
     VisibilityValidationException,
 )
-from src.domain.sns.value_object import UserId, PostId
-from src.domain.sns.enum import PostVisibility
-from src.domain.sns.event import SnsPostCreatedEvent, SnsContentLikedEvent, SnsContentDeletedEvent, SnsContentMentionedEvent
+from ai_rpg_world.domain.sns.value_object import UserId, PostId
+from ai_rpg_world.domain.sns.enum import PostVisibility
+from ai_rpg_world.domain.sns.event import SnsPostCreatedEvent, SnsContentLikedEvent, SnsContentDeletedEvent, SnsContentMentionedEvent
 
 
 class TestPostCommandService:
@@ -293,7 +293,7 @@ class TestPostCommandService:
 
         # PostVisibilityではない値を直接渡すことはできないので、
         # モックを使ってPostContent.createがVisibilityValidationExceptionを投げるようにする
-        with patch('src.domain.sns.value_object.post_content.PostContent.create') as mock_create:
+        with patch('ai_rpg_world.domain.sns.value_object.post_content.PostContent.create') as mock_create:
             mock_create.side_effect = VisibilityValidationException("invalid_visibility")
 
             command = CreatePostCommand(
@@ -568,7 +568,7 @@ class TestPostCommandService:
         )
 
         # 例外が発生することを確認
-        from src.application.social.exceptions.query.user_query_exception import UserQueryException
+        from ai_rpg_world.application.social.exceptions.query.user_query_exception import UserQueryException
         with pytest.raises(UserQueryException):
             service.create_post(command)
 

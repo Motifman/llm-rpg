@@ -2,7 +2,7 @@
 SNSユーザーコマンド関連例外のテスト
 """
 import pytest
-from src.application.social.exceptions.command.user_command_exception import (
+from ai_rpg_world.application.social.exceptions.command.user_command_exception import (
     UserCommandException,
     UserCreationException,
     UserProfileUpdateException,

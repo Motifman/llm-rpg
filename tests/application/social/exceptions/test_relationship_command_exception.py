@@ -2,7 +2,7 @@
 SNS関係性コマンド関連例外のテスト
 """
 import pytest
-from src.application.social.exceptions.command.relationship_command_exception import (
+from ai_rpg_world.application.social.exceptions.command.relationship_command_exception import (
     UserFollowException,
     UserBlockException,
     UserSubscribeException,

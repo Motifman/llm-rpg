@@ -79,27 +79,27 @@ from typing import Optional
 # プロジェクトのルートディレクトリをPythonパスに追加
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from src.domain.sns.value_object import UserId
-from src.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
-from src.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
-from src.infrastructure.repository.in_memory_reply_repository import InMemoryReplyRepository
-from src.infrastructure.repository.in_memory_sns_notification_repository import InMemorySnsNotificationRepository
-from src.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
-from src.infrastructure.events.sns_event_handler_registry import SnsEventHandlerRegistry
-from src.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
-from src.infrastructure.di.container import DependencyInjectionContainer
-from src.application.social.services.user_query_service import UserQueryService
-from src.application.social.services.user_command_service import UserCommandService
-from src.application.social.services.post_query_service import PostQueryService
-from src.application.social.services.post_command_service import PostCommandService
-from src.application.social.services.reply_query_service import ReplyQueryService
-from src.application.social.services.reply_command_service import ReplyCommandService
-from src.application.social.services.notification_query_service import NotificationQueryService
-from src.application.social.services.notification_command_service import NotificationCommandService
-from src.application.social.services.notification_event_handler_service import NotificationEventHandlerService
-from src.application.social.services.relationship_event_handler_service import RelationshipEventHandlerService
-from src.application.social.contracts.dtos import UserProfileDto, PostDto, ReplyDto, ReplyThreadDto, NotificationDto
-from src.application.social.contracts.commands import (
+from ai_rpg_world.domain.sns.value_object import UserId
+from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
+from ai_rpg_world.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
+from ai_rpg_world.infrastructure.repository.in_memory_reply_repository import InMemoryReplyRepository
+from ai_rpg_world.infrastructure.repository.in_memory_sns_notification_repository import InMemorySnsNotificationRepository
+from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
+from ai_rpg_world.infrastructure.events.sns_event_handler_registry import SnsEventHandlerRegistry
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.infrastructure.di.container import DependencyInjectionContainer
+from ai_rpg_world.application.social.services.user_query_service import UserQueryService
+from ai_rpg_world.application.social.services.user_command_service import UserCommandService
+from ai_rpg_world.application.social.services.post_query_service import PostQueryService
+from ai_rpg_world.application.social.services.post_command_service import PostCommandService
+from ai_rpg_world.application.social.services.reply_query_service import ReplyQueryService
+from ai_rpg_world.application.social.services.reply_command_service import ReplyCommandService
+from ai_rpg_world.application.social.services.notification_query_service import NotificationQueryService
+from ai_rpg_world.application.social.services.notification_command_service import NotificationCommandService
+from ai_rpg_world.application.social.services.notification_event_handler_service import NotificationEventHandlerService
+from ai_rpg_world.application.social.services.relationship_event_handler_service import RelationshipEventHandlerService
+from ai_rpg_world.application.social.contracts.dtos import UserProfileDto, PostDto, ReplyDto, ReplyThreadDto, NotificationDto
+from ai_rpg_world.application.social.contracts.commands import (
     CreateUserCommand,
     UpdateUserProfileCommand,
     FollowUserCommand,
@@ -117,12 +117,12 @@ from src.application.social.contracts.commands import (
     MarkNotificationAsReadCommand,
     MarkAllNotificationsAsReadCommand
 )
-from src.application.social.exceptions import UserQueryException, UserCommandException
-from src.application.social.exceptions.query.post_query_exception import PostQueryException
-from src.application.social.exceptions.command.post_command_exception import PostCommandException
-from src.application.social.exceptions.query.reply_query_exception import ReplyQueryException
-from src.application.social.exceptions.command.reply_command_exception import ReplyCommandException
-from src.domain.sns.enum import PostVisibility
+from ai_rpg_world.application.social.exceptions import UserQueryException, UserCommandException
+from ai_rpg_world.application.social.exceptions.query.post_query_exception import PostQueryException
+from ai_rpg_world.application.social.exceptions.command.post_command_exception import PostCommandException
+from ai_rpg_world.application.social.exceptions.query.reply_query_exception import ReplyQueryException
+from ai_rpg_world.application.social.exceptions.command.reply_command_exception import ReplyCommandException
+from ai_rpg_world.domain.sns.enum import PostVisibility
 
 
 class SnsDemo:

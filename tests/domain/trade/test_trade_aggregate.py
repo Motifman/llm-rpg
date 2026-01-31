@@ -2,25 +2,25 @@ import pytest
 from datetime import datetime
 from unittest.mock import Mock
 
-from src.domain.common.aggregate_root import AggregateRoot
-from src.domain.trade.aggregate.trade_aggregate import TradeAggregate
-from src.domain.trade.enum.trade_enum import TradeStatus
-from src.domain.trade.exception.trade_exception import (
+from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
+from ai_rpg_world.domain.trade.aggregate.trade_aggregate import TradeAggregate
+from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
+from ai_rpg_world.domain.trade.exception.trade_exception import (
     InvalidTradeStatusException,
     CannotAcceptOwnTradeException,
     CannotAcceptTradeWithOtherPlayerException,
     CannotCancelTradeWithOtherPlayerException,
 )
-from src.domain.trade.event.trade_event import (
+from ai_rpg_world.domain.trade.event.trade_event import (
     TradeOfferedEvent,
     TradeAcceptedEvent,
     TradeCancelledEvent,
 )
-from src.domain.trade.value_object.trade_id import TradeId
-from src.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
-from src.domain.trade.value_object.trade_scope import TradeScope
-from src.domain.player.value_object.player_id import PlayerId
-from src.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
+from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
+from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 
 
 class TestTradeAggregate:

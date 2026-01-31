@@ -1,7 +1,7 @@
 import pytest
 from typing import List
-from src.domain.sns.repository.reply_repository import ReplyRepository
-from src.domain.sns.value_object import UserId, PostId, ReplyId
+from ai_rpg_world.domain.sns.repository.reply_repository import ReplyRepository
+from ai_rpg_world.domain.sns.value_object import UserId, PostId, ReplyId
 
 
 class _TestReplyRepositoryInterface:
@@ -14,7 +14,7 @@ class _TestReplyRepositoryInterface:
 
     def test_find_by_id_existing_reply(self, repository):
         """既存リプライのID検索テスト"""
-        from src.domain.sns.value_object import ReplyId, UserId
+        from ai_rpg_world.domain.sns.value_object import ReplyId, UserId
         reply = repository.find_by_id(ReplyId(1))
         assert reply is not None
         assert reply.reply_id == ReplyId(1)
@@ -22,13 +22,13 @@ class _TestReplyRepositoryInterface:
 
     def test_find_by_id_nonexistent_reply(self, repository):
         """存在しないリプライのID検索テスト"""
-        from src.domain.sns.value_object import ReplyId
+        from ai_rpg_world.domain.sns.value_object import ReplyId
         reply = repository.find_by_id(ReplyId(999))
         assert reply is None
 
     def test_find_by_ids_multiple_replies(self, repository):
         """複数リプライのID検索テスト"""
-        from src.domain.sns.value_object import ReplyId
+        from ai_rpg_world.domain.sns.value_object import ReplyId
         replies = repository.find_by_ids([1, 2])  # InMemory実装はList[int]を受け取る
         assert len(replies) == 2
         reply_ids = [reply.reply_id for reply in replies]
@@ -36,7 +36,7 @@ class _TestReplyRepositoryInterface:
 
     def test_find_by_post_id(self, repository):
         """ポストIDによるリプライ検索テスト"""
-        from src.domain.sns.value_object import PostId
+        from ai_rpg_world.domain.sns.value_object import PostId
         replies = repository.find_by_post_id(PostId(1), limit=10)
         assert isinstance(replies, List)
         for reply in replies:
@@ -44,7 +44,7 @@ class _TestReplyRepositoryInterface:
 
     def test_find_by_post_id_include_deleted(self, repository):
         """ポストIDによるリプライ検索テスト（削除済みを含む）"""
-        from src.domain.sns.value_object import PostId
+        from ai_rpg_world.domain.sns.value_object import PostId
         replies = repository.find_by_post_id_include_deleted(PostId(1), limit=10)
         assert isinstance(replies, List)
         for reply in replies:
@@ -52,7 +52,7 @@ class _TestReplyRepositoryInterface:
 
     def test_find_by_user_id(self, repository):
         """ユーザーIDによるリプライ検索テスト"""
-        from src.domain.sns.value_object import UserId
+        from ai_rpg_world.domain.sns.value_object import UserId
         replies = repository.find_by_user_id(UserId(1), limit=10)
         assert isinstance(replies, List)
         for reply in replies:
@@ -60,7 +60,7 @@ class _TestReplyRepositoryInterface:
 
     def test_find_by_parent_reply_id(self, repository):
         """親リプライIDによるリプライ検索テスト"""
-        from src.domain.sns.value_object import ReplyId
+        from ai_rpg_world.domain.sns.value_object import ReplyId
         replies = repository.find_by_parent_reply_id(ReplyId(3), limit=10)
         assert isinstance(replies, List)
         for reply in replies:
@@ -82,14 +82,14 @@ class _TestReplyRepositoryInterface:
 
     def test_generate_reply_id(self, repository):
         """リプライID生成テスト"""
-        from src.domain.sns.value_object import ReplyId
+        from ai_rpg_world.domain.sns.value_object import ReplyId
         reply_id = repository.generate_reply_id()
         assert isinstance(reply_id, ReplyId)
         assert reply_id.value >= 8  # サンプルデータで7つのリプライがあるので8以上
 
     def test_find_all(self, repository):
         """全リプライ取得テスト"""
-        from src.domain.sns.value_object import ReplyId
+        from ai_rpg_world.domain.sns.value_object import ReplyId
         replies = repository.find_all()
         assert len(replies) >= 7  # サンプルデータで少なくとも7つのリプライ
         reply_ids = [reply.reply_id for reply in replies]

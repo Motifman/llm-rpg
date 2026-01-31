@@ -1,15 +1,15 @@
 import pytest
-from src.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
-from src.domain.player.value_object.player_id import PlayerId
-from src.domain.player.value_object.slot_id import SlotId
-from src.domain.item.value_object.item_instance_id import ItemInstanceId
-from src.domain.player.enum.equipment_slot_type import EquipmentSlotType
-from src.domain.player.event.inventory_events import (
+from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
+from ai_rpg_world.domain.player.event.inventory_events import (
     ItemReservedForTradeEvent,
     ItemReservationCancelledEvent,
     ItemDroppedFromInventoryEvent
 )
-from src.domain.player.exception.player_exceptions import (
+from ai_rpg_world.domain.player.exception.player_exceptions import (
     ItemReservedException,
     ItemAlreadyReservedException,
     ItemNotReservedException,

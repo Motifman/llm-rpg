@@ -3,15 +3,15 @@ SNS例外ファクトリのテスト
 """
 import pytest
 from unittest.mock import Mock
-from src.application.social.exceptions.exception_factory import ApplicationExceptionFactory
-from src.application.social.exceptions.base_exception import ApplicationException
-from src.application.social.exceptions.query.user_query_exception import (
+from ai_rpg_world.application.social.exceptions.exception_factory import ApplicationExceptionFactory
+from ai_rpg_world.application.social.exceptions.base_exception import ApplicationException
+from ai_rpg_world.application.social.exceptions.query.user_query_exception import (
     UserQueryException,
     UserNotFoundException,
     InvalidUserIdException,
     ProfileNotFoundException,
 )
-from src.application.social.exceptions.command.user_command_exception import (
+from ai_rpg_world.application.social.exceptions.command.user_command_exception import (
     UserCommandException,
 )
 

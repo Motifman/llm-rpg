@@ -2,7 +2,7 @@
 
 import pytest
 from datetime import datetime, timedelta
-from src.domain.sns.event import (
+from ai_rpg_world.domain.sns.event import (
     # User events
     SnsUserCreatedEvent,
     SnsUserFollowedEvent,
@@ -19,7 +19,7 @@ from src.domain.sns.event import (
     SnsContentDeletedEvent,
     SnsContentMentionedEvent,
 )
-from src.domain.sns.value_object import UserId, PostId, ReplyId, PostContent, Mention, Like
+from ai_rpg_world.domain.sns.value_object import UserId, PostId, ReplyId, PostContent, Mention, Like
 
 
 class TestSnsUserCreatedEvent:

@@ -1,6 +1,6 @@
 import pytest
-from src.domain.sns.value_object import PostId
-from src.domain.sns.exception import PostIdValidationException
+from ai_rpg_world.domain.sns.value_object import PostId
+from ai_rpg_world.domain.sns.exception import PostIdValidationException
 
 
 class TestPostId:

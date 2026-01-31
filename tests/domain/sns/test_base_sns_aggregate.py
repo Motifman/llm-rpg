@@ -3,10 +3,10 @@ from unittest.mock import MagicMock
 from datetime import datetime
 from typing import Set, Optional
 
-from src.domain.sns.aggregate import BaseSnsContentAggregate, PostAggregate, ReplyAggregate
-from src.domain.sns.value_object import PostContent, Like, Mention, PostId, ReplyId, UserId
-from src.domain.sns.enum import PostVisibility
-from src.domain.sns.exception import (
+from ai_rpg_world.domain.sns.aggregate import BaseSnsContentAggregate, PostAggregate, ReplyAggregate
+from ai_rpg_world.domain.sns.value_object import PostContent, Like, Mention, PostId, ReplyId, UserId
+from ai_rpg_world.domain.sns.enum import PostVisibility
+from ai_rpg_world.domain.sns.exception import (
     InvalidContentTypeException,
     OwnershipException,
     ContentTypeException,

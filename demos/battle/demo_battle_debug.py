@@ -5,16 +5,16 @@
 戦闘状態とダメージ計算を詳しく確認するためのデバッグツール
 """
 import asyncio
-from src.infrastructure.repository.in_memory_player_repository import InMemoryPlayerRepository
-from src.infrastructure.repository.in_memory_monster_repository import InMemoryMonsterRepository
-from src.infrastructure.repository.in_memory_action_repository import InMemoryActionRepository
-from src.infrastructure.repository.in_memory_area_repository import InMemoryAreaRepository
-from src.infrastructure.repository.in_memory_battle_repository import InMemoryBattleRepository
-from src.domain.battle.battle import Battle
-from src.domain.battle.battle_service import BattleLogicService
-from src.domain.battle.combat_state import CombatState
-from src.domain.battle.battle_enum import ParticipantType
-from src.application.combat.contracts.dtos import PlayerActionDto
+from ai_rpg_world.infrastructure.repository.in_memory_player_repository import InMemoryPlayerRepository
+from ai_rpg_world.infrastructure.repository.in_memory_monster_repository import InMemoryMonsterRepository
+from ai_rpg_world.infrastructure.repository.in_memory_action_repository import InMemoryActionRepository
+from ai_rpg_world.infrastructure.repository.in_memory_area_repository import InMemoryAreaRepository
+from ai_rpg_world.infrastructure.repository.in_memory_battle_repository import InMemoryBattleRepository
+from ai_rpg_world.domain.battle.battle import Battle
+from ai_rpg_world.domain.battle.battle_service import BattleLogicService
+from ai_rpg_world.domain.battle.combat_state import CombatState
+from ai_rpg_world.domain.battle.battle_enum import ParticipantType
+from ai_rpg_world.application.combat.contracts.dtos import PlayerActionDto
 
 
 async def debug_battle_system():

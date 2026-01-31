@@ -4,14 +4,14 @@ TradeQueryServiceのテスト
 import pytest
 from typing import Optional
 
-from src.application.trade.services.trade_query_service import TradeQueryService
-from src.infrastructure.repository.in_memory_trade_read_model_repository import InMemoryTradeReadModelRepository
-from src.application.trade.contracts.dtos import TradeDto, TradeListDto, TradeSearchFilterDto
-from src.application.trade.exceptions.trade_query_application_exception import TradeQueryApplicationException
-from src.application.common.exceptions import SystemErrorException
-from src.domain.common.exception import DomainException
-from src.domain.trade.exception.trade_exception import TradeIdValidationException, TradeSearchFilterValidationException
-from src.domain.player.exception.player_exceptions import PlayerIdValidationException
+from ai_rpg_world.application.trade.services.trade_query_service import TradeQueryService
+from ai_rpg_world.infrastructure.repository.in_memory_trade_read_model_repository import InMemoryTradeReadModelRepository
+from ai_rpg_world.application.trade.contracts.dtos import TradeDto, TradeListDto, TradeSearchFilterDto
+from ai_rpg_world.application.trade.exceptions.trade_query_application_exception import TradeQueryApplicationException
+from ai_rpg_world.application.common.exceptions import SystemErrorException
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.trade.exception.trade_exception import TradeIdValidationException, TradeSearchFilterValidationException
+from ai_rpg_world.domain.player.exception.player_exceptions import PlayerIdValidationException
 
 
 class TestTradeQueryService:
@@ -358,7 +358,7 @@ class TestTradeQueryService:
         from unittest.mock import Mock, patch
 
         # モックを作成してDomainExceptionを発生させる
-        from src.domain.common.exception import StateException
+        from ai_rpg_world.domain.common.exception import StateException
         mock_operation = Mock(side_effect=StateException("Test domain error"))
 
         with pytest.raises(TradeQueryApplicationException) as exc_info:

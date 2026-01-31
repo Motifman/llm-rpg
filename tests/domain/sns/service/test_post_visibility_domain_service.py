@@ -3,14 +3,14 @@ PostVisibilityDomainServiceのテスト
 """
 
 import pytest
-from src.domain.sns.service.post_visibility_domain_service import PostVisibilityDomainService
-from src.domain.sns.aggregate.post_aggregate import PostAggregate
-from src.domain.sns.aggregate.user_aggregate import UserAggregate
-from src.domain.sns.value_object.post_content import PostContent
-from src.domain.sns.value_object.post_id import PostId
-from src.domain.sns.value_object.user_id import UserId
-from src.domain.sns.enum.sns_enum import PostVisibility
-from src.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
+from ai_rpg_world.domain.sns.service.post_visibility_domain_service import PostVisibilityDomainService
+from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
+from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
+from ai_rpg_world.domain.sns.value_object.post_content import PostContent
+from ai_rpg_world.domain.sns.value_object.post_id import PostId
+from ai_rpg_world.domain.sns.value_object.user_id import UserId
+from ai_rpg_world.domain.sns.enum.sns_enum import PostVisibility
+from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
 
 
 class TestPostVisibilityDomainService:
@@ -206,8 +206,8 @@ class TestPostVisibilityDomainService:
     def test_can_view_deleted_reply_for_thread_by_owner(self, hero_user):
         """自分の削除したリプライはスレッド表示用に閲覧可能"""
         # Given: リプライを作成（PostAggregateの代わりに簡易的に作成）
-        from src.domain.sns.aggregate.reply_aggregate import ReplyAggregate
-        from src.domain.sns.value_object.reply_id import ReplyId
+        from ai_rpg_world.domain.sns.aggregate.reply_aggregate import ReplyAggregate
+        from ai_rpg_world.domain.sns.value_object.reply_id import ReplyId
 
         reply_content = PostContent("テストリプライ", (), PostVisibility.PUBLIC)
         reply = ReplyAggregate.create(
@@ -229,8 +229,8 @@ class TestPostVisibilityDomainService:
     def test_can_view_deleted_reply_for_thread_by_other(self, hero_user, mage_user):
         """他人の削除したリプライはスレッド表示用に閲覧可能（ブロック関係を除く）"""
         # Given: リプライを作成
-        from src.domain.sns.aggregate.reply_aggregate import ReplyAggregate
-        from src.domain.sns.value_object.reply_id import ReplyId
+        from ai_rpg_world.domain.sns.aggregate.reply_aggregate import ReplyAggregate
+        from ai_rpg_world.domain.sns.value_object.reply_id import ReplyId
 
         reply_content = PostContent("テストリプライ", (), PostVisibility.PUBLIC)
         reply = ReplyAggregate.create(
@@ -252,8 +252,8 @@ class TestPostVisibilityDomainService:
     def test_cannot_view_deleted_reply_for_thread_when_blocked(self, hero_user, mage_user):
         """ブロックされている場合、削除されたリプライもスレッド表示用に閲覧不可"""
         # Given: リプライを作成
-        from src.domain.sns.aggregate.reply_aggregate import ReplyAggregate
-        from src.domain.sns.value_object.reply_id import ReplyId
+        from ai_rpg_world.domain.sns.aggregate.reply_aggregate import ReplyAggregate
+        from ai_rpg_world.domain.sns.value_object.reply_id import ReplyId
 
         reply_content = PostContent("テストリプライ", (), PostVisibility.PUBLIC)
         reply = ReplyAggregate.create(

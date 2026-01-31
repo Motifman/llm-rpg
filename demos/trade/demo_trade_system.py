@@ -22,40 +22,40 @@ from unittest.mock import MagicMock
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 # ドメイン
-from src.domain.player.value_object.player_id import PlayerId
-from src.domain.player.value_object.player_name import PlayerName
-from src.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
-from src.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
-from src.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
-from src.domain.player.value_object.gold import Gold
-from src.domain.player.value_object.hp import Hp
-from src.domain.player.value_object.mp import Mp
-from src.domain.player.value_object.stamina import Stamina
-from src.domain.player.value_object.base_stats import BaseStats
-from src.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from src.domain.player.value_object.exp_table import ExpTable
-from src.domain.player.value_object.growth import Growth
-from src.domain.item.value_object.item_instance_id import ItemInstanceId
-from src.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
-from src.domain.player.value_object.slot_id import SlotId
-from src.domain.trade.value_object.trade_id import TradeId
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_name import PlayerName
+from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
+from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.gold import Gold
+from ai_rpg_world.domain.player.value_object.hp import Hp
+from ai_rpg_world.domain.player.value_object.mp import Mp
+from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
+from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
+from ai_rpg_world.domain.player.value_object.growth import Growth
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
+from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 
 # アプリケーション
-from src.application.trade.services.trade_command_service import TradeCommandService
-from src.application.trade.services.trade_query_service import TradeQueryService
-from src.application.trade.contracts.commands import OfferItemCommand, AcceptTradeCommand, CancelTradeCommand
-from src.application.trade.handlers.trade_event_handler import TradeEventHandler
+from ai_rpg_world.application.trade.services.trade_command_service import TradeCommandService
+from ai_rpg_world.application.trade.services.trade_query_service import TradeQueryService
+from ai_rpg_world.application.trade.contracts.commands import OfferItemCommand, AcceptTradeCommand, CancelTradeCommand
+from ai_rpg_world.application.trade.handlers.trade_event_handler import TradeEventHandler
 
 # インフラ
-from src.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from src.infrastructure.repository.in_memory_trade_repository import InMemoryTradeRepository
-from src.infrastructure.repository.in_memory_player_inventory_repository import InMemoryPlayerInventoryRepository
-from src.infrastructure.repository.in_memory_player_status_repository import InMemoryPlayerStatusRepository
-from src.infrastructure.repository.in_memory_player_profile_repository import InMemoryPlayerProfileRepository
-from src.infrastructure.repository.in_memory_trade_read_model_repository import InMemoryTradeReadModelRepository
-from src.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
-from src.infrastructure.unit_of_work.unit_of_work_factory_impl import InMemoryUnitOfWorkFactory
-from src.infrastructure.events.trade_event_handler_registry import TradeEventHandlerRegistry
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.infrastructure.repository.in_memory_trade_repository import InMemoryTradeRepository
+from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import InMemoryPlayerInventoryRepository
+from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import InMemoryPlayerStatusRepository
+from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import InMemoryPlayerProfileRepository
+from ai_rpg_world.infrastructure.repository.in_memory_trade_read_model_repository import InMemoryTradeReadModelRepository
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.infrastructure.unit_of_work.unit_of_work_factory_impl import InMemoryUnitOfWorkFactory
+from ai_rpg_world.infrastructure.events.trade_event_handler_registry import TradeEventHandlerRegistry
 
 def print_separator(title):
     print("\n" + "="*20 + f" {title} " + "="*20)
