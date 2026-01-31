@@ -9,7 +9,7 @@ from src.domain.item.exception import InvalidRecipeException
 from src.domain.item.aggregate.item_aggregate import ItemAggregate
 from src.domain.item.value_object.item_spec import ItemSpec
 from src.domain.item.value_object.max_stack_size import MaxStackSize
-from src.domain.item.enum.item_enum import ItemType, Rarity
+from src.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
 
 
 class TestRecipeAggregate:
@@ -48,7 +48,8 @@ class TestRecipeAggregate:
             item_type=ItemType.EQUIPMENT,
             rarity=Rarity.COMMON,
             description="A wooden sword",
-            max_stack_size=MaxStackSize(1)
+            max_stack_size=MaxStackSize(1),
+            equipment_type=EquipmentType.WEAPON
         )
 
     @pytest.fixture

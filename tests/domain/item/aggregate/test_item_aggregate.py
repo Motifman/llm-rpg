@@ -7,7 +7,7 @@ from src.domain.item.value_object.item_spec import ItemSpec
 from src.domain.item.value_object.max_stack_size import MaxStackSize
 from src.domain.item.value_object.durability import Durability
 from src.domain.item.event.item_event import ItemUsedEvent, ItemBrokenEvent, ItemCraftedEvent, ItemRepairedEvent
-from src.domain.item.enum.item_enum import ItemType, Rarity
+from src.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
 from src.domain.item.exception import ItemSpecValidationException, DurabilityValidationException, QuantityValidationException, InsufficientQuantityException, StackSizeExceededException
 
 
@@ -36,7 +36,8 @@ class TestItemAggregate:
             rarity=Rarity.UNCOMMON,
             description="A test item with durability",
             max_stack_size=MaxStackSize(1),
-            durability_max=100
+            durability_max=100,
+            equipment_type=EquipmentType.WEAPON
         )
 
     @pytest.fixture

@@ -13,7 +13,7 @@ from src.domain.item.value_object.max_stack_size import MaxStackSize
 from src.domain.item.value_object.recipe_id import RecipeId
 from src.domain.item.value_object.recipe_ingredient import RecipeIngredient
 from src.domain.item.value_object.recipe_result import RecipeResult
-from src.domain.item.enum.item_enum import ItemType, Rarity
+from src.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
 from src.domain.item.exception import InsufficientIngredientsException
 
 
@@ -53,7 +53,8 @@ class TestItemStackingDomainServiceCrafting:
             item_type=ItemType.EQUIPMENT,
             rarity=Rarity.COMMON,
             description="A wooden sword",
-            max_stack_size=MaxStackSize(1)
+            max_stack_size=MaxStackSize(1),
+            equipment_type=EquipmentType.WEAPON
         )
 
     @pytest.fixture
@@ -337,7 +338,8 @@ class TestItemStackingDomainServiceStacking:
             rarity=Rarity.UNCOMMON,
             description="A non-stackable item",
             max_stack_size=MaxStackSize(1),
-            durability_max=100
+            durability_max=100,
+            equipment_type=EquipmentType.WEAPON
         )
 
     def test_calculate_max_stack_quantity_single_item(self, sample_item_spec_stackable):
