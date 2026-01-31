@@ -101,8 +101,10 @@ class PersonalTradeQueryService:
             item_quantity=read_model.item_quantity,
             item_type=read_model.item_type.value,
             item_rarity=read_model.item_rarity.value,
+            item_equipment_type=read_model.item_equipment_type.value if read_model.item_equipment_type else None,
             durability_current=read_model.durability_current,
             durability_max=read_model.durability_max,
             requested_gold=read_model.requested_gold,
-            seller_name=read_model.seller_name
+            seller_name=read_model.seller_name,
+            created_at=read_model.created_at.isoformat()
         )

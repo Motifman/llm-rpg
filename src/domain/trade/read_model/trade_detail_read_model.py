@@ -98,9 +98,9 @@ class TradeDetailReadModel:
     @property
     def is_active(self) -> bool:
         """取引がアクティブかどうか"""
-        return self.status == "ACTIVE"
+        return self.status == "active"
 
     @property
     def is_completed(self) -> bool:
         """取引が成立済みかどうか"""
-        return self.status == "COMPLETED"
+        return self.status == "completed"

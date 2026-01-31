@@ -12,10 +12,12 @@ class PersonalTradeListingDto:
     item_quantity: int
     item_type: str
     item_rarity: str
+    item_equipment_type: Optional[str]
     durability_current: Optional[int]
     durability_max: Optional[int]
     requested_gold: int
     seller_name: str
+    created_at: str
 
 
 @dataclass(frozen=True)

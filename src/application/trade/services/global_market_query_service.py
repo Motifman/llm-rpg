@@ -8,8 +8,8 @@ from src.domain.trade.value_object.trade_search_filter import TradeSearchFilter
 from src.domain.trade.enum.trade_enum import TradeStatus
 from src.domain.common.exception import DomainException
 
-from src.application.trade.contracts.dtos import TradeSearchFilterDto
 from src.application.trade.contracts.global_market_dtos import (
+    GlobalMarketFilterDto,
     GlobalMarketListingDto,
     GlobalMarketListDto
 )
@@ -44,7 +44,7 @@ class GlobalMarketQueryService:
 
     def get_market_listings(
         self,
-        filter_dto: Optional[TradeSearchFilterDto] = None,
+        filter_dto: Optional[GlobalMarketFilterDto] = None,
         limit: int = 50,
         cursor: Optional[str] = None
     ) -> GlobalMarketListDto:
@@ -72,7 +72,7 @@ class GlobalMarketQueryService:
             }
         )
 
-    def _get_market_listings_impl(self, filter_dto: Optional[TradeSearchFilterDto], limit: int, cursor: Optional[str]) -> GlobalMarketListDto:
+    def _get_market_listings_impl(self, filter_dto: Optional[GlobalMarketFilterDto], limit: int, cursor: Optional[str]) -> GlobalMarketListDto:
         """グローバル取引所出品取得の実装"""
         # DTOからドメインフィルタに変換
         filter_condition = self._convert_to_filter(filter_dto)
@@ -94,10 +94,10 @@ class GlobalMarketQueryService:
             next_cursor=next_cursor_encoded
         )
 
-    def _convert_to_filter(self, filter_dto: Optional[TradeSearchFilterDto]) -> TradeSearchFilter:
+    def _convert_to_filter(self, filter_dto: Optional[GlobalMarketFilterDto]) -> TradeSearchFilter:
         """DTOからドメインフィルタに変換"""
         # グローバル取引所では常にアクティブな取引のみを表示
-        base_statuses = [TradeStatus.ACTIVE.value]
+        base_statuses = [TradeStatus.ACTIVE]
 
         if filter_dto is None:
             return TradeSearchFilter.from_primitives(statuses=base_statuses)
@@ -122,6 +122,9 @@ class GlobalMarketQueryService:
             item_quantity=read_model.item_quantity,
             item_type=read_model.item_type.value,
             item_rarity=read_model.item_rarity.value,
+            item_equipment_type=read_model.item_equipment_type.value if read_model.item_equipment_type else None,
+            status=read_model.status.value,
+            created_at=read_model.created_at.isoformat(),
             durability_current=read_model.durability_current,
             durability_max=read_model.durability_max,
             requested_gold=read_model.requested_gold
