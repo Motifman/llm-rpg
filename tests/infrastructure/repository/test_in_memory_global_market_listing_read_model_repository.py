@@ -5,15 +5,15 @@ import pytest
 from datetime import datetime, timedelta
 from typing import List, Tuple, Optional
 
-from src.infrastructure.repository.in_memory_global_market_listing_read_model_repository import InMemoryGlobalMarketListingReadModelRepository
-from src.domain.trade.read_model.global_market_listing_read_model import GlobalMarketListingReadModel
-from src.domain.trade.repository.cursor import ListingCursor
-from src.domain.trade.value_object.trade_id import TradeId
-from src.domain.trade.value_object.trade_search_filter import TradeSearchFilter
-from src.domain.item.value_object.item_spec_id import ItemSpecId
-from src.domain.item.value_object.item_instance_id import ItemInstanceId
-from src.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
-from src.domain.trade.enum.trade_enum import TradeStatus
+from ai_rpg_world.infrastructure.repository.in_memory_global_market_listing_read_model_repository import InMemoryGlobalMarketListingReadModelRepository
+from ai_rpg_world.domain.trade.read_model.global_market_listing_read_model import GlobalMarketListingReadModel
+from ai_rpg_world.domain.trade.repository.cursor import ListingCursor
+from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
+from ai_rpg_world.domain.trade.value_object.trade_search_filter import TradeSearchFilter
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
+from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
 
 
 class TestInMemoryGlobalMarketListingReadModelRepository:

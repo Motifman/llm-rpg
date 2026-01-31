@@ -3,13 +3,13 @@ SNS例外の統合テスト（エンドツーエンドテスト）
 """
 import pytest
 from unittest.mock import Mock
-from src.application.social.exceptions.exception_factory import ApplicationExceptionFactory
-from src.application.social.exceptions.query.user_query_exception import (
+from ai_rpg_world.application.social.exceptions.exception_factory import ApplicationExceptionFactory
+from ai_rpg_world.application.social.exceptions.query.user_query_exception import (
     UserQueryException,
     UserNotFoundException,
     InvalidUserIdException,
 )
-from src.application.social.exceptions.command.user_command_exception import (
+from ai_rpg_world.application.social.exceptions.command.user_command_exception import (
     UserCommandException,
     UserCreationException,
 )

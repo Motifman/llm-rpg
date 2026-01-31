@@ -1,6 +1,6 @@
 import pytest
-from src.domain.player.value_object.stamina import Stamina
-from src.domain.player.exception import StaminaValidationException
+from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.exception import StaminaValidationException
 
 
 class TestStamina:

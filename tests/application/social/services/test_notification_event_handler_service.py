@@ -5,23 +5,23 @@
 import pytest
 from datetime import datetime, timedelta
 from unittest.mock import patch
-from src.application.social.services.notification_event_handler_service import NotificationEventHandlerService
-from src.domain.sns.event import (
+from ai_rpg_world.application.social.services.notification_event_handler_service import NotificationEventHandlerService
+from ai_rpg_world.domain.sns.event import (
     SnsUserSubscribedEvent,
     SnsUserFollowedEvent,
     SnsPostCreatedEvent,
     SnsReplyCreatedEvent,
     SnsContentLikedEvent,
 )
-from src.domain.sns.value_object import UserId, PostId, ReplyId, PostContent, Mention
-from src.domain.sns.value_object.notification_type import NotificationType
-from src.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
-from src.infrastructure.repository.in_memory_reply_repository import InMemoryReplyRepository
-from src.infrastructure.repository.in_memory_sns_notification_repository import InMemorySnsNotificationRepository
-from src.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from src.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
-from src.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
-from src.infrastructure.unit_of_work.unit_of_work_factory_impl import InMemoryUnitOfWorkFactory
+from ai_rpg_world.domain.sns.value_object import UserId, PostId, ReplyId, PostContent, Mention
+from ai_rpg_world.domain.sns.value_object.notification_type import NotificationType
+from ai_rpg_world.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
+from ai_rpg_world.infrastructure.repository.in_memory_reply_repository import InMemoryReplyRepository
+from ai_rpg_world.infrastructure.repository.in_memory_sns_notification_repository import InMemorySnsNotificationRepository
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.infrastructure.unit_of_work.unit_of_work_factory_impl import InMemoryUnitOfWorkFactory
 
 
 class TestNotificationEventHandlerService:
@@ -414,8 +414,8 @@ class TestNotificationEventHandlerService:
 
     def test_notification_cleanup_expired(self, service, user_repository, notification_repository):
         """期限切れ通知のクリーンアップテスト"""
-        from src.domain.sns.entity.notification import Notification
-        from src.domain.sns.value_object.notification_content import NotificationContent
+        from ai_rpg_world.domain.sns.entity.notification import Notification
+        from ai_rpg_world.domain.sns.value_object.notification_content import NotificationContent
 
         # 過去の期限を持つプッシュ通知を作成して保存
         expired_notification = Notification.create_push_notification(

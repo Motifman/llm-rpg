@@ -2,21 +2,21 @@ import pytest
 from datetime import datetime
 from unittest.mock import Mock
 
-from src.application.trade.handlers.trade_event_handler import TradeEventHandler
-from src.domain.trade.event.trade_event import TradeOfferedEvent, TradeAcceptedEvent, TradeCancelledEvent
-from src.domain.trade.value_object.trade_id import TradeId
-from src.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
-from src.domain.trade.value_object.trade_scope import TradeScope
-from src.domain.player.value_object.player_id import PlayerId
-from src.domain.player.value_object.player_name import PlayerName
-from src.domain.item.value_object.item_instance_id import ItemInstanceId
-from src.domain.item.enum.item_enum import ItemType, Rarity
-from src.domain.trade.enum.trade_enum import TradeStatus
-from src.infrastructure.repository.in_memory_trade_read_model_repository import InMemoryTradeReadModelRepository
-from src.infrastructure.repository.in_memory_trade_repository import InMemoryTradeRepository
-from src.infrastructure.repository.in_memory_player_profile_repository import InMemoryPlayerProfileRepository
-from src.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
-from src.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.application.trade.handlers.trade_event_handler import TradeEventHandler
+from ai_rpg_world.domain.trade.event.trade_event import TradeOfferedEvent, TradeAcceptedEvent, TradeCancelledEvent
+from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
+from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
+from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_name import PlayerName
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
+from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
+from ai_rpg_world.infrastructure.repository.in_memory_trade_read_model_repository import InMemoryTradeReadModelRepository
+from ai_rpg_world.infrastructure.repository.in_memory_trade_repository import InMemoryTradeRepository
+from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import InMemoryPlayerProfileRepository
+from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 
 
 class TestTradeEventHandler:

@@ -5,18 +5,18 @@ BattleApplicationServiceの基本的な使用方法を示すサンプルコー�
 """
 
 import traceback
-from src.application.battle.services.battle_service import BattleApplicationService
-from src.application.battle.contracts.dtos import PlayerActionDto
-from src.infrastructure.notifier.console_notifier import ConsoleNotifier
-from src.infrastructure.events.event_publisher_impl import InMemoryEventPublisher
-from src.infrastructure.repository.player_repository_impl import PlayerRepositoryImpl
-from src.infrastructure.repository.action_repository_impl import ActionRepositoryImpl
-from src.infrastructure.repository.battle_repository_impl import BattleRepositoryImpl
-from src.infrastructure.repository.area_repository_impl import AreaRepositoryImpl
-from src.infrastructure.repository.monster_repository_impl import MonsterRepositoryImpl
-from src.domain.battle.services.monster_action_service import MonsterActionService
-from src.domain.battle.battle_service import BattleLogicService
-from src.domain.battle.battle_enum import ParticipantType
+from ai_rpg_world.application.battle.services.battle_service import BattleApplicationService
+from ai_rpg_world.application.battle.contracts.dtos import PlayerActionDto
+from ai_rpg_world.infrastructure.notifier.console_notifier import ConsoleNotifier
+from ai_rpg_world.infrastructure.events.event_publisher_impl import InMemoryEventPublisher
+from ai_rpg_world.infrastructure.repository.player_repository_impl import PlayerRepositoryImpl
+from ai_rpg_world.infrastructure.repository.action_repository_impl import ActionRepositoryImpl
+from ai_rpg_world.infrastructure.repository.battle_repository_impl import BattleRepositoryImpl
+from ai_rpg_world.infrastructure.repository.area_repository_impl import AreaRepositoryImpl
+from ai_rpg_world.infrastructure.repository.monster_repository_impl import MonsterRepositoryImpl
+from ai_rpg_world.domain.battle.services.monster_action_service import MonsterActionService
+from ai_rpg_world.domain.battle.battle_service import BattleLogicService
+from ai_rpg_world.domain.battle.battle_enum import ParticipantType
 
 
 def create_sample_battle_service() -> BattleApplicationService:

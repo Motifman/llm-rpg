@@ -1,9 +1,9 @@
 import pytest
 from unittest.mock import MagicMock
 from typing import Set, Optional
-from src.domain.sns.aggregate import ReplyAggregate
-from src.domain.sns.value_object import PostContent, PostId, ReplyId, UserId, Like, Mention
-from src.domain.sns.exception import (
+from ai_rpg_world.domain.sns.aggregate import ReplyAggregate
+from ai_rpg_world.domain.sns.value_object import PostContent, PostId, ReplyId, UserId, Like, Mention
+from ai_rpg_world.domain.sns.exception import (
     InvalidParentReferenceException,
     OwnershipException,
     InvalidContentTypeException,

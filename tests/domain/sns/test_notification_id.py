@@ -1,6 +1,6 @@
 import pytest
-from src.domain.sns.value_object.notification_id import NotificationId
-from src.domain.sns.exception import NotificationIdValidationException
+from ai_rpg_world.domain.sns.value_object.notification_id import NotificationId
+from ai_rpg_world.domain.sns.exception import NotificationIdValidationException
 
 
 class TestNotificationId:

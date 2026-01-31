@@ -3,13 +3,13 @@ ItemInfoQueryServiceのテスト
 """
 import pytest
 from unittest.mock import Mock
-from src.application.inventory.services.item_spec_query_service import ItemSpecQueryService
-from src.infrastructure.repository.in_memory_item_spec_repository import InMemoryItemSpecRepository
-from src.application.inventory.contracts.dtos import ItemSpecDto, ErrorResponseDto
-from src.application.inventory.exceptions.item_info_query_application_exception import ItemInfoQueryApplicationException
-from src.application.common.exceptions import SystemErrorException
-from src.domain.item.exception.item_exception import ItemInstanceIdValidationException
-from src.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
+from ai_rpg_world.application.inventory.services.item_spec_query_service import ItemSpecQueryService
+from ai_rpg_world.infrastructure.repository.in_memory_item_spec_repository import InMemoryItemSpecRepository
+from ai_rpg_world.application.inventory.contracts.dtos import ItemSpecDto, ErrorResponseDto
+from ai_rpg_world.application.inventory.exceptions.item_info_query_application_exception import ItemInfoQueryApplicationException
+from ai_rpg_world.application.common.exceptions import SystemErrorException
+from ai_rpg_world.domain.item.exception.item_exception import ItemInstanceIdValidationException
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
 
 
 class TestItemSpecQueryService:

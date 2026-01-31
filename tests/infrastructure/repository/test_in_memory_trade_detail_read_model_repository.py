@@ -4,13 +4,13 @@ InMemoryTradeDetailReadModelRepositoryのテスト
 import pytest
 from datetime import datetime
 
-from src.infrastructure.repository.in_memory_trade_detail_read_model_repository import InMemoryTradeDetailReadModelRepository
-from src.domain.trade.read_model.trade_detail_read_model import TradeDetailReadModel
-from src.domain.trade.value_object.trade_id import TradeId
-from src.domain.item.value_object.item_spec_id import ItemSpecId
-from src.domain.item.value_object.item_instance_id import ItemInstanceId
-from src.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
-from src.domain.trade.enum.trade_enum import TradeStatus
+from ai_rpg_world.infrastructure.repository.in_memory_trade_detail_read_model_repository import InMemoryTradeDetailReadModelRepository
+from ai_rpg_world.domain.trade.read_model.trade_detail_read_model import TradeDetailReadModel
+from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
+from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
 
 
 class TestInMemoryTradeDetailReadModelRepository:

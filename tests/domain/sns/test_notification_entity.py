@@ -1,10 +1,10 @@
 import pytest
 from datetime import datetime, timedelta
-from src.domain.sns.entity.notification import Notification
-from src.domain.sns.value_object.notification_id import NotificationId
-from src.domain.sns.value_object.user_id import UserId
-from src.domain.sns.value_object.notification_type import NotificationType
-from src.domain.sns.value_object.notification_content import NotificationContent
+from ai_rpg_world.domain.sns.entity.notification import Notification
+from ai_rpg_world.domain.sns.value_object.notification_id import NotificationId
+from ai_rpg_world.domain.sns.value_object.user_id import UserId
+from ai_rpg_world.domain.sns.value_object.notification_type import NotificationType
+from ai_rpg_world.domain.sns.value_object.notification_content import NotificationContent
 
 
 class TestNotificationEntity:

@@ -1,6 +1,6 @@
 import pytest
-from src.domain.sns.value_object import ReplyId
-from src.domain.sns.exception import ReplyIdValidationException
+from ai_rpg_world.domain.sns.value_object import ReplyId
+from ai_rpg_world.domain.sns.exception import ReplyIdValidationException
 
 
 class TestReplyId:

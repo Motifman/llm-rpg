@@ -4,11 +4,11 @@ UserCommandServiceのテスト
 import pytest
 import logging
 from unittest.mock import Mock, patch
-from src.application.social.services.user_command_service import UserCommandService
-from src.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
-from src.infrastructure.events.event_publisher_impl import InMemoryEventPublisher
-from src.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
-from src.application.social.contracts.commands import (
+from ai_rpg_world.application.social.services.user_command_service import UserCommandService
+from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
+from ai_rpg_world.infrastructure.events.event_publisher_impl import InMemoryEventPublisher
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.application.social.contracts.commands import (
     CreateUserCommand,
     UpdateUserProfileCommand,
     FollowUserCommand,
@@ -18,16 +18,16 @@ from src.application.social.contracts.commands import (
     SubscribeUserCommand,
     UnsubscribeUserCommand
 )
-from src.application.social.contracts.dtos import CommandResultDto, ErrorResponseDto
-from src.application.social.exceptions.command.user_command_exception import (
+from ai_rpg_world.application.social.contracts.dtos import CommandResultDto, ErrorResponseDto
+from ai_rpg_world.application.social.exceptions.command.user_command_exception import (
     UserCommandException,
     UserCreationException,
     UserProfileUpdateException,
     UserNotFoundForCommandException,
 )
-from src.application.social.exceptions.query.user_query_exception import UserQueryException
-from src.application.social.exceptions import SystemErrorException
-from src.domain.sns.exception import (
+from ai_rpg_world.application.social.exceptions.query.user_query_exception import UserQueryException
+from ai_rpg_world.application.social.exceptions import SystemErrorException
+from ai_rpg_world.domain.sns.exception import (
     UserNotFoundException,
     CannotFollowBlockedUserException,
     CannotUnfollowNotFollowedUserException,
@@ -45,8 +45,8 @@ from src.domain.sns.exception import (
     SelfUnsubscribeException,
     ProfileUpdateValidationException,
 )
-from src.domain.sns.value_object.user_id import UserId
-from src.domain.sns.event.sns_user_event import (
+from ai_rpg_world.domain.sns.value_object.user_id import UserId
+from ai_rpg_world.domain.sns.event.sns_user_event import (
     SnsUserCreatedEvent,
     SnsUserFollowedEvent,
     SnsUserUnfollowedEvent,
@@ -721,7 +721,7 @@ class TestUserCommandService:
     def test_error_response_dto_creation(self):
         """エラーレスポンスDTOが正しく作成されることのテスト"""
         # Given
-        from src.application.social.contracts.dtos import ErrorResponseDto
+        from ai_rpg_world.application.social.contracts.dtos import ErrorResponseDto
 
         # When
         error_response = ErrorResponseDto(
@@ -756,7 +756,7 @@ class TestUserCommandService:
         assert exc_info.value.user_id == 999
         # ログは記録されているはず（実際のテストではログの確認は難しいため、例外が適切に処理されることを確認）
 
-    @patch('src.application.social.services.user_command_service.logging')
+    @patch('ai_rpg_world.application.social.services.user_command_service.logging')
     def test_unexpected_error_logging(self, mock_logging):
         """予期しないエラーが発生した場合に適切にログが記録されることのテスト"""
         # Given: モックを使って予期しないエラーを発生させる

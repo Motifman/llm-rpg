@@ -5,22 +5,22 @@
 """
 
 from datetime import datetime
-from src.application.world.contracts.commands import MovePlayerCommand, GetPlayerLocationCommand, GetSpotInfoCommand
-from src.application.world.services.movement_service import MovementApplicationService
-from src.domain.spot.movement_service import MovementService
-from src.domain.player.player_repository import PlayerRepository
-from src.domain.spot.spot_repository import SpotRepository
-from src.domain.player.player import Player
-from src.domain.spot.spot import Spot
-from src.domain.spot.road import Road
-from src.domain.player.base_status import BaseStatus
-from src.domain.player.dynamic_status import DynamicStatus
-from src.domain.player.inventory import Inventory
-from src.domain.player.equipment_set import EquipmentSet
-from src.domain.player.message_box import MessageBox
-from src.domain.player.player_enum import Role
-from src.domain.spot.road_enum import ConditionType
-from src.domain.spot.condition import Condition
+from ai_rpg_world.application.world.contracts.commands import MovePlayerCommand, GetPlayerLocationCommand, GetSpotInfoCommand
+from ai_rpg_world.application.world.services.movement_service import MovementApplicationService
+from ai_rpg_world.domain.spot.movement_service import MovementService
+from ai_rpg_world.domain.player.player_repository import PlayerRepository
+from ai_rpg_world.domain.spot.spot_repository import SpotRepository
+from ai_rpg_world.domain.player.player import Player
+from ai_rpg_world.domain.spot.spot import Spot
+from ai_rpg_world.domain.spot.road import Road
+from ai_rpg_world.domain.player.base_status import BaseStatus
+from ai_rpg_world.domain.player.dynamic_status import DynamicStatus
+from ai_rpg_world.domain.player.inventory import Inventory
+from ai_rpg_world.domain.player.equipment_set import EquipmentSet
+from ai_rpg_world.domain.player.message_box import MessageBox
+from ai_rpg_world.domain.player.player_enum import Role
+from ai_rpg_world.domain.spot.road_enum import ConditionType
+from ai_rpg_world.domain.spot.condition import Condition
 
 
 class MockPlayerRepository(PlayerRepository):

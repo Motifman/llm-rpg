@@ -1,7 +1,7 @@
 import pytest
 from typing import List
-from src.domain.sns.repository.post_repository import PostRepository
-from src.domain.sns.value_object import UserId, PostId
+from ai_rpg_world.domain.sns.repository.post_repository import PostRepository
+from ai_rpg_world.domain.sns.value_object import UserId, PostId
 
 
 class _TestPostRepositoryInterface:
@@ -14,7 +14,7 @@ class _TestPostRepositoryInterface:
 
     def test_find_by_id_existing_post(self, repository):
         """既存ポストのID検索テスト"""
-        from src.domain.sns.value_object import PostId, UserId
+        from ai_rpg_world.domain.sns.value_object import PostId, UserId
         post = repository.find_by_id(PostId(1))
         assert post is not None
         assert post.post_id == PostId(1)
@@ -22,13 +22,13 @@ class _TestPostRepositoryInterface:
 
     def test_find_by_id_nonexistent_post(self, repository):
         """存在しないポストのID検索テスト"""
-        from src.domain.sns.value_object import PostId
+        from ai_rpg_world.domain.sns.value_object import PostId
         post = repository.find_by_id(PostId(999))
         assert post is None
 
     def test_find_by_ids_multiple_posts(self, repository):
         """複数ポストのID検索テスト"""
-        from src.domain.sns.value_object import PostId
+        from ai_rpg_world.domain.sns.value_object import PostId
         posts = repository.find_by_ids([PostId(1), PostId(2)])
         assert len(posts) == 2
         post_ids = [post.post_id for post in posts]
@@ -36,7 +36,7 @@ class _TestPostRepositoryInterface:
 
     def test_find_by_user_id(self, repository):
         """ユーザーIDによるポスト検索テスト"""
-        from src.domain.sns.value_object import UserId
+        from ai_rpg_world.domain.sns.value_object import UserId
         posts = repository.find_by_user_id(UserId(1), limit=10)
         assert isinstance(posts, List)
         assert len(posts) >= 1
@@ -45,7 +45,7 @@ class _TestPostRepositoryInterface:
 
     def test_find_by_user_ids_multiple_users(self, repository):
         """複数ユーザーIDによるポスト検索テスト"""
-        from src.domain.sns.value_object import UserId
+        from ai_rpg_world.domain.sns.value_object import UserId
         posts = repository.find_by_user_ids([UserId(1), UserId(2)], limit=10)
         assert isinstance(posts, List)
         user_ids = set(post.author_user_id for post in posts)
@@ -84,14 +84,14 @@ class _TestPostRepositoryInterface:
 
     def test_generate_post_id(self, repository):
         """ポストID生成テスト"""
-        from src.domain.sns.value_object import PostId
+        from ai_rpg_world.domain.sns.value_object import PostId
         post_id = repository.generate_post_id()
         assert isinstance(post_id, PostId)
         assert post_id.value >= 6  # サンプルデータで5つのポストがあるので6以上
 
     def test_exists_by_id(self, repository):
         """ポスト存在確認テスト"""
-        from src.domain.sns.value_object import PostId
+        from ai_rpg_world.domain.sns.value_object import PostId
         assert repository.exists_by_id(PostId(1)) == True
         assert repository.exists_by_id(PostId(999)) == False
 
@@ -102,7 +102,7 @@ class _TestPostRepositoryInterface:
 
     def test_find_all(self, repository):
         """全ポスト取得テスト"""
-        from src.domain.sns.value_object import PostId
+        from ai_rpg_world.domain.sns.value_object import PostId
         posts = repository.find_all()
         assert len(posts) >= 5  # サンプルデータで少なくとも5つのポスト
         post_ids = [post.post_id for post in posts]

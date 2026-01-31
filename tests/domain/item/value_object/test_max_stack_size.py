@@ -1,6 +1,6 @@
 import pytest
-from src.domain.item.value_object.max_stack_size import MaxStackSize
-from src.domain.item.exception import MaxStackSizeValidationException
+from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
+from ai_rpg_world.domain.item.exception import MaxStackSizeValidationException
 
 
 class TestMaxStackSize:

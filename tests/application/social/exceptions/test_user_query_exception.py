@@ -2,7 +2,7 @@
 SNSユーザー検索関連例外のテスト
 """
 import pytest
-from src.application.social.exceptions.query.user_query_exception import (
+from ai_rpg_world.application.social.exceptions.query.user_query_exception import (
     UserQueryException,
     ProfileNotFoundException,
     UserNotFoundException,

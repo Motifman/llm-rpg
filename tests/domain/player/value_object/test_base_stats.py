@@ -1,7 +1,7 @@
 import pytest
-from src.domain.player.value_object.base_stats import BaseStats
-from src.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from src.domain.player.exception.player_exceptions import BaseStatsValidationException
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
+from ai_rpg_world.domain.player.exception.player_exceptions import BaseStatsValidationException
 
 
 class TestBaseStats:

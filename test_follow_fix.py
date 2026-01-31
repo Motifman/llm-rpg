@@ -8,18 +8,18 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from src.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
-from src.infrastructure.repository.in_memory_sns_notification_repository import InMemorySnsNotificationRepository
-from src.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
-from src.infrastructure.repository.in_memory_reply_repository import InMemoryReplyRepository
-from src.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
-from src.infrastructure.events.sns_event_handler_registry import SnsEventHandlerRegistry
-from src.application.sns.services.user_command_service import UserCommandService
-from src.application.sns.services.notification_event_handler_service import NotificationEventHandlerService
-from src.application.sns.services.relationship_event_handler_service import RelationshipEventHandlerService
-from src.application.sns.contracts.commands import FollowUserCommand
-from src.domain.sns.aggregate.user_aggregate import UserAggregate
-from src.domain.sns.value_object.user_profile import UserProfile
+from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
+from ai_rpg_world.infrastructure.repository.in_memory_sns_notification_repository import InMemorySnsNotificationRepository
+from ai_rpg_world.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
+from ai_rpg_world.infrastructure.repository.in_memory_reply_repository import InMemoryReplyRepository
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.infrastructure.events.sns_event_handler_registry import SnsEventHandlerRegistry
+from ai_rpg_world.application.sns.services.user_command_service import UserCommandService
+from ai_rpg_world.application.sns.services.notification_event_handler_service import NotificationEventHandlerService
+from ai_rpg_world.application.sns.services.relationship_event_handler_service import RelationshipEventHandlerService
+from ai_rpg_world.application.sns.contracts.commands import FollowUserCommand
+from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
+from ai_rpg_world.domain.sns.value_object.user_profile import UserProfile
 
 
 def test_follow_functionality():
@@ -70,7 +70,7 @@ def test_follow_functionality():
     )
 
     # テストユーザーを作成
-    from src.domain.sns.value_object.user_id import UserId
+    from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
     hero_user = UserAggregate.create_new_user(
         user_id=UserId(1),

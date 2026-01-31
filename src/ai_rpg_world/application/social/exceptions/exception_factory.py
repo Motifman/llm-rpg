@@ -1,0 +1,189 @@
+"""
+アプリケーション例外ファクトリ
+ドメイン例外から適切なアプリケーション例外を生成する
+"""
+
+from typing import Optional, Dict, Type, Any, Tuple
+from ai_rpg_world.application.social.exceptions.base_exception import ApplicationException
+from ai_rpg_world.application.social.exceptions.query.user_query_exception import (
+    UserQueryException,
+    ProfileNotFoundException,
+    UserNotFoundException,
+    InvalidUserIdException,
+    ProfileQueryException,
+    RelationshipQueryException,
+)
+from ai_rpg_world.application.social.exceptions.command.user_command_exception import (
+    UserCommandException,
+    UserCreationException,
+    UserProfileUpdateException,
+)
+from ai_rpg_world.application.social.exceptions.command.post_command_exception import (
+    PostCommandException,
+)
+from ai_rpg_world.application.social.exceptions.command.notification_command_exception import (
+    NotificationCommandException,
+)
+from ai_rpg_world.application.social.exceptions.command.relationship_command_exception import (
+    UserFollowException,
+    UserBlockException,
+    UserSubscribeException,
+)
+from ai_rpg_world.application.social.exceptions.query.post_query_exception import (
+    PostQueryException,
+    PostNotFoundException,
+    PostAccessDeniedException,
+    InvalidPostIdException,
+)
+from ai_rpg_world.application.social.exceptions.query.notification_query_exception import (
+    NotificationQueryException,
+    NotificationNotFoundException,
+    NotificationAccessDeniedException,
+    InvalidNotificationIdException,
+)
+
+
+class ApplicationExceptionFactory:
+    """アプリケーション例外のファクトリクラス"""
+
+    # ドメイン例外からアプリケーション例外へのマッピング
+    # 既存のマッピングを維持しつつ、統一されたインターフェースを提供
+    EXCEPTION_MAPPING: Dict[str, Type[ApplicationException]] = {
+        # ユーザー関連例外
+        "UserNotFoundException": UserQueryException,
+        "UserIdValidationException": UserQueryException,
+        "UserNameValidationException": UserCommandException,
+        "DisplayNameValidationException": UserCommandException,
+        "BioValidationException": UserCommandException,
+        "ProfileUpdateValidationException": UserCommandException,
+
+        # 関係性関連例外
+        "RelationshipQueryException": RelationshipQueryException,
+        "FollowException": UserCommandException,
+        "CannotFollowBlockedUserException": UserCommandException,
+        "CannotUnfollowNotFollowedUserException": UserCommandException,
+        "BlockException": UserCommandException,
+        "CannotBlockAlreadyBlockedUserException": UserCommandException,
+        "CannotUnblockNotBlockedUserException": UserCommandException,
+        "SubscribeException": UserCommandException,
+        "CannotSubscribeAlreadySubscribedUserException": UserCommandException,
+        "CannotSubscribeBlockedUserException": UserCommandException,
+        "CannotSubscribeNotFollowedUserException": UserCommandException,
+        "CannotUnsubscribeNotSubscribedUserException": UserCommandException,
+
+        # セルフ操作関連例外
+        "SelfFollowException": UserCommandException,
+        "SelfUnfollowException": UserCommandException,
+        "SelfBlockException": UserCommandException,
+        "SelfUnblockException": UserCommandException,
+        "SelfSubscribeException": UserCommandException,
+        "SelfUnsubscribeException": UserCommandException,
+
+        # ポスト関連例外
+        "PostIdValidationException": PostQueryException,
+        "InvalidParentReferenceException": PostQueryException,
+        "ContentOwnershipException": PostCommandException,
+        "ContentLengthValidationException": PostCommandException,
+        "HashtagCountValidationException": PostCommandException,
+        "VisibilityValidationException": PostCommandException,
+        "ContentAlreadyDeletedException": PostCommandException,
+
+        # 通知関連例外
+        "NotificationIdValidationException": NotificationCommandException,
+        "NotificationOwnershipException": NotificationCommandException,
+        "NotificationAlreadyReadException": NotificationCommandException,
+        "NotificationNotFoundException": NotificationCommandException,
+    }
+
+    @classmethod
+    def create_from_domain_exception(
+        cls,
+        domain_exception: Exception,
+        user_id: Optional[int] = None,
+        target_user_id: Optional[int] = None,
+        post_id: Optional[int] = None,
+        **additional_context
+    ) -> ApplicationException:
+        """
+        ドメイン例外から適切なアプリケーション例外を作成
+
+        Args:
+            domain_exception: ドメイン例外
+            user_id: ユーザーID
+            target_user_id: 対象ユーザーID
+            post_id: ポストID
+            **additional_context: 追加のコンテキスト情報
+
+        Returns:
+            適切なアプリケーション例外
+        """
+        # ドメイン例外から情報を抽出
+        domain_class_name = domain_exception.__class__.__name__
+
+        # マッピングから適切なアプリケーション例外クラスを取得
+        app_exception_class = cls.EXCEPTION_MAPPING.get(domain_class_name)
+
+        if app_exception_class is None:
+            # デフォルトの汎用例外（マッピングにない場合）
+            app_exception_class = UserQueryException
+
+        # コンテキストを構築
+        context = additional_context.copy()
+
+        # user_id, target_user_id, post_idをコンテキストに追加
+        if user_id is not None:
+            context['user_id'] = user_id
+        if target_user_id is not None:
+            context['target_user_id'] = target_user_id
+        if post_id is not None:
+            context['post_id'] = post_id
+
+        # ドメイン例外から特定のフィールドを抽出してコンテキストに追加
+        if hasattr(domain_exception, 'user_id'):
+            context['user_id'] = domain_exception.user_id
+        if hasattr(domain_exception, 'relationship_type'):
+            context['relationship_type'] = domain_exception.relationship_type
+        if hasattr(domain_exception, 'post_id'):
+            context['post_id'] = domain_exception.post_id
+
+        # ドメイン例外の他の属性もコンテキストに追加
+        domain_attrs = ['error_detail', 'target_user_id', 'follower_id', 'followee_id', 'content_id']
+        for attr in domain_attrs:
+            if hasattr(domain_exception, attr) and attr not in context:
+                context[attr] = getattr(domain_exception, attr)
+
+        # アプリケーション例外を作成
+        # Exceptionクラスに定義されたエラーコードを使用
+        error_code = getattr(domain_exception, 'error_code', domain_class_name.upper())
+        try:
+            app_exception = app_exception_class(
+                message=str(domain_exception),
+                error_code=error_code,
+                **context
+            )
+        except TypeError:
+            # コンストラクタが新しいシグネチャに対応していない場合のフォールバック
+            app_exception = app_exception_class(
+                message=str(domain_exception),
+                **context
+            )
+
+        # 例外チェーニング
+        app_exception.__cause__ = domain_exception
+
+        return app_exception
+
+    @classmethod
+    def create_user_not_found_exception(cls, user_id: int) -> UserNotFoundException:
+        """UserNotFoundExceptionを作成"""
+        return UserNotFoundException(user_id)
+
+    @classmethod
+    def create_invalid_user_id_exception(cls, user_id: int) -> InvalidUserIdException:
+        """InvalidUserIdExceptionを作成"""
+        return InvalidUserIdException(user_id)
+
+    @classmethod
+    def create_profile_not_found_exception(cls, user_id: int) -> ProfileNotFoundException:
+        """ProfileNotFoundExceptionを作成"""
+        return ProfileNotFoundException(user_id)

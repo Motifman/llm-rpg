@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import Mock, MagicMock
-from src.domain.item.value_object.item_effect import (
+from ai_rpg_world.domain.item.value_object.item_effect import (
     ItemEffect,
     HealEffect,
     RecoverMpEffect,
@@ -8,8 +8,8 @@ from src.domain.item.value_object.item_effect import (
     ExpEffect,
     CompositeItemEffect
 )
-from src.domain.item.exception import ItemEffectValidationException
-from src.domain.common.value_object import Gold, Exp
+from ai_rpg_world.domain.item.exception import ItemEffectValidationException
+from ai_rpg_world.domain.common.value_object import Gold, Exp
 
 
 class TestHealEffect:

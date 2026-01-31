@@ -5,12 +5,12 @@ import pytest
 from unittest import mock
 from typing import Optional
 
-from src.application.trade.services.recent_trade_query_service import RecentTradeQueryService
-from src.infrastructure.repository.in_memory_recent_trade_read_model_repository import InMemoryRecentTradeReadModelRepository
-from src.application.trade.contracts.recent_trade_dtos import RecentTradeDto, RecentTradeSummaryDto
-from src.application.trade.exceptions.recent_trade_query_application_exception import RecentTradeQueryApplicationException
-from src.application.common.exceptions import SystemErrorException
-from src.domain.common.exception import DomainException
+from ai_rpg_world.application.trade.services.recent_trade_query_service import RecentTradeQueryService
+from ai_rpg_world.infrastructure.repository.in_memory_recent_trade_read_model_repository import InMemoryRecentTradeReadModelRepository
+from ai_rpg_world.application.trade.contracts.recent_trade_dtos import RecentTradeDto, RecentTradeSummaryDto
+from ai_rpg_world.application.trade.exceptions.recent_trade_query_application_exception import RecentTradeQueryApplicationException
+from ai_rpg_world.application.common.exceptions import SystemErrorException
+from ai_rpg_world.domain.common.exception import DomainException
 
 
 class TestRecentTradeQueryService:

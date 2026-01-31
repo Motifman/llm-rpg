@@ -4,9 +4,9 @@ InMemoryItemTradeStatisticsReadModelRepositoryのテスト
 import pytest
 from datetime import datetime, timedelta
 
-from src.infrastructure.repository.in_memory_item_trade_statistics_read_model_repository import InMemoryItemTradeStatisticsReadModelRepository
-from src.domain.trade.read_model.item_trade_statistics_read_model import ItemTradeStatisticsReadModel
-from src.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.infrastructure.repository.in_memory_item_trade_statistics_read_model_repository import InMemoryItemTradeStatisticsReadModelRepository
+from ai_rpg_world.domain.trade.read_model.item_trade_statistics_read_model import ItemTradeStatisticsReadModel
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 
 
 class TestInMemoryItemTradeStatisticsReadModelRepository:

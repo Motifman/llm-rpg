@@ -1,7 +1,7 @@
 import pytest
 from datetime import datetime
-from src.domain.sns.value_object import SubscribeRelationShip, UserId
-from src.domain.sns.exception import (
+from ai_rpg_world.domain.sns.value_object import SubscribeRelationShip, UserId
+from ai_rpg_world.domain.sns.exception import (
     UserIdValidationException,
     SelfReferenceValidationException,
 )

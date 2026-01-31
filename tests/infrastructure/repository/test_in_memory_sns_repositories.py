@@ -2,10 +2,10 @@ import pytest
 from tests.infrastructure.repository.test_sns_user_repository_interface import _TestUserRepositoryInterface
 from tests.infrastructure.repository.test_post_repository_interface import _TestPostRepositoryInterface
 from tests.infrastructure.repository.test_reply_repository_interface import _TestReplyRepositoryInterface
-from src.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
-from src.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
-from src.infrastructure.repository.in_memory_reply_repository import InMemoryReplyRepository
-from src.domain.sns.value_object import UserId, PostId, ReplyId
+from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
+from ai_rpg_world.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
+from ai_rpg_world.infrastructure.repository.in_memory_reply_repository import InMemoryReplyRepository
+from ai_rpg_world.domain.sns.value_object import UserId, PostId, ReplyId
 
 
 class TestInMemoryUserRepository(_TestUserRepositoryInterface):
@@ -25,9 +25,9 @@ class TestInMemoryUserRepositorySpecific:
 
     def test_save_and_find_new_user(self, repository):
         """新規ユーザー保存と検索テスト"""
-        from src.domain.sns.entity.sns_user import SnsUser
-        from src.domain.sns.value_object.user_profile import UserProfile
-        from src.domain.sns.aggregate.user_aggregate import UserAggregate
+        from ai_rpg_world.domain.sns.entity.sns_user import SnsUser
+        from ai_rpg_world.domain.sns.value_object.user_profile import UserProfile
+        from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
 
         # 新しいユーザーを作成
         new_profile = UserProfile("test_user", "テストユーザー", "テスト用のユーザーです")
@@ -97,9 +97,9 @@ class TestInMemoryPostRepositorySpecific:
 
     def test_save_and_find_new_post(self, repository):
         """新規ポスト保存と検索テスト"""
-        from src.domain.sns.aggregate import PostAggregate
-        from src.domain.sns.value_object import PostContent
-        from src.domain.sns.enum import PostVisibility
+        from ai_rpg_world.domain.sns.aggregate import PostAggregate
+        from ai_rpg_world.domain.sns.value_object import PostContent
+        from ai_rpg_world.domain.sns.enum import PostVisibility
         from datetime import datetime
 
         # 新しいポストを作成
@@ -148,9 +148,9 @@ class TestInMemoryReplyRepositorySpecific:
 
     def test_save_and_find_new_reply(self, repository):
         """新規リプライ保存と検索テスト"""
-        from src.domain.sns.aggregate import ReplyAggregate
-        from src.domain.sns.value_object import PostContent
-        from src.domain.sns.enum import PostVisibility
+        from ai_rpg_world.domain.sns.aggregate import ReplyAggregate
+        from ai_rpg_world.domain.sns.value_object import PostContent
+        from ai_rpg_world.domain.sns.enum import PostVisibility
         from datetime import datetime
 
         # 新しいリプライを作成

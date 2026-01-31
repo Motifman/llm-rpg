@@ -1,18 +1,18 @@
 import pytest
 from datetime import datetime, timedelta
-from src.application.social.services.notification_query_service import NotificationQueryService
-from src.application.social.contracts.dtos import NotificationDto
-from src.application.social.exceptions.query.notification_query_exception import (
+from ai_rpg_world.application.social.services.notification_query_service import NotificationQueryService
+from ai_rpg_world.application.social.contracts.dtos import NotificationDto
+from ai_rpg_world.application.social.exceptions.query.notification_query_exception import (
     NotificationQueryException,
     NotificationNotFoundException,
     NotificationAccessDeniedException
 )
-from src.application.social.exceptions.query.user_query_exception import UserQueryException
-from src.domain.sns.value_object import UserId, NotificationId
-from src.domain.sns.value_object.notification_content import NotificationContent
-from src.domain.sns.value_object.notification_type import NotificationType
-from src.domain.sns.entity.notification import Notification
-from src.infrastructure.repository.in_memory_sns_notification_repository import InMemorySnsNotificationRepository
+from ai_rpg_world.application.social.exceptions.query.user_query_exception import UserQueryException
+from ai_rpg_world.domain.sns.value_object import UserId, NotificationId
+from ai_rpg_world.domain.sns.value_object.notification_content import NotificationContent
+from ai_rpg_world.domain.sns.value_object.notification_type import NotificationType
+from ai_rpg_world.domain.sns.entity.notification import Notification
+from ai_rpg_world.infrastructure.repository.in_memory_sns_notification_repository import InMemorySnsNotificationRepository
 
 
 class TestNotificationQueryService:

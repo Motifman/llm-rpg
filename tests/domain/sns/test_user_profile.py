@@ -1,6 +1,6 @@
 import pytest
-from src.domain.sns.value_object import UserProfile
-from src.domain.sns.exception import (
+from ai_rpg_world.domain.sns.value_object import UserProfile
+from ai_rpg_world.domain.sns.exception import (
     UserNameValidationException,
     DisplayNameValidationException,
     BioValidationException,

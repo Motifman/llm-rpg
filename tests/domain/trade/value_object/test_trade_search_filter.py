@@ -1,8 +1,8 @@
 import pytest
-from src.domain.trade.value_object.trade_search_filter import TradeSearchFilter
-from src.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
-from src.domain.trade.enum.trade_enum import TradeStatus
-from src.domain.trade.exception.trade_exception import TradeSearchFilterValidationException
+from ai_rpg_world.domain.trade.value_object.trade_search_filter import TradeSearchFilter
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
+from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
+from ai_rpg_world.domain.trade.exception.trade_exception import TradeSearchFilterValidationException
 
 
 class TestTradeSearchFilter:

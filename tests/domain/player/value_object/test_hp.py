@@ -1,7 +1,7 @@
 import pytest
 from datetime import datetime
-from src.domain.player.value_object.hp import Hp
-from src.domain.player.exception import HpValidationException
+from ai_rpg_world.domain.player.value_object.hp import Hp
+from ai_rpg_world.domain.player.exception import HpValidationException
 
 
 class TestHp:

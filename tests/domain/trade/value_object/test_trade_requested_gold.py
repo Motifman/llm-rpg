@@ -1,6 +1,6 @@
 import pytest
-from src.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
-from src.domain.trade.exception.trade_exception import TradeRequestedGoldValidationException
+from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
+from ai_rpg_world.domain.trade.exception.trade_exception import TradeRequestedGoldValidationException
 
 
 class TestTradeRequestedGold:

@@ -1,8 +1,8 @@
 import pytest
 from datetime import datetime
-from src.domain.sns.value_object import PostContent
-from src.domain.sns.enum import PostVisibility
-from src.domain.sns.exception import ContentLengthValidationException, HashtagCountValidationException, VisibilityValidationException
+from ai_rpg_world.domain.sns.value_object import PostContent
+from ai_rpg_world.domain.sns.enum import PostVisibility
+from ai_rpg_world.domain.sns.exception import ContentLengthValidationException, HashtagCountValidationException, VisibilityValidationException
 
 
 class TestPostContent:

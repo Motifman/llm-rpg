@@ -5,12 +5,12 @@
 ダメージ計算と適用が正しく動作するかを確認する最小限のテスト
 """
 import asyncio
-from src.infrastructure.repository.in_memory_player_repository import InMemoryPlayerRepository
-from src.infrastructure.repository.in_memory_monster_repository import InMemoryMonsterRepository
-from src.infrastructure.repository.in_memory_action_repository import InMemoryActionRepository
-from src.domain.battle.battle import Battle
-from src.domain.battle.battle_service import BattleLogicService
-from src.domain.battle.battle_enum import ParticipantType
+from ai_rpg_world.infrastructure.repository.in_memory_player_repository import InMemoryPlayerRepository
+from ai_rpg_world.infrastructure.repository.in_memory_monster_repository import InMemoryMonsterRepository
+from ai_rpg_world.infrastructure.repository.in_memory_action_repository import InMemoryActionRepository
+from ai_rpg_world.domain.battle.battle import Battle
+from ai_rpg_world.domain.battle.battle_service import BattleLogicService
+from ai_rpg_world.domain.battle.battle_enum import ParticipantType
 
 
 async def test_simple_attack():

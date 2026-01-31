@@ -1,5 +1,5 @@
 import pytest
-from src.domain.sns.value_object.notification_type import NotificationType
+from ai_rpg_world.domain.sns.value_object.notification_type import NotificationType
 
 
 class TestNotificationType:

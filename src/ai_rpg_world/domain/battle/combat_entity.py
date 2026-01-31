@@ -1,0 +1,130 @@
+from typing import Optional
+from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
+from ai_rpg_world.domain.player.base_status import BaseStatus
+from ai_rpg_world.domain.player.dynamic_status import DynamicStatus
+from ai_rpg_world.domain.battle.battle_enum import Race
+from ai_rpg_world.domain.battle.battle_enum import Element
+from ai_rpg_world.domain.spot.spot_exception import PlayerAlreadyInSpotException
+from ai_rpg_world.domain.spot.movement_events import PlayerMovedEvent
+
+
+class CombatEntity(AggregateRoot):
+    """戦闘エンティティの基底クラス - PlayerとMonsterの共通機能"""
+    
+    def __init__(
+        self,
+        name: str,
+        race: Race,
+        element: Element,
+        current_spot_id: int,
+        base_status: BaseStatus,
+        dynamic_status: DynamicStatus,
+        previous_spot_id: Optional[int] = None,
+    ):
+        self._name = name
+        self._race = race
+        self._element = element
+        self._current_spot_id = current_spot_id
+        self._base_status = base_status
+        self._dynamic_status = dynamic_status
+        self._previous_spot_id = previous_spot_id
+    
+    # ===== 基本プロパティ =====
+    @property
+    def name(self) -> str:
+        """名前を取得"""
+        return self._name
+    
+    @property
+    def race(self) -> Race:
+        """種族を取得"""
+        return self._race
+    
+    @property
+    def element(self) -> Element:
+        """属性を取得"""
+        return self._element
+    
+    @property
+    def current_spot_id(self) -> int:
+        """現在のスポットIDを取得"""
+        return self._current_spot_id
+    
+    # ===== ステータスプロパティ =====
+    @property
+    def hp(self) -> int:
+        """HPを取得"""
+        return self._dynamic_status.hp.value
+    
+    @property
+    def mp(self) -> int:
+        """MPを取得"""
+        return self._dynamic_status.mp.value
+    
+    @property
+    def max_hp(self) -> int:
+        """最大HPを取得"""
+        return self._dynamic_status.hp.max_hp
+    
+    @property
+    def max_mp(self) -> int:
+        """最大MPを取得"""
+        return self._dynamic_status.mp.max_mp
+    
+    # ===== 戦闘関連メソッド =====
+    def take_damage(self, damage: int):
+        """ダメージを受ける"""
+        if damage < 0:
+            raise ValueError(f"Invalid damage: {damage}")
+        self._dynamic_status.take_damage(damage)
+    
+    def heal(self, amount: int):
+        """回復"""
+        if amount < 0:
+            raise ValueError(f"Invalid amount: {amount}")
+        self._dynamic_status.heal(amount)
+    
+    def recover_mp(self, amount: int):
+        """MP回復"""
+        if amount < 0:
+            raise ValueError(f"Invalid amount: {amount}")
+        self._dynamic_status.recover_mp(amount)
+    
+    def consume_mp(self, amount: int):
+        """MPを消費"""
+        if amount < 0:
+            raise ValueError(f"Invalid amount: {amount}")
+        self._dynamic_status.consume_mp(amount)
+    
+    def can_consume_mp(self, amount: int) -> bool:
+        """MPが足りるかどうか"""
+        if amount < 0:
+            raise ValueError(f"Invalid amount: {amount}")
+        return self._dynamic_status.can_consume_mp(amount)
+    
+    def can_consume_hp(self, amount: int) -> bool:
+        """HPが足りるかどうか"""
+        if amount < 0:
+            raise ValueError(f"Invalid amount: {amount}")
+        return self._dynamic_status.can_consume_hp(amount)
+    
+    def is_alive(self) -> bool:
+        """生存しているかどうか"""
+        return self._dynamic_status.is_alive()
+    
+    def is_defending(self) -> bool:
+        """防御状態かどうか"""
+        return self._dynamic_status.is_defending()
+    
+    def defend(self):
+        """防御状態にする"""
+        self._dynamic_status.defend()
+    
+    def un_defend(self):
+        """防御解除"""
+        self._dynamic_status.un_defend()
+    
+    def calculate_status(self) -> BaseStatus:
+        """ステータスを計算"""
+        return self._base_status
+    

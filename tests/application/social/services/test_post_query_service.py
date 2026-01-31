@@ -1,20 +1,20 @@
 import pytest
 from datetime import datetime
-from src.application.social.services.post_query_service import PostQueryService
-from src.application.social.contracts.dtos import PostDto
-from src.application.social.exceptions.query.post_query_exception import (
+from ai_rpg_world.application.social.services.post_query_service import PostQueryService
+from ai_rpg_world.application.social.contracts.dtos import PostDto
+from ai_rpg_world.application.social.exceptions.query.post_query_exception import (
     PostQueryException,
     PostNotFoundException,
     PostAccessDeniedException
 )
-from src.application.social.exceptions.query.user_query_exception import UserQueryException
-from src.domain.sns.value_object import UserId, PostId, PostContent
-from src.domain.sns.enum import PostVisibility
-from src.domain.sns.aggregate.post_aggregate import PostAggregate
-from src.domain.sns.aggregate.user_aggregate import UserAggregate
-from src.domain.sns.exception import UserIdValidationException, PostIdValidationException
-from src.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
-from src.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
+from ai_rpg_world.application.social.exceptions.query.user_query_exception import UserQueryException
+from ai_rpg_world.domain.sns.value_object import UserId, PostId, PostContent
+from ai_rpg_world.domain.sns.enum import PostVisibility
+from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
+from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
+from ai_rpg_world.domain.sns.exception import UserIdValidationException, PostIdValidationException
+from ai_rpg_world.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
+from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
 
 
 class TestPostQueryService:
@@ -85,7 +85,7 @@ class TestPostQueryService:
         post_repository._posts[PostId(1006)] = liked_post2
 
         # いいねデータを追加（ユーザー1がポスト1005と1006にいいね）
-        from src.domain.sns.value_object.like import Like
+        from ai_rpg_world.domain.sns.value_object.like import Like
         liked_post1._likes.add(Like(UserId(1), PostId(1005)))
         liked_post2._likes.add(Like(UserId(1), PostId(1006)))
 
@@ -318,10 +318,10 @@ class TestPostQueryService:
     def test_get_post_author_not_found(self, post_query_service, post_repository, user_repository):
         """get_postの著者ユーザーが見つからない場合のテスト"""
         # テスト用のポストを作成（存在しない著者ユーザーIDを使用）
-        from src.domain.sns.aggregate.post_aggregate import PostAggregate
-        from src.domain.sns.value_object import PostId, UserId
-        from src.domain.sns.value_object.post_content import PostContent
-        from src.domain.sns.enum.sns_enum import PostVisibility
+        from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
+        from ai_rpg_world.domain.sns.value_object import PostId, UserId
+        from ai_rpg_world.domain.sns.value_object.post_content import PostContent
+        from ai_rpg_world.domain.sns.enum.sns_enum import PostVisibility
 
         # 存在しない著者ユーザーID（999）のポストを作成
         test_content = PostContent(
@@ -329,7 +329,7 @@ class TestPostQueryService:
             hashtags=("test",),
             visibility=PostVisibility.PUBLIC
         )
-        from src.domain.sns.value_object import Like, Mention, ReplyId
+        from ai_rpg_world.domain.sns.value_object import Like, Mention, ReplyId
 
         orphaned_post = PostAggregate(
             post_id=PostId(9998),
@@ -352,10 +352,10 @@ class TestPostQueryService:
     def test_get_home_timeline_author_not_found(self, post_query_service, post_repository, user_repository):
         """get_home_timelineの著者ユーザーが見つからない場合のテスト"""
         # テスト用のポストを作成（存在しない著者ユーザーIDを使用）
-        from src.domain.sns.aggregate.post_aggregate import PostAggregate
-        from src.domain.sns.value_object import PostId, UserId
-        from src.domain.sns.value_object.post_content import PostContent
-        from src.domain.sns.enum.sns_enum import PostVisibility
+        from ai_rpg_world.domain.sns.aggregate.post_aggregate import PostAggregate
+        from ai_rpg_world.domain.sns.value_object import PostId, UserId
+        from ai_rpg_world.domain.sns.value_object.post_content import PostContent
+        from ai_rpg_world.domain.sns.enum.sns_enum import PostVisibility
 
         # 存在しない著者ユーザーID（999）のポストを作成
         test_content = PostContent(
@@ -388,7 +388,7 @@ class TestPostQueryService:
     def test_unexpected_exception_handling(self, post_query_service, post_repository, user_repository):
         """予期せぬ例外のハンドリングテスト"""
         from unittest.mock import patch
-        from src.application.social.exceptions import SystemErrorException
+        from ai_rpg_world.application.social.exceptions import SystemErrorException
 
         # post_repository.find_by_user_id で予期せぬ例外を発生させる
         with patch.object(post_repository, 'find_by_user_id', side_effect=RuntimeError("予期せぬエラー")):
@@ -401,7 +401,7 @@ class TestPostQueryService:
     def test_domain_exception_conversion(self, post_query_service, post_repository, user_repository):
         """ドメイン例外からアプリケーション例外への変換テスト"""
         from unittest.mock import patch
-        from src.domain.sns.exception.user_profile_exceptions import UserProfileException
+        from ai_rpg_world.domain.sns.exception.user_profile_exceptions import UserProfileException
 
         # _user_repository.find_by_id でドメイン例外を発生させる
         # UserProfileExceptionはUserQueryExceptionに変換される

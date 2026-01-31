@@ -1,15 +1,15 @@
 import pytest
-from src.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
-from src.domain.player.value_object.player_id import PlayerId
-from src.domain.player.value_object.base_stats import BaseStats
-from src.domain.player.value_object.stat_growth_factor import StatGrowthFactor
-from src.domain.player.value_object.exp_table import ExpTable
-from src.domain.player.value_object.growth import Growth
-from src.domain.player.value_object.gold import Gold
-from src.domain.player.value_object.hp import Hp
-from src.domain.player.value_object.mp import Mp
-from src.domain.player.value_object.stamina import Stamina
-from src.domain.player.event.status_events import (
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
+from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
+from ai_rpg_world.domain.player.value_object.growth import Growth
+from ai_rpg_world.domain.player.value_object.gold import Gold
+from ai_rpg_world.domain.player.value_object.hp import Hp
+from ai_rpg_world.domain.player.value_object.mp import Mp
+from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.event.status_events import (
     PlayerDownedEvent,
     PlayerRevivedEvent,
     PlayerLevelUpEvent,
@@ -21,7 +21,7 @@ from src.domain.player.event.status_events import (
     PlayerGoldEarnedEvent,
     PlayerGoldPaidEvent,
 )
-from src.domain.player.exception import (
+from ai_rpg_world.domain.player.exception import (
     InsufficientMpException,
     InsufficientGoldException,
     PlayerDownedException

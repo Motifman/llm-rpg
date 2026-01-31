@@ -1,6 +1,6 @@
 import pytest
-from src.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
-from src.domain.sns.enum.sns_enum import UserRelationshipType
+from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
+from ai_rpg_world.domain.sns.enum.sns_enum import UserRelationshipType
 
 
 class TestInMemorySnsUserRepository:
@@ -10,7 +10,7 @@ class TestInMemorySnsUserRepository:
 
     def test_find_by_id(self):
         """ユーザーID検索テスト"""
-        from src.domain.sns.value_object.user_id import UserId
+        from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
         # 存在するユーザー
         user = self.repository.find_by_id(UserId(1))
@@ -24,7 +24,7 @@ class TestInMemorySnsUserRepository:
 
     def test_find_by_ids(self):
         """複数ユーザーID検索テスト"""
-        from src.domain.sns.value_object.user_id import UserId
+        from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
         users = self.repository.find_by_ids([UserId(1), UserId(2), UserId(3)])
         assert len(users) == 3
@@ -50,7 +50,7 @@ class TestInMemorySnsUserRepository:
 
     def test_find_followers(self):
         """フォロワー取得テスト"""
-        from src.domain.sns.value_object.user_id import UserId
+        from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
         # 勇者（ユーザー1）のフォロワー
         followers = self.repository.find_followers(UserId(1))
@@ -64,7 +64,7 @@ class TestInMemorySnsUserRepository:
 
     def test_find_followees(self):
         """フォロー中ユーザー取得テスト"""
-        from src.domain.sns.value_object.user_id import UserId
+        from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
         # 勇者（ユーザー1）のフォロー中ユーザー
         followees = self.repository.find_followees(UserId(1))
@@ -82,7 +82,7 @@ class TestInMemorySnsUserRepository:
 
     def test_find_mutual_follows(self):
         """相互フォロー取得テスト"""
-        from src.domain.sns.value_object.user_id import UserId
+        from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
         # 勇者（ユーザー1）と魔法使い（ユーザー2）は相互フォロー
         mutual_follows = self.repository.find_mutual_follows(UserId(1))
@@ -98,7 +98,7 @@ class TestInMemorySnsUserRepository:
 
     def test_count_followers(self):
         """フォロワー数取得テスト"""
-        from src.domain.sns.value_object.user_id import UserId
+        from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
         assert self.repository.count_followers(UserId(1)) == 4  # 勇者のフォロワー数
         assert self.repository.count_followers(UserId(2)) == 2  # 魔法使いのフォロワー数
@@ -107,7 +107,7 @@ class TestInMemorySnsUserRepository:
 
     def test_count_followees(self):
         """フォロー数取得テスト"""
-        from src.domain.sns.value_object.user_id import UserId
+        from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
         assert self.repository.count_followees(UserId(1)) == 2  # 勇者のフォロー数
         assert self.repository.count_followees(UserId(2)) == 2  # 魔法使いのフォロー数
@@ -116,7 +116,7 @@ class TestInMemorySnsUserRepository:
 
     def test_find_blocked_users(self):
         """ブロック中ユーザー取得テスト"""
-        from src.domain.sns.value_object.user_id import UserId
+        from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
         # 魔法使い（ユーザー2）のブロック中ユーザー
         blocked_users = self.repository.find_blocked_users(UserId(2))
@@ -132,7 +132,7 @@ class TestInMemorySnsUserRepository:
 
     def test_find_blockers(self):
         """ブロックしているユーザー取得テスト"""
-        from src.domain.sns.value_object.user_id import UserId
+        from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
         # 盗賊（ユーザー4）のブロック者
         blockers = self.repository.find_blockers(UserId(4))
@@ -148,7 +148,7 @@ class TestInMemorySnsUserRepository:
 
     def test_is_blocked(self):
         """ブロック関係確認テスト"""
-        from src.domain.sns.value_object.user_id import UserId
+        from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
         assert self.repository.is_blocked(UserId(2), UserId(4)) == True   # 魔法使い -> 盗賊
         assert self.repository.is_blocked(UserId(6), UserId(1)) == True   # 商人 -> 勇者
@@ -157,7 +157,7 @@ class TestInMemorySnsUserRepository:
 
     def test_find_subscribers(self):
         """購読者取得テスト"""
-        from src.domain.sns.value_object.user_id import UserId
+        from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
         # 勇者（ユーザー1）の購読者
         subscribers = self.repository.find_subscribers(UserId(1))
@@ -175,7 +175,7 @@ class TestInMemorySnsUserRepository:
 
     def test_find_subscriptions(self):
         """購読中ユーザー取得テスト"""
-        from src.domain.sns.value_object.user_id import UserId
+        from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
         # 勇者（ユーザー1）の購読中ユーザー
         subscriptions = self.repository.find_subscriptions(UserId(1))
@@ -191,7 +191,7 @@ class TestInMemorySnsUserRepository:
 
     def test_is_subscribed(self):
         """購読関係確認テスト"""
-        from src.domain.sns.value_object.user_id import UserId
+        from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
         assert self.repository.is_subscribed(UserId(1), UserId(2)) == True   # 勇者 -> 魔法使い
         assert self.repository.is_subscribed(UserId(2), UserId(1)) == True   # 魔法使い -> 勇者
@@ -200,7 +200,7 @@ class TestInMemorySnsUserRepository:
 
     def test_update_profile(self):
         """プロフィール更新テスト"""
-        from src.domain.sns.value_object.user_id import UserId
+        from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
         # 既存ユーザーのプロフィール更新
         updated_user = self.repository.update_profile(UserId(1), "新しい自己紹介", "新勇者")
@@ -244,7 +244,7 @@ class TestInMemorySnsUserRepository:
 
     def test_get_user_stats(self):
         """ユーザー統計情報取得テスト"""
-        from src.domain.sns.value_object.user_id import UserId
+        from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
         # 勇者（ユーザー1）の統計
         stats = self.repository.get_user_stats(UserId(1))
@@ -276,7 +276,7 @@ class TestInMemorySnsUserRepository:
 
     def test_bulk_update_relationships(self):
         """一括関係性更新テスト"""
-        from src.domain.sns.value_object.user_id import UserId
+        from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
         # 新しい関係性を追加
         relationships = [
@@ -309,9 +309,9 @@ class TestInMemorySnsUserRepository:
 
     def test_save_and_delete(self):
         """保存・削除テスト"""
-        from src.domain.sns.entity.sns_user import SnsUser
-        from src.domain.sns.value_object.user_profile import UserProfile
-        from src.domain.sns.aggregate.user_aggregate import UserAggregate
+        from ai_rpg_world.domain.sns.entity.sns_user import SnsUser
+        from ai_rpg_world.domain.sns.value_object.user_profile import UserProfile
+        from ai_rpg_world.domain.sns.aggregate.user_aggregate import UserAggregate
 
         # 新しいユーザーを作成
         new_profile = UserProfile("test_user", "テストユーザー", "テスト用のユーザーです")
@@ -335,7 +335,7 @@ class TestInMemorySnsUserRepository:
 
     def test_exists_by_id(self):
         """ユーザー存在確認テスト"""
-        from src.domain.sns.value_object.user_id import UserId
+        from ai_rpg_world.domain.sns.value_object.user_id import UserId
 
         assert self.repository.exists_by_id(UserId(1)) == True
         assert self.repository.exists_by_id(UserId(999)) == False
