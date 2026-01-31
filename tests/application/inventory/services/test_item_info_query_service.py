@@ -3,22 +3,22 @@ ItemInfoQueryServiceのテスト
 """
 import pytest
 from unittest.mock import Mock
-from src.application.inventory.services.item_info_query_service import ItemInfoQueryService
+from src.application.inventory.services.item_spec_query_service import ItemSpecQueryService
 from src.infrastructure.repository.in_memory_item_spec_repository import InMemoryItemSpecRepository
 from src.application.inventory.contracts.dtos import ItemSpecDto, ErrorResponseDto
 from src.application.inventory.exceptions.item_info_query_application_exception import ItemInfoQueryApplicationException
-from src.application.inventory.exceptions import SystemErrorException
+from src.application.common.exceptions import SystemErrorException
 from src.domain.item.exception.item_exception import ItemInstanceIdValidationException
-from src.domain.item.enum.item_enum import ItemType, Rarity
+from src.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
 
 
-class TestItemInfoQueryService:
-    """ItemInfoQueryServiceのテストクラス"""
+class TestItemSpecQueryService:
+    """ItemSpecQueryServiceのテストクラス"""
 
     def setup_method(self):
         """各テストメソッドの前に実行"""
         self.repository = InMemoryItemSpecRepository()
-        self.service = ItemInfoQueryService(self.repository)
+        self.service = ItemSpecQueryService(self.repository)
 
     def teardown_method(self):
         """各テストメソッドの後に実行"""
@@ -299,7 +299,7 @@ class TestItemInfoQueryService:
         # Given
         mock_repo = Mock()
         mock_repo.find_by_id.side_effect = Exception("Database connection failed")
-        service = ItemInfoQueryService(mock_repo)
+        service = ItemSpecQueryService(mock_repo)
 
         # When & Then
         with pytest.raises(SystemErrorException) as exc_info:
@@ -313,7 +313,7 @@ class TestItemInfoQueryService:
         # Given
         mock_repo = Mock()
         mock_repo.find_by_type.side_effect = Exception("Database connection failed")
-        service = ItemInfoQueryService(mock_repo)
+        service = ItemSpecQueryService(mock_repo)
 
         # When & Then
         with pytest.raises(SystemErrorException) as exc_info:
@@ -326,7 +326,7 @@ class TestItemInfoQueryService:
         # Given
         mock_repo = Mock()
         mock_repo.find_by_rarity.side_effect = Exception("Database connection failed")
-        service = ItemInfoQueryService(mock_repo)
+        service = ItemSpecQueryService(mock_repo)
 
         # When & Then
         with pytest.raises(SystemErrorException) as exc_info:
@@ -339,7 +339,7 @@ class TestItemInfoQueryService:
         # Given
         mock_repo = Mock()
         mock_repo.find_tradeable_items.side_effect = Exception("Database connection failed")
-        service = ItemInfoQueryService(mock_repo)
+        service = ItemSpecQueryService(mock_repo)
 
         # When & Then
         with pytest.raises(SystemErrorException) as exc_info:
@@ -352,7 +352,7 @@ class TestItemInfoQueryService:
         # Given
         mock_repo = Mock()
         mock_repo.find_by_name.side_effect = Exception("Database connection failed")
-        service = ItemInfoQueryService(mock_repo)
+        service = ItemSpecQueryService(mock_repo)
 
         # When & Then
         with pytest.raises(SystemErrorException) as exc_info:
@@ -391,7 +391,7 @@ class TestItemInfoQueryService:
         # Given
         mock_repo = Mock()
         mock_repo.find_by_id.side_effect = Exception("Database connection failed")
-        service = ItemInfoQueryService(mock_repo)
+        service = ItemSpecQueryService(mock_repo)
 
         # When & Then
         with caplog.at_level(logging.ERROR):
@@ -410,7 +410,7 @@ class TestItemInfoQueryService:
         # Given
         mock_repo = Mock()
         mock_repo.find_by_id.side_effect = ItemInfoQueryApplicationException.item_spec_not_found(999)
-        service = ItemInfoQueryService(mock_repo)
+        service = ItemSpecQueryService(mock_repo)
 
         # When & Then
         with pytest.raises(ItemInfoQueryApplicationException) as exc_info:
@@ -426,7 +426,7 @@ class TestItemInfoQueryService:
         # Given
         mock_repo = Mock()
         mock_repo.find_by_type.side_effect = Exception("Database connection failed")
-        service = ItemInfoQueryService(mock_repo)
+        service = ItemSpecQueryService(mock_repo)
 
         # When & Then
         with caplog.at_level(logging.ERROR):

@@ -6,7 +6,7 @@ from src.domain.item.repository.item_spec_repository import ItemSpecRepository
 from src.domain.item.value_object.item_spec import ItemSpec
 from src.domain.item.value_object.item_spec_id import ItemSpecId
 from src.domain.item.value_object.max_stack_size import MaxStackSize
-from src.domain.item.enum.item_enum import ItemType, Rarity
+from src.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
 
 
 class InMemoryItemSpecRepository(ItemSpecRepository):
@@ -30,7 +30,8 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
             rarity=Rarity.COMMON,
             description="基本的な鉄製の剣。冒険者の定番武器。",
             max_stack_size=MaxStackSize(1),
-            durability_max=100
+            durability_max=100,
+            equipment_type=EquipmentType.WEAPON
         )
         self._save_item_spec(sword_spec)
 
@@ -41,7 +42,8 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
             rarity=Rarity.UNCOMMON,
             description="鋭い鋼製の剣。攻撃力が高い。",
             max_stack_size=MaxStackSize(1),
-            durability_max=120
+            durability_max=120,
+            equipment_type=EquipmentType.WEAPON
         )
         self._save_item_spec(steel_sword_spec)
 
@@ -52,7 +54,8 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
             rarity=Rarity.LEGENDARY,
             description="古代の英雄が使っていたという伝説の剣。",
             max_stack_size=MaxStackSize(1),
-            durability_max=200
+            durability_max=200,
+            equipment_type=EquipmentType.WEAPON
         )
         self._save_item_spec(legendary_sword_spec)
 
@@ -64,7 +67,8 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
             rarity=Rarity.COMMON,
             description="軽量な革製の鎧。防御力は低いが動きやすい。",
             max_stack_size=MaxStackSize(1),
-            durability_max=80
+            durability_max=80,
+            equipment_type=EquipmentType.ARMOR
         )
         self._save_item_spec(leather_armor_spec)
 
@@ -75,7 +79,8 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
             rarity=Rarity.UNCOMMON,
             description="頑丈な鉄製の鎧。防御力が高い。",
             max_stack_size=MaxStackSize(1),
-            durability_max=150
+            durability_max=150,
+            equipment_type=EquipmentType.ARMOR
         )
         self._save_item_spec(iron_armor_spec)
 
@@ -182,7 +187,8 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
             rarity=Rarity.COMMON,
             description="軽い革製の靴。歩きやすい。",
             max_stack_size=MaxStackSize(1),
-            durability_max=60
+            durability_max=60,
+            equipment_type=EquipmentType.BOOTS
         )
         self._save_item_spec(leather_boots_spec)
 
@@ -193,7 +199,8 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
             rarity=Rarity.COMMON,
             description="基本的な革製の手袋。",
             max_stack_size=MaxStackSize(1),
-            durability_max=50
+            durability_max=50,
+            equipment_type=EquipmentType.ACCESSORY
         )
         self._save_item_spec(leather_gloves_spec)
 
@@ -204,7 +211,8 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
             rarity=Rarity.COMMON,
             description="頭を守る革製の兜。",
             max_stack_size=MaxStackSize(1),
-            durability_max=70
+            durability_max=70,
+            equipment_type=EquipmentType.HELMET
         )
         self._save_item_spec(leather_helmet_spec)
 

@@ -7,7 +7,7 @@ from src.application.inventory.services.recipe_info_query_service import RecipeI
 from src.infrastructure.repository.in_memory_recipe_repository import InMemoryRecipeRepository
 from src.application.inventory.contracts.dtos import RecipeDto, RecipeIngredientDto, RecipeResultDto
 from src.application.inventory.exceptions.recipe_info_query_application_exception import RecipeInfoQueryApplicationException
-from src.application.inventory.exceptions import SystemErrorException
+from src.application.common.exceptions import SystemErrorException
 from src.domain.item.exception.item_exception import RecipeNotFoundException, ItemInstanceIdValidationException
 from src.domain.item.value_object.recipe_id import RecipeId
 from src.domain.item.value_object.item_spec_id import ItemSpecId

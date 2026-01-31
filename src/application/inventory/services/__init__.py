@@ -1,4 +1,4 @@
 from .item_service import ItemStackingApplicationService
-from .item_info_query_service import ItemInfoQueryService
+from .item_spec_query_service import ItemSpecQueryService
 
-__all__ = ["ItemStackingApplicationService", "ItemInfoQueryService"]
+__all__ = ["ItemStackingApplicationService", "ItemSpecQueryService"]
