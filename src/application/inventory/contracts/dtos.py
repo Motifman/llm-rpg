@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional
-from src.domain.item.enum.item_enum import ItemType, Rarity
+from src.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
 
 
 @dataclass(frozen=True)
@@ -13,6 +13,7 @@ class ItemSpecDto:
     description: str
     max_stack_size: int
     durability_max: Optional[int]
+    equipment_type: Optional[EquipmentType] = None
 
 
 @dataclass(frozen=True)

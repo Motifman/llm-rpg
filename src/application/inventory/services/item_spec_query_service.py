@@ -44,7 +44,8 @@ class ItemSpecQueryService:
             rarity=read_model.rarity,
             description=read_model.description,
             max_stack_size=read_model.max_stack_size.value,
-            durability_max=read_model.durability_max
+            durability_max=read_model.durability_max,
+            equipment_type=read_model.equipment_type
         )
 
     def get_item_spec(self, item_spec_id: int) -> ItemSpecDto:
