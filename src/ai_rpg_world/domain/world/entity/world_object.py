@@ -13,12 +13,15 @@ class WorldObject:
         coordinate: Coordinate,
         object_type: ObjectTypeEnum,
         is_blocking: bool = True,
+        is_blocking_sight: bool = None,
         component: Optional[WorldObjectComponent] = None
     ):
         self._object_id = object_id
         self._coordinate = coordinate
         self._object_type = object_type
         self._is_blocking = is_blocking
+        # 明示的に指定がない場合はis_blockingと同じにする
+        self._is_blocking_sight = is_blocking_sight if is_blocking_sight is not None else is_blocking
         self._component = component
 
     @property
@@ -38,12 +41,20 @@ class WorldObject:
         return self._is_blocking
 
     @property
+    def is_blocking_sight(self) -> bool:
+        return self._is_blocking_sight
+
+    @property
     def component(self) -> Optional[WorldObjectComponent]:
         return self._component
 
     def set_blocking(self, is_blocking: bool):
         """ブロッキング状態を更新する（例：ドアが開いた）"""
         self._is_blocking = is_blocking
+
+    def set_blocking_sight(self, is_blocking_sight: bool):
+        """視覚遮蔽状態を更新する"""
+        self._is_blocking_sight = is_blocking_sight
     
     def move_to(self, new_coordinate: Coordinate):
         """オブジェクトを移動させる（例：動く像）"""
@@ -52,7 +63,7 @@ class WorldObject:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "object_id": str(self._object_id),
-            "coordinate": {"x": self._coordinate.x, "y": self._coordinate.y},
+            "coordinate": {"x": self._coordinate.x, "y": self._coordinate.y, "z": self._coordinate.z},
             "object_type": self._object_type.value,
             "is_blocking": self._is_blocking,
             "component": self._component.to_dict() if self._component else None

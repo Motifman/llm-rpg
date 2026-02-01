@@ -2,7 +2,6 @@ from typing import Optional
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.value_object.movement_cost import MovementCost
-from ai_rpg_world.domain.world.entity.map_trigger import MapTrigger
 
 
 class Tile:
@@ -11,14 +10,12 @@ class Tile:
         self,
         coordinate: Coordinate,
         terrain_type: TerrainType,
-        is_walkable_override: bool = None,
-        trigger: Optional[MapTrigger] = None
+        is_walkable_override: bool = None
     ):
         self._coordinate = coordinate
         self._terrain_type = terrain_type
         # 地形タイプによる通行可能性を基本とするが、個別に上書き可能にする（例：一時的な障害物）
         self._is_walkable_override = is_walkable_override
-        self._trigger = trigger
 
     @property
     def coordinate(self) -> Coordinate:
@@ -27,10 +24,6 @@ class Tile:
     @property
     def terrain_type(self) -> TerrainType:
         return self._terrain_type
-
-    @property
-    def trigger(self) -> Optional[MapTrigger]:
-        return self._trigger
 
     @property
     def is_walkable(self) -> bool:
@@ -53,7 +46,3 @@ class Tile:
     def change_terrain(self, new_terrain_type: TerrainType):
         """地形を変更する"""
         self._terrain_type = new_terrain_type
-
-    def set_trigger(self, trigger: Optional[MapTrigger]):
-        """トリガーを設定する"""
-        self._trigger = trigger
