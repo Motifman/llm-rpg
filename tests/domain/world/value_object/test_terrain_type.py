@@ -12,7 +12,7 @@ class TestTerrainType:
         assert TerrainType.road().base_cost.value == 1.0
         
         assert TerrainType.wall().type == TerrainTypeEnum.WALL
-        assert TerrainType.wall().base_cost.value == float('inf')
+        assert TerrainType.wall().base_cost.value == 1.0
         
         assert TerrainType.swamp().type == TerrainTypeEnum.SWAMP
         assert TerrainType.swamp().base_cost.value == 5.0

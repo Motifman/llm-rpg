@@ -19,7 +19,7 @@ class PathfindingService:
         capability: MovementCapability,
         ignore_errors: bool = False,
         max_iterations: int = 1000,
-        allow_partial_path: bool = True,
+        allow_partial_path: bool = False,
         smooth_path: bool = True
     ) -> List[Coordinate]:
         """
@@ -46,13 +46,20 @@ class PathfindingService:
         if not map_data.is_passable(start, capability):
             raise InvalidPathRequestException(f"Start point {start} is not passable with given capability")
         
-        if not map_data.is_passable(goal, capability):
+        if not map_data.is_passable(goal, capability) and not allow_partial_path:
             raise InvalidPathRequestException(f"Goal point {goal} is not passable with given capability")
 
         if start == goal:
             return [start]
 
-        path = self._strategy.find_path(start, goal, map_data, capability, max_iterations=max_iterations)
+        path = self._strategy.find_path(
+            start, 
+            goal, 
+            map_data, 
+            capability, 
+            max_iterations=max_iterations, 
+            allow_partial_path=allow_partial_path
+        )
         
         if not path:
             if ignore_errors:
