@@ -1,0 +1,63 @@
+import pytest
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.exception.map_exception import CoordinateValidationException
+
+
+class TestCoordinate:
+    """Coordinate値オブジェクトのテスト"""
+
+    def test_create_success(self):
+        """正常に作成できること"""
+        coord = Coordinate(10, 20)
+        assert coord.x == 10
+        assert coord.y == 20
+
+    def test_create_boundary_zero(self):
+        """0の座標で作成できること"""
+        coord = Coordinate(0, 0)
+        assert coord.x == 0
+        assert coord.y == 0
+
+    def test_create_negative_raises_error(self):
+        """負の座標は作成できないこと"""
+        with pytest.raises(CoordinateValidationException):
+            Coordinate(-1, 0)
+        with pytest.raises(CoordinateValidationException):
+            Coordinate(0, -1)
+
+    def test_str_conversion(self):
+        """文字列変換が正しく動作すること"""
+        coord = Coordinate(5, 5)
+        assert str(coord) == "(5, 5)"
+
+    def test_distance_to(self):
+        """マンハッタン距離が正しく計算されること"""
+        c1 = Coordinate(0, 0)
+        c2 = Coordinate(3, 4)
+        assert c1.distance_to(c2) == 7
+        assert c2.distance_to(c1) == 7
+
+    def test_equality(self):
+        """等価性比較が正しく動作すること"""
+        c1 = Coordinate(1, 2)
+        c2 = Coordinate(1, 2)
+        c3 = Coordinate(2, 1)
+
+        assert c1 == c2
+        assert c1 != c3
+        assert c1 != (1, 2)
+
+    def test_hash(self):
+        """ハッシュ値が正しく生成されること"""
+        c1 = Coordinate(10, 10)
+        c2 = Coordinate(10, 10)
+        assert hash(c1) == hash(c2)
+        assert len({c1, c2}) == 1
+
+    def test_immutability(self):
+        """不変性が保たれていること"""
+        coord = Coordinate(1, 1)
+        with pytest.raises(AttributeError):
+            coord.x = 2
+        with pytest.raises(AttributeError):
+            coord.y = 2
