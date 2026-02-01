@@ -1,12 +1,13 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Dict, Any
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.connection import Connection
-from ai_rpg_world.domain.world.enum.world_enum import TerrainTypeEnum, TriggerTypeEnum
+from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
+from ai_rpg_world.domain.world.enum.world_enum import TerrainTypeEnum, TriggerTypeEnum, ObjectTypeEnum
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,7 @@ class WorldObjectAddedEvent(BaseDomainEvent[WorldObjectId, str]):
     """オブジェクトが追加されたイベント"""
     object_id: WorldObjectId
     coordinate: Coordinate
+    object_type: ObjectTypeEnum
 
 
 @dataclass(frozen=True)
@@ -60,6 +62,40 @@ class TileTriggeredEvent(BaseDomainEvent[SpotId, str]):
     coordinate: Coordinate
     trigger_type: TriggerTypeEnum
     object_id: Optional[WorldObjectId] = None
+
+
+@dataclass(frozen=True)
+class AreaTriggeredEvent(BaseDomainEvent[AreaTriggerId, str]):
+    """エリアトリガーが発火したイベント"""
+    trigger_id: AreaTriggerId
+    spot_id: SpotId
+    object_id: WorldObjectId
+    trigger_type: TriggerTypeEnum
+
+
+@dataclass(frozen=True)
+class AreaEnteredEvent(BaseDomainEvent[AreaTriggerId, str]):
+    """エリアに進入したイベント"""
+    trigger_id: AreaTriggerId
+    spot_id: SpotId
+    object_id: WorldObjectId
+
+
+@dataclass(frozen=True)
+class AreaExitedEvent(BaseDomainEvent[AreaTriggerId, str]):
+    """エリアから退出したイベント"""
+    trigger_id: AreaTriggerId
+    spot_id: SpotId
+    object_id: WorldObjectId
+
+
+@dataclass(frozen=True)
+class WorldObjectInteractedEvent(BaseDomainEvent[WorldObjectId, str]):
+    """オブジェクトとインタラクションしたイベント"""
+    actor_id: WorldObjectId
+    target_id: WorldObjectId
+    interaction_type: str
+    data: Dict[str, Any]
 
 
 @dataclass(frozen=True)

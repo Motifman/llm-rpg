@@ -18,6 +18,8 @@ class ObjectTypeEnum(Enum):
     GATE = "GATE"
     SIGN = "SIGN"
     SWITCH = "SWITCH"
+    PLAYER = "PLAYER"
+    NPC = "NPC"
 
 
 class SpotCategoryEnum(Enum):
@@ -38,3 +40,21 @@ class TriggerTypeEnum(Enum):
     WARP = "WARP"
     DAMAGE = "DAMAGE"
     EVENT = "EVENT"
+
+
+class MovementCapabilityEnum(Enum):
+    """移動能力の種類"""
+    WALK = "WALK"          # 通常の歩行
+    SWIM = "SWIM"          # 水泳（水の上を歩ける）
+    FLY = "FLY"            # 飛行（進入不可タイル以外を越えられる）
+    GHOST_WALK = "GHOST_WALK" # 壁抜け
+
+
+class DirectionEnum(Enum):
+    """向きの種類"""
+    NORTH = "NORTH"
+    SOUTH = "SOUTH"
+    EAST = "EAST"
+    WEST = "WEST"
+    UP = "UP"
+    DOWN = "DOWN"

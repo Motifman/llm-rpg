@@ -92,3 +92,38 @@ class WorldObjectIdValidationException(MapDomainException, ValidationException):
 class SpotNameEmptyException(MapDomainException, ValidationException):
     """スポット名が空である例外"""
     error_code = "MAP.SPOT_NAME_EMPTY"
+
+
+class AreaTriggerIdValidationException(MapDomainException, ValidationException):
+    """エリアトリガーIDバリデーション例外"""
+    error_code = "MAP.AREA_TRIGGER_ID_VALIDATION"
+
+
+class AreaTriggerNotFoundException(MapDomainException, NotFoundException):
+    """エリアトリガーが見つからない例外"""
+    error_code = "MAP.AREA_TRIGGER_NOT_FOUND"
+
+
+class DuplicateAreaTriggerException(MapDomainException, BusinessRuleException):
+    """エリアトリガーが既に存在する例外"""
+    error_code = "MAP.DUPLICATE_AREA_TRIGGER"
+
+
+class NotAnActorException(MapDomainException, BusinessRuleException):
+    """オブジェクトがアクターではない場合の例外"""
+    error_code = "MAP.NOT_AN_ACTOR"
+
+
+class InteractionOutOfRangeException(MapDomainException, BusinessRuleException):
+    """インタラクションの範囲外である例外"""
+    error_code = "MAP.INTERACTION_OUT_OF_RANGE"
+
+
+class NotFacingTargetException(MapDomainException, BusinessRuleException):
+    """ターゲットの方を向いていない例外"""
+    error_code = "MAP.NOT_FACING_TARGET"
+
+
+class NotInteractableException(MapDomainException, BusinessRuleException):
+    """インタラクション不可能なオブジェクトである例外"""
+    error_code = "MAP.NOT_INTERACTABLE"

@@ -31,7 +31,11 @@ class WarpTrigger(MapTrigger):
         return {
             "type": self.get_trigger_type().value,
             "target_spot_id": str(self.target_spot_id),
-            "target_coordinate": {"x": self.target_coordinate.x, "y": self.target_coordinate.y}
+            "target_coordinate": {
+                "x": self.target_coordinate.x, 
+                "y": self.target_coordinate.y,
+                "z": self.target_coordinate.z
+            }
         }
 
 

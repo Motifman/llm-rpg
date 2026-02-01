@@ -1,25 +1,25 @@
 from dataclasses import dataclass
 from typing import Union
-from ai_rpg_world.domain.world.exception.map_exception import WorldObjectIdValidationException
+from ai_rpg_world.domain.world.exception.map_exception import AreaTriggerIdValidationException
 
 
 @dataclass(frozen=True)
-class WorldObjectId:
-    """ワールドオブジェクトの一意識別子"""
+class AreaTriggerId:
+    """エリアトリガーの識別子"""
     value: int
 
     def __post_init__(self):
         if self.value <= 0:
-            raise WorldObjectIdValidationException(f"WorldObject ID must be positive: {self.value}")
+            raise AreaTriggerIdValidationException(f"AreaTriggerId must be positive: {self.value}")
 
     @classmethod
-    def create(cls, value: Union[int, str]) -> "WorldObjectId":
-        """intまたはstrからWorldObjectIdを作成"""
+    def create(cls, value: Union[int, str]) -> "AreaTriggerId":
+        """intまたはstrからAreaTriggerIdを作成"""
         if isinstance(value, str):
             try:
                 int_value = int(value)
             except ValueError:
-                raise WorldObjectIdValidationException(value)
+                raise AreaTriggerIdValidationException(value)
         else:
             int_value = value
 
