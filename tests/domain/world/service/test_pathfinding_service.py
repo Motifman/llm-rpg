@@ -37,7 +37,14 @@ class TestPathfindingService:
         path = service.calculate_path(start, goal, mock_map, capability, smooth_path=False)
         
         assert path == expected_path
-        mock_strategy.find_path.assert_called_once_with(start, goal, mock_map, capability, max_iterations=1000)
+        mock_strategy.find_path.assert_called_once_with(
+            start, 
+            goal, 
+            mock_map, 
+            capability, 
+            max_iterations=1000, 
+            allow_partial_path=False
+        )
 
     def test_calculate_path_same_start_goal(self, service, mock_strategy, mock_map, capability):
         """開始点と目標地点が同じ場合"""

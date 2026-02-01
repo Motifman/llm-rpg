@@ -16,7 +16,8 @@ class AStarPathfindingStrategy(PathfindingStrategy):
         goal: Coordinate,
         map_data: PathfindingMap,
         capability: MovementCapability,
-        max_iterations: int = 1000
+        max_iterations: int = 1000,
+        allow_partial_path: bool = False
     ) -> List[Coordinate]:
         """
         A*アルゴリズムを使用して最短経路を探索する。
@@ -77,8 +78,8 @@ class AStarPathfindingStrategy(PathfindingStrategy):
                     heapq.heappush(open_set, (f_val, counter, neighbor))
         
         # ゴールに到達できず、ループを抜けた場合
-        if iterations >= max_iterations and best_node != start:
-            # 探索制限に達した場合は、そこまでの最善の経路を返す
+        if (iterations >= max_iterations or allow_partial_path) and best_node != start:
+            # 探索制限に達した場合、または部分経路が許可されている場合は、そこまでの最善の経路を返す
             return self._reconstruct_path(came_from, best_node)
                     
         return []

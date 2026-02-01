@@ -58,3 +58,13 @@ class DirectionEnum(Enum):
     WEST = "WEST"
     UP = "UP"
     DOWN = "DOWN"
+
+
+class BehaviorStateEnum(Enum):
+    """アクターの行動状態"""
+    IDLE = "IDLE"       # 待機
+    PATROL = "PATROL"   # 巡回
+    CHASE = "CHASE"     # 追跡
+    SEARCH = "SEARCH"   # 探索（見失った地点へ向かう）
+    FLEE = "FLEE"       # 逃走
+    RETURN = "RETURN"   # 初期位置への帰還

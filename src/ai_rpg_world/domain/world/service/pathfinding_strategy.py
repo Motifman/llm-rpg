@@ -26,7 +26,8 @@ class PathfindingStrategy(ABC):
         goal: Coordinate,
         map_data: PathfindingMap,
         capability: MovementCapability,
-        max_iterations: int = 1000
+        max_iterations: int = 1000,
+        allow_partial_path: bool = False
     ) -> List[Coordinate]:
         """
         開始地点から目標地点までの経路を計算する。
@@ -37,10 +38,10 @@ class PathfindingStrategy(ABC):
             map_data: マップデータ（通行可能性とコストの取得に使用）
             capability: 移動能力
             max_iterations: 探索の最大試行回数
+            allow_partial_path: Trueの場合、ゴールに到達できなくても最善の地点までの経路を返す
             
         Returns:
             座標のリスト。
             経路が見つからない場合は空リスト。
-            探索制限に達した場合は、その時点での「最も目標に近い地点」までの部分経路を返すことがある。
         """
         pass
