@@ -168,6 +168,14 @@ class PhysicalMapAggregate(AggregateRoot):
         except TileNotFoundException:
             return False
 
+    def get_movement_cost(self, coordinate: Coordinate, capability: MovementCapability) -> float:
+        """指定された座標の移動コストを計算する。通行不可の場合は無限大を返す。"""
+        if not self.is_passable(coordinate, capability):
+            return float('inf')
+        
+        tile = self.get_tile(coordinate)
+        return tile.terrain_type.calculate_cost(capability).value
+
     @property
     def spot_id(self) -> SpotId:
         return self._spot_id

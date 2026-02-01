@@ -162,3 +162,18 @@ class GatewayNotFoundException(MapDomainException, NotFoundException):
 class DuplicateGatewayException(MapDomainException, BusinessRuleException):
     """ゲートウェイが既に存在する例外"""
     error_code = "MAP.DUPLICATE_GATEWAY"
+
+
+class PathNotFoundException(MapDomainException, BusinessRuleException):
+    """経路が見つからない例外"""
+    error_code = "MAP.PATH_NOT_FOUND"
+
+
+class PathfindingLimitReachedException(MapDomainException, BusinessRuleException):
+    """経路探索の試行回数上限に達した例外"""
+    error_code = "MAP.PATHFINDING_LIMIT_REACHED"
+
+
+class InvalidPathRequestException(MapDomainException, ValidationException):
+    """不正な経路探索リクエストの例外"""
+    error_code = "MAP.INVALID_PATH_REQUEST"

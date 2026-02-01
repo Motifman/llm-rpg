@@ -35,12 +35,12 @@ class TerrainType:
 
     @classmethod
     def wall(cls) -> "TerrainType":
-        return cls(TerrainTypeEnum.WALL, MovementCost.impassable(), frozenset({MovementCapabilityEnum.GHOST_WALK, MovementCapabilityEnum.FLY}), is_opaque=True)
+        return cls(TerrainTypeEnum.WALL, MovementCost(1.0), frozenset({MovementCapabilityEnum.GHOST_WALK, MovementCapabilityEnum.FLY}), is_opaque=True)
 
     @classmethod
     def glass_wall(cls) -> "TerrainType":
         """通行不可だが視線は通る地形"""
-        return cls(TerrainTypeEnum.WALL, MovementCost.impassable(), frozenset({MovementCapabilityEnum.GHOST_WALK, MovementCapabilityEnum.FLY}), is_opaque=False)
+        return cls(TerrainTypeEnum.WALL, MovementCost(1.0), frozenset({MovementCapabilityEnum.GHOST_WALK, MovementCapabilityEnum.FLY}), is_opaque=False)
 
     @property
     def is_walkable(self) -> bool:
