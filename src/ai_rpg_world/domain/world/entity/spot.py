@@ -1,3 +1,4 @@
+from typing import Optional
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.exception.map_exception import SpotNameEmptyException
@@ -10,7 +11,8 @@ class Spot:
         spot_id: SpotId,
         name: str,
         description: str,
-        category: SpotCategoryEnum = SpotCategoryEnum.OTHER
+        category: SpotCategoryEnum = SpotCategoryEnum.OTHER,
+        parent_id: Optional[SpotId] = None
     ):
         if not name:
             raise SpotNameEmptyException("Spot name cannot be empty")
@@ -19,10 +21,15 @@ class Spot:
         self._name = name
         self._description = description
         self._category = category
+        self._parent_id = parent_id
 
     @property
     def spot_id(self) -> SpotId:
         return self._spot_id
+
+    @property
+    def parent_id(self) -> Optional[SpotId]:
+        return self._parent_id
 
     @property
     def name(self) -> str:

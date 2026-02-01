@@ -19,7 +19,8 @@ from ai_rpg_world.domain.world.exception.map_exception import (
     AreaTriggerNotFoundException,
     InteractionOutOfRangeException,
     NotFacingTargetException,
-    NotInteractableException
+    NotInteractableException,
+    SameCoordinateDirectionException
 )
 from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
 from ai_rpg_world.domain.world.value_object.area import PointArea, RectArea
@@ -564,6 +565,12 @@ class TestPhysicalMapAggregate:
         def test_remove_non_existent_area_trigger_raises_error(self, aggregate):
             with pytest.raises(AreaTriggerNotFoundException):
                 aggregate.remove_area_trigger(AreaTriggerId(999))
+
+        def test_get_direction_to_same_coordinate_raises_error(self, aggregate):
+            coord = Coordinate(0, 0, 0)
+            # 内部メソッドだが方向計算の不変性を担保するためにテスト
+            with pytest.raises(SameCoordinateDirectionException):
+                aggregate._get_direction_to(coord, coord)
 
     class TestBugFixes:
         def test_move_object_from_wall_stays_impassable(self, spot_id):
