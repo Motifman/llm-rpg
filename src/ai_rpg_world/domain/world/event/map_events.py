@@ -7,6 +7,8 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.connection import Connection
 from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
 from ai_rpg_world.domain.world.enum.world_enum import TerrainTypeEnum, TriggerTypeEnum, ObjectTypeEnum
 
 
@@ -116,3 +118,31 @@ class ConnectionAddedEvent(BaseDomainEvent[WorldId, str]):
     """接続が追加されたイベント"""
     world_id: WorldId
     connection: Connection
+
+
+@dataclass(frozen=True)
+class LocationEnteredEvent(BaseDomainEvent[LocationAreaId, str]):
+    """ロケーションエリアに進入したイベント"""
+    location_id: LocationAreaId
+    spot_id: SpotId
+    object_id: WorldObjectId
+    name: str
+    description: str
+
+
+@dataclass(frozen=True)
+class LocationExitedEvent(BaseDomainEvent[LocationAreaId, str]):
+    """ロケーションエリアから退出したイベント"""
+    location_id: LocationAreaId
+    spot_id: SpotId
+    object_id: WorldObjectId
+
+
+@dataclass(frozen=True)
+class GatewayTriggeredEvent(BaseDomainEvent[GatewayId, str]):
+    """ゲートウェイ（出口）を通過したイベント"""
+    gateway_id: GatewayId
+    spot_id: SpotId
+    object_id: WorldObjectId
+    target_spot_id: SpotId
+    landing_coordinate: Coordinate

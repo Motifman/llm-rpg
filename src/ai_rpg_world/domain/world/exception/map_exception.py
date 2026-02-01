@@ -127,3 +127,38 @@ class NotFacingTargetException(MapDomainException, BusinessRuleException):
 class NotInteractableException(MapDomainException, BusinessRuleException):
     """インタラクション不可能なオブジェクトである例外"""
     error_code = "MAP.NOT_INTERACTABLE"
+
+
+class SameCoordinateDirectionException(MapDomainException, BusinessRuleException):
+    """同じ座標間の方向を計算しようとした際の例外"""
+    error_code = "MAP.SAME_COORDINATE_DIRECTION"
+
+
+class LocationAreaIdValidationException(MapDomainException, ValidationException):
+    """ロケーションエリアIDバリデーション例外"""
+    error_code = "MAP.LOCATION_AREA_ID_VALIDATION"
+
+
+class LocationAreaNotFoundException(MapDomainException, NotFoundException):
+    """ロケーションエリアが見つからない例外"""
+    error_code = "MAP.LOCATION_AREA_NOT_FOUND"
+
+
+class DuplicateLocationAreaException(MapDomainException, BusinessRuleException):
+    """ロケーションエリアが既に存在する例外"""
+    error_code = "MAP.DUPLICATE_LOCATION_AREA"
+
+
+class GatewayIdValidationException(MapDomainException, ValidationException):
+    """ゲートウェイIDバリデーション例外"""
+    error_code = "MAP.GATEWAY_ID_VALIDATION"
+
+
+class GatewayNotFoundException(MapDomainException, NotFoundException):
+    """ゲートウェイが見つからない例外"""
+    error_code = "MAP.GATEWAY_NOT_FOUND"
+
+
+class DuplicateGatewayException(MapDomainException, BusinessRuleException):
+    """ゲートウェイが既に存在する例外"""
+    error_code = "MAP.DUPLICATE_GATEWAY"

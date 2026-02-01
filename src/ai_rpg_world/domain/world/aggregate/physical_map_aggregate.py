@@ -5,9 +5,13 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.area_trigger import AreaTrigger
+from ai_rpg_world.domain.world.entity.location_area import LocationArea
+from ai_rpg_world.domain.world.entity.gateway import Gateway
 from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent, InteractableComponent
 from ai_rpg_world.domain.world.entity.map_trigger import MapTrigger
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
@@ -23,7 +27,10 @@ from ai_rpg_world.domain.world.event.map_events import (
     AreaEnteredEvent,
     AreaExitedEvent,
     AreaTriggeredEvent,
-    WorldObjectInteractedEvent
+    WorldObjectInteractedEvent,
+    LocationEnteredEvent,
+    LocationExitedEvent,
+    GatewayTriggeredEvent
 )
 from ai_rpg_world.domain.world.exception.map_exception import (
     TileNotFoundException, 
@@ -36,7 +43,12 @@ from ai_rpg_world.domain.world.exception.map_exception import (
     NotAnActorException,
     InteractionOutOfRangeException,
     NotFacingTargetException,
-    NotInteractableException
+    NotInteractableException,
+    SameCoordinateDirectionException,
+    DuplicateLocationAreaException,
+    LocationAreaNotFoundException,
+    DuplicateGatewayException,
+    GatewayNotFoundException
 )
 
 
@@ -48,14 +60,18 @@ class PhysicalMapAggregate(AggregateRoot):
         spot_id: SpotId,
         tiles: Dict[Coordinate, Tile],
         objects: List[WorldObject] = None,
-        area_triggers: List[AreaTrigger] = None
+        area_triggers: List[AreaTrigger] = None,
+        location_areas: List[LocationArea] = None,
+        gateways: List[Gateway] = None
     ):
         super().__init__()
         self._spot_id = spot_id
         self._tiles = tiles
         self._objects: Dict[WorldObjectId, WorldObject] = {}
-        self._object_positions: Dict[Coordinate, WorldObjectId] = {}
+        self._object_positions: Dict[Coordinate, List[WorldObjectId]] = {}
         self._area_triggers: Dict[AreaTriggerId, AreaTrigger] = {t.trigger_id: t for t in (area_triggers or [])}
+        self._location_areas: Dict[LocationAreaId, LocationArea] = {l.location_id: l for l in (location_areas or [])}
+        self._gateways: Dict[GatewayId, Gateway] = {g.gateway_id: g for g in (gateways or [])}
         
         if objects:
             for obj in objects:
@@ -67,10 +83,12 @@ class PhysicalMapAggregate(AggregateRoot):
         spot_id: SpotId, 
         tiles: List[Tile], 
         objects: List[WorldObject] = None,
-        area_triggers: List[AreaTrigger] = None
+        area_triggers: List[AreaTrigger] = None,
+        location_areas: List[LocationArea] = None,
+        gateways: List[Gateway] = None
     ) -> "PhysicalMapAggregate":
         tile_dict = {tile.coordinate: tile for tile in tiles}
-        aggregate = cls(spot_id, tile_dict, objects, area_triggers)
+        aggregate = cls(spot_id, tile_dict, objects, area_triggers, location_areas, gateways)
         aggregate.add_event(PhysicalMapCreatedEvent.create(
             aggregate_id=spot_id,
             aggregate_type="PhysicalMapAggregate",
@@ -83,23 +101,25 @@ class PhysicalMapAggregate(AggregateRoot):
         if obj.object_id in self._objects:
             raise DuplicateObjectException(f"Object ID {obj.object_id} already exists")
         
-        # アクターの場合は能力を取得して配置バリデーションを行う
+        # アクターの場合は能力を取得
         capability = None
         if obj.component and isinstance(obj.component, ActorComponent):
             capability = obj.component.capability
 
-        # 座標のバリデーション
-        self._validate_placement(obj.coordinate, capability)
+        # 座標のバリデーション（ブロッキング設定を考慮）
+        self._validate_placement(obj.coordinate, obj.is_blocking, capability)
         
         # 内部データの更新
         self._objects[obj.object_id] = obj
-        self._object_positions[obj.coordinate] = obj.object_id
+        if obj.coordinate not in self._object_positions:
+            self._object_positions[obj.coordinate] = []
+        self._object_positions[obj.coordinate].append(obj.object_id)
         
         # オブジェクトによる通行制限を反映
         if obj.is_blocking:
             self._override_tile_walkability(obj.coordinate, False)
 
-    def _validate_placement(self, coordinate: Coordinate, capability: Optional[MovementCapability] = None):
+    def _validate_placement(self, coordinate: Coordinate, is_blocking: bool, capability: Optional[MovementCapability] = None, exclude_object_id: Optional[WorldObjectId] = None):
         """指定された座標にオブジェクトを配置可能かチェックする"""
         # 1. タイルが存在するか
         if coordinate not in self._tiles:
@@ -115,9 +135,19 @@ class PhysicalMapAggregate(AggregateRoot):
             if not tile.terrain_type.is_walkable:
                 raise InvalidPlacementException(f"Cannot place object on non-walkable terrain at {coordinate}")
         
-        # 3. 既にオブジェクトが存在しないか
+        # 3. 既存オブジェクトとの衝突チェック（重なりルール）
         if coordinate in self._object_positions:
-            raise DuplicateObjectException(f"Another object already exists at {coordinate}")
+            existing_ids = [oid for oid in self._object_positions[coordinate] if oid != exclude_object_id]
+            if existing_ids:
+                existing_objects = [self._objects[oid] for oid in existing_ids]
+                
+                # ルール: 配置対象がブロッキングなら、既に何かあれば不可
+                if is_blocking:
+                    raise DuplicateObjectException(f"Cannot place blocking object at {coordinate} because other objects already exist")
+                
+                # ルール: 配置対象が非ブロッキングなら、既存にブロッキングがあれば不可
+                if any(o.is_blocking for o in existing_objects):
+                    raise InvalidPlacementException(f"Cannot enter {coordinate} because it is blocked by another object")
 
     def is_passable(self, coordinate: Coordinate, capability: MovementCapability) -> bool:
         """指定された座標が特定のアクター能力で通行可能か判定する"""
@@ -128,8 +158,8 @@ class PhysicalMapAggregate(AggregateRoot):
                 return False
             # オブジェクトによるブロッキング
             if coordinate in self._object_positions:
-                obj = self._objects[self._object_positions[coordinate]]
-                if obj.is_blocking:
+                existing_objects = [self._objects[oid] for oid in self._object_positions[coordinate]]
+                if any(o.is_blocking for o in existing_objects):
                     if not capability.has_capability(MovementCapabilityEnum.GHOST_WALK):
                         return False
             
@@ -163,6 +193,12 @@ class PhysicalMapAggregate(AggregateRoot):
         obj = self.get_object(object_id)
         if obj.is_blocking == is_blocking:
             return
+        
+        # ブロッキング状態を切り替える前に衝突チェックが必要（非ブロッキング->ブロッキングの場合）
+        if is_blocking:
+            # 自分以外にオブジェクトがあればブロッキングになれない
+            if len(self._object_positions.get(obj.coordinate, [])) > 1:
+                 raise DuplicateObjectException(f"Cannot set object {object_id} to blocking because other objects share the same coordinate")
             
         obj.set_blocking(is_blocking)
         # 物理マップの通行可能性を更新
@@ -187,7 +223,7 @@ class PhysicalMapAggregate(AggregateRoot):
 
         # 移動先のバリデーション
         try:
-            self._validate_placement(new_coordinate, capability)
+            self._validate_placement(new_coordinate, obj.is_blocking, capability, exclude_object_id=object_id)
         except (InvalidPlacementException, DuplicateObjectException) as e:
             raise InvalidMovementException(f"Cannot move object to {new_coordinate}: {str(e)}")
             
@@ -197,8 +233,14 @@ class PhysicalMapAggregate(AggregateRoot):
             self._override_tile_walkability(new_coordinate, False)
             
         # 位置管理の更新
-        del self._object_positions[old_coordinate]
-        self._object_positions[new_coordinate] = object_id
+        self._object_positions[old_coordinate].remove(object_id)
+        if not self._object_positions[old_coordinate]:
+            del self._object_positions[old_coordinate]
+            
+        if new_coordinate not in self._object_positions:
+            self._object_positions[new_coordinate] = []
+        self._object_positions[new_coordinate].append(object_id)
+        
         obj.move_to(new_coordinate)
         
         self.add_event(WorldObjectMovedEvent.create(
@@ -214,6 +256,7 @@ class PhysicalMapAggregate(AggregateRoot):
 
     def _check_area_triggers(self, object_id: WorldObjectId, old_coordinate: Optional[Coordinate], new_coordinate: Coordinate):
         """進入・退出・滞在判定"""
+        # 1. AreaTriggerの判定
         for trigger in self._area_triggers.values():
             was_in = trigger.contains(old_coordinate) if old_coordinate else False
             is_in = trigger.contains(new_coordinate)
@@ -241,6 +284,49 @@ class PhysicalMapAggregate(AggregateRoot):
             elif was_in and is_in:
                 # Staying (継続的な効果など)
                 self._activate_area_trigger(trigger, object_id)
+
+        # 2. LocationAreaの判定
+        for loc in self._location_areas.values():
+            was_in = loc.contains(old_coordinate) if old_coordinate else False
+            is_in = loc.contains(new_coordinate)
+
+            if not was_in and is_in:
+                # Entering a location area - send detailed info
+                self.add_event(LocationEnteredEvent.create(
+                    aggregate_id=loc.location_id,
+                    aggregate_type="LocationArea",
+                    location_id=loc.location_id,
+                    spot_id=self._spot_id,
+                    object_id=object_id,
+                    name=loc.name,
+                    description=loc.description
+                ))
+            elif was_in and not is_in:
+                # Exiting a location area
+                self.add_event(LocationExitedEvent.create(
+                    aggregate_id=loc.location_id,
+                    aggregate_type="LocationArea",
+                    location_id=loc.location_id,
+                    spot_id=self._spot_id,
+                    object_id=object_id
+                ))
+
+        # 3. Gatewayの判定
+        for gateway in self._gateways.values():
+            was_in = gateway.contains(old_coordinate) if old_coordinate else False
+            is_in = gateway.contains(new_coordinate)
+
+            if not was_in and is_in:
+                # Entering a gateway area triggers the transition
+                self.add_event(GatewayTriggeredEvent.create(
+                    aggregate_id=gateway.gateway_id,
+                    aggregate_type="Gateway",
+                    gateway_id=gateway.gateway_id,
+                    spot_id=self._spot_id,
+                    object_id=object_id,
+                    target_spot_id=gateway.target_spot_id,
+                    landing_coordinate=gateway.landing_coordinate
+                ))
 
     def _activate_area_trigger(self, trigger: AreaTrigger, object_id: WorldObjectId):
         """エリアトリガーを発火させる"""
@@ -288,6 +374,12 @@ class PhysicalMapAggregate(AggregateRoot):
 
     def get_all_area_triggers(self) -> List[AreaTrigger]:
         return list(self._area_triggers.values())
+
+    def get_all_location_areas(self) -> List[LocationArea]:
+        return list(self._location_areas.values())
+
+    def get_all_gateways(self) -> List[Gateway]:
+        return list(self._gateways.values())
 
     def add_object(self, obj: WorldObject):
         """マップに新しくオブジェクトを追加する"""
@@ -391,6 +483,20 @@ class PhysicalMapAggregate(AggregateRoot):
 
         return True
 
+    def remove_object(self, object_id: WorldObjectId):
+        """オブジェクトをマップから削除する"""
+        obj = self.get_object(object_id)
+        coord = obj.coordinate
+        
+        if obj.is_blocking:
+            self._reset_tile_walkability(coord)
+            
+        self._object_positions[coord].remove(object_id)
+        if not self._object_positions[coord]:
+            del self._object_positions[coord]
+            
+        del self._objects[object_id]
+
     def _is_sight_blocked(self, coordinate: Coordinate) -> bool:
         """指定された座標が視線を遮るか判定する"""
         if coordinate not in self._tiles:
@@ -402,8 +508,8 @@ class PhysicalMapAggregate(AggregateRoot):
 
         # オブジェクトの視覚遮蔽チェック
         if coordinate in self._object_positions:
-            obj = self._objects[self._object_positions[coordinate]]
-            if obj.is_blocking_sight:
+            existing_objects = [self._objects[oid] for oid in self._object_positions[coordinate]]
+            if any(obj.is_blocking_sight for obj in existing_objects):
                 return True
 
         return False
@@ -447,6 +553,40 @@ class PhysicalMapAggregate(AggregateRoot):
         if trigger_id not in self._area_triggers:
             raise AreaTriggerNotFoundException(f"AreaTrigger with ID {trigger_id} not found")
         del self._area_triggers[trigger_id]
+
+    def add_location_area(self, location_area: LocationArea):
+        """ロケーションエリアを追加する"""
+        if location_area.location_id in self._location_areas:
+            raise DuplicateLocationAreaException(f"LocationArea with ID {location_area.location_id} already exists")
+        self._location_areas[location_area.location_id] = location_area
+
+    def remove_location_area(self, location_id: LocationAreaId):
+        """ロケーションエリアを削除する"""
+        if location_id not in self._location_areas:
+            raise LocationAreaNotFoundException(f"LocationArea with ID {location_id} not found")
+        del self._location_areas[location_id]
+
+    def add_gateway(self, gateway: Gateway):
+        """ゲートウェイを追加する"""
+        if gateway.gateway_id in self._gateways:
+            raise DuplicateGatewayException(f"Gateway with ID {gateway.gateway_id} already exists")
+        self._gateways[gateway.gateway_id] = gateway
+
+    def remove_gateway(self, gateway_id: GatewayId):
+        """ゲートウェイを削除する"""
+        if gateway_id not in self._gateways:
+            raise GatewayNotFoundException(f"Gateway with ID {gateway_id} not found")
+        del self._gateways[gateway_id]
+
+    def get_location_area(self, location_id: LocationAreaId) -> LocationArea:
+        if location_id not in self._location_areas:
+            raise LocationAreaNotFoundException(f"LocationArea with ID {location_id} not found")
+        return self._location_areas[location_id]
+
+    def get_gateway(self, gateway_id: GatewayId) -> Gateway:
+        if gateway_id not in self._gateways:
+            raise GatewayNotFoundException(f"Gateway with ID {gateway_id} not found")
+        return self._gateways[gateway_id]
 
     def interact_with(self, actor_id: WorldObjectId, target_id: WorldObjectId):
         """アクターがターゲットのオブジェクトに対してインタラクションを行う"""
@@ -498,9 +638,8 @@ class PhysicalMapAggregate(AggregateRoot):
         if dy > 0: return DirectionEnum.SOUTH
         if dy < 0: return DirectionEnum.NORTH
         
-        # 同じマスの場合は現在のアクターの向きを維持するとみなすか、
-        # あるいは特殊な値を返すべきだが、ここでは便宜上SOUTHを返す（呼び出し側で距離0ならスキップも可能）
-        return DirectionEnum.SOUTH
+        # 同じマスの場合は方向を定義できないため例外を投げる
+        raise SameCoordinateDirectionException(f"Cannot determine direction for the same coordinate: {from_coord}")
 
     def check_and_activate_trigger(self, coordinate: Coordinate, object_id: Optional[WorldObjectId] = None) -> Optional[MapTrigger]:
         """
