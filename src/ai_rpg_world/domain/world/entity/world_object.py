@@ -3,6 +3,7 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
 from ai_rpg_world.domain.world.entity.world_object_component import WorldObjectComponent
+from ai_rpg_world.domain.common.value_object import WorldTick
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
@@ -18,7 +19,8 @@ class WorldObject:
         object_type: ObjectTypeEnum,
         is_blocking: bool = True,
         is_blocking_sight: bool = None,
-        component: Optional[WorldObjectComponent] = None
+        component: Optional[WorldObjectComponent] = None,
+        busy_until: Optional[WorldTick] = None
     ):
         self._object_id = object_id
         self._coordinate = coordinate
@@ -27,6 +29,7 @@ class WorldObject:
         # 明示的に指定がない場合はis_blockingと同じにする
         self._is_blocking_sight = is_blocking_sight if is_blocking_sight is not None else is_blocking
         self._component = component
+        self._busy_until = busy_until
 
     @property
     def object_id(self) -> WorldObjectId:
@@ -81,6 +84,30 @@ class WorldObject:
     def interaction_data(self) -> Dict[str, Any]:
         """インタラクションデータを返す"""
         return self._component.interaction_data if self._component else {}
+
+    @property
+    def interaction_duration(self) -> int:
+        """インタラクションにかかるティック数を返す"""
+        return self._component.interaction_duration if self._component else 1
+
+    @property
+    def busy_until(self) -> Optional[WorldTick]:
+        """アクションが終了するティックを返す"""
+        return self._busy_until
+
+    def is_busy(self, current_tick: WorldTick) -> bool:
+        """指定されたティック時点でビジー状態（アクション中）かどうかを判定する"""
+        if self._busy_until is None:
+            return False
+        return self._busy_until > current_tick
+
+    def set_busy(self, until_tick: WorldTick):
+        """ビジー状態を設定する"""
+        self._busy_until = until_tick
+
+    def clear_busy(self):
+        """ビジー状態を解除する"""
+        self._busy_until = None
 
     def set_blocking(self, is_blocking: bool):
         """ブロッキング状態を更新する（例：ドアが開いた）"""

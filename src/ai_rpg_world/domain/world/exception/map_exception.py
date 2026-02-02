@@ -169,6 +169,11 @@ class PathNotFoundException(MapDomainException, BusinessRuleException):
     error_code = "MAP.PATH_NOT_FOUND"
 
 
+class ActorBusyException(MapDomainException, BusinessRuleException):
+    """アクターがアクション中で操作不能な場合の例外"""
+    error_code = "MAP.ACTOR_BUSY"
+
+
 class PathfindingLimitReachedException(MapDomainException, BusinessRuleException):
     """経路探索の試行回数上限に達した例外"""
     error_code = "MAP.PATHFINDING_LIMIT_REACHED"
