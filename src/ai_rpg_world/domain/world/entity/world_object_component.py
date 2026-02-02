@@ -29,6 +29,30 @@ class WorldObjectComponent(ABC):
     def to_dict(self) -> Dict[str, Any]:
         pass
 
+    @property
+    def capability(self) -> Optional[MovementCapability]:
+        """移動能力を返す（デフォルトはNone）"""
+        return None
+
+    def turn(self, direction: DirectionEnum):
+        """向きを変える（デフォルトは何もしない）"""
+        pass
+
+    @property
+    def is_actor(self) -> bool:
+        """アクターかどうか（デフォルトはFalse）"""
+        return False
+
+    @property
+    def interaction_type(self) -> Optional[str]:
+        """インタラクションタイプを返す（デフォルトはNone）"""
+        return None
+
+    @property
+    def interaction_data(self) -> Dict[str, Any]:
+        """インタラクションデータを返す（デフォルトは空辞書）"""
+        return {}
+
 
 class ChestComponent(WorldObjectComponent):
     """宝箱の機能を持つコンポーネント"""
@@ -89,12 +113,20 @@ class ActorComponent(WorldObjectComponent):
             raise FOVAngleValidationException(f"FOV angle must be between 0 and 360: {fov_angle}")
             
         self.direction = direction
-        self.capability = capability or MovementCapability.normal_walk()
+        self._capability = capability or MovementCapability.normal_walk()
         self.owner_id = owner_id
         self.is_npc = is_npc
         self.fov_angle = fov_angle
         self.race = race
         self.faction = faction
+
+    @property
+    def capability(self) -> MovementCapability:
+        return self._capability
+
+    @property
+    def is_actor(self) -> bool:
+        return True
 
     def get_type_name(self) -> str:
         return "actor"
@@ -103,13 +135,13 @@ class ActorComponent(WorldObjectComponent):
         self.direction = direction
 
     def update_capability(self, capability: MovementCapability):
-        self.capability = capability
+        self._capability = capability
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "direction": self.direction.value,
-            "speed_modifier": self.capability.speed_modifier,
-            "capabilities": [c.value for c in self.capability.capabilities],
+            "speed_modifier": self._capability.speed_modifier,
+            "capabilities": [c.value for c in self._capability.capabilities],
             "owner_id": self.owner_id,
             "is_npc": self.is_npc,
             "fov_angle": self.fov_angle,
@@ -121,15 +153,23 @@ class ActorComponent(WorldObjectComponent):
 class InteractableComponent(WorldObjectComponent):
     """インタラクション（調べる、話しかける等）が可能なコンポーネント"""
     def __init__(self, interaction_type: str, data: Dict[str, Any] = None):
-        self.interaction_type = interaction_type
+        self._interaction_type = interaction_type
         self.data = data or {}
+
+    @property
+    def interaction_type(self) -> str:
+        return self._interaction_type
+
+    @property
+    def interaction_data(self) -> Dict[str, Any]:
+        return self.data
 
     def get_type_name(self) -> str:
         return "interactable"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "interaction_type": self.interaction_type,
+            "interaction_type": self._interaction_type,
             "data": self.data
         }
 

@@ -16,6 +16,7 @@ from ai_rpg_world.domain.world.entity.world_object_component import ActorCompone
 from ai_rpg_world.domain.world.entity.map_trigger import MapTrigger
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.enum.world_enum import MovementCapabilityEnum, DirectionEnum
+from ai_rpg_world.domain.world.service.map_geometry_service import MapGeometryService
 from ai_rpg_world.domain.world.event.map_events import (
     PhysicalMapCreatedEvent,
     WorldObjectStateChangedEvent,
@@ -101,13 +102,8 @@ class PhysicalMapAggregate(AggregateRoot):
         if obj.object_id in self._objects:
             raise DuplicateObjectException(f"Object ID {obj.object_id} already exists")
         
-        # アクターの場合は能力を取得
-        capability = None
-        if obj.component and isinstance(obj.component, ActorComponent):
-            capability = obj.component.capability
-
         # 座標のバリデーション（ブロッキング設定を考慮）
-        self._validate_placement(obj.coordinate, obj.is_blocking, capability)
+        self._validate_placement(obj.coordinate, obj.is_blocking, obj.capability)
         
         # 内部データの更新
         self._objects[obj.object_id] = obj
@@ -118,6 +114,13 @@ class PhysicalMapAggregate(AggregateRoot):
         # オブジェクトによる通行制限を反映
         if obj.is_blocking:
             self._override_tile_walkability(obj.coordinate, False)
+
+    def get_actor(self, object_id: WorldObjectId) -> WorldObject:
+        """指定されたIDのオブジェクトを取得し、アクターであることを保証する"""
+        obj = self.get_object(object_id)
+        if not obj.is_actor:
+            raise NotAnActorException(f"Object {object_id} is not an actor")
+        return obj
 
     def _validate_placement(self, coordinate: Coordinate, is_blocking: bool, capability: Optional[MovementCapability] = None, exclude_object_id: Optional[WorldObjectId] = None):
         """指定された座標にオブジェクトを配置可能かチェックする"""
@@ -413,100 +416,14 @@ class PhysicalMapAggregate(AggregateRoot):
         return found_objects
 
     def is_visible(self, from_coord: Coordinate, to_coord: Coordinate) -> bool:
-        """指定された座標間が互いに視認可能か判定する（3D Bresenham's Line Algorithm）"""
-        if from_coord == to_coord:
-            return True
-
-        # 座標がマップ内にあるかチェック
+        """指定された座標間が互いに視認可能か判定する"""
+        # 座標がマップ内にあるかチェック（元の実装の動作を維持）
         if from_coord not in self._tiles or to_coord not in self._tiles:
             return False
+        return MapGeometryService.is_visible(from_coord, to_coord, self)
 
-        # 3D Bresenham (DDAに近い実装)
-        x1, y1, z1 = from_coord.x, from_coord.y, from_coord.z
-        x2, y2, z2 = to_coord.x, to_coord.y, to_coord.z
-
-        dx = abs(x2 - x1)
-        dy = abs(y2 - y1)
-        dz = abs(z2 - z1)
-
-        xs = 1 if x2 > x1 else -1
-        ys = 1 if y2 > y1 else -1
-        zs = 1 if z2 > z1 else -1
-
-        # 最大の変化量を基準にする
-        if dx >= dy and dx >= dz:
-            # x軸メイン
-            p1 = 2 * dy - dx
-            p2 = 2 * dz - dx
-            while x1 != x2:
-                x1 += xs
-                if p1 >= 0:
-                    y1 += ys
-                    p1 -= 2 * dx
-                if p2 >= 0:
-                    z1 += zs
-                    p2 -= 2 * dx
-                p1 += 2 * dy
-                p2 += 2 * dz
-                if (x1, y1, z1) == (x2, y2, z2):
-                    break
-                if self._is_sight_blocked(Coordinate(x1, y1, z1)):
-                    return False
-        elif dy >= dx and dy >= dz:
-            # y軸メイン
-            p1 = 2 * dx - dy
-            p2 = 2 * dz - dy
-            while y1 != y2:
-                y1 += ys
-                if p1 >= 0:
-                    x1 += xs
-                    p1 -= 2 * dy
-                if p2 >= 0:
-                    z1 += zs
-                    p2 -= 2 * dy
-                p1 += 2 * dx
-                p2 += 2 * dz
-                if (x1, y1, z1) == (x2, y2, z2):
-                    break
-                if self._is_sight_blocked(Coordinate(x1, y1, z1)):
-                    return False
-        else:
-            # z軸メイン
-            p1 = 2 * dx - dz
-            p2 = 2 * dy - dz
-            while z1 != z2:
-                z1 += zs
-                if p1 >= 0:
-                    x1 += xs
-                    p1 -= 2 * dz
-                if p2 >= 0:
-                    y1 += ys
-                    p2 -= 2 * dz
-                p1 += 2 * dx
-                p2 += 2 * dy
-                if (x1, y1, z1) == (x2, y2, z2):
-                    break
-                if self._is_sight_blocked(Coordinate(x1, y1, z1)):
-                    return False
-
-        return True
-
-    def remove_object(self, object_id: WorldObjectId):
-        """オブジェクトをマップから削除する"""
-        obj = self.get_object(object_id)
-        coord = obj.coordinate
-        
-        if obj.is_blocking:
-            self._reset_tile_walkability(coord)
-            
-        self._object_positions[coord].remove(object_id)
-        if not self._object_positions[coord]:
-            del self._object_positions[coord]
-            
-        del self._objects[object_id]
-
-    def _is_sight_blocked(self, coordinate: Coordinate) -> bool:
-        """指定された座標が視線を遮るか判定する"""
+    def is_sight_blocked(self, coordinate: Coordinate) -> bool:
+        """指定された座標が視線を遮るか判定する（VisibilityMapプロトコルの実装）"""
         if coordinate not in self._tiles:
             return False # タイルのない場所（空中など）は透明とみなす
 
@@ -522,33 +439,32 @@ class PhysicalMapAggregate(AggregateRoot):
 
         return False
 
+    def remove_object(self, object_id: WorldObjectId):
+        """オブジェクトをマップから削除する"""
+        obj = self.get_object(object_id)
+        coord = obj.coordinate
+        
+        if obj.is_blocking:
+            self._reset_tile_walkability(coord)
+            
+        self._object_positions[coord].remove(object_id)
+        if not self._object_positions[coord]:
+            del self._object_positions[coord]
+            
+        del self._objects[object_id]
+
     def move_actor(self, object_id: WorldObjectId, direction: DirectionEnum):
         """アクターを指定された方向に1マス移動させる"""
-        obj = self.get_object(object_id)
-        if not isinstance(obj.component, ActorComponent):
-            raise NotAnActorException(f"Object {object_id} is not an actor")
+        actor = self.get_actor(object_id)
         
         # 向きを更新
-        obj.component.turn(direction)
+        actor.turn(direction)
         
         # 移動先の座標を計算
-        curr = obj.coordinate
-        new_coord = curr
-        if direction == DirectionEnum.NORTH:
-            new_coord = Coordinate(curr.x, curr.y - 1, curr.z)
-        elif direction == DirectionEnum.SOUTH:
-            new_coord = Coordinate(curr.x, curr.y + 1, curr.z)
-        elif direction == DirectionEnum.EAST:
-            new_coord = Coordinate(curr.x + 1, curr.y, curr.z)
-        elif direction == DirectionEnum.WEST:
-            new_coord = Coordinate(curr.x - 1, curr.y, curr.z)
-        elif direction == DirectionEnum.UP:
-            new_coord = Coordinate(curr.x, curr.y, curr.z + 1)
-        elif direction == DirectionEnum.DOWN:
-            new_coord = Coordinate(curr.x, curr.y, curr.z - 1)
+        new_coord = actor.coordinate.neighbor(direction)
             
         # 移動実行（能力を考慮）
-        self.move_object(object_id, new_coord, obj.component.capability)
+        self.move_object(object_id, new_coord, actor.capability)
 
     def add_area_trigger(self, trigger: AreaTrigger):
         """エリアトリガーを追加する"""
@@ -598,11 +514,8 @@ class PhysicalMapAggregate(AggregateRoot):
 
     def interact_with(self, actor_id: WorldObjectId, target_id: WorldObjectId):
         """アクターがターゲットのオブジェクトに対してインタラクションを行う"""
-        actor = self.get_object(actor_id)
+        actor = self.get_actor(actor_id)
         target = self.get_object(target_id)
-
-        if not isinstance(actor.component, ActorComponent):
-            raise NotAnActorException(f"Object {actor_id} is not an actor")
 
         # 1. 距離チェック（隣接または同じマス）
         distance = actor.coordinate.distance_to(target.coordinate)
@@ -611,17 +524,14 @@ class PhysicalMapAggregate(AggregateRoot):
 
         # 2. 向きチェック（ターゲットが隣接している場合、その方向を向いている必要がある）
         if distance == 1:
-            expected_direction = self._get_direction_to(actor.coordinate, target.coordinate)
-            if actor.component.direction != expected_direction:
+            expected_direction = actor.coordinate.direction_to(target.coordinate)
+            if actor.direction != expected_direction:
                 raise NotFacingTargetException(f"Actor {actor_id} is not facing target {target_id}")
 
         # 3. インタラクション可能性チェック
-        interactable = None
-        if isinstance(target.component, InteractableComponent):
-            interactable = target.component
-        
-        if not interactable:
-            raise NotInteractableException(f"Target {target_id} has no interactable component")
+        interaction_type = target.interaction_type
+        if not interaction_type:
+            raise NotInteractableException(f"Target {target_id} is not interactable")
 
         # インタラクション成功イベントを発行
         self.add_event(WorldObjectInteractedEvent.create(
@@ -629,25 +539,9 @@ class PhysicalMapAggregate(AggregateRoot):
             aggregate_type="WorldObject",
             actor_id=actor_id,
             target_id=target_id,
-            interaction_type=interactable.interaction_type,
-            data=interactable.data
+            interaction_type=interaction_type,
+            data=target.interaction_data
         ))
-
-    def _get_direction_to(self, from_coord: Coordinate, to_coord: Coordinate) -> DirectionEnum:
-        """from_coordからto_coordへの方向を取得する（隣接している前提）"""
-        dx = to_coord.x - from_coord.x
-        dy = to_coord.y - from_coord.y
-        dz = to_coord.z - from_coord.z
-
-        if dz > 0: return DirectionEnum.UP
-        if dz < 0: return DirectionEnum.DOWN
-        if dx > 0: return DirectionEnum.EAST
-        if dx < 0: return DirectionEnum.WEST
-        if dy > 0: return DirectionEnum.SOUTH
-        if dy < 0: return DirectionEnum.NORTH
-        
-        # 同じマスの場合は方向を定義できないため例外を投げる
-        raise SameCoordinateDirectionException(f"Cannot determine direction for the same coordinate: {from_coord}")
 
     def check_and_activate_trigger(self, coordinate: Coordinate, object_id: Optional[WorldObjectId] = None) -> Optional[MapTrigger]:
         """

@@ -82,3 +82,43 @@ class TestCoordinate:
             coord.x = 2
         with pytest.raises(AttributeError):
             coord.y = 2
+
+    def test_euclidean_distance_to(self):
+        """ユークリッド距離が正しく計算されること"""
+        c1 = Coordinate(0, 0, 0)
+        c2 = Coordinate(3, 4, 0)
+        assert c1.euclidean_distance_to(c2) == 5.0
+        
+        c3 = Coordinate(1, 1, 1)
+        c4 = Coordinate(2, 2, 2)
+        # sqrt(1^2 + 1^2 + 1^2) = sqrt(3)
+        assert c3.euclidean_distance_to(c4) == pytest.approx(1.7320508)
+
+    def test_neighbor(self):
+        """隣接座標の取得が正しく動作すること"""
+        from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+        coord = Coordinate(1, 1, 1)
+        
+        assert coord.neighbor(DirectionEnum.NORTH) == Coordinate(1, 0, 1)
+        assert coord.neighbor(DirectionEnum.SOUTH) == Coordinate(1, 2, 1)
+        assert coord.neighbor(DirectionEnum.EAST) == Coordinate(2, 1, 1)
+        assert coord.neighbor(DirectionEnum.WEST) == Coordinate(0, 1, 1)
+        assert coord.neighbor(DirectionEnum.UP) == Coordinate(1, 1, 2)
+        assert coord.neighbor(DirectionEnum.DOWN) == Coordinate(1, 1, 0)
+
+    def test_direction_to(self):
+        """別の座標への方向取得が正しく動作すること"""
+        from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+        from ai_rpg_world.domain.world.exception.map_exception import SameCoordinateDirectionException
+        
+        c = Coordinate(1, 1, 1)
+        
+        assert c.direction_to(Coordinate(1, 0, 1)) == DirectionEnum.NORTH
+        assert c.direction_to(Coordinate(1, 2, 1)) == DirectionEnum.SOUTH
+        assert c.direction_to(Coordinate(2, 1, 1)) == DirectionEnum.EAST
+        assert c.direction_to(Coordinate(0, 1, 1)) == DirectionEnum.WEST
+        assert c.direction_to(Coordinate(1, 1, 2)) == DirectionEnum.UP
+        assert c.direction_to(Coordinate(1, 1, 0)) == DirectionEnum.DOWN
+        
+        with pytest.raises(SameCoordinateDirectionException):
+            c.direction_to(c)
