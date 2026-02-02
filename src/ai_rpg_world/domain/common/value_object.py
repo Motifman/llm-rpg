@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any
 
 @dataclass(frozen=True)
 class Exp:
@@ -77,3 +78,53 @@ class Level:
 
     def __repr__(self) -> str:
         return f"Level({self.value})"
+
+
+@dataclass(frozen=True)
+class WorldTick:
+    """ワールド内の時間を表す最小単位（ティック）"""
+    value: int
+
+    def __post_init__(self):
+        if self.value < 0:
+            raise ValueError(f"Invalid tick: {self.value}")
+
+    def next(self) -> "WorldTick":
+        """次のティックを返す"""
+        return WorldTick(self.value + 1)
+
+    def add_duration(self, duration: int) -> "WorldTick":
+        """期間（ティック数）を加算する"""
+        if duration < 0:
+            raise ValueError(f"Duration cannot be negative: {duration}")
+        return WorldTick(self.value + duration)
+
+    def __add__(self, other: Any) -> "WorldTick":
+        if isinstance(other, int):
+            return self.add_duration(other)
+        if isinstance(other, WorldTick):
+            return self.add_duration(other.value)
+        return NotImplemented
+
+    def __sub__(self, other: "WorldTick") -> int:
+        if not isinstance(other, WorldTick):
+            return NotImplemented
+        return self.value - other.value
+
+    def __gt__(self, other: "WorldTick") -> bool:
+        return self.value > other.value
+
+    def __ge__(self, other: "WorldTick") -> bool:
+        return self.value >= other.value
+
+    def __lt__(self, other: "WorldTick") -> bool:
+        return self.value < other.value
+
+    def __le__(self, other: "WorldTick") -> bool:
+        return self.value <= other.value
+
+    def __str__(self) -> str:
+        return str(self.value)
+
+    def __repr__(self) -> str:
+        return f"WorldTick({self.value})"

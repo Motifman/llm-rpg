@@ -98,3 +98,25 @@ class TestWorldObject:
         assert obj.direction is None
         assert obj.interaction_type is None
         assert obj.interaction_data == {}
+
+    def test_busy_state(self):
+        """ビジー状態の管理が正しく動作すること"""
+        from ai_rpg_world.domain.common.value_object import WorldTick
+        
+        obj = WorldObject(WorldObjectId(1), Coordinate(1, 1), ObjectTypeEnum.PLAYER)
+        
+        # 初期状態はビジーではない
+        assert obj.busy_until is None
+        assert obj.is_busy(WorldTick(10)) is False
+        
+        # ビジー状態を設定
+        obj.set_busy(WorldTick(20))
+        assert obj.busy_until == WorldTick(20)
+        assert obj.is_busy(WorldTick(10)) is True
+        assert obj.is_busy(WorldTick(19)) is True
+        assert obj.is_busy(WorldTick(20)) is False # 20時点で完了
+        
+        # ビジー解除
+        obj.clear_busy()
+        assert obj.busy_until is None
+        assert obj.is_busy(WorldTick(10)) is False

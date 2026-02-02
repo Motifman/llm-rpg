@@ -324,7 +324,8 @@ class BehaviorService:
                 map_data=map_aggregate,
                 capability=component.capability,
                 allow_partial_path=True,
-                smooth_path=False
+                smooth_path=False,
+                exclude_object_id=actor.object_id
             )
             
             if len(path) > 1:

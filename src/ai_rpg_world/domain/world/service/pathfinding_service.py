@@ -1,8 +1,11 @@
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.service.pathfinding_strategy import PathfindingStrategy, PathfindingMap
 from ai_rpg_world.domain.world.exception.map_exception import PathNotFoundException, InvalidPathRequestException
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class PathfindingService:
@@ -20,7 +23,8 @@ class PathfindingService:
         ignore_errors: bool = False,
         max_iterations: int = 1000,
         allow_partial_path: bool = False,
-        smooth_path: bool = True
+        smooth_path: bool = True,
+        exclude_object_id: Optional["WorldObjectId"] = None
     ) -> List[Coordinate]:
         """
         開始地点から目標地点までの経路を算出する。
@@ -43,10 +47,10 @@ class PathfindingService:
             PathNotFoundException: 経路が見つからない場合（ignore_errors=Falseの場合）
         """
         # バリデーション
-        if not map_data.is_passable(start, capability):
+        if not map_data.is_passable(start, capability, exclude_object_id=exclude_object_id):
             raise InvalidPathRequestException(f"Start point {start} is not passable with given capability")
         
-        if not map_data.is_passable(goal, capability) and not allow_partial_path:
+        if not map_data.is_passable(goal, capability, exclude_object_id=exclude_object_id) and not allow_partial_path:
             raise InvalidPathRequestException(f"Goal point {goal} is not passable with given capability")
 
         if start == goal:
@@ -58,7 +62,8 @@ class PathfindingService:
             map_data, 
             capability, 
             max_iterations=max_iterations, 
-            allow_partial_path=allow_partial_path
+            allow_partial_path=allow_partial_path,
+            exclude_object_id=exclude_object_id
         )
         
         if not path:

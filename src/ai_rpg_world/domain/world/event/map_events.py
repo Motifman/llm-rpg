@@ -10,6 +10,7 @@ from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
 from ai_rpg_world.domain.world.enum.world_enum import TerrainTypeEnum, TriggerTypeEnum, ObjectTypeEnum
+from ai_rpg_world.domain.common.value_object import WorldTick
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ class WorldObjectMovedEvent(BaseDomainEvent[WorldObjectId, str]):
     object_id: WorldObjectId
     from_coordinate: Coordinate
     to_coordinate: Coordinate
+    arrival_tick: Optional[WorldTick] = None
 
 
 @dataclass(frozen=True)
