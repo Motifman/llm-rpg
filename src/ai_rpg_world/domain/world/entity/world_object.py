@@ -1,8 +1,12 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TYPE_CHECKING
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
 from ai_rpg_world.domain.world.entity.world_object_component import WorldObjectComponent
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+    from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 
 
 class WorldObject:
@@ -47,6 +51,36 @@ class WorldObject:
     @property
     def component(self) -> Optional[WorldObjectComponent]:
         return self._component
+
+    @property
+    def is_actor(self) -> bool:
+        """アクターかどうか"""
+        return self._component.is_actor if self._component else False
+
+    @property
+    def capability(self) -> Optional["MovementCapability"]:
+        """移動能力を返す"""
+        return self._component.capability if self._component else None
+
+    def turn(self, direction: "DirectionEnum"):
+        """向きを変える"""
+        if self._component:
+            self._component.turn(direction)
+
+    @property
+    def direction(self) -> Optional["DirectionEnum"]:
+        """向きを返す"""
+        return getattr(self._component, "direction", None) if self._component else None
+
+    @property
+    def interaction_type(self) -> Optional[str]:
+        """インタラクションタイプを返す"""
+        return self._component.interaction_type if self._component else None
+
+    @property
+    def interaction_data(self) -> Dict[str, Any]:
+        """インタラクションデータを返す"""
+        return self._component.interaction_data if self._component else {}
 
     def set_blocking(self, is_blocking: bool):
         """ブロッキング状態を更新する（例：ドアが開いた）"""

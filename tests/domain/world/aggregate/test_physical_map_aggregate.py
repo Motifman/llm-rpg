@@ -568,9 +568,30 @@ class TestPhysicalMapAggregate:
 
         def test_get_direction_to_same_coordinate_raises_error(self, aggregate):
             coord = Coordinate(0, 0, 0)
-            # 内部メソッドだが方向計算の不変性を担保するためにテスト
             with pytest.raises(SameCoordinateDirectionException):
-                aggregate._get_direction_to(coord, coord)
+                coord.direction_to(coord)
+
+        def test_get_actor_success(self, aggregate):
+            # Given
+            obj_id = WorldObjectId(1)
+            actor = ActorComponent()
+            aggregate.add_object(WorldObject(obj_id, Coordinate(0, 0, 0), ObjectTypeEnum.PLAYER, component=actor))
+            
+            # When
+            obj = aggregate.get_actor(obj_id)
+            
+            # Then
+            assert obj.object_id == obj_id
+            assert obj.is_actor is True
+
+        def test_get_actor_raises_error_for_non_actor(self, aggregate):
+            # Given
+            obj_id = WorldObjectId(1)
+            aggregate.add_object(WorldObject(obj_id, Coordinate(0, 0, 0), ObjectTypeEnum.CHEST))
+            
+            # When & Then
+            with pytest.raises(NotAnActorException):
+                aggregate.get_actor(obj_id)
 
     class TestBugFixes:
         def test_move_object_from_wall_stays_impassable(self, spot_id):

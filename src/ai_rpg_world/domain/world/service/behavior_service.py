@@ -120,7 +120,7 @@ class BehaviorService:
                 continue
                 
             # アクター（プレイヤー含む）のみを対象とする
-            if not isinstance(obj.component, ActorComponent):
+            if not obj.is_actor:
                 continue
 
             # 敵対関係チェック
@@ -139,11 +139,7 @@ class BehaviorService:
             return None
             
         # 最も近い敵対オブジェクトを選択
-        return min(visible_hostiles, key=lambda p: self._calculate_distance(actor.coordinate, p.coordinate))
-
-    def _calculate_distance(self, c1: Coordinate, c2: Coordinate) -> float:
-        """2つの座標間の距離を計算（Z軸も考慮）"""
-        return math.sqrt((c1.x - c2.x)**2 + (c1.y - c2.y)**2 + (c1.z - c2.z)**2)
+        return min(visible_hostiles, key=lambda p: actor.coordinate.euclidean_distance_to(p.coordinate))
 
     def _is_within_fov(
         self, 
@@ -227,7 +223,7 @@ class BehaviorService:
     ) -> Optional[Coordinate]:
         """ターゲットから最も遠ざかる通行可能な座標を探す"""
         best_coord = None
-        max_dist = self._calculate_distance(actor.coordinate, enemy_coord)
+        max_dist = actor.coordinate.euclidean_distance_to(enemy_coord)
         
         # 視界範囲の端あたりの座標をいくつかサンプリングする
         # (全タイルを走査するのは重いため、円周上の8方向+αを確認)
@@ -246,7 +242,7 @@ class BehaviorService:
             if not map_aggregate.is_passable(sample, component.capability):
                 continue
             
-            dist = self._calculate_distance(sample, enemy_coord)
+            dist = sample.euclidean_distance_to(enemy_coord)
             if dist > max_dist:
                 max_dist = dist
                 best_coord = sample

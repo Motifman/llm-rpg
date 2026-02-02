@@ -158,13 +158,13 @@ class TestBehaviorService:
             map_aggregate.add_object(player)
 
             # 実行
-            initial_dist = behavior_service._calculate_distance(monster.coordinate, player_coord)
+            initial_dist = monster.coordinate.euclidean_distance_to(player_coord)
             next_move = behavior_service.plan_next_move(monster_id, map_aggregate)
 
             assert comp.state == BehaviorStateEnum.FLEE
             assert next_move is not None
             
-            new_dist = behavior_service._calculate_distance(next_move, player_coord)
+            new_dist = next_move.euclidean_distance_to(player_coord)
             assert new_dist > initial_dist
 
         def test_search_logic(self, behavior_service, map_aggregate):
