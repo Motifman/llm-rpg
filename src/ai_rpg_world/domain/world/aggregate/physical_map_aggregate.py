@@ -49,8 +49,10 @@ from ai_rpg_world.domain.world.exception.map_exception import (
     DuplicateLocationAreaException,
     LocationAreaNotFoundException,
     DuplicateGatewayException,
-    GatewayNotFoundException
+    GatewayNotFoundException,
+    ActorBusyException
 )
+from ai_rpg_world.domain.common.value_object import WorldTick
 
 
 class PhysicalMapAggregate(AggregateRoot):
@@ -152,7 +154,7 @@ class PhysicalMapAggregate(AggregateRoot):
                 if any(o.is_blocking for o in existing_objects):
                     raise InvalidPlacementException(f"Cannot enter {coordinate} because it is blocked by another object")
 
-    def is_passable(self, coordinate: Coordinate, capability: MovementCapability) -> bool:
+    def is_passable(self, coordinate: Coordinate, capability: MovementCapability, exclude_object_id: Optional[WorldObjectId] = None) -> bool:
         """指定された座標が特定のアクター能力で通行可能か判定する"""
         try:
             tile = self.get_tile(coordinate)
@@ -161,7 +163,11 @@ class PhysicalMapAggregate(AggregateRoot):
                 return False
             # オブジェクトによるブロッキング
             if coordinate in self._object_positions:
-                existing_objects = [self._objects[oid] for oid in self._object_positions[coordinate]]
+                # 指定されたアクター以外のブロッキングオブジェクトをチェック
+                existing_objects = [
+                    self._objects[oid] for oid in self._object_positions[coordinate] 
+                    if oid != exclude_object_id
+                ]
                 if any(o.is_blocking for o in existing_objects):
                     if not capability.has_capability(MovementCapabilityEnum.GHOST_WALK):
                         return False
@@ -171,9 +177,9 @@ class PhysicalMapAggregate(AggregateRoot):
         except TileNotFoundException:
             return False
 
-    def get_movement_cost(self, coordinate: Coordinate, capability: MovementCapability) -> float:
+    def get_movement_cost(self, coordinate: Coordinate, capability: MovementCapability, exclude_object_id: Optional[WorldObjectId] = None) -> float:
         """指定された座標の移動コストを計算する。通行不可の場合は無限大を返す。"""
-        if not self.is_passable(coordinate, capability):
+        if not self.is_passable(coordinate, capability, exclude_object_id=exclude_object_id):
             return float('inf')
         
         tile = self.get_tile(coordinate)
@@ -182,6 +188,11 @@ class PhysicalMapAggregate(AggregateRoot):
     @property
     def spot_id(self) -> SpotId:
         return self._spot_id
+
+    @property
+    def actors(self) -> List[WorldObject]:
+        """マップ上の全アクターを取得する"""
+        return [obj for obj in self._objects.values() if obj.is_actor]
 
     def get_tile(self, coordinate: Coordinate) -> Tile:
         if coordinate not in self._tiles:
@@ -225,19 +236,37 @@ class PhysicalMapAggregate(AggregateRoot):
             is_blocking=is_blocking
         ))
 
-    def move_object(self, object_id: WorldObjectId, new_coordinate: Coordinate, capability: Optional[MovementCapability] = None):
+    def move_object(self, object_id: WorldObjectId, new_coordinate: Coordinate, current_tick: WorldTick, capability: Optional[MovementCapability] = None):
         obj = self.get_object(object_id)
+        
+        # 1. ビジー状態のチェック
+        if obj.is_busy(current_tick):
+            raise ActorBusyException(f"Object {object_id} is busy until {obj.busy_until}")
+
         old_coordinate = obj.coordinate
         
         if old_coordinate == new_coordinate:
             return
 
         # 移動先のバリデーション
+        # 移動能力の解決（指定がない場合はオブジェクトの能力、それもなければ通常歩行）
+        actual_capability = capability or obj.capability or MovementCapability.normal_walk()
+        
         try:
-            self._validate_placement(new_coordinate, obj.is_blocking, capability, exclude_object_id=object_id)
+            self._validate_placement(new_coordinate, obj.is_blocking, actual_capability, exclude_object_id=object_id)
         except (InvalidPlacementException, DuplicateObjectException) as e:
             raise InvalidMovementException(f"Cannot move object to {new_coordinate}: {str(e)}")
             
+        # 2. 移動にかかるティック数を計算（コストに基づく）
+        # 移動先タイルのコストを取得
+        cost = self.get_movement_cost(new_coordinate, actual_capability, exclude_object_id=object_id)
+        
+        # 基本倍率（例：1.0コスト = 1ティック）
+        # 小数点以下は切り上げ
+        import math
+        travel_ticks = max(1, math.ceil(cost))
+        
+        # 3. 状態の更新
         # 物理マップの通行可能性（オブジェクトによる上書き）の更新
         if obj.is_blocking:
             self._reset_tile_walkability(old_coordinate)
@@ -252,14 +281,17 @@ class PhysicalMapAggregate(AggregateRoot):
             self._object_positions[new_coordinate] = []
         self._object_positions[new_coordinate].append(object_id)
         
+        # オブジェクトの座標更新とビジー設定
         obj.move_to(new_coordinate)
+        obj.set_busy(current_tick.add_duration(travel_ticks))
         
         self.add_event(WorldObjectMovedEvent.create(
             aggregate_id=object_id,
             aggregate_type="WorldObject",
             object_id=object_id,
             from_coordinate=old_coordinate,
-            to_coordinate=new_coordinate
+            to_coordinate=new_coordinate,
+            arrival_tick=obj.busy_until
         ))
 
         # エリアトリガーの判定
@@ -453,7 +485,7 @@ class PhysicalMapAggregate(AggregateRoot):
             
         del self._objects[object_id]
 
-    def move_actor(self, object_id: WorldObjectId, direction: DirectionEnum):
+    def move_actor(self, object_id: WorldObjectId, direction: DirectionEnum, current_tick: WorldTick):
         """アクターを指定された方向に1マス移動させる"""
         actor = self.get_actor(object_id)
         
@@ -464,7 +496,7 @@ class PhysicalMapAggregate(AggregateRoot):
         new_coord = actor.coordinate.neighbor(direction)
             
         # 移動実行（能力を考慮）
-        self.move_object(object_id, new_coord, actor.capability)
+        self.move_object(object_id, new_coord, current_tick, actor.capability)
 
     def add_area_trigger(self, trigger: AreaTrigger):
         """エリアトリガーを追加する"""
@@ -512,10 +544,26 @@ class PhysicalMapAggregate(AggregateRoot):
             raise GatewayNotFoundException(f"Gateway with ID {gateway_id} not found")
         return self._gateways[gateway_id]
 
-    def interact_with(self, actor_id: WorldObjectId, target_id: WorldObjectId):
+    def perform_action(self, object_id: WorldObjectId, duration: int, current_tick: WorldTick):
+        """オブジェクトに時間のかかるアクションを実行させる"""
+        obj = self.get_object(object_id)
+        
+        if obj.is_busy(current_tick):
+            raise ActorBusyException(f"Object {object_id} is busy until {obj.busy_until}")
+            
+        if duration < 0:
+            raise ValueError(f"Duration cannot be negative: {duration}")
+            
+        obj.set_busy(current_tick.add_duration(duration))
+
+    def interact_with(self, actor_id: WorldObjectId, target_id: WorldObjectId, current_tick: WorldTick):
         """アクターがターゲットのオブジェクトに対してインタラクションを行う"""
         actor = self.get_actor(actor_id)
         target = self.get_object(target_id)
+
+        # 0. ビジー状態のチェック
+        if actor.is_busy(current_tick):
+            raise ActorBusyException(f"Actor {actor_id} is busy until {actor.busy_until}")
 
         # 1. 距離チェック（隣接または同じマス）
         distance = actor.coordinate.distance_to(target.coordinate)
@@ -542,6 +590,10 @@ class PhysicalMapAggregate(AggregateRoot):
             interaction_type=interaction_type,
             data=target.interaction_data
         ))
+
+        # アクターをビジー状態にする
+        duration = target.interaction_duration
+        actor.set_busy(current_tick.add_duration(duration))
 
     def check_and_activate_trigger(self, coordinate: Coordinate, object_id: Optional[WorldObjectId] = None) -> Optional[MapTrigger]:
         """

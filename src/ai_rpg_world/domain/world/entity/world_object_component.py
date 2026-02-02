@@ -53,6 +53,11 @@ class WorldObjectComponent(ABC):
         """インタラクションデータを返す（デフォルトは空辞書）"""
         return {}
 
+    @property
+    def interaction_duration(self) -> int:
+        """インタラクションにかかるティック数（デフォルトは1）"""
+        return 1
+
 
 class ChestComponent(WorldObjectComponent):
     """宝箱の機能を持つコンポーネント"""
@@ -152,9 +157,10 @@ class ActorComponent(WorldObjectComponent):
 
 class InteractableComponent(WorldObjectComponent):
     """インタラクション（調べる、話しかける等）が可能なコンポーネント"""
-    def __init__(self, interaction_type: str, data: Dict[str, Any] = None):
+    def __init__(self, interaction_type: str, data: Dict[str, Any] = None, duration: int = 1):
         self._interaction_type = interaction_type
         self.data = data or {}
+        self._duration = duration
 
     @property
     def interaction_type(self) -> str:
@@ -163,6 +169,10 @@ class InteractableComponent(WorldObjectComponent):
     @property
     def interaction_data(self) -> Dict[str, Any]:
         return self.data
+
+    @property
+    def interaction_duration(self) -> int:
+        return self._duration
 
     def get_type_name(self) -> str:
         return "interactable"

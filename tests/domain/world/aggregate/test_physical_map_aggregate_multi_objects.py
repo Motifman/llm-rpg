@@ -7,6 +7,7 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.exception.map_exception import (
     DuplicateObjectException,
     InvalidPlacementException,
@@ -67,7 +68,7 @@ class TestPhysicalMapAggregateMultiObjects:
         aggregate.add_object(WorldObject(p1_id, Coordinate(0, 0, 0), ObjectTypeEnum.PLAYER, is_blocking=False))
         
         with pytest.raises(InvalidMovementException, match="blocked by another object"):
-            aggregate.move_object(p1_id, coord)
+            aggregate.move_object(p1_id, coord, WorldTick(10))
 
     def test_cannot_set_object_to_blocking_if_sharing_coordinate(self, aggregate):
         # Given: Two players at (2,2)
