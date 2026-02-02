@@ -43,7 +43,8 @@ class TestPathfindingService:
             mock_map, 
             capability, 
             max_iterations=1000, 
-            allow_partial_path=False
+            allow_partial_path=False,
+            exclude_object_id=None
         )
 
     def test_calculate_path_same_start_goal(self, service, mock_strategy, mock_map, capability):
@@ -62,7 +63,7 @@ class TestPathfindingService:
         start = Coordinate(0, 0)
         goal = Coordinate(1, 1)
         
-        mock_map.is_passable.side_effect = lambda c, cap: c != start
+        mock_map.is_passable.side_effect = lambda c, cap, **kwargs: c != start
         
         with pytest.raises(InvalidPathRequestException) as exc:
             service.calculate_path(start, goal, mock_map, capability)
@@ -73,7 +74,7 @@ class TestPathfindingService:
         start = Coordinate(0, 0)
         goal = Coordinate(1, 1)
         
-        mock_map.is_passable.side_effect = lambda c, cap: c != goal
+        mock_map.is_passable.side_effect = lambda c, cap, **kwargs: c != goal
         
         with pytest.raises(InvalidPathRequestException) as exc:
             service.calculate_path(start, goal, mock_map, capability)

@@ -12,6 +12,7 @@ from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
 from ai_rpg_world.domain.world.value_object.area import RectArea
 from ai_rpg_world.domain.world.entity.location_area import LocationArea
 from ai_rpg_world.domain.world.entity.gateway import Gateway
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.event.map_events import (
     LocationEnteredEvent,
     LocationExitedEvent,
@@ -88,7 +89,7 @@ class TestPhysicalMapAggregateLocationGateway:
             aggregate.clear_events()
             
             # When: Move into the location area
-            aggregate.move_object(obj_id, Coordinate(2, 2, 0))
+            aggregate.move_object(obj_id, Coordinate(2, 2, 0), WorldTick(10))
             
             # Then
             events = aggregate.get_events()
@@ -110,7 +111,7 @@ class TestPhysicalMapAggregateLocationGateway:
             aggregate.clear_events()
             
             # When: Move out of the location area
-            aggregate.move_object(obj_id, Coordinate(1, 1, 0))
+            aggregate.move_object(obj_id, Coordinate(1, 1, 0), WorldTick(10))
             
             # Then
             events = aggregate.get_events()
@@ -152,7 +153,7 @@ class TestPhysicalMapAggregateLocationGateway:
             aggregate.clear_events()
             
             # When: Move into the gateway area
-            aggregate.move_object(obj_id, Coordinate(4, 4, 0))
+            aggregate.move_object(obj_id, Coordinate(4, 4, 0), WorldTick(10))
             
             # Then
             events = aggregate.get_events()
@@ -175,7 +176,7 @@ class TestPhysicalMapAggregateLocationGateway:
             aggregate.clear_events()
             
             # When
-            aggregate.move_object(obj_id, Coordinate(2, 2, 0))
+            aggregate.move_object(obj_id, Coordinate(2, 2, 0), WorldTick(10))
             
             # Then
             assert not any(isinstance(e, LocationEnteredEvent) for e in aggregate.get_events())
@@ -191,7 +192,7 @@ class TestPhysicalMapAggregateLocationGateway:
             aggregate.clear_events()
             
             # When
-            aggregate.move_object(obj_id, Coordinate(2, 2, 0))
+            aggregate.move_object(obj_id, Coordinate(2, 2, 0), WorldTick(10))
             
             # Then
             assert not any(isinstance(e, GatewayTriggeredEvent) for e in aggregate.get_events())
@@ -208,7 +209,7 @@ class TestPhysicalMapAggregateLocationGateway:
             aggregate.clear_events()
             
             # When
-            aggregate.move_object(obj_id, Coordinate(2, 2, 0))
+            aggregate.move_object(obj_id, Coordinate(2, 2, 0), WorldTick(10))
             
             # Then
             events = [e for e in aggregate.get_events() if isinstance(e, LocationEnteredEvent)]

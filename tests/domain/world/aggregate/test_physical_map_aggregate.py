@@ -15,6 +15,7 @@ from ai_rpg_world.domain.world.exception.map_exception import (
     InvalidPlacementException,
     InvalidMovementException,
     NotAnActorException,
+    ActorBusyException,
     DuplicateAreaTriggerException,
     AreaTriggerNotFoundException,
     InteractionOutOfRangeException,
@@ -40,6 +41,7 @@ from ai_rpg_world.domain.world.event.map_events import (
 )
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.entity.map_trigger import WarpTrigger, DamageTrigger
+from ai_rpg_world.domain.common.value_object import WorldTick
 
 
 class TestPhysicalMapAggregate:
@@ -159,7 +161,7 @@ class TestPhysicalMapAggregate:
             ghost_cap = MovementCapability.ghost()
             
             # When
-            aggregate.move_object(obj_id, Coordinate(1, 1), ghost_cap)
+            aggregate.move_object(obj_id, Coordinate(1, 1), WorldTick(10), ghost_cap)
             
             # Then
             assert aggregate.get_object(obj_id).coordinate == Coordinate(1, 1)
@@ -179,7 +181,7 @@ class TestPhysicalMapAggregate:
             
             # When & Then
             with pytest.raises(InvalidMovementException):
-                aggregate.move_object(obj_id, Coordinate(1, 1), normal_cap)
+                aggregate.move_object(obj_id, Coordinate(1, 1), WorldTick(10), normal_cap)
 
         def test_is_passable_checks_object_blocking(self, aggregate):
             # Given
@@ -216,7 +218,7 @@ class TestPhysicalMapAggregate:
             aggregate.add_object(WorldObject(obj_id, Coordinate(1, 1, 0), ObjectTypeEnum.PLAYER, component=actor_comp))
             
             # When
-            aggregate.move_actor(obj_id, DirectionEnum.EAST)
+            aggregate.move_actor(obj_id, DirectionEnum.EAST, WorldTick(10))
             
             # Then
             assert aggregate.get_object(obj_id).coordinate == Coordinate(2, 1, 0)
@@ -273,17 +275,54 @@ class TestPhysicalMapAggregate:
             obj = WorldObject(obj_id, start_coord, ObjectTypeEnum.SIGN, is_blocking=True)
             aggregate._add_object_to_internal_storage(obj)
             aggregate.clear_events()
+            current_tick = WorldTick(10)
             
             # When
-            aggregate.move_object(obj_id, end_coord)
+            aggregate.move_object(obj_id, end_coord, current_tick)
             
             # Then
             assert aggregate.get_object(obj_id).coordinate == end_coord
             assert aggregate.is_walkable(start_coord) is True
             assert aggregate.is_walkable(end_coord) is False
             
+            # ビジー状態の確認
+            assert obj.is_busy(current_tick) is True
+            # Roadのコストは1.0なので、10 + 1 = 11になるはず
+            assert obj.busy_until == WorldTick(11)
+
             events = aggregate.get_events()
             assert any(isinstance(e, WorldObjectMovedEvent) for e in events)
+            move_event = [e for e in events if isinstance(e, WorldObjectMovedEvent)][0]
+            assert move_event.arrival_tick == WorldTick(11)
+
+        def test_move_fails_when_busy(self, aggregate):
+            # Given
+            obj_id = WorldObjectId(1)
+            obj = WorldObject(obj_id, Coordinate(0, 0), ObjectTypeEnum.SIGN, busy_until=WorldTick(20))
+            aggregate._add_object_to_internal_storage(obj)
+            
+            # When & Then
+            with pytest.raises(ActorBusyException):
+                aggregate.move_object(obj_id, Coordinate(1, 1), WorldTick(15))
+
+        def test_move_cost_affects_busy_duration(self, spot_id):
+            # Given: Swamp (cost 5.0)
+            tiles = [
+                Tile(Coordinate(0, 0), TerrainType.road()),
+                Tile(Coordinate(0, 1), TerrainType.swamp())
+            ]
+            aggregate = PhysicalMapAggregate.create(spot_id, tiles)
+            obj_id = WorldObjectId(1)
+            obj = WorldObject(obj_id, Coordinate(0, 0), ObjectTypeEnum.PLAYER)
+            aggregate.add_object(obj)
+            current_tick = WorldTick(10)
+            
+            # When
+            aggregate.move_object(obj_id, Coordinate(0, 1), current_tick)
+            
+            # Then
+            # Swamp cost 5.0 -> 10 + 5 = 15
+            assert obj.busy_until == WorldTick(15)
 
         def test_move_to_same_position_does_nothing(self, aggregate):
             obj_id = WorldObjectId(1)
@@ -292,7 +331,7 @@ class TestPhysicalMapAggregate:
             aggregate._add_object_to_internal_storage(obj)
             aggregate.clear_events()
             
-            aggregate.move_object(obj_id, coord)
+            aggregate.move_object(obj_id, coord, WorldTick(10))
             
             assert len(aggregate.get_events()) == 0
 
@@ -303,7 +342,7 @@ class TestPhysicalMapAggregate:
             aggregate._add_object_to_internal_storage(obj2)
             
             with pytest.raises(InvalidMovementException):
-                aggregate.move_object(WorldObjectId(1), Coordinate(1, 1))
+                aggregate.move_object(WorldObjectId(1), Coordinate(1, 1), WorldTick(10))
 
         def test_move_to_wall_raises_error(self, spot_id):
             tiles = [
@@ -315,7 +354,7 @@ class TestPhysicalMapAggregate:
             aggregate._add_object_to_internal_storage(WorldObject(obj_id, Coordinate(0, 0), ObjectTypeEnum.CHEST))
             
             with pytest.raises(InvalidMovementException):
-                aggregate.move_object(obj_id, Coordinate(1, 1))
+                aggregate.move_object(obj_id, Coordinate(1, 1), WorldTick(10))
 
     class TestSetObjectBlocking:
         def test_set_blocking_updates_walkability(self, aggregate):
@@ -514,7 +553,7 @@ class TestPhysicalMapAggregate:
             aggregate.clear_events()
             
             # When
-            aggregate.move_object(obj_id, Coordinate(1, 1, 0))
+            aggregate.move_object(obj_id, Coordinate(1, 1, 0), WorldTick(10))
             
             # Then
             events = aggregate.get_events()
@@ -532,7 +571,7 @@ class TestPhysicalMapAggregate:
             aggregate.clear_events()
             
             # When
-            aggregate.move_object(obj_id, Coordinate(1, 1, 0))
+            aggregate.move_object(obj_id, Coordinate(1, 1, 0), WorldTick(10))
             
             # Then
             events = aggregate.get_events()
@@ -554,7 +593,7 @@ class TestPhysicalMapAggregate:
             obj_id = WorldObjectId(1)
             aggregate.add_object(WorldObject(obj_id, Coordinate(0, 0, 0), ObjectTypeEnum.CHEST))
             with pytest.raises(NotAnActorException):
-                aggregate.move_actor(obj_id, DirectionEnum.NORTH)
+                aggregate.move_actor(obj_id, DirectionEnum.NORTH, WorldTick(10))
 
         def test_add_duplicate_area_trigger_raises_error(self, aggregate):
             trigger = AreaTrigger(AreaTriggerId(1), PointArea(Coordinate(0, 0, 0)), DamageTrigger(10))
@@ -613,7 +652,7 @@ class TestPhysicalMapAggregate:
             assert aggregate.is_walkable(Coordinate(1, 1, 0)) is False
             
             # When: Move the object away from the wall
-            aggregate.move_object(obj_id, Coordinate(0, 0, 0), ghost_cap)
+            aggregate.move_object(obj_id, Coordinate(0, 0, 0), WorldTick(10), ghost_cap)
             
             # Then: The wall should still be impassable because it's a wall (reset override to None)
             assert aggregate.is_walkable(Coordinate(1, 1, 0)) is False
@@ -633,6 +672,30 @@ class TestPhysicalMapAggregate:
             assert aggregate.is_visible(Coordinate(0, 0, 0), Coordinate(2, 2, 0)) is True
 
     class TestInteraction:
+        def test_perform_action_sets_busy(self, aggregate):
+            # Given
+            obj_id = WorldObjectId(1)
+            obj = WorldObject(obj_id, Coordinate(0, 0), ObjectTypeEnum.PLAYER)
+            aggregate.add_object(obj)
+            current_tick = WorldTick(10)
+            
+            # When
+            aggregate.perform_action(obj_id, 5, current_tick)
+            
+            # Then
+            assert obj.is_busy(current_tick) is True
+            assert obj.busy_until == WorldTick(15)
+
+        def test_perform_action_fails_when_busy(self, aggregate):
+            # Given
+            obj_id = WorldObjectId(1)
+            obj = WorldObject(obj_id, Coordinate(0, 0), ObjectTypeEnum.PLAYER, busy_until=WorldTick(20))
+            aggregate._add_object_to_internal_storage(obj)
+            
+            # When & Then
+            with pytest.raises(ActorBusyException):
+                aggregate.perform_action(obj_id, 5, WorldTick(15))
+
         def test_interact_success_adjacent(self, aggregate):
             # Given
             actor_id = WorldObjectId(1)
@@ -644,9 +707,10 @@ class TestPhysicalMapAggregate:
             aggregate.add_object(actor)
             aggregate.add_object(target)
             aggregate.clear_events()
+            current_tick = WorldTick(10)
 
             # When
-            aggregate.interact_with(actor_id, target_id)
+            aggregate.interact_with(actor_id, target_id, current_tick)
 
             # Then
             events = aggregate.get_events()
@@ -656,6 +720,26 @@ class TestPhysicalMapAggregate:
             assert event.target_id == target_id
             assert event.interaction_type == "talk"
             assert event.data == {"name": "Bob"}
+            
+            # アクターがビジー状態になっていること
+            assert actor.is_busy(current_tick) is True
+            assert actor.busy_until == current_tick.add_duration(1) # デフォルト1
+
+        def test_interact_fails_when_busy(self, aggregate):
+            # Given
+            actor_id = WorldObjectId(1)
+            target_id = WorldObjectId(2)
+            actor = WorldObject(actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.PLAYER, 
+                                component=ActorComponent(direction=DirectionEnum.SOUTH),
+                                busy_until=WorldTick(20))
+            target = WorldObject(target_id, Coordinate(0, 1, 0), ObjectTypeEnum.NPC, 
+                                 component=InteractableComponent("talk"))
+            aggregate.add_object(actor)
+            aggregate.add_object(target)
+            
+            # When & Then
+            with pytest.raises(ActorBusyException):
+                aggregate.interact_with(actor_id, target_id, WorldTick(15))
 
         def test_interact_fails_too_far(self, aggregate):
             # Given
@@ -670,7 +754,7 @@ class TestPhysicalMapAggregate:
 
             # When & Then
             with pytest.raises(InteractionOutOfRangeException):
-                aggregate.interact_with(actor_id, target_id)
+                aggregate.interact_with(actor_id, target_id, WorldTick(10))
 
         def test_interact_fails_wrong_direction(self, aggregate):
             # Given
@@ -686,7 +770,7 @@ class TestPhysicalMapAggregate:
 
             # When & Then
             with pytest.raises(NotFacingTargetException):
-                aggregate.interact_with(actor_id, target_id)
+                aggregate.interact_with(actor_id, target_id, WorldTick(10))
 
         def test_interact_fails_not_interactable(self, aggregate):
             # Given
@@ -700,4 +784,4 @@ class TestPhysicalMapAggregate:
 
             # When & Then
             with pytest.raises(NotInteractableException):
-                aggregate.interact_with(actor_id, target_id)
+                aggregate.interact_with(actor_id, target_id, WorldTick(10))

@@ -1,10 +1,13 @@
 import heapq
 import math
-from typing import List, Dict, Set, Optional, Tuple
+from typing import List, Dict, Set, Optional, Tuple, TYPE_CHECKING
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.service.pathfinding_strategy import PathfindingStrategy, PathfindingMap
 from ai_rpg_world.domain.world.exception.map_exception import CoordinateValidationException
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class AStarPathfindingStrategy(PathfindingStrategy):
@@ -17,7 +20,8 @@ class AStarPathfindingStrategy(PathfindingStrategy):
         map_data: PathfindingMap,
         capability: MovementCapability,
         max_iterations: int = 1000,
-        allow_partial_path: bool = False
+        allow_partial_path: bool = False,
+        exclude_object_id: Optional["WorldObjectId"] = None
     ) -> List[Coordinate]:
         """
         A*アルゴリズムを使用して最短経路を探索する。
@@ -57,11 +61,11 @@ class AStarPathfindingStrategy(PathfindingStrategy):
             
             # 隣接ノードの探索（上下左右斜め、高さ±1まで考慮）
             for neighbor, move_cost_multiplier in self._get_neighbors_with_costs(current):
-                if not map_data.is_passable(neighbor, capability):
+                if not map_data.is_passable(neighbor, capability, exclude_object_id=exclude_object_id):
                     continue
                 
                 # 移動コストの取得
-                base_cost = map_data.get_movement_cost(neighbor, capability)
+                base_cost = map_data.get_movement_cost(neighbor, capability, exclude_object_id=exclude_object_id)
                 if base_cost == float('inf'):
                     continue
                 

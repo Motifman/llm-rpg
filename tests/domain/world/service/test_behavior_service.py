@@ -10,6 +10,7 @@ from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
 from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import AStarPathfindingStrategy
 from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
@@ -185,7 +186,7 @@ class TestBehaviorService:
             assert next_move == last_pos
             
             # 位置を更新して再度実行 (到着済み)
-            map_aggregate.move_object(monster_id, last_pos)
+            map_aggregate.move_object(monster_id, last_pos, WorldTick(10))
             
             # 2. 探索1ターン目 (タイマー 0 -> 1)
             behavior_service.plan_next_move(monster_id, map_aggregate)

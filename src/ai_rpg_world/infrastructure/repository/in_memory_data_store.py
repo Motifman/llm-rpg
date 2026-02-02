@@ -20,6 +20,8 @@ from ai_rpg_world.domain.sns.value_object.reply_id import ReplyId
 from ai_rpg_world.domain.sns.aggregate.reply_aggregate import ReplyAggregate
 from ai_rpg_world.domain.sns.entity.notification import Notification as SnsNotification
 from ai_rpg_world.domain.sns.value_object.notification_id import NotificationId
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
 class InMemoryDataStore:
@@ -50,6 +52,9 @@ class InMemoryDataStore:
         # Trade Domain
         self.trades: Dict[Any, Any] = {}
         self.next_trade_id = 1
+        
+        # World Domain
+        self.physical_maps: Dict[SpotId, PhysicalMapAggregate] = {}
         
         # サンプルデータの投入
         self._setup_sample_data()
@@ -228,3 +233,6 @@ class InMemoryDataStore:
         self.next_sns_notification_id = 1
         self.players.clear()
         self.next_player_id = 1
+        self.trades.clear()
+        self.next_trade_id = 1
+        self.physical_maps.clear()
