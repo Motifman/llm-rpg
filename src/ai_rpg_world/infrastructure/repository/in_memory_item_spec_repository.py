@@ -3,6 +3,7 @@ InMemoryItemSpecRepository - ItemSpecを使用するインメモリ実装
 """
 from typing import List, Optional, Dict
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
+from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
@@ -10,11 +11,11 @@ from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentT
 
 
 class InMemoryItemSpecRepository(ItemSpecRepository):
-    """ItemSpecを使用するインメモリリポジトリ"""
+    """ItemSpecReadModelを使用するインメモリリポジトリ"""
 
     def __init__(self):
-        self._item_specs: Dict[ItemSpecId, ItemSpec] = {}
-        self._name_to_item_spec: Dict[str, ItemSpec] = {}
+        self._item_specs: Dict[ItemSpecId, ItemSpecReadModel] = {}
+        self._name_to_item_spec: Dict[str, ItemSpecReadModel] = {}
         self._next_item_spec_id = ItemSpecId(1)
 
         # サンプルアイテムデータをセットアップ
@@ -23,7 +24,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
     def _setup_sample_data(self):
         """サンプルアイテムデータのセットアップ"""
         # 装備品系アイテム
-        sword_spec = ItemSpec(
+        sword_spec = ItemSpecReadModel(
             item_spec_id=ItemSpecId(1),
             name="鉄の剣",
             item_type=ItemType.EQUIPMENT,
@@ -35,7 +36,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
         )
         self._save_item_spec(sword_spec)
 
-        steel_sword_spec = ItemSpec(
+        steel_sword_spec = ItemSpecReadModel(
             item_spec_id=ItemSpecId(2),
             name="鋼の剣",
             item_type=ItemType.EQUIPMENT,
@@ -47,7 +48,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
         )
         self._save_item_spec(steel_sword_spec)
 
-        legendary_sword_spec = ItemSpec(
+        legendary_sword_spec = ItemSpecReadModel(
             item_spec_id=ItemSpecId(3),
             name="伝説の剣",
             item_type=ItemType.EQUIPMENT,
@@ -60,7 +61,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
         self._save_item_spec(legendary_sword_spec)
 
         # 防具系アイテム
-        leather_armor_spec = ItemSpec(
+        leather_armor_spec = ItemSpecReadModel(
             item_spec_id=ItemSpecId(4),
             name="革の鎧",
             item_type=ItemType.EQUIPMENT,
@@ -72,7 +73,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
         )
         self._save_item_spec(leather_armor_spec)
 
-        iron_armor_spec = ItemSpec(
+        iron_armor_spec = ItemSpecReadModel(
             item_spec_id=ItemSpecId(5),
             name="鉄の鎧",
             item_type=ItemType.EQUIPMENT,
@@ -85,7 +86,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
         self._save_item_spec(iron_armor_spec)
 
         # 消耗品アイテム
-        health_potion_spec = ItemSpec(
+        health_potion_spec = ItemSpecReadModel(
             item_spec_id=ItemSpecId(6),
             name="回復ポーション",
             item_type=ItemType.CONSUMABLE,
@@ -95,7 +96,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
         )
         self._save_item_spec(health_potion_spec)
 
-        mana_potion_spec = ItemSpec(
+        mana_potion_spec = ItemSpecReadModel(
             item_spec_id=ItemSpecId(7),
             name="マナポーション",
             item_type=ItemType.CONSUMABLE,
@@ -105,7 +106,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
         )
         self._save_item_spec(mana_potion_spec)
 
-        greater_health_potion_spec = ItemSpec(
+        greater_health_potion_spec = ItemSpecReadModel(
             item_spec_id=ItemSpecId(8),
             name="上級回復ポーション",
             item_type=ItemType.CONSUMABLE,
@@ -116,7 +117,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
         self._save_item_spec(greater_health_potion_spec)
 
         # 素材アイテム
-        iron_ore_spec = ItemSpec(
+        iron_ore_spec = ItemSpecReadModel(
             item_spec_id=ItemSpecId(9),
             name="鉄鉱石",
             item_type=ItemType.MATERIAL,
@@ -126,7 +127,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
         )
         self._save_item_spec(iron_ore_spec)
 
-        steel_ingot_spec = ItemSpec(
+        steel_ingot_spec = ItemSpecReadModel(
             item_spec_id=ItemSpecId(10),
             name="鋼鉄インゴット",
             item_type=ItemType.MATERIAL,
@@ -136,7 +137,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
         )
         self._save_item_spec(steel_ingot_spec)
 
-        mystic_crystal_spec = ItemSpec(
+        mystic_crystal_spec = ItemSpecReadModel(
             item_spec_id=ItemSpecId(11),
             name="神秘のクリスタル",
             item_type=ItemType.MATERIAL,
@@ -147,7 +148,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
         self._save_item_spec(mystic_crystal_spec)
 
         # クエストアイテム
-        ancient_scroll_spec = ItemSpec(
+        ancient_scroll_spec = ItemSpecReadModel(
             item_spec_id=ItemSpecId(12),
             name="古代の巻物",
             item_type=ItemType.QUEST,
@@ -158,7 +159,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
         self._save_item_spec(ancient_scroll_spec)
 
         # その他アイテム
-        rope_spec = ItemSpec(
+        rope_spec = ItemSpecReadModel(
             item_spec_id=ItemSpecId(13),
             name="ロープ",
             item_type=ItemType.OTHER,
@@ -169,7 +170,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
         self._save_item_spec(rope_spec)
 
         # 取引不可能なアイテム（クエスト専用）
-        quest_key_spec = ItemSpec(
+        quest_key_spec = ItemSpecReadModel(
             item_spec_id=ItemSpecId(14),
             name="クエストキー",
             item_type=ItemType.QUEST,
@@ -180,7 +181,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
         self._save_item_spec(quest_key_spec)
 
         # その他の装備品アイテム
-        leather_boots_spec = ItemSpec(
+        leather_boots_spec = ItemSpecReadModel(
             item_spec_id=ItemSpecId(15),
             name="革の靴",
             item_type=ItemType.EQUIPMENT,
@@ -192,7 +193,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
         )
         self._save_item_spec(leather_boots_spec)
 
-        leather_gloves_spec = ItemSpec(
+        leather_gloves_spec = ItemSpecReadModel(
             item_spec_id=ItemSpecId(16),
             name="革の手袋",
             item_type=ItemType.EQUIPMENT,
@@ -204,7 +205,7 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
         )
         self._save_item_spec(leather_gloves_spec)
 
-        leather_helmet_spec = ItemSpec(
+        leather_helmet_spec = ItemSpecReadModel(
             item_spec_id=ItemSpecId(17),
             name="革の兜",
             item_type=ItemType.EQUIPMENT,
@@ -216,24 +217,24 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
         )
         self._save_item_spec(leather_helmet_spec)
 
-    def _save_item_spec(self, item_spec: ItemSpec):
+    def _save_item_spec(self, item_spec: ItemSpecReadModel):
         """アイテムスペックを保存（内部用）"""
         self._item_specs[item_spec.item_spec_id] = item_spec
         self._name_to_item_spec[item_spec.name] = item_spec
 
-    def find_by_id(self, item_spec_id: ItemSpecId) -> Optional[ItemSpec]:
+    def find_by_id(self, item_spec_id: ItemSpecId) -> Optional[ItemSpecReadModel]:
         """IDで検索"""
         return self._item_specs.get(item_spec_id)
 
-    def find_by_ids(self, item_spec_ids: List[ItemSpecId]) -> List[ItemSpec]:
+    def find_by_ids(self, item_spec_ids: List[ItemSpecId]) -> List[ItemSpecReadModel]:
         """IDのリストで検索"""
         return [self._item_specs[item_spec_id] for item_spec_id in item_spec_ids if item_spec_id in self._item_specs]
 
-    def find_all(self) -> List[ItemSpec]:
+    def find_all(self) -> List[ItemSpecReadModel]:
         """全件取得"""
         return list(self._item_specs.values())
 
-    def save(self, item_spec: ItemSpec) -> ItemSpec:
+    def save(self, item_spec: ItemSpecReadModel) -> ItemSpecReadModel:
         """保存"""
         self._save_item_spec(item_spec)
         return item_spec
@@ -248,27 +249,27 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
             return True
         return False
 
-    def find_by_type(self, item_type: ItemType) -> List[ItemSpec]:
+    def find_by_type(self, item_type: ItemType) -> List[ItemSpecReadModel]:
         """アイテムタイプで検索"""
         return [
             item_spec for item_spec in self._item_specs.values()
             if item_spec.item_type == item_type
         ]
 
-    def find_by_rarity(self, rarity: Rarity) -> List[ItemSpec]:
+    def find_by_rarity(self, rarity: Rarity) -> List[ItemSpecReadModel]:
         """レアリティで検索"""
         return [
             item_spec for item_spec in self._item_specs.values()
             if item_spec.rarity == rarity
         ]
 
-    def find_tradeable_items(self) -> List[ItemSpec]:
+    def find_tradeable_items(self) -> List[ItemSpecReadModel]:
         """取引可能なアイテムを検索（クエストアイテム以外）"""
         return [
             item_spec for item_spec in self._item_specs.values()
             if item_spec.item_type != ItemType.QUEST
         ]
 
-    def find_by_name(self, name: str) -> Optional[ItemSpec]:
+    def find_by_name(self, name: str) -> Optional[ItemSpecReadModel]:
         """名前で検索"""
         return self._name_to_item_spec.get(name)

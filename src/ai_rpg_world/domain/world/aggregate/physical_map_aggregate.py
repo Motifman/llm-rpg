@@ -653,6 +653,10 @@ class PhysicalMapAggregate(AggregateRoot):
         actor = self.get_actor(actor_id)
         target = self.get_object(target_id)
 
+        # 0. ビジー状態のチェック
+        if actor.is_busy(current_tick):
+            raise ActorBusyException(f"Actor {actor_id} is busy until {actor.busy_until}")
+
         # 1. 距離と向きのチェック
         distance = actor.coordinate.distance_to(target.coordinate)
         if distance > 1:

@@ -354,9 +354,10 @@ class HarvestableComponent(WorldObjectComponent):
         initial_quantity: Optional[int] = None,
         last_harvest_tick: WorldTick = WorldTick(0),
         required_tool_category: Optional[str] = None,
-        harvest_duration: int = 5
+        harvest_duration: int = 5,
+        stamina_cost: int = 10
     ):
-        self._validate_params(loot_table_id, max_quantity, respawn_interval, initial_quantity, harvest_duration)
+        self._validate_params(loot_table_id, max_quantity, respawn_interval, initial_quantity, harvest_duration, stamina_cost)
         self._loot_table_id = loot_table_id
         self._max_quantity = max_quantity
         self._respawn_interval = respawn_interval
@@ -364,12 +365,13 @@ class HarvestableComponent(WorldObjectComponent):
         self._last_update_tick = last_harvest_tick
         self._required_tool_category = required_tool_category
         self._harvest_duration = harvest_duration
+        self._stamina_cost = stamina_cost
         
         # 進行中の採取状態
         self._current_actor_id: Optional[WorldObjectId] = None
         self._harvest_finish_tick: Optional[WorldTick] = None
 
-    def _validate_params(self, loot_table_id, max_quantity, respawn_interval, initial_quantity, harvest_duration):
+    def _validate_params(self, loot_table_id, max_quantity, respawn_interval, initial_quantity, harvest_duration, stamina_cost):
         if not loot_table_id:
             raise ValidationException("Loot table ID cannot be empty")
         if max_quantity <= 0:
@@ -385,6 +387,8 @@ class HarvestableComponent(WorldObjectComponent):
                 )
         if harvest_duration < 0:
             raise ValidationException(f"Harvest duration cannot be negative: {harvest_duration}")
+        if stamina_cost < 0:
+            raise ValidationException(f"Stamina cost cannot be negative: {stamina_cost}")
 
     def get_type_name(self) -> str:
         return "harvestable"
@@ -420,6 +424,10 @@ class HarvestableComponent(WorldObjectComponent):
             
         recovered = elapsed // self._respawn_interval
         return min(self._max_quantity, self._current_quantity + recovered)
+
+    @property
+    def stamina_cost(self) -> int:
+        return self._stamina_cost
 
     def start_harvest(self, actor_id: WorldObjectId, current_tick: WorldTick) -> WorldTick:
         """採取アクションを開始する。終了ティックを返す。"""
@@ -490,5 +498,6 @@ class HarvestableComponent(WorldObjectComponent):
             "current_quantity": self._current_quantity,
             "respawn_interval": self._respawn_interval,
             "last_update_tick": self._last_update_tick.value,
-            "required_tool_category": self._required_tool_category
+            "required_tool_category": self._required_tool_category,
+            "stamina_cost": self._stamina_cost
         }
