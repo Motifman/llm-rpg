@@ -2,8 +2,7 @@ import pytest
 from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_name import PlayerName
-from ai_rpg_world.domain.player.enum.player_enum import Role
-from ai_rpg_world.domain.battle.battle_enum import Race, Element
+from ai_rpg_world.domain.player.enum.player_enum import Role, Race, Element
 from ai_rpg_world.domain.player.event.profile_events import PlayerProfileChangedEvent
 
 
