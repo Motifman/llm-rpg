@@ -21,6 +21,38 @@ class Role(Enum):
     WOODCUTTER = "woodcutter"    
 
 
+class Race(Enum):
+    """種族"""
+    HUMAN = "human"
+    GHOST = "ghost"
+    GOBLIN = "goblin"
+    ORC = "orc"
+    TROLL = "troll"
+    TITAN = "titan"
+    WEREWOLF = "werewolf"
+    WITCH = "witch"
+    WIZARD = "wizard"
+    WOLF = "wolf"
+    ZOMBIE = "zombie"
+    DRAGON = "dragon"
+    BEAST = "beast"
+
+
+class Element(Enum):
+    """属性"""
+    FIRE = "fire"
+    WATER = "water"
+    THUNDER = "thunder"
+    WIND = "wind"
+    ICE = "ice"
+    EARTH = "earth"
+    GRASS = "grass"
+    LIGHT = "light"
+    DARKNESS = "darkness"
+    NEUTRAL = "neutral"
+    POISON = "poison"
+
+
 class PlayerState(Enum):
     """プレイヤーの状態"""
     NORMAL = "normal"           # 通常状態

@@ -1,7 +1,7 @@
 from typing import List, Optional, Dict
 from ai_rpg_world.domain.battle.action_repository import ActionRepository
 from ai_rpg_world.domain.battle.battle_action import BattleAction
-from ai_rpg_world.domain.battle.battle_enum import ActionType
+from ai_rpg_world.domain.player.enum.player_enum import ActionType
 from ai_rpg_world.domain.player.player_enum import Role
 
 
