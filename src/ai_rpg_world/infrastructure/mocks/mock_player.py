@@ -5,7 +5,7 @@
 
 from typing import List
 from ai_rpg_world.domain.player.enum.player_enum import Role
-from ai_rpg_world.domain.battle.battle_enum import Element, Race
+from ai_rpg_world.domain.player.enum.player_enum import Element, Race
 from ai_rpg_world.domain.battle.action_deck import ActionDeck
 from ai_rpg_world.domain.battle.action_slot import ActionSlot
 from ai_rpg_world.domain.battle.skill_capacity import SkillCapacity

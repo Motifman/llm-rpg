@@ -6,7 +6,7 @@ from ai_rpg_world.domain.monster.monster_repository import MonsterRepository
 from ai_rpg_world.domain.monster.monster import Monster
 from ai_rpg_world.domain.monster.drop_reward import DropReward
 from ai_rpg_world.domain.player.base_status import BaseStatus
-from ai_rpg_world.domain.battle.battle_enum import Race, Element
+from ai_rpg_world.domain.player.enum.player_enum import Race, Element
 from ai_rpg_world.domain.battle.action_deck import ActionDeck
 from ai_rpg_world.domain.battle.action_slot import ActionSlot
 from ai_rpg_world.domain.battle.skill_capacity import SkillCapacity

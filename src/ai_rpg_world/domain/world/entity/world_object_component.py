@@ -5,7 +5,8 @@ from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, BehaviorSta
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.common.exception import ValidationException
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.common.exception import ValidationException, BusinessRuleException
 from ai_rpg_world.domain.world.exception.behavior_exception import (
     VisionRangeValidationException, 
     FOVAngleValidationException,
@@ -328,3 +329,166 @@ class AutonomousBehaviorComponent(ActorComponent):
             "random_move_chance": self.random_move_chance
         })
         return data
+
+
+from ai_rpg_world.domain.world.exception.harvest_exception import (
+    HarvestQuantityValidationException,
+    HarvestIntervalValidationException,
+    ResourceExhaustedException,
+    HarvestDomainException,
+    HarvestInProgressException,
+    HarvestNotStartedException
+)
+
+
+class HarvestableComponent(WorldObjectComponent):
+    """
+    採掘・採集可能な資源オブジェクトのコンポーネント。
+    リソースの枯渇と時間経過による自動回復（Lazy Recovery）を管理する。
+    """
+    def __init__(
+        self,
+        loot_table_id: str,
+        max_quantity: int = 1,
+        respawn_interval: int = 100,
+        initial_quantity: Optional[int] = None,
+        last_harvest_tick: WorldTick = WorldTick(0),
+        required_tool_category: Optional[str] = None,
+        harvest_duration: int = 5
+    ):
+        self._validate_params(loot_table_id, max_quantity, respawn_interval, initial_quantity, harvest_duration)
+        self._loot_table_id = loot_table_id
+        self._max_quantity = max_quantity
+        self._respawn_interval = respawn_interval
+        self._current_quantity = initial_quantity if initial_quantity is not None else max_quantity
+        self._last_update_tick = last_harvest_tick
+        self._required_tool_category = required_tool_category
+        self._harvest_duration = harvest_duration
+        
+        # 進行中の採取状態
+        self._current_actor_id: Optional[WorldObjectId] = None
+        self._harvest_finish_tick: Optional[WorldTick] = None
+
+    def _validate_params(self, loot_table_id, max_quantity, respawn_interval, initial_quantity, harvest_duration):
+        if not loot_table_id:
+            raise ValidationException("Loot table ID cannot be empty")
+        if max_quantity <= 0:
+            raise HarvestQuantityValidationException(f"Max quantity must be positive: {max_quantity}")
+        if respawn_interval < 0:
+            raise HarvestIntervalValidationException(f"Respawn interval cannot be negative: {respawn_interval}")
+        if initial_quantity is not None:
+            if initial_quantity < 0:
+                raise HarvestQuantityValidationException(f"Initial quantity cannot be negative: {initial_quantity}")
+            if initial_quantity > max_quantity:
+                raise HarvestQuantityValidationException(
+                    f"Initial quantity ({initial_quantity}) cannot exceed max quantity ({max_quantity})"
+                )
+        if harvest_duration < 0:
+            raise ValidationException(f"Harvest duration cannot be negative: {harvest_duration}")
+
+    def get_type_name(self) -> str:
+        return "harvestable"
+
+    @property
+    def loot_table_id(self) -> str:
+        return self._loot_table_id
+
+    @property
+    def required_tool_category(self) -> Optional[str]:
+        return self._required_tool_category
+
+    @property
+    def harvest_duration(self) -> int:
+        return self._harvest_duration
+
+    @property
+    def interaction_duration(self) -> int:
+        return self._harvest_duration
+
+    @property
+    def current_actor_id(self) -> Optional[WorldObjectId]:
+        return self._current_actor_id
+
+    def get_available_quantity(self, current_tick: WorldTick) -> int:
+        """現在の利用可能な資源量を計算して返す（Lazy Recovery）"""
+        if self._current_quantity >= self._max_quantity:
+            return self._max_quantity
+        
+        elapsed = current_tick.value - self._last_update_tick.value
+        if elapsed < 0:
+            return self._current_quantity
+            
+        recovered = elapsed // self._respawn_interval
+        return min(self._max_quantity, self._current_quantity + recovered)
+
+    def start_harvest(self, actor_id: WorldObjectId, current_tick: WorldTick) -> WorldTick:
+        """採取アクションを開始する。終了ティックを返す。"""
+        if self._current_actor_id is not None:
+            raise HarvestInProgressException(f"Resource is already being harvested by {self._current_actor_id}")
+        
+        if self.get_available_quantity(current_tick) <= 0:
+            raise ResourceExhaustedException("No resources available to harvest")
+            
+        self._current_actor_id = actor_id
+        self._harvest_finish_tick = current_tick.add_duration(self._harvest_duration)
+        return self._harvest_finish_tick
+
+    def cancel_harvest(self, actor_id: WorldObjectId):
+        """採取アクションを中断する"""
+        if self._current_actor_id != actor_id:
+            # 自分以外の採取を勝手にキャンセルすることはできない（例外にすべきか、単に無視すべきか）
+            return
+            
+        self._current_actor_id = None
+        self._harvest_finish_tick = None
+
+    def is_harvest_complete(self, current_tick: WorldTick) -> bool:
+        """採取が完了したか判定する"""
+        if self._current_actor_id is None or self._harvest_finish_tick is None:
+            return False
+        return current_tick >= self._harvest_finish_tick
+
+    def finish_harvest(self, actor_id: WorldObjectId, current_tick: WorldTick) -> bool:
+        """採取アクションを完了させ、資源を減少させる。"""
+        if self._current_actor_id != actor_id:
+            raise HarvestNotStartedException("Actor is not harvesting this resource")
+            
+        if not self.is_harvest_complete(current_tick):
+            # まだ完了していない
+            return False
+        
+        available = self.get_available_quantity(current_tick)
+        if available <= 0:
+            # 採取中に他者に取られた、あるいは自然に消滅した場合
+            self.cancel_harvest(actor_id)
+            raise ResourceExhaustedException("Resource disappeared during harvest")
+
+        # 資源減少
+        self._current_quantity = available - 1
+        self._last_update_tick = current_tick
+        
+        # 状態リセット
+        self._current_actor_id = None
+        self._harvest_finish_tick = None
+        return True
+
+    @property
+    def interaction_type(self) -> str:
+        return "harvest"
+
+    @property
+    def interaction_data(self) -> Dict[str, Any]:
+        return {
+            "loot_table_id": self._loot_table_id,
+            "required_tool_category": self._required_tool_category
+        }
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "loot_table_id": self._loot_table_id,
+            "max_quantity": self._max_quantity,
+            "current_quantity": self._current_quantity,
+            "respawn_interval": self._respawn_interval,
+            "last_update_tick": self._last_update_tick.value,
+            "required_tool_category": self._required_tool_category
+        }
