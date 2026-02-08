@@ -57,3 +57,17 @@ class ItemSpecReadModel:
     def can_have_durability(self) -> bool:
         """耐久度を持つことができるかどうか"""
         return self.durability_max is not None
+
+    def to_item_spec(self) -> "ItemSpec":
+        """ItemSpecReadModelをItemSpecに変換"""
+        from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
+        return ItemSpec(
+            item_spec_id=self.item_spec_id,
+            name=self.name,
+            item_type=self.item_type,
+            rarity=self.rarity,
+            description=self.description,
+            max_stack_size=self.max_stack_size,
+            durability_max=self.durability_max,
+            equipment_type=self.equipment_type
+        )

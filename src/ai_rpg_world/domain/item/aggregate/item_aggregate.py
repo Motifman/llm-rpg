@@ -86,6 +86,11 @@ class ItemAggregate(AggregateRoot):
         return self._item_instance.item_instance_id
 
     @property
+    def item_instance(self) -> ItemInstance:
+        """アイテムインスタンス（内部エンティティ）"""
+        return self._item_instance
+
+    @property
     def item_spec(self) -> ItemSpec:
         """アイテム仕様"""
         return self._item_instance.item_spec
