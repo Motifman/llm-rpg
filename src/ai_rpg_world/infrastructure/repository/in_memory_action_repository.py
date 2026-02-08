@@ -4,7 +4,7 @@ InMemoryActionRepository - 実際のBattleActionクラスを使用するイン�
 from typing import List, Optional, Dict, Set
 from ai_rpg_world.domain.battle.action_repository import ActionRepository
 from ai_rpg_world.domain.battle.battle_action import BattleAction, AttackAction, HealAction, StatusEffectInfo
-from ai_rpg_world.domain.battle.battle_enum import (
+from ai_rpg_world.domain.player.enum.player_enum import (
     ActionType, TargetSelectionMethod, Element, StatusEffectType, BuffType
 )
 from ai_rpg_world.domain.player.player_enum import Role

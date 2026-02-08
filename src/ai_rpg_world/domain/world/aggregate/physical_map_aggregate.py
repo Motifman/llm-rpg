@@ -12,11 +12,13 @@ from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.area_trigger import AreaTrigger
 from ai_rpg_world.domain.world.entity.location_area import LocationArea
 from ai_rpg_world.domain.world.entity.gateway import Gateway
-from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent, InteractableComponent
+from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent, InteractableComponent, HarvestableComponent
 from ai_rpg_world.domain.world.entity.map_trigger import MapTrigger
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
-from ai_rpg_world.domain.world.enum.world_enum import MovementCapabilityEnum, DirectionEnum
+from ai_rpg_world.domain.world.enum.world_enum import MovementCapabilityEnum, DirectionEnum, EnvironmentTypeEnum
 from ai_rpg_world.domain.world.service.map_geometry_service import MapGeometryService
+from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
+from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
 from ai_rpg_world.domain.world.event.map_events import (
     PhysicalMapCreatedEvent,
     WorldObjectStateChangedEvent,
@@ -32,6 +34,11 @@ from ai_rpg_world.domain.world.event.map_events import (
     LocationEnteredEvent,
     LocationExitedEvent,
     GatewayTriggeredEvent
+)
+from ai_rpg_world.domain.world.event.harvest_events import (
+    HarvestStartedEvent,
+    HarvestCancelledEvent,
+    HarvestCompletedEvent
 )
 from ai_rpg_world.domain.world.exception.map_exception import (
     TileNotFoundException, 
@@ -52,6 +59,12 @@ from ai_rpg_world.domain.world.exception.map_exception import (
     GatewayNotFoundException,
     ActorBusyException
 )
+from ai_rpg_world.domain.world.exception.harvest_exception import (
+    NotHarvestableException,
+    ResourceExhaustedException,
+    HarvestInProgressException,
+    HarvestNotStartedException
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 
 
@@ -65,7 +78,8 @@ class PhysicalMapAggregate(AggregateRoot):
         objects: List[WorldObject] = None,
         area_triggers: List[AreaTrigger] = None,
         location_areas: List[LocationArea] = None,
-        gateways: List[Gateway] = None
+        gateways: List[Gateway] = None,
+        environment_type: EnvironmentTypeEnum = EnvironmentTypeEnum.OUTDOOR
     ):
         super().__init__()
         self._spot_id = spot_id
@@ -75,6 +89,8 @@ class PhysicalMapAggregate(AggregateRoot):
         self._area_triggers: Dict[AreaTriggerId, AreaTrigger] = {t.trigger_id: t for t in (area_triggers or [])}
         self._location_areas: Dict[LocationAreaId, LocationArea] = {l.location_id: l for l in (location_areas or [])}
         self._gateways: Dict[GatewayId, Gateway] = {g.gateway_id: g for g in (gateways or [])}
+        self._environment_type = environment_type
+        self._weather_state = WeatherState.clear()
         
         if objects:
             for obj in objects:
@@ -154,6 +170,13 @@ class PhysicalMapAggregate(AggregateRoot):
                 if any(o.is_blocking for o in existing_objects):
                     raise InvalidPlacementException(f"Cannot enter {coordinate} because it is blocked by another object")
 
+    def set_weather(self, weather_state: WeatherState):
+        """天候状態を設定する。屋内や地下の場合は常に晴れとして扱う。"""
+        if self._environment_type == EnvironmentTypeEnum.OUTDOOR:
+            self._weather_state = weather_state
+        else:
+            self._weather_state = WeatherState.clear()
+
     def is_passable(self, coordinate: Coordinate, capability: MovementCapability, exclude_object_id: Optional[WorldObjectId] = None) -> bool:
         """指定された座標が特定のアクター能力で通行可能か判定する"""
         try:
@@ -183,7 +206,14 @@ class PhysicalMapAggregate(AggregateRoot):
             return float('inf')
         
         tile = self.get_tile(coordinate)
-        return tile.terrain_type.calculate_cost(capability).value
+        base_cost = tile.terrain_type.calculate_cost(capability).value
+        
+        # 天候によるコスト増加
+        multiplier = WeatherEffectService.calculate_movement_cost_multiplier(
+            self._weather_state, 
+            self._environment_type
+        )
+        return base_cost * multiplier
 
     @property
     def spot_id(self) -> SpotId:
@@ -441,9 +471,23 @@ class PhysicalMapAggregate(AggregateRoot):
 
     def get_objects_in_range(self, center: Coordinate, distance: int) -> List[WorldObject]:
         """指定された座標から一定範囲内のオブジェクトを取得する（マンハッタン距離）"""
+        # 天候による視界減衰
+        reduction = WeatherEffectService.calculate_vision_reduction(
+            self._weather_state,
+            self._environment_type
+        )
+        effective_distance = max(0, distance - reduction)
+        
+        # 天候による絶対的な最大視界制限
+        max_dist = WeatherEffectService.get_max_vision_distance(
+            self._weather_state,
+            self._environment_type
+        )
+        effective_distance = min(effective_distance, max_dist)
+        
         found_objects = []
         for obj in self._objects.values():
-            if center.distance_to(obj.coordinate) <= distance:
+            if center.distance_to(obj.coordinate) <= effective_distance:
                 found_objects.append(obj)
         return found_objects
 
@@ -452,6 +496,15 @@ class PhysicalMapAggregate(AggregateRoot):
         # 座標がマップ内にあるかチェック（元の実装の動作を維持）
         if from_coord not in self._tiles or to_coord not in self._tiles:
             return False
+            
+        # 天候による最大視界制限チェック
+        max_dist = WeatherEffectService.get_max_vision_distance(
+            self._weather_state,
+            self._environment_type
+        )
+        if from_coord.distance_to(to_coord) > max_dist:
+            return False
+
         return MapGeometryService.is_visible(from_coord, to_coord, self)
 
     def is_sight_blocked(self, coordinate: Coordinate) -> bool:
@@ -594,6 +647,87 @@ class PhysicalMapAggregate(AggregateRoot):
         # アクターをビジー状態にする
         duration = target.interaction_duration
         actor.set_busy(current_tick.add_duration(duration))
+
+    def start_resource_harvest(self, actor_id: WorldObjectId, target_id: WorldObjectId, current_tick: WorldTick):
+        """資源の採取を開始する"""
+        actor = self.get_actor(actor_id)
+        target = self.get_object(target_id)
+
+        # 1. 距離と向きのチェック
+        distance = actor.coordinate.distance_to(target.coordinate)
+        if distance > 1:
+            raise InteractionOutOfRangeException(f"Target {target_id} is too far from actor {actor_id}")
+        if distance == 1:
+            expected_direction = actor.coordinate.direction_to(target.coordinate)
+            if actor.direction != expected_direction:
+                raise NotFacingTargetException(f"Actor {actor_id} is not facing target {target_id}")
+
+        # 2. HarvestableComponentのチェック
+        if not isinstance(target.component, HarvestableComponent):
+            raise NotHarvestableException(f"Object {target_id} is not harvestable")
+
+        # 3. コンポーネントの採取開始（状態更新と終了時間の取得）
+        finish_tick = target.component.start_harvest(actor_id, current_tick)
+
+        # 4. アクターをビジー状態にする
+        actor.set_busy(finish_tick)
+
+        # 5. イベント発行
+        self.add_event(HarvestStartedEvent.create(
+            aggregate_id=target_id,
+            aggregate_type="WorldObject",
+            actor_id=actor_id,
+            target_id=target_id,
+            finish_tick=finish_tick
+        ))
+
+    def finish_resource_harvest(self, actor_id: WorldObjectId, target_id: WorldObjectId, current_tick: WorldTick):
+        """資源の採取を完了させる"""
+        actor = self.get_actor(actor_id)
+        target = self.get_object(target_id)
+
+        if not isinstance(target.component, HarvestableComponent):
+            raise NotHarvestableException(f"Object {target_id} is not harvestable")
+
+        # コンポーネントの採取完了処理
+        loot_table_id = target.component.loot_table_id
+        success = target.component.finish_harvest(actor_id, current_tick)
+
+        if success:
+            # アクターのビジー状態を解除（念のため、現在のティックに合わせる）
+            actor.clear_busy()
+
+            # イベント発行
+            self.add_event(HarvestCompletedEvent.create(
+                aggregate_id=target_id,
+                aggregate_type="WorldObject",
+                actor_id=actor_id,
+                target_id=target_id,
+                loot_table_id=loot_table_id
+            ))
+
+    def cancel_resource_harvest(self, actor_id: WorldObjectId, target_id: WorldObjectId, reason: str = "cancelled"):
+        """資源の採取を中断する"""
+        actor = self.get_actor(actor_id)
+        target = self.get_object(target_id)
+
+        if not isinstance(target.component, HarvestableComponent):
+            raise NotHarvestableException(f"Object {target_id} is not harvestable")
+
+        # コンポーネントの採取中断処理
+        target.component.cancel_harvest(actor_id)
+
+        # アクターのビジー状態を解除
+        actor.clear_busy()
+
+        # イベント発行
+        self.add_event(HarvestCancelledEvent.create(
+            aggregate_id=target_id,
+            aggregate_type="WorldObject",
+            actor_id=actor_id,
+            target_id=target_id,
+            reason=reason
+        ))
 
     def check_and_activate_trigger(self, coordinate: Coordinate, object_id: Optional[WorldObjectId] = None) -> Optional[MapTrigger]:
         """

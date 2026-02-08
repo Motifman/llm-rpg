@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
@@ -148,3 +148,31 @@ class GatewayTriggeredEvent(BaseDomainEvent[GatewayId, str]):
     object_id: WorldObjectId
     target_spot_id: SpotId
     landing_coordinate: Coordinate
+
+
+@dataclass(frozen=True)
+class ResourceHarvestedEvent(BaseDomainEvent[WorldObjectId, str]):
+    """資源を採集・採掘したイベント"""
+    object_id: WorldObjectId
+    actor_id: WorldObjectId
+    loot_table_id: str
+    obtained_items: List[dict] # {"item_spec_id": str, "quantity": int}
+
+    @classmethod
+    def create(
+        cls,
+        aggregate_id: WorldObjectId,
+        aggregate_type: str,
+        object_id: WorldObjectId,
+        actor_id: WorldObjectId,
+        loot_table_id: str,
+        obtained_items: List[dict]
+    ) -> "ResourceHarvestedEvent":
+        return super().create(
+            aggregate_id=aggregate_id,
+            aggregate_type=aggregate_type,
+            object_id=object_id,
+            actor_id=actor_id,
+            loot_table_id=loot_table_id,
+            obtained_items=obtained_items
+        )
