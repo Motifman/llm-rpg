@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -10,6 +10,8 @@ from ai_rpg_world.domain.player.value_object.gold import Gold
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.player.event.status_events import (
     PlayerDownedEvent,
     PlayerRevivedEvent,
@@ -21,6 +23,7 @@ from ai_rpg_world.domain.player.event.status_events import (
     PlayerStaminaHealedEvent,
     PlayerGoldEarnedEvent,
     PlayerGoldPaidEvent,
+    PlayerLocationChangedEvent,
 )
 from ai_rpg_world.domain.player.exception import (
     InsufficientMpException,
@@ -43,6 +46,10 @@ class PlayerStatusAggregate(AggregateRoot):
         hp: Hp,
         mp: Mp,
         stamina: Stamina,
+        current_spot_id: Optional[SpotId] = None,
+        current_coordinate: Optional[Coordinate] = None,
+        current_destination: Optional[Coordinate] = None,
+        planned_path: List[Coordinate] = None,
         is_down: bool = False,
     ):
         super().__init__()
@@ -55,6 +62,10 @@ class PlayerStatusAggregate(AggregateRoot):
         self._hp = hp
         self._mp = mp
         self._stamina = stamina
+        self._current_spot_id = current_spot_id
+        self._current_coordinate = current_coordinate
+        self._current_destination = current_destination
+        self._planned_path = planned_path or []
         self._is_down = is_down
 
     @property
@@ -106,6 +117,71 @@ class PlayerStatusAggregate(AggregateRoot):
     def is_down(self) -> bool:
         """戦闘不能状態かどうか"""
         return self._is_down
+
+    @property
+    def current_spot_id(self) -> Optional[SpotId]:
+        """現在のスポットID"""
+        return self._current_spot_id
+
+    @property
+    def current_coordinate(self) -> Optional[Coordinate]:
+        """現在の座標"""
+        return self._current_coordinate
+
+    @property
+    def current_destination(self) -> Optional[Coordinate]:
+        """現在の目的地座標（同じスポット内）"""
+        return self._current_destination
+
+    @property
+    def planned_path(self) -> List[Coordinate]:
+        """計画された経路"""
+        return self._planned_path.copy()
+
+    def set_destination(self, destination: Coordinate, path: List[Coordinate]) -> None:
+        """目的地と経路を設定する"""
+        self._current_destination = destination
+        self._planned_path = path
+
+    def clear_path(self) -> None:
+        """経路をクリアする"""
+        self._planned_path = []
+        self._current_destination = None
+
+    def advance_path(self) -> Optional[Coordinate]:
+        """経路を1ステップ進める。次に進むべき座標を返し、経路から削除する。"""
+        if not self._planned_path:
+            return None
+        
+        # [0] は現在地のはずなので、[1] を返す
+        if len(self._planned_path) < 2:
+            self.clear_path()
+            return None
+            
+        next_coord = self._planned_path.pop(1)
+        if len(self._planned_path) <= 1:
+            self.clear_path()
+            
+        return next_coord
+
+    def update_location(self, spot_id: SpotId, coordinate: Coordinate) -> None:
+        """現在地を更新する"""
+        if self._current_spot_id == spot_id and self._current_coordinate == coordinate:
+            return
+
+        old_spot_id = self._current_spot_id
+        old_coordinate = self._current_coordinate
+        self._current_spot_id = spot_id
+        self._current_coordinate = coordinate
+
+        self.add_event(PlayerLocationChangedEvent.create(
+            aggregate_id=self._player_id,
+            aggregate_type="PlayerStatusAggregate",
+            old_spot_id=old_spot_id,
+            old_coordinate=old_coordinate,
+            new_spot_id=spot_id,
+            new_coordinate=coordinate,
+        ))
 
     def can_act(self) -> bool:
         """戦闘行動が可能かどうか

@@ -11,6 +11,9 @@ class PlayerLocationDto:
     current_spot_id: int
     current_spot_name: str
     current_spot_description: str
+    x: int
+    y: int
+    z: int
     area_id: Optional[int]
     area_name: Optional[str]
 
@@ -39,10 +42,10 @@ class MoveResultDto:
     from_spot_name: str
     to_spot_id: int
     to_spot_name: str
-    road_id: int
-    road_description: str
+    from_coordinate: dict # {"x": x, "y": y, "z": z}
+    to_coordinate: dict
     moved_at: datetime
-    distance: int
+    busy_until_tick: int
     message: str
     error_message: Optional[str] = None
 

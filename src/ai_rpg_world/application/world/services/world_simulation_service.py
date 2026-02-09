@@ -9,6 +9,7 @@ from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 
+
 class WorldSimulationApplicationService:
     """ワールド全体の進行・シミュレーションを管理するアプリケーションサービス"""
     

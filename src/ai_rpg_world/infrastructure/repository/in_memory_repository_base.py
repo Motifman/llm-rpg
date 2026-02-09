@@ -2,6 +2,7 @@
 InMemoryRepositoryBase - インメモリリポジトリの基底クラス
 Unit of Workとの統合ロジックを提供します。
 """
+import copy
 from typing import Optional, Callable, Any, TypeVar, Generic
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from .in_memory_data_store import InMemoryDataStore
@@ -23,6 +24,12 @@ class InMemoryRepositoryBase:
             
         self._data_store = data_store
         self._unit_of_work = unit_of_work
+
+    def _clone(self, obj: T) -> T:
+        """オブジェクトを複製する（ロールバック支援のため）"""
+        if obj is None:
+            return None
+        return copy.deepcopy(obj)
 
     def _execute_operation(self, operation: Callable[[], Any]) -> Any:
         """操作を実行またはUOWに登録

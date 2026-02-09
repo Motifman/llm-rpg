@@ -19,8 +19,8 @@ class HarvestDomainService:
         loot_result: Optional[LootResult],
         item_spec: Optional[ItemSpec],
         new_item_id: Optional[ItemInstanceId],
-        inventory: PlayerInventoryAggregate,
-        status: PlayerStatusAggregate
+        inventory: Optional[PlayerInventoryAggregate],
+        status: Optional[PlayerStatusAggregate]
     ) -> tuple[List[DomainEvent], Optional[ItemAggregate]]:
         """
         採集の報酬付与とスタミナ消費を処理し、生成されたアイテムがあれば返す。
@@ -29,11 +29,12 @@ class HarvestDomainService:
         item_aggregate = None
 
         # スタミナ消費
-        status.consume_stamina(harvestable.stamina_cost)
-        events.extend(status.get_events())
+        if status:
+            status.consume_stamina(harvestable.stamina_cost)
+            events.extend(status.get_events())
 
         # 報酬アイテムの生成とインベントリへの追加
-        if loot_result and item_spec and new_item_id:
+        if loot_result and item_spec and new_item_id and inventory:
             item_aggregate = ItemAggregate.create(
                 item_instance_id=new_item_id,
                 item_spec=item_spec,
