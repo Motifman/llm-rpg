@@ -30,6 +30,11 @@ class UnitOfWork(Protocol):
         pass
 
     @abstractmethod
+    def process_sync_events(self) -> None:
+        """同期イベントを即座に処理する"""
+        pass
+
+    @abstractmethod
     def __enter__(self):
         """コンテキストマネージャー開始"""
         pass
