@@ -592,6 +592,10 @@ class PhysicalMapAggregate(AggregateRoot):
             raise LocationAreaNotFoundException(f"LocationArea with ID {location_id} not found")
         return self._location_areas[location_id]
 
+    def get_location_areas_at(self, coordinate: Coordinate) -> List[LocationArea]:
+        """指定された座標が含まれる全てのロケーションエリアを取得"""
+        return [loc for loc in self._location_areas.values() if loc.contains(coordinate)]
+
     def get_gateway(self, gateway_id: GatewayId) -> Gateway:
         if gateway_id not in self._gateways:
             raise GatewayNotFoundException(f"Gateway with ID {gateway_id} not found")

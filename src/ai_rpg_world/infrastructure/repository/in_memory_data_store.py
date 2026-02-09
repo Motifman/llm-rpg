@@ -55,6 +55,8 @@ class InMemoryDataStore:
         
         # World Domain
         self.physical_maps: Dict[SpotId, PhysicalMapAggregate] = {}
+        self.world_maps: Dict[Any, Any] = {} # Dict[WorldId, WorldMapAggregate]
+        self.spot_to_world_id: Dict[SpotId, Any] = {} # Dict[SpotId, WorldId]
         
         # サンプルデータの投入
         self._setup_sample_data()

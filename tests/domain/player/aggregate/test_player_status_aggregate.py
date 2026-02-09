@@ -445,3 +445,54 @@ class TestPlayerStatusAggregate:
         assert aggregate.can_act() == False
         assert aggregate.can_receive_healing() == True
         assert aggregate.can_consume_resources() == False
+
+    def test_location_updates(self):
+        """位置情報と経路情報の更新テスト"""
+        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+        from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+        from ai_rpg_world.domain.player.event.status_events import PlayerLocationChangedEvent
+
+        aggregate = create_test_status_aggregate()
+        spot1 = SpotId(1)
+        coord1 = Coordinate(0, 0, 0)
+        
+        # 1. 位置の更新
+        aggregate.update_location(spot1, coord1)
+        assert aggregate.current_spot_id == spot1
+        assert aggregate.current_coordinate == coord1
+        
+        events = aggregate.get_events()
+        assert any(isinstance(e, PlayerLocationChangedEvent) for e in events)
+        
+        # 2. 経路の設定
+        dest = Coordinate(5, 5, 0)
+        path = [coord1, Coordinate(1, 0, 0), dest]
+        aggregate.set_destination(dest, path)
+        
+        assert aggregate.current_destination == dest
+        assert aggregate.planned_path == path
+        
+        # 3. 経路を1ステップ進める
+        next_coord = aggregate.advance_path()
+        assert next_coord == Coordinate(1, 0, 0)
+        # 現在地（[0]）と進んだ先（[1]）が残る
+        assert len(aggregate.planned_path) == 2
+        
+        # 4. 経路のクリア
+        aggregate.clear_path()
+        assert aggregate.current_destination is None
+        assert aggregate.planned_path == []
+
+    def test_advance_path_exhaustion(self):
+        """経路を最後まで進めた時の挙動"""
+        from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+        aggregate = create_test_status_aggregate()
+        
+        path = [Coordinate(0, 0), Coordinate(0, 1)]
+        aggregate.set_destination(Coordinate(0, 1), path)
+        
+        next_coord = aggregate.advance_path()
+        assert next_coord == Coordinate(0, 1)
+        # 残り1要素以下になったらクリアされる仕様
+        assert aggregate.planned_path == []
+        assert aggregate.current_destination is None
