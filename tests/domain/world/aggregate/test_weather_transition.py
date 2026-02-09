@@ -12,7 +12,7 @@ class TestWeatherTransition:
 
     def test_transition_constraints(self):
         """天候遷移の制約が正しく機能することを確認"""
-        zone_id = WeatherZoneId("z1")
+        zone_id = WeatherZoneId(1)
         # 晴れから開始
         zone = WeatherZone(zone_id, "Test", {SpotId(1)}, WeatherState.clear())
 
@@ -33,7 +33,7 @@ class TestWeatherTransition:
 
     def test_force_change_weather(self):
         """強制的な天候変更が制約を無視できることを確認"""
-        zone = WeatherZone(WeatherZoneId("z1"), "Test", {SpotId(1)}, WeatherState(WeatherTypeEnum.RAIN, 1.0))
+        zone = WeatherZone(WeatherZoneId(1), "Test", {SpotId(1)}, WeatherState(WeatherTypeEnum.RAIN, 1.0))
         
         # 強制的に晴れにする
         clear = WeatherState.clear()
@@ -42,7 +42,7 @@ class TestWeatherTransition:
 
     def test_simulation_service_output(self):
         """シミュレーションサービスが制約に従った天候を返すことを確認"""
-        zone = WeatherZone(WeatherZoneId("z1"), "Test", {SpotId(1)}, WeatherState.clear())
+        zone = WeatherZone(WeatherZoneId(1), "Test", {SpotId(1)}, WeatherState.clear())
         
         for _ in range(10):
             next_state = WeatherSimulationService.simulate_next_weather(zone.current_state)

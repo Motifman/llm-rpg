@@ -1,3 +1,4 @@
+import math
 from typing import List, Dict, Optional, Any
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -104,10 +105,11 @@ class PhysicalMapAggregate(AggregateRoot):
         objects: List[WorldObject] = None,
         area_triggers: List[AreaTrigger] = None,
         location_areas: List[LocationArea] = None,
-        gateways: List[Gateway] = None
+        gateways: List[Gateway] = None,
+        environment_type: EnvironmentTypeEnum = EnvironmentTypeEnum.OUTDOOR
     ) -> "PhysicalMapAggregate":
         tile_dict = {tile.coordinate: tile for tile in tiles}
-        aggregate = cls(spot_id, tile_dict, objects, area_triggers, location_areas, gateways)
+        aggregate = cls(spot_id, tile_dict, objects, area_triggers, location_areas, gateways, environment_type)
         aggregate.add_event(PhysicalMapCreatedEvent.create(
             aggregate_id=spot_id,
             aggregate_type="PhysicalMapAggregate",
@@ -169,6 +171,14 @@ class PhysicalMapAggregate(AggregateRoot):
                 # ルール: 配置対象が非ブロッキングなら、既存にブロッキングがあれば不可
                 if any(o.is_blocking for o in existing_objects):
                     raise InvalidPlacementException(f"Cannot enter {coordinate} because it is blocked by another object")
+
+    @property
+    def environment_type(self) -> EnvironmentTypeEnum:
+        return self._environment_type
+
+    @property
+    def weather_state(self) -> WeatherState:
+        return self._weather_state
 
     def set_weather(self, weather_state: WeatherState):
         """天候状態を設定する。屋内や地下の場合は常に晴れとして扱う。"""
@@ -293,7 +303,6 @@ class PhysicalMapAggregate(AggregateRoot):
         
         # 基本倍率（例：1.0コスト = 1ティック）
         # 小数点以下は切り上げ
-        import math
         travel_ticks = max(1, math.ceil(cost))
         
         # 3. 状態の更新

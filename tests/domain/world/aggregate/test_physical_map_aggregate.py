@@ -7,7 +7,7 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, TerrainTypeEnum, TriggerTypeEnum, DirectionEnum, MovementCapabilityEnum
+from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, TerrainTypeEnum, TriggerTypeEnum, DirectionEnum, MovementCapabilityEnum, EnvironmentTypeEnum
 from ai_rpg_world.domain.world.exception.map_exception import (
     TileNotFoundException,
     ObjectNotFoundException,
@@ -40,6 +40,8 @@ from ai_rpg_world.domain.world.event.map_events import (
     WorldObjectInteractedEvent
 )
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
+from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.entity.map_trigger import WarpTrigger, DamageTrigger
 from ai_rpg_world.domain.common.value_object import WorldTick
 
@@ -785,3 +787,58 @@ class TestPhysicalMapAggregate:
             # When & Then
             with pytest.raises(NotInteractableException):
                 aggregate.interact_with(actor_id, target_id, WorldTick(10))
+
+    class TestWeatherEffects:
+        def test_weather_affects_vision_range(self, spot_id):
+            # Given: 霧 (FOG, intensity 1.0) -> Vision reduction = 8.
+            tiles = [Tile(Coordinate(x, 0), TerrainType.road()) for x in range(11)]
+            aggregate = PhysicalMapAggregate.create(spot_id, tiles)
+            aggregate.set_weather(WeatherState(WeatherTypeEnum.FOG, 1.0))
+            
+            obj1 = WorldObject(WorldObjectId(1), Coordinate(0, 0), ObjectTypeEnum.CHEST)
+            obj2 = WorldObject(WorldObjectId(2), Coordinate(5, 0), ObjectTypeEnum.CHEST)
+            obj3 = WorldObject(WorldObjectId(3), Coordinate(10, 0), ObjectTypeEnum.CHEST)
+            aggregate.add_object(obj1)
+            aggregate.add_object(obj2)
+            aggregate.add_object(obj3)
+
+            # When
+            # Default vision distance is usually large. Let's assume 10.
+            # 10 - 8 = 2.
+            in_range = aggregate.get_objects_in_range(Coordinate(0, 0), 10)
+            
+            # Then
+            assert obj1 in in_range
+            assert obj2 not in in_range
+            assert obj3 not in in_range
+
+        def test_weather_affects_movement_cost(self, spot_id):
+            # Given: 嵐 (STORM, intensity 1.0) -> Multiplier = 1.8.
+            tiles = [Tile(Coordinate(0, 0), TerrainType.road()), Tile(Coordinate(1, 0), TerrainType.road())]
+            aggregate = PhysicalMapAggregate.create(spot_id, tiles)
+            aggregate.set_weather(WeatherState(WeatherTypeEnum.STORM, 1.0))
+            
+            # Road base cost is 1.0. 1.0 * 1.8 = 1.8.
+            cost = aggregate.get_movement_cost(Coordinate(1, 0), MovementCapability.normal_walk())
+            assert cost == 1.8
+
+        def test_indoor_ignores_weather(self, spot_id):
+            # Given: 屋内 (INDOOR)
+            tiles = [
+                Tile(Coordinate(0, 0), TerrainType.road()),
+                Tile(Coordinate(10, 0), TerrainType.road())
+            ]
+            aggregate = PhysicalMapAggregate.create(spot_id, tiles, environment_type=EnvironmentTypeEnum.INDOOR)
+            
+            # 天候を設定しようとしても Clear になるはず
+            aggregate.set_weather(WeatherState(WeatherTypeEnum.BLIZZARD, 1.0))
+            assert aggregate.weather_state.weather_type == WeatherTypeEnum.CLEAR
+            
+            # 視界も制限されない
+            # CLEAR -> Reduction 0.
+            # get_objects_in_range(..., 10) should see things at dist 10.
+            obj = WorldObject(WorldObjectId(2), Coordinate(10, 0), ObjectTypeEnum.CHEST)
+            aggregate.add_object(obj)
+            
+            in_range = aggregate.get_objects_in_range(Coordinate(0, 0), 10)
+            assert obj in in_range

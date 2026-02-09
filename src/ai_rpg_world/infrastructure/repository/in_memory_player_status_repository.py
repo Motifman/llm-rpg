@@ -31,6 +31,16 @@ class InMemoryPlayerStatusRepository(PlayerStatusRepository, InMemoryRepositoryB
             
         return self._execute_operation(operation)
     
+    def save_all(self, statuses: List[PlayerStatusAggregate]) -> None:
+        """複数のプレイヤーステータスを一括保存"""
+        cloned_statuses = [self._clone(s) for s in statuses]
+        def operation():
+            for s in cloned_statuses:
+                self._statuses[s.player_id] = s
+            return None
+            
+        self._execute_operation(operation)
+    
     def delete(self, player_id: PlayerId) -> bool:
         def operation():
             if player_id in self._statuses:

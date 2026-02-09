@@ -18,6 +18,8 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 from ai_rpg_world.domain.world.service.global_pathfinding_service import GlobalPathfindingService
+from ai_rpg_world.domain.world.service.weather_simulation_service import WeatherSimulationService
+from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
 from ai_rpg_world.domain.world.service.movement_config_service import MovementConfigService
 from ai_rpg_world.domain.world.event.map_events import GatewayTriggeredEvent
 from ai_rpg_world.domain.world.exception.map_exception import (
@@ -260,7 +262,14 @@ class MovementApplicationService:
         # 4. スタミナ消費の計算とチェック
         try:
             tile = physical_map.get_tile(to_coord)
-            stamina_cost = self._movement_config_service.get_stamina_cost(tile.terrain_type)
+            base_stamina_cost = self._movement_config_service.get_stamina_cost(tile.terrain_type)
+            
+            # 天候による倍率適用
+            weather_multiplier = WeatherEffectService.calculate_stamina_multiplier(
+                physical_map.weather_state,
+                physical_map.environment_type
+            )
+            stamina_cost = base_stamina_cost * weather_multiplier
             
             if player_status.stamina.value < stamina_cost:
                 raise PlayerStaminaExhaustedException(player_id_int, stamina_cost, player_status.stamina.value)
