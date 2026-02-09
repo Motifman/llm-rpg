@@ -17,18 +17,19 @@ class InMemoryPhysicalMapRepository(PhysicalMapRepository, InMemoryRepositoryBas
         return self._data_store.physical_maps
 
     def find_by_id(self, entity_id: SpotId) -> Optional[PhysicalMapAggregate]:
-        return self._maps.get(entity_id)
+        return self._clone(self._maps.get(entity_id))
     
     def find_by_spot_id(self, spot_id: SpotId) -> Optional[PhysicalMapAggregate]:
         return self.find_by_id(spot_id)
 
     def find_by_ids(self, entity_ids: List[SpotId]) -> List[PhysicalMapAggregate]:
-        return [self._maps[sid] for sid in entity_ids if sid in self._maps]
+        return [self._clone(self._maps[sid]) for sid in entity_ids if sid in self._maps]
     
     def save(self, physical_map: PhysicalMapAggregate) -> PhysicalMapAggregate:
+        cloned_map = self._clone(physical_map)
         def operation():
-            self._maps[physical_map.spot_id] = physical_map
-            return physical_map
+            self._maps[cloned_map.spot_id] = cloned_map
+            return cloned_map
             
         return self._execute_operation(operation)
     

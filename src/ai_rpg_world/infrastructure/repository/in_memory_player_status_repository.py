@@ -18,15 +18,16 @@ class InMemoryPlayerStatusRepository(PlayerStatusRepository, InMemoryRepositoryB
         return self._data_store.player_statuses
 
     def find_by_id(self, player_id: PlayerId) -> Optional[PlayerStatusAggregate]:
-        return self._statuses.get(player_id)
+        return self._clone(self._statuses.get(player_id))
     
     def find_by_ids(self, player_ids: List[PlayerId]) -> List[PlayerStatusAggregate]:
-        return [self._statuses[pid] for pid in player_ids if pid in self._statuses]
+        return [self._clone(self._statuses[pid]) for pid in player_ids if pid in self._statuses]
     
     def save(self, status: PlayerStatusAggregate) -> PlayerStatusAggregate:
+        cloned_status = self._clone(status)
         def operation():
-            self._statuses[status.player_id] = status
-            return status
+            self._statuses[cloned_status.player_id] = cloned_status
+            return cloned_status
             
         return self._execute_operation(operation)
     
