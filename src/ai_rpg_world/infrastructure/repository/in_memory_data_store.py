@@ -235,6 +235,34 @@ class InMemoryDataStore:
         self.next_sns_notification_id = 1
         self.players.clear()
         self.next_player_id = 1
+        self.player_profiles.clear()
+        self.player_inventories.clear()
+        self.player_statuses.clear()
         self.trades.clear()
         self.next_trade_id = 1
         self.physical_maps.clear()
+        self.world_maps.clear()
+        self.spot_to_world_id.clear()
+
+    def take_snapshot(self) -> Dict[str, Any]:
+        """現在のデータのスナップショットを作成する"""
+        import copy
+        return {
+            "player_statuses": copy.deepcopy(self.player_statuses),
+            "physical_maps": copy.deepcopy(self.physical_maps),
+            "player_inventories": copy.deepcopy(self.player_inventories),
+            "trades": copy.deepcopy(self.trades),
+            "sns_users": copy.deepcopy(self.sns_users),
+            "posts": copy.deepcopy(self.posts),
+            "replies": copy.deepcopy(self.replies),
+        }
+
+    def restore_snapshot(self, snapshot: Dict[str, Any]):
+        """スナップショットからデータを復元する"""
+        self.player_statuses = snapshot["player_statuses"]
+        self.physical_maps = snapshot["physical_maps"]
+        self.player_inventories = snapshot["player_inventories"]
+        self.trades = snapshot["trades"]
+        self.sns_users = snapshot["sns_users"]
+        self.posts = snapshot["posts"]
+        self.replies = snapshot["replies"]

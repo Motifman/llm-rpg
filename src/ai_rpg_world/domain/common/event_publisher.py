@@ -11,7 +11,7 @@ class EventPublisher(ABC, Generic[E]):
     """イベント発行者のインターフェース"""
     
     @abstractmethod
-    def register_handler(self, event_type: Type[E], handler: EventHandler[E]) -> None:
+    def register_handler(self, event_type: Type[E], handler: EventHandler[E], is_synchronous: bool = False) -> None:
         """イベントハンドラーを登録"""
         pass
     
