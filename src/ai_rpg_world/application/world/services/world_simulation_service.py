@@ -1,10 +1,20 @@
 import logging
-from typing import List, Callable, Any, Optional
+from typing import List, Callable, Any, Optional, Dict
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
+from ai_rpg_world.domain.world.repository.weather_zone_repository import WeatherZoneRepository
+from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.entity.world_object import WorldObject
+from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
+from ai_rpg_world.domain.world.service.weather_simulation_service import WeatherSimulationService
+from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
+from ai_rpg_world.domain.world.service.weather_config_service import WeatherConfigService
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
@@ -17,12 +27,18 @@ class WorldSimulationApplicationService:
         self,
         time_provider: GameTimeProvider,
         physical_map_repository: PhysicalMapRepository,
+        weather_zone_repository: WeatherZoneRepository,
+        player_status_repository: PlayerStatusRepository,
         behavior_service: BehaviorService,
+        weather_config_service: WeatherConfigService,
         unit_of_work: UnitOfWork
     ):
         self._time_provider = time_provider
         self._physical_map_repository = physical_map_repository
+        self._weather_zone_repository = weather_zone_repository
+        self._player_status_repository = player_status_repository
         self._behavior_service = behavior_service
+        self._weather_config_service = weather_config_service
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -38,11 +54,32 @@ class WorldSimulationApplicationService:
             # 1. ティックを進める
             current_tick = self._time_provider.advance_tick()
             
-            # 2. マップを順番に処理
+            # 2. 天候の更新（長周期）
+            # deferされたsaveの影響でリポジトリから取得しても更新前の場合があるため、
+            # 最新の状態を辞書で保持して同期に利用する
+            latest_weather = self._update_weather_if_needed(current_tick)
+            
+            # 3. マップを順番に処理
             maps = self._physical_map_repository.find_all()
             
+            # プレイヤーIDと所属マップの対応を保持（環境効果の一括適用のため）
+            player_map_map: Dict[PlayerId, PhysicalMapAggregate] = {}
+            
             for physical_map in maps:
-                # 3. マップ内のアクターの更新
+                # 3.1 天候の同期
+                self._sync_weather_to_map(physical_map, latest_weather)
+
+                # 3.2 プレイヤーIDの収集
+                for actor in physical_map.actors:
+                    if actor.player_id:
+                        player_map_map[actor.player_id] = physical_map
+
+            # 3.3 環境効果の一括適用
+            if player_map_map:
+                self._apply_environmental_effects_bulk(player_map_map)
+            
+            # 4. 各マップのアクターの行動更新
+            for physical_map in maps:
                 for actor in physical_map.actors:
                     # Busy状態のアクターはスキップ
                     if actor.is_busy(current_tick):
@@ -54,21 +91,133 @@ class WorldSimulationApplicationService:
                         if next_coord:
                             # 移動実行
                             physical_map.move_object(actor.object_id, next_coord, current_tick)
+                    except DomainException as e:
+                        # ドメインルール違反（移動不可など）は警告ログにとどめる
+                        self._logger.warning(
+                            f"Behavior skipped for actor {actor.object_id} due to domain rule: {str(e)}"
+                        )
                     except Exception as e:
-                        # 個別のアクターの更新失敗が全体に影響しないようにする
+                        # その他予期せぬエラー
                         self._logger.error(
                             f"Failed to update actor {actor.object_id} in map {physical_map.spot_id}: {str(e)}",
                             exc_info=True
                         )
                 
-                # 4. マップの状態を保存
+                # マップの状態を保存
                 self._physical_map_repository.save(physical_map)
                 
-                # 5. イベントの収集
+                # イベントの収集
                 self._unit_of_work.add_events(physical_map.get_events())
                 physical_map.clear_events()
             
             return current_tick
+
+    def _update_weather_if_needed(self, current_tick: WorldTick) -> Dict[SpotId, WeatherState]:
+        """必要に応じて天候を更新する（設定された間隔ごと）
+        
+        Returns:
+            Dict[SpotId, WeatherState]: 更新されたスポットIDと天候状態のマップ
+        """
+        latest_weather = {}
+        interval = self._weather_config_service.get_update_interval_ticks()
+        
+        try:
+            zones = self._weather_zone_repository.find_all()
+            if not zones:
+                self._logger.debug("No weather zones found")
+                return latest_weather
+
+            for zone in zones:
+                if current_tick.value % interval == 0:
+                    try:
+                        new_state = WeatherSimulationService.simulate_next_weather(zone.current_state)
+                        zone.change_weather(new_state)
+                        self._weather_zone_repository.save(zone)
+                        self._unit_of_work.add_events(zone.get_events())
+                        zone.clear_events()
+                        self._logger.info(f"Weather updated in zone {zone.zone_id} to {new_state.weather_type}")
+                    except DomainException as e:
+                        self._logger.error(f"Weather transition rule violation in zone {zone.zone_id}: {str(e)}")
+                    except Exception as e:
+                        self._logger.error(f"Unexpected error updating weather for zone {zone.zone_id}: {str(e)}", exc_info=True)
+                
+                # 最新の状態をスポットごとに保持
+                for spot_id in zone.spot_ids:
+                    latest_weather[spot_id] = zone.current_state
+        except Exception as e:
+            self._logger.error(f"Failed to retrieve weather zones: {str(e)}")
+                
+        return latest_weather
+
+    def _sync_weather_to_map(self, physical_map: PhysicalMapAggregate, latest_weather: Dict[SpotId, WeatherState]) -> None:
+        """天候ゾーンの状態を物理マップに同期する"""
+        # まずは今回更新された（または保持されている）最新状態を確認
+        if physical_map.spot_id in latest_weather:
+            physical_map.set_weather(latest_weather[physical_map.spot_id])
+            return
+
+        # 辞書にない場合はリポジトリから取得
+        try:
+            zone = self._weather_zone_repository.find_by_spot_id(physical_map.spot_id)
+            if zone:
+                physical_map.set_weather(zone.current_state)
+            else:
+                # ゾーンが見つからない場合はデフォルト（晴れ）
+                physical_map.set_weather(WeatherState.clear())
+        except DomainException as e:
+            self._logger.error(f"Domain error syncing weather to map {physical_map.spot_id}: {str(e)}")
+            physical_map.set_weather(WeatherState.clear())
+        except Exception as e:
+            self._logger.error(f"Unexpected error syncing weather to map {physical_map.spot_id}: {str(e)}", exc_info=True)
+            # エラー時もデフォルトに設定
+            physical_map.set_weather(WeatherState.clear())
+
+    def _apply_environmental_effects_bulk(self, player_map_map: Dict[PlayerId, PhysicalMapAggregate]) -> None:
+        """アクター（プレイヤー）に対して環境効果（スタミナ減少など）を一括適用する"""
+        player_ids = list(player_map_map.keys())
+        try:
+            player_statuses = self._player_status_repository.find_by_ids(player_ids)
+            status_map = {s.player_id: s for s in player_statuses}
+            
+            updated_statuses = []
+            
+            for player_id, physical_map in player_map_map.items():
+                player_status = status_map.get(player_id)
+                if not player_status:
+                    self._logger.warning(f"Player status not found for player {player_id}")
+                    continue
+                
+                if not player_status.can_act():
+                    continue
+
+                # スタミナ減少量の計算
+                drain = WeatherEffectService.calculate_environmental_stamina_drain(
+                    physical_map.weather_state,
+                    physical_map.environment_type
+                )
+
+                if drain > 0:
+                    if player_status.stamina.value > 0:
+                        actual_drain = min(player_status.stamina.value, drain)
+                        try:
+                            player_status.consume_stamina(actual_drain)
+                            updated_statuses.append(player_status)
+                        except DomainException as e:
+                            # スタミナ不足などはここで処理（実際にはminで防いでいるが、念のため）
+                            self._logger.warning(f"Could not apply environmental effect to player {player_id}: {str(e)}")
+                        except Exception as e:
+                            self._logger.error(f"Unexpected error consuming stamina for player {player_id}: {str(e)}", exc_info=True)
+            
+            if updated_statuses:
+                # 一括保存
+                self._player_status_repository.save_all(updated_statuses)
+                # イベントの収集
+                for status in updated_statuses:
+                    self._unit_of_work.add_events(status.get_events())
+                    status.clear_events()
+                    
+        except Exception as e:
+            self._logger.error(f"Error applying environmental effects in bulk: {str(e)}", exc_info=True)
 
     def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
         try:
