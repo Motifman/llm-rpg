@@ -55,6 +55,7 @@ from ai_rpg_world.domain.world.service.global_pathfinding_service import GlobalP
 from ai_rpg_world.domain.world.service.movement_config_service import DefaultMovementConfigService
 from ai_rpg_world.domain.player.event.status_events import PlayerLocationChangedEvent, PlayerStaminaConsumedEvent
 from ai_rpg_world.domain.world.event.map_events import WorldObjectMovedEvent, GatewayTriggeredEvent
+from ai_rpg_world.application.world.handlers.gateway_handler import GatewayTriggeredEventHandler
 from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import AStarPathfindingStrategy
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import InMemoryPlayerStatusRepository
 from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import InMemoryPlayerProfileRepository
@@ -68,15 +69,16 @@ from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import In
 class TestMovementApplicationService:
     @pytest.fixture
     def setup_service(self):
-        def create_uow():
-            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
-
-        unit_of_work, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(
-            unit_of_work_factory=create_uow
-        )
-
         data_store = InMemoryDataStore()
         data_store.clear_all()
+
+        def create_uow():
+            return InMemoryUnitOfWork(unit_of_work_factory=create_uow, data_store=data_store)
+
+        unit_of_work, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(
+            unit_of_work_factory=create_uow,
+            data_store=data_store
+        )
         
         player_status_repo = InMemoryPlayerStatusRepository(data_store, unit_of_work)
         player_profile_repo = InMemoryPlayerProfileRepository(data_store, unit_of_work)
@@ -89,6 +91,15 @@ class TestMovementApplicationService:
         map_transition_service = MapTransitionService()
         time_provider = InMemoryGameTimeProvider(initial_tick=100)
         
+        # 同期イベントハンドラの登録
+        gateway_handler = GatewayTriggeredEventHandler(
+            physical_map_repository=physical_map_repo,
+            player_status_repository=player_status_repo,
+            map_transition_service=map_transition_service,
+            event_publisher=event_publisher
+        )
+        event_publisher.register_handler(GatewayTriggeredEvent, gateway_handler, is_synchronous=True)
+
         service = MovementApplicationService(
             player_status_repository=player_status_repo,
             player_profile_repository=player_profile_repo,
@@ -96,7 +107,6 @@ class TestMovementApplicationService:
             world_map_repository=world_map_repo,
             global_pathfinding_service=global_pathfinding_service,
             movement_config_service=movement_config_service,
-            map_transition_service=map_transition_service,
             time_provider=time_provider,
             unit_of_work=unit_of_work
         )
