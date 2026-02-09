@@ -1,4 +1,5 @@
 import pytest
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, ObjectTypeEnum, MovementCapabilityEnum
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
@@ -10,10 +11,11 @@ from ai_rpg_world.domain.world.entity.world_object_component import ActorCompone
 class TestActorComponent:
     def test_actor_creation(self):
         capability = MovementCapability.ghost()
+        player_id = PlayerId(100)
         actor_comp = ActorComponent(
             direction=DirectionEnum.NORTH,
             capability=capability,
-            owner_id="player_1",
+            player_id=player_id,
             is_npc=False
         )
         
@@ -29,7 +31,7 @@ class TestActorComponent:
         assert isinstance(obj.component, ActorComponent)
         assert obj.component.direction == DirectionEnum.NORTH
         assert obj.component.capability == capability
-        assert obj.component.owner_id == "player_1"
+        assert obj.component.player_id == player_id
         assert obj.component.is_npc is False
 
     def test_actor_turn(self):
@@ -40,9 +42,10 @@ class TestActorComponent:
         assert actor_comp.direction == DirectionEnum.EAST
 
     def test_actor_to_dict(self):
-        actor_comp = ActorComponent(owner_id="p1")
+        player_id = PlayerId(100)
+        actor_comp = ActorComponent(player_id=player_id)
         d = actor_comp.to_dict()
         
         assert d["direction"] == "SOUTH"
-        assert d["owner_id"] == "p1"
+        assert d["player_id"] == "100"
         assert "WALK" in d["capabilities"]

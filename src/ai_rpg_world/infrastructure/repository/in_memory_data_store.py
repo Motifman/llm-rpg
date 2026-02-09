@@ -21,7 +21,9 @@ from ai_rpg_world.domain.sns.aggregate.reply_aggregate import ReplyAggregate
 from ai_rpg_world.domain.sns.entity.notification import Notification as SnsNotification
 from ai_rpg_world.domain.sns.value_object.notification_id import NotificationId
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.aggregate.weather_zone import WeatherZone
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.weather_zone_id import WeatherZoneId
 
 
 class InMemoryDataStore:
@@ -55,6 +57,7 @@ class InMemoryDataStore:
         
         # World Domain
         self.physical_maps: Dict[SpotId, PhysicalMapAggregate] = {}
+        self.weather_zones: Dict[WeatherZoneId, WeatherZone] = {}
         self.world_maps: Dict[Any, Any] = {} # Dict[WorldId, WorldMapAggregate]
         self.spot_to_world_id: Dict[SpotId, Any] = {} # Dict[SpotId, WorldId]
         
@@ -241,6 +244,7 @@ class InMemoryDataStore:
         self.trades.clear()
         self.next_trade_id = 1
         self.physical_maps.clear()
+        self.weather_zones.clear()
         self.world_maps.clear()
         self.spot_to_world_id.clear()
 
@@ -250,6 +254,7 @@ class InMemoryDataStore:
         return {
             "player_statuses": copy.deepcopy(self.player_statuses),
             "physical_maps": copy.deepcopy(self.physical_maps),
+            "weather_zones": copy.deepcopy(self.weather_zones),
             "player_inventories": copy.deepcopy(self.player_inventories),
             "trades": copy.deepcopy(self.trades),
             "sns_users": copy.deepcopy(self.sns_users),
@@ -261,6 +266,7 @@ class InMemoryDataStore:
         """スナップショットからデータを復元する"""
         self.player_statuses = snapshot["player_statuses"]
         self.physical_maps = snapshot["physical_maps"]
+        self.weather_zones = snapshot["weather_zones"]
         self.player_inventories = snapshot["player_inventories"]
         self.trades = snapshot["trades"]
         self.sns_users = snapshot["sns_users"]

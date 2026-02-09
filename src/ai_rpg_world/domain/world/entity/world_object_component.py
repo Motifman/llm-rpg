@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TYPE_CHECKING
 from ai_rpg_world.domain.world.exception.map_exception import LockedDoorException
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, BehaviorStateEnum
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
@@ -7,6 +7,8 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.common.exception import ValidationException, BusinessRuleException
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.exception.behavior_exception import (
     VisionRangeValidationException, 
     FOVAngleValidationException,
@@ -60,6 +62,11 @@ class WorldObjectComponent(ABC):
         return 1
 
 
+    @property
+    def player_id(self) -> Optional["PlayerId"]:
+        """紐付いているプレイヤーIDを返す（アクターでない場合はNone）"""
+        return None
+
 class ChestComponent(WorldObjectComponent):
     """宝箱の機能を持つコンポーネント"""
     def __init__(self, is_open: bool = False, item_ids: list[int] = None):
@@ -109,7 +116,7 @@ class ActorComponent(WorldObjectComponent):
         self, 
         direction: DirectionEnum = DirectionEnum.SOUTH,
         capability: MovementCapability = None,
-        owner_id: Optional[str] = None, # プレイヤーIDなど
+        player_id: Optional["PlayerId"] = None,
         is_npc: bool = False,
         fov_angle: float = 360.0,
         race: str = "human",
@@ -120,11 +127,15 @@ class ActorComponent(WorldObjectComponent):
             
         self.direction = direction
         self._capability = capability or MovementCapability.normal_walk()
-        self.owner_id = owner_id
+        self._player_id = player_id
         self.is_npc = is_npc
         self.fov_angle = fov_angle
         self.race = race
         self.faction = faction
+
+    @property
+    def player_id(self) -> Optional["PlayerId"]:
+        return self._player_id
 
     @property
     def capability(self) -> MovementCapability:
@@ -148,7 +159,7 @@ class ActorComponent(WorldObjectComponent):
             "direction": self.direction.value,
             "speed_modifier": self._capability.speed_modifier,
             "capabilities": [c.value for c in self._capability.capabilities],
-            "owner_id": self.owner_id,
+            "player_id": str(self._player_id) if self._player_id else None,
             "is_npc": self.is_npc,
             "fov_angle": self.fov_angle,
             "race": self.race,
@@ -191,7 +202,7 @@ class AutonomousBehaviorComponent(ActorComponent):
         self,
         direction: DirectionEnum = DirectionEnum.SOUTH,
         capability: MovementCapability = None,
-        owner_id: Optional[str] = None,
+        player_id: Optional["PlayerId"] = None,
         is_npc: bool = True,
         state: BehaviorStateEnum = BehaviorStateEnum.IDLE,
         vision_range: int = 5,
@@ -206,7 +217,7 @@ class AutonomousBehaviorComponent(ActorComponent):
         initial_position: Optional[Coordinate] = None,
         random_move_chance: float = 0.5
     ):
-        super().__init__(direction, capability, owner_id, is_npc, fov_angle, race, faction)
+        super().__init__(direction, capability, player_id, is_npc, fov_angle, race, faction)
         self._validate(vision_range, search_duration, hp_percentage, flee_threshold, max_failures, random_move_chance)
             
         self.state = state

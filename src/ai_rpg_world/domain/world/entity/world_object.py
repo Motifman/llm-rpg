@@ -56,6 +56,11 @@ class WorldObject:
         return self._component
 
     @property
+    def player_id(self) -> Optional["PlayerId"]:
+        """紐付いているプレイヤーIDを返す"""
+        return self._component.player_id if self._component else None
+
+    @property
     def is_actor(self) -> bool:
         """アクターかどうか"""
         return self._component.is_actor if self._component else False
