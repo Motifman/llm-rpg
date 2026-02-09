@@ -17,12 +17,15 @@ class InMemoryUnitOfWork(UnitOfWork):
     複数の集約更新の一貫性を保証します。
     """
 
-    def __init__(self, event_publisher=None, unit_of_work_factory=None):
+    def __init__(self, event_publisher=None, unit_of_work_factory=None, data_store=None):
         self._in_transaction = False
         self._pending_operations: List[Callable[[], None]] = []
         self._pending_events: List[DomainEvent] = []
+        self._processed_sync_count = 0
         self._committed = False
         self._event_publisher = event_publisher
+        self._data_store = data_store
+        self._snapshot = None
 
         # 別トランザクション処理専用 - 必須パラメータ
         if unit_of_work_factory is None:
@@ -36,17 +39,24 @@ class InMemoryUnitOfWork(UnitOfWork):
         self._in_transaction = True
         self._pending_operations = []
         self._pending_events = []
+        self._processed_sync_count = 0
         self._committed = False
+        
+        # ロールバック用にスナップショットを取得
+        if self._data_store:
+            self._snapshot = self._data_store.take_snapshot()
 
     def commit(self) -> None:
-        """コミット - 保留中の操作を実行し、別トランザクションでイベント処理"""
+        """コミット - 保留中の操作を実行し、同一トランザクションで同期イベント、別トランザクションで非同期イベントを処理"""
         if not self._in_transaction:
             raise RuntimeError("No transaction in progress")
 
         try:
-            # 保留中の操作を順次実行
-            for operation in self._pending_operations:
-                operation()
+            # 1. 同期イベントの処理（保留中の操作も適宜実行される）
+            self.process_sync_events()
+
+            # 2. 残った保留中の操作があれば実行
+            self._execute_pending_operations()
 
             self._committed = True
 
@@ -55,19 +65,54 @@ class InMemoryUnitOfWork(UnitOfWork):
             self.rollback()
             raise e
         finally:
-            # トランザクション完了後はクリア
+            # トランザクション完了後は状態をクリアするが、
+            # 非同期イベント処理のためにイベントリストは一時的に保持
+            events_to_process_async = self._pending_events.copy()
+            
             self._in_transaction = False
             self._pending_operations.clear()
-
-            # コミット成功時のみ、別トランザクションでイベントを処理
-            if self._committed and self._pending_events:
-                self._process_events_in_separate_transaction()
-
-            # イベントもクリア
             self._pending_events.clear()
+            self._processed_sync_count = 0 # リセット
+            self._snapshot = None
+
+            # コミット成功時のみ、別トランザクションで非同期イベントを処理
+            if self._committed and events_to_process_async:
+                self._pending_events = events_to_process_async
+                self._process_events_in_separate_transaction()
+                self._pending_events.clear()
+
+    def _execute_pending_operations(self) -> None:
+        """保留中の操作を順次実行する"""
+        while self._pending_operations:
+            # 操作の実行中にさらに操作が追加される可能性があるため
+            operations = self._pending_operations.copy()
+            self._pending_operations.clear()
+            for operation in operations:
+                operation()
+
+    def process_sync_events(self) -> None:
+        """同期イベントを即座に処理する（同一トランザクション内）"""
+        if not self._in_transaction:
+            return
+
+        if not hasattr(self, '_processed_sync_count'):
+            self._processed_sync_count = 0
+
+        while True:
+            # 同期イベントを処理する前に、そこまでの操作を全て反映させる
+            # これにより、ハンドラが最新の状態をリポジトリから取得できる
+            self._execute_pending_operations()
+            
+            if self._processed_sync_count >= len(self._pending_events):
+                break
+                
+            events_to_process = self._pending_events[self._processed_sync_count:]
+            self._processed_sync_count = len(self._pending_events)
+            if self._event_publisher:
+                self._event_publisher.publish_sync_events(events_to_process)
 
     def _process_events_in_separate_transaction(self) -> None:
-        """保留中のイベントを別トランザクションで処理"""
+        """保留中のイベントを別トランザクションで処理（非同期ハンドラ）"""
         if not self._pending_events:
             return
 
@@ -85,7 +130,8 @@ class InMemoryUnitOfWork(UnitOfWork):
                     # イベントパブリッシャーがない場合でも、メインのイベントパブリッシャーのハンドラーを使用
                     for event in self._pending_events:
                         event_type = type(event)
-                        handlers = self._event_publisher._handlers.get(event_type, [])
+                        # 非同期ハンドラーを使用
+                        handlers = self._event_publisher._async_handlers.get(event_type, [])
                         for handler in handlers:
                             try:
                                 handler.handle(event)
@@ -98,15 +144,20 @@ class InMemoryUnitOfWork(UnitOfWork):
             print(f"Failed to process events in separate transaction: {e}")
 
     def rollback(self) -> None:
-        """ロールバック - 保留中の操作を破棄"""
+        """ロールバック - 保留中の操作を破棄し、状態を復元"""
         if not self._in_transaction:
             raise RuntimeError("No transaction in progress")
+
+        # 状態を復元
+        if self._data_store and self._snapshot:
+            self._data_store.restore_snapshot(self._snapshot)
 
         # 保留中の操作をクリア
         self._pending_operations.clear()
         self._pending_events.clear()
         self._committed = False
         self._in_transaction = False
+        self._snapshot = None
 
     def add_operation(self, operation: Callable[[], None]) -> None:
         """保留中の操作を追加"""
@@ -151,13 +202,14 @@ class InMemoryUnitOfWork(UnitOfWork):
             self.commit()
 
     @classmethod
-    def create_with_event_publisher(cls, unit_of_work_factory=None) -> Tuple["InMemoryUnitOfWork", "InMemoryEventPublisherWithUow"]:
+    def create_with_event_publisher(cls, unit_of_work_factory=None, data_store=None) -> Tuple["InMemoryUnitOfWork", "InMemoryEventPublisherWithUow"]:
         """Unit of Workとイベントパブリッシャーを作成し、適切に接続する
-
+        
         双方向参照の設定をカプセル化し、テストでの使用を簡素化します。
 
         Args:
             unit_of_work_factory: 別トランザクション用のUnit of Workファクトリ（必須）
+            data_store: 状態復元用のデータストア
 
         Returns:
             (unit_of_work, event_publisher)のタプル
@@ -168,7 +220,7 @@ class InMemoryUnitOfWork(UnitOfWork):
         # 実行時にインポートして循環インポートを回避
         from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
 
-        unit_of_work = cls(unit_of_work_factory=unit_of_work_factory)
+        unit_of_work = cls(unit_of_work_factory=unit_of_work_factory, data_store=data_store)
         event_publisher = InMemoryEventPublisherWithUow(unit_of_work)
         unit_of_work._event_publisher = event_publisher
         return unit_of_work, event_publisher

@@ -17,7 +17,6 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
-from ai_rpg_world.domain.world.service.map_transition_service import MapTransitionService
 from ai_rpg_world.domain.world.service.global_pathfinding_service import GlobalPathfindingService
 from ai_rpg_world.domain.world.service.movement_config_service import MovementConfigService
 from ai_rpg_world.domain.world.event.map_events import GatewayTriggeredEvent
@@ -60,7 +59,6 @@ class MovementApplicationService:
         world_map_repository: WorldMapRepository,
         global_pathfinding_service: GlobalPathfindingService,
         movement_config_service: MovementConfigService,
-        map_transition_service: MapTransitionService,
         time_provider: GameTimeProvider,
         unit_of_work: UnitOfWork
     ):
@@ -70,7 +68,6 @@ class MovementApplicationService:
         self._world_map_repository = world_map_repository
         self._global_pathfinding_service = global_pathfinding_service
         self._movement_config_service = movement_config_service
-        self._map_transition_service = map_transition_service
         self._time_provider = time_provider
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
@@ -277,26 +274,11 @@ class MovementApplicationService:
             # プレイヤー状態の更新（座標）
             player_status.update_location(current_spot_id, to_coord)
             
-            # 6. イベント収集と後処理（ゲートウェイ判定など）
-            events = physical_map.get_events()
-            gateway_event = next((e for e in events if isinstance(e, GatewayTriggeredEvent)), None)
-            
-            arrival_tick = actor.busy_until
+            # 6. イベント収集と後処理
+            # ゲートウェイ判定などは同期イベントハンドラに委譲される
             message = "移動しました"
-            
-            if gateway_event:
-                # ゲートウェイによるマップ遷移
-                target_spot_id = gateway_event.target_spot_id
-                target_map = self._physical_map_repository.find_by_spot_id(target_spot_id)
-                if not target_map:
-                    raise MapNotFoundException(int(target_spot_id))
-                
-                self._map_transition_service.transition_player(
-                    player_status, physical_map, target_map, gateway_event.landing_coordinate
-                )
-                self._physical_map_repository.save(target_map)
-                self._unit_of_work.add_events(target_map.get_events())
-                message = "マップを移動しました"
+            if any(isinstance(e, GatewayTriggeredEvent) for e in physical_map.get_events()):
+                 message = "マップを移動しました"
 
             # 保存
             self._physical_map_repository.save(physical_map)
@@ -305,8 +287,14 @@ class MovementApplicationService:
             # イベント収集
             self._unit_of_work.add_events(physical_map.get_events())
             self._unit_of_work.add_events(player_status.get_events())
+
+            # 同期イベントの即時実行（マップ遷移などを反映させるため）
+            self._unit_of_work.process_sync_events()
             
-            return self._create_success_dto(player_status, current_spot_id, from_coord, player_status.current_coordinate, arrival_tick.value, message)
+            # 状態が変わっている可能性があるため再ロード
+            player_status = self._player_status_repository.find_by_id(player_id)
+            
+            return self._create_success_dto(player_status, current_spot_id, from_coord, player_status.current_coordinate, actor.busy_until.value, message)
 
         except DomainActorBusyException as e:
             raise ActorBusyException(player_id_int, int(actor.busy_until.value - current_tick.value))
