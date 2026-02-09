@@ -46,7 +46,9 @@ from ai_rpg_world.domain.world.entity.gateway import Gateway
 from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
 from ai_rpg_world.domain.world.value_object.area import RectArea
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, DirectionEnum
+from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, DirectionEnum, EnvironmentTypeEnum
+from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
@@ -729,3 +731,40 @@ class TestMovementApplicationService:
         
         with pytest.raises(MapNotFoundException):
             service.move_tile(MoveTileCommand(player_id=player_id, direction=DirectionEnum.SOUTH))
+
+    def test_movement_stamina_cost_with_weather(self, setup_service):
+        """天候によって移動時のスタミナ消費が変化すること"""
+        service, status_repo, profile_repo, phys_repo, world_repo, uow, _, event_publisher = setup_service
+        
+        # スタミナ基本消費を10に設定
+        service._movement_config_service = DefaultMovementConfigService(base_stamina_cost=10.0)
+        
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        world_repo.save(self._create_world_map(1, [{"id": spot_id, "name": "S1"}]))
+        
+        # 1. 吹雪のマップを作成 (Roadを使用)
+        # BLIZZARD multiplier is 1.8. Road cost is 1.0. 
+        # Stamina cost = base(10.0) * terrain_mult(1.0) * weather_mult(1.8) = 18.0.
+        phys_map = self._create_sample_map(spot_id, objects=[self._create_player_object(player_id, 0, 0)], terrain_type=TerrainType.road())
+        phys_map.set_weather(WeatherState(WeatherTypeEnum.BLIZZARD, 1.0))
+        phys_repo.save(phys_map)
+        
+        status = self._create_sample_status(player_id, spot_id, 0, 0)
+        initial_stamina = status.stamina.value
+        status_repo.save(status)
+        
+        # 移動
+        service.move_tile(MoveTileCommand(player_id=player_id, direction=DirectionEnum.SOUTH))
+        
+        # スタミナ消費の検証
+        updated_status = status_repo.find_by_id(PlayerId(player_id))
+        consumed = initial_stamina - updated_status.stamina.value
+        assert consumed == 18
+
+        # イベント発行の検証
+        events = event_publisher.get_published_events()
+        stamina_events = [e for e in events if isinstance(e, PlayerStaminaConsumedEvent)]
+        assert len(stamina_events) == 1
+        assert stamina_events[0].consumed_amount == 18

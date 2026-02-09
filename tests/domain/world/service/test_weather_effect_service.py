@@ -55,3 +55,45 @@ class TestWeatherEffectService:
         # 屋内
         max_dist = WeatherEffectService.get_max_vision_distance(state, EnvironmentTypeEnum.INDOOR)
         assert max_dist == float('inf')
+
+    def test_calculate_stamina_multiplier(self):
+        # 晴れ
+        state = WeatherState(WeatherTypeEnum.CLEAR, 1.0)
+        mult = WeatherEffectService.calculate_stamina_multiplier(state, EnvironmentTypeEnum.OUTDOOR)
+        assert mult == 1.0
+        
+        # 吹雪 (1.8倍)
+        state = WeatherState(WeatherTypeEnum.BLIZZARD, 1.0)
+        mult = WeatherEffectService.calculate_stamina_multiplier(state, EnvironmentTypeEnum.OUTDOOR)
+        assert mult == 1.8
+        
+        # 強度 0.5 の吹雪 -> 1.0 + (1.8 - 1.0) * 0.5 = 1.4
+        state = WeatherState(WeatherTypeEnum.BLIZZARD, 0.5)
+        mult = WeatherEffectService.calculate_stamina_multiplier(state, EnvironmentTypeEnum.OUTDOOR)
+        assert pytest.approx(mult) == 1.4
+        
+        # 屋内なら影響なし
+        state = WeatherState(WeatherTypeEnum.BLIZZARD, 1.0)
+        mult = WeatherEffectService.calculate_stamina_multiplier(state, EnvironmentTypeEnum.INDOOR)
+        assert mult == 1.0
+
+    def test_calculate_environmental_stamina_drain(self):
+        # 晴れ
+        state = WeatherState(WeatherTypeEnum.CLEAR, 1.0)
+        drain = WeatherEffectService.calculate_environmental_stamina_drain(state, EnvironmentTypeEnum.OUTDOOR)
+        assert drain == 0
+        
+        # 吹雪 (3 * intensity)
+        state = WeatherState(WeatherTypeEnum.BLIZZARD, 1.0)
+        drain = WeatherEffectService.calculate_environmental_stamina_drain(state, EnvironmentTypeEnum.OUTDOOR)
+        assert drain == 3
+        
+        # 強度 0.5 の吹雪 -> int(3 * 0.5) = 1
+        state = WeatherState(WeatherTypeEnum.BLIZZARD, 0.5)
+        drain = WeatherEffectService.calculate_environmental_stamina_drain(state, EnvironmentTypeEnum.OUTDOOR)
+        assert drain == 1
+        
+        # 屋内なら影響なし
+        state = WeatherState(WeatherTypeEnum.BLIZZARD, 1.0)
+        drain = WeatherEffectService.calculate_environmental_stamina_drain(state, EnvironmentTypeEnum.INDOOR)
+        assert drain == 0

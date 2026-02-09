@@ -19,7 +19,7 @@ class TestWeatherZone:
 
     def test_create_weather_zone_success(self):
         """正常なWeatherZoneの作成テスト"""
-        zone_id = WeatherZoneId("zone-1")
+        zone_id = WeatherZoneId(1)
         name = WeatherZoneName("Test Zone")
         spot_ids = {SpotId(1), SpotId(2)}
         initial_state = WeatherState.clear()
@@ -34,9 +34,9 @@ class TestWeatherZone:
     def test_validation_empty_id(self):
         """空のIDに対するバリデーションテスト"""
         with pytest.raises(WeatherZoneIdValidationException):
-            WeatherZoneId("")
+            WeatherZoneId(0)
         with pytest.raises(WeatherZoneIdValidationException):
-            WeatherZoneId("   ")
+            WeatherZoneId(-1)
 
     def test_validation_empty_name(self):
         """空の名前に対するバリデーションテスト"""
@@ -54,7 +54,7 @@ class TestWeatherZone:
 
     def test_change_weather_emits_event(self):
         """天候変更時のイベント発行テスト"""
-        zone_id = WeatherZoneId("zone-1")
+        zone_id = WeatherZoneId(1)
         name = WeatherZoneName("Test Zone")
         zone = WeatherZone(zone_id, name, {SpotId(1)}, WeatherState.clear())
         zone.clear_events()
@@ -74,7 +74,7 @@ class TestWeatherZone:
 
     def test_change_weather_no_change(self):
         """同じ天候への変更時にイベントが発行されないことのテスト"""
-        zone = WeatherZone(WeatherZoneId("z1"), WeatherZoneName("Z"), {SpotId(1)}, WeatherState.clear())
+        zone = WeatherZone(WeatherZoneId(1), WeatherZoneName("Z"), {SpotId(1)}, WeatherState.clear())
         zone.clear_events()
         
         zone.change_weather(WeatherState.clear())
@@ -83,7 +83,7 @@ class TestWeatherZone:
 
     def test_spot_management(self):
         """スポット管理機能のテスト"""
-        zone = WeatherZone(WeatherZoneId("z1"), WeatherZoneName("Z"), {SpotId(1)}, WeatherState.clear())
+        zone = WeatherZone(WeatherZoneId(1), WeatherZoneName("Z"), {SpotId(1)}, WeatherState.clear())
         
         assert zone.contains_spot(SpotId(1))
         assert not zone.contains_spot(SpotId(2))
@@ -101,7 +101,7 @@ class TestWeatherZone:
     def test_spot_ids_immutability(self):
         """spot_idsの不変性テスト"""
         spot_ids = {SpotId(1)}
-        zone = WeatherZone(WeatherZoneId("z1"), WeatherZoneName("Z"), spot_ids, WeatherState.clear())
+        zone = WeatherZone(WeatherZoneId(1), WeatherZoneName("Z"), spot_ids, WeatherState.clear())
         
         # 内部セットがコピーされていることを確認
         zone.spot_ids.add(SpotId(2))
