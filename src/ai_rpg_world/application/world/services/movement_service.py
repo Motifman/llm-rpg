@@ -1,208 +1,443 @@
-from typing import Optional, List
+import logging
+from typing import Optional, List, Dict, Tuple, Callable, Any
 from datetime import datetime
+
+from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
+from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.aggregate.world_map_aggregate import WorldMapAggregate
+from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
+from ai_rpg_world.domain.world.repository.world_map_repository import WorldMapRepository
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+from ai_rpg_world.domain.world.service.map_transition_service import MapTransitionService
+from ai_rpg_world.domain.world.service.global_pathfinding_service import GlobalPathfindingService
+from ai_rpg_world.domain.world.service.movement_config_service import MovementConfigService
+from ai_rpg_world.domain.world.event.map_events import GatewayTriggeredEvent
+from ai_rpg_world.domain.world.exception.map_exception import (
+    ObjectNotFoundException, TileNotFoundException, InvalidMovementException, ActorBusyException as DomainActorBusyException
+)
+from ai_rpg_world.domain.player.exception import PlayerDownedException
+from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.application.world.contracts.commands import (
-    MovePlayerCommand,
-    GetPlayerLocationCommand,
-    GetSpotInfoCommand
+    MoveTileCommand,
+    SetDestinationCommand,
+    TickMovementCommand,
+    GetPlayerLocationCommand
 )
 from ai_rpg_world.application.world.contracts.dtos import (
     MoveResultDto,
-    PlayerLocationDto,
-    SpotInfoDto,
-    AvailableMoveDto,
-    PlayerMovementOptionsDto
+    PlayerLocationDto
 )
-from ai_rpg_world.domain.spot.movement_service import MovementService
-from ai_rpg_world.domain.player.player_repository import PlayerRepository
-from ai_rpg_world.domain.spot.spot_repository import SpotRepository
-from ai_rpg_world.domain.spot.road_repository import RoadRepository
-from ai_rpg_world.domain.spot.spot_exception import (
-    PlayerNotMeetConditionException,
-    PlayerAlreadyInSpotException,
-    PlayerNotInSpotException,
-    SpotNotConnectedException,
-    RoadNotConnectedToFromSpotException,
-    RoadNotConnectedToToSpotException,
+from ai_rpg_world.application.world.exceptions.base_exception import WorldApplicationException, WorldSystemErrorException
+from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
+    MovementCommandException,
+    PlayerNotFoundException,
+    MapNotFoundException,
+    MovementInvalidException,
+    PlayerStaminaExhaustedException,
+    PathBlockedException,
+    ActorBusyException,
+    MapTransitionInvalidException
 )
 
 
 class MovementApplicationService:
-    """移動アプリケーションサービス"""
+    """移動に関するユースケースを統合するアプリケーションサービス"""
     
     def __init__(
         self,
-        move_service: MovementService,
-        player_repository: PlayerRepository,
-        spot_repository: SpotRepository,
-        road_repository: RoadRepository
+        player_status_repository: PlayerStatusRepository,
+        player_profile_repository: PlayerProfileRepository,
+        physical_map_repository: PhysicalMapRepository,
+        world_map_repository: WorldMapRepository,
+        global_pathfinding_service: GlobalPathfindingService,
+        movement_config_service: MovementConfigService,
+        map_transition_service: MapTransitionService,
+        time_provider: GameTimeProvider,
+        unit_of_work: UnitOfWork
     ):
-        self._move_service = move_service
-        self._player_repository = player_repository
-        self._spot_repository = spot_repository
-        self._road_repository = road_repository
-    
-    def move_player(self, command: MovePlayerCommand) -> MoveResultDto:
-        """プレイヤーを移動させる
-        
-        Args:
-            command: 移動コマンド
-            
-        Returns:
-            MoveResultDto: 移動結果
-            
-        Raises:
-            ValueError: プレイヤーまたはスポットが見つからない場合
-        """
-        # 1. エンティティを取得
-        player = self._player_repository.find_by_id(command.player_id)
-        if not player:
-            raise ValueError(f"Player not found: {command.player_id}")
-        
-        to_spot = self._spot_repository.find_by_id(command.to_spot_id)
-        if not to_spot:
-            raise ValueError(f"Destination spot not found: {command.to_spot_id}")
-        
-        from_spot = self._spot_repository.find_by_id(player.current_spot_id)
-        if not from_spot:
-            raise ValueError(f"Current spot not found: {player.current_spot_id}")
-        
-        road = self._road_repository.find_between_spots(from_spot.spot_id, to_spot.spot_id)
-        if not road:
-            raise ValueError(f"Road not found between spots {from_spot.spot_id} and {to_spot.spot_id}")
-        
+        self._player_status_repository = player_status_repository
+        self._player_profile_repository = player_profile_repository
+        self._physical_map_repository = physical_map_repository
+        self._world_map_repository = world_map_repository
+        self._global_pathfinding_service = global_pathfinding_service
+        self._movement_config_service = movement_config_service
+        self._map_transition_service = map_transition_service
+        self._time_provider = time_provider
+        self._unit_of_work = unit_of_work
+        self._logger = logging.getLogger(self.__class__.__name__)
+
+    def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
+        """共通の例外処理を実行"""
         try:
-            # 3. ドメインサービスで移動実行
-            move_result = self._move_service.move_player_to_spot(player, from_spot, to_spot, road)
+            return operation()
+        except WorldApplicationException as e:
+            raise e
+        except DomainException as e:
+            # ドメイン例外をアプリケーション例外に変換
+            raise MovementCommandException(str(e), player_id=context.get('player_id'))
+        except Exception as e:
+            self._logger.error(f"Unexpected error in {context.get('action', 'unknown')}: {str(e)}",
+                             extra=context)
+            raise WorldSystemErrorException(f"{context.get('action', 'unknown')} failed: {str(e)}",
+                                         original_exception=e)
+
+    def move_tile(self, command: MoveTileCommand) -> MoveResultDto:
+        """タイルベースの移動（人間プレイヤー用）"""
+        return self._execute_with_error_handling(
+            operation=lambda: self._move_tile_impl(command),
+            context={
+                "action": "move_tile",
+                "player_id": command.player_id,
+                "direction": command.direction
+            }
+        )
+
+    def _move_tile_impl(self, command: MoveTileCommand) -> MoveResultDto:
+        with self._unit_of_work:
+            return self._execute_movement_step(command.player_id, direction=command.direction)
+
+    def set_destination(self, command: SetDestinationCommand) -> MoveResultDto:
+        """目的地を設定する（LLMエージェントまたは自動移動用）"""
+        return self._execute_with_error_handling(
+            operation=lambda: self._set_destination_impl(command),
+            context={
+                "action": "set_destination",
+                "player_id": command.player_id,
+                "target_spot_id": command.target_spot_id,
+                "target_coord": (command.target_x, command.target_y, command.target_z)
+            }
+        )
+
+    def _set_destination_impl(self, command: SetDestinationCommand) -> MoveResultDto:
+        player_id = PlayerId(command.player_id)
+        target_spot_id = SpotId(command.target_spot_id)
+        target_coord = Coordinate(command.target_x, command.target_y, command.target_z)
+        
+        with self._unit_of_work:
+            player_status = self._player_status_repository.find_by_id(player_id)
+            if not player_status:
+                raise PlayerNotFoundException(command.player_id)
             
-            # 4. エンティティを保存
-            self._player_repository.save(player)
-            self._spot_repository.save(from_spot)
-            self._spot_repository.save(to_spot)
-            self._road_repository.save(road)
+            # 現在地取得
+            current_spot_id = player_status.current_spot_id
+            current_coord = player_status.current_coordinate
             
-            # 5. DTOに変換して返却
-            return MoveResultDto(
-                success=True,
-                player_id=move_result.player_id,
-                player_name=move_result.player_name,
-                from_spot_id=move_result.from_spot_id,
-                from_spot_name=move_result.from_spot_name,
-                to_spot_id=move_result.to_spot_id,
-                to_spot_name=move_result.to_spot_name,
-                road_id=move_result.road_id,
-                road_description=move_result.road_description,
-                moved_at=move_result.moved_at,
-                distance=move_result.distance,
-                message=move_result.get_move_summary()
+            if not current_spot_id or not current_coord:
+                raise MovementInvalidException("Player is not placed on any map", command.player_id)
+
+            # 目的地とパスの設定（GlobalPathfindingServiceを使用）
+            physical_map = self._physical_map_repository.find_by_spot_id(current_spot_id)
+            if not physical_map:
+                raise MapNotFoundException(int(current_spot_id))
+
+            # 世界地図を取得
+            world_map = self._get_world_map_for_spot(current_spot_id)
+
+            # プレイヤーオブジェクト情報の取得
+            world_object_id = WorldObjectId.create(int(player_id))
+            try:
+                actor = physical_map.get_actor(world_object_id)
+            except ObjectNotFoundException:
+                raise MovementInvalidException("Player object not found in map", command.player_id)
+
+            temp_goal, path = self._global_pathfinding_service.calculate_global_path(
+                current_spot_id=current_spot_id,
+                current_coord=current_coord,
+                target_spot_id=target_spot_id,
+                target_coord=target_coord,
+                physical_map=physical_map,
+                world_map=world_map,
+                world_object_id=world_object_id,
+                capability=actor.capability or MovementCapability.normal_walk()
             )
             
-        except (PlayerNotMeetConditionException, PlayerAlreadyInSpotException,
-                PlayerNotInSpotException, SpotNotConnectedException,
-                RoadNotConnectedToFromSpotException, RoadNotConnectedToToSpotException) as e:
-            return MoveResultDto(
-                success=False,
-                player_id=player.player_id,
-                player_name=player.name,
-                from_spot_id=from_spot.spot_id,
-                from_spot_name=from_spot.name,
-                to_spot_id=to_spot.spot_id,
-                to_spot_name=to_spot.name,
-                road_id=road.road_id if road else 0,
-                road_description=road.description if road else "",
-                moved_at=datetime.now(),
-                distance=0,
-                message="移動に失敗しました",
-                error_message=str(e)
+            if not path:
+                return self._create_failure_dto(command.player_id, "目的地への経路が見つかりません", player_status)
+
+            player_status.set_destination(temp_goal, path)
+            self._player_status_repository.save(player_status)
+            
+            # イベント収集
+            self._unit_of_work.add_events(player_status.get_events())
+            
+            return self._create_success_dto(
+                player_status, 
+                current_spot_id, 
+                current_coord, 
+                current_coord, 
+                self._time_provider.get_current_tick().value, 
+                "目的地を設定しました"
             )
-    
+
+    def tick_movement(self, command: TickMovementCommand) -> MoveResultDto:
+        """集約に保存されたパスに基づいて1ステップ進む"""
+        return self._execute_with_error_handling(
+            operation=lambda: self._tick_movement_impl(command),
+            context={
+                "action": "tick_movement",
+                "player_id": command.player_id
+            }
+        )
+
+    def _tick_movement_impl(self, command: TickMovementCommand) -> MoveResultDto:
+        player_id = PlayerId(command.player_id)
+        
+        with self._unit_of_work:
+            player_status = self._player_status_repository.find_by_id(player_id)
+            if not player_status:
+                raise PlayerNotFoundException(command.player_id)
+
+            next_coord = player_status.advance_path()
+            if not next_coord:
+                return self._create_failure_dto(command.player_id, "移動計画がないか、既に到着しています", player_status)
+            
+            # 移動実行
+            try:
+                result = self._execute_movement_step(command.player_id, target_coordinate=next_coord, player_status=player_status)
+                if not result.success:
+                    player_status.clear_path()
+                    self._player_status_repository.save(player_status)
+                    self._unit_of_work.add_events(player_status.get_events())
+                
+                return result
+            except (MovementInvalidException, PathBlockedException, ActorBusyException, PlayerStaminaExhaustedException) as e:
+                # 業務的な失敗の場合は、経路をクリアした状態を保存して正常終了（失敗DTO）を返す
+                player_status.clear_path()
+                self._player_status_repository.save(player_status)
+                self._unit_of_work.add_events(player_status.get_events())
+                return self._create_failure_dto(command.player_id, str(e), player_status)
+
+    def _execute_movement_step(
+        self, 
+        player_id_int: int, 
+        direction: Optional[DirectionEnum] = None, 
+        target_coordinate: Optional[Coordinate] = None,
+        player_status: Optional[PlayerStatusAggregate] = None
+    ) -> MoveResultDto:
+        """移動の1ステップを実行する"""
+        player_id = PlayerId(player_id_int)
+        current_tick = self._time_provider.get_current_tick()
+        
+        if not player_status:
+            player_status = self._player_status_repository.find_by_id(player_id)
+            if not player_status:
+                raise PlayerNotFoundException(player_id_int)
+        
+        # 1. 基本状態チェック（戦闘不能など）
+        if not player_status.can_act():
+            return self._create_failure_dto(player_id_int, "現在行動できません", player_status)
+
+        current_spot_id = player_status.current_spot_id
+        if not current_spot_id:
+            raise MovementInvalidException("Player is not on any map", player_id_int)
+        
+        # 2. 物理マップとアクターの取得
+        physical_map = self._physical_map_repository.find_by_spot_id(current_spot_id)
+        if not physical_map:
+            raise MapNotFoundException(int(current_spot_id))
+            
+        world_object_id = WorldObjectId.create(player_id_int)
+        try:
+            actor = physical_map.get_actor(world_object_id)
+        except ObjectNotFoundException:
+            raise MovementInvalidException("Player object not found in physical map", player_id_int)
+
+        # 3. 移動先座標の決定
+        from_coord = actor.coordinate
+        if direction:
+            to_coord = from_coord.neighbor(direction)
+        elif target_coordinate:
+            to_coord = target_coordinate
+        else:
+            raise MovementInvalidException("No movement target specified", player_id_int)
+
+        # 4. スタミナ消費の計算とチェック
+        try:
+            tile = physical_map.get_tile(to_coord)
+            stamina_cost = self._movement_config_service.get_stamina_cost(tile.terrain_type)
+            
+            if player_status.stamina.value < stamina_cost:
+                raise PlayerStaminaExhaustedException(player_id_int, stamina_cost, player_status.stamina.value)
+            
+            # 5. ドメインロジックの実行（物理マップ内移動）
+            physical_map.move_object(world_object_id, to_coord, current_tick, actor.capability)
+            
+            # スタミナ消費
+            player_status.consume_stamina(int(stamina_cost))
+            
+            # プレイヤー状態の更新（座標）
+            player_status.update_location(current_spot_id, to_coord)
+            
+            # 6. イベント収集と後処理（ゲートウェイ判定など）
+            events = physical_map.get_events()
+            gateway_event = next((e for e in events if isinstance(e, GatewayTriggeredEvent)), None)
+            
+            arrival_tick = actor.busy_until
+            message = "移動しました"
+            
+            if gateway_event:
+                # ゲートウェイによるマップ遷移
+                target_spot_id = gateway_event.target_spot_id
+                target_map = self._physical_map_repository.find_by_spot_id(target_spot_id)
+                if not target_map:
+                    raise MapNotFoundException(int(target_spot_id))
+                
+                self._map_transition_service.transition_player(
+                    player_status, physical_map, target_map, gateway_event.landing_coordinate
+                )
+                self._physical_map_repository.save(target_map)
+                self._unit_of_work.add_events(target_map.get_events())
+                message = "マップを移動しました"
+
+            # 保存
+            self._physical_map_repository.save(physical_map)
+            self._player_status_repository.save(player_status)
+            
+            # イベント収集
+            self._unit_of_work.add_events(physical_map.get_events())
+            self._unit_of_work.add_events(player_status.get_events())
+            
+            return self._create_success_dto(player_status, current_spot_id, from_coord, player_status.current_coordinate, arrival_tick.value, message)
+
+        except DomainActorBusyException as e:
+            raise ActorBusyException(player_id_int, int(actor.busy_until.value - current_tick.value))
+        except (TileNotFoundException, InvalidMovementException) as e:
+            raise PathBlockedException(player_id_int, {"x": to_coord.x, "y": to_coord.y, "z": to_coord.z})
+
+    def _create_success_dto(self, player_status, from_spot_id, from_coord, to_coord, arrival_tick, message) -> MoveResultDto:
+        # 名前情報の取得
+        profile = self._player_profile_repository.find_by_id(player_status.player_id)
+        if not profile:
+            raise PlayerNotFoundException(int(player_status.player_id))
+        player_name = profile.name.value
+            
+        # スポット名の取得（WorldMapRepositoryを使用）
+        from_spot = self._world_map_repository.find_spot_by_id(from_spot_id)
+        if not from_spot:
+            raise MapNotFoundException(int(from_spot_id))
+        from_spot_name = from_spot.name
+            
+        to_spot = self._world_map_repository.find_spot_by_id(player_status.current_spot_id)
+        if not to_spot:
+            raise MapNotFoundException(int(player_status.current_spot_id))
+        to_spot_name = to_spot.name
+
+        return MoveResultDto(
+            success=True,
+            player_id=int(player_status.player_id),
+            player_name=player_name,
+            from_spot_id=int(from_spot_id),
+            from_spot_name=from_spot_name,
+            to_spot_id=int(player_status.current_spot_id),
+            to_spot_name=to_spot_name,
+            from_coordinate={"x": from_coord.x, "y": from_coord.y, "z": from_coord.z},
+            to_coordinate={"x": to_coord.x, "y": to_coord.y, "z": to_coord.z},
+            moved_at=datetime.now(),
+            busy_until_tick=arrival_tick,
+            message=message
+        )
+
+    def _create_failure_dto(self, player_id_int: int, message: str, player_status: Optional[PlayerStatusAggregate] = None) -> MoveResultDto:
+        player_id = PlayerId(player_id_int)
+        player_name = ""
+        from_spot_id = 0
+        from_spot_name = ""
+        to_spot_id = 0
+        to_spot_name = ""
+        from_coord_dict = {"x": 0, "y": 0, "z": 0}
+        to_coord_dict = {"x": 0, "y": 0, "z": 0}
+
+        if player_status:
+            profile = self._player_profile_repository.find_by_id(player_id)
+            if profile:
+                player_name = profile.name.value
+            
+            if player_status.current_spot_id:
+                from_spot_id = int(player_status.current_spot_id)
+                to_spot_id = from_spot_id
+                spot = self._world_map_repository.find_spot_by_id(player_status.current_spot_id)
+                if spot:
+                    from_spot_name = spot.name
+                    to_spot_name = spot.name
+            
+            if player_status.current_coordinate:
+                c = player_status.current_coordinate
+                from_coord_dict = {"x": c.x, "y": c.y, "z": c.z}
+                to_coord_dict = from_coord_dict
+
+        return MoveResultDto(
+            success=False,
+            player_id=player_id_int,
+            player_name=player_name,
+            from_spot_id=from_spot_id,
+            from_spot_name=from_spot_name,
+            to_spot_id=to_spot_id,
+            to_spot_name=to_spot_name,
+            from_coordinate=from_coord_dict,
+            to_coordinate=to_coord_dict,
+            moved_at=datetime.now(),
+            busy_until_tick=0,
+            message="移動失敗",
+            error_message=message
+        )
+
+    def _get_world_map_for_spot(self, spot_id: SpotId) -> WorldMapAggregate:
+        """指定されたスポットを含む世界地図を取得"""
+        world_map = self._world_map_repository.find_by_spot_id(spot_id)
+        if world_map:
+            return world_map
+        raise MapNotFoundException(int(spot_id))
+
     def get_player_location(self, command: GetPlayerLocationCommand) -> Optional[PlayerLocationDto]:
         """プレイヤーの現在位置を取得"""
-        player = self._player_repository.find_by_id(command.player_id)
-        if not player:
+        player_id = PlayerId(command.player_id)
+        player_status = self._player_status_repository.find_by_id(player_id)
+        if not player_status or not player_status.current_spot_id or not player_status.current_coordinate:
             return None
+            
+        spot_id = player_status.current_spot_id
+        coord = player_status.current_coordinate
         
-        current_spot = self._spot_repository.find_by_id(player.current_spot_id)
-        if not current_spot:
-            return None
-        
-        # エリア情報は将来的に実装
-        area_name = None
-        
-        return PlayerLocationDto(
-            player_id=player.player_id,
-            player_name=player.name,
-            current_spot_id=current_spot.spot_id,
-            current_spot_name=current_spot.name,
-            current_spot_description=current_spot.description,
-            area_id=getattr(current_spot, '_area_id', None),
-            area_name=area_name
-        )
-    
-    def get_spot_info(self, command: GetSpotInfoCommand) -> Optional[SpotInfoDto]:
-        """スポット情報を取得"""
-        spot = self._spot_repository.find_by_id(command.spot_id)
+        # 名前情報の取得
+        profile = self._player_profile_repository.find_by_id(player_id)
+        if not profile:
+            raise PlayerNotFoundException(command.player_id)
+        player_name = profile.name.value
+            
+        spot = self._world_map_repository.find_spot_by_id(spot_id)
         if not spot:
-            return None
-        
-        # エリア情報は将来的に実装
+            raise MapNotFoundException(int(spot_id))
+        spot_name = spot.name
+        spot_desc = spot.description
+         
+        # LocationArea情報の取得
+        area_id = None
         area_name = None
-        
-        # 接続情報をリポジトリから取得
-        connected_spots = self._spot_repository.find_connected_spots(spot.spot_id)
-        connected_spot_ids = [spot.spot_id for spot in connected_spots]
-        connected_spot_names = [spot.name for spot in connected_spots]
-        
-        return SpotInfoDto(
-            spot_id=spot.spot_id,
-            name=spot.name,
-            description=spot.description,
-            area_id=getattr(spot, '_area_id', None),
-            area_name=area_name,
-            current_player_count=spot.get_current_player_count(),
-            current_player_ids=spot.get_current_player_ids(),
-            connected_spot_ids=connected_spot_ids,
-            connected_spot_names=connected_spot_names
-        )
-    
-    def get_player_movement_options(self, player_id: int) -> Optional[PlayerMovementOptionsDto]:
-        """プレイヤーの移動オプションを取得"""
-        player = self._player_repository.find_by_id(player_id)
-        if not player:
-            return None
-        
-        current_spot = self._spot_repository.find_by_id(player.current_spot_id)
-        if not current_spot:
-            return None
-        
-        available_moves = []
-        
-        # 接続されているスポットをリポジトリから取得
-        connected_spot_ids = self._road_repository.find_connected_spot_ids(current_spot.spot_id)
-        
-        for to_spot_id in connected_spot_ids:
-            to_spot = self._spot_repository.find_by_id(to_spot_id)
-            if not to_spot:
-                continue
-            
-            # 道路情報をリポジトリから取得
-            road = self._road_repository.find_between_spots(current_spot.spot_id, to_spot_id)
-            if not road:
-                continue
-            
-            available_moves.append(AvailableMoveDto(
-                spot_id=to_spot.spot_id,
-                spot_name=to_spot.name,
-                road_id=road.road_id,
-                road_description=road.description,
-                conditions_met=True,  # 条件チェックは移動時に実行されるため、ここでは常にTrue
-                failed_conditions=[]  # 条件チェックは移動時に実行されるため、ここでは空リスト
-            ))
-        
-        return PlayerMovementOptionsDto(
-            player_id=player.player_id,
-            player_name=player.name,
-            current_spot_id=current_spot.spot_id,
-            current_spot_name=current_spot.name,
-            available_moves=available_moves,
-            total_available_moves=len(available_moves)  # すべての接続先を利用可能として扱う
+        physical_map = self._physical_map_repository.find_by_spot_id(spot_id)
+        if physical_map:
+            areas = physical_map.get_location_areas_at(coord)
+            if areas:
+                area_id = int(areas[0].location_id)
+                area_name = areas[0].name
+         
+        return PlayerLocationDto(
+            player_id=command.player_id,
+            player_name=player_name,
+            current_spot_id=int(spot_id),
+            current_spot_name=spot_name,
+            current_spot_description=spot_desc,
+            x=coord.x,
+            y=coord.y,
+            z=coord.z,
+            area_id=area_id,
+            area_name=area_name
         )

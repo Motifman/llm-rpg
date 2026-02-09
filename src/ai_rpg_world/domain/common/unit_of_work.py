@@ -25,6 +25,11 @@ class UnitOfWork(Protocol):
         pass
 
     @abstractmethod
+    def add_events(self, events: list) -> None:
+        """保留中のイベントを追加"""
+        pass
+
+    @abstractmethod
     def __enter__(self):
         """コンテキストマネージャー開始"""
         pass

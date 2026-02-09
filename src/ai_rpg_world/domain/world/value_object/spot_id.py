@@ -27,3 +27,6 @@ class SpotId:
 
     def __str__(self) -> str:
         return str(self.value)
+
+    def __int__(self) -> int:
+        return self.value
