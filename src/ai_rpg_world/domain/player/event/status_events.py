@@ -14,6 +14,12 @@ class PlayerDownedEvent(BaseDomainEvent[PlayerId, "PlayerStatusAggregate"]):
 
 
 @dataclass(frozen=True)
+class PlayerEvadedEvent(BaseDomainEvent[PlayerId, "PlayerStatusAggregate"]):
+    """プレイヤー回避イベント"""
+    current_hp: int
+
+
+@dataclass(frozen=True)
 class PlayerRevivedEvent(BaseDomainEvent[PlayerId, "PlayerStatusAggregate"]):
     """プレイヤー復帰イベント"""
     hp_recovered: int

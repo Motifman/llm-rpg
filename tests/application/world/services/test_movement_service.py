@@ -407,7 +407,7 @@ class TestMovementApplicationService:
         profile_repo.save(self._create_sample_profile(player_id))
         status = self._create_sample_status(player_id, spot_id, 0, 0)
         # 戦闘不能にする
-        status.take_damage(1000)
+        status.apply_damage(1000)
         status_repo.save(status)
         
         phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))

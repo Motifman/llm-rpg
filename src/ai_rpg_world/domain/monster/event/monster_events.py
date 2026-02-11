@@ -38,7 +38,8 @@ class MonsterRespawnedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
 
 @dataclass(frozen=True)
 class MonsterEvadedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
-    pass
+    coordinate: dict
+    current_hp: int
 
 
 @dataclass(frozen=True)

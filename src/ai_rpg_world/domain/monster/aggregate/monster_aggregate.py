@@ -1,4 +1,3 @@
-import random
 from typing import Optional
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
@@ -21,13 +20,12 @@ from ai_rpg_world.domain.monster.exception.monster_exceptions import (
     MonsterAlreadySpawnedException,
     MonsterNotDeadException,
     MonsterNotSpawnedException,
-    MonsterRespawnIntervalNotMetException,
-    MonsterInsufficientMpException
+    MonsterRespawnIntervalNotMetException
 )
-from ai_rpg_world.domain.monster.service.monster_combat_service import MonsterCombatService
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.monster.service.monster_config_service import MonsterConfigService, DefaultMonsterConfigService
 
 
 class MonsterAggregate(AggregateRoot):
@@ -129,8 +127,8 @@ class MonsterAggregate(AggregateRoot):
             coordinate={"x": coordinate.x, "y": coordinate.y, "z": coordinate.z}
         ))
 
-    def take_damage(self, raw_damage: int, current_tick: WorldTick):
-        """ダメージを受ける"""
+    def apply_damage(self, final_damage: int, current_tick: WorldTick):
+        """計算済みのダメージを適用する"""
         if self._status != MonsterStatusEnum.ALIVE:
             if self._status == MonsterStatusEnum.DEAD and self._last_death_tick is None:
                 raise MonsterNotSpawnedException(f"Monster {self._monster_id} is not spawned yet")
@@ -139,28 +137,34 @@ class MonsterAggregate(AggregateRoot):
         if self._coordinate is None:
             raise MonsterNotSpawnedException(f"Monster {self._monster_id} is not spawned yet")
 
-        # 戦闘サービスを使用してダメージ計算と回避判定を行う
-        result = MonsterCombatService.calculate_damage(self, raw_damage)
-
-        if result.is_evaded:
-            self.add_event(MonsterEvadedEvent.create(
-                aggregate_id=self._monster_id,
-                aggregate_type="MonsterAggregate"
-            ))
-            return
-
-        actual_damage = result.damage
-        self._hp = self._hp.damage(actual_damage)
+        self._hp = self._hp.damage(final_damage)
         
         self.add_event(MonsterDamagedEvent.create(
             aggregate_id=self._monster_id,
             aggregate_type="MonsterAggregate",
-            damage=actual_damage,
+            damage=final_damage,
             current_hp=self._hp.value
         ))
 
         if not self._hp.is_alive():
             self._die(current_tick)
+
+    def record_evasion(self):
+        """回避を記録する（ALIVE時のみ）"""
+        if self._status != MonsterStatusEnum.ALIVE:
+            if self._status == MonsterStatusEnum.DEAD and self._last_death_tick is None:
+                raise MonsterNotSpawnedException(f"Monster {self._monster_id} is not spawned yet")
+            raise MonsterAlreadyDeadException(f"Monster {self._monster_id} is not alive")
+
+        if self._coordinate is None:
+            raise MonsterNotSpawnedException(f"Monster {self._monster_id} is not spawned yet")
+
+        self.add_event(MonsterEvadedEvent.create(
+            aggregate_id=self._monster_id,
+            aggregate_type="MonsterAggregate",
+            coordinate={"x": self._coordinate.x, "y": self._coordinate.y, "z": self._coordinate.z},
+            current_hp=self._hp.value,
+        ))
 
     def heal_hp(self, amount: int):
         """HPを回復する"""
@@ -204,12 +208,13 @@ class MonsterAggregate(AggregateRoot):
         # MonsterMp.use 内で MonsterInsufficientMpException が投げられる
         self._mp = self._mp.use(amount)
 
-    def on_tick(self, current_tick: WorldTick):
+    def on_tick(self, current_tick: WorldTick, config: MonsterConfigService = DefaultMonsterConfigService()):
         """時間経過による処理（自然回復など）"""
         if self._status == MonsterStatusEnum.ALIVE:
-            # 微量回復（例：最大値の1%）
-            hp_regen = max(1, self._template.base_stats.max_hp // 100)
-            mp_regen = max(1, self._template.base_stats.max_mp // 100)
+            # 自然回復
+            regen_rate = config.get_regeneration_rate()
+            hp_regen = max(1, int(self._template.base_stats.max_hp * regen_rate))
+            mp_regen = max(1, int(self._template.base_stats.max_mp * regen_rate))
             
             self.heal_hp(hp_regen)
             self.recover_mp(mp_regen)
@@ -257,11 +262,7 @@ class MonsterAggregate(AggregateRoot):
             raise MonsterNotDeadException(f"Monster {self._monster_id} is not dead, cannot respawn")
 
         if not self.should_respawn(current_tick):
-            raise MonsterRespawnIntervalNotMetException(
-                f"Monster {self._monster_id} cannot respawn yet. "
-                f"Last death: {self._last_death_tick.value if self._last_death_tick else 'None'}, "
-                f"Current tick: {current_tick.value}"
-            )
+            raise MonsterRespawnIntervalNotMetException(f"Monster {self._monster_id} cannot respawn yet.")
 
         self._initialize_status(coordinate)
 
