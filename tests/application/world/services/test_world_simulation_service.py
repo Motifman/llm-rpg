@@ -44,6 +44,7 @@ from ai_rpg_world.domain.combat.value_object.hit_box_collision_policy import (
     ObstacleCollisionPolicy,
     TargetCollisionPolicy,
 )
+from ai_rpg_world.domain.combat.service.hit_box_config_service import DefaultHitBoxConfigService
 from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxMovedEvent,
     HitBoxHitRecordedEvent,
@@ -76,6 +77,7 @@ class TestWorldSimulationApplicationService:
         pathfinding_service = PathfindingService(AStarPathfindingStrategy())
         behavior_service = BehaviorService(pathfinding_service)
         weather_config = DefaultWeatherConfigService(update_interval_ticks=1)
+        hit_box_config = DefaultHitBoxConfigService(substeps_per_tick=4)
         
         service = WorldSimulationApplicationService(
             time_provider=time_provider,
@@ -85,7 +87,8 @@ class TestWorldSimulationApplicationService:
             hit_box_repository=hit_box_repo,
             behavior_service=behavior_service,
             weather_config_service=weather_config,
-            unit_of_work=uow
+            unit_of_work=uow,
+            hit_box_config_service=hit_box_config,
         )
         
         return service, time_provider, repository, weather_zone_repo, player_status_repo, hit_box_repo, uow, event_publisher
@@ -594,6 +597,85 @@ class TestWorldSimulationApplicationService:
         with mock.patch.object(service._hit_box_repository, "find_active_by_spot_id", side_effect=Exception("repo error")):
             # 例外を外に投げず継続すること
             service.tick()
+
+    def test_substep_update_accumulates_fractional_velocity_across_ticks(self, setup_service):
+        """サブステップ更新で小数速度がティックをまたいで蓄積されること"""
+        service, _, map_repo, _, _, hit_box_repo, _, _ = setup_service
+
+        spot_id = SpotId(1)
+        tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(3) for y in range(2)]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        owner_id = WorldObjectId(940)
+        target_id = WorldObjectId(941)
+        physical_map.add_object(WorldObject(owner_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
+        physical_map.add_object(WorldObject(target_id, Coordinate(1, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
+        map_repo.save(physical_map)
+
+        hit_box = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(5),
+            spot_id=spot_id,
+            owner_id=owner_id,
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(10),
+            duration=10,
+            velocity=HitBoxVelocity(0.5, 0.0, 0.0),
+        )
+        hit_box_repo.save(hit_box)
+
+        service.tick()  # tick 11: precise 0.5, discrete 0
+        updated = hit_box_repo.find_by_id(HitBoxId.create(5))
+        assert updated.current_coordinate == Coordinate(0, 0, 0)
+        assert updated.has_hit(target_id) is False
+        assert updated.precise_position == pytest.approx((0.5, 0.0, 0.0))
+
+        service.tick()  # tick 12: precise 1.0, discrete 1
+        updated2 = hit_box_repo.find_by_id(HitBoxId.create(5))
+        assert updated2.current_coordinate == Coordinate(1, 0, 0)
+        assert updated2.has_hit(target_id) is True
+
+    def test_substep_update_obstacle_collision_only_one_event(self, setup_service):
+        """サブステップ更新で同じ障害物に複数回当たってもイベントは1度だけ発行されること"""
+        service, _, map_repo, _, _, hit_box_repo, _, event_publisher = setup_service
+
+        spot_id = SpotId(1)
+        # (1,0) が壁
+        tiles = [
+            Tile(Coordinate(0, 0), TerrainType.grass()),
+            Tile(Coordinate(1, 0), TerrainType.wall()),
+        ]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        owner_id = WorldObjectId(950)
+        physical_map.add_object(WorldObject(owner_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
+        map_repo.save(physical_map)
+
+        # 速度 0.25 で 4サブステップ。各ステップで (0,0) -> (0,0) -> (0,0) -> (1,0) と移動し、
+        # 最後のステップで壁に当たる。
+        # 実際には substep ごとに衝突判定される。
+        hit_box = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(6),
+            spot_id=spot_id,
+            owner_id=owner_id,
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(10),
+            duration=10,
+            velocity=HitBoxVelocity(1.0, 0.0, 0.0),
+            obstacle_collision_policy=ObstacleCollisionPolicy.PASS_THROUGH,
+        )
+        hit_box_repo.save(hit_box)
+
+        service.tick() # 4サブステップ実行
+
+        events = event_publisher.get_published_events()
+        collision_events = [e for e in events if isinstance(e, HitBoxObstacleCollidedEvent)]
+        # 壁に到達したタイミングで1度だけ発行されるべき
+        assert len(collision_events) == 1
+
+    def test_substep_negative_count_clamped_to_one(self, setup_service):
+        """サブステップ数に負の値が指定されても 1 として扱われること"""
+        config = DefaultHitBoxConfigService(substeps_per_tick=-5)
+        assert config.get_substeps_per_tick() == 1
 
     def _create_sample_player(self, player_id, spot_id, coord, stamina_val=100):
         base_stats = BaseStats(100, 50, 10, 10, 10, 0.05, 0.05)

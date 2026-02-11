@@ -6,6 +6,8 @@ from ai_rpg_world.application.common.services.game_time_provider import GameTime
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
 from ai_rpg_world.domain.world.repository.weather_zone_repository import WeatherZoneRepository
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
+from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
+from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
@@ -17,6 +19,10 @@ from ai_rpg_world.domain.world.service.weather_simulation_service import Weather
 from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
 from ai_rpg_world.domain.world.service.weather_config_service import WeatherConfigService
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
+from ai_rpg_world.domain.combat.service.hit_box_config_service import (
+    DefaultHitBoxConfigService,
+    HitBoxConfigService,
+)
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
@@ -31,10 +37,11 @@ class WorldSimulationApplicationService:
         physical_map_repository: PhysicalMapRepository,
         weather_zone_repository: WeatherZoneRepository,
         player_status_repository: PlayerStatusRepository,
-        hit_box_repository: Any,
+        hit_box_repository: HitBoxRepository,
         behavior_service: BehaviorService,
         weather_config_service: WeatherConfigService,
-        unit_of_work: UnitOfWork
+        unit_of_work: UnitOfWork,
+        hit_box_config_service: Optional[HitBoxConfigService] = None,
     ):
         self._time_provider = time_provider
         self._physical_map_repository = physical_map_repository
@@ -43,6 +50,7 @@ class WorldSimulationApplicationService:
         self._hit_box_repository = hit_box_repository
         self._behavior_service = behavior_service
         self._weather_config_service = weather_config_service
+        self._hit_box_config_service = hit_box_config_service or DefaultHitBoxConfigService()
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -243,10 +251,15 @@ class WorldSimulationApplicationService:
 
         for hit_box in hit_boxes:
             try:
-                hit_box.on_tick(current_tick)
+                substeps_per_tick = self._hit_box_config_service.get_substeps_per_tick()
+                step_ratio = 1.0 / substeps_per_tick
+                for _ in range(substeps_per_tick):
+                    if not hit_box.is_active:
+                        break
+                    hit_box.on_tick(current_tick, step_ratio=step_ratio)
 
-                if hit_box.is_active:
-                    self._resolve_hit_box_collisions(physical_map, hit_box)
+                    if hit_box.is_active:
+                        self._resolve_hit_box_collisions(physical_map, hit_box)
 
                 self._hit_box_repository.save(hit_box)
                 self._unit_of_work.add_events(hit_box.get_events())
@@ -261,7 +274,7 @@ class WorldSimulationApplicationService:
                     exc_info=True,
                 )
 
-    def _resolve_hit_box_collisions(self, physical_map: PhysicalMapAggregate, hit_box: Any) -> None:
+    def _resolve_hit_box_collisions(self, physical_map: PhysicalMapAggregate, hit_box: HitBoxAggregate) -> None:
         """
         HitBoxの被覆座標に対して、障害物→オブジェクトの順で衝突判定を行う。
         """
@@ -281,7 +294,13 @@ class WorldSimulationApplicationService:
                 hit_box.record_hit(obj.object_id)
 
     def _is_obstacle_coordinate(self, physical_map: PhysicalMapAggregate, coordinate: Coordinate) -> bool:
-        return not physical_map.is_passable(coordinate, MovementCapability.normal_walk())
+        """指定座標が（地形的に）障害物かどうかを判定する。オブジェクトとの衝突は別途判定される。"""
+        try:
+            tile = physical_map.get_tile(coordinate)
+            return not tile.terrain_type.can_pass(MovementCapability.normal_walk())
+        except Exception:
+            # タイルが見つからない（マップ外）場合は障害物とみなす
+            return True
 
     def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
         try:
