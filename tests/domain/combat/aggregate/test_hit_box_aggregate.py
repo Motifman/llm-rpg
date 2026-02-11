@@ -238,6 +238,41 @@ class TestHitBoxAggregate:
             assert hit_box.current_coordinate == Coordinate(2, 0, 0)
             assert hit_box._previous_coordinate == Coordinate(1, 0, 0)
 
+        def test_calculate_path_covers_all_stepped_cells(self, aggregate: HitBoxAggregate):
+            """DDAアルゴリズムが通過する全てのセルを網羅すること (斜め移動)"""
+            start = Coordinate(0, 0, 0)
+            end = Coordinate(2, 2, 0)
+            
+            path = aggregate._calculate_path(start, end)
+            
+            # (0,0) -> (1,0) or (0,1) -> (1,1) -> (2,1) or (1,2) -> (2,2)
+            # Supercoverなので、線がかすめる全てのセルが含まれる
+            assert Coordinate(0, 0, 0) in path
+            assert Coordinate(2, 2, 0) in path
+            # 中間地点のいくつかが含まれているはず
+            assert len(path) >= 5 # (0,0),(1,0),(1,1),(2,1),(2,2) など
+
+        def test_high_speed_movement_path_interpolation(self, hit_box_id: HitBoxId, spot_id: SpotId, owner_id: WorldObjectId):
+            """高速移動時に途中の座標が get_all_covered_coordinates に含まれること"""
+            hit_box = HitBoxAggregate.create(
+                hit_box_id=hit_box_id,
+                spot_id=spot_id,
+                owner_id=owner_id,
+                shape=HitBoxShape.single_cell(),
+                initial_coordinate=Coordinate(0, 0, 0),
+                start_tick=WorldTick(0),
+                duration=10,
+                velocity=HitBoxVelocity(10.0, 0.0, 0.0),
+            )
+            # 1ティックで10マス移動
+            hit_box.on_tick(WorldTick(1), step_ratio=1.0)
+            
+            covered = hit_box.get_all_covered_coordinates()
+            
+            # 0から10までの全てのX座標が含まれているべき
+            for x in range(11):
+                assert Coordinate(x, 0, 0) in covered
+
     class TestCoverage:
         def test_get_all_covered_coordinates_includes_path(self, shape: HitBoxShape):
             hit_box = HitBoxAggregate.create(

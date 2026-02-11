@@ -45,6 +45,7 @@ from ai_rpg_world.domain.combat.value_object.hit_box_collision_policy import (
     TargetCollisionPolicy,
 )
 from ai_rpg_world.domain.combat.service.hit_box_config_service import DefaultHitBoxConfigService
+from ai_rpg_world.domain.combat.service.hit_box_collision_service import HitBoxCollisionDomainService
 from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxMovedEvent,
     HitBoxHitRecordedEvent,
@@ -78,6 +79,7 @@ class TestWorldSimulationApplicationService:
         behavior_service = BehaviorService(pathfinding_service)
         weather_config = DefaultWeatherConfigService(update_interval_ticks=1)
         hit_box_config = DefaultHitBoxConfigService(substeps_per_tick=4)
+        hit_box_collision_service = HitBoxCollisionDomainService()
         
         service = WorldSimulationApplicationService(
             time_provider=time_provider,
@@ -89,6 +91,7 @@ class TestWorldSimulationApplicationService:
             weather_config_service=weather_config,
             unit_of_work=uow,
             hit_box_config_service=hit_box_config,
+            hit_box_collision_service=hit_box_collision_service,
         )
         
         return service, time_provider, repository, weather_zone_repo, player_status_repo, hit_box_repo, uow, event_publisher
@@ -676,6 +679,135 @@ class TestWorldSimulationApplicationService:
         """サブステップ数に負の値が指定されても 1 として扱われること"""
         config = DefaultHitBoxConfigService(substeps_per_tick=-5)
         assert config.get_substeps_per_tick() == 1
+
+    def test_uses_adaptive_substeps_per_hit_box(self, setup_service):
+        """HitBoxごとに設定サービス経由でサブステップ数を取得すること"""
+        service, _, map_repo, _, _, hit_box_repo, _, _ = setup_service
+
+        spot_id = SpotId(1)
+        tiles = [Tile(Coordinate(0, 0), TerrainType.grass())]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        owner_id = WorldObjectId(960)
+        physical_map.add_object(WorldObject(owner_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
+        map_repo.save(physical_map)
+
+        hit_box = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(7),
+            spot_id=spot_id,
+            owner_id=owner_id,
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(10),
+            duration=10,
+            velocity=HitBoxVelocity(1.0, 0.0, 0.0),
+        )
+        hit_box_repo.save(hit_box)
+
+        import unittest.mock as mock
+        with mock.patch.object(service._hit_box_config_service, "get_substeps_for_hit_box", return_value=6) as mocked:
+            service.tick()
+            assert mocked.call_count >= 1
+
+    def test_hit_box_get_aggregated_events_deduplicates_same_payload(self):
+        """同一内容のHitBoxイベントが重複した場合に集約されること（ドメイン層での検証）"""
+        hit_box_id = HitBoxId.create(1)
+        
+        # HitBoxを最小限のパラメータで作成
+        hit_box = HitBoxAggregate.create(
+            hit_box_id=hit_box_id,
+            spot_id=SpotId(1),
+            owner_id=WorldObjectId(99),
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(0),
+            duration=10,
+        )
+        hit_box.clear_events()
+
+        moved_a = HitBoxMovedEvent.create(
+            aggregate_id=hit_box_id,
+            aggregate_type="HitBoxAggregate",
+            from_coordinate=Coordinate(0, 0, 0),
+            to_coordinate=Coordinate(1, 0, 0),
+        )
+        moved_b = HitBoxMovedEvent.create(
+            aggregate_id=hit_box_id,
+            aggregate_type="HitBoxAggregate",
+            from_coordinate=Coordinate(0, 0, 0),
+            to_coordinate=Coordinate(1, 0, 0),
+        )
+        
+        # 直接イベントを追加（本来は内部メソッド経由だが集約ロジックのテストのため）
+        hit_box.add_event(moved_a)
+        hit_box.add_event(moved_b)
+
+        aggregated = hit_box.get_aggregated_events()
+        assert len(aggregated) == 1
+
+    def test_collision_check_guard_limits_checks_and_continues(self, setup_service, caplog):
+        """衝突判定上限に達した場合、警告を出して処理継続すること"""
+        service, _, map_repo, _, _, hit_box_repo, _, _ = setup_service
+
+        service._hit_box_config_service = DefaultHitBoxConfigService(
+            substeps_per_tick=4,
+            max_collision_checks_per_tick=1,
+        )
+
+        spot_id = SpotId(1)
+        tiles = [Tile(Coordinate(x, 0), TerrainType.grass()) for x in range(3)]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        owner_id = WorldObjectId(970)
+        target_id = WorldObjectId(971)
+        physical_map.add_object(WorldObject(owner_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
+        physical_map.add_object(WorldObject(target_id, Coordinate(1, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
+        map_repo.save(physical_map)
+
+        hit_box = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(8),
+            spot_id=spot_id,
+            owner_id=owner_id,
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(10),
+            duration=10,
+            velocity=HitBoxVelocity(2.0, 0.0, 0.0),
+            obstacle_collision_policy=ObstacleCollisionPolicy.PASS_THROUGH,
+        )
+        hit_box_repo.save(hit_box)
+
+        caplog.set_level("WARNING")
+        service.tick()
+
+        assert any("Collision check guard triggered" in rec.message for rec in caplog.records)
+        updated = hit_box_repo.find_by_id(HitBoxId.create(8))
+        assert updated is not None
+
+    def test_hit_box_stats_log_is_emitted(self, setup_service, caplog):
+        """HitBox更新統計ログが出力されること"""
+        service, _, map_repo, _, _, hit_box_repo, _, _ = setup_service
+        caplog.set_level("DEBUG")
+
+        spot_id = SpotId(1)
+        tiles = [Tile(Coordinate(0, 0), TerrainType.grass())]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        owner_id = WorldObjectId(980)
+        physical_map.add_object(WorldObject(owner_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
+        map_repo.save(physical_map)
+
+        hit_box = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(9),
+            spot_id=spot_id,
+            owner_id=owner_id,
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(10),
+            duration=10,
+            velocity=HitBoxVelocity(0.0, 0.0, 0.0),
+        )
+        hit_box_repo.save(hit_box)
+
+        service.tick()
+        assert any("HitBox update stats map=" in rec.message for rec in caplog.records)
 
     def _create_sample_player(self, player_id, spot_id, coord, stamina_val=100):
         base_stats = BaseStats(100, 50, 10, 10, 10, 0.05, 0.05)
