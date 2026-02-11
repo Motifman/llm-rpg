@@ -10,10 +10,12 @@ from ai_rpg_world.domain.player.value_object.gold import Gold
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.service.player_config_service import PlayerConfigService, DefaultPlayerConfigService
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.player.event.status_events import (
     PlayerDownedEvent,
+    PlayerEvadedEvent,
     PlayerRevivedEvent,
     PlayerLevelUpEvent,
     PlayerHpHealedEvent,
@@ -197,7 +199,7 @@ class PlayerStatusAggregate(AggregateRoot):
         Returns:
             bool: 回復を受けられるならTrue
         """
-        return True
+        return not self._is_down
 
     def can_consume_resources(self) -> bool:
         """リソースを消費できる状態かどうか
@@ -207,8 +209,8 @@ class PlayerStatusAggregate(AggregateRoot):
         """
         return not self._is_down
 
-    def take_damage(self, damage: int) -> None:
-        """ダメージを受ける
+    def apply_damage(self, damage: int) -> None:
+        """計算済みのダメージを適用する
 
         Args:
             damage: ダメージ量
@@ -222,6 +224,17 @@ class PlayerStatusAggregate(AggregateRoot):
                 aggregate_id=self._player_id,
                 aggregate_type="PlayerStatusAggregate",
             ))
+
+    def record_evasion(self) -> None:
+        """回避を記録する（行動可能状態のみ）"""
+        if self._is_down:
+            raise PlayerDownedException("ダウン状態のプレイヤーは回避を記録できません")
+
+        self.add_event(PlayerEvadedEvent.create(
+            aggregate_id=self._player_id,
+            aggregate_type="PlayerStatusAggregate",
+            current_hp=self._hp.value,
+        ))
 
     def gain_exp(self, exp_amount: int) -> None:
         """経験値を獲得する
@@ -266,6 +279,9 @@ class PlayerStatusAggregate(AggregateRoot):
         Args:
             amount: 回復量
         """
+        if not self.can_receive_healing():
+            return
+
         old_hp = self._hp.value
         self._hp = self._hp.heal(amount)
 
@@ -402,11 +418,11 @@ class PlayerStatusAggregate(AggregateRoot):
             total_stamina=self._stamina.value,
         ))
 
-    def revive(self, hp_recovery_percent: float) -> None:
+    def revive(self, config: PlayerConfigService = DefaultPlayerConfigService()) -> None:
         """戦闘不能状態から復帰する
 
         Args:
-            hp_recovery_percent: HP回復率（0.0〜1.0）
+            config: プレイヤー設定サービス
 
         Raises:
             ValueError: 既にダウン状態でない場合
@@ -414,7 +430,8 @@ class PlayerStatusAggregate(AggregateRoot):
         if not self._is_down:
             raise ValueError("プレイヤーは戦闘不能状態ではありません")
 
-        # HPを回復率に応じて回復
+        # HPを設定された率に応じて回復
+        hp_recovery_percent = config.get_revive_hp_rate()
         recovery_hp = int(self._base_stats.max_hp * hp_recovery_percent)
         old_hp = self._hp.value
         self._hp = Hp.create(recovery_hp, self._base_stats.max_hp)
