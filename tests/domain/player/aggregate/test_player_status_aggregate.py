@@ -11,6 +11,7 @@ from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.event.status_events import (
     PlayerDownedEvent,
+    PlayerEvadedEvent,
     PlayerRevivedEvent,
     PlayerLevelUpEvent,
     PlayerHpHealedEvent,
@@ -26,6 +27,7 @@ from ai_rpg_world.domain.player.exception import (
     InsufficientGoldException,
     PlayerDownedException
 )
+from ai_rpg_world.domain.combat.service.combat_logic_service import CombatLogicService
 
 
 # テスト用のヘルパー関数
@@ -140,12 +142,12 @@ class TestPlayerStatusAggregate:
         assert aggregate.growth.total_exp == 0
         assert aggregate.is_down == False
 
-    def test_take_damage_normal(self):
+    def test_apply_damage_normal(self):
         """ダメージを受け、HPが減少すること"""
         aggregate = create_test_status_aggregate(hp=100)
         initial_hp = aggregate.hp.value
 
-        aggregate.take_damage(30)
+        aggregate.apply_damage(30)
 
         assert aggregate.hp.value == initial_hp - 30
         assert aggregate.is_down == False
@@ -154,11 +156,11 @@ class TestPlayerStatusAggregate:
         events = aggregate.get_events()
         assert len(events) == 0  # HPが残っているので戦闘不能イベントは発行されない
 
-    def test_take_damage_down(self):
+    def test_apply_damage_down(self):
         """ダメージでHPが0になり、戦闘不能になること"""
         aggregate = create_test_status_aggregate(hp=50)
 
-        aggregate.take_damage(50)
+        aggregate.apply_damage(50)
 
         assert aggregate.hp.value == 0
         assert aggregate.is_down == True
@@ -169,14 +171,96 @@ class TestPlayerStatusAggregate:
         assert isinstance(events[0], PlayerDownedEvent)
         assert events[0].aggregate_id == aggregate.player_id
 
-    def test_take_damage_over_kill(self):
+    def test_apply_damage_over_kill(self):
         """ダメージがHPを超える場合、HPが0になること"""
         aggregate = create_test_status_aggregate(hp=30)
 
-        aggregate.take_damage(100)
+        aggregate.apply_damage(100)
 
         assert aggregate.hp.value == 0
         assert aggregate.is_down == True
+
+    def test_application_style_damage_flow_success(self):
+        """アプリケーション層経由で計算したダメージが適用されること"""
+        aggregate = create_test_status_aggregate(hp=100)
+        attacker_stats = create_test_base_stats(
+            attack=40,
+            defense=10,
+            critical_rate=0.0,
+            evasion_rate=0.0,
+        )
+
+        damage = CombatLogicService.calculate_damage(
+            attacker_stats=attacker_stats,
+            defender_stats=aggregate.base_stats,
+        )
+        if damage.is_evaded:
+            aggregate.record_evasion()
+        else:
+            aggregate.apply_damage(damage.value)
+
+        # Damage = (40 - 15/2) = 32.5 -> int(32)
+        assert aggregate.hp.value == 68
+        assert aggregate.is_down == False
+        assert len(aggregate.get_events()) == 0
+
+    def test_application_style_damage_flow_evaded(self):
+        """アプリケーション層経由で回避時にPlayerEvadedEventが発行されること"""
+        aggregate = create_test_status_aggregate(hp=80)
+        attacker_stats = create_test_base_stats(
+            attack=40,
+            defense=10,
+            critical_rate=0.0,
+            evasion_rate=0.0,
+        )
+        # テストの決定性を担保するため、防御側の回避率を100%にする
+        defender_stats = create_test_base_stats(
+            attack=aggregate.base_stats.attack,
+            defense=aggregate.base_stats.defense,
+            critical_rate=aggregate.base_stats.critical_rate,
+            evasion_rate=1.0,
+        )
+
+        damage = CombatLogicService.calculate_damage(
+            attacker_stats=attacker_stats,
+            defender_stats=defender_stats,
+        )
+        if damage.is_evaded:
+            aggregate.record_evasion()
+        else:
+            aggregate.apply_damage(damage.value)
+
+        assert aggregate.hp.value == 80
+        events = aggregate.get_events()
+        assert len(events) == 1
+        event = events[0]
+        assert isinstance(event, PlayerEvadedEvent)
+        assert event.aggregate_id == aggregate.player_id
+        assert event.aggregate_type == "PlayerStatusAggregate"
+        assert event.current_hp == 80
+
+    def test_record_evasion_success(self):
+        """回避記録時にイベントが発行されること"""
+        aggregate = create_test_status_aggregate(hp=80, is_down=False)
+
+        aggregate.record_evasion()
+
+        events = aggregate.get_events()
+        assert len(events) == 1
+        event = events[0]
+        assert isinstance(event, PlayerEvadedEvent)
+        assert event.aggregate_id == aggregate.player_id
+        assert event.aggregate_type == "PlayerStatusAggregate"
+        assert event.current_hp == 80
+        assert hasattr(event, "event_id")
+        assert hasattr(event, "occurred_at")
+
+    def test_record_evasion_when_downed_raises_exception(self):
+        """ダウン状態では回避記録できないこと"""
+        aggregate = create_test_status_aggregate(is_down=True)
+
+        with pytest.raises(PlayerDownedException, match="ダウン状態のプレイヤーは回避を記録できません"):
+            aggregate.record_evasion()
 
     def test_gain_exp_level_up(self):
         """経験値を獲得し、レベルアップすること"""
@@ -366,17 +450,56 @@ class TestPlayerStatusAggregate:
         """戦闘不能状態から復帰すること"""
         aggregate = create_test_status_aggregate(hp=0, is_down=True)
 
-        aggregate.revive(0.5)  # 50%回復
+        aggregate.revive()  # デフォルト設定(10%)で復帰
 
-        assert aggregate.hp.value == 50  # max_hp(100) * 0.5
+        assert aggregate.hp.value == 10  # max_hp(100) * 0.1
         assert aggregate.is_down == False
 
         # イベントが発行されていることを確認
         events = aggregate.get_events()
         assert len(events) == 1
         assert isinstance(events[0], PlayerRevivedEvent)
-        assert events[0].hp_recovered == 50
-        assert events[0].total_hp == 50
+        assert events[0].hp_recovered == 10
+        assert events[0].total_hp == 10
+
+    def test_revive_custom_config(self):
+        """カスタム設定で復帰すること"""
+        from ai_rpg_world.domain.player.service.player_config_service import DefaultPlayerConfigService
+        aggregate = create_test_status_aggregate(hp=0, is_down=True)
+        config = DefaultPlayerConfigService(revive_hp_rate=0.5)
+
+        aggregate.revive(config=config)
+
+        assert aggregate.hp.value == 50
+        assert aggregate.is_down == False
+
+    def test_downed_transition_flow(self):
+        """ダウン -> 回復不可 -> 蘇生 -> 回復可能 の遷移テスト"""
+        aggregate = create_test_status_aggregate(hp=100)
+        
+        # 1. ダウン状態にする
+        aggregate.apply_damage(100)
+        assert aggregate.is_down is True
+        assert aggregate.can_receive_healing() is False
+        
+        # 2. ダウン中の回復試行（回復しないはず）
+        aggregate.clear_events()
+        aggregate.heal_hp(50)
+        assert aggregate.hp.value == 0
+        assert len(aggregate.get_events()) == 0
+        
+        # 3. 蘇生
+        aggregate.revive()
+        assert aggregate.is_down is False
+        assert aggregate.hp.value == 10
+        assert aggregate.can_receive_healing() is True
+        
+        # 4. 蘇生後の回復
+        aggregate.clear_events()
+        aggregate.heal_hp(50)
+        assert aggregate.hp.value == 60
+        assert len(aggregate.get_events()) == 1
+        assert isinstance(aggregate.get_events()[0], PlayerHpHealedEvent)
 
     def test_revive_not_down(self):
         """戦闘不能状態でない場合、例外が発生すること"""
@@ -443,7 +566,7 @@ class TestPlayerStatusAggregate:
         # 戦闘不能状態（ダウン状態）
         aggregate = create_test_status_aggregate(is_down=True)
         assert aggregate.can_act() == False
-        assert aggregate.can_receive_healing() == True
+        assert aggregate.can_receive_healing() == False
         assert aggregate.can_consume_resources() == False
 
     def test_location_updates(self):
