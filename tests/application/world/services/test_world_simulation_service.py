@@ -4,6 +4,7 @@ from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import In
 from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import InMemoryPhysicalMapRepository
 from ai_rpg_world.infrastructure.repository.in_memory_weather_zone_repository import InMemoryWeatherZoneRepository
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import InMemoryPlayerStatusRepository
+from ai_rpg_world.infrastructure.repository.in_memory_hit_box_repository import InMemoryHitBoxRepository
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.unit_of_work.unit_of_work_factory_impl import InMemoryUnitOfWorkFactory
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
@@ -35,6 +36,22 @@ from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, BehaviorSt
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
+from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
+from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape
+from ai_rpg_world.domain.combat.value_object.hit_box_velocity import HitBoxVelocity
+from ai_rpg_world.domain.combat.value_object.hit_box_collision_policy import (
+    ObstacleCollisionPolicy,
+    TargetCollisionPolicy,
+)
+from ai_rpg_world.domain.combat.service.hit_box_config_service import DefaultHitBoxConfigService
+from ai_rpg_world.domain.combat.service.hit_box_collision_service import HitBoxCollisionDomainService
+from ai_rpg_world.domain.combat.event.combat_events import (
+    HitBoxMovedEvent,
+    HitBoxHitRecordedEvent,
+    HitBoxObstacleCollidedEvent,
+    HitBoxDeactivatedEvent,
+)
 
 class TestWorldSimulationApplicationService:
     @pytest.fixture
@@ -55,27 +72,33 @@ class TestWorldSimulationApplicationService:
         repository = InMemoryPhysicalMapRepository(data_store, uow)
         weather_zone_repo = InMemoryWeatherZoneRepository(data_store, uow)
         player_status_repo = InMemoryPlayerStatusRepository(data_store, uow)
+        hit_box_repo = InMemoryHitBoxRepository(data_store, uow)
         
         from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import AStarPathfindingStrategy
         pathfinding_service = PathfindingService(AStarPathfindingStrategy())
         behavior_service = BehaviorService(pathfinding_service)
         weather_config = DefaultWeatherConfigService(update_interval_ticks=1)
+        hit_box_config = DefaultHitBoxConfigService(substeps_per_tick=4)
+        hit_box_collision_service = HitBoxCollisionDomainService()
         
         service = WorldSimulationApplicationService(
             time_provider=time_provider,
             physical_map_repository=repository,
             weather_zone_repository=weather_zone_repo,
             player_status_repository=player_status_repo,
+            hit_box_repository=hit_box_repo,
             behavior_service=behavior_service,
             weather_config_service=weather_config,
-            unit_of_work=uow
+            unit_of_work=uow,
+            hit_box_config_service=hit_box_config,
+            hit_box_collision_service=hit_box_collision_service,
         )
         
-        return service, time_provider, repository, weather_zone_repo, player_status_repo, uow, event_publisher
+        return service, time_provider, repository, weather_zone_repo, player_status_repo, hit_box_repo, uow, event_publisher
 
     def test_tick_advances_time(self, setup_service):
         """tickによってゲーム時間が進むこと"""
-        service, time_provider, _, _, _, _, _ = setup_service
+        service, time_provider, _, _, _, _, _, _ = setup_service
         
         assert time_provider.get_current_tick() == WorldTick(10)
         
@@ -85,7 +108,7 @@ class TestWorldSimulationApplicationService:
 
     def test_tick_updates_autonomous_actors(self, setup_service):
         """tickによって自律行動アクターの行動が計画・実行されること"""
-        service, _, repository, _, _, _, _ = setup_service
+        service, _, repository, _, _, _, _, _ = setup_service
         
         # マップのセットアップ
         spot_id = SpotId(1)
@@ -119,7 +142,7 @@ class TestWorldSimulationApplicationService:
 
     def test_busy_actor_is_skipped(self, setup_service):
         """Busy状態のアクターはシミュレーションでスキップされること"""
-        service, _, repository, _, _, _, _ = setup_service
+        service, _, repository, _, _, _, _, _ = setup_service
         
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
@@ -148,7 +171,7 @@ class TestWorldSimulationApplicationService:
 
     def test_tick_handles_actor_error_gracefully(self, setup_service):
         """1つのアクターでエラーが発生しても他のアクターの更新が継続されること"""
-        service, _, repository, _, _, _, _ = setup_service
+        service, _, repository, _, _, _, _, _ = setup_service
         
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
@@ -171,7 +194,7 @@ class TestWorldSimulationApplicationService:
 
     def test_tick_applies_environmental_stamina_drain(self, setup_service):
         """過酷な天候下でプレイヤーのスタミナが減少すること（正常系）"""
-        service, _, map_repo, zone_repo, player_repo, uow, _ = setup_service
+        service, _, map_repo, zone_repo, player_repo, _, uow, _ = setup_service
         
         # 1. セットアップ: 吹雪のゾーン
         spot_id = SpotId(1)
@@ -213,7 +236,7 @@ class TestWorldSimulationApplicationService:
 
     def test_environmental_drain_skips_non_player_actors(self, setup_service):
         """NPCなどのプレイヤー以外の項目には環境ダメージが適用されないこと"""
-        service, _, map_repo, zone_repo, player_repo, _, _ = setup_service
+        service, _, map_repo, zone_repo, player_repo, _, _, _ = setup_service
         
         spot_id = SpotId(1)
         weather_state = WeatherState(WeatherTypeEnum.BLIZZARD, 1.0) # Drain = 3
@@ -237,7 +260,7 @@ class TestWorldSimulationApplicationService:
         
     def test_stamina_drain_not_below_zero(self, setup_service):
         """スタミナ減少によってスタミナが負の値にならないこと（境界値）"""
-        service, _, map_repo, zone_repo, player_repo, _, _ = setup_service
+        service, _, map_repo, zone_repo, player_repo, _, _, _ = setup_service
         
         spot_id = SpotId(1)
         weather_state = WeatherState(WeatherTypeEnum.BLIZZARD, 1.0) # Drain = 3
@@ -268,7 +291,7 @@ class TestWorldSimulationApplicationService:
 
     def test_handles_missing_player_status_gracefully(self, setup_service):
         """アクターにplayer_idはあるが、リポジトリにステータスがない場合にエラーにならないこと（異常系）"""
-        service, _, map_repo, zone_repo, _, _, _ = setup_service
+        service, _, map_repo, zone_repo, _, _, _, _ = setup_service
         
         spot_id = SpotId(1)
         zone_repo.save(WeatherZone.create(WeatherZoneId(1), WeatherZoneName("Z"), {spot_id}, WeatherState(WeatherTypeEnum.BLIZZARD, 1.0)))
@@ -286,7 +309,7 @@ class TestWorldSimulationApplicationService:
 
     def test_handles_missing_weather_zone_gracefully(self, setup_service):
         """マップに対応する天候ゾーンがない場合、デフォルト（晴れ）として処理されること（異常系）"""
-        service, _, map_repo, zone_repo, player_repo, _, _ = setup_service
+        service, _, map_repo, zone_repo, player_repo, _, _, _ = setup_service
         
         # ゾーンを登録しない
         spot_id = SpotId(1)
@@ -311,7 +334,7 @@ class TestWorldSimulationApplicationService:
 
     def test_weather_update_respects_interval(self, setup_service):
         """天候更新が設定されたインターバルに従うこと（ロジック検証）"""
-        service, time_provider, map_repo, zone_repo, _, _, _ = setup_service
+        service, time_provider, map_repo, zone_repo, _, _, _, _ = setup_service
         
         # インターバルを5に設定
         from ai_rpg_world.domain.world.service.weather_config_service import DefaultWeatherConfigService
@@ -353,7 +376,7 @@ class TestWorldSimulationApplicationService:
 
     def test_stamina_drain_publishes_events_to_uow(self, setup_service):
         """スタミナ減少イベントがUnitOfWorkに追加されること"""
-        service, _, map_repo, zone_repo, player_repo, uow, event_publisher = setup_service
+        service, _, map_repo, zone_repo, player_repo, _, uow, event_publisher = setup_service
         
         spot_id = SpotId(1)
         weather_state = WeatherState(WeatherTypeEnum.BLIZZARD, 1.0)
@@ -383,7 +406,7 @@ class TestWorldSimulationApplicationService:
 
     def test_bulk_processing_handles_partial_failures(self, setup_service):
         """バルク処理中に一部のプレイヤーでエラー（ドメイン例外など）が発生しても他が正常に処理されること"""
-        service, _, map_repo, zone_repo, player_repo, _, _ = setup_service
+        service, _, map_repo, zone_repo, player_repo, _, _, _ = setup_service
         
         spot_id = SpotId(1)
         weather_state = WeatherState(WeatherTypeEnum.BLIZZARD, 1.0) # Drain = 3
@@ -420,6 +443,371 @@ class TestWorldSimulationApplicationService:
         assert player_repo.find_by_id(pid1).stamina.value == 97
         # プレイヤー2は変化なし（can_act() == False のためスキップされる）
         assert player_repo.find_by_id(pid2).stamina.value == 100
+
+    def test_tick_updates_hitbox_and_records_target_hit_event(self, setup_service):
+        """tickでHitBoxが移動し、同座標のオブジェクトへのヒットイベントが発行されること"""
+        service, _, map_repo, _, _, hit_box_repo, _, event_publisher = setup_service
+
+        spot_id = SpotId(1)
+        tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(4) for y in range(4)]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+
+        owner_id = WorldObjectId(900)
+        target_id = WorldObjectId(901)
+        owner = WorldObject(owner_id, Coordinate(0, 1), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent())
+        target = WorldObject(target_id, Coordinate(1, 1), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent())
+        physical_map.add_object(owner)
+        physical_map.add_object(target)
+        map_repo.save(physical_map)
+
+        hit_box = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(1),
+            spot_id=spot_id,
+            owner_id=owner_id,
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 1, 0),
+            start_tick=WorldTick(10),
+            duration=10,
+            velocity=HitBoxVelocity(1, 0, 0),
+        )
+        hit_box_repo.save(hit_box)
+
+        service.tick()  # tick 11
+
+        updated = hit_box_repo.find_by_id(HitBoxId.create(1))
+        assert updated.current_coordinate == Coordinate(1, 1, 0)
+        assert updated.has_hit(target_id) is True
+
+        events = event_publisher.get_published_events()
+        assert any(isinstance(e, HitBoxMovedEvent) for e in events)
+        assert any(isinstance(e, HitBoxHitRecordedEvent) for e in events)
+
+    def test_tick_deactivates_hitbox_on_obstacle_when_policy_is_deactivate(self, setup_service):
+        """障害物衝突でDEACTIVATEポリシーのHitBoxが消失すること"""
+        service, _, map_repo, _, _, hit_box_repo, _, event_publisher = setup_service
+
+        spot_id = SpotId(1)
+        tiles = [
+            Tile(Coordinate(0, 0), TerrainType.grass()),
+            Tile(Coordinate(1, 0), TerrainType.wall()),
+        ]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        owner_id = WorldObjectId(910)
+        physical_map.add_object(WorldObject(owner_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
+        map_repo.save(physical_map)
+
+        hit_box = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(2),
+            spot_id=spot_id,
+            owner_id=owner_id,
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(10),
+            duration=10,
+            velocity=HitBoxVelocity(1, 0, 0),
+            obstacle_collision_policy=ObstacleCollisionPolicy.DEACTIVATE,
+        )
+        hit_box_repo.save(hit_box)
+
+        service.tick()
+
+        updated = hit_box_repo.find_by_id(HitBoxId.create(2))
+        assert updated.is_active is False
+
+        events = event_publisher.get_published_events()
+        assert any(isinstance(e, HitBoxObstacleCollidedEvent) for e in events)
+        assert any(isinstance(e, HitBoxDeactivatedEvent) and e.reason == "obstacle_collision" for e in events)
+
+    def test_tick_keeps_hitbox_active_when_obstacle_policy_pass_through(self, setup_service):
+        """障害物衝突でもPASS_THROUGHポリシーのHitBoxは継続すること"""
+        service, _, map_repo, _, _, hit_box_repo, _, event_publisher = setup_service
+
+        spot_id = SpotId(1)
+        tiles = [
+            Tile(Coordinate(0, 0), TerrainType.grass()),
+            Tile(Coordinate(1, 0), TerrainType.wall()),
+        ]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        owner_id = WorldObjectId(920)
+        physical_map.add_object(WorldObject(owner_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
+        map_repo.save(physical_map)
+
+        hit_box = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(3),
+            spot_id=spot_id,
+            owner_id=owner_id,
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(10),
+            duration=10,
+            velocity=HitBoxVelocity(1, 0, 0),
+            obstacle_collision_policy=ObstacleCollisionPolicy.PASS_THROUGH,
+        )
+        hit_box_repo.save(hit_box)
+
+        service.tick()
+
+        updated = hit_box_repo.find_by_id(HitBoxId.create(3))
+        assert updated.is_active is True
+        assert updated.current_coordinate == Coordinate(1, 0, 0)
+
+        events = event_publisher.get_published_events()
+        assert any(isinstance(e, HitBoxObstacleCollidedEvent) for e in events)
+        assert not any(isinstance(e, HitBoxDeactivatedEvent) and e.reason == "obstacle_collision" for e in events)
+
+    def test_tick_deactivates_hitbox_on_target_collision_policy(self, setup_service):
+        """ターゲット衝突でDEACTIVATEポリシーのHitBoxが消失すること"""
+        service, _, map_repo, _, _, hit_box_repo, _, _ = setup_service
+
+        spot_id = SpotId(1)
+        tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(2) for y in range(2)]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        owner_id = WorldObjectId(930)
+        target_id = WorldObjectId(931)
+        physical_map.add_object(WorldObject(owner_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
+        physical_map.add_object(WorldObject(target_id, Coordinate(1, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
+        map_repo.save(physical_map)
+
+        hit_box = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(4),
+            spot_id=spot_id,
+            owner_id=owner_id,
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(10),
+            duration=10,
+            velocity=HitBoxVelocity(1, 0, 0),
+            target_collision_policy=TargetCollisionPolicy.DEACTIVATE,
+        )
+        hit_box_repo.save(hit_box)
+
+        service.tick()
+
+        updated = hit_box_repo.find_by_id(HitBoxId.create(4))
+        assert updated.has_hit(target_id) is True
+        assert updated.is_active is False
+
+    def test_tick_handles_hitbox_repository_failure_gracefully(self, setup_service):
+        """HitBox更新処理で例外が発生してもtick全体は継続すること"""
+        service, _, map_repo, _, _, _, _, _ = setup_service
+
+        spot_id = SpotId(1)
+        tiles = [Tile(Coordinate(0, 0), TerrainType.grass())]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        map_repo.save(physical_map)
+
+        import unittest.mock as mock
+        with mock.patch.object(service._hit_box_repository, "find_active_by_spot_id", side_effect=Exception("repo error")):
+            # 例外を外に投げず継続すること
+            service.tick()
+
+    def test_substep_update_accumulates_fractional_velocity_across_ticks(self, setup_service):
+        """サブステップ更新で小数速度がティックをまたいで蓄積されること"""
+        service, _, map_repo, _, _, hit_box_repo, _, _ = setup_service
+
+        spot_id = SpotId(1)
+        tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(3) for y in range(2)]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        owner_id = WorldObjectId(940)
+        target_id = WorldObjectId(941)
+        physical_map.add_object(WorldObject(owner_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
+        physical_map.add_object(WorldObject(target_id, Coordinate(1, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
+        map_repo.save(physical_map)
+
+        hit_box = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(5),
+            spot_id=spot_id,
+            owner_id=owner_id,
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(10),
+            duration=10,
+            velocity=HitBoxVelocity(0.5, 0.0, 0.0),
+        )
+        hit_box_repo.save(hit_box)
+
+        service.tick()  # tick 11: precise 0.5, discrete 0
+        updated = hit_box_repo.find_by_id(HitBoxId.create(5))
+        assert updated.current_coordinate == Coordinate(0, 0, 0)
+        assert updated.has_hit(target_id) is False
+        assert updated.precise_position == pytest.approx((0.5, 0.0, 0.0))
+
+        service.tick()  # tick 12: precise 1.0, discrete 1
+        updated2 = hit_box_repo.find_by_id(HitBoxId.create(5))
+        assert updated2.current_coordinate == Coordinate(1, 0, 0)
+        assert updated2.has_hit(target_id) is True
+
+    def test_substep_update_obstacle_collision_only_one_event(self, setup_service):
+        """サブステップ更新で同じ障害物に複数回当たってもイベントは1度だけ発行されること"""
+        service, _, map_repo, _, _, hit_box_repo, _, event_publisher = setup_service
+
+        spot_id = SpotId(1)
+        # (1,0) が壁
+        tiles = [
+            Tile(Coordinate(0, 0), TerrainType.grass()),
+            Tile(Coordinate(1, 0), TerrainType.wall()),
+        ]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        owner_id = WorldObjectId(950)
+        physical_map.add_object(WorldObject(owner_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
+        map_repo.save(physical_map)
+
+        # 速度 0.25 で 4サブステップ。各ステップで (0,0) -> (0,0) -> (0,0) -> (1,0) と移動し、
+        # 最後のステップで壁に当たる。
+        # 実際には substep ごとに衝突判定される。
+        hit_box = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(6),
+            spot_id=spot_id,
+            owner_id=owner_id,
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(10),
+            duration=10,
+            velocity=HitBoxVelocity(1.0, 0.0, 0.0),
+            obstacle_collision_policy=ObstacleCollisionPolicy.PASS_THROUGH,
+        )
+        hit_box_repo.save(hit_box)
+
+        service.tick() # 4サブステップ実行
+
+        events = event_publisher.get_published_events()
+        collision_events = [e for e in events if isinstance(e, HitBoxObstacleCollidedEvent)]
+        # 壁に到達したタイミングで1度だけ発行されるべき
+        assert len(collision_events) == 1
+
+    def test_substep_negative_count_clamped_to_one(self, setup_service):
+        """サブステップ数に負の値が指定されても 1 として扱われること"""
+        config = DefaultHitBoxConfigService(substeps_per_tick=-5)
+        assert config.get_substeps_per_tick() == 1
+
+    def test_uses_adaptive_substeps_per_hit_box(self, setup_service):
+        """HitBoxごとに設定サービス経由でサブステップ数を取得すること"""
+        service, _, map_repo, _, _, hit_box_repo, _, _ = setup_service
+
+        spot_id = SpotId(1)
+        tiles = [Tile(Coordinate(0, 0), TerrainType.grass())]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        owner_id = WorldObjectId(960)
+        physical_map.add_object(WorldObject(owner_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
+        map_repo.save(physical_map)
+
+        hit_box = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(7),
+            spot_id=spot_id,
+            owner_id=owner_id,
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(10),
+            duration=10,
+            velocity=HitBoxVelocity(1.0, 0.0, 0.0),
+        )
+        hit_box_repo.save(hit_box)
+
+        import unittest.mock as mock
+        with mock.patch.object(service._hit_box_config_service, "get_substeps_for_hit_box", return_value=6) as mocked:
+            service.tick()
+            assert mocked.call_count >= 1
+
+    def test_hit_box_get_aggregated_events_deduplicates_same_payload(self):
+        """同一内容のHitBoxイベントが重複した場合に集約されること（ドメイン層での検証）"""
+        hit_box_id = HitBoxId.create(1)
+        
+        # HitBoxを最小限のパラメータで作成
+        hit_box = HitBoxAggregate.create(
+            hit_box_id=hit_box_id,
+            spot_id=SpotId(1),
+            owner_id=WorldObjectId(99),
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(0),
+            duration=10,
+        )
+        hit_box.clear_events()
+
+        moved_a = HitBoxMovedEvent.create(
+            aggregate_id=hit_box_id,
+            aggregate_type="HitBoxAggregate",
+            from_coordinate=Coordinate(0, 0, 0),
+            to_coordinate=Coordinate(1, 0, 0),
+        )
+        moved_b = HitBoxMovedEvent.create(
+            aggregate_id=hit_box_id,
+            aggregate_type="HitBoxAggregate",
+            from_coordinate=Coordinate(0, 0, 0),
+            to_coordinate=Coordinate(1, 0, 0),
+        )
+        
+        # 直接イベントを追加（本来は内部メソッド経由だが集約ロジックのテストのため）
+        hit_box.add_event(moved_a)
+        hit_box.add_event(moved_b)
+
+        aggregated = hit_box.get_aggregated_events()
+        assert len(aggregated) == 1
+
+    def test_collision_check_guard_limits_checks_and_continues(self, setup_service, caplog):
+        """衝突判定上限に達した場合、警告を出して処理継続すること"""
+        service, _, map_repo, _, _, hit_box_repo, _, _ = setup_service
+
+        service._hit_box_config_service = DefaultHitBoxConfigService(
+            substeps_per_tick=4,
+            max_collision_checks_per_tick=1,
+        )
+
+        spot_id = SpotId(1)
+        tiles = [Tile(Coordinate(x, 0), TerrainType.grass()) for x in range(3)]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        owner_id = WorldObjectId(970)
+        target_id = WorldObjectId(971)
+        physical_map.add_object(WorldObject(owner_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
+        physical_map.add_object(WorldObject(target_id, Coordinate(1, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
+        map_repo.save(physical_map)
+
+        hit_box = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(8),
+            spot_id=spot_id,
+            owner_id=owner_id,
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(10),
+            duration=10,
+            velocity=HitBoxVelocity(2.0, 0.0, 0.0),
+            obstacle_collision_policy=ObstacleCollisionPolicy.PASS_THROUGH,
+        )
+        hit_box_repo.save(hit_box)
+
+        caplog.set_level("WARNING")
+        service.tick()
+
+        assert any("Collision check guard triggered" in rec.message for rec in caplog.records)
+        updated = hit_box_repo.find_by_id(HitBoxId.create(8))
+        assert updated is not None
+
+    def test_hit_box_stats_log_is_emitted(self, setup_service, caplog):
+        """HitBox更新統計ログが出力されること"""
+        service, _, map_repo, _, _, hit_box_repo, _, _ = setup_service
+        caplog.set_level("DEBUG")
+
+        spot_id = SpotId(1)
+        tiles = [Tile(Coordinate(0, 0), TerrainType.grass())]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        owner_id = WorldObjectId(980)
+        physical_map.add_object(WorldObject(owner_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
+        map_repo.save(physical_map)
+
+        hit_box = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(9),
+            spot_id=spot_id,
+            owner_id=owner_id,
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(10),
+            duration=10,
+            velocity=HitBoxVelocity(0.0, 0.0, 0.0),
+        )
+        hit_box_repo.save(hit_box)
+
+        service.tick()
+        assert any("HitBox update stats map=" in rec.message for rec in caplog.records)
 
     def _create_sample_player(self, player_id, spot_id, coord, stamina_val=100):
         base_stats = BaseStats(100, 50, 10, 10, 10, 0.05, 0.05)
