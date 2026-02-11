@@ -25,6 +25,11 @@ class HitBoxValidationException(CombatDomainException, ValidationException):
     error_code = "COMBAT.HIT_BOX_VALIDATION"
 
 
+class HitEffectValidationException(CombatDomainException, ValidationException):
+    """HitEffectバリデーション例外"""
+    error_code = "COMBAT.HIT_EFFECT_VALIDATION"
+
+
 class CombatTargetNotFoundException(CombatDomainException, BusinessRuleException):
     """戦闘対象未検出例外"""
     error_code = "COMBAT.TARGET_NOT_FOUND"
