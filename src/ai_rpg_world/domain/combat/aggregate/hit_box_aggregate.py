@@ -1,5 +1,6 @@
-from typing import List, Set, Tuple
+from typing import List, Set, Tuple, Any
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxCreatedEvent,
     HitBoxDeactivatedEvent,
@@ -19,6 +20,7 @@ from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.common.value_object import WorldTick
 
 
@@ -42,6 +44,7 @@ class HitBoxAggregate(AggregateRoot):
         target_collision_policy: TargetCollisionPolicy = TargetCollisionPolicy.KEEP_ACTIVE,
         obstacle_collision_policy: ObstacleCollisionPolicy = ObstacleCollisionPolicy.PASS_THROUGH,
         hit_effects: Tuple[HitEffect, ...] = (),
+        movement_capability: MovementCapability = MovementCapability.normal_walk(),
     ):
         super().__init__()
         self._hit_box_id = hit_box_id
@@ -60,6 +63,7 @@ class HitBoxAggregate(AggregateRoot):
         self._target_collision_policy = target_collision_policy
         self._obstacle_collision_policy = obstacle_collision_policy
         self._hit_effects = hit_effects
+        self._movement_capability = movement_capability
         self._is_active = True
         self._hit_targets: Set[WorldObjectId] = set()
         self._hit_obstacle_coordinates: Set[Coordinate] = set()
@@ -79,6 +83,7 @@ class HitBoxAggregate(AggregateRoot):
         target_collision_policy: TargetCollisionPolicy = TargetCollisionPolicy.KEEP_ACTIVE,
         obstacle_collision_policy: ObstacleCollisionPolicy = ObstacleCollisionPolicy.PASS_THROUGH,
         hit_effects: List[HitEffect] | None = None,
+        movement_capability: MovementCapability | None = None,
     ) -> "HitBoxAggregate":
         """HitBoxを新規作成する。"""
         from ai_rpg_world.domain.combat.exception.combat_exceptions import HitBoxValidationException
@@ -87,6 +92,7 @@ class HitBoxAggregate(AggregateRoot):
         if power_multiplier <= 0:
             raise HitBoxValidationException(f"power_multiplier must be greater than 0. power_multiplier: {power_multiplier}")
         effects = tuple(hit_effects or [])
+        capability = movement_capability or MovementCapability.normal_walk()
 
         hit_box = cls(
             hit_box_id=hit_box_id,
@@ -101,6 +107,7 @@ class HitBoxAggregate(AggregateRoot):
             target_collision_policy=target_collision_policy,
             obstacle_collision_policy=obstacle_collision_policy,
             hit_effects=effects,
+            movement_capability=capability,
         )
         hit_box.add_event(HitBoxCreatedEvent.create(
             aggregate_id=hit_box_id,
@@ -142,6 +149,10 @@ class HitBoxAggregate(AggregateRoot):
     @property
     def hit_effects(self) -> Tuple[HitEffect, ...]:
         return self._hit_effects
+
+    @property
+    def movement_capability(self) -> MovementCapability:
+        return self._movement_capability
 
     @property
     def precise_position(self) -> Tuple[float, float, float]:
@@ -288,6 +299,33 @@ class HitBoxAggregate(AggregateRoot):
 
         if not self.can_pass_through_obstacles():
             self.deactivate(reason="obstacle_collision")
+
+    def get_aggregated_events(self) -> List[DomainEvent]:
+        """
+        蓄積されたイベントを重複抑制して返す。
+        同一ティック内での冗長な移動や衝突イベントを集約する。
+        """
+        events = self.get_events()
+        aggregated: List[DomainEvent] = []
+        seen_keys = set()
+
+        for event in events:
+            key: Any = None
+            if isinstance(event, HitBoxMovedEvent):
+                key = ("moved", event.from_coordinate, event.to_coordinate)
+            elif isinstance(event, HitBoxObstacleCollidedEvent):
+                key = ("obstacle", event.collision_coordinate, event.obstacle_collision_policy)
+            elif isinstance(event, HitBoxHitRecordedEvent):
+                key = ("target_hit", event.target_id, event.hit_coordinate)
+
+            if key is not None:
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+
+            aggregated.append(event)
+
+        return aggregated
 
     def get_all_covered_coordinates(self) -> List[Coordinate]:
         """

@@ -8,6 +8,11 @@ from ai_rpg_world.domain.world.repository.weather_zone_repository import Weather
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
+from ai_rpg_world.domain.combat.event.combat_events import (
+    HitBoxHitRecordedEvent,
+    HitBoxMovedEvent,
+    HitBoxObstacleCollidedEvent,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
@@ -23,6 +28,7 @@ from ai_rpg_world.domain.combat.service.hit_box_config_service import (
     DefaultHitBoxConfigService,
     HitBoxConfigService,
 )
+from ai_rpg_world.domain.combat.service.hit_box_collision_service import HitBoxCollisionDomainService
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
@@ -42,6 +48,7 @@ class WorldSimulationApplicationService:
         weather_config_service: WeatherConfigService,
         unit_of_work: UnitOfWork,
         hit_box_config_service: Optional[HitBoxConfigService] = None,
+        hit_box_collision_service: Optional[HitBoxCollisionDomainService] = None,
     ):
         self._time_provider = time_provider
         self._physical_map_repository = physical_map_repository
@@ -51,6 +58,7 @@ class WorldSimulationApplicationService:
         self._behavior_service = behavior_service
         self._weather_config_service = weather_config_service
         self._hit_box_config_service = hit_box_config_service or DefaultHitBoxConfigService()
+        self._hit_box_collision_service = hit_box_collision_service or HitBoxCollisionDomainService()
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -249,21 +257,43 @@ class WorldSimulationApplicationService:
             )
             return
 
+        total_substeps_executed = 0
+        total_collision_checks = 0
+        guard_trigger_count = 0
+
         for hit_box in hit_boxes:
             try:
-                substeps_per_tick = self._hit_box_config_service.get_substeps_per_tick()
+                substeps_per_tick = self._hit_box_config_service.get_substeps_for_hit_box(hit_box)
+                max_collision_checks = self._hit_box_config_service.get_max_collision_checks_per_tick()
+                collision_checks_for_hit_box = 0
+                guard_triggered = False
                 step_ratio = 1.0 / substeps_per_tick
                 for _ in range(substeps_per_tick):
                     if not hit_box.is_active:
                         break
+                    total_substeps_executed += 1
                     hit_box.on_tick(current_tick, step_ratio=step_ratio)
 
                     if hit_box.is_active:
-                        self._resolve_hit_box_collisions(physical_map, hit_box)
+                        used_checks, guard_triggered = self._hit_box_collision_service.resolve_collisions(
+                            physical_map,
+                            hit_box,
+                            max_collision_checks=max_collision_checks - collision_checks_for_hit_box,
+                        )
+                        collision_checks_for_hit_box += used_checks
+                        if guard_triggered:
+                            guard_trigger_count += 1
+                            self._logger.warning(
+                                f"Collision check guard triggered for hit box {hit_box.hit_box_id} "
+                                f"in map {physical_map.spot_id}. limit={max_collision_checks}"
+                            )
+                            break
 
                 self._hit_box_repository.save(hit_box)
-                self._unit_of_work.add_events(hit_box.get_events())
+                aggregated_events = hit_box.get_aggregated_events()
+                self._unit_of_work.add_events(aggregated_events)
                 hit_box.clear_events()
+                total_collision_checks += collision_checks_for_hit_box
             except DomainException as e:
                 self._logger.warning(
                     f"HitBox update skipped for {hit_box.hit_box_id} due to domain rule: {str(e)}"
@@ -274,33 +304,11 @@ class WorldSimulationApplicationService:
                     exc_info=True,
                 )
 
-    def _resolve_hit_box_collisions(self, physical_map: PhysicalMapAggregate, hit_box: HitBoxAggregate) -> None:
-        """
-        HitBoxの被覆座標に対して、障害物→オブジェクトの順で衝突判定を行う。
-        """
-        for coord in hit_box.get_all_covered_coordinates():
-            if not hit_box.is_active:
-                return
-
-            if self._is_obstacle_coordinate(physical_map, coord):
-                hit_box.record_obstacle_collision(coord)
-                if not hit_box.is_active:
-                    return
-                # PASS_THROUGH時は座標走査を継続
-
-            for obj in physical_map.get_objects_in_range(coord, 0):
-                if not hit_box.is_active:
-                    return
-                hit_box.record_hit(obj.object_id)
-
-    def _is_obstacle_coordinate(self, physical_map: PhysicalMapAggregate, coordinate: Coordinate) -> bool:
-        """指定座標が（地形的に）障害物かどうかを判定する。オブジェクトとの衝突は別途判定される。"""
-        try:
-            tile = physical_map.get_tile(coordinate)
-            return not tile.terrain_type.can_pass(MovementCapability.normal_walk())
-        except Exception:
-            # タイルが見つからない（マップ外）場合は障害物とみなす
-            return True
+        self._logger.debug(
+            f"HitBox update stats map={physical_map.spot_id} hit_boxes={len(hit_boxes)} "
+            f"substeps={total_substeps_executed} collision_checks={total_collision_checks} "
+            f"guard_triggers={guard_trigger_count}"
+        )
 
     def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
         try:
