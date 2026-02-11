@@ -50,6 +50,9 @@ class HitBoxAggregate(AggregateRoot):
         self._shape = shape
         self._current_coordinate = initial_coordinate
         self._previous_coordinate = initial_coordinate
+        self._precise_x = float(initial_coordinate.x)
+        self._precise_y = float(initial_coordinate.y)
+        self._precise_z = float(initial_coordinate.z)
         self._start_tick = start_tick
         self._duration = duration
         self._power_multiplier = power_multiplier
@@ -59,6 +62,7 @@ class HitBoxAggregate(AggregateRoot):
         self._hit_effects = hit_effects
         self._is_active = True
         self._hit_targets: Set[WorldObjectId] = set()
+        self._hit_obstacle_coordinates: Set[Coordinate] = set()
 
     @classmethod
     def create(
@@ -140,6 +144,11 @@ class HitBoxAggregate(AggregateRoot):
         return self._hit_effects
 
     @property
+    def precise_position(self) -> Tuple[float, float, float]:
+        """内部的な連続位置（衝突判定前の計算用）を返す。"""
+        return (self._precise_x, self._precise_y, self._precise_z)
+
+    @property
     def is_active(self) -> bool:
         return self._is_active
 
@@ -149,7 +158,7 @@ class HitBoxAggregate(AggregateRoot):
     def can_pass_through_obstacles(self) -> bool:
         return self._obstacle_collision_policy == ObstacleCollisionPolicy.PASS_THROUGH
 
-    def on_tick(self, current_tick: WorldTick) -> None:
+    def on_tick(self, current_tick: WorldTick, step_ratio: float = 1.0) -> None:
         """
         ティック進行時の更新。
         寿命切れ判定後、速度が設定されていれば移動を実行する。
@@ -161,12 +170,37 @@ class HitBoxAggregate(AggregateRoot):
             self.deactivate(reason="expired")
             return
 
+        # 前回の位置を現在の位置で更新し、このサブステップの移動経路を計算できるようにする
+        self._previous_coordinate = self._current_coordinate
+
         if self._velocity.is_stationary:
             return
 
-        self.move_to(self._velocity.apply_to(self._current_coordinate))
+        next_x, next_y, next_z = self._velocity.apply_to_precise(
+            self._precise_x,
+            self._precise_y,
+            self._precise_z,
+            step_ratio=step_ratio,
+        )
 
-    def move_to(self, new_coordinate: Coordinate):
+        projected = Coordinate(
+            int(next_x),
+            int(next_y),
+            int(next_z),
+        )
+
+        self._precise_x, self._precise_y, self._precise_z = next_x, next_y, next_z
+        self._move_to_step(projected)
+
+    def teleport_to(self, new_coordinate: Coordinate):
+        """指定した座標にテレポートする。小数精度の位置も同期される。"""
+        self._update_location(new_coordinate, sync_precise=True)
+
+    def _move_to_step(self, new_coordinate: Coordinate):
+        """サブステップ移動用の内部メソッド。小数精度の位置は更新済みであることを前提とする。"""
+        self._update_location(new_coordinate, sync_precise=False)
+
+    def _update_location(self, new_coordinate: Coordinate, sync_precise: bool):
         """位置を更新し、移動前の位置を保持する（経路判定のため）"""
         if not self._is_active:
             raise HitBoxInactiveException(f"HitBox {self._hit_box_id} is inactive")
@@ -177,12 +211,23 @@ class HitBoxAggregate(AggregateRoot):
         old_coordinate = self._current_coordinate
         self._previous_coordinate = self._current_coordinate
         self._current_coordinate = new_coordinate
+        if sync_precise:
+            self._precise_x = float(new_coordinate.x)
+            self._precise_y = float(new_coordinate.y)
+            self._precise_z = float(new_coordinate.z)
         self.add_event(HitBoxMovedEvent.create(
             aggregate_id=self._hit_box_id,
             aggregate_type="HitBoxAggregate",
             from_coordinate=old_coordinate,
             to_coordinate=new_coordinate,
         ))
+
+    def move_to(self, new_coordinate: Coordinate, sync_precise: bool = True):
+        """
+        【非推奨】teleport_to または内部の移動処理を使用してください。
+        後方互換性とテストのために残していますが、将来的に削除される可能性があります。
+        """
+        self._update_location(new_coordinate, sync_precise=sync_precise)
 
     def is_expired(self, current_tick: WorldTick) -> bool:
         """持続時間が終了しているか判定する"""
@@ -230,6 +275,10 @@ class HitBoxAggregate(AggregateRoot):
         if not self._is_active:
             raise HitBoxInactiveException(f"HitBox {self._hit_box_id} is inactive")
 
+        if collision_coordinate in self._hit_obstacle_coordinates:
+            return
+
+        self._hit_obstacle_coordinates.add(collision_coordinate)
         self.add_event(HitBoxObstacleCollidedEvent.create(
             aggregate_id=self._hit_box_id,
             aggregate_type="HitBoxAggregate",

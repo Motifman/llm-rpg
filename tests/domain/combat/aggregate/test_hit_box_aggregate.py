@@ -123,12 +123,13 @@ class TestHitBoxAggregate:
             assert hit_box.hit_effects[0].effect_type == HitEffectType.POISON
 
     class TestMovement:
-        def test_move_to_success_adds_event(self, aggregate: HitBoxAggregate):
+        def test_teleport_to_success_adds_event_and_syncs_precise(self, aggregate: HitBoxAggregate):
             aggregate.clear_events()
 
-            aggregate.move_to(Coordinate(6, 5, 0))
+            aggregate.teleport_to(Coordinate(6, 5, 0))
 
             assert aggregate.current_coordinate == Coordinate(6, 5, 0)
+            assert aggregate.precise_position == (6.0, 5.0, 0.0)
             events = aggregate.get_events()
             assert len(events) == 1
             event = events[0]
@@ -138,13 +139,13 @@ class TestHitBoxAggregate:
 
         def test_move_to_same_coordinate_does_not_add_event(self, aggregate: HitBoxAggregate):
             aggregate.clear_events()
-            aggregate.move_to(Coordinate(5, 5, 0))
+            aggregate.teleport_to(Coordinate(5, 5, 0))
             assert aggregate.get_events() == []
 
-        def test_move_to_inactive_raises_exception(self, aggregate: HitBoxAggregate):
+        def test_teleport_to_inactive_raises_exception(self, aggregate: HitBoxAggregate):
             aggregate.deactivate()
             with pytest.raises(HitBoxInactiveException):
-                aggregate.move_to(Coordinate(6, 6, 0))
+                aggregate.teleport_to(Coordinate(6, 6, 0))
 
         def test_on_tick_moves_with_velocity(self, hit_box_id: HitBoxId, spot_id: SpotId, owner_id: WorldObjectId, shape: HitBoxShape):
             hit_box = HitBoxAggregate.create(
@@ -183,6 +184,60 @@ class TestHitBoxAggregate:
             assert hit_box.current_coordinate == Coordinate(1, 1, 0)
             assert hit_box.get_events() == []
 
+        def test_on_tick_substep_accumulates_precise_position(
+            self, hit_box_id: HitBoxId, spot_id: SpotId, owner_id: WorldObjectId, shape: HitBoxShape
+        ):
+            hit_box = HitBoxAggregate.create(
+                hit_box_id=hit_box_id,
+                spot_id=spot_id,
+                owner_id=owner_id,
+                shape=shape,
+                initial_coordinate=Coordinate(0, 0, 0),
+                start_tick=WorldTick(0),
+                duration=20,
+                velocity=HitBoxVelocity(0.5, 0.0, 0.0),
+            )
+            hit_box.clear_events()
+
+            # Tick 1: substep 0.25 * 4 = 1.0 velocity but divided into steps
+            for _ in range(4):
+                hit_box.on_tick(WorldTick(1), step_ratio=0.25)
+
+            # 1 tick分のサブステップ後、離散座標はまだ0のまま（0.5に到達しただけ）
+            assert hit_box.current_coordinate == Coordinate(0, 0, 0)
+            assert hit_box.precise_position == pytest.approx((0.5, 0.0, 0.0))
+            assert hit_box.get_events() == []
+
+            for _ in range(4):
+                hit_box.on_tick(WorldTick(2), step_ratio=0.25)
+
+            # 2 tick目で内部座標が 1.0 に到達し、移動イベントが発火
+            assert hit_box.current_coordinate == Coordinate(1, 0, 0)
+            moved_events = [e for e in hit_box.get_events() if isinstance(e, HitBoxMovedEvent)]
+            assert len(moved_events) == 1
+
+        def test_on_tick_updates_previous_coordinate_each_substep(
+            self, hit_box_id: HitBoxId, spot_id: SpotId, owner_id: WorldObjectId, shape: HitBoxShape
+        ):
+            hit_box = HitBoxAggregate.create(
+                hit_box_id=hit_box_id,
+                spot_id=spot_id,
+                owner_id=owner_id,
+                shape=shape,
+                initial_coordinate=Coordinate(0, 0, 0),
+                start_tick=WorldTick(0),
+                duration=20,
+                velocity=HitBoxVelocity(4.0, 0.0, 0.0),
+            )
+            # Tick 1, substep 0.25 -> 1.0 movement per substep
+            hit_box.on_tick(WorldTick(1), step_ratio=0.25)
+            assert hit_box.current_coordinate == Coordinate(1, 0, 0)
+            assert hit_box._previous_coordinate == Coordinate(0, 0, 0)
+
+            hit_box.on_tick(WorldTick(1), step_ratio=0.25)
+            assert hit_box.current_coordinate == Coordinate(2, 0, 0)
+            assert hit_box._previous_coordinate == Coordinate(1, 0, 0)
+
     class TestCoverage:
         def test_get_all_covered_coordinates_includes_path(self, shape: HitBoxShape):
             hit_box = HitBoxAggregate.create(
@@ -195,7 +250,7 @@ class TestHitBoxAggregate:
                 duration=10,
             )
 
-            hit_box.move_to(Coordinate(2, 0, 0))
+            hit_box.teleport_to(Coordinate(2, 0, 0))
             covered = hit_box.get_all_covered_coordinates()
 
             assert Coordinate(0, 0, 0) in covered
@@ -214,7 +269,7 @@ class TestHitBoxAggregate:
                 duration=10,
             )
 
-            hit_box.move_to(Coordinate(1, 1, 0))
+            hit_box.teleport_to(Coordinate(1, 1, 0))
             covered = hit_box.get_all_covered_coordinates()
 
             # 始点と終点は必ず含まれる
@@ -239,7 +294,7 @@ class TestHitBoxAggregate:
             )
 
             # (5,5) -> (6,5) への移動
-            hit_box.move_to(Coordinate(6, 5, 0))
+            hit_box.teleport_to(Coordinate(6, 5, 0))
             covered = hit_box.get_all_covered_coordinates()
 
             # 元の位置の全マスが含まれるべき
@@ -331,6 +386,26 @@ class TestHitBoxAggregate:
             assert len(events) == 1
             assert isinstance(events[0], HitBoxObstacleCollidedEvent)
             assert events[0].obstacle_collision_policy == ObstacleCollisionPolicy.PASS_THROUGH.value
+
+        def test_record_obstacle_collision_only_once_for_same_coordinate(
+            self, hit_box_id: HitBoxId, spot_id: SpotId, owner_id: WorldObjectId, shape: HitBoxShape
+        ):
+            hit_box = HitBoxAggregate.create(
+                hit_box_id=hit_box_id,
+                spot_id=spot_id,
+                owner_id=owner_id,
+                shape=shape,
+                initial_coordinate=Coordinate(2, 2, 0),
+                start_tick=WorldTick(0),
+                duration=20,
+                obstacle_collision_policy=ObstacleCollisionPolicy.PASS_THROUGH,
+            )
+            hit_box.clear_events()
+
+            hit_box.record_obstacle_collision(Coordinate(3, 2, 0))
+            hit_box.record_obstacle_collision(Coordinate(3, 2, 0)) # 二回目
+
+            assert len([e for e in hit_box.get_events() if isinstance(e, HitBoxObstacleCollidedEvent)]) == 1
 
         def test_record_obstacle_collision_deactivate_turns_inactive(
             self, hit_box_id: HitBoxId, spot_id: SpotId, owner_id: WorldObjectId, shape: HitBoxShape
