@@ -404,7 +404,7 @@ class TestWorldSimulationApplicationService:
         # プレイヤー2: 戦闘不能（本来はcan_actで弾かれるが、テストのため）
         pid2 = PlayerId(2)
         ps2 = self._create_sample_player(pid2, spot_id, Coordinate(1, 1), stamina_val=100)
-        ps2.take_damage(1000) # is_down = True
+        ps2.apply_damage(1000) # is_down = True
         player_repo.save(ps2)
         physical_map.add_object(WorldObject(WorldObjectId(2), Coordinate(1, 1), ObjectTypeEnum.PLAYER, component=ActorComponent(player_id=pid2)))
         
