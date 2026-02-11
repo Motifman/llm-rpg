@@ -11,10 +11,12 @@ from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalM
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
 from ai_rpg_world.domain.world.service.weather_simulation_service import WeatherSimulationService
 from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
 from ai_rpg_world.domain.world.service.weather_config_service import WeatherConfigService
+from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
@@ -29,6 +31,7 @@ class WorldSimulationApplicationService:
         physical_map_repository: PhysicalMapRepository,
         weather_zone_repository: WeatherZoneRepository,
         player_status_repository: PlayerStatusRepository,
+        hit_box_repository: Any,
         behavior_service: BehaviorService,
         weather_config_service: WeatherConfigService,
         unit_of_work: UnitOfWork
@@ -37,6 +40,7 @@ class WorldSimulationApplicationService:
         self._physical_map_repository = physical_map_repository
         self._weather_zone_repository = weather_zone_repository
         self._player_status_repository = player_status_repository
+        self._hit_box_repository = hit_box_repository
         self._behavior_service = behavior_service
         self._weather_config_service = weather_config_service
         self._unit_of_work = unit_of_work
@@ -102,6 +106,9 @@ class WorldSimulationApplicationService:
                             f"Failed to update actor {actor.object_id} in map {physical_map.spot_id}: {str(e)}",
                             exc_info=True
                         )
+
+                # 4.5 HitBoxの更新（移動・衝突判定）
+                self._update_hit_boxes(physical_map, current_tick)
                 
                 # マップの状態を保存
                 self._physical_map_repository.save(physical_map)
@@ -218,6 +225,63 @@ class WorldSimulationApplicationService:
                     
         except Exception as e:
             self._logger.error(f"Error applying environmental effects in bulk: {str(e)}", exc_info=True)
+
+    def _update_hit_boxes(self, physical_map: PhysicalMapAggregate, current_tick: WorldTick) -> None:
+        """
+        指定マップ上のHitBoxを更新し、衝突判定を行う。
+        - 移動・寿命更新は HitBoxAggregate.on_tick に委譲
+        - 障害物・オブジェクト衝突判定はアプリケーション層で調停
+        """
+        try:
+            hit_boxes = self._hit_box_repository.find_active_by_spot_id(physical_map.spot_id)
+        except Exception as e:
+            self._logger.error(
+                f"Failed to load hit boxes for map {physical_map.spot_id}: {str(e)}",
+                exc_info=True,
+            )
+            return
+
+        for hit_box in hit_boxes:
+            try:
+                hit_box.on_tick(current_tick)
+
+                if hit_box.is_active:
+                    self._resolve_hit_box_collisions(physical_map, hit_box)
+
+                self._hit_box_repository.save(hit_box)
+                self._unit_of_work.add_events(hit_box.get_events())
+                hit_box.clear_events()
+            except DomainException as e:
+                self._logger.warning(
+                    f"HitBox update skipped for {hit_box.hit_box_id} due to domain rule: {str(e)}"
+                )
+            except Exception as e:
+                self._logger.error(
+                    f"Failed to update hit box {hit_box.hit_box_id} in map {physical_map.spot_id}: {str(e)}",
+                    exc_info=True,
+                )
+
+    def _resolve_hit_box_collisions(self, physical_map: PhysicalMapAggregate, hit_box: Any) -> None:
+        """
+        HitBoxの被覆座標に対して、障害物→オブジェクトの順で衝突判定を行う。
+        """
+        for coord in hit_box.get_all_covered_coordinates():
+            if not hit_box.is_active:
+                return
+
+            if self._is_obstacle_coordinate(physical_map, coord):
+                hit_box.record_obstacle_collision(coord)
+                if not hit_box.is_active:
+                    return
+                # PASS_THROUGH時は座標走査を継続
+
+            for obj in physical_map.get_objects_in_range(coord, 0):
+                if not hit_box.is_active:
+                    return
+                hit_box.record_hit(obj.object_id)
+
+    def _is_obstacle_coordinate(self, physical_map: PhysicalMapAggregate, coordinate: Coordinate) -> bool:
+        return not physical_map.is_passable(coordinate, MovementCapability.normal_walk())
 
     def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
         try:

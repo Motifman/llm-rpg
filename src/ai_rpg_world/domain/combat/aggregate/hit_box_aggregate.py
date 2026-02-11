@@ -1,15 +1,23 @@
-from typing import List, Set
+from typing import List, Set, Tuple
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxCreatedEvent,
     HitBoxDeactivatedEvent,
     HitBoxHitRecordedEvent,
     HitBoxMovedEvent,
+    HitBoxObstacleCollidedEvent,
 )
 from ai_rpg_world.domain.combat.exception.combat_exceptions import HitBoxInactiveException
+from ai_rpg_world.domain.combat.value_object.hit_box_collision_policy import (
+    ObstacleCollisionPolicy,
+    TargetCollisionPolicy,
+)
+from ai_rpg_world.domain.combat.value_object.hit_box_velocity import HitBoxVelocity
+from ai_rpg_world.domain.combat.value_object.hit_effect import HitEffect
 from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
 from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.common.value_object import WorldTick
 
@@ -23,15 +31,21 @@ class HitBoxAggregate(AggregateRoot):
     def __init__(
         self,
         hit_box_id: HitBoxId,
+        spot_id: SpotId,
         owner_id: WorldObjectId,
         shape: HitBoxShape,
         initial_coordinate: Coordinate,
         start_tick: WorldTick,
         duration: int,
-        power_multiplier: float = 1.0
+        power_multiplier: float = 1.0,
+        velocity: HitBoxVelocity = HitBoxVelocity.zero(),
+        target_collision_policy: TargetCollisionPolicy = TargetCollisionPolicy.KEEP_ACTIVE,
+        obstacle_collision_policy: ObstacleCollisionPolicy = ObstacleCollisionPolicy.PASS_THROUGH,
+        hit_effects: Tuple[HitEffect, ...] = (),
     ):
         super().__init__()
         self._hit_box_id = hit_box_id
+        self._spot_id = spot_id
         self._owner_id = owner_id
         self._shape = shape
         self._current_coordinate = initial_coordinate
@@ -39,6 +53,10 @@ class HitBoxAggregate(AggregateRoot):
         self._start_tick = start_tick
         self._duration = duration
         self._power_multiplier = power_multiplier
+        self._velocity = velocity
+        self._target_collision_policy = target_collision_policy
+        self._obstacle_collision_policy = obstacle_collision_policy
+        self._hit_effects = hit_effects
         self._is_active = True
         self._hit_targets: Set[WorldObjectId] = set()
 
@@ -46,12 +64,17 @@ class HitBoxAggregate(AggregateRoot):
     def create(
         cls,
         hit_box_id: HitBoxId,
+        spot_id: SpotId,
         owner_id: WorldObjectId,
         shape: HitBoxShape,
         initial_coordinate: Coordinate,
         start_tick: WorldTick,
         duration: int,
         power_multiplier: float = 1.0,
+        velocity: HitBoxVelocity = HitBoxVelocity.zero(),
+        target_collision_policy: TargetCollisionPolicy = TargetCollisionPolicy.KEEP_ACTIVE,
+        obstacle_collision_policy: ObstacleCollisionPolicy = ObstacleCollisionPolicy.PASS_THROUGH,
+        hit_effects: List[HitEffect] | None = None,
     ) -> "HitBoxAggregate":
         """HitBoxを新規作成する。"""
         from ai_rpg_world.domain.combat.exception.combat_exceptions import HitBoxValidationException
@@ -59,30 +82,42 @@ class HitBoxAggregate(AggregateRoot):
             raise HitBoxValidationException(f"duration must be greater than 0. duration: {duration}")
         if power_multiplier <= 0:
             raise HitBoxValidationException(f"power_multiplier must be greater than 0. power_multiplier: {power_multiplier}")
+        effects = tuple(hit_effects or [])
 
         hit_box = cls(
             hit_box_id=hit_box_id,
+            spot_id=spot_id,
             owner_id=owner_id,
             shape=shape,
             initial_coordinate=initial_coordinate,
             start_tick=start_tick,
             duration=duration,
             power_multiplier=power_multiplier,
+            velocity=velocity,
+            target_collision_policy=target_collision_policy,
+            obstacle_collision_policy=obstacle_collision_policy,
+            hit_effects=effects,
         )
         hit_box.add_event(HitBoxCreatedEvent.create(
             aggregate_id=hit_box_id,
             aggregate_type="HitBoxAggregate",
+            spot_id=spot_id,
             owner_id=owner_id,
             initial_coordinate=initial_coordinate,
             duration=duration,
             power_multiplier=power_multiplier,
             shape_cell_count=len(shape.relative_coordinates),
+            effect_count=len(effects),
         ))
         return hit_box
 
     @property
     def hit_box_id(self) -> HitBoxId:
         return self._hit_box_id
+
+    @property
+    def spot_id(self) -> SpotId:
+        return self._spot_id
 
     @property
     def owner_id(self) -> WorldObjectId:
@@ -97,8 +132,39 @@ class HitBoxAggregate(AggregateRoot):
         return self._power_multiplier
 
     @property
+    def velocity(self) -> HitBoxVelocity:
+        return self._velocity
+
+    @property
+    def hit_effects(self) -> Tuple[HitEffect, ...]:
+        return self._hit_effects
+
+    @property
     def is_active(self) -> bool:
         return self._is_active
+
+    def should_deactivate_on_target_hit(self) -> bool:
+        return self._target_collision_policy == TargetCollisionPolicy.DEACTIVATE
+
+    def can_pass_through_obstacles(self) -> bool:
+        return self._obstacle_collision_policy == ObstacleCollisionPolicy.PASS_THROUGH
+
+    def on_tick(self, current_tick: WorldTick) -> None:
+        """
+        ティック進行時の更新。
+        寿命切れ判定後、速度が設定されていれば移動を実行する。
+        """
+        if not self._is_active:
+            return
+
+        if self.is_expired(current_tick):
+            self.deactivate(reason="expired")
+            return
+
+        if self._velocity.is_stationary:
+            return
+
+        self.move_to(self._velocity.apply_to(self._current_coordinate))
 
     def move_to(self, new_coordinate: Coordinate):
         """位置を更新し、移動前の位置を保持する（経路判定のため）"""
@@ -156,6 +222,24 @@ class HitBoxAggregate(AggregateRoot):
             hit_coordinate=self._current_coordinate,
         ))
 
+        if self.should_deactivate_on_target_hit():
+            self.deactivate(reason="target_collision")
+
+    def record_obstacle_collision(self, collision_coordinate: Coordinate) -> None:
+        """障害物との衝突を記録し、ポリシーに応じて消滅させる。"""
+        if not self._is_active:
+            raise HitBoxInactiveException(f"HitBox {self._hit_box_id} is inactive")
+
+        self.add_event(HitBoxObstacleCollidedEvent.create(
+            aggregate_id=self._hit_box_id,
+            aggregate_type="HitBoxAggregate",
+            collision_coordinate=collision_coordinate,
+            obstacle_collision_policy=self._obstacle_collision_policy.value,
+        ))
+
+        if not self.can_pass_through_obstacles():
+            self.deactivate(reason="obstacle_collision")
+
     def get_all_covered_coordinates(self) -> List[Coordinate]:
         """
         現在の位置、および前回の位置からの移動経路上に含まれる全ての絶対座標を返す。
@@ -191,17 +275,6 @@ class HitBoxAggregate(AggregateRoot):
         step_x = 1 if dx > 0 else -1 if dx < 0 else 0
         step_y = 1 if dy > 0 else -1 if dy < 0 else 0
         step_z = 1 if dz > 0 else -1 if dz < 0 else 0
-
-        # 各軸の境界を跨ぐまでの「時間」を計算
-        # 整数グリッドなので、初期の境界までの距離を dx で割る
-        def get_t_max(start_val, delta_val, step):
-            if step == 0:
-                return float('inf')
-            # 次の境界値（整数値）
-            next_boundary = start_val + (1 if step > 0 else 0) if step != 0 else start_val
-            # 浮動小数点計算を避けるため、deltaの絶対値を使用
-            # ただしここでは正確な交差判定のため float を使用
-            return abs((next_boundary - (start_val + 0.5)) / delta_val) if delta_val != 0 else float('inf')
 
         # グリッドの中心(x+0.5)からスタートすると考える
         t_max_x = abs((step_x * 0.5) / dx) if dx != 0 else float('inf')
