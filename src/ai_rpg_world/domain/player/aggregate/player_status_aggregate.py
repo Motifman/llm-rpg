@@ -29,6 +29,8 @@ from ai_rpg_world.domain.player.event.status_events import (
 )
 from ai_rpg_world.domain.player.exception import (
     InsufficientMpException,
+    InsufficientStaminaException,
+    InsufficientHpException,
     InsufficientGoldException,
     PlayerDownedException
 )
@@ -384,13 +386,13 @@ class PlayerStatusAggregate(AggregateRoot):
 
         Raises:
             PlayerDownedException: ダウン状態の場合
-            ValueError: スタミナが不足している場合
+            InsufficientStaminaException: スタミナが不足している場合
         """
         if self._is_down:
             raise PlayerDownedException("ダウン状態のプレイヤーはスタミナを消費できません")
 
         if not self._stamina.can_consume(amount):
-            raise ValueError(f"スタミナが不足しています。必要: {amount}, 現在: {self._stamina.value}")
+            raise InsufficientStaminaException(f"スタミナが不足しています。必要: {amount}, 現在: {self._stamina.value}")
 
         old_stamina = self._stamina.value
         self._stamina = self._stamina.consume(amount)
@@ -401,6 +403,67 @@ class PlayerStatusAggregate(AggregateRoot):
             consumed_amount=amount,
             remaining_stamina=self._stamina.value,
         ))
+
+    def validate_resource_consumption(
+        self,
+        mp_cost: int = 0,
+        stamina_cost: int = 0,
+        hp_cost: int = 0
+    ) -> None:
+        """リソース消費が可能かバリデーションを行う
+
+        Args:
+            mp_cost: MP消費量
+            stamina_cost: スタミナ消費量
+            hp_cost: HP消費量（現在のHPを超えてはならない）
+
+        Raises:
+            PlayerDownedException: ダウン状態の場合
+            InsufficientMpException: MP不足
+            InsufficientStaminaException: スタミナ不足
+            InsufficientHpException: HP不足
+        """
+        if self._is_down:
+            raise PlayerDownedException("ダウン状態のプレイヤーはリソースを消費できません")
+
+        if mp_cost > 0 and not self._mp.can_consume(mp_cost):
+            raise InsufficientMpException(f"MPが不足しています。必要: {mp_cost}, 現在: {self._mp.value}")
+
+        if stamina_cost > 0 and not self._stamina.can_consume(stamina_cost):
+            raise InsufficientStaminaException(f"スタミナが不足しています。必要: {stamina_cost}, 現在: {self._stamina.value}")
+
+        if hp_cost > 0 and hp_cost >= self._hp.value:
+            raise InsufficientHpException(f"HPが不足しています。必要: {hp_cost}, 現在: {self._hp.value}")
+
+    def consume_resources(
+        self,
+        mp_cost: int = 0,
+        stamina_cost: int = 0,
+        hp_cost: int = 0
+    ) -> None:
+        """リソースを一括で消費する
+
+        Args:
+            mp_cost: MP消費量
+            stamina_cost: スタミナ消費量
+            hp_cost: HP消費量
+
+        Raises:
+            PlayerDownedException: ダウン状態の場合
+            InsufficientMpException: MP不足
+            InsufficientStaminaException: スタミナ不足
+            InsufficientHpException: HP不足
+        """
+        # バリデーション
+        self.validate_resource_consumption(mp_cost, stamina_cost, hp_cost)
+
+        # 消費
+        if mp_cost > 0:
+            self.use_mp(mp_cost)
+        if stamina_cost > 0:
+            self.consume_stamina(stamina_cost)
+        if hp_cost > 0:
+            self.apply_damage(hp_cost)
 
     def heal_stamina(self, amount: int) -> None:
         """スタミナを回復する
