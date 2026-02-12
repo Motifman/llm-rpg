@@ -271,6 +271,11 @@ class WorldSimulationApplicationService:
                 for _ in range(substeps_per_tick):
                     if not hit_box.is_active:
                         break
+                    
+                    # 有効化タイミングに達していない場合はスキップ（移動も判定も行わない）
+                    if not hit_box.is_activated(current_tick):
+                        break
+
                     total_substeps_executed += 1
                     hit_box.on_tick(current_tick, step_ratio=step_ratio)
 

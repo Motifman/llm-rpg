@@ -809,6 +809,35 @@ class TestWorldSimulationApplicationService:
         service.tick()
         assert any("HitBox update stats map=" in rec.message for rec in caplog.records)
 
+    def test_tick_skips_hitbox_before_activation_tick(self, setup_service):
+        """有効化時刻前のHitBoxはtickで移動も衝突判定も行われないこと"""
+        service, _, map_repo, _, _, hit_box_repo, _, _ = setup_service
+
+        spot_id = SpotId(1)
+        tiles = [Tile(Coordinate(x, 0), TerrainType.grass()) for x in range(3)]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        map_repo.save(physical_map)
+
+        hit_box = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(10),
+            spot_id=spot_id,
+            owner_id=WorldObjectId(990),
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(10),
+            duration=10,
+            velocity=HitBoxVelocity(1, 0, 0),
+            activation_tick=15, # Tick 15まで有効化されない
+        )
+        hit_box_repo.save(hit_box)
+
+        # Tick 11 で実行
+        service.tick() 
+
+        updated = hit_box_repo.find_by_id(HitBoxId.create(10))
+        # まだ移動していないはず
+        assert updated.current_coordinate == Coordinate(0, 0, 0)
+
     def _create_sample_player(self, player_id, spot_id, coord, stamina_val=100):
         base_stats = BaseStats(100, 50, 10, 10, 10, 0.05, 0.05)
         exp_table = ExpTable(100.0, 2.0)

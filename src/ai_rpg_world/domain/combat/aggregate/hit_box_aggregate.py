@@ -45,6 +45,8 @@ class HitBoxAggregate(AggregateRoot):
         obstacle_collision_policy: ObstacleCollisionPolicy = ObstacleCollisionPolicy.PASS_THROUGH,
         hit_effects: Tuple[HitEffect, ...] = (),
         movement_capability: MovementCapability = MovementCapability.normal_walk(),
+        activation_tick: int | None = None,
+        skill_id: str | None = None,
     ):
         super().__init__()
         self._hit_box_id = hit_box_id
@@ -64,6 +66,8 @@ class HitBoxAggregate(AggregateRoot):
         self._obstacle_collision_policy = obstacle_collision_policy
         self._hit_effects = hit_effects
         self._movement_capability = movement_capability
+        self._activation_tick = activation_tick or start_tick.value
+        self._skill_id = skill_id
         self._is_active = True
         self._hit_targets: Set[WorldObjectId] = set()
         self._hit_obstacle_coordinates: Set[Coordinate] = set()
@@ -84,6 +88,8 @@ class HitBoxAggregate(AggregateRoot):
         obstacle_collision_policy: ObstacleCollisionPolicy = ObstacleCollisionPolicy.PASS_THROUGH,
         hit_effects: List[HitEffect] | None = None,
         movement_capability: MovementCapability | None = None,
+        activation_tick: int | None = None,
+        skill_id: str | None = None,
     ) -> "HitBoxAggregate":
         """HitBoxを新規作成する。"""
         from ai_rpg_world.domain.combat.exception.combat_exceptions import HitBoxValidationException
@@ -91,6 +97,12 @@ class HitBoxAggregate(AggregateRoot):
             raise HitBoxValidationException(f"duration must be greater than 0. duration: {duration}")
         if power_multiplier <= 0:
             raise HitBoxValidationException(f"power_multiplier must be greater than 0. power_multiplier: {power_multiplier}")
+        
+        start_val = start_tick.value
+        act_val = activation_tick if activation_tick is not None else start_val
+        if act_val < start_val:
+            raise HitBoxValidationException(f"activation_tick ({act_val}) cannot be earlier than start_tick ({start_val})")
+
         effects = tuple(hit_effects or [])
         capability = movement_capability or MovementCapability.normal_walk()
 
@@ -108,6 +120,8 @@ class HitBoxAggregate(AggregateRoot):
             obstacle_collision_policy=obstacle_collision_policy,
             hit_effects=effects,
             movement_capability=capability,
+            activation_tick=activation_tick,
+            skill_id=skill_id,
         )
         hit_box.add_event(HitBoxCreatedEvent.create(
             aggregate_id=hit_box_id,
@@ -119,6 +133,8 @@ class HitBoxAggregate(AggregateRoot):
             power_multiplier=power_multiplier,
             shape_cell_count=len(shape.relative_coordinates),
             effect_count=len(effects),
+            activation_tick=hit_box.activation_tick,
+            skill_id=skill_id,
         ))
         return hit_box
 
@@ -155,6 +171,18 @@ class HitBoxAggregate(AggregateRoot):
         return self._movement_capability
 
     @property
+    def activation_tick(self) -> int:
+        return self._activation_tick
+
+    @property
+    def skill_id(self) -> str | None:
+        return self._skill_id
+
+    def is_activated(self, current_tick: WorldTick) -> bool:
+        """有効化時刻に達しているか判定する"""
+        return current_tick.value >= self._activation_tick
+
+    @property
     def precise_position(self) -> Tuple[float, float, float]:
         """内部的な連続位置（衝突判定前の計算用）を返す。"""
         return (self._precise_x, self._precise_y, self._precise_z)
@@ -172,9 +200,16 @@ class HitBoxAggregate(AggregateRoot):
     def on_tick(self, current_tick: WorldTick, step_ratio: float = 1.0) -> None:
         """
         ティック進行時の更新。
-        寿命切れ判定後、速度が設定されていれば移動を実行する。
+        有効化時刻のチェック、寿命切れ判定後、速度が設定されていれば移動を実行する。
         """
         if not self._is_active:
+            return
+
+        # 前回の位置を現在の位置で更新（有効化前でも経路計算の起点は必要）
+        self._previous_coordinate = self._current_coordinate
+
+        # 有効化時刻に達していない場合は何もしない
+        if current_tick.value < self._activation_tick:
             return
 
         if self.is_expired(current_tick):
@@ -242,7 +277,8 @@ class HitBoxAggregate(AggregateRoot):
 
     def is_expired(self, current_tick: WorldTick) -> bool:
         """持続時間が終了しているか判定する"""
-        return current_tick.value >= (self._start_tick.value + self._duration)
+        # 寿命は有効化されてからの経過時間で判定すべき
+        return current_tick.value >= (self._activation_tick + self._duration)
 
     def deactivate(self, reason: str = "manual"):
         """HitBoxを無効化する（寿命終了や衝突消滅時）"""

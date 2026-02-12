@@ -48,4 +48,7 @@ class UsePlayerSkillCommand:
     loadout_id: int
     slot_index: int
     current_tick: int
+    spot_id: str                        # 使用する場所（マップ）
+    target_direction: str | None = None  # 指定がない場合はプレイヤーの向きを使用
+    auto_aim: bool = False              # Trueの場合、付近のターゲットを自動で狙う
 

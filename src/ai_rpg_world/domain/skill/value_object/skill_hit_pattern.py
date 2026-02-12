@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Tuple
 
-from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape
+from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape, RelativeCoordinate
 from ai_rpg_world.domain.combat.value_object.hit_box_velocity import HitBoxVelocity
 from ai_rpg_world.domain.skill.enum.skill_enum import SkillHitPatternType
 from ai_rpg_world.domain.skill.exception.skill_exceptions import SkillHitPatternValidationException
@@ -14,7 +14,7 @@ class SkillHitTimelineSegment:
     duration_ticks: int
     shape: HitBoxShape
     velocity: HitBoxVelocity = HitBoxVelocity.zero()
-    spawn_offset: Coordinate = Coordinate(0, 0, 0)
+    spawn_offset: RelativeCoordinate = RelativeCoordinate(0, 0, 0)
     segment_power_multiplier: float = 1.0
 
     def __post_init__(self):
