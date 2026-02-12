@@ -21,6 +21,7 @@ class InMemoryUnitOfWork(UnitOfWork):
         self._in_transaction = False
         self._pending_operations: List[Callable[[], None]] = []
         self._pending_events: List[DomainEvent] = []
+        self._registered_aggregates: set = set()
         self._processed_sync_count = 0
         self._committed = False
         self._event_publisher = event_publisher
@@ -39,6 +40,7 @@ class InMemoryUnitOfWork(UnitOfWork):
         self._in_transaction = True
         self._pending_operations = []
         self._pending_events = []
+        self._registered_aggregates = set()
         self._processed_sync_count = 0
         self._committed = False
         
@@ -52,7 +54,10 @@ class InMemoryUnitOfWork(UnitOfWork):
             raise RuntimeError("No transaction in progress")
 
         try:
-            # 1. 同期イベントの処理（保留中の操作も適宜実行される）
+            # 1. 登録された集約から最終的なイベントを収集
+            self._collect_events_from_aggregates()
+
+            # 2. 同期イベントの処理（保留中の操作も適宜実行される）
             self.process_sync_events()
 
             # 2. 残った保留中の操作があれば実行
@@ -99,6 +104,9 @@ class InMemoryUnitOfWork(UnitOfWork):
             self._processed_sync_count = 0
 
         while True:
+            # 処理前に、現時点で登録されている集約からイベントを収集
+            self._collect_events_from_aggregates()
+            
             # 同期イベントを処理する前に、そこまでの操作を全て反映させる
             # これにより、ハンドラが最新の状態をリポジトリから取得できる
             self._execute_pending_operations()
@@ -148,6 +156,10 @@ class InMemoryUnitOfWork(UnitOfWork):
         if not self._in_transaction:
             raise RuntimeError("No transaction in progress")
 
+        # 集約の状態を戻すことはできない（メモリ上のオブジェクトが直接変更されているため）が、
+        # 登録情報はクリアする
+        self._registered_aggregates.clear()
+
         # 状態を復元
         if self._data_store and self._snapshot:
             self._data_store.restore_snapshot(self._snapshot)
@@ -170,6 +182,26 @@ class InMemoryUnitOfWork(UnitOfWork):
         if not self._in_transaction:
             raise RuntimeError("No transaction in progress")
         self._pending_events.extend(events)
+
+    def register_aggregate(self, aggregate: Any) -> None:
+        """集約を登録し、コミット時にイベントを自動収集できるようにする"""
+        if not self._in_transaction:
+            raise RuntimeError("No transaction in progress")
+        self._registered_aggregates.add(aggregate)
+
+    def _collect_events_from_aggregates(self) -> None:
+        """登録された集約からイベントを収集し、クリアする"""
+        # セットをコピーしてループ（収集中にさらに追加される可能性に備える）
+        aggregates = list(self._registered_aggregates)
+        # 収集済みとして一旦クリア
+        self._registered_aggregates.clear()
+        
+        for aggregate in aggregates:
+            if hasattr(aggregate, 'get_events') and hasattr(aggregate, 'clear_events'):
+                events = aggregate.get_events()
+                if events:
+                    self._pending_events.extend(events)
+                    aggregate.clear_events()
 
     def get_pending_events(self) -> List[DomainEvent]:
         """保留中のイベントを取得（テスト用）"""

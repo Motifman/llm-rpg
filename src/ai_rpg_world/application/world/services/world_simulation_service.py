@@ -128,10 +128,6 @@ class WorldSimulationApplicationService:
                 
                 # マップの状態を保存
                 self._physical_map_repository.save(physical_map)
-                
-                # イベントの収集
-                self._unit_of_work.add_events(physical_map.get_events())
-                physical_map.clear_events()
             
             return current_tick
 
@@ -156,8 +152,6 @@ class WorldSimulationApplicationService:
                         new_state = WeatherSimulationService.simulate_next_weather(zone.current_state)
                         zone.change_weather(new_state)
                         self._weather_zone_repository.save(zone)
-                        self._unit_of_work.add_events(zone.get_events())
-                        zone.clear_events()
                         self._logger.info(f"Weather updated in zone {zone.zone_id} to {new_state.weather_type}")
                     except DomainException as e:
                         self._logger.error(f"Weather transition rule violation in zone {zone.zone_id}: {str(e)}")
@@ -234,10 +228,6 @@ class WorldSimulationApplicationService:
             if updated_statuses:
                 # 一括保存
                 self._player_status_repository.save_all(updated_statuses)
-                # イベントの収集
-                for status in updated_statuses:
-                    self._unit_of_work.add_events(status.get_events())
-                    status.clear_events()
                     
         except Exception as e:
             self._logger.error(f"Error applying environmental effects in bulk: {str(e)}", exc_info=True)
@@ -295,9 +285,6 @@ class WorldSimulationApplicationService:
                             break
 
                 self._hit_box_repository.save(hit_box)
-                aggregated_events = hit_box.get_aggregated_events()
-                self._unit_of_work.add_events(aggregated_events)
-                hit_box.clear_events()
                 total_collision_checks += collision_checks_for_hit_box
             except DomainException as e:
                 self._logger.warning(

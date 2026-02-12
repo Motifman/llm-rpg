@@ -34,10 +34,12 @@ class InMemoryPlayerProfileRepository(PlayerProfileRepository, InMemoryRepositor
         return any(profile.name == name for profile in self._profiles.values())
 
     def save(self, profile: PlayerProfileAggregate) -> PlayerProfileAggregate:
+        cloned_profile = self._clone(profile)
         def operation():
-            self._profiles[profile.player_id] = profile
-            return profile
+            self._profiles[cloned_profile.player_id] = cloned_profile
+            return cloned_profile
             
+        self._register_aggregate(profile)
         return self._execute_operation(operation)
     
     def delete(self, player_id: PlayerId) -> bool:

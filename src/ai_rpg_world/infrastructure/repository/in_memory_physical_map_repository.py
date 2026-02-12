@@ -31,6 +31,7 @@ class InMemoryPhysicalMapRepository(PhysicalMapRepository, InMemoryRepositoryBas
             self._maps[cloned_map.spot_id] = cloned_map
             return cloned_map
             
+        self._register_aggregate(physical_map)
         return self._execute_operation(operation)
     
     def delete(self, spot_id: SpotId) -> bool:

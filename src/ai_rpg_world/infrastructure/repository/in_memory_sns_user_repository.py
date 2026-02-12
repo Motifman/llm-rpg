@@ -195,12 +195,14 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
 
     def save(self, user: UserAggregate) -> UserAggregate:
         """ユーザーを保存"""
+        cloned_user = self._clone(user)
         def operation():
-            self._users[user.user_id] = user
-            profile_info = user.get_user_profile_info()
-            self._username_to_user_id[profile_info["user_name"]] = user.user_id
-            return user
+            self._users[cloned_user.user_id] = cloned_user
+            profile_info = cloned_user.get_user_profile_info()
+            self._username_to_user_id[profile_info["user_name"]] = cloned_user.user_id
+            return cloned_user
             
+        self._register_aggregate(user)
         return self._execute_operation(operation)
 
     def delete(self, user_id: UserId) -> bool:

@@ -89,9 +89,6 @@ class UserCommandService:
             # リポジトリに保存
             self.user_repository.save(user_aggregate)
 
-            # イベントをUnit of Workに追加（コミット時に発行される）
-            self._unit_of_work.add_events(user_aggregate.get_events())
-
         self.logger.info(
             f"ユーザーが正常に作成されました: user_id={user_id}, user_name={command.user_name}",
             extra={
@@ -129,9 +126,6 @@ class UserCommandService:
 
             # リポジトリに保存
             self.user_repository.save(user_aggregate)
-
-            # イベントをUnit of Workに追加（コミット時に発行される）
-            self._unit_of_work.add_events(user_aggregate.get_events())
 
         self.logger.info(
             f"ユーザープロフィールが正常に更新されました: user_id={command.user_id}",
@@ -179,9 +173,6 @@ class UserCommandService:
             # リポジトリに保存
             self.user_repository.save(user_aggregate)
 
-            # イベントをUnit of Workに追加（コミット時に発行される）
-            self._unit_of_work.add_events(user_aggregate.get_events())
-
         self.logger.info(
             f"ユーザーをフォローしました: follower={command.follower_user_id}, followee={command.followee_user_id}",
             extra={
@@ -223,9 +214,6 @@ class UserCommandService:
 
             # リポジトリに保存
             self.user_repository.save(user_aggregate)
-
-            # イベントをUnit of Workに追加（コミット時に発行される）
-            self._unit_of_work.add_events(user_aggregate.get_events())
 
         self.logger.info(
             f"ユーザーのフォローを解除しました: follower={command.follower_user_id}, followee={command.followee_user_id}",
@@ -269,9 +257,6 @@ class UserCommandService:
             # リポジトリに保存
             self.user_repository.save(user_aggregate)
 
-            # イベントをUnit of Workに追加（コミット時に発行される）
-            self._unit_of_work.add_events(user_aggregate.get_events())
-
         self.logger.info(
             f"ユーザーをブロックしました: blocker={command.blocker_user_id}, blocked={command.blocked_user_id}",
             extra={
@@ -313,9 +298,6 @@ class UserCommandService:
 
             # リポジトリに保存
             self.user_repository.save(user_aggregate)
-
-            # イベントをUnit of Workに追加（コミット時に発行される）
-            self._unit_of_work.add_events(user_aggregate.get_events())
 
         self.logger.info(
             f"ユーザーのブロックを解除しました: blocker={command.blocker_user_id}, blocked={command.blocked_user_id}",
@@ -367,9 +349,6 @@ class UserCommandService:
             # リポジトリに保存
             self.user_repository.save(user_aggregate)
 
-            # イベントをUnit of Workに追加（コミット時に発行される）
-            self._unit_of_work.add_events(user_aggregate.get_events())
-
         self.logger.info(
             f"ユーザーを購読しました: subscriber={command.subscriber_user_id}, subscribed={command.subscribed_user_id}",
             extra={
@@ -411,9 +390,6 @@ class UserCommandService:
 
             # リポジトリに保存
             self.user_repository.save(user_aggregate)
-
-            # イベントをUnit of Workに追加（コミット時に発行される）
-            self._unit_of_work.add_events(user_aggregate.get_events())
 
         self.logger.info(
             f"ユーザーの購読を解除しました: subscriber={command.subscriber_user_id}, subscribed={command.subscribed_user_id}",

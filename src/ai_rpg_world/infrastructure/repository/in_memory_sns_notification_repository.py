@@ -35,20 +35,22 @@ class InMemorySnsNotificationRepository(SnsNotificationRepository, InMemoryRepos
 
     def save(self, notification: Notification) -> Notification:
         """通知を保存"""
+        cloned_notification = self._clone(notification)
         def operation():
-            self._notifications[notification.notification_id] = notification
-            return notification
+            self._notifications[cloned_notification.notification_id] = cloned_notification
+            return cloned_notification
             
+        self._register_aggregate(notification)
         return self._execute_operation(operation)
 
     def find_by_id(self, notification_id: NotificationId) -> Optional[Notification]:
         """通知IDで通知を取得"""
-        return self._notifications.get(notification_id)
+        return self._clone(self._notifications.get(notification_id))
 
     def find_by_user_id(self, user_id: UserId, limit: int = 50, offset: int = 0) -> List[Notification]:
         """ユーザーIDで通知を取得（新しい順）"""
         user_notifications = [
-            notification for notification in self._notifications.values()
+            self._clone(notification) for notification in self._notifications.values()
             if notification.user_id == user_id
         ]
         user_notifications.sort(key=lambda n: n.created_at, reverse=True)
@@ -57,25 +59,34 @@ class InMemorySnsNotificationRepository(SnsNotificationRepository, InMemoryRepos
     def find_unread_by_user_id(self, user_id: UserId) -> List[Notification]:
         """ユーザーIDで未読通知を取得"""
         return [
-            notification for notification in self._notifications.values()
+            self._clone(notification) for notification in self._notifications.values()
             if notification.user_id == user_id and not notification.is_read
         ]
 
     def mark_as_read(self, notification_id: NotificationId) -> None:
         """通知を既読にする"""
+        notification = self._notifications.get(notification_id)
+        if not notification:
+            return
+            
         def operation():
-            notification = self._notifications.get(notification_id)
-            if notification:
-                notification.mark_as_read()
+            target = self._notifications.get(notification_id)
+            if target:
+                target.mark_as_read()
                 
+        self._register_aggregate(notification)
         self._execute_operation(operation)
 
     def mark_all_as_read(self, user_id: UserId) -> None:
         """ユーザーの全通知を既読にする"""
+        # 未読通知を特定して登録
+        unread_notifications = [n for n in self._notifications.values() if n.user_id == user_id and not n.is_read]
+        for n in unread_notifications:
+            self._register_aggregate(n)
+            
         def operation():
-            for notification in self._notifications.values():
-                if notification.user_id == user_id:
-                    notification.mark_as_read()
+            for notification in unread_notifications:
+                notification.mark_as_read()
                     
         self._execute_operation(operation)
 

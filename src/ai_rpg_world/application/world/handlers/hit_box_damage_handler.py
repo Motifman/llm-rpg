@@ -105,15 +105,6 @@ class HitBoxDamageHandler(EventHandler[HitBoxHitRecordedEvent]):
             else:
                 self._monster_repository.save(target_aggregate)
 
-            # イベントをUnitOfWorkに追加
-            self._unit_of_work.add_events(target_aggregate.get_events())
-            target_aggregate.clear_events()
-            
-            # 攻撃側がプレイヤーならそのイベントも拾う
-            if attacker and attacker.kind == "player":
-                self._unit_of_work.add_events(attacker.stats_owner.get_events())
-                attacker.stats_owner.clear_events()
-
         except DomainException as e:
             self._logger.warning(f"Domain exception in damage handler: {str(e)}")
         except Exception as e:

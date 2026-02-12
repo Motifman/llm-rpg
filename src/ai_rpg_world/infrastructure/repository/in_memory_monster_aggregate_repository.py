@@ -53,6 +53,7 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
             self._world_object_to_monster_id[cloned.world_object_id] = cloned.monster_id
             return cloned
 
+        self._register_aggregate(entity)
         return self._execute_operation(operation)
 
     def delete(self, entity_id: MonsterId) -> bool:

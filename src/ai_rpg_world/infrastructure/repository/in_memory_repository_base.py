@@ -50,6 +50,12 @@ class InMemoryRepositoryBase:
         # トランザクション外、またはUOWが指定されていない場合は即時実行
         return operation()
 
+    def _register_aggregate(self, aggregate: Any) -> None:
+        """集約をUOWに登録し、イベントの自動収集を有効にする"""
+        if self._unit_of_work and self._is_in_transaction():
+            if hasattr(self._unit_of_work, 'register_aggregate'):
+                self._unit_of_work.register_aggregate(aggregate)
+
     def _is_in_transaction(self) -> bool:
         """トランザクション中かどうかを確認"""
         if not self._unit_of_work:

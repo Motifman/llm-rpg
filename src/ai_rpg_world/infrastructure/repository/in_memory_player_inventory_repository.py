@@ -24,10 +24,12 @@ class InMemoryPlayerInventoryRepository(PlayerInventoryRepository, InMemoryRepos
         return [self._inventories[pid] for pid in player_ids if pid in self._inventories]
     
     def save(self, inventory: PlayerInventoryAggregate) -> PlayerInventoryAggregate:
+        cloned_inventory = self._clone(inventory)
         def operation():
-            self._inventories[inventory.player_id] = inventory
-            return inventory
+            self._inventories[cloned_inventory.player_id] = cloned_inventory
+            return cloned_inventory
             
+        self._register_aggregate(inventory)
         return self._execute_operation(operation)
     
     def delete(self, player_id: PlayerId) -> bool:

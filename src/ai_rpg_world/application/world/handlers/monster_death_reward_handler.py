@@ -81,17 +81,9 @@ class MonsterDeathRewardHandler(EventHandler[MonsterDiedEvent]):
                             inventory.acquire_item(instance_id)
                             self._player_inventory_repository.save(inventory)
                             
-                            # インベントリのイベントも追加
-                            self._unit_of_work.add_events(inventory.get_events())
-                            inventory.clear_events()
-                            
                             self._logger.info(f"Player {event.killer_player_id} acquired {loot_result.quantity} of {item_spec.name}")
 
             self._player_status_repository.save(player_status)
-            
-            # プレイヤー側で発生したイベント（レベルアップなど）をUnitOfWorkに追加
-            self._unit_of_work.add_events(player_status.get_events())
-            player_status.clear_events()
 
         except Exception as e:
             self._logger.exception(f"Unexpected error in MonsterDeathRewardHandler: {str(e)}")

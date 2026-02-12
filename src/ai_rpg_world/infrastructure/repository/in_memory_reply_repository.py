@@ -31,10 +31,12 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
 
     def save(self, reply: ReplyAggregate) -> None:
         """リプライを保存"""
+        cloned_reply = self._clone(reply)
         def operation():
-            self._replies[reply.reply_id] = reply
-            reply.clear_events()  # 発行済みのイベントをクリア
+            self._replies[cloned_reply.reply_id] = cloned_reply
+            return None
             
+        self._register_aggregate(reply)
         return self._execute_operation(operation)
 
     def find_by_id(self, reply_id: ReplyId) -> Optional[ReplyAggregate]:

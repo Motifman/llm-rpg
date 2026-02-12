@@ -166,3 +166,48 @@ class TestInMemoryUnitOfWork:
 
         # 双方向参照が正しく設定されていることを確認
         assert unit_of_work._event_publisher is event_publisher
+
+    def test_register_aggregate_and_automatic_event_collection(self):
+        """集約の登録とイベント自動収集のテスト"""
+        # モック集約の作成
+        mock_event = Mock(spec=DomainEvent)
+        mock_aggregate = Mock()
+        mock_aggregate.get_events.return_value = [mock_event]
+        mock_aggregate.clear_events = Mock()
+
+        with self.unit_of_work:
+            # 集約を登録
+            self.unit_of_work.register_aggregate(mock_aggregate)
+            
+            # まだ収集されていない
+            assert self.unit_of_work.get_pending_events() == []
+            
+        # コミット後に収集されている
+        # 内部で events_to_process_async にコピーされてクリアされるため、
+        # テストでは途中の状態を確認するためにモックを調整
+        mock_aggregate.get_events.assert_called_once()
+        mock_aggregate.clear_events.assert_called_once()
+
+    def test_automatic_collection_before_sync_event_processing(self):
+        """同期イベント処理前の自動収集テスト"""
+        mock_event = Mock(spec=DomainEvent)
+        mock_aggregate = Mock()
+        mock_aggregate.get_events.return_value = [mock_event]
+        mock_aggregate.clear_events = Mock()
+        
+        # モックイベントパブリッシャー
+        mock_publisher = Mock()
+        self.unit_of_work._event_publisher = mock_publisher
+
+        with self.unit_of_work:
+            self.unit_of_work.register_aggregate(mock_aggregate)
+            
+            # 同期イベント処理を呼び出す
+            self.unit_of_work.process_sync_events()
+            
+            # 同期処理の前に収集されているはず
+            mock_aggregate.get_events.assert_called_once()
+            mock_aggregate.clear_events.assert_called_once()
+            
+            # パブリッシャーに渡されている
+            mock_publisher.publish_sync_events.assert_called_once_with([mock_event])

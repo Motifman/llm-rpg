@@ -30,6 +30,11 @@ class UnitOfWork(Protocol):
         pass
 
     @abstractmethod
+    def register_aggregate(self, aggregate: any) -> None:
+        """集約を登録し、コミット時にイベントを自動収集できるようにする"""
+        pass
+
+    @abstractmethod
     def process_sync_events(self) -> None:
         """同期イベントを即座に処理する"""
         pass

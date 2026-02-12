@@ -91,9 +91,6 @@ class PostCommandService:
             # リポジトリに保存
             self._post_repository.save(post_aggregate)
 
-            # イベントをUnit of Workに追加（コミット時に発行される）
-            self._unit_of_work.add_events(post_aggregate.get_events())
-
             self._logger.info(f"Post created successfully: post_id={post_id.value}, user_id={command.user_id}")
 
             return CommandResultDto(
@@ -133,9 +130,6 @@ class PostCommandService:
             # リポジトリに保存
             self._post_repository.save(post_aggregate)
 
-            # イベントをUnit of Workに追加（コミット時に発行される）
-            self._unit_of_work.add_events(post_aggregate.get_events())
-
             self._logger.info(f"Post liked successfully: post_id={command.post_id}, user_id={command.user_id}")
 
             return CommandResultDto(
@@ -174,9 +168,6 @@ class PostCommandService:
 
             # リポジトリに保存
             self._post_repository.save(post_aggregate)
-
-            # イベントをUnit of Workに追加（コミット時に発行される）
-            self._unit_of_work.add_events(post_aggregate.get_events())
 
             self._logger.info(f"Post deleted successfully: post_id={command.post_id}, user_id={command.user_id}")
 
