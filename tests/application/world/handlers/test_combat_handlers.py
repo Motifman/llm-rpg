@@ -1,0 +1,725 @@
+import pytest
+import logging
+from typing import Dict, List, Optional, Set
+from unittest.mock import MagicMock
+
+from ai_rpg_world.application.world.handlers.hit_box_damage_handler import HitBoxDamageHandler
+from ai_rpg_world.application.world.handlers.combat_aggro_handler import CombatAggroHandler
+from ai_rpg_world.application.world.handlers.monster_death_reward_handler import MonsterDeathRewardHandler
+from ai_rpg_world.application.world.services.world_simulation_service import (
+    WorldSimulationApplicationService,
+)
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
+from ai_rpg_world.domain.combat.event.combat_events import HitBoxHitRecordedEvent
+from ai_rpg_world.domain.combat.service.hit_box_collision_service import HitBoxCollisionDomainService
+from ai_rpg_world.domain.combat.service.hit_box_config_service import DefaultHitBoxConfigService
+from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
+from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape
+from ai_rpg_world.domain.combat.value_object.hit_box_velocity import HitBoxVelocity
+from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
+from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
+from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
+from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
+from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
+from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
+from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
+from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
+from ai_rpg_world.domain.player.enum.player_enum import Race
+from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
+from ai_rpg_world.domain.player.value_object.gold import Gold
+from ai_rpg_world.domain.player.value_object.growth import Growth
+from ai_rpg_world.domain.player.value_object.hp import Hp
+from ai_rpg_world.domain.player.value_object.mp import Mp
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.entity.tile import Tile
+from ai_rpg_world.domain.world.entity.world_object import WorldObject
+from ai_rpg_world.domain.world.entity.world_object_component import (
+    ActorComponent,
+    AutonomousBehaviorComponent,
+)
+from ai_rpg_world.domain.world.enum.world_enum import (
+    BehaviorStateEnum,
+    DirectionEnum,
+    ObjectTypeEnum,
+)
+from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
+from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
+from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
+from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
+from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
+from ai_rpg_world.domain.world.service.weather_config_service import DefaultWeatherConfigService
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.infrastructure.events.combat_event_handler_registry import CombatEventHandlerRegistry
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.infrastructure.repository.in_memory_hit_box_repository import InMemoryHitBoxRepository
+from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import (
+    InMemoryMonsterAggregateRepository,
+)
+from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
+    InMemoryPhysicalMapRepository,
+)
+from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
+    InMemoryPlayerStatusRepository,
+)
+from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import (
+    InMemoryPlayerInventoryRepository,
+)
+from ai_rpg_world.infrastructure.repository.in_memory_loot_table_repository import (
+    InMemoryLootTableRepository,
+)
+from ai_rpg_world.infrastructure.repository.in_memory_item_spec_repository import (
+    InMemoryItemSpecRepository,
+)
+from ai_rpg_world.infrastructure.repository.in_memory_weather_zone_repository import (
+    InMemoryWeatherZoneRepository,
+)
+from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import InMemoryGameTimeProvider
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import LootTableAggregate, LootEntry
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+
+
+# --- Test Helpers ---
+
+def _create_player_status(
+    player_id: int,
+    *,
+    max_hp: int = 100,
+    attack: int = 20,
+    defense: int = 10,
+    critical_rate: float = 0.0,
+    evasion_rate: float = 0.0,
+) -> PlayerStatusAggregate:
+    base_stats = BaseStats(
+        max_hp=max_hp,
+        max_mp=100,
+        attack=attack,
+        defense=defense,
+        speed=10,
+        critical_rate=critical_rate,
+        evasion_rate=evasion_rate,
+    )
+    return PlayerStatusAggregate(
+        player_id=PlayerId(player_id),
+        base_stats=base_stats,
+        stat_growth_factor=StatGrowthFactor.for_level(1),
+        exp_table=ExpTable(100, 2.0),
+        growth=Growth(1, 0, ExpTable(100, 2.0)),
+        gold=Gold(0),
+        hp=Hp.create(max_hp, max_hp),
+        mp=Mp.create(100, 100),
+        stamina=Stamina.create(100, 100),
+    )
+
+
+def _create_monster(monster_id: int, world_object_id: int, coordinate: Coordinate, max_hp: int = 120, attack: int = 15, loot_table_id: str = None) -> MonsterAggregate:
+    template = MonsterTemplate(
+        template_id=MonsterTemplateId(monster_id),
+        name=f"monster-{monster_id}",
+        base_stats=BaseStats(
+            max_hp=max_hp,
+            max_mp=20,
+            attack=attack,
+            defense=8,
+            speed=8,
+            critical_rate=0.0,
+            evasion_rate=0.0,
+        ),
+        reward_info=RewardInfo(exp=10, gold=5, loot_table_id=loot_table_id),
+        respawn_info=RespawnInfo(respawn_interval_ticks=100, is_auto_respawn=True),
+        race=Race.BEAST,
+        faction=MonsterFactionEnum.ENEMY,
+        description="test monster",
+    )
+    monster = MonsterAggregate.create(
+        monster_id=MonsterId(monster_id),
+        template=template,
+        world_object_id=WorldObjectId(world_object_id),
+    )
+    monster.clear_events()
+    monster.spawn(coordinate)
+    monster.clear_events()
+    return monster
+
+
+def _create_actor_object(world_object_id: int, coordinate: Coordinate, player_id: int | None = None) -> WorldObject:
+    component = ActorComponent(
+        direction=DirectionEnum.SOUTH,
+        player_id=PlayerId(player_id) if player_id is not None else None,
+    )
+    object_type = ObjectTypeEnum.PLAYER if player_id is not None else ObjectTypeEnum.NPC
+    return WorldObject(
+        object_id=WorldObjectId(world_object_id),
+        coordinate=coordinate,
+        object_type=object_type,
+        component=component,
+    )
+
+
+def _create_map(spot_id: int = 1) -> PhysicalMapAggregate:
+    tiles = [Tile(Coordinate(x, y, 0), TerrainType.grass()) for x in range(5) for y in range(5)]
+    return PhysicalMapAggregate.create(SpotId(spot_id), tiles)
+
+
+class FakeItemRepository(ItemRepository):
+    def __init__(self):
+        self.aggregates = {}
+        self._next_id = 1
+    def generate_item_instance_id(self) -> ItemInstanceId:
+        res = ItemInstanceId(self._next_id)
+        self._next_id += 1
+        return res
+    def save(self, aggregate):
+        self.aggregates[aggregate.item_instance_id] = aggregate
+        return aggregate
+    def find_by_id(self, id): return self.aggregates.get(id)
+    def find_all(self): return list(self.aggregates.values())
+    def find_by_ids(self, ids): return [self.aggregates[i] for i in ids if i in self.aggregates]
+    def delete(self, id): 
+        if id in self.aggregates: del self.aggregates[id]; return True
+        return False
+    def find_by_spec_id(self, spec_id): return []
+    def find_by_type(self, type): return []
+    def find_by_rarity(self, rarity): return []
+    def find_broken_items(self): return []
+    def find_tradeable_items(self): return []
+    def find_by_owner_id(self, owner_id): return []
+
+
+# --- Test Classes ---
+
+class TestHitBoxDamageHandler:
+    @pytest.fixture
+    def setup(self):
+        data_store = InMemoryDataStore()
+        data_store.clear_all()
+        def create_uow():
+            return InMemoryUnitOfWork(unit_of_work_factory=create_uow, data_store=data_store)
+        uow, _ = InMemoryUnitOfWork.create_with_event_publisher(unit_of_work_factory=create_uow, data_store=data_store)
+        
+        time_provider = InMemoryGameTimeProvider(initial_tick=10)
+        map_repo = InMemoryPhysicalMapRepository(data_store, uow)
+        player_repo = InMemoryPlayerStatusRepository(data_store, uow)
+        monster_repo = InMemoryMonsterAggregateRepository(data_store, uow)
+        hit_box_repo = InMemoryHitBoxRepository(data_store, uow)
+        
+        handler = HitBoxDamageHandler(
+            hit_box_repository=hit_box_repo,
+            physical_map_repository=map_repo,
+            player_status_repository=player_repo,
+            monster_repository=monster_repo,
+            time_provider=time_provider,
+            unit_of_work=uow,
+        )
+        return locals()
+
+    def _create_hit_box(self, hit_box_repo, owner_id, stats=None):
+        hb_id = HitBoxId.create(1)
+        hb = HitBoxAggregate.create(
+            hit_box_id=hb_id,
+            spot_id=SpotId(1),
+            owner_id=owner_id,
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(1, 1, 0),
+            start_tick=WorldTick(10),
+            duration=5,
+            power_multiplier=1.0,
+            velocity=HitBoxVelocity.zero(),
+            attacker_stats=stats
+        )
+        hit_box_repo.save(hb)
+        return hb
+
+    def test_apply_damage_with_snapshot_stats(self, setup):
+        # Given
+        s = setup
+        pmap = _create_map()
+        pmap.add_object(_create_actor_object(100, Coordinate(0, 1, 0), player_id=100))
+        pmap.add_object(_create_actor_object(200, Coordinate(1, 1, 0), player_id=200))
+        s["map_repo"].save(pmap)
+
+        # アタッカーのステータススナップショット (攻撃力 50)
+        attacker_stats = BaseStats(100, 100, 50, 10, 10, 0, 0)
+        hb = self._create_hit_box(s["hit_box_repo"], WorldObjectId(100), attacker_stats)
+        
+        # 実際のプレイヤーのステータスは攻撃力 10 (スナップショットが優先されるはず)
+        s["player_repo"].save(_create_player_status(100, attack=10))
+        # ディフェンダー (防御力 10)
+        s["player_repo"].save(_create_player_status(200, defense=10))
+
+        event = HitBoxHitRecordedEvent.create(
+            aggregate_id=hb.hit_box_id,
+            aggregate_type="HitBoxAggregate",
+            owner_id=WorldObjectId(100),
+            target_id=WorldObjectId(200),
+            hit_coordinate=Coordinate(1, 1, 0),
+        )
+
+        # When
+        with s["uow"]:
+            s["handler"].handle(event)
+
+        # Then
+        target = s["player_repo"].find_by_id(PlayerId(200))
+        # ダメージ = 50 - (10 / 2) = 45. 100 - 45 = 55
+        assert target.hp.value == 55
+
+    def test_apply_damage_filters_expired_buffs(self, setup):
+        # Given
+        s = setup
+        pmap = _create_map()
+        pmap.add_object(_create_actor_object(100, Coordinate(0, 1, 0), player_id=100))
+        pmap.add_object(_create_actor_object(200, Coordinate(1, 1, 0), player_id=200))
+        s["map_repo"].save(pmap)
+
+        # ディフェンダーに期限切れの防御バフを付与
+        defender = _create_player_status(200, defense=10)
+        # Tick 5 で切れるバフを付与 (現在は Tick 10)
+        defender.add_status_effect(StatusEffect(StatusEffectType.DEFENSE_UP, 10.0, WorldTick(5)))
+        s["player_repo"].save(defender)
+
+        # アタッカー (攻撃力 20)
+        attacker_stats = BaseStats(100, 100, 20, 10, 10, 0, 0)
+        hb = self._create_hit_box(s["hit_box_repo"], WorldObjectId(100), attacker_stats)
+
+        event = HitBoxHitRecordedEvent.create(
+            aggregate_id=hb.hit_box_id,
+            aggregate_type="HitBoxAggregate",
+            owner_id=WorldObjectId(100),
+            target_id=WorldObjectId(200),
+            hit_coordinate=Coordinate(1, 1, 0),
+        )
+
+        # When
+        with s["uow"]:
+            s["handler"].handle(event)
+
+        # Then
+        target = s["player_repo"].find_by_id(PlayerId(200))
+        # 防御バフが効いていればダメージは 0 になるはずだが、期限切れなので 20 - (10/2) = 15 入る
+        assert target.hp.value == 85
+        assert len(target._active_effects) == 0 # クリーンアップされていること
+
+    def test_skip_damage_when_target_already_dead(self, setup):
+        # Given
+        s = setup
+        pmap = _create_map()
+        pmap.add_object(_create_actor_object(100, Coordinate(0, 1, 0), player_id=100))
+        pmap.add_object(_create_actor_object(300, Coordinate(1, 1, 0), player_id=None))
+        s["map_repo"].save(pmap)
+
+        monster = _create_monster(1, 300, Coordinate(1, 1, 0))
+        monster.apply_damage(999, WorldTick(10)) # 殺しておく
+        s["monster_repo"].save(monster)
+
+        hb = self._create_hit_box(s["hit_box_repo"], WorldObjectId(100), BaseStats(100, 100, 10, 10, 10, 0, 0))
+        event = HitBoxHitRecordedEvent.create(
+            aggregate_id=hb.hit_box_id,
+            aggregate_type="HitBoxAggregate",
+            owner_id=WorldObjectId(100),
+            target_id=WorldObjectId(300),
+            hit_coordinate=Coordinate(1, 1, 0)
+        )
+
+        # When
+        with s["uow"]:
+            s["handler"].handle(event)
+
+        # Then
+        # 例外が発生せずに正常終了することを確認
+        assert True
+
+    def test_handle_hit_box_not_found(self, setup):
+        # Given
+        s = setup
+        event = HitBoxHitRecordedEvent.create(
+            aggregate_id=HitBoxId.create(999), # 存在しないID
+            aggregate_type="HitBoxAggregate",
+            owner_id=WorldObjectId(100),
+            target_id=WorldObjectId(200),
+            hit_coordinate=Coordinate(1, 1, 0)
+        )
+
+        # When
+        with s["uow"]:
+            s["handler"].handle(event) # エラーにならずに終了することを確認
+
+        # Then
+        assert True
+
+    def test_handle_map_not_found(self, setup):
+        # Given
+        s = setup
+        hb = self._create_hit_box(s["hit_box_repo"], WorldObjectId(100))
+        # マップを削除しておく（インメモリなのでクリア）
+        s["data_store"].physical_maps.clear()
+
+        event = HitBoxHitRecordedEvent.create(
+            aggregate_id=hb.hit_box_id,
+            aggregate_type="HitBoxAggregate",
+            owner_id=WorldObjectId(100),
+            target_id=WorldObjectId(200),
+            hit_coordinate=Coordinate(1, 1, 0)
+        )
+
+        # When
+        with s["uow"]:
+            s["handler"].handle(event)
+
+        # Then
+        assert True
+
+    def test_handle_defender_disappeared(self, setup):
+        # Given
+        s = setup
+        pmap = _create_map()
+        pmap.add_object(_create_actor_object(100, Coordinate(0, 1, 0), player_id=100))
+        # ディフェンダーを配置しない
+        s["map_repo"].save(pmap)
+
+        hb = self._create_hit_box(s["hit_box_repo"], WorldObjectId(100))
+        event = HitBoxHitRecordedEvent.create(
+            aggregate_id=hb.hit_box_id,
+            aggregate_type="HitBoxAggregate",
+            owner_id=WorldObjectId(100),
+            target_id=WorldObjectId(200), # 存在しない
+            hit_coordinate=Coordinate(1, 1, 0)
+        )
+
+        # When
+        with s["uow"]:
+            s["handler"].handle(event)
+
+        # Then
+        assert True
+
+
+class TestCombatAggroHandler:
+    @pytest.fixture
+    def setup(self):
+        data_store = InMemoryDataStore()
+        data_store.clear_all()
+        def create_uow():
+            return InMemoryUnitOfWork(unit_of_work_factory=create_uow, data_store=data_store)
+        uow, _ = InMemoryUnitOfWork.create_with_event_publisher(create_uow, data_store)
+        
+        map_repo = InMemoryPhysicalMapRepository(data_store, uow)
+        hit_box_repo = InMemoryHitBoxRepository(data_store, uow)
+        handler = CombatAggroHandler(hit_box_repo, map_repo, uow)
+        return locals()
+
+    def test_aggro_skipped_when_attacker_not_actor(self, setup):
+        # Given
+        s = setup
+        pmap = _create_map()
+        # アタッカーは単なるオブジェクト（設置物など）
+        attacker_obj = WorldObject(WorldObjectId(500), Coordinate(0, 0, 0), ObjectTypeEnum.SIGN)
+        # ターゲットは自律モンスター
+        monster_obj = WorldObject(
+            WorldObjectId(300), Coordinate(1, 1, 0), ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(state=BehaviorStateEnum.IDLE)
+        )
+        pmap.add_object(attacker_obj)
+        pmap.add_object(monster_obj)
+        s["map_repo"].save(pmap)
+
+        hb = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(1),
+            spot_id=SpotId(1),
+            owner_id=WorldObjectId(500),
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0,0,0),
+            start_tick=WorldTick(10),
+            duration=5
+        )
+        s["hit_box_repo"].save(hb)
+
+        event = HitBoxHitRecordedEvent.create(
+            aggregate_id=hb.hit_box_id,
+            aggregate_type="HitBoxAggregate",
+            owner_id=WorldObjectId(500),
+            target_id=WorldObjectId(300),
+            hit_coordinate=Coordinate(1, 1, 0)
+        )
+
+        # When
+        with s["uow"]:
+            s["handler"].handle(event)
+
+        # Then
+        updated_map = s["map_repo"].find_by_spot_id(SpotId(1))
+        target = updated_map.get_object(WorldObjectId(300))
+        assert target.component.target_id is None # ターゲットが設定されていないこと
+
+    def test_aggro_skipped_when_target_not_actor(self, setup):
+        # Given
+        s = setup
+        pmap = _create_map()
+        # アタッカーはプレイヤー
+        attacker_obj = _create_actor_object(100, Coordinate(0, 0, 0), player_id=100)
+        # ターゲットはアクターでないオブジェクト（チェスト）
+        target_obj = WorldObject(WorldObjectId(200), Coordinate(1, 1, 0), ObjectTypeEnum.CHEST)
+        pmap.add_object(attacker_obj)
+        pmap.add_object(target_obj)
+        s["map_repo"].save(pmap)
+
+        hb = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(1),
+            spot_id=SpotId(1),
+            owner_id=WorldObjectId(100),
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0,0,0),
+            start_tick=WorldTick(10),
+            duration=5
+        )
+        s["hit_box_repo"].save(hb)
+
+        event = HitBoxHitRecordedEvent.create(
+            aggregate_id=hb.hit_box_id,
+            aggregate_type="HitBoxAggregate",
+            owner_id=WorldObjectId(100),
+            target_id=WorldObjectId(200),
+            hit_coordinate=Coordinate(1, 1, 0)
+        )
+
+        # When
+        with s["uow"]:
+            s["handler"].handle(event)
+
+        # Then
+        # エラーにならずに終了することを確認
+        assert True
+
+
+class TestMonsterDeathRewardHandler:
+    @pytest.fixture
+    def setup(self):
+        data_store = InMemoryDataStore()
+        data_store.clear_all()
+        def create_uow():
+            return InMemoryUnitOfWork(unit_of_work_factory=create_uow, data_store=data_store)
+        uow, _ = InMemoryUnitOfWork.create_with_event_publisher(create_uow, data_store)
+        
+        player_repo = InMemoryPlayerStatusRepository(data_store, uow)
+        inventory_repo = InMemoryPlayerInventoryRepository(data_store, uow)
+        loot_repo = InMemoryLootTableRepository()
+        item_spec_repo = InMemoryItemSpecRepository()
+        item_repo = FakeItemRepository()
+        
+        handler = MonsterDeathRewardHandler(
+            player_status_repository=player_repo,
+            player_inventory_repository=inventory_repo,
+            loot_table_repository=loot_repo,
+            item_spec_repository=item_spec_repo,
+            item_repository=item_repo,
+            unit_of_work=uow,
+        )
+        return locals()
+
+    def test_grant_rewards_and_loot(self, setup):
+        # Given
+        s = setup
+        player_id = PlayerId(100)
+        s["player_repo"].save(_create_player_status(100))
+        s["inventory_repo"].save(PlayerInventoryAggregate.create_new_inventory(player_id))
+
+        # ドロップテーブルの設定 (100%で鉄の剣が出る)
+        spec = s["item_spec_repo"].find_by_id(ItemSpecId(1)) # 鉄の剣
+        loot_table = LootTableAggregate.create("test_table", [LootEntry(spec.item_spec_id, 100, 1, 1)])
+        s["loot_repo"].save(loot_table)
+
+        event = MonsterDiedEvent.create(
+            aggregate_id=MonsterId(1),
+            aggregate_type="MonsterAggregate",
+            respawn_tick=100,
+            exp=50,
+            gold=20,
+            loot_table_id="test_table",
+            killer_player_id=player_id
+        )
+
+        # When
+        with s["uow"]:
+            s["handler"].handle(event)
+
+        # Then
+        # 経験値とゴールド
+        status = s["player_repo"].find_by_id(player_id)
+        assert status.growth.total_exp == 50
+        assert status.gold.value == 20
+
+        # アイテム入手
+        inv = s["inventory_repo"].find_by_id(player_id)
+        # スロット0に何か入っているはず
+        item_id = inv.get_item_instance_id_by_slot(SlotId(0))
+        assert item_id is not None
+        
+        instance = s["item_repo"].find_by_id(item_id)
+        assert instance.item_spec.item_spec_id == spec.item_spec_id
+
+    def test_skip_rewards_when_no_killer(self, setup):
+        # Given
+        s = setup
+        event = MonsterDiedEvent.create(
+            aggregate_id=MonsterId(1),
+            aggregate_type="MonsterAggregate",
+            respawn_tick=100,
+            exp=50,
+            gold=20,
+            loot_table_id="table",
+            killer_player_id=None
+        )
+
+        # When
+        with s["uow"]:
+            s["handler"].handle(event)
+
+        # Then
+        # エラーにならずに終了することを確認
+        assert True
+
+    def test_handle_player_status_not_found(self, setup):
+        # Given
+        s = setup
+        player_id = PlayerId(100)
+        # プレイヤー状態を保存しない
+        
+        event = MonsterDiedEvent.create(
+            aggregate_id=MonsterId(1),
+            aggregate_type="MonsterAggregate",
+            respawn_tick=100,
+            exp=50,
+            gold=20,
+            loot_table_id="table",
+            killer_player_id=player_id
+        )
+
+        # When
+        with s["uow"]:
+            s["handler"].handle(event)
+
+        # Then
+        assert True
+
+    def test_handle_loot_table_not_found(self, setup):
+        # Given
+        s = setup
+        player_id = PlayerId(100)
+        s["player_repo"].save(_create_player_status(100))
+        s["inventory_repo"].save(PlayerInventoryAggregate.create_new_inventory(player_id))
+        
+        # 存在しないドロップテーブルを指定
+        event = MonsterDiedEvent.create(
+            aggregate_id=MonsterId(1),
+            aggregate_type="MonsterAggregate",
+            respawn_tick=100,
+            exp=50,
+            gold=20,
+            loot_table_id="missing_table",
+            killer_player_id=player_id
+        )
+
+        # When
+        with s["uow"]:
+            s["handler"].handle(event)
+
+        # Then
+        # 経験値とゴールドは付与されるはず
+        status = s["player_repo"].find_by_id(player_id)
+        assert status.growth.total_exp == 50
+        assert status.gold.value == 20
+
+
+class TestCombatIntegration:
+    @pytest.fixture
+    def setup_service(self):
+        data_store = InMemoryDataStore()
+        data_store.clear_all()
+        time_provider = InMemoryGameTimeProvider(initial_tick=10)
+
+        def create_uow():
+            return InMemoryUnitOfWork(unit_of_work_factory=create_uow, data_store=data_store)
+
+        uow, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(create_uow, data_store)
+
+        map_repo = InMemoryPhysicalMapRepository(data_store, uow)
+        player_repo = InMemoryPlayerStatusRepository(data_store, uow)
+        inventory_repo = InMemoryPlayerInventoryRepository(data_store, uow)
+        monster_repo = InMemoryMonsterAggregateRepository(data_store, uow)
+        hit_box_repo = InMemoryHitBoxRepository(data_store, uow)
+        loot_repo = InMemoryLootTableRepository()
+        item_spec_repo = InMemoryItemSpecRepository()
+        item_repo = FakeItemRepository()
+        weather_zone_repo = InMemoryWeatherZoneRepository(data_store, uow)
+
+        damage_handler = HitBoxDamageHandler(hit_box_repo, map_repo, player_repo, monster_repo, time_provider, uow)
+        aggro_handler = CombatAggroHandler(hit_box_repo, map_repo, uow)
+        reward_handler = MonsterDeathRewardHandler(player_repo, inventory_repo, loot_repo, item_spec_repo, item_repo, uow)
+        
+        CombatEventHandlerRegistry(damage_handler, aggro_handler, reward_handler).register_handlers(event_publisher)
+
+        behavior_service = BehaviorService(PathfindingService(None))
+        service = WorldSimulationApplicationService(
+            time_provider=time_provider,
+            physical_map_repository=map_repo,
+            weather_zone_repository=weather_zone_repo,
+            player_status_repository=player_repo,
+            hit_box_repository=hit_box_repo,
+            behavior_service=behavior_service,
+            weather_config_service=DefaultWeatherConfigService(1),
+            unit_of_work=uow,
+            hit_box_config_service=DefaultHitBoxConfigService(4),
+            hit_box_collision_service=HitBoxCollisionDomainService(),
+        )
+
+        return locals()
+
+    def test_full_combat_to_reward_flow(self, setup_service):
+        # Given
+        s = setup_service
+        pmap = _create_map()
+        player_obj = _create_actor_object(100, Coordinate(0, 0, 0), player_id=100)
+        monster_obj = _create_actor_object(300, Coordinate(1, 0, 0), player_id=None)
+        pmap.add_object(player_obj)
+        pmap.add_object(monster_obj)
+        s["map_repo"].save(pmap)
+
+        player_id = PlayerId(100)
+        s["player_repo"].save(_create_player_status(100, attack=500)) # 確定1パン
+        s["inventory_repo"].save(PlayerInventoryAggregate.create_new_inventory(player_id))
+        s["monster_repo"].save(_create_monster(1, 300, Coordinate(1, 0, 0)))
+
+        # 攻撃者のステータスを込めてHitBox生成
+        hb = HitBoxAggregate.create(
+            HitBoxId.create(1), SpotId(1), WorldObjectId(100), HitBoxShape.single_cell(),
+            Coordinate(0, 0, 0), WorldTick(10), 5, velocity=HitBoxVelocity(1, 0, 0),
+            attacker_stats=s["player_repo"].find_by_id(player_id).get_effective_stats(WorldTick(10))
+        )
+        s["hit_box_repo"].save(hb)
+
+        # When
+        s["service"].tick() # Tick 11
+
+        # Then
+        # モンスター死亡確認
+        monster = s["monster_repo"].find_by_id(MonsterId(1))
+        assert monster.hp.value <= 0
+        
+        # 報酬確認
+        player = s["player_repo"].find_by_id(player_id)
+        assert player.growth.total_exp == 10
+        assert player.gold.value == 5

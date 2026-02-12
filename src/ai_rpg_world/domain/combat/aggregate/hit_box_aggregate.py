@@ -20,6 +20,7 @@ from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.common.value_object import WorldTick
 
@@ -41,6 +42,7 @@ class HitBoxAggregate(AggregateRoot):
         duration: int,
         power_multiplier: float = 1.0,
         velocity: HitBoxVelocity = HitBoxVelocity.zero(),
+        attacker_stats: BaseStats | None = None,
         target_collision_policy: TargetCollisionPolicy = TargetCollisionPolicy.KEEP_ACTIVE,
         obstacle_collision_policy: ObstacleCollisionPolicy = ObstacleCollisionPolicy.PASS_THROUGH,
         hit_effects: Tuple[HitEffect, ...] = (),
@@ -62,6 +64,7 @@ class HitBoxAggregate(AggregateRoot):
         self._duration = duration
         self._power_multiplier = power_multiplier
         self._velocity = velocity
+        self._attacker_stats = attacker_stats
         self._target_collision_policy = target_collision_policy
         self._obstacle_collision_policy = obstacle_collision_policy
         self._hit_effects = hit_effects
@@ -84,6 +87,7 @@ class HitBoxAggregate(AggregateRoot):
         duration: int,
         power_multiplier: float = 1.0,
         velocity: HitBoxVelocity = HitBoxVelocity.zero(),
+        attacker_stats: BaseStats | None = None,
         target_collision_policy: TargetCollisionPolicy = TargetCollisionPolicy.KEEP_ACTIVE,
         obstacle_collision_policy: ObstacleCollisionPolicy = ObstacleCollisionPolicy.PASS_THROUGH,
         hit_effects: List[HitEffect] | None = None,
@@ -116,6 +120,7 @@ class HitBoxAggregate(AggregateRoot):
             duration=duration,
             power_multiplier=power_multiplier,
             velocity=velocity,
+            attacker_stats=attacker_stats,
             target_collision_policy=target_collision_policy,
             obstacle_collision_policy=obstacle_collision_policy,
             hit_effects=effects,
@@ -157,6 +162,10 @@ class HitBoxAggregate(AggregateRoot):
     @property
     def power_multiplier(self) -> float:
         return self._power_multiplier
+
+    @property
+    def attacker_stats(self) -> BaseStats | None:
+        return self._attacker_stats
 
     @property
     def velocity(self) -> HitBoxVelocity:
