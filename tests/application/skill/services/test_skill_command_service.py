@@ -61,6 +61,7 @@ class _FakeUow(UnitOfWork):
     def commit(self): pass
     def rollback(self): pass
     def add_events(self, events): self.events.extend(events)
+    def register_aggregate(self, aggregate): pass
     def process_sync_events(self): pass
 
 class _InMemoryRepo:

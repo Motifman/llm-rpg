@@ -29,6 +29,7 @@ class InMemoryPlayerStatusRepository(PlayerStatusRepository, InMemoryRepositoryB
             self._statuses[cloned_status.player_id] = cloned_status
             return cloned_status
             
+        self._register_aggregate(status)
         return self._execute_operation(operation)
     
     def save_all(self, statuses: List[PlayerStatusAggregate]) -> None:
@@ -39,6 +40,8 @@ class InMemoryPlayerStatusRepository(PlayerStatusRepository, InMemoryRepositoryB
                 self._statuses[s.player_id] = s
             return None
             
+        for s in statuses:
+            self._register_aggregate(s)
         self._execute_operation(operation)
     
     def delete(self, player_id: PlayerId) -> bool:

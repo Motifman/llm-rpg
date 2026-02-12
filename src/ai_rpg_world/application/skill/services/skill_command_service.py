@@ -168,8 +168,6 @@ class SkillCommandService:
 
             loadout.equip_skill(command.deck_tier, command.slot_index, spec, actor_id=command.player_id)
             self._skill_loadout_repository.save(loadout)
-            self._unit_of_work.add_events(loadout.get_events())
-            loadout.clear_events()
 
     def _activate_player_awakened_mode_impl(self, command: ActivatePlayerAwakenedModeCommand) -> None:
         with self._unit_of_work:
@@ -201,10 +199,6 @@ class SkillCommandService:
 
             self._player_status_repository.save(status)
             self._skill_loadout_repository.save(loadout)
-            self._unit_of_work.add_events(status.get_events())
-            self._unit_of_work.add_events(loadout.get_events())
-            status.clear_events()
-            loadout.clear_events()
 
     def _grant_skill_deck_exp_impl(self, command: GrantSkillDeckExpCommand) -> None:
         with self._unit_of_work:
@@ -214,8 +208,6 @@ class SkillCommandService:
                 raise SkillCommandException(f"skill deck progress not found: {command.progress_id}")
             progress.grant_exp(command.exp_amount)
             self._skill_deck_progress_repository.save(progress)
-            self._unit_of_work.add_events(progress.get_events())
-            progress.clear_events()
 
     def _use_player_skill_impl(self, command: UsePlayerSkillCommand) -> None:
         with self._unit_of_work:
@@ -278,8 +270,7 @@ class SkillCommandService:
             )
 
             for hit_box in hit_boxes:
-                self._unit_of_work.add_events(hit_box.get_events())
-                hit_box.clear_events()
+                pass
             
             if hit_boxes:
                 self._hit_box_repository.save_all(hit_boxes)
@@ -288,13 +279,6 @@ class SkillCommandService:
             self._player_status_repository.save(status)
             self._skill_loadout_repository.save(loadout)
             self._physical_map_repository.save(physical_map)
-
-            self._unit_of_work.add_events(status.get_events())
-            self._unit_of_work.add_events(loadout.get_events())
-            self._unit_of_work.add_events(physical_map.get_events())
-            status.clear_events()
-            loadout.clear_events()
-            physical_map.clear_events()
 
     def _accept_skill_proposal_impl(self, command: AcceptSkillProposalCommand) -> None:
         with self._unit_of_work:
@@ -327,12 +311,6 @@ class SkillCommandService:
 
             self._skill_deck_progress_repository.save(progress)
             self._skill_loadout_repository.save(loadout)
-            
-            self._unit_of_work.add_events(progress.get_events())
-            self._unit_of_work.add_events(loadout.get_events())
-            
-            progress.clear_events()
-            loadout.clear_events()
 
     def _reject_skill_proposal_impl(self, command: RejectSkillProposalCommand) -> None:
         with self._unit_of_work:
@@ -344,8 +322,6 @@ class SkillCommandService:
             progress.reject_proposal(command.proposal_id)
             
             self._skill_deck_progress_repository.save(progress)
-            self._unit_of_work.add_events(progress.get_events())
-            progress.clear_events()
 
     def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
         try:

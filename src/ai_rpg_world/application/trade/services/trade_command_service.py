@@ -118,10 +118,6 @@ class TradeCommandService:
             self._trade_repository.save(trade)
             self._player_inventory_repository.save(inventory)
 
-            # イベントをUnit of Workに追加
-            self._unit_of_work.add_events(inventory.get_events())
-            self._unit_of_work.add_events(trade.get_events())
-
             self._logger.info(f"Trade offered: trade_id={trade_id.value}, seller_id={command.seller_id}")
 
             return TradeCommandResultDto(
@@ -205,13 +201,6 @@ class TradeCommandService:
             self._player_inventory_repository.save(seller_inventory)
             self._player_inventory_repository.save(buyer_inventory)
 
-            # イベントをUnit of Workに追加
-            self._unit_of_work.add_events(trade.get_events())
-            self._unit_of_work.add_events(seller_status.get_events())
-            self._unit_of_work.add_events(buyer_status.get_events())
-            self._unit_of_work.add_events(seller_inventory.get_events())
-            self._unit_of_work.add_events(buyer_inventory.get_events())
-
             self._logger.info(f"Trade accepted: trade_id={command.trade_id}, buyer_id={command.buyer_id}")
 
             return TradeCommandResultDto(
@@ -258,10 +247,6 @@ class TradeCommandService:
             # 保存
             self._trade_repository.save(trade)
             self._player_inventory_repository.save(inventory)
-
-            # イベントをUnit of Workに追加
-            self._unit_of_work.add_events(trade.get_events())
-            self._unit_of_work.add_events(inventory.get_events())
 
             self._logger.info(f"Trade cancelled: trade_id={command.trade_id}, player_id={command.player_id}")
 

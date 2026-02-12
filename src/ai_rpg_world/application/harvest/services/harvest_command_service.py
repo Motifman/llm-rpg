@@ -130,9 +130,6 @@ class HarvestCommandService:
             # 保存
             self._physical_map_repository.save(physical_map)
             
-            # イベントをUnit of Workに追加
-            self._unit_of_work.add_events(physical_map.get_events())
-            
             self._logger.info(f"Harvest started: actor_id={command.actor_id}, target_id={command.target_id}")
             
             return HarvestCommandResultDto(
@@ -219,10 +216,6 @@ class HarvestCommandService:
                 self._item_repository.save(item_aggregate)
 
             self._physical_map_repository.save(physical_map)
-            
-            # イベントをUnit of Workに追加
-            self._unit_of_work.add_events(physical_map.get_events())
-            self._unit_of_work.add_events(reward_events)
             
             acquired_items = []
             message = "採集を完了しました"

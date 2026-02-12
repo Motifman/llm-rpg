@@ -36,6 +36,7 @@ class InMemoryHitBoxRepository(HitBoxRepository, InMemoryRepositoryBase):
             self._hit_boxes[cloned.hit_box_id] = cloned
             return cloned
 
+        self._register_aggregate(entity)
         return self._execute_operation(operation)
 
     def delete(self, entity_id: HitBoxId) -> bool:
@@ -81,4 +82,6 @@ class InMemoryHitBoxRepository(HitBoxRepository, InMemoryRepositoryBase):
             for entity in cloned_entities:
                 self._hit_boxes[entity.hit_box_id] = entity
 
+        for entity in entities:
+            self._register_aggregate(entity)
         self._execute_operation(operation)

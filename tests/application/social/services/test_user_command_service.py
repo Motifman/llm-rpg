@@ -63,7 +63,6 @@ class TestUserCommandService:
 
     def setup_method(self):
         """各テストメソッドの前に実行"""
-        self.repository = InMemorySnsUserRepository()
         # Unit of Workファクトリ関数を定義（別トランザクション用）
         def create_uow():
             return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
@@ -72,6 +71,7 @@ class TestUserCommandService:
         self.unit_of_work, self.event_publisher = InMemoryUnitOfWork.create_with_event_publisher(
             unit_of_work_factory=create_uow
         )
+        self.repository = InMemorySnsUserRepository(unit_of_work=self.unit_of_work)
         self.service = UserCommandService(self.repository, self.event_publisher, self.unit_of_work)
         # ログ出力をテスト用に設定
         self.service.logger.setLevel(logging.DEBUG)

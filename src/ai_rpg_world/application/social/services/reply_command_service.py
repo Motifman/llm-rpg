@@ -149,9 +149,6 @@ class ReplyCommandService:
                 parent_reply.add_reply(reply_id)
                 self._reply_repository.save(parent_reply)
 
-            # イベントをUnit of Workに追加（コミット時に発行される）
-            self._unit_of_work.add_events(reply_aggregate.get_events())
-
             self._logger.info(f"Reply created successfully: reply_id={reply_id.value}, user_id={command.user_id}, parent_post_id={command.parent_post_id}, parent_reply_id={command.parent_reply_id}")
 
             return CommandResultDto(
@@ -190,9 +187,6 @@ class ReplyCommandService:
 
             # リプライを保存
             self._reply_repository.save(reply_aggregate)
-
-            # イベントをUnit of Workに追加（コミット時に発行される）
-            self._unit_of_work.add_events(reply_aggregate.get_events())
 
             self._logger.info(f"Reply liked successfully: reply_id={command.reply_id}, user_id={command.user_id}")
 
@@ -251,9 +245,6 @@ class ReplyCommandService:
 
             # リプライを保存
             self._reply_repository.save(reply_aggregate)
-
-            # イベントをUnit of Workに追加（コミット時に発行される）
-            self._unit_of_work.add_events(reply_aggregate.get_events())
 
             self._logger.info(f"Reply deleted successfully: reply_id={command.reply_id}, user_id={command.user_id}")
 

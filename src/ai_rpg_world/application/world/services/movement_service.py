@@ -165,9 +165,6 @@ class MovementApplicationService:
             player_status.set_destination(temp_goal, path)
             self._player_status_repository.save(player_status)
             
-            # イベント収集
-            self._unit_of_work.add_events(player_status.get_events())
-            
             return self._create_success_dto(
                 player_status, 
                 current_spot_id, 
@@ -205,14 +202,12 @@ class MovementApplicationService:
                 if not result.success:
                     player_status.clear_path()
                     self._player_status_repository.save(player_status)
-                    self._unit_of_work.add_events(player_status.get_events())
                 
                 return result
             except (MovementInvalidException, PathBlockedException, ActorBusyException, PlayerStaminaExhaustedException) as e:
                 # 業務的な失敗の場合は、経路をクリアした状態を保存して正常終了（失敗DTO）を返す
                 player_status.clear_path()
                 self._player_status_repository.save(player_status)
-                self._unit_of_work.add_events(player_status.get_events())
                 return self._create_failure_dto(command.player_id, str(e), player_status)
 
     def _execute_movement_step(
@@ -293,10 +288,6 @@ class MovementApplicationService:
             self._physical_map_repository.save(physical_map)
             self._player_status_repository.save(player_status)
             
-            # イベント収集
-            self._unit_of_work.add_events(physical_map.get_events())
-            self._unit_of_work.add_events(player_status.get_events())
-
             # 同期イベントの即時実行（マップ遷移などを反映させるため）
             self._unit_of_work.process_sync_events()
             

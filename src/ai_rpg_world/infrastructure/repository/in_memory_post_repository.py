@@ -41,11 +41,12 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
 
     def save(self, post: PostAggregate) -> PostAggregate:
         """ポストを保存"""
+        cloned_post = self._clone(post)
         def operation():
-            self._posts[post.post_id] = post
-            post.clear_events()  # 発行済みのイベントをクリア
-            return post
+            self._posts[cloned_post.post_id] = cloned_post
+            return cloned_post
             
+        self._register_aggregate(post)
         return self._execute_operation(operation)
 
     def delete(self, post_id: PostId) -> bool:

@@ -18,31 +18,38 @@ class InMemoryItemRepository(ItemRepository, InMemoryRepositoryBase):
 
     def find_by_id(self, item_instance_id: ItemInstanceId) -> Optional[ItemAggregate]:
         """IDで検索"""
-        return self._data_store.items.get(item_instance_id)
+        return self._clone(self._data_store.items.get(item_instance_id))
 
     def find_by_ids(self, item_instance_ids: List[ItemInstanceId]) -> List[ItemAggregate]:
         """IDのリストで検索"""
         return [
-            self._data_store.items[iid]
+            self._clone(self._data_store.items[iid])
             for iid in item_instance_ids
             if iid in self._data_store.items
         ]
 
     def find_all(self) -> List[ItemAggregate]:
         """全件取得"""
-        return list(self._data_store.items.values())
+        return [self._clone(item) for item in self._data_store.items.values()]
 
     def save(self, aggregate: ItemAggregate) -> ItemAggregate:
         """保存"""
-        self._data_store.items[aggregate.item_instance_id] = aggregate
-        return aggregate
+        cloned_aggregate = self._clone(aggregate)
+        def operation():
+            self._data_store.items[cloned_aggregate.item_instance_id] = cloned_aggregate
+            return cloned_aggregate
+            
+        self._register_aggregate(aggregate)
+        return self._execute_operation(operation)
 
     def delete(self, item_instance_id: ItemInstanceId) -> bool:
         """削除"""
-        if item_instance_id in self._data_store.items:
-            del self._data_store.items[item_instance_id]
-            return True
-        return False
+        def operation():
+            if item_instance_id in self._data_store.items:
+                del self._data_store.items[item_instance_id]
+                return True
+            return False
+        return self._execute_operation(operation)
 
     def find_by_spec_id(self, item_spec_id: ItemSpecId) -> List[ItemAggregate]:
         """アイテム仕様IDで検索"""

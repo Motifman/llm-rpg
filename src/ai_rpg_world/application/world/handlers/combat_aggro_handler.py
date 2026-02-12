@@ -57,9 +57,5 @@ class CombatAggroHandler(EventHandler[HitBoxHitRecordedEvent]):
             
             # 物理マップの変更（コンポーネントの状態変更）を保存
             self._physical_map_repository.save(physical_map)
-            
-            # マップから発生したイベントがあればUnitOfWorkに追加
-            self._unit_of_work.add_events(physical_map.get_events())
-            physical_map.clear_events()
         except Exception as e:
             self._logger.exception(f"Unexpected error in CombatAggroHandler: {str(e)}")
