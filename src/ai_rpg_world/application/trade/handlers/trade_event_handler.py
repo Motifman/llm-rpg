@@ -58,7 +58,7 @@ class TradeEventHandler:
             seller_name = seller_profile.name.value if seller_profile else f"Unknown({event.seller_id.value})"
 
             # アイテム情報を取得
-            item_aggregate = self._item_repository.find_by_id(event.offered_item_id)
+            item_instance = self._item_repository.find_by_id(event.offered_item_id)
             if not item_instance:
                 self._logger.error(f"Item instance not found for ReadModel update: {event.offered_item_id.value}")
                 return
