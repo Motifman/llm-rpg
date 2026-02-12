@@ -14,6 +14,8 @@ from .player_exceptions import (
     InventoryFullException,
     InsufficientGoldException,
     InsufficientMpException,
+    InsufficientStaminaException,
+    InsufficientHpException,
     MessageValidationException,
     MpValidationException,
     PlayerDomainException,

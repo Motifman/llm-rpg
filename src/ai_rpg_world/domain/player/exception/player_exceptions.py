@@ -94,6 +94,16 @@ class InsufficientMpException(PlayerDomainException, BusinessRuleException):
     error_code = "PLAYER.INSUFFICIENT_MP"
 
 
+class InsufficientStaminaException(PlayerDomainException, BusinessRuleException):
+    """スタミナ不足例外"""
+    error_code = "PLAYER.INSUFFICIENT_STAMINA"
+
+
+class InsufficientHpException(PlayerDomainException, BusinessRuleException):
+    """HP不足例外"""
+    error_code = "PLAYER.INSUFFICIENT_HP"
+
+
 class InsufficientGoldException(PlayerDomainException, BusinessRuleException):
     """ゴールド不足例外"""
     error_code = "PLAYER.INSUFFICIENT_GOLD"

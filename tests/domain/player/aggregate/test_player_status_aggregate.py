@@ -24,6 +24,8 @@ from ai_rpg_world.domain.player.event.status_events import (
 )
 from ai_rpg_world.domain.player.exception import (
     InsufficientMpException,
+    InsufficientStaminaException,
+    InsufficientHpException,
     InsufficientGoldException,
     PlayerDownedException
 )
@@ -406,7 +408,7 @@ class TestPlayerStatusAggregate:
         """スタミナが不足している場合、例外が発生すること"""
         aggregate = create_test_status_aggregate(stamina=10)
 
-        with pytest.raises(ValueError, match="スタミナが不足しています"):
+        with pytest.raises(InsufficientStaminaException, match="スタミナが不足しています"):
             aggregate.consume_stamina(20)
 
         # スタミナが消費されていないことを確認
@@ -619,3 +621,107 @@ class TestPlayerStatusAggregate:
         # 残り1要素以下になったらクリアされる仕様
         assert aggregate.planned_path == []
         assert aggregate.current_destination is None
+
+    def test_consume_resources_zero_costs(self):
+        """ゼロコストでの消費が正常に終了すること"""
+        aggregate = create_test_status_aggregate(hp=100, mp=50, stamina=100)
+        aggregate.clear_events()
+        
+        # 何も消費しない
+        aggregate.consume_resources(mp_cost=0, stamina_cost=0, hp_cost=0)
+        
+        assert aggregate.hp.value == 100
+        assert aggregate.mp.value == 50
+        assert aggregate.stamina.value == 100
+        assert len(aggregate.get_events()) == 0
+
+    def test_consume_resources_all_success(self):
+        """全リソースを正常に消費できること"""
+        aggregate = create_test_status_aggregate(hp=100, mp=50, stamina=100)
+        aggregate.clear_events()
+        
+        aggregate.consume_resources(mp_cost=10, stamina_cost=20, hp_cost=30)
+        
+        assert aggregate.hp.value == 70
+        assert aggregate.mp.value == 40
+        assert aggregate.stamina.value == 80
+        
+        events = aggregate.get_events()
+        # HPダメージ（apply_damage）はイベントを発行しない（死亡時のみ）
+        # MP消費、スタミナ消費のイベントが発行される
+        assert len(events) == 2
+        assert any(isinstance(e, PlayerMpConsumedEvent) for e in events)
+        assert any(isinstance(e, PlayerStaminaConsumedEvent) for e in events)
+
+    def test_consume_resources_insufficient_mp(self):
+        """MP不足時に適切な例外が発生し、リソースが消費されないこと"""
+        aggregate = create_test_status_aggregate(hp=100, mp=5, stamina=100)
+        
+        with pytest.raises(InsufficientMpException, match="MPが不足しています"):
+            aggregate.consume_resources(mp_cost=10, stamina_cost=20, hp_cost=30)
+            
+        # 状態が変わっていないこと
+        assert aggregate.hp.value == 100
+        assert aggregate.mp.value == 5
+        assert aggregate.stamina.value == 100
+
+    def test_consume_resources_insufficient_stamina(self):
+        """スタミナ不足時に適切な例外が発生し、リソースが消費されないこと"""
+        aggregate = create_test_status_aggregate(hp=100, mp=50, stamina=10)
+        
+        with pytest.raises(InsufficientStaminaException, match="スタミナが不足しています"):
+            aggregate.consume_resources(mp_cost=10, stamina_cost=20, hp_cost=30)
+            
+        # 状態が変わっていないこと
+        assert aggregate.hp.value == 100
+        assert aggregate.mp.value == 50
+        assert aggregate.stamina.value == 10
+
+    def test_consume_resources_insufficient_hp(self):
+        """HP不足（死亡コスト）時に適切な例外が発生し、リソースが消費されないこと"""
+        aggregate = create_test_status_aggregate(hp=20, mp=50, stamina=100)
+        
+        with pytest.raises(InsufficientHpException, match="HPが不足しています"):
+            aggregate.consume_resources(mp_cost=10, stamina_cost=20, hp_cost=30)
+            
+        # 状態が変わっていないこと
+        assert aggregate.hp.value == 20
+        assert aggregate.mp.value == 50
+        assert aggregate.stamina.value == 100
+
+    def test_consume_resources_when_downed(self):
+        """ダウン状態での消費試行時に例外が発生すること"""
+        aggregate = create_test_status_aggregate(is_down=True)
+        
+        with pytest.raises(PlayerDownedException, match="ダウン状態のプレイヤーはリソースを消費できません"):
+            aggregate.consume_resources(mp_cost=1, stamina_cost=1, hp_cost=1)
+
+    def test_consume_resources_partial_costs(self):
+        """一部のリソースのみを指定して消費できること"""
+        aggregate = create_test_status_aggregate(hp=100, mp=50, stamina=100)
+        
+        # MPのみ
+        aggregate.consume_resources(mp_cost=10)
+        assert aggregate.mp.value == 40
+        assert aggregate.hp.value == 100
+        assert aggregate.stamina.value == 100
+        
+        # スタミナのみ
+        aggregate.consume_resources(stamina_cost=20)
+        assert aggregate.stamina.value == 80
+        
+        # HPのみ
+        aggregate.consume_resources(hp_cost=30)
+        assert aggregate.hp.value == 70
+
+    def test_consume_resources_validation_priority(self):
+        """バリデーションの優先順位（MP > Stamina > HP）の確認"""
+        aggregate = create_test_status_aggregate(hp=5, mp=5, stamina=5)
+        
+        # MPとスタミナが両方不足している場合、MP不足が優先される
+        with pytest.raises(InsufficientMpException):
+            aggregate.consume_resources(mp_cost=10, stamina_cost=10)
+            
+        # スタミナとHPが両方不足している場合、スタミナ不足が優先される
+        with pytest.raises(InsufficientStaminaException):
+            aggregate.consume_resources(stamina_cost=10, hp_cost=10)
