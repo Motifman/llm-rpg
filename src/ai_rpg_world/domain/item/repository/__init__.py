@@ -1,9 +1,11 @@
 from .item_spec_repository import ItemSpecRepository
-from .item_instance_repository import ItemInstanceRepository
+from .item_repository import ItemRepository
 from .recipe_repository import RecipeRepository
+from .loot_table_repository import LootTableRepository
 
 __all__ = [
     'ItemSpecRepository',
-    'ItemInstanceRepository',
+    'ItemRepository',
     'RecipeRepository',
+    'LootTableRepository',
 ]

@@ -1,7 +1,10 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
@@ -21,6 +24,7 @@ class MonsterSpawnedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
 class MonsterDamagedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
     damage: int
     current_hp: int
+    attacker_id: Optional[WorldObjectId] = None
 
 
 @dataclass(frozen=True)
@@ -28,7 +32,8 @@ class MonsterDiedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
     respawn_tick: int
     exp: int
     gold: int
-    loot_table_id: str
+    loot_table_id: Optional[str] = None
+    killer_player_id: Optional[PlayerId] = None
 
 
 @dataclass(frozen=True)

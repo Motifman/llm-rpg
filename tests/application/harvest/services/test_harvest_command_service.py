@@ -23,6 +23,7 @@ from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.service.harvest_domain_service import HarvestDomainService
 from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import InMemoryPhysicalMapRepository
+from ai_rpg_world.infrastructure.repository.in_memory_item_repository import InMemoryItemRepository
 from ai_rpg_world.infrastructure.repository.in_memory_loot_table_repository import InMemoryLootTableRepository
 from ai_rpg_world.infrastructure.repository.in_memory_item_spec_repository import InMemoryItemSpecRepository
 from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import InMemoryPlayerInventoryRepository
@@ -47,16 +48,15 @@ class TestHarvestCommandService:
         inventory_repo = InMemoryPlayerInventoryRepository(data_store, unit_of_work)
         status_repo = InMemoryPlayerStatusRepository(data_store, unit_of_work)
         
-        # Mock item_instance_repository
-        item_instance_repo = MagicMock()
-        item_instance_repo.generate_item_instance_id.return_value = ItemInstanceId(999)
+        # Item repository
+        item_repo = InMemoryItemRepository(data_store, unit_of_work)
         
         harvest_domain_service = HarvestDomainService()
         
         service = HarvestCommandService(
             physical_map_repo,
             loot_table_repo,
-            item_instance_repo,
+            item_repo,
             item_spec_repo,
             inventory_repo,
             status_repo,
@@ -71,7 +71,7 @@ class TestHarvestCommandService:
             "item_spec_repo": item_spec_repo,
             "inventory_repo": inventory_repo,
             "status_repo": status_repo,
-            "item_instance_repo": item_instance_repo,
+            "item_repo": item_repo,
             "uow": unit_of_work,
             "event_publisher": event_publisher
         }
@@ -162,7 +162,7 @@ class TestHarvestCommandService:
         
         # インベントリにアイテムが追加されているか
         updated_inv = s["inventory_repo"].find_by_id(player_id)
-        assert updated_inv.get_item_instance_id_by_slot(SlotId(0)) == ItemInstanceId(999)
+        assert updated_inv.get_item_instance_id_by_slot(SlotId(0)) == ItemInstanceId(1)
         
         # リソースが減少しているか
         updated_map = s["physical_map_repo"].find_by_spot_id(spot_id)

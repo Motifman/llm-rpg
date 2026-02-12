@@ -78,5 +78,6 @@ class SkillExecutionDomainService:
             origin=actor.coordinate,
             direction=target_direction,
             start_tick=WorldTick(current_tick),
-            base_power_multiplier=skill_spec.power_multiplier
+            base_power_multiplier=skill_spec.power_multiplier,
+            attacker_stats=player_status.get_effective_stats(WorldTick(current_tick))
         )

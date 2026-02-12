@@ -11,6 +11,9 @@ from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.service.player_config_service import PlayerConfigService, DefaultPlayerConfigService
+from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
+from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.player.event.status_events import (
@@ -55,6 +58,7 @@ class PlayerStatusAggregate(AggregateRoot):
         current_destination: Optional[Coordinate] = None,
         planned_path: List[Coordinate] = None,
         is_down: bool = False,
+        active_effects: List[StatusEffect] = None,
     ):
         super().__init__()
         self._player_id = player_id
@@ -71,6 +75,7 @@ class PlayerStatusAggregate(AggregateRoot):
         self._current_destination = current_destination
         self._planned_path = planned_path or []
         self._is_down = is_down
+        self._active_effects = active_effects or []
 
     @property
     def player_id(self) -> PlayerId:
@@ -81,6 +86,39 @@ class PlayerStatusAggregate(AggregateRoot):
     def base_stats(self) -> BaseStats:
         """基礎ステータス"""
         return self._base_stats
+
+    def get_effective_stats(self, current_tick: WorldTick) -> BaseStats:
+        """バフ・デバフ適用後の実効ステータス（期限切れを除外）"""
+        # 期限切れエフェクトのクリーンアップ
+        self.cleanup_expired_effects(current_tick)
+        
+        atk_mult = 1.0
+        def_mult = 1.0
+        spd_mult = 1.0
+        
+        for effect in self._active_effects:
+            if effect.effect_type == StatusEffectType.ATTACK_UP:
+                atk_mult *= effect.value
+            elif effect.effect_type == StatusEffectType.ATTACK_DOWN:
+                atk_mult *= effect.value
+            elif effect.effect_type == StatusEffectType.DEFENSE_UP:
+                def_mult *= effect.value
+            elif effect.effect_type == StatusEffectType.DEFENSE_DOWN:
+                def_mult *= effect.value
+            elif effect.effect_type == StatusEffectType.SPEED_UP:
+                spd_mult *= effect.value
+            elif effect.effect_type == StatusEffectType.SPEED_DOWN:
+                spd_mult *= effect.value
+                
+        return BaseStats(
+            max_hp=self._base_stats.max_hp,
+            max_mp=self._base_stats.max_mp,
+            attack=int(self._base_stats.attack * atk_mult),
+            defense=int(self._base_stats.defense * def_mult),
+            speed=int(self._base_stats.speed * spd_mult),
+            critical_rate=self._base_stats.critical_rate,
+            evasion_rate=self._base_stats.evasion_rate,
+        )
 
     @property
     def stat_growth_factor(self) -> StatGrowthFactor:
@@ -508,4 +546,12 @@ class PlayerStatusAggregate(AggregateRoot):
             hp_recovered=self._hp.value - old_hp,
             total_hp=self._hp.value,
         ))
+
+    def add_status_effect(self, effect: StatusEffect) -> None:
+        """ステータス効果を追加する"""
+        self._active_effects.append(effect)
+
+    def cleanup_expired_effects(self, current_tick: WorldTick) -> None:
+        """期限切れのステータス効果を削除する"""
+        self._active_effects = [e for e in self._active_effects if not e.is_expired(current_tick)]
 
