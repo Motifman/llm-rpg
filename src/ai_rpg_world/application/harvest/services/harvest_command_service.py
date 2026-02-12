@@ -7,7 +7,7 @@ from ai_rpg_world.domain.world.repository.physical_map_repository import Physica
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.item.repository.loot_table_repository import LootTableRepository
-from ai_rpg_world.domain.item.repository.item_instance_repository import ItemInstanceRepository
+from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
@@ -41,7 +41,7 @@ class HarvestCommandService:
         self,
         physical_map_repository: PhysicalMapRepository,
         loot_table_repository: LootTableRepository,
-        item_instance_repository: ItemInstanceRepository,
+        item_repository: ItemRepository,
         item_spec_repository: ItemSpecRepository,
         player_inventory_repository: PlayerInventoryRepository,
         player_status_repository: PlayerStatusRepository,
@@ -50,7 +50,7 @@ class HarvestCommandService:
     ):
         self._physical_map_repository = physical_map_repository
         self._loot_table_repository = loot_table_repository
-        self._item_instance_repository = item_instance_repository
+        self._item_repository = item_repository
         self._item_spec_repository = item_spec_repository
         self._player_inventory_repository = player_inventory_repository
         self._player_status_repository = player_status_repository
@@ -192,7 +192,7 @@ class HarvestCommandService:
                     raise HarvestCommandException(f"Item spec {loot_result.item_spec_id} not found")
                 
                 item_spec = item_spec_read_model.to_item_spec()
-                new_item_id = self._item_instance_repository.generate_item_instance_id()
+                new_item_id = self._item_repository.generate_item_instance_id()
 
             # 3. アクターのインベントリとステータスの取得
             actor_player_id = PlayerId.create(command.actor_id)
@@ -216,7 +216,7 @@ class HarvestCommandService:
             self._player_status_repository.save(status)
             self._player_inventory_repository.save(inventory)
             if item_aggregate:
-                self._item_instance_repository.save(item_aggregate.item_instance)
+                self._item_repository.save(item_aggregate)
 
             self._physical_map_repository.save(physical_map)
             

@@ -427,3 +427,57 @@ class TestMonsterAggregate:
         def test_use_mp_not_alive_raises_error(self, monster: MonsterAggregate):
             with pytest.raises(MonsterAlreadyDeadException):
                 monster.use_mp(1)
+
+    class TestStatusEffects:
+        def test_get_effective_stats_with_multiplicative_buffs(self, monster: MonsterAggregate):
+            # Given
+            monster.spawn(Coordinate(0, 0, 0))
+            # 攻撃力 20
+            # 1.5倍バフと1.2倍バフを付与
+            from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
+            from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
+            monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(100)))
+            monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.2, WorldTick(100)))
+            
+            # When
+            effective_stats = monster.get_effective_stats(WorldTick(10))
+            
+            # Then
+            # 20 * 1.5 * 1.2 = 36
+            assert effective_stats.attack == 36
+
+        def test_get_effective_stats_filters_expired_effects(self, monster: MonsterAggregate):
+            # Given
+            monster.spawn(Coordinate(0, 0, 0))
+            # 攻撃力 20
+            # 期限切れ(Tick 5)の 2.0倍バフ
+            from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
+            from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
+            monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 2.0, WorldTick(5)))
+            # 有効な 1.5倍バフ
+            monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(20)))
+            
+            # When
+            effective_stats = monster.get_effective_stats(WorldTick(10))
+            
+            # Then
+            # 20 * 1.5 = 30
+            assert effective_stats.attack == 30
+            assert len(monster._active_effects) == 1
+
+        def test_buff_and_debuff_stacking(self, monster: MonsterAggregate):
+            # Given
+            monster.spawn(Coordinate(0, 0, 0))
+            # 攻撃力 20
+            # 1.5倍バフと 0.5倍デバフ
+            from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
+            from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
+            monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(100)))
+            monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_DOWN, 0.5, WorldTick(100)))
+            
+            # When
+            effective_stats = monster.get_effective_stats(WorldTick(10))
+            
+            # Then
+            # 20 * 1.5 * 0.5 = 15
+            assert effective_stats.attack == 15

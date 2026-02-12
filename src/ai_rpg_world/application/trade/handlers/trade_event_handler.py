@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.trade.repository.trade_read_model_repository import TradeReadModelRepository
     from ai_rpg_world.domain.trade.repository.trade_repository import TradeRepository
     from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
-    from ai_rpg_world.domain.item.repository.item_instance_repository import ItemInstanceRepository
+    from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 
 
 class TradeEventHandler:
@@ -30,13 +30,13 @@ class TradeEventHandler:
         trade_read_model_repository: "TradeReadModelRepository",
         trade_repository: "TradeRepository",
         player_profile_repository: "PlayerProfileRepository",
-        item_instance_repository: "ItemInstanceRepository",
+        item_repository: "ItemRepository",
         unit_of_work_factory: UnitOfWorkFactory
     ):
         self._trade_read_model_repository = trade_read_model_repository
         self._trade_repository = trade_repository
         self._player_profile_repository = player_profile_repository
-        self._item_instance_repository = item_instance_repository
+        self._item_repository = item_repository
         self._unit_of_work_factory = unit_of_work_factory
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -58,7 +58,7 @@ class TradeEventHandler:
             seller_name = seller_profile.name.value if seller_profile else f"Unknown({event.seller_id.value})"
 
             # アイテム情報を取得
-            item_instance = self._item_instance_repository.find_by_id(event.offered_item_id)
+            item_aggregate = self._item_repository.find_by_id(event.offered_item_id)
             if not item_instance:
                 self._logger.error(f"Item instance not found for ReadModel update: {event.offered_item_id.value}")
                 return
