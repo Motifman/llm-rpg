@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
@@ -24,8 +24,12 @@ from ai_rpg_world.domain.monster.exception.monster_exceptions import (
 )
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.service.monster_config_service import MonsterConfigService, DefaultMonsterConfigService
+from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
+from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 
 
 class MonsterAggregate(AggregateRoot):
@@ -41,6 +45,7 @@ class MonsterAggregate(AggregateRoot):
         status: MonsterStatusEnum = MonsterStatusEnum.ALIVE,
         last_death_tick: Optional[WorldTick] = None,
         coordinate: Optional[Coordinate] = None,
+        active_effects: List[StatusEffect] = None,
     ):
         super().__init__()
         self._monster_id = monster_id
@@ -51,6 +56,7 @@ class MonsterAggregate(AggregateRoot):
         self._status = status
         self._last_death_tick = last_death_tick
         self._coordinate = coordinate
+        self._active_effects = active_effects or []
 
     @classmethod
     def create(
@@ -81,6 +87,40 @@ class MonsterAggregate(AggregateRoot):
     @property
     def template(self) -> MonsterTemplate:
         return self._template
+
+    def get_effective_stats(self, current_tick: WorldTick) -> BaseStats:
+        """バフ・デバフ適用後の実効ステータス（期限切れを除外）"""
+        # 期限切れエフェクトのクリーンアップ
+        self.cleanup_expired_effects(current_tick)
+        
+        base = self._template.base_stats
+        atk_mult = 1.0
+        def_mult = 1.0
+        spd_mult = 1.0
+        
+        for effect in self._active_effects:
+            if effect.effect_type == StatusEffectType.ATTACK_UP:
+                atk_mult *= effect.value
+            elif effect.effect_type == StatusEffectType.ATTACK_DOWN:
+                atk_mult *= effect.value
+            elif effect.effect_type == StatusEffectType.DEFENSE_UP:
+                def_mult *= effect.value
+            elif effect.effect_type == StatusEffectType.DEFENSE_DOWN:
+                def_mult *= effect.value
+            elif effect.effect_type == StatusEffectType.SPEED_UP:
+                spd_mult *= effect.value
+            elif effect.effect_type == StatusEffectType.SPEED_DOWN:
+                spd_mult *= effect.value
+                
+        return BaseStats(
+            max_hp=base.max_hp,
+            max_mp=base.max_mp,
+            attack=int(base.attack * atk_mult),
+            defense=int(base.defense * def_mult),
+            speed=int(base.speed * spd_mult),
+            critical_rate=base.critical_rate,
+            evasion_rate=base.evasion_rate,
+        )
 
     @property
     def world_object_id(self) -> WorldObjectId:
@@ -127,7 +167,7 @@ class MonsterAggregate(AggregateRoot):
             coordinate={"x": coordinate.x, "y": coordinate.y, "z": coordinate.z}
         ))
 
-    def apply_damage(self, final_damage: int, current_tick: WorldTick):
+    def apply_damage(self, final_damage: int, current_tick: WorldTick, attacker_id: Optional[WorldObjectId] = None, killer_player_id: Optional[PlayerId] = None):
         """計算済みのダメージを適用する"""
         if self._status != MonsterStatusEnum.ALIVE:
             if self._status == MonsterStatusEnum.DEAD and self._last_death_tick is None:
@@ -143,11 +183,12 @@ class MonsterAggregate(AggregateRoot):
             aggregate_id=self._monster_id,
             aggregate_type="MonsterAggregate",
             damage=final_damage,
-            current_hp=self._hp.value
+            current_hp=self._hp.value,
+            attacker_id=attacker_id
         ))
 
         if not self._hp.is_alive():
-            self._die(current_tick)
+            self._die(current_tick, killer_player_id=killer_player_id)
 
     def record_evasion(self):
         """回避を記録する（ALIVE時のみ）"""
@@ -222,7 +263,7 @@ class MonsterAggregate(AggregateRoot):
         # リスポーン判定などは上位のアプリケーションサービスで行うことを想定するが、
         # 必要に応じてここでもロジックを追加できる
 
-    def _die(self, current_tick: WorldTick):
+    def _die(self, current_tick: WorldTick, killer_player_id: Optional[PlayerId] = None):
         """死亡する（内部用）"""
         if self._status == MonsterStatusEnum.DEAD:
             return
@@ -239,7 +280,8 @@ class MonsterAggregate(AggregateRoot):
             respawn_tick=respawn_tick,
             exp=self._template.reward_info.exp,
             gold=self._template.reward_info.gold,
-            loot_table_id=self._template.reward_info.loot_table_id
+            loot_table_id=self._template.reward_info.loot_table_id,
+            killer_player_id=killer_player_id
         ))
 
     def should_respawn(self, current_tick: WorldTick) -> bool:
@@ -271,4 +313,12 @@ class MonsterAggregate(AggregateRoot):
             aggregate_type="MonsterAggregate",
             coordinate={"x": coordinate.x, "y": coordinate.y, "z": coordinate.z}
         ))
+
+    def add_status_effect(self, effect: StatusEffect) -> None:
+        """ステータス効果を追加する"""
+        self._active_effects.append(effect)
+
+    def cleanup_expired_effects(self, current_tick: WorldTick) -> None:
+        """期限切れのステータス効果を削除する"""
+        self._active_effects = [e for e in self._active_effects if not e.is_expired(current_tick)]
 
