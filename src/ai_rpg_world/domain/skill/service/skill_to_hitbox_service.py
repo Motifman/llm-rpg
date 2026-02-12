@@ -1,24 +1,12 @@
-from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List
 from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape, RelativeCoordinate
 from ai_rpg_world.domain.combat.value_object.hit_box_velocity import HitBoxVelocity
+from ai_rpg_world.domain.combat.value_object.hit_box_spawn_param import HitBoxSpawnParam
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.skill.value_object.skill_hit_pattern import SkillHitPattern, SkillHitTimelineSegment
 from ai_rpg_world.domain.common.value_object import WorldTick
-
-
-@dataclass(frozen=True)
-class HitBoxSpawnParam:
-    """HitBox生成に必要なパラメータセット"""
-    shape: HitBoxShape
-    velocity: HitBoxVelocity
-    initial_coordinate: Coordinate
-    activation_tick: int
-    duration_ticks: int
-    power_multiplier: float
-    attacker_stats: BaseStats | None = None
 
 
 class SkillToHitBoxDomainService:

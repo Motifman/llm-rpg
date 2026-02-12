@@ -23,6 +23,7 @@ from ai_rpg_world.domain.skill.value_object.skill_hit_pattern import SkillHitPat
 from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape, RelativeCoordinate
 from ai_rpg_world.domain.combat.value_object.hit_box_velocity import HitBoxVelocity
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
+from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
 from ai_rpg_world.domain.player.enum.player_enum import Element
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
@@ -141,6 +142,7 @@ class TestSkillCommandService:
         skill_to_hitbox_service = SkillToHitBoxDomainService()
         skill_targeting_service = SkillTargetingDomainService()
         skill_execution_service = SkillExecutionDomainService(skill_targeting_service, skill_to_hitbox_service)
+        hitbox_factory = HitBoxFactory()
         uow = _FakeUow()
         
         service = SkillCommandService(
@@ -151,6 +153,7 @@ class TestSkillCommandService:
             map_repo,
             hitbox_repo,
             skill_execution_service,
+            hitbox_factory,
             uow
         )
         return service, loadout_repo, spec_repo, progress_repo, player_repo, map_repo, hitbox_repo, uow

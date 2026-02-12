@@ -37,6 +37,7 @@ from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadout
 from ai_rpg_world.domain.skill.value_object.skill_spec import SkillSpec
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
 from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
+from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
 from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -57,6 +58,7 @@ class SkillCommandService:
         physical_map_repository: PhysicalMapRepository,
         hit_box_repository: HitBoxRepository,
         skill_execution_service: SkillExecutionDomainService,
+        hit_box_factory: HitBoxFactory,
         unit_of_work: UnitOfWork,
     ):
         self._skill_loadout_repository = skill_loadout_repository
@@ -66,6 +68,7 @@ class SkillCommandService:
         self._physical_map_repository = physical_map_repository
         self._hit_box_repository = hit_box_repository
         self._skill_execution_service = skill_execution_service
+        self._hit_box_factory = hit_box_factory
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -265,22 +268,16 @@ class SkillCommandService:
             actor_id = WorldObjectId(command.player_id)
             hit_box_ids = self._hit_box_repository.batch_generate_ids(len(spawn_params))
 
-            hit_boxes = []
-            for i, param in enumerate(spawn_params):
-                hit_box = HitBoxAggregate.create(
-                    hit_box_id=hit_box_ids[i],
-                    spot_id=spot_id,
-                    owner_id=actor_id,
-                    shape=param.shape,
-                    initial_coordinate=param.initial_coordinate,
-                    start_tick=WorldTick(command.current_tick),
-                    duration=param.duration_ticks,
-                    power_multiplier=param.power_multiplier,
-                    velocity=param.velocity,
-                    activation_tick=param.activation_tick,
-                    skill_id=str(skill_spec.skill_id)
-                )
-                hit_boxes.append(hit_box)
+            hit_boxes = self._hit_box_factory.create_from_params(
+                hit_box_ids=hit_box_ids,
+                params=spawn_params,
+                spot_id=spot_id,
+                owner_id=actor_id,
+                start_tick=WorldTick(command.current_tick),
+                skill_id=str(skill_spec.skill_id)
+            )
+
+            for hit_box in hit_boxes:
                 self._unit_of_work.add_events(hit_box.get_events())
                 hit_box.clear_events()
             
