@@ -10,6 +10,11 @@ class HitBoxRepository(Repository["HitBoxAggregate", HitBoxId], ABC):
     """HitBoxのリポジトリインターフェース"""
 
     @abstractmethod
+    def generate_id(self) -> HitBoxId:
+        """新しいHitBoxIdを生成する"""
+        pass
+
+    @abstractmethod
     def find_active_by_spot_id(self, spot_id: SpotId) -> List["HitBoxAggregate"]:
         """指定スポット上のアクティブなHitBoxを取得する"""
         pass

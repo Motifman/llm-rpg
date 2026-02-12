@@ -20,6 +20,8 @@ class HitBoxCreatedEvent(BaseDomainEvent[HitBoxId, "HitBoxAggregate"]):
     power_multiplier: float
     shape_cell_count: int
     effect_count: int
+    activation_tick: int
+    skill_id: str | None = None
 
 
 @dataclass(frozen=True)

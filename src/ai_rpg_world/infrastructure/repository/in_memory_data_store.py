@@ -61,6 +61,7 @@ class InMemoryDataStore:
         self.physical_maps: Dict[SpotId, PhysicalMapAggregate] = {}
         self.weather_zones: Dict[WeatherZoneId, WeatherZone] = {}
         self.hit_boxes: Dict[HitBoxId, HitBoxAggregate] = {}
+        self.next_hit_box_id = 1
         self.world_maps: Dict[Any, Any] = {} # Dict[WorldId, WorldMapAggregate]
         self.spot_to_world_id: Dict[SpotId, Any] = {} # Dict[SpotId, WorldId]
         

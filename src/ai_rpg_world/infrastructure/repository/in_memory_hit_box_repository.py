@@ -55,3 +55,11 @@ class InMemoryHitBoxRepository(HitBoxRepository, InMemoryRepositoryBase):
 
     def find_active_by_spot_id(self, spot_id: SpotId) -> List[HitBoxAggregate]:
         return [self._clone(hb) for hb in self._hit_boxes.values() if hb.spot_id == spot_id and hb.is_active]
+
+    def generate_id(self) -> HitBoxId:
+        def operation():
+            hit_box_id = HitBoxId(self._data_store.next_hit_box_id)
+            self._data_store.next_hit_box_id += 1
+            return hit_box_id
+
+        return self._execute_operation(operation)
