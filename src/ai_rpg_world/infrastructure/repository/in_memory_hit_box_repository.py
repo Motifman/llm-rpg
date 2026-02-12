@@ -63,3 +63,22 @@ class InMemoryHitBoxRepository(HitBoxRepository, InMemoryRepositoryBase):
             return hit_box_id
 
         return self._execute_operation(operation)
+
+    def batch_generate_ids(self, count: int) -> List[HitBoxId]:
+        def operation():
+            ids = []
+            for _ in range(count):
+                ids.append(HitBoxId(self._data_store.next_hit_box_id))
+                self._data_store.next_hit_box_id += 1
+            return ids
+
+        return self._execute_operation(operation)
+
+    def save_all(self, entities: List[HitBoxAggregate]) -> None:
+        cloned_entities = [self._clone(e) for e in entities]
+
+        def operation():
+            for entity in cloned_entities:
+                self._hit_boxes[entity.hit_box_id] = entity
+
+        self._execute_operation(operation)

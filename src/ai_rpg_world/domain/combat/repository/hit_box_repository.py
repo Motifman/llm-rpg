@@ -15,6 +15,16 @@ class HitBoxRepository(Repository["HitBoxAggregate", HitBoxId], ABC):
         pass
 
     @abstractmethod
+    def batch_generate_ids(self, count: int) -> List[HitBoxId]:
+        """複数の新しいHitBoxIdを生成する"""
+        pass
+
+    @abstractmethod
+    def save_all(self, entities: List["HitBoxAggregate"]) -> None:
+        """複数のHitBoxを一括保存する"""
+        pass
+
+    @abstractmethod
     def find_active_by_spot_id(self, spot_id: SpotId) -> List["HitBoxAggregate"]:
         """指定スポット上のアクティブなHitBoxを取得する"""
         pass

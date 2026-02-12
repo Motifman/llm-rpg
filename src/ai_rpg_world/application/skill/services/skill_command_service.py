@@ -28,8 +28,9 @@ from ai_rpg_world.domain.skill.repository.skill_repository import (
     SkillLoadoutRepository,
     SkillSpecRepository,
 )
-from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
+from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
 from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
+from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
 from ai_rpg_world.domain.skill.value_object.skill_deck_progress_id import SkillDeckProgressId
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
@@ -37,6 +38,7 @@ from ai_rpg_world.domain.skill.value_object.skill_spec import SkillSpec
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
 from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
+from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
@@ -54,8 +56,7 @@ class SkillCommandService:
         player_status_repository: PlayerStatusRepository,
         physical_map_repository: PhysicalMapRepository,
         hit_box_repository: HitBoxRepository,
-        skill_to_hitbox_service: SkillToHitBoxDomainService,
-        skill_targeting_service: SkillTargetingDomainService,
+        skill_execution_service: SkillExecutionDomainService,
         unit_of_work: UnitOfWork,
     ):
         self._skill_loadout_repository = skill_loadout_repository
@@ -64,8 +65,7 @@ class SkillCommandService:
         self._player_status_repository = player_status_repository
         self._physical_map_repository = physical_map_repository
         self._hit_box_repository = hit_box_repository
-        self._skill_to_hitbox_service = skill_to_hitbox_service
-        self._skill_targeting_service = skill_targeting_service
+        self._skill_execution_service = skill_execution_service
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -233,65 +233,42 @@ class SkillCommandService:
             if skill_spec is None:
                 raise SkillCommandException(f"skill not found in slot: {command.slot_index}")
 
-            # 1. プレイヤーのアクター情報をマップから取得
+            # 1. マップとアクターの取得
             spot_id = SpotId(command.spot_id)
             physical_map = self._physical_map_repository.find_by_id(spot_id)
             if not physical_map:
                 raise SkillCommandException(f"map not found: {command.spot_id}")
             
-            actor_id = WorldObjectId(command.player_id)
-            try:
-                actor = physical_map.get_actor(actor_id)
-            except DomainException as e:
-                raise SkillCommandException(f"actor not found on map: {command.player_id} at {command.spot_id}", cause=e)
-
-            # 2. 射撃方向の決定
-            target_direction = None
-            if command.auto_aim:
-                # ドメインサービスを使用してオートエイム方向を計算
-                target_direction = self._skill_targeting_service.calculate_auto_aim_direction(
-                    physical_map=physical_map,
-                    actor_id=actor_id
-                )
-            
-            if not target_direction and command.target_direction:
+            # 2. ドメインサービスによるスキル実行処理
+            target_direction_override = None
+            if command.target_direction:
                 try:
-                    target_direction = DirectionEnum(command.target_direction)
+                    target_direction_override = DirectionEnum(command.target_direction)
                 except ValueError:
                     raise SkillCommandException(f"invalid direction: {command.target_direction}")
-            
-            if not target_direction:
-                # オートエイムでターゲットが見つからない、かつ指定方向もない場合は現在の向き
-                target_direction = actor.direction or DirectionEnum.SOUTH
 
-            # 向きを更新（スキルを放つ方向を向く）
-            actor.turn(target_direction)
+            try:
+                spawn_params = self._skill_execution_service.execute_skill(
+                    physical_map=physical_map,
+                    player_status=status,
+                    skill_loadout=loadout,
+                    skill_spec=skill_spec,
+                    slot_index=command.slot_index,
+                    current_tick=command.current_tick,
+                    auto_aim=command.auto_aim,
+                    target_direction_override=target_direction_override
+                )
+            except ObjectNotFoundException as e:
+                raise SkillCommandException(f"actor not found on map: {command.player_id} at {command.spot_id}", cause=e)
 
-            # 3. ドメイン層でのバリデーションと消費
-            status.consume_resources(
-                mp_cost=skill_spec.mp_cost or 0,
-                stamina_cost=skill_spec.stamina_cost or 0,
-                hp_cost=skill_spec.hp_cost or 0,
-            )
-            
-            loadout.use_skill(
-                slot_index=command.slot_index,
-                current_tick=command.current_tick,
-                actor_id=command.player_id,
-            )
+            # 3. ヒットボックスの生成
+            actor_id = WorldObjectId(command.player_id)
+            hit_box_ids = self._hit_box_repository.batch_generate_ids(len(spawn_params))
 
-            # 4. ヒットボックスの生成
-            spawn_params = self._skill_to_hitbox_service.calculate_spawn_params(
-                hit_pattern=skill_spec.hit_pattern,
-                origin=actor.coordinate,
-                direction=target_direction,
-                start_tick=WorldTick(command.current_tick),
-                base_power_multiplier=skill_spec.power_multiplier
-            )
-
-            for param in spawn_params:
+            hit_boxes = []
+            for i, param in enumerate(spawn_params):
                 hit_box = HitBoxAggregate.create(
-                    hit_box_id=self._hit_box_repository.generate_id(),
+                    hit_box_id=hit_box_ids[i],
                     spot_id=spot_id,
                     owner_id=actor_id,
                     shape=param.shape,
@@ -303,11 +280,14 @@ class SkillCommandService:
                     activation_tick=param.activation_tick,
                     skill_id=str(skill_spec.skill_id)
                 )
-                self._hit_box_repository.save(hit_box)
+                hit_boxes.append(hit_box)
                 self._unit_of_work.add_events(hit_box.get_events())
                 hit_box.clear_events()
+            
+            if hit_boxes:
+                self._hit_box_repository.save_all(hit_boxes)
 
-            # 5. 永続化
+            # 4. 永続化
             self._player_status_repository.save(status)
             self._skill_loadout_repository.save(loadout)
             self._physical_map_repository.save(physical_map)

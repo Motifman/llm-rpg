@@ -33,6 +33,7 @@ from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.skill.value_object.skill_proposal import SkillProposal
+from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
 from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
 from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
@@ -139,6 +140,7 @@ class TestSkillCommandService:
         hitbox_repo = InMemoryHitBoxRepository(data_store)
         skill_to_hitbox_service = SkillToHitBoxDomainService()
         skill_targeting_service = SkillTargetingDomainService()
+        skill_execution_service = SkillExecutionDomainService(skill_targeting_service, skill_to_hitbox_service)
         uow = _FakeUow()
         
         service = SkillCommandService(
@@ -148,8 +150,7 @@ class TestSkillCommandService:
             player_repo,
             map_repo,
             hitbox_repo,
-            skill_to_hitbox_service,
-            skill_targeting_service,
+            skill_execution_service,
             uow
         )
         return service, loadout_repo, spec_repo, progress_repo, player_repo, map_repo, hitbox_repo, uow
