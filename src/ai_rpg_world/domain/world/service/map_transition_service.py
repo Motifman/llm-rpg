@@ -49,3 +49,32 @@ class MapTransitionService:
         
         # 4. 経路情報のクリア（スポットが変わったため）
         player_status.clear_path()
+
+    def transition_object(
+        self,
+        from_map: PhysicalMapAggregate,
+        to_map: PhysicalMapAggregate,
+        world_object_id: WorldObjectId,
+        landing_coordinate: Coordinate,
+    ) -> None:
+        """
+        マップ上のオブジェクト（プレイヤー以外）を遷移元から遷移先へ移動させる。
+        プレイヤーは transition_player を使用すること。
+
+        Args:
+            from_map: 遷移元の物理マップ集約
+            to_map: 遷移先の物理マップ集約
+            world_object_id: 移動対象のワールドオブジェクトID
+            landing_coordinate: 遷移先での着地座標
+        """
+        old_object = from_map.get_object(world_object_id)
+        from_map.remove_object(world_object_id)
+        new_object = WorldObject(
+            object_id=world_object_id,
+            coordinate=landing_coordinate,
+            object_type=old_object.object_type,
+            is_blocking=old_object.is_blocking,
+            component=old_object.component,
+            busy_until=old_object.busy_until,
+        )
+        to_map.add_object(new_object)

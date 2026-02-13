@@ -22,9 +22,20 @@ class MonsterTemplate:
     faction: MonsterFactionEnum
     description: str
     skill_ids: List[SkillId] = None
+    vision_range: int = 5
+    flee_threshold: float = 0.2
 
     def __post_init__(self):
         object.__setattr__(self, "skill_ids", self.skill_ids or [])
+        if not isinstance(self.skill_ids, list):
+            raise MonsterTemplateValidationException(
+                f"skill_ids must be a list, got {type(self.skill_ids).__name__}"
+            )
+        for i, e in enumerate(self.skill_ids):
+            if not isinstance(e, SkillId):
+                raise MonsterTemplateValidationException(
+                    f"skill_ids[{i}] must be SkillId, got {type(e).__name__}"
+                )
         if not self.name or not self.name.strip():
             raise MonsterTemplateValidationException("Monster name cannot be empty")
         
@@ -39,3 +50,12 @@ class MonsterTemplate:
             
         if not isinstance(self.faction, MonsterFactionEnum):
             raise MonsterTemplateValidationException(f"Invalid faction: {self.faction}")
+
+        if self.vision_range < 0:
+            raise MonsterTemplateValidationException(
+                f"vision_range cannot be negative: {self.vision_range}"
+            )
+        if not (0.0 <= self.flee_threshold <= 1.0):
+            raise MonsterTemplateValidationException(
+                f"flee_threshold must be between 0.0 and 1.0: {self.flee_threshold}"
+            )

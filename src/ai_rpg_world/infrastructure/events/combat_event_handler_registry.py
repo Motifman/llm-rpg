@@ -3,8 +3,15 @@ from typing import TYPE_CHECKING, List
 from ai_rpg_world.application.world.handlers.hit_box_damage_handler import HitBoxDamageHandler
 from ai_rpg_world.application.world.handlers.combat_aggro_handler import CombatAggroHandler
 from ai_rpg_world.application.world.handlers.monster_death_reward_handler import MonsterDeathRewardHandler
+from ai_rpg_world.application.world.handlers.monster_spawned_map_placement_handler import (
+    MonsterSpawnedMapPlacementHandler,
+)
 from ai_rpg_world.domain.combat.event.combat_events import HitBoxHitRecordedEvent
-from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
+from ai_rpg_world.domain.monster.event.monster_events import (
+    MonsterDiedEvent,
+    MonsterSpawnedEvent,
+    MonsterRespawnedEvent,
+)
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 
 if TYPE_CHECKING:
@@ -15,14 +22,16 @@ class CombatEventHandlerRegistry:
     """戦闘関連イベントハンドラの登録"""
 
     def __init__(
-        self, 
+        self,
         hit_box_damage_handler: HitBoxDamageHandler,
         combat_aggro_handler: CombatAggroHandler,
-        monster_death_reward_handler: MonsterDeathRewardHandler
+        monster_death_reward_handler: MonsterDeathRewardHandler,
+        monster_spawned_map_placement_handler: MonsterSpawnedMapPlacementHandler,
     ):
         self._hit_box_damage_handler = hit_box_damage_handler
         self._combat_aggro_handler = combat_aggro_handler
         self._monster_death_reward_handler = monster_death_reward_handler
+        self._monster_spawned_map_placement_handler = monster_spawned_map_placement_handler
 
     def register_handlers(self, event_publisher: EventPublisher) -> None:
         # HitBoxヒット時にダメージ適用とヘイト更新を行う
@@ -41,6 +50,18 @@ class CombatEventHandlerRegistry:
         event_publisher.register_handler(
             MonsterDiedEvent,
             self._create_event_handler(self._monster_death_reward_handler.handle),
+            is_synchronous=True,
+        )
+
+        # モンスタースポーン/リスポーン時にマップにオブジェクトを配置する
+        event_publisher.register_handler(
+            MonsterSpawnedEvent,
+            self._create_event_handler(self._monster_spawned_map_placement_handler.handle),
+            is_synchronous=True,
+        )
+        event_publisher.register_handler(
+            MonsterRespawnedEvent,
+            self._create_event_handler(self._monster_spawned_map_placement_handler.handle),
             is_synchronous=True,
         )
 

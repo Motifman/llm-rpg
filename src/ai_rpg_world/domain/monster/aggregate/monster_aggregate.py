@@ -24,6 +24,7 @@ from ai_rpg_world.domain.monster.exception.monster_exceptions import (
 )
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.service.monster_config_service import MonsterConfigService, DefaultMonsterConfigService
@@ -47,6 +48,7 @@ class MonsterAggregate(AggregateRoot):
         status: MonsterStatusEnum = MonsterStatusEnum.ALIVE,
         last_death_tick: Optional[WorldTick] = None,
         coordinate: Optional[Coordinate] = None,
+        spot_id: Optional[SpotId] = None,
         active_effects: List[StatusEffect] = None,
     ):
         super().__init__()
@@ -58,6 +60,7 @@ class MonsterAggregate(AggregateRoot):
         self._status = status
         self._last_death_tick = last_death_tick
         self._coordinate = coordinate
+        self._spot_id = spot_id
         self._active_effects = active_effects or []
         self._skill_loadout = skill_loadout
 
@@ -152,28 +155,41 @@ class MonsterAggregate(AggregateRoot):
         return self._coordinate
 
     @property
+    def spot_id(self) -> Optional[SpotId]:
+        return self._spot_id
+
+    @property
     def skill_loadout(self) -> SkillLoadoutAggregate:
         return self._skill_loadout
 
-    def _initialize_status(self, coordinate: Coordinate):
+    def _initialize_status(self, coordinate: Coordinate, spot_id: SpotId):
         """ステータスを初期化（出現/リスポーン時）"""
         self._coordinate = coordinate
+        self._spot_id = spot_id
         self._status = MonsterStatusEnum.ALIVE
         self._hp = MonsterHp.create(self._template.base_stats.max_hp, self._template.base_stats.max_hp)
         self._mp = MonsterMp.create(self._template.base_stats.max_mp, self._template.base_stats.max_mp)
         self._last_death_tick = None
 
-    def spawn(self, coordinate: Coordinate):
+    def update_map_placement(self, spot_id: SpotId, coordinate: Coordinate) -> None:
+        """ゲートウェイ等によるマップ間移動時に座標・スポットを更新する（ALIVE時のみ想定）"""
+        if self._status != MonsterStatusEnum.ALIVE:
+            raise MonsterAlreadyDeadException(f"Monster {self._monster_id} is not alive")
+        self._coordinate = coordinate
+        self._spot_id = spot_id
+
+    def spawn(self, coordinate: Coordinate, spot_id: SpotId):
         """モンスターを出現させる"""
         if self._coordinate is not None or self._status == MonsterStatusEnum.ALIVE:
             raise MonsterAlreadySpawnedException(f"Monster {self._monster_id} is already spawned at {self._coordinate}")
 
-        self._initialize_status(coordinate)
+        self._initialize_status(coordinate, spot_id)
         
         self.add_event(MonsterSpawnedEvent.create(
             aggregate_id=self._monster_id,
             aggregate_type="MonsterAggregate",
-            coordinate={"x": coordinate.x, "y": coordinate.y, "z": coordinate.z}
+            coordinate={"x": coordinate.x, "y": coordinate.y, "z": coordinate.z},
+            spot_id=spot_id,
         ))
 
     def apply_damage(self, final_damage: int, current_tick: WorldTick, attacker_id: Optional[WorldObjectId] = None, killer_player_id: Optional[PlayerId] = None):
@@ -279,10 +295,12 @@ class MonsterAggregate(AggregateRoot):
 
         self._status = MonsterStatusEnum.DEAD
         self._last_death_tick = current_tick
+        spot_id_for_event = self._spot_id
         self._coordinate = None  # 死亡時は座標をクリア
-        
+        self._spot_id = None
+
         respawn_tick = current_tick.value + self._template.respawn_info.respawn_interval_ticks
-        
+
         self.add_event(MonsterDiedEvent.create(
             aggregate_id=self._monster_id,
             aggregate_type="MonsterAggregate",
@@ -290,7 +308,8 @@ class MonsterAggregate(AggregateRoot):
             exp=self._template.reward_info.exp,
             gold=self._template.reward_info.gold,
             loot_table_id=self._template.reward_info.loot_table_id,
-            killer_player_id=killer_player_id
+            killer_player_id=killer_player_id,
+            spot_id=spot_id_for_event,
         ))
 
     def should_respawn(self, current_tick: WorldTick) -> bool:
@@ -307,7 +326,7 @@ class MonsterAggregate(AggregateRoot):
         elapsed = current_tick.value - self._last_death_tick.value
         return elapsed >= self._template.respawn_info.respawn_interval_ticks
 
-    def respawn(self, coordinate: Coordinate, current_tick: WorldTick):
+    def respawn(self, coordinate: Coordinate, current_tick: WorldTick, spot_id: SpotId):
         """リスポーンさせる"""
         if self._status != MonsterStatusEnum.DEAD:
             raise MonsterNotDeadException(f"Monster {self._monster_id} is not dead, cannot respawn")
@@ -315,12 +334,13 @@ class MonsterAggregate(AggregateRoot):
         if not self.should_respawn(current_tick):
             raise MonsterRespawnIntervalNotMetException(f"Monster {self._monster_id} cannot respawn yet.")
 
-        self._initialize_status(coordinate)
+        self._initialize_status(coordinate, spot_id)
 
         self.add_event(MonsterRespawnedEvent.create(
             aggregate_id=self._monster_id,
             aggregate_type="MonsterAggregate",
-            coordinate={"x": coordinate.x, "y": coordinate.y, "z": coordinate.z}
+            coordinate={"x": coordinate.x, "y": coordinate.y, "z": coordinate.z},
+            spot_id=spot_id,
         ))
 
     def add_status_effect(self, effect: StatusEffect) -> None:
@@ -330,4 +350,3 @@ class MonsterAggregate(AggregateRoot):
     def cleanup_expired_effects(self, current_tick: WorldTick) -> None:
         """期限切れのステータス効果を削除する"""
         self._active_effects = [e for e in self._active_effects if not e.is_expired(current_tick)]
-

@@ -6,6 +6,13 @@ from unittest.mock import MagicMock
 from ai_rpg_world.application.world.handlers.hit_box_damage_handler import HitBoxDamageHandler
 from ai_rpg_world.application.world.handlers.combat_aggro_handler import CombatAggroHandler
 from ai_rpg_world.application.world.handlers.monster_death_reward_handler import MonsterDeathRewardHandler
+from ai_rpg_world.application.common.exceptions import ApplicationException
+from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
+    PlayerNotFoundException,
+)
+from ai_rpg_world.application.world.handlers.monster_spawned_map_placement_handler import (
+    MonsterSpawnedMapPlacementHandler,
+)
 from ai_rpg_world.application.world.services.world_simulation_service import (
     WorldSimulationApplicationService,
 )
@@ -167,7 +174,7 @@ def _create_monster(monster_id: int, world_object_id: int, coordinate: Coordinat
         skill_loadout=loadout,
     )
     monster.clear_events()
-    monster.spawn(coordinate)
+    monster.spawn(coordinate, SpotId(1))
     monster.clear_events()
     return monster
 
@@ -329,6 +336,50 @@ class TestHitBoxDamageHandler:
         # 防御バフが効いていればダメージは 0 になるはずだが、期限切れなので 20 - (10/2) = 15 入る
         assert target.hp.value == 85
         assert len(target._active_effects) == 0 # クリーンアップされていること
+
+    def test_monster_hp_synced_to_map_component(self, setup):
+        """モンスターにダメージ適用後、同一マップ上の AutonomousBehaviorComponent.hp_percentage が同期されること"""
+        s = setup
+        pmap = _create_map()
+        # プレイヤー（攻撃者）
+        pmap.add_object(_create_actor_object(100, Coordinate(0, 1, 0), player_id=100))
+        s["player_repo"].save(_create_player_status(100, attack=50))
+        # モンスター（被弾者）: マップ上には AutonomousBehaviorComponent を持つ NPC として配置
+        monster_world_object_id = WorldObjectId(300)
+        monster_comp = AutonomousBehaviorComponent(hp_percentage=1.0)
+        monster_obj = WorldObject(
+            monster_world_object_id,
+            Coordinate(1, 1, 0),
+            ObjectTypeEnum.NPC,
+            component=monster_comp,
+        )
+        pmap.add_object(monster_obj)
+        s["map_repo"].save(pmap)
+
+        monster = _create_monster(1, 300, Coordinate(1, 1, 0), max_hp=100, attack=5)
+        s["monster_repo"].save(monster)
+
+        attacker_stats = BaseStats(100, 100, 50, 10, 10, 0, 0)
+        hb = self._create_hit_box(s["hit_box_repo"], WorldObjectId(100), attacker_stats)
+        event = HitBoxHitRecordedEvent.create(
+            aggregate_id=hb.hit_box_id,
+            aggregate_type="HitBoxAggregate",
+            owner_id=WorldObjectId(100),
+            target_id=monster_world_object_id,
+            hit_coordinate=Coordinate(1, 1, 0),
+        )
+
+        with s["uow"]:
+            s["handler"].handle(event)
+
+        # 集約の HP が減っていること (50 - 8/2 = 46 ダメージ → 100 - 46 = 54)
+        updated_monster = s["monster_repo"].find_by_world_object_id(monster_world_object_id)
+        assert updated_monster.hp.value == 54
+        # マップ上のコンポーネントの hp_percentage が同期されていること
+        updated_map = s["map_repo"].find_by_spot_id(SpotId(1))
+        target_obj = updated_map.get_object(monster_world_object_id)
+        assert isinstance(target_obj.component, AutonomousBehaviorComponent)
+        assert target_obj.component.hp_percentage == pytest.approx(0.54, rel=1e-5)
 
     def test_skip_damage_when_target_already_dead(self, setup):
         # Given
@@ -609,11 +660,9 @@ class TestMonsterDeathRewardHandler:
         assert True
 
     def test_handle_player_status_not_found(self, setup):
-        # Given
+        """キラーのプレイヤー状態が存在しない場合は PlayerNotFoundException を投げること"""
         s = setup
         player_id = PlayerId(100)
-        # プレイヤー状態を保存しない
-        
         event = MonsterDiedEvent.create(
             aggregate_id=MonsterId(1),
             aggregate_type="MonsterAggregate",
@@ -621,24 +670,19 @@ class TestMonsterDeathRewardHandler:
             exp=50,
             gold=20,
             loot_table_id="table",
-            killer_player_id=player_id
+            killer_player_id=player_id,
         )
 
-        # When
-        with s["uow"]:
-            s["handler"].handle(event)
-
-        # Then
-        assert True
+        with pytest.raises(PlayerNotFoundException):
+            with s["uow"]:
+                s["handler"].handle(event)
 
     def test_handle_loot_table_not_found(self, setup):
-        # Given
+        """存在しないドロップテーブル指定時は ApplicationException を投げること"""
         s = setup
         player_id = PlayerId(100)
         s["player_repo"].save(_create_player_status(100))
         s["inventory_repo"].save(PlayerInventoryAggregate.create_new_inventory(player_id))
-        
-        # 存在しないドロップテーブルを指定
         event = MonsterDiedEvent.create(
             aggregate_id=MonsterId(1),
             aggregate_type="MonsterAggregate",
@@ -646,18 +690,13 @@ class TestMonsterDeathRewardHandler:
             exp=50,
             gold=20,
             loot_table_id="missing_table",
-            killer_player_id=player_id
+            killer_player_id=player_id,
         )
 
-        # When
-        with s["uow"]:
-            s["handler"].handle(event)
-
-        # Then
-        # 経験値とゴールドは付与されるはず
-        status = s["player_repo"].find_by_id(player_id)
-        assert status.growth.total_exp == 50
-        assert status.gold.value == 20
+        with pytest.raises(ApplicationException) as excinfo:
+            with s["uow"]:
+                s["handler"].handle(event)
+        assert "missing_table" in str(excinfo.value) or "LootTable" in str(excinfo.value)
 
 
 class TestCombatIntegration:
@@ -685,8 +724,17 @@ class TestCombatIntegration:
         damage_handler = HitBoxDamageHandler(hit_box_repo, map_repo, player_repo, monster_repo, time_provider, uow)
         aggro_handler = CombatAggroHandler(hit_box_repo, map_repo, uow)
         reward_handler = MonsterDeathRewardHandler(player_repo, inventory_repo, loot_repo, item_spec_repo, item_repo, uow)
-        
-        CombatEventHandlerRegistry(damage_handler, aggro_handler, reward_handler).register_handlers(event_publisher)
+        monster_spawned_map_placement_handler = MonsterSpawnedMapPlacementHandler(
+            monster_repository=monster_repo,
+            physical_map_repository=map_repo,
+            unit_of_work=uow,
+        )
+        CombatEventHandlerRegistry(
+            damage_handler,
+            aggro_handler,
+            reward_handler,
+            monster_spawned_map_placement_handler,
+        ).register_handlers(event_publisher)
 
         behavior_service = BehaviorService(PathfindingService(None))
         skill_loadout_repo = MagicMock()

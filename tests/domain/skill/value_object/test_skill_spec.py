@@ -51,3 +51,19 @@ class TestSkillSpec:
             kwargs = {field: value}
             with pytest.raises(SkillSpecValidationException):
                 TestSkillSpec._sample_spec(**kwargs)
+
+        def test_skill_spec_rejects_negative_targeting_range(self):
+            with pytest.raises(SkillSpecValidationException, match="targeting_range cannot be negative"):
+                TestSkillSpec._sample_spec(targeting_range=-1)
+
+        def test_skill_spec_accepts_zero_targeting_range(self):
+            spec = TestSkillSpec._sample_spec(targeting_range=0)
+            assert spec.targeting_range == 0
+
+        def test_skill_spec_accepts_positive_targeting_range(self):
+            spec = TestSkillSpec._sample_spec(targeting_range=5)
+            assert spec.targeting_range == 5
+
+        def test_skill_spec_default_targeting_range_is_one(self):
+            spec = TestSkillSpec._sample_spec()
+            assert spec.targeting_range == 1
