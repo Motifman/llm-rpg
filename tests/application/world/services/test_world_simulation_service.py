@@ -1,4 +1,5 @@
 import pytest
+import unittest.mock as mock
 from ai_rpg_world.application.world.services.world_simulation_service import WorldSimulationApplicationService
 from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import InMemoryGameTimeProvider
 from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import InMemoryPhysicalMapRepository
@@ -9,6 +10,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemory
 from ai_rpg_world.infrastructure.unit_of_work.unit_of_work_factory_impl import InMemoryUnitOfWorkFactory
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
+from ai_rpg_world.domain.world.service.hostility_service import ConfigurableHostilityService
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
 from ai_rpg_world.domain.world.service.weather_config_service import DefaultWeatherConfigService
 from ai_rpg_world.domain.world.aggregate.weather_zone import WeatherZone
@@ -32,9 +34,29 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, BehaviorStateEnum
+from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, BehaviorStateEnum, DirectionEnum, BehaviorActionType
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent
+from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
+from ai_rpg_world.application.common.exceptions import ApplicationException
+from ai_rpg_world.application.monster.services.monster_skill_application_service import MonsterSkillApplicationService
+from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
+from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
+from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
+from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
+from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
+from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
+from ai_rpg_world.domain.player.enum.player_enum import Race, Element
+from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
+from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
+from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
+from ai_rpg_world.domain.skill.value_object.skill_spec import SkillSpec
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillHitPatternType
+from ai_rpg_world.domain.skill.value_object.skill_hit_pattern import SkillHitPattern
+from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
+from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
+from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
+from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent, MonsterSkillInfo
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
 from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
@@ -81,6 +103,27 @@ class TestWorldSimulationApplicationService:
         hit_box_config = DefaultHitBoxConfigService(substeps_per_tick=4)
         hit_box_collision_service = HitBoxCollisionDomainService()
         
+        # モンスターリポジトリとサービスの追加
+        from unittest.mock import MagicMock
+        monster_repo = MagicMock()
+        skill_loadout_repo = MagicMock()
+        skill_spec_repo = MagicMock()
+        skill_execution_service = SkillExecutionDomainService(
+            SkillTargetingDomainService(), 
+            SkillToHitBoxDomainService()
+        )
+        from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
+        monster_skill_service = MonsterSkillApplicationService(
+            monster_repository=monster_repo,
+            skill_loadout_repository=skill_loadout_repo,
+            skill_spec_repository=skill_spec_repo,
+            physical_map_repository=repository,
+            hit_box_repository=hit_box_repo,
+            skill_execution_service=skill_execution_service,
+            hit_box_factory=HitBoxFactory(),
+            unit_of_work=uow
+        )
+
         service = WorldSimulationApplicationService(
             time_provider=time_provider,
             physical_map_repository=repository,
@@ -90,15 +133,16 @@ class TestWorldSimulationApplicationService:
             behavior_service=behavior_service,
             weather_config_service=weather_config,
             unit_of_work=uow,
+            monster_skill_service=monster_skill_service,
             hit_box_config_service=hit_box_config,
             hit_box_collision_service=hit_box_collision_service,
         )
         
-        return service, time_provider, repository, weather_zone_repo, player_status_repo, hit_box_repo, uow, event_publisher
+        return service, time_provider, repository, weather_zone_repo, player_status_repo, hit_box_repo, uow, event_publisher, monster_skill_service, monster_repo
 
     def test_tick_advances_time(self, setup_service):
         """tickによってゲーム時間が進むこと"""
-        service, time_provider, _, _, _, _, _, _ = setup_service
+        service, time_provider, _, _, _, _, _, _, _, _ = setup_service
         
         assert time_provider.get_current_tick() == WorldTick(10)
         
@@ -108,7 +152,7 @@ class TestWorldSimulationApplicationService:
 
     def test_tick_updates_autonomous_actors(self, setup_service):
         """tickによって自律行動アクターの行動が計画・実行されること"""
-        service, _, repository, _, _, _, _, _ = setup_service
+        service, _, repository, _, _, _, _, _, _, _ = setup_service
         
         # マップのセットアップ
         spot_id = SpotId(1)
@@ -142,7 +186,7 @@ class TestWorldSimulationApplicationService:
 
     def test_busy_actor_is_skipped(self, setup_service):
         """Busy状態のアクターはシミュレーションでスキップされること"""
-        service, _, repository, _, _, _, _, _ = setup_service
+        service, _, repository, _, _, _, _, _, _, _ = setup_service
         
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
@@ -171,30 +215,68 @@ class TestWorldSimulationApplicationService:
 
     def test_tick_handles_actor_error_gracefully(self, setup_service):
         """1つのアクターでエラーが発生しても他のアクターの更新が継続されること"""
-        service, _, repository, _, _, _, _, _ = setup_service
+        service, _, repository, _, _, _, _, _, _, _ = setup_service
         
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
         physical_map = PhysicalMapAggregate.create(spot_id, tiles)
         
-        # エラーを投げるようにBehaviorServiceをmock
+        actor1_id = WorldObjectId(1)
+        actor2_id = WorldObjectId(2)
+        actor1 = WorldObject(
+            actor1_id, Coordinate(2, 2), ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(2, 2), Coordinate(2, 3)])
+        )
+        actor2 = WorldObject(
+            actor2_id, Coordinate(3, 3), ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(3, 3), Coordinate(3, 4)])
+        )
+        physical_map.add_object(actor1)
+        physical_map.add_object(actor2)
+        repository.save(physical_map)
+        
+        call_count = [0]
+        def plan_action_side_effect(actor_id, map_agg):
+            call_count[0] += 1
+            if actor_id == actor1_id:
+                raise Exception("Plan error")
+            return BehaviorAction.move(Coordinate(3, 4))
+        
         import unittest.mock as mock
-        with mock.patch.object(service._behavior_service, 'plan_next_move', side_effect=Exception("Plan error")):
-            # アクター追加
-            actor1 = WorldObject(WorldObjectId(1), Coordinate(2, 2), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent())
-            physical_map.add_object(actor1)
-            repository.save(physical_map)
-            
-            # 実行
+        with mock.patch.object(service._behavior_service, "plan_action", side_effect=plan_action_side_effect):
             service.tick()
         
-        # サービス全体がクラッシュせず、actor1が(mockされているので移動はしてないが)処理されたことを確認
-        # (実際にはログにエラーが出るが、例外はキャッチされているはず)
-        # ここでは例外が上に飛んでこないことを確認
+        updated_map = repository.find_by_spot_id(spot_id)
+        assert call_count[0] == 2
+        assert updated_map.get_object(actor1_id).coordinate == Coordinate(2, 2)
+        assert updated_map.get_object(actor2_id).coordinate == Coordinate(3, 4)
+
+    def test_tick_raises_application_exception_when_use_skill_has_no_slot_index(self, setup_service):
+        """USE_SKILLアクションでskill_slot_indexがNoneの場合にApplicationExceptionが発生すること"""
+        service, _, repository, _, _, _, _, _, _, _ = setup_service
+        
+        spot_id = SpotId(1)
+        tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        actor_id = WorldObjectId(1)
+        physical_map.add_object(WorldObject(
+            actor_id, Coordinate(2, 2), ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent()
+        ))
+        repository.save(physical_map)
+        
+        invalid_action = BehaviorAction(
+            action_type=BehaviorActionType.USE_SKILL,
+            coordinate=None,
+            skill_slot_index=None,
+        )
+        with mock.patch.object(service._behavior_service, "plan_action", return_value=invalid_action):
+            with pytest.raises(ApplicationException, match="skill_slot_index"):
+                service.tick()
 
     def test_tick_applies_environmental_stamina_drain(self, setup_service):
         """過酷な天候下でプレイヤーのスタミナが減少すること（正常系）"""
-        service, _, map_repo, zone_repo, player_repo, _, uow, _ = setup_service
+        service, _, map_repo, zone_repo, player_repo, _, uow, _, _, _ = setup_service
         
         # 1. セットアップ: 吹雪のゾーン
         spot_id = SpotId(1)
@@ -236,7 +318,7 @@ class TestWorldSimulationApplicationService:
 
     def test_environmental_drain_skips_non_player_actors(self, setup_service):
         """NPCなどのプレイヤー以外の項目には環境ダメージが適用されないこと"""
-        service, _, map_repo, zone_repo, player_repo, _, _, _ = setup_service
+        service, _, map_repo, zone_repo, player_repo, _, _, _, _, _ = setup_service
         
         spot_id = SpotId(1)
         weather_state = WeatherState(WeatherTypeEnum.BLIZZARD, 1.0) # Drain = 3
@@ -260,7 +342,7 @@ class TestWorldSimulationApplicationService:
         
     def test_stamina_drain_not_below_zero(self, setup_service):
         """スタミナ減少によってスタミナが負の値にならないこと（境界値）"""
-        service, _, map_repo, zone_repo, player_repo, _, _, _ = setup_service
+        service, _, map_repo, zone_repo, player_repo, _, _, _, _, _ = setup_service
         
         spot_id = SpotId(1)
         weather_state = WeatherState(WeatherTypeEnum.BLIZZARD, 1.0) # Drain = 3
@@ -291,7 +373,7 @@ class TestWorldSimulationApplicationService:
 
     def test_handles_missing_player_status_gracefully(self, setup_service):
         """アクターにplayer_idはあるが、リポジトリにステータスがない場合にエラーにならないこと（異常系）"""
-        service, _, map_repo, zone_repo, _, _, _, _ = setup_service
+        service, _, map_repo, zone_repo, _, _, _, _, _, _ = setup_service
         
         spot_id = SpotId(1)
         zone_repo.save(WeatherZone.create(WeatherZoneId(1), WeatherZoneName("Z"), {spot_id}, WeatherState(WeatherTypeEnum.BLIZZARD, 1.0)))
@@ -309,7 +391,7 @@ class TestWorldSimulationApplicationService:
 
     def test_handles_missing_weather_zone_gracefully(self, setup_service):
         """マップに対応する天候ゾーンがない場合、デフォルト（晴れ）として処理されること（異常系）"""
-        service, _, map_repo, zone_repo, player_repo, _, _, _ = setup_service
+        service, _, map_repo, zone_repo, player_repo, _, _, _, _, _ = setup_service
         
         # ゾーンを登録しない
         spot_id = SpotId(1)
@@ -334,7 +416,7 @@ class TestWorldSimulationApplicationService:
 
     def test_weather_update_respects_interval(self, setup_service):
         """天候更新が設定されたインターバルに従うこと（ロジック検証）"""
-        service, time_provider, map_repo, zone_repo, _, _, _, _ = setup_service
+        service, time_provider, map_repo, zone_repo, _, _, _, _, _, _ = setup_service
         
         # インターバルを5に設定
         from ai_rpg_world.domain.world.service.weather_config_service import DefaultWeatherConfigService
@@ -376,7 +458,7 @@ class TestWorldSimulationApplicationService:
 
     def test_stamina_drain_publishes_events_to_uow(self, setup_service):
         """スタミナ減少イベントがUnitOfWorkに追加されること"""
-        service, _, map_repo, zone_repo, player_repo, _, uow, event_publisher = setup_service
+        service, _, map_repo, zone_repo, player_repo, _, uow, event_publisher, _, _ = setup_service
         
         spot_id = SpotId(1)
         weather_state = WeatherState(WeatherTypeEnum.BLIZZARD, 1.0)
@@ -406,7 +488,7 @@ class TestWorldSimulationApplicationService:
 
     def test_bulk_processing_handles_partial_failures(self, setup_service):
         """バルク処理中に一部のプレイヤーでエラー（ドメイン例外など）が発生しても他が正常に処理されること"""
-        service, _, map_repo, zone_repo, player_repo, _, _, _ = setup_service
+        service, _, map_repo, zone_repo, player_repo, _, _, _, _, _ = setup_service
         
         spot_id = SpotId(1)
         weather_state = WeatherState(WeatherTypeEnum.BLIZZARD, 1.0) # Drain = 3
@@ -446,7 +528,7 @@ class TestWorldSimulationApplicationService:
 
     def test_tick_updates_hitbox_and_records_target_hit_event(self, setup_service):
         """tickでHitBoxが移動し、同座標のオブジェクトへのヒットイベントが発行されること"""
-        service, _, map_repo, _, _, hit_box_repo, _, event_publisher = setup_service
+        service, _, map_repo, _, _, hit_box_repo, _, event_publisher, _, _ = setup_service
 
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(4) for y in range(4)]
@@ -484,7 +566,7 @@ class TestWorldSimulationApplicationService:
 
     def test_tick_deactivates_hitbox_on_obstacle_when_policy_is_deactivate(self, setup_service):
         """障害物衝突でDEACTIVATEポリシーのHitBoxが消失すること"""
-        service, _, map_repo, _, _, hit_box_repo, _, event_publisher = setup_service
+        service, _, map_repo, _, _, hit_box_repo, _, event_publisher, _, _ = setup_service
 
         spot_id = SpotId(1)
         tiles = [
@@ -520,7 +602,7 @@ class TestWorldSimulationApplicationService:
 
     def test_tick_keeps_hitbox_active_when_obstacle_policy_pass_through(self, setup_service):
         """障害物衝突でもPASS_THROUGHポリシーのHitBoxは継続すること"""
-        service, _, map_repo, _, _, hit_box_repo, _, event_publisher = setup_service
+        service, _, map_repo, _, _, hit_box_repo, _, event_publisher, _, _ = setup_service
 
         spot_id = SpotId(1)
         tiles = [
@@ -557,7 +639,7 @@ class TestWorldSimulationApplicationService:
 
     def test_tick_deactivates_hitbox_on_target_collision_policy(self, setup_service):
         """ターゲット衝突でDEACTIVATEポリシーのHitBoxが消失すること"""
-        service, _, map_repo, _, _, hit_box_repo, _, _ = setup_service
+        service, _, map_repo, _, _, hit_box_repo, _, _, _, _ = setup_service
 
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(2) for y in range(2)]
@@ -589,7 +671,7 @@ class TestWorldSimulationApplicationService:
 
     def test_tick_handles_hitbox_repository_failure_gracefully(self, setup_service):
         """HitBox更新処理で例外が発生してもtick全体は継続すること"""
-        service, _, map_repo, _, _, _, _, _ = setup_service
+        service, _, map_repo, _, _, _, _, _, _, _ = setup_service
 
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(0, 0), TerrainType.grass())]
@@ -603,7 +685,7 @@ class TestWorldSimulationApplicationService:
 
     def test_substep_update_accumulates_fractional_velocity_across_ticks(self, setup_service):
         """サブステップ更新で小数速度がティックをまたいで蓄積されること"""
-        service, _, map_repo, _, _, hit_box_repo, _, _ = setup_service
+        service, _, map_repo, _, _, hit_box_repo, _, _, _, _ = setup_service
 
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(3) for y in range(2)]
@@ -639,7 +721,7 @@ class TestWorldSimulationApplicationService:
 
     def test_substep_update_obstacle_collision_only_one_event(self, setup_service):
         """サブステップ更新で同じ障害物に複数回当たってもイベントは1度だけ発行されること"""
-        service, _, map_repo, _, _, hit_box_repo, _, event_publisher = setup_service
+        service, _, map_repo, _, _, hit_box_repo, _, event_publisher, _, _ = setup_service
 
         spot_id = SpotId(1)
         # (1,0) が壁
@@ -682,7 +764,7 @@ class TestWorldSimulationApplicationService:
 
     def test_uses_adaptive_substeps_per_hit_box(self, setup_service):
         """HitBoxごとに設定サービス経由でサブステップ数を取得すること"""
-        service, _, map_repo, _, _, hit_box_repo, _, _ = setup_service
+        service, _, map_repo, _, _, hit_box_repo, _, _, _, _ = setup_service
 
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(0, 0), TerrainType.grass())]
@@ -746,7 +828,7 @@ class TestWorldSimulationApplicationService:
 
     def test_collision_check_guard_limits_checks_and_continues(self, setup_service, caplog):
         """衝突判定上限に達した場合、警告を出して処理継続すること"""
-        service, _, map_repo, _, _, hit_box_repo, _, _ = setup_service
+        service, _, map_repo, _, _, hit_box_repo, _, _, _, _ = setup_service
 
         service._hit_box_config_service = DefaultHitBoxConfigService(
             substeps_per_tick=4,
@@ -784,7 +866,7 @@ class TestWorldSimulationApplicationService:
 
     def test_hit_box_stats_log_is_emitted(self, setup_service, caplog):
         """HitBox更新統計ログが出力されること"""
-        service, _, map_repo, _, _, hit_box_repo, _, _ = setup_service
+        service, _, map_repo, _, _, hit_box_repo, _, _, _, _ = setup_service
         caplog.set_level("DEBUG")
 
         spot_id = SpotId(1)
@@ -811,7 +893,7 @@ class TestWorldSimulationApplicationService:
 
     def test_tick_skips_hitbox_before_activation_tick(self, setup_service):
         """有効化時刻前のHitBoxはtickで移動も衝突判定も行われないこと"""
-        service, _, map_repo, _, _, hit_box_repo, _, _ = setup_service
+        service, _, map_repo, _, _, hit_box_repo, _, _, _, _ = setup_service
 
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, 0), TerrainType.grass()) for x in range(3)]
@@ -837,6 +919,70 @@ class TestWorldSimulationApplicationService:
         updated = hit_box_repo.find_by_id(HitBoxId.create(10))
         # まだ移動していないはず
         assert updated.current_coordinate == Coordinate(0, 0, 0)
+
+    def test_tick_executes_monster_skill(self, setup_service):
+        """tickによってモンスターがスキルを使用すること"""
+        service, _, repository, _, _, _, _, _, monster_skill_service, monster_repo = setup_service
+        
+        spot_id = SpotId(1)
+        tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(10) for y in range(10)]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        
+        # モンスターの追加
+        monster_obj_id = WorldObjectId(100)
+        skills = [MonsterSkillInfo(slot_index=0, range=2, mp_cost=10)]
+        monster_comp = AutonomousBehaviorComponent(
+            state=BehaviorStateEnum.CHASE,
+            vision_range=5,
+            available_skills=skills,
+            fov_angle=360.0 # 全方位見えるように設定
+        )
+        monster_comp.target_id = WorldObjectId(1) # プレイヤーをターゲット
+        monster_comp.last_known_target_position = Coordinate(7, 5)
+        monster_obj = WorldObject(monster_obj_id, Coordinate(5, 5), ObjectTypeEnum.NPC, component=monster_comp)
+        physical_map.add_object(monster_obj)
+        
+        # ターゲット（プレイヤー）の追加
+        player_id = WorldObjectId(1)
+        # 敵対関係を認識させるために種族を設定
+        player_obj = WorldObject(
+            player_id, 
+            Coordinate(7, 5), 
+            ObjectTypeEnum.PLAYER, 
+            component=ActorComponent(race="human", faction="player")
+        )
+        physical_map.add_object(player_obj)
+        
+        repository.save(physical_map)
+        
+        # 敵対関係の設定
+        behavior_service = service._behavior_service
+        behavior_service._hostility_service = ConfigurableHostilityService(
+            race_hostility_table={"monster": {"human"}}
+        )
+        
+        # モンスターのコンポーネントを再取得して、ターゲットが見えるか確認
+        monster_obj = physical_map.get_object(monster_obj_id)
+        # 向きをターゲットに向ける
+        monster_obj.turn(DirectionEnum.EAST)
+        
+        # モンスター集約の準備（リポジトリのモック）
+        from unittest.mock import MagicMock
+        monster = MagicMock(spec=MonsterAggregate)
+        monster.world_object_id = monster_obj_id
+        monster_repo.find_by_world_object_id.return_value = monster
+        
+        # 実行
+        with mock.patch.object(monster_skill_service, 'use_monster_skill') as mocked_use_skill:
+            service.tick()
+            
+            # スキル使用が呼ばれたことを確認
+            mocked_use_skill.assert_called_once_with(
+                monster_world_object_id=monster_obj_id,
+                spot_id=spot_id,
+                slot_index=0,
+                current_tick=WorldTick(11)
+            )
 
     def _create_sample_player(self, player_id, spot_id, coord, stamina_val=100):
         base_stats = BaseStats(100, 50, 10, 10, 10, 0.05, 0.05)

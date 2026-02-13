@@ -30,6 +30,7 @@ from ai_rpg_world.domain.monster.service.monster_config_service import MonsterCo
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 
 
 class MonsterAggregate(AggregateRoot):
@@ -40,6 +41,7 @@ class MonsterAggregate(AggregateRoot):
         monster_id: MonsterId,
         template: MonsterTemplate,
         world_object_id: WorldObjectId,
+        skill_loadout: SkillLoadoutAggregate,
         hp: Optional[MonsterHp] = None,
         mp: Optional[MonsterMp] = None,
         status: MonsterStatusEnum = MonsterStatusEnum.ALIVE,
@@ -57,13 +59,15 @@ class MonsterAggregate(AggregateRoot):
         self._last_death_tick = last_death_tick
         self._coordinate = coordinate
         self._active_effects = active_effects or []
+        self._skill_loadout = skill_loadout
 
     @classmethod
     def create(
         cls,
         monster_id: MonsterId,
         template: MonsterTemplate,
-        world_object_id: WorldObjectId
+        world_object_id: WorldObjectId,
+        skill_loadout: SkillLoadoutAggregate,
     ) -> "MonsterAggregate":
         """モンスター個体を新規作成する（初期状態は未出現）"""
         monster = cls(
@@ -71,7 +75,8 @@ class MonsterAggregate(AggregateRoot):
             template=template,
             world_object_id=world_object_id,
             status=MonsterStatusEnum.DEAD,  # 初期状態はDEAD（出現前）とする
-            coordinate=None
+            coordinate=None,
+            skill_loadout=skill_loadout,
         )
         monster.add_event(MonsterCreatedEvent.create(
             aggregate_id=monster_id,
@@ -145,6 +150,10 @@ class MonsterAggregate(AggregateRoot):
     @property
     def coordinate(self) -> Optional[Coordinate]:
         return self._coordinate
+
+    @property
+    def skill_loadout(self) -> SkillLoadoutAggregate:
+        return self._skill_loadout
 
     def _initialize_status(self, coordinate: Coordinate):
         """ステータスを初期化（出現/リスポーン時）"""

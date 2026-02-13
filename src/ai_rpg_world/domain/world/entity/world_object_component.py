@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Dict, Any, Optional, TYPE_CHECKING
 from ai_rpg_world.domain.world.exception.map_exception import LockedDoorException
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, BehaviorStateEnum
@@ -10,14 +11,13 @@ from ai_rpg_world.domain.common.exception import ValidationException, BusinessRu
 if TYPE_CHECKING:
     from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.exception.behavior_exception import (
-    VisionRangeValidationException, 
+    VisionRangeValidationException,
     FOVAngleValidationException,
     SearchDurationValidationException,
     InvalidPatrolPointException,
-    SearchDurationValidationException,
     HPPercentageValidationException,
     FleeThresholdValidationException,
-    MaxFailuresValidationException
+    MaxFailuresValidationException,
 )
 
 
@@ -196,6 +196,14 @@ class InteractableComponent(WorldObjectComponent):
         }
 
 
+@dataclass(frozen=True)
+class MonsterSkillInfo:
+    """AIが判断に利用するためのスキル簡略情報"""
+    slot_index: int
+    range: int
+    mp_cost: int
+
+
 class AutonomousBehaviorComponent(ActorComponent):
     """自律的な行動ロジックを持つアクターコンポーネント"""
     def __init__(
@@ -215,7 +223,8 @@ class AutonomousBehaviorComponent(ActorComponent):
         flee_threshold: float = 0.2,
         max_failures: int = 3,
         initial_position: Optional[Coordinate] = None,
-        random_move_chance: float = 0.5
+        random_move_chance: float = 0.5,
+        available_skills: list[MonsterSkillInfo] = None
     ):
         super().__init__(direction, capability, player_id, is_npc, fov_angle, race, faction)
         self._validate(vision_range, search_duration, hp_percentage, flee_threshold, max_failures, random_move_chance)
@@ -237,6 +246,7 @@ class AutonomousBehaviorComponent(ActorComponent):
         self.failure_count = 0
         self.initial_position = initial_position
         self.random_move_chance = random_move_chance
+        self.available_skills = available_skills or []
 
     def _validate(self, vision_range, search_duration, hp_percentage, flee_threshold, max_failures, random_move_chance):
         if vision_range < 0:

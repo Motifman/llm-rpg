@@ -4,11 +4,16 @@ from typing import Optional, List, Tuple
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.enum.world_enum import BehaviorStateEnum, ObjectTypeEnum, DirectionEnum
-from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent
+from ai_rpg_world.domain.world.enum.world_enum import BehaviorStateEnum, ObjectTypeEnum, DirectionEnum, BehaviorActionType
+from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent, MonsterSkillInfo
+from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
 from ai_rpg_world.domain.world.service.hostility_service import HostilityService, ConfigurableHostilityService
-from ai_rpg_world.domain.world.exception.map_exception import NotAnActorException, PathNotFoundException, InvalidPathRequestException
+from ai_rpg_world.domain.world.exception.map_exception import (
+    ObjectNotFoundException,
+    PathNotFoundException,
+    InvalidPathRequestException,
+)
 from ai_rpg_world.domain.world.event.behavior_events import (
     ActorStateChangedEvent,
     TargetSpottedEvent,
@@ -24,22 +29,22 @@ class BehaviorService:
         self._pathfinding_service = pathfinding_service
         self._hostility_service = hostility_service or ConfigurableHostilityService()
 
-    def plan_next_move(
+    def plan_action(
         self,
         actor_id: WorldObjectId,
         map_aggregate: PhysicalMapAggregate
-    ) -> Optional[Coordinate]:
+    ) -> BehaviorAction:
         """
-        アクターの現在の状態に基づいて次の移動先を決定する。
+        アクターの現在の状態に基づいて次のアクションを決定する。
         
         Returns:
-            次に移動すべき座標。移動の必要がない場合はNone。
+            実行すべきアクション。
         """
         actor = map_aggregate.get_object(actor_id)
         component = actor.component
         
         if not isinstance(component, AutonomousBehaviorComponent):
-            return None
+            return BehaviorAction.wait()
 
         # 初期位置の保持
         if component.initial_position is None:
@@ -80,18 +85,61 @@ class BehaviorService:
                             last_known_coordinate=last_coord
                         ))
 
-        # 2. 状態に応じた移動先計算
+        # 2. 攻撃可能かチェック (CHASE状態かつターゲットが視界内にいる場合)
+        if component.state == BehaviorStateEnum.CHASE and target:
+            attack_action = self._plan_attack_if_possible(actor, target, component)
+            if attack_action:
+                return attack_action
+
+        # 3. 状態に応じた移動先計算
+        next_coord = None
         if component.state == BehaviorStateEnum.FLEE:
-            return self._calculate_flee_move(actor, component, map_aggregate)
+            next_coord = self._calculate_flee_move(actor, component, map_aggregate)
         elif component.state == BehaviorStateEnum.CHASE:
-            return self._calculate_chase_move(actor, component, map_aggregate)
+            next_coord = self._calculate_chase_move(actor, component, map_aggregate)
         elif component.state == BehaviorStateEnum.SEARCH:
-            return self._calculate_search_move(actor, component, map_aggregate)
+            next_coord = self._calculate_search_move(actor, component, map_aggregate)
         elif component.state == BehaviorStateEnum.PATROL:
-            return self._calculate_patrol_move(actor, component, map_aggregate)
+            next_coord = self._calculate_patrol_move(actor, component, map_aggregate)
         elif component.state == BehaviorStateEnum.RETURN:
-            return self._calculate_return_move(actor, component, map_aggregate)
+            next_coord = self._calculate_return_move(actor, component, map_aggregate)
         
+        if next_coord:
+            return BehaviorAction.move(next_coord)
+        
+        return BehaviorAction.wait()
+
+    def _plan_attack_if_possible(
+        self, 
+        actor, 
+        target, 
+        component: AutonomousBehaviorComponent
+    ) -> Optional[BehaviorAction]:
+        """射程内にターゲットがいる場合、使用可能なスキルを選択する。
+        現状は射程内の最初のスキルを返す。今後、状況に応じたスロット選択
+        （射程・MP・クールダウン・ターゲット状態などを考慮した戦略）に拡張する想定。
+        """
+        if not component.available_skills:
+            return None
+
+        distance = actor.coordinate.distance_to(target.coordinate)
+        for skill in component.available_skills:
+            if distance <= skill.range:
+                return BehaviorAction.use_skill(skill.slot_index)
+        
+        return None
+
+    def plan_next_move(
+        self,
+        actor_id: WorldObjectId,
+        map_aggregate: PhysicalMapAggregate
+    ) -> Optional[Coordinate]:
+        """
+        互換性のために残す。内部で plan_action を呼び出す。
+        """
+        action = self.plan_action(actor_id, map_aggregate)
+        if action.action_type == BehaviorActionType.MOVE:
+            return action.coordinate
         return None
 
     def _publish_state_changed(self, map_aggregate, actor_id, old_state, new_state):
@@ -201,7 +249,7 @@ class BehaviorService:
             
         try:
             target = map_aggregate.get_object(target_id)
-        except Exception:
+        except ObjectNotFoundException:
             component.lose_target()
             return self._calculate_return_move(actor, component, map_aggregate)
 

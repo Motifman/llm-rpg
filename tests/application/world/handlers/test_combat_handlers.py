@@ -9,6 +9,13 @@ from ai_rpg_world.application.world.handlers.monster_death_reward_handler import
 from ai_rpg_world.application.world.services.world_simulation_service import (
     WorldSimulationApplicationService,
 )
+from ai_rpg_world.application.monster.services.monster_skill_application_service import (
+    MonsterSkillApplicationService,
+)
+from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
+from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
+from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
+from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
 from ai_rpg_world.domain.combat.event.combat_events import HitBoxHitRecordedEvent
@@ -25,6 +32,8 @@ from ai_rpg_world.domain.monster.value_object.monster_template_id import Monster
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
+from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
+from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.enum.player_enum import Race
@@ -145,10 +154,17 @@ def _create_monster(monster_id: int, world_object_id: int, coordinate: Coordinat
         faction=MonsterFactionEnum.ENEMY,
         description="test monster",
     )
+    loadout = SkillLoadoutAggregate.create(
+        SkillLoadoutId(monster_id + 1000),
+        owner_id=world_object_id,
+        normal_capacity=10,
+        awakened_capacity=10,
+    )
     monster = MonsterAggregate.create(
         monster_id=MonsterId(monster_id),
         template=template,
         world_object_id=WorldObjectId(world_object_id),
+        skill_loadout=loadout,
     )
     monster.clear_events()
     monster.spawn(coordinate)
@@ -673,6 +689,22 @@ class TestCombatIntegration:
         CombatEventHandlerRegistry(damage_handler, aggro_handler, reward_handler).register_handlers(event_publisher)
 
         behavior_service = BehaviorService(PathfindingService(None))
+        skill_loadout_repo = MagicMock()
+        skill_spec_repo = MagicMock()
+        skill_execution_service = SkillExecutionDomainService(
+            SkillTargetingDomainService(),
+            SkillToHitBoxDomainService(),
+        )
+        monster_skill_service = MonsterSkillApplicationService(
+            monster_repository=monster_repo,
+            skill_loadout_repository=skill_loadout_repo,
+            skill_spec_repository=skill_spec_repo,
+            physical_map_repository=map_repo,
+            hit_box_repository=hit_box_repo,
+            skill_execution_service=skill_execution_service,
+            hit_box_factory=HitBoxFactory(),
+            unit_of_work=uow,
+        )
         service = WorldSimulationApplicationService(
             time_provider=time_provider,
             physical_map_repository=map_repo,
@@ -682,6 +714,7 @@ class TestCombatIntegration:
             behavior_service=behavior_service,
             weather_config_service=DefaultWeatherConfigService(1),
             unit_of_work=uow,
+            monster_skill_service=monster_skill_service,
             hit_box_config_service=DefaultHitBoxConfigService(4),
             hit_box_collision_service=HitBoxCollisionDomainService(),
         )

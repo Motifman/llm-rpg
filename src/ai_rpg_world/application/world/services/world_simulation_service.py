@@ -1,5 +1,5 @@
 import logging
-from typing import List, Callable, Any, Optional, Dict
+from typing import List, Callable, Any, Dict, Optional
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
@@ -20,6 +20,8 @@ from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
+from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
+from ai_rpg_world.application.monster.services.monster_skill_application_service import MonsterSkillApplicationService
 from ai_rpg_world.domain.world.service.weather_simulation_service import WeatherSimulationService
 from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
 from ai_rpg_world.domain.world.service.weather_config_service import WeatherConfigService
@@ -47,6 +49,7 @@ class WorldSimulationApplicationService:
         behavior_service: BehaviorService,
         weather_config_service: WeatherConfigService,
         unit_of_work: UnitOfWork,
+        monster_skill_service: MonsterSkillApplicationService,
         hit_box_config_service: Optional[HitBoxConfigService] = None,
         hit_box_collision_service: Optional[HitBoxCollisionDomainService] = None,
     ):
@@ -57,6 +60,7 @@ class WorldSimulationApplicationService:
         self._hit_box_repository = hit_box_repository
         self._behavior_service = behavior_service
         self._weather_config_service = weather_config_service
+        self._monster_skill_service = monster_skill_service
         self._hit_box_config_service = hit_box_config_service or DefaultHitBoxConfigService()
         self._hit_box_collision_service = hit_box_collision_service or HitBoxCollisionDomainService()
         self._unit_of_work = unit_of_work
@@ -107,15 +111,32 @@ class WorldSimulationApplicationService:
                     
                     try:
                         # 自律行動アクターの計画
-                        next_coord = self._behavior_service.plan_next_move(actor.object_id, physical_map)
-                        if next_coord:
+                        action = self._behavior_service.plan_action(actor.object_id, physical_map)
+                        
+                        if action.action_type == BehaviorActionType.MOVE:
                             # 移動実行
-                            physical_map.move_object(actor.object_id, next_coord, current_tick)
+                            physical_map.move_object(actor.object_id, action.coordinate, current_tick)
+                        elif action.action_type == BehaviorActionType.USE_SKILL:
+                            # USE_SKILL 時は skill_slot_index が必ず指定されていることを保証
+                            if action.skill_slot_index is None:
+                                raise ApplicationException(
+                                    "USE_SKILL action must have skill_slot_index",
+                                    action_type=BehaviorActionType.USE_SKILL,
+                                )
+                            self._monster_skill_service.use_monster_skill(
+                                monster_world_object_id=actor.object_id,
+                                spot_id=physical_map.spot_id,
+                                slot_index=action.skill_slot_index,
+                                current_tick=current_tick
+                            )
+                        # WAIT の場合は何もしない
                     except DomainException as e:
                         # ドメインルール違反（移動不可など）は警告ログにとどめる
                         self._logger.warning(
                             f"Behavior skipped for actor {actor.object_id} due to domain rule: {str(e)}"
                         )
+                    except ApplicationException:
+                        raise
                     except Exception as e:
                         # その他予期せぬエラー
                         self._logger.error(
