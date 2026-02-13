@@ -76,3 +76,10 @@ class BehaviorStateEnum(Enum):
     SEARCH = "SEARCH"   # 探索（見失った地点へ向かう）
     FLEE = "FLEE"       # 逃走
     RETURN = "RETURN"   # 初期位置への帰還
+
+
+class BehaviorActionType(Enum):
+    """AIが決定したアクションの種類"""
+    MOVE = "MOVE"
+    USE_SKILL = "USE_SKILL"
+    WAIT = "WAIT"

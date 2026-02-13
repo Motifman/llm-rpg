@@ -32,6 +32,8 @@ from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
+from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 
 
 class TestMonsterAggregate:
@@ -71,11 +73,21 @@ class TestMonsterAggregate:
         )
 
     @pytest.fixture
-    def monster(self, monster_template: MonsterTemplate) -> MonsterAggregate:
+    def skill_loadout(self) -> SkillLoadoutAggregate:
+        return SkillLoadoutAggregate.create(
+            SkillLoadoutId(1),
+            owner_id=1001,
+            normal_capacity=10,
+            awakened_capacity=10,
+        )
+
+    @pytest.fixture
+    def monster(self, monster_template: MonsterTemplate, skill_loadout: SkillLoadoutAggregate) -> MonsterAggregate:
         return MonsterAggregate.create(
             monster_id=MonsterId.create(1),
             template=monster_template,
             world_object_id=WorldObjectId.create(1001),
+            skill_loadout=skill_loadout,
         )
 
     class TestCreate:
@@ -335,10 +347,17 @@ class TestMonsterAggregate:
                 faction=monster_template.faction,
                 description=monster_template.description,
             )
+            loadout_200 = SkillLoadoutAggregate.create(
+                SkillLoadoutId(2),
+                owner_id=200,
+                normal_capacity=10,
+                awakened_capacity=10,
+            )
             monster = MonsterAggregate.create(
                 monster_id=MonsterId.create(10),
                 template=no_auto_respawn_template,
                 world_object_id=WorldObjectId.create(200),
+                skill_loadout=loadout_200,
             )
             monster.spawn(Coordinate(0, 0, 0))
             monster.apply_damage(100, WorldTick(100))

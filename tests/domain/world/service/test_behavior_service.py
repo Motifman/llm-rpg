@@ -4,11 +4,12 @@ from unittest.mock import MagicMock
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, BehaviorStateEnum, DirectionEnum
+from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, BehaviorStateEnum, DirectionEnum, BehaviorActionType
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent
+from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent, MonsterSkillInfo
+from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
@@ -223,6 +224,86 @@ class TestBehaviorService:
             
             assert comp.state == BehaviorStateEnum.RETURN
             assert any(isinstance(e, BehaviorStuckEvent) for e in map_aggregate.get_events())
+
+        def test_skill_planning(self, behavior_service, map_aggregate):
+            """ターゲットが射程内にいる場合、スキル使用アクションを返すこと"""
+            monster_id = WorldObjectId(100)
+            skills = [MonsterSkillInfo(slot_index=0, range=2, mp_cost=10)]
+            comp = AutonomousBehaviorComponent(
+                race="goblin", 
+                vision_range=5, 
+                fov_angle=360,
+                available_skills=skills
+            )
+            monster = WorldObject(monster_id, Coordinate(5, 5), ObjectTypeEnum.NPC, component=comp)
+            map_aggregate.add_object(monster)
+
+            player_id = WorldObjectId(1)
+            # 距離2の位置にプレイヤー
+            player = WorldObject(player_id, Coordinate(7, 5), ObjectTypeEnum.PLAYER, component=ActorComponent(race="human"))
+            map_aggregate.add_object(player)
+
+            # 実行
+            action = behavior_service.plan_action(monster_id, map_aggregate)
+
+            assert action.action_type == BehaviorActionType.USE_SKILL
+            assert action.skill_slot_index == 0
+
+        def test_skill_planning_no_skills_returns_move(self, behavior_service, map_aggregate):
+            """スキルがない場合は攻撃せず移動アクションを返すこと"""
+            monster_id = WorldObjectId(100)
+            comp = AutonomousBehaviorComponent(
+                race="goblin",
+                vision_range=5,
+                fov_angle=360,
+                available_skills=[],
+            )
+            monster = WorldObject(monster_id, Coordinate(5, 5), ObjectTypeEnum.NPC, component=comp)
+            map_aggregate.add_object(monster)
+            player = WorldObject(WorldObjectId(1), Coordinate(7, 5), ObjectTypeEnum.PLAYER, component=ActorComponent(race="human"))
+            map_aggregate.add_object(player)
+            action = behavior_service.plan_action(monster_id, map_aggregate)
+            assert action.action_type == BehaviorActionType.MOVE
+            assert action.coordinate is not None
+
+        def test_skill_planning_target_out_of_range_returns_move(self, behavior_service, map_aggregate):
+            """ターゲットが射程外の場合は移動アクションを返すこと"""
+            monster_id = WorldObjectId(100)
+            skills = [MonsterSkillInfo(slot_index=0, range=1, mp_cost=10)]
+            comp = AutonomousBehaviorComponent(
+                race="goblin",
+                vision_range=10,
+                fov_angle=360,
+                available_skills=skills,
+            )
+            monster = WorldObject(monster_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=comp)
+            map_aggregate.add_object(monster)
+            player = WorldObject(WorldObjectId(1), Coordinate(5, 0), ObjectTypeEnum.PLAYER, component=ActorComponent(race="human"))
+            map_aggregate.add_object(player)
+            action = behavior_service.plan_action(monster_id, map_aggregate)
+            assert action.action_type == BehaviorActionType.MOVE
+            assert action.coordinate is not None
+
+        def test_skill_planning_multiple_skills_in_range_returns_first(self, behavior_service, map_aggregate):
+            """射程内に複数スキルがある場合は最初のスキルを選択すること"""
+            monster_id = WorldObjectId(100)
+            skills = [
+                MonsterSkillInfo(slot_index=0, range=5, mp_cost=10),
+                MonsterSkillInfo(slot_index=1, range=5, mp_cost=20),
+            ]
+            comp = AutonomousBehaviorComponent(
+                race="goblin",
+                vision_range=5,
+                fov_angle=360,
+                available_skills=skills,
+            )
+            monster = WorldObject(monster_id, Coordinate(5, 5), ObjectTypeEnum.NPC, component=comp)
+            map_aggregate.add_object(monster)
+            player = WorldObject(WorldObjectId(1), Coordinate(6, 5), ObjectTypeEnum.PLAYER, component=ActorComponent(race="human"))
+            map_aggregate.add_object(player)
+            action = behavior_service.plan_action(monster_id, map_aggregate)
+            assert action.action_type == BehaviorActionType.USE_SKILL
+            assert action.skill_slot_index == 0
 
     class TestVisibility:
         """視認判定のテスト"""

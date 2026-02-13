@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import List
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
@@ -6,6 +7,7 @@ from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
 from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
 from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterTemplateValidationException
+from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
 
 
 @dataclass(frozen=True)
@@ -19,8 +21,10 @@ class MonsterTemplate:
     race: Race
     faction: MonsterFactionEnum
     description: str
+    skill_ids: List[SkillId] = None
 
     def __post_init__(self):
+        object.__setattr__(self, "skill_ids", self.skill_ids or [])
         if not self.name or not self.name.strip():
             raise MonsterTemplateValidationException("Monster name cannot be empty")
         
