@@ -77,3 +77,19 @@ class MapTransitionInvalidException(MovementInvalidException):
 
     def __init__(self, player_id: int, message: str):
         super().__init__(message, player_id)
+
+
+class GatewayObjectNotFoundException(MovementCommandException):
+    """ゲートウェイ通過時にマップ上にオブジェクトが存在しない場合の例外"""
+
+    def __init__(self, object_id: int, spot_id: int):
+        message = f"ゲートウェイ通過対象のオブジェクトがマップ上に存在しません: object_id={object_id}, spot_id={spot_id}"
+        super().__init__(message, "GATEWAY_OBJECT_NOT_FOUND", spot_id=spot_id)
+
+
+class GatewayMonsterNotFoundException(MovementCommandException):
+    """ゲートウェイ通過時にワールドオブジェクトIDに紐づくモンスターが見つからない場合の例外"""
+
+    def __init__(self, world_object_id: int):
+        message = f"ゲートウェイ通過対象のモンスターが見つかりません: world_object_id={world_object_id}"
+        super().__init__(message, "GATEWAY_MONSTER_NOT_FOUND")

@@ -31,6 +31,7 @@ from ai_rpg_world.domain.combat.service.combat_logic_service import CombatLogicS
 from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
@@ -82,6 +83,10 @@ class TestMonsterAggregate:
         )
 
     @pytest.fixture
+    def spot_id(self) -> SpotId:
+        return SpotId(1)
+
+    @pytest.fixture
     def monster(self, monster_template: MonsterTemplate, skill_loadout: SkillLoadoutAggregate) -> MonsterAggregate:
         return MonsterAggregate.create(
             monster_id=MonsterId.create(1),
@@ -109,15 +114,16 @@ class TestMonsterAggregate:
             assert hasattr(event, "occurred_at")
 
     class TestSpawn:
-        def test_spawn_success(self, monster: MonsterAggregate):
+        def test_spawn_success(self, monster: MonsterAggregate, spot_id: SpotId):
             # Given
             coordinate = Coordinate(10, 20, 0)
 
             # When
-            monster.spawn(coordinate)
+            monster.spawn(coordinate, spot_id)
 
             # Then
             assert monster.coordinate == coordinate
+            assert monster.spot_id == spot_id
             assert monster.status == MonsterStatusEnum.ALIVE
             assert monster.hp.value == monster.template.base_stats.max_hp
             assert monster.mp.value == monster.template.base_stats.max_mp
@@ -126,19 +132,20 @@ class TestMonsterAggregate:
             assert any(isinstance(e, MonsterSpawnedEvent) for e in events)
             spawn_event = next(e for e in events if isinstance(e, MonsterSpawnedEvent))
             assert spawn_event.coordinate == {"x": 10, "y": 20, "z": 0}
+            assert spawn_event.spot_id == spot_id
 
-        def test_spawn_already_spawned_raises_error(self, monster: MonsterAggregate):
+        def test_spawn_already_spawned_raises_error(self, monster: MonsterAggregate, spot_id: SpotId):
             # Given
-            monster.spawn(Coordinate(0, 0, 0))
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
 
             # When & Then
             with pytest.raises(MonsterAlreadySpawnedException):
-                monster.spawn(Coordinate(1, 1, 0))
+                monster.spawn(Coordinate(1, 1, 0), spot_id)
 
     class TestApplyDamage:
-        def test_apply_damage_success(self, monster: MonsterAggregate):
+        def test_apply_damage_success(self, monster: MonsterAggregate, spot_id: SpotId):
             # Given
-            monster.spawn(Coordinate(0, 0, 0))
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
             monster.clear_events()
 
             # When
@@ -159,9 +166,9 @@ class TestMonsterAggregate:
             with pytest.raises(MonsterNotSpawnedException):
                 monster.apply_damage(10, WorldTick(10))
 
-        def test_apply_damage_already_dead_raises_error(self, monster: MonsterAggregate):
+        def test_apply_damage_already_dead_raises_error(self, monster: MonsterAggregate, spot_id: SpotId):
             # Given
-            monster.spawn(Coordinate(0, 0, 0))
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
             monster.apply_damage(100, WorldTick(10))
 
             # When & Then
@@ -169,9 +176,9 @@ class TestMonsterAggregate:
                 monster.apply_damage(1, WorldTick(11))
 
     class TestCombatOrchestration:
-        def test_application_style_damage_flow_success(self, monster: MonsterAggregate):
+        def test_application_style_damage_flow_success(self, monster: MonsterAggregate, spot_id: SpotId):
             # Given
-            monster.spawn(Coordinate(0, 0, 0))
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
             attacker_stats = BaseStats(
                 max_hp=100,
                 max_mp=30,
@@ -203,9 +210,9 @@ class TestMonsterAggregate:
             assert event.damage == 42
             assert event.current_hp == 58
 
-        def test_application_style_damage_flow_evaded(self, monster: MonsterAggregate):
+        def test_application_style_damage_flow_evaded(self, monster: MonsterAggregate, spot_id: SpotId):
             # Given
-            monster.spawn(Coordinate(1, 1, 0))
+            monster.spawn(Coordinate(1, 1, 0), spot_id)
             attacker_stats = BaseStats(
                 max_hp=100,
                 max_mp=30,
@@ -238,9 +245,9 @@ class TestMonsterAggregate:
             assert event.current_hp == 100
 
     class TestRecordEvasion:
-        def test_record_evasion_success(self, monster: MonsterAggregate):
+        def test_record_evasion_success(self, monster: MonsterAggregate, spot_id: SpotId):
             # Given
-            monster.spawn(Coordinate(2, 3, 0))
+            monster.spawn(Coordinate(2, 3, 0), spot_id)
             monster.apply_damage(20, WorldTick(1))
             monster.clear_events()
 
@@ -263,19 +270,48 @@ class TestMonsterAggregate:
             with pytest.raises(MonsterNotSpawnedException):
                 monster.record_evasion()
 
-        def test_record_evasion_dead_raises_error(self, monster: MonsterAggregate):
+        def test_record_evasion_dead_raises_error(self, monster: MonsterAggregate, spot_id: SpotId):
             # Given
-            monster.spawn(Coordinate(0, 0, 0))
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
             monster.apply_damage(100, WorldTick(10))
 
             # When & Then
             with pytest.raises(MonsterAlreadyDeadException):
                 monster.record_evasion()
 
+    class TestUpdateMapPlacement:
+        """update_map_placement（ゲートウェイ等によるマップ間移動）のテスト"""
+
+        def test_update_map_placement_success(self, monster: MonsterAggregate, spot_id: SpotId):
+            """出現済みモンスターの座標・スポットを更新できること"""
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
+            new_spot = SpotId(2)
+            new_coord = Coordinate(5, 10, 0)
+
+            monster.update_map_placement(new_spot, new_coord)
+
+            assert monster.spot_id == new_spot
+            assert monster.coordinate == new_coord
+
+        def test_update_map_placement_not_spawned_raises_error(self, monster: MonsterAggregate):
+            """未出現のモンスターで update_map_placement すると MonsterAlreadyDeadException となること"""
+            with pytest.raises(MonsterAlreadyDeadException):
+                monster.update_map_placement(SpotId(1), Coordinate(0, 0, 0))
+
+        def test_update_map_placement_after_death_raises_error(
+            self, monster: MonsterAggregate, spot_id: SpotId
+        ):
+            """死亡済みのモンスターで update_map_placement すると MonsterAlreadyDeadException となること"""
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
+            monster.apply_damage(100, WorldTick(10))
+
+            with pytest.raises(MonsterAlreadyDeadException):
+                monster.update_map_placement(SpotId(2), Coordinate(1, 1, 0))
+
     class TestDeathAndRespawn:
-        def test_death_by_damage_adds_reward_event(self, monster: MonsterAggregate, monster_template: MonsterTemplate):
+        def test_death_by_damage_adds_reward_event(self, monster: MonsterAggregate, monster_template: MonsterTemplate, spot_id: SpotId):
             # Given
-            monster.spawn(Coordinate(1, 2, 3))
+            monster.spawn(Coordinate(1, 2, 3), spot_id)
             current_tick = WorldTick(100)
 
             # When
@@ -293,15 +329,15 @@ class TestMonsterAggregate:
             assert die_event.gold == monster_template.reward_info.gold
             assert die_event.loot_table_id == monster_template.reward_info.loot_table_id
 
-        def test_respawn_success(self, monster: MonsterAggregate):
+        def test_respawn_success(self, monster: MonsterAggregate, spot_id: SpotId):
             # Given
-            monster.spawn(Coordinate(0, 0, 0))
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
             monster.apply_damage(100, WorldTick(100))
             monster.clear_events()
 
             # When
             new_coordinate = Coordinate(5, 5, 0)
-            monster.respawn(new_coordinate, WorldTick(200))
+            monster.respawn(new_coordinate, WorldTick(200), spot_id)
 
             # Then
             assert monster.status == MonsterStatusEnum.ALIVE
@@ -315,27 +351,28 @@ class TestMonsterAggregate:
             event = events[0]
             assert isinstance(event, MonsterRespawnedEvent)
             assert event.coordinate == {"x": 5, "y": 5, "z": 0}
+            assert event.spot_id == spot_id
 
-        def test_respawn_too_early_raises_error(self, monster: MonsterAggregate):
-            monster.spawn(Coordinate(0, 0, 0))
+        def test_respawn_too_early_raises_error(self, monster: MonsterAggregate, spot_id: SpotId):
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
             monster.apply_damage(100, WorldTick(100))
 
             with pytest.raises(MonsterRespawnIntervalNotMetException):
-                monster.respawn(Coordinate(0, 0, 0), WorldTick(150))
+                monster.respawn(Coordinate(0, 0, 0), WorldTick(150), spot_id)
 
-        def test_respawn_not_dead_raises_error(self, monster: MonsterAggregate):
-            monster.spawn(Coordinate(0, 0, 0))
+        def test_respawn_not_dead_raises_error(self, monster: MonsterAggregate, spot_id: SpotId):
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
             with pytest.raises(MonsterNotDeadException):
-                monster.respawn(Coordinate(0, 0, 0), WorldTick(200))
+                monster.respawn(Coordinate(0, 0, 0), WorldTick(200), spot_id)
 
     class TestShouldRespawn:
-        def test_should_respawn_conditions(self, monster: MonsterAggregate):
-            monster.spawn(Coordinate(0, 0, 0))
+        def test_should_respawn_conditions(self, monster: MonsterAggregate, spot_id: SpotId):
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
             monster.apply_damage(100, WorldTick(100))
             assert monster.should_respawn(WorldTick(150)) is False
             assert monster.should_respawn(WorldTick(200)) is True
 
-        def test_should_respawn_no_auto_respawn(self, monster_template: MonsterTemplate):
+        def test_should_respawn_no_auto_respawn(self, monster_template: MonsterTemplate, spot_id: SpotId):
             # Given
             no_auto_respawn_template = MonsterTemplate(
                 template_id=monster_template.template_id,
@@ -359,16 +396,16 @@ class TestMonsterAggregate:
                 world_object_id=WorldObjectId.create(200),
                 skill_loadout=loadout_200,
             )
-            monster.spawn(Coordinate(0, 0, 0))
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
             monster.apply_damage(100, WorldTick(100))
 
             # Then
             assert monster.should_respawn(WorldTick(1000)) is False
 
     class TestRecoveryAndRegeneration:
-        def test_heal_hp_success(self, monster: MonsterAggregate):
+        def test_heal_hp_success(self, monster: MonsterAggregate, spot_id: SpotId):
             # Given
-            monster.spawn(Coordinate(0, 0, 0))
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
             monster.apply_damage(50, WorldTick(10))
             monster.clear_events()
 
@@ -384,9 +421,9 @@ class TestMonsterAggregate:
             assert event.amount == 30
             assert event.current_hp == 80
 
-        def test_recover_mp_success(self, monster: MonsterAggregate):
+        def test_recover_mp_success(self, monster: MonsterAggregate, spot_id: SpotId):
             # Given
-            monster.spawn(Coordinate(0, 0, 0))
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
             monster.use_mp(40)
             monster.clear_events()
 
@@ -402,9 +439,9 @@ class TestMonsterAggregate:
             assert event.amount == 20
             assert event.current_mp == 30
 
-        def test_on_tick_regeneration(self, monster: MonsterAggregate):
+        def test_on_tick_regeneration(self, monster: MonsterAggregate, spot_id: SpotId):
             # Given
-            monster.spawn(Coordinate(0, 0, 0))
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
             monster.apply_damage(50, WorldTick(10))
             monster.use_mp(40)
             monster.clear_events()
@@ -420,9 +457,9 @@ class TestMonsterAggregate:
             assert any(isinstance(e, MonsterHealedEvent) for e in events)
             assert any(isinstance(e, MonsterMpRecoveredEvent) for e in events)
 
-        def test_on_tick_custom_config(self, monster: MonsterAggregate):
+        def test_on_tick_custom_config(self, monster: MonsterAggregate, spot_id: SpotId):
             from ai_rpg_world.domain.monster.service.monster_config_service import DefaultMonsterConfigService
-            monster.spawn(Coordinate(0, 0, 0))
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
             monster.apply_damage(50, WorldTick(10))
             monster.clear_events()
             
@@ -433,13 +470,13 @@ class TestMonsterAggregate:
             assert monster.hp.value == 60 # 50 + 100 * 0.1
 
     class TestMpUsage:
-        def test_use_mp_success(self, monster: MonsterAggregate):
-            monster.spawn(Coordinate(0, 0, 0))
+        def test_use_mp_success(self, monster: MonsterAggregate, spot_id: SpotId):
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
             monster.use_mp(20)
             assert monster.mp.value == 30
 
-        def test_use_mp_insufficient_raises_error(self, monster: MonsterAggregate):
-            monster.spawn(Coordinate(0, 0, 0))
+        def test_use_mp_insufficient_raises_error(self, monster: MonsterAggregate, spot_id: SpotId):
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
             with pytest.raises(MonsterInsufficientMpException):
                 monster.use_mp(60)
 
@@ -448,9 +485,9 @@ class TestMonsterAggregate:
                 monster.use_mp(1)
 
     class TestStatusEffects:
-        def test_get_effective_stats_with_multiplicative_buffs(self, monster: MonsterAggregate):
+        def test_get_effective_stats_with_multiplicative_buffs(self, monster: MonsterAggregate, spot_id: SpotId):
             # Given
-            monster.spawn(Coordinate(0, 0, 0))
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
             # 攻撃力 20
             # 1.5倍バフと1.2倍バフを付与
             from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
@@ -465,9 +502,9 @@ class TestMonsterAggregate:
             # 20 * 1.5 * 1.2 = 36
             assert effective_stats.attack == 36
 
-        def test_get_effective_stats_filters_expired_effects(self, monster: MonsterAggregate):
+        def test_get_effective_stats_filters_expired_effects(self, monster: MonsterAggregate, spot_id: SpotId):
             # Given
-            monster.spawn(Coordinate(0, 0, 0))
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
             # 攻撃力 20
             # 期限切れ(Tick 5)の 2.0倍バフ
             from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
@@ -484,9 +521,9 @@ class TestMonsterAggregate:
             assert effective_stats.attack == 30
             assert len(monster._active_effects) == 1
 
-        def test_buff_and_debuff_stacking(self, monster: MonsterAggregate):
+        def test_buff_and_debuff_stacking(self, monster: MonsterAggregate, spot_id: SpotId):
             # Given
-            monster.spawn(Coordinate(0, 0, 0))
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
             # 攻撃力 20
             # 1.5倍バフと 0.5倍デバフ
             from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect

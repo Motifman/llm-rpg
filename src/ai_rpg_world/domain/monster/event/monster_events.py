@@ -5,6 +5,7 @@ from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
@@ -18,6 +19,7 @@ class MonsterCreatedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
 @dataclass(frozen=True)
 class MonsterSpawnedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
     coordinate: dict
+    spot_id: SpotId
 
 
 @dataclass(frozen=True)
@@ -34,11 +36,13 @@ class MonsterDiedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
     gold: int
     loot_table_id: Optional[str] = None
     killer_player_id: Optional[PlayerId] = None
+    spot_id: Optional[SpotId] = None
 
 
 @dataclass(frozen=True)
 class MonsterRespawnedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
     coordinate: dict
+    spot_id: SpotId
 
 
 @dataclass(frozen=True)

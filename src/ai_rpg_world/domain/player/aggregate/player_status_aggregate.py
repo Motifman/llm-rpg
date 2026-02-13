@@ -554,4 +554,3 @@ class PlayerStatusAggregate(AggregateRoot):
     def cleanup_expired_effects(self, current_tick: WorldTick) -> None:
         """期限切れのステータス効果を削除する"""
         self._active_effects = [e for e in self._active_effects if not e.is_expired(current_tick)]
-

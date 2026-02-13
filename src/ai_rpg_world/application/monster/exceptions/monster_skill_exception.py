@@ -38,3 +38,19 @@ class MonsterNotOnMapException(ApplicationException):
             f"WorldObjectId={world_object_id}, SpotId={spot_id}"
         )
         super().__init__(message, world_object_id=world_object_id, spot_id=spot_id)
+
+
+class MonsterNotFoundException(ApplicationException):
+    """スポーン時にモンスターが見つからない場合の例外"""
+
+    def __init__(self, monster_id: int):
+        message = f"モンスターが見つかりません: MonsterId={monster_id}"
+        super().__init__(message, monster_id=monster_id)
+
+
+class MonsterAlreadySpawnedApplicationException(ApplicationException):
+    """スポーン時に既に出現済みの場合の例外"""
+
+    def __init__(self, monster_id: int):
+        message = f"モンスターは既に出現済みです: MonsterId={monster_id}"
+        super().__init__(message, monster_id=monster_id)

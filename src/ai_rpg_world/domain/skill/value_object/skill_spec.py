@@ -25,6 +25,7 @@ class SkillSpec:
     hit_effects: Tuple[HitEffect, ...] = ()
     required_skill_ids: Tuple[SkillId, ...] = ()
     is_awakened_deck_only: bool = False
+    targeting_range: int = 1
 
     def __post_init__(self):
         if not self.name or not self.name.strip():
@@ -42,6 +43,10 @@ class SkillSpec:
         if self.power_multiplier <= 0:
             raise SkillSpecValidationException(
                 f"power_multiplier must be greater than 0: {self.power_multiplier}"
+            )
+        if self.targeting_range < 0:
+            raise SkillSpecValidationException(
+                f"targeting_range cannot be negative: {self.targeting_range}"
             )
 
         self._validate_optional_cost("mp_cost", self.mp_cost)

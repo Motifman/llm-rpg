@@ -3,6 +3,8 @@ from ai_rpg_world.application.monster.exceptions.monster_skill_exception import 
     MonsterSkillNotFoundInSlotException,
     MapNotFoundForMonsterSkillException,
     MonsterNotOnMapException,
+    MonsterNotFoundException,
+    MonsterAlreadySpawnedApplicationException,
 )
 
 __all__ = [
@@ -10,4 +12,6 @@ __all__ = [
     "MonsterSkillNotFoundInSlotException",
     "MapNotFoundForMonsterSkillException",
     "MonsterNotOnMapException",
+    "MonsterNotFoundException",
+    "MonsterAlreadySpawnedApplicationException",
 ]
