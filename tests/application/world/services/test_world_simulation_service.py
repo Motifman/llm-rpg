@@ -37,9 +37,11 @@ from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, BehaviorStateEnum, DirectionEnum, BehaviorActionType
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
-from ai_rpg_world.application.common.exceptions import ApplicationException
-from ai_rpg_world.application.monster.services.monster_skill_application_service import MonsterSkillApplicationService
+from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
+from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
+from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import MonsterSkillExecutionDomainService
+from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import InMemoryMonsterAggregateRepository
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
@@ -75,6 +77,19 @@ from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxDeactivatedEvent,
 )
 
+
+class _InMemorySkillLoadoutRepo:
+    """テスト用のスキルロードアウト保存（WorldSimulation は save のみ使用）"""
+    def __init__(self):
+        self._data = {}
+
+    def save(self, loadout):
+        self._data[loadout.loadout_id] = loadout
+
+    def find_by_id(self, loadout_id):
+        return self._data.get(loadout_id)
+
+
 class TestWorldSimulationApplicationService:
     @pytest.fixture
     def setup_service(self):
@@ -103,26 +118,16 @@ class TestWorldSimulationApplicationService:
         hit_box_config = DefaultHitBoxConfigService(substeps_per_tick=4)
         hit_box_collision_service = HitBoxCollisionDomainService()
         
-        # モンスターリポジトリとサービスの追加
-        from unittest.mock import MagicMock
-        monster_repo = MagicMock()
-        skill_loadout_repo = MagicMock()
-        skill_spec_repo = MagicMock()
+        # モンスター・スキルロードアウト・ドメインサービス・ファクトリ
+        monster_repo = InMemoryMonsterAggregateRepository(data_store, uow)
+        skill_loadout_repo = _InMemorySkillLoadoutRepo()
         skill_execution_service = SkillExecutionDomainService(
-            SkillTargetingDomainService(), 
-            SkillToHitBoxDomainService()
+            SkillTargetingDomainService(),
+            SkillToHitBoxDomainService(),
         )
+        monster_skill_execution_domain_service = MonsterSkillExecutionDomainService(skill_execution_service)
         from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
-        monster_skill_service = MonsterSkillApplicationService(
-            monster_repository=monster_repo,
-            skill_loadout_repository=skill_loadout_repo,
-            skill_spec_repository=skill_spec_repo,
-            physical_map_repository=repository,
-            hit_box_repository=hit_box_repo,
-            skill_execution_service=skill_execution_service,
-            hit_box_factory=HitBoxFactory(),
-            unit_of_work=uow
-        )
+        hit_box_factory = HitBoxFactory()
 
         service = WorldSimulationApplicationService(
             time_provider=time_provider,
@@ -133,12 +138,15 @@ class TestWorldSimulationApplicationService:
             behavior_service=behavior_service,
             weather_config_service=weather_config,
             unit_of_work=uow,
-            monster_skill_service=monster_skill_service,
+            monster_repository=monster_repo,
+            skill_loadout_repository=skill_loadout_repo,
+            monster_skill_execution_domain_service=monster_skill_execution_domain_service,
+            hit_box_factory=hit_box_factory,
             hit_box_config_service=hit_box_config,
             hit_box_collision_service=hit_box_collision_service,
         )
         
-        return service, time_provider, repository, weather_zone_repo, player_status_repo, hit_box_repo, uow, event_publisher, monster_skill_service, monster_repo
+        return service, time_provider, repository, weather_zone_repo, player_status_repo, hit_box_repo, uow, event_publisher, monster_repo, skill_loadout_repo
 
     def test_tick_advances_time(self, setup_service):
         """tickによってゲーム時間が進むこと"""
@@ -250,6 +258,37 @@ class TestWorldSimulationApplicationService:
         assert call_count[0] == 2
         assert updated_map.get_object(actor1_id).coordinate == Coordinate(2, 2)
         assert updated_map.get_object(actor2_id).coordinate == Coordinate(3, 4)
+
+    def test_tick_domain_exception_converted_to_application_exception(self, setup_service):
+        """tick内でDomainExceptionが発生した場合、ApplicationExceptionに変換されて送出されること"""
+        service, _, _, _, _, _, _, _, _, _ = setup_service
+
+        with mock.patch.object(
+            service._physical_map_repository,
+            "find_all",
+            side_effect=DomainException("domain rule violation"),
+        ):
+            with pytest.raises(ApplicationException) as excinfo:
+                service.tick()
+        assert "domain rule violation" in str(excinfo.value)
+        assert excinfo.value.cause is not None
+        assert isinstance(excinfo.value.cause, DomainException)
+
+    def test_tick_unexpected_exception_raises_system_error_exception(self, setup_service):
+        """tick内で予期しない例外が発生した場合、SystemErrorExceptionが送出されること"""
+        service, _, _, _, _, _, _, _, _, _ = setup_service
+
+        with mock.patch.object(
+            service._physical_map_repository,
+            "find_all",
+            side_effect=RuntimeError("repo error"),
+        ):
+            with pytest.raises(SystemErrorException) as excinfo:
+                service.tick()
+        assert "tick" in str(excinfo.value).lower()
+        assert "failed" in str(excinfo.value).lower()
+        assert excinfo.value.original_exception is not None
+        assert isinstance(excinfo.value.original_exception, RuntimeError)
 
     def test_tick_raises_application_exception_when_use_skill_has_no_slot_index(self, setup_service):
         """USE_SKILLアクションでskill_slot_indexがNoneの場合にApplicationExceptionが発生すること"""
@@ -921,68 +960,85 @@ class TestWorldSimulationApplicationService:
         assert updated.current_coordinate == Coordinate(0, 0, 0)
 
     def test_tick_executes_monster_skill(self, setup_service):
-        """tickによってモンスターがスキルを使用すること"""
-        service, _, repository, _, _, _, _, _, monster_skill_service, monster_repo = setup_service
+        """tickによってモンスターがスキルを使用し、HitBoxが生成されること"""
+        service, _, repository, _, _, hit_box_repo, _, _, monster_repo, skill_loadout_repo = setup_service
         
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(10) for y in range(10)]
         physical_map = PhysicalMapAggregate.create(spot_id, tiles)
         
-        # モンスターの追加
         monster_obj_id = WorldObjectId(100)
         skills = [MonsterSkillInfo(slot_index=0, range=2, mp_cost=10)]
         monster_comp = AutonomousBehaviorComponent(
             state=BehaviorStateEnum.CHASE,
             vision_range=5,
             available_skills=skills,
-            fov_angle=360.0 # 全方位見えるように設定
+            fov_angle=360.0,
         )
-        monster_comp.target_id = WorldObjectId(1) # プレイヤーをターゲット
+        monster_comp.target_id = WorldObjectId(1)
         monster_comp.last_known_target_position = Coordinate(7, 5)
         monster_obj = WorldObject(monster_obj_id, Coordinate(5, 5), ObjectTypeEnum.NPC, component=monster_comp)
         physical_map.add_object(monster_obj)
         
-        # ターゲット（プレイヤー）の追加
         player_id = WorldObjectId(1)
-        # 敵対関係を認識させるために種族を設定
         player_obj = WorldObject(
-            player_id, 
-            Coordinate(7, 5), 
-            ObjectTypeEnum.PLAYER, 
-            component=ActorComponent(race="human", faction="player")
+            player_id,
+            Coordinate(7, 5),
+            ObjectTypeEnum.PLAYER,
+            component=ActorComponent(race="human", faction="player"),
         )
         physical_map.add_object(player_obj)
         
         repository.save(physical_map)
         
-        # 敵対関係の設定
-        behavior_service = service._behavior_service
-        behavior_service._hostility_service = ConfigurableHostilityService(
-            race_hostility_table={"monster": {"human"}}
+        # モンスター集約を準備（スキル装備・スポーン済み）
+        template = MonsterTemplate(
+            template_id=MonsterTemplateId(1),
+            name="test",
+            base_stats=BaseStats(100, 100, 10, 10, 10, 0.05, 0.05),
+            reward_info=RewardInfo(10, 10, "loot"),
+            respawn_info=RespawnInfo(100, True),
+            race=Race.HUMAN,
+            faction=MonsterFactionEnum.ENEMY,
+            description="Test monster",
+            skill_ids=[SkillId(1)],
         )
+        skill_spec = SkillSpec(
+            skill_id=SkillId(1),
+            name="s1",
+            element=Element.NEUTRAL,
+            deck_cost=1,
+            cast_lock_ticks=1,
+            cooldown_ticks=5,
+            power_multiplier=1.0,
+            hit_pattern=SkillHitPattern.single_pulse(SkillHitPatternType.MELEE, HitBoxShape.single_cell()),
+            mp_cost=10,
+        )
+        loadout = SkillLoadoutAggregate.create(SkillLoadoutId(500), monster_obj_id.value, 10, 10)
+        loadout.equip_skill(DeckTier.NORMAL, 0, skill_spec)
+        skill_loadout_repo.save(loadout)
         
-        # モンスターのコンポーネントを再取得して、ターゲットが見えるか確認
-        monster_obj = physical_map.get_object(monster_obj_id)
-        # 向きをターゲットに向ける
-        monster_obj.turn(DirectionEnum.EAST)
+        monster = MonsterAggregate.create(MonsterId(1), template, monster_obj_id, skill_loadout=loadout)
+        monster.spawn(Coordinate(5, 5), spot_id)
+        monster_repo.save(monster)
         
-        # モンスター集約の準備（リポジトリのモック）
-        from unittest.mock import MagicMock
-        monster = MagicMock(spec=MonsterAggregate)
-        monster.world_object_id = monster_obj_id
-        monster_repo.find_by_world_object_id.return_value = monster
-        
-        # 実行
-        with mock.patch.object(monster_skill_service, 'use_monster_skill') as mocked_use_skill:
+        # plan_action が USE_SKILL を返すようにモック
+        use_skill_action = BehaviorAction(
+            action_type=BehaviorActionType.USE_SKILL,
+            coordinate=None,
+            skill_slot_index=0,
+        )
+        with mock.patch.object(service._behavior_service, "plan_action", return_value=use_skill_action):
             service.tick()
-            
-            # スキル使用が呼ばれたことを確認
-            mocked_use_skill.assert_called_once_with(
-                monster_world_object_id=monster_obj_id,
-                spot_id=spot_id,
-                slot_index=0,
-                current_tick=WorldTick(11)
-            )
+        
+        # HitBox が 1 つ生成されていること
+        active = hit_box_repo.find_active_by_spot_id(spot_id)
+        assert len(active) == 1
+        assert active[0].owner_id == monster_obj_id
+        assert active[0].skill_id == "1"
+        # モンスターの MP 消費
+        updated_monster = monster_repo.find_by_world_object_id(monster_obj_id)
+        assert updated_monster.mp.value == 90
 
     def _create_sample_player(self, player_id, spot_id, coord, stamina_val=100):
         base_stats = BaseStats(100, 50, 10, 10, 10, 0.05, 0.05)

@@ -70,14 +70,12 @@ class InMemoryHitBoxRepository(HitBoxRepository, InMemoryRepositoryBase):
         return self._execute_operation(operation)
 
     def batch_generate_ids(self, count: int) -> List[HitBoxId]:
-        def operation():
-            ids = []
-            for _ in range(count):
-                ids.append(HitBoxId(self._data_store.next_hit_box_id))
-                self._data_store.next_hit_box_id += 1
-            return ids
-
-        return self._execute_operation(operation)
+        """ID生成は常に即時実行する（呼び出し元が戻り値を必要とするため、UoWに遅延しない）"""
+        ids = []
+        for _ in range(count):
+            ids.append(HitBoxId(self._data_store.next_hit_box_id))
+            self._data_store.next_hit_box_id += 1
+        return ids
 
     def save_all(self, entities: List[HitBoxAggregate]) -> None:
         cloned_entities = [self._clone(e) for e in entities]
