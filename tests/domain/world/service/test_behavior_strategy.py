@@ -20,14 +20,18 @@ from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorActio
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
+from ai_rpg_world.domain.world.value_object.behavior_context import SkillSelectionContext
 from ai_rpg_world.domain.world.service.skill_selection_policy import (
     FirstInRangeSkillPolicy,
     SkillSelectionPolicy,
+    BossSkillPolicy,
 )
 from ai_rpg_world.domain.world.service.behavior_strategy import (
     BehaviorStrategy,
     DefaultBehaviorStrategy,
+    BossBehaviorStrategy,
 )
+from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.world.event.behavior_events import BehaviorStuckEvent
 from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import (
     AStarPathfindingStrategy,
@@ -331,3 +335,204 @@ class TestDefaultBehaviorStrategy:
         events = map_aggregate.get_events()
         assert any(isinstance(e, BehaviorStuckEvent) for e in events)
         assert comp.state == BehaviorStateEnum.RETURN
+
+    def test_decide_action_enrage_with_target_in_skill_range_returns_use_skill(
+        self,
+        strategy: DefaultBehaviorStrategy,
+        map_aggregate: PhysicalMapAggregate,
+    ):
+        """ENRAGE 状態でターゲットが射程内のとき USE_SKILL を返すこと（CHASE と同様）"""
+        skills = [MonsterSkillInfo(slot_index=0, range=5, mp_cost=10)]
+        comp = AutonomousBehaviorComponent(
+            state=BehaviorStateEnum.ENRAGE,
+            vision_range=5,
+            available_skills=skills,
+        )
+        comp.last_known_target_position = Coordinate(7, 5)
+        comp.target_id = WorldObjectId(1)
+        actor = WorldObject(
+            object_id=WorldObjectId(100),
+            coordinate=Coordinate(5, 5),
+            object_type=ObjectTypeEnum.NPC,
+            is_blocking=False,
+            component=comp,
+        )
+        map_aggregate.add_object(actor)
+        target = WorldObject(
+            object_id=WorldObjectId(1),
+            coordinate=Coordinate(7, 5),
+            object_type=ObjectTypeEnum.PLAYER,
+            is_blocking=False,
+            component=ActorComponent(race="human"),
+        )
+        map_aggregate.add_object(target)
+        action = strategy.decide_action(actor, map_aggregate, comp, target)
+        assert action.action_type == BehaviorActionType.USE_SKILL
+        assert action.skill_slot_index == 0
+
+    def test_decide_action_territory_radius_exceeded_returns_toward_initial(
+        self,
+        strategy: DefaultBehaviorStrategy,
+        map_aggregate: PhysicalMapAggregate,
+    ):
+        """CHASE/ENRAGE 中に初期位置から territory_radius を超えたら RETURN に遷移し初期位置へ MOVE を返すこと"""
+        comp = AutonomousBehaviorComponent(
+            state=BehaviorStateEnum.CHASE,
+            vision_range=10,
+            territory_radius=3,
+            initial_position=Coordinate(1, 1),
+        )
+        comp.last_known_target_position = Coordinate(8, 8)
+        comp.target_id = WorldObjectId(1)
+        actor = WorldObject(
+            object_id=WorldObjectId(100),
+            coordinate=Coordinate(5, 5),
+            object_type=ObjectTypeEnum.NPC,
+            is_blocking=False,
+            component=comp,
+        )
+        map_aggregate.add_object(actor)
+        action = strategy.decide_action(actor, map_aggregate, comp, None)
+        assert comp.state == BehaviorStateEnum.RETURN
+        assert action.action_type == BehaviorActionType.MOVE
+        assert action.coordinate is not None
+
+    def test_decide_action_pack_rally_coordinate_follower_moves_toward_rally(
+        self,
+        pathfinding_service: PathfindingService,
+        map_aggregate: PhysicalMapAggregate,
+    ):
+        """フォロワー（pack_id あり・is_pack_leader=False）が IDLE のとき pack_rally_coordinate へ MOVE を返すこと"""
+        skill_policy = FirstInRangeSkillPolicy()
+        strategy = DefaultBehaviorStrategy(pathfinding_service, skill_policy)
+        pack_id = PackId.create("pack1")
+        comp = AutonomousBehaviorComponent(
+            state=BehaviorStateEnum.IDLE,
+            vision_range=5,
+            pack_id=pack_id,
+            is_pack_leader=False,
+        )
+        actor = WorldObject(
+            object_id=WorldObjectId(100),
+            coordinate=Coordinate(5, 5),
+            object_type=ObjectTypeEnum.NPC,
+            is_blocking=False,
+            component=comp,
+        )
+        map_aggregate.add_object(actor)
+        rally = Coordinate(8, 5)
+        action = strategy.decide_action(
+            actor,
+            map_aggregate,
+            comp,
+            None,
+            pack_rally_coordinate=rally,
+        )
+        assert action.action_type == BehaviorActionType.MOVE
+        assert action.coordinate is not None
+        assert action.coordinate != actor.coordinate
+
+
+class TestBossBehaviorStrategy:
+    """BossBehaviorStrategy のテスト（BossSkillPolicy 使用・AOE優先の確認）"""
+
+    @pytest.fixture
+    def pathfinding_service(self) -> PathfindingService:
+        return PathfindingService(AStarPathfindingStrategy())
+
+    @pytest.fixture
+    def strategy(self, pathfinding_service: PathfindingService) -> BossBehaviorStrategy:
+        return BossBehaviorStrategy(pathfinding_service)
+
+    @pytest.fixture
+    def map_aggregate(self) -> PhysicalMapAggregate:
+        tiles = [
+            Tile(Coordinate(x, y), TerrainType.grass())
+            for x in range(10)
+            for y in range(10)
+        ]
+        return PhysicalMapAggregate.create(SpotId(1), tiles)
+
+    def test_decide_action_uses_boss_skill_policy_aoe_priority(
+        self,
+        strategy: BossBehaviorStrategy,
+        map_aggregate: PhysicalMapAggregate,
+    ):
+        """BossSkillPolicy により targets_in_range_by_slot で AOE 優先のスロットを返すこと"""
+        skills = [
+            MonsterSkillInfo(slot_index=0, range=5, mp_cost=10),
+            MonsterSkillInfo(slot_index=1, range=5, mp_cost=20),
+        ]
+        comp = AutonomousBehaviorComponent(
+            state=BehaviorStateEnum.CHASE,
+            vision_range=5,
+            available_skills=skills,
+        )
+        comp.target_id = WorldObjectId(1)
+        comp.last_known_target_position = Coordinate(6, 5)
+        actor = WorldObject(
+            object_id=WorldObjectId(100),
+            coordinate=Coordinate(5, 5),
+            object_type=ObjectTypeEnum.NPC,
+            is_blocking=False,
+            component=comp,
+        )
+        map_aggregate.add_object(actor)
+        target = WorldObject(
+            object_id=WorldObjectId(1),
+            coordinate=Coordinate(6, 5),
+            object_type=ObjectTypeEnum.PLAYER,
+            is_blocking=False,
+            component=ActorComponent(race="human"),
+        )
+        map_aggregate.add_object(target)
+        skill_context = SkillSelectionContext(
+            usable_slot_indices={0, 1},
+            targets_in_range_by_slot={0: 1, 1: 3},
+        )
+        action = strategy.decide_action(
+            actor,
+            map_aggregate,
+            comp,
+            target,
+            skill_context=skill_context,
+        )
+        assert action.action_type == BehaviorActionType.USE_SKILL
+        assert action.skill_slot_index == 1
+
+    def test_decide_action_boss_without_context_returns_first_in_range(
+        self,
+        strategy: BossBehaviorStrategy,
+        map_aggregate: PhysicalMapAggregate,
+    ):
+        """context なしのときは射程内の最初のスキルを返すこと"""
+        skills = [
+            MonsterSkillInfo(slot_index=0, range=5, mp_cost=10),
+            MonsterSkillInfo(slot_index=1, range=5, mp_cost=20),
+        ]
+        comp = AutonomousBehaviorComponent(
+            state=BehaviorStateEnum.CHASE,
+            vision_range=5,
+            available_skills=skills,
+        )
+        comp.target_id = WorldObjectId(1)
+        comp.last_known_target_position = Coordinate(6, 5)
+        actor = WorldObject(
+            object_id=WorldObjectId(100),
+            coordinate=Coordinate(5, 5),
+            object_type=ObjectTypeEnum.NPC,
+            is_blocking=False,
+            component=comp,
+        )
+        map_aggregate.add_object(actor)
+        target = WorldObject(
+            object_id=WorldObjectId(1),
+            coordinate=Coordinate(6, 5),
+            object_type=ObjectTypeEnum.PLAYER,
+            is_blocking=False,
+            component=ActorComponent(race="human"),
+        )
+        map_aggregate.add_object(target)
+        action = strategy.decide_action(actor, map_aggregate, comp, target)
+        assert action.action_type == BehaviorActionType.USE_SKILL
+        assert action.skill_slot_index == 0

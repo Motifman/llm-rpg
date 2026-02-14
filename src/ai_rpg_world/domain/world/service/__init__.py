@@ -3,21 +3,19 @@ from ai_rpg_world.domain.world.service.pathfinding_strategy import PathfindingSt
 from ai_rpg_world.domain.world.service.target_selection_policy import (
     TargetSelectionPolicy,
     NearestTargetPolicy,
+    HighestThreatTargetPolicy,
+    LowestHpTargetPolicy,
 )
 from ai_rpg_world.domain.world.service.skill_selection_policy import (
     SkillSelectionPolicy,
     FirstInRangeSkillPolicy,
+    BossSkillPolicy,
 )
 from ai_rpg_world.domain.world.service.behavior_strategy import (
     BehaviorStrategy,
     DefaultBehaviorStrategy,
     BossBehaviorStrategy,
 )
-from ai_rpg_world.domain.world.service.target_selection_policy import (
-    HighestThreatTargetPolicy,
-    LowestHpTargetPolicy,
-)
-from ai_rpg_world.domain.world.service.skill_selection_policy import BossSkillPolicy
 from ai_rpg_world.domain.world.service.allegiance_service import (
     AllegianceService,
     PackAllegianceService,

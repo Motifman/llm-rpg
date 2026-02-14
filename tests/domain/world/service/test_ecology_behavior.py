@@ -4,7 +4,7 @@ import pytest
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, BehaviorStateEnum, EcologyTypeEnum
+from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, BehaviorStateEnum, EcologyTypeEnum, BehaviorActionType
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import (
@@ -143,3 +143,43 @@ class TestEcologyAmbush:
         service.plan_action(WorldObjectId(100), map_aggregate)
         assert comp.target_id is None
         assert comp.state == BehaviorStateEnum.IDLE
+
+
+class TestEcologyTerritorial:
+    """TERRITORIAL: 縄張り（初期位置から territory_radius を超えたら帰還）"""
+
+    @pytest.fixture
+    def service(self):
+        path = PathfindingService(AStarPathfindingStrategy())
+        hostility = ConfigurableHostilityService(race_hostility_table={"goblin": {"human"}})
+        return BehaviorService(path, hostility)
+
+    @pytest.fixture
+    def map_aggregate(self):
+        tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(15) for y in range(15)]
+        return PhysicalMapAggregate.create(SpotId(1), tiles)
+
+    def test_territorial_beyond_radius_returns_to_initial(self, service, map_aggregate):
+        """CHASE 中に初期位置から territory_radius を超えると RETURN に遷移し帰還すること"""
+        comp = AutonomousBehaviorComponent(
+            race="goblin",
+            vision_range=10,
+            fov_angle=360,
+            territory_radius=3,
+            initial_position=Coordinate(2, 2),
+        )
+        comp.state = BehaviorStateEnum.CHASE
+        comp.target_id = WorldObjectId(1)
+        comp.last_known_target_position = Coordinate(10, 10)
+        monster = WorldObject(
+            WorldObjectId(100), Coordinate(7, 7), ObjectTypeEnum.NPC, is_blocking=False, component=comp
+        )
+        map_aggregate.add_object(monster)
+        player = WorldObject(
+            WorldObjectId(1), Coordinate(10, 10), ObjectTypeEnum.PLAYER, is_blocking=False, component=ActorComponent(race="human")
+        )
+        map_aggregate.add_object(player)
+        action = service.plan_action(WorldObjectId(100), map_aggregate)
+        assert comp.state == BehaviorStateEnum.RETURN
+        assert action.action_type == BehaviorActionType.MOVE
+        assert action.coordinate is not None
