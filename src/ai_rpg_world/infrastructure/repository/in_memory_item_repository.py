@@ -18,15 +18,14 @@ class InMemoryItemRepository(ItemRepository, InMemoryRepositoryBase):
 
     def find_by_id(self, item_instance_id: ItemInstanceId) -> Optional[ItemAggregate]:
         """IDで検索"""
+        pending = self._get_pending_aggregate(item_instance_id)
+        if pending is not None:
+            return self._clone(pending)
         return self._clone(self._data_store.items.get(item_instance_id))
 
     def find_by_ids(self, item_instance_ids: List[ItemInstanceId]) -> List[ItemAggregate]:
         """IDのリストで検索"""
-        return [
-            self._clone(self._data_store.items[iid])
-            for iid in item_instance_ids
-            if iid in self._data_store.items
-        ]
+        return [x for iid in item_instance_ids for x in [self.find_by_id(iid)] if x is not None]
 
     def find_all(self) -> List[ItemAggregate]:
         """全件取得"""
@@ -40,6 +39,7 @@ class InMemoryItemRepository(ItemRepository, InMemoryRepositoryBase):
             return cloned_aggregate
             
         self._register_aggregate(aggregate)
+        self._register_pending_if_uow(aggregate.item_instance_id, aggregate)
         return self._execute_operation(operation)
 
     def delete(self, item_instance_id: ItemInstanceId) -> bool:

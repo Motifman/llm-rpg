@@ -1,6 +1,8 @@
 """RelationshipEventHandlerServiceのテスト"""
 
+import logging
 import pytest
+from ai_rpg_world.application.common.exceptions import SystemErrorException
 from ai_rpg_world.application.social.services.relationship_event_handler_service import RelationshipEventHandlerService
 from ai_rpg_world.domain.sns.event import SnsUserBlockedEvent
 from ai_rpg_world.domain.sns.value_object.user_id import UserId
@@ -249,11 +251,13 @@ class TestRelationshipEventHandlerServiceImprovements:
             raise Exception("Mock save exception")
         user_repository_improvements.save = mock_save
 
-        # 実行（例外が発生してもサービスは停止しない）
-        service_improvements.handle_user_blocked(event)
-
-        # クリーンアップ
-        user_repository_improvements.save = original_save
+        try:
+            # 実行（予期しない例外は SystemErrorException でラップされて再送出される）
+            with pytest.raises(SystemErrorException) as exc_info:
+                service_improvements.handle_user_blocked(event)
+            assert "Mock save exception" in str(exc_info.value)
+        finally:
+            user_repository_improvements.save = original_save
 
         # 検証：ログにエラーが記録されていることを確認
         assert any("Failed to handle event" in record.message for record in caplog.records)

@@ -23,10 +23,14 @@ class InMemoryWeatherZoneRepository(WeatherZoneRepository, InMemoryRepositoryBas
         def operation():
             self._zones[cloned_zone.zone_id] = cloned_zone
             return cloned_zone
-            
+
+        self._register_pending_if_uow(weather_zone.zone_id, weather_zone)
         return self._execute_operation(operation)
 
     def find_by_id(self, zone_id: WeatherZoneId) -> Optional[WeatherZone]:
+        pending = self._get_pending_aggregate(zone_id)
+        if pending is not None:
+            return self._clone(pending)
         return self._clone(self._zones.get(zone_id))
 
     def find_by_ids(self, zone_ids: List[WeatherZoneId]) -> List[WeatherZone]:

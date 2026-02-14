@@ -39,12 +39,16 @@ class InMemorySnsNotificationRepository(SnsNotificationRepository, InMemoryRepos
         def operation():
             self._notifications[cloned_notification.notification_id] = cloned_notification
             return cloned_notification
-            
+
         self._register_aggregate(notification)
+        self._register_pending_if_uow(notification.notification_id, notification)
         return self._execute_operation(operation)
 
     def find_by_id(self, notification_id: NotificationId) -> Optional[Notification]:
         """通知IDで通知を取得"""
+        pending = self._get_pending_aggregate(notification_id)
+        if pending is not None:
+            return self._clone(pending)
         return self._clone(self._notifications.get(notification_id))
 
     def find_by_user_id(self, user_id: UserId, limit: int = 50, offset: int = 0) -> List[Notification]:

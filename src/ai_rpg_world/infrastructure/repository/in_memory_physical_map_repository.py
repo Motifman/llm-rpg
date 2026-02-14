@@ -17,21 +17,25 @@ class InMemoryPhysicalMapRepository(PhysicalMapRepository, InMemoryRepositoryBas
         return self._data_store.physical_maps
 
     def find_by_id(self, entity_id: SpotId) -> Optional[PhysicalMapAggregate]:
+        pending = self._get_pending_aggregate(entity_id)
+        if pending is not None:
+            return self._clone(pending)
         return self._clone(self._maps.get(entity_id))
-    
+
     def find_by_spot_id(self, spot_id: SpotId) -> Optional[PhysicalMapAggregate]:
         return self.find_by_id(spot_id)
 
     def find_by_ids(self, entity_ids: List[SpotId]) -> List[PhysicalMapAggregate]:
-        return [self._clone(self._maps[sid]) for sid in entity_ids if sid in self._maps]
+        return [x for sid in entity_ids for x in [self.find_by_id(sid)] if x is not None]
     
     def save(self, physical_map: PhysicalMapAggregate) -> PhysicalMapAggregate:
         cloned_map = self._clone(physical_map)
         def operation():
             self._maps[cloned_map.spot_id] = cloned_map
             return cloned_map
-            
+
         self._register_aggregate(physical_map)
+        self._register_pending_if_uow(physical_map.spot_id, physical_map)
         return self._execute_operation(operation)
     
     def delete(self, spot_id: SpotId) -> bool:

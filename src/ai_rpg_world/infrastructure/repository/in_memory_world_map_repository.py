@@ -31,6 +31,9 @@ class InMemoryWorldMapRepository(WorldMapRepository, InMemoryRepositoryBase):
 
     def find_by_id(self, world_id: WorldId) -> Optional[WorldMapAggregate]:
         """ワールドIDで世界地図を検索"""
+        pending = self._get_pending_aggregate(world_id)
+        if pending is not None:
+            return self._clone(pending)
         return self._world_maps.get(world_id)
 
     def find_by_ids(self, world_ids: List[WorldId]) -> List[WorldMapAggregate]:
@@ -51,7 +54,8 @@ class InMemoryWorldMapRepository(WorldMapRepository, InMemoryRepositoryBase):
             for spot in world_map.get_all_spots():
                 self._spot_to_world_id[spot.spot_id] = world_map.world_id
             return world_map
-            
+
+        self._register_pending_if_uow(world_map.world_id, world_map)
         return self._execute_operation(operation)
     
     def delete(self, world_id: WorldId) -> bool:

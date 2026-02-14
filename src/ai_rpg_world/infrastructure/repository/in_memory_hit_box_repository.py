@@ -24,10 +24,13 @@ class InMemoryHitBoxRepository(HitBoxRepository, InMemoryRepositoryBase):
         return self._data_store.hit_boxes
 
     def find_by_id(self, entity_id: HitBoxId) -> Optional[HitBoxAggregate]:
+        pending = self._get_pending_aggregate(entity_id)
+        if pending is not None:
+            return self._clone(pending)
         return self._clone(self._hit_boxes.get(entity_id))
 
     def find_by_ids(self, entity_ids: List[HitBoxId]) -> List[HitBoxAggregate]:
-        return [self._clone(self._hit_boxes[eid]) for eid in entity_ids if eid in self._hit_boxes]
+        return [x for eid in entity_ids for x in [self.find_by_id(eid)] if x is not None]
 
     def save(self, entity: HitBoxAggregate) -> HitBoxAggregate:
         cloned = self._clone(entity)
@@ -37,6 +40,7 @@ class InMemoryHitBoxRepository(HitBoxRepository, InMemoryRepositoryBase):
             return cloned
 
         self._register_aggregate(entity)
+        self._register_pending_if_uow(entity.hit_box_id, entity)
         return self._execute_operation(operation)
 
     def delete(self, entity_id: HitBoxId) -> bool:
@@ -84,4 +88,5 @@ class InMemoryHitBoxRepository(HitBoxRepository, InMemoryRepositoryBase):
 
         for entity in entities:
             self._register_aggregate(entity)
+            self._register_pending_if_uow(entity.hit_box_id, entity)
         self._execute_operation(operation)

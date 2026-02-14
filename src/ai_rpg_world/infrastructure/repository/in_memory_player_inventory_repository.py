@@ -18,18 +18,22 @@ class InMemoryPlayerInventoryRepository(PlayerInventoryRepository, InMemoryRepos
         return self._data_store.player_inventories
 
     def find_by_id(self, player_id: PlayerId) -> Optional[PlayerInventoryAggregate]:
+        pending = self._get_pending_aggregate(player_id)
+        if pending is not None:
+            return self._clone(pending)
         return self._inventories.get(player_id)
-    
+
     def find_by_ids(self, player_ids: List[PlayerId]) -> List[PlayerInventoryAggregate]:
-        return [self._inventories[pid] for pid in player_ids if pid in self._inventories]
-    
+        return [x for pid in player_ids for x in [self.find_by_id(pid)] if x is not None]
+
     def save(self, inventory: PlayerInventoryAggregate) -> PlayerInventoryAggregate:
         cloned_inventory = self._clone(inventory)
         def operation():
             self._inventories[cloned_inventory.player_id] = cloned_inventory
             return cloned_inventory
-            
+
         self._register_aggregate(inventory)
+        self._register_pending_if_uow(inventory.player_id, inventory)
         return self._execute_operation(operation)
     
     def delete(self, player_id: PlayerId) -> bool:

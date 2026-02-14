@@ -2,9 +2,11 @@
 
 インメモリリポジトリを使用して実際の動作をテストする
 """
+import logging
 import pytest
 from datetime import datetime, timedelta
 from unittest.mock import patch
+from ai_rpg_world.application.common.exceptions import SystemErrorException
 from ai_rpg_world.application.social.services.notification_event_handler_service import NotificationEventHandlerService
 from ai_rpg_world.domain.sns.event import (
     SnsUserSubscribedEvent,
@@ -594,9 +596,7 @@ class TestNotificationEventHandlerServiceImprovements:
         return user
 
     def test_exception_handling_in_event_handler(self, service, user_repository, notification_repository, user1, user2, caplog):
-        """イベントハンドラでの例外処理が正しく動作することを確認"""
-        import logging
-        # 特定のロガーのレベルを設定
+        """イベントハンドラで例外発生時に SystemErrorException が送出され、ログにエラーが記録されることを確認"""
         caplog.set_level(logging.ERROR, logger="NotificationEventHandlerService")
 
         # 正常なユーザーIDを使用するが、リポジトリのsaveメソッドが例外を投げるようにする
@@ -613,11 +613,13 @@ class TestNotificationEventHandlerServiceImprovements:
             raise Exception("Mock save exception")
         notification_repository.save = mock_save
 
-        # 実行（例外が発生してもサービスは停止しない）
-        service.handle_user_subscribed(event)
-
-        # クリーンアップ
-        notification_repository.save = original_save
+        try:
+            # 実行（予期しない例外は SystemErrorException でラップされて再送出される）
+            with pytest.raises(SystemErrorException) as exc_info:
+                service.handle_user_subscribed(event)
+            assert "Mock save exception" in str(exc_info.value)
+        finally:
+            notification_repository.save = original_save
 
         # 検証：ログにエラーが記録されていることを確認
         assert any("Failed to handle event" in record.message for record in caplog.records)

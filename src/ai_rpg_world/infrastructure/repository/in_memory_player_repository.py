@@ -21,6 +21,9 @@ class InMemoryPlayerRepository(PlayerRepository, InMemoryRepositoryBase):
         return self._data_store.players
 
     def find_by_id(self, player_id: Any) -> Optional[Any]:
+        pending = self._get_pending_aggregate(player_id)
+        if pending is not None:
+            return self._clone(pending)
         return self._players.get(player_id)
     
     def find_by_name(self, name: str) -> Optional[Any]:
@@ -40,13 +43,15 @@ class InMemoryPlayerRepository(PlayerRepository, InMemoryRepositoryBase):
         return [player for player in self._players.values() if hasattr(player, 'role') and player.role == role]
     
     def save(self, player: Any) -> Any:
+        pid = getattr(player, 'player_id', None)
         def operation():
             # IDの取得を試みる（古いPlayerクラスや新しい集約に対応）
-            pid = getattr(player, 'player_id', None)
             if pid is not None:
                 self._players[pid] = player
             return player
-            
+
+        if pid is not None:
+            self._register_pending_if_uow(pid, player)
         return self._execute_operation(operation)
     
     def delete(self, player_id: Any) -> bool:
