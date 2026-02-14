@@ -16,9 +16,6 @@ from ai_rpg_world.application.world.handlers.monster_spawned_map_placement_handl
 from ai_rpg_world.application.world.services.world_simulation_service import (
     WorldSimulationApplicationService,
 )
-from ai_rpg_world.application.monster.services.monster_skill_application_service import (
-    MonsterSkillApplicationService,
-)
 from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
 from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
 from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
@@ -738,21 +735,12 @@ class TestCombatIntegration:
 
         behavior_service = BehaviorService(PathfindingService(None))
         skill_loadout_repo = MagicMock()
-        skill_spec_repo = MagicMock()
         skill_execution_service = SkillExecutionDomainService(
             SkillTargetingDomainService(),
             SkillToHitBoxDomainService(),
         )
-        monster_skill_service = MonsterSkillApplicationService(
-            monster_repository=monster_repo,
-            skill_loadout_repository=skill_loadout_repo,
-            skill_spec_repository=skill_spec_repo,
-            physical_map_repository=map_repo,
-            hit_box_repository=hit_box_repo,
-            skill_execution_service=skill_execution_service,
-            hit_box_factory=HitBoxFactory(),
-            unit_of_work=uow,
-        )
+        from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import MonsterSkillExecutionDomainService
+        monster_skill_execution_domain_service = MonsterSkillExecutionDomainService(skill_execution_service)
         service = WorldSimulationApplicationService(
             time_provider=time_provider,
             physical_map_repository=map_repo,
@@ -762,7 +750,10 @@ class TestCombatIntegration:
             behavior_service=behavior_service,
             weather_config_service=DefaultWeatherConfigService(1),
             unit_of_work=uow,
-            monster_skill_service=monster_skill_service,
+            monster_repository=monster_repo,
+            skill_loadout_repository=skill_loadout_repo,
+            monster_skill_execution_domain_service=monster_skill_execution_domain_service,
+            hit_box_factory=HitBoxFactory(),
             hit_box_config_service=DefaultHitBoxConfigService(4),
             hit_box_collision_service=HitBoxCollisionDomainService(),
         )

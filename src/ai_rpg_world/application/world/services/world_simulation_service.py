@@ -21,11 +21,15 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
 from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
-from ai_rpg_world.application.monster.services.monster_skill_application_service import MonsterSkillApplicationService
+from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
+from ai_rpg_world.domain.skill.repository.skill_repository import SkillLoadoutRepository
+from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import MonsterSkillExecutionDomainService
+from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
 from ai_rpg_world.domain.world.service.weather_simulation_service import WeatherSimulationService
 from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
 from ai_rpg_world.domain.world.service.weather_config_service import WeatherConfigService
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.combat.service.hit_box_config_service import (
     DefaultHitBoxConfigService,
     HitBoxConfigService,
@@ -38,7 +42,7 @@ from ai_rpg_world.application.common.exceptions import ApplicationException, Sys
 
 class WorldSimulationApplicationService:
     """ワールド全体の進行・シミュレーションを管理するアプリケーションサービス"""
-    
+
     def __init__(
         self,
         time_provider: GameTimeProvider,
@@ -49,7 +53,10 @@ class WorldSimulationApplicationService:
         behavior_service: BehaviorService,
         weather_config_service: WeatherConfigService,
         unit_of_work: UnitOfWork,
-        monster_skill_service: MonsterSkillApplicationService,
+        monster_repository: MonsterRepository,
+        skill_loadout_repository: SkillLoadoutRepository,
+        monster_skill_execution_domain_service: MonsterSkillExecutionDomainService,
+        hit_box_factory: HitBoxFactory,
         hit_box_config_service: Optional[HitBoxConfigService] = None,
         hit_box_collision_service: Optional[HitBoxCollisionDomainService] = None,
     ):
@@ -60,7 +67,10 @@ class WorldSimulationApplicationService:
         self._hit_box_repository = hit_box_repository
         self._behavior_service = behavior_service
         self._weather_config_service = weather_config_service
-        self._monster_skill_service = monster_skill_service
+        self._monster_repository = monster_repository
+        self._skill_loadout_repository = skill_loadout_repository
+        self._monster_skill_execution_domain_service = monster_skill_execution_domain_service
+        self._hit_box_factory = hit_box_factory
         self._hit_box_config_service = hit_box_config_service or DefaultHitBoxConfigService()
         self._hit_box_collision_service = hit_box_collision_service or HitBoxCollisionDomainService()
         self._unit_of_work = unit_of_work
@@ -123,11 +133,11 @@ class WorldSimulationApplicationService:
                                     "USE_SKILL action must have skill_slot_index",
                                     action_type=BehaviorActionType.USE_SKILL,
                                 )
-                            self._monster_skill_service.use_monster_skill(
-                                monster_world_object_id=actor.object_id,
-                                spot_id=physical_map.spot_id,
+                            self._execute_monster_skill_in_tick(
+                                actor_id=actor.object_id,
+                                physical_map=physical_map,
                                 slot_index=action.skill_slot_index,
-                                current_tick=current_tick
+                                current_tick=current_tick,
                             )
                         # WAIT の場合は何もしない
                     except DomainException as e:
@@ -151,6 +161,56 @@ class WorldSimulationApplicationService:
                 self._physical_map_repository.save(physical_map)
             
             return current_tick
+
+    def _execute_monster_skill_in_tick(
+        self,
+        actor_id: WorldObjectId,
+        physical_map: PhysicalMapAggregate,
+        slot_index: int,
+        current_tick: WorldTick,
+    ) -> None:
+        """
+        tick 内で自律アクター（モンスター）のスキル使用を実行する。
+        同一 UoW 内でドメインサービスを呼び、HitBox 生成・集約の保存まで行う。
+        モンスター未検出やドメインルール違反時はログのみでスキップする。
+        """
+        monster = self._monster_repository.find_by_world_object_id(actor_id)
+        if not monster:
+            self._logger.warning(
+                f"Monster not found for world_object_id={actor_id}, skipping USE_SKILL"
+            )
+            return
+
+        loadout = monster.skill_loadout
+        try:
+            spawn_params = self._monster_skill_execution_domain_service.execute(
+                monster=monster,
+                loadout=loadout,
+                physical_map=physical_map,
+                slot_index=slot_index,
+                current_tick=current_tick,
+            )
+        except DomainException as e:
+            self._logger.warning(
+                f"Monster skill skipped for actor {actor_id} due to domain rule: {str(e)}"
+            )
+            return
+
+        skill_spec = loadout.get_current_deck(current_tick.value).get_skill(slot_index)
+        skill_id = str(skill_spec.skill_id) if skill_spec else None
+        hit_box_ids = self._hit_box_repository.batch_generate_ids(len(spawn_params))
+        hit_boxes = self._hit_box_factory.create_from_params(
+            hit_box_ids=hit_box_ids,
+            params=spawn_params,
+            spot_id=physical_map.spot_id,
+            owner_id=actor_id,
+            start_tick=current_tick,
+            skill_id=skill_id,
+        )
+        if hit_boxes:
+            self._hit_box_repository.save_all(hit_boxes)
+        self._monster_repository.save(monster)
+        self._skill_loadout_repository.save(loadout)
 
     def _update_weather_if_needed(self, current_tick: WorldTick) -> Dict[SpotId, WeatherState]:
         """必要に応じて天候を更新する（設定された間隔ごと）
