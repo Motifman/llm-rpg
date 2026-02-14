@@ -35,12 +35,16 @@ class InMemoryReplyRepository(ReplyRepository, InMemoryRepositoryBase):
         def operation():
             self._replies[cloned_reply.reply_id] = cloned_reply
             return None
-            
+
         self._register_aggregate(reply)
+        self._register_pending_if_uow(reply.reply_id, reply)
         return self._execute_operation(operation)
 
     def find_by_id(self, reply_id: ReplyId) -> Optional[ReplyAggregate]:
         """IDでリプライを取得"""
+        pending = self._get_pending_aggregate(reply_id)
+        if pending is not None:
+            return self._clone(pending)
         return self._replies.get(reply_id)
 
     def find_by_post_id(self, post_id: PostId, limit: int = 20, offset: int = 0) -> List[ReplyAggregate]:

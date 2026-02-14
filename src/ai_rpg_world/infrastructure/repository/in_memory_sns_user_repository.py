@@ -26,6 +26,9 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
 
     def find_by_id(self, user_id: UserId) -> Optional[UserAggregate]:
         """ユーザーIDでユーザーを検索"""
+        pending = self._get_pending_aggregate(user_id)
+        if pending is not None:
+            return self._clone(pending)
         return self._users.get(user_id)
 
     def find_by_ids(self, user_ids: List[UserId]) -> List[UserAggregate]:
@@ -203,6 +206,7 @@ class InMemorySnsUserRepository(UserRepository, InMemoryRepositoryBase):
             return cloned_user
             
         self._register_aggregate(user)
+        self._register_pending_if_uow(user.user_id, user)
         return self._execute_operation(operation)
 
     def delete(self, user_id: UserId) -> bool:

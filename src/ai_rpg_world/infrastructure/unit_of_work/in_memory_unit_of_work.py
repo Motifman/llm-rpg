@@ -2,7 +2,7 @@
 InMemoryUnitOfWork - インメモリ実装のUnit of Work
 実際のデータベーストランザクションは存在しないが、論理的なトランザクション境界を提供します。
 """
-from typing import List, Callable, Any, Tuple, TYPE_CHECKING, Optional
+from typing import List, Callable, Any, Tuple, TYPE_CHECKING, Optional, Dict
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 
@@ -22,6 +22,7 @@ class InMemoryUnitOfWork(UnitOfWork):
         self._pending_operations: List[Callable[[], None]] = []
         self._pending_events: List[DomainEvent] = []
         self._registered_aggregates: set = set()
+        self._pending_aggregates: Dict[Tuple[str, Any], Any] = {}  # (repo_key, entity_id) -> 未反映の集約
         self._processed_sync_count = 0
         self._committed = False
         self._event_publisher = event_publisher
@@ -41,6 +42,7 @@ class InMemoryUnitOfWork(UnitOfWork):
         self._pending_operations = []
         self._pending_events = []
         self._registered_aggregates = set()
+        self._pending_aggregates = {}
         self._processed_sync_count = 0
         self._committed = False
         
@@ -77,6 +79,7 @@ class InMemoryUnitOfWork(UnitOfWork):
             self._in_transaction = False
             self._pending_operations.clear()
             self._pending_events.clear()
+            self._pending_aggregates = {}
             self._processed_sync_count = 0 # リセット
             self._snapshot = None
 
@@ -167,9 +170,22 @@ class InMemoryUnitOfWork(UnitOfWork):
         # 保留中の操作をクリア
         self._pending_operations.clear()
         self._pending_events.clear()
+        self._pending_aggregates = {}
         self._committed = False
         self._in_transaction = False
         self._snapshot = None
+
+    def register_pending_aggregate(self, repo_key: str, entity_id: Any, aggregate: Any) -> None:
+        """同一トランザクション内で find が未反映の集約を返せるよう、保留中の集約を登録する"""
+        if not self._in_transaction:
+            return
+        self._pending_aggregates[(repo_key, entity_id)] = aggregate
+
+    def get_pending_aggregate(self, repo_key: str, entity_id: Any) -> Optional[Any]:
+        """保留中の集約があれば返す（同一トランザクション内の一貫した find 用）"""
+        if not self._in_transaction:
+            return None
+        return self._pending_aggregates.get((repo_key, entity_id))
 
     def add_operation(self, operation: Callable[[], None]) -> None:
         """保留中の操作を追加"""

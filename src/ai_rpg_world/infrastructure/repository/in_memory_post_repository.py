@@ -26,6 +26,9 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
         """ポストIDでポストを検索"""
         try:
             post_id_obj = PostId(post_id) if not isinstance(post_id, PostId) else post_id
+            pending = self._get_pending_aggregate(post_id_obj)
+            if pending is not None:
+                return self._clone(pending)
             return self._posts.get(post_id_obj)
         except (ValueError, TypeError):
             return None
@@ -34,7 +37,7 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
         """複数のポストIDでポストを検索"""
         result = []
         for post_id in post_ids:
-            post = self._posts.get(post_id)
+            post = self.find_by_id(post_id)
             if post:
                 result.append(post)
         return result
@@ -45,8 +48,9 @@ class InMemoryPostRepository(PostRepository, InMemoryRepositoryBase):
         def operation():
             self._posts[cloned_post.post_id] = cloned_post
             return cloned_post
-            
+
         self._register_aggregate(post)
+        self._register_pending_if_uow(post.post_id, post)
         return self._execute_operation(operation)
 
     def delete(self, post_id: PostId) -> bool:

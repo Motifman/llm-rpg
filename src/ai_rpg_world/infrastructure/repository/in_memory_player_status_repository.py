@@ -18,18 +18,22 @@ class InMemoryPlayerStatusRepository(PlayerStatusRepository, InMemoryRepositoryB
         return self._data_store.player_statuses
 
     def find_by_id(self, player_id: PlayerId) -> Optional[PlayerStatusAggregate]:
+        pending = self._get_pending_aggregate(player_id)
+        if pending is not None:
+            return self._clone(pending)
         return self._clone(self._statuses.get(player_id))
-    
+
     def find_by_ids(self, player_ids: List[PlayerId]) -> List[PlayerStatusAggregate]:
-        return [self._clone(self._statuses[pid]) for pid in player_ids if pid in self._statuses]
-    
+        return [x for pid in player_ids for x in [self.find_by_id(pid)] if x is not None]
+
     def save(self, status: PlayerStatusAggregate) -> PlayerStatusAggregate:
         cloned_status = self._clone(status)
         def operation():
             self._statuses[cloned_status.player_id] = cloned_status
             return cloned_status
-            
+
         self._register_aggregate(status)
+        self._register_pending_if_uow(status.player_id, status)
         return self._execute_operation(operation)
     
     def save_all(self, statuses: List[PlayerStatusAggregate]) -> None:
@@ -39,9 +43,10 @@ class InMemoryPlayerStatusRepository(PlayerStatusRepository, InMemoryRepositoryB
             for s in cloned_statuses:
                 self._statuses[s.player_id] = s
             return None
-            
+
         for s in statuses:
             self._register_aggregate(s)
+            self._register_pending_if_uow(s.player_id, s)
         self._execute_operation(operation)
     
     def delete(self, player_id: PlayerId) -> bool:

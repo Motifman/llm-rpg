@@ -1,6 +1,8 @@
 import logging
 from typing import List, TYPE_CHECKING, Callable, Any, Optional
 from datetime import datetime, timedelta
+from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
+from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
 from ai_rpg_world.domain.sns.event import (
     SnsUserSubscribedEvent,
@@ -43,15 +45,24 @@ class NotificationEventHandlerService:
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _execute_in_separate_transaction(self, operation: Callable[[], Any], context: dict) -> None:
-        """別トランザクションで操作を実行し、共通の例外処理を行う"""
+        """別トランザクションで操作を実行。ApplicationException/DomainException は再送出、その他は SystemErrorException でラップして送出する。"""
         unit_of_work = self._unit_of_work_factory.create()
         try:
             with unit_of_work:
                 operation()
+        except (ApplicationException, DomainException):
+            raise
         except Exception as e:
-            self._logger.error(f"Failed to handle event in {context.get('handler', 'unknown')}: {str(e)}",
-                             extra=context, exc_info=True)
-            # イベントハンドラなので、例外を再スローせず処理を継続
+            self._logger.exception(
+                "Failed to handle event in %s: %s",
+                context.get("handler", "unknown"),
+                e,
+                extra=context,
+            )
+            raise SystemErrorException(
+                f"Notification event handling failed in {context.get('handler', 'unknown')}: {e}",
+                original_exception=e,
+            ) from e
 
 
     def handle_user_subscribed(self, event: SnsUserSubscribedEvent) -> None:

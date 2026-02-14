@@ -21,18 +21,22 @@ class InMemoryTradeRepository(TradeRepository, InMemoryRepositoryBase):
         return self._data_store.trades
 
     def find_by_id(self, trade_id: TradeId) -> Optional[TradeAggregate]:
+        pending = self._get_pending_aggregate(trade_id)
+        if pending is not None:
+            return self._clone(pending)
         return self._clone(self._trades.get(trade_id))
-    
+
     def find_by_ids(self, trade_ids: List[TradeId]) -> List[TradeAggregate]:
-        return [self._clone(self._trades[tid]) for tid in trade_ids if tid in self._trades]
-    
+        return [x for tid in trade_ids for x in [self.find_by_id(tid)] if x is not None]
+
     def save(self, trade: TradeAggregate) -> TradeAggregate:
         cloned_trade = self._clone(trade)
         def operation():
             self._trades[cloned_trade.trade_id] = cloned_trade
             return cloned_trade
-            
+
         self._register_aggregate(trade)
+        self._register_pending_if_uow(trade.trade_id, trade)
         return self._execute_operation(operation)
     
     def delete(self, trade_id: TradeId) -> bool:

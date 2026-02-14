@@ -1,5 +1,7 @@
 import logging
 from typing import TYPE_CHECKING, Callable, Any, Optional
+from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
+from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
 from ai_rpg_world.domain.trade.event.trade_event import (
     TradeOfferedEvent,
@@ -41,14 +43,24 @@ class TradeEventHandler:
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _execute_in_separate_transaction(self, operation: Callable[[], Any], context: dict) -> None:
-        """別トランザクションで操作を実行"""
+        """別トランザクションで操作を実行。ApplicationException/DomainException は再送出、その他は SystemErrorException でラップして送出する。"""
         unit_of_work = self._unit_of_work_factory.create()
         try:
             with unit_of_work:
                 operation()
+        except (ApplicationException, DomainException):
+            raise
         except Exception as e:
-            self._logger.error(f"Failed to handle event in {context.get('handler', 'unknown')}: {str(e)}",
-                             extra=context, exc_info=True)
+            self._logger.exception(
+                "Failed to handle event in %s: %s",
+                context.get("handler", "unknown"),
+                e,
+                extra=context,
+            )
+            raise SystemErrorException(
+                f"Trade event handling failed in {context.get('handler', 'unknown')}: {e}",
+                original_exception=e,
+            ) from e
 
     def handle_trade_offered(self, event: TradeOfferedEvent) -> None:
         """取引出品イベントのハンドリング"""

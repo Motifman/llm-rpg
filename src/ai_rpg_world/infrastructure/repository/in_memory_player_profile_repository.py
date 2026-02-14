@@ -19,6 +19,9 @@ class InMemoryPlayerProfileRepository(PlayerProfileRepository, InMemoryRepositor
         return self._data_store.player_profiles
 
     def find_by_id(self, player_id: PlayerId) -> Optional[PlayerProfileAggregate]:
+        pending = self._get_pending_aggregate(player_id)
+        if pending is not None:
+            return self._clone(pending)
         return self._profiles.get(player_id)
     
     def find_by_ids(self, player_ids: List[PlayerId]) -> List[PlayerProfileAggregate]:
@@ -40,6 +43,7 @@ class InMemoryPlayerProfileRepository(PlayerProfileRepository, InMemoryRepositor
             return cloned_profile
             
         self._register_aggregate(profile)
+        self._register_pending_if_uow(profile.player_id, profile)
         return self._execute_operation(operation)
     
     def delete(self, player_id: PlayerId) -> bool:

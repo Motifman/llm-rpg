@@ -28,10 +28,13 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
         return self._data_store.world_object_to_monster_id
 
     def find_by_id(self, entity_id: MonsterId) -> Optional[MonsterAggregate]:
+        pending = self._get_pending_aggregate(entity_id)
+        if pending is not None:
+            return self._clone(pending)
         return self._clone(self._monsters.get(entity_id))
 
     def find_by_ids(self, entity_ids: List[MonsterId]) -> List[MonsterAggregate]:
-        return [self._clone(self._monsters[eid]) for eid in entity_ids if eid in self._monsters]
+        return [x for eid in entity_ids for x in [self.find_by_id(eid)] if x is not None]
 
     def find_by_world_object_id(self, world_object_id: WorldObjectId) -> Optional[MonsterAggregate]:
         monster_id = self._world_object_to_monster_id.get(world_object_id)
@@ -54,6 +57,7 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
             return cloned
 
         self._register_aggregate(entity)
+        self._register_pending_if_uow(entity.monster_id, entity)
         return self._execute_operation(operation)
 
     def delete(self, entity_id: MonsterId) -> bool:

@@ -370,7 +370,6 @@ class TestMovementApplicationService:
         status_after_step = status_repo.find_by_id(PlayerId(player_id))
         assert len(status_after_step.planned_path) < initial_path_len
 
-    @pytest.mark.skip(reason="GatewayHandler が process_sync_events 内で find_by_spot_id 時に保存前のマップを参照している可能性。UoW で未コミットの集約を find で返す対応後に有効化")
     def test_gateway_transition_uses_service(self, setup_service):
         """ゲートウェイ移動がドメインサービスを通じて正しく処理されること"""
         service, status_repo, profile_repo, phys_repo, world_repo, _, _, _ = setup_service
@@ -588,7 +587,6 @@ class TestMovementApplicationService:
         assert loc_dto.area_id == 10
         assert loc_dto.area_name == "Town Square"
 
-    @pytest.mark.skip(reason="Gateway 通過時に GatewayHandler がオブジェクトを発見できない問題（test_gateway_transition_uses_service と同様）")
     def test_multi_hop_destination_and_movement(self, setup_service):
         """複数スポットを跨ぐ移動のテスト"""
         service, status_repo, profile_repo, phys_repo, world_repo, _, time_provider, _ = setup_service

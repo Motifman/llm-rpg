@@ -56,6 +56,24 @@ class InMemoryRepositoryBase:
             if hasattr(self._unit_of_work, 'register_aggregate'):
                 self._unit_of_work.register_aggregate(aggregate)
 
+    def _repo_key(self) -> str:
+        """同一トランザクション内の保留集約のキー用。リポジトリ種別の一意な文字列。"""
+        return self.__class__.__name__
+
+    def _register_pending_if_uow(self, entity_id: Any, aggregate: Any) -> None:
+        """保存予定の集約をUoWに登録し、同一トランザクション内の find で未反映の状態を返せるようにする"""
+        if self._unit_of_work and self._is_in_transaction():
+            if hasattr(self._unit_of_work, 'register_pending_aggregate'):
+                self._unit_of_work.register_pending_aggregate(self._repo_key(), entity_id, aggregate)
+
+    def _get_pending_aggregate(self, entity_id: Any) -> Optional[Any]:
+        """同一トランザクション内で保留中の集約があれば返す"""
+        if not self._unit_of_work or not self._is_in_transaction():
+            return None
+        if hasattr(self._unit_of_work, 'get_pending_aggregate'):
+            return self._unit_of_work.get_pending_aggregate(self._repo_key(), entity_id)
+        return None
+
     def _is_in_transaction(self) -> bool:
         """トランザクション中かどうかを確認"""
         if not self._unit_of_work:

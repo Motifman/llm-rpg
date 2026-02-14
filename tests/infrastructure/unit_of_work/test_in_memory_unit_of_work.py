@@ -211,3 +211,23 @@ class TestInMemoryUnitOfWork:
             
             # パブリッシャーに渡されている
             mock_publisher.publish_sync_events.assert_called_once_with([mock_event])
+
+    def test_register_pending_aggregate_and_get_pending_aggregate(self):
+        """同一トランザクション内で保留集約を登録・取得できること。コミット/ロールバックでクリアされること。"""
+        obj = Mock()
+        self.unit_of_work.begin()
+        self.unit_of_work.register_pending_aggregate("TestRepo", 1, obj)
+        assert self.unit_of_work.get_pending_aggregate("TestRepo", 1) is obj
+        assert self.unit_of_work.get_pending_aggregate("TestRepo", 2) is None
+        assert self.unit_of_work.get_pending_aggregate("OtherRepo", 1) is None
+        self.unit_of_work.rollback()
+        assert self.unit_of_work.get_pending_aggregate("TestRepo", 1) is None
+
+    def test_pending_aggregates_cleared_after_commit(self):
+        """コミット後に保留集約がクリアされること。"""
+        obj = Mock()
+        self.unit_of_work._event_publisher = Mock()
+        with self.unit_of_work:
+            self.unit_of_work.register_pending_aggregate("TestRepo", 1, obj)
+            assert self.unit_of_work.get_pending_aggregate("TestRepo", 1) is obj
+        assert self.unit_of_work.get_pending_aggregate("TestRepo", 1) is None
