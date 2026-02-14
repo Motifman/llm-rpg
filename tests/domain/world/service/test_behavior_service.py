@@ -16,6 +16,8 @@ from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingSer
 from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import AStarPathfindingStrategy
 from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
 from ai_rpg_world.domain.world.service.hostility_service import ConfigurableHostilityService
+from ai_rpg_world.domain.world.service.skill_selection_policy import SkillSelectionPolicy
+from ai_rpg_world.domain.world.service.behavior_strategy import DefaultBehaviorStrategy
 from ai_rpg_world.domain.world.exception.behavior_exception import (
     VisionRangeValidationException,
     FOVAngleValidationException,
@@ -348,3 +350,42 @@ class TestBehaviorService:
             
             behavior_service.plan_next_move(WorldObjectId(100), map_agg)
             assert comp.state == BehaviorStateEnum.CHASE
+
+    class TestCustomPolicyAndStrategy:
+        """カスタムポリシー・戦略を注入した BehaviorService の動作"""
+
+        def test_behavior_service_uses_injected_skill_policy(self, pathfinding_service, map_aggregate):
+            """注入したスキル選択ポリシーが使われること（2番目スキルを選ぶポリシー）"""
+            class SecondInRangeSkillPolicy(SkillSelectionPolicy):
+                def select_slot(self, actor, target, available_skills):
+                    in_range = [
+                        s for s in available_skills
+                        if actor.coordinate.distance_to(target.coordinate) <= s.range
+                    ]
+                    return in_range[1].slot_index if len(in_range) > 1 else (in_range[0].slot_index if in_range else None)
+
+            strategy = DefaultBehaviorStrategy(pathfinding_service, SecondInRangeSkillPolicy())
+            hostility = ConfigurableHostilityService(race_hostility_table={"goblin": {"human"}})
+            service = BehaviorService(pathfinding_service, hostility, strategy=strategy)
+
+            monster_id = WorldObjectId(100)
+            skills = [
+                MonsterSkillInfo(slot_index=0, range=5, mp_cost=10),
+                MonsterSkillInfo(slot_index=1, range=5, mp_cost=20),
+            ]
+            comp = AutonomousBehaviorComponent(
+                race="goblin",
+                vision_range=5,
+                fov_angle=360,
+                available_skills=skills,
+            )
+            monster = WorldObject(monster_id, Coordinate(5, 5), ObjectTypeEnum.NPC, component=comp)
+            map_aggregate.add_object(monster)
+            player = WorldObject(
+                WorldObjectId(1), Coordinate(6, 5), ObjectTypeEnum.PLAYER, component=ActorComponent(race="human")
+            )
+            map_aggregate.add_object(player)
+
+            action = service.plan_action(monster_id, map_aggregate)
+            assert action.action_type == BehaviorActionType.USE_SKILL
+            assert action.skill_slot_index == 1
