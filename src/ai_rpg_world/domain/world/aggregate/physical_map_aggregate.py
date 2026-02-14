@@ -13,7 +13,13 @@ from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.area_trigger import AreaTrigger
 from ai_rpg_world.domain.world.entity.location_area import LocationArea
 from ai_rpg_world.domain.world.entity.gateway import Gateway
-from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent, InteractableComponent, HarvestableComponent
+from ai_rpg_world.domain.world.entity.world_object_component import (
+    ActorComponent,
+    AutonomousBehaviorComponent,
+    InteractableComponent,
+    HarvestableComponent,
+)
+from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.world.entity.map_trigger import MapTrigger
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.enum.world_enum import MovementCapabilityEnum, DirectionEnum, EnvironmentTypeEnum
@@ -233,6 +239,17 @@ class PhysicalMapAggregate(AggregateRoot):
     def actors(self) -> List[WorldObject]:
         """マップ上の全アクターを取得する"""
         return [obj for obj in self._objects.values() if obj.is_actor]
+
+    def get_actors_in_pack(self, pack_id: PackId) -> List[WorldObject]:
+        """指定した pack_id に属する自律行動アクターのみを返す。"""
+        result = []
+        for obj in self._objects.values():
+            if not obj.is_actor:
+                continue
+            comp = obj.component
+            if isinstance(comp, AutonomousBehaviorComponent) and comp.pack_id == pack_id:
+                result.append(obj)
+        return result
 
     def get_tile(self, coordinate: Coordinate) -> Tile:
         if coordinate not in self._tiles:

@@ -21,6 +21,8 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
 from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
+from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
+from ai_rpg_world.domain.world.value_object.behavior_context import SkillSelectionContext, TargetSelectionContext
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
 from ai_rpg_world.domain.skill.repository.skill_repository import SkillLoadoutRepository
 from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import MonsterSkillExecutionDomainService
@@ -38,6 +40,7 @@ from ai_rpg_world.domain.combat.service.hit_box_collision_service import HitBoxC
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
+from ai_rpg_world.application.world.aggro_store import AggroStore
 
 
 class WorldSimulationApplicationService:
@@ -59,6 +62,7 @@ class WorldSimulationApplicationService:
         hit_box_factory: HitBoxFactory,
         hit_box_config_service: Optional[HitBoxConfigService] = None,
         hit_box_collision_service: Optional[HitBoxCollisionDomainService] = None,
+        aggro_store: Optional[AggroStore] = None,
     ):
         self._time_provider = time_provider
         self._physical_map_repository = physical_map_repository
@@ -74,6 +78,7 @@ class WorldSimulationApplicationService:
         self._hit_box_config_service = hit_box_config_service or DefaultHitBoxConfigService()
         self._hit_box_collision_service = hit_box_collision_service or HitBoxCollisionDomainService()
         self._unit_of_work = unit_of_work
+        self._aggro_store = aggro_store
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def tick(self) -> WorldTick:
@@ -120,8 +125,16 @@ class WorldSimulationApplicationService:
                         continue
                     
                     try:
+                        # 自律行動アクター用の skill_context / target_context を組み立て（モンスターでない場合は None）
+                        skill_context = self._build_skill_context_for_actor(actor, physical_map, current_tick)
+                        target_context = self._build_target_context_for_actor(actor, physical_map)
                         # 自律行動アクターの計画
-                        action = self._behavior_service.plan_action(actor.object_id, physical_map)
+                        action = self._behavior_service.plan_action(
+                            actor.object_id,
+                            physical_map,
+                            skill_context=skill_context,
+                            target_context=target_context,
+                        )
                         
                         if action.action_type == BehaviorActionType.MOVE:
                             # 移動実行
@@ -161,6 +174,49 @@ class WorldSimulationApplicationService:
                 self._physical_map_repository.save(physical_map)
             
             return current_tick
+
+    def _build_skill_context_for_actor(
+        self,
+        actor: WorldObject,
+        physical_map: PhysicalMapAggregate,
+        current_tick: WorldTick,
+    ) -> Optional[SkillSelectionContext]:
+        """
+        自律行動のモンスターについて、使用可能スロットから SkillSelectionContext を組み立てる。
+        モンスターでない、または取得失敗時は None を返す。
+        """
+        if not isinstance(actor.component, AutonomousBehaviorComponent):
+            return None
+        monster = self._monster_repository.find_by_world_object_id(actor.object_id)
+        if not monster:
+            return None
+        loadout = monster.skill_loadout
+        component = actor.component
+        usable_slot_indices: set = set()
+        for skill_info in component.available_skills:
+            if loadout.can_use_skill(skill_info.slot_index, current_tick.value):
+                usable_slot_indices.add(skill_info.slot_index)
+        return SkillSelectionContext(usable_slot_indices=usable_slot_indices)
+
+    def _build_target_context_for_actor(
+        self,
+        actor: WorldObject,
+        physical_map: PhysicalMapAggregate,
+    ) -> Optional[TargetSelectionContext]:
+        """
+        自律行動のモンスターについて、ヘイト等から TargetSelectionContext を組み立てる。
+        ヘイトストア未注入時や該当データなしの場合は None を返す。
+        """
+        if not isinstance(actor.component, AutonomousBehaviorComponent):
+            return None
+        if self._aggro_store is None:
+            return None
+        threat_by_id = self._aggro_store.get_threat_by_attacker(
+            physical_map.spot_id, actor.object_id
+        )
+        if not threat_by_id:
+            return None
+        return TargetSelectionContext(threat_by_id=threat_by_id)
 
     def _execute_monster_skill_in_tick(
         self,

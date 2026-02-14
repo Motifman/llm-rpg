@@ -1,6 +1,8 @@
 import logging
+from typing import Optional
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
+from ai_rpg_world.application.world.aggro_store import AggroStore
 from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
@@ -20,10 +22,12 @@ class CombatAggroHandler(EventHandler[HitBoxHitRecordedEvent]):
         hit_box_repository: HitBoxRepository,
         physical_map_repository: PhysicalMapRepository,
         unit_of_work: UnitOfWork,
+        aggro_store: Optional[AggroStore] = None,
     ):
         self._hit_box_repository = hit_box_repository
         self._physical_map_repository = physical_map_repository
         self._unit_of_work = unit_of_work
+        self._aggro_store = aggro_store
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def handle(self, event: HitBoxHitRecordedEvent) -> None:
@@ -66,4 +70,11 @@ class CombatAggroHandler(EventHandler[HitBoxHitRecordedEvent]):
             return
 
         component.spot_target(owner_obj.object_id, owner_obj.coordinate)
+        if self._aggro_store is not None:
+            self._aggro_store.add_aggro(
+                spot_id=hit_box.spot_id,
+                victim_id=event.target_id,
+                attacker_id=event.owner_id,
+                amount=1,
+            )
         self._physical_map_repository.save(physical_map)
