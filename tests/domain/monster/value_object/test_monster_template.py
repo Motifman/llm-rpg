@@ -8,6 +8,7 @@ from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
 from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterTemplateValidationException
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
+from ai_rpg_world.domain.world.enum.world_enum import EcologyTypeEnum
 
 
 @pytest.fixture
@@ -226,3 +227,33 @@ class TestMonsterTemplate:
                 description="A weak blue slime.",
                 skill_ids=[1, 2],
             )
+
+    def test_create_fail_ecology_type_not_enum(self, valid_base_stats, valid_reward_info, valid_respawn_info):
+        """ecology_type が EcologyTypeEnum でない場合はエラーが発生すること"""
+        with pytest.raises(MonsterTemplateValidationException, match="ecology_type must be EcologyTypeEnum"):
+            MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="Slime",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="A weak blue slime.",
+                ecology_type="invalid",
+            )
+
+    def test_create_success_with_ecology_type_enum(self, valid_base_stats, valid_reward_info, valid_respawn_info):
+        """ecology_type に EcologyTypeEnum を渡して作成できること"""
+        template = MonsterTemplate(
+            template_id=MonsterTemplateId.create(1),
+            name="Slime",
+            base_stats=valid_base_stats,
+            reward_info=valid_reward_info,
+            respawn_info=valid_respawn_info,
+            race=Race.BEAST,
+            faction=MonsterFactionEnum.ENEMY,
+            description="A weak blue slime.",
+            ecology_type=EcologyTypeEnum.AMBUSH,
+        )
+        assert template.ecology_type == EcologyTypeEnum.AMBUSH
