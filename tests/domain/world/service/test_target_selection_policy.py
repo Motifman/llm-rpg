@@ -5,10 +5,13 @@ from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent, AutonomousBehaviorComponent
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.behavior_context import TargetSelectionContext
 from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
 from ai_rpg_world.domain.world.service.target_selection_policy import (
     TargetSelectionPolicy,
     NearestTargetPolicy,
+    HighestThreatTargetPolicy,
+    LowestHpTargetPolicy,
 )
 
 
@@ -127,3 +130,182 @@ class TestNearestTargetPolicy:
         result = policy.select_target(actor_3d, [far_xy, near_z])
         assert result is not None
         assert result.object_id == near_z.object_id
+
+
+class TestHighestThreatTargetPolicy:
+    """HighestThreatTargetPolicy の正常・境界・context 有無のテスト"""
+
+    @pytest.fixture
+    def policy(self) -> HighestThreatTargetPolicy:
+        return HighestThreatTargetPolicy()
+
+    @pytest.fixture
+    def actor(self) -> WorldObject:
+        comp = AutonomousBehaviorComponent(vision_range=5)
+        return WorldObject(
+            object_id=WorldObjectId(100),
+            coordinate=Coordinate(5, 5),
+            object_type=ObjectTypeEnum.NPC,
+            is_blocking=False,
+            component=comp,
+        )
+
+    @pytest.fixture
+    def candidate_low_threat(self) -> WorldObject:
+        return WorldObject(
+            object_id=WorldObjectId(1),
+            coordinate=Coordinate(6, 5),
+            object_type=ObjectTypeEnum.PLAYER,
+            is_blocking=False,
+            component=ActorComponent(race="human"),
+        )
+
+    @pytest.fixture
+    def candidate_high_threat(self) -> WorldObject:
+        return WorldObject(
+            object_id=WorldObjectId(2),
+            coordinate=Coordinate(7, 5),
+            object_type=ObjectTypeEnum.PLAYER,
+            is_blocking=False,
+            component=ActorComponent(race="human"),
+        )
+
+    def test_select_target_returns_none_when_empty(self, policy, actor):
+        """候補が空のとき None を返すこと"""
+        result = policy.select_target(actor, [])
+        assert result is None
+
+    def test_select_target_without_context_returns_nearest(self, policy, actor, candidate_low_threat, candidate_high_threat):
+        """context がないときは最近距離の候補を返すこと（NearestTargetPolicy と同様）"""
+        candidates = [candidate_high_threat, candidate_low_threat]
+        result = policy.select_target(actor, candidates)
+        assert result is not None
+        assert result.object_id == WorldObjectId(1)
+        assert result.coordinate == Coordinate(6, 5)
+
+    def test_select_target_with_threat_by_id_returns_highest_threat(self, policy, actor, candidate_low_threat, candidate_high_threat):
+        """context.threat_by_id があるときは脅威値が最も高い候補を返すこと"""
+        context = TargetSelectionContext(threat_by_id={
+            WorldObjectId(1): 10,
+            WorldObjectId(2): 50,
+        })
+        candidates = [candidate_low_threat, candidate_high_threat]
+        result = policy.select_target(actor, candidates, context)
+        assert result is not None
+        assert result.object_id == WorldObjectId(2)
+
+    def test_select_target_threat_tie_returns_one(self, policy, actor, candidate_low_threat, candidate_high_threat):
+        """脅威値が同点の候補が複数いる場合でも1体を返すこと"""
+        context = TargetSelectionContext(threat_by_id={
+            WorldObjectId(1): 30,
+            WorldObjectId(2): 30,
+        })
+        candidates = [candidate_low_threat, candidate_high_threat]
+        result = policy.select_target(actor, candidates, context)
+        assert result is not None
+        assert result.object_id in (WorldObjectId(1), WorldObjectId(2))
+
+    def test_select_target_missing_id_in_threat_uses_zero(self, policy, actor, candidate_low_threat, candidate_high_threat):
+        """threat_by_id に含まれない ID は脅威 0 として扱うこと"""
+        context = TargetSelectionContext(threat_by_id={WorldObjectId(2): 5})
+        candidates = [candidate_low_threat, candidate_high_threat]
+        result = policy.select_target(actor, candidates, context)
+        assert result is not None
+        assert result.object_id == WorldObjectId(2)
+
+    def test_select_target_empty_threat_by_id_falls_back_to_nearest(self, policy, actor, candidate_low_threat, candidate_high_threat):
+        """context はあるが threat_by_id が空のときは最近距離を返すこと"""
+        context = TargetSelectionContext(threat_by_id={})
+        candidates = [candidate_high_threat, candidate_low_threat]
+        result = policy.select_target(actor, candidates, context)
+        assert result is not None
+        assert result.object_id == WorldObjectId(1)
+
+
+class TestLowestHpTargetPolicy:
+    """LowestHpTargetPolicy の正常・境界・context 有無のテスト"""
+
+    @pytest.fixture
+    def policy(self) -> LowestHpTargetPolicy:
+        return LowestHpTargetPolicy()
+
+    @pytest.fixture
+    def actor(self) -> WorldObject:
+        comp = AutonomousBehaviorComponent(vision_range=5)
+        return WorldObject(
+            object_id=WorldObjectId(100),
+            coordinate=Coordinate(5, 5),
+            object_type=ObjectTypeEnum.NPC,
+            is_blocking=False,
+            component=comp,
+        )
+
+    @pytest.fixture
+    def candidate_near(self) -> WorldObject:
+        return WorldObject(
+            object_id=WorldObjectId(1),
+            coordinate=Coordinate(6, 5),
+            object_type=ObjectTypeEnum.PLAYER,
+            is_blocking=False,
+            component=ActorComponent(race="human"),
+        )
+
+    @pytest.fixture
+    def candidate_far(self) -> WorldObject:
+        return WorldObject(
+            object_id=WorldObjectId(2),
+            coordinate=Coordinate(8, 5),
+            object_type=ObjectTypeEnum.PLAYER,
+            is_blocking=False,
+            component=ActorComponent(race="human"),
+        )
+
+    def test_select_target_returns_none_when_empty(self, policy, actor):
+        """候補が空のとき None を返すこと"""
+        result = policy.select_target(actor, [])
+        assert result is None
+
+    def test_select_target_without_context_returns_nearest(self, policy, actor, candidate_near, candidate_far):
+        """context がないときは最近距離の候補を返すこと"""
+        candidates = [candidate_far, candidate_near]
+        result = policy.select_target(actor, candidates)
+        assert result is not None
+        assert result.object_id == WorldObjectId(1)
+
+    def test_select_target_with_hp_percentage_returns_lowest_hp(self, policy, actor, candidate_near, candidate_far):
+        """context.hp_percentage_by_id があるときは HP% が最も低い候補を返すこと"""
+        context = TargetSelectionContext(hp_percentage_by_id={
+            WorldObjectId(1): 0.8,
+            WorldObjectId(2): 0.2,
+        })
+        candidates = [candidate_near, candidate_far]
+        result = policy.select_target(actor, candidates, context)
+        assert result is not None
+        assert result.object_id == WorldObjectId(2)
+
+    def test_select_target_hp_tie_returns_one(self, policy, actor, candidate_near, candidate_far):
+        """HP% が同点の候補が複数いる場合でも1体を返すこと"""
+        context = TargetSelectionContext(hp_percentage_by_id={
+            WorldObjectId(1): 0.5,
+            WorldObjectId(2): 0.5,
+        })
+        candidates = [candidate_near, candidate_far]
+        result = policy.select_target(actor, candidates, context)
+        assert result is not None
+        assert result.object_id in (WorldObjectId(1), WorldObjectId(2))
+
+    def test_select_target_missing_id_in_hp_uses_one(self, policy, actor, candidate_near, candidate_far):
+        """hp_percentage_by_id に含まれない ID は 1.0 として扱うこと（満タン）"""
+        context = TargetSelectionContext(hp_percentage_by_id={WorldObjectId(1): 0.1})
+        candidates = [candidate_near, candidate_far]
+        result = policy.select_target(actor, candidates, context)
+        assert result is not None
+        assert result.object_id == WorldObjectId(1)
+
+    def test_select_target_empty_hp_percentage_falls_back_to_nearest(self, policy, actor, candidate_near, candidate_far):
+        """context はあるが hp_percentage_by_id が空のときは最近距離を返すこと"""
+        context = TargetSelectionContext(hp_percentage_by_id={})
+        candidates = [candidate_far, candidate_near]
+        result = policy.select_target(actor, candidates, context)
+        assert result is not None
+        assert result.object_id == WorldObjectId(1)

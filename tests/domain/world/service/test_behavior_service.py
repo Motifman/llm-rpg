@@ -443,3 +443,34 @@ class TestBehaviorService:
             """マップに存在しない actor_id で plan_action を呼ぶと ObjectNotFoundException"""
             with pytest.raises(ObjectNotFoundException):
                 behavior_service.plan_action(WorldObjectId(99999), map_aggregate)
+
+    class TestEnrageTransition:
+        """phase_thresholds による ENRAGE 遷移のテスト"""
+
+        def test_phase_threshold_triggers_enrage_state(self, pathfinding_service, hostility_service, map_aggregate):
+            """HP% が phase_thresholds[0] 以下になると ENRAGE 状態に遷移しイベントが発行されること"""
+            service = BehaviorService(pathfinding_service, hostility_service)
+            comp = AutonomousBehaviorComponent(
+                race="goblin",
+                vision_range=5,
+                fov_angle=360,
+                hp_percentage=0.3,
+                flee_threshold=0.1,
+                phase_thresholds=[0.5],
+            )
+            monster_id = WorldObjectId(100)
+            monster = WorldObject(
+                monster_id, Coordinate(5, 5), ObjectTypeEnum.NPC, is_blocking=False, component=comp
+            )
+            map_aggregate.add_object(monster)
+            player = WorldObject(
+                WorldObjectId(1), Coordinate(6, 5), ObjectTypeEnum.PLAYER, is_blocking=False, component=ActorComponent(race="human")
+            )
+            map_aggregate.add_object(player)
+            service.plan_action(monster_id, map_aggregate)
+            assert comp.state == BehaviorStateEnum.ENRAGE
+            events = map_aggregate.get_events()
+            assert any(
+                isinstance(e, ActorStateChangedEvent) and e.new_state == BehaviorStateEnum.ENRAGE
+                for e in events
+            )

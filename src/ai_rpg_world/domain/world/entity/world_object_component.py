@@ -320,7 +320,7 @@ class AutonomousBehaviorComponent(ActorComponent):
         self.last_known_target_position = coordinate
         if self.hp_percentage <= self.flee_threshold:
             self.set_state(BehaviorStateEnum.FLEE)
-        else:
+        elif self.state != BehaviorStateEnum.ENRAGE:
             self.set_state(BehaviorStateEnum.CHASE)
 
     def lose_target(self):
