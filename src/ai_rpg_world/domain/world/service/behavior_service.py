@@ -1,21 +1,40 @@
 import math
-from typing import Optional, List
+from typing import Optional, List, Callable
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.behavior_context import (
+    TargetSelectionContext,
+    SkillSelectionContext,
+)
 from ai_rpg_world.domain.world.enum.world_enum import BehaviorStateEnum, DirectionEnum, BehaviorActionType
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent
 from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
 from ai_rpg_world.domain.world.service.hostility_service import HostilityService, ConfigurableHostilityService
+from ai_rpg_world.domain.world.service.allegiance_service import AllegianceService
 from ai_rpg_world.domain.world.service.target_selection_policy import TargetSelectionPolicy, NearestTargetPolicy
 from ai_rpg_world.domain.world.service.skill_selection_policy import SkillSelectionPolicy, FirstInRangeSkillPolicy
-from ai_rpg_world.domain.world.service.behavior_strategy import BehaviorStrategy, DefaultBehaviorStrategy
+from ai_rpg_world.domain.world.service.behavior_strategy import (
+    BehaviorStrategy,
+    DefaultBehaviorStrategy,
+    BossBehaviorStrategy,
+)
 from ai_rpg_world.domain.world.event.behavior_events import (
     ActorStateChangedEvent,
     TargetSpottedEvent,
     TargetLostEvent,
 )
+
+
+def _default_strategy_factory(component: AutonomousBehaviorComponent, pathfinding_service: PathfindingService) -> BehaviorStrategy:
+    if component.behavior_strategy_type == "boss":
+        return BossBehaviorStrategy(pathfinding_service)
+    return DefaultBehaviorStrategy(pathfinding_service, FirstInRangeSkillPolicy())
+
+
+def _default_target_policy_factory(component: AutonomousBehaviorComponent) -> TargetSelectionPolicy:
+    return NearestTargetPolicy()
 
 
 class BehaviorService:
@@ -25,24 +44,37 @@ class BehaviorService:
         self,
         pathfinding_service: PathfindingService,
         hostility_service: Optional[HostilityService] = None,
+        allegiance_service: Optional[AllegianceService] = None,
         target_policy: Optional[TargetSelectionPolicy] = None,
         strategy: Optional[BehaviorStrategy] = None,
+        strategy_factory: Optional[Callable[[AutonomousBehaviorComponent], BehaviorStrategy]] = None,
+        target_policy_factory: Optional[Callable[[AutonomousBehaviorComponent], TargetSelectionPolicy]] = None,
     ):
         self._pathfinding_service = pathfinding_service
         self._hostility_service = hostility_service or ConfigurableHostilityService()
-        self._target_policy = target_policy or NearestTargetPolicy()
-        self._strategy = strategy or DefaultBehaviorStrategy(
-            pathfinding_service,
-            FirstInRangeSkillPolicy(),
+        self._allegiance_service = allegiance_service
+        self._target_policy = target_policy
+        self._strategy = strategy
+        self._strategy_factory = strategy_factory or (
+            lambda c: _default_strategy_factory(c, pathfinding_service)
         )
+        self._target_policy_factory = target_policy_factory or _default_target_policy_factory
 
     def plan_action(
         self,
         actor_id: WorldObjectId,
-        map_aggregate: PhysicalMapAggregate
+        map_aggregate: PhysicalMapAggregate,
+        target_context: Optional[TargetSelectionContext] = None,
+        skill_context: Optional[SkillSelectionContext] = None,
+        pack_rally_coordinate: Optional[Coordinate] = None,
     ) -> BehaviorAction:
         """
         アクターの現在の状態に基づいて次のアクションを決定する。
+
+        Args:
+            target_context: ターゲット選択の補助情報（HP%・脅威値等）。省略可
+            skill_context: スキル選択の補助情報（使用可能スロット・射程内数等）。省略可
+            pack_rally_coordinate: 群れの集結座標（味方が戦闘に入った座標）。省略可
 
         Returns:
             実行すべきアクション。
@@ -57,12 +89,37 @@ class BehaviorService:
             component.initial_position = actor.coordinate
 
         old_state = component.state
+        target_policy = (
+            self._target_policy
+            if self._target_policy is not None
+            else self._target_policy_factory(component)
+        )
+        strategy = (
+            self._strategy
+            if self._strategy is not None
+            else self._strategy_factory(component)
+        )
+
+        # 0. ボスフェーズ: HPが閾値以下なら ENRAGE へ遷移
+        if component.phase_thresholds:
+            if component.hp_percentage <= component.phase_thresholds[0]:
+                if component.state not in (BehaviorStateEnum.ENRAGE, BehaviorStateEnum.FLEE):
+                    if old_state != BehaviorStateEnum.ENRAGE:
+                        self._publish_state_changed(
+                            map_aggregate, actor_id, old_state, BehaviorStateEnum.ENRAGE
+                        )
+                    component.set_state(BehaviorStateEnum.ENRAGE)
+                    old_state = BehaviorStateEnum.ENRAGE
 
         # 1. 視界内の敵対候補を収集し、ポリシーで1体選択
         visible_hostiles = self._collect_visible_hostiles(
             actor, map_aggregate, component
         )
-        target = self._target_policy.select_target(actor, visible_hostiles) if visible_hostiles else None
+        target = (
+            target_policy.select_target(actor, visible_hostiles, target_context)
+            if visible_hostiles
+            else None
+        )
 
         # 2. ターゲットの有無に応じて状態更新とイベント発行
         if target:
@@ -101,8 +158,14 @@ class BehaviorService:
                         )
 
         # 3. 戦略にアクション決定を委譲
-        return self._strategy.decide_action(
-            actor, map_aggregate, component, target
+        return strategy.decide_action(
+            actor,
+            map_aggregate,
+            component,
+            target,
+            target_context=target_context,
+            skill_context=skill_context,
+            pack_rally_coordinate=pack_rally_coordinate,
         )
 
     def plan_next_move(
@@ -139,7 +202,7 @@ class BehaviorService:
         map_aggregate: PhysicalMapAggregate,
         component: AutonomousBehaviorComponent,
     ) -> List:
-        """視界内にいる敵対的なオブジェクトのリストを返す（FOV を考慮）。"""
+        """視界内にいる敵対的なオブジェクトのリストを返す（FOV を考慮）。味方は除外する。"""
         nearby_objects = map_aggregate.get_objects_in_range(
             actor.coordinate, component.vision_range
         )
@@ -148,6 +211,8 @@ class BehaviorService:
             if obj.object_id == actor.object_id:
                 continue
             if not obj.is_actor:
+                continue
+            if self._allegiance_service and self._allegiance_service.is_ally(component, obj.component):
                 continue
             if not self._hostility_service.is_hostile(component, obj.component):
                 continue

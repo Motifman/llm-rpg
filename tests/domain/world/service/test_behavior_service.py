@@ -16,7 +16,10 @@ from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingSer
 from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import AStarPathfindingStrategy
 from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
 from ai_rpg_world.domain.world.service.hostility_service import ConfigurableHostilityService
+from ai_rpg_world.domain.world.service.allegiance_service import PackAllegianceService
 from ai_rpg_world.domain.world.service.skill_selection_policy import SkillSelectionPolicy
+from ai_rpg_world.domain.world.value_object.pack_id import PackId
+from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
 from ai_rpg_world.domain.world.service.behavior_strategy import DefaultBehaviorStrategy
 from ai_rpg_world.domain.world.exception.behavior_exception import (
     VisionRangeValidationException,
@@ -357,7 +360,7 @@ class TestBehaviorService:
         def test_behavior_service_uses_injected_skill_policy(self, pathfinding_service, map_aggregate):
             """注入したスキル選択ポリシーが使われること（2番目スキルを選ぶポリシー）"""
             class SecondInRangeSkillPolicy(SkillSelectionPolicy):
-                def select_slot(self, actor, target, available_skills):
+                def select_slot(self, actor, target, available_skills, context=None):
                     in_range = [
                         s for s in available_skills
                         if actor.coordinate.distance_to(target.coordinate) <= s.range
@@ -389,3 +392,54 @@ class TestBehaviorService:
             action = service.plan_action(monster_id, map_aggregate)
             assert action.action_type == BehaviorActionType.USE_SKILL
             assert action.skill_slot_index == 1
+
+    class TestAllegianceExclusion:
+        """味方をターゲットから除外するテスト"""
+
+        def test_ally_excluded_from_targets(self, pathfinding_service, map_aggregate):
+            """同一パックの味方は視界内にいてもターゲットに選ばれず、プレイヤーのみターゲットになる"""
+            hostility = ConfigurableHostilityService(race_hostility_table={"goblin": {"human"}})
+            allegiance = PackAllegianceService()
+            service = BehaviorService(
+                pathfinding_service, hostility, allegiance_service=allegiance
+            )
+            pack = PackId.create("wolf_pack")
+            monster_a_id = WorldObjectId(100)
+            comp_a = AutonomousBehaviorComponent(
+                race="goblin",
+                vision_range=10,
+                fov_angle=360,
+                pack_id=pack,
+            )
+            monster_a = WorldObject(
+                monster_a_id, Coordinate(5, 5), ObjectTypeEnum.NPC, is_blocking=False, component=comp_a
+            )
+            map_aggregate.add_object(monster_a)
+
+            monster_b_id = WorldObjectId(101)
+            comp_b = AutonomousBehaviorComponent(
+                race="goblin",
+                vision_range=10,
+                fov_angle=360,
+                pack_id=pack,
+            )
+            monster_b = WorldObject(
+                monster_b_id, Coordinate(6, 5), ObjectTypeEnum.NPC, is_blocking=False, component=comp_b
+            )
+            map_aggregate.add_object(monster_b)
+
+            player_id = WorldObjectId(1)
+            player = WorldObject(
+                player_id, Coordinate(7, 5), ObjectTypeEnum.PLAYER, is_blocking=False,
+                component=ActorComponent(race="human"),
+            )
+            map_aggregate.add_object(player)
+
+            action = service.plan_action(monster_a_id, map_aggregate)
+            assert comp_a.target_id == player_id
+            assert comp_a.target_id != monster_b_id
+
+        def test_actor_not_in_map_raises_object_not_found(self, behavior_service, map_aggregate):
+            """マップに存在しない actor_id で plan_action を呼ぶと ObjectNotFoundException"""
+            with pytest.raises(ObjectNotFoundException):
+                behavior_service.plan_action(WorldObjectId(99999), map_aggregate)

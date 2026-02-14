@@ -182,3 +182,8 @@ class PathfindingLimitReachedException(MapDomainException, BusinessRuleException
 class InvalidPathRequestException(MapDomainException, ValidationException):
     """不正な経路探索リクエストの例外"""
     error_code = "MAP.INVALID_PATH_REQUEST"
+
+
+class PackIdValidationException(MapDomainException, ValidationException):
+    """PackIdバリデーション例外"""
+    error_code = "MAP.PACK_ID_VALIDATION"

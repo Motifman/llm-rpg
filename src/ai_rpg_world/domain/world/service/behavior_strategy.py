@@ -10,10 +10,17 @@ from typing import Optional, TYPE_CHECKING
 
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
+from ai_rpg_world.domain.world.value_object.behavior_context import (
+    SkillSelectionContext,
+    TargetSelectionContext,
+)
 from ai_rpg_world.domain.world.enum.world_enum import BehaviorStateEnum, DirectionEnum
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
-from ai_rpg_world.domain.world.service.skill_selection_policy import SkillSelectionPolicy
+from ai_rpg_world.domain.world.service.skill_selection_policy import (
+    SkillSelectionPolicy,
+    BossSkillPolicy,
+)
 from ai_rpg_world.domain.world.exception.map_exception import (
     ObjectNotFoundException,
     PathNotFoundException,
@@ -40,6 +47,9 @@ class BehaviorStrategy(ABC):
         map_aggregate: "PhysicalMapAggregate",
         component: AutonomousBehaviorComponent,
         target: Optional["WorldObject"],
+        target_context: Optional[TargetSelectionContext] = None,
+        skill_context: Optional[SkillSelectionContext] = None,
+        pack_rally_coordinate: Optional[Coordinate] = None,
     ) -> BehaviorAction:
         """
         現在の状態とターゲットに基づき、実行すべきアクションを決定する。
@@ -49,6 +59,9 @@ class BehaviorStrategy(ABC):
             map_aggregate: 現在のマップ集約
             component: アクターの自律行動コンポーネント（状態は呼び出し元で更新済み）
             target: 現在のターゲット（視界内にいない場合は None）
+            target_context: ターゲット選択の補助情報（省略可）
+            skill_context: スキル選択の補助情報（省略可）
+            pack_rally_coordinate: 群れの集結座標（味方が戦闘に入った座標等）。省略可
 
         Returns:
             実行すべき BehaviorAction
@@ -77,20 +90,36 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
         map_aggregate: "PhysicalMapAggregate",
         component: AutonomousBehaviorComponent,
         target: Optional["WorldObject"],
+        target_context: Optional[TargetSelectionContext] = None,
+        skill_context: Optional[SkillSelectionContext] = None,
+        pack_rally_coordinate: Optional[Coordinate] = None,
     ) -> BehaviorAction:
-        # 攻撃可能かチェック (CHASE かつターゲットが視界内)
-        if component.state == BehaviorStateEnum.CHASE and target:
+        # 攻撃可能かチェック (CHASE または ENRAGE かつターゲットが視界内)
+        attack_states = (BehaviorStateEnum.CHASE, BehaviorStateEnum.ENRAGE)
+        if component.state in attack_states and target:
             slot = self._skill_policy.select_slot(
-                actor, target, component.available_skills
+                actor, target, component.available_skills, skill_context
             )
             if slot is not None:
                 return BehaviorAction.use_skill(slot)
 
-        # 状態に応じた移動先計算
+        # 状態に応じた移動先計算（ENRAGE は CHASE と同様に追跡）
         next_coord = None
+        # 縄張り: CHASE/ENRAGE 中に初期位置から territory_radius を超えたら帰還
+        if (
+            component.territory_radius is not None
+            and component.initial_position is not None
+            and component.state in (BehaviorStateEnum.CHASE, BehaviorStateEnum.ENRAGE)
+        ):
+            if actor.coordinate.distance_to(component.initial_position) > component.territory_radius:
+                component.set_state(BehaviorStateEnum.RETURN)
+                next_coord = self._calculate_return_move(actor, component, map_aggregate)
+        if next_coord is not None:
+            return BehaviorAction.move(next_coord)
+
         if component.state == BehaviorStateEnum.FLEE:
             next_coord = self._calculate_flee_move(actor, component, map_aggregate)
-        elif component.state == BehaviorStateEnum.CHASE:
+        elif component.state in (BehaviorStateEnum.CHASE, BehaviorStateEnum.ENRAGE):
             next_coord = self._calculate_chase_move(actor, component, map_aggregate)
         elif component.state == BehaviorStateEnum.SEARCH:
             next_coord = self._calculate_search_move(actor, component, map_aggregate)
@@ -98,6 +127,15 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
             next_coord = self._calculate_patrol_move(actor, component, map_aggregate)
         elif component.state == BehaviorStateEnum.RETURN:
             next_coord = self._calculate_return_move(actor, component, map_aggregate)
+
+        # 群れフォロワー: IDLE/PATROL で移動先が無い場合、pack_rally_coordinate へ向かう
+        if next_coord is None and pack_rally_coordinate:
+            is_follower = component.pack_id is not None and not component.is_pack_leader
+            if is_follower and component.state in (BehaviorStateEnum.IDLE, BehaviorStateEnum.PATROL):
+                if actor.coordinate != pack_rally_coordinate:
+                    next_coord = self._get_next_step_to(
+                        actor, pack_rally_coordinate, map_aggregate, component
+                    )
 
         if next_coord is not None:
             return BehaviorAction.move(next_coord)
@@ -278,3 +316,12 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
                 )
             return None
         return None
+
+
+class BossBehaviorStrategy(DefaultBehaviorStrategy):
+    """
+    ボス用行動戦略。DefaultBehaviorStrategy と同一の移動ロジックだが、
+    BossSkillPolicy により複数体射程内でAOE優先・使用可能スロットのみ選択する。
+    """
+    def __init__(self, pathfinding_service: PathfindingService):
+        super().__init__(pathfinding_service, BossSkillPolicy())
