@@ -13,7 +13,11 @@ from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorActio
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
 from ai_rpg_world.domain.world.service.hostility_service import HostilityService, ConfigurableHostilityService
 from ai_rpg_world.domain.world.service.allegiance_service import AllegianceService
-from ai_rpg_world.domain.world.service.target_selection_policy import TargetSelectionPolicy, NearestTargetPolicy
+from ai_rpg_world.domain.world.service.target_selection_policy import (
+    TargetSelectionPolicy,
+    NearestTargetPolicy,
+    HighestThreatTargetPolicy,
+)
 from ai_rpg_world.domain.world.service.skill_selection_policy import SkillSelectionPolicy, FirstInRangeSkillPolicy
 from ai_rpg_world.domain.world.service.behavior_strategy import (
     BehaviorStrategy,
@@ -34,7 +38,7 @@ def _default_strategy_factory(component: AutonomousBehaviorComponent, pathfindin
 
 
 def _default_target_policy_factory(component: AutonomousBehaviorComponent) -> TargetSelectionPolicy:
-    return NearestTargetPolicy()
+    return HighestThreatTargetPolicy()
 
 
 class BehaviorService:

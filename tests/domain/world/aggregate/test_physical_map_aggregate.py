@@ -26,7 +26,7 @@ from ai_rpg_world.domain.world.exception.map_exception import (
 from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
 from ai_rpg_world.domain.world.value_object.area import PointArea, RectArea
 from ai_rpg_world.domain.world.entity.area_trigger import AreaTrigger
-from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent, InteractableComponent
+from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent, AutonomousBehaviorComponent, InteractableComponent
 from ai_rpg_world.domain.world.event.map_events import (
     PhysicalMapCreatedEvent,
     WorldObjectMovedEvent,
@@ -40,6 +40,7 @@ from ai_rpg_world.domain.world.event.map_events import (
     WorldObjectInteractedEvent
 )
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
+from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.entity.map_trigger import WarpTrigger, DamageTrigger
@@ -842,3 +843,96 @@ class TestPhysicalMapAggregate:
             
             in_range = aggregate.get_objects_in_range(Coordinate(0, 0), 10)
             assert obj in in_range
+
+    class TestGetActorsInPack:
+        """get_actors_in_pack の正常・境界・例外ケース"""
+
+        def test_returns_only_autonomous_actors_in_pack(self, spot_id):
+            # Given: 同一 pack の自律アクター2体と、別 pack の1体、pack なしの1体、非アクター1体
+            tiles = [Tile(Coordinate(x, y), TerrainType.road()) for x in range(3) for y in range(3)]
+            aggregate = PhysicalMapAggregate.create(spot_id, tiles)
+            pack_a = PackId.create("pack_a")
+            pack_b = PackId.create("pack_b")
+
+            actor1 = WorldObject(
+                WorldObjectId(1), Coordinate(0, 0), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(pack_id=pack_a),
+            )
+            actor2 = WorldObject(
+                WorldObjectId(2), Coordinate(1, 0), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(pack_id=pack_a),
+            )
+            actor3 = WorldObject(
+                WorldObjectId(3), Coordinate(2, 0), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(pack_id=pack_b),
+            )
+            actor4 = WorldObject(
+                WorldObjectId(4), Coordinate(0, 1), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(pack_id=None),
+            )
+            chest = WorldObject(WorldObjectId(5), Coordinate(1, 1), ObjectTypeEnum.CHEST)
+            aggregate.add_object(actor1)
+            aggregate.add_object(actor2)
+            aggregate.add_object(actor3)
+            aggregate.add_object(actor4)
+            aggregate.add_object(chest)
+
+            # When
+            in_pack_a = aggregate.get_actors_in_pack(pack_a)
+            in_pack_b = aggregate.get_actors_in_pack(pack_b)
+
+            # Then
+            assert len(in_pack_a) == 2
+            assert {obj.object_id for obj in in_pack_a} == {WorldObjectId(1), WorldObjectId(2)}
+            assert len(in_pack_b) == 1
+            assert in_pack_b[0].object_id == WorldObjectId(3)
+
+        def test_returns_empty_when_no_actor_in_pack(self, spot_id):
+            # Given: pack に属するアクターがいない
+            tiles = [Tile(Coordinate(0, 0), TerrainType.road())]
+            aggregate = PhysicalMapAggregate.create(spot_id, tiles)
+            pack_a = PackId.create("pack_a")
+            actor = WorldObject(
+                WorldObjectId(1), Coordinate(0, 0), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(pack_id=None),
+            )
+            aggregate.add_object(actor)
+
+            # When
+            result = aggregate.get_actors_in_pack(pack_a)
+
+            # Then
+            assert result == []
+
+        def test_returns_empty_when_map_has_no_actors(self, aggregate):
+            # Given: アクターが1体もいないマップ
+            pack_id = PackId.create("any_pack")
+
+            # When
+            result = aggregate.get_actors_in_pack(pack_id)
+
+            # Then
+            assert result == []
+
+        def test_players_and_non_autonomous_actors_excluded(self, spot_id):
+            # Given: プレイヤー（ActorComponent）と自律アクター（AutonomousBehaviorComponent）
+            tiles = [Tile(Coordinate(x, y), TerrainType.road()) for x in range(2) for y in range(2)]
+            aggregate = PhysicalMapAggregate.create(spot_id, tiles)
+            pack_id = PackId.create("pack")
+            player = WorldObject(
+                WorldObjectId(1), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=None),
+            )
+            monster = WorldObject(
+                WorldObjectId(2), Coordinate(1, 0), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(pack_id=pack_id),
+            )
+            aggregate.add_object(player)
+            aggregate.add_object(monster)
+
+            # When
+            result = aggregate.get_actors_in_pack(pack_id)
+
+            # Then: 自律アクターのみ
+            assert len(result) == 1
+            assert result[0].object_id == WorldObjectId(2)
