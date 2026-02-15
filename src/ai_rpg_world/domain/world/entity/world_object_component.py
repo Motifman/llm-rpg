@@ -309,8 +309,18 @@ class AutonomousBehaviorComponent(ActorComponent):
             raise HPPercentageValidationException("HP percentage must be between 0.0 and 1.0")
         self.hp_percentage = hp_percentage
 
-    def spot_target(self, target_id: WorldObjectId, coordinate: Coordinate):
-        """ターゲットを捕捉した際の状態遷移（生態タイプに応じる）"""
+    def spot_target(
+        self,
+        target_id: WorldObjectId,
+        coordinate: Coordinate,
+        effective_flee_threshold: Optional[float] = None,
+        allow_chase: Optional[bool] = None,
+    ):
+        """
+        ターゲットを捕捉した際の状態遷移（生態タイプに応じる）。
+        effective_flee_threshold: 成長段階に応じた FLEE 閾値（未指定時は self.flee_threshold）
+        allow_chase: CHASE を許可するか（未指定時は True）。幼体などは False で渡す。
+        """
         if self.ecology_type == EcologyTypeEnum.PATROL_ONLY:
             return
         if self.ecology_type == EcologyTypeEnum.FLEE_ONLY:
@@ -327,10 +337,13 @@ class AutonomousBehaviorComponent(ActorComponent):
                 return
         self.target_id = target_id
         self.last_known_target_position = coordinate
-        if self.hp_percentage <= self.flee_threshold:
+        flee_th = effective_flee_threshold if effective_flee_threshold is not None else self.flee_threshold
+        can_chase = allow_chase if allow_chase is not None else True
+        if self.hp_percentage <= flee_th:
             self.set_state(BehaviorStateEnum.FLEE)
-        elif self.state != BehaviorStateEnum.ENRAGE:
+        elif can_chase and self.state != BehaviorStateEnum.ENRAGE:
             self.set_state(BehaviorStateEnum.CHASE)
+        # allow_chase が False の場合は CHASE に遷移しない（IDLE 等のまま）
 
     def lose_target(self):
         """ターゲットを見失った際の状態遷移"""

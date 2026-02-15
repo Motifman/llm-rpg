@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import List, Optional, Set
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
-from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
+from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage, MAX_GROWTH_STAGES
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
@@ -108,6 +108,10 @@ class MonsterTemplate:
                 raise MonsterTemplateValidationException(
                     f"growth_stages must be a list, got {type(self.growth_stages).__name__}"
                 )
+            if len(self.growth_stages) > MAX_GROWTH_STAGES:
+                raise MonsterTemplateValidationException(
+                    f"growth_stages must have at most {MAX_GROWTH_STAGES} stages, got {len(self.growth_stages)}"
+                )
             for i, g in enumerate(self.growth_stages):
                 if not isinstance(g, GrowthStage):
                     raise MonsterTemplateValidationException(
@@ -118,4 +122,8 @@ class MonsterTemplate:
                 if sorted_ticks != [g.after_ticks for g in self.growth_stages]:
                     raise MonsterTemplateValidationException(
                         "growth_stages must be ordered by after_ticks ascending"
+                    )
+                if self.growth_stages[0].after_ticks != 0:
+                    raise MonsterTemplateValidationException(
+                        "first growth_stage must have after_ticks=0"
                     )

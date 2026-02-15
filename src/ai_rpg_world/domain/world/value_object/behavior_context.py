@@ -27,3 +27,13 @@ class SkillSelectionContext:
     """
     usable_slot_indices: Set[int] = field(default_factory=set)
     targets_in_range_by_slot: Dict[int, int] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class GrowthContext:
+    """
+    成長段階に応じた行動制御の補助情報。
+    幼体は FLEE 閾値を上げ・CHASE しない等をアプリ層が MonsterAggregate から取得して渡す。
+    """
+    effective_flee_threshold: float  # この tick で使う FLEE 閾値（0.0〜1.0）
+    allow_chase: bool  # CHASE（追跡）を許可するか

@@ -2,6 +2,7 @@ from typing import Optional, List, TYPE_CHECKING
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
+from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
 from ai_rpg_world.domain.monster.value_object.monster_hp import MonsterHp
 from ai_rpg_world.domain.monster.value_object.monster_mp import MonsterMp
 from ai_rpg_world.domain.monster.enum.monster_enum import MonsterStatusEnum
@@ -107,25 +108,45 @@ class MonsterAggregate(AggregateRoot):
     def template(self) -> MonsterTemplate:
         return self._template
 
+    def _get_current_growth_stage(self, current_tick: WorldTick) -> Optional[GrowthStage]:
+        """現在の成長段階を返す。未スポーンまたは段階なしの場合は None。"""
+        if self._spawned_at_tick is None:
+            return None
+        stages = self._template.growth_stages
+        if not stages:
+            return None
+        elapsed = current_tick.value - self._spawned_at_tick.value
+        if elapsed < 0:
+            return None
+        stage = None
+        for g in stages:
+            if elapsed >= g.after_ticks:
+                stage = g
+        return stage
+
     def get_current_growth_multiplier(self, current_tick: WorldTick) -> float:
         """
         現在の成長段階に応じたステータス乗率を返す。
         spawned_at_tick が未設定または growth_stages が空の場合は 1.0。
         """
-        if self._spawned_at_tick is None:
-            return 1.0
-        stages = self._template.growth_stages
-        if not stages:
-            return 1.0
-        elapsed = current_tick.value - self._spawned_at_tick.value
-        if elapsed < 0:
-            return 1.0
-        # 経過 tick 以下で最大の after_ticks を持つ段階を採用
-        mult = 1.0
-        for g in stages:
-            if elapsed >= g.after_ticks:
-                mult = g.stats_multiplier
-        return mult
+        stage = self._get_current_growth_stage(current_tick)
+        return stage.stats_multiplier if stage else 1.0
+
+    def get_effective_flee_threshold(self, current_tick: WorldTick) -> float:
+        """
+        現在の成長段階を反映した FLEE 閾値を返す。
+        テンプレートの flee_threshold に flee_bias_multiplier を掛ける（未指定時は 1.0）。
+        """
+        base = self._template.flee_threshold
+        stage = self._get_current_growth_stage(current_tick)
+        if stage is None or stage.flee_bias_multiplier is None:
+            return base
+        return min(1.0, round(base * stage.flee_bias_multiplier, 4))
+
+    def get_allow_chase(self, current_tick: WorldTick) -> bool:
+        """現在の成長段階で CHASE（追跡）を許可するか。"""
+        stage = self._get_current_growth_stage(current_tick)
+        return stage.allow_chase if stage else True
 
     def get_effective_stats(self, current_tick: WorldTick) -> BaseStats:
         """バフ・デバフ・成長段階適用後の実効ステータス（期限切れを除外）"""
@@ -153,8 +174,8 @@ class MonsterAggregate(AggregateRoot):
                 spd_mult *= effect.value
                 
         return BaseStats(
-            max_hp=base.max_hp,
-            max_mp=base.max_mp,
+            max_hp=max(1, int(base.max_hp * growth_mult)),
+            max_mp=max(1, int(base.max_mp * growth_mult)),
             attack=int(base.attack * atk_mult),
             defense=int(base.defense * def_mult),
             speed=int(base.speed * spd_mult),

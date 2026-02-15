@@ -22,7 +22,11 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
 from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
-from ai_rpg_world.domain.world.value_object.behavior_context import SkillSelectionContext, TargetSelectionContext
+from ai_rpg_world.domain.world.value_object.behavior_context import (
+    SkillSelectionContext,
+    TargetSelectionContext,
+    GrowthContext,
+)
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
 from ai_rpg_world.domain.monster.enum.monster_enum import MonsterStatusEnum
 from ai_rpg_world.domain.skill.repository.skill_repository import SkillLoadoutRepository
@@ -172,15 +176,16 @@ class WorldSimulationApplicationService:
                         if not is_active_at_time(actor.component.active_time, time_of_day):
                             continue
                     try:
-                        # 自律行動アクター用の skill_context / target_context を組み立て（モンスターでない場合は None）
+                        # 自律行動アクター用の skill_context / target_context / growth_context を組み立て
                         skill_context = self._build_skill_context_for_actor(actor, physical_map, current_tick)
                         target_context = self._build_target_context_for_actor(actor, physical_map, current_tick)
-                        # 自律行動アクターの計画
+                        growth_context = self._build_growth_context_for_actor(actor, current_tick)
                         action = self._behavior_service.plan_action(
                             actor.object_id,
                             physical_map,
                             skill_context=skill_context,
                             target_context=target_context,
+                            growth_context=growth_context,
                         )
                         
                         if action.action_type == BehaviorActionType.MOVE:
@@ -266,6 +271,25 @@ class WorldSimulationApplicationService:
             if loadout.can_use_skill(skill_info.slot_index, current_tick.value):
                 usable_slot_indices.add(skill_info.slot_index)
         return SkillSelectionContext(usable_slot_indices=usable_slot_indices)
+
+    def _build_growth_context_for_actor(
+        self,
+        actor: WorldObject,
+        current_tick: WorldTick,
+    ) -> Optional[GrowthContext]:
+        """
+        自律行動のモンスターについて、成長段階に応じた GrowthContext を組み立てる。
+        growth_stages が無い場合は None（従来どおりコンポーネントの flee_threshold と CHASE 許可）。
+        """
+        if not isinstance(actor.component, AutonomousBehaviorComponent):
+            return None
+        monster = self._monster_repository.find_by_world_object_id(actor.object_id)
+        if not monster or not monster.template.growth_stages:
+            return None
+        return GrowthContext(
+            effective_flee_threshold=monster.get_effective_flee_threshold(current_tick),
+            allow_chase=monster.get_allow_chase(current_tick),
+        )
 
     def _build_target_context_for_actor(
         self,

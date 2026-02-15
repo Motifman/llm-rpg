@@ -1,6 +1,6 @@
 import pytest
 
-from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
+from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage, MAX_GROWTH_STAGES
 from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterTemplateValidationException
 
 
@@ -33,6 +33,17 @@ class TestGrowthStage:
             assert low.stats_multiplier == 0.01
             assert high.stats_multiplier == 2.0
 
+        def test_create_success_with_flee_bias_and_allow_chase(self):
+            """flee_bias_multiplier と allow_chase を指定して作成できること（幼体用）"""
+            stage = GrowthStage(
+                after_ticks=0,
+                stats_multiplier=0.8,
+                flee_bias_multiplier=1.5,
+                allow_chase=False,
+            )
+            assert stage.flee_bias_multiplier == 1.5
+            assert stage.allow_chase is False
+
     class TestCreateValidationFailure:
         def test_create_fail_negative_after_ticks(self):
             """after_ticks が負の場合は MonsterTemplateValidationException を投げること"""
@@ -53,3 +64,14 @@ class TestGrowthStage:
             """stats_multiplier が 2.0 を超える場合はエラーとなること"""
             with pytest.raises(MonsterTemplateValidationException, match="stats_multiplier must be between"):
                 GrowthStage(after_ticks=0, stats_multiplier=2.01)
+
+        def test_create_fail_flee_bias_out_of_range(self):
+            """flee_bias_multiplier が 0.1〜3.0 の範囲外の場合はエラーとなること"""
+            with pytest.raises(MonsterTemplateValidationException, match="flee_bias_multiplier must be between"):
+                GrowthStage(after_ticks=0, stats_multiplier=1.0, flee_bias_multiplier=0.05)
+            with pytest.raises(MonsterTemplateValidationException, match="flee_bias_multiplier must be between"):
+                GrowthStage(after_ticks=0, stats_multiplier=1.0, flee_bias_multiplier=3.5)
+
+    def test_max_growth_stages_constant(self):
+        """MAX_GROWTH_STAGES が 4 であること"""
+        assert MAX_GROWTH_STAGES == 4
