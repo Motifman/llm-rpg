@@ -4,7 +4,7 @@ import pytest
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, BehaviorStateEnum, EcologyTypeEnum, BehaviorActionType
+from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, BehaviorStateEnum, EcologyTypeEnum, BehaviorActionType, Disposition
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import (
@@ -25,7 +25,7 @@ class TestEcologyFleeOnly:
     @pytest.fixture
     def service(self):
         path = PathfindingService(AStarPathfindingStrategy())
-        hostility = ConfigurableHostilityService(race_hostility_table={"goblin": {"human"}})
+        hostility = ConfigurableHostilityService(race_disposition_table={"goblin": {"human": Disposition.HOSTILE}})
         return BehaviorService(path, hostility)
 
     @pytest.fixture
@@ -59,7 +59,7 @@ class TestEcologyPatrolOnly:
     @pytest.fixture
     def service(self):
         path = PathfindingService(AStarPathfindingStrategy())
-        hostility = ConfigurableHostilityService(race_hostility_table={"goblin": {"human"}})
+        hostility = ConfigurableHostilityService(race_disposition_table={"goblin": {"human": Disposition.HOSTILE}})
         return BehaviorService(path, hostility)
 
     @pytest.fixture
@@ -94,7 +94,7 @@ class TestEcologyAmbush:
     @pytest.fixture
     def service(self):
         path = PathfindingService(AStarPathfindingStrategy())
-        hostility = ConfigurableHostilityService(race_hostility_table={"goblin": {"human"}})
+        hostility = ConfigurableHostilityService(race_disposition_table={"goblin": {"human": Disposition.HOSTILE}})
         return BehaviorService(path, hostility)
 
     @pytest.fixture
@@ -151,7 +151,7 @@ class TestEcologyTerritorial:
     @pytest.fixture
     def service(self):
         path = PathfindingService(AStarPathfindingStrategy())
-        hostility = ConfigurableHostilityService(race_hostility_table={"goblin": {"human"}})
+        hostility = ConfigurableHostilityService(race_disposition_table={"goblin": {"human": Disposition.HOSTILE}})
         return BehaviorService(path, hostility)
 
     @pytest.fixture

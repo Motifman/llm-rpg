@@ -55,6 +55,7 @@ class MonsterAggregate(AggregateRoot):
         active_effects: List[StatusEffect] = None,
         pack_id: Optional["PackId"] = None,
         is_pack_leader: bool = False,
+        initial_spawn_coordinate: Optional[Coordinate] = None,
     ):
         super().__init__()
         self._monster_id = monster_id
@@ -70,6 +71,7 @@ class MonsterAggregate(AggregateRoot):
         self._skill_loadout = skill_loadout
         self._pack_id = pack_id
         self._is_pack_leader = is_pack_leader
+        self._initial_spawn_coordinate = initial_spawn_coordinate
 
     @classmethod
     def create(
@@ -207,6 +209,7 @@ class MonsterAggregate(AggregateRoot):
         self._initialize_status(coordinate, spot_id)
         self._pack_id = pack_id
         self._is_pack_leader = is_pack_leader
+        self._initial_spawn_coordinate = coordinate
 
         self.add_event(MonsterSpawnedEvent.create(
             aggregate_id=self._monster_id,
@@ -319,8 +322,7 @@ class MonsterAggregate(AggregateRoot):
         self._status = MonsterStatusEnum.DEAD
         self._last_death_tick = current_tick
         spot_id_for_event = self._spot_id
-        self._coordinate = None  # 死亡時は座標をクリア
-        self._spot_id = None
+        self._coordinate = None  # 死亡時は座標をクリア（spot_id はリスポーン判定のため保持）
 
         respawn_tick = current_tick.value + self._template.respawn_info.respawn_interval_ticks
 
@@ -336,7 +338,7 @@ class MonsterAggregate(AggregateRoot):
         ))
 
     def should_respawn(self, current_tick: WorldTick) -> bool:
-        """リスポーンすべきか判定する"""
+        """リスポーンすべきか判定する（時間経過と is_auto_respawn のみ。SpawnCondition は呼び出し側で評価）"""
         if self._status != MonsterStatusEnum.DEAD:
             return False
         
@@ -348,6 +350,10 @@ class MonsterAggregate(AggregateRoot):
 
         elapsed = current_tick.value - self._last_death_tick.value
         return elapsed >= self._template.respawn_info.respawn_interval_ticks
+
+    def get_respawn_coordinate(self) -> Optional[Coordinate]:
+        """リスポーン時に使用する座標（初期スポーン位置）を返す。未スポーン時は None。"""
+        return self._initial_spawn_coordinate
 
     def respawn(self, coordinate: Coordinate, current_tick: WorldTick, spot_id: SpotId):
         """リスポーンさせる"""

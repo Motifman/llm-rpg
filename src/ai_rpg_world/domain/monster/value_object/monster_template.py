@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Set
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
@@ -8,7 +8,7 @@ from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
 from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterTemplateValidationException
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
-from ai_rpg_world.domain.world.enum.world_enum import EcologyTypeEnum
+from ai_rpg_world.domain.world.enum.world_enum import EcologyTypeEnum, ActiveTimeType
 
 
 @dataclass(frozen=True)
@@ -30,10 +30,15 @@ class MonsterTemplate:
     ecology_type: EcologyTypeEnum = EcologyTypeEnum.NORMAL
     ambush_chase_range: Optional[int] = None
     territory_radius: Optional[int] = None
+    active_time: ActiveTimeType = ActiveTimeType.ALWAYS
+    threat_races: Optional[Set[str]] = None
+    prey_races: Optional[Set[str]] = None
 
     def __post_init__(self):
         object.__setattr__(self, "skill_ids", self.skill_ids or [])
         object.__setattr__(self, "phase_thresholds", self.phase_thresholds or [])
+        object.__setattr__(self, "threat_races", self.threat_races or frozenset())
+        object.__setattr__(self, "prey_races", self.prey_races or frozenset())
         if not isinstance(self.skill_ids, list):
             raise MonsterTemplateValidationException(
                 f"skill_ids must be a list, got {type(self.skill_ids).__name__}"
@@ -82,4 +87,16 @@ class MonsterTemplate:
         if not isinstance(self.ecology_type, EcologyTypeEnum):
             raise MonsterTemplateValidationException(
                 f"ecology_type must be EcologyTypeEnum, got {type(self.ecology_type).__name__}"
+            )
+        if not isinstance(self.active_time, ActiveTimeType):
+            raise MonsterTemplateValidationException(
+                f"active_time must be ActiveTimeType, got {type(self.active_time).__name__}"
+            )
+        if self.threat_races is not None and not isinstance(self.threat_races, (set, frozenset)):
+            raise MonsterTemplateValidationException(
+                f"threat_races must be a set or frozenset, got {type(self.threat_races).__name__}"
+            )
+        if self.prey_races is not None and not isinstance(self.prey_races, (set, frozenset)):
+            raise MonsterTemplateValidationException(
+                f"prey_races must be a set or frozenset, got {type(self.prey_races).__name__}"
             )

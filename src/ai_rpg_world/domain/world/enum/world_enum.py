@@ -95,6 +95,14 @@ class BehaviorActionType(Enum):
     WAIT = "WAIT"
 
 
+class ActiveTimeType(Enum):
+    """活動時間帯（いつ行動するか）"""
+    ALWAYS = "always"       # 常時活動
+    DIURNAL = "diurnal"     # 昼行性（昼のみ）
+    NOCTURNAL = "nocturnal"  # 夜行性（夜のみ）
+    CREPUSCULAR = "crepuscular"  # 薄明性（朝・夕のみ）
+
+
 class Disposition(Enum):
     """種族間の関係タイプ（アクターから対象への態度）"""
     NEUTRAL = "neutral"   # 無視（攻撃しない・逃げない・優先しない）

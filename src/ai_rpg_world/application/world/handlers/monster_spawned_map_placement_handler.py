@@ -112,6 +112,9 @@ class MonsterSpawnedMapPlacementHandler(
             ecology_type=template.ecology_type,
             ambush_chase_range=template.ambush_chase_range,
             territory_radius=template.territory_radius,
+            active_time=template.active_time,
+            threat_races=set(template.threat_races) if template.threat_races else None,
+            prey_races=set(template.prey_races) if template.prey_races else None,
         )
 
         world_object = WorldObject(

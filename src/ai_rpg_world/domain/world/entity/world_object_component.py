@@ -1,11 +1,11 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, Any, Optional, TYPE_CHECKING
+from typing import Dict, Any, Optional, Set, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.world.exception.map_exception import LockedDoorException
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, BehaviorStateEnum, EcologyTypeEnum
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, BehaviorStateEnum, EcologyTypeEnum, ActiveTimeType
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
@@ -239,6 +239,9 @@ class AutonomousBehaviorComponent(ActorComponent):
         ambush_chase_range: Optional[int] = None,
         territory_radius: Optional[int] = None,
         aggro_memory_policy: Optional[AggroMemoryPolicy] = None,
+        active_time: ActiveTimeType = ActiveTimeType.ALWAYS,
+        threat_races: Optional[Set[str]] = None,
+        prey_races: Optional[Set[str]] = None,
     ):
         super().__init__(direction, capability, player_id, is_npc, fov_angle, race, faction, pack_id)
         self._validate(vision_range, search_duration, hp_percentage, flee_threshold, max_failures, random_move_chance)
@@ -265,6 +268,9 @@ class AutonomousBehaviorComponent(ActorComponent):
         self.ambush_chase_range = ambush_chase_range
         self.territory_radius = territory_radius
         self.aggro_memory_policy = aggro_memory_policy
+        self.active_time = active_time
+        self.threat_races = threat_races or frozenset()
+        self.prey_races = prey_races or frozenset()
 
     def _validate(self, vision_range, search_duration, hp_percentage, flee_threshold, max_failures, random_move_chance):
         if vision_range < 0:
@@ -387,6 +393,9 @@ class AutonomousBehaviorComponent(ActorComponent):
             "ecology_type": self.ecology_type.value,
             "ambush_chase_range": self.ambush_chase_range,
             "territory_radius": self.territory_radius,
+            "active_time": self.active_time.value,
+            "threat_races": list(self.threat_races),
+            "prey_races": list(self.prey_races),
         })
         return data
 
