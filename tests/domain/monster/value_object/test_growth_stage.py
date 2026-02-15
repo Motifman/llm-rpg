@@ -44,6 +44,16 @@ class TestGrowthStage:
             assert stage.flee_bias_multiplier == 1.5
             assert stage.allow_chase is False
 
+        def test_create_success_flee_bias_boundary_low(self):
+            """flee_bias_multiplier の境界値 0.1 で作成できること"""
+            stage = GrowthStage(after_ticks=0, stats_multiplier=1.0, flee_bias_multiplier=0.1)
+            assert stage.flee_bias_multiplier == 0.1
+
+        def test_create_success_flee_bias_boundary_high(self):
+            """flee_bias_multiplier の境界値 3.0 で作成できること"""
+            stage = GrowthStage(after_ticks=0, stats_multiplier=1.0, flee_bias_multiplier=3.0)
+            assert stage.flee_bias_multiplier == 3.0
+
     class TestCreateValidationFailure:
         def test_create_fail_negative_after_ticks(self):
             """after_ticks が負の場合は MonsterTemplateValidationException を投げること"""
