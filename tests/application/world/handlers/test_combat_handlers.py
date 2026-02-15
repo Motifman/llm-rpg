@@ -175,7 +175,7 @@ def _create_monster(monster_id: int, world_object_id: int, coordinate: Coordinat
         skill_loadout=loadout,
     )
     monster.clear_events()
-    monster.spawn(coordinate, SpotId(1))
+    monster.spawn(coordinate, SpotId(1), WorldTick(0))
     monster.clear_events()
     return monster
 
