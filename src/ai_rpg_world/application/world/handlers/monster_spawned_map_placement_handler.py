@@ -103,8 +103,15 @@ class MonsterSpawnedMapPlacementHandler(
             flee_threshold=template.flee_threshold,
             available_skills=available_skills,
             hp_percentage=1.0,
-            race=template.race.value if hasattr(template.race, "value") else str(template.race),
-            faction=template.faction.value if hasattr(template.faction, "value") else str(template.faction),
+            race=template.race.value,
+            faction=template.faction.value,
+            behavior_strategy_type=template.behavior_strategy_type,
+            phase_thresholds=list(template.phase_thresholds),
+            pack_id=monster.pack_id,
+            is_pack_leader=monster.is_pack_leader,
+            ecology_type=template.ecology_type,
+            ambush_chase_range=template.ambush_chase_range,
+            territory_radius=template.territory_radius,
         )
 
         world_object = WorldObject(

@@ -4,7 +4,13 @@ from unittest.mock import MagicMock
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, BehaviorStateEnum, DirectionEnum, BehaviorActionType
+from ai_rpg_world.domain.world.enum.world_enum import (
+    ObjectTypeEnum,
+    BehaviorStateEnum,
+    DirectionEnum,
+    BehaviorActionType,
+    Disposition,
+)
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
@@ -16,6 +22,11 @@ from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingSer
 from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import AStarPathfindingStrategy
 from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
 from ai_rpg_world.domain.world.service.hostility_service import ConfigurableHostilityService
+from ai_rpg_world.domain.world.service.allegiance_service import PackAllegianceService
+from ai_rpg_world.domain.world.service.skill_selection_policy import SkillSelectionPolicy
+from ai_rpg_world.domain.world.value_object.pack_id import PackId
+from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
+from ai_rpg_world.domain.world.service.behavior_strategy import DefaultBehaviorStrategy
 from ai_rpg_world.domain.world.exception.behavior_exception import (
     VisionRangeValidationException,
     FOVAngleValidationException,
@@ -348,3 +359,256 @@ class TestBehaviorService:
             
             behavior_service.plan_next_move(WorldObjectId(100), map_agg)
             assert comp.state == BehaviorStateEnum.CHASE
+
+    class TestCustomPolicyAndStrategy:
+        """カスタムポリシー・戦略を注入した BehaviorService の動作"""
+
+        def test_behavior_service_uses_injected_skill_policy(self, pathfinding_service, map_aggregate):
+            """注入したスキル選択ポリシーが使われること（2番目スキルを選ぶポリシー）"""
+            class SecondInRangeSkillPolicy(SkillSelectionPolicy):
+                def select_slot(self, actor, target, available_skills, context=None):
+                    in_range = [
+                        s for s in available_skills
+                        if actor.coordinate.distance_to(target.coordinate) <= s.range
+                    ]
+                    return in_range[1].slot_index if len(in_range) > 1 else (in_range[0].slot_index if in_range else None)
+
+            strategy = DefaultBehaviorStrategy(pathfinding_service, SecondInRangeSkillPolicy())
+            hostility = ConfigurableHostilityService(race_hostility_table={"goblin": {"human"}})
+            service = BehaviorService(pathfinding_service, hostility, strategy=strategy)
+
+            monster_id = WorldObjectId(100)
+            skills = [
+                MonsterSkillInfo(slot_index=0, range=5, mp_cost=10),
+                MonsterSkillInfo(slot_index=1, range=5, mp_cost=20),
+            ]
+            comp = AutonomousBehaviorComponent(
+                race="goblin",
+                vision_range=5,
+                fov_angle=360,
+                available_skills=skills,
+            )
+            monster = WorldObject(monster_id, Coordinate(5, 5), ObjectTypeEnum.NPC, component=comp)
+            map_aggregate.add_object(monster)
+            player = WorldObject(
+                WorldObjectId(1), Coordinate(6, 5), ObjectTypeEnum.PLAYER, component=ActorComponent(race="human")
+            )
+            map_aggregate.add_object(player)
+
+            action = service.plan_action(monster_id, map_aggregate)
+            assert action.action_type == BehaviorActionType.USE_SKILL
+            assert action.skill_slot_index == 1
+
+    class TestAllegianceExclusion:
+        """味方をターゲットから除外するテスト"""
+
+        def test_ally_excluded_from_targets(self, pathfinding_service, map_aggregate):
+            """同一パックの味方は視界内にいてもターゲットに選ばれず、プレイヤーのみターゲットになる"""
+            hostility = ConfigurableHostilityService(race_hostility_table={"goblin": {"human"}})
+            allegiance = PackAllegianceService()
+            service = BehaviorService(
+                pathfinding_service, hostility, allegiance_service=allegiance
+            )
+            pack = PackId.create("wolf_pack")
+            monster_a_id = WorldObjectId(100)
+            comp_a = AutonomousBehaviorComponent(
+                race="goblin",
+                vision_range=10,
+                fov_angle=360,
+                pack_id=pack,
+            )
+            monster_a = WorldObject(
+                monster_a_id, Coordinate(5, 5), ObjectTypeEnum.NPC, is_blocking=False, component=comp_a
+            )
+            map_aggregate.add_object(monster_a)
+
+            monster_b_id = WorldObjectId(101)
+            comp_b = AutonomousBehaviorComponent(
+                race="goblin",
+                vision_range=10,
+                fov_angle=360,
+                pack_id=pack,
+            )
+            monster_b = WorldObject(
+                monster_b_id, Coordinate(6, 5), ObjectTypeEnum.NPC, is_blocking=False, component=comp_b
+            )
+            map_aggregate.add_object(monster_b)
+
+            player_id = WorldObjectId(1)
+            player = WorldObject(
+                player_id, Coordinate(7, 5), ObjectTypeEnum.PLAYER, is_blocking=False,
+                component=ActorComponent(race="human"),
+            )
+            map_aggregate.add_object(player)
+
+            action = service.plan_action(monster_a_id, map_aggregate)
+            assert comp_a.target_id == player_id
+            assert comp_a.target_id != monster_b_id
+
+        def test_actor_not_in_map_raises_object_not_found(self, behavior_service, map_aggregate):
+            """マップに存在しない actor_id で plan_action を呼ぶと ObjectNotFoundException"""
+            missing_id = WorldObjectId(99999)
+            with pytest.raises(ObjectNotFoundException) as exc_info:
+                behavior_service.plan_action(missing_id, map_aggregate)
+            assert str(missing_id) in str(exc_info.value) or "99999" in str(exc_info.value)
+            assert "not found" in str(exc_info.value).lower()
+            assert exc_info.value.error_code == "MAP.OBJECT_NOT_FOUND"
+
+    class TestEnrageTransition:
+        """phase_thresholds による ENRAGE 遷移のテスト"""
+
+        def test_phase_threshold_triggers_enrage_state(self, pathfinding_service, hostility_service, map_aggregate):
+            """HP% が phase_thresholds[0] 以下になると ENRAGE 状態に遷移しイベントが発行されること"""
+            service = BehaviorService(pathfinding_service, hostility_service)
+            comp = AutonomousBehaviorComponent(
+                race="goblin",
+                vision_range=5,
+                fov_angle=360,
+                hp_percentage=0.3,
+                flee_threshold=0.1,
+                phase_thresholds=[0.5],
+            )
+            monster_id = WorldObjectId(100)
+            monster = WorldObject(
+                monster_id, Coordinate(5, 5), ObjectTypeEnum.NPC, is_blocking=False, component=comp
+            )
+            map_aggregate.add_object(monster)
+            player = WorldObject(
+                WorldObjectId(1), Coordinate(6, 5), ObjectTypeEnum.PLAYER, is_blocking=False, component=ActorComponent(race="human")
+            )
+            map_aggregate.add_object(player)
+            service.plan_action(monster_id, map_aggregate)
+            assert comp.state == BehaviorStateEnum.ENRAGE
+            events = map_aggregate.get_events()
+            assert any(
+                isinstance(e, ActorStateChangedEvent) and e.new_state == BehaviorStateEnum.ENRAGE
+                for e in events
+            )
+
+    class TestDispositionThreatFlee:
+        """THREAT（脅威）視界内で FLEE に遷移するテスト"""
+
+        def test_threat_in_sight_transitions_to_flee(self, pathfinding_service, map_aggregate):
+            """視界内に THREAT がいる場合、攻撃せず FLEE に遷移すること"""
+            hostility = ConfigurableHostilityService(
+                race_disposition_table={
+                    "goblin": {"dragon": Disposition.THREAT},
+                }
+            )
+            service = BehaviorService(pathfinding_service, hostility)
+            comp = AutonomousBehaviorComponent(
+                race="goblin",
+                vision_range=3,
+                fov_angle=360,
+                hp_percentage=1.0,
+            )
+            monster_id = WorldObjectId(100)
+            monster = WorldObject(
+                monster_id, Coordinate(5, 5), ObjectTypeEnum.NPC, is_blocking=False, component=comp
+            )
+            map_aggregate.add_object(monster)
+            dragon = WorldObject(
+                WorldObjectId(200),
+                Coordinate(6, 5),
+                ObjectTypeEnum.NPC,
+                is_blocking=False,
+                component=AutonomousBehaviorComponent(race="dragon"),
+            )
+            map_aggregate.add_object(dragon)
+
+            action = service.plan_action(monster_id, map_aggregate)
+
+            assert comp.state == BehaviorStateEnum.FLEE
+            assert comp.target_id == dragon.object_id
+            assert action.action_type == BehaviorActionType.MOVE
+
+        def test_hostile_and_threat_present_threat_triggers_flee(self, pathfinding_service, map_aggregate):
+            """視界内に HOSTILE と THREAT がいる場合、THREAT で FLEE になること（THREAT 優先）"""
+            hostility = ConfigurableHostilityService(
+                race_disposition_table={
+                    "goblin": {
+                        "human": Disposition.HOSTILE,
+                        "dragon": Disposition.THREAT,
+                    },
+                }
+            )
+            service = BehaviorService(pathfinding_service, hostility)
+            comp = AutonomousBehaviorComponent(
+                race="goblin",
+                vision_range=3,
+                fov_angle=360,
+                hp_percentage=1.0,
+            )
+            monster_id = WorldObjectId(100)
+            monster = WorldObject(
+                monster_id, Coordinate(5, 5), ObjectTypeEnum.NPC, is_blocking=False, component=comp
+            )
+            map_aggregate.add_object(monster)
+            human = WorldObject(
+                WorldObjectId(1),
+                Coordinate(5, 6),
+                ObjectTypeEnum.PLAYER,
+                is_blocking=False,
+                component=ActorComponent(race="human"),
+            )
+            dragon = WorldObject(
+                WorldObjectId(200),
+                Coordinate(5, 4),
+                ObjectTypeEnum.NPC,
+                is_blocking=False,
+                component=AutonomousBehaviorComponent(race="dragon"),
+            )
+            map_aggregate.add_object(human)
+            map_aggregate.add_object(dragon)
+
+            service.plan_action(monster_id, map_aggregate)
+
+            assert comp.state == BehaviorStateEnum.FLEE
+            assert comp.target_id == dragon.object_id
+
+    class TestDispositionPreyPriority:
+        """PREY（獲物）優先ターゲット選択のテスト"""
+
+        def test_prey_selected_over_hostile(self, pathfinding_service, map_aggregate):
+            """視界内に HOSTILE と PREY がいる場合、PREY がターゲットに選ばれること"""
+            hostility = ConfigurableHostilityService(
+                race_disposition_table={
+                    "wolf": {
+                        "human": Disposition.HOSTILE,
+                        "rabbit": Disposition.PREY,
+                    },
+                }
+            )
+            service = BehaviorService(pathfinding_service, hostility)
+            comp = AutonomousBehaviorComponent(
+                race="wolf",
+                vision_range=10,
+                fov_angle=360,
+                hp_percentage=1.0,
+            )
+            monster_id = WorldObjectId(100)
+            monster = WorldObject(
+                monster_id, Coordinate(5, 5), ObjectTypeEnum.NPC, is_blocking=False, component=comp
+            )
+            map_aggregate.add_object(monster)
+            human = WorldObject(
+                WorldObjectId(1),
+                Coordinate(5, 4),
+                ObjectTypeEnum.PLAYER,
+                is_blocking=False,
+                component=ActorComponent(race="human"),
+            )
+            rabbit = WorldObject(
+                WorldObjectId(201),
+                Coordinate(5, 6),
+                ObjectTypeEnum.NPC,
+                is_blocking=False,
+                component=AutonomousBehaviorComponent(race="rabbit"),
+            )
+            map_aggregate.add_object(human)
+            map_aggregate.add_object(rabbit)
+
+            service.plan_action(monster_id, map_aggregate)
+
+            assert comp.state == BehaviorStateEnum.CHASE
+            assert comp.target_id == rabbit.object_id

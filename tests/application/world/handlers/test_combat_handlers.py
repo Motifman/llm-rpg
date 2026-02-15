@@ -1,12 +1,14 @@
 import pytest
 import logging
 from typing import Dict, List, Optional, Set
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from ai_rpg_world.application.world.handlers.hit_box_damage_handler import HitBoxDamageHandler
 from ai_rpg_world.application.world.handlers.combat_aggro_handler import CombatAggroHandler
+from ai_rpg_world.application.world.aggro_store import AggroStore
+from ai_rpg_world.infrastructure.aggro.in_memory_aggro_store import InMemoryAggroStore
 from ai_rpg_world.application.world.handlers.monster_death_reward_handler import MonsterDeathRewardHandler
-from ai_rpg_world.application.common.exceptions import ApplicationException
+from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
     PlayerNotFoundException,
 )
@@ -15,9 +17,6 @@ from ai_rpg_world.application.world.handlers.monster_spawned_map_placement_handl
 )
 from ai_rpg_world.application.world.services.world_simulation_service import (
     WorldSimulationApplicationService,
-)
-from ai_rpg_world.application.monster.services.monster_skill_application_service import (
-    MonsterSkillApplicationService,
 )
 from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
 from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
@@ -76,6 +75,8 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.world.value_object.aggro_memory_policy import AggroMemoryPolicy
+from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
 from ai_rpg_world.infrastructure.events.combat_event_handler_registry import CombatEventHandlerRegistry
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_hit_box_repository import InMemoryHitBoxRepository
@@ -571,6 +572,252 @@ class TestCombatAggroHandler:
         # エラーにならずに終了することを確認
         assert True
 
+    def test_aggro_store_receives_aggro_when_target_is_autonomous(self, setup):
+        # Given: アタッカーと被弾者ともにアクター、被弾者は AutonomousBehaviorComponent、aggro_store を注入
+        s = setup
+        aggro_store = InMemoryAggroStore()
+        handler = CombatAggroHandler(
+            s["hit_box_repo"], s["map_repo"], s["uow"], aggro_store=aggro_store
+        )
+        pmap = _create_map()
+        attacker_id = WorldObjectId(100)
+        target_id = WorldObjectId(300)
+        attacker_obj = _create_actor_object(100, Coordinate(0, 0, 0), player_id=100)
+        monster_obj = WorldObject(
+            target_id, Coordinate(1, 1, 0), ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(state=BehaviorStateEnum.IDLE),
+        )
+        pmap.add_object(attacker_obj)
+        pmap.add_object(monster_obj)
+        s["map_repo"].save(pmap)
+
+        hb = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(1),
+            spot_id=SpotId(1),
+            owner_id=attacker_id,
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(10),
+            duration=5,
+        )
+        s["hit_box_repo"].save(hb)
+
+        event = HitBoxHitRecordedEvent.create(
+            aggregate_id=hb.hit_box_id,
+            aggregate_type="HitBoxAggregate",
+            owner_id=attacker_id,
+            target_id=target_id,
+            hit_coordinate=Coordinate(1, 1, 0),
+        )
+
+        # When
+        with s["uow"]:
+            handler.handle(event)
+
+        # Then: 被弾者側のコンポーネントに spot_target が呼ばれ、aggro_store にヘイトが加算されている
+        updated_map = s["map_repo"].find_by_spot_id(SpotId(1))
+        target = updated_map.get_object(target_id)
+        assert target.component.target_id == attacker_id
+        threat = aggro_store.get_threat_by_attacker(SpotId(1), attacker_id)
+        assert threat == {target_id: 1}
+
+    def test_aggro_stored_with_current_tick_when_game_time_provider_injected(self, setup):
+        """game_time_provider を注入した場合、add_aggro にその時点の tick が渡され last_seen_tick として記録されること"""
+        s = setup
+        aggro_store = InMemoryAggroStore()
+        time_provider = InMemoryGameTimeProvider(initial_tick=50)
+        handler = CombatAggroHandler(
+            s["hit_box_repo"], s["map_repo"], s["uow"],
+            aggro_store=aggro_store,
+            game_time_provider=time_provider,
+        )
+        pmap = _create_map()
+        attacker_id = WorldObjectId(100)
+        target_id = WorldObjectId(300)
+        pmap.add_object(_create_actor_object(100, Coordinate(0, 0, 0), player_id=100))
+        pmap.add_object(WorldObject(
+            target_id, Coordinate(1, 1, 0), ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(state=BehaviorStateEnum.IDLE),
+        ))
+        s["map_repo"].save(pmap)
+        hb = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(1),
+            spot_id=SpotId(1),
+            owner_id=attacker_id,
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(10),
+            duration=5,
+        )
+        s["hit_box_repo"].save(hb)
+        event = HitBoxHitRecordedEvent.create(
+            aggregate_id=hb.hit_box_id,
+            aggregate_type="HitBoxAggregate",
+            owner_id=attacker_id,
+            target_id=target_id,
+            hit_coordinate=Coordinate(1, 1, 0),
+        )
+        with s["uow"]:
+            handler.handle(event)
+        policy = AggroMemoryPolicy(forget_after_ticks=10)
+        threat_within = aggro_store.get_threat_by_attacker(
+            SpotId(1), attacker_id, current_tick=59, memory_policy=policy
+        )
+        threat_after = aggro_store.get_threat_by_attacker(
+            SpotId(1), attacker_id, current_tick=61, memory_policy=policy
+        )
+        assert threat_within == {target_id: 1}
+        assert threat_after == {}
+
+    def test_aggro_store_not_called_when_aggro_store_none(self, setup):
+        # Given: aggro_store なしでハンドラを構築
+        s = setup
+        pmap = _create_map()
+        attacker_obj = _create_actor_object(100, Coordinate(0, 0, 0), player_id=100)
+        monster_obj = WorldObject(
+            WorldObjectId(300), Coordinate(1, 1, 0), ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(state=BehaviorStateEnum.IDLE),
+        )
+        pmap.add_object(attacker_obj)
+        pmap.add_object(monster_obj)
+        s["map_repo"].save(pmap)
+
+        hb = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(1),
+            spot_id=SpotId(1),
+            owner_id=WorldObjectId(100),
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(10),
+            duration=5,
+        )
+        s["hit_box_repo"].save(hb)
+        event = HitBoxHitRecordedEvent.create(
+            aggregate_id=hb.hit_box_id,
+            aggregate_type="HitBoxAggregate",
+            owner_id=WorldObjectId(100),
+            target_id=WorldObjectId(300),
+            hit_coordinate=Coordinate(1, 1, 0),
+        )
+
+        # When: aggro_store なしのハンドラで handle
+        with s["uow"]:
+            s["handler"].handle(event)
+
+        # Then: エラーにならず、spot_target は反映されている（既存の test と同様）
+        updated_map = s["map_repo"].find_by_spot_id(SpotId(1))
+        target = updated_map.get_object(WorldObjectId(300))
+        assert target.component.target_id == WorldObjectId(100)
+
+    def test_handle_hit_box_not_found(self, setup):
+        """HitBox が存在しないイベントの場合は例外を出さずに return する"""
+        s = setup
+        event = HitBoxHitRecordedEvent.create(
+            aggregate_id=HitBoxId.create(999),
+            aggregate_type="HitBoxAggregate",
+            owner_id=WorldObjectId(100),
+            target_id=WorldObjectId(200),
+            hit_coordinate=Coordinate(1, 1, 0),
+        )
+        with s["uow"]:
+            s["handler"].handle(event)
+        assert True
+
+    def test_handle_map_not_found(self, setup):
+        """HitBox の spot_id に対応するマップが存在しない場合は例外を出さずに return する"""
+        s = setup
+        hb = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(1),
+            spot_id=SpotId(1),
+            owner_id=WorldObjectId(100),
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(10),
+            duration=5,
+        )
+        s["hit_box_repo"].save(hb)
+        s["data_store"].physical_maps.clear()
+        event = HitBoxHitRecordedEvent.create(
+            aggregate_id=hb.hit_box_id,
+            aggregate_type="HitBoxAggregate",
+            owner_id=WorldObjectId(100),
+            target_id=WorldObjectId(200),
+            hit_coordinate=Coordinate(1, 1, 0),
+        )
+        with s["uow"]:
+            s["handler"].handle(event)
+        assert True
+
+    def test_handle_combatant_disappeared(self, setup):
+        """Owner または Target がマップに存在しない（ObjectNotFoundException）場合は例外を出さずに return する"""
+        s = setup
+        pmap = _create_map()
+        pmap.add_object(_create_actor_object(100, Coordinate(0, 0, 0), player_id=100))
+        s["map_repo"].save(pmap)
+        hb = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(1),
+            spot_id=SpotId(1),
+            owner_id=WorldObjectId(100),
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(10),
+            duration=5,
+        )
+        s["hit_box_repo"].save(hb)
+        event = HitBoxHitRecordedEvent.create(
+            aggregate_id=hb.hit_box_id,
+            aggregate_type="HitBoxAggregate",
+            owner_id=WorldObjectId(100),
+            target_id=WorldObjectId(200),
+            hit_coordinate=Coordinate(1, 1, 0),
+        )
+        with s["uow"]:
+            s["handler"].handle(event)
+        assert True
+
+    def test_handle_unexpected_exception_raises_system_error_exception(self, setup):
+        """想定外の例外が _handle_impl 内で発生した場合、handle() は SystemErrorException を送出する"""
+        s = setup
+        pmap = _create_map()
+        pmap.add_object(_create_actor_object(100, Coordinate(0, 0, 0), player_id=100))
+        pmap.add_object(
+            WorldObject(
+                WorldObjectId(300),
+                Coordinate(1, 1, 0),
+                ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.IDLE),
+            )
+        )
+        s["map_repo"].save(pmap)
+        hb = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(1),
+            spot_id=SpotId(1),
+            owner_id=WorldObjectId(100),
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(10),
+            duration=5,
+        )
+        s["hit_box_repo"].save(hb)
+        event = HitBoxHitRecordedEvent.create(
+            aggregate_id=hb.hit_box_id,
+            aggregate_type="HitBoxAggregate",
+            owner_id=WorldObjectId(100),
+            target_id=WorldObjectId(300),
+            hit_coordinate=Coordinate(1, 1, 0),
+        )
+        with patch.object(
+            s["map_repo"],
+            "find_by_spot_id",
+            side_effect=RuntimeError("unexpected repo error"),
+        ):
+            with pytest.raises(SystemErrorException) as excinfo:
+                with s["uow"]:
+                    s["handler"].handle(event)
+        assert "Combat aggro handling failed" in str(excinfo.value)
+        assert excinfo.value.original_exception is not None
+        assert isinstance(excinfo.value.original_exception, RuntimeError)
+
 
 class TestMonsterDeathRewardHandler:
     @pytest.fixture
@@ -738,21 +985,12 @@ class TestCombatIntegration:
 
         behavior_service = BehaviorService(PathfindingService(None))
         skill_loadout_repo = MagicMock()
-        skill_spec_repo = MagicMock()
         skill_execution_service = SkillExecutionDomainService(
             SkillTargetingDomainService(),
             SkillToHitBoxDomainService(),
         )
-        monster_skill_service = MonsterSkillApplicationService(
-            monster_repository=monster_repo,
-            skill_loadout_repository=skill_loadout_repo,
-            skill_spec_repository=skill_spec_repo,
-            physical_map_repository=map_repo,
-            hit_box_repository=hit_box_repo,
-            skill_execution_service=skill_execution_service,
-            hit_box_factory=HitBoxFactory(),
-            unit_of_work=uow,
-        )
+        from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import MonsterSkillExecutionDomainService
+        monster_skill_execution_domain_service = MonsterSkillExecutionDomainService(skill_execution_service)
         service = WorldSimulationApplicationService(
             time_provider=time_provider,
             physical_map_repository=map_repo,
@@ -762,7 +1000,10 @@ class TestCombatIntegration:
             behavior_service=behavior_service,
             weather_config_service=DefaultWeatherConfigService(1),
             unit_of_work=uow,
-            monster_skill_service=monster_skill_service,
+            monster_repository=monster_repo,
+            skill_loadout_repository=skill_loadout_repo,
+            monster_skill_execution_domain_service=monster_skill_execution_domain_service,
+            hit_box_factory=HitBoxFactory(),
             hit_box_config_service=DefaultHitBoxConfigService(4),
             hit_box_collision_service=HitBoxCollisionDomainService(),
         )

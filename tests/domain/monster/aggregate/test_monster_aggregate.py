@@ -31,6 +31,7 @@ from ai_rpg_world.domain.combat.service.combat_logic_service import CombatLogicS
 from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
@@ -141,6 +142,28 @@ class TestMonsterAggregate:
             # When & Then
             with pytest.raises(MonsterAlreadySpawnedException):
                 monster.spawn(Coordinate(1, 1, 0), spot_id)
+
+        def test_spawn_with_pack_id_sets_pack_and_leader(self, monster: MonsterAggregate, spot_id: SpotId):
+            """spawn に pack_id / is_pack_leader を渡すとインスタンスに設定されること"""
+            pack_id = PackId.create("goblin_pack_1")
+            monster.spawn(Coordinate(0, 0, 0), spot_id, pack_id=pack_id, is_pack_leader=True)
+            assert monster.pack_id == pack_id
+            assert monster.is_pack_leader is True
+
+        def test_spawn_without_pack_keeps_none(self, monster: MonsterAggregate, spot_id: SpotId):
+            """pack を渡さない場合 pack_id は None、is_pack_leader は False のままであること"""
+            monster.spawn(Coordinate(0, 0, 0), spot_id)
+            assert monster.pack_id is None
+            assert monster.is_pack_leader is False
+
+        def test_respawn_preserves_pack_id_and_leader(self, monster: MonsterAggregate, spot_id: SpotId):
+            """リスポーン後も pack_id / is_pack_leader が維持されること"""
+            pack_id = PackId.create("pack_a")
+            monster.spawn(Coordinate(0, 0, 0), spot_id, pack_id=pack_id, is_pack_leader=False)
+            monster.apply_damage(100, WorldTick(100))
+            monster.respawn(Coordinate(5, 5, 0), WorldTick(200), spot_id)
+            assert monster.pack_id == pack_id
+            assert monster.is_pack_leader is False
 
     class TestApplyDamage:
         def test_apply_damage_success(self, monster: MonsterAggregate, spot_id: SpotId):

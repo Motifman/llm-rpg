@@ -22,6 +22,7 @@ from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
 from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
 from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
 from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
+from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import MonsterSkillExecutionDomainService
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
@@ -40,7 +41,7 @@ from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
 from ai_rpg_world.domain.player.enum.player_enum import Race, Element
-from ai_rpg_world.application.common.exceptions import ApplicationException
+from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.monster.exceptions import (
     MonsterNotFoundForSkillException,
     MonsterSkillNotFoundInSlotException,
@@ -125,6 +126,7 @@ class TestMonsterSkillApplicationService:
         skill_to_hitbox_service = SkillToHitBoxDomainService()
         skill_targeting_service = SkillTargetingDomainService()
         skill_execution_service = SkillExecutionDomainService(skill_targeting_service, skill_to_hitbox_service)
+        monster_skill_execution_domain_service = MonsterSkillExecutionDomainService(skill_execution_service)
         hitbox_factory = HitBoxFactory()
         uow = _FakeUow()
         
@@ -134,7 +136,7 @@ class TestMonsterSkillApplicationService:
             spec_repo,
             map_repo,
             hitbox_repo,
-            skill_execution_service,
+            monster_skill_execution_domain_service,
             hitbox_factory,
             uow
         )
@@ -358,3 +360,33 @@ class TestMonsterSkillApplicationService:
             service.use_monster_skill(world_object_id, spot_id, 0, WorldTick(10))
         assert "1000" in str(excinfo.value)
         assert "1" in str(excinfo.value)
+
+    def test_use_monster_skill_unexpected_exception_raises_system_error_exception(self, setup):
+        """予期しない例外（ドメイン・アプリ以外）が発生した場合 SystemErrorException が送出されること"""
+        service, monster_repo, loadout_repo, spec_repo, map_repo, _, _ = setup
+        spot_id = SpotId(1)
+        world_object_id = WorldObjectId(1000)
+        monster_id = MonsterId(100)
+        pmap = _create_sample_map(1)
+        monster_obj = WorldObject(world_object_id, Coordinate(5, 5, 0), ObjectTypeEnum.NPC, component=ActorComponent())
+        pmap.add_object(monster_obj)
+        map_repo.save(pmap)
+        skill = _sample_skill(1, mp_cost=10)
+        spec_repo.save(skill)
+        loadout = SkillLoadoutAggregate.create(SkillLoadoutId(500), 1000, 10, 10)
+        loadout.equip_skill(DeckTier.NORMAL, 0, skill)
+        loadout_repo.save(loadout)
+        monster = MonsterAggregate.create(monster_id, _sample_monster_template(1), world_object_id, skill_loadout=loadout)
+        monster.spawn(Coordinate(5, 5, 0), SpotId(1))
+        monster_repo.save(monster)
+
+        with mock.patch.object(
+            service._monster_skill_execution_domain_service,
+            "execute",
+            side_effect=RuntimeError("unexpected internal error"),
+        ):
+            with pytest.raises(SystemErrorException) as excinfo:
+                service.use_monster_skill(world_object_id, spot_id, 0, WorldTick(10))
+        assert "Failed to use monster skill" in str(excinfo.value)
+        assert excinfo.value.original_exception is not None
+        assert isinstance(excinfo.value.original_exception, RuntimeError)

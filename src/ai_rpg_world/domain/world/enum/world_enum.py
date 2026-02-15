@@ -76,6 +76,16 @@ class BehaviorStateEnum(Enum):
     SEARCH = "SEARCH"   # 探索（見失った地点へ向かう）
     FLEE = "FLEE"       # 逃走
     RETURN = "RETURN"   # 初期位置への帰還
+    ENRAGE = "ENRAGE"   # 怒り（ボス等のフェーズ状態）
+
+
+class EcologyTypeEnum(Enum):
+    """生態・行動タイプ（追跡・逃走・縄張りの振る舞い）"""
+    NORMAL = "normal"           # 通常（発見したら追跡・HPで逃走）
+    PATROL_ONLY = "patrol_only" # 巡回のみ（発見しても追わない）
+    AMBUSH = "ambush"           # 待ち伏せ（初期位置から一定距離までしか追わない）
+    FLEE_ONLY = "flee_only"     # 逃走専用（発見したら逃げるのみ）
+    TERRITORIAL = "territorial" # 縄張り（初期位置から一定距離を超えたら帰還）
 
 
 class BehaviorActionType(Enum):
@@ -83,3 +93,12 @@ class BehaviorActionType(Enum):
     MOVE = "MOVE"
     USE_SKILL = "USE_SKILL"
     WAIT = "WAIT"
+
+
+class Disposition(Enum):
+    """種族間の関係タイプ（アクターから対象への態度）"""
+    NEUTRAL = "neutral"   # 無視（攻撃しない・逃げない・優先しない）
+    ALLY = "ally"         # 味方（攻撃しない）
+    HOSTILE = "hostile"   # 敵対（攻撃・CHASE の対象）
+    PREY = "prey"         # 獲物（敵対かつターゲット選択で優先）
+    THREAT = "threat"     # 脅威（視界内にいれば FLEE、攻撃対象にしない）
