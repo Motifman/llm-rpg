@@ -12,7 +12,10 @@ from ai_rpg_world.domain.world.service.target_selection_policy import (
     NearestTargetPolicy,
     HighestThreatTargetPolicy,
     LowestHpTargetPolicy,
+    PreyPriorityTargetPolicy,
 )
+from ai_rpg_world.domain.world.service.hostility_service import ConfigurableHostilityService
+from ai_rpg_world.domain.world.enum.world_enum import Disposition
 
 
 class TestNearestTargetPolicy:
@@ -309,3 +312,82 @@ class TestLowestHpTargetPolicy:
         result = policy.select_target(actor, candidates, context)
         assert result is not None
         assert result.object_id == WorldObjectId(1)
+
+
+class TestPreyPriorityTargetPolicy:
+    """PreyPriorityTargetPolicy の正常・境界ケース"""
+
+    @pytest.fixture
+    def hostility_service(self):
+        return ConfigurableHostilityService(
+            race_disposition_table={
+                "wolf": {"rabbit": Disposition.PREY, "human": Disposition.HOSTILE},
+            }
+        )
+
+    @pytest.fixture
+    def policy(self, hostility_service):
+        return PreyPriorityTargetPolicy(hostility_service, NearestTargetPolicy())
+
+    @pytest.fixture
+    def actor(self) -> WorldObject:
+        comp = AutonomousBehaviorComponent(race="wolf", vision_range=5)
+        return WorldObject(
+            object_id=WorldObjectId(100),
+            coordinate=Coordinate(5, 5),
+            object_type=ObjectTypeEnum.NPC,
+            is_blocking=False,
+            component=comp,
+        )
+
+    @pytest.fixture
+    def candidate_prey(self) -> WorldObject:
+        return WorldObject(
+            object_id=WorldObjectId(201),
+            coordinate=Coordinate(7, 5),
+            object_type=ObjectTypeEnum.NPC,
+            is_blocking=False,
+            component=AutonomousBehaviorComponent(race="rabbit"),
+        )
+
+    @pytest.fixture
+    def candidate_hostile(self) -> WorldObject:
+        return WorldObject(
+            object_id=WorldObjectId(1),
+            coordinate=Coordinate(6, 5),
+            object_type=ObjectTypeEnum.PLAYER,
+            is_blocking=False,
+            component=ActorComponent(race="human"),
+        )
+
+    def test_select_target_returns_none_when_empty(self, policy, actor):
+        """候補が空のとき None を返すこと"""
+        result = policy.select_target(actor, [])
+        assert result is None
+
+    def test_select_target_prefers_prey_over_hostile(self, policy, actor, candidate_prey, candidate_hostile):
+        """PREY を HOSTILE より優先して選択すること（獲物が遠くても選ぶ）"""
+        candidates = [candidate_hostile, candidate_prey]
+        result = policy.select_target(actor, candidates)
+        assert result is not None
+        assert result.object_id == WorldObjectId(201)
+
+    def test_select_target_falls_back_when_no_prey(self, policy, actor, candidate_hostile):
+        """獲物がいないときはフォールバック（最近距離）で選ぶこと"""
+        candidate_far = WorldObject(
+            object_id=WorldObjectId(2),
+            coordinate=Coordinate(9, 9),
+            object_type=ObjectTypeEnum.PLAYER,
+            is_blocking=False,
+            component=ActorComponent(race="human"),
+        )
+        candidates = [candidate_far, candidate_hostile]
+        result = policy.select_target(actor, candidates)
+        assert result is not None
+        assert result.object_id == WorldObjectId(1)
+
+    def test_select_target_single_prey_returns_it(self, policy, actor, candidate_prey):
+        """獲物が1体だけのときその1体を返すこと"""
+        result = policy.select_target(actor, [candidate_prey])
+        assert result is not None
+        assert result.object_id == WorldObjectId(201)

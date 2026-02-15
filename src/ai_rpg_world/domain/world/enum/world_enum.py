@@ -93,3 +93,12 @@ class BehaviorActionType(Enum):
     MOVE = "MOVE"
     USE_SKILL = "USE_SKILL"
     WAIT = "WAIT"
+
+
+class Disposition(Enum):
+    """種族間の関係タイプ（アクターから対象への態度）"""
+    NEUTRAL = "neutral"   # 無視（攻撃しない・逃げない・優先しない）
+    ALLY = "ally"         # 味方（攻撃しない）
+    HOSTILE = "hostile"   # 敵対（攻撃・CHASE の対象）
+    PREY = "prey"         # 獲物（敵対かつターゲット選択で優先）
+    THREAT = "threat"     # 脅威（視界内にいれば FLEE、攻撃対象にしない）
