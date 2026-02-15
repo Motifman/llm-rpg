@@ -1,6 +1,7 @@
 import pytest
 import unittest.mock as mock
 from ai_rpg_world.application.world.services.world_simulation_service import WorldSimulationApplicationService
+from ai_rpg_world.application.world.services.caching_pathfinding_service import CachingPathfindingService
 from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import InMemoryGameTimeProvider
 from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import InMemoryPhysicalMapRepository
 from ai_rpg_world.infrastructure.repository.in_memory_weather_zone_repository import InMemoryWeatherZoneRepository
@@ -116,7 +117,12 @@ class TestWorldSimulationApplicationService:
         
         from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import AStarPathfindingStrategy
         pathfinding_service = PathfindingService(AStarPathfindingStrategy())
-        behavior_service = BehaviorService(pathfinding_service)
+        caching_pathfinding = CachingPathfindingService(
+            pathfinding_service,
+            time_provider=time_provider,
+            ttl_ticks=5,
+        )
+        behavior_service = BehaviorService(caching_pathfinding)
         weather_config = DefaultWeatherConfigService(update_interval_ticks=1)
         hit_box_config = DefaultHitBoxConfigService(substeps_per_tick=4)
         hit_box_collision_service = HitBoxCollisionDomainService()
