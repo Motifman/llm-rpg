@@ -117,9 +117,9 @@ class WorldSimulationApplicationService:
             if player_map_map:
                 self._apply_environmental_effects_bulk(player_map_map)
             
-            # 4. 各マップのアクターの行動更新
+            # 4. 各マップのアクターの行動更新（同一スポット内でプレイヤーとの距離が近い順に処理）
             for physical_map in maps:
-                for actor in physical_map.actors:
+                for actor in self._actors_sorted_by_distance_to_players(physical_map):
                     # Busy状態のアクターはスキップ
                     if actor.is_busy(current_tick):
                         continue
@@ -174,6 +174,28 @@ class WorldSimulationApplicationService:
                 self._physical_map_repository.save(physical_map)
             
             return current_tick
+
+    def _actors_sorted_by_distance_to_players(
+        self, physical_map: PhysicalMapAggregate
+    ) -> List[WorldObject]:
+        """
+        同一マップ上のプレイヤー位置との距離が近い順にアクターを返す。
+        プレイヤーが誰もいない場合は physical_map.actors の順のまま返す。
+        距離は同一スポット内の座標（Coordinate.distance_to）で計算する。
+        """
+        actors = physical_map.actors
+        player_coords = [
+            a.coordinate for a in actors
+            if a.player_id is not None
+        ]
+        if not player_coords:
+            return list(actors)
+        return sorted(
+            actors,
+            key=lambda a: min(
+                a.coordinate.distance_to(p) for p in player_coords
+            ),
+        )
 
     def _build_skill_context_for_actor(
         self,
