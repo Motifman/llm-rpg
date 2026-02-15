@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
@@ -8,6 +8,7 @@ from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
 from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterTemplateValidationException
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
+from ai_rpg_world.domain.world.enum.world_enum import EcologyTypeEnum
 
 
 @dataclass(frozen=True)
@@ -24,9 +25,15 @@ class MonsterTemplate:
     skill_ids: List[SkillId] = None
     vision_range: int = 5
     flee_threshold: float = 0.2
+    behavior_strategy_type: str = "default"
+    phase_thresholds: Optional[List[float]] = None
+    ecology_type: EcologyTypeEnum = EcologyTypeEnum.NORMAL
+    ambush_chase_range: Optional[int] = None
+    territory_radius: Optional[int] = None
 
     def __post_init__(self):
         object.__setattr__(self, "skill_ids", self.skill_ids or [])
+        object.__setattr__(self, "phase_thresholds", self.phase_thresholds or [])
         if not isinstance(self.skill_ids, list):
             raise MonsterTemplateValidationException(
                 f"skill_ids must be a list, got {type(self.skill_ids).__name__}"
@@ -58,4 +65,21 @@ class MonsterTemplate:
         if not (0.0 <= self.flee_threshold <= 1.0):
             raise MonsterTemplateValidationException(
                 f"flee_threshold must be between 0.0 and 1.0: {self.flee_threshold}"
+            )
+        for i, t in enumerate(self.phase_thresholds):
+            if not (0.0 <= t <= 1.0):
+                raise MonsterTemplateValidationException(
+                    f"phase_thresholds[{i}] must be between 0.0 and 1.0: {t}"
+                )
+        if self.ambush_chase_range is not None and self.ambush_chase_range < 0:
+            raise MonsterTemplateValidationException(
+                f"ambush_chase_range cannot be negative: {self.ambush_chase_range}"
+            )
+        if self.territory_radius is not None and self.territory_radius < 0:
+            raise MonsterTemplateValidationException(
+                f"territory_radius cannot be negative: {self.territory_radius}"
+            )
+        if not isinstance(self.ecology_type, EcologyTypeEnum):
+            raise MonsterTemplateValidationException(
+                f"ecology_type must be EcologyTypeEnum, got {type(self.ecology_type).__name__}"
             )

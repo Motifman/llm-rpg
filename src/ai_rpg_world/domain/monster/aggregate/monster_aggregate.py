@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
@@ -33,6 +33,9 @@ from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.world.value_object.pack_id import PackId
+
 
 class MonsterAggregate(AggregateRoot):
     """モンスター個体の集約ルート"""
@@ -50,6 +53,8 @@ class MonsterAggregate(AggregateRoot):
         coordinate: Optional[Coordinate] = None,
         spot_id: Optional[SpotId] = None,
         active_effects: List[StatusEffect] = None,
+        pack_id: Optional["PackId"] = None,
+        is_pack_leader: bool = False,
     ):
         super().__init__()
         self._monster_id = monster_id
@@ -63,6 +68,8 @@ class MonsterAggregate(AggregateRoot):
         self._spot_id = spot_id
         self._active_effects = active_effects or []
         self._skill_loadout = skill_loadout
+        self._pack_id = pack_id
+        self._is_pack_leader = is_pack_leader
 
     @classmethod
     def create(
@@ -162,6 +169,14 @@ class MonsterAggregate(AggregateRoot):
     def skill_loadout(self) -> SkillLoadoutAggregate:
         return self._skill_loadout
 
+    @property
+    def pack_id(self) -> Optional["PackId"]:
+        return self._pack_id
+
+    @property
+    def is_pack_leader(self) -> bool:
+        return self._is_pack_leader
+
     def _initialize_status(self, coordinate: Coordinate, spot_id: SpotId):
         """ステータスを初期化（出現/リスポーン時）"""
         self._coordinate = coordinate
@@ -178,13 +193,21 @@ class MonsterAggregate(AggregateRoot):
         self._coordinate = coordinate
         self._spot_id = spot_id
 
-    def spawn(self, coordinate: Coordinate, spot_id: SpotId):
-        """モンスターを出現させる"""
+    def spawn(
+        self,
+        coordinate: Coordinate,
+        spot_id: SpotId,
+        pack_id: Optional["PackId"] = None,
+        is_pack_leader: bool = False,
+    ):
+        """モンスターを出現させる。pack_id / is_pack_leader はインスタンス単位で設定する。"""
         if self._coordinate is not None or self._status == MonsterStatusEnum.ALIVE:
             raise MonsterAlreadySpawnedException(f"Monster {self._monster_id} is already spawned at {self._coordinate}")
 
         self._initialize_status(coordinate, spot_id)
-        
+        self._pack_id = pack_id
+        self._is_pack_leader = is_pack_leader
+
         self.add_event(MonsterSpawnedEvent.create(
             aggregate_id=self._monster_id,
             aggregate_type="MonsterAggregate",

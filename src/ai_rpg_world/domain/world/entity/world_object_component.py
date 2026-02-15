@@ -1,8 +1,11 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.world.exception.map_exception import LockedDoorException
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, BehaviorStateEnum
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, BehaviorStateEnum, EcologyTypeEnum
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
@@ -10,6 +13,7 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.common.exception import ValidationException, BusinessRuleException
 if TYPE_CHECKING:
     from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.aggro_memory_policy import AggroMemoryPolicy
 from ai_rpg_world.domain.world.exception.behavior_exception import (
     VisionRangeValidationException,
     FOVAngleValidationException,
@@ -113,18 +117,18 @@ class DoorComponent(WorldObjectComponent):
 class ActorComponent(WorldObjectComponent):
     """プレイヤーやNPCなどの動体（アクター）の機能を持つコンポーネント"""
     def __init__(
-        self, 
+        self,
         direction: DirectionEnum = DirectionEnum.SOUTH,
         capability: MovementCapability = None,
         player_id: Optional["PlayerId"] = None,
         is_npc: bool = False,
         fov_angle: float = 360.0,
         race: str = "human",
-        faction: str = "neutral"
+        faction: str = "neutral",
+        pack_id: Optional["PackId"] = None,
     ):
         if not (0 <= fov_angle <= 360.0):
             raise FOVAngleValidationException(f"FOV angle must be between 0 and 360: {fov_angle}")
-            
         self.direction = direction
         self._capability = capability or MovementCapability.normal_walk()
         self._player_id = player_id
@@ -132,6 +136,7 @@ class ActorComponent(WorldObjectComponent):
         self.fov_angle = fov_angle
         self.race = race
         self.faction = faction
+        self.pack_id = pack_id
 
     @property
     def player_id(self) -> Optional["PlayerId"]:
@@ -163,7 +168,8 @@ class ActorComponent(WorldObjectComponent):
             "is_npc": self.is_npc,
             "fov_angle": self.fov_angle,
             "race": self.race,
-            "faction": self.faction
+            "faction": self.faction,
+            "pack_id": self.pack_id.value if self.pack_id else None,
         }
 
 
@@ -224,22 +230,26 @@ class AutonomousBehaviorComponent(ActorComponent):
         max_failures: int = 3,
         initial_position: Optional[Coordinate] = None,
         random_move_chance: float = 0.5,
-        available_skills: list[MonsterSkillInfo] = None
+        available_skills: list[MonsterSkillInfo] = None,
+        behavior_strategy_type: str = "default",
+        phase_thresholds: Optional[list[float]] = None,
+        pack_id: Optional["PackId"] = None,
+        is_pack_leader: bool = False,
+        ecology_type: EcologyTypeEnum = EcologyTypeEnum.NORMAL,
+        ambush_chase_range: Optional[int] = None,
+        territory_radius: Optional[int] = None,
+        aggro_memory_policy: Optional[AggroMemoryPolicy] = None,
     ):
-        super().__init__(direction, capability, player_id, is_npc, fov_angle, race, faction)
+        super().__init__(direction, capability, player_id, is_npc, fov_angle, race, faction, pack_id)
         self._validate(vision_range, search_duration, hp_percentage, flee_threshold, max_failures, random_move_chance)
-            
         self.state = state
         self.vision_range = vision_range
         self.patrol_points = patrol_points or []
-        
         self.current_patrol_index = 0
         self.target_id: Optional[WorldObjectId] = None
         self.last_known_target_position: Optional[Coordinate] = None
         self.search_duration = search_duration
         self.search_timer = 0
-        
-        # 逃走・諦め・HP・種族関連
         self.hp_percentage = hp_percentage
         self.flee_threshold = flee_threshold
         self.max_failures = max_failures
@@ -247,6 +257,14 @@ class AutonomousBehaviorComponent(ActorComponent):
         self.initial_position = initial_position
         self.random_move_chance = random_move_chance
         self.available_skills = available_skills or []
+        self.behavior_strategy_type = behavior_strategy_type
+        self.phase_thresholds = phase_thresholds or []
+        self.pack_id = pack_id
+        self.is_pack_leader = is_pack_leader
+        self.ecology_type = ecology_type
+        self.ambush_chase_range = ambush_chase_range
+        self.territory_radius = territory_radius
+        self.aggro_memory_policy = aggro_memory_policy
 
     def _validate(self, vision_range, search_duration, hp_percentage, flee_threshold, max_failures, random_move_chance):
         if vision_range < 0:
@@ -274,7 +292,7 @@ class AutonomousBehaviorComponent(ActorComponent):
         self.failure_count = 0
         if new_state not in [BehaviorStateEnum.SEARCH, BehaviorStateEnum.FLEE]:
             self.search_timer = 0
-        if new_state != BehaviorStateEnum.CHASE and new_state != BehaviorStateEnum.FLEE:
+        if new_state not in (BehaviorStateEnum.CHASE, BehaviorStateEnum.FLEE, BehaviorStateEnum.ENRAGE):
             self.target_id = None
 
     def update_last_known_position(self, coordinate: Coordinate):
@@ -286,17 +304,31 @@ class AutonomousBehaviorComponent(ActorComponent):
         self.hp_percentage = hp_percentage
 
     def spot_target(self, target_id: WorldObjectId, coordinate: Coordinate):
-        """ターゲットを捕捉した際の状態遷移"""
+        """ターゲットを捕捉した際の状態遷移（生態タイプに応じる）"""
+        if self.ecology_type == EcologyTypeEnum.PATROL_ONLY:
+            return
+        if self.ecology_type == EcologyTypeEnum.FLEE_ONLY:
+            self.target_id = target_id
+            self.last_known_target_position = coordinate
+            self.set_state(BehaviorStateEnum.FLEE)
+            return
+        if (
+            self.ecology_type == EcologyTypeEnum.AMBUSH
+            and self.initial_position is not None
+            and self.ambush_chase_range is not None
+        ):
+            if self.initial_position.distance_to(coordinate) > self.ambush_chase_range:
+                return
         self.target_id = target_id
         self.last_known_target_position = coordinate
         if self.hp_percentage <= self.flee_threshold:
             self.set_state(BehaviorStateEnum.FLEE)
-        else:
+        elif self.state != BehaviorStateEnum.ENRAGE:
             self.set_state(BehaviorStateEnum.CHASE)
 
     def lose_target(self):
         """ターゲットを見失った際の状態遷移"""
-        if self.state == BehaviorStateEnum.CHASE:
+        if self.state in (BehaviorStateEnum.CHASE, BehaviorStateEnum.ENRAGE):
             self.set_state(BehaviorStateEnum.SEARCH)
         elif self.state == BehaviorStateEnum.FLEE:
             # 逃走中に見失ったら帰還へ
@@ -347,7 +379,14 @@ class AutonomousBehaviorComponent(ActorComponent):
                 "y": self.initial_position.y, 
                 "z": self.initial_position.z
             } if self.initial_position else None,
-            "random_move_chance": self.random_move_chance
+            "random_move_chance": self.random_move_chance,
+            "behavior_strategy_type": self.behavior_strategy_type,
+            "phase_thresholds": list(self.phase_thresholds),
+            "pack_id": self.pack_id.value if self.pack_id else None,
+            "is_pack_leader": self.is_pack_leader,
+            "ecology_type": self.ecology_type.value,
+            "ambush_chase_range": self.ambush_chase_range,
+            "territory_radius": self.territory_radius,
         })
         return data
 

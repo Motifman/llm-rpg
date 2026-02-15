@@ -1,5 +1,5 @@
 import logging
-from typing import List, Callable, Any, Dict, Optional
+from typing import List, Callable, Any, Dict, Optional, Set
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
@@ -21,11 +21,17 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
 from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
-from ai_rpg_world.application.monster.services.monster_skill_application_service import MonsterSkillApplicationService
+from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
+from ai_rpg_world.domain.world.value_object.behavior_context import SkillSelectionContext, TargetSelectionContext
+from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
+from ai_rpg_world.domain.skill.repository.skill_repository import SkillLoadoutRepository
+from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import MonsterSkillExecutionDomainService
+from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
 from ai_rpg_world.domain.world.service.weather_simulation_service import WeatherSimulationService
 from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
 from ai_rpg_world.domain.world.service.weather_config_service import WeatherConfigService
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.combat.service.hit_box_config_service import (
     DefaultHitBoxConfigService,
     HitBoxConfigService,
@@ -34,11 +40,12 @@ from ai_rpg_world.domain.combat.service.hit_box_collision_service import HitBoxC
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
+from ai_rpg_world.application.world.aggro_store import AggroStore
 
 
 class WorldSimulationApplicationService:
     """ワールド全体の進行・シミュレーションを管理するアプリケーションサービス"""
-    
+
     def __init__(
         self,
         time_provider: GameTimeProvider,
@@ -49,9 +56,13 @@ class WorldSimulationApplicationService:
         behavior_service: BehaviorService,
         weather_config_service: WeatherConfigService,
         unit_of_work: UnitOfWork,
-        monster_skill_service: MonsterSkillApplicationService,
+        monster_repository: MonsterRepository,
+        skill_loadout_repository: SkillLoadoutRepository,
+        monster_skill_execution_domain_service: MonsterSkillExecutionDomainService,
+        hit_box_factory: HitBoxFactory,
         hit_box_config_service: Optional[HitBoxConfigService] = None,
         hit_box_collision_service: Optional[HitBoxCollisionDomainService] = None,
+        aggro_store: Optional[AggroStore] = None,
     ):
         self._time_provider = time_provider
         self._physical_map_repository = physical_map_repository
@@ -60,10 +71,14 @@ class WorldSimulationApplicationService:
         self._hit_box_repository = hit_box_repository
         self._behavior_service = behavior_service
         self._weather_config_service = weather_config_service
-        self._monster_skill_service = monster_skill_service
+        self._monster_repository = monster_repository
+        self._skill_loadout_repository = skill_loadout_repository
+        self._monster_skill_execution_domain_service = monster_skill_execution_domain_service
+        self._hit_box_factory = hit_box_factory
         self._hit_box_config_service = hit_box_config_service or DefaultHitBoxConfigService()
         self._hit_box_collision_service = hit_box_collision_service or HitBoxCollisionDomainService()
         self._unit_of_work = unit_of_work
+        self._aggro_store = aggro_store
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def tick(self) -> WorldTick:
@@ -101,17 +116,30 @@ class WorldSimulationApplicationService:
             # 3.3 環境効果の一括適用
             if player_map_map:
                 self._apply_environmental_effects_bulk(player_map_map)
-            
-            # 4. 各マップのアクターの行動更新
+
+            # アクティブなスポット（プレイヤーが1人以上いるスポット）のみ行動更新・HitBox・save を行う
+            active_spot_ids: Set[SpotId] = {pm.spot_id for pm in player_map_map.values()}
+
+            # 4. 各マップのアクターの行動更新（アクティブなスポットのみ；同一スポット内でプレイヤーとの距離が近い順に処理）
             for physical_map in maps:
-                for actor in physical_map.actors:
+                if physical_map.spot_id not in active_spot_ids:
+                    continue
+                for actor in self._actors_sorted_by_distance_to_players(physical_map):
                     # Busy状態のアクターはスキップ
                     if actor.is_busy(current_tick):
                         continue
                     
                     try:
+                        # 自律行動アクター用の skill_context / target_context を組み立て（モンスターでない場合は None）
+                        skill_context = self._build_skill_context_for_actor(actor, physical_map, current_tick)
+                        target_context = self._build_target_context_for_actor(actor, physical_map, current_tick)
                         # 自律行動アクターの計画
-                        action = self._behavior_service.plan_action(actor.object_id, physical_map)
+                        action = self._behavior_service.plan_action(
+                            actor.object_id,
+                            physical_map,
+                            skill_context=skill_context,
+                            target_context=target_context,
+                        )
                         
                         if action.action_type == BehaviorActionType.MOVE:
                             # 移動実行
@@ -123,11 +151,11 @@ class WorldSimulationApplicationService:
                                     "USE_SKILL action must have skill_slot_index",
                                     action_type=BehaviorActionType.USE_SKILL,
                                 )
-                            self._monster_skill_service.use_monster_skill(
-                                monster_world_object_id=actor.object_id,
-                                spot_id=physical_map.spot_id,
+                            self._execute_monster_skill_in_tick(
+                                actor_id=actor.object_id,
+                                physical_map=physical_map,
                                 slot_index=action.skill_slot_index,
-                                current_tick=current_tick
+                                current_tick=current_tick,
                             )
                         # WAIT の場合は何もしない
                     except DomainException as e:
@@ -151,6 +179,128 @@ class WorldSimulationApplicationService:
                 self._physical_map_repository.save(physical_map)
             
             return current_tick
+
+    def _actors_sorted_by_distance_to_players(
+        self, physical_map: PhysicalMapAggregate
+    ) -> List[WorldObject]:
+        """
+        同一マップ上のプレイヤー位置との距離が近い順にアクターを返す。
+        プレイヤーが誰もいない場合は physical_map.actors の順のまま返す。
+        距離は同一スポット内の座標（Coordinate.distance_to）で計算する。
+        """
+        actors = physical_map.actors
+        player_coords = [
+            a.coordinate for a in actors
+            if a.player_id is not None
+        ]
+        if not player_coords:
+            return list(actors)
+        return sorted(
+            actors,
+            key=lambda a: min(
+                a.coordinate.distance_to(p) for p in player_coords
+            ),
+        )
+
+    def _build_skill_context_for_actor(
+        self,
+        actor: WorldObject,
+        physical_map: PhysicalMapAggregate,
+        current_tick: WorldTick,
+    ) -> Optional[SkillSelectionContext]:
+        """
+        自律行動のモンスターについて、使用可能スロットから SkillSelectionContext を組み立てる。
+        モンスターでない、または取得失敗時は None を返す。
+        """
+        if not isinstance(actor.component, AutonomousBehaviorComponent):
+            return None
+        monster = self._monster_repository.find_by_world_object_id(actor.object_id)
+        if not monster:
+            return None
+        loadout = monster.skill_loadout
+        component = actor.component
+        usable_slot_indices: set = set()
+        for skill_info in component.available_skills:
+            if loadout.can_use_skill(skill_info.slot_index, current_tick.value):
+                usable_slot_indices.add(skill_info.slot_index)
+        return SkillSelectionContext(usable_slot_indices=usable_slot_indices)
+
+    def _build_target_context_for_actor(
+        self,
+        actor: WorldObject,
+        physical_map: PhysicalMapAggregate,
+        current_tick: WorldTick,
+    ) -> Optional[TargetSelectionContext]:
+        """
+        自律行動のモンスターについて、ヘイト等から TargetSelectionContext を組み立てる。
+        AggroMemoryPolicy があれば last_seen_tick からの経過で忘却したエントリは除外する。
+        ヘイトストア未注入時や該当データなしの場合は None を返す。
+        """
+        if not isinstance(actor.component, AutonomousBehaviorComponent):
+            return None
+        if self._aggro_store is None:
+            return None
+        component = actor.component
+        policy = getattr(component, "aggro_memory_policy", None)
+        threat_by_id = self._aggro_store.get_threat_by_attacker(
+            physical_map.spot_id,
+            actor.object_id,
+            current_tick=current_tick.value,
+            memory_policy=policy,
+        )
+        if not threat_by_id:
+            return None
+        return TargetSelectionContext(threat_by_id=threat_by_id)
+
+    def _execute_monster_skill_in_tick(
+        self,
+        actor_id: WorldObjectId,
+        physical_map: PhysicalMapAggregate,
+        slot_index: int,
+        current_tick: WorldTick,
+    ) -> None:
+        """
+        tick 内で自律アクター（モンスター）のスキル使用を実行する。
+        同一 UoW 内でドメインサービスを呼び、HitBox 生成・集約の保存まで行う。
+        モンスター未検出やドメインルール違反時はログのみでスキップする。
+        """
+        monster = self._monster_repository.find_by_world_object_id(actor_id)
+        if not monster:
+            self._logger.warning(
+                f"Monster not found for world_object_id={actor_id}, skipping USE_SKILL"
+            )
+            return
+
+        loadout = monster.skill_loadout
+        try:
+            spawn_params = self._monster_skill_execution_domain_service.execute(
+                monster=monster,
+                loadout=loadout,
+                physical_map=physical_map,
+                slot_index=slot_index,
+                current_tick=current_tick,
+            )
+        except DomainException as e:
+            self._logger.warning(
+                f"Monster skill skipped for actor {actor_id} due to domain rule: {str(e)}"
+            )
+            return
+
+        skill_spec = loadout.get_current_deck(current_tick.value).get_skill(slot_index)
+        skill_id = str(skill_spec.skill_id) if skill_spec else None
+        hit_box_ids = self._hit_box_repository.batch_generate_ids(len(spawn_params))
+        hit_boxes = self._hit_box_factory.create_from_params(
+            hit_box_ids=hit_box_ids,
+            params=spawn_params,
+            spot_id=physical_map.spot_id,
+            owner_id=actor_id,
+            start_tick=current_tick,
+            skill_id=skill_id,
+        )
+        if hit_boxes:
+            self._hit_box_repository.save_all(hit_boxes)
+        self._monster_repository.save(monster)
+        self._skill_loadout_repository.save(loadout)
 
     def _update_weather_if_needed(self, current_tick: WorldTick) -> Dict[SpotId, WeatherState]:
         """必要に応じて天候を更新する（設定された間隔ごと）

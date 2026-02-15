@@ -3,8 +3,8 @@ import logging
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
+from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import MonsterSkillExecutionDomainService
 from ai_rpg_world.domain.skill.repository.skill_repository import SkillLoadoutRepository, SkillSpecRepository
-from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
 from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
 from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
@@ -22,6 +22,7 @@ from ai_rpg_world.domain.world.exception.map_exception import (
     NotAnActorException,
     ObjectNotFoundException,
 )
+from ai_rpg_world.domain.skill.exception.skill_exceptions import SkillNotFoundInSlotException
 
 
 class MonsterSkillApplicationService:
@@ -34,7 +35,7 @@ class MonsterSkillApplicationService:
         skill_spec_repository: SkillSpecRepository,
         physical_map_repository: PhysicalMapRepository,
         hit_box_repository: HitBoxRepository,
-        skill_execution_service: SkillExecutionDomainService,
+        monster_skill_execution_domain_service: MonsterSkillExecutionDomainService,
         hit_box_factory: HitBoxFactory,
         unit_of_work: UnitOfWork,
     ):
@@ -43,7 +44,7 @@ class MonsterSkillApplicationService:
         self._skill_spec_repository = skill_spec_repository
         self._physical_map_repository = physical_map_repository
         self._hit_box_repository = hit_box_repository
-        self._skill_execution_service = skill_execution_service
+        self._monster_skill_execution_domain_service = monster_skill_execution_domain_service
         self._hit_box_factory = hit_box_factory
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
@@ -79,26 +80,22 @@ class MonsterSkillApplicationService:
                 raise MonsterNotFoundForSkillException(monster_world_object_id.value)
 
             loadout = monster.skill_loadout
-            deck = loadout.get_current_deck(current_tick.value)
-            skill_spec = deck.get_skill(slot_index)
-            if not skill_spec:
-                raise MonsterSkillNotFoundInSlotException(monster.monster_id.value, slot_index)
 
             physical_map = self._physical_map_repository.find_by_id(spot_id)
             if not physical_map:
                 raise MapNotFoundForMonsterSkillException(spot_id.value)
 
             try:
-                monster.use_mp(skill_spec.mp_cost)
-                loadout.use_skill(slot_index, current_tick.value, actor_id=loadout.owner_id)
-
-                spawn_params = self._skill_execution_service.execute_monster_skill(
-                    physical_map=physical_map,
+                spawn_params = self._monster_skill_execution_domain_service.execute(
                     monster=monster,
-                    skill_spec=skill_spec,
-                    current_tick=current_tick
+                    loadout=loadout,
+                    physical_map=physical_map,
+                    slot_index=slot_index,
+                    current_tick=current_tick,
                 )
 
+                skill_spec = loadout.get_current_deck(current_tick.value).get_skill(slot_index)
+                skill_id = str(skill_spec.skill_id) if skill_spec else None
                 hit_box_ids = self._hit_box_repository.batch_generate_ids(len(spawn_params))
                 hit_boxes = self._hit_box_factory.create_from_params(
                     hit_box_ids=hit_box_ids,
@@ -106,7 +103,7 @@ class MonsterSkillApplicationService:
                     spot_id=spot_id,
                     owner_id=monster_world_object_id,
                     start_tick=current_tick,
-                    skill_id=str(skill_spec.skill_id)
+                    skill_id=skill_id,
                 )
 
                 if hit_boxes:
@@ -123,6 +120,8 @@ class MonsterSkillApplicationService:
                 raise MonsterNotOnMapException(
                     monster_world_object_id.value, spot_id.value
                 ) from e
+            except SkillNotFoundInSlotException:
+                raise MonsterSkillNotFoundInSlotException(monster.monster_id.value, slot_index)
             except DomainException as e:
                 self._logger.warning(f"Monster {monster.monster_id} failed to use skill: {str(e)}")
                 raise e

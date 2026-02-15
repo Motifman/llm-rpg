@@ -1,5 +1,5 @@
 import math
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Tuple
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
@@ -13,7 +13,13 @@ from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.area_trigger import AreaTrigger
 from ai_rpg_world.domain.world.entity.location_area import LocationArea
 from ai_rpg_world.domain.world.entity.gateway import Gateway
-from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent, InteractableComponent, HarvestableComponent
+from ai_rpg_world.domain.world.entity.world_object_component import (
+    ActorComponent,
+    AutonomousBehaviorComponent,
+    InteractableComponent,
+    HarvestableComponent,
+)
+from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.world.entity.map_trigger import MapTrigger
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.enum.world_enum import MovementCapabilityEnum, DirectionEnum, EnvironmentTypeEnum
@@ -233,6 +239,17 @@ class PhysicalMapAggregate(AggregateRoot):
     def actors(self) -> List[WorldObject]:
         """マップ上の全アクターを取得する"""
         return [obj for obj in self._objects.values() if obj.is_actor]
+
+    def get_actors_in_pack(self, pack_id: PackId) -> List[WorldObject]:
+        """指定した pack_id に属する自律行動アクターのみを返す。"""
+        result = []
+        for obj in self._objects.values():
+            if not obj.is_actor:
+                continue
+            comp = obj.component
+            if isinstance(comp, AutonomousBehaviorComponent) and comp.pack_id == pack_id:
+                result.append(obj)
+        return result
 
     def get_tile(self, coordinate: Coordinate) -> Tile:
         if coordinate not in self._tiles:
@@ -515,6 +532,58 @@ class PhysicalMapAggregate(AggregateRoot):
             return False
 
         return MapGeometryService.is_visible(from_coord, to_coord, self)
+
+    def get_objects_in_range_bulk(
+        self, centers_with_range: List[Tuple[Coordinate, int]]
+    ) -> List[List[WorldObject]]:
+        """
+        複数の (中心座標, 距離) について、それぞれの範囲内オブジェクトを一括で取得する。
+        マップのオブジェクト走査は1回で行い、各クエリへの結果を返す。
+        天候による視界減衰・最大視界制限は get_objects_in_range と同様に適用する。
+        """
+        if not centers_with_range:
+            return []
+
+        reduction = WeatherEffectService.calculate_vision_reduction(
+            self._weather_state,
+            self._environment_type,
+        )
+        max_dist = WeatherEffectService.get_max_vision_distance(
+            self._weather_state,
+            self._environment_type,
+        )
+
+        effective_distances: List[float] = []
+        for center, distance in centers_with_range:
+            effective = max(0, distance - reduction)
+            effective = min(effective, max_dist)
+            effective_distances.append(effective)
+
+        results: List[List[WorldObject]] = [[] for _ in centers_with_range]
+        for obj in self._objects.values():
+            for i, (center, _) in enumerate(centers_with_range):
+                if center.distance_to(obj.coordinate) <= effective_distances[i]:
+                    results[i].append(obj)
+        return results
+
+    def is_visible_batch(
+        self, pairs: List[Tuple[Coordinate, Coordinate]]
+    ) -> List[bool]:
+        """
+        複数の (from_coord, to_coord) について、互いに視認可能かを一括で判定する。
+        同一ペアは1回だけ計算し、結果は入力順で返す。
+        """
+        if not pairs:
+            return []
+
+        seen: Dict[Tuple[Coordinate, Coordinate], bool] = {}
+        out: List[bool] = []
+        for from_coord, to_coord in pairs:
+            key = (from_coord, to_coord)
+            if key not in seen:
+                seen[key] = self.is_visible(from_coord, to_coord)
+            out.append(seen[key])
+        return out
 
     def is_sight_blocked(self, coordinate: Coordinate) -> bool:
         """指定された座標が視線を遮るか判定する（VisibilityMapプロトコルの実装）"""
