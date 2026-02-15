@@ -65,7 +65,11 @@ from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecu
 from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
 from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent, MonsterSkillInfo
-from ai_rpg_world.domain.world.value_object.behavior_context import SkillSelectionContext, TargetSelectionContext
+from ai_rpg_world.domain.world.value_object.behavior_context import (
+    SkillSelectionContext,
+    TargetSelectionContext,
+    GrowthContext,
+)
 from ai_rpg_world.domain.world.value_object.aggro_memory_policy import AggroMemoryPolicy
 from ai_rpg_world.infrastructure.aggro.in_memory_aggro_store import InMemoryAggroStore
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -1343,6 +1347,125 @@ class TestWorldSimulationApplicationService:
             for c in captured:
                 ctx = c.get("target_context")
                 assert ctx is None or ctx.threat_by_id == {}, "忘却済みのヘイトは target_context に含まれないこと"
+
+    class TestGrowthContext:
+        """_build_growth_context_for_actor の組み立て（正常・境界・例外）"""
+
+        def test_build_growth_context_returns_none_for_non_autonomous_actor(self, setup_service):
+            """自律行動コンポーネントでないアクター（プレイヤー等）の場合は None を返すこと"""
+            service, _, _, _, _, _, _, _, _, _ = setup_service
+            player_actor = WorldObject(
+                WorldObjectId(100),
+                Coordinate(0, 0),
+                ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=PlayerId(100)),
+            )
+            result = service._build_growth_context_for_actor(player_actor, WorldTick(0))
+            assert result is None
+
+        def test_build_growth_context_returns_none_when_monster_not_found(self, setup_service):
+            """モンスターリポジトリに該当 world_object_id のモンスターが存在しない場合は None を返すこと"""
+            service, _, repository, _, _, _, _, _, monster_repo, _ = setup_service
+            spot_id = SpotId(1)
+            tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(3) for y in range(3)]
+            physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+            actor_id = WorldObjectId(999)
+            physical_map.add_object(WorldObject(
+                actor_id,
+                Coordinate(1, 1),
+                ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(),
+            ))
+            repository.save(physical_map)
+            # monster_repo には 999 を world_object_id に持つモンスターを登録していない
+            result = service._build_growth_context_for_actor(
+                physical_map.get_object(actor_id), WorldTick(0)
+            )
+            assert result is None
+
+        def test_build_growth_context_returns_none_when_monster_has_no_growth_stages(self, setup_service):
+            """モンスターのテンプレートに growth_stages が無い（空）場合は None を返すこと"""
+            service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
+            spot_id = SpotId(1)
+            tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(3) for y in range(3)]
+            physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+            physical_map.add_object(WorldObject(
+                WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=PlayerId(100)),
+            ))
+            actor_id = WorldObjectId(1)
+            physical_map.add_object(WorldObject(
+                actor_id, Coordinate(1, 1), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(),
+            ))
+            repository.save(physical_map)
+
+            template = MonsterTemplate(
+                template_id=MonsterTemplateId(1),
+                name="NoGrowth",
+                base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+                reward_info=RewardInfo(0, 0),
+                respawn_info=RespawnInfo(1, True),
+                race=Race.HUMAN,
+                faction=MonsterFactionEnum.ENEMY,
+                description="No growth stages",
+                skill_ids=[],
+            )
+            loadout = SkillLoadoutAggregate.create(SkillLoadoutId(1), 1, 10, 10)
+            monster = MonsterAggregate.create(MonsterId(1), template, actor_id, skill_loadout=loadout)
+            monster.spawn(Coordinate(1, 1, 0), spot_id, WorldTick(0))
+            monster_repo.save(monster)
+
+            result = service._build_growth_context_for_actor(
+                physical_map.get_object(actor_id), WorldTick(0)
+            )
+            assert result is None
+
+        def test_build_growth_context_returns_context_when_monster_has_growth_stages(self, setup_service):
+            """モンスターのテンプレートに growth_stages がある場合は GrowthContext を返すこと"""
+            from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
+            service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
+            spot_id = SpotId(1)
+            tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(3) for y in range(3)]
+            physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+            physical_map.add_object(WorldObject(
+                WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=PlayerId(100)),
+            ))
+            actor_id = WorldObjectId(1)
+            physical_map.add_object(WorldObject(
+                actor_id, Coordinate(1, 1), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(),
+            ))
+            repository.save(physical_map)
+
+            template = MonsterTemplate(
+                template_id=MonsterTemplateId(2),
+                name="WithGrowth",
+                base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+                reward_info=RewardInfo(0, 0),
+                respawn_info=RespawnInfo(1, True),
+                race=Race.HUMAN,
+                faction=MonsterFactionEnum.ENEMY,
+                description="Has growth stages",
+                skill_ids=[],
+                growth_stages=[
+                    GrowthStage(after_ticks=0, stats_multiplier=0.8, flee_bias_multiplier=1.5, allow_chase=False),
+                    GrowthStage(after_ticks=100, stats_multiplier=1.0),
+                ],
+            )
+            loadout = SkillLoadoutAggregate.create(SkillLoadoutId(2), 1, 10, 10)
+            monster = MonsterAggregate.create(MonsterId(2), template, actor_id, skill_loadout=loadout)
+            monster.spawn(Coordinate(1, 1, 0), spot_id, WorldTick(0))
+            monster_repo.save(monster)
+
+            result = service._build_growth_context_for_actor(
+                physical_map.get_object(actor_id), WorldTick(50)
+            )
+            assert result is not None
+            assert isinstance(result, GrowthContext)
+            assert result.effective_flee_threshold == 0.3  # 0.2 * 1.5 = 0.3, min(1.0, 0.3)
+            assert result.allow_chase is False
 
     class TestActorExecutionOrder:
         """実行順ソート（同一スポット内でプレイヤーとの距離順）の正常・境界・異常系"""

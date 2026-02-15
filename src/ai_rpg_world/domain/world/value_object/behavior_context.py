@@ -1,12 +1,13 @@
 """
-行動決定に用いるコンテキスト（ターゲット選択・スキル選択で利用）。
-アプリケーション層がHP・脅威値・利用可能スロット等を渡すための値オブジェクト。
+行動決定に用いるコンテキスト（ターゲット選択・スキル選択・成長段階で利用）。
+アプリケーション層がHP・脅威値・利用可能スロット・成長段階に応じた行動パラメータ等を渡すための値オブジェクト。
 """
 
 from dataclasses import dataclass, field
 from typing import Dict, Set
 
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.world.exception.behavior_exception import GrowthContextValidationException
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,21 @@ class GrowthContext:
     """
     成長段階に応じた行動制御の補助情報。
     幼体は FLEE 閾値を上げ・CHASE しない等をアプリ層が MonsterAggregate から取得して渡す。
+    値オブジェクトとして不正な値を許容しない（effective_flee_threshold は 0.0〜1.0、allow_chase は bool）。
     """
     effective_flee_threshold: float  # この tick で使う FLEE 閾値（0.0〜1.0）
     allow_chase: bool  # CHASE（追跡）を許可するか
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.effective_flee_threshold, (int, float)):
+            raise GrowthContextValidationException(
+                f"effective_flee_threshold must be a number, got {type(self.effective_flee_threshold).__name__}"
+            )
+        if not (0.0 <= self.effective_flee_threshold <= 1.0):
+            raise GrowthContextValidationException(
+                f"effective_flee_threshold must be between 0.0 and 1.0: {self.effective_flee_threshold}"
+            )
+        if not isinstance(self.allow_chase, bool):
+            raise GrowthContextValidationException(
+                f"allow_chase must be a bool, got {type(self.allow_chase).__name__}"
+            )

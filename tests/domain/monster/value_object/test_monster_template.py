@@ -67,6 +67,20 @@ class TestMonsterTemplate:
                 description="A weak blue slime."
             )
 
+    def test_create_fail_whitespace_only_name(self, valid_base_stats, valid_reward_info, valid_respawn_info):
+        """名前が空白のみの場合はエラーが発生すること"""
+        with pytest.raises(MonsterTemplateValidationException, match="Monster name cannot be empty"):
+            MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="   ",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="A weak blue slime."
+            )
+
     def test_create_fail_empty_description(self, valid_base_stats, valid_reward_info, valid_respawn_info):
         """説明文が空の場合はエラーが発生すること"""
         with pytest.raises(MonsterTemplateValidationException, match="Monster description cannot be empty"):

@@ -227,13 +227,18 @@ class MonsterAggregate(AggregateRoot):
     def spawned_at_tick(self) -> Optional[WorldTick]:
         return self._spawned_at_tick
 
-    def _initialize_status(self, coordinate: Coordinate, spot_id: SpotId):
-        """ステータスを初期化（出現/リスポーン時）"""
+    def _initialize_status(self, coordinate: Coordinate, spot_id: SpotId, current_tick: WorldTick) -> None:
+        """
+        ステータスを初期化（出現/リスポーン時）。
+        呼び出し元で _spawned_at_tick を current_tick に設定したうえで呼ぶこと。
+        HP/MP は実効ステータス（成長段階を反映した max_hp/max_mp）で満タンに初期化する。
+        """
         self._coordinate = coordinate
         self._spot_id = spot_id
         self._status = MonsterStatusEnum.ALIVE
-        self._hp = MonsterHp.create(self._template.base_stats.max_hp, self._template.base_stats.max_hp)
-        self._mp = MonsterMp.create(self._template.base_stats.max_mp, self._template.base_stats.max_mp)
+        effective = self.get_effective_stats(current_tick)
+        self._hp = MonsterHp.create(effective.max_hp, effective.max_hp)
+        self._mp = MonsterMp.create(effective.max_mp, effective.max_mp)
         self._last_death_tick = None
 
     def update_map_placement(self, spot_id: SpotId, coordinate: Coordinate) -> None:
@@ -255,11 +260,11 @@ class MonsterAggregate(AggregateRoot):
         if self._coordinate is not None or self._status == MonsterStatusEnum.ALIVE:
             raise MonsterAlreadySpawnedException(f"Monster {self._monster_id} is already spawned at {self._coordinate}")
 
-        self._initialize_status(coordinate, spot_id)
+        self._spawned_at_tick = current_tick
+        self._initialize_status(coordinate, spot_id, current_tick)
         self._pack_id = pack_id
         self._is_pack_leader = is_pack_leader
         self._initial_spawn_coordinate = coordinate
-        self._spawned_at_tick = current_tick
 
         self.add_event(MonsterSpawnedEvent.create(
             aggregate_id=self._monster_id,
@@ -351,13 +356,12 @@ class MonsterAggregate(AggregateRoot):
         self._mp = self._mp.use(amount)
 
     def on_tick(self, current_tick: WorldTick, config: MonsterConfigService = DefaultMonsterConfigService()):
-        """時間経過による処理（自然回復など）"""
+        """時間経過による処理（自然回復など）。自然回復量は実効ステータス（成長段階反映後）の max_hp/max_mp を基準とする。"""
         if self._status == MonsterStatusEnum.ALIVE:
-            # 自然回復
+            effective = self.get_effective_stats(current_tick)
             regen_rate = config.get_regeneration_rate()
-            hp_regen = max(1, int(self._template.base_stats.max_hp * regen_rate))
-            mp_regen = max(1, int(self._template.base_stats.max_mp * regen_rate))
-            
+            hp_regen = max(1, int(effective.max_hp * regen_rate))
+            mp_regen = max(1, int(effective.max_mp * regen_rate))
             self.heal_hp(hp_regen)
             self.recover_mp(mp_regen)
         
@@ -413,8 +417,8 @@ class MonsterAggregate(AggregateRoot):
         if not self.should_respawn(current_tick):
             raise MonsterRespawnIntervalNotMetException(f"Monster {self._monster_id} cannot respawn yet.")
 
-        self._initialize_status(coordinate, spot_id)
         self._spawned_at_tick = current_tick
+        self._initialize_status(coordinate, spot_id, current_tick)
 
         self.add_event(MonsterRespawnedEvent.create(
             aggregate_id=self._monster_id,

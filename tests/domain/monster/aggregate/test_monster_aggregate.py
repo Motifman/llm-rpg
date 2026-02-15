@@ -650,6 +650,14 @@ class TestMonsterAggregate:
             assert monster_with_growth.get_current_growth_multiplier(WorldTick(0)) == 1.0
             assert monster_with_growth.get_current_growth_multiplier(WorldTick(200)) == 1.0
 
+        def test_get_current_growth_multiplier_when_current_tick_before_spawned_at_returns_one(
+            self, monster_with_growth: MonsterAggregate, spot_id: SpotId
+        ):
+            """スポーン済みでも current_tick が spawned_at_tick より前の場合は乗率 1.0 を返すこと（時刻ずれ等の防御）"""
+            monster_with_growth.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(100))
+            assert monster_with_growth.get_current_growth_multiplier(WorldTick(50)) == 1.0
+            assert monster_with_growth.get_current_growth_multiplier(WorldTick(99)) == 1.0
+
         def test_get_current_growth_multiplier_juvenile_stage(
             self, monster_with_growth: MonsterAggregate, spot_id: SpotId
         ):
@@ -715,6 +723,28 @@ class TestMonsterAggregate:
             # base max_hp=100, max_mp=50、幼体 0.8 → 80, 40
             assert stats.max_hp == 80
             assert stats.max_mp == 40
+
+        def test_spawn_initializes_hp_mp_with_effective_stats_juvenile(
+            self, monster_with_growth: MonsterAggregate, spot_id: SpotId
+        ):
+            """成長段階ありのテンプレートでスポーン時、HP/MP は実効 max_hp/max_mp で満タンに初期化されること（幼体）"""
+            monster_with_growth.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            # 幼体 0.8 → 80, 40
+            assert monster_with_growth.hp.value == 80
+            assert monster_with_growth.mp.value == 40
+            assert monster_with_growth.hp.max_hp == 80
+            assert monster_with_growth.mp.max_mp == 40
+
+        def test_respawn_initializes_hp_mp_with_effective_stats(
+            self, monster_with_growth: MonsterAggregate, spot_id: SpotId
+        ):
+            """成長段階ありのテンプレートでリスポーン時も、HP/MP は実効 max_hp/max_mp で満タンに初期化されること"""
+            monster_with_growth.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            monster_with_growth.apply_damage(80, WorldTick(10))
+            monster_with_growth.respawn(Coordinate(5, 5, 0), WorldTick(200), spot_id)
+            # リスポーン時 spawned_at_tick=200 なので経過 0 → 幼体段階（0.8）→ 80, 40
+            assert monster_with_growth.hp.value == 80
+            assert monster_with_growth.mp.value == 40
 
         def test_get_effective_flee_threshold_with_stage_flee_bias(
             self, monster_with_growth: MonsterAggregate, spot_id: SpotId

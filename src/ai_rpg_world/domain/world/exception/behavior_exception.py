@@ -59,3 +59,8 @@ class MaxFailuresValidationException(BehaviorDomainException, ValidationExceptio
 class ComponentRequiredForDispositionException(BehaviorDomainException, ValidationException):
     """関係判定に必要な component が None の場合の例外。WorldObject は component を持つ前提。"""
     error_code = "BEHAVIOR.COMPONENT_REQUIRED_FOR_DISPOSITION"
+
+
+class GrowthContextValidationException(BehaviorDomainException, ValidationException):
+    """GrowthContext のバリデーション例外（effective_flee_threshold や allow_chase の不正値）"""
+    error_code = "BEHAVIOR.GROWTH_CONTEXT_VALIDATION"
