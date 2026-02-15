@@ -95,28 +95,6 @@ class TestConfigurableHostilityServiceGetDisposition:
         target = _comp("human", "player")
         assert service.get_disposition(actor, target) == Disposition.HOSTILE
 
-    def test_race_hostility_table_legacy_returns_hostile(self):
-        """後方互換の race_hostility_table で HOSTILE が返ること"""
-        service = ConfigurableHostilityService(
-            race_hostility_table={"goblin": {"human", "elf"}},
-        )
-        actor = _comp("goblin", "enemy")
-        target_human = _comp("human", "player")
-        target_elf = _comp("elf", "player")
-        assert service.get_disposition(actor, target_human) == Disposition.HOSTILE
-        assert service.get_disposition(actor, target_elf) == Disposition.HOSTILE
-
-    def test_race_disposition_overrides_race_hostility_legacy(self):
-        """race_disposition_table が race_hostility_table より優先されること"""
-        service = ConfigurableHostilityService(
-            race_disposition_table={"goblin": {"human": Disposition.THREAT}},
-            race_hostility_table={"goblin": {"human"}},
-        )
-        actor = _comp("goblin", "enemy")
-        target = _comp("human", "player")
-        assert service.get_disposition(actor, target) == Disposition.THREAT
-
-
 class TestConfigurableHostilityServiceIsHostile:
     """is_hostile の正常・境界ケース"""
 
@@ -324,3 +302,53 @@ class TestConfigurableHostilityServiceComponentRequired:
         actor = _comp("wolf")
         with pytest.raises(ComponentRequiredForDispositionException):
             service.is_prey(actor, None)
+
+
+class TestConfigurableHostilityServiceComponentThreatPreyRaces:
+    """コンポーネントの threat_races / prey_races を優先するテスト"""
+
+    def test_threat_races_returns_threat(self):
+        """actor の threat_races に target.race が含まれるとき THREAT"""
+        actor = _comp("goblin", "enemy")
+        actor.threat_races = frozenset({"dragon"})
+        target = _comp("dragon", "boss")
+        service = ConfigurableHostilityService()
+        assert service.get_disposition(actor, target) == Disposition.THREAT
+
+    def test_prey_races_returns_prey(self):
+        """actor の prey_races に target.race が含まれるとき PREY"""
+        actor = _comp("wolf", "beast")
+        actor.prey_races = frozenset({"rabbit"})
+        target = _comp("rabbit", "beast")
+        service = ConfigurableHostilityService()
+        assert service.get_disposition(actor, target) == Disposition.PREY
+
+    def test_threat_races_overrides_race_disposition_table(self):
+        """threat_races が race_disposition_table より優先されること"""
+        service = ConfigurableHostilityService(
+            race_disposition_table={"goblin": {"dragon": Disposition.HOSTILE}},
+        )
+        actor = _comp("goblin", "enemy")
+        actor.threat_races = frozenset({"dragon"})
+        target = _comp("dragon", "boss")
+        assert service.get_disposition(actor, target) == Disposition.THREAT
+
+    def test_prey_races_overrides_race_disposition_table(self):
+        """prey_races が race_disposition_table より優先されること"""
+        service = ConfigurableHostilityService(
+            race_disposition_table={"wolf": {"rabbit": Disposition.NEUTRAL}},
+        )
+        actor = _comp("wolf", "beast")
+        actor.prey_races = frozenset({"rabbit"})
+        target = _comp("rabbit", "beast")
+        assert service.get_disposition(actor, target) == Disposition.PREY
+
+    def test_empty_threat_races_falls_back_to_table(self):
+        """threat_races が空のとき race_disposition_table で判定"""
+        service = ConfigurableHostilityService(
+            race_disposition_table={"goblin": {"dragon": Disposition.THREAT}},
+        )
+        actor = _comp("goblin", "enemy")
+        actor.threat_races = frozenset()
+        target = _comp("dragon", "boss")
+        assert service.get_disposition(actor, target) == Disposition.THREAT

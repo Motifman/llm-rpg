@@ -156,6 +156,28 @@ class TestMonsterAggregate:
             assert monster.pack_id is None
             assert monster.is_pack_leader is False
 
+        def test_get_respawn_coordinate_before_spawn_returns_none(self, monster: MonsterAggregate):
+            """スポーン前に get_respawn_coordinate は None を返すこと"""
+            assert monster.get_respawn_coordinate() is None
+
+        def test_get_respawn_coordinate_after_spawn_returns_initial_position(
+            self, monster: MonsterAggregate, spot_id: SpotId
+        ):
+            """スポーン後に get_respawn_coordinate は初期スポーン座標を返すこと"""
+            coordinate = Coordinate(10, 20, 0)
+            monster.spawn(coordinate, spot_id)
+            assert monster.get_respawn_coordinate() == coordinate
+
+        def test_get_respawn_coordinate_after_respawn_unchanged(
+            self, monster: MonsterAggregate, spot_id: SpotId
+        ):
+            """リスポーン後も get_respawn_coordinate は最初のスポーン座標のままであること"""
+            initial = Coordinate(0, 0, 0)
+            monster.spawn(initial, spot_id)
+            monster.apply_damage(100, WorldTick(100))
+            monster.respawn(Coordinate(5, 5, 0), WorldTick(200), spot_id)
+            assert monster.get_respawn_coordinate() == initial
+
         def test_respawn_preserves_pack_id_and_leader(self, monster: MonsterAggregate, spot_id: SpotId):
             """リスポーン後も pack_id / is_pack_leader が維持されること"""
             pack_id = PackId.create("pack_a")

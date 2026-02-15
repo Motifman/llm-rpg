@@ -14,6 +14,11 @@ from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
 from ai_rpg_world.domain.world.service.hostility_service import ConfigurableHostilityService
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
 from ai_rpg_world.domain.world.service.weather_config_service import DefaultWeatherConfigService
+from ai_rpg_world.domain.world.service.world_time_config_service import DefaultWorldTimeConfigService
+from ai_rpg_world.domain.world.enum.world_enum import ActiveTimeType
+from ai_rpg_world.domain.monster.enum.monster_enum import MonsterStatusEnum
+from ai_rpg_world.domain.monster.value_object.spawn_condition import SpawnCondition
+from ai_rpg_world.domain.world.value_object.time_of_day import TimeOfDay
 from ai_rpg_world.domain.world.aggregate.weather_zone import WeatherZone
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.value_object.weather_zone_id import WeatherZoneId
@@ -153,6 +158,7 @@ class TestWorldSimulationApplicationService:
             hit_box_factory=hit_box_factory,
             hit_box_config_service=hit_box_config,
             hit_box_collision_service=hit_box_collision_service,
+            world_time_config_service=DefaultWorldTimeConfigService(ticks_per_day=24),
         )
         
         return service, time_provider, repository, weather_zone_repo, player_status_repo, hit_box_repo, uow, event_publisher, monster_repo, skill_loadout_repo
@@ -1768,3 +1774,134 @@ class TestWorldSimulationApplicationService:
                 service.tick()
 
             assert save_count[0] == 1
+
+    class TestActiveTimeSkip:
+        """活動時間帯でない自律アクターは plan_action をスキップするテスト"""
+
+        def test_nocturnal_actor_skipped_during_day(self, setup_service):
+            """昼の時間帯では夜行性アクターは plan_action を呼ばれないこと"""
+            service, time_provider, repository, _, _, _, _, _, _, _ = setup_service
+            # ticks_per_day=24 で initial_tick=12 → advance で 13 → DAY
+            time_provider.advance_tick()
+            time_provider.advance_tick()
+            time_provider.advance_tick()
+            # 現在 13 (DAY)
+            spot_id = SpotId(1)
+            tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
+            physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+            physical_map.add_object(WorldObject(
+                WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=PlayerId(100)),
+            ))
+            nocturnal_id = WorldObjectId(1)
+            physical_map.add_object(WorldObject(
+                nocturnal_id,
+                Coordinate(2, 2),
+                ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(
+                    state=BehaviorStateEnum.PATROL,
+                    patrol_points=[Coordinate(2, 2), Coordinate(2, 3)],
+                    active_time=ActiveTimeType.NOCTURNAL,
+                ),
+            ))
+            repository.save(physical_map)
+
+            plan_actor_ids = []
+            def capture_actor(actor_id_arg, map_agg, **kwargs):
+                plan_actor_ids.append(actor_id_arg)
+                return BehaviorAction.wait()
+
+            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_actor):
+                service.tick()
+
+            # プレイヤー(100)は ActorComponent のみなので plan_action は呼ばれる（自律でないのでスキップ判定は通る）
+            # NOCTURNAL の NPC(1) は活動時間でないので plan_action が呼ばれない
+            assert nocturnal_id not in plan_actor_ids
+
+        def test_diurnal_actor_acts_during_day(self, setup_service):
+            """昼の時間帯では昼行性アクターは plan_action が呼ばれること"""
+            service, time_provider, repository, _, _, _, _, _, _, _ = setup_service
+            time_provider.advance_tick()
+            time_provider.advance_tick()
+            time_provider.advance_tick()
+            spot_id = SpotId(1)
+            tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
+            physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+            physical_map.add_object(WorldObject(
+                WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=PlayerId(100)),
+            ))
+            diurnal_id = WorldObjectId(1)
+            physical_map.add_object(WorldObject(
+                diurnal_id,
+                Coordinate(2, 2),
+                ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(
+                    state=BehaviorStateEnum.PATROL,
+                    patrol_points=[Coordinate(2, 2), Coordinate(2, 3)],
+                    active_time=ActiveTimeType.DIURNAL,
+                ),
+            ))
+            repository.save(physical_map)
+
+            plan_actor_ids = []
+            def capture_actor(actor_id_arg, map_agg, **kwargs):
+                plan_actor_ids.append(actor_id_arg)
+                return BehaviorAction.wait()
+
+            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_actor):
+                service.tick()
+
+            assert diurnal_id in plan_actor_ids
+
+    class TestRespawnLoop:
+        """リスポーンループのテスト"""
+
+        def test_dead_monster_respawns_when_interval_elapsed_and_condition_met(self, setup_service):
+            """DEAD モンスターがリスポーン間隔経過かつ条件を満たすときリスポーンすること"""
+            service, time_provider, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
+            spot_id = SpotId(1)
+            tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
+            physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+            physical_map.add_object(WorldObject(
+                WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=PlayerId(100)),
+            ))
+            repository.save(physical_map)
+
+            monster_obj_id = WorldObjectId(1)
+            respawn_interval = 50
+            template = MonsterTemplate(
+                template_id=MonsterTemplateId(1),
+                name="test",
+                base_stats=BaseStats(100, 100, 10, 10, 10, 0.05, 0.05),
+                reward_info=RewardInfo(10, 10, "loot"),
+                respawn_info=RespawnInfo(respawn_interval_ticks=respawn_interval, is_auto_respawn=True),
+                race=Race.HUMAN,
+                faction=MonsterFactionEnum.ENEMY,
+                description="Test",
+                skill_ids=[],
+            )
+            loadout = SkillLoadoutAggregate.create(SkillLoadoutId(500), monster_obj_id.value, 10, 10)
+            skill_loadout_repo.save(loadout)
+            monster = MonsterAggregate.create(MonsterId(1), template, monster_obj_id, skill_loadout=loadout)
+            spawn_coord = Coordinate(2, 2, 0)
+            monster.spawn(spawn_coord, spot_id)
+            monster.apply_damage(100, WorldTick(100))
+            monster_repo.save(monster)
+            assert monster.status == MonsterStatusEnum.DEAD
+            assert monster.spot_id == spot_id
+            assert monster.get_respawn_coordinate() == spawn_coord
+
+            # initial_tick=10 なので 10 回 advance すると 20。リスポーンは 100+50=150 なので届かない。
+            # time_provider を 149 にしておき、1 tick で 150 にする
+            for _ in range(139):
+                time_provider.advance_tick()
+            assert time_provider.get_current_tick().value == 149
+
+            service.tick()
+
+            updated = monster_repo.find_by_id(MonsterId(1))
+            assert updated.status == MonsterStatusEnum.ALIVE
+            assert updated.coordinate == spawn_coord
+            assert updated.spot_id == spot_id

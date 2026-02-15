@@ -24,12 +24,21 @@ from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
 from ai_rpg_world.domain.world.value_object.behavior_context import SkillSelectionContext, TargetSelectionContext
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
+from ai_rpg_world.domain.monster.enum.monster_enum import MonsterStatusEnum
 from ai_rpg_world.domain.skill.repository.skill_repository import SkillLoadoutRepository
 from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import MonsterSkillExecutionDomainService
 from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
 from ai_rpg_world.domain.world.service.weather_simulation_service import WeatherSimulationService
 from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
 from ai_rpg_world.domain.world.service.weather_config_service import WeatherConfigService
+from ai_rpg_world.domain.world.service.world_time_config_service import (
+    WorldTimeConfigService,
+    DefaultWorldTimeConfigService,
+)
+from ai_rpg_world.domain.world.value_object.time_of_day import (
+    time_of_day_from_tick,
+    is_active_at_time,
+)
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.combat.service.hit_box_config_service import (
@@ -63,6 +72,7 @@ class WorldSimulationApplicationService:
         hit_box_config_service: Optional[HitBoxConfigService] = None,
         hit_box_collision_service: Optional[HitBoxCollisionDomainService] = None,
         aggro_store: Optional[AggroStore] = None,
+        world_time_config_service: Optional[WorldTimeConfigService] = None,
     ):
         self._time_provider = time_provider
         self._physical_map_repository = physical_map_repository
@@ -79,6 +89,7 @@ class WorldSimulationApplicationService:
         self._hit_box_collision_service = hit_box_collision_service or HitBoxCollisionDomainService()
         self._unit_of_work = unit_of_work
         self._aggro_store = aggro_store
+        self._world_time_config_service = world_time_config_service or DefaultWorldTimeConfigService()
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def tick(self) -> WorldTick:
@@ -120,6 +131,32 @@ class WorldSimulationApplicationService:
             # アクティブなスポット（プレイヤーが1人以上いるスポット）のみ行動更新・HitBox・save を行う
             active_spot_ids: Set[SpotId] = {pm.spot_id for pm in player_map_map.values()}
 
+            # 3.5 リスポーン判定（DEAD モンスターのうち条件を満たすものを再出現させる）
+            ticks_per_day = self._world_time_config_service.get_ticks_per_day()
+            time_of_day = time_of_day_from_tick(current_tick.value, ticks_per_day)
+            for monster in self._monster_repository.find_all():
+                if monster.status != MonsterStatusEnum.DEAD:
+                    continue
+                if monster.spot_id is None or monster.spot_id not in active_spot_ids:
+                    continue
+                if not monster.should_respawn(current_tick):
+                    continue
+                condition = monster.template.respawn_info.condition
+                if condition is not None and not condition.is_satisfied_at(time_of_day):
+                    continue
+                respawn_coord = monster.get_respawn_coordinate()
+                if respawn_coord is None:
+                    continue
+                try:
+                    monster.respawn(respawn_coord, current_tick, monster.spot_id)
+                    self._monster_repository.save(monster)
+                except DomainException as e:
+                    self._logger.warning(
+                        "Respawn skipped for monster %s: %s",
+                        monster.monster_id,
+                        str(e),
+                    )
+
             # 4. 各マップのアクターの行動更新（アクティブなスポットのみ；同一スポット内でプレイヤーとの距離が近い順に処理）
             for physical_map in maps:
                 if physical_map.spot_id not in active_spot_ids:
@@ -128,7 +165,12 @@ class WorldSimulationApplicationService:
                     # Busy状態のアクターはスキップ
                     if actor.is_busy(current_tick):
                         continue
-                    
+                    # 活動時間帯でない自律アクターは行動しない（WAIT 相当）
+                    if isinstance(actor.component, AutonomousBehaviorComponent):
+                        ticks_per_day = self._world_time_config_service.get_ticks_per_day()
+                        time_of_day = time_of_day_from_tick(current_tick.value, ticks_per_day)
+                        if not is_active_at_time(actor.component.active_time, time_of_day):
+                            continue
                     try:
                         # 自律行動アクター用の skill_context / target_context を組み立て（モンスターでない場合は None）
                         skill_context = self._build_skill_context_for_actor(actor, physical_map, current_tick)

@@ -116,8 +116,9 @@ class TestBehaviorService:
 
     @pytest.fixture
     def hostility_service(self):
+        from ai_rpg_world.domain.world.enum.world_enum import Disposition
         return ConfigurableHostilityService(
-            race_hostility_table={"goblin": {"human"}}
+            race_disposition_table={"goblin": {"human": Disposition.HOSTILE}}
         )
 
     @pytest.fixture
@@ -355,7 +356,8 @@ class TestBehaviorService:
             map_agg.add_object(p1)
             
             # 敵対サービスが人間を敵視するように再設定
-            behavior_service._hostility_service = ConfigurableHostilityService(race_hostility_table={"monster": {"human"}})
+            from ai_rpg_world.domain.world.enum.world_enum import Disposition
+            behavior_service._hostility_service = ConfigurableHostilityService(race_disposition_table={"monster": {"human": Disposition.HOSTILE}})
             
             behavior_service.plan_next_move(WorldObjectId(100), map_agg)
             assert comp.state == BehaviorStateEnum.CHASE
@@ -374,7 +376,8 @@ class TestBehaviorService:
                     return in_range[1].slot_index if len(in_range) > 1 else (in_range[0].slot_index if in_range else None)
 
             strategy = DefaultBehaviorStrategy(pathfinding_service, SecondInRangeSkillPolicy())
-            hostility = ConfigurableHostilityService(race_hostility_table={"goblin": {"human"}})
+            from ai_rpg_world.domain.world.enum.world_enum import Disposition
+            hostility = ConfigurableHostilityService(race_disposition_table={"goblin": {"human": Disposition.HOSTILE}})
             service = BehaviorService(pathfinding_service, hostility, strategy=strategy)
 
             monster_id = WorldObjectId(100)
@@ -404,7 +407,8 @@ class TestBehaviorService:
 
         def test_ally_excluded_from_targets(self, pathfinding_service, map_aggregate):
             """同一パックの味方は視界内にいてもターゲットに選ばれず、プレイヤーのみターゲットになる"""
-            hostility = ConfigurableHostilityService(race_hostility_table={"goblin": {"human"}})
+            from ai_rpg_world.domain.world.enum.world_enum import Disposition
+            hostility = ConfigurableHostilityService(race_disposition_table={"goblin": {"human": Disposition.HOSTILE}})
             allegiance = PackAllegianceService()
             service = BehaviorService(
                 pathfinding_service, hostility, allegiance_service=allegiance
