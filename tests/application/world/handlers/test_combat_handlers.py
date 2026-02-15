@@ -75,6 +75,7 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.world.value_object.aggro_memory_policy import AggroMemoryPolicy
 from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
 from ai_rpg_world.infrastructure.events.combat_event_handler_registry import CombatEventHandlerRegistry
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
@@ -619,6 +620,54 @@ class TestCombatAggroHandler:
         assert target.component.target_id == attacker_id
         threat = aggro_store.get_threat_by_attacker(SpotId(1), attacker_id)
         assert threat == {target_id: 1}
+
+    def test_aggro_stored_with_current_tick_when_game_time_provider_injected(self, setup):
+        """game_time_provider を注入した場合、add_aggro にその時点の tick が渡され last_seen_tick として記録されること"""
+        s = setup
+        aggro_store = InMemoryAggroStore()
+        time_provider = InMemoryGameTimeProvider(initial_tick=50)
+        handler = CombatAggroHandler(
+            s["hit_box_repo"], s["map_repo"], s["uow"],
+            aggro_store=aggro_store,
+            game_time_provider=time_provider,
+        )
+        pmap = _create_map()
+        attacker_id = WorldObjectId(100)
+        target_id = WorldObjectId(300)
+        pmap.add_object(_create_actor_object(100, Coordinate(0, 0, 0), player_id=100))
+        pmap.add_object(WorldObject(
+            target_id, Coordinate(1, 1, 0), ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(state=BehaviorStateEnum.IDLE),
+        ))
+        s["map_repo"].save(pmap)
+        hb = HitBoxAggregate.create(
+            hit_box_id=HitBoxId.create(1),
+            spot_id=SpotId(1),
+            owner_id=attacker_id,
+            shape=HitBoxShape.single_cell(),
+            initial_coordinate=Coordinate(0, 0, 0),
+            start_tick=WorldTick(10),
+            duration=5,
+        )
+        s["hit_box_repo"].save(hb)
+        event = HitBoxHitRecordedEvent.create(
+            aggregate_id=hb.hit_box_id,
+            aggregate_type="HitBoxAggregate",
+            owner_id=attacker_id,
+            target_id=target_id,
+            hit_coordinate=Coordinate(1, 1, 0),
+        )
+        with s["uow"]:
+            handler.handle(event)
+        policy = AggroMemoryPolicy(forget_after_ticks=10)
+        threat_within = aggro_store.get_threat_by_attacker(
+            SpotId(1), attacker_id, current_tick=59, memory_policy=policy
+        )
+        threat_after = aggro_store.get_threat_by_attacker(
+            SpotId(1), attacker_id, current_tick=61, memory_policy=policy
+        )
+        assert threat_within == {target_id: 1}
+        assert threat_after == {}
 
     def test_aggro_store_not_called_when_aggro_store_none(self, setup):
         # Given: aggro_store なしでハンドラを構築

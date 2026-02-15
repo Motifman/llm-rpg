@@ -13,6 +13,7 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.common.exception import ValidationException, BusinessRuleException
 if TYPE_CHECKING:
     from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.aggro_memory_policy import AggroMemoryPolicy
 from ai_rpg_world.domain.world.exception.behavior_exception import (
     VisionRangeValidationException,
     FOVAngleValidationException,
@@ -237,6 +238,7 @@ class AutonomousBehaviorComponent(ActorComponent):
         ecology_type: EcologyTypeEnum = EcologyTypeEnum.NORMAL,
         ambush_chase_range: Optional[int] = None,
         territory_radius: Optional[int] = None,
+        aggro_memory_policy: Optional[AggroMemoryPolicy] = None,
     ):
         super().__init__(direction, capability, player_id, is_npc, fov_angle, race, faction, pack_id)
         self._validate(vision_range, search_duration, hp_percentage, flee_threshold, max_failures, random_move_chance)
@@ -262,6 +264,7 @@ class AutonomousBehaviorComponent(ActorComponent):
         self.ecology_type = ecology_type
         self.ambush_chase_range = ambush_chase_range
         self.territory_radius = territory_radius
+        self.aggro_memory_policy = aggro_memory_policy
 
     def _validate(self, vision_range, search_duration, hp_percentage, flee_threshold, max_failures, random_move_chance):
         if vision_range < 0:

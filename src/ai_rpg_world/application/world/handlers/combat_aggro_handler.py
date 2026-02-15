@@ -2,6 +2,7 @@ import logging
 from typing import Optional
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
+from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.application.world.aggro_store import AggroStore
 from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.exception import DomainException
@@ -23,11 +24,13 @@ class CombatAggroHandler(EventHandler[HitBoxHitRecordedEvent]):
         physical_map_repository: PhysicalMapRepository,
         unit_of_work: UnitOfWork,
         aggro_store: Optional[AggroStore] = None,
+        game_time_provider: Optional[GameTimeProvider] = None,
     ):
         self._hit_box_repository = hit_box_repository
         self._physical_map_repository = physical_map_repository
         self._unit_of_work = unit_of_work
         self._aggro_store = aggro_store
+        self._game_time_provider = game_time_provider
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def handle(self, event: HitBoxHitRecordedEvent) -> None:
@@ -71,10 +74,16 @@ class CombatAggroHandler(EventHandler[HitBoxHitRecordedEvent]):
 
         component.spot_target(owner_obj.object_id, owner_obj.coordinate)
         if self._aggro_store is not None:
+            current_tick = (
+                self._game_time_provider.get_current_tick().value
+                if self._game_time_provider is not None
+                else 0
+            )
             self._aggro_store.add_aggro(
                 spot_id=hit_box.spot_id,
                 victim_id=event.target_id,
                 attacker_id=event.owner_id,
                 amount=1,
+                current_tick=current_tick,
             )
         self._physical_map_repository.save(physical_map)

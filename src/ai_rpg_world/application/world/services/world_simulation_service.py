@@ -1,5 +1,5 @@
 import logging
-from typing import List, Callable, Any, Dict, Optional
+from typing import List, Callable, Any, Dict, Optional, Set
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
@@ -116,9 +116,14 @@ class WorldSimulationApplicationService:
             # 3.3 環境効果の一括適用
             if player_map_map:
                 self._apply_environmental_effects_bulk(player_map_map)
-            
-            # 4. 各マップのアクターの行動更新（同一スポット内でプレイヤーとの距離が近い順に処理）
+
+            # アクティブなスポット（プレイヤーが1人以上いるスポット）のみ行動更新・HitBox・save を行う
+            active_spot_ids: Set[SpotId] = {pm.spot_id for pm in player_map_map.values()}
+
+            # 4. 各マップのアクターの行動更新（アクティブなスポットのみ；同一スポット内でプレイヤーとの距離が近い順に処理）
             for physical_map in maps:
+                if physical_map.spot_id not in active_spot_ids:
+                    continue
                 for actor in self._actors_sorted_by_distance_to_players(physical_map):
                     # Busy状態のアクターはスキップ
                     if actor.is_busy(current_tick):
@@ -127,7 +132,7 @@ class WorldSimulationApplicationService:
                     try:
                         # 自律行動アクター用の skill_context / target_context を組み立て（モンスターでない場合は None）
                         skill_context = self._build_skill_context_for_actor(actor, physical_map, current_tick)
-                        target_context = self._build_target_context_for_actor(actor, physical_map)
+                        target_context = self._build_target_context_for_actor(actor, physical_map, current_tick)
                         # 自律行動アクターの計画
                         action = self._behavior_service.plan_action(
                             actor.object_id,
@@ -224,17 +229,24 @@ class WorldSimulationApplicationService:
         self,
         actor: WorldObject,
         physical_map: PhysicalMapAggregate,
+        current_tick: WorldTick,
     ) -> Optional[TargetSelectionContext]:
         """
         自律行動のモンスターについて、ヘイト等から TargetSelectionContext を組み立てる。
+        AggroMemoryPolicy があれば last_seen_tick からの経過で忘却したエントリは除外する。
         ヘイトストア未注入時や該当データなしの場合は None を返す。
         """
         if not isinstance(actor.component, AutonomousBehaviorComponent):
             return None
         if self._aggro_store is None:
             return None
+        component = actor.component
+        policy = getattr(component, "aggro_memory_policy", None)
         threat_by_id = self._aggro_store.get_threat_by_attacker(
-            physical_map.spot_id, actor.object_id
+            physical_map.spot_id,
+            actor.object_id,
+            current_tick=current_tick.value,
+            memory_policy=policy,
         )
         if not threat_by_id:
             return None

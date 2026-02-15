@@ -60,6 +60,7 @@ from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHit
 from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent, MonsterSkillInfo
 from ai_rpg_world.domain.world.value_object.behavior_context import SkillSelectionContext, TargetSelectionContext
+from ai_rpg_world.domain.world.value_object.aggro_memory_policy import AggroMemoryPolicy
 from ai_rpg_world.infrastructure.aggro.in_memory_aggro_store import InMemoryAggroStore
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
@@ -161,14 +162,17 @@ class TestWorldSimulationApplicationService:
         assert time_provider.get_current_tick() == WorldTick(11)
 
     def test_tick_updates_autonomous_actors(self, setup_service):
-        """tickによって自律行動アクターの行動が計画・実行されること"""
+        """tickによって自律行動アクターの行動が計画・実行されること（アクティブスポットのみ更新）"""
         service, _, repository, _, _, _, _, _, _, _ = setup_service
         
-        # マップのセットアップ
+        # マップのセットアップ（プレイヤーがいるスポットのみ更新されるためプレイヤーを配置）
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
         physical_map = PhysicalMapAggregate.create(spot_id, tiles)
-        
+        physical_map.add_object(WorldObject(
+            WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+            component=ActorComponent(player_id=PlayerId(100)),
+        ))
         # 自律行動アクターの追加
         actor_id = WorldObjectId(1)
         actor = WorldObject(
@@ -230,7 +234,10 @@ class TestWorldSimulationApplicationService:
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
         physical_map = PhysicalMapAggregate.create(spot_id, tiles)
-        
+        physical_map.add_object(WorldObject(
+            WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+            component=ActorComponent(player_id=PlayerId(100)),
+        ))
         actor1_id = WorldObjectId(1)
         actor2_id = WorldObjectId(2)
         actor1 = WorldObject(
@@ -245,10 +252,13 @@ class TestWorldSimulationApplicationService:
         physical_map.add_object(actor2)
         repository.save(physical_map)
         
+        player_wo_id = WorldObjectId(100)
         call_count = [0]
-        def plan_action_side_effect(actor_id, map_agg, **kwargs):
+        def plan_action_side_effect(actor_id_arg, map_agg, **kwargs):
             call_count[0] += 1
-            if actor_id == actor1_id:
+            if actor_id_arg == player_wo_id:
+                return BehaviorAction.wait()
+            if actor_id_arg == actor1_id:
                 raise Exception("Plan error")
             return BehaviorAction.move(Coordinate(3, 4))
         
@@ -257,7 +267,7 @@ class TestWorldSimulationApplicationService:
             service.tick()
         
         updated_map = repository.find_by_spot_id(spot_id)
-        assert call_count[0] == 2
+        assert call_count[0] == 3
         assert updated_map.get_object(actor1_id).coordinate == Coordinate(2, 2)
         assert updated_map.get_object(actor2_id).coordinate == Coordinate(3, 4)
 
@@ -299,6 +309,10 @@ class TestWorldSimulationApplicationService:
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
         physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        physical_map.add_object(WorldObject(
+            WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+            component=ActorComponent(player_id=PlayerId(100)),
+        ))
         actor_id = WorldObjectId(1)
         physical_map.add_object(WorldObject(
             actor_id, Coordinate(2, 2), ObjectTypeEnum.NPC,
@@ -574,7 +588,10 @@ class TestWorldSimulationApplicationService:
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(4) for y in range(4)]
         physical_map = PhysicalMapAggregate.create(spot_id, tiles)
-
+        physical_map.add_object(WorldObject(
+            WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+            component=ActorComponent(player_id=PlayerId(100)),
+        ))
         owner_id = WorldObjectId(900)
         target_id = WorldObjectId(901)
         owner = WorldObject(owner_id, Coordinate(0, 1), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent())
@@ -613,8 +630,13 @@ class TestWorldSimulationApplicationService:
         tiles = [
             Tile(Coordinate(0, 0), TerrainType.grass()),
             Tile(Coordinate(1, 0), TerrainType.wall()),
+            Tile(Coordinate(0, 1), TerrainType.grass()),
         ]
         physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        physical_map.add_object(WorldObject(
+            WorldObjectId(100), Coordinate(0, 1), ObjectTypeEnum.PLAYER,
+            component=ActorComponent(player_id=PlayerId(100)),
+        ))
         owner_id = WorldObjectId(910)
         physical_map.add_object(WorldObject(owner_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
         map_repo.save(physical_map)
@@ -649,8 +671,13 @@ class TestWorldSimulationApplicationService:
         tiles = [
             Tile(Coordinate(0, 0), TerrainType.grass()),
             Tile(Coordinate(1, 0), TerrainType.wall()),
+            Tile(Coordinate(0, 1), TerrainType.grass()),
         ]
         physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        physical_map.add_object(WorldObject(
+            WorldObjectId(100), Coordinate(0, 1), ObjectTypeEnum.PLAYER,
+            component=ActorComponent(player_id=PlayerId(100)),
+        ))
         owner_id = WorldObjectId(920)
         physical_map.add_object(WorldObject(owner_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
         map_repo.save(physical_map)
@@ -685,6 +712,10 @@ class TestWorldSimulationApplicationService:
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(2) for y in range(2)]
         physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        physical_map.add_object(WorldObject(
+            WorldObjectId(100), Coordinate(0, 1), ObjectTypeEnum.PLAYER,
+            component=ActorComponent(player_id=PlayerId(100)),
+        ))
         owner_id = WorldObjectId(930)
         target_id = WorldObjectId(931)
         physical_map.add_object(WorldObject(owner_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
@@ -715,8 +746,12 @@ class TestWorldSimulationApplicationService:
         service, _, map_repo, _, _, _, _, _, _, _ = setup_service
 
         spot_id = SpotId(1)
-        tiles = [Tile(Coordinate(0, 0), TerrainType.grass())]
+        tiles = [Tile(Coordinate(0, 0), TerrainType.grass()), Tile(Coordinate(0, 1), TerrainType.grass())]
         physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        physical_map.add_object(WorldObject(
+            WorldObjectId(100), Coordinate(0, 1), ObjectTypeEnum.PLAYER,
+            component=ActorComponent(player_id=PlayerId(100)),
+        ))
         map_repo.save(physical_map)
 
         import unittest.mock as mock
@@ -731,6 +766,10 @@ class TestWorldSimulationApplicationService:
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(3) for y in range(2)]
         physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        physical_map.add_object(WorldObject(
+            WorldObjectId(100), Coordinate(2, 1), ObjectTypeEnum.PLAYER,
+            component=ActorComponent(player_id=PlayerId(100)),
+        ))
         owner_id = WorldObjectId(940)
         target_id = WorldObjectId(941)
         physical_map.add_object(WorldObject(owner_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
@@ -769,8 +808,13 @@ class TestWorldSimulationApplicationService:
         tiles = [
             Tile(Coordinate(0, 0), TerrainType.grass()),
             Tile(Coordinate(1, 0), TerrainType.wall()),
+            Tile(Coordinate(0, 1), TerrainType.grass()),
         ]
         physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        physical_map.add_object(WorldObject(
+            WorldObjectId(100), Coordinate(0, 1), ObjectTypeEnum.PLAYER,
+            component=ActorComponent(player_id=PlayerId(100)),
+        ))
         owner_id = WorldObjectId(950)
         physical_map.add_object(WorldObject(owner_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
         map_repo.save(physical_map)
@@ -808,8 +852,12 @@ class TestWorldSimulationApplicationService:
         service, _, map_repo, _, _, hit_box_repo, _, _, _, _ = setup_service
 
         spot_id = SpotId(1)
-        tiles = [Tile(Coordinate(0, 0), TerrainType.grass())]
+        tiles = [Tile(Coordinate(0, 0), TerrainType.grass()), Tile(Coordinate(0, 1), TerrainType.grass())]
         physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        physical_map.add_object(WorldObject(
+            WorldObjectId(100), Coordinate(0, 1), ObjectTypeEnum.PLAYER,
+            component=ActorComponent(player_id=PlayerId(100)),
+        ))
         owner_id = WorldObjectId(960)
         physical_map.add_object(WorldObject(owner_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
         map_repo.save(physical_map)
@@ -879,6 +927,10 @@ class TestWorldSimulationApplicationService:
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, 0), TerrainType.grass()) for x in range(3)]
         physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        physical_map.add_object(WorldObject(
+            WorldObjectId(100), Coordinate(2, 0), ObjectTypeEnum.PLAYER,
+            component=ActorComponent(player_id=PlayerId(100)),
+        ))
         owner_id = WorldObjectId(970)
         target_id = WorldObjectId(971)
         physical_map.add_object(WorldObject(owner_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
@@ -911,8 +963,12 @@ class TestWorldSimulationApplicationService:
         caplog.set_level("DEBUG")
 
         spot_id = SpotId(1)
-        tiles = [Tile(Coordinate(0, 0), TerrainType.grass())]
+        tiles = [Tile(Coordinate(0, 0), TerrainType.grass()), Tile(Coordinate(0, 1), TerrainType.grass())]
         physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        physical_map.add_object(WorldObject(
+            WorldObjectId(100), Coordinate(0, 1), ObjectTypeEnum.PLAYER,
+            component=ActorComponent(player_id=PlayerId(100)),
+        ))
         owner_id = WorldObjectId(980)
         physical_map.add_object(WorldObject(owner_id, Coordinate(0, 0), ObjectTypeEnum.NPC, component=AutonomousBehaviorComponent()))
         map_repo.save(physical_map)
@@ -939,6 +995,10 @@ class TestWorldSimulationApplicationService:
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, 0), TerrainType.grass()) for x in range(3)]
         physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        physical_map.add_object(WorldObject(
+            WorldObjectId(100), Coordinate(2, 0), ObjectTypeEnum.PLAYER,
+            component=ActorComponent(player_id=PlayerId(100)),
+        ))
         map_repo.save(physical_map)
 
         hit_box = HitBoxAggregate.create(
@@ -982,12 +1042,12 @@ class TestWorldSimulationApplicationService:
         monster_obj = WorldObject(monster_obj_id, Coordinate(5, 5), ObjectTypeEnum.NPC, component=monster_comp)
         physical_map.add_object(monster_obj)
         
-        player_id = WorldObjectId(1)
+        player_wo_id = WorldObjectId(1)
         player_obj = WorldObject(
-            player_id,
+            player_wo_id,
             Coordinate(7, 5),
             ObjectTypeEnum.PLAYER,
-            component=ActorComponent(race="human", faction="player"),
+            component=ActorComponent(player_id=PlayerId(100), race="human", faction="player"),
         )
         physical_map.add_object(player_obj)
         
@@ -1063,11 +1123,15 @@ class TestWorldSimulationApplicationService:
         """skill_context / target_context の組み立てと plan_action への渡し（正常・境界）"""
 
         def test_plan_action_receives_skill_context_for_monster_with_usable_slots(self, setup_service):
-            # Given: モンスターが存在し、available_skills のスロットが can_use_skill で使用可能
+            # Given: モンスターが存在し、available_skills のスロットが can_use_skill で使用可能（アクティブスポットのためプレイヤーを配置）
             service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
             spot_id = SpotId(1)
             tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
             physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+            physical_map.add_object(WorldObject(
+                WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=PlayerId(100)),
+            ))
             actor_id = WorldObjectId(1)
             actor = WorldObject(
                 actor_id,
@@ -1125,10 +1189,9 @@ class TestWorldSimulationApplicationService:
             with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_plan_action):
                 service.tick()
 
-            assert len(captured) == 1
-            assert "skill_context" in captured[0]
-            ctx = captured[0]["skill_context"]
-            assert ctx is not None
+            assert len(captured) == 2
+            monster_captured = next(c for c in captured if c.get("skill_context") is not None)
+            ctx = monster_captured["skill_context"]
             assert isinstance(ctx, SkillSelectionContext)
             assert 0 in ctx.usable_slot_indices
 
@@ -1160,7 +1223,7 @@ class TestWorldSimulationApplicationService:
             assert captured[0].get("skill_context") is None
 
         def test_plan_action_receives_target_context_when_aggro_store_has_data(self, setup_service):
-            # Given: aggro_store を注入し、該当アクターのヘイトデータを事前に登録
+            # Given: aggro_store を注入し、該当アクターのヘイトデータを事前に登録（アクティブスポットのためプレイヤーを配置）
             service, _, repository, _, _, _, _, _, _, _ = setup_service
             aggro_store = InMemoryAggroStore()
             aggro_store.add_aggro(SpotId(1), WorldObjectId(200), WorldObjectId(1), 5)
@@ -1169,6 +1232,10 @@ class TestWorldSimulationApplicationService:
             spot_id = SpotId(1)
             tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
             physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+            physical_map.add_object(WorldObject(
+                WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=PlayerId(100)),
+            ))
             actor_id = WorldObjectId(1)
             actor = WorldObject(
                 actor_id,
@@ -1187,21 +1254,24 @@ class TestWorldSimulationApplicationService:
             with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_plan_action):
                 service.tick()
 
-            assert len(captured) == 1
-            assert "target_context" in captured[0]
-            ctx = captured[0]["target_context"]
-            assert ctx is not None
+            assert len(captured) == 2
+            npc_captured = next(c for c in captured if c.get("target_context") is not None)
+            ctx = npc_captured["target_context"]
             assert isinstance(ctx, TargetSelectionContext)
             assert ctx.threat_by_id == {WorldObjectId(200): 5}
 
         def test_plan_action_receives_none_target_context_when_aggro_store_not_injected(self, setup_service):
-            # Given: aggro_store は None（デフォルト）
+            # Given: aggro_store は None（デフォルト）。アクティブスポットのためプレイヤーを配置
             service, _, repository, _, _, _, _, _, _, _ = setup_service
             assert service._aggro_store is None
 
             spot_id = SpotId(1)
             tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
             physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+            physical_map.add_object(WorldObject(
+                WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=PlayerId(100)),
+            ))
             actor = WorldObject(
                 WorldObjectId(1),
                 Coordinate(2, 2),
@@ -1219,8 +1289,48 @@ class TestWorldSimulationApplicationService:
             with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_plan_action):
                 service.tick()
 
-            assert len(captured) == 1
-            assert captured[0].get("target_context") is None
+            assert len(captured) == 2
+            assert all(c.get("target_context") is None for c in captured)
+
+        def test_plan_action_receives_target_context_with_memory_policy_forgotten_excluded(self, setup_service):
+            """aggro_memory_policy で忘却済みのヘイトは target_context に含まれないこと（last_seen から経過で忘却）"""
+            service, _, repository, _, _, _, _, _, _, _ = setup_service
+            aggro_store = InMemoryAggroStore()
+            aggro_store.add_aggro(SpotId(1), WorldObjectId(200), WorldObjectId(1), 5, current_tick=0)
+            service._aggro_store = aggro_store
+            service._time_provider = InMemoryGameTimeProvider(initial_tick=20)
+
+            spot_id = SpotId(1)
+            tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
+            physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+            physical_map.add_object(WorldObject(
+                WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=PlayerId(100)),
+            ))
+            actor_id = WorldObjectId(1)
+            actor = WorldObject(
+                actor_id,
+                Coordinate(2, 2),
+                ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(
+                    aggro_memory_policy=AggroMemoryPolicy(forget_after_ticks=10),
+                ),
+            )
+            physical_map.add_object(actor)
+            repository.save(physical_map)
+
+            captured = []
+            def capture_plan_action(actor_id_arg, map_agg, **kwargs):
+                captured.append(kwargs)
+                return BehaviorAction.wait()
+
+            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_plan_action):
+                service.tick()
+
+            assert service._time_provider.get_current_tick().value == 21
+            for c in captured:
+                ctx = c.get("target_context")
+                assert ctx is None or ctx.threat_by_id == {}, "忘却済みのヘイトは target_context に含まれないこと"
 
     class TestActorExecutionOrder:
         """実行順ソート（同一スポット内でプレイヤーとの距離順）の正常・境界・異常系"""
@@ -1273,7 +1383,7 @@ class TestWorldSimulationApplicationService:
             assert call_order[3] == far_id
 
         def test_actors_processed_when_no_player_on_map(self, setup_service):
-            """同一マップにプレイヤーがいない場合、全アクターが plan_action の対象になること（順序は未規定）"""
+            """同一マップにプレイヤーがいない場合、そのスポットは凍結され plan_action は呼ばれないこと"""
             service, _, repository, _, _, _, _, _, _, _ = setup_service
             spot_id = SpotId(1)
             tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
@@ -1295,7 +1405,7 @@ class TestWorldSimulationApplicationService:
             with mock.patch.object(service._behavior_service, "plan_action", side_effect=count_calls):
                 service.tick()
 
-            assert call_count[0] == 3
+            assert call_count[0] == 0
 
         def test_actors_sorted_by_nearest_player_when_multiple_players(self, setup_service):
             """同一マップに複数プレイヤーがいる場合、最も近いプレイヤーとの距離でソートされること"""
@@ -1345,7 +1455,7 @@ class TestWorldSimulationApplicationService:
             assert npc_order[2] == mid_id
 
         def test_single_actor_no_player_on_map(self, setup_service):
-            """プレイヤーがいないマップでアクターが1体のみの場合、1回だけ plan_action が呼ばれること"""
+            """プレイヤーがいないマップではスポットが凍結され plan_action は呼ばれないこと"""
             service, _, repository, _, _, _, _, _, _, _ = setup_service
             spot_id = SpotId(1)
             tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
@@ -1365,7 +1475,7 @@ class TestWorldSimulationApplicationService:
             with mock.patch.object(service._behavior_service, "plan_action", side_effect=count_calls):
                 service.tick()
 
-            assert call_count[0] == 1
+            assert call_count[0] == 0
 
         def test_busy_actors_skipped_regardless_of_execution_order(self, setup_service):
             """実行順ソート後も、Busy なアクターは plan_action が呼ばれずスキップされること"""
@@ -1445,3 +1555,210 @@ class TestWorldSimulationApplicationService:
 
             assert len(call_order) == 1
             assert call_order[0] == WorldObjectId(100)
+
+    class TestActiveSpotFreeze:
+        """スポット単位凍結（プレイヤーが存在するマップでのみ逐次更新）の正常・境界・異常系"""
+
+        def test_only_active_spot_gets_plan_action_and_save(self, setup_service):
+            """プレイヤーがいるスポットのみ plan_action が呼ばれ、そのスポットのみ save されること"""
+            service, _, repository, _, _, _, _, _, _, _ = setup_service
+            spot_a = SpotId(1)
+            spot_b = SpotId(2)
+            tiles_5x5 = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
+            map_a = PhysicalMapAggregate.create(spot_a, tiles_5x5)
+            map_b = PhysicalMapAggregate.create(spot_b, tiles_5x5)
+            player_id = PlayerId(100)
+            map_a.add_object(WorldObject(
+                WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=player_id),
+            ))
+            map_a.add_object(WorldObject(
+                WorldObjectId(1), Coordinate(1, 1), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(1, 1), Coordinate(1, 2)]),
+            ))
+            map_b.add_object(WorldObject(
+                WorldObjectId(2), Coordinate(2, 2), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
+            ))
+            repository.save(map_a)
+            repository.save(map_b)
+
+            plan_action_calls = []
+            def capture_plan(actor_id_arg, map_agg, **kwargs):
+                plan_action_calls.append((actor_id_arg, map_agg.spot_id))
+                return BehaviorAction.wait()
+
+            save_calls = []
+            original_save = repository.save
+            def capture_save(physical_map):
+                save_calls.append(physical_map.spot_id)
+                return original_save(physical_map)
+
+            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_plan):
+                with mock.patch.object(service._physical_map_repository, "save", side_effect=capture_save):
+                    service.tick()
+
+            assert all(spot_id == spot_a for _, spot_id in plan_action_calls)
+            assert len(plan_action_calls) == 2
+            assert save_calls == [spot_a]
+
+        def test_no_player_on_any_map_no_plan_action_no_save(self, setup_service):
+            """全マップにプレイヤーがいない場合、plan_action も save も呼ばれないこと"""
+            service, _, repository, _, _, _, _, _, _, _ = setup_service
+            spot_a = SpotId(10)
+            spot_b = SpotId(20)
+            tiles = [Tile(Coordinate(0, 0), TerrainType.grass())]
+            map_a = PhysicalMapAggregate.create(spot_a, tiles)
+            map_b = PhysicalMapAggregate.create(spot_b, tiles)
+            map_a.add_object(WorldObject(
+                WorldObjectId(1), Coordinate(0, 0), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(0, 0)]),
+            ))
+            map_b.add_object(WorldObject(
+                WorldObjectId(2), Coordinate(0, 0), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(0, 0)]),
+            ))
+            repository.save(map_a)
+            repository.save(map_b)
+
+            plan_count = [0]
+            save_count = [0]
+            def count_plan(*args, **kwargs):
+                plan_count[0] += 1
+                return BehaviorAction.wait()
+            original_save = repository.save
+            def count_save(physical_map):
+                save_count[0] += 1
+                return original_save(physical_map)
+
+            with mock.patch.object(service._behavior_service, "plan_action", side_effect=count_plan):
+                with mock.patch.object(service._physical_map_repository, "save", side_effect=count_save):
+                    service.tick()
+
+            assert plan_count[0] == 0
+            assert save_count[0] == 0
+
+        def test_both_spots_with_players_both_updated(self, setup_service):
+            """複数スポットにそれぞれプレイヤーがいる場合、両方のスポットで plan_action と save が行われること"""
+            service, _, repository, _, _, _, _, _, _, _ = setup_service
+            spot_a = SpotId(1)
+            spot_b = SpotId(2)
+            tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(3) for y in range(3)]
+            map_a = PhysicalMapAggregate.create(spot_a, tiles)
+            map_b = PhysicalMapAggregate.create(spot_b, tiles)
+            map_a.add_object(WorldObject(
+                WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=PlayerId(100)),
+            ))
+            map_b.add_object(WorldObject(
+                WorldObjectId(101), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=PlayerId(101)),
+            ))
+            repository.save(map_a)
+            repository.save(map_b)
+
+            plan_spot_ids = []
+            def capture_spot(actor_id_arg, map_agg, **kwargs):
+                plan_spot_ids.append(map_agg.spot_id)
+                return BehaviorAction.wait()
+
+            save_spot_ids = []
+            original_save = repository.save
+            def capture_save(physical_map):
+                save_spot_ids.append(physical_map.spot_id)
+                return original_save(physical_map)
+
+            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_spot):
+                with mock.patch.object(service._physical_map_repository, "save", side_effect=capture_save):
+                    service.tick()
+
+            assert set(plan_spot_ids) == {spot_a, spot_b}
+            assert set(save_spot_ids) == {spot_a, spot_b}
+
+        def test_inactive_spot_actors_never_get_plan_action(self, setup_service):
+            """プレイヤーがいないスポットのアクターには plan_action が一度も呼ばれないこと"""
+            service, _, repository, _, _, _, _, _, _, _ = setup_service
+            spot_active = SpotId(1)
+            spot_inactive = SpotId(2)
+            tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
+            map_active = PhysicalMapAggregate.create(spot_active, tiles)
+            map_inactive = PhysicalMapAggregate.create(spot_inactive, tiles)
+            map_active.add_object(WorldObject(
+                WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=PlayerId(100)),
+            ))
+            map_active.add_object(WorldObject(
+                WorldObjectId(1), Coordinate(1, 0), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(1, 0), Coordinate(1, 1)]),
+            ))
+            npc_on_inactive_id = WorldObjectId(2)
+            map_inactive.add_object(WorldObject(
+                npc_on_inactive_id, Coordinate(2, 2), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
+            ))
+            repository.save(map_active)
+            repository.save(map_inactive)
+
+            plan_actor_ids = []
+            def capture_actor(actor_id_arg, map_agg, **kwargs):
+                plan_actor_ids.append(actor_id_arg)
+                return BehaviorAction.wait()
+
+            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_actor):
+                service.tick()
+
+            assert npc_on_inactive_id not in plan_actor_ids
+            assert WorldObjectId(100) in plan_actor_ids
+            assert WorldObjectId(1) in plan_actor_ids
+
+        def test_single_map_with_player_behaves_as_before(self, setup_service):
+            """プレイヤーが1人いるマップが1つの場合は従来どおり更新され、tick が正常終了すること"""
+            service, _, repository, _, _, _, _, _, _, _ = setup_service
+            spot_id = SpotId(1)
+            tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
+            physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+            player_id_wo = WorldObjectId(100)
+            actor_id = WorldObjectId(1)
+            physical_map.add_object(WorldObject(
+                player_id_wo, Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=PlayerId(100)),
+            ))
+            physical_map.add_object(WorldObject(
+                actor_id, Coordinate(2, 2), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
+            ))
+            repository.save(physical_map)
+
+            def plan_by_actor(actor_id_arg, map_agg, **kwargs):
+                if actor_id_arg == player_id_wo:
+                    return BehaviorAction.wait()
+                return BehaviorAction.move(Coordinate(2, 3))
+
+            with mock.patch.object(service._behavior_service, "plan_action", side_effect=plan_by_actor):
+                service.tick()
+
+            updated = repository.find_by_spot_id(spot_id)
+            assert updated.get_object(actor_id).coordinate == Coordinate(2, 3)
+
+        def test_active_spot_save_called_once_per_active_map(self, setup_service):
+            """アクティブなスポットごとに save が1回だけ呼ばれること（境界）"""
+            service, _, repository, _, _, _, _, _, _, _ = setup_service
+            spot_id = SpotId(1)
+            tiles = [Tile(Coordinate(0, 0), TerrainType.grass())]
+            physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+            physical_map.add_object(WorldObject(
+                WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=PlayerId(100)),
+            ))
+            repository.save(physical_map)
+
+            save_count = [0]
+            original_save = repository.save
+            def count_save(physical_map):
+                save_count[0] += 1
+                return original_save(physical_map)
+
+            with mock.patch.object(service._physical_map_repository, "save", side_effect=count_save):
+                service.tick()
+
+            assert save_count[0] == 1
