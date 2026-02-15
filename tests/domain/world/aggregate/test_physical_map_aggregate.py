@@ -844,6 +844,272 @@ class TestPhysicalMapAggregate:
             in_range = aggregate.get_objects_in_range(Coordinate(0, 0), 10)
             assert obj in in_range
 
+    class TestGetObjectsInRangeBulk:
+        """get_objects_in_range_bulk の正常・境界・例外ケース"""
+
+        def test_bulk_returns_same_as_individual_calls(self, spot_id):
+            # Given: 複数オブジェクトを配置
+            tiles = [Tile(Coordinate(x, y), TerrainType.road()) for x in range(5) for y in range(5)]
+            aggregate = PhysicalMapAggregate.create(spot_id, tiles)
+            obj1 = WorldObject(WorldObjectId(1), Coordinate(1, 1), ObjectTypeEnum.CHEST)
+            obj2 = WorldObject(WorldObjectId(2), Coordinate(2, 2), ObjectTypeEnum.CHEST)
+            obj3 = WorldObject(WorldObjectId(3), Coordinate(4, 4), ObjectTypeEnum.CHEST)
+            aggregate.add_object(obj1)
+            aggregate.add_object(obj2)
+            aggregate.add_object(obj3)
+
+            centers_with_range = [
+                (Coordinate(2, 2), 2),
+                (Coordinate(0, 0), 1),
+                (Coordinate(4, 4), 0),
+            ]
+
+            # When
+            bulk_result = aggregate.get_objects_in_range_bulk(centers_with_range)
+
+            # Then: 各クエリは単体の get_objects_in_range と一致
+            assert len(bulk_result) == 3
+            single_0 = aggregate.get_objects_in_range(Coordinate(2, 2), 2)
+            single_1 = aggregate.get_objects_in_range(Coordinate(0, 0), 1)
+            single_2 = aggregate.get_objects_in_range(Coordinate(4, 4), 0)
+            assert set(bulk_result[0]) == set(single_0)
+            assert set(bulk_result[1]) == set(single_1)
+            assert set(bulk_result[2]) == set(single_2)
+            assert len(bulk_result[0]) == 2
+            assert obj1 in bulk_result[0]
+            assert obj2 in bulk_result[0]
+            assert obj3 not in bulk_result[0]
+            assert len(bulk_result[2]) == 1
+            assert obj3 in bulk_result[2]
+
+        def test_bulk_empty_input_returns_empty_list(self, aggregate):
+            # When
+            result = aggregate.get_objects_in_range_bulk([])
+
+            # Then
+            assert result == []
+
+        def test_bulk_single_query(self, spot_id):
+            # Given
+            tiles = [Tile(Coordinate(0, 0), TerrainType.road()), Tile(Coordinate(1, 0), TerrainType.road())]
+            aggregate = PhysicalMapAggregate.create(spot_id, tiles)
+            obj = WorldObject(WorldObjectId(1), Coordinate(1, 0), ObjectTypeEnum.CHEST)
+            aggregate.add_object(obj)
+
+            # When
+            result = aggregate.get_objects_in_range_bulk([(Coordinate(0, 0), 2)])
+
+            # Then
+            assert len(result) == 1
+            assert len(result[0]) == 1
+            assert obj in result[0]
+
+        def test_bulk_multiple_centers_same_map(self, spot_id):
+            # Given: 3つの中心で一括取得
+            tiles = [Tile(Coordinate(x, y), TerrainType.road()) for x in range(5) for y in range(5)]
+            aggregate = PhysicalMapAggregate.create(spot_id, tiles)
+            for i, (x, y) in enumerate([(0, 0), (2, 2), (4, 4)]):
+                aggregate.add_object(WorldObject(WorldObjectId(i + 1), Coordinate(x, y), ObjectTypeEnum.CHEST))
+
+            centers_with_range = [
+                (Coordinate(0, 0), 0),
+                (Coordinate(2, 2), 1),
+                (Coordinate(4, 4), 10),
+            ]
+
+            # When
+            result = aggregate.get_objects_in_range_bulk(centers_with_range)
+
+            # Then
+            assert len(result) == 3
+            assert len(result[0]) == 1
+            assert result[0][0].object_id == WorldObjectId(1)
+            assert len(result[1]) == 1
+            assert result[1][0].object_id == WorldObjectId(2)
+            assert len(result[2]) == 3
+
+        def test_bulk_weather_affects_all_queries(self, spot_id):
+            # Given: 霧で視界減衰
+            tiles = [Tile(Coordinate(x, 0), TerrainType.road()) for x in range(11)]
+            aggregate = PhysicalMapAggregate.create(spot_id, tiles)
+            aggregate.set_weather(WeatherState(WeatherTypeEnum.FOG, 1.0))
+            obj_near = WorldObject(WorldObjectId(1), Coordinate(0, 0), ObjectTypeEnum.CHEST)
+            obj_far = WorldObject(WorldObjectId(2), Coordinate(10, 0), ObjectTypeEnum.CHEST)
+            aggregate.add_object(obj_near)
+            aggregate.add_object(obj_far)
+
+            centers_with_range = [
+                (Coordinate(0, 0), 10),
+                (Coordinate(10, 0), 10),
+            ]
+
+            # When
+            result = aggregate.get_objects_in_range_bulk(centers_with_range)
+
+            # Then: 両方のクエリとも天候が適用され、遠くは見えない
+            assert len(result) == 2
+            assert obj_near in result[0]
+            assert obj_far not in result[0]
+            assert obj_far in result[1]
+            assert obj_near not in result[1]
+
+        def test_bulk_order_of_results_matches_input_order(self, spot_id):
+            # Given
+            tiles = [Tile(Coordinate(x, y), TerrainType.road()) for x in range(3) for y in range(3)]
+            aggregate = PhysicalMapAggregate.create(spot_id, tiles)
+            aggregate.add_object(WorldObject(WorldObjectId(1), Coordinate(1, 1), ObjectTypeEnum.CHEST))
+
+            centers_with_range = [
+                (Coordinate(1, 1), 0),
+                (Coordinate(0, 0), 5),
+                (Coordinate(2, 2), 5),
+            ]
+
+            # When
+            result = aggregate.get_objects_in_range_bulk(centers_with_range)
+
+            # Then: 返り値の順序が入力の (center, range) 順と一致
+            assert len(result) == 3
+            assert result[0][0].object_id == WorldObjectId(1)
+            assert len(result[1]) == 1
+            assert len(result[2]) == 1
+
+    class TestIsVisibleBatch:
+        """is_visible_batch の正常・境界・例外ケース"""
+
+        def test_batch_returns_same_as_individual_calls(self, aggregate):
+            # Given: 障害物なしのマップ
+            pairs = [
+                (Coordinate(0, 0), Coordinate(2, 2)),
+                (Coordinate(0, 0), Coordinate(1, 1)),
+                (Coordinate(2, 2), Coordinate(0, 0)),
+            ]
+
+            # When
+            batch_result = aggregate.is_visible_batch(pairs)
+
+            # Then: 各ペアは単体の is_visible と一致
+            assert len(batch_result) == 3
+            assert batch_result[0] is aggregate.is_visible(Coordinate(0, 0), Coordinate(2, 2))
+            assert batch_result[1] is aggregate.is_visible(Coordinate(0, 0), Coordinate(1, 1))
+            assert batch_result[2] is aggregate.is_visible(Coordinate(2, 2), Coordinate(0, 0))
+            assert batch_result[0] is True
+            assert batch_result[1] is True
+            assert batch_result[2] is True
+
+        def test_batch_empty_input_returns_empty_list(self, aggregate):
+            # When
+            result = aggregate.is_visible_batch([])
+
+            # Then
+            assert result == []
+
+        def test_batch_deduplicates_same_pair(self, spot_id):
+            # Given: 同一ペアを複数回含む
+            tiles = [
+                Tile(Coordinate(0, 0), TerrainType.road()),
+                Tile(Coordinate(1, 1), TerrainType.wall()),
+                Tile(Coordinate(2, 2), TerrainType.road()),
+            ]
+            aggregate = PhysicalMapAggregate.create(spot_id, tiles)
+            pairs = [
+                (Coordinate(0, 0), Coordinate(2, 2)),
+                (Coordinate(0, 0), Coordinate(2, 2)),
+                (Coordinate(2, 2), Coordinate(0, 0)),
+            ]
+
+            # When
+            result = aggregate.is_visible_batch(pairs)
+
+            # Then: 順序は入力順、同一ペアは同じ結果（壁で遮られて False）
+            assert len(result) == 3
+            assert result[0] is False
+            assert result[1] is False
+            assert result[2] is False
+            assert result[0] == result[1]
+
+        def test_batch_out_of_bounds_returns_false(self, aggregate):
+            # Given: マップ外の座標を含むペア
+            pairs = [
+                (Coordinate(0, 0), Coordinate(99, 99, 0)),
+                (Coordinate(99, 99, 0), Coordinate(0, 0)),
+            ]
+
+            # When
+            result = aggregate.is_visible_batch(pairs)
+
+            # Then
+            assert len(result) == 2
+            assert result[0] is False
+            assert result[1] is False
+
+        def test_batch_blocked_pairs_return_false(self, spot_id):
+            # Given: 壁で遮られたペア
+            tiles = [
+                Tile(Coordinate(0, 0), TerrainType.road()),
+                Tile(Coordinate(1, 1), TerrainType.wall()),
+                Tile(Coordinate(2, 2), TerrainType.road()),
+            ]
+            aggregate = PhysicalMapAggregate.create(spot_id, tiles)
+            pairs = [(Coordinate(0, 0), Coordinate(2, 2))]
+
+            # When
+            result = aggregate.is_visible_batch(pairs)
+
+            # Then
+            assert len(result) == 1
+            assert result[0] is False
+
+        def test_batch_visible_pairs_return_true(self, aggregate):
+            # Given: 障害物なし
+            pairs = [
+                (Coordinate(0, 0), Coordinate(2, 2)),
+                (Coordinate(0, 0), Coordinate(0, 0)),
+            ]
+
+            # When
+            result = aggregate.is_visible_batch(pairs)
+
+            # Then
+            assert len(result) == 2
+            assert result[0] is True
+            assert result[1] is True
+
+        def test_batch_order_of_results_matches_input_order(self, spot_id):
+            # Given: 可視と不可視が混在（中間タイルで遮られるペアを含む）
+            tiles = [
+                Tile(Coordinate(0, 0), TerrainType.road()),
+                Tile(Coordinate(1, 1), TerrainType.wall()),
+                Tile(Coordinate(2, 2), TerrainType.road()),
+            ]
+            aggregate = PhysicalMapAggregate.create(spot_id, tiles)
+            # (0,0)-(1,1): 見える, (0,0)-(2,2): (1,1)で遮られて不可視, (2,2)-(0,0): (1,1)で遮られて不可視
+            pairs = [
+                (Coordinate(0, 0), Coordinate(1, 1)),
+                (Coordinate(0, 0), Coordinate(2, 2)),
+                (Coordinate(2, 2), Coordinate(0, 0)),
+            ]
+
+            # When
+            result = aggregate.is_visible_batch(pairs)
+
+            # Then: 入力順で [True, False, False]
+            assert len(result) == 3
+            assert result[0] is True
+            assert result[1] is False
+            assert result[2] is False
+
+        def test_batch_same_coordinate_returns_true(self, aggregate):
+            # Given: 同一座標ペア
+            pairs = [(Coordinate(1, 1), Coordinate(1, 1))]
+
+            # When
+            result = aggregate.is_visible_batch(pairs)
+
+            # Then
+            assert len(result) == 1
+            assert result[0] is True
+
     class TestGetActorsInPack:
         """get_actors_in_pack の正常・境界・例外ケース"""
 
