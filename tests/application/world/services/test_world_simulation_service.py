@@ -1221,3 +1221,227 @@ class TestWorldSimulationApplicationService:
 
             assert len(captured) == 1
             assert captured[0].get("target_context") is None
+
+    class TestActorExecutionOrder:
+        """実行順ソート（同一スポット内でプレイヤーとの距離順）の正常・境界・異常系"""
+
+        def test_actors_processed_in_order_of_distance_to_player_when_player_on_map(self, setup_service):
+            """同一マップにプレイヤーがいる場合、プレイヤーに近いアクターから順に plan_action が呼ばれること"""
+            service, _, repository, _, _, _, _, _, _, _ = setup_service
+            spot_id = SpotId(1)
+            tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(10) for y in range(10)]
+            physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+
+            player_id = PlayerId(100)
+            player_coord = Coordinate(0, 0)
+            physical_map.add_object(WorldObject(
+                WorldObjectId(100),
+                player_coord,
+                ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=player_id),
+            ))
+
+            near_id = WorldObjectId(1)
+            mid_id = WorldObjectId(2)
+            far_id = WorldObjectId(3)
+            physical_map.add_object(WorldObject(
+                near_id, Coordinate(1, 0), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(1, 0), Coordinate(1, 1)]),
+            ))
+            physical_map.add_object(WorldObject(
+                mid_id, Coordinate(3, 0), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(3, 0), Coordinate(3, 1)]),
+            ))
+            physical_map.add_object(WorldObject(
+                far_id, Coordinate(5, 0), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(5, 0), Coordinate(5, 1)]),
+            ))
+            repository.save(physical_map)
+
+            call_order = []
+            def capture_order(actor_id_arg, map_agg, **kwargs):
+                call_order.append(actor_id_arg)
+                return BehaviorAction.move(Coordinate(0, 0))
+
+            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_order):
+                service.tick()
+
+            assert len(call_order) == 4
+            assert call_order[0] == WorldObjectId(100)
+            assert call_order[1] == near_id
+            assert call_order[2] == mid_id
+            assert call_order[3] == far_id
+
+        def test_actors_processed_when_no_player_on_map(self, setup_service):
+            """同一マップにプレイヤーがいない場合、全アクターが plan_action の対象になること（順序は未規定）"""
+            service, _, repository, _, _, _, _, _, _, _ = setup_service
+            spot_id = SpotId(1)
+            tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
+            physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+
+            for i, coord in enumerate([Coordinate(1, 1), Coordinate(2, 2), Coordinate(3, 3)]):
+                actor_id = WorldObjectId(10 + i)
+                physical_map.add_object(WorldObject(
+                    actor_id, coord, ObjectTypeEnum.NPC,
+                    component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[coord, coord]),
+                ))
+            repository.save(physical_map)
+
+            call_count = [0]
+            def count_calls(actor_id_arg, map_agg, **kwargs):
+                call_count[0] += 1
+                return BehaviorAction.move(Coordinate(0, 0))
+
+            with mock.patch.object(service._behavior_service, "plan_action", side_effect=count_calls):
+                service.tick()
+
+            assert call_count[0] == 3
+
+        def test_actors_sorted_by_nearest_player_when_multiple_players(self, setup_service):
+            """同一マップに複数プレイヤーがいる場合、最も近いプレイヤーとの距離でソートされること"""
+            service, _, repository, _, _, _, _, _, _, _ = setup_service
+            spot_id = SpotId(1)
+            tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(15) for y in range(5)]
+            physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+
+            physical_map.add_object(WorldObject(
+                WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=PlayerId(100)),
+            ))
+            physical_map.add_object(WorldObject(
+                WorldObjectId(101), Coordinate(10, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=PlayerId(101)),
+            ))
+
+            near_p1_id = WorldObjectId(1)
+            mid_id = WorldObjectId(2)
+            near_p2_id = WorldObjectId(3)
+            physical_map.add_object(WorldObject(
+                near_p1_id, Coordinate(1, 0), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(1, 0), Coordinate(1, 1)]),
+            ))
+            physical_map.add_object(WorldObject(
+                mid_id, Coordinate(5, 0), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(5, 0), Coordinate(5, 1)]),
+            ))
+            physical_map.add_object(WorldObject(
+                near_p2_id, Coordinate(9, 0), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(9, 0), Coordinate(9, 1)]),
+            ))
+            repository.save(physical_map)
+
+            call_order = []
+            def capture_order(actor_id_arg, map_agg, **kwargs):
+                call_order.append(actor_id_arg)
+                return BehaviorAction.move(Coordinate(0, 0))
+
+            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_order):
+                service.tick()
+
+            assert len(call_order) == 5
+            npc_order = [oid for oid in call_order if oid in (near_p1_id, mid_id, near_p2_id)]
+            assert npc_order[0] == near_p1_id
+            assert npc_order[1] == near_p2_id
+            assert npc_order[2] == mid_id
+
+        def test_single_actor_no_player_on_map(self, setup_service):
+            """プレイヤーがいないマップでアクターが1体のみの場合、1回だけ plan_action が呼ばれること"""
+            service, _, repository, _, _, _, _, _, _, _ = setup_service
+            spot_id = SpotId(1)
+            tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
+            physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+            actor_id = WorldObjectId(1)
+            physical_map.add_object(WorldObject(
+                actor_id, Coordinate(2, 2), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
+            ))
+            repository.save(physical_map)
+
+            call_count = [0]
+            def count_calls(actor_id_arg, map_agg, **kwargs):
+                call_count[0] += 1
+                return BehaviorAction.move(Coordinate(2, 3))
+
+            with mock.patch.object(service._behavior_service, "plan_action", side_effect=count_calls):
+                service.tick()
+
+            assert call_count[0] == 1
+
+        def test_busy_actors_skipped_regardless_of_execution_order(self, setup_service):
+            """実行順ソート後も、Busy なアクターは plan_action が呼ばれずスキップされること"""
+            service, _, repository, _, _, _, _, _, _, _ = setup_service
+            spot_id = SpotId(1)
+            tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
+            physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+
+            player_id = PlayerId(100)
+            physical_map.add_object(WorldObject(
+                WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=player_id),
+            ))
+            near_id = WorldObjectId(1)
+            far_busy_id = WorldObjectId(2)
+            physical_map.add_object(WorldObject(
+                near_id, Coordinate(1, 0), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(1, 0), Coordinate(1, 1)]),
+            ))
+            physical_map.add_object(WorldObject(
+                far_busy_id, Coordinate(3, 0), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(3, 0), Coordinate(3, 1)]),
+                busy_until=WorldTick(999),
+            ))
+            repository.save(physical_map)
+
+            called_ids = []
+            def capture_called(actor_id_arg, map_agg, **kwargs):
+                called_ids.append(actor_id_arg)
+                return BehaviorAction.wait()
+
+            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_called):
+                service.tick()
+
+            assert near_id in called_ids
+            assert WorldObjectId(100) in called_ids
+            assert far_busy_id not in called_ids
+
+        def test_empty_actors_no_crash(self, setup_service):
+            """アクターが0体のマップ（プレイヤーもいない）でも plan_action が呼ばれず正常終了すること"""
+            service, _, repository, _, _, _, _, _, _, _ = setup_service
+            spot_id = SpotId(1)
+            tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(3) for y in range(3)]
+            physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+            repository.save(physical_map)
+
+            call_count = [0]
+            def count_calls(actor_id_arg, map_agg, **kwargs):
+                call_count[0] += 1
+                return BehaviorAction.wait()
+
+            with mock.patch.object(service._behavior_service, "plan_action", side_effect=count_calls):
+                service.tick()
+
+            assert call_count[0] == 0
+
+        def test_player_only_map_execution_order(self, setup_service):
+            """プレイヤーのみがいるマップでは plan_action が1回だけ呼ばれること"""
+            service, _, repository, _, _, _, _, _, _, _ = setup_service
+            spot_id = SpotId(1)
+            tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
+            physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+            player_id = PlayerId(100)
+            physical_map.add_object(WorldObject(
+                WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=player_id),
+            ))
+            repository.save(physical_map)
+
+            call_order = []
+            def capture_order(actor_id_arg, map_agg, **kwargs):
+                call_order.append(actor_id_arg)
+                return BehaviorAction.wait()
+
+            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_order):
+                service.tick()
+
+            assert len(call_order) == 1
+            assert call_order[0] == WorldObjectId(100)
