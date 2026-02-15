@@ -1,6 +1,7 @@
 import pytest
 
 from ai_rpg_world.application.monster.services.monster_spawn_application_service import MonsterSpawnApplicationService
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
@@ -130,11 +131,13 @@ class TestMonsterSpawnApplicationService:
             pmap = _create_sample_map(1)
             map_repo.save(pmap)
 
-            service.spawn_monster(monster_id, spot_id, coordinate)
+            current_tick = WorldTick(0)
+            service.spawn_monster(monster_id, spot_id, coordinate, current_tick)
 
             updated = monster_repo.find_by_id(monster_id)
             assert updated is not None
             assert updated.coordinate == coordinate
+            assert updated.spawned_at_tick == current_tick
             assert updated.spot_id == spot_id
             assert updated.status == MonsterStatusEnum.ALIVE
             assert updated.hp.value == 100
@@ -161,7 +164,7 @@ class TestMonsterSpawnApplicationService:
             monster_repo.save(monster)
             map_repo.save(_create_sample_map(1))
 
-            service.spawn_monster(monster_id, spot_id, coordinate)
+            service.spawn_monster(monster_id, spot_id, coordinate, WorldTick(0))
 
             updated = monster_repo.find_by_id(monster_id)
             assert updated is not None
@@ -183,6 +186,7 @@ class TestMonsterSpawnApplicationService:
                     MonsterId(999),
                     SpotId(1),
                     Coordinate(0, 0, 0),
+                    WorldTick(0),
                 )
             assert "999" in str(excinfo.value)
             assert "モンスターが見つかりません" in str(excinfo.value)
@@ -207,7 +211,7 @@ class TestMonsterSpawnApplicationService:
             # マップは保存しない（SpotId(99) のマップがない）
 
             with pytest.raises(MapNotFoundForMonsterSkillException) as excinfo:
-                service.spawn_monster(monster_id, SpotId(99), Coordinate(0, 0, 0))
+                service.spawn_monster(monster_id, SpotId(99), Coordinate(0, 0, 0), WorldTick(0))
             assert "99" in str(excinfo.value)
 
         def test_spawn_monster_already_spawned_raises(self, setup):
@@ -227,12 +231,12 @@ class TestMonsterSpawnApplicationService:
                 world_object_id=WorldObjectId(1001),
                 skill_loadout=loadout,
             )
-            monster.spawn(Coordinate(1, 1, 0), spot_id)
+            monster.spawn(Coordinate(1, 1, 0), spot_id, WorldTick(0))
             monster.clear_events()
             monster_repo.save(monster)
             map_repo.save(_create_sample_map(1))
 
             with pytest.raises(MonsterAlreadySpawnedApplicationException) as excinfo:
-                service.spawn_monster(monster_id, spot_id, Coordinate(2, 2, 0))
+                service.spawn_monster(monster_id, spot_id, Coordinate(2, 2, 0), WorldTick(1))
             assert "1" in str(excinfo.value)
             assert "既に出現済み" in str(excinfo.value)

@@ -100,7 +100,7 @@ class TestMonsterSkillExecutionDomainService:
         loadout.equip_skill(DeckTier.NORMAL, 0, skill)
 
         monster = MonsterAggregate.create(monster_id, _sample_template(1), world_object_id, skill_loadout=loadout)
-        monster.spawn(Coordinate(5, 5, 0), spot_id)
+        monster.spawn(Coordinate(5, 5, 0), spot_id, WorldTick(0))
 
         return monster, loadout, pmap, world_object_id, spot_id
 

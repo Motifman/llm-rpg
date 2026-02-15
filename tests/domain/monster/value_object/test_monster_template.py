@@ -1,6 +1,7 @@
 import pytest
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
+from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
@@ -257,3 +258,94 @@ class TestMonsterTemplate:
             ecology_type=EcologyTypeEnum.AMBUSH,
         )
         assert template.ecology_type == EcologyTypeEnum.AMBUSH
+
+    def test_create_success_with_growth_stages(self, valid_base_stats, valid_reward_info, valid_respawn_info):
+        """growth_stages を指定して作成できること"""
+        stages = [
+            GrowthStage(after_ticks=0, stats_multiplier=0.8),
+            GrowthStage(after_ticks=100, stats_multiplier=1.0),
+        ]
+        template = MonsterTemplate(
+            template_id=MonsterTemplateId.create(1),
+            name="Dragon",
+            base_stats=valid_base_stats,
+            reward_info=valid_reward_info,
+            respawn_info=valid_respawn_info,
+            race=Race.BEAST,
+            faction=MonsterFactionEnum.ENEMY,
+            description="Grows over time.",
+            growth_stages=stages,
+        )
+        assert len(template.growth_stages) == 2
+        assert template.growth_stages[0].after_ticks == 0
+        assert template.growth_stages[0].stats_multiplier == 0.8
+        assert template.growth_stages[1].after_ticks == 100
+        assert template.growth_stages[1].stats_multiplier == 1.0
+
+    def test_create_success_with_empty_growth_stages_defaults_to_empty_list(
+        self, valid_base_stats, valid_reward_info, valid_respawn_info
+    ):
+        """growth_stages を渡さない場合は空リストになること"""
+        template = MonsterTemplate(
+            template_id=MonsterTemplateId.create(1),
+            name="Slime",
+            base_stats=valid_base_stats,
+            reward_info=valid_reward_info,
+            respawn_info=valid_respawn_info,
+            race=Race.BEAST,
+            faction=MonsterFactionEnum.ENEMY,
+            description="A weak blue slime.",
+        )
+        assert template.growth_stages == []
+
+    def test_create_fail_growth_stages_not_list(self, valid_base_stats, valid_reward_info, valid_respawn_info):
+        """growth_stages がリストでない場合はエラーが発生すること"""
+        with pytest.raises(MonsterTemplateValidationException, match="growth_stages must be a list"):
+            MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="Slime",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="A weak blue slime.",
+                growth_stages=GrowthStage(after_ticks=0, stats_multiplier=1.0),
+            )
+
+    def test_create_fail_growth_stages_element_not_growth_stage(
+        self, valid_base_stats, valid_reward_info, valid_respawn_info
+    ):
+        """growth_stages の要素が GrowthStage でない場合はエラーが発生すること"""
+        with pytest.raises(MonsterTemplateValidationException, match="must be GrowthStage"):
+            MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="Slime",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="A weak blue slime.",
+                growth_stages=[(0, 0.8), (100, 1.0)],
+            )
+
+    def test_create_fail_growth_stages_not_ordered_by_after_ticks(
+        self, valid_base_stats, valid_reward_info, valid_respawn_info
+    ):
+        """growth_stages が after_ticks の昇順でない場合はエラーが発生すること"""
+        with pytest.raises(MonsterTemplateValidationException, match="ordered by after_ticks ascending"):
+            MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="Slime",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="A weak blue slime.",
+                growth_stages=[
+                    GrowthStage(after_ticks=100, stats_multiplier=1.0),
+                    GrowthStage(after_ticks=0, stats_multiplier=0.8),
+                ],
+            )

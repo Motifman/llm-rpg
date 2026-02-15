@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import List, Optional, Set
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
+from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
@@ -33,12 +34,14 @@ class MonsterTemplate:
     active_time: ActiveTimeType = ActiveTimeType.ALWAYS
     threat_races: Optional[Set[str]] = None
     prey_races: Optional[Set[str]] = None
+    growth_stages: Optional[List[GrowthStage]] = None
 
     def __post_init__(self):
         object.__setattr__(self, "skill_ids", self.skill_ids or [])
         object.__setattr__(self, "phase_thresholds", self.phase_thresholds or [])
         object.__setattr__(self, "threat_races", self.threat_races or frozenset())
         object.__setattr__(self, "prey_races", self.prey_races or frozenset())
+        object.__setattr__(self, "growth_stages", self.growth_stages or [])
         if not isinstance(self.skill_ids, list):
             raise MonsterTemplateValidationException(
                 f"skill_ids must be a list, got {type(self.skill_ids).__name__}"
@@ -100,3 +103,19 @@ class MonsterTemplate:
             raise MonsterTemplateValidationException(
                 f"prey_races must be a set or frozenset, got {type(self.prey_races).__name__}"
             )
+        if self.growth_stages is not None:
+            if not isinstance(self.growth_stages, list):
+                raise MonsterTemplateValidationException(
+                    f"growth_stages must be a list, got {type(self.growth_stages).__name__}"
+                )
+            for i, g in enumerate(self.growth_stages):
+                if not isinstance(g, GrowthStage):
+                    raise MonsterTemplateValidationException(
+                        f"growth_stages[{i}] must be GrowthStage, got {type(g).__name__}"
+                    )
+            if self.growth_stages:
+                sorted_ticks = [g.after_ticks for g in sorted(self.growth_stages, key=lambda x: x.after_ticks)]
+                if sorted_ticks != [g.after_ticks for g in self.growth_stages]:
+                    raise MonsterTemplateValidationException(
+                        "growth_stages must be ordered by after_ticks ascending"
+                    )

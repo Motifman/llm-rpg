@@ -1093,7 +1093,7 @@ class TestWorldSimulationApplicationService:
         skill_loadout_repo.save(loadout)
         
         monster = MonsterAggregate.create(MonsterId(1), template, monster_obj_id, skill_loadout=loadout)
-        monster.spawn(Coordinate(5, 5), spot_id)
+        monster.spawn(Coordinate(5, 5, 0), spot_id, WorldTick(0))
         monster_repo.save(monster)
         
         # plan_action が USE_SKILL を返すようにモック
@@ -1190,7 +1190,7 @@ class TestWorldSimulationApplicationService:
             monster = MonsterAggregate.create(
                 MonsterId(1), template, WorldObjectId(1), skill_loadout=loadout
             )
-            monster.spawn(Coordinate(2, 2), spot_id)
+            monster.spawn(Coordinate(2, 2, 0), spot_id, WorldTick(0))
             monster_repo.save(monster)
 
             captured = []
@@ -1886,7 +1886,7 @@ class TestWorldSimulationApplicationService:
             skill_loadout_repo.save(loadout)
             monster = MonsterAggregate.create(MonsterId(1), template, monster_obj_id, skill_loadout=loadout)
             spawn_coord = Coordinate(2, 2, 0)
-            monster.spawn(spawn_coord, spot_id)
+            monster.spawn(spawn_coord, spot_id, WorldTick(0))
             monster.apply_damage(100, WorldTick(100))
             monster_repo.save(monster)
             assert monster.status == MonsterStatusEnum.DEAD

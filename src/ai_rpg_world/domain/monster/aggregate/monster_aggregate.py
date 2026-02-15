@@ -56,6 +56,7 @@ class MonsterAggregate(AggregateRoot):
         pack_id: Optional["PackId"] = None,
         is_pack_leader: bool = False,
         initial_spawn_coordinate: Optional[Coordinate] = None,
+        spawned_at_tick: Optional[WorldTick] = None,
     ):
         super().__init__()
         self._monster_id = monster_id
@@ -72,6 +73,7 @@ class MonsterAggregate(AggregateRoot):
         self._pack_id = pack_id
         self._is_pack_leader = is_pack_leader
         self._initial_spawn_coordinate = initial_spawn_coordinate
+        self._spawned_at_tick = spawned_at_tick
 
     @classmethod
     def create(
@@ -105,15 +107,36 @@ class MonsterAggregate(AggregateRoot):
     def template(self) -> MonsterTemplate:
         return self._template
 
+    def get_current_growth_multiplier(self, current_tick: WorldTick) -> float:
+        """
+        現在の成長段階に応じたステータス乗率を返す。
+        spawned_at_tick が未設定または growth_stages が空の場合は 1.0。
+        """
+        if self._spawned_at_tick is None:
+            return 1.0
+        stages = self._template.growth_stages
+        if not stages:
+            return 1.0
+        elapsed = current_tick.value - self._spawned_at_tick.value
+        if elapsed < 0:
+            return 1.0
+        # 経過 tick 以下で最大の after_ticks を持つ段階を採用
+        mult = 1.0
+        for g in stages:
+            if elapsed >= g.after_ticks:
+                mult = g.stats_multiplier
+        return mult
+
     def get_effective_stats(self, current_tick: WorldTick) -> BaseStats:
-        """バフ・デバフ適用後の実効ステータス（期限切れを除外）"""
+        """バフ・デバフ・成長段階適用後の実効ステータス（期限切れを除外）"""
         # 期限切れエフェクトのクリーンアップ
         self.cleanup_expired_effects(current_tick)
         
         base = self._template.base_stats
-        atk_mult = 1.0
-        def_mult = 1.0
-        spd_mult = 1.0
+        growth_mult = self.get_current_growth_multiplier(current_tick)
+        atk_mult = growth_mult
+        def_mult = growth_mult
+        spd_mult = growth_mult
         
         for effect in self._active_effects:
             if effect.effect_type == StatusEffectType.ATTACK_UP:
@@ -179,6 +202,10 @@ class MonsterAggregate(AggregateRoot):
     def is_pack_leader(self) -> bool:
         return self._is_pack_leader
 
+    @property
+    def spawned_at_tick(self) -> Optional[WorldTick]:
+        return self._spawned_at_tick
+
     def _initialize_status(self, coordinate: Coordinate, spot_id: SpotId):
         """ステータスを初期化（出現/リスポーン時）"""
         self._coordinate = coordinate
@@ -199,6 +226,7 @@ class MonsterAggregate(AggregateRoot):
         self,
         coordinate: Coordinate,
         spot_id: SpotId,
+        current_tick: WorldTick,
         pack_id: Optional["PackId"] = None,
         is_pack_leader: bool = False,
     ):
@@ -210,6 +238,7 @@ class MonsterAggregate(AggregateRoot):
         self._pack_id = pack_id
         self._is_pack_leader = is_pack_leader
         self._initial_spawn_coordinate = coordinate
+        self._spawned_at_tick = current_tick
 
         self.add_event(MonsterSpawnedEvent.create(
             aggregate_id=self._monster_id,
@@ -364,6 +393,7 @@ class MonsterAggregate(AggregateRoot):
             raise MonsterRespawnIntervalNotMetException(f"Monster {self._monster_id} cannot respawn yet.")
 
         self._initialize_status(coordinate, spot_id)
+        self._spawned_at_tick = current_tick
 
         self.add_event(MonsterRespawnedEvent.create(
             aggregate_id=self._monster_id,
