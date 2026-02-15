@@ -6,6 +6,7 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.behavior_context import (
     TargetSelectionContext,
     SkillSelectionContext,
+    GrowthContext,
 )
 from ai_rpg_world.domain.world.enum.world_enum import BehaviorStateEnum, DirectionEnum, BehaviorActionType
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent
@@ -80,6 +81,7 @@ class BehaviorService:
         target_context: Optional[TargetSelectionContext] = None,
         skill_context: Optional[SkillSelectionContext] = None,
         pack_rally_coordinate: Optional[Coordinate] = None,
+        growth_context: Optional[GrowthContext] = None,
     ) -> BehaviorAction:
         """
         アクターの現在の状態に基づいて次のアクションを決定する。
@@ -88,6 +90,7 @@ class BehaviorService:
             target_context: ターゲット選択の補助情報（HP%・脅威値等）。省略可
             skill_context: スキル選択の補助情報（使用可能スロット・射程内数等）。省略可
             pack_rally_coordinate: 群れの集結座標（味方が戦闘に入った座標）。省略可
+            growth_context: 成長段階に応じた行動制御（有効FLEE閾値・CHASE許可）。省略可
 
         Returns:
             実行すべきアクション。
@@ -165,7 +168,14 @@ class BehaviorService:
         # 2. ターゲットの有無に応じて状態更新とイベント発行（脅威で既に FLEE の場合は spot_target を呼ばない；spot_target は CHASE に遷移するため）
         if target:
             if component.state != BehaviorStateEnum.FLEE:
-                component.spot_target(target.object_id, target.coordinate)
+                effective_flee = growth_context.effective_flee_threshold if growth_context else None
+                allow_chase = growth_context.allow_chase if growth_context else None
+                component.spot_target(
+                    target.object_id,
+                    target.coordinate,
+                    effective_flee_threshold=effective_flee,
+                    allow_chase=allow_chase,
+                )
             if old_state != component.state:
                 self._publish_state_changed(
                     map_aggregate, actor_id, old_state, component.state

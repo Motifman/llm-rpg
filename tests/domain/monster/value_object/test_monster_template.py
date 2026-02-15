@@ -1,7 +1,7 @@
 import pytest
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
-from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
+from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage, MAX_GROWTH_STAGES
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
@@ -347,5 +347,48 @@ class TestMonsterTemplate:
                 growth_stages=[
                     GrowthStage(after_ticks=100, stats_multiplier=1.0),
                     GrowthStage(after_ticks=0, stats_multiplier=0.8),
+                ],
+            )
+
+    def test_create_fail_first_growth_stage_not_zero(
+        self, valid_base_stats, valid_reward_info, valid_respawn_info
+    ):
+        """最初の growth_stage の after_ticks が 0 でない場合はエラーが発生すること"""
+        with pytest.raises(MonsterTemplateValidationException, match="after_ticks=0"):
+            MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="Slime",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="A weak blue slime.",
+                growth_stages=[
+                    GrowthStage(after_ticks=10, stats_multiplier=0.8),
+                    GrowthStage(after_ticks=100, stats_multiplier=1.0),
+                ],
+            )
+
+    def test_create_fail_growth_stages_exceeds_max(
+        self, valid_base_stats, valid_reward_info, valid_respawn_info
+    ):
+        """growth_stages が MAX_GROWTH_STAGES を超える場合はエラーが発生すること"""
+        with pytest.raises(MonsterTemplateValidationException, match=f"at most {MAX_GROWTH_STAGES}"):
+            MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="Slime",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="A weak blue slime.",
+                growth_stages=[
+                    GrowthStage(after_ticks=0, stats_multiplier=0.5),
+                    GrowthStage(after_ticks=50, stats_multiplier=0.8),
+                    GrowthStage(after_ticks=100, stats_multiplier=1.0),
+                    GrowthStage(after_ticks=200, stats_multiplier=1.0),
+                    GrowthStage(after_ticks=300, stats_multiplier=1.0),
                 ],
             )

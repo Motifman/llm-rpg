@@ -688,6 +688,15 @@ class TestMonsterAggregate:
             assert stats.defense == 15
             assert stats.speed == 10
 
+        def test_get_effective_flee_threshold_and_allow_chase_default_without_flee_bias(
+            self, monster_with_growth: MonsterAggregate, spot_id: SpotId
+        ):
+            """flee_bias_multiplier 未指定の段階ではテンプレートの flee_threshold と allow_chase True であること"""
+            monster_with_growth.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            # template_with_growth_stages の flee_threshold はデフォルト 0.2
+            assert monster_with_growth.get_effective_flee_threshold(WorldTick(50)) == 0.2
+            assert monster_with_growth.get_allow_chase(WorldTick(50)) is True
+
         def test_get_effective_stats_no_growth_stages_uses_one(
             self, monster: MonsterAggregate, spot_id: SpotId
         ):
@@ -696,3 +705,51 @@ class TestMonsterAggregate:
             stats = monster.get_effective_stats(WorldTick(1000))
             assert stats.attack == monster.template.base_stats.attack
             assert stats.defense == monster.template.base_stats.defense
+
+        def test_get_effective_stats_applies_growth_to_max_hp_mp(
+            self, monster_with_growth: MonsterAggregate, spot_id: SpotId
+        ):
+            """成長段階の乗率が max_hp, max_mp にも適用されること"""
+            monster_with_growth.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            stats = monster_with_growth.get_effective_stats(WorldTick(50))
+            # base max_hp=100, max_mp=50、幼体 0.8 → 80, 40
+            assert stats.max_hp == 80
+            assert stats.max_mp == 40
+
+        def test_get_effective_flee_threshold_with_stage_flee_bias(
+            self, monster_with_growth: MonsterAggregate, spot_id: SpotId
+        ):
+            """成長段階に flee_bias_multiplier がある場合に get_effective_flee_threshold がそれを反映すること"""
+            # template_with_growth_stages は flee_bias なしなので、別 fixture で flee_bias ありのテンプレートを作る
+            from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
+            base_stats = BaseStats(100, 50, 20, 15, 10, 0.05, 0.03)
+            template_flee = MonsterTemplate(
+                template_id=MonsterTemplateId.create(3),
+                name="Prey",
+                base_stats=base_stats,
+                reward_info=RewardInfo(10, 5, None),
+                respawn_info=RespawnInfo(100, True),
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="Flees easily when juvenile.",
+                growth_stages=[
+                    GrowthStage(after_ticks=0, stats_multiplier=0.8, flee_bias_multiplier=1.5, allow_chase=False),
+                    GrowthStage(after_ticks=100, stats_multiplier=1.0),
+                ],
+            )
+            from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
+            from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
+            loadout = SkillLoadoutAggregate.create(SkillLoadoutId(3), owner_id=3003, normal_capacity=10, awakened_capacity=10)
+            agg = MonsterAggregate.create(
+                monster_id=MonsterId.create(3),
+                template=template_flee,
+                world_object_id=WorldObjectId.create(3003),
+                skill_loadout=loadout,
+            )
+            agg.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            # テンプレートの flee_threshold は 0.2。1.5 倍で min(1.0, 0.3) = 0.3
+            assert agg.get_effective_flee_threshold(WorldTick(50)) == 0.3
+            assert agg.get_allow_chase(WorldTick(50)) is False
+            # 成体ではデフォルト（flee_bias なしなので 0.2）、allow_chase True
+            assert agg.get_effective_flee_threshold(WorldTick(150)) == 0.2
+            assert agg.get_allow_chase(WorldTick(150)) is True
