@@ -17,6 +17,7 @@ from ai_rpg_world.domain.world.service.target_selection_policy import (
     TargetSelectionPolicy,
     NearestTargetPolicy,
     HighestThreatTargetPolicy,
+    PreyPriorityTargetPolicy,
 )
 from ai_rpg_world.domain.world.service.skill_selection_policy import SkillSelectionPolicy, FirstInRangeSkillPolicy
 from ai_rpg_world.domain.world.service.behavior_strategy import (
@@ -37,8 +38,14 @@ def _default_strategy_factory(component: AutonomousBehaviorComponent, pathfindin
     return DefaultBehaviorStrategy(pathfinding_service, FirstInRangeSkillPolicy())
 
 
-def _default_target_policy_factory(component: AutonomousBehaviorComponent) -> TargetSelectionPolicy:
-    return HighestThreatTargetPolicy()
+def _default_target_policy_factory(
+    component: AutonomousBehaviorComponent,
+    hostility_service: HostilityService,
+) -> TargetSelectionPolicy:
+    return PreyPriorityTargetPolicy(
+        hostility_service,
+        HighestThreatTargetPolicy(),
+    )
 
 
 class BehaviorService:
@@ -62,7 +69,9 @@ class BehaviorService:
         self._strategy_factory = strategy_factory or (
             lambda c: _default_strategy_factory(c, pathfinding_service)
         )
-        self._target_policy_factory = target_policy_factory or _default_target_policy_factory
+        self._target_policy_factory = target_policy_factory or (
+            lambda c: _default_target_policy_factory(c, self._hostility_service)
+        )
 
     def plan_action(
         self,
@@ -115,19 +124,48 @@ class BehaviorService:
                     component.set_state(BehaviorStateEnum.ENRAGE)
                     old_state = BehaviorStateEnum.ENRAGE
 
-        # 1. 視界内の敵対候補を収集し、ポリシーで1体選択
-        visible_hostiles = self._collect_visible_hostiles(
-            actor, map_aggregate, component
-        )
-        target = (
-            target_policy.select_target(actor, visible_hostiles, target_context)
-            if visible_hostiles
-            else None
-        )
+        # 1a. 視界内に脅威(THREAT)がいれば FLEE に遷移し、その1体をターゲット（逃走方向用）に
+        visible_threats = self._collect_visible_threats(actor, map_aggregate, component)
+        target = None
+        if visible_threats and component.state != BehaviorStateEnum.FLEE:
+            if old_state != BehaviorStateEnum.FLEE:
+                self._publish_state_changed(
+                    map_aggregate, actor_id, old_state, BehaviorStateEnum.FLEE
+                )
+            component.set_state(BehaviorStateEnum.FLEE)
+            old_state = BehaviorStateEnum.FLEE
+            # 最も近い脅威を逃走方向の基準とする（spot_target は使わない；CHASE に遷移するため）
+            target = min(
+                visible_threats,
+                key=lambda obj: actor.coordinate.euclidean_distance_to(obj.coordinate),
+            )
+            component.target_id = target.object_id
+            component.last_known_target_position = target.coordinate
+            map_aggregate.add_event(
+                TargetSpottedEvent.create(
+                    aggregate_id=actor_id,
+                    aggregate_type="Actor",
+                    actor_id=actor_id,
+                    target_id=target.object_id,
+                    coordinate=target.coordinate,
+                )
+            )
 
-        # 2. ターゲットの有無に応じて状態更新とイベント発行
+        # 1b. 脅威でない場合は敵対候補を収集し、ポリシーで1体選択（攻撃対象）
+        if target is None:
+            visible_hostiles = self._collect_visible_hostiles(
+                actor, map_aggregate, component
+            )
+            target = (
+                target_policy.select_target(actor, visible_hostiles, target_context)
+                if visible_hostiles
+                else None
+            )
+
+        # 2. ターゲットの有無に応じて状態更新とイベント発行（脅威で既に FLEE の場合は spot_target を呼ばない；spot_target は CHASE に遷移するため）
         if target:
-            component.spot_target(target.object_id, target.coordinate)
+            if component.state != BehaviorStateEnum.FLEE:
+                component.spot_target(target.object_id, target.coordinate)
             if old_state != component.state:
                 self._publish_state_changed(
                     map_aggregate, actor_id, old_state, component.state
@@ -200,13 +238,39 @@ class BehaviorService:
             )
         )
 
+    def _collect_visible_threats(
+        self,
+        actor,
+        map_aggregate: PhysicalMapAggregate,
+        component: AutonomousBehaviorComponent,
+    ) -> List:
+        """視界内にいる脅威(THREAT)オブジェクトのリストを返す（FOV を考慮）。味方は除外する。"""
+        nearby_objects = map_aggregate.get_objects_in_range(
+            actor.coordinate, component.vision_range
+        )
+        visible_threats = []
+        for obj in nearby_objects:
+            if obj.object_id == actor.object_id:
+                continue
+            if not obj.is_actor:
+                continue
+            if self._allegiance_service and self._allegiance_service.is_ally(component, obj.component):
+                continue
+            if not self._hostility_service.is_threat(component, obj.component):
+                continue
+            if not map_aggregate.is_visible(actor.coordinate, obj.coordinate):
+                continue
+            if self._is_within_fov(actor, obj.coordinate, component):
+                visible_threats.append(obj)
+        return visible_threats
+
     def _collect_visible_hostiles(
         self,
         actor,
         map_aggregate: PhysicalMapAggregate,
         component: AutonomousBehaviorComponent,
     ) -> List:
-        """視界内にいる敵対的なオブジェクトのリストを返す（FOV を考慮）。味方は除外する。"""
+        """視界内にいる敵対的なオブジェクトのリストを返す（FOV を考慮）。味方は除外する。THREAT は含めない（攻撃対象にしない）。"""
         nearby_objects = map_aggregate.get_objects_in_range(
             actor.coordinate, component.vision_range
         )

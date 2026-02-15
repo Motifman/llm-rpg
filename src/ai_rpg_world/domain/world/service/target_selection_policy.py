@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from typing import List, Optional, TYPE_CHECKING
 
 from ai_rpg_world.domain.world.value_object.behavior_context import TargetSelectionContext
+from ai_rpg_world.domain.world.service.hostility_service import HostilityService
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.entity.world_object import WorldObject
@@ -106,3 +107,31 @@ class LowestHpTargetPolicy(TargetSelectionPolicy):
             candidates,
             key=lambda obj: actor.coordinate.euclidean_distance_to(obj.coordinate),
         )
+
+
+class PreyPriorityTargetPolicy(TargetSelectionPolicy):
+    """
+    獲物(PREY)を優先し、同列ならフォールバックポリシーで選択する。
+    HostilityService.is_prey で獲物を判定し、獲物がいればその中から fallback で1体選ぶ。
+    """
+
+    def __init__(
+        self,
+        hostility_service: HostilityService,
+        fallback_policy: TargetSelectionPolicy,
+    ):
+        self._hostility_service = hostility_service
+        self._fallback_policy = fallback_policy
+
+    def select_target(
+        self,
+        actor: "WorldObject",
+        candidates: List["WorldObject"],
+        context: Optional[TargetSelectionContext] = None,
+    ) -> Optional["WorldObject"]:
+        if not candidates:
+            return None
+        actor_comp = actor.component
+        preys = [c for c in candidates if self._hostility_service.is_prey(actor_comp, c.component)]
+        pool = preys if preys else candidates
+        return self._fallback_policy.select_target(actor, pool, context)

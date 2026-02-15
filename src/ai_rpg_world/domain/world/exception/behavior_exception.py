@@ -54,3 +54,8 @@ class FleeThresholdValidationException(BehaviorDomainException, ValidationExcept
 class MaxFailuresValidationException(BehaviorDomainException, ValidationException):
     """最大失敗回数のバリデーション例外"""
     error_code = "BEHAVIOR.MAX_FAILURES_VALIDATION"
+
+
+class ComponentRequiredForDispositionException(BehaviorDomainException, ValidationException):
+    """関係判定に必要な component が None の場合の例外。WorldObject は component を持つ前提。"""
+    error_code = "BEHAVIOR.COMPONENT_REQUIRED_FOR_DISPOSITION"

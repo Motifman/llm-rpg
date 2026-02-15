@@ -1,9 +1,6 @@
 from dataclasses import dataclass
-from typing import List, Optional, TYPE_CHECKING
+from typing import List, Optional
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
-
-if TYPE_CHECKING:
-    from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
@@ -30,8 +27,6 @@ class MonsterTemplate:
     flee_threshold: float = 0.2
     behavior_strategy_type: str = "default"
     phase_thresholds: Optional[List[float]] = None
-    pack_id: Optional["PackId"] = None
-    is_pack_leader: bool = False
     ecology_type: EcologyTypeEnum = EcologyTypeEnum.NORMAL
     ambush_chase_range: Optional[int] = None
     territory_radius: Optional[int] = None
