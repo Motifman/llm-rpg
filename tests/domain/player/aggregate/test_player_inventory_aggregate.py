@@ -20,7 +20,8 @@ from ai_rpg_world.domain.player.event.inventory_events import (
 from ai_rpg_world.domain.player.exception.player_exceptions import (
     InvalidSlotException,
     ItemNotInSlotException,
-    EquipmentSlotValidationException
+    EquipmentSlotValidationException,
+    ItemReservedException,
 )
 
 
@@ -746,3 +747,37 @@ class TestPlayerInventoryAggregate:
         # 再度操作を実行
         aggregate.acquire_item(ItemInstanceId(200))
         assert len(aggregate.get_events()) == 1
+
+    def test_has_item_in_inventory(self):
+        """has_item: インベントリスロットにアイテムがあれば True"""
+        aggregate = create_test_inventory_aggregate(inventory_slots={0: 100})
+        assert aggregate.has_item(ItemInstanceId(100)) is True
+        assert aggregate.has_item(ItemInstanceId(999)) is False
+
+    def test_has_item_in_equipment(self):
+        """has_item: 装備スロットにあれば True"""
+        aggregate = create_test_inventory_aggregate(equipment_slots={EquipmentSlotType.WEAPON: 50})
+        assert aggregate.has_item(ItemInstanceId(50)) is True
+        assert aggregate.has_item(ItemInstanceId(51)) is False
+
+    def test_remove_item_for_storage_success(self):
+        """remove_item_for_storage: 所持アイテムを削除しイベントを発行しない"""
+        aggregate = create_test_inventory_aggregate(inventory_slots={0: 100})
+        aggregate.clear_events()
+        aggregate.remove_item_for_storage(ItemInstanceId(100))
+        assert aggregate.has_item(ItemInstanceId(100)) is False
+        assert aggregate.get_item_instance_id_by_slot(SlotId(0)) is None
+        assert len(aggregate.get_events()) == 0
+
+    def test_remove_item_for_storage_raises_when_not_in_slot(self):
+        """remove_item_for_storage: 所持していない場合は ItemNotInSlotException"""
+        aggregate = create_test_inventory_aggregate()
+        with pytest.raises(ItemNotInSlotException):
+            aggregate.remove_item_for_storage(ItemInstanceId(999))
+
+    def test_remove_item_for_storage_raises_when_reserved(self):
+        """remove_item_for_storage: 予約中は ItemReservedException"""
+        aggregate = create_test_inventory_aggregate(inventory_slots={0: 100})
+        aggregate.reserve_item(SlotId(0))
+        with pytest.raises(ItemReservedException):
+            aggregate.remove_item_for_storage(ItemInstanceId(100))

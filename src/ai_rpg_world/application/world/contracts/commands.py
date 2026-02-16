@@ -60,3 +60,47 @@ class GetSpotInfoCommand:
         """バリデーション"""
         if self.spot_id <= 0:
             raise ValueError("spot_id must be greater than 0")
+
+
+@dataclass(frozen=True)
+class StoreItemInChestCommand:
+    """チェストにアイテムを収納するコマンド"""
+    player_id: int
+    spot_id: int
+    actor_world_object_id: int
+    chest_world_object_id: int
+    item_instance_id: int
+
+    def __post_init__(self):
+        if self.player_id <= 0:
+            raise ValueError("player_id must be greater than 0")
+        if self.spot_id <= 0:
+            raise ValueError("spot_id must be greater than 0")
+        if self.actor_world_object_id <= 0:
+            raise ValueError("actor_world_object_id must be greater than 0")
+        if self.chest_world_object_id <= 0:
+            raise ValueError("chest_world_object_id must be greater than 0")
+        if self.item_instance_id <= 0:
+            raise ValueError("item_instance_id must be greater than 0")
+
+
+@dataclass(frozen=True)
+class TakeItemFromChestCommand:
+    """チェストからアイテムを取得するコマンド"""
+    player_id: int
+    spot_id: int
+    actor_world_object_id: int
+    chest_world_object_id: int
+    item_instance_id: int
+
+    def __post_init__(self):
+        if self.player_id <= 0:
+            raise ValueError("player_id must be greater than 0")
+        if self.spot_id <= 0:
+            raise ValueError("spot_id must be greater than 0")
+        if self.actor_world_object_id <= 0:
+            raise ValueError("actor_world_object_id must be greater than 0")
+        if self.chest_world_object_id <= 0:
+            raise ValueError("chest_world_object_id must be greater than 0")
+        if self.item_instance_id <= 0:
+            raise ValueError("item_instance_id must be greater than 0")

@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, Any, Optional, Set, TYPE_CHECKING, Union
+from typing import Dict, Any, Optional, Set, TYPE_CHECKING, Union, List
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.value_object.pack_id import PackId
-from ai_rpg_world.domain.world.exception.map_exception import LockedDoorException
+from ai_rpg_world.domain.world.exception.map_exception import LockedDoorException, ItemAlreadyInChestException
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.world.enum.world_enum import (
     DirectionEnum,
     BehaviorStateEnum,
@@ -80,26 +81,76 @@ class WorldObjectComponent(ABC):
 
 
 class ChestComponent(WorldObjectComponent):
-    """宝箱の機能を持つコンポーネント"""
-    def __init__(self, is_open: bool = False, item_ids: list[int] = None):
+    """宝箱の機能を持つコンポーネント。
+
+    開閉は interact_with(OPEN_CHEST) でトグル。
+    収納・取得はアプリケーションサービス経由の Command（STORE_IN_CHEST / TAKE_FROM_CHEST）で行う。
+    """
+    def __init__(
+        self,
+        is_open: bool = False,
+        item_ids: Optional[List[ItemInstanceId]] = None,
+    ):
         self.is_open = is_open
-        self.item_ids = item_ids or []
+        self._item_ids: List[ItemInstanceId] = list(item_ids) if item_ids else []
+
+    @property
+    def item_ids(self) -> List[ItemInstanceId]:
+        """収納中のアイテムインスタンスIDリスト（不変として返すコピー）"""
+        return list(self._item_ids)
 
     def get_type_name(self) -> str:
         return "chest"
 
-    def open(self):
+    @property
+    def interaction_type(self) -> Optional[InteractionTypeEnum]:
+        """インタラクション種別: 開閉は OPEN_CHEST"""
+        return InteractionTypeEnum.OPEN_CHEST
+
+    @property
+    def interaction_data(self) -> Dict[str, Any]:
+        return {"is_open": self.is_open}
+
+    @property
+    def interaction_duration(self) -> int:
+        return 1
+
+    def open(self) -> None:
         self.is_open = True
+
+    def close(self) -> None:
+        self.is_open = False
+
+    def toggle_open(self) -> None:
+        self.is_open = not self.is_open
+
+    def add_item(self, item_instance_id: ItemInstanceId) -> None:
+        if self.has_item(item_instance_id):
+            raise ItemAlreadyInChestException(
+                f"Item {item_instance_id} is already in this chest"
+            )
+        self._item_ids.append(item_instance_id)
+
+    def remove_item(self, item_instance_id: ItemInstanceId) -> bool:
+        """指定IDのアイテムを1件削除。存在すれば True、なければ False。"""
+        for i, eid in enumerate(self._item_ids):
+            if eid == item_instance_id:
+                self._item_ids.pop(i)
+                return True
+        return False
+
+    def has_item(self, item_instance_id: ItemInstanceId) -> bool:
+        return any(eid == item_instance_id for eid in self._item_ids)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "is_open": self.is_open,
-            "item_ids": self.item_ids
+            "item_ids": [eid.value for eid in self._item_ids],
         }
 
 
 class DoorComponent(WorldObjectComponent):
-    """ドアの機能を持つコンポーネント"""
+    """ドアの機能を持つコンポーネント。開閉は interact_with(OPEN_DOOR) で行う。"""
     def __init__(self, is_open: bool = False, is_locked: bool = False):
         self.is_open = is_open
         self.is_locked = is_locked
@@ -107,12 +158,32 @@ class DoorComponent(WorldObjectComponent):
     def get_type_name(self) -> str:
         return "door"
 
-    def open(self):
+    @property
+    def interaction_type(self) -> Optional[InteractionTypeEnum]:
+        return InteractionTypeEnum.OPEN_DOOR
+
+    @property
+    def interaction_data(self) -> Dict[str, Any]:
+        return {"is_open": self.is_open, "is_locked": self.is_locked}
+
+    @property
+    def interaction_duration(self) -> int:
+        return 1
+
+    def open(self) -> None:
         if self.is_locked:
             raise LockedDoorException("Door is locked")
         self.is_open = True
 
-    def unlock(self):
+    def close(self) -> None:
+        self.is_open = False
+
+    def toggle_open(self) -> None:
+        if self.is_locked:
+            raise LockedDoorException("Door is locked")
+        self.is_open = not self.is_open
+
+    def unlock(self) -> None:
         self.is_locked = False
 
     def to_dict(self) -> Dict[str, Any]:
