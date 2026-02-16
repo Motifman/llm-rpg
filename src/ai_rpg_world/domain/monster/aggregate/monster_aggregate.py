@@ -5,7 +5,7 @@ from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTem
 from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
 from ai_rpg_world.domain.monster.value_object.monster_hp import MonsterHp
 from ai_rpg_world.domain.monster.value_object.monster_mp import MonsterMp
-from ai_rpg_world.domain.monster.enum.monster_enum import MonsterStatusEnum
+from ai_rpg_world.domain.monster.enum.monster_enum import MonsterStatusEnum, DeathCauseEnum
 from ai_rpg_world.domain.monster.event.monster_events import (
     MonsterCreatedEvent,
     MonsterSpawnedEvent,
@@ -294,7 +294,13 @@ class MonsterAggregate(AggregateRoot):
         ))
 
         if not self._hp.is_alive():
-            self._die(current_tick, killer_player_id=killer_player_id)
+            cause = DeathCauseEnum.KILLED_BY_PLAYER if killer_player_id else DeathCauseEnum.KILLED_BY_MONSTER
+            self._die(
+                current_tick,
+                killer_player_id=killer_player_id,
+                killer_world_object_id=attacker_id,
+                cause=cause if (killer_player_id or attacker_id) else None,
+            )
 
     def record_evasion(self):
         """回避を記録する（ALIVE時のみ）"""
@@ -368,7 +374,13 @@ class MonsterAggregate(AggregateRoot):
         # リスポーン判定などは上位のアプリケーションサービスで行うことを想定するが、
         # 必要に応じてここでもロジックを追加できる
 
-    def _die(self, current_tick: WorldTick, killer_player_id: Optional[PlayerId] = None):
+    def _die(
+        self,
+        current_tick: WorldTick,
+        killer_player_id: Optional[PlayerId] = None,
+        killer_world_object_id: Optional[WorldObjectId] = None,
+        cause: Optional[DeathCauseEnum] = None,
+    ) -> None:
         """死亡する（内部用）"""
         if self._status == MonsterStatusEnum.DEAD:
             return
@@ -388,8 +400,20 @@ class MonsterAggregate(AggregateRoot):
             gold=self._template.reward_info.gold,
             loot_table_id=self._template.reward_info.loot_table_id,
             killer_player_id=killer_player_id,
+            killer_world_object_id=killer_world_object_id,
+            cause=cause,
             spot_id=spot_id_for_event,
         ))
+
+    def starve(self, current_tick: WorldTick) -> None:
+        """飢餓で死亡させる。ALIVE のときのみ有効。"""
+        if self._status != MonsterStatusEnum.ALIVE:
+            if self._status == MonsterStatusEnum.DEAD and self._last_death_tick is None:
+                raise MonsterNotSpawnedException(f"Monster {self._monster_id} is not spawned yet")
+            raise MonsterAlreadyDeadException(f"Monster {self._monster_id} is not alive")
+        if self._coordinate is None:
+            raise MonsterNotSpawnedException(f"Monster {self._monster_id} is not spawned yet")
+        self._die(current_tick, cause=DeathCauseEnum.STARVATION)
 
     def should_respawn(self, current_tick: WorldTick) -> bool:
         """リスポーンすべきか判定する（時間経過と is_auto_respawn のみ。SpawnCondition は呼び出し側で評価）"""

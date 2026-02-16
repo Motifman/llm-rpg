@@ -3,7 +3,11 @@ from unittest.mock import patch
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
-from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum, MonsterStatusEnum
+from ai_rpg_world.domain.monster.enum.monster_enum import (
+    DeathCauseEnum,
+    MonsterFactionEnum,
+    MonsterStatusEnum,
+)
 from ai_rpg_world.domain.monster.event.monster_events import (
     MonsterCreatedEvent,
     MonsterDamagedEvent,
@@ -369,9 +373,10 @@ class TestMonsterAggregate:
             # Given
             monster.spawn(Coordinate(1, 2, 3), spot_id, WorldTick(0))
             current_tick = WorldTick(100)
+            attacker_id = WorldObjectId.create(999)
 
             # When
-            monster.apply_damage(100, current_tick)
+            monster.apply_damage(100, current_tick, attacker_id=attacker_id)
 
             # Then
             assert monster.status == MonsterStatusEnum.DEAD
@@ -384,6 +389,50 @@ class TestMonsterAggregate:
             assert die_event.exp == monster_template.reward_info.exp
             assert die_event.gold == monster_template.reward_info.gold
             assert die_event.loot_table_id == monster_template.reward_info.loot_table_id
+            assert die_event.killer_world_object_id == attacker_id
+            assert die_event.cause == DeathCauseEnum.KILLED_BY_MONSTER
+
+        def test_death_by_player_sets_cause_killed_by_player(
+            self, monster: MonsterAggregate, spot_id: SpotId
+        ):
+            """プレイヤーが倒した場合 cause が KILLED_BY_PLAYER になること"""
+            from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            monster.apply_damage(
+                100,
+                WorldTick(10),
+                attacker_id=WorldObjectId.create(1),
+                killer_player_id=PlayerId.create(1),
+            )
+            events = monster.get_events()
+            die_event = next(e for e in events if isinstance(e, MonsterDiedEvent))
+            assert die_event.cause == DeathCauseEnum.KILLED_BY_PLAYER
+            assert die_event.killer_player_id == PlayerId.create(1)
+
+        def test_starve_success(self, monster: MonsterAggregate, spot_id: SpotId):
+            """飢餓で死亡させると STARVATION 原因でイベントが発行されること"""
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            current_tick = WorldTick(100)
+            monster.starve(current_tick)
+            assert monster.status == MonsterStatusEnum.DEAD
+            events = monster.get_events()
+            die_event = next(e for e in events if isinstance(e, MonsterDiedEvent))
+            assert die_event.cause == DeathCauseEnum.STARVATION
+            assert die_event.killer_player_id is None
+            assert die_event.killer_world_object_id is None
+
+        def test_starve_when_not_spawned_raises(self, monster: MonsterAggregate):
+            """未スポーンのモンスターで starve すると MonsterNotSpawnedException"""
+            with pytest.raises(MonsterNotSpawnedException):
+                monster.starve(WorldTick(10))
+
+        def test_starve_when_already_dead_raises(self, monster: MonsterAggregate, spot_id: SpotId):
+            """既に死亡しているモンスターで starve すると MonsterAlreadyDeadException"""
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            monster.apply_damage(100, WorldTick(10))
+            with pytest.raises(MonsterAlreadyDeadException):
+                monster.starve(WorldTick(20))
 
         def test_respawn_success(self, monster: MonsterAggregate, spot_id: SpotId):
             # Given

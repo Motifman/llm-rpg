@@ -406,3 +406,116 @@ class TestMonsterTemplate:
                     GrowthStage(after_ticks=300, stats_multiplier=1.0),
                 ],
             )
+
+    class TestHungerParams:
+        """Phase 6: 飢餓パラメータのバリデーション"""
+
+        def test_create_with_hunger_params_success(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """有効な飢餓パラメータで作成できること"""
+            template = MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="Wolf",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="A wolf.",
+                hunger_increase_per_tick=0.001,
+                hunger_decrease_on_prey_kill=0.3,
+                hunger_starvation_threshold=0.8,
+                starvation_ticks=50,
+            )
+            assert template.hunger_increase_per_tick == 0.001
+            assert template.hunger_decrease_on_prey_kill == 0.3
+            assert template.hunger_starvation_threshold == 0.8
+            assert template.starvation_ticks == 50
+
+        def test_create_with_default_hunger_params(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """飢餓パラメータ省略時はデフォルトで無効になること"""
+            template = MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="Slime",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="A slime.",
+            )
+            assert template.hunger_increase_per_tick == 0.0
+            assert template.hunger_decrease_on_prey_kill == 0.0
+            assert template.hunger_starvation_threshold == 1.0
+            assert template.starvation_ticks == 0
+
+        def test_create_fail_hunger_increase_negative(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """hunger_increase_per_tick が負の場合はエラー"""
+            with pytest.raises(MonsterTemplateValidationException, match="hunger_increase_per_tick"):
+                MonsterTemplate(
+                    template_id=MonsterTemplateId.create(1),
+                    name="X",
+                    base_stats=valid_base_stats,
+                    reward_info=valid_reward_info,
+                    respawn_info=valid_respawn_info,
+                    race=Race.BEAST,
+                    faction=MonsterFactionEnum.ENEMY,
+                    description="X",
+                    hunger_increase_per_tick=-0.01,
+                )
+
+        def test_create_fail_hunger_decrease_negative(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """hunger_decrease_on_prey_kill が負の場合はエラー"""
+            with pytest.raises(MonsterTemplateValidationException, match="hunger_decrease_on_prey_kill"):
+                MonsterTemplate(
+                    template_id=MonsterTemplateId.create(1),
+                    name="X",
+                    base_stats=valid_base_stats,
+                    reward_info=valid_reward_info,
+                    respawn_info=valid_respawn_info,
+                    race=Race.BEAST,
+                    faction=MonsterFactionEnum.ENEMY,
+                    description="X",
+                    hunger_decrease_on_prey_kill=-0.1,
+                )
+
+        def test_create_fail_hunger_starvation_threshold_out_of_range(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """hunger_starvation_threshold が 0.0〜1.0 の範囲外の場合はエラー"""
+            with pytest.raises(MonsterTemplateValidationException, match="hunger_starvation_threshold"):
+                MonsterTemplate(
+                    template_id=MonsterTemplateId.create(1),
+                    name="X",
+                    base_stats=valid_base_stats,
+                    reward_info=valid_reward_info,
+                    respawn_info=valid_respawn_info,
+                    race=Race.BEAST,
+                    faction=MonsterFactionEnum.ENEMY,
+                    description="X",
+                    hunger_starvation_threshold=1.5,
+                )
+
+        def test_create_fail_starvation_ticks_negative(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """starvation_ticks が負の場合はエラー"""
+            with pytest.raises(MonsterTemplateValidationException, match="starvation_ticks"):
+                MonsterTemplate(
+                    template_id=MonsterTemplateId.create(1),
+                    name="X",
+                    base_stats=valid_base_stats,
+                    reward_info=valid_reward_info,
+                    respawn_info=valid_respawn_info,
+                    race=Race.BEAST,
+                    faction=MonsterFactionEnum.ENEMY,
+                    description="X",
+                    starvation_ticks=-1,
+                )
