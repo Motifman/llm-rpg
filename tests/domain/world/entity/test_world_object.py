@@ -1,4 +1,5 @@
 import pytest
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import ChestComponent, DoorComponent
 from ai_rpg_world.domain.world.exception.map_exception import LockedDoorException
@@ -12,7 +13,7 @@ class TestWorldObject:
         # Given
         obj_id = WorldObjectId(1)
         coord = Coordinate(1, 1)
-        chest = ChestComponent(item_ids=[101, 102])
+        chest = ChestComponent(item_ids=[ItemInstanceId.create(101), ItemInstanceId.create(102)])
         
         # When
         obj = WorldObject(obj_id, coord, ObjectTypeEnum.CHEST, component=chest)
@@ -21,7 +22,7 @@ class TestWorldObject:
         assert obj.object_id == obj_id
         assert obj.coordinate == coord
         assert isinstance(obj.component, ChestComponent)
-        assert obj.component.item_ids == [101, 102]
+        assert [e.value for e in obj.component.item_ids] == [101, 102]
 
     def test_world_object_creation_with_door(self):
         # Given

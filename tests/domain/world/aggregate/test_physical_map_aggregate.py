@@ -29,12 +29,22 @@ from ai_rpg_world.domain.world.exception.map_exception import (
     InteractionOutOfRangeException,
     NotFacingTargetException,
     NotInteractableException,
-    SameCoordinateDirectionException
+    SameCoordinateDirectionException,
+    LockedDoorException,
+    ChestClosedException,
+    NotAChestException,
+    ItemNotInChestException,
 )
 from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
 from ai_rpg_world.domain.world.value_object.area import PointArea, RectArea
 from ai_rpg_world.domain.world.entity.area_trigger import AreaTrigger
-from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent, AutonomousBehaviorComponent, InteractableComponent
+from ai_rpg_world.domain.world.entity.world_object_component import (
+    ActorComponent,
+    AutonomousBehaviorComponent,
+    InteractableComponent,
+    ChestComponent,
+    DoorComponent,
+)
 from ai_rpg_world.domain.world.event.map_events import (
     PhysicalMapCreatedEvent,
     WorldObjectMovedEvent,
@@ -45,8 +55,11 @@ from ai_rpg_world.domain.world.event.map_events import (
     AreaEnteredEvent,
     AreaExitedEvent,
     AreaTriggeredEvent,
-    WorldObjectInteractedEvent
+    WorldObjectInteractedEvent,
+    ItemStoredInChestEvent,
+    ItemTakenFromChestEvent,
 )
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
@@ -1210,3 +1223,216 @@ class TestPhysicalMapAggregate:
             # Then: 自律アクターのみ
             assert len(result) == 1
             assert result[0].object_id == WorldObjectId(2)
+
+    class TestChestAndDoor:
+        """チェスト・ドアのインタラクションと収納・取得のテスト"""
+
+        def test_interact_with_open_chest_toggles_state(self, aggregate):
+            actor_id = WorldObjectId(1)
+            chest_id = WorldObjectId(2)
+            actor = WorldObject(
+                actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(direction=DirectionEnum.SOUTH),
+            )
+            chest = WorldObject(
+                chest_id, Coordinate(0, 1, 0), ObjectTypeEnum.CHEST,
+                component=ChestComponent(is_open=False),
+            )
+            aggregate.add_object(actor)
+            aggregate.add_object(chest)
+            aggregate.clear_events()
+            current_tick = WorldTick(10)
+            assert chest.component.is_open is False
+
+            aggregate.interact_with(actor_id, chest_id, current_tick)
+
+            assert chest.component.is_open is True
+            events = aggregate.get_events()
+            assert any(isinstance(e, WorldObjectInteractedEvent) for e in events)
+            event = next(e for e in events if isinstance(e, WorldObjectInteractedEvent))
+            assert event.interaction_type == InteractionTypeEnum.OPEN_CHEST
+
+        def test_interact_with_open_door_toggles_state_and_blocking(self, aggregate):
+            actor_id = WorldObjectId(1)
+            door_id = WorldObjectId(2)
+            actor = WorldObject(
+                actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(direction=DirectionEnum.SOUTH),
+            )
+            door = WorldObject(
+                door_id, Coordinate(0, 1, 0), ObjectTypeEnum.DOOR,
+                component=DoorComponent(is_open=False, is_locked=False),
+            )
+            aggregate.add_object(actor)
+            aggregate.add_object(door)
+            aggregate.clear_events()
+            current_tick = WorldTick(10)
+            assert door.component.is_open is False
+            assert door.is_blocking is True
+
+            aggregate.interact_with(actor_id, door_id, current_tick)
+
+            assert door.component.is_open is True
+            assert door.is_blocking is False
+            events = aggregate.get_events()
+            assert any(isinstance(e, WorldObjectBlockingChangedEvent) for e in events)
+
+        def test_interact_with_locked_door_raises(self, aggregate):
+            actor_id = WorldObjectId(1)
+            door_id = WorldObjectId(2)
+            actor = WorldObject(
+                actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(direction=DirectionEnum.SOUTH),
+            )
+            door = WorldObject(
+                door_id, Coordinate(0, 1, 0), ObjectTypeEnum.DOOR,
+                component=DoorComponent(is_locked=True),
+            )
+            aggregate.add_object(actor)
+            aggregate.add_object(door)
+
+            with pytest.raises(LockedDoorException):
+                aggregate.interact_with(actor_id, door_id, WorldTick(10))
+
+        def test_store_item_in_chest_success(self, aggregate, spot_id):
+            actor_id = WorldObjectId(1)
+            chest_id = WorldObjectId(2)
+            actor = WorldObject(
+                actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(direction=DirectionEnum.SOUTH),
+            )
+            chest = WorldObject(
+                chest_id, Coordinate(0, 1, 0), ObjectTypeEnum.CHEST,
+                component=ChestComponent(is_open=True),
+            )
+            aggregate.add_object(actor)
+            aggregate.add_object(chest)
+            aggregate.clear_events()
+            item_id = ItemInstanceId.create(100)
+            player_id_value = 999
+
+            aggregate.store_item_in_chest(actor_id, chest_id, item_id, player_id_value)
+
+            assert chest.component.has_item(item_id) is True
+            events = aggregate.get_events()
+            stored = next(e for e in events if isinstance(e, ItemStoredInChestEvent))
+            assert stored.chest_id == chest_id
+            assert stored.actor_id == actor_id
+            assert stored.item_instance_id == item_id
+            assert stored.player_id_value == player_id_value
+
+        def test_store_item_in_chest_raises_when_closed(self, aggregate):
+            actor_id = WorldObjectId(1)
+            chest_id = WorldObjectId(2)
+            actor = WorldObject(
+                actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(direction=DirectionEnum.SOUTH),
+            )
+            chest = WorldObject(
+                chest_id, Coordinate(0, 1, 0), ObjectTypeEnum.CHEST,
+                component=ChestComponent(is_open=False),
+            )
+            aggregate.add_object(actor)
+            aggregate.add_object(chest)
+            item_id = ItemInstanceId.create(100)
+
+            with pytest.raises(ChestClosedException):
+                aggregate.store_item_in_chest(actor_id, chest_id, item_id, 1)
+
+        def test_store_item_in_chest_raises_when_not_chest(self, aggregate):
+            actor_id = WorldObjectId(1)
+            target_id = WorldObjectId(2)
+            actor = WorldObject(
+                actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(direction=DirectionEnum.SOUTH),
+            )
+            target = WorldObject(
+                target_id, Coordinate(0, 1, 0), ObjectTypeEnum.NPC,
+                component=InteractableComponent("talk"),
+            )
+            aggregate.add_object(actor)
+            aggregate.add_object(target)
+            item_id = ItemInstanceId.create(100)
+
+            with pytest.raises(NotAChestException):
+                aggregate.store_item_in_chest(actor_id, target_id, item_id, 1)
+
+        def test_store_item_in_chest_raises_when_too_far(self, aggregate):
+            actor_id = WorldObjectId(1)
+            chest_id = WorldObjectId(2)
+            actor = WorldObject(
+                actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(direction=DirectionEnum.SOUTH),
+            )
+            chest = WorldObject(
+                chest_id, Coordinate(2, 0, 0), ObjectTypeEnum.CHEST,
+                component=ChestComponent(is_open=True),
+            )
+            aggregate.add_object(actor)
+            aggregate.add_object(chest)
+            item_id = ItemInstanceId.create(100)
+
+            with pytest.raises(InteractionOutOfRangeException):
+                aggregate.store_item_in_chest(actor_id, chest_id, item_id, 1)
+
+        def test_take_item_from_chest_success(self, aggregate):
+            actor_id = WorldObjectId(1)
+            chest_id = WorldObjectId(2)
+            item_id = ItemInstanceId.create(50)
+            actor = WorldObject(
+                actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(direction=DirectionEnum.SOUTH),
+            )
+            chest = WorldObject(
+                chest_id, Coordinate(0, 1, 0), ObjectTypeEnum.CHEST,
+                component=ChestComponent(is_open=True, item_ids=[item_id]),
+            )
+            aggregate.add_object(actor)
+            aggregate.add_object(chest)
+            aggregate.clear_events()
+            player_id_value = 1
+
+            aggregate.take_item_from_chest(actor_id, chest_id, item_id, player_id_value)
+
+            assert chest.component.has_item(item_id) is False
+            events = aggregate.get_events()
+            taken = next(e for e in events if isinstance(e, ItemTakenFromChestEvent))
+            assert taken.chest_id == chest_id
+            assert taken.item_instance_id == item_id
+            assert taken.player_id_value == player_id_value
+
+        def test_take_item_from_chest_raises_when_item_not_in_chest(self, aggregate):
+            actor_id = WorldObjectId(1)
+            chest_id = WorldObjectId(2)
+            actor = WorldObject(
+                actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(direction=DirectionEnum.SOUTH),
+            )
+            chest = WorldObject(
+                chest_id, Coordinate(0, 1, 0), ObjectTypeEnum.CHEST,
+                component=ChestComponent(is_open=True),
+            )
+            aggregate.add_object(actor)
+            aggregate.add_object(chest)
+            item_id = ItemInstanceId.create(999)
+
+            with pytest.raises(ItemNotInChestException):
+                aggregate.take_item_from_chest(actor_id, chest_id, item_id, 1)
+
+        def test_take_item_from_chest_raises_when_closed(self, aggregate):
+            actor_id = WorldObjectId(1)
+            chest_id = WorldObjectId(2)
+            item_id = ItemInstanceId.create(50)
+            actor = WorldObject(
+                actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(direction=DirectionEnum.SOUTH),
+            )
+            chest = WorldObject(
+                chest_id, Coordinate(0, 1, 0), ObjectTypeEnum.CHEST,
+                component=ChestComponent(is_open=False, item_ids=[item_id]),
+            )
+            aggregate.add_object(actor)
+            aggregate.add_object(chest)
+
+            with pytest.raises(ChestClosedException):
+                aggregate.take_item_from_chest(actor_id, chest_id, item_id, 1)

@@ -980,6 +980,10 @@ class TestCombatIntegration:
             physical_map_repository=map_repo,
             unit_of_work=uow,
         )
+        from ai_rpg_world.application.world.handlers.item_stored_in_chest_handler import ItemStoredInChestHandler
+        from ai_rpg_world.application.world.handlers.item_taken_from_chest_handler import ItemTakenFromChestHandler
+        item_stored_handler = ItemStoredInChestHandler(inventory_repo, uow)
+        item_taken_handler = ItemTakenFromChestHandler(inventory_repo, uow)
         CombatEventHandlerRegistry(
             damage_handler,
             aggro_handler,
@@ -987,6 +991,8 @@ class TestCombatIntegration:
             hunger_handler,
             map_removal_handler,
             monster_spawned_map_placement_handler,
+            item_stored_handler,
+            item_taken_handler,
         ).register_handlers(event_publisher)
 
         behavior_service = BehaviorService(PathfindingService(None))

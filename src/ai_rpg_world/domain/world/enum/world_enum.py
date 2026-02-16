@@ -118,5 +118,7 @@ class InteractionTypeEnum(Enum):
     EXAMINE = "examine"                # 調べる
     HARVEST = "harvest"                # 採取・採掘
     MONSTER_FEED = "monster_feed"      # モンスターが食事オブジェクトで採食
-    OPEN_CHEST = "open_chest"          # 宝箱を開ける（予約）
-    OPEN_DOOR = "open_door"            # ドアを開閉（予約）
+    OPEN_CHEST = "open_chest"          # 宝箱を開ける
+    OPEN_DOOR = "open_door"            # ドアを開閉
+    STORE_IN_CHEST = "store_in_chest"  # 宝箱にアイテムを収納（Command で item 指定）
+    TAKE_FROM_CHEST = "take_from_chest"  # 宝箱からアイテムを取得

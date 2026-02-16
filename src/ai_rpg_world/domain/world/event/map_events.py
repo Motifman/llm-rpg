@@ -16,6 +16,7 @@ from ai_rpg_world.domain.world.enum.world_enum import (
     InteractionTypeEnum,
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 
 
 @dataclass(frozen=True)
@@ -181,3 +182,23 @@ class ResourceHarvestedEvent(BaseDomainEvent[WorldObjectId, str]):
             loot_table_id=loot_table_id,
             obtained_items=obtained_items
         )
+
+
+@dataclass(frozen=True)
+class ItemStoredInChestEvent(BaseDomainEvent[SpotId, str]):
+    """チェストにアイテムを収納したイベント（集約: PhysicalMap）"""
+    spot_id: SpotId
+    chest_id: WorldObjectId
+    actor_id: WorldObjectId
+    item_instance_id: ItemInstanceId
+    player_id_value: int
+
+
+@dataclass(frozen=True)
+class ItemTakenFromChestEvent(BaseDomainEvent[SpotId, str]):
+    """チェストからアイテムを取得したイベント（集約: PhysicalMap）"""
+    spot_id: SpotId
+    chest_id: WorldObjectId
+    actor_id: WorldObjectId
+    item_instance_id: ItemInstanceId
+    player_id_value: int

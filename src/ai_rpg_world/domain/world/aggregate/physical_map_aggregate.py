@@ -18,11 +18,18 @@ from ai_rpg_world.domain.world.entity.world_object_component import (
     AutonomousBehaviorComponent,
     InteractableComponent,
     HarvestableComponent,
+    ChestComponent,
+    DoorComponent,
 )
 from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.world.entity.map_trigger import MapTrigger
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
-from ai_rpg_world.domain.world.enum.world_enum import MovementCapabilityEnum, DirectionEnum, EnvironmentTypeEnum
+from ai_rpg_world.domain.world.enum.world_enum import (
+    MovementCapabilityEnum,
+    DirectionEnum,
+    EnvironmentTypeEnum,
+    InteractionTypeEnum,
+)
 from ai_rpg_world.domain.world.service.map_geometry_service import MapGeometryService
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
@@ -40,7 +47,9 @@ from ai_rpg_world.domain.world.event.map_events import (
     WorldObjectInteractedEvent,
     LocationEnteredEvent,
     LocationExitedEvent,
-    GatewayTriggeredEvent
+    GatewayTriggeredEvent,
+    ItemStoredInChestEvent,
+    ItemTakenFromChestEvent,
 )
 from ai_rpg_world.domain.world.event.harvest_events import (
     HarvestStartedEvent,
@@ -48,7 +57,7 @@ from ai_rpg_world.domain.world.event.harvest_events import (
     HarvestCompletedEvent
 )
 from ai_rpg_world.domain.world.exception.map_exception import (
-    TileNotFoundException, 
+    TileNotFoundException,
     ObjectNotFoundException,
     DuplicateObjectException,
     InvalidPlacementException,
@@ -64,7 +73,12 @@ from ai_rpg_world.domain.world.exception.map_exception import (
     LocationAreaNotFoundException,
     DuplicateGatewayException,
     GatewayNotFoundException,
-    ActorBusyException
+    ActorBusyException,
+    ChestClosedException,
+    NotAChestException,
+    ItemNotInChestException,
+    NotADoorException,
+    LockedDoorException,
 )
 from ai_rpg_world.domain.world.exception.harvest_exception import (
     NotHarvestableException,
@@ -73,6 +87,7 @@ from ai_rpg_world.domain.world.exception.harvest_exception import (
     HarvestNotStartedException
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 
 
 class PhysicalMapAggregate(AggregateRoot):
@@ -726,9 +741,96 @@ class PhysicalMapAggregate(AggregateRoot):
             data=target.interaction_data
         ))
 
+        # 開閉系インタラクション: 集約内で状態を更新（チェスト・ドア）
+        if interaction_type == InteractionTypeEnum.OPEN_CHEST and isinstance(target.component, ChestComponent):
+            target.component.toggle_open()
+        elif interaction_type == InteractionTypeEnum.OPEN_DOOR and isinstance(target.component, DoorComponent):
+            target.component.toggle_open()
+            target.set_blocking(not target.component.is_open)
+            self.add_event(WorldObjectBlockingChangedEvent.create(
+                aggregate_id=target_id,
+                aggregate_type="WorldObject",
+                object_id=target_id,
+                is_blocking=target.is_blocking
+            ))
+
         # アクターをビジー状態にする
         duration = target.interaction_duration
         actor.set_busy(current_tick.add_duration(duration))
+
+    def store_item_in_chest(
+        self,
+        actor_id: WorldObjectId,
+        target_chest_id: WorldObjectId,
+        item_instance_id: ItemInstanceId,
+        player_id_value: int,
+    ) -> None:
+        """チェストにアイテムを収納する。アプリケーションサービスから呼ばれ、プレイヤー所持検証は呼び出し側で行う。"""
+        actor = self.get_actor(actor_id)
+        chest_obj = self.get_object(target_chest_id)
+
+        if not isinstance(chest_obj.component, ChestComponent):
+            raise NotAChestException(f"Object {target_chest_id} is not a chest")
+
+        chest = chest_obj.component
+        if not chest.is_open:
+            raise ChestClosedException(f"Chest {target_chest_id} is closed")
+
+        distance = actor.coordinate.distance_to(chest_obj.coordinate)
+        if distance > 1:
+            raise InteractionOutOfRangeException(
+                f"Chest {target_chest_id} is too far from actor {actor_id}"
+            )
+
+        chest.add_item(item_instance_id)
+        self.add_event(ItemStoredInChestEvent.create(
+            aggregate_id=self._spot_id,
+            aggregate_type="PhysicalMap",
+            spot_id=self._spot_id,
+            chest_id=target_chest_id,
+            actor_id=actor_id,
+            item_instance_id=item_instance_id,
+            player_id_value=player_id_value,
+        ))
+
+    def take_item_from_chest(
+        self,
+        actor_id: WorldObjectId,
+        target_chest_id: WorldObjectId,
+        item_instance_id: ItemInstanceId,
+        player_id_value: int,
+    ) -> None:
+        """チェストからアイテムを取得する。アプリケーションサービスから呼ばれる。"""
+        actor = self.get_actor(actor_id)
+        chest_obj = self.get_object(target_chest_id)
+
+        if not isinstance(chest_obj.component, ChestComponent):
+            raise NotAChestException(f"Object {target_chest_id} is not a chest")
+
+        chest = chest_obj.component
+        if not chest.is_open:
+            raise ChestClosedException(f"Chest {target_chest_id} is closed")
+
+        distance = actor.coordinate.distance_to(chest_obj.coordinate)
+        if distance > 1:
+            raise InteractionOutOfRangeException(
+                f"Chest {target_chest_id} is too far from actor {actor_id}"
+            )
+
+        if not chest.remove_item(item_instance_id):
+            raise ItemNotInChestException(
+                f"Item {item_instance_id} is not in chest {target_chest_id}"
+            )
+
+        self.add_event(ItemTakenFromChestEvent.create(
+            aggregate_id=self._spot_id,
+            aggregate_type="PhysicalMap",
+            spot_id=self._spot_id,
+            chest_id=target_chest_id,
+            actor_id=actor_id,
+            item_instance_id=item_instance_id,
+            player_id_value=player_id_value,
+        ))
 
     def start_resource_harvest(self, actor_id: WorldObjectId, target_id: WorldObjectId, current_tick: WorldTick):
         """資源の採取を開始する"""
