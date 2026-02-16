@@ -80,13 +80,14 @@ class TestWorldObject:
     def test_interactable_properties(self):
         """インタラクション関連のプロパティが正しく動作すること"""
         from ai_rpg_world.domain.world.entity.world_object_component import InteractableComponent
-        
+        from ai_rpg_world.domain.world.enum.world_enum import InteractionTypeEnum
+
         data = {"key": "value"}
         interactable = InteractableComponent(interaction_type="examine", data=data)
         obj = WorldObject(WorldObjectId(1), Coordinate(1, 1), ObjectTypeEnum.CHEST, component=interactable)
-        
+
         assert obj.is_actor is False
-        assert obj.interaction_type == "examine"
+        assert obj.interaction_type == InteractionTypeEnum.EXAMINE
         assert obj.interaction_data == data
 
     def test_non_component_properties(self):

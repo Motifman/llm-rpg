@@ -971,6 +971,10 @@ class TestCombatIntegration:
         damage_handler = HitBoxDamageHandler(hit_box_repo, map_repo, player_repo, monster_repo, time_provider, uow)
         aggro_handler = CombatAggroHandler(hit_box_repo, map_repo, uow)
         reward_handler = MonsterDeathRewardHandler(player_repo, inventory_repo, loot_repo, item_spec_repo, item_repo, uow)
+        from ai_rpg_world.application.world.handlers.monster_death_hunger_handler import MonsterDeathHungerHandler
+        from ai_rpg_world.application.world.handlers.monster_died_map_removal_handler import MonsterDiedMapRemovalHandler
+        hunger_handler = MonsterDeathHungerHandler(map_repo, monster_repo, uow)
+        map_removal_handler = MonsterDiedMapRemovalHandler(map_repo, monster_repo, uow)
         monster_spawned_map_placement_handler = MonsterSpawnedMapPlacementHandler(
             monster_repository=monster_repo,
             physical_map_repository=map_repo,
@@ -980,6 +984,8 @@ class TestCombatIntegration:
             damage_handler,
             aggro_handler,
             reward_handler,
+            hunger_handler,
+            map_removal_handler,
             monster_spawned_map_placement_handler,
         ).register_handlers(event_publisher)
 

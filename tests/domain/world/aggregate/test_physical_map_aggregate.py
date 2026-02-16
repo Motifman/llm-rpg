@@ -7,7 +7,15 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, TerrainTypeEnum, TriggerTypeEnum, DirectionEnum, MovementCapabilityEnum, EnvironmentTypeEnum
+from ai_rpg_world.domain.world.enum.world_enum import (
+    ObjectTypeEnum,
+    TerrainTypeEnum,
+    TriggerTypeEnum,
+    DirectionEnum,
+    MovementCapabilityEnum,
+    EnvironmentTypeEnum,
+    InteractionTypeEnum,
+)
 from ai_rpg_world.domain.world.exception.map_exception import (
     TileNotFoundException,
     ObjectNotFoundException,
@@ -721,7 +729,7 @@ class TestPhysicalMapAggregate:
             event = [e for e in events if isinstance(e, WorldObjectInteractedEvent)][0]
             assert event.actor_id == actor_id
             assert event.target_id == target_id
-            assert event.interaction_type == "talk"
+            assert event.interaction_type == InteractionTypeEnum.TALK
             assert event.data == {"name": "Bob"}
             
             # アクターがビジー状態になっていること

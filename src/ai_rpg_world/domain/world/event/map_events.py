@@ -9,7 +9,12 @@ from ai_rpg_world.domain.world.value_object.connection import Connection
 from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
-from ai_rpg_world.domain.world.enum.world_enum import TerrainTypeEnum, TriggerTypeEnum, ObjectTypeEnum
+from ai_rpg_world.domain.world.enum.world_enum import (
+    TerrainTypeEnum,
+    TriggerTypeEnum,
+    ObjectTypeEnum,
+    InteractionTypeEnum,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 
 
@@ -98,7 +103,7 @@ class WorldObjectInteractedEvent(BaseDomainEvent[WorldObjectId, str]):
     """オブジェクトとインタラクションしたイベント"""
     actor_id: WorldObjectId
     target_id: WorldObjectId
-    interaction_type: str
+    interaction_type: InteractionTypeEnum
     data: Dict[str, Any]
 
 

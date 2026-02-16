@@ -64,3 +64,8 @@ class ComponentRequiredForDispositionException(BehaviorDomainException, Validati
 class GrowthContextValidationException(BehaviorDomainException, ValidationException):
     """GrowthContext のバリデーション例外（effective_flee_threshold や allow_chase の不正値）"""
     error_code = "BEHAVIOR.GROWTH_CONTEXT_VALIDATION"
+
+
+class HungerValidationException(BehaviorDomainException, ValidationException):
+    """飢餓値のバリデーション例外（0.0〜1.0 の範囲外など）"""
+    error_code = "BEHAVIOR.HUNGER_VALIDATION"

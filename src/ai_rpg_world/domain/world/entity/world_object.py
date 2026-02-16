@@ -1,7 +1,7 @@
 from typing import Dict, Any, Optional, TYPE_CHECKING
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
+from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, InteractionTypeEnum
 from ai_rpg_world.domain.world.entity.world_object_component import WorldObjectComponent
 from ai_rpg_world.domain.common.value_object import WorldTick
 
@@ -81,7 +81,7 @@ class WorldObject:
         return getattr(self._component, "direction", None) if self._component else None
 
     @property
-    def interaction_type(self) -> Optional[str]:
+    def interaction_type(self) -> Optional[InteractionTypeEnum]:
         """インタラクションタイプを返す"""
         return self._component.interaction_type if self._component else None
 

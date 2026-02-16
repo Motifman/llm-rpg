@@ -1,11 +1,17 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, Any, Optional, Set, TYPE_CHECKING
+from typing import Dict, Any, Optional, Set, TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.world.exception.map_exception import LockedDoorException
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, BehaviorStateEnum, EcologyTypeEnum, ActiveTimeType
+from ai_rpg_world.domain.world.enum.world_enum import (
+    DirectionEnum,
+    BehaviorStateEnum,
+    EcologyTypeEnum,
+    ActiveTimeType,
+    InteractionTypeEnum,
+)
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
@@ -22,6 +28,7 @@ from ai_rpg_world.domain.world.exception.behavior_exception import (
     HPPercentageValidationException,
     FleeThresholdValidationException,
     MaxFailuresValidationException,
+    HungerValidationException,
 )
 
 
@@ -51,7 +58,7 @@ class WorldObjectComponent(ABC):
         return False
 
     @property
-    def interaction_type(self) -> Optional[str]:
+    def interaction_type(self) -> Optional[InteractionTypeEnum]:
         """インタラクションタイプを返す（デフォルトはNone）"""
         return None
 
@@ -70,6 +77,7 @@ class WorldObjectComponent(ABC):
     def player_id(self) -> Optional["PlayerId"]:
         """紐付いているプレイヤーIDを返す（アクターでない場合はNone）"""
         return None
+
 
 class ChestComponent(WorldObjectComponent):
     """宝箱の機能を持つコンポーネント"""
@@ -175,13 +183,21 @@ class ActorComponent(WorldObjectComponent):
 
 class InteractableComponent(WorldObjectComponent):
     """インタラクション（調べる、話しかける等）が可能なコンポーネント"""
-    def __init__(self, interaction_type: str, data: Dict[str, Any] = None, duration: int = 1):
-        self._interaction_type = interaction_type
+    def __init__(
+        self,
+        interaction_type: Union[InteractionTypeEnum, str],
+        data: Dict[str, Any] = None,
+        duration: int = 1,
+    ):
+        if isinstance(interaction_type, str):
+            self._interaction_type = InteractionTypeEnum(interaction_type)
+        else:
+            self._interaction_type = interaction_type
         self.data = data or {}
         self._duration = duration
 
     @property
-    def interaction_type(self) -> str:
+    def interaction_type(self) -> InteractionTypeEnum:
         return self._interaction_type
 
     @property
@@ -197,7 +213,7 @@ class InteractableComponent(WorldObjectComponent):
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "interaction_type": self._interaction_type,
+            "interaction_type": self._interaction_type.value,
             "data": self.data
         }
 
@@ -242,9 +258,14 @@ class AutonomousBehaviorComponent(ActorComponent):
         active_time: ActiveTimeType = ActiveTimeType.ALWAYS,
         threat_races: Optional[Set[str]] = None,
         prey_races: Optional[Set[str]] = None,
+        hunger: float = 0.0,
+        hunger_increase_per_tick: float = 0.0,
+        hunger_starvation_threshold: float = 1.0,
+        starvation_ticks: int = 0,
     ):
         super().__init__(direction, capability, player_id, is_npc, fov_angle, race, faction, pack_id)
         self._validate(vision_range, search_duration, hp_percentage, flee_threshold, max_failures, random_move_chance)
+        self._validate_hunger(hunger, hunger_starvation_threshold, starvation_ticks)
         self.state = state
         self.vision_range = vision_range
         self.patrol_points = patrol_points or []
@@ -271,6 +292,11 @@ class AutonomousBehaviorComponent(ActorComponent):
         self.active_time = active_time
         self.threat_races = threat_races or frozenset()
         self.prey_races = prey_races or frozenset()
+        self.hunger = max(0.0, min(1.0, hunger))
+        self.hunger_increase_per_tick = hunger_increase_per_tick
+        self.hunger_starvation_threshold = hunger_starvation_threshold
+        self.starvation_ticks = starvation_ticks
+        self.starvation_timer = 0
 
     def _validate(self, vision_range, search_duration, hp_percentage, flee_threshold, max_failures, random_move_chance):
         if vision_range < 0:
@@ -286,6 +312,16 @@ class AutonomousBehaviorComponent(ActorComponent):
         if not (0.0 <= random_move_chance <= 1.0):
             # 汎用的なValidationExceptionまたは新設
             raise ValidationException(f"Random move chance must be between 0.0 and 1.0: {random_move_chance}")
+
+    def _validate_hunger(self, hunger: float, hunger_starvation_threshold: float, starvation_ticks: int) -> None:
+        if not (0.0 <= hunger <= 1.0):
+            raise HungerValidationException(f"hunger must be between 0.0 and 1.0: {hunger}")
+        if not (0.0 <= hunger_starvation_threshold <= 1.0):
+            raise HungerValidationException(
+                f"hunger_starvation_threshold must be between 0.0 and 1.0: {hunger_starvation_threshold}"
+            )
+        if starvation_ticks < 0:
+            raise HungerValidationException(f"starvation_ticks cannot be negative: {starvation_ticks}")
 
     def get_type_name(self) -> str:
         return "autonomous_actor"
@@ -308,6 +344,32 @@ class AutonomousBehaviorComponent(ActorComponent):
         if not (0.0 <= hp_percentage <= 1.0):
             raise HPPercentageValidationException("HP percentage must be between 0.0 and 1.0")
         self.hp_percentage = hp_percentage
+
+    def add_hunger(self, delta: float) -> None:
+        """飢餓値を増やす（上限 1.0）"""
+        if self.starvation_ticks <= 0:
+            return
+        self.hunger = max(0.0, min(1.0, self.hunger + delta))
+
+    def reduce_hunger(self, delta: float) -> None:
+        """飢餓値を減らす（下限 0.0）"""
+        if self.starvation_ticks <= 0:
+            return
+        self.hunger = max(0.0, min(1.0, self.hunger - delta))
+
+    def tick_hunger_and_starvation(self) -> bool:
+        """
+        1 tick 分の飢餓を適用し、飢餓死すべきか返す。
+        飢餓が無効（starvation_ticks <= 0）の場合は False。
+        """
+        if self.starvation_ticks <= 0 or self.hunger_increase_per_tick <= 0:
+            return False
+        self.hunger = min(1.0, self.hunger + self.hunger_increase_per_tick)
+        if self.hunger >= self.hunger_starvation_threshold:
+            self.starvation_timer += 1
+            return self.starvation_timer >= self.starvation_ticks
+        self.starvation_timer = 0
+        return False
 
     def spot_target(
         self,
@@ -409,6 +471,11 @@ class AutonomousBehaviorComponent(ActorComponent):
             "active_time": self.active_time.value,
             "threat_races": list(self.threat_races),
             "prey_races": list(self.prey_races),
+            "hunger": self.hunger,
+            "hunger_increase_per_tick": self.hunger_increase_per_tick,
+            "hunger_starvation_threshold": self.hunger_starvation_threshold,
+            "starvation_ticks": self.starvation_ticks,
+            "starvation_timer": self.starvation_timer,
         })
         return data
 
@@ -563,8 +630,8 @@ class HarvestableComponent(WorldObjectComponent):
         return True
 
     @property
-    def interaction_type(self) -> str:
-        return "harvest"
+    def interaction_type(self) -> InteractionTypeEnum:
+        return InteractionTypeEnum.HARVEST
 
     @property
     def interaction_data(self) -> Dict[str, Any]:

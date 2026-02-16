@@ -110,3 +110,13 @@ class Disposition(Enum):
     HOSTILE = "hostile"   # 敵対（攻撃・CHASE の対象）
     PREY = "prey"         # 獲物（敵対かつターゲット選択で優先）
     THREAT = "threat"     # 脅威（視界内にいれば FLEE、攻撃対象にしない）
+
+
+class InteractionTypeEnum(Enum):
+    """インタラクションの種類（拡張時はここに追加）"""
+    TALK = "talk"                     # 会話・調べる
+    EXAMINE = "examine"                # 調べる
+    HARVEST = "harvest"                # 採取・採掘
+    MONSTER_FEED = "monster_feed"      # モンスターが食事オブジェクトで採食
+    OPEN_CHEST = "open_chest"          # 宝箱を開ける（予約）
+    OPEN_DOOR = "open_door"            # ドアを開閉（予約）

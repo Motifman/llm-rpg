@@ -175,6 +175,21 @@ class WorldSimulationApplicationService:
                         time_of_day = time_of_day_from_tick(current_tick.value, ticks_per_day)
                         if not is_active_at_time(actor.component.active_time, time_of_day):
                             continue
+                        # Phase 6: 飢餓ティックと飢餓死判定
+                        if actor.component.tick_hunger_and_starvation():
+                            monster = self._monster_repository.find_by_world_object_id(actor.object_id)
+                            if monster:
+                                try:
+                                    monster.starve(current_tick)
+                                    self._monster_repository.save(monster)
+                                    self._unit_of_work.process_sync_events()
+                                except DomainException as e:
+                                    self._logger.warning(
+                                        "Starvation skipped for actor %s: %s",
+                                        actor.object_id,
+                                        str(e),
+                                    )
+                            continue
                     try:
                         # 自律行動アクター用の skill_context / target_context / growth_context を組み立て
                         skill_context = self._build_skill_context_for_actor(actor, physical_map, current_tick)

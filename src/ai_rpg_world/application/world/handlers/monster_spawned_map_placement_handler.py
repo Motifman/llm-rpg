@@ -115,6 +115,10 @@ class MonsterSpawnedMapPlacementHandler(
             active_time=template.active_time,
             threat_races=set(template.threat_races) if template.threat_races else None,
             prey_races=set(template.prey_races) if template.prey_races else None,
+            hunger=0.0,
+            hunger_increase_per_tick=template.hunger_increase_per_tick,
+            hunger_starvation_threshold=template.hunger_starvation_threshold,
+            starvation_ticks=template.starvation_ticks,
         )
 
         world_object = WorldObject(

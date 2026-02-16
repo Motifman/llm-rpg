@@ -35,6 +35,11 @@ class MonsterTemplate:
     threat_races: Optional[Set[str]] = None
     prey_races: Optional[Set[str]] = None
     growth_stages: Optional[List[GrowthStage]] = None
+    # Phase 6: 飢餓（None/0 で無効）
+    hunger_increase_per_tick: float = 0.0
+    hunger_decrease_on_prey_kill: float = 0.0
+    hunger_starvation_threshold: float = 1.0
+    starvation_ticks: int = 0
 
     def __post_init__(self):
         object.__setattr__(self, "skill_ids", self.skill_ids or [])
@@ -127,3 +132,19 @@ class MonsterTemplate:
                     raise MonsterTemplateValidationException(
                         "first growth_stage must have after_ticks=0"
                     )
+        if self.hunger_increase_per_tick < 0.0:
+            raise MonsterTemplateValidationException(
+                f"hunger_increase_per_tick cannot be negative: {self.hunger_increase_per_tick}"
+            )
+        if self.hunger_decrease_on_prey_kill < 0.0:
+            raise MonsterTemplateValidationException(
+                f"hunger_decrease_on_prey_kill cannot be negative: {self.hunger_decrease_on_prey_kill}"
+            )
+        if not (0.0 <= self.hunger_starvation_threshold <= 1.0):
+            raise MonsterTemplateValidationException(
+                f"hunger_starvation_threshold must be between 0.0 and 1.0: {self.hunger_starvation_threshold}"
+            )
+        if self.starvation_ticks < 0:
+            raise MonsterTemplateValidationException(
+                f"starvation_ticks cannot be negative: {self.starvation_ticks}"
+            )
