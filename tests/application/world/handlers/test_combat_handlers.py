@@ -78,6 +78,7 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.aggro_memory_policy import AggroMemoryPolicy
 from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
 from ai_rpg_world.infrastructure.events.combat_event_handler_registry import CombatEventHandlerRegistry
+from ai_rpg_world.infrastructure.events.map_interaction_event_handler_registry import MapInteractionEventHandlerRegistry
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_hit_box_repository import InMemoryHitBoxRepository
 from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import (
@@ -991,8 +992,10 @@ class TestCombatIntegration:
             hunger_handler,
             map_removal_handler,
             monster_spawned_map_placement_handler,
-            item_stored_handler,
-            item_taken_handler,
+        ).register_handlers(event_publisher)
+        MapInteractionEventHandlerRegistry(
+            item_stored_in_chest_handler=item_stored_handler,
+            item_taken_from_chest_handler=item_taken_handler,
         ).register_handlers(event_publisher)
 
         behavior_service = BehaviorService(PathfindingService(None))
