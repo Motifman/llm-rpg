@@ -44,17 +44,9 @@ from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemory
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 from ai_rpg_world.application.world.handlers.item_stored_in_chest_handler import ItemStoredInChestHandler
 from ai_rpg_world.application.world.handlers.item_taken_from_chest_handler import ItemTakenFromChestHandler
-from ai_rpg_world.infrastructure.events.combat_event_handler_registry import CombatEventHandlerRegistry
-from ai_rpg_world.application.world.handlers.hit_box_damage_handler import HitBoxDamageHandler
-from ai_rpg_world.application.world.handlers.combat_aggro_handler import CombatAggroHandler
-from ai_rpg_world.application.world.handlers.monster_death_reward_handler import MonsterDeathRewardHandler
-from ai_rpg_world.application.world.handlers.monster_death_hunger_handler import MonsterDeathHungerHandler
-from ai_rpg_world.application.world.handlers.monster_died_map_removal_handler import MonsterDiedMapRemovalHandler
-from ai_rpg_world.application.world.handlers.monster_spawned_map_placement_handler import (
-    MonsterSpawnedMapPlacementHandler,
-)
+from ai_rpg_world.infrastructure.events.map_interaction_event_handler_registry import MapInteractionEventHandlerRegistry
 from ai_rpg_world.domain.world.exception.map_exception import MapDomainException
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 
 def _create_map(spot_id_int: int = 1) -> PhysicalMapAggregate:
@@ -85,13 +77,7 @@ class TestChestCommandService:
         map_repo = InMemoryPhysicalMapRepository(data_store, uow)
         item_stored_handler = ItemStoredInChestHandler(inventory_repo, uow)
         item_taken_handler = ItemTakenFromChestHandler(inventory_repo, uow)
-        registry = CombatEventHandlerRegistry(
-            hit_box_damage_handler=MagicMock(),
-            combat_aggro_handler=MagicMock(),
-            monster_death_reward_handler=MagicMock(),
-            monster_death_hunger_handler=MagicMock(),
-            monster_died_map_removal_handler=MagicMock(),
-            monster_spawned_map_placement_handler=MagicMock(),
+        registry = MapInteractionEventHandlerRegistry(
             item_stored_in_chest_handler=item_stored_handler,
             item_taken_from_chest_handler=item_taken_handler,
         )

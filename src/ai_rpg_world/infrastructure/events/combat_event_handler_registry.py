@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from ai_rpg_world.application.world.handlers.hit_box_damage_handler import HitBoxDamageHandler
 from ai_rpg_world.application.world.handlers.combat_aggro_handler import CombatAggroHandler
@@ -8,15 +8,12 @@ from ai_rpg_world.application.world.handlers.monster_died_map_removal_handler im
 from ai_rpg_world.application.world.handlers.monster_spawned_map_placement_handler import (
     MonsterSpawnedMapPlacementHandler,
 )
-from ai_rpg_world.application.world.handlers.item_stored_in_chest_handler import ItemStoredInChestHandler
-from ai_rpg_world.application.world.handlers.item_taken_from_chest_handler import ItemTakenFromChestHandler
 from ai_rpg_world.domain.combat.event.combat_events import HitBoxHitRecordedEvent
 from ai_rpg_world.domain.monster.event.monster_events import (
     MonsterDiedEvent,
     MonsterSpawnedEvent,
     MonsterRespawnedEvent,
 )
-from ai_rpg_world.domain.world.event.map_events import ItemStoredInChestEvent, ItemTakenFromChestEvent
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 
 if TYPE_CHECKING:
@@ -34,8 +31,6 @@ class CombatEventHandlerRegistry:
         monster_death_hunger_handler: MonsterDeathHungerHandler,
         monster_died_map_removal_handler: MonsterDiedMapRemovalHandler,
         monster_spawned_map_placement_handler: MonsterSpawnedMapPlacementHandler,
-        item_stored_in_chest_handler: ItemStoredInChestHandler,
-        item_taken_from_chest_handler: ItemTakenFromChestHandler,
     ):
         self._hit_box_damage_handler = hit_box_damage_handler
         self._combat_aggro_handler = combat_aggro_handler
@@ -43,8 +38,6 @@ class CombatEventHandlerRegistry:
         self._monster_death_hunger_handler = monster_death_hunger_handler
         self._monster_died_map_removal_handler = monster_died_map_removal_handler
         self._monster_spawned_map_placement_handler = monster_spawned_map_placement_handler
-        self._item_stored_in_chest_handler = item_stored_in_chest_handler
-        self._item_taken_from_chest_handler = item_taken_from_chest_handler
 
     def register_handlers(self, event_publisher: EventPublisher) -> None:
         # HitBoxヒット時にダメージ適用とヘイト更新を行う
@@ -87,18 +80,6 @@ class CombatEventHandlerRegistry:
         event_publisher.register_handler(
             MonsterRespawnedEvent,
             self._create_event_handler(self._monster_spawned_map_placement_handler.handle),
-            is_synchronous=True,
-        )
-
-        # チェスト収納・取得時にプレイヤーインベントリを更新する
-        event_publisher.register_handler(
-            ItemStoredInChestEvent,
-            self._create_event_handler(self._item_stored_in_chest_handler.handle),
-            is_synchronous=True,
-        )
-        event_publisher.register_handler(
-            ItemTakenFromChestEvent,
-            self._create_event_handler(self._item_taken_from_chest_handler.handle),
             is_synchronous=True,
         )
 
