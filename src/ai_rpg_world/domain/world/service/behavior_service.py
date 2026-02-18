@@ -4,11 +4,12 @@ from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalM
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.behavior_context import (
+    PlanActionContext,
     TargetSelectionContext,
     SkillSelectionContext,
     GrowthContext,
 )
-from ai_rpg_world.domain.world.enum.world_enum import BehaviorStateEnum, DirectionEnum, BehaviorActionType
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, BehaviorActionType
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent
 from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
@@ -16,20 +17,14 @@ from ai_rpg_world.domain.world.service.hostility_service import HostilityService
 from ai_rpg_world.domain.world.service.allegiance_service import AllegianceService
 from ai_rpg_world.domain.world.service.target_selection_policy import (
     TargetSelectionPolicy,
-    NearestTargetPolicy,
-    HighestThreatTargetPolicy,
     PreyPriorityTargetPolicy,
+    HighestThreatTargetPolicy,
 )
 from ai_rpg_world.domain.world.service.skill_selection_policy import SkillSelectionPolicy, FirstInRangeSkillPolicy
 from ai_rpg_world.domain.world.service.behavior_strategy import (
     BehaviorStrategy,
     DefaultBehaviorStrategy,
     BossBehaviorStrategy,
-)
-from ai_rpg_world.domain.world.event.behavior_events import (
-    ActorStateChangedEvent,
-    TargetSpottedEvent,
-    TargetLostEvent,
 )
 
 
@@ -52,11 +47,7 @@ def _default_target_policy_factory(
 class BehaviorService:
     """
     アクターの自律的な行動を制御するドメインサービス。
-    ターゲット収集・状態更新・イベント発行を行い、アクション決定は戦略に委譲する。
-
-    状態遷移の流れ: (1) HP%≤phase→ENRAGE (2) 視界内THREAT→FLEE
-    (3) 敵対でspot_target→FLEE/CHASE (ecology_type・flee_thresholdで制御)
-    (4) ターゲット見失い→lose_target()でSEARCH/RETURN (5) 戦略側でSEARCH終了・縄張り超過・RETURN到着・移動失敗でPATROL/RETURN/IDLE.
+    コンテキスト（視界内の脅威・敵対・ターゲット等）を収集し、状態遷移とアクション決定は戦略に委譲する。
     """
 
     def __init__(
@@ -92,15 +83,7 @@ class BehaviorService:
     ) -> BehaviorAction:
         """
         アクターの現在の状態に基づいて次のアクションを決定する。
-
-        Args:
-            target_context: ターゲット選択の補助情報（HP%・脅威値等）。省略可
-            skill_context: スキル選択の補助情報（使用可能スロット・射程内数等）。省略可
-            pack_rally_coordinate: 群れの集結座標（味方が戦闘に入った座標）。省略可
-            growth_context: 成長段階に応じた行動制御（有効FLEE閾値・CHASE許可）。省略可
-
-        Returns:
-            実行すべきアクション。
+        コンテキストを収集し、戦略の update_state / decide_action に委譲する。
         """
         actor = map_aggregate.get_object(actor_id)
         component = actor.component
@@ -111,7 +94,6 @@ class BehaviorService:
         if component.initial_position is None:
             component.initial_position = actor.coordinate
 
-        old_state = component.state
         target_policy = (
             self._target_policy
             if self._target_policy is not None
@@ -123,109 +105,30 @@ class BehaviorService:
             else self._strategy_factory(component)
         )
 
-        # 0. ボスフェーズ: HPが閾値以下なら ENRAGE へ遷移
-        if component.phase_thresholds:
-            if component.hp_percentage <= component.phase_thresholds[0]:
-                if component.state not in (BehaviorStateEnum.ENRAGE, BehaviorStateEnum.FLEE):
-                    if old_state != BehaviorStateEnum.ENRAGE:
-                        self._publish_state_changed(
-                            map_aggregate, actor_id, old_state, BehaviorStateEnum.ENRAGE
-                        )
-                    component.set_state(BehaviorStateEnum.ENRAGE)
-                    old_state = BehaviorStateEnum.ENRAGE
-
-        # 1a. 視界内に脅威(THREAT)がいれば FLEE に遷移し、その1体をターゲット（逃走方向用）に
         visible_threats = self._collect_visible_threats(actor, map_aggregate, component)
-        target = None
-        if visible_threats and component.state != BehaviorStateEnum.FLEE:
-            if old_state != BehaviorStateEnum.FLEE:
-                self._publish_state_changed(
-                    map_aggregate, actor_id, old_state, BehaviorStateEnum.FLEE
-                )
-            component.set_state(BehaviorStateEnum.FLEE)
-            old_state = BehaviorStateEnum.FLEE
-            # 最も近い脅威を逃走方向の基準とする（spot_target は使わない；CHASE に遷移するため）
-            target = min(
-                visible_threats,
-                key=lambda obj: actor.coordinate.euclidean_distance_to(obj.coordinate),
-            )
-            component.target_id = target.object_id
-            component.last_known_target_position = target.coordinate
-            map_aggregate.add_event(
-                TargetSpottedEvent.create(
-                    aggregate_id=actor_id,
-                    aggregate_type="Actor",
-                    actor_id=actor_id,
-                    target_id=target.object_id,
-                    coordinate=target.coordinate,
-                )
-            )
+        visible_hostiles = self._collect_visible_hostiles(actor, map_aggregate, component)
+        target = (
+            target_policy.select_target(actor, visible_hostiles, target_context)
+            if visible_hostiles
+            else None
+        )
 
-        # 1b. 脅威でない場合は敵対候補を収集し、ポリシーで1体選択（攻撃対象）
-        if target is None:
-            visible_hostiles = self._collect_visible_hostiles(
-                actor, map_aggregate, component
-            )
-            target = (
-                target_policy.select_target(actor, visible_hostiles, target_context)
-                if visible_hostiles
-                else None
-            )
-
-        # 2. ターゲットの有無に応じて状態更新とイベント発行（脅威で既に FLEE の場合は spot_target を呼ばない；spot_target は CHASE に遷移するため）
-        if target:
-            if component.state != BehaviorStateEnum.FLEE:
-                effective_flee = growth_context.effective_flee_threshold if growth_context else None
-                allow_chase = growth_context.allow_chase if growth_context else None
-                component.spot_target(
-                    target.object_id,
-                    target.coordinate,
-                    effective_flee_threshold=effective_flee,
-                    allow_chase=allow_chase,
-                )
-            if old_state != component.state:
-                self._publish_state_changed(
-                    map_aggregate, actor_id, old_state, component.state
-                )
-                map_aggregate.add_event(
-                    TargetSpottedEvent.create(
-                        aggregate_id=actor_id,
-                        aggregate_type="Actor",
-                        actor_id=actor_id,
-                        target_id=target.object_id,
-                        coordinate=target.coordinate,
-                    )
-                )
-        else:
-            if component.target_id:
-                lost_target_id = component.target_id
-                last_coord = component.last_known_target_position
-                component.lose_target()
-                if old_state != component.state:
-                    self._publish_state_changed(
-                        map_aggregate, actor_id, old_state, component.state
-                    )
-                    if last_coord:
-                        map_aggregate.add_event(
-                            TargetLostEvent.create(
-                                aggregate_id=actor_id,
-                                aggregate_type="Actor",
-                                actor_id=actor_id,
-                                target_id=lost_target_id,
-                                last_known_coordinate=last_coord,
-                            )
-                        )
-
-        # 3. 戦略にアクション決定を委譲
-        return strategy.decide_action(
-            actor,
-            map_aggregate,
-            component,
-            target,
+        context = PlanActionContext(
+            actor_id=actor_id,
+            actor=actor,
+            map_aggregate=map_aggregate,
+            component=component,
+            visible_threats=visible_threats,
+            visible_hostiles=visible_hostiles,
+            target=target,
             target_context=target_context,
             skill_context=skill_context,
             pack_rally_coordinate=pack_rally_coordinate,
+            growth_context=growth_context,
         )
+
+        strategy.update_state(context)
+        return strategy.decide_action(context)
 
     def plan_next_move(
         self,
@@ -237,23 +140,6 @@ class BehaviorService:
         if action.action_type == BehaviorActionType.MOVE:
             return action.coordinate
         return None
-
-    def _publish_state_changed(
-        self,
-        map_aggregate: PhysicalMapAggregate,
-        actor_id: WorldObjectId,
-        old_state: BehaviorStateEnum,
-        new_state: BehaviorStateEnum,
-    ) -> None:
-        map_aggregate.add_event(
-            ActorStateChangedEvent.create(
-                aggregate_id=actor_id,
-                aggregate_type="Actor",
-                actor_id=actor_id,
-                old_state=old_state,
-                new_state=new_state,
-            )
-        )
 
     def _collect_visible_threats(
         self,

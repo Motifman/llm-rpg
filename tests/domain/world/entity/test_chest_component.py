@@ -1,9 +1,12 @@
 """ChestComponent の正常・例外ケースの網羅的テスト"""
 
 import pytest
+from unittest.mock import MagicMock
 from ai_rpg_world.domain.world.entity.world_object_component import ChestComponent
 from ai_rpg_world.domain.world.enum.world_enum import InteractionTypeEnum
 from ai_rpg_world.domain.world.exception.map_exception import ItemAlreadyInChestException
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 
 
@@ -59,6 +62,27 @@ class TestChestComponent:
         def test_toggle_open_open_to_closed(self):
             chest = ChestComponent(is_open=True)
             chest.toggle_open()
+            assert chest.is_open is False
+
+    class TestApplyInteractionFrom:
+        """apply_interaction_from の正常ケース（効果のカプセル化）"""
+
+        def test_apply_interaction_from_toggles_open_state(self):
+            chest = ChestComponent(is_open=False)
+            map_aggregate = MagicMock()
+            chest.apply_interaction_from(
+                WorldObjectId(1), WorldObjectId(2), map_aggregate, WorldTick(10)
+            )
+            assert chest.is_open is True
+            map_aggregate.get_object.assert_not_called()
+            map_aggregate.add_event.assert_not_called()
+
+        def test_apply_interaction_from_open_to_closed(self):
+            chest = ChestComponent(is_open=True)
+            map_aggregate = MagicMock()
+            chest.apply_interaction_from(
+                WorldObjectId(1), WorldObjectId(2), map_aggregate, WorldTick(10)
+            )
             assert chest.is_open is False
 
     class TestAddRemoveItem:
