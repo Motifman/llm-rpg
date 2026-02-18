@@ -148,16 +148,19 @@ class TestBehaviorService:
             player = WorldObject(player_id, Coordinate(2, 0), ObjectTypeEnum.PLAYER, is_blocking=False, component=ActorComponent(race="human"))
             map_aggregate.add_object(player)
 
-            # 実行
-            next_move = behavior_service.plan_next_move(monster_id, map_aggregate)
+            # 実行（event_sink に行動イベントが積まれる）
+            behavior_events = []
+            action = behavior_service.plan_action(monster_id, map_aggregate, event_sink=behavior_events)
+            next_move = action.coordinate if action.action_type == BehaviorActionType.MOVE else None
 
             assert comp.state == BehaviorStateEnum.CHASE
             assert next_move == Coordinate(1, 0)
-            
-            # イベント確認
-            events = map_aggregate.get_events()
-            assert any(isinstance(e, TargetSpottedEvent) for e in events)
-            assert any(isinstance(e, ActorStateChangedEvent) for e in events)
+
+            # 行動イベントは event_sink に追加され、Map には積まれない（Map には create/add のみ）
+            assert any(isinstance(e, TargetSpottedEvent) for e in behavior_events)
+            assert any(isinstance(e, ActorStateChangedEvent) for e in behavior_events)
+            behavior_event_types = (TargetSpottedEvent, TargetLostEvent, ActorStateChangedEvent, BehaviorStuckEvent)
+            assert not any(isinstance(e, behavior_event_types) for e in map_aggregate.get_events())
 
         def test_flee_logic_advanced(self, behavior_service, map_aggregate):
             """逃走時に適切な遠方地点への1歩を返すこと"""
@@ -211,7 +214,7 @@ class TestBehaviorService:
             assert comp.state == BehaviorStateEnum.RETURN
 
         def test_stuck_logic(self, behavior_service, map_aggregate):
-            """移動失敗が重なるとスタックイベントが発行され、RETURN状態になること"""
+            """移動失敗が重なるとスタックイベントが event_sink に追加され、RETURN状態になること"""
             monster_id = WorldObjectId(100)
             comp = AutonomousBehaviorComponent(state=BehaviorStateEnum.CHASE, max_failures=2)
             comp.update_last_known_position(Coordinate(9, 9))
@@ -227,15 +230,18 @@ class TestBehaviorService:
                     map_aggregate.add_object(wall)
 
             # 1回目失敗
-            behavior_service.plan_next_move(monster_id, map_aggregate)
+            behavior_events_1 = []
+            behavior_service.plan_action(monster_id, map_aggregate, event_sink=behavior_events_1)
             assert comp.failure_count == 1
-            
-            # 2回目失敗 -> STUCK & RETURN
-            map_aggregate.clear_events()
-            behavior_service.plan_next_move(monster_id, map_aggregate)
-            
+
+            # 2回目失敗 -> STUCK & RETURN（イベントは event_sink に追加）
+            behavior_events_2 = []
+            behavior_service.plan_action(monster_id, map_aggregate, event_sink=behavior_events_2)
+
             assert comp.state == BehaviorStateEnum.RETURN
-            assert any(isinstance(e, BehaviorStuckEvent) for e in map_aggregate.get_events())
+            assert any(isinstance(e, BehaviorStuckEvent) for e in behavior_events_2)
+            behavior_event_types = (TargetSpottedEvent, TargetLostEvent, ActorStateChangedEvent, BehaviorStuckEvent)
+            assert not any(isinstance(e, behavior_event_types) for e in map_aggregate.get_events())
 
         def test_skill_planning(self, behavior_service, map_aggregate):
             """ターゲットが射程内にいる場合、スキル使用アクションを返すこと"""
@@ -458,11 +464,43 @@ class TestBehaviorService:
             assert "not found" in str(exc_info.value).lower()
             assert exc_info.value.error_code == "MAP.OBJECT_NOT_FOUND"
 
+        def test_plan_action_without_event_sink_returns_action(self, behavior_service, map_aggregate):
+            """event_sink を渡さない場合も plan_action は正常に動作し BehaviorAction を返すこと"""
+            monster_id = WorldObjectId(100)
+            comp = AutonomousBehaviorComponent(
+                state=BehaviorStateEnum.IDLE,
+                vision_range=5,
+                fov_angle=360,
+            )
+            monster = WorldObject(
+                monster_id, Coordinate(5, 5), ObjectTypeEnum.NPC, is_blocking=False, component=comp
+            )
+            map_aggregate.add_object(monster)
+            action = behavior_service.plan_action(monster_id, map_aggregate)
+            assert action is not None
+            assert action.action_type == BehaviorActionType.WAIT
+
+        def test_plan_action_with_event_sink_none_does_not_raise(self, behavior_service, map_aggregate):
+            """event_sink=None を渡しても例外にならず、内部で空リストとして扱われること"""
+            monster_id = WorldObjectId(100)
+            comp = AutonomousBehaviorComponent(
+                state=BehaviorStateEnum.IDLE,
+                vision_range=5,
+                fov_angle=360,
+            )
+            monster = WorldObject(
+                monster_id, Coordinate(5, 5), ObjectTypeEnum.NPC, is_blocking=False, component=comp
+            )
+            map_aggregate.add_object(monster)
+            # event_sink は Optional なので None を渡す（実装は None なら [] を使う）
+            action = behavior_service.plan_action(monster_id, map_aggregate, event_sink=None)
+            assert action is not None
+
     class TestEnrageTransition:
         """phase_thresholds による ENRAGE 遷移のテスト"""
 
         def test_phase_threshold_triggers_enrage_state(self, pathfinding_service, hostility_service, map_aggregate):
-            """HP% が phase_thresholds[0] 以下になると ENRAGE 状態に遷移しイベントが発行されること"""
+            """HP% が phase_thresholds[0] 以下になると ENRAGE 状態に遷移しイベントが event_sink に追加されること"""
             service = BehaviorService(pathfinding_service, hostility_service)
             comp = AutonomousBehaviorComponent(
                 race="goblin",
@@ -481,13 +519,15 @@ class TestBehaviorService:
                 WorldObjectId(1), Coordinate(6, 5), ObjectTypeEnum.PLAYER, is_blocking=False, component=ActorComponent(race="human")
             )
             map_aggregate.add_object(player)
-            service.plan_action(monster_id, map_aggregate)
+            behavior_events = []
+            service.plan_action(monster_id, map_aggregate, event_sink=behavior_events)
             assert comp.state == BehaviorStateEnum.ENRAGE
-            events = map_aggregate.get_events()
             assert any(
                 isinstance(e, ActorStateChangedEvent) and e.new_state == BehaviorStateEnum.ENRAGE
-                for e in events
+                for e in behavior_events
             )
+            behavior_event_types = (TargetSpottedEvent, TargetLostEvent, ActorStateChangedEvent, BehaviorStuckEvent)
+            assert not any(isinstance(e, behavior_event_types) for e in map_aggregate.get_events())
 
     class TestDispositionThreatFlee:
         """THREAT（脅威）視界内で FLEE に遷移するテスト"""

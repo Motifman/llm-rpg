@@ -80,10 +80,13 @@ class BehaviorService:
         skill_context: Optional[SkillSelectionContext] = None,
         pack_rally_coordinate: Optional[Coordinate] = None,
         growth_context: Optional[GrowthContext] = None,
+        event_sink: Optional[List] = None,
     ) -> BehaviorAction:
         """
         アクターの現在の状態に基づいて次のアクションを決定する。
         コンテキストを収集し、戦略の update_state / decide_action に委譲する。
+        行動イベント（TargetSpotted, ActorStateChanged 等）は event_sink に追加される。
+        呼び出し元でモンスター集約に add_event して save すると、commit 時に発行される。
         """
         actor = map_aggregate.get_object(actor_id)
         component = actor.component
@@ -113,6 +116,7 @@ class BehaviorService:
             else None
         )
 
+        sink = event_sink if event_sink is not None else []
         context = PlanActionContext(
             actor_id=actor_id,
             actor=actor,
@@ -125,6 +129,7 @@ class BehaviorService:
             skill_context=skill_context,
             pack_rally_coordinate=pack_rally_coordinate,
             growth_context=growth_context,
+            event_sink=sink,
         )
 
         strategy.update_state(context)

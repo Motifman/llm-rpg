@@ -229,14 +229,23 @@ class WorldSimulationApplicationService:
                         skill_context = self._build_skill_context_for_actor(actor, physical_map, current_tick)
                         target_context = self._build_target_context_for_actor(actor, physical_map, current_tick)
                         growth_context = self._build_growth_context_for_actor(actor, current_tick)
+                        # 行動イベント（TargetSpotted, ActorStateChanged 等）をモンスター集約に積むため event_sink を渡す
+                        behavior_events: List = []
                         action = self._behavior_service.plan_action(
                             actor.object_id,
                             physical_map,
                             skill_context=skill_context,
                             target_context=target_context,
                             growth_context=growth_context,
+                            event_sink=behavior_events,
                         )
-                        
+                        # モンスターの場合は行動イベントを集約に積み、save で UoW に登録（commit 時に発行）
+                        monster = self._monster_repository.find_by_world_object_id(actor.object_id)
+                        if monster:
+                            for event in behavior_events:
+                                monster.add_event(event)
+                            self._monster_repository.save(monster)
+
                         if action.action_type == BehaviorActionType.MOVE:
                             # 移動実行
                             physical_map.move_object(actor.object_id, action.coordinate, current_tick)
