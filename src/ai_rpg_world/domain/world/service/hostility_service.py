@@ -59,39 +59,42 @@ class HostilityService(ABC):
 class ConfigurableHostilityService(HostilityService):
     """
     設定可能な関係テーブルを持つ実装。
-    種族(race)の Disposition テーブルと、勢力(faction)の敵対テーブルをサポートする。
-    race_hostility_table は後方互換用（指定された target_race は HOSTILE として扱う）。
+    コンポーネントの threat_races / prey_races（テンプレート由来）を最優先し、
+    次に勢力(faction)の敵対テーブル、種族(race)の Disposition テーブルで判定する。
     """
 
     def __init__(
         self,
         race_disposition_table: Dict[str, Dict[str, Disposition]] = None,
-        race_hostility_table: Dict[str, Set[str]] = None,
         faction_hostility_table: Dict[str, Set[str]] = None,
     ):
         # 種族 -> (対象種族 -> Disposition)
         self._race_disposition = race_disposition_table or {}
-        # 後方互換: 種族 -> 敵対する種族のセット（HOSTILE として扱う）
-        self._race_hostility = race_hostility_table or {}
         # 勢力 -> 敵対する勢力のセット（HOSTILE として扱う）
         self._faction_hostility = faction_hostility_table or {}
 
     def get_disposition(self, actor_comp, target_comp) -> Disposition:
         _require_component(actor_comp, target_comp)
-        # 1. 勢力による判定（優先）
+        target_race = getattr(target_comp, "race", None)
+        if target_race is not None:
+            # 1. コンポーネントの threat_races（テンプレート由来）を最優先
+            threat_races = getattr(actor_comp, "threat_races", None)
+            if threat_races and target_race in threat_races:
+                return Disposition.THREAT
+            # 2. コンポーネントの prey_races（テンプレート由来）
+            prey_races = getattr(actor_comp, "prey_races", None)
+            if prey_races and target_race in prey_races:
+                return Disposition.PREY
+
+        # 3. 勢力による判定
         if actor_comp.faction in self._faction_hostility:
             if target_comp.faction in self._faction_hostility[actor_comp.faction]:
                 return Disposition.HOSTILE
 
-        # 2. 種族の Disposition テーブル
+        # 4. 種族の Disposition テーブル
         if actor_comp.race in self._race_disposition:
             by_target = self._race_disposition[actor_comp.race]
             if target_comp.race in by_target:
                 return by_target[target_comp.race]
-
-        # 3. 後方互換: race_hostility_table
-        if actor_comp.race in self._race_hostility:
-            if target_comp.race in self._race_hostility[actor_comp.race]:
-                return Disposition.HOSTILE
 
         return Disposition.NEUTRAL

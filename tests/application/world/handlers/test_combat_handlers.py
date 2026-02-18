@@ -78,6 +78,7 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.aggro_memory_policy import AggroMemoryPolicy
 from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
 from ai_rpg_world.infrastructure.events.combat_event_handler_registry import CombatEventHandlerRegistry
+from ai_rpg_world.infrastructure.events.map_interaction_event_handler_registry import MapInteractionEventHandlerRegistry
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_hit_box_repository import InMemoryHitBoxRepository
 from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import (
@@ -175,7 +176,7 @@ def _create_monster(monster_id: int, world_object_id: int, coordinate: Coordinat
         skill_loadout=loadout,
     )
     monster.clear_events()
-    monster.spawn(coordinate, SpotId(1))
+    monster.spawn(coordinate, SpotId(1), WorldTick(0))
     monster.clear_events()
     return monster
 
@@ -971,16 +972,30 @@ class TestCombatIntegration:
         damage_handler = HitBoxDamageHandler(hit_box_repo, map_repo, player_repo, monster_repo, time_provider, uow)
         aggro_handler = CombatAggroHandler(hit_box_repo, map_repo, uow)
         reward_handler = MonsterDeathRewardHandler(player_repo, inventory_repo, loot_repo, item_spec_repo, item_repo, uow)
+        from ai_rpg_world.application.world.handlers.monster_death_hunger_handler import MonsterDeathHungerHandler
+        from ai_rpg_world.application.world.handlers.monster_died_map_removal_handler import MonsterDiedMapRemovalHandler
+        hunger_handler = MonsterDeathHungerHandler(map_repo, monster_repo, uow)
+        map_removal_handler = MonsterDiedMapRemovalHandler(map_repo, monster_repo, uow)
         monster_spawned_map_placement_handler = MonsterSpawnedMapPlacementHandler(
             monster_repository=monster_repo,
             physical_map_repository=map_repo,
             unit_of_work=uow,
         )
+        from ai_rpg_world.application.world.handlers.item_stored_in_chest_handler import ItemStoredInChestHandler
+        from ai_rpg_world.application.world.handlers.item_taken_from_chest_handler import ItemTakenFromChestHandler
+        item_stored_handler = ItemStoredInChestHandler(inventory_repo, uow)
+        item_taken_handler = ItemTakenFromChestHandler(inventory_repo, uow)
         CombatEventHandlerRegistry(
             damage_handler,
             aggro_handler,
             reward_handler,
+            hunger_handler,
+            map_removal_handler,
             monster_spawned_map_placement_handler,
+        ).register_handlers(event_publisher)
+        MapInteractionEventHandlerRegistry(
+            item_stored_in_chest_handler=item_stored_handler,
+            item_taken_from_chest_handler=item_taken_handler,
         ).register_handlers(event_publisher)
 
         behavior_service = BehaviorService(PathfindingService(None))

@@ -4,6 +4,7 @@ from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_repository_base import InMemoryRepositoryBase
@@ -41,6 +42,34 @@ class InMemoryMonsterAggregateRepository(MonsterRepository, InMemoryRepositoryBa
         if monster_id:
             return self.find_by_id(monster_id)
         return None
+
+    def generate_monster_id(self) -> MonsterId:
+        """ID発行はリポジトリの責務。"""
+
+        def operation():
+            mid = MonsterId(self._data_store.next_monster_id)
+            self._data_store.next_monster_id += 1
+            return mid
+
+        return self._execute_operation(operation)
+
+    def generate_world_object_id_for_npc(self) -> WorldObjectId:
+        """NPC用の WorldObjectId を発行する（プレイヤーIDと衝突しない範囲）。"""
+
+        def operation():
+            wid = WorldObjectId(self._data_store.next_world_object_id)
+            self._data_store.next_world_object_id += 1
+            return wid
+
+        return self._execute_operation(operation)
+
+    def find_by_spot_id(self, spot_id: SpotId) -> List[MonsterAggregate]:
+        """指定スポットに紐づくモンスター一覧（ALIVE/DEAD 問わず）。"""
+        result = []
+        for mid, m in self._monsters.items():
+            if m.spot_id == spot_id:
+                result.append(self._clone(m))
+        return result
 
     def save(self, entity: MonsterAggregate) -> MonsterAggregate:
         cloned = self._clone(entity)

@@ -187,3 +187,28 @@ class InvalidPathRequestException(MapDomainException, ValidationException):
 class PackIdValidationException(MapDomainException, ValidationException):
     """PackIdバリデーション例外"""
     error_code = "MAP.PACK_ID_VALIDATION"
+
+
+class ChestClosedException(MapDomainException, BusinessRuleException):
+    """チェストが閉じているため収納・取得できない例外"""
+    error_code = "MAP.CHEST_CLOSED"
+
+
+class NotAChestException(MapDomainException, BusinessRuleException):
+    """対象がチェストではない例外"""
+    error_code = "MAP.NOT_A_CHEST"
+
+
+class ItemNotInChestException(MapDomainException, BusinessRuleException):
+    """指定アイテムがチェストに存在しない例外"""
+    error_code = "MAP.ITEM_NOT_IN_CHEST"
+
+
+class ItemAlreadyInChestException(MapDomainException, BusinessRuleException):
+    """指定アイテムが既にチェストに存在する例外"""
+    error_code = "MAP.ITEM_ALREADY_IN_CHEST"
+
+
+class NotADoorException(MapDomainException, BusinessRuleException):
+    """対象がドアではない例外"""
+    error_code = "MAP.NOT_A_DOOR"

@@ -1,5 +1,6 @@
 import pytest
 from ai_rpg_world.domain.world.entity.world_object_component import HarvestableComponent
+from ai_rpg_world.domain.world.enum.world_enum import InteractionTypeEnum
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.exception.harvest_exception import (
     HarvestQuantityValidationException,
@@ -174,7 +175,7 @@ class TestHarvestableComponent:
         )
         
         assert comp.get_type_name() == "harvestable"
-        assert comp.interaction_type == "harvest"
+        assert comp.interaction_type == InteractionTypeEnum.HARVEST
         assert comp.interaction_data == {
             "loot_table_id": "gold",
             "required_tool_category": "special_pickaxe"

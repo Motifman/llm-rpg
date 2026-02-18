@@ -186,6 +186,15 @@ class PlayerInventoryAggregate(AggregateRoot):
                 return slot_id
         return None
 
+    def has_item(self, item_instance_id: ItemInstanceId) -> bool:
+        """指定アイテムをインベントリ（または装備）で所持しているか"""
+        if self._find_slot_by_item_id(item_instance_id) is not None:
+            return True
+        for eid in self._equipment_slots.values():
+            if eid == item_instance_id:
+                return True
+        return False
+
     def get_item_instance_id_by_slot(self, slot_id: SlotId) -> Optional[ItemInstanceId]:
         """スロット番号からItemInstanceIdを取得"""
         if slot_id.value >= self._max_slots:
@@ -266,6 +275,20 @@ class PlayerInventoryAggregate(AggregateRoot):
             slot_id=slot_id
         )
         self.add_event(event)
+
+    def remove_item_for_storage(self, item_instance_id: ItemInstanceId) -> None:
+        """チェスト等への収納のため、指定アイテムをインベントリから削除する。
+        イベントは発行しない（ItemStoredInChestEvent が別で発行される想定）。"""
+        if item_instance_id in self._reserved_item_ids:
+            raise ItemReservedException(
+                f"Item {item_instance_id} is reserved and cannot be moved to storage"
+            )
+        slot_id = self._find_slot_by_item_id(item_instance_id)
+        if slot_id is None:
+            raise ItemNotInSlotException(
+                f"Item {item_instance_id} is not in any inventory slot"
+            )
+        self._inventory_slots[slot_id] = None
 
     def request_equip_item(self, inventory_slot_id: SlotId, equipment_slot: EquipmentSlotType) -> None:
         """アイテム装備を要求する（装備要求イベントを発行）"""

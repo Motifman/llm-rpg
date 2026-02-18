@@ -1,11 +1,20 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, Any, Optional, TYPE_CHECKING
+from typing import Dict, Any, Optional, Set, TYPE_CHECKING, Union, List
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.value_object.pack_id import PackId
-from ai_rpg_world.domain.world.exception.map_exception import LockedDoorException
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, BehaviorStateEnum, EcologyTypeEnum
+    from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.exception.map_exception import LockedDoorException, ItemAlreadyInChestException
+from ai_rpg_world.domain.world.event.map_events import WorldObjectBlockingChangedEvent
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.world.enum.world_enum import (
+    DirectionEnum,
+    BehaviorStateEnum,
+    EcologyTypeEnum,
+    ActiveTimeType,
+    InteractionTypeEnum,
+)
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
@@ -22,6 +31,7 @@ from ai_rpg_world.domain.world.exception.behavior_exception import (
     HPPercentageValidationException,
     FleeThresholdValidationException,
     MaxFailuresValidationException,
+    HungerValidationException,
 )
 
 
@@ -51,7 +61,7 @@ class WorldObjectComponent(ABC):
         return False
 
     @property
-    def interaction_type(self) -> Optional[str]:
+    def interaction_type(self) -> Optional[InteractionTypeEnum]:
         """インタラクションタイプを返す（デフォルトはNone）"""
         return None
 
@@ -65,33 +75,105 @@ class WorldObjectComponent(ABC):
         """インタラクションにかかるティック数（デフォルトは1）"""
         return 1
 
+    def apply_interaction_from(
+        self,
+        actor_id: WorldObjectId,
+        target_id: WorldObjectId,
+        map_aggregate: "PhysicalMapAggregate",
+        current_tick: WorldTick,
+    ) -> None:
+        """
+        このオブジェクトがインタラクションされたときの効果を適用する。
+        サブクラスでオーバーライドする。デフォルトは何もしない。
+        """
+        pass
 
     @property
     def player_id(self) -> Optional["PlayerId"]:
         """紐付いているプレイヤーIDを返す（アクターでない場合はNone）"""
         return None
 
+
 class ChestComponent(WorldObjectComponent):
-    """宝箱の機能を持つコンポーネント"""
-    def __init__(self, is_open: bool = False, item_ids: list[int] = None):
+    """宝箱の機能を持つコンポーネント。
+
+    開閉は interact_with(OPEN_CHEST) でトグル。
+    収納・取得はアプリケーションサービス経由の Command（STORE_IN_CHEST / TAKE_FROM_CHEST）で行う。
+    """
+    def __init__(
+        self,
+        is_open: bool = False,
+        item_ids: Optional[List[ItemInstanceId]] = None,
+    ):
         self.is_open = is_open
-        self.item_ids = item_ids or []
+        self._item_ids: List[ItemInstanceId] = list(item_ids) if item_ids else []
+
+    @property
+    def item_ids(self) -> List[ItemInstanceId]:
+        """収納中のアイテムインスタンスIDリスト（不変として返すコピー）"""
+        return list(self._item_ids)
 
     def get_type_name(self) -> str:
         return "chest"
 
-    def open(self):
+    @property
+    def interaction_type(self) -> Optional[InteractionTypeEnum]:
+        """インタラクション種別: 開閉は OPEN_CHEST"""
+        return InteractionTypeEnum.OPEN_CHEST
+
+    @property
+    def interaction_data(self) -> Dict[str, Any]:
+        return {"is_open": self.is_open}
+
+    @property
+    def interaction_duration(self) -> int:
+        return 1
+
+    def open(self) -> None:
         self.is_open = True
+
+    def close(self) -> None:
+        self.is_open = False
+
+    def toggle_open(self) -> None:
+        self.is_open = not self.is_open
+
+    def apply_interaction_from(
+        self,
+        actor_id: WorldObjectId,
+        target_id: WorldObjectId,
+        map_aggregate: "PhysicalMapAggregate",
+        current_tick: WorldTick,
+    ) -> None:
+        self.toggle_open()
+
+    def add_item(self, item_instance_id: ItemInstanceId) -> None:
+        if self.has_item(item_instance_id):
+            raise ItemAlreadyInChestException(
+                f"Item {item_instance_id} is already in this chest"
+            )
+        self._item_ids.append(item_instance_id)
+
+    def remove_item(self, item_instance_id: ItemInstanceId) -> bool:
+        """指定IDのアイテムを1件削除。存在すれば True、なければ False。"""
+        for i, eid in enumerate(self._item_ids):
+            if eid == item_instance_id:
+                self._item_ids.pop(i)
+                return True
+        return False
+
+    def has_item(self, item_instance_id: ItemInstanceId) -> bool:
+        return any(eid == item_instance_id for eid in self._item_ids)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "is_open": self.is_open,
-            "item_ids": self.item_ids
+            "item_ids": [eid.value for eid in self._item_ids],
         }
 
 
 class DoorComponent(WorldObjectComponent):
-    """ドアの機能を持つコンポーネント"""
+    """ドアの機能を持つコンポーネント。開閉は interact_with(OPEN_DOOR) で行う。"""
     def __init__(self, is_open: bool = False, is_locked: bool = False):
         self.is_open = is_open
         self.is_locked = is_locked
@@ -99,13 +181,52 @@ class DoorComponent(WorldObjectComponent):
     def get_type_name(self) -> str:
         return "door"
 
-    def open(self):
+    @property
+    def interaction_type(self) -> Optional[InteractionTypeEnum]:
+        return InteractionTypeEnum.OPEN_DOOR
+
+    @property
+    def interaction_data(self) -> Dict[str, Any]:
+        return {"is_open": self.is_open, "is_locked": self.is_locked}
+
+    @property
+    def interaction_duration(self) -> int:
+        return 1
+
+    def open(self) -> None:
         if self.is_locked:
             raise LockedDoorException("Door is locked")
         self.is_open = True
 
-    def unlock(self):
+    def close(self) -> None:
+        self.is_open = False
+
+    def toggle_open(self) -> None:
+        if self.is_locked:
+            raise LockedDoorException("Door is locked")
+        self.is_open = not self.is_open
+
+    def unlock(self) -> None:
         self.is_locked = False
+
+    def apply_interaction_from(
+        self,
+        actor_id: WorldObjectId,
+        target_id: WorldObjectId,
+        map_aggregate: "PhysicalMapAggregate",
+        current_tick: WorldTick,
+    ) -> None:
+        self.toggle_open()
+        target = map_aggregate.get_object(target_id)
+        target.set_blocking(not self.is_open)
+        map_aggregate.add_event(
+            WorldObjectBlockingChangedEvent.create(
+                aggregate_id=target_id,
+                aggregate_type="WorldObject",
+                object_id=target_id,
+                is_blocking=target.is_blocking,
+            )
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -175,13 +296,21 @@ class ActorComponent(WorldObjectComponent):
 
 class InteractableComponent(WorldObjectComponent):
     """インタラクション（調べる、話しかける等）が可能なコンポーネント"""
-    def __init__(self, interaction_type: str, data: Dict[str, Any] = None, duration: int = 1):
-        self._interaction_type = interaction_type
+    def __init__(
+        self,
+        interaction_type: Union[InteractionTypeEnum, str],
+        data: Dict[str, Any] = None,
+        duration: int = 1,
+    ):
+        if isinstance(interaction_type, str):
+            self._interaction_type = InteractionTypeEnum(interaction_type)
+        else:
+            self._interaction_type = interaction_type
         self.data = data or {}
         self._duration = duration
 
     @property
-    def interaction_type(self) -> str:
+    def interaction_type(self) -> InteractionTypeEnum:
         return self._interaction_type
 
     @property
@@ -197,7 +326,7 @@ class InteractableComponent(WorldObjectComponent):
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "interaction_type": self._interaction_type,
+            "interaction_type": self._interaction_type.value,
             "data": self.data
         }
 
@@ -211,7 +340,11 @@ class MonsterSkillInfo:
 
 
 class AutonomousBehaviorComponent(ActorComponent):
-    """自律的な行動ロジックを持つアクターコンポーネント"""
+    """
+    自律的な行動ロジックを持つアクターコンポーネント。
+    状態: IDLE/PATROL/CHASE/SEARCH/FLEE/RETURN/ENRAGE.
+    lose_target: CHASE/ENRAGE→SEARCH, FLEE→RETURN. tick_search終了→PATROLまたはRETURN.
+    """
     def __init__(
         self,
         direction: DirectionEnum = DirectionEnum.SOUTH,
@@ -239,9 +372,17 @@ class AutonomousBehaviorComponent(ActorComponent):
         ambush_chase_range: Optional[int] = None,
         territory_radius: Optional[int] = None,
         aggro_memory_policy: Optional[AggroMemoryPolicy] = None,
+        active_time: ActiveTimeType = ActiveTimeType.ALWAYS,
+        threat_races: Optional[Set[str]] = None,
+        prey_races: Optional[Set[str]] = None,
+        hunger: float = 0.0,
+        hunger_increase_per_tick: float = 0.0,
+        hunger_starvation_threshold: float = 1.0,
+        starvation_ticks: int = 0,
     ):
         super().__init__(direction, capability, player_id, is_npc, fov_angle, race, faction, pack_id)
         self._validate(vision_range, search_duration, hp_percentage, flee_threshold, max_failures, random_move_chance)
+        self._validate_hunger(hunger, hunger_starvation_threshold, starvation_ticks)
         self.state = state
         self.vision_range = vision_range
         self.patrol_points = patrol_points or []
@@ -265,6 +406,14 @@ class AutonomousBehaviorComponent(ActorComponent):
         self.ambush_chase_range = ambush_chase_range
         self.territory_radius = territory_radius
         self.aggro_memory_policy = aggro_memory_policy
+        self.active_time = active_time
+        self.threat_races = threat_races or frozenset()
+        self.prey_races = prey_races or frozenset()
+        self.hunger = max(0.0, min(1.0, hunger))
+        self.hunger_increase_per_tick = hunger_increase_per_tick
+        self.hunger_starvation_threshold = hunger_starvation_threshold
+        self.starvation_ticks = starvation_ticks
+        self.starvation_timer = 0
 
     def _validate(self, vision_range, search_duration, hp_percentage, flee_threshold, max_failures, random_move_chance):
         if vision_range < 0:
@@ -280,6 +429,16 @@ class AutonomousBehaviorComponent(ActorComponent):
         if not (0.0 <= random_move_chance <= 1.0):
             # 汎用的なValidationExceptionまたは新設
             raise ValidationException(f"Random move chance must be between 0.0 and 1.0: {random_move_chance}")
+
+    def _validate_hunger(self, hunger: float, hunger_starvation_threshold: float, starvation_ticks: int) -> None:
+        if not (0.0 <= hunger <= 1.0):
+            raise HungerValidationException(f"hunger must be between 0.0 and 1.0: {hunger}")
+        if not (0.0 <= hunger_starvation_threshold <= 1.0):
+            raise HungerValidationException(
+                f"hunger_starvation_threshold must be between 0.0 and 1.0: {hunger_starvation_threshold}"
+            )
+        if starvation_ticks < 0:
+            raise HungerValidationException(f"starvation_ticks cannot be negative: {starvation_ticks}")
 
     def get_type_name(self) -> str:
         return "autonomous_actor"
@@ -303,8 +462,44 @@ class AutonomousBehaviorComponent(ActorComponent):
             raise HPPercentageValidationException("HP percentage must be between 0.0 and 1.0")
         self.hp_percentage = hp_percentage
 
-    def spot_target(self, target_id: WorldObjectId, coordinate: Coordinate):
-        """ターゲットを捕捉した際の状態遷移（生態タイプに応じる）"""
+    def add_hunger(self, delta: float) -> None:
+        """飢餓値を増やす（上限 1.0）"""
+        if self.starvation_ticks <= 0:
+            return
+        self.hunger = max(0.0, min(1.0, self.hunger + delta))
+
+    def reduce_hunger(self, delta: float) -> None:
+        """飢餓値を減らす（下限 0.0）"""
+        if self.starvation_ticks <= 0:
+            return
+        self.hunger = max(0.0, min(1.0, self.hunger - delta))
+
+    def tick_hunger_and_starvation(self) -> bool:
+        """
+        1 tick 分の飢餓を適用し、飢餓死すべきか返す。
+        飢餓が無効（starvation_ticks <= 0）の場合は False。
+        """
+        if self.starvation_ticks <= 0 or self.hunger_increase_per_tick <= 0:
+            return False
+        self.hunger = min(1.0, self.hunger + self.hunger_increase_per_tick)
+        if self.hunger >= self.hunger_starvation_threshold:
+            self.starvation_timer += 1
+            return self.starvation_timer >= self.starvation_ticks
+        self.starvation_timer = 0
+        return False
+
+    def spot_target(
+        self,
+        target_id: WorldObjectId,
+        coordinate: Coordinate,
+        effective_flee_threshold: Optional[float] = None,
+        allow_chase: Optional[bool] = None,
+    ):
+        """
+        ターゲットを捕捉した際の状態遷移（生態タイプに応じる）。
+        effective_flee_threshold: 成長段階に応じた FLEE 閾値（未指定時は self.flee_threshold）
+        allow_chase: CHASE を許可するか（未指定時は True）。幼体などは False で渡す。
+        """
         if self.ecology_type == EcologyTypeEnum.PATROL_ONLY:
             return
         if self.ecology_type == EcologyTypeEnum.FLEE_ONLY:
@@ -321,13 +516,16 @@ class AutonomousBehaviorComponent(ActorComponent):
                 return
         self.target_id = target_id
         self.last_known_target_position = coordinate
-        if self.hp_percentage <= self.flee_threshold:
+        flee_th = effective_flee_threshold if effective_flee_threshold is not None else self.flee_threshold
+        can_chase = allow_chase if allow_chase is not None else True
+        if self.hp_percentage <= flee_th:
             self.set_state(BehaviorStateEnum.FLEE)
-        elif self.state != BehaviorStateEnum.ENRAGE:
+        elif can_chase and self.state != BehaviorStateEnum.ENRAGE:
             self.set_state(BehaviorStateEnum.CHASE)
+        # allow_chase が False の場合は CHASE に遷移しない（IDLE 等のまま）
 
     def lose_target(self):
-        """ターゲットを見失った際の状態遷移"""
+        """ターゲットを見失った際の状態遷移。CHASE/ENRAGE→SEARCH, FLEE→RETURN."""
         if self.state in (BehaviorStateEnum.CHASE, BehaviorStateEnum.ENRAGE):
             self.set_state(BehaviorStateEnum.SEARCH)
         elif self.state == BehaviorStateEnum.FLEE:
@@ -387,6 +585,14 @@ class AutonomousBehaviorComponent(ActorComponent):
             "ecology_type": self.ecology_type.value,
             "ambush_chase_range": self.ambush_chase_range,
             "territory_radius": self.territory_radius,
+            "active_time": self.active_time.value,
+            "threat_races": list(self.threat_races),
+            "prey_races": list(self.prey_races),
+            "hunger": self.hunger,
+            "hunger_increase_per_tick": self.hunger_increase_per_tick,
+            "hunger_starvation_threshold": self.hunger_starvation_threshold,
+            "starvation_ticks": self.starvation_ticks,
+            "starvation_timer": self.starvation_timer,
         })
         return data
 
@@ -541,8 +747,8 @@ class HarvestableComponent(WorldObjectComponent):
         return True
 
     @property
-    def interaction_type(self) -> str:
-        return "harvest"
+    def interaction_type(self) -> InteractionTypeEnum:
+        return InteractionTypeEnum.HARVEST
 
     @property
     def interaction_data(self) -> Dict[str, Any]:

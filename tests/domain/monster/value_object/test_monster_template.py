@@ -1,6 +1,7 @@
 import pytest
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
+from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage, MAX_GROWTH_STAGES
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
@@ -58,6 +59,20 @@ class TestMonsterTemplate:
             MonsterTemplate(
                 template_id=MonsterTemplateId.create(1),
                 name="",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="A weak blue slime."
+            )
+
+    def test_create_fail_whitespace_only_name(self, valid_base_stats, valid_reward_info, valid_respawn_info):
+        """名前が空白のみの場合はエラーが発生すること"""
+        with pytest.raises(MonsterTemplateValidationException, match="Monster name cannot be empty"):
+            MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="   ",
                 base_stats=valid_base_stats,
                 reward_info=valid_reward_info,
                 respawn_info=valid_respawn_info,
@@ -257,3 +272,320 @@ class TestMonsterTemplate:
             ecology_type=EcologyTypeEnum.AMBUSH,
         )
         assert template.ecology_type == EcologyTypeEnum.AMBUSH
+
+    def test_create_success_with_growth_stages(self, valid_base_stats, valid_reward_info, valid_respawn_info):
+        """growth_stages を指定して作成できること"""
+        stages = [
+            GrowthStage(after_ticks=0, stats_multiplier=0.8),
+            GrowthStage(after_ticks=100, stats_multiplier=1.0),
+        ]
+        template = MonsterTemplate(
+            template_id=MonsterTemplateId.create(1),
+            name="Dragon",
+            base_stats=valid_base_stats,
+            reward_info=valid_reward_info,
+            respawn_info=valid_respawn_info,
+            race=Race.BEAST,
+            faction=MonsterFactionEnum.ENEMY,
+            description="Grows over time.",
+            growth_stages=stages,
+        )
+        assert len(template.growth_stages) == 2
+        assert template.growth_stages[0].after_ticks == 0
+        assert template.growth_stages[0].stats_multiplier == 0.8
+        assert template.growth_stages[1].after_ticks == 100
+        assert template.growth_stages[1].stats_multiplier == 1.0
+
+    def test_create_success_with_empty_growth_stages_defaults_to_empty_list(
+        self, valid_base_stats, valid_reward_info, valid_respawn_info
+    ):
+        """growth_stages を渡さない場合は空リストになること"""
+        template = MonsterTemplate(
+            template_id=MonsterTemplateId.create(1),
+            name="Slime",
+            base_stats=valid_base_stats,
+            reward_info=valid_reward_info,
+            respawn_info=valid_respawn_info,
+            race=Race.BEAST,
+            faction=MonsterFactionEnum.ENEMY,
+            description="A weak blue slime.",
+        )
+        assert template.growth_stages == []
+
+    def test_create_fail_growth_stages_not_list(self, valid_base_stats, valid_reward_info, valid_respawn_info):
+        """growth_stages がリストでない場合はエラーが発生すること"""
+        with pytest.raises(MonsterTemplateValidationException, match="growth_stages must be a list"):
+            MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="Slime",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="A weak blue slime.",
+                growth_stages=GrowthStage(after_ticks=0, stats_multiplier=1.0),
+            )
+
+    def test_create_fail_growth_stages_element_not_growth_stage(
+        self, valid_base_stats, valid_reward_info, valid_respawn_info
+    ):
+        """growth_stages の要素が GrowthStage でない場合はエラーが発生すること"""
+        with pytest.raises(MonsterTemplateValidationException, match="must be GrowthStage"):
+            MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="Slime",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="A weak blue slime.",
+                growth_stages=[(0, 0.8), (100, 1.0)],
+            )
+
+    def test_create_fail_growth_stages_not_ordered_by_after_ticks(
+        self, valid_base_stats, valid_reward_info, valid_respawn_info
+    ):
+        """growth_stages が after_ticks の昇順でない場合はエラーが発生すること"""
+        with pytest.raises(MonsterTemplateValidationException, match="ordered by after_ticks ascending"):
+            MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="Slime",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="A weak blue slime.",
+                growth_stages=[
+                    GrowthStage(after_ticks=100, stats_multiplier=1.0),
+                    GrowthStage(after_ticks=0, stats_multiplier=0.8),
+                ],
+            )
+
+    def test_create_fail_first_growth_stage_not_zero(
+        self, valid_base_stats, valid_reward_info, valid_respawn_info
+    ):
+        """最初の growth_stage の after_ticks が 0 でない場合はエラーが発生すること"""
+        with pytest.raises(MonsterTemplateValidationException, match="after_ticks=0"):
+            MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="Slime",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="A weak blue slime.",
+                growth_stages=[
+                    GrowthStage(after_ticks=10, stats_multiplier=0.8),
+                    GrowthStage(after_ticks=100, stats_multiplier=1.0),
+                ],
+            )
+
+    def test_create_fail_growth_stages_exceeds_max(
+        self, valid_base_stats, valid_reward_info, valid_respawn_info
+    ):
+        """growth_stages が MAX_GROWTH_STAGES を超える場合はエラーが発生すること"""
+        with pytest.raises(MonsterTemplateValidationException, match=f"at most {MAX_GROWTH_STAGES}"):
+            MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="Slime",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="A weak blue slime.",
+                growth_stages=[
+                    GrowthStage(after_ticks=0, stats_multiplier=0.5),
+                    GrowthStage(after_ticks=50, stats_multiplier=0.8),
+                    GrowthStage(after_ticks=100, stats_multiplier=1.0),
+                    GrowthStage(after_ticks=200, stats_multiplier=1.0),
+                    GrowthStage(after_ticks=300, stats_multiplier=1.0),
+                ],
+            )
+
+    class TestHungerParams:
+        """Phase 6: 飢餓パラメータのバリデーション"""
+
+        def test_create_with_hunger_params_success(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """有効な飢餓パラメータで作成できること"""
+            template = MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="Wolf",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="A wolf.",
+                hunger_increase_per_tick=0.001,
+                hunger_decrease_on_prey_kill=0.3,
+                hunger_starvation_threshold=0.8,
+                starvation_ticks=50,
+            )
+            assert template.hunger_increase_per_tick == 0.001
+            assert template.hunger_decrease_on_prey_kill == 0.3
+            assert template.hunger_starvation_threshold == 0.8
+            assert template.starvation_ticks == 50
+
+        def test_create_with_default_hunger_params(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """飢餓パラメータ省略時はデフォルトで無効になること"""
+            template = MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="Slime",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="A slime.",
+            )
+            assert template.hunger_increase_per_tick == 0.0
+            assert template.hunger_decrease_on_prey_kill == 0.0
+            assert template.hunger_starvation_threshold == 1.0
+            assert template.starvation_ticks == 0
+
+        def test_create_fail_hunger_increase_negative(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """hunger_increase_per_tick が負の場合はエラー"""
+            with pytest.raises(MonsterTemplateValidationException, match="hunger_increase_per_tick"):
+                MonsterTemplate(
+                    template_id=MonsterTemplateId.create(1),
+                    name="X",
+                    base_stats=valid_base_stats,
+                    reward_info=valid_reward_info,
+                    respawn_info=valid_respawn_info,
+                    race=Race.BEAST,
+                    faction=MonsterFactionEnum.ENEMY,
+                    description="X",
+                    hunger_increase_per_tick=-0.01,
+                )
+
+        def test_create_fail_hunger_decrease_negative(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """hunger_decrease_on_prey_kill が負の場合はエラー"""
+            with pytest.raises(MonsterTemplateValidationException, match="hunger_decrease_on_prey_kill"):
+                MonsterTemplate(
+                    template_id=MonsterTemplateId.create(1),
+                    name="X",
+                    base_stats=valid_base_stats,
+                    reward_info=valid_reward_info,
+                    respawn_info=valid_respawn_info,
+                    race=Race.BEAST,
+                    faction=MonsterFactionEnum.ENEMY,
+                    description="X",
+                    hunger_decrease_on_prey_kill=-0.1,
+                )
+
+        def test_create_fail_hunger_starvation_threshold_out_of_range(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """hunger_starvation_threshold が 0.0〜1.0 の範囲外の場合はエラー"""
+            with pytest.raises(MonsterTemplateValidationException, match="hunger_starvation_threshold"):
+                MonsterTemplate(
+                    template_id=MonsterTemplateId.create(1),
+                    name="X",
+                    base_stats=valid_base_stats,
+                    reward_info=valid_reward_info,
+                    respawn_info=valid_respawn_info,
+                    race=Race.BEAST,
+                    faction=MonsterFactionEnum.ENEMY,
+                    description="X",
+                    hunger_starvation_threshold=1.5,
+                )
+
+        def test_create_fail_starvation_ticks_negative(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """starvation_ticks が負の場合はエラー"""
+            with pytest.raises(MonsterTemplateValidationException, match="starvation_ticks"):
+                MonsterTemplate(
+                    template_id=MonsterTemplateId.create(1),
+                    name="X",
+                    base_stats=valid_base_stats,
+                    reward_info=valid_reward_info,
+                    respawn_info=valid_respawn_info,
+                    race=Race.BEAST,
+                    faction=MonsterFactionEnum.ENEMY,
+                    description="X",
+                    starvation_ticks=-1,
+                )
+
+    class TestMaxAgeTicks:
+        """max_age_ticks のバリデーション"""
+
+        def test_create_success_none(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """max_age_ticks が None の場合は有効"""
+            t = MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="X",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="X",
+            )
+            assert t.max_age_ticks is None
+
+        def test_create_success_zero(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """max_age_ticks が 0 の場合は有効（無効扱い）"""
+            t = MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="X",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="X",
+                max_age_ticks=0,
+            )
+            assert t.max_age_ticks == 0
+
+        def test_create_success_positive(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """max_age_ticks が正の場合は有効"""
+            t = MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="X",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="X",
+                max_age_ticks=1000,
+            )
+            assert t.max_age_ticks == 1000
+
+        def test_create_fail_max_age_ticks_negative(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """max_age_ticks が負の場合はエラー"""
+            with pytest.raises(MonsterTemplateValidationException, match="max_age_ticks"):
+                MonsterTemplate(
+                    template_id=MonsterTemplateId.create(1),
+                    name="X",
+                    base_stats=valid_base_stats,
+                    reward_info=valid_reward_info,
+                    respawn_info=valid_respawn_info,
+                    race=Race.BEAST,
+                    faction=MonsterFactionEnum.ENEMY,
+                    description="X",
+                    max_age_ticks=-1,
+                )
