@@ -947,6 +947,178 @@ class TestMonsterDeathRewardHandler:
         assert "missing_table" in str(excinfo.value) or "LootTable" in str(excinfo.value)
 
 
+class TestMonsterDecidedToMoveHandler:
+    """MonsterDecidedToMoveHandler の単体テスト（正常・異常）"""
+
+    @pytest.fixture
+    def handler_deps(self):
+        data_store = InMemoryDataStore()
+        data_store.clear_all()
+        uow = InMemoryUnitOfWork(unit_of_work_factory=lambda: None, data_store=data_store)
+        map_repo = InMemoryPhysicalMapRepository(data_store, uow)
+        monster_repo = InMemoryMonsterAggregateRepository(data_store, uow)
+        from ai_rpg_world.application.world.handlers.monster_decided_to_move_handler import (
+            MonsterDecidedToMoveHandler,
+        )
+        handler = MonsterDecidedToMoveHandler(
+            physical_map_repository=map_repo,
+            monster_repository=monster_repo,
+        )
+        return {"handler": handler, "map_repo": map_repo, "monster_repo": monster_repo, "uow": uow}
+
+    def test_handle_move_success(self, handler_deps):
+        """イベント処理で move_object が呼ばれオブジェクトが移動すること"""
+        from ai_rpg_world.domain.monster.event.monster_events import MonsterDecidedToMoveEvent
+        s = handler_deps
+        tiles = [Tile(Coordinate(x, y, 0), TerrainType.grass()) for x in range(5) for y in range(5)]
+        pmap = PhysicalMapAggregate.create(SpotId(1), tiles)
+        actor = WorldObject(
+            object_id=WorldObjectId(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.NPC,
+            component=ActorComponent(),
+        )
+        pmap.add_object(actor)
+        s["map_repo"].save(pmap)
+        event = MonsterDecidedToMoveEvent.create(
+            aggregate_id=MonsterId(1),
+            aggregate_type="MonsterAggregate",
+            actor_id=WorldObjectId(1),
+            coordinate={"x": 1, "y": 0, "z": 0},
+            spot_id=SpotId(1),
+            current_tick=WorldTick(10),
+        )
+        with s["uow"]:
+            s["handler"].handle(event)
+        loaded = s["map_repo"].find_by_spot_id(SpotId(1))
+        obj = loaded.get_object(WorldObjectId(1))
+        assert obj.coordinate == Coordinate(1, 0, 0)
+
+    def test_handle_map_not_found_skips(self, handler_deps):
+        """マップが存在しない場合は移動せずスキップすること（例外にしない）"""
+        from ai_rpg_world.domain.monster.event.monster_events import MonsterDecidedToMoveEvent
+        s = handler_deps
+        event = MonsterDecidedToMoveEvent.create(
+            aggregate_id=MonsterId(1),
+            aggregate_type="MonsterAggregate",
+            actor_id=WorldObjectId(1),
+            coordinate={"x": 1, "y": 0, "z": 0},
+            spot_id=SpotId(999),
+            current_tick=WorldTick(10),
+        )
+        with s["uow"]:
+            s["handler"].handle(event)
+        assert s["map_repo"].find_by_spot_id(SpotId(999)) is None
+
+    def test_handle_domain_exception_skips(self, handler_deps):
+        """move_object がドメイン例外を投げた場合はログのみでスキップすること"""
+        from ai_rpg_world.domain.monster.event.monster_events import MonsterDecidedToMoveEvent
+        from ai_rpg_world.domain.world.exception.map_exception import InvalidMovementException
+        s = handler_deps
+        tiles = [Tile(Coordinate(x, y, 0), TerrainType.grass()) for x in range(5) for y in range(5)]
+        pmap = PhysicalMapAggregate.create(SpotId(1), tiles)
+        actor = WorldObject(
+            object_id=WorldObjectId(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.NPC,
+            component=ActorComponent(),
+        )
+        pmap.add_object(actor)
+        s["map_repo"].save(pmap)
+        event = MonsterDecidedToMoveEvent.create(
+            aggregate_id=MonsterId(1),
+            aggregate_type="MonsterAggregate",
+            actor_id=WorldObjectId(1),
+            coordinate={"x": 1, "y": 0, "z": 0},
+            spot_id=SpotId(1),
+            current_tick=WorldTick(10),
+        )
+        with patch.object(pmap, "move_object", side_effect=InvalidMovementException("blocked")):
+            with patch.object(s["map_repo"], "find_by_spot_id", return_value=pmap):
+                with s["uow"]:
+                    s["handler"].handle(event)
+        loaded = s["map_repo"].find_by_spot_id(SpotId(1))
+        obj = loaded.get_object(WorldObjectId(1))
+        assert obj.coordinate == Coordinate(0, 0, 0)
+
+
+class TestMonsterDecidedToUseSkillHandler:
+    """MonsterDecidedToUseSkillHandler の単体テスト（正常・異常）"""
+
+    @pytest.fixture
+    def handler_deps(self):
+        data_store = InMemoryDataStore()
+        data_store.clear_all()
+        uow = InMemoryUnitOfWork(unit_of_work_factory=lambda: None, data_store=data_store)
+        map_repo = InMemoryPhysicalMapRepository(data_store, uow)
+        monster_repo = InMemoryMonsterAggregateRepository(data_store, uow)
+        hit_box_repo = InMemoryHitBoxRepository(data_store, uow)
+        skill_loadout_repo = MagicMock()
+        from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import (
+            MonsterSkillExecutionDomainService,
+        )
+        from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
+        from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
+        from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
+        skill_exec = SkillExecutionDomainService(
+            SkillTargetingDomainService(),
+            SkillToHitBoxDomainService(),
+        )
+        monster_skill_exec = MonsterSkillExecutionDomainService(skill_exec)
+        from ai_rpg_world.application.world.handlers.monster_decided_to_use_skill_handler import (
+            MonsterDecidedToUseSkillHandler,
+        )
+        handler = MonsterDecidedToUseSkillHandler(
+            physical_map_repository=map_repo,
+            monster_repository=monster_repo,
+            monster_skill_execution_domain_service=monster_skill_exec,
+            hit_box_factory=HitBoxFactory(),
+            hit_box_repository=hit_box_repo,
+            skill_loadout_repository=skill_loadout_repo,
+        )
+        return {
+            "handler": handler,
+            "map_repo": map_repo,
+            "monster_repo": monster_repo,
+            "uow": uow,
+        }
+
+    def test_handle_map_not_found_skips(self, handler_deps):
+        """マップが存在しない場合はスキル実行せずスキップすること"""
+        from ai_rpg_world.domain.monster.event.monster_events import MonsterDecidedToUseSkillEvent
+        s = handler_deps
+        event = MonsterDecidedToUseSkillEvent.create(
+            aggregate_id=MonsterId(1),
+            aggregate_type="MonsterAggregate",
+            actor_id=WorldObjectId(1),
+            skill_slot_index=0,
+            target_id=None,
+            spot_id=SpotId(999),
+            current_tick=WorldTick(10),
+        )
+        with s["uow"]:
+            s["handler"].handle(event)
+
+    def test_handle_monster_not_found_skips(self, handler_deps):
+        """モンスターが存在しない場合はスキル実行せずスキップすること"""
+        from ai_rpg_world.domain.monster.event.monster_events import MonsterDecidedToUseSkillEvent
+        s = handler_deps
+        tiles = [Tile(Coordinate(x, y, 0), TerrainType.grass()) for x in range(5) for y in range(5)]
+        pmap = PhysicalMapAggregate.create(SpotId(1), tiles)
+        s["map_repo"].save(pmap)
+        event = MonsterDecidedToUseSkillEvent.create(
+            aggregate_id=MonsterId(1),
+            aggregate_type="MonsterAggregate",
+            actor_id=WorldObjectId(999),
+            skill_slot_index=0,
+            target_id=None,
+            spot_id=SpotId(1),
+            current_tick=WorldTick(10),
+        )
+        with s["uow"]:
+            s["handler"].handle(event)
+
+
 class TestCombatIntegration:
     @pytest.fixture
     def setup_service(self):
@@ -983,8 +1155,34 @@ class TestCombatIntegration:
         )
         from ai_rpg_world.application.world.handlers.item_stored_in_chest_handler import ItemStoredInChestHandler
         from ai_rpg_world.application.world.handlers.item_taken_from_chest_handler import ItemTakenFromChestHandler
+        from ai_rpg_world.application.world.handlers.monster_decided_to_move_handler import MonsterDecidedToMoveHandler
+        from ai_rpg_world.application.world.handlers.monster_decided_to_use_skill_handler import MonsterDecidedToUseSkillHandler
+        from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import MonsterSkillExecutionDomainService
+        from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
+        from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
+        from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
+        from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
+
         item_stored_handler = ItemStoredInChestHandler(inventory_repo, uow)
         item_taken_handler = ItemTakenFromChestHandler(inventory_repo, uow)
+        monster_decided_to_move_handler = MonsterDecidedToMoveHandler(
+            physical_map_repository=map_repo,
+            monster_repository=monster_repo,
+        )
+        skill_loadout_repo = MagicMock()
+        skill_execution_service = SkillExecutionDomainService(
+            SkillTargetingDomainService(),
+            SkillToHitBoxDomainService(),
+        )
+        monster_skill_execution_domain_service = MonsterSkillExecutionDomainService(skill_execution_service)
+        monster_decided_to_use_skill_handler = MonsterDecidedToUseSkillHandler(
+            physical_map_repository=map_repo,
+            monster_repository=monster_repo,
+            monster_skill_execution_domain_service=monster_skill_execution_domain_service,
+            hit_box_factory=HitBoxFactory(),
+            hit_box_repository=hit_box_repo,
+            skill_loadout_repository=skill_loadout_repo,
+        )
         CombatEventHandlerRegistry(
             damage_handler,
             aggro_handler,
@@ -993,19 +1191,33 @@ class TestCombatIntegration:
             map_removal_handler,
             monster_spawned_map_placement_handler,
         ).register_handlers(event_publisher)
+        from ai_rpg_world.infrastructure.events.monster_event_handler_registry import (
+            MonsterEventHandlerRegistry,
+        )
+        MonsterEventHandlerRegistry(
+            monster_decided_to_move_handler,
+            monster_decided_to_use_skill_handler,
+        ).register_handlers(event_publisher)
         MapInteractionEventHandlerRegistry(
             item_stored_in_chest_handler=item_stored_handler,
             item_taken_from_chest_handler=item_taken_handler,
         ).register_handlers(event_publisher)
 
-        behavior_service = BehaviorService(PathfindingService(None))
-        skill_loadout_repo = MagicMock()
-        skill_execution_service = SkillExecutionDomainService(
-            SkillTargetingDomainService(),
-            SkillToHitBoxDomainService(),
+        from ai_rpg_world.application.world.services.caching_pathfinding_service import CachingPathfindingService
+        from ai_rpg_world.application.world.services.monster_action_resolver import create_monster_action_resolver_factory
+        from ai_rpg_world.domain.world.service.skill_selection_policy import FirstInRangeSkillPolicy
+
+        pathfinding_service = PathfindingService(None)
+        caching_pathfinding = CachingPathfindingService(
+            pathfinding_service,
+            time_provider=time_provider,
+            ttl_ticks=5,
         )
-        from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import MonsterSkillExecutionDomainService
-        monster_skill_execution_domain_service = MonsterSkillExecutionDomainService(skill_execution_service)
+        monster_action_resolver_factory = create_monster_action_resolver_factory(
+            caching_pathfinding,
+            FirstInRangeSkillPolicy(),
+        )
+        behavior_service = BehaviorService(caching_pathfinding)
         service = WorldSimulationApplicationService(
             time_provider=time_provider,
             physical_map_repository=map_repo,
@@ -1021,6 +1233,7 @@ class TestCombatIntegration:
             hit_box_factory=HitBoxFactory(),
             hit_box_config_service=DefaultHitBoxConfigService(4),
             hit_box_collision_service=HitBoxCollisionDomainService(),
+            monster_action_resolver_factory=monster_action_resolver_factory,
         )
 
         return locals()

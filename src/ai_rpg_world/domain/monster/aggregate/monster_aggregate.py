@@ -14,7 +14,9 @@ from ai_rpg_world.domain.monster.event.monster_events import (
     MonsterRespawnedEvent,
     MonsterEvadedEvent,
     MonsterHealedEvent,
-    MonsterMpRecoveredEvent
+    MonsterMpRecoveredEvent,
+    MonsterDecidedToMoveEvent,
+    MonsterDecidedToUseSkillEvent,
 )
 from ai_rpg_world.domain.monster.exception.monster_exceptions import (
     MonsterAlreadyDeadException,
@@ -39,6 +41,7 @@ from ai_rpg_world.domain.monster.service.behavior_state_transition_service impor
     BehaviorStateTransitionService,
     StateTransitionResult,
 )
+from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
 from ai_rpg_world.domain.world.event.behavior_events import (
     ActorStateChangedEvent,
     TargetSpottedEvent,
@@ -48,7 +51,6 @@ from ai_rpg_world.domain.world.event.behavior_events import (
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.value_object.pack_id import PackId
     from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
-    from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
     from ai_rpg_world.domain.monster.action_resolver import IMonsterActionResolver
 
 
@@ -672,10 +674,11 @@ class MonsterAggregate(AggregateRoot):
         current_tick: WorldTick,
         actor_coordinate: Coordinate,
         action_resolver: "IMonsterActionResolver",
-    ) -> "BehaviorAction":
+    ) -> None:
         """
-        観測と現在状態に基づき状態遷移とイベント発行を行い、実行すべきアクションを返す。
-        イベントは集約内で生成・add_event する。次の一手は action_resolver（アプリ層が注入）で解決する。
+        観測と現在状態に基づき状態遷移とイベント発行を行う。
+        実行すべきアクションは action_resolver で解決し、MOVE/USE_SKILL の場合は
+        MonsterDecidedToMoveEvent / MonsterDecidedToUseSkillEvent を発行する。実行はハンドラが行う。
         """
         if self._status != MonsterStatusEnum.ALIVE:
             raise MonsterAlreadyDeadException(
@@ -684,6 +687,10 @@ class MonsterAggregate(AggregateRoot):
         if self._coordinate is None:
             raise MonsterNotSpawnedException(
                 f"Monster {self._monster_id} is not spawned yet, cannot decide"
+            )
+        if self._spot_id is None:
+            raise MonsterNotSpawnedException(
+                f"Monster {self._monster_id} has no spot_id, cannot decide"
             )
 
         transition_service = BehaviorStateTransitionService()
@@ -724,9 +731,37 @@ class MonsterAggregate(AggregateRoot):
                     )
                 )
 
-        return action_resolver.resolve_action(
+        action = action_resolver.resolve_action(
             self, observation, actor_coordinate
         )
+        if action.action_type == BehaviorActionType.MOVE and action.coordinate is not None:
+            self.add_event(
+                MonsterDecidedToMoveEvent.create(
+                    aggregate_id=self._monster_id,
+                    aggregate_type="MonsterAggregate",
+                    actor_id=self._world_object_id,
+                    coordinate={
+                        "x": action.coordinate.x,
+                        "y": action.coordinate.y,
+                        "z": action.coordinate.z,
+                    },
+                    spot_id=self._spot_id,
+                    current_tick=current_tick,
+                )
+            )
+        elif action.action_type == BehaviorActionType.USE_SKILL and action.skill_slot_index is not None:
+            self.add_event(
+                MonsterDecidedToUseSkillEvent.create(
+                    aggregate_id=self._monster_id,
+                    aggregate_type="MonsterAggregate",
+                    actor_id=self._world_object_id,
+                    skill_slot_index=action.skill_slot_index,
+                    target_id=self._behavior_target_id,
+                    spot_id=self._spot_id,
+                    current_tick=current_tick,
+                )
+            )
+        # WAIT の場合は何も発行しない
 
     def respawn(self, coordinate: Coordinate, current_tick: WorldTick, spot_id: SpotId):
         """リスポーンさせる"""
