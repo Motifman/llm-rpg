@@ -6,14 +6,12 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
 from ai_rpg_world.domain.world.value_object.behavior_context import (
-    PlanActionContext,
     TargetSelectionContext,
     SkillSelectionContext,
     GrowthContext,
 )
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, BehaviorActionType
-from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent
-from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
 from ai_rpg_world.domain.world.service.hostility_service import HostilityService, ConfigurableHostilityService
 from ai_rpg_world.domain.world.service.allegiance_service import AllegianceService
@@ -91,7 +89,7 @@ class BehaviorService:
     ) -> BehaviorObservation:
         """
         アクターの観測（視界内脅威・敵対・選択ターゲット等）を組み立てて返す。
-        モンスターの decide 用にアプリ層から呼ぶ。plan_action は内部でこのロジックを再利用する。
+        モンスターの decide 用にアプリ層から呼ぶ。
         """
         actor = map_aggregate.get_object(actor_id)
         component = actor.component
@@ -128,86 +126,6 @@ class BehaviorService:
             pack_rally_coordinate=pack_rally_coordinate,
             current_tick=current_tick,
         )
-
-    def plan_action(
-        self,
-        actor_id: WorldObjectId,
-        map_aggregate: PhysicalMapAggregate,
-        target_context: Optional[TargetSelectionContext] = None,
-        skill_context: Optional[SkillSelectionContext] = None,
-        pack_rally_coordinate: Optional[Coordinate] = None,
-        growth_context: Optional[GrowthContext] = None,
-        current_tick: Optional[WorldTick] = None,
-        event_sink: Optional[List] = None,
-    ) -> BehaviorAction:
-        """
-        アクターの現在の状態に基づいて次のアクションを決定する。
-        観測（視界内脅威・敵対・選択ターゲット等）を組み立て、戦略の update_state / decide_action に委譲する。
-        行動イベント（TargetSpotted, ActorStateChanged 等）は event_sink に追加される。
-        呼び出し元でモンスター集約に add_event して save すると、commit 時に発行される。
-        """
-        actor = map_aggregate.get_object(actor_id)
-        component = actor.component
-
-        if not isinstance(component, AutonomousBehaviorComponent):
-            return BehaviorAction.wait()
-
-        if component.initial_position is None:
-            component.initial_position = actor.coordinate
-
-        target_policy = (
-            self._target_policy
-            if self._target_policy is not None
-            else self._target_policy_factory(component)
-        )
-        strategy = (
-            self._strategy
-            if self._strategy is not None
-            else self._strategy_factory(component)
-        )
-
-        visible_threats = self._collect_visible_threats(actor, map_aggregate, component)
-        visible_hostiles = self._collect_visible_hostiles(actor, map_aggregate, component)
-        selected_target = (
-            target_policy.select_target(actor, visible_hostiles, target_context)
-            if visible_hostiles
-            else None
-        )
-
-        observation = BehaviorObservation(
-            visible_threats=visible_threats,
-            visible_hostiles=visible_hostiles,
-            selected_target=selected_target,
-            skill_context=skill_context,
-            growth_context=growth_context,
-            target_context=target_context,
-            pack_rally_coordinate=pack_rally_coordinate,
-            current_tick=current_tick,
-        )
-
-        sink = event_sink if event_sink is not None else []
-        context = PlanActionContext(
-            actor_id=actor_id,
-            actor=actor,
-            map_aggregate=map_aggregate,
-            component=component,
-            observation=observation,
-            event_sink=sink,
-        )
-
-        strategy.update_state(context)
-        return strategy.decide_action(context)
-
-    def plan_next_move(
-        self,
-        actor_id: WorldObjectId,
-        map_aggregate: PhysicalMapAggregate
-    ) -> Optional[Coordinate]:
-        """互換性のために残す。内部で plan_action を呼び出す。"""
-        action = self.plan_action(actor_id, map_aggregate)
-        if action.action_type == BehaviorActionType.MOVE:
-            return action.coordinate
-        return None
 
     def _collect_visible_threats(
         self,

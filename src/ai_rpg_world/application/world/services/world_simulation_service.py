@@ -20,7 +20,6 @@ from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
-from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
 from ai_rpg_world.domain.world.value_object.behavior_context import (
     SkillSelectionContext,
@@ -86,15 +85,15 @@ class WorldSimulationApplicationService:
         skill_loadout_repository: SkillLoadoutRepository,
         monster_skill_execution_domain_service: MonsterSkillExecutionDomainService,
         hit_box_factory: HitBoxFactory,
+        monster_action_resolver_factory: Callable[
+            [PhysicalMapAggregate, WorldObject], "IMonsterActionResolver"
+        ],
         hit_box_config_service: Optional[HitBoxConfigService] = None,
         hit_box_collision_service: Optional[HitBoxCollisionDomainService] = None,
         aggro_store: Optional[AggroStore] = None,
         world_time_config_service: Optional[WorldTimeConfigService] = None,
         spawn_table_repository: Optional[SpawnTableRepository] = None,
         monster_template_repository: Optional[MonsterTemplateRepository] = None,
-        monster_action_resolver_factory: Optional[
-            Callable[[PhysicalMapAggregate, WorldObject], "IMonsterActionResolver"]
-        ] = None,
     ):
         self._time_provider = time_provider
         self._physical_map_repository = physical_map_repository
@@ -238,70 +237,29 @@ class WorldSimulationApplicationService:
                         growth_context = self._build_growth_context_for_actor(actor, current_tick)
 
                         monster = self._monster_repository.find_by_world_object_id(actor.object_id)
-                        if monster and self._monster_action_resolver_factory is not None:
-                            # モンスター: 観測を組み立て → Monster.decide → save → 実行
-                            observation = self._behavior_service.build_observation(
-                                actor.object_id,
-                                physical_map,
-                                target_context=target_context,
-                                skill_context=skill_context,
-                                growth_context=growth_context,
-                                pack_rally_coordinate=None,
-                                current_tick=current_tick,
-                            )
-                            resolver = self._monster_action_resolver_factory(
-                                physical_map, actor
-                            )
-                            action = monster.decide(
-                                observation,
-                                current_tick,
-                                actor.coordinate,
-                                resolver,
-                            )
-                            self._monster_repository.save(monster)
-                            self._unit_of_work.process_sync_events()
-                        else:
-                            # 非モンスター or ファクトリ未注入: 従来どおり plan_action
-                            behavior_events: List = []
-                            action = self._behavior_service.plan_action(
-                                actor.object_id,
-                                physical_map,
-                                skill_context=skill_context,
-                                target_context=target_context,
-                                growth_context=growth_context,
-                                current_tick=current_tick,
-                                event_sink=behavior_events,
-                            )
-                            if monster:
-                                for event in behavior_events:
-                                    monster.add_event(event)
-                                self._monster_repository.save(monster)
-                                self._unit_of_work.process_sync_events()
-
-                        if action.action_type == BehaviorActionType.MOVE:
-                            # 移動実行
-                            physical_map.move_object(actor.object_id, action.coordinate, current_tick)
-                            # パトロール点到達時はモンスターの patrol_index を進める
-                            if monster and self._monster_action_resolver_factory is not None:
-                                if isinstance(actor.component, AutonomousBehaviorComponent):
-                                    pts = actor.component.patrol_points
-                                    if pts and action.coordinate == pts[monster.behavior_patrol_index]:
-                                        monster.advance_patrol_index(len(pts))
-                                        self._monster_repository.save(monster)
-                        elif action.action_type == BehaviorActionType.USE_SKILL:
-                            # USE_SKILL 時は skill_slot_index が必ず指定されていることを保証
-                            if action.skill_slot_index is None:
-                                raise ApplicationException(
-                                    "USE_SKILL action must have skill_slot_index",
-                                    action_type=BehaviorActionType.USE_SKILL,
-                                )
-                            self._execute_monster_skill_in_tick(
-                                actor_id=actor.object_id,
-                                physical_map=physical_map,
-                                slot_index=action.skill_slot_index,
-                                current_tick=current_tick,
-                            )
-                        # WAIT の場合は何もしない
+                        if not monster:
+                            continue
+                        # モンスター: 観測を組み立て → Monster.decide（イベント発行）→ save → process_sync_events でハンドラが移動・スキル実行
+                        observation = self._behavior_service.build_observation(
+                            actor.object_id,
+                            physical_map,
+                            target_context=target_context,
+                            skill_context=skill_context,
+                            growth_context=growth_context,
+                            pack_rally_coordinate=None,
+                            current_tick=current_tick,
+                        )
+                        resolver = self._monster_action_resolver_factory(
+                            physical_map, actor
+                        )
+                        monster.decide(
+                            observation,
+                            current_tick,
+                            actor.coordinate,
+                            resolver,
+                        )
+                        self._monster_repository.save(monster)
+                        self._unit_of_work.process_sync_events()
                     except DomainException as e:
                         # ドメインルール違反（移動不可など）は警告ログにとどめる
                         self._logger.warning(
@@ -317,9 +275,11 @@ class WorldSimulationApplicationService:
                         )
 
                 # 4.5 HitBoxの更新（移動・衝突判定）
+                # 同期イベントハンドラがマップを更新している可能性があるため、最新のマップを再取得してから HitBox 更新・保存する
+                latest_map = self._physical_map_repository.find_by_spot_id(physical_map.spot_id)
+                if latest_map is not None:
+                    physical_map = latest_map
                 self._update_hit_boxes(physical_map, current_tick)
-                
-                # マップの状態を保存
                 self._physical_map_repository.save(physical_map)
             
             return current_tick

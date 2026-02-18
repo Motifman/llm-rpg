@@ -1065,22 +1065,72 @@ class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
         with pytest.raises(MonsterAlreadyDeadException):
             monster.decide(obs, WorldTick(2), Coordinate(0, 0, 0), MockResolver())
 
-    def test_decide_calls_resolver_and_returns_action(self, spawned_monster):
-        """decide が状態遷移後にリゾルバを呼び BehaviorAction を返すこと"""
+    def test_decide_calls_resolver_and_emits_move_event(self, spawned_monster):
+        """decide が状態遷移後にリゾルバを呼び、MOVE の場合は MonsterDecidedToMoveEvent を発行すること"""
         from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
         from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
-        from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
+        from ai_rpg_world.domain.monster.event.monster_events import MonsterDecidedToMoveEvent
 
         class MockResolver:
             def resolve_action(self, monster, observation, actor_coordinate):
                 return BehaviorAction.move(Coordinate(6, 5, 0))
 
         obs = BehaviorObservation()
-        action = spawned_monster.decide(
+        spawned_monster.decide(
             obs, WorldTick(10), Coordinate(5, 5, 0), MockResolver()
         )
-        assert action.action_type == BehaviorActionType.MOVE
-        assert action.coordinate == Coordinate(6, 5, 0)
+        events = spawned_monster.get_events()
+        move_events = [e for e in events if isinstance(e, MonsterDecidedToMoveEvent)]
+        assert len(move_events) == 1
+        assert move_events[0].actor_id == spawned_monster.world_object_id
+        assert move_events[0].coordinate == {"x": 6, "y": 5, "z": 0}
+        assert move_events[0].spot_id == spawned_monster.spot_id
+        assert move_events[0].current_tick == WorldTick(10)
+
+    def test_decide_emits_use_skill_event(self, spawned_monster):
+        """decide でリゾルバが USE_SKILL を返した場合 MonsterDecidedToUseSkillEvent を発行すること"""
+        from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
+        from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
+        from ai_rpg_world.domain.monster.event.monster_events import MonsterDecidedToUseSkillEvent
+
+        class MockResolver:
+            def resolve_action(self, monster, observation, actor_coordinate):
+                return BehaviorAction.use_skill(0)
+
+        obs = BehaviorObservation()
+        spawned_monster.decide(
+            obs, WorldTick(10), Coordinate(5, 5, 0), MockResolver()
+        )
+        events = spawned_monster.get_events()
+        skill_events = [e for e in events if isinstance(e, MonsterDecidedToUseSkillEvent)]
+        assert len(skill_events) == 1
+        assert skill_events[0].actor_id == spawned_monster.world_object_id
+        assert skill_events[0].skill_slot_index == 0
+        assert skill_events[0].spot_id == spawned_monster.spot_id
+        assert skill_events[0].current_tick == WorldTick(10)
+
+    def test_decide_emits_no_decision_event_on_wait(self, spawned_monster):
+        """decide でリゾルバが WAIT を返した場合は移動・スキルイベントを発行しないこと"""
+        from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
+        from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
+        from ai_rpg_world.domain.monster.event.monster_events import (
+            MonsterDecidedToMoveEvent,
+            MonsterDecidedToUseSkillEvent,
+        )
+
+        class MockResolver:
+            def resolve_action(self, monster, observation, actor_coordinate):
+                return BehaviorAction.wait()
+
+        obs = BehaviorObservation()
+        spawned_monster.decide(
+            obs, WorldTick(10), Coordinate(5, 5, 0), MockResolver()
+        )
+        events = spawned_monster.get_events()
+        move_events = [e for e in events if isinstance(e, MonsterDecidedToMoveEvent)]
+        skill_events = [e for e in events if isinstance(e, MonsterDecidedToUseSkillEvent)]
+        assert len(move_events) == 0
+        assert len(skill_events) == 0
 
     def test_advance_patrol_index(self, spawned_monster):
         """advance_patrol_index がインデックスを進めること"""
