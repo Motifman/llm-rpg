@@ -72,8 +72,10 @@ class BehaviorStrategy(ABC):
 class DefaultBehaviorStrategy(BehaviorStrategy):
     """
     デフォルトの行動戦略。
-    追跡・逃走・巡回・帰還・探索などの移動と、
-    射程内でのスキル使用をスキル選択ポリシーに委譲する。
+    追跡・逃走・巡回・帰還・探索などの移動と、射程内でのスキル使用をスキル選択ポリシーに委譲する。
+
+    状態別: FLEE→逃走移動; CHASE/ENRAGE→追跡(縄張り超過でRETURN); SEARCH→last_knownへ、search_durationでPATROL/RETURN;
+    PATROL→patrol_points順; RETURN→初期位置、到着でIDLE. 移動失敗max_failures回でRETURN(BehaviorStuckEvent).
     """
 
     def __init__(

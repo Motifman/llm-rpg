@@ -28,6 +28,7 @@ from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggrega
 from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.monster.value_object.spot_spawn_table import SpotSpawnTable
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
@@ -72,6 +73,9 @@ class InMemoryDataStore:
         self.weather_zones: Dict[WeatherZoneId, WeatherZone] = {}
         self.monsters: Dict[MonsterId, MonsterAggregate] = {}
         self.world_object_to_monster_id: Dict[WorldObjectId, MonsterId] = {}
+        self.next_monster_id = 1
+        self.next_world_object_id = 100000  # NPC用。プレイヤーIDと衝突しない範囲
+        self.spawn_tables: Dict[SpotId, SpotSpawnTable] = {}
         self.hit_boxes: Dict[HitBoxId, HitBoxAggregate] = {}
         self.next_hit_box_id = 1
         self.world_maps: Dict[Any, Any] = {} # Dict[WorldId, WorldMapAggregate]
@@ -265,6 +269,9 @@ class InMemoryDataStore:
         self.weather_zones.clear()
         self.monsters.clear()
         self.world_object_to_monster_id.clear()
+        self.next_monster_id = 1
+        self.next_world_object_id = 100000
+        self.spawn_tables.clear()
         self.hit_boxes.clear()
         self.world_maps.clear()
         self.spot_to_world_id.clear()
@@ -278,6 +285,7 @@ class InMemoryDataStore:
             "weather_zones": copy.deepcopy(self.weather_zones),
             "monsters": copy.deepcopy(self.monsters),
             "world_object_to_monster_id": copy.deepcopy(self.world_object_to_monster_id),
+            "spawn_tables": copy.deepcopy(self.spawn_tables),
             "hit_boxes": copy.deepcopy(self.hit_boxes),
             "player_inventories": copy.deepcopy(self.player_inventories),
             "trades": copy.deepcopy(self.trades),
@@ -294,6 +302,7 @@ class InMemoryDataStore:
         self.weather_zones = snapshot["weather_zones"]
         self.monsters = snapshot["monsters"]
         self.world_object_to_monster_id = snapshot["world_object_to_monster_id"]
+        self.spawn_tables = snapshot.get("spawn_tables", {})
         self.hit_boxes = snapshot["hit_boxes"]
         self.player_inventories = snapshot["player_inventories"]
         self.trades = snapshot["trades"]

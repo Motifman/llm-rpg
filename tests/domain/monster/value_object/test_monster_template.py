@@ -519,3 +519,73 @@ class TestMonsterTemplate:
                     description="X",
                     starvation_ticks=-1,
                 )
+
+    class TestMaxAgeTicks:
+        """max_age_ticks のバリデーション"""
+
+        def test_create_success_none(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """max_age_ticks が None の場合は有効"""
+            t = MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="X",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="X",
+            )
+            assert t.max_age_ticks is None
+
+        def test_create_success_zero(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """max_age_ticks が 0 の場合は有効（無効扱い）"""
+            t = MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="X",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="X",
+                max_age_ticks=0,
+            )
+            assert t.max_age_ticks == 0
+
+        def test_create_success_positive(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """max_age_ticks が正の場合は有効"""
+            t = MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="X",
+                base_stats=valid_base_stats,
+                reward_info=valid_reward_info,
+                respawn_info=valid_respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="X",
+                max_age_ticks=1000,
+            )
+            assert t.max_age_ticks == 1000
+
+        def test_create_fail_max_age_ticks_negative(
+            self, valid_base_stats, valid_reward_info, valid_respawn_info
+        ):
+            """max_age_ticks が負の場合はエラー"""
+            with pytest.raises(MonsterTemplateValidationException, match="max_age_ticks"):
+                MonsterTemplate(
+                    template_id=MonsterTemplateId.create(1),
+                    name="X",
+                    base_stats=valid_base_stats,
+                    reward_info=valid_reward_info,
+                    respawn_info=valid_respawn_info,
+                    race=Race.BEAST,
+                    faction=MonsterFactionEnum.ENEMY,
+                    description="X",
+                    max_age_ticks=-1,
+                )

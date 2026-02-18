@@ -69,7 +69,13 @@ class EnvironmentTypeEnum(Enum):
 
 
 class BehaviorStateEnum(Enum):
-    """アクターの行動状態"""
+    """
+    アクターの行動状態。
+
+    主な遷移: 視界内にTHREAT→FLEE; 敵対でFLEEでない→CHASE(またはHP%でFLEE);
+    ターゲット見失い→CHASE/ENRAGEはSEARCH, FLEEはRETURN; SEARCH終了→PATROLまたはRETURN;
+    縄張り超過→RETURN; RETURN到着→IDLE; 移動失敗max回→RETURN; HP%≤phase→ENRAGE.
+    """
     IDLE = "IDLE"       # 待機
     PATROL = "PATROL"   # 巡回
     CHASE = "CHASE"     # 追跡

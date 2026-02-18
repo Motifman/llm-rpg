@@ -415,6 +415,25 @@ class MonsterAggregate(AggregateRoot):
             raise MonsterNotSpawnedException(f"Monster {self._monster_id} is not spawned yet")
         self._die(current_tick, cause=DeathCauseEnum.STARVATION)
 
+    def die_from_old_age(self, current_tick: WorldTick) -> bool:
+        """
+        寿命で死亡させる。経過ティック（spawned_at_tick からの経過）が max_age_ticks 以上なら
+        _die(cause=NATURAL) を呼ぶ。ALIVE かつ max_age_ticks が有効なときのみ判定。
+        死亡した場合 True、しなかった場合 False。
+        """
+        if self._status != MonsterStatusEnum.ALIVE:
+            return False
+        if self._spawned_at_tick is None:
+            return False
+        max_age = self._template.max_age_ticks
+        if max_age is None or max_age <= 0:
+            return False
+        elapsed = current_tick.value - self._spawned_at_tick.value
+        if elapsed < max_age:
+            return False
+        self._die(current_tick, cause=DeathCauseEnum.NATURAL)
+        return True
+
     def should_respawn(self, current_tick: WorldTick) -> bool:
         """リスポーンすべきか判定する（時間経過と is_auto_respawn のみ。SpawnCondition は呼び出し側で評価）"""
         if self._status != MonsterStatusEnum.DEAD:
