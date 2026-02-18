@@ -33,6 +33,10 @@ from ai_rpg_world.domain.world.event.behavior_events import (
     TargetLostEvent,
     TargetSpottedEvent,
 )
+from ai_rpg_world.domain.monster.value_object.behavior_state_snapshot import BehaviorStateSnapshot
+from ai_rpg_world.domain.monster.service.behavior_state_transition_service import (
+    BehaviorStateTransitionService,
+)
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.entity.world_object import WorldObject
@@ -72,97 +76,73 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
         self,
         pathfinding_service: PathfindingService,
         skill_policy: SkillSelectionPolicy,
+        state_transition_service: Optional[BehaviorStateTransitionService] = None,
     ):
         self._pathfinding_service = pathfinding_service
         self._skill_policy = skill_policy
+        self._state_transition_service = state_transition_service or BehaviorStateTransitionService()
 
     def update_state(self, context: PlanActionContext) -> None:
-        """フェーズ・脅威・ターゲット・見失いに応じた状態遷移とイベント発行を行う。"""
+        """状態遷移を Monster ドメインのサービスに委譲し、返り値に従って component を更新する。"""
         component = context.component
         old_state = component.state
 
-        # 0. ボスフェーズ: HPが閾値以下なら ENRAGE へ遷移
-        if component.phase_thresholds:
-            if component.hp_percentage <= component.phase_thresholds[0]:
-                if component.state not in (BehaviorStateEnum.ENRAGE, BehaviorStateEnum.FLEE):
-                    self._publish_state_changed(context, old_state, BehaviorStateEnum.ENRAGE)
-                    component.set_state(BehaviorStateEnum.ENRAGE)
-                    old_state = BehaviorStateEnum.ENRAGE
+        snapshot = BehaviorStateSnapshot(
+            state=component.state,
+            target_id=component.target_id,
+            last_known_target_position=component.last_known_target_position,
+            hp_percentage=component.hp_percentage,
+            phase_thresholds=tuple(component.phase_thresholds) if component.phase_thresholds else (),
+            flee_threshold=component.flee_threshold,
+        )
+        result = self._state_transition_service.compute_transition(
+            observation=context.observation,
+            snapshot=snapshot,
+            actor_id=context.actor_id,
+            actor_coordinate=context.actor.coordinate,
+        )
 
-        # 1a. 視界内に脅威(THREAT)がいれば FLEE に遷移
-        target = None
-        if context.visible_threats and component.state != BehaviorStateEnum.FLEE:
-            self._publish_state_changed(context, old_state, BehaviorStateEnum.FLEE)
+        if result.apply_enrage:
+            component.set_state(BehaviorStateEnum.ENRAGE)
+            old_state = BehaviorStateEnum.ENRAGE
+
+        if result.flee_from_threat_id is not None and result.flee_from_threat_coordinate is not None:
             component.set_state(BehaviorStateEnum.FLEE)
+            component.target_id = result.flee_from_threat_id
+            component.last_known_target_position = result.flee_from_threat_coordinate
+            # FLEE の ActorStateChangedEvent はサービスが result.events に含めている
             old_state = BehaviorStateEnum.FLEE
-            nearest = min(
-                context.visible_threats,
-                key=lambda obj: context.actor.coordinate.euclidean_distance_to(obj.coordinate),
-            )
-            target = nearest
-            component.target_id = target.object_id
-            component.last_known_target_position = target.coordinate
-            context.event_sink.append(
-                TargetSpottedEvent.create(
-                    aggregate_id=context.actor_id,
-                    aggregate_type="Actor",
-                    actor_id=context.actor_id,
-                    target_id=target.object_id,
-                    coordinate=target.coordinate,
-                )
-            )
 
-        # 1b. 脅威でない場合は渡されたターゲットで spot_target
-        if target is None and context.target and component.state != BehaviorStateEnum.FLEE:
-            effective_flee = context.growth_context.effective_flee_threshold if context.growth_context else None
-            allow_chase = context.growth_context.allow_chase if context.growth_context else None
+        if result.spot_target_params is not None:
+            params = result.spot_target_params
             component.spot_target(
-                context.target.object_id,
-                context.target.coordinate,
-                effective_flee_threshold=effective_flee,
-                allow_chase=allow_chase,
+                params.target_id,
+                params.coordinate,
+                effective_flee_threshold=params.effective_flee_threshold,
+                allow_chase=params.allow_chase,
             )
             if old_state != component.state:
                 self._publish_state_changed(context, old_state, component.state)
-                context.event_sink.append(
-                    TargetSpottedEvent.create(
-                        aggregate_id=context.actor_id,
-                        aggregate_type="Actor",
-                        actor_id=context.actor_id,
-                        target_id=context.target.object_id,
-                        coordinate=context.target.coordinate,
-                    )
-                )
 
-        # 2. ターゲットなしで既にターゲットを持っていたら lose_target（脅威でターゲットを設定した直後は除く）
-        if not context.visible_threats and not context.target and component.target_id:
-            lost_target_id = component.target_id
-            last_coord = component.last_known_target_position
+        if result.do_lose_target:
             component.lose_target()
             if old_state != component.state:
                 self._publish_state_changed(context, old_state, component.state)
-                if last_coord:
-                    context.event_sink.append(
-                        TargetLostEvent.create(
-                            aggregate_id=context.actor_id,
-                            aggregate_type="Actor",
-                            actor_id=context.actor_id,
-                            target_id=lost_target_id,
-                            last_known_coordinate=last_coord,
-                        )
-                    )
+
+        context.event_sink.extend(result.events)
 
     def decide_action(self, context: PlanActionContext) -> BehaviorAction:
         actor = context.actor
         map_aggregate = context.map_aggregate
         component = context.component
-        target = context.target
+        obs = context.observation
+        target = obs.selected_target
 
         # 攻撃可能かチェック (CHASE または ENRAGE かつターゲットが視界内)
         attack_states = (BehaviorStateEnum.CHASE, BehaviorStateEnum.ENRAGE)
         if component.state in attack_states and target:
             slot = self._skill_policy.select_slot(
-                actor, target, component.available_skills, context.skill_context
+                actor, target, component.available_skills, obs.skill_context
             )
             if slot is not None:
                 return BehaviorAction.use_skill(slot)
@@ -191,12 +171,12 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
         elif component.state == BehaviorStateEnum.RETURN:
             next_coord = self._calculate_return_move(actor, component, map_aggregate, context)
 
-        if next_coord is None and context.pack_rally_coordinate:
+        if next_coord is None and obs.pack_rally_coordinate:
             is_follower = component.pack_id is not None and not component.is_pack_leader
             if is_follower and component.state in (BehaviorStateEnum.IDLE, BehaviorStateEnum.PATROL):
-                if actor.coordinate != context.pack_rally_coordinate:
+                if actor.coordinate != obs.pack_rally_coordinate:
                     next_coord = self._get_next_step_to(
-                        actor, context.pack_rally_coordinate, map_aggregate, component, context.event_sink
+                        actor, obs.pack_rally_coordinate, map_aggregate, component, context.event_sink
                     )
 
         if next_coord is not None:

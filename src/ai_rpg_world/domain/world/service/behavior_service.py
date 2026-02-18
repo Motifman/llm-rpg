@@ -1,8 +1,10 @@
 import math
 from typing import Optional, List, Callable
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
 from ai_rpg_world.domain.world.value_object.behavior_context import (
     PlanActionContext,
     TargetSelectionContext,
@@ -26,12 +28,17 @@ from ai_rpg_world.domain.world.service.behavior_strategy import (
     DefaultBehaviorStrategy,
     BossBehaviorStrategy,
 )
+from ai_rpg_world.domain.monster.service.behavior_state_transition_service import BehaviorStateTransitionService
 
 
 def _default_strategy_factory(component: AutonomousBehaviorComponent, pathfinding_service: PathfindingService) -> BehaviorStrategy:
     if component.behavior_strategy_type == "boss":
         return BossBehaviorStrategy(pathfinding_service)
-    return DefaultBehaviorStrategy(pathfinding_service, FirstInRangeSkillPolicy())
+    return DefaultBehaviorStrategy(
+        pathfinding_service,
+        FirstInRangeSkillPolicy(),
+        state_transition_service=BehaviorStateTransitionService(),
+    )
 
 
 def _default_target_policy_factory(
@@ -80,11 +87,12 @@ class BehaviorService:
         skill_context: Optional[SkillSelectionContext] = None,
         pack_rally_coordinate: Optional[Coordinate] = None,
         growth_context: Optional[GrowthContext] = None,
+        current_tick: Optional[WorldTick] = None,
         event_sink: Optional[List] = None,
     ) -> BehaviorAction:
         """
         アクターの現在の状態に基づいて次のアクションを決定する。
-        コンテキストを収集し、戦略の update_state / decide_action に委譲する。
+        観測（視界内脅威・敵対・選択ターゲット等）を組み立て、戦略の update_state / decide_action に委譲する。
         行動イベント（TargetSpotted, ActorStateChanged 等）は event_sink に追加される。
         呼び出し元でモンスター集約に add_event して save すると、commit 時に発行される。
         """
@@ -110,10 +118,21 @@ class BehaviorService:
 
         visible_threats = self._collect_visible_threats(actor, map_aggregate, component)
         visible_hostiles = self._collect_visible_hostiles(actor, map_aggregate, component)
-        target = (
+        selected_target = (
             target_policy.select_target(actor, visible_hostiles, target_context)
             if visible_hostiles
             else None
+        )
+
+        observation = BehaviorObservation(
+            visible_threats=visible_threats,
+            visible_hostiles=visible_hostiles,
+            selected_target=selected_target,
+            skill_context=skill_context,
+            growth_context=growth_context,
+            target_context=target_context,
+            pack_rally_coordinate=pack_rally_coordinate,
+            current_tick=current_tick,
         )
 
         sink = event_sink if event_sink is not None else []
@@ -122,13 +141,7 @@ class BehaviorService:
             actor=actor,
             map_aggregate=map_aggregate,
             component=component,
-            visible_threats=visible_threats,
-            visible_hostiles=visible_hostiles,
-            target=target,
-            target_context=target_context,
-            skill_context=skill_context,
-            pack_rally_coordinate=pack_rally_coordinate,
-            growth_context=growth_context,
+            observation=observation,
             event_sink=sink,
         )
 

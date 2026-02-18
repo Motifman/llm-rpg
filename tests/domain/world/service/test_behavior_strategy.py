@@ -17,11 +17,15 @@ from ai_rpg_world.domain.world.entity.world_object_component import (
     MonsterSkillInfo,
 )
 from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
-from ai_rpg_world.domain.world.value_object.behavior_context import PlanActionContext
+from ai_rpg_world.domain.world.value_object.behavior_context import (
+    PlanActionContext,
+    SkillSelectionContext,
+    GrowthContext,
+)
+from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
-from ai_rpg_world.domain.world.value_object.behavior_context import SkillSelectionContext
 from ai_rpg_world.domain.world.service.skill_selection_policy import (
     FirstInRangeSkillPolicy,
     SkillSelectionPolicy,
@@ -44,20 +48,29 @@ from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy im
 )
 
 
+def _make_observation(target=None, **kwargs):
+    """テスト用の BehaviorObservation を組み立てる。"""
+    return BehaviorObservation(
+        visible_threats=kwargs.get("visible_threats", []),
+        visible_hostiles=kwargs.get("visible_hostiles", []),
+        selected_target=target,
+        skill_context=kwargs.get("skill_context"),
+        growth_context=kwargs.get("growth_context"),
+        target_context=kwargs.get("target_context"),
+        pack_rally_coordinate=kwargs.get("pack_rally_coordinate"),
+        current_tick=kwargs.get("current_tick"),
+    )
+
+
 def _make_context(actor_id, actor, map_aggregate, component, target=None, **kwargs):
     """decide_action テスト用の PlanActionContext を組み立てる。"""
+    observation = _make_observation(target=target, **kwargs)
     return PlanActionContext(
         actor_id=actor_id,
         actor=actor,
         map_aggregate=map_aggregate,
         component=component,
-        visible_threats=kwargs.get("visible_threats", []),
-        visible_hostiles=kwargs.get("visible_hostiles", []),
-        target=target,
-        target_context=kwargs.get("target_context"),
-        skill_context=kwargs.get("skill_context"),
-        pack_rally_coordinate=kwargs.get("pack_rally_coordinate"),
-        growth_context=kwargs.get("growth_context"),
+        observation=observation,
         event_sink=kwargs.get("event_sink", []),
     )
 
@@ -435,14 +448,17 @@ class TestDefaultBehaviorStrategy:
         )
         map_aggregate.add_object(threat)
         event_sink = []
+        observation = BehaviorObservation(
+            visible_threats=[threat],
+            visible_hostiles=[],
+            selected_target=None,
+        )
         ctx = PlanActionContext(
             actor_id=actor.object_id,
             actor=actor,
             map_aggregate=map_aggregate,
             component=comp,
-            visible_threats=[threat],
-            visible_hostiles=[],
-            target=None,
+            observation=observation,
             event_sink=event_sink,
         )
         strategy.update_state(ctx)
