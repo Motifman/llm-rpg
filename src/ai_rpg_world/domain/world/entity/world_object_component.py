@@ -4,7 +4,9 @@ from typing import Dict, Any, Optional, Set, TYPE_CHECKING, Union, List
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.value_object.pack_id import PackId
+    from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.exception.map_exception import LockedDoorException, ItemAlreadyInChestException
+from ai_rpg_world.domain.world.event.map_events import WorldObjectBlockingChangedEvent
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.world.enum.world_enum import (
     DirectionEnum,
@@ -73,6 +75,18 @@ class WorldObjectComponent(ABC):
         """インタラクションにかかるティック数（デフォルトは1）"""
         return 1
 
+    def apply_interaction_from(
+        self,
+        actor_id: WorldObjectId,
+        target_id: WorldObjectId,
+        map_aggregate: "PhysicalMapAggregate",
+        current_tick: WorldTick,
+    ) -> None:
+        """
+        このオブジェクトがインタラクションされたときの効果を適用する。
+        サブクラスでオーバーライドする。デフォルトは何もしない。
+        """
+        pass
 
     @property
     def player_id(self) -> Optional["PlayerId"]:
@@ -123,6 +137,15 @@ class ChestComponent(WorldObjectComponent):
 
     def toggle_open(self) -> None:
         self.is_open = not self.is_open
+
+    def apply_interaction_from(
+        self,
+        actor_id: WorldObjectId,
+        target_id: WorldObjectId,
+        map_aggregate: "PhysicalMapAggregate",
+        current_tick: WorldTick,
+    ) -> None:
+        self.toggle_open()
 
     def add_item(self, item_instance_id: ItemInstanceId) -> None:
         if self.has_item(item_instance_id):
@@ -185,6 +208,25 @@ class DoorComponent(WorldObjectComponent):
 
     def unlock(self) -> None:
         self.is_locked = False
+
+    def apply_interaction_from(
+        self,
+        actor_id: WorldObjectId,
+        target_id: WorldObjectId,
+        map_aggregate: "PhysicalMapAggregate",
+        current_tick: WorldTick,
+    ) -> None:
+        self.toggle_open()
+        target = map_aggregate.get_object(target_id)
+        target.set_blocking(not self.is_open)
+        map_aggregate.add_event(
+            WorldObjectBlockingChangedEvent.create(
+                aggregate_id=target_id,
+                aggregate_type="WorldObject",
+                object_id=target_id,
+                is_blocking=target.is_blocking,
+            )
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         return {

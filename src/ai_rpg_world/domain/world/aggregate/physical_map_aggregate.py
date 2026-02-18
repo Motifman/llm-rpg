@@ -731,7 +731,12 @@ class PhysicalMapAggregate(AggregateRoot):
         if not interaction_type:
             raise NotInteractableException(f"Target {target_id} is not interactable")
 
-        # インタラクション成功イベントを発行
+        # 4. 効果をターゲットのコンポーネントに委譲（例外時はイベント・ビジーは行わない）
+        target.component.apply_interaction_from(
+            actor_id, target_id, self, current_tick
+        )
+
+        # 5. インタラクション成功イベントを発行
         self.add_event(WorldObjectInteractedEvent.create(
             aggregate_id=target_id,
             aggregate_type="WorldObject",
@@ -741,20 +746,7 @@ class PhysicalMapAggregate(AggregateRoot):
             data=target.interaction_data
         ))
 
-        # 開閉系インタラクション: 集約内で状態を更新（チェスト・ドア）
-        if interaction_type == InteractionTypeEnum.OPEN_CHEST and isinstance(target.component, ChestComponent):
-            target.component.toggle_open()
-        elif interaction_type == InteractionTypeEnum.OPEN_DOOR and isinstance(target.component, DoorComponent):
-            target.component.toggle_open()
-            target.set_blocking(not target.component.is_open)
-            self.add_event(WorldObjectBlockingChangedEvent.create(
-                aggregate_id=target_id,
-                aggregate_type="WorldObject",
-                object_id=target_id,
-                is_blocking=target.is_blocking
-            ))
-
-        # アクターをビジー状態にする
+        # 6. アクターをビジー状態にする
         duration = target.interaction_duration
         actor.set_busy(current_tick.add_duration(duration))
 

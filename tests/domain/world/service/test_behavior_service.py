@@ -492,8 +492,14 @@ class TestBehaviorService:
     class TestDispositionThreatFlee:
         """THREAT（脅威）視界内で FLEE に遷移するテスト"""
 
-        def test_threat_in_sight_transitions_to_flee(self, pathfinding_service, map_aggregate):
+        def test_threat_in_sight_transitions_to_flee(self, pathfinding_service):
             """視界内に THREAT がいる場合、攻撃せず FLEE に遷移すること"""
+            tiles = [
+                Tile(Coordinate(x, y), TerrainType.grass())
+                for x in range(10)
+                for y in range(10)
+            ]
+            map_aggregate = PhysicalMapAggregate.create(SpotId(1), tiles)
             hostility = ConfigurableHostilityService(
                 race_disposition_table={
                     "goblin": {"dragon": Disposition.THREAT},

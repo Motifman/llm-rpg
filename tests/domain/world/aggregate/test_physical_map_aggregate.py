@@ -1294,6 +1294,32 @@ class TestPhysicalMapAggregate:
             with pytest.raises(LockedDoorException):
                 aggregate.interact_with(actor_id, door_id, WorldTick(10))
 
+        def test_interact_with_locked_door_emits_no_event_and_actor_not_busy(self, aggregate):
+            """apply_interaction_from が例外を投げた場合、イベント発行・ビジー設定は行わないこと"""
+            actor_id = WorldObjectId(1)
+            door_id = WorldObjectId(2)
+            actor = WorldObject(
+                actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(direction=DirectionEnum.SOUTH),
+            )
+            door = WorldObject(
+                door_id, Coordinate(0, 1, 0), ObjectTypeEnum.DOOR,
+                component=DoorComponent(is_locked=True),
+            )
+            aggregate.add_object(actor)
+            aggregate.add_object(door)
+            aggregate.clear_events()
+            events_before = len(aggregate.get_events())
+            assert actor.is_busy(WorldTick(10)) is False
+
+            with pytest.raises(LockedDoorException):
+                aggregate.interact_with(actor_id, door_id, WorldTick(10))
+
+            events_after = aggregate.get_events()
+            assert len(events_after) == events_before
+            assert not any(isinstance(e, WorldObjectInteractedEvent) for e in events_after)
+            assert actor.is_busy(WorldTick(10)) is False
+
         def test_store_item_in_chest_success(self, aggregate, spot_id):
             actor_id = WorldObjectId(1)
             chest_id = WorldObjectId(2)
