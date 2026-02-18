@@ -25,6 +25,7 @@ from ai_rpg_world.domain.world.service.hostility_service import ConfigurableHost
 from ai_rpg_world.domain.world.service.allegiance_service import PackAllegianceService
 from ai_rpg_world.domain.world.service.skill_selection_policy import SkillSelectionPolicy
 from ai_rpg_world.domain.world.value_object.pack_id import PackId
+from ai_rpg_world.domain.world.value_object.behavior_context import GrowthContext
 from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
 from ai_rpg_world.domain.world.service.behavior_strategy import DefaultBehaviorStrategy
 from ai_rpg_world.domain.world.exception.behavior_exception import (
@@ -495,6 +496,36 @@ class TestBehaviorService:
             # event_sink は Optional なので None を渡す（実装は None なら [] を使う）
             action = behavior_service.plan_action(monster_id, map_aggregate, event_sink=None)
             assert action is not None
+
+        def test_build_observation_returns_observation_with_visible_hostiles(self, behavior_service, map_aggregate):
+            """build_observation が視界内の敵対・選択ターゲットを含む観測を返すこと"""
+            monster_id = WorldObjectId(100)
+            comp = AutonomousBehaviorComponent(race="goblin", vision_range=5, fov_angle=360)
+            monster = WorldObject(monster_id, Coordinate(0, 0), ObjectTypeEnum.NPC, is_blocking=False, component=comp)
+            map_aggregate.add_object(monster)
+            player_id = WorldObjectId(1)
+            player = WorldObject(player_id, Coordinate(2, 0), ObjectTypeEnum.PLAYER, is_blocking=False, component=ActorComponent(race="human"))
+            map_aggregate.add_object(player)
+            growth = GrowthContext(effective_flee_threshold=0.2, allow_chase=True)
+            obs = behavior_service.build_observation(
+                monster_id,
+                map_aggregate,
+                growth_context=growth,
+                current_tick=WorldTick(0),
+            )
+            assert obs.visible_hostiles or obs.visible_threats or obs.selected_target is not None
+            assert obs.growth_context is growth
+            assert obs.current_tick is not None
+
+        def test_build_observation_non_autonomous_returns_empty_like_observation(self, behavior_service, map_aggregate):
+            """自律でないアクターでは build_observation が空の観測を返すこと"""
+            actor_id = WorldObjectId(50)
+            actor = WorldObject(actor_id, Coordinate(1, 1), ObjectTypeEnum.NPC, is_blocking=False, component=ActorComponent(race="human"))
+            map_aggregate.add_object(actor)
+            obs = behavior_service.build_observation(actor_id, map_aggregate)
+            assert obs.visible_threats == []
+            assert obs.visible_hostiles == []
+            assert obs.selected_target is None
 
         def test_plan_action_accepts_current_tick_and_returns_action(self, behavior_service, map_aggregate):
             """current_tick を渡しても plan_action が正常に動作し BehaviorAction を返すこと（Phase 2a: 観測に current_tick を含める）"""
