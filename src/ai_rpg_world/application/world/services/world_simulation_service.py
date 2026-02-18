@@ -1,5 +1,5 @@
 import logging
-from typing import List, Callable, Any, Dict, Optional, Set
+from typing import List, Callable, Any, Dict, Optional, Set, TYPE_CHECKING
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
@@ -65,6 +65,9 @@ from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.world.aggro_store import AggroStore
 
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.monster.action_resolver import IMonsterActionResolver
+
 
 class WorldSimulationApplicationService:
     """ワールド全体の進行・シミュレーションを管理するアプリケーションサービス"""
@@ -89,6 +92,9 @@ class WorldSimulationApplicationService:
         world_time_config_service: Optional[WorldTimeConfigService] = None,
         spawn_table_repository: Optional[SpawnTableRepository] = None,
         monster_template_repository: Optional[MonsterTemplateRepository] = None,
+        monster_action_resolver_factory: Optional[
+            Callable[[PhysicalMapAggregate, WorldObject], "IMonsterActionResolver"]
+        ] = None,
     ):
         self._time_provider = time_provider
         self._physical_map_repository = physical_map_repository
@@ -108,6 +114,7 @@ class WorldSimulationApplicationService:
         self._unit_of_work = unit_of_work
         self._aggro_store = aggro_store
         self._world_time_config_service = world_time_config_service or DefaultWorldTimeConfigService()
+        self._monster_action_resolver_factory = monster_action_resolver_factory
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def tick(self) -> WorldTick:
@@ -229,28 +236,58 @@ class WorldSimulationApplicationService:
                         skill_context = self._build_skill_context_for_actor(actor, physical_map, current_tick)
                         target_context = self._build_target_context_for_actor(actor, physical_map, current_tick)
                         growth_context = self._build_growth_context_for_actor(actor, current_tick)
-                        # 行動イベント（TargetSpotted, ActorStateChanged 等）をモンスター集約に積むため event_sink を渡す
-                        behavior_events: List = []
-                        action = self._behavior_service.plan_action(
-                            actor.object_id,
-                            physical_map,
-                            skill_context=skill_context,
-                            target_context=target_context,
-                            growth_context=growth_context,
-                            current_tick=current_tick,
-                            event_sink=behavior_events,
-                        )
-                        # モンスターの場合は行動イベントを集約に積み、save で UoW に登録（commit 時に発行）
+
                         monster = self._monster_repository.find_by_world_object_id(actor.object_id)
-                        if monster:
-                            for event in behavior_events:
-                                monster.add_event(event)
+                        if monster and self._monster_action_resolver_factory is not None:
+                            # モンスター: 観測を組み立て → Monster.decide → save → 実行
+                            observation = self._behavior_service.build_observation(
+                                actor.object_id,
+                                physical_map,
+                                target_context=target_context,
+                                skill_context=skill_context,
+                                growth_context=growth_context,
+                                pack_rally_coordinate=None,
+                                current_tick=current_tick,
+                            )
+                            resolver = self._monster_action_resolver_factory(
+                                physical_map, actor
+                            )
+                            action = monster.decide(
+                                observation,
+                                current_tick,
+                                actor.coordinate,
+                                resolver,
+                            )
                             self._monster_repository.save(monster)
                             self._unit_of_work.process_sync_events()
+                        else:
+                            # 非モンスター or ファクトリ未注入: 従来どおり plan_action
+                            behavior_events: List = []
+                            action = self._behavior_service.plan_action(
+                                actor.object_id,
+                                physical_map,
+                                skill_context=skill_context,
+                                target_context=target_context,
+                                growth_context=growth_context,
+                                current_tick=current_tick,
+                                event_sink=behavior_events,
+                            )
+                            if monster:
+                                for event in behavior_events:
+                                    monster.add_event(event)
+                                self._monster_repository.save(monster)
+                                self._unit_of_work.process_sync_events()
 
                         if action.action_type == BehaviorActionType.MOVE:
                             # 移動実行
                             physical_map.move_object(actor.object_id, action.coordinate, current_tick)
+                            # パトロール点到達時はモンスターの patrol_index を進める
+                            if monster and self._monster_action_resolver_factory is not None:
+                                if isinstance(actor.component, AutonomousBehaviorComponent):
+                                    pts = actor.component.patrol_points
+                                    if pts and action.coordinate == pts[monster.behavior_patrol_index]:
+                                        monster.advance_patrol_index(len(pts))
+                                        self._monster_repository.save(monster)
                         elif action.action_type == BehaviorActionType.USE_SKILL:
                             # USE_SKILL 時は skill_slot_index が必ず指定されていることを保証
                             if action.skill_slot_index is None:

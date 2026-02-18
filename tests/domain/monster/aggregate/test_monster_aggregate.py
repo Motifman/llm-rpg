@@ -976,3 +976,118 @@ class TestMonsterAggregate:
             # 成体ではデフォルト（flee_bias なしなので 0.2）、allow_chase True
             assert agg.get_effective_flee_threshold(WorldTick(150)) == 0.2
             assert agg.get_allow_chase(WorldTick(150)) is True
+
+
+class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
+    """Monster の行動状態スナップショットと decide のテスト（TestMonsterAggregate の fixture を利用）"""
+
+    @pytest.fixture
+    def spawned_monster(
+        self, monster_template, skill_loadout, spot_id
+    ) -> MonsterAggregate:
+        agg = MonsterAggregate.create(
+            monster_id=MonsterId.create(1),
+            template=monster_template,
+            world_object_id=WorldObjectId(1),
+            skill_loadout=skill_loadout,
+        )
+        agg.spawn(Coordinate(5, 5, 0), spot_id, WorldTick(10))
+        return agg
+
+    def test_to_behavior_state_snapshot_after_spawn(self, spawned_monster):
+        """スポーン直後の to_behavior_state_snapshot が IDLE と初期位置を返すこと"""
+        from ai_rpg_world.domain.world.enum.world_enum import BehaviorStateEnum
+        from ai_rpg_world.domain.monster.value_object.behavior_state_snapshot import BehaviorStateSnapshot
+
+        snap = spawned_monster.to_behavior_state_snapshot(
+            Coordinate(5, 5, 0), WorldTick(10)
+        )
+        assert isinstance(snap, BehaviorStateSnapshot)
+        assert snap.state == BehaviorStateEnum.IDLE
+        assert snap.target_id is None
+        assert snap.last_known_target_position is None
+        assert snap.hp_percentage == 1.0
+        assert snap.flee_threshold == 0.2
+
+    def test_to_behavior_state_snapshot_phase_thresholds_from_template(self, base_stats, reward_info, respawn_info, skill_loadout, spot_id):
+        """phase_thresholds はテンプレートから取得されること"""
+        from ai_rpg_world.domain.world.enum.world_enum import BehaviorStateEnum
+        from ai_rpg_world.domain.monster.value_object.behavior_state_snapshot import BehaviorStateSnapshot
+
+        template = MonsterTemplate(
+            template_id=MonsterTemplateId.create(2),
+            name="Boss",
+            base_stats=base_stats,
+            reward_info=reward_info,
+            respawn_info=respawn_info,
+            race=Race.BEAST,
+            faction=MonsterFactionEnum.ENEMY,
+            description="Boss",
+            phase_thresholds=[0.5, 0.25],
+        )
+        agg = MonsterAggregate.create(
+            monster_id=MonsterId.create(2),
+            template=template,
+            world_object_id=WorldObjectId(2),
+            skill_loadout=skill_loadout,
+        )
+        agg.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+        snap = agg.to_behavior_state_snapshot(Coordinate(0, 0, 0), WorldTick(0))
+        assert snap.phase_thresholds == (0.5, 0.25)
+
+    def test_decide_when_not_spawned_raises(self, monster):
+        """未スポーンのモンスター（DEAD）で decide を呼ぶと MonsterAlreadyDeadException"""
+        from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
+        from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
+
+        class MockResolver:
+            def resolve_action(self, monster_agg, observation, actor_coordinate):
+                return BehaviorAction.wait()
+
+        obs = BehaviorObservation()
+        with pytest.raises(MonsterAlreadyDeadException):
+            monster.decide(obs, WorldTick(0), Coordinate(0, 0, 0), MockResolver())
+
+    def test_decide_when_dead_raises(self, monster, spot_id):
+        """死亡済みモンスターで decide を呼ぶと MonsterAlreadyDeadException"""
+        from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
+        from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
+
+        monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+        monster.apply_damage(999, WorldTick(1))
+        assert monster.status == MonsterStatusEnum.DEAD
+
+        class MockResolver:
+            def resolve_action(self, monster_agg, observation, actor_coordinate):
+                return BehaviorAction.wait()
+
+        obs = BehaviorObservation()
+        with pytest.raises(MonsterAlreadyDeadException):
+            monster.decide(obs, WorldTick(2), Coordinate(0, 0, 0), MockResolver())
+
+    def test_decide_calls_resolver_and_returns_action(self, spawned_monster):
+        """decide が状態遷移後にリゾルバを呼び BehaviorAction を返すこと"""
+        from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
+        from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
+        from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
+
+        class MockResolver:
+            def resolve_action(self, monster, observation, actor_coordinate):
+                return BehaviorAction.move(Coordinate(6, 5, 0))
+
+        obs = BehaviorObservation()
+        action = spawned_monster.decide(
+            obs, WorldTick(10), Coordinate(5, 5, 0), MockResolver()
+        )
+        assert action.action_type == BehaviorActionType.MOVE
+        assert action.coordinate == Coordinate(6, 5, 0)
+
+    def test_advance_patrol_index(self, spawned_monster):
+        """advance_patrol_index がインデックスを進めること"""
+        assert spawned_monster.behavior_patrol_index == 0
+        spawned_monster.advance_patrol_index(3)
+        assert spawned_monster.behavior_patrol_index == 1
+        spawned_monster.advance_patrol_index(3)
+        assert spawned_monster.behavior_patrol_index == 2
+        spawned_monster.advance_patrol_index(3)
+        assert spawned_monster.behavior_patrol_index == 0

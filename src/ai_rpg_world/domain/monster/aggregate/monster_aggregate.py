@@ -26,16 +26,30 @@ from ai_rpg_world.domain.monster.exception.monster_exceptions import (
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.enum.world_enum import BehaviorStateEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.monster.value_object.behavior_state_snapshot import BehaviorStateSnapshot
 from ai_rpg_world.domain.monster.service.monster_config_service import MonsterConfigService, DefaultMonsterConfigService
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
+from ai_rpg_world.domain.monster.service.behavior_state_transition_service import (
+    BehaviorStateTransitionService,
+    StateTransitionResult,
+)
+from ai_rpg_world.domain.world.event.behavior_events import (
+    ActorStateChangedEvent,
+    TargetSpottedEvent,
+    TargetLostEvent,
+)
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.value_object.pack_id import PackId
+    from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
+    from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
+    from ai_rpg_world.domain.monster.action_resolver import IMonsterActionResolver
 
 
 class MonsterAggregate(AggregateRoot):
@@ -58,6 +72,13 @@ class MonsterAggregate(AggregateRoot):
         is_pack_leader: bool = False,
         initial_spawn_coordinate: Optional[Coordinate] = None,
         spawned_at_tick: Optional[WorldTick] = None,
+        behavior_state: BehaviorStateEnum = BehaviorStateEnum.IDLE,
+        behavior_target_id: Optional[WorldObjectId] = None,
+        behavior_last_known_position: Optional[Coordinate] = None,
+        behavior_initial_position: Optional[Coordinate] = None,
+        behavior_patrol_index: int = 0,
+        behavior_search_timer: int = 0,
+        behavior_failure_count: int = 0,
     ):
         super().__init__()
         self._monster_id = monster_id
@@ -75,6 +96,13 @@ class MonsterAggregate(AggregateRoot):
         self._is_pack_leader = is_pack_leader
         self._initial_spawn_coordinate = initial_spawn_coordinate
         self._spawned_at_tick = spawned_at_tick
+        self._behavior_state = behavior_state
+        self._behavior_target_id = behavior_target_id
+        self._behavior_last_known_position = behavior_last_known_position
+        self._behavior_initial_position = behavior_initial_position
+        self._behavior_patrol_index = behavior_patrol_index
+        self._behavior_search_timer = behavior_search_timer
+        self._behavior_failure_count = behavior_failure_count
 
     @classmethod
     def create(
@@ -227,11 +255,48 @@ class MonsterAggregate(AggregateRoot):
     def spawned_at_tick(self) -> Optional[WorldTick]:
         return self._spawned_at_tick
 
+    @property
+    def behavior_state(self) -> BehaviorStateEnum:
+        return self._behavior_state
+
+    @property
+    def behavior_target_id(self) -> Optional[WorldObjectId]:
+        return self._behavior_target_id
+
+    @property
+    def behavior_last_known_position(self) -> Optional[Coordinate]:
+        return self._behavior_last_known_position
+
+    @property
+    def behavior_initial_position(self) -> Optional[Coordinate]:
+        return self._behavior_initial_position
+
+    @property
+    def behavior_patrol_index(self) -> int:
+        return self._behavior_patrol_index
+
+    @property
+    def behavior_search_timer(self) -> int:
+        return self._behavior_search_timer
+
+    @property
+    def behavior_failure_count(self) -> int:
+        return self._behavior_failure_count
+
+    def advance_patrol_index(self, patrol_points_count: int) -> None:
+        """パトロール点に到達したときにインデックスを進める。patrol_points_count は点の数。"""
+        if patrol_points_count <= 0:
+            return
+        self._behavior_patrol_index = (
+            self._behavior_patrol_index + 1
+        ) % patrol_points_count
+
     def _initialize_status(self, coordinate: Coordinate, spot_id: SpotId, current_tick: WorldTick) -> None:
         """
         ステータスを初期化（出現/リスポーン時）。
         呼び出し元で _spawned_at_tick を current_tick に設定したうえで呼ぶこと。
         HP/MP は実効ステータス（成長段階を反映した max_hp/max_mp）で満タンに初期化する。
+        行動状態もリセットし、_behavior_initial_position を設定する。
         """
         self._coordinate = coordinate
         self._spot_id = spot_id
@@ -240,6 +305,13 @@ class MonsterAggregate(AggregateRoot):
         self._hp = MonsterHp.create(effective.max_hp, effective.max_hp)
         self._mp = MonsterMp.create(effective.max_mp, effective.max_mp)
         self._last_death_tick = None
+        self._behavior_initial_position = coordinate
+        self._behavior_state = BehaviorStateEnum.IDLE
+        self._behavior_target_id = None
+        self._behavior_last_known_position = None
+        self._behavior_patrol_index = 0
+        self._behavior_search_timer = 0
+        self._behavior_failure_count = 0
 
     def update_map_placement(self, spot_id: SpotId, coordinate: Coordinate) -> None:
         """ゲートウェイ等によるマップ間移動時に座標・スポットを更新する（ALIVE時のみ想定）"""
@@ -451,6 +523,210 @@ class MonsterAggregate(AggregateRoot):
     def get_respawn_coordinate(self) -> Optional[Coordinate]:
         """リスポーン時に使用する座標（初期スポーン位置）を返す。未スポーン時は None。"""
         return self._initial_spawn_coordinate
+
+    def to_behavior_state_snapshot(
+        self, actor_coordinate: Coordinate, current_tick: WorldTick
+    ) -> BehaviorStateSnapshot:
+        """
+        状態遷移の入力用に、現在の行動状態のスナップショットを返す。
+        phase_thresholds / flee_threshold はテンプレート・成長段階から取得する。
+        """
+        hp_percentage = (
+            self._hp.value / self._hp.max_hp if self._hp.max_hp > 0 else 1.0
+        )
+        phase_thresholds = (
+            tuple(self._template.phase_thresholds)
+            if self._template.phase_thresholds
+            else ()
+        )
+        flee_threshold = self.get_effective_flee_threshold(current_tick)
+        return BehaviorStateSnapshot(
+            state=self._behavior_state,
+            target_id=self._behavior_target_id,
+            last_known_target_position=self._behavior_last_known_position,
+            hp_percentage=hp_percentage,
+            phase_thresholds=phase_thresholds,
+            flee_threshold=flee_threshold,
+        )
+
+    def _apply_behavior_transition(
+        self, result: StateTransitionResult, current_tick: WorldTick
+    ) -> None:
+        """
+        状態遷移結果を自身の _behavior_* に反映し、イベントを集約内で生成・add_event する。
+        """
+        old_state = self._behavior_state
+        hp_percentage = (
+            self._hp.value / self._hp.max_hp if self._hp.max_hp > 0 else 1.0
+        )
+
+        if result.apply_enrage:
+            self._behavior_state = BehaviorStateEnum.ENRAGE
+            self.add_event(
+                ActorStateChangedEvent.create(
+                    aggregate_id=self._world_object_id,
+                    aggregate_type="Actor",
+                    actor_id=self._world_object_id,
+                    old_state=old_state,
+                    new_state=BehaviorStateEnum.ENRAGE,
+                )
+            )
+            old_state = BehaviorStateEnum.ENRAGE
+
+        if result.flee_from_threat_id is not None and result.flee_from_threat_coordinate is not None:
+            self._behavior_state = BehaviorStateEnum.FLEE
+            self._behavior_target_id = result.flee_from_threat_id
+            self._behavior_last_known_position = result.flee_from_threat_coordinate
+            self.add_event(
+                TargetSpottedEvent.create(
+                    aggregate_id=self._world_object_id,
+                    aggregate_type="Actor",
+                    actor_id=self._world_object_id,
+                    target_id=result.flee_from_threat_id,
+                    coordinate=result.flee_from_threat_coordinate,
+                )
+            )
+            if not result.apply_enrage:
+                self.add_event(
+                    ActorStateChangedEvent.create(
+                        aggregate_id=self._world_object_id,
+                        aggregate_type="Actor",
+                        actor_id=self._world_object_id,
+                        old_state=old_state,
+                        new_state=BehaviorStateEnum.FLEE,
+                    )
+                )
+            old_state = BehaviorStateEnum.FLEE
+
+        if result.spot_target_params is not None:
+            params = result.spot_target_params
+            self._behavior_target_id = params.target_id
+            self._behavior_last_known_position = params.coordinate
+            effective_flee = (
+                params.effective_flee_threshold
+                if params.effective_flee_threshold is not None
+                else self.get_effective_flee_threshold(current_tick)
+            )
+            allow_chase = (
+                params.allow_chase if params.allow_chase is not None else True
+            )
+            if hp_percentage <= effective_flee:
+                self._behavior_state = BehaviorStateEnum.FLEE
+            elif allow_chase and self._behavior_state != BehaviorStateEnum.ENRAGE:
+                self._behavior_state = BehaviorStateEnum.CHASE
+            self.add_event(
+                TargetSpottedEvent.create(
+                    aggregate_id=self._world_object_id,
+                    aggregate_type="Actor",
+                    actor_id=self._world_object_id,
+                    target_id=params.target_id,
+                    coordinate=params.coordinate,
+                )
+            )
+            if old_state != self._behavior_state:
+                self.add_event(
+                    ActorStateChangedEvent.create(
+                        aggregate_id=self._world_object_id,
+                        aggregate_type="Actor",
+                        actor_id=self._world_object_id,
+                        old_state=old_state,
+                        new_state=self._behavior_state,
+                    )
+                )
+            old_state = self._behavior_state
+
+        if result.do_lose_target:
+            if self._behavior_state in (
+                BehaviorStateEnum.CHASE,
+                BehaviorStateEnum.ENRAGE,
+            ):
+                self._behavior_state = BehaviorStateEnum.SEARCH
+            elif self._behavior_state == BehaviorStateEnum.FLEE:
+                self._behavior_state = BehaviorStateEnum.RETURN
+            self._behavior_target_id = None
+            self._behavior_last_known_position = None
+            if result.last_known_coordinate is not None:
+                self.add_event(
+                    TargetLostEvent.create(
+                        aggregate_id=self._world_object_id,
+                        aggregate_type="Actor",
+                        actor_id=self._world_object_id,
+                        target_id=result.lost_target_id,
+                        last_known_coordinate=result.last_known_coordinate,
+                    )
+                )
+            if old_state != self._behavior_state:
+                self.add_event(
+                    ActorStateChangedEvent.create(
+                        aggregate_id=self._world_object_id,
+                        aggregate_type="Actor",
+                        actor_id=self._world_object_id,
+                        old_state=old_state,
+                        new_state=self._behavior_state,
+                    )
+                )
+
+    def decide(
+        self,
+        observation: "BehaviorObservation",
+        current_tick: WorldTick,
+        actor_coordinate: Coordinate,
+        action_resolver: "IMonsterActionResolver",
+    ) -> "BehaviorAction":
+        """
+        観測と現在状態に基づき状態遷移とイベント発行を行い、実行すべきアクションを返す。
+        イベントは集約内で生成・add_event する。次の一手は action_resolver（アプリ層が注入）で解決する。
+        """
+        if self._status != MonsterStatusEnum.ALIVE:
+            raise MonsterAlreadyDeadException(
+                f"Monster {self._monster_id} is not alive, cannot decide"
+            )
+        if self._coordinate is None:
+            raise MonsterNotSpawnedException(
+                f"Monster {self._monster_id} is not spawned yet, cannot decide"
+            )
+
+        transition_service = BehaviorStateTransitionService()
+        snapshot = self.to_behavior_state_snapshot(actor_coordinate, current_tick)
+        result = transition_service.compute_transition(
+            observation=observation,
+            snapshot=snapshot,
+            actor_id=self._world_object_id,
+            actor_coordinate=actor_coordinate,
+        )
+        self._apply_behavior_transition(result, current_tick)
+
+        # テリトリを超えていたら RETURN に遷移（Monster の責務）
+        territory_radius = self._template.territory_radius
+        if (
+            territory_radius is not None
+            and self._behavior_initial_position is not None
+            and self._behavior_state in (
+                BehaviorStateEnum.CHASE,
+                BehaviorStateEnum.ENRAGE,
+            )
+        ):
+            if (
+                actor_coordinate.euclidean_distance_to(
+                    self._behavior_initial_position
+                )
+                > float(territory_radius)
+            ):
+                old_state = self._behavior_state
+                self._behavior_state = BehaviorStateEnum.RETURN
+                self.add_event(
+                    ActorStateChangedEvent.create(
+                        aggregate_id=self._world_object_id,
+                        aggregate_type="Actor",
+                        actor_id=self._world_object_id,
+                        old_state=old_state,
+                        new_state=BehaviorStateEnum.RETURN,
+                    )
+                )
+
+        return action_resolver.resolve_action(
+            self, observation, actor_coordinate
+        )
 
     def respawn(self, coordinate: Coordinate, current_tick: WorldTick, spot_id: SpotId):
         """リスポーンさせる"""

@@ -79,6 +79,56 @@ class BehaviorService:
             lambda c: _default_target_policy_factory(c, self._hostility_service)
         )
 
+    def build_observation(
+        self,
+        actor_id: WorldObjectId,
+        map_aggregate: PhysicalMapAggregate,
+        target_context: Optional[TargetSelectionContext] = None,
+        skill_context: Optional[SkillSelectionContext] = None,
+        pack_rally_coordinate: Optional[Coordinate] = None,
+        growth_context: Optional[GrowthContext] = None,
+        current_tick: Optional[WorldTick] = None,
+    ) -> BehaviorObservation:
+        """
+        アクターの観測（視界内脅威・敵対・選択ターゲット等）を組み立てて返す。
+        モンスターの decide 用にアプリ層から呼ぶ。plan_action は内部でこのロジックを再利用する。
+        """
+        actor = map_aggregate.get_object(actor_id)
+        component = actor.component
+        if not isinstance(component, AutonomousBehaviorComponent):
+            return BehaviorObservation(
+                visible_threats=[],
+                visible_hostiles=[],
+                selected_target=None,
+                skill_context=skill_context,
+                growth_context=growth_context,
+                target_context=target_context,
+                pack_rally_coordinate=pack_rally_coordinate,
+                current_tick=current_tick,
+            )
+        target_policy = (
+            self._target_policy
+            if self._target_policy is not None
+            else self._target_policy_factory(component)
+        )
+        visible_threats = self._collect_visible_threats(actor, map_aggregate, component)
+        visible_hostiles = self._collect_visible_hostiles(actor, map_aggregate, component)
+        selected_target = (
+            target_policy.select_target(actor, visible_hostiles, target_context)
+            if visible_hostiles
+            else None
+        )
+        return BehaviorObservation(
+            visible_threats=visible_threats,
+            visible_hostiles=visible_hostiles,
+            selected_target=selected_target,
+            skill_context=skill_context,
+            growth_context=growth_context,
+            target_context=target_context,
+            pack_rally_coordinate=pack_rally_coordinate,
+            current_tick=current_tick,
+        )
+
     def plan_action(
         self,
         actor_id: WorldObjectId,

@@ -104,13 +104,40 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
 
         if result.apply_enrage:
             component.set_state(BehaviorStateEnum.ENRAGE)
+            context.event_sink.append(
+                ActorStateChangedEvent.create(
+                    aggregate_id=context.actor_id,
+                    aggregate_type="Actor",
+                    actor_id=context.actor_id,
+                    old_state=old_state,
+                    new_state=BehaviorStateEnum.ENRAGE,
+                )
+            )
             old_state = BehaviorStateEnum.ENRAGE
 
         if result.flee_from_threat_id is not None and result.flee_from_threat_coordinate is not None:
             component.set_state(BehaviorStateEnum.FLEE)
             component.target_id = result.flee_from_threat_id
             component.last_known_target_position = result.flee_from_threat_coordinate
-            # FLEE の ActorStateChangedEvent はサービスが result.events に含めている
+            context.event_sink.append(
+                TargetSpottedEvent.create(
+                    aggregate_id=context.actor_id,
+                    aggregate_type="Actor",
+                    actor_id=context.actor_id,
+                    target_id=result.flee_from_threat_id,
+                    coordinate=result.flee_from_threat_coordinate,
+                )
+            )
+            if not result.apply_enrage:
+                context.event_sink.append(
+                    ActorStateChangedEvent.create(
+                        aggregate_id=context.actor_id,
+                        aggregate_type="Actor",
+                        actor_id=context.actor_id,
+                        old_state=old_state,
+                        new_state=BehaviorStateEnum.FLEE,
+                    )
+                )
             old_state = BehaviorStateEnum.FLEE
 
         if result.spot_target_params is not None:
@@ -121,15 +148,32 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
                 effective_flee_threshold=params.effective_flee_threshold,
                 allow_chase=params.allow_chase,
             )
+            context.event_sink.append(
+                TargetSpottedEvent.create(
+                    aggregate_id=context.actor_id,
+                    aggregate_type="Actor",
+                    actor_id=context.actor_id,
+                    target_id=params.target_id,
+                    coordinate=params.coordinate,
+                )
+            )
             if old_state != component.state:
                 self._publish_state_changed(context, old_state, component.state)
 
         if result.do_lose_target:
             component.lose_target()
+            if result.last_known_coordinate is not None:
+                context.event_sink.append(
+                    TargetLostEvent.create(
+                        aggregate_id=context.actor_id,
+                        aggregate_type="Actor",
+                        actor_id=context.actor_id,
+                        target_id=result.lost_target_id,
+                        last_known_coordinate=result.last_known_coordinate,
+                    )
+                )
             if old_state != component.state:
                 self._publish_state_changed(context, old_state, component.state)
-
-        context.event_sink.extend(result.events)
 
     def decide_action(self, context: PlanActionContext) -> BehaviorAction:
         actor = context.actor

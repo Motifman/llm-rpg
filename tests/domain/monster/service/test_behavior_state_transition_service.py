@@ -19,11 +19,6 @@ from ai_rpg_world.domain.world.value_object.behavior_context import GrowthContex
 from ai_rpg_world.domain.world.enum.world_enum import BehaviorStateEnum, ObjectTypeEnum
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
-from ai_rpg_world.domain.world.event.behavior_events import (
-    ActorStateChangedEvent,
-    TargetSpottedEvent,
-    TargetLostEvent,
-)
 
 
 def _obj(oid: int, x: int, y: int) -> WorldObject:
@@ -97,20 +92,6 @@ class TestStateTransitionResult:
         assert result.do_lose_target is False
         assert result.lost_target_id is None
         assert result.last_known_coordinate is None
-        assert result.events == []
-
-    def test_create_with_events(self):
-        """events を指定して作成できること"""
-        ev = ActorStateChangedEvent.create(
-            aggregate_id=WorldObjectId(1),
-            aggregate_type="Actor",
-            actor_id=WorldObjectId(1),
-            old_state=BehaviorStateEnum.IDLE,
-            new_state=BehaviorStateEnum.CHASE,
-        )
-        result = StateTransitionResult(events=[ev])
-        assert len(result.events) == 1
-        assert result.events[0] is ev
 
 
 class TestBehaviorStateTransitionServiceNormal:
@@ -139,7 +120,6 @@ class TestBehaviorStateTransitionServiceNormal:
         assert result.flee_from_threat_id is None
         assert result.spot_target_params is None
         assert result.do_lose_target is False
-        assert result.events == []
 
     def test_compute_transition_enrage_only_when_phase_below_threshold(
         self, service, actor_id, actor_coordinate
@@ -156,9 +136,6 @@ class TestBehaviorStateTransitionServiceNormal:
         assert result.flee_from_threat_id is None
         assert result.spot_target_params is None
         assert result.do_lose_target is False
-        assert len(result.events) == 1
-        assert isinstance(result.events[0], ActorStateChangedEvent)
-        assert result.events[0].new_state == BehaviorStateEnum.ENRAGE
 
     def test_compute_transition_enrage_not_applied_when_already_enrage(
         self, service, actor_id, actor_coordinate
@@ -172,7 +149,6 @@ class TestBehaviorStateTransitionServiceNormal:
         obs = _observation()
         result = service.compute_transition(obs, snapshot, actor_id, actor_coordinate)
         assert result.apply_enrage is False
-        assert result.events == []
 
     def test_compute_transition_enrage_not_applied_when_already_flee(
         self, service, actor_id, actor_coordinate
@@ -186,7 +162,6 @@ class TestBehaviorStateTransitionServiceNormal:
         obs = _observation()
         result = service.compute_transition(obs, snapshot, actor_id, actor_coordinate)
         assert result.apply_enrage is False
-        assert result.events == []
 
     def test_compute_transition_flee_when_visible_threats(
         self, service, actor_id, actor_coordinate
@@ -202,14 +177,6 @@ class TestBehaviorStateTransitionServiceNormal:
         assert result.flee_from_threat_coordinate == threat_near.coordinate
         assert result.spot_target_params is None
         assert result.do_lose_target is False
-        # TargetSpotted + ActorStateChanged(FLEE)
-        assert len(result.events) == 2
-        target_spotted = [e for e in result.events if isinstance(e, TargetSpottedEvent)]
-        state_changed = [e for e in result.events if isinstance(e, ActorStateChangedEvent)]
-        assert len(target_spotted) == 1
-        assert target_spotted[0].target_id == threat_near.object_id
-        assert len(state_changed) == 1
-        assert state_changed[0].new_state == BehaviorStateEnum.FLEE
 
     def test_compute_transition_spot_target_when_selected_target_no_threats(
         self, service, actor_id, actor_coordinate
@@ -228,8 +195,6 @@ class TestBehaviorStateTransitionServiceNormal:
         assert result.spot_target_params.effective_flee_threshold == 0.3
         assert result.spot_target_params.allow_chase is True
         assert result.do_lose_target is False
-        assert len(result.events) == 1
-        assert isinstance(result.events[0], TargetSpottedEvent)
 
     def test_compute_transition_lose_target_when_no_threats_no_selected_has_target_id(
         self, service, actor_id, actor_coordinate
@@ -250,15 +215,11 @@ class TestBehaviorStateTransitionServiceNormal:
         assert result.do_lose_target is True
         assert result.lost_target_id == lost_id
         assert result.last_known_coordinate == last_coord
-        assert len(result.events) == 1
-        assert isinstance(result.events[0], TargetLostEvent)
-        assert result.events[0].target_id == lost_id
-        assert result.events[0].last_known_coordinate == last_coord
 
-    def test_compute_transition_lose_target_no_event_when_no_last_known(
+    def test_compute_transition_lose_target_last_known_none(
         self, service, actor_id, actor_coordinate
     ):
-        """lose_target で last_known_target_position が None のとき TargetLostEvent は出さないこと"""
+        """lose_target で last_known_target_position が None のとき last_known_coordinate は None のまま返ること"""
         snapshot = BehaviorStateSnapshot(
             state=BehaviorStateEnum.CHASE,
             target_id=WorldObjectId(1),
@@ -269,7 +230,6 @@ class TestBehaviorStateTransitionServiceNormal:
         assert result.do_lose_target is True
         assert result.lost_target_id == WorldObjectId(1)
         assert result.last_known_coordinate is None
-        assert result.events == []
 
 
 class TestBehaviorStateTransitionServiceBoundary:
@@ -314,12 +274,6 @@ class TestBehaviorStateTransitionServiceBoundary:
         result = service.compute_transition(obs, snapshot, actor_id, actor_coordinate)
         assert result.apply_enrage is True
         assert result.flee_from_threat_id == threat.object_id
-        # ENRAGE イベント + TargetSpotted。FLEE の ActorStateChanged は apply_enrage 時はサービスでは出さない（呼び出し元で ENRAGE→FLEE は状態更新のみ）
-        assert len(result.events) >= 2
-        enrage_ev = [e for e in result.events if isinstance(e, ActorStateChangedEvent) and e.new_state == BehaviorStateEnum.ENRAGE]
-        target_spotted = [e for e in result.events if isinstance(e, TargetSpottedEvent)]
-        assert len(enrage_ev) == 1
-        assert len(target_spotted) == 1
 
     def test_already_flee_does_not_trigger_spot_target(
         self, service, actor_id, actor_coordinate
@@ -330,7 +284,6 @@ class TestBehaviorStateTransitionServiceBoundary:
         obs = _observation(selected_target=target)
         result = service.compute_transition(obs, snapshot, actor_id, actor_coordinate)
         assert result.spot_target_params is None
-        assert result.events == []
 
     def test_already_flee_with_visible_threats_no_duplicate_flee(
         self, service, actor_id, actor_coordinate
@@ -342,7 +295,6 @@ class TestBehaviorStateTransitionServiceBoundary:
         result = service.compute_transition(obs, snapshot, actor_id, actor_coordinate)
         assert result.flee_from_threat_id is None
         assert result.flee_from_threat_coordinate is None
-        assert result.events == []
 
     def test_nearest_threat_selected_among_multiple(
         self, service, actor_id, actor_coordinate
