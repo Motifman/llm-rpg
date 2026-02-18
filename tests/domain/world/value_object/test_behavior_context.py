@@ -9,6 +9,7 @@ from ai_rpg_world.domain.world.value_object.behavior_context import (
     GrowthContext,
     PlanActionContext,
 )
+from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
 from ai_rpg_world.domain.world.exception.behavior_exception import GrowthContextValidationException
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
@@ -108,7 +109,15 @@ class TestGrowthContextValidation:
 
 
 class TestPlanActionContext:
-    """PlanActionContext の event_sink のテスト"""
+    """PlanActionContext の observation と event_sink のテスト"""
+
+    def _minimal_observation(self):
+        """テスト用の最小限の BehaviorObservation を返す。"""
+        return BehaviorObservation(
+            visible_threats=[],
+            visible_hostiles=[],
+            selected_target=None,
+        )
 
     def test_create_with_default_event_sink(self):
         """event_sink を渡さない場合、デフォルトで空リストが設定されること"""
@@ -118,17 +127,17 @@ class TestPlanActionContext:
         actor.coordinate = Coordinate(0, 0)
         map_aggregate = MagicMock()
         component = MagicMock()
+        observation = self._minimal_observation()
         ctx = PlanActionContext(
             actor_id=actor_id,
             actor=actor,
             map_aggregate=map_aggregate,
             component=component,
-            visible_threats=[],
-            visible_hostiles=[],
-            target=None,
+            observation=observation,
         )
         assert ctx.event_sink == []
         assert isinstance(ctx.event_sink, list)
+        assert ctx.observation is observation
 
     def test_create_with_custom_event_sink(self):
         """event_sink を渡した場合、そのリストがそのまま使われること"""
@@ -139,16 +148,17 @@ class TestPlanActionContext:
         map_aggregate = MagicMock()
         component = MagicMock()
         sink = []
+        observation = self._minimal_observation()
         ctx = PlanActionContext(
             actor_id=actor_id,
             actor=actor,
             map_aggregate=map_aggregate,
             component=component,
-            visible_threats=[],
-            visible_hostiles=[],
-            target=None,
+            observation=observation,
             event_sink=sink,
         )
         assert ctx.event_sink is sink
         ctx.event_sink.append("dummy")
         assert sink == ["dummy"]
+        assert ctx.observation.visible_threats == []
+        assert ctx.observation.selected_target is None

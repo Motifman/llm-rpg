@@ -237,6 +237,7 @@ class WorldSimulationApplicationService:
                             skill_context=skill_context,
                             target_context=target_context,
                             growth_context=growth_context,
+                            current_tick=current_tick,
                             event_sink=behavior_events,
                         )
                         # モンスターの場合は行動イベントを集約に積み、save で UoW に登録（commit 時に発行）
@@ -245,6 +246,7 @@ class WorldSimulationApplicationService:
                             for event in behavior_events:
                                 monster.add_event(event)
                             self._monster_repository.save(monster)
+                            self._unit_of_work.process_sync_events()
 
                         if action.action_type == BehaviorActionType.MOVE:
                             # 移動実行

@@ -496,6 +496,28 @@ class TestBehaviorService:
             action = behavior_service.plan_action(monster_id, map_aggregate, event_sink=None)
             assert action is not None
 
+        def test_plan_action_accepts_current_tick_and_returns_action(self, behavior_service, map_aggregate):
+            """current_tick を渡しても plan_action が正常に動作し BehaviorAction を返すこと（Phase 2a: 観測に current_tick を含める）"""
+            monster_id = WorldObjectId(100)
+            comp = AutonomousBehaviorComponent(
+                state=BehaviorStateEnum.IDLE,
+                vision_range=5,
+                fov_angle=360,
+            )
+            monster = WorldObject(
+                monster_id, Coordinate(5, 5), ObjectTypeEnum.NPC, is_blocking=False, component=comp
+            )
+            map_aggregate.add_object(monster)
+            behavior_events = []
+            action = behavior_service.plan_action(
+                monster_id,
+                map_aggregate,
+                current_tick=WorldTick(42),
+                event_sink=behavior_events,
+            )
+            assert action is not None
+            assert action.action_type == BehaviorActionType.WAIT
+
     class TestEnrageTransition:
         """phase_thresholds による ENRAGE 遷移のテスト"""
 
