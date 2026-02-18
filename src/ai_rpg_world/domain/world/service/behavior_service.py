@@ -50,7 +50,14 @@ def _default_target_policy_factory(
 
 
 class BehaviorService:
-    """アクターの自律的な行動を制御するドメインサービス。ターゲット収集・状態更新・イベント発行を行い、アクション決定は戦略に委譲する。"""
+    """
+    アクターの自律的な行動を制御するドメインサービス。
+    ターゲット収集・状態更新・イベント発行を行い、アクション決定は戦略に委譲する。
+
+    状態遷移の流れ: (1) HP%≤phase→ENRAGE (2) 視界内THREAT→FLEE
+    (3) 敵対でspot_target→FLEE/CHASE (ecology_type・flee_thresholdで制御)
+    (4) ターゲット見失い→lose_target()でSEARCH/RETURN (5) 戦略側でSEARCH終了・縄張り超過・RETURN到着・移動失敗でPATROL/RETURN/IDLE.
+    """
 
     def __init__(
         self,

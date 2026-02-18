@@ -40,6 +40,8 @@ class MonsterTemplate:
     hunger_decrease_on_prey_kill: float = 0.0
     hunger_starvation_threshold: float = 1.0
     starvation_ticks: int = 0
+    # 寿命（Optional[int]、None/0 で無効。経過ティック ≥ max_age_ticks で NATURAL 死亡）
+    max_age_ticks: Optional[int] = None
 
     def __post_init__(self):
         object.__setattr__(self, "skill_ids", self.skill_ids or [])
@@ -147,4 +149,8 @@ class MonsterTemplate:
         if self.starvation_ticks < 0:
             raise MonsterTemplateValidationException(
                 f"starvation_ticks cannot be negative: {self.starvation_ticks}"
+            )
+        if self.max_age_ticks is not None and self.max_age_ticks < 0:
+            raise MonsterTemplateValidationException(
+                f"max_age_ticks cannot be negative: {self.max_age_ticks}"
             )

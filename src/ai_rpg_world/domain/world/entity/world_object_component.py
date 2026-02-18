@@ -298,7 +298,11 @@ class MonsterSkillInfo:
 
 
 class AutonomousBehaviorComponent(ActorComponent):
-    """自律的な行動ロジックを持つアクターコンポーネント"""
+    """
+    自律的な行動ロジックを持つアクターコンポーネント。
+    状態: IDLE/PATROL/CHASE/SEARCH/FLEE/RETURN/ENRAGE.
+    lose_target: CHASE/ENRAGE→SEARCH, FLEE→RETURN. tick_search終了→PATROLまたはRETURN.
+    """
     def __init__(
         self,
         direction: DirectionEnum = DirectionEnum.SOUTH,
@@ -479,7 +483,7 @@ class AutonomousBehaviorComponent(ActorComponent):
         # allow_chase が False の場合は CHASE に遷移しない（IDLE 等のまま）
 
     def lose_target(self):
-        """ターゲットを見失った際の状態遷移"""
+        """ターゲットを見失った際の状態遷移。CHASE/ENRAGE→SEARCH, FLEE→RETURN."""
         if self.state in (BehaviorStateEnum.CHASE, BehaviorStateEnum.ENRAGE):
             self.set_state(BehaviorStateEnum.SEARCH)
         elif self.state == BehaviorStateEnum.FLEE:

@@ -434,6 +434,150 @@ class TestMonsterAggregate:
             with pytest.raises(MonsterAlreadyDeadException):
                 monster.starve(WorldTick(20))
 
+    class TestDieFromOldAge:
+        """die_from_old_age のテスト"""
+
+        def test_die_from_old_age_success(self, monster_template: MonsterTemplate, spot_id: SpotId):
+            """経過ティックが max_age_ticks 以上で NATURAL 死亡し True を返す"""
+            template_with_age = MonsterTemplate(
+                template_id=monster_template.template_id,
+                name=monster_template.name,
+                base_stats=monster_template.base_stats,
+                reward_info=monster_template.reward_info,
+                respawn_info=monster_template.respawn_info,
+                race=monster_template.race,
+                faction=monster_template.faction,
+                description=monster_template.description,
+                max_age_ticks=50,
+            )
+            loadout = SkillLoadoutAggregate.create(
+                SkillLoadoutId(1), owner_id=1001, normal_capacity=10, awakened_capacity=10
+            )
+            monster = MonsterAggregate.create(
+                MonsterId.create(1),
+                template_with_age,
+                WorldObjectId.create(1001),
+                skill_loadout=loadout,
+            )
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            monster.clear_events()
+
+            result = monster.die_from_old_age(WorldTick(50))
+
+            assert result is True
+            assert monster.status == MonsterStatusEnum.DEAD
+            events = monster.get_events()
+            die_event = next(e for e in events if isinstance(e, MonsterDiedEvent))
+            assert die_event.cause == DeathCauseEnum.NATURAL
+
+        def test_die_from_old_age_returns_false_when_elapsed_under(
+            self, monster_template: MonsterTemplate, spot_id: SpotId
+        ):
+            """経過ティックが max_age_ticks 未満のときは何もせず False"""
+            template_with_age = MonsterTemplate(
+                template_id=monster_template.template_id,
+                name=monster_template.name,
+                base_stats=monster_template.base_stats,
+                reward_info=monster_template.reward_info,
+                respawn_info=monster_template.respawn_info,
+                race=monster_template.race,
+                faction=monster_template.faction,
+                description=monster_template.description,
+                max_age_ticks=100,
+            )
+            loadout = SkillLoadoutAggregate.create(
+                SkillLoadoutId(1), owner_id=1001, normal_capacity=10, awakened_capacity=10
+            )
+            monster = MonsterAggregate.create(
+                MonsterId.create(1),
+                template_with_age,
+                WorldObjectId.create(1001),
+                skill_loadout=loadout,
+            )
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+
+            result = monster.die_from_old_age(WorldTick(50))
+
+            assert result is False
+            assert monster.status == MonsterStatusEnum.ALIVE
+
+        def test_die_from_old_age_returns_false_when_not_spawned(self, monster: MonsterAggregate):
+            """未スポーンのときは False（spawned_at_tick が None）"""
+            result = monster.die_from_old_age(WorldTick(1000))
+            assert result is False
+            assert monster.status == MonsterStatusEnum.DEAD
+
+        def test_die_from_old_age_returns_false_when_already_dead(
+            self, monster_template: MonsterTemplate, spot_id: SpotId
+        ):
+            """既に DEAD のときは False"""
+            template_with_age = MonsterTemplate(
+                template_id=monster_template.template_id,
+                name=monster_template.name,
+                base_stats=monster_template.base_stats,
+                reward_info=monster_template.reward_info,
+                respawn_info=monster_template.respawn_info,
+                race=monster_template.race,
+                faction=monster_template.faction,
+                description=monster_template.description,
+                max_age_ticks=10,
+            )
+            loadout = SkillLoadoutAggregate.create(
+                SkillLoadoutId(1), owner_id=1001, normal_capacity=10, awakened_capacity=10
+            )
+            monster = MonsterAggregate.create(
+                MonsterId.create(1),
+                template_with_age,
+                WorldObjectId.create(1001),
+                skill_loadout=loadout,
+            )
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            monster.apply_damage(100, WorldTick(5))
+
+            result = monster.die_from_old_age(WorldTick(20))
+
+            assert result is False
+            assert monster.status == MonsterStatusEnum.DEAD
+
+        def test_die_from_old_age_returns_false_when_max_age_ticks_none(
+            self, monster: MonsterAggregate, spot_id: SpotId
+        ):
+            """max_age_ticks が None のときは False"""
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            result = monster.die_from_old_age(WorldTick(100000))
+            assert result is False
+            assert monster.status == MonsterStatusEnum.ALIVE
+
+        def test_die_from_old_age_returns_false_when_max_age_ticks_zero(
+            self, monster_template: MonsterTemplate, spot_id: SpotId
+        ):
+            """max_age_ticks が 0 のときは False"""
+            template_zero = MonsterTemplate(
+                template_id=monster_template.template_id,
+                name=monster_template.name,
+                base_stats=monster_template.base_stats,
+                reward_info=monster_template.reward_info,
+                respawn_info=monster_template.respawn_info,
+                race=monster_template.race,
+                faction=monster_template.faction,
+                description=monster_template.description,
+                max_age_ticks=0,
+            )
+            loadout = SkillLoadoutAggregate.create(
+                SkillLoadoutId(1), owner_id=1001, normal_capacity=10, awakened_capacity=10
+            )
+            monster = MonsterAggregate.create(
+                MonsterId.create(1),
+                template_zero,
+                WorldObjectId.create(1001),
+                skill_loadout=loadout,
+            )
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            result = monster.die_from_old_age(WorldTick(100000))
+            assert result is False
+            assert monster.status == MonsterStatusEnum.ALIVE
+
+    class TestRespawn:
         def test_respawn_success(self, monster: MonsterAggregate, spot_id: SpotId):
             # Given
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
