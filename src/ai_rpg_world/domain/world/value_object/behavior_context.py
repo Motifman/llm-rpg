@@ -6,6 +6,7 @@
 from dataclasses import dataclass, field
 from typing import Dict, Set, List, Optional, TYPE_CHECKING
 
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.exception.behavior_exception import GrowthContextValidationException
@@ -66,6 +67,8 @@ class PlanActionContext:
     """
     行動計画（状態更新・アクション決定）に必要なコンテキストを一括で渡すための値オブジェクト。
     BehaviorService が収集し、戦略の update_state / decide_action に渡す。
+    行動イベント（TargetSpotted, ActorStateChanged 等）は event_sink に追加し、
+    呼び出し元でモンスター集約等に積み直す。
     """
     actor_id: WorldObjectId
     actor: "WorldObject"
@@ -78,3 +81,4 @@ class PlanActionContext:
     skill_context: Optional[SkillSelectionContext] = None
     pack_rally_coordinate: Optional[Coordinate] = None
     growth_context: Optional[GrowthContext] = None
+    event_sink: List[DomainEvent] = field(default_factory=list)

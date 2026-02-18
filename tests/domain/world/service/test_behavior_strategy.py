@@ -33,7 +33,12 @@ from ai_rpg_world.domain.world.service.behavior_strategy import (
     BossBehaviorStrategy,
 )
 from ai_rpg_world.domain.world.value_object.pack_id import PackId
-from ai_rpg_world.domain.world.event.behavior_events import BehaviorStuckEvent
+from ai_rpg_world.domain.world.event.behavior_events import (
+    ActorStateChangedEvent,
+    BehaviorStuckEvent,
+    TargetLostEvent,
+    TargetSpottedEvent,
+)
 from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import (
     AStarPathfindingStrategy,
 )
@@ -53,6 +58,7 @@ def _make_context(actor_id, actor, map_aggregate, component, target=None, **kwar
         skill_context=kwargs.get("skill_context"),
         pack_rally_coordinate=kwargs.get("pack_rally_coordinate"),
         growth_context=kwargs.get("growth_context"),
+        event_sink=kwargs.get("event_sink", []),
     )
 
 
@@ -326,12 +332,12 @@ class TestDefaultBehaviorStrategy:
         action = strategy.decide_action(ctx)
         assert action.action_type == BehaviorActionType.MOVE
 
-    def test_decide_action_stuck_emits_behavior_stuck_event(
+    def test_decide_action_stuck_emits_behavior_stuck_event_to_event_sink(
         self,
         strategy: DefaultBehaviorStrategy,
         map_aggregate: PhysicalMapAggregate,
     ):
-        """経路が取れず移動失敗が max_failures に達したとき BehaviorStuckEvent が発行されること"""
+        """経路が取れず移動失敗が max_failures に達したとき BehaviorStuckEvent が event_sink に追加されること"""
         comp = AutonomousBehaviorComponent(
             state=BehaviorStateEnum.CHASE,
             max_failures=2,
@@ -357,11 +363,11 @@ class TestDefaultBehaviorStrategy:
                     is_blocking=True,
                 )
                 map_aggregate.add_object(wall)
-        ctx = _make_context(actor.object_id, actor, map_aggregate, comp, None)
+        event_sink = []
+        ctx = _make_context(actor.object_id, actor, map_aggregate, comp, None, event_sink=event_sink)
         strategy.decide_action(ctx)
         strategy.decide_action(ctx)
-        events = map_aggregate.get_events()
-        assert any(isinstance(e, BehaviorStuckEvent) for e in events)
+        assert any(isinstance(e, BehaviorStuckEvent) for e in event_sink)
         assert comp.state == BehaviorStateEnum.RETURN
 
     def test_decide_action_enrage_with_target_in_skill_range_returns_use_skill(
@@ -428,6 +434,7 @@ class TestDefaultBehaviorStrategy:
             component=AutonomousBehaviorComponent(race="dragon"),
         )
         map_aggregate.add_object(threat)
+        event_sink = []
         ctx = PlanActionContext(
             actor_id=actor.object_id,
             actor=actor,
@@ -436,11 +443,17 @@ class TestDefaultBehaviorStrategy:
             visible_threats=[threat],
             visible_hostiles=[],
             target=None,
+            event_sink=event_sink,
         )
         strategy.update_state(ctx)
         assert comp.state == BehaviorStateEnum.FLEE
         assert comp.target_id == threat.object_id
         assert comp.last_known_target_position == threat.coordinate
+        # 行動イベントは event_sink に追加され、Map には積まれない（Map には create/add のみ）
+        assert any(isinstance(e, TargetSpottedEvent) for e in event_sink)
+        assert any(isinstance(e, ActorStateChangedEvent) for e in event_sink)
+        behavior_event_types = (TargetSpottedEvent, TargetLostEvent, ActorStateChangedEvent, BehaviorStuckEvent)
+        assert not any(isinstance(e, behavior_event_types) for e in map_aggregate.get_events())
 
     def test_decide_action_territory_radius_exceeded_returns_toward_initial(
         self,

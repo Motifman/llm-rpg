@@ -6,7 +6,7 @@
 import math
 import random
 from abc import ABC, abstractmethod
-from typing import Optional, TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING
 
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
@@ -102,7 +102,7 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
             target = nearest
             component.target_id = target.object_id
             component.last_known_target_position = target.coordinate
-            context.map_aggregate.add_event(
+            context.event_sink.append(
                 TargetSpottedEvent.create(
                     aggregate_id=context.actor_id,
                     aggregate_type="Actor",
@@ -124,7 +124,7 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
             )
             if old_state != component.state:
                 self._publish_state_changed(context, old_state, component.state)
-                context.map_aggregate.add_event(
+                context.event_sink.append(
                     TargetSpottedEvent.create(
                         aggregate_id=context.actor_id,
                         aggregate_type="Actor",
@@ -142,7 +142,7 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
             if old_state != component.state:
                 self._publish_state_changed(context, old_state, component.state)
                 if last_coord:
-                    context.map_aggregate.add_event(
+                    context.event_sink.append(
                         TargetLostEvent.create(
                             aggregate_id=context.actor_id,
                             aggregate_type="Actor",
@@ -176,27 +176,27 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
         ):
             if actor.coordinate.distance_to(component.initial_position) > component.territory_radius:
                 component.set_state(BehaviorStateEnum.RETURN)
-                next_coord = self._calculate_return_move(actor, component, map_aggregate)
+                next_coord = self._calculate_return_move(actor, component, map_aggregate, context)
         if next_coord is not None:
             return BehaviorAction.move(next_coord)
 
         if component.state == BehaviorStateEnum.FLEE:
-            next_coord = self._calculate_flee_move(actor, component, map_aggregate)
+            next_coord = self._calculate_flee_move(actor, component, map_aggregate, context)
         elif component.state in (BehaviorStateEnum.CHASE, BehaviorStateEnum.ENRAGE):
-            next_coord = self._calculate_chase_move(actor, component, map_aggregate)
+            next_coord = self._calculate_chase_move(actor, component, map_aggregate, context)
         elif component.state == BehaviorStateEnum.SEARCH:
-            next_coord = self._calculate_search_move(actor, component, map_aggregate)
+            next_coord = self._calculate_search_move(actor, component, map_aggregate, context)
         elif component.state == BehaviorStateEnum.PATROL:
-            next_coord = self._calculate_patrol_move(actor, component, map_aggregate)
+            next_coord = self._calculate_patrol_move(actor, component, map_aggregate, context)
         elif component.state == BehaviorStateEnum.RETURN:
-            next_coord = self._calculate_return_move(actor, component, map_aggregate)
+            next_coord = self._calculate_return_move(actor, component, map_aggregate, context)
 
         if next_coord is None and context.pack_rally_coordinate:
             is_follower = component.pack_id is not None and not component.is_pack_leader
             if is_follower and component.state in (BehaviorStateEnum.IDLE, BehaviorStateEnum.PATROL):
                 if actor.coordinate != context.pack_rally_coordinate:
                     next_coord = self._get_next_step_to(
-                        actor, context.pack_rally_coordinate, map_aggregate, component
+                        actor, context.pack_rally_coordinate, map_aggregate, component, context.event_sink
                     )
 
         if next_coord is not None:
@@ -209,7 +209,7 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
         old_state: BehaviorStateEnum,
         new_state: BehaviorStateEnum,
     ) -> None:
-        context.map_aggregate.add_event(
+        context.event_sink.append(
             ActorStateChangedEvent.create(
                 aggregate_id=context.actor_id,
                 aggregate_type="Actor",
@@ -224,11 +224,12 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
         actor: "WorldObject",
         component: AutonomousBehaviorComponent,
         map_aggregate: "PhysicalMapAggregate",
+        context: PlanActionContext,
     ) -> Optional[Coordinate]:
         if not component.last_known_target_position:
             return None
         return self._get_next_step_to(
-            actor, component.last_known_target_position, map_aggregate, component
+            actor, component.last_known_target_position, map_aggregate, component, context.event_sink
         )
 
     def _calculate_flee_move(
@@ -236,21 +237,22 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
         actor: "WorldObject",
         component: AutonomousBehaviorComponent,
         map_aggregate: "PhysicalMapAggregate",
+        context: PlanActionContext,
     ) -> Optional[Coordinate]:
         target_id = component.target_id
         if not target_id:
-            return self._calculate_return_move(actor, component, map_aggregate)
+            return self._calculate_return_move(actor, component, map_aggregate, context)
         try:
             target = map_aggregate.get_object(target_id)
         except ObjectNotFoundException:
             component.lose_target()
-            return self._calculate_return_move(actor, component, map_aggregate)
+            return self._calculate_return_move(actor, component, map_aggregate, context)
         flee_goal = self._find_flee_goal(
             actor, target.coordinate, component, map_aggregate
         )
         if not flee_goal:
             return None
-        return self._get_next_step_to(actor, flee_goal, map_aggregate, component)
+        return self._get_next_step_to(actor, flee_goal, map_aggregate, component, context.event_sink)
 
     def _find_flee_goal(
         self,
@@ -283,6 +285,7 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
         actor: "WorldObject",
         component: AutonomousBehaviorComponent,
         map_aggregate: "PhysicalMapAggregate",
+        context: PlanActionContext,
     ) -> Optional[Coordinate]:
         if not component.initial_position:
             component.set_state(BehaviorStateEnum.IDLE)
@@ -291,7 +294,7 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
             component.set_state(BehaviorStateEnum.IDLE)
             return None
         return self._get_next_step_to(
-            actor, component.initial_position, map_aggregate, component
+            actor, component.initial_position, map_aggregate, component, context.event_sink
         )
 
     def _calculate_search_move(
@@ -299,21 +302,23 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
         actor: "WorldObject",
         component: AutonomousBehaviorComponent,
         map_aggregate: "PhysicalMapAggregate",
+        context: PlanActionContext,
     ) -> Optional[Coordinate]:
         if not component.last_known_target_position:
             component.set_state(BehaviorStateEnum.RETURN)
-            return self._calculate_return_move(actor, component, map_aggregate)
+            return self._calculate_return_move(actor, component, map_aggregate, context)
         if actor.coordinate != component.last_known_target_position:
             return self._get_next_step_to(
                 actor,
                 component.last_known_target_position,
                 map_aggregate,
                 component,
+                context.event_sink,
             )
         if component.tick_search():
             if component.state == BehaviorStateEnum.PATROL:
-                return self._calculate_patrol_move(actor, component, map_aggregate)
-            return self._calculate_return_move(actor, component, map_aggregate)
+                return self._calculate_patrol_move(actor, component, map_aggregate, context)
+            return self._calculate_return_move(actor, component, map_aggregate, context)
         new_dir = random.choice([
             DirectionEnum.NORTH,
             DirectionEnum.SOUTH,
@@ -337,6 +342,7 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
         actor: "WorldObject",
         component: AutonomousBehaviorComponent,
         map_aggregate: "PhysicalMapAggregate",
+        context: PlanActionContext,
     ) -> Optional[Coordinate]:
         if not component.patrol_points:
             return None
@@ -347,7 +353,7 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
             ) % len(component.patrol_points)
             target_point = component.patrol_points[component.current_patrol_index]
         return self._get_next_step_to(
-            actor, target_point, map_aggregate, component
+            actor, target_point, map_aggregate, component, context.event_sink
         )
 
     def _get_next_step_to(
@@ -356,6 +362,7 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
         goal: Coordinate,
         map_aggregate: "PhysicalMapAggregate",
         component: AutonomousBehaviorComponent,
+        event_sink: Optional[List] = None,
     ) -> Optional[Coordinate]:
         try:
             path = self._pathfinding_service.calculate_path(
@@ -371,8 +378,8 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
                 component.on_move_success()
                 return path[1]
             if actor.coordinate != goal:
-                if component.on_move_failed():
-                    map_aggregate.add_event(
+                if component.on_move_failed() and event_sink is not None:
+                    event_sink.append(
                         BehaviorStuckEvent.create(
                             aggregate_id=actor.object_id,
                             aggregate_type="Actor",
@@ -382,8 +389,8 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
                         )
                     )
         except (PathNotFoundException, InvalidPathRequestException):
-            if component.on_move_failed():
-                map_aggregate.add_event(
+            if component.on_move_failed() and event_sink is not None:
+                event_sink.append(
                     BehaviorStuckEvent.create(
                         aggregate_id=actor.object_id,
                         aggregate_type="Actor",
