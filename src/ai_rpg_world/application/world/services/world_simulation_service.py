@@ -22,14 +22,37 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
 from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
-from ai_rpg_world.domain.world.value_object.behavior_context import SkillSelectionContext, TargetSelectionContext
-from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
+from ai_rpg_world.domain.world.value_object.behavior_context import (
+    SkillSelectionContext,
+    TargetSelectionContext,
+    GrowthContext,
+)
+from ai_rpg_world.domain.monster.repository.monster_repository import (
+    MonsterRepository,
+    MonsterTemplateRepository,
+)
+from ai_rpg_world.domain.monster.repository.spawn_table_repository import SpawnTableRepository
+from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
+from ai_rpg_world.domain.monster.enum.monster_enum import MonsterStatusEnum
+from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
+from ai_rpg_world.domain.monster.value_object.spawn_slot import SpawnSlot
 from ai_rpg_world.domain.skill.repository.skill_repository import SkillLoadoutRepository
+from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
+from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import MonsterSkillExecutionDomainService
 from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
 from ai_rpg_world.domain.world.service.weather_simulation_service import WeatherSimulationService
 from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
 from ai_rpg_world.domain.world.service.weather_config_service import WeatherConfigService
+from ai_rpg_world.domain.world.service.world_time_config_service import (
+    WorldTimeConfigService,
+    DefaultWorldTimeConfigService,
+)
+from ai_rpg_world.domain.world.value_object.time_of_day import (
+    TimeOfDay,
+    time_of_day_from_tick,
+    is_active_at_time,
+)
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.combat.service.hit_box_config_service import (
@@ -63,6 +86,9 @@ class WorldSimulationApplicationService:
         hit_box_config_service: Optional[HitBoxConfigService] = None,
         hit_box_collision_service: Optional[HitBoxCollisionDomainService] = None,
         aggro_store: Optional[AggroStore] = None,
+        world_time_config_service: Optional[WorldTimeConfigService] = None,
+        spawn_table_repository: Optional[SpawnTableRepository] = None,
+        monster_template_repository: Optional[MonsterTemplateRepository] = None,
     ):
         self._time_provider = time_provider
         self._physical_map_repository = physical_map_repository
@@ -73,12 +99,15 @@ class WorldSimulationApplicationService:
         self._weather_config_service = weather_config_service
         self._monster_repository = monster_repository
         self._skill_loadout_repository = skill_loadout_repository
+        self._spawn_table_repository = spawn_table_repository
+        self._monster_template_repository = monster_template_repository
         self._monster_skill_execution_domain_service = monster_skill_execution_domain_service
         self._hit_box_factory = hit_box_factory
         self._hit_box_config_service = hit_box_config_service or DefaultHitBoxConfigService()
         self._hit_box_collision_service = hit_box_collision_service or HitBoxCollisionDomainService()
         self._unit_of_work = unit_of_work
         self._aggro_store = aggro_store
+        self._world_time_config_service = world_time_config_service or DefaultWorldTimeConfigService()
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def tick(self) -> WorldTick:
@@ -120,6 +149,39 @@ class WorldSimulationApplicationService:
             # アクティブなスポット（プレイヤーが1人以上いるスポット）のみ行動更新・HitBox・save を行う
             active_spot_ids: Set[SpotId] = {pm.spot_id for pm in player_map_map.values()}
 
+            # 3.5 スポーン・リスポーン判定（スロットベース or 従来のDEAD走査）
+            ticks_per_day = self._world_time_config_service.get_ticks_per_day()
+            time_of_day = time_of_day_from_tick(current_tick.value, ticks_per_day)
+            if self._spawn_table_repository and self._monster_template_repository:
+                self._process_spawn_and_respawn_by_slots(
+                    active_spot_ids=active_spot_ids,
+                    current_tick=current_tick,
+                    time_of_day=time_of_day,
+                )
+            else:
+                for monster in self._monster_repository.find_all():
+                    if monster.status != MonsterStatusEnum.DEAD:
+                        continue
+                    if monster.spot_id is None or monster.spot_id not in active_spot_ids:
+                        continue
+                    if not monster.should_respawn(current_tick):
+                        continue
+                    condition = monster.template.respawn_info.condition
+                    if condition is not None and not condition.is_satisfied_at(time_of_day):
+                        continue
+                    respawn_coord = monster.get_respawn_coordinate()
+                    if respawn_coord is None:
+                        continue
+                    try:
+                        monster.respawn(respawn_coord, current_tick, monster.spot_id)
+                        self._monster_repository.save(monster)
+                    except DomainException as e:
+                        self._logger.warning(
+                            "Respawn skipped for monster %s: %s",
+                            monster.monster_id,
+                            str(e),
+                        )
+
             # 4. 各マップのアクターの行動更新（アクティブなスポットのみ；同一スポット内でプレイヤーとの距離が近い順に処理）
             for physical_map in maps:
                 if physical_map.spot_id not in active_spot_ids:
@@ -128,17 +190,51 @@ class WorldSimulationApplicationService:
                     # Busy状態のアクターはスキップ
                     if actor.is_busy(current_tick):
                         continue
-                    
+                    # 活動時間帯でない自律アクターは行動しない（WAIT 相当）
+                    if isinstance(actor.component, AutonomousBehaviorComponent):
+                        ticks_per_day = self._world_time_config_service.get_ticks_per_day()
+                        time_of_day = time_of_day_from_tick(current_tick.value, ticks_per_day)
+                        if not is_active_at_time(actor.component.active_time, time_of_day):
+                            continue
+                        # Phase 6: 飢餓ティックと飢餓死判定
+                        if actor.component.tick_hunger_and_starvation():
+                            monster = self._monster_repository.find_by_world_object_id(actor.object_id)
+                            if monster:
+                                try:
+                                    monster.starve(current_tick)
+                                    self._monster_repository.save(monster)
+                                    self._unit_of_work.process_sync_events()
+                                except DomainException as e:
+                                    self._logger.warning(
+                                        "Starvation skipped for actor %s: %s",
+                                        actor.object_id,
+                                        str(e),
+                                    )
+                            continue
+                        # 寿命判定（経過ティック ≥ max_age_ticks で NATURAL 死亡）
+                        monster = self._monster_repository.find_by_world_object_id(actor.object_id)
+                        if monster and monster.die_from_old_age(current_tick):
+                            try:
+                                self._monster_repository.save(monster)
+                                self._unit_of_work.process_sync_events()
+                            except DomainException as e:
+                                self._logger.warning(
+                                    "Old-age death skipped for actor %s: %s",
+                                    actor.object_id,
+                                    str(e),
+                                )
+                            continue
                     try:
-                        # 自律行動アクター用の skill_context / target_context を組み立て（モンスターでない場合は None）
+                        # 自律行動アクター用の skill_context / target_context / growth_context を組み立て
                         skill_context = self._build_skill_context_for_actor(actor, physical_map, current_tick)
                         target_context = self._build_target_context_for_actor(actor, physical_map, current_tick)
-                        # 自律行動アクターの計画
+                        growth_context = self._build_growth_context_for_actor(actor, current_tick)
                         action = self._behavior_service.plan_action(
                             actor.object_id,
                             physical_map,
                             skill_context=skill_context,
                             target_context=target_context,
+                            growth_context=growth_context,
                         )
                         
                         if action.action_type == BehaviorActionType.MOVE:
@@ -179,6 +275,115 @@ class WorldSimulationApplicationService:
                 self._physical_map_repository.save(physical_map)
             
             return current_tick
+
+    def _process_spawn_and_respawn_by_slots(
+        self,
+        active_spot_ids: Set[SpotId],
+        current_tick: WorldTick,
+        time_of_day: TimeOfDay,
+    ) -> None:
+        """スロット単位でスポーン・リスポーンを処理。条件を満たしたスロットに spawn または respawn する。"""
+        for spot_id in active_spot_ids:
+            table = self._spawn_table_repository.find_by_spot_id(spot_id)
+            if not table:
+                continue
+            physical_map = self._physical_map_repository.find_by_spot_id(spot_id)
+            weather_type = (
+                physical_map.weather_state.weather_type
+                if physical_map and physical_map.weather_state
+                else None
+            )
+            area_traits = getattr(physical_map, "area_traits", None) if physical_map else None
+            monsters_for_spot = self._monster_repository.find_by_spot_id(spot_id)
+            for slot in table.slots:
+                if slot.condition is not None and not slot.condition.is_satisfied(
+                    time_of_day, weather_type=weather_type, area_traits=area_traits
+                ):
+                    continue
+                monster_for_slot = self._find_monster_for_slot(
+                    slot, monsters_for_spot
+                )
+                count_alive = self._count_alive_for_slot(slot, monsters_for_spot)
+                if count_alive >= slot.max_concurrent:
+                    continue
+                if monster_for_slot is not None:
+                    if (
+                        monster_for_slot.status == MonsterStatusEnum.DEAD
+                        and monster_for_slot.should_respawn(current_tick)
+                    ):
+                        try:
+                            monster_for_slot.respawn(
+                                slot.coordinate, current_tick, slot.spot_id
+                            )
+                            self._monster_repository.save(monster_for_slot)
+                            self._unit_of_work.process_sync_events()
+                        except DomainException as e:
+                            self._logger.warning(
+                                "Respawn skipped for slot %s %s: %s",
+                                slot.spot_id,
+                                slot.coordinate,
+                                str(e),
+                            )
+                else:
+                    template = self._monster_template_repository.find_by_id(
+                        slot.template_id
+                    )
+                    if not template:
+                        continue
+                    try:
+                        monster_id = self._monster_repository.generate_monster_id()
+                        world_object_id = (
+                            self._monster_repository.generate_world_object_id_for_npc()
+                        )
+                        loadout = SkillLoadoutAggregate.create(
+                            SkillLoadoutId(world_object_id.value),
+                            world_object_id.value,
+                            10,
+                            10,
+                        )
+                        monster = MonsterAggregate.create(
+                            monster_id,
+                            template,
+                            world_object_id,
+                            skill_loadout=loadout,
+                        )
+                        monster.spawn(
+                            slot.coordinate, slot.spot_id, current_tick
+                        )
+                        self._monster_repository.save(monster)
+                        self._skill_loadout_repository.save(loadout)
+                        self._unit_of_work.process_sync_events()
+                    except DomainException as e:
+                        self._logger.warning(
+                            "Spawn skipped for slot %s %s: %s",
+                            slot.spot_id,
+                            slot.coordinate,
+                            str(e),
+                        )
+
+    def _find_monster_for_slot(self, slot: SpawnSlot, monsters: List[MonsterAggregate]) -> Optional[MonsterAggregate]:
+        """スロットに割り当てられたモンスターを1体返す（get_respawn_coordinate と template_id で一致）。"""
+        for m in monsters:
+            respawn_coord = m.get_respawn_coordinate()
+            if (
+                respawn_coord is not None
+                and m.spot_id == slot.spot_id
+                and respawn_coord == slot.coordinate
+                and m.template.template_id == slot.template_id
+            ):
+                return m
+        return None
+
+    def _count_alive_for_slot(self, slot: SpawnSlot, monsters: List[MonsterAggregate]) -> int:
+        """スロットに対応する ALIVE モンスター数を返す。"""
+        return sum(
+            1
+            for m in monsters
+            if m.status == MonsterStatusEnum.ALIVE
+            and m.spot_id == slot.spot_id
+            and m.get_respawn_coordinate() == slot.coordinate
+            and m.template.template_id == slot.template_id
+        )
 
     def _actors_sorted_by_distance_to_players(
         self, physical_map: PhysicalMapAggregate
@@ -224,6 +429,25 @@ class WorldSimulationApplicationService:
             if loadout.can_use_skill(skill_info.slot_index, current_tick.value):
                 usable_slot_indices.add(skill_info.slot_index)
         return SkillSelectionContext(usable_slot_indices=usable_slot_indices)
+
+    def _build_growth_context_for_actor(
+        self,
+        actor: WorldObject,
+        current_tick: WorldTick,
+    ) -> Optional[GrowthContext]:
+        """
+        自律行動のモンスターについて、成長段階に応じた GrowthContext を組み立てる。
+        growth_stages が無い場合は None（従来どおりコンポーネントの flee_threshold と CHASE 許可）。
+        """
+        if not isinstance(actor.component, AutonomousBehaviorComponent):
+            return None
+        monster = self._monster_repository.find_by_world_object_id(actor.object_id)
+        if not monster or not monster.template.growth_stages:
+            return None
+        return GrowthContext(
+            effective_flee_threshold=monster.get_effective_flee_threshold(current_tick),
+            allow_chase=monster.get_allow_chase(current_tick),
+        )
 
     def _build_target_context_for_actor(
         self,

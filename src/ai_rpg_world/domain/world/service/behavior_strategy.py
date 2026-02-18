@@ -1,6 +1,6 @@
 """
 行動戦略。
-アクターの「次のアクション」を決定するロジックを抽象化する。
+アクターの状態遷移と「次のアクション」決定のロジックを戦略に集約する。
 """
 
 import math
@@ -11,6 +11,7 @@ from typing import Optional, TYPE_CHECKING
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
 from ai_rpg_world.domain.world.value_object.behavior_context import (
+    PlanActionContext,
     SkillSelectionContext,
     TargetSelectionContext,
 )
@@ -26,7 +27,12 @@ from ai_rpg_world.domain.world.exception.map_exception import (
     PathNotFoundException,
     InvalidPathRequestException,
 )
-from ai_rpg_world.domain.world.event.behavior_events import BehaviorStuckEvent
+from ai_rpg_world.domain.world.event.behavior_events import (
+    ActorStateChangedEvent,
+    BehaviorStuckEvent,
+    TargetLostEvent,
+    TargetSpottedEvent,
+)
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.entity.world_object import WorldObject
@@ -35,36 +41,22 @@ if TYPE_CHECKING:
 
 class BehaviorStrategy(ABC):
     """
-    アクターの次のアクションを決定する戦略のインターフェース。
-    状態更新やイベント発行は呼び出し元（BehaviorService）が行い、
-    本インターフェースは「どのアクションを返すか」のみを担当する。
+    アクターの状態遷移と次のアクション決定を担当する戦略のインターフェース。
+    状態更新・イベント発行・アクション決定を一箇所にカプセル化する。
     """
 
     @abstractmethod
-    def decide_action(
-        self,
-        actor: "WorldObject",
-        map_aggregate: "PhysicalMapAggregate",
-        component: AutonomousBehaviorComponent,
-        target: Optional["WorldObject"],
-        target_context: Optional[TargetSelectionContext] = None,
-        skill_context: Optional[SkillSelectionContext] = None,
-        pack_rally_coordinate: Optional[Coordinate] = None,
-    ) -> BehaviorAction:
+    def update_state(self, context: PlanActionContext) -> None:
         """
-        現在の状態とターゲットに基づき、実行すべきアクションを決定する。
+        コンテキストに基づきコンポーネントの状態を更新し、必要に応じてイベントを発行する。
+        （フェーズ→ENRAGE、脅威→FLEE、ターゲット捕捉→CHASE/FLEE、見失い→SEARCH/RETURN 等）
+        """
+        pass
 
-        Args:
-            actor: 行動主体のワールドオブジェクト
-            map_aggregate: 現在のマップ集約
-            component: アクターの自律行動コンポーネント（状態は呼び出し元で更新済み）
-            target: 現在のターゲット（視界内にいない場合は None）
-            target_context: ターゲット選択の補助情報（省略可）
-            skill_context: スキル選択の補助情報（省略可）
-            pack_rally_coordinate: 群れの集結座標（味方が戦闘に入った座標等）。省略可
-
-        Returns:
-            実行すべき BehaviorAction
+    @abstractmethod
+    def decide_action(self, context: PlanActionContext) -> BehaviorAction:
+        """
+        現在の状態とコンテキストに基づき、実行すべきアクションを決定する。
         """
         pass
 
@@ -72,8 +64,8 @@ class BehaviorStrategy(ABC):
 class DefaultBehaviorStrategy(BehaviorStrategy):
     """
     デフォルトの行動戦略。
-    追跡・逃走・巡回・帰還・探索などの移動と、
-    射程内でのスキル使用をスキル選択ポリシーに委譲する。
+    状態遷移（update_state）と行動決定（decide_action）を一箇所に集約する。
+    追跡・逃走・巡回・帰還・探索などの移動と、射程内でのスキル使用をスキル選択ポリシーに委譲する。
     """
 
     def __init__(
@@ -84,28 +76,99 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
         self._pathfinding_service = pathfinding_service
         self._skill_policy = skill_policy
 
-    def decide_action(
-        self,
-        actor: "WorldObject",
-        map_aggregate: "PhysicalMapAggregate",
-        component: AutonomousBehaviorComponent,
-        target: Optional["WorldObject"],
-        target_context: Optional[TargetSelectionContext] = None,
-        skill_context: Optional[SkillSelectionContext] = None,
-        pack_rally_coordinate: Optional[Coordinate] = None,
-    ) -> BehaviorAction:
+    def update_state(self, context: PlanActionContext) -> None:
+        """フェーズ・脅威・ターゲット・見失いに応じた状態遷移とイベント発行を行う。"""
+        component = context.component
+        old_state = component.state
+
+        # 0. ボスフェーズ: HPが閾値以下なら ENRAGE へ遷移
+        if component.phase_thresholds:
+            if component.hp_percentage <= component.phase_thresholds[0]:
+                if component.state not in (BehaviorStateEnum.ENRAGE, BehaviorStateEnum.FLEE):
+                    self._publish_state_changed(context, old_state, BehaviorStateEnum.ENRAGE)
+                    component.set_state(BehaviorStateEnum.ENRAGE)
+                    old_state = BehaviorStateEnum.ENRAGE
+
+        # 1a. 視界内に脅威(THREAT)がいれば FLEE に遷移
+        target = None
+        if context.visible_threats and component.state != BehaviorStateEnum.FLEE:
+            self._publish_state_changed(context, old_state, BehaviorStateEnum.FLEE)
+            component.set_state(BehaviorStateEnum.FLEE)
+            old_state = BehaviorStateEnum.FLEE
+            nearest = min(
+                context.visible_threats,
+                key=lambda obj: context.actor.coordinate.euclidean_distance_to(obj.coordinate),
+            )
+            target = nearest
+            component.target_id = target.object_id
+            component.last_known_target_position = target.coordinate
+            context.map_aggregate.add_event(
+                TargetSpottedEvent.create(
+                    aggregate_id=context.actor_id,
+                    aggregate_type="Actor",
+                    actor_id=context.actor_id,
+                    target_id=target.object_id,
+                    coordinate=target.coordinate,
+                )
+            )
+
+        # 1b. 脅威でない場合は渡されたターゲットで spot_target
+        if target is None and context.target and component.state != BehaviorStateEnum.FLEE:
+            effective_flee = context.growth_context.effective_flee_threshold if context.growth_context else None
+            allow_chase = context.growth_context.allow_chase if context.growth_context else None
+            component.spot_target(
+                context.target.object_id,
+                context.target.coordinate,
+                effective_flee_threshold=effective_flee,
+                allow_chase=allow_chase,
+            )
+            if old_state != component.state:
+                self._publish_state_changed(context, old_state, component.state)
+                context.map_aggregate.add_event(
+                    TargetSpottedEvent.create(
+                        aggregate_id=context.actor_id,
+                        aggregate_type="Actor",
+                        actor_id=context.actor_id,
+                        target_id=context.target.object_id,
+                        coordinate=context.target.coordinate,
+                    )
+                )
+
+        # 2. ターゲットなしで既にターゲットを持っていたら lose_target（脅威でターゲットを設定した直後は除く）
+        if not context.visible_threats and not context.target and component.target_id:
+            lost_target_id = component.target_id
+            last_coord = component.last_known_target_position
+            component.lose_target()
+            if old_state != component.state:
+                self._publish_state_changed(context, old_state, component.state)
+                if last_coord:
+                    context.map_aggregate.add_event(
+                        TargetLostEvent.create(
+                            aggregate_id=context.actor_id,
+                            aggregate_type="Actor",
+                            actor_id=context.actor_id,
+                            target_id=lost_target_id,
+                            last_known_coordinate=last_coord,
+                        )
+                    )
+
+    def decide_action(self, context: PlanActionContext) -> BehaviorAction:
+        actor = context.actor
+        map_aggregate = context.map_aggregate
+        component = context.component
+        target = context.target
+
         # 攻撃可能かチェック (CHASE または ENRAGE かつターゲットが視界内)
         attack_states = (BehaviorStateEnum.CHASE, BehaviorStateEnum.ENRAGE)
         if component.state in attack_states and target:
             slot = self._skill_policy.select_slot(
-                actor, target, component.available_skills, skill_context
+                actor, target, component.available_skills, context.skill_context
             )
             if slot is not None:
                 return BehaviorAction.use_skill(slot)
 
-        # 状態に応じた移動先計算（ENRAGE は CHASE と同様に追跡）
+        # 状態に応じた移動先計算
         next_coord = None
-        # 縄張り: CHASE/ENRAGE 中に初期位置から territory_radius を超えたら帰還
         if (
             component.territory_radius is not None
             and component.initial_position is not None
@@ -128,18 +191,33 @@ class DefaultBehaviorStrategy(BehaviorStrategy):
         elif component.state == BehaviorStateEnum.RETURN:
             next_coord = self._calculate_return_move(actor, component, map_aggregate)
 
-        # 群れフォロワー: IDLE/PATROL で移動先が無い場合、pack_rally_coordinate へ向かう
-        if next_coord is None and pack_rally_coordinate:
+        if next_coord is None and context.pack_rally_coordinate:
             is_follower = component.pack_id is not None and not component.is_pack_leader
             if is_follower and component.state in (BehaviorStateEnum.IDLE, BehaviorStateEnum.PATROL):
-                if actor.coordinate != pack_rally_coordinate:
+                if actor.coordinate != context.pack_rally_coordinate:
                     next_coord = self._get_next_step_to(
-                        actor, pack_rally_coordinate, map_aggregate, component
+                        actor, context.pack_rally_coordinate, map_aggregate, component
                     )
 
         if next_coord is not None:
             return BehaviorAction.move(next_coord)
         return BehaviorAction.wait()
+
+    def _publish_state_changed(
+        self,
+        context: PlanActionContext,
+        old_state: BehaviorStateEnum,
+        new_state: BehaviorStateEnum,
+    ) -> None:
+        context.map_aggregate.add_event(
+            ActorStateChangedEvent.create(
+                aggregate_id=context.actor_id,
+                aggregate_type="Actor",
+                actor_id=context.actor_id,
+                old_state=old_state,
+                new_state=new_state,
+            )
+        )
 
     def _calculate_chase_move(
         self,

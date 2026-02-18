@@ -2,9 +2,10 @@ from typing import Optional, List, TYPE_CHECKING
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
+from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage
 from ai_rpg_world.domain.monster.value_object.monster_hp import MonsterHp
 from ai_rpg_world.domain.monster.value_object.monster_mp import MonsterMp
-from ai_rpg_world.domain.monster.enum.monster_enum import MonsterStatusEnum
+from ai_rpg_world.domain.monster.enum.monster_enum import MonsterStatusEnum, DeathCauseEnum
 from ai_rpg_world.domain.monster.event.monster_events import (
     MonsterCreatedEvent,
     MonsterSpawnedEvent,
@@ -55,6 +56,8 @@ class MonsterAggregate(AggregateRoot):
         active_effects: List[StatusEffect] = None,
         pack_id: Optional["PackId"] = None,
         is_pack_leader: bool = False,
+        initial_spawn_coordinate: Optional[Coordinate] = None,
+        spawned_at_tick: Optional[WorldTick] = None,
     ):
         super().__init__()
         self._monster_id = monster_id
@@ -70,6 +73,8 @@ class MonsterAggregate(AggregateRoot):
         self._skill_loadout = skill_loadout
         self._pack_id = pack_id
         self._is_pack_leader = is_pack_leader
+        self._initial_spawn_coordinate = initial_spawn_coordinate
+        self._spawned_at_tick = spawned_at_tick
 
     @classmethod
     def create(
@@ -103,15 +108,56 @@ class MonsterAggregate(AggregateRoot):
     def template(self) -> MonsterTemplate:
         return self._template
 
+    def _get_current_growth_stage(self, current_tick: WorldTick) -> Optional[GrowthStage]:
+        """現在の成長段階を返す。未スポーンまたは段階なしの場合は None。"""
+        if self._spawned_at_tick is None:
+            return None
+        stages = self._template.growth_stages
+        if not stages:
+            return None
+        elapsed = current_tick.value - self._spawned_at_tick.value
+        if elapsed < 0:
+            return None
+        stage = None
+        for g in stages:
+            if elapsed >= g.after_ticks:
+                stage = g
+        return stage
+
+    def get_current_growth_multiplier(self, current_tick: WorldTick) -> float:
+        """
+        現在の成長段階に応じたステータス乗率を返す。
+        spawned_at_tick が未設定または growth_stages が空の場合は 1.0。
+        """
+        stage = self._get_current_growth_stage(current_tick)
+        return stage.stats_multiplier if stage else 1.0
+
+    def get_effective_flee_threshold(self, current_tick: WorldTick) -> float:
+        """
+        現在の成長段階を反映した FLEE 閾値を返す。
+        テンプレートの flee_threshold に flee_bias_multiplier を掛ける（未指定時は 1.0）。
+        """
+        base = self._template.flee_threshold
+        stage = self._get_current_growth_stage(current_tick)
+        if stage is None or stage.flee_bias_multiplier is None:
+            return base
+        return min(1.0, round(base * stage.flee_bias_multiplier, 4))
+
+    def get_allow_chase(self, current_tick: WorldTick) -> bool:
+        """現在の成長段階で CHASE（追跡）を許可するか。"""
+        stage = self._get_current_growth_stage(current_tick)
+        return stage.allow_chase if stage else True
+
     def get_effective_stats(self, current_tick: WorldTick) -> BaseStats:
-        """バフ・デバフ適用後の実効ステータス（期限切れを除外）"""
+        """バフ・デバフ・成長段階適用後の実効ステータス（期限切れを除外）"""
         # 期限切れエフェクトのクリーンアップ
         self.cleanup_expired_effects(current_tick)
         
         base = self._template.base_stats
-        atk_mult = 1.0
-        def_mult = 1.0
-        spd_mult = 1.0
+        growth_mult = self.get_current_growth_multiplier(current_tick)
+        atk_mult = growth_mult
+        def_mult = growth_mult
+        spd_mult = growth_mult
         
         for effect in self._active_effects:
             if effect.effect_type == StatusEffectType.ATTACK_UP:
@@ -128,8 +174,8 @@ class MonsterAggregate(AggregateRoot):
                 spd_mult *= effect.value
                 
         return BaseStats(
-            max_hp=base.max_hp,
-            max_mp=base.max_mp,
+            max_hp=max(1, int(base.max_hp * growth_mult)),
+            max_mp=max(1, int(base.max_mp * growth_mult)),
             attack=int(base.attack * atk_mult),
             defense=int(base.defense * def_mult),
             speed=int(base.speed * spd_mult),
@@ -177,13 +223,22 @@ class MonsterAggregate(AggregateRoot):
     def is_pack_leader(self) -> bool:
         return self._is_pack_leader
 
-    def _initialize_status(self, coordinate: Coordinate, spot_id: SpotId):
-        """ステータスを初期化（出現/リスポーン時）"""
+    @property
+    def spawned_at_tick(self) -> Optional[WorldTick]:
+        return self._spawned_at_tick
+
+    def _initialize_status(self, coordinate: Coordinate, spot_id: SpotId, current_tick: WorldTick) -> None:
+        """
+        ステータスを初期化（出現/リスポーン時）。
+        呼び出し元で _spawned_at_tick を current_tick に設定したうえで呼ぶこと。
+        HP/MP は実効ステータス（成長段階を反映した max_hp/max_mp）で満タンに初期化する。
+        """
         self._coordinate = coordinate
         self._spot_id = spot_id
         self._status = MonsterStatusEnum.ALIVE
-        self._hp = MonsterHp.create(self._template.base_stats.max_hp, self._template.base_stats.max_hp)
-        self._mp = MonsterMp.create(self._template.base_stats.max_mp, self._template.base_stats.max_mp)
+        effective = self.get_effective_stats(current_tick)
+        self._hp = MonsterHp.create(effective.max_hp, effective.max_hp)
+        self._mp = MonsterMp.create(effective.max_mp, effective.max_mp)
         self._last_death_tick = None
 
     def update_map_placement(self, spot_id: SpotId, coordinate: Coordinate) -> None:
@@ -197,6 +252,7 @@ class MonsterAggregate(AggregateRoot):
         self,
         coordinate: Coordinate,
         spot_id: SpotId,
+        current_tick: WorldTick,
         pack_id: Optional["PackId"] = None,
         is_pack_leader: bool = False,
     ):
@@ -204,9 +260,11 @@ class MonsterAggregate(AggregateRoot):
         if self._coordinate is not None or self._status == MonsterStatusEnum.ALIVE:
             raise MonsterAlreadySpawnedException(f"Monster {self._monster_id} is already spawned at {self._coordinate}")
 
-        self._initialize_status(coordinate, spot_id)
+        self._spawned_at_tick = current_tick
+        self._initialize_status(coordinate, spot_id, current_tick)
         self._pack_id = pack_id
         self._is_pack_leader = is_pack_leader
+        self._initial_spawn_coordinate = coordinate
 
         self.add_event(MonsterSpawnedEvent.create(
             aggregate_id=self._monster_id,
@@ -236,7 +294,13 @@ class MonsterAggregate(AggregateRoot):
         ))
 
         if not self._hp.is_alive():
-            self._die(current_tick, killer_player_id=killer_player_id)
+            cause = DeathCauseEnum.KILLED_BY_PLAYER if killer_player_id else DeathCauseEnum.KILLED_BY_MONSTER
+            self._die(
+                current_tick,
+                killer_player_id=killer_player_id,
+                killer_world_object_id=attacker_id,
+                cause=cause if (killer_player_id or attacker_id) else None,
+            )
 
     def record_evasion(self):
         """回避を記録する（ALIVE時のみ）"""
@@ -298,20 +362,25 @@ class MonsterAggregate(AggregateRoot):
         self._mp = self._mp.use(amount)
 
     def on_tick(self, current_tick: WorldTick, config: MonsterConfigService = DefaultMonsterConfigService()):
-        """時間経過による処理（自然回復など）"""
+        """時間経過による処理（自然回復など）。自然回復量は実効ステータス（成長段階反映後）の max_hp/max_mp を基準とする。"""
         if self._status == MonsterStatusEnum.ALIVE:
-            # 自然回復
+            effective = self.get_effective_stats(current_tick)
             regen_rate = config.get_regeneration_rate()
-            hp_regen = max(1, int(self._template.base_stats.max_hp * regen_rate))
-            mp_regen = max(1, int(self._template.base_stats.max_mp * regen_rate))
-            
+            hp_regen = max(1, int(effective.max_hp * regen_rate))
+            mp_regen = max(1, int(effective.max_mp * regen_rate))
             self.heal_hp(hp_regen)
             self.recover_mp(mp_regen)
         
         # リスポーン判定などは上位のアプリケーションサービスで行うことを想定するが、
         # 必要に応じてここでもロジックを追加できる
 
-    def _die(self, current_tick: WorldTick, killer_player_id: Optional[PlayerId] = None):
+    def _die(
+        self,
+        current_tick: WorldTick,
+        killer_player_id: Optional[PlayerId] = None,
+        killer_world_object_id: Optional[WorldObjectId] = None,
+        cause: Optional[DeathCauseEnum] = None,
+    ) -> None:
         """死亡する（内部用）"""
         if self._status == MonsterStatusEnum.DEAD:
             return
@@ -319,8 +388,7 @@ class MonsterAggregate(AggregateRoot):
         self._status = MonsterStatusEnum.DEAD
         self._last_death_tick = current_tick
         spot_id_for_event = self._spot_id
-        self._coordinate = None  # 死亡時は座標をクリア
-        self._spot_id = None
+        self._coordinate = None  # 死亡時は座標をクリア（spot_id はリスポーン判定のため保持）
 
         respawn_tick = current_tick.value + self._template.respawn_info.respawn_interval_ticks
 
@@ -332,11 +400,42 @@ class MonsterAggregate(AggregateRoot):
             gold=self._template.reward_info.gold,
             loot_table_id=self._template.reward_info.loot_table_id,
             killer_player_id=killer_player_id,
+            killer_world_object_id=killer_world_object_id,
+            cause=cause,
             spot_id=spot_id_for_event,
         ))
 
+    def starve(self, current_tick: WorldTick) -> None:
+        """飢餓で死亡させる。ALIVE のときのみ有効。"""
+        if self._status != MonsterStatusEnum.ALIVE:
+            if self._status == MonsterStatusEnum.DEAD and self._last_death_tick is None:
+                raise MonsterNotSpawnedException(f"Monster {self._monster_id} is not spawned yet")
+            raise MonsterAlreadyDeadException(f"Monster {self._monster_id} is not alive")
+        if self._coordinate is None:
+            raise MonsterNotSpawnedException(f"Monster {self._monster_id} is not spawned yet")
+        self._die(current_tick, cause=DeathCauseEnum.STARVATION)
+
+    def die_from_old_age(self, current_tick: WorldTick) -> bool:
+        """
+        寿命で死亡させる。経過ティック（spawned_at_tick からの経過）が max_age_ticks 以上なら
+        _die(cause=NATURAL) を呼ぶ。ALIVE かつ max_age_ticks が有効なときのみ判定。
+        死亡した場合 True、しなかった場合 False。
+        """
+        if self._status != MonsterStatusEnum.ALIVE:
+            return False
+        if self._spawned_at_tick is None:
+            return False
+        max_age = self._template.max_age_ticks
+        if max_age is None or max_age <= 0:
+            return False
+        elapsed = current_tick.value - self._spawned_at_tick.value
+        if elapsed < max_age:
+            return False
+        self._die(current_tick, cause=DeathCauseEnum.NATURAL)
+        return True
+
     def should_respawn(self, current_tick: WorldTick) -> bool:
-        """リスポーンすべきか判定する"""
+        """リスポーンすべきか判定する（時間経過と is_auto_respawn のみ。SpawnCondition は呼び出し側で評価）"""
         if self._status != MonsterStatusEnum.DEAD:
             return False
         
@@ -349,6 +448,10 @@ class MonsterAggregate(AggregateRoot):
         elapsed = current_tick.value - self._last_death_tick.value
         return elapsed >= self._template.respawn_info.respawn_interval_ticks
 
+    def get_respawn_coordinate(self) -> Optional[Coordinate]:
+        """リスポーン時に使用する座標（初期スポーン位置）を返す。未スポーン時は None。"""
+        return self._initial_spawn_coordinate
+
     def respawn(self, coordinate: Coordinate, current_tick: WorldTick, spot_id: SpotId):
         """リスポーンさせる"""
         if self._status != MonsterStatusEnum.DEAD:
@@ -357,7 +460,8 @@ class MonsterAggregate(AggregateRoot):
         if not self.should_respawn(current_tick):
             raise MonsterRespawnIntervalNotMetException(f"Monster {self._monster_id} cannot respawn yet.")
 
-        self._initialize_status(coordinate, spot_id)
+        self._spawned_at_tick = current_tick
+        self._initialize_status(coordinate, spot_id, current_tick)
 
         self.add_event(MonsterRespawnedEvent.create(
             aggregate_id=self._monster_id,

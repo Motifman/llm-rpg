@@ -1,5 +1,8 @@
 from dataclasses import dataclass
+from typing import Optional
+
 from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterRespawnValidationException
+from ai_rpg_world.domain.monster.value_object.spawn_condition import SpawnCondition
 
 
 @dataclass(frozen=True)
@@ -7,6 +10,7 @@ class RespawnInfo:
     """モンスターのリスポーン設定"""
     respawn_interval_ticks: int
     is_auto_respawn: bool = True
+    condition: Optional[SpawnCondition] = None
 
     def __post_init__(self):
         if self.respawn_interval_ticks < 0:

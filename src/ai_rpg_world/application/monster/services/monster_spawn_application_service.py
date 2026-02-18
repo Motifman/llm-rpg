@@ -3,6 +3,7 @@ from typing import Optional
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
@@ -37,12 +38,13 @@ class MonsterSpawnApplicationService:
         monster_id: MonsterId,
         spot_id: SpotId,
         coordinate: Coordinate,
+        current_tick: WorldTick,
         pack_id: Optional[PackId] = None,
         is_pack_leader: bool = False,
     ) -> None:
         """指定スポットの指定座標にモンスターを出現させる。群れの場合は pack_id / is_pack_leader を指定する。"""
         try:
-            self._spawn_monster_impl(monster_id, spot_id, coordinate, pack_id, is_pack_leader)
+            self._spawn_monster_impl(monster_id, spot_id, coordinate, current_tick, pack_id, is_pack_leader)
         except ApplicationException as e:
             raise e
         except DomainException as e:
@@ -58,6 +60,7 @@ class MonsterSpawnApplicationService:
         monster_id: MonsterId,
         spot_id: SpotId,
         coordinate: Coordinate,
+        current_tick: WorldTick,
         pack_id: Optional[PackId] = None,
         is_pack_leader: bool = False,
     ) -> None:
@@ -70,5 +73,5 @@ class MonsterSpawnApplicationService:
             if not physical_map:
                 raise MapNotFoundForMonsterSkillException(spot_id.value)
 
-            monster.spawn(coordinate, spot_id, pack_id=pack_id, is_pack_leader=is_pack_leader)
+            monster.spawn(coordinate, spot_id, current_tick, pack_id=pack_id, is_pack_leader=is_pack_leader)
             self._monster_repository.save(monster)

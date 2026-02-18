@@ -168,7 +168,7 @@ class TestMonsterSkillApplicationService:
         loadout_repo.save(loadout)
         
         monster = MonsterAggregate.create(monster_id, template, world_object_id, skill_loadout=loadout)
-        monster.spawn(Coordinate(5, 5, 0), SpotId(1))
+        monster.spawn(Coordinate(5, 5, 0), SpotId(1), WorldTick(0))
         monster_repo.save(monster)
         
         # 実行
@@ -208,7 +208,7 @@ class TestMonsterSkillApplicationService:
         loadout_repo.save(loadout)
         
         monster = MonsterAggregate.create(monster_id, _sample_monster_template(1), world_object_id, skill_loadout=loadout)
-        monster.spawn(Coordinate(5, 5, 0), SpotId(1))
+        monster.spawn(Coordinate(5, 5, 0), SpotId(1), WorldTick(0))
         monster_repo.save(monster)
         
         with pytest.raises(ApplicationException, match="Insufficient MP"):
@@ -233,7 +233,7 @@ class TestMonsterSkillApplicationService:
         loadout_repo.save(loadout)
         
         monster = MonsterAggregate.create(MonsterId(100), _sample_monster_template(1), world_object_id, skill_loadout=loadout)
-        monster.spawn(Coordinate(5, 5, 0), SpotId(1))
+        monster.spawn(Coordinate(5, 5, 0), SpotId(1), WorldTick(0))
         monster_repo.save(monster)
         
         # 1回目
@@ -266,7 +266,7 @@ class TestMonsterSkillApplicationService:
         loadout.equip_skill(DeckTier.NORMAL, 0, skill)
         loadout_repo.save(loadout)
         monster = MonsterAggregate.create(monster_id, _sample_monster_template(1), world_object_id, skill_loadout=loadout)
-        monster.spawn(Coordinate(5, 5, 0), SpotId(1))
+        monster.spawn(Coordinate(5, 5, 0), SpotId(1), WorldTick(0))
         monster_repo.save(monster)
         with pytest.raises(MapNotFoundForMonsterSkillException) as excinfo:
             service.use_monster_skill(world_object_id, SpotId(1), 0, WorldTick(10))
@@ -286,7 +286,7 @@ class TestMonsterSkillApplicationService:
         loadout = SkillLoadoutAggregate.create(SkillLoadoutId(500), 1000, 10, 10)
         loadout_repo.save(loadout)
         monster = MonsterAggregate.create(monster_id, _sample_monster_template(1), world_object_id, skill_loadout=loadout)
-        monster.spawn(Coordinate(5, 5, 0), SpotId(1))
+        monster.spawn(Coordinate(5, 5, 0), SpotId(1), WorldTick(0))
         monster_repo.save(monster)
         with pytest.raises(MonsterSkillNotFoundInSlotException) as excinfo:
             service.use_monster_skill(world_object_id, spot_id, 0, WorldTick(10))
@@ -310,7 +310,7 @@ class TestMonsterSkillApplicationService:
         loadout.equip_skill(DeckTier.NORMAL, 0, skill)
         loadout_repo.save(loadout)
         monster = MonsterAggregate.create(monster_id, _sample_monster_template(1), world_object_id, skill_loadout=loadout)
-        monster.spawn(Coordinate(5, 5, 0), SpotId(1))
+        monster.spawn(Coordinate(5, 5, 0), SpotId(1), WorldTick(0))
         monster_repo.save(monster)
         monster.apply_damage(1000, WorldTick(10))
         monster_repo.save(monster)
@@ -334,7 +334,7 @@ class TestMonsterSkillApplicationService:
         loadout.equip_skill(DeckTier.NORMAL, 0, skill)
         loadout_repo.save(loadout)
         monster = MonsterAggregate.create(monster_id, _sample_monster_template(1), world_object_id, skill_loadout=loadout)
-        monster.spawn(Coordinate(5, 5, 0), SpotId(1))
+        monster.spawn(Coordinate(5, 5, 0), SpotId(1), WorldTick(0))
         monster_repo.save(monster)
         with pytest.raises(ApplicationException) as excinfo:
             service.use_monster_skill(world_object_id, spot_id, MAX_SKILL_SLOTS, WorldTick(10))
@@ -354,7 +354,7 @@ class TestMonsterSkillApplicationService:
         loadout.equip_skill(DeckTier.NORMAL, 0, skill)
         loadout_repo.save(loadout)
         monster = MonsterAggregate.create(monster_id, _sample_monster_template(1), world_object_id, skill_loadout=loadout)
-        monster.spawn(Coordinate(5, 5, 0), SpotId(1))
+        monster.spawn(Coordinate(5, 5, 0), SpotId(1), WorldTick(0))
         monster_repo.save(monster)
         with pytest.raises(MonsterNotOnMapException) as excinfo:
             service.use_monster_skill(world_object_id, spot_id, 0, WorldTick(10))
@@ -377,7 +377,7 @@ class TestMonsterSkillApplicationService:
         loadout.equip_skill(DeckTier.NORMAL, 0, skill)
         loadout_repo.save(loadout)
         monster = MonsterAggregate.create(monster_id, _sample_monster_template(1), world_object_id, skill_loadout=loadout)
-        monster.spawn(Coordinate(5, 5, 0), SpotId(1))
+        monster.spawn(Coordinate(5, 5, 0), SpotId(1), WorldTick(0))
         monster_repo.save(monster)
 
         with mock.patch.object(

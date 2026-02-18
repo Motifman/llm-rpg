@@ -17,6 +17,7 @@ from ai_rpg_world.domain.world.entity.world_object_component import (
     MonsterSkillInfo,
 )
 from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
+from ai_rpg_world.domain.world.value_object.behavior_context import PlanActionContext
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
@@ -36,6 +37,23 @@ from ai_rpg_world.domain.world.event.behavior_events import BehaviorStuckEvent
 from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import (
     AStarPathfindingStrategy,
 )
+
+
+def _make_context(actor_id, actor, map_aggregate, component, target=None, **kwargs):
+    """decide_action テスト用の PlanActionContext を組み立てる。"""
+    return PlanActionContext(
+        actor_id=actor_id,
+        actor=actor,
+        map_aggregate=map_aggregate,
+        component=component,
+        visible_threats=kwargs.get("visible_threats", []),
+        visible_hostiles=kwargs.get("visible_hostiles", []),
+        target=target,
+        target_context=kwargs.get("target_context"),
+        skill_context=kwargs.get("skill_context"),
+        pack_rally_coordinate=kwargs.get("pack_rally_coordinate"),
+        growth_context=kwargs.get("growth_context"),
+    )
 
 
 class TestDefaultBehaviorStrategy:
@@ -106,12 +124,14 @@ class TestDefaultBehaviorStrategy:
         """CHASE 状態でターゲットが射程内のとき USE_SKILL を返すこと"""
         component = actor_chase_with_target.component
         assert isinstance(component, AutonomousBehaviorComponent)
-        action = strategy.decide_action(
+        ctx = _make_context(
+            actor_chase_with_target.object_id,
             actor_chase_with_target,
             map_aggregate,
             component,
             target_in_range,
         )
+        action = strategy.decide_action(ctx)
         assert action.action_type == BehaviorActionType.USE_SKILL
         assert action.skill_slot_index == 0
 
@@ -145,7 +165,8 @@ class TestDefaultBehaviorStrategy:
             component=ActorComponent(race="human"),
         )
         map_aggregate.add_object(target)
-        action = strategy.decide_action(actor, map_aggregate, comp, target)
+        ctx = _make_context(actor.object_id, actor, map_aggregate, comp, target)
+        action = strategy.decide_action(ctx)
         assert action.action_type == BehaviorActionType.MOVE
         assert action.coordinate is not None
 
@@ -168,7 +189,8 @@ class TestDefaultBehaviorStrategy:
             component=comp,
         )
         map_aggregate.add_object(actor)
-        action = strategy.decide_action(actor, map_aggregate, comp, None)
+        ctx = _make_context(actor.object_id, actor, map_aggregate, comp, None)
+        action = strategy.decide_action(ctx)
         assert action.action_type == BehaviorActionType.MOVE
         assert action.coordinate == Coordinate(6, 5)
 
@@ -200,7 +222,8 @@ class TestDefaultBehaviorStrategy:
             component=ActorComponent(race="human"),
         )
         map_aggregate.add_object(target)
-        action = strategy.decide_action(actor, map_aggregate, comp, target)
+        ctx = _make_context(actor.object_id, actor, map_aggregate, comp, target)
+        action = strategy.decide_action(ctx)
         assert action.action_type == BehaviorActionType.MOVE
         assert action.coordinate is not None
 
@@ -223,7 +246,8 @@ class TestDefaultBehaviorStrategy:
             component=comp,
         )
         map_aggregate.add_object(actor)
-        action = strategy.decide_action(actor, map_aggregate, comp, None)
+        ctx = _make_context(actor.object_id, actor, map_aggregate, comp, None)
+        action = strategy.decide_action(ctx)
         assert action.action_type == BehaviorActionType.MOVE
         assert action.coordinate is not None
 
@@ -245,7 +269,8 @@ class TestDefaultBehaviorStrategy:
             component=comp,
         )
         map_aggregate.add_object(actor)
-        action = strategy.decide_action(actor, map_aggregate, comp, None)
+        ctx = _make_context(actor.object_id, actor, map_aggregate, comp, None)
+        action = strategy.decide_action(ctx)
         assert action.action_type == BehaviorActionType.WAIT
         assert action.coordinate is None
         assert action.skill_slot_index is None
@@ -270,7 +295,8 @@ class TestDefaultBehaviorStrategy:
             component=comp,
         )
         map_aggregate.add_object(actor)
-        action = strategy.decide_action(actor, map_aggregate, comp, None)
+        ctx = _make_context(actor.object_id, actor, map_aggregate, comp, None)
+        action = strategy.decide_action(ctx)
         assert action.action_type == BehaviorActionType.MOVE
         assert action.coordinate is not None
 
@@ -296,7 +322,8 @@ class TestDefaultBehaviorStrategy:
             component=comp,
         )
         map_aggregate.add_object(actor)
-        action = strategy.decide_action(actor, map_aggregate, comp, target_in_range)
+        ctx = _make_context(actor.object_id, actor, map_aggregate, comp, target_in_range)
+        action = strategy.decide_action(ctx)
         assert action.action_type == BehaviorActionType.MOVE
 
     def test_decide_action_stuck_emits_behavior_stuck_event(
@@ -330,8 +357,9 @@ class TestDefaultBehaviorStrategy:
                     is_blocking=True,
                 )
                 map_aggregate.add_object(wall)
-        strategy.decide_action(actor, map_aggregate, comp, None)
-        strategy.decide_action(actor, map_aggregate, comp, None)
+        ctx = _make_context(actor.object_id, actor, map_aggregate, comp, None)
+        strategy.decide_action(ctx)
+        strategy.decide_action(ctx)
         events = map_aggregate.get_events()
         assert any(isinstance(e, BehaviorStuckEvent) for e in events)
         assert comp.state == BehaviorStateEnum.RETURN
@@ -366,9 +394,53 @@ class TestDefaultBehaviorStrategy:
             component=ActorComponent(race="human"),
         )
         map_aggregate.add_object(target)
-        action = strategy.decide_action(actor, map_aggregate, comp, target)
+        ctx = _make_context(actor.object_id, actor, map_aggregate, comp, target)
+        action = strategy.decide_action(ctx)
         assert action.action_type == BehaviorActionType.USE_SKILL
         assert action.skill_slot_index == 0
+
+    def test_update_state_with_visible_threats_transitions_to_flee(
+        self,
+        strategy: DefaultBehaviorStrategy,
+        map_aggregate: PhysicalMapAggregate,
+    ):
+        """visible_threats が渡されたとき FLEE に遷移し、最も近い脅威をターゲットにすること"""
+        comp = AutonomousBehaviorComponent(
+            race="goblin",
+            vision_range=5,
+            fov_angle=360,
+            hp_percentage=1.0,
+            state=BehaviorStateEnum.IDLE,
+        )
+        actor = WorldObject(
+            object_id=WorldObjectId(100),
+            coordinate=Coordinate(5, 5),
+            object_type=ObjectTypeEnum.NPC,
+            is_blocking=False,
+            component=comp,
+        )
+        map_aggregate.add_object(actor)
+        threat = WorldObject(
+            object_id=WorldObjectId(200),
+            coordinate=Coordinate(6, 5),
+            object_type=ObjectTypeEnum.NPC,
+            is_blocking=False,
+            component=AutonomousBehaviorComponent(race="dragon"),
+        )
+        map_aggregate.add_object(threat)
+        ctx = PlanActionContext(
+            actor_id=actor.object_id,
+            actor=actor,
+            map_aggregate=map_aggregate,
+            component=comp,
+            visible_threats=[threat],
+            visible_hostiles=[],
+            target=None,
+        )
+        strategy.update_state(ctx)
+        assert comp.state == BehaviorStateEnum.FLEE
+        assert comp.target_id == threat.object_id
+        assert comp.last_known_target_position == threat.coordinate
 
     def test_decide_action_territory_radius_exceeded_returns_toward_initial(
         self,
@@ -392,7 +464,8 @@ class TestDefaultBehaviorStrategy:
             component=comp,
         )
         map_aggregate.add_object(actor)
-        action = strategy.decide_action(actor, map_aggregate, comp, None)
+        ctx = _make_context(actor.object_id, actor, map_aggregate, comp, None)
+        action = strategy.decide_action(ctx)
         assert comp.state == BehaviorStateEnum.RETURN
         assert action.action_type == BehaviorActionType.MOVE
         assert action.coordinate is not None
@@ -421,13 +494,11 @@ class TestDefaultBehaviorStrategy:
         )
         map_aggregate.add_object(actor)
         rally = Coordinate(8, 5)
-        action = strategy.decide_action(
-            actor,
-            map_aggregate,
-            comp,
-            None,
+        ctx = _make_context(
+            actor.object_id, actor, map_aggregate, comp, None,
             pack_rally_coordinate=rally,
         )
+        action = strategy.decide_action(ctx)
         assert action.action_type == BehaviorActionType.MOVE
         assert action.coordinate is not None
         assert action.coordinate != actor.coordinate
@@ -490,13 +561,11 @@ class TestBossBehaviorStrategy:
             usable_slot_indices={0, 1},
             targets_in_range_by_slot={0: 1, 1: 3},
         )
-        action = strategy.decide_action(
-            actor,
-            map_aggregate,
-            comp,
-            target,
+        ctx = _make_context(
+            actor.object_id, actor, map_aggregate, comp, target,
             skill_context=skill_context,
         )
+        action = strategy.decide_action(ctx)
         assert action.action_type == BehaviorActionType.USE_SKILL
         assert action.skill_slot_index == 1
 
@@ -533,6 +602,7 @@ class TestBossBehaviorStrategy:
             component=ActorComponent(race="human"),
         )
         map_aggregate.add_object(target)
-        action = strategy.decide_action(actor, map_aggregate, comp, target)
+        ctx = _make_context(actor.object_id, actor, map_aggregate, comp, target)
+        action = strategy.decide_action(ctx)
         assert action.action_type == BehaviorActionType.USE_SKILL
         assert action.skill_slot_index == 0

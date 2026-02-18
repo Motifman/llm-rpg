@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.monster.enum.monster_enum import DeathCauseEnum
 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
@@ -36,6 +37,8 @@ class MonsterDiedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
     gold: int
     loot_table_id: Optional[str] = None
     killer_player_id: Optional[PlayerId] = None
+    killer_world_object_id: Optional[WorldObjectId] = None
+    cause: Optional[DeathCauseEnum] = None
     spot_id: Optional[SpotId] = None
 
 

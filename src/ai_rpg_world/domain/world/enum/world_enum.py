@@ -69,7 +69,13 @@ class EnvironmentTypeEnum(Enum):
 
 
 class BehaviorStateEnum(Enum):
-    """アクターの行動状態"""
+    """
+    アクターの行動状態。
+
+    主な遷移: 視界内にTHREAT→FLEE; 敵対でFLEEでない→CHASE(またはHP%でFLEE);
+    ターゲット見失い→CHASE/ENRAGEはSEARCH, FLEEはRETURN; SEARCH終了→PATROLまたはRETURN;
+    縄張り超過→RETURN; RETURN到着→IDLE; 移動失敗max回→RETURN; HP%≤phase→ENRAGE.
+    """
     IDLE = "IDLE"       # 待機
     PATROL = "PATROL"   # 巡回
     CHASE = "CHASE"     # 追跡
@@ -95,6 +101,14 @@ class BehaviorActionType(Enum):
     WAIT = "WAIT"
 
 
+class ActiveTimeType(Enum):
+    """活動時間帯（いつ行動するか）"""
+    ALWAYS = "always"       # 常時活動
+    DIURNAL = "diurnal"     # 昼行性（昼のみ）
+    NOCTURNAL = "nocturnal"  # 夜行性（夜のみ）
+    CREPUSCULAR = "crepuscular"  # 薄明性（朝・夕のみ）
+
+
 class Disposition(Enum):
     """種族間の関係タイプ（アクターから対象への態度）"""
     NEUTRAL = "neutral"   # 無視（攻撃しない・逃げない・優先しない）
@@ -102,3 +116,15 @@ class Disposition(Enum):
     HOSTILE = "hostile"   # 敵対（攻撃・CHASE の対象）
     PREY = "prey"         # 獲物（敵対かつターゲット選択で優先）
     THREAT = "threat"     # 脅威（視界内にいれば FLEE、攻撃対象にしない）
+
+
+class InteractionTypeEnum(Enum):
+    """インタラクションの種類（拡張時はここに追加）"""
+    TALK = "talk"                     # 会話・調べる
+    EXAMINE = "examine"                # 調べる
+    HARVEST = "harvest"                # 採取・採掘
+    MONSTER_FEED = "monster_feed"      # モンスターが食事オブジェクトで採食
+    OPEN_CHEST = "open_chest"          # 宝箱を開ける
+    OPEN_DOOR = "open_door"            # ドアを開閉
+    STORE_IN_CHEST = "store_in_chest"  # 宝箱にアイテムを収納（Command で item 指定）
+    TAKE_FROM_CHEST = "take_from_chest"  # 宝箱からアイテムを取得
