@@ -6,7 +6,6 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.enum.world_enum import (
     ObjectTypeEnum,
-    BehaviorStateEnum,
     DirectionEnum,
     BehaviorActionType,
     Disposition,
@@ -14,7 +13,8 @@ from ai_rpg_world.domain.world.enum.world_enum import (
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent, MonsterSkillInfo
+from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent
+from ai_rpg_world.domain.monster.value_object.monster_skill_info import MonsterSkillInfo
 from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -27,86 +27,44 @@ from ai_rpg_world.domain.world.service.skill_selection_policy import SkillSelect
 from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.world.value_object.behavior_context import GrowthContext
 from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
-from ai_rpg_world.domain.world.service.behavior_strategy import DefaultBehaviorStrategy
 from ai_rpg_world.domain.world.exception.behavior_exception import (
     VisionRangeValidationException,
     FOVAngleValidationException,
-    SearchDurationValidationException,
-    HPPercentageValidationException,
-    FleeThresholdValidationException,
-    MaxFailuresValidationException
-)
-from ai_rpg_world.domain.world.event.behavior_events import (
-    ActorStateChangedEvent,
-    TargetSpottedEvent,
-    TargetLostEvent,
-    BehaviorStuckEvent
 )
 from ai_rpg_world.domain.common.exception import ValidationException
 
 
 class TestAutonomousBehaviorComponent:
-    """AutonomousBehaviorComponentのバリデーションと状態遷移のテスト"""
+    """AutonomousBehaviorComponent のバリデーションのテスト（軽量版コンポーネント）"""
 
     def test_validation_success(self):
         """正常なパラメータで生成できること"""
         comp = AutonomousBehaviorComponent(
             vision_range=5,
-            search_duration=3,
-            hp_percentage=0.5,
-            flee_threshold=0.2,
-            max_failures=5,
-            random_move_chance=0.5
+            random_move_chance=0.5,
         )
         assert comp.vision_range == 5
-        assert comp.hp_percentage == 0.5
+        assert comp.random_move_chance == 0.5
+        assert comp.patrol_points == []
+        assert comp.available_skills == []
 
     def test_validation_errors(self):
         """異常なパラメータで例外が発生すること"""
         with pytest.raises(VisionRangeValidationException):
             AutonomousBehaviorComponent(vision_range=-1)
-        
+
         with pytest.raises(FOVAngleValidationException):
             AutonomousBehaviorComponent(fov_angle=361)
-            
-        with pytest.raises(SearchDurationValidationException):
-            AutonomousBehaviorComponent(search_duration=-1)
-
-        with pytest.raises(HPPercentageValidationException):
-            AutonomousBehaviorComponent(hp_percentage=1.1)
-
-        with pytest.raises(FleeThresholdValidationException):
-            AutonomousBehaviorComponent(flee_threshold=-0.1)
-
-        with pytest.raises(MaxFailuresValidationException):
-            AutonomousBehaviorComponent(max_failures=0)
 
         with pytest.raises(ValidationException):
             AutonomousBehaviorComponent(random_move_chance=1.5)
 
-    def test_state_transitions(self):
-        """捕捉・見失いによる状態遷移が正しいこと"""
-        comp = AutonomousBehaviorComponent(hp_percentage=1.0, flee_threshold=0.2)
-        target_id = WorldObjectId(1)
-        coord = Coordinate(1, 1)
-
-        # 1. 捕捉 (通常時 -> CHASE)
-        comp.spot_target(target_id, coord)
-        assert comp.state == BehaviorStateEnum.CHASE
-        assert comp.target_id == target_id
-
-        # 2. 見失い (CHASE -> SEARCH)
-        comp.lose_target()
-        assert comp.state == BehaviorStateEnum.SEARCH
-
-        # 3. 捕捉 (HP低時 -> FLEE)
-        comp.hp_percentage = 0.1
-        comp.spot_target(target_id, coord)
-        assert comp.state == BehaviorStateEnum.FLEE
-
-        # 4. 見失い (FLEE -> RETURN)
-        comp.lose_target()
-        assert comp.state == BehaviorStateEnum.RETURN
+    def test_validation_random_move_chance_boundary(self):
+        """random_move_chance の境界値 0.0, 1.0 は有効であること"""
+        comp0 = AutonomousBehaviorComponent(vision_range=1, random_move_chance=0.0)
+        assert comp0.random_move_chance == 0.0
+        comp1 = AutonomousBehaviorComponent(vision_range=1, random_move_chance=1.0)
+        assert comp1.random_move_chance == 1.0
 
 
 class TestBehaviorService:
@@ -123,8 +81,8 @@ class TestBehaviorService:
         )
 
     @pytest.fixture
-    def behavior_service(self, pathfinding_service, hostility_service):
-        return BehaviorService(pathfinding_service, hostility_service)
+    def behavior_service(self, hostility_service):
+        return BehaviorService(hostility_service=hostility_service)
 
     @pytest.fixture
     def map_aggregate(self):

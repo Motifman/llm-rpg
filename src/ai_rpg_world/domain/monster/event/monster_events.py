@@ -8,6 +8,8 @@ from ai_rpg_world.domain.monster.enum.monster_enum import DeathCauseEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
@@ -84,3 +86,36 @@ class MonsterDecidedToUseSkillEvent(BaseDomainEvent[MonsterId, "MonsterAggregate
     target_id: Optional[WorldObjectId]
     spot_id: SpotId
     current_tick: WorldTick
+
+
+# モンスターの行動状態変化イベント（Monster 集約から発行）
+@dataclass(frozen=True)
+class ActorStateChangedEvent(BaseDomainEvent[WorldObjectId, str]):
+    """アクターの行動状態が変化したイベント"""
+    actor_id: WorldObjectId
+    old_state: BehaviorStateEnum
+    new_state: BehaviorStateEnum
+
+
+@dataclass(frozen=True)
+class TargetSpottedEvent(BaseDomainEvent[WorldObjectId, str]):
+    """ターゲットを視認したイベント"""
+    actor_id: WorldObjectId
+    target_id: WorldObjectId
+    coordinate: Coordinate
+
+
+@dataclass(frozen=True)
+class TargetLostEvent(BaseDomainEvent[WorldObjectId, str]):
+    """ターゲットを見失ったイベント"""
+    actor_id: WorldObjectId
+    target_id: WorldObjectId
+    last_known_coordinate: Coordinate
+
+
+@dataclass(frozen=True)
+class BehaviorStuckEvent(BaseDomainEvent[WorldObjectId, str]):
+    """行動がスタック（移動失敗の連続）したイベント"""
+    actor_id: WorldObjectId
+    state: BehaviorStateEnum
+    coordinate: Coordinate

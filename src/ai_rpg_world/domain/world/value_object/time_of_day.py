@@ -7,7 +7,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ai_rpg_world.domain.world.enum.world_enum import ActiveTimeType
+    from ai_rpg_world.domain.monster.enum.monster_enum import ActiveTimeType
 
 
 class TimeOfDay(Enum):
@@ -58,7 +58,7 @@ def is_active_at_time(active_time: "ActiveTimeType", time_of_day: TimeOfDay) -> 
     Returns:
         活動する場合は True
     """
-    from ai_rpg_world.domain.world.enum.world_enum import ActiveTimeType
+    from ai_rpg_world.domain.monster.enum.monster_enum import ActiveTimeType
     if active_time == ActiveTimeType.ALWAYS:
         return True
     if active_time == ActiveTimeType.DIURNAL:

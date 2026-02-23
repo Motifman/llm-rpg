@@ -13,10 +13,8 @@ from ai_rpg_world.domain.monster.event.monster_events import MonsterSpawnedEvent
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
 from ai_rpg_world.domain.skill.constants import MAX_SKILL_SLOTS
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.entity.world_object_component import (
-    AutonomousBehaviorComponent,
-    MonsterSkillInfo,
-)
+from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
+from ai_rpg_world.domain.monster.value_object.monster_skill_info import MonsterSkillInfo
 from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
@@ -100,13 +98,10 @@ class MonsterSpawnedMapPlacementHandler(
 
         component = AutonomousBehaviorComponent(
             vision_range=template.vision_range,
-            flee_threshold=template.flee_threshold,
             available_skills=available_skills,
-            hp_percentage=1.0,
             race=template.race.value,
             faction=template.faction.value,
             behavior_strategy_type=template.behavior_strategy_type,
-            phase_thresholds=list(template.phase_thresholds),
             pack_id=monster.pack_id,
             is_pack_leader=monster.is_pack_leader,
             ecology_type=template.ecology_type,
@@ -115,10 +110,7 @@ class MonsterSpawnedMapPlacementHandler(
             active_time=template.active_time,
             threat_races=set(template.threat_races) if template.threat_races else None,
             prey_races=set(template.prey_races) if template.prey_races else None,
-            hunger=0.0,
-            hunger_increase_per_tick=template.hunger_increase_per_tick,
-            hunger_starvation_threshold=template.hunger_starvation_threshold,
-            starvation_ticks=template.starvation_ticks,
+            initial_position=coordinate,
         )
 
         world_object = WorldObject(

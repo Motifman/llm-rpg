@@ -39,7 +39,7 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.enum.world_enum import BehaviorStateEnum, EcologyTypeEnum
+from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum, EcologyTypeEnum
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 
@@ -1136,7 +1136,7 @@ class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
 
     def test_to_behavior_state_snapshot_after_spawn(self, spawned_monster):
         """スポーン直後の to_behavior_state_snapshot が IDLE と初期位置を返すこと"""
-        from ai_rpg_world.domain.world.enum.world_enum import BehaviorStateEnum
+        from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
         from ai_rpg_world.domain.monster.value_object.behavior_state_snapshot import BehaviorStateSnapshot
 
         snap = spawned_monster.to_behavior_state_snapshot(
@@ -1151,7 +1151,7 @@ class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
 
     def test_to_behavior_state_snapshot_phase_thresholds_from_template(self, base_stats, reward_info, respawn_info, skill_loadout, spot_id):
         """phase_thresholds はテンプレートから取得されること"""
-        from ai_rpg_world.domain.world.enum.world_enum import BehaviorStateEnum
+        from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
         from ai_rpg_world.domain.monster.value_object.behavior_state_snapshot import BehaviorStateSnapshot
 
         template = MonsterTemplate(

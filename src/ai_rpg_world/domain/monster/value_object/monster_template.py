@@ -9,7 +9,7 @@ from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
 from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterTemplateValidationException
 from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
-from ai_rpg_world.domain.world.enum.world_enum import EcologyTypeEnum, ActiveTimeType
+from ai_rpg_world.domain.monster.enum.monster_enum import EcologyTypeEnum, ActiveTimeType
 
 
 @dataclass(frozen=True)
