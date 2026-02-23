@@ -100,9 +100,10 @@ class MonsterDecidedToInteractEvent(BaseDomainEvent[MonsterId, "MonsterAggregate
 
 @dataclass(frozen=True)
 class MonsterFedEvent(BaseDomainEvent[WorldObjectId, str]):
-    """モンスターが Harvestable で採食したイベント。ハンドラが record_feed を呼ぶ。"""
+    """モンスターが Harvestable で採食したイベント。ハンドラが record_feed と餌場記憶を更新する。"""
     actor_id: WorldObjectId
     target_id: WorldObjectId
+    target_coordinate: Coordinate
 
     @classmethod
     def create(
@@ -111,12 +112,14 @@ class MonsterFedEvent(BaseDomainEvent[WorldObjectId, str]):
         aggregate_type: str,
         actor_id: WorldObjectId,
         target_id: WorldObjectId,
+        target_coordinate: Coordinate,
     ) -> "MonsterFedEvent":
         return super().create(
             aggregate_id=aggregate_id,
             aggregate_type=aggregate_type,
             actor_id=actor_id,
             target_id=target_id,
+            target_coordinate=target_coordinate,
         )
 
 

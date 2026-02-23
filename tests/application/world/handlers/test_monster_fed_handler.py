@@ -74,6 +74,7 @@ class TestMonsterFedHandler:
             aggregate_type="WorldObject",
             actor_id=WorldObjectId(100),
             target_id=WorldObjectId(200),
+            target_coordinate=Coordinate(1, 0, 0),
         )
         handler.handle(event)
 
@@ -88,6 +89,7 @@ class TestMonsterFedHandler:
             aggregate_type="WorldObject",
             actor_id=WorldObjectId(999),
             target_id=WorldObjectId(998),
+            target_coordinate=Coordinate(0, 0, 0),
         )
         repo = InMemoryMonsterAggregateRepository()
         h = MonsterFedHandler(monster_repository=repo)
@@ -115,9 +117,41 @@ class TestMonsterFedHandler:
             aggregate_type="WorldObject",
             actor_id=WorldObjectId(101),
             target_id=WorldObjectId(201),
+            target_coordinate=Coordinate(2, 0, 0),
         )
         handler.handle(event)
 
         after = monster_repo.find_by_world_object_id(WorldObjectId(101))
         assert after is not None
         assert after.hunger == pytest.approx(0.5)  # 変化なし
+
+    def test_remember_feed_updates_feed_memory(self, handler, monster_repo):
+        """正常: 採食時に餌場記憶が更新されること"""
+        template = _template_with_feed(hunger_decrease_on_feed=0.2)
+        loadout = SkillLoadoutAggregate.create(
+            SkillLoadoutId(1), owner_id=200, normal_capacity=5, awakened_capacity=5
+        )
+        monster = MonsterAggregate.create(
+            monster_id=MonsterId(3),
+            template=template,
+            world_object_id=WorldObjectId(200),
+            skill_loadout=loadout,
+        )
+        monster.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0), initial_hunger=0.6)
+        monster_repo.save(monster)
+
+        feed_coord = Coordinate(3, 4, 0)
+        event = MonsterFedEvent.create(
+            aggregate_id=WorldObjectId(300),
+            aggregate_type="WorldObject",
+            actor_id=WorldObjectId(200),
+            target_id=WorldObjectId(300),
+            target_coordinate=feed_coord,
+        )
+        handler.handle(event)
+
+        after = monster_repo.find_by_world_object_id(WorldObjectId(200))
+        assert after is not None
+        assert len(after.behavior_last_known_feed) == 1
+        assert after.behavior_last_known_feed[0].object_id == WorldObjectId(300)
+        assert after.behavior_last_known_feed[0].coordinate == feed_coord

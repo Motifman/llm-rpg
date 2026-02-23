@@ -40,4 +40,5 @@ class MonsterFedHandler(EventHandler[MonsterFedEvent]):
         if monster.template.starvation_ticks <= 0 or decrease <= 0:
             return
         monster.record_feed(decrease)
+        monster.remember_feed(event.target_id, event.target_coordinate)
         self._monster_repository.save(monster)

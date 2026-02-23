@@ -1,4 +1,5 @@
 import logging
+import random
 from typing import List, Callable, Any, Dict, Optional, Set, TYPE_CHECKING
 
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -66,6 +67,9 @@ from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.world.aggro_store import AggroStore
+from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
+from ai_rpg_world.domain.world.repository.world_map_repository import WorldMapRepository
+from ai_rpg_world.domain.world.service.map_transition_service import MapTransitionService
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.monster.action_resolver import IMonsterActionResolver
@@ -98,9 +102,13 @@ class WorldSimulationApplicationService:
         spawn_table_repository: Optional[SpawnTableRepository] = None,
         monster_template_repository: Optional[MonsterTemplateRepository] = None,
         loot_table_repository: Optional[LootTableRepository] = None,
+        world_map_repository: Optional[WorldMapRepository] = None,
+        map_transition_service: Optional[MapTransitionService] = None,
     ):
         self._time_provider = time_provider
         self._loot_table_repository = loot_table_repository
+        self._world_map_repository = world_map_repository
+        self._map_transition_service = map_transition_service
         self._physical_map_repository = physical_map_repository
         self._weather_zone_repository = weather_zone_repository
         self._player_status_repository = player_status_repository
@@ -192,6 +200,19 @@ class WorldSimulationApplicationService:
                             monster.monster_id,
                             str(e),
                         )
+
+            # 3.6 飢餓時のスポット転移（移住）：飢餓 ≥ 閾値かつ現在スポットに餌がなければ接続スポットへ 1 体のみ移住
+            if (
+                self._world_map_repository is not None
+                and self._map_transition_service is not None
+                and self._loot_table_repository is not None
+            ):
+                for physical_map in maps:
+                    if physical_map.spot_id not in active_spot_ids:
+                        continue
+                    self._process_hunger_migration_for_spot(
+                        physical_map, current_tick, active_spot_ids
+                    )
 
             # 4. 各マップのアクターの行動更新（アクティブなスポットのみ；同一スポット内でプレイヤーとの距離が近い順に処理）
             for physical_map in maps:
@@ -472,7 +493,10 @@ class WorldSimulationApplicationService:
         monster: MonsterAggregate,
         current_tick: WorldTick,
     ):
-        """視界内の餌オブジェクトと、飢餓時の選択餌ターゲットを組み立てる。"""
+        """視界内の餌オブジェクトと、飢餓時の選択餌ターゲットを組み立てる。
+        視界内に餌があればそれを選択し餌場記憶を更新。なければ記憶を距離が近い順に参照し、
+        有効な餌があればそれを選択する。
+        """
         visible_feed: List[WorldObject] = []
         selected_feed_target: Optional[WorldObject] = None
         if self._loot_table_repository is None or not monster.template.preferred_feed_item_spec_ids:
@@ -501,7 +525,119 @@ class WorldSimulationApplicationService:
                 visible_feed,
                 key=lambda o: actor.coordinate.distance_to(o.coordinate),
             )
+            monster.remember_feed(
+                selected_feed_target.object_id,
+                selected_feed_target.coordinate,
+            )
+        if selected_feed_target is None and monster.hunger >= monster.template.forage_threshold:
+            # 視界内に餌がなければ記憶を距離が近い順に参照
+            memories = sorted(
+                monster.behavior_last_known_feed,
+                key=lambda e: actor.coordinate.distance_to(e.coordinate),
+            )
+            for entry in memories:
+                try:
+                    obj = physical_map.get_object(entry.object_id)
+                except ObjectNotFoundException:
+                    continue
+                if not isinstance(obj.component, HarvestableComponent):
+                    continue
+                harvestable = obj.component
+                if harvestable.get_available_quantity(current_tick) <= 0:
+                    continue
+                loot_table = self._loot_table_repository.find_by_id(harvestable.loot_table_id)
+                if not loot_table or not is_feed_for_monster(loot_table.entries, preferred):
+                    continue
+                selected_feed_target = obj
+                break
         return visible_feed, selected_feed_target
+
+    def _spot_has_feed_for_monster(
+        self,
+        physical_map: PhysicalMapAggregate,
+        monster: MonsterAggregate,
+        current_tick: WorldTick,
+    ) -> bool:
+        """
+        スポット内に、このモンスターの嗜好に合いかつ残量 > 0 の Harvestable が
+        1 つ以上あるか。ドメインはリポジトリに依存しないためアプリ層で判定する。
+        """
+        preferred = monster.template.preferred_feed_item_spec_ids
+        if not preferred:
+            return False
+        for obj in physical_map.get_all_objects():
+            if not isinstance(obj.component, HarvestableComponent):
+                continue
+            harvestable = obj.component
+            if harvestable.get_available_quantity(current_tick) <= 0:
+                continue
+            loot_table = self._loot_table_repository.find_by_id(harvestable.loot_table_id)
+            if not loot_table or not is_feed_for_monster(loot_table.entries, preferred):
+                continue
+            return True
+        return False
+
+    def _process_hunger_migration_for_spot(
+        self,
+        physical_map: PhysicalMapAggregate,
+        current_tick: WorldTick,
+        active_spot_ids: Set[SpotId],
+    ) -> None:
+        """
+        このスポットで飢餓かつ餌なしのモンスターのうち飢餓が最も高い 1 体を、
+        接続スポットへランダムに移住させる。1 スポットあたり 1 tick に 1 体まで。
+        """
+        monsters_on_spot = self._monster_repository.find_by_spot_id(physical_map.spot_id)
+        # 飢餓 ≥ 閾値かつ嗜好ありかつスポットに餌がない候補
+        candidates: List[MonsterAggregate] = []
+        for monster in monsters_on_spot:
+            if monster.coordinate is None:
+                continue
+            if monster.hunger < monster.template.forage_threshold:
+                continue
+            if not monster.template.preferred_feed_item_spec_ids:
+                continue
+            if self._spot_has_feed_for_monster(physical_map, monster, current_tick):
+                continue
+            candidates.append(monster)
+        if not candidates:
+            return
+        # 飢餓が最も高い 1 体
+        migrant = max(candidates, key=lambda m: m.hunger)
+        connected = self._world_map_repository.find_all_connected_spots(
+            physical_map.spot_id
+        )
+        if not connected:
+            return
+        to_spot_id = random.choice(connected)
+        gateways = physical_map.get_all_gateways()
+        target_gateway = next(
+            (g for g in gateways if g.target_spot_id == to_spot_id),
+            None,
+        )
+        if target_gateway is None:
+            return
+        to_map = self._physical_map_repository.find_by_spot_id(to_spot_id)
+        if to_map is None:
+            return
+        try:
+            self._map_transition_service.transition_object(
+                physical_map,
+                to_map,
+                migrant.world_object_id,
+                target_gateway.landing_coordinate,
+            )
+            migrant.update_map_placement(to_spot_id, target_gateway.landing_coordinate)
+            self._physical_map_repository.save(physical_map)
+            self._physical_map_repository.save(to_map)
+            self._monster_repository.save(migrant)
+            self._unit_of_work.process_sync_events()
+        except DomainException as e:
+            self._logger.warning(
+                "Hunger migration skipped for monster %s: %s",
+                migrant.monster_id,
+                str(e),
+            )
 
     def _build_target_context_for_actor(
         self,
