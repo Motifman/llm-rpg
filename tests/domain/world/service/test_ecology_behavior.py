@@ -8,7 +8,8 @@ import pytest
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, BehaviorStateEnum, EcologyTypeEnum, Disposition
+from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, Disposition
+from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum, EcologyTypeEnum
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import (
@@ -31,7 +32,7 @@ class TestEcologyFleeOnly:
     def service(self):
         path = PathfindingService(AStarPathfindingStrategy())
         hostility = ConfigurableHostilityService(race_disposition_table={"goblin": {"human": Disposition.HOSTILE}})
-        return BehaviorService(path, hostility)
+        return BehaviorService(hostility_service=hostility)
 
     @pytest.fixture
     def map_aggregate(self):
@@ -65,7 +66,7 @@ class TestEcologyPatrolOnly:
     def service(self):
         path = PathfindingService(AStarPathfindingStrategy())
         hostility = ConfigurableHostilityService(race_disposition_table={"goblin": {"human": Disposition.HOSTILE}})
-        return BehaviorService(path, hostility)
+        return BehaviorService(hostility_service=hostility)
 
     @pytest.fixture
     def map_aggregate(self):
@@ -100,7 +101,7 @@ class TestEcologyAmbush:
     def service(self):
         path = PathfindingService(AStarPathfindingStrategy())
         hostility = ConfigurableHostilityService(race_disposition_table={"goblin": {"human": Disposition.HOSTILE}})
-        return BehaviorService(path, hostility)
+        return BehaviorService(hostility_service=hostility)
 
     @pytest.fixture
     def map_aggregate(self):
@@ -156,7 +157,7 @@ class TestEcologyTerritorial:
     def service(self):
         path = PathfindingService(AStarPathfindingStrategy())
         hostility = ConfigurableHostilityService(race_disposition_table={"goblin": {"human": Disposition.HOSTILE}})
-        return BehaviorService(path, hostility)
+        return BehaviorService(hostility_service=hostility)
 
     @pytest.fixture
     def map_aggregate(self):

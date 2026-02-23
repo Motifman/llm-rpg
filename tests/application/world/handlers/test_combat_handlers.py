@@ -61,10 +61,10 @@ from ai_rpg_world.domain.world.entity.world_object_component import (
     AutonomousBehaviorComponent,
 )
 from ai_rpg_world.domain.world.enum.world_enum import (
-    BehaviorStateEnum,
     DirectionEnum,
     ObjectTypeEnum,
 )
+from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
@@ -348,7 +348,7 @@ class TestHitBoxDamageHandler:
         s["player_repo"].save(_create_player_status(100, attack=50))
         # モンスター（被弾者）: マップ上には AutonomousBehaviorComponent を持つ NPC として配置
         monster_world_object_id = WorldObjectId(300)
-        monster_comp = AutonomousBehaviorComponent(hp_percentage=1.0)
+        monster_comp = AutonomousBehaviorComponent()
         monster_obj = WorldObject(
             monster_world_object_id,
             Coordinate(1, 1, 0),
@@ -377,12 +377,10 @@ class TestHitBoxDamageHandler:
         # Monster 集約の HP が減っていること (50 - 8/2 = 46 ダメージ → 100 - 46 = 54)
         updated_monster = s["monster_repo"].find_by_world_object_id(monster_world_object_id)
         assert updated_monster.hp.value == 54
-        # HP の真実の源は Monster 集約。Component には同期しない（モンスター情報は Monster ドメインに集約）
+        # HP の真実の源は Monster 集約のみ。Component には hp_percentage を持たない（軽量版）
         updated_map = s["map_repo"].find_by_spot_id(SpotId(1))
         target_obj = updated_map.get_object(monster_world_object_id)
         assert isinstance(target_obj.component, AutonomousBehaviorComponent)
-        # 初期値のまま（同期しないため）
-        assert target_obj.component.hp_percentage == pytest.approx(1.0, rel=1e-5)
 
     def test_skip_damage_when_target_already_dead(self, setup):
         # Given
@@ -502,7 +500,7 @@ class TestCombatAggroHandler:
         # ターゲットは自律モンスター
         monster_obj = WorldObject(
             WorldObjectId(300), Coordinate(1, 1, 0), ObjectTypeEnum.NPC,
-            component=AutonomousBehaviorComponent(state=BehaviorStateEnum.IDLE)
+            component=AutonomousBehaviorComponent()
         )
         pmap.add_object(attacker_obj)
         pmap.add_object(monster_obj)
@@ -531,10 +529,12 @@ class TestCombatAggroHandler:
         with s["uow"]:
             s["handler"].handle(event)
 
-        # Then
+        # Then: アタッカーがアクターでないため record_attacked_by は呼ばれず、
+        # ターゲット側の Monster に behavior_target_id は設定されない。
+        # （Component は軽量版のため target_id を持たない。Monster 集約のみが保持）
         updated_map = s["map_repo"].find_by_spot_id(SpotId(1))
         target = updated_map.get_object(WorldObjectId(300))
-        assert target.component.target_id is None # ターゲットが設定されていないこと
+        assert isinstance(target.component, AutonomousBehaviorComponent)
 
     def test_aggro_skipped_when_target_not_actor(self, setup):
         # Given
@@ -589,7 +589,7 @@ class TestCombatAggroHandler:
         attacker_obj = _create_actor_object(100, Coordinate(0, 0, 0), player_id=100)
         monster_obj = WorldObject(
             target_id, Coordinate(1, 1, 0), ObjectTypeEnum.NPC,
-            component=AutonomousBehaviorComponent(state=BehaviorStateEnum.IDLE),
+            component=AutonomousBehaviorComponent(),
         )
         pmap.add_object(attacker_obj)
         pmap.add_object(monster_obj)
@@ -643,7 +643,7 @@ class TestCombatAggroHandler:
         pmap.add_object(_create_actor_object(100, Coordinate(0, 0, 0), player_id=100))
         pmap.add_object(WorldObject(
             target_id, Coordinate(1, 1, 0), ObjectTypeEnum.NPC,
-            component=AutonomousBehaviorComponent(state=BehaviorStateEnum.IDLE),
+            component=AutonomousBehaviorComponent(),
         ))
         s["map_repo"].save(pmap)
         s["monster_repo"].save(_create_monster(1, 300, Coordinate(1, 1, 0)))
@@ -683,7 +683,7 @@ class TestCombatAggroHandler:
         attacker_obj = _create_actor_object(100, Coordinate(0, 0, 0), player_id=100)
         monster_obj = WorldObject(
             WorldObjectId(300), Coordinate(1, 1, 0), ObjectTypeEnum.NPC,
-            component=AutonomousBehaviorComponent(state=BehaviorStateEnum.IDLE),
+            component=AutonomousBehaviorComponent(),
         )
         pmap.add_object(attacker_obj)
         pmap.add_object(monster_obj)
@@ -793,7 +793,7 @@ class TestCombatAggroHandler:
                 WorldObjectId(300),
                 Coordinate(1, 1, 0),
                 ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.IDLE),
+                component=AutonomousBehaviorComponent(),
             )
         )
         s["map_repo"].save(pmap)
@@ -1224,7 +1224,7 @@ class TestCombatIntegration:
             caching_pathfinding,
             FirstInRangeSkillPolicy(),
         )
-        behavior_service = BehaviorService(caching_pathfinding)
+        behavior_service = BehaviorService()
         service = WorldSimulationApplicationService(
             time_provider=time_provider,
             physical_map_repository=map_repo,

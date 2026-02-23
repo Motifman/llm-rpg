@@ -15,7 +15,7 @@ from ai_rpg_world.domain.world.service.hostility_service import ConfigurableHost
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
 from ai_rpg_world.domain.world.service.weather_config_service import DefaultWeatherConfigService
 from ai_rpg_world.domain.world.service.world_time_config_service import DefaultWorldTimeConfigService
-from ai_rpg_world.domain.world.enum.world_enum import ActiveTimeType
+from ai_rpg_world.domain.monster.enum.monster_enum import ActiveTimeType
 from ai_rpg_world.domain.monster.enum.monster_enum import MonsterStatusEnum
 from ai_rpg_world.domain.monster.value_object.spawn_condition import SpawnCondition
 from ai_rpg_world.domain.world.value_object.time_of_day import TimeOfDay
@@ -40,7 +40,8 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, BehaviorStateEnum, DirectionEnum, BehaviorActionType
+from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, DirectionEnum, BehaviorActionType
+from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
@@ -64,7 +65,8 @@ from ai_rpg_world.domain.skill.value_object.skill_hit_pattern import SkillHitPat
 from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
 from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
 from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
-from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent, MonsterSkillInfo
+from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent
+from ai_rpg_world.domain.monster.value_object.monster_skill_info import MonsterSkillInfo
 from ai_rpg_world.domain.world.value_object.behavior_context import (
     SkillSelectionContext,
     TargetSelectionContext,
@@ -89,7 +91,7 @@ from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxObstacleCollidedEvent,
     HitBoxDeactivatedEvent,
 )
-from ai_rpg_world.domain.world.event.behavior_events import (
+from ai_rpg_world.domain.monster.event.monster_events import (
     TargetSpottedEvent,
     ActorStateChangedEvent,
 )
@@ -136,7 +138,7 @@ class TestWorldSimulationApplicationService:
             time_provider=time_provider,
             ttl_ticks=5,
         )
-        behavior_service = BehaviorService(caching_pathfinding)
+        behavior_service = BehaviorService()
         weather_config = DefaultWeatherConfigService(update_interval_ticks=1)
         hit_box_config = DefaultHitBoxConfigService(substeps_per_tick=4)
         hit_box_collision_service = HitBoxCollisionDomainService()
@@ -226,7 +228,6 @@ class TestWorldSimulationApplicationService:
             Coordinate(2, 2),
             ObjectTypeEnum.NPC,
             component=AutonomousBehaviorComponent(
-                state=BehaviorStateEnum.PATROL,
                 vision_range=5,
                 patrol_points=[Coordinate(2, 2), Coordinate(2, 3)],
             ),
@@ -359,11 +360,11 @@ class TestWorldSimulationApplicationService:
         actor2_id = WorldObjectId(2)
         actor1 = WorldObject(
             actor1_id, Coordinate(2, 2), ObjectTypeEnum.NPC,
-            component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
+            component=AutonomousBehaviorComponent(patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
         )
         actor2 = WorldObject(
             actor2_id, Coordinate(3, 3), ObjectTypeEnum.NPC,
-            component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(3, 3), Coordinate(3, 4)]),
+            component=AutonomousBehaviorComponent(patrol_points=[Coordinate(3, 3), Coordinate(3, 4)]),
         )
         physical_map.add_object(actor1)
         physical_map.add_object(actor2)
@@ -1142,13 +1143,10 @@ class TestWorldSimulationApplicationService:
         monster_obj_id = WorldObjectId(100)
         skills = [MonsterSkillInfo(slot_index=0, range=2, mp_cost=10)]
         monster_comp = AutonomousBehaviorComponent(
-            state=BehaviorStateEnum.CHASE,
             vision_range=5,
             available_skills=skills,
             fov_angle=360.0,
         )
-        monster_comp.target_id = WorldObjectId(1)
-        monster_comp.last_known_target_position = Coordinate(7, 5)
         monster_obj = WorldObject(monster_obj_id, Coordinate(5, 5), ObjectTypeEnum.NPC, component=monster_comp)
         physical_map.add_object(monster_obj)
         
@@ -1668,7 +1666,7 @@ class TestWorldSimulationApplicationService:
             for oid, coord in [(near_id, Coordinate(1, 0)), (mid_id, Coordinate(3, 0)), (far_id, Coordinate(5, 0))]:
                 physical_map.add_object(WorldObject(
                     oid, coord, ObjectTypeEnum.NPC,
-                    component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[coord, coord]),
+                    component=AutonomousBehaviorComponent(patrol_points=[coord, coord]),
                 ))
                 loadout = SkillLoadoutAggregate.create(SkillLoadoutId.create(oid.value), 1, 10, 10)
                 skill_loadout_repo.save(loadout)
@@ -1705,7 +1703,7 @@ class TestWorldSimulationApplicationService:
                 actor_id = WorldObjectId(10 + i)
                 physical_map.add_object(WorldObject(
                     actor_id, coord, ObjectTypeEnum.NPC,
-                    component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[coord, coord]),
+                    component=AutonomousBehaviorComponent(patrol_points=[coord, coord]),
                 ))
             repository.save(physical_map)
 
@@ -1756,7 +1754,7 @@ class TestWorldSimulationApplicationService:
             ]:
                 physical_map.add_object(WorldObject(
                     oid, coord, ObjectTypeEnum.NPC,
-                    component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[coord, coord]),
+                    component=AutonomousBehaviorComponent(patrol_points=[coord, coord]),
                 ))
                 loadout = SkillLoadoutAggregate.create(SkillLoadoutId.create(oid.value), 1, 10, 10)
                 skill_loadout_repo.save(loadout)
@@ -1791,7 +1789,7 @@ class TestWorldSimulationApplicationService:
             actor_id = WorldObjectId(1)
             physical_map.add_object(WorldObject(
                 actor_id, Coordinate(2, 2), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
+                component=AutonomousBehaviorComponent(patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
             ))
             repository.save(physical_map)
 
@@ -1833,7 +1831,6 @@ class TestWorldSimulationApplicationService:
                 physical_map.add_object(WorldObject(
                     oid, coord, ObjectTypeEnum.NPC,
                     component=AutonomousBehaviorComponent(
-                        state=BehaviorStateEnum.PATROL,
                         patrol_points=[coord, coord],
                     ),
                     busy_until=busy,
@@ -1917,11 +1914,11 @@ class TestWorldSimulationApplicationService:
             ))
             map_a.add_object(WorldObject(
                 WorldObjectId(1), Coordinate(1, 1), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(1, 1), Coordinate(1, 2)]),
+                component=AutonomousBehaviorComponent(patrol_points=[Coordinate(1, 1), Coordinate(1, 2)]),
             ))
             map_b.add_object(WorldObject(
                 WorldObjectId(2), Coordinate(2, 2), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
+                component=AutonomousBehaviorComponent(patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
             ))
             repository.save(map_a)
             repository.save(map_b)
@@ -1977,11 +1974,11 @@ class TestWorldSimulationApplicationService:
             map_b = PhysicalMapAggregate.create(spot_b, tiles)
             map_a.add_object(WorldObject(
                 WorldObjectId(1), Coordinate(0, 0), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(0, 0)]),
+                component=AutonomousBehaviorComponent(patrol_points=[Coordinate(0, 0)]),
             ))
             map_b.add_object(WorldObject(
                 WorldObjectId(2), Coordinate(0, 0), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(0, 0)]),
+                component=AutonomousBehaviorComponent(patrol_points=[Coordinate(0, 0)]),
             ))
             repository.save(map_a)
             repository.save(map_b)
@@ -2022,11 +2019,11 @@ class TestWorldSimulationApplicationService:
             ))
             map_a.add_object(WorldObject(
                 WorldObjectId(1), Coordinate(1, 0), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(1, 0)]),
+                component=AutonomousBehaviorComponent(patrol_points=[Coordinate(1, 0)]),
             ))
             map_b.add_object(WorldObject(
                 WorldObjectId(2), Coordinate(1, 0), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(1, 0)]),
+                component=AutonomousBehaviorComponent(patrol_points=[Coordinate(1, 0)]),
             ))
             repository.save(map_a)
             repository.save(map_b)
@@ -2085,12 +2082,12 @@ class TestWorldSimulationApplicationService:
             ))
             map_active.add_object(WorldObject(
                 WorldObjectId(1), Coordinate(1, 0), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(1, 0), Coordinate(1, 1)]),
+                component=AutonomousBehaviorComponent(patrol_points=[Coordinate(1, 0), Coordinate(1, 1)]),
             ))
             npc_on_inactive_id = WorldObjectId(2)
             map_inactive.add_object(WorldObject(
                 npc_on_inactive_id, Coordinate(2, 2), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
+                component=AutonomousBehaviorComponent(patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
             ))
             repository.save(map_active)
             repository.save(map_inactive)
@@ -2141,7 +2138,7 @@ class TestWorldSimulationApplicationService:
             ))
             physical_map.add_object(WorldObject(
                 actor_id, Coordinate(2, 2), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
+                component=AutonomousBehaviorComponent(patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
             ))
             repository.save(physical_map)
 
@@ -2217,7 +2214,6 @@ class TestWorldSimulationApplicationService:
                 Coordinate(2, 2),
                 ObjectTypeEnum.NPC,
                 component=AutonomousBehaviorComponent(
-                    state=BehaviorStateEnum.PATROL,
                     patrol_points=[Coordinate(2, 2), Coordinate(2, 3)],
                     active_time=ActiveTimeType.NOCTURNAL,
                 ),
@@ -2271,7 +2267,6 @@ class TestWorldSimulationApplicationService:
                 Coordinate(2, 2),
                 ObjectTypeEnum.NPC,
                 component=AutonomousBehaviorComponent(
-                    state=BehaviorStateEnum.PATROL,
                     patrol_points=[Coordinate(2, 2), Coordinate(2, 3)],
                     active_time=ActiveTimeType.DIURNAL,
                 ),

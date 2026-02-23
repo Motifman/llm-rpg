@@ -6,7 +6,7 @@ from ai_rpg_world.domain.world.value_object.time_of_day import (
     time_of_day_from_tick,
     is_active_at_time,
 )
-from ai_rpg_world.domain.world.enum.world_enum import ActiveTimeType
+from ai_rpg_world.domain.monster.enum.monster_enum import ActiveTimeType
 
 
 class TestTimeOfDay:

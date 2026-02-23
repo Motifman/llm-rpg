@@ -28,7 +28,7 @@ from ai_rpg_world.domain.monster.exception.monster_exceptions import (
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.enum.world_enum import BehaviorStateEnum, EcologyTypeEnum
+from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum, EcologyTypeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.value_object.behavior_state_snapshot import BehaviorStateSnapshot
@@ -42,7 +42,7 @@ from ai_rpg_world.domain.monster.service.behavior_state_transition_service impor
     StateTransitionResult,
 )
 from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
-from ai_rpg_world.domain.world.event.behavior_events import (
+from ai_rpg_world.domain.monster.event.monster_events import (
     ActorStateChangedEvent,
     TargetSpottedEvent,
     TargetLostEvent,

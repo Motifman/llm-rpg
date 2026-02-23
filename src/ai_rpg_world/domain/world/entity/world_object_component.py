@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from typing import Dict, Any, Optional, Set, TYPE_CHECKING, Union, List
 
 if TYPE_CHECKING:
@@ -10,10 +9,11 @@ from ai_rpg_world.domain.world.event.map_events import WorldObjectBlockingChange
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.world.enum.world_enum import (
     DirectionEnum,
-    BehaviorStateEnum,
+    InteractionTypeEnum,
+)
+from ai_rpg_world.domain.monster.enum.monster_enum import (
     EcologyTypeEnum,
     ActiveTimeType,
-    InteractionTypeEnum,
 )
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
@@ -26,12 +26,7 @@ from ai_rpg_world.domain.world.value_object.aggro_memory_policy import AggroMemo
 from ai_rpg_world.domain.world.exception.behavior_exception import (
     VisionRangeValidationException,
     FOVAngleValidationException,
-    SearchDurationValidationException,
     InvalidPatrolPointException,
-    HPPercentageValidationException,
-    FleeThresholdValidationException,
-    MaxFailuresValidationException,
-    HungerValidationException,
 )
 
 
@@ -331,19 +326,14 @@ class InteractableComponent(WorldObjectComponent):
         }
 
 
-@dataclass(frozen=True)
-class MonsterSkillInfo:
-    """AIが判断に利用するためのスキル簡略情報"""
-    slot_index: int
-    range: int
-    mp_cost: int
+from ai_rpg_world.domain.monster.value_object.monster_skill_info import MonsterSkillInfo
 
 
 class AutonomousBehaviorComponent(ActorComponent):
     """
-    自律的な行動ロジックを持つアクターコンポーネント。
-    状態: IDLE/PATROL/CHASE/SEARCH/FLEE/RETURN/ENRAGE.
-    lose_target: CHASE/ENRAGE→SEARCH, FLEE→RETURN. tick_search終了→PATROLまたはRETURN.
+    自律的な行動ロジックを持つアクターのマップ用コンポーネント（軽量版）。
+    表示・パス探索・観測に必要なテンプレート由来の情報のみを保持する。
+    行動状態（state, target_id 等）は Monster 集約が保持し、このコンポーネントには持たない。
     """
     def __init__(
         self,
@@ -351,21 +341,15 @@ class AutonomousBehaviorComponent(ActorComponent):
         capability: MovementCapability = None,
         player_id: Optional["PlayerId"] = None,
         is_npc: bool = True,
-        state: BehaviorStateEnum = BehaviorStateEnum.IDLE,
         vision_range: int = 5,
         fov_angle: float = 90.0,
         patrol_points: list[Coordinate] = None,
-        search_duration: int = 3,
         race: str = "monster",
         faction: str = "enemy",
-        hp_percentage: float = 1.0,
-        flee_threshold: float = 0.2,
-        max_failures: int = 3,
         initial_position: Optional[Coordinate] = None,
         random_move_chance: float = 0.5,
         available_skills: list[MonsterSkillInfo] = None,
         behavior_strategy_type: str = "default",
-        phase_thresholds: Optional[list[float]] = None,
         pack_id: Optional["PackId"] = None,
         is_pack_leader: bool = False,
         ecology_type: EcologyTypeEnum = EcologyTypeEnum.NORMAL,
@@ -375,32 +359,15 @@ class AutonomousBehaviorComponent(ActorComponent):
         active_time: ActiveTimeType = ActiveTimeType.ALWAYS,
         threat_races: Optional[Set[str]] = None,
         prey_races: Optional[Set[str]] = None,
-        hunger: float = 0.0,
-        hunger_increase_per_tick: float = 0.0,
-        hunger_starvation_threshold: float = 1.0,
-        starvation_ticks: int = 0,
     ):
         super().__init__(direction, capability, player_id, is_npc, fov_angle, race, faction, pack_id)
-        self._validate(vision_range, search_duration, hp_percentage, flee_threshold, max_failures, random_move_chance)
-        self._validate_hunger(hunger, hunger_starvation_threshold, starvation_ticks)
-        self.state = state
+        self._validate(vision_range, random_move_chance)
         self.vision_range = vision_range
         self.patrol_points = patrol_points or []
-        self.current_patrol_index = 0
-        self.target_id: Optional[WorldObjectId] = None
-        self.last_known_target_position: Optional[Coordinate] = None
-        self.search_duration = search_duration
-        self.search_timer = 0
-        self.hp_percentage = hp_percentage
-        self.flee_threshold = flee_threshold
-        self.max_failures = max_failures
-        self.failure_count = 0
         self.initial_position = initial_position
         self.random_move_chance = random_move_chance
         self.available_skills = available_skills or []
         self.behavior_strategy_type = behavior_strategy_type
-        self.phase_thresholds = phase_thresholds or []
-        self.pack_id = pack_id
         self.is_pack_leader = is_pack_leader
         self.ecology_type = ecology_type
         self.ambush_chase_range = ambush_chase_range
@@ -409,147 +376,29 @@ class AutonomousBehaviorComponent(ActorComponent):
         self.active_time = active_time
         self.threat_races = threat_races or frozenset()
         self.prey_races = prey_races or frozenset()
-        self.hunger = max(0.0, min(1.0, hunger))
-        self.hunger_increase_per_tick = hunger_increase_per_tick
-        self.hunger_starvation_threshold = hunger_starvation_threshold
-        self.starvation_ticks = starvation_ticks
-        self.starvation_timer = 0
 
-    def _validate(self, vision_range, search_duration, hp_percentage, flee_threshold, max_failures, random_move_chance):
+    def _validate(self, vision_range: int, random_move_chance: float) -> None:
         if vision_range < 0:
             raise VisionRangeValidationException("Vision range cannot be negative")
-        if search_duration < 0:
-            raise SearchDurationValidationException("Search duration cannot be negative")
-        if not (0.0 <= hp_percentage <= 1.0):
-            raise HPPercentageValidationException("HP percentage must be between 0.0 and 1.0")
-        if not (0.0 <= flee_threshold <= 1.0):
-            raise FleeThresholdValidationException("Flee threshold must be between 0.0 and 1.0")
-        if max_failures < 1:
-            raise MaxFailuresValidationException("Max failures must be at least 1")
         if not (0.0 <= random_move_chance <= 1.0):
-            # 汎用的なValidationExceptionまたは新設
-            raise ValidationException(f"Random move chance must be between 0.0 and 1.0: {random_move_chance}")
-
-    def _validate_hunger(self, hunger: float, hunger_starvation_threshold: float, starvation_ticks: int) -> None:
-        if not (0.0 <= hunger <= 1.0):
-            raise HungerValidationException(f"hunger must be between 0.0 and 1.0: {hunger}")
-        if not (0.0 <= hunger_starvation_threshold <= 1.0):
-            raise HungerValidationException(
-                f"hunger_starvation_threshold must be between 0.0 and 1.0: {hunger_starvation_threshold}"
+            raise ValidationException(
+                f"Random move chance must be between 0.0 and 1.0: {random_move_chance}"
             )
-        if starvation_ticks < 0:
-            raise HungerValidationException(f"starvation_ticks cannot be negative: {starvation_ticks}")
 
     def get_type_name(self) -> str:
         return "autonomous_actor"
 
-    def set_state(self, new_state: BehaviorStateEnum):
-        if self.state == new_state:
-            return
-        self.state = new_state
-        # 状態リセットロジック
-        self.failure_count = 0
-        if new_state not in [BehaviorStateEnum.SEARCH, BehaviorStateEnum.FLEE]:
-            self.search_timer = 0
-        if new_state not in (BehaviorStateEnum.CHASE, BehaviorStateEnum.FLEE, BehaviorStateEnum.ENRAGE):
-            self.target_id = None
-
-    def update_last_known_position(self, coordinate: Coordinate):
-        self.last_known_target_position = coordinate
-
-    def spot_target(
-        self,
-        target_id: WorldObjectId,
-        coordinate: Coordinate,
-        effective_flee_threshold: Optional[float] = None,
-        allow_chase: Optional[bool] = None,
-    ):
-        """
-        ターゲットを捕捉した際の状態遷移（生態タイプに応じる）。
-        effective_flee_threshold: 成長段階に応じた FLEE 閾値（未指定時は self.flee_threshold）
-        allow_chase: CHASE を許可するか（未指定時は True）。幼体などは False で渡す。
-        """
-        if self.ecology_type == EcologyTypeEnum.PATROL_ONLY:
-            return
-        if self.ecology_type == EcologyTypeEnum.FLEE_ONLY:
-            self.target_id = target_id
-            self.last_known_target_position = coordinate
-            self.set_state(BehaviorStateEnum.FLEE)
-            return
-        if (
-            self.ecology_type == EcologyTypeEnum.AMBUSH
-            and self.initial_position is not None
-            and self.ambush_chase_range is not None
-        ):
-            if self.initial_position.distance_to(coordinate) > self.ambush_chase_range:
-                return
-        self.target_id = target_id
-        self.last_known_target_position = coordinate
-        flee_th = effective_flee_threshold if effective_flee_threshold is not None else self.flee_threshold
-        can_chase = allow_chase if allow_chase is not None else True
-        if self.hp_percentage <= flee_th:
-            self.set_state(BehaviorStateEnum.FLEE)
-        elif can_chase and self.state != BehaviorStateEnum.ENRAGE:
-            self.set_state(BehaviorStateEnum.CHASE)
-        # allow_chase が False の場合は CHASE に遷移しない（IDLE 等のまま）
-
-    def lose_target(self):
-        """ターゲットを見失った際の状態遷移。CHASE/ENRAGE→SEARCH, FLEE→RETURN."""
-        if self.state in (BehaviorStateEnum.CHASE, BehaviorStateEnum.ENRAGE):
-            self.set_state(BehaviorStateEnum.SEARCH)
-        elif self.state == BehaviorStateEnum.FLEE:
-            # 逃走中に見失ったら帰還へ
-            self.set_state(BehaviorStateEnum.RETURN)
-
-    def on_move_success(self):
-        self.failure_count = 0
-
-    def on_move_failed(self):
-        self.failure_count += 1
-        if self.failure_count >= self.max_failures:
-            self.set_state(BehaviorStateEnum.RETURN)
-            self.failure_count = 0
-            return True # スタックしたことを通知
-        return False
-
-    def tick_search(self):
-        """探索タイマーを進め、終了したか返す"""
-        self.search_timer += 1
-        if self.search_timer >= self.search_duration:
-            if self.patrol_points:
-                self.set_state(BehaviorStateEnum.PATROL)
-            else:
-                self.set_state(BehaviorStateEnum.RETURN)
-            return True
-        return False
-
     def to_dict(self) -> Dict[str, Any]:
         data = super().to_dict()
         data.update({
-            "state": self.state.value,
             "vision_range": self.vision_range,
             "patrol_points": [{"x": p.x, "y": p.y, "z": p.z} for p in self.patrol_points],
-            "target_id": str(self.target_id) if self.target_id else None,
-            "last_known_target_position": {
-                "x": self.last_known_target_position.x, 
-                "y": self.last_known_target_position.y, 
-                "z": self.last_known_target_position.z
-            } if self.last_known_target_position else None,
-            "search_duration": self.search_duration,
-            "search_timer": self.search_timer,
-            "hp_percentage": self.hp_percentage,
-            "flee_threshold": self.flee_threshold,
-            "max_failures": self.max_failures,
-            "failure_count": self.failure_count,
-            "initial_position": {
-                "x": self.initial_position.x, 
-                "y": self.initial_position.y, 
-                "z": self.initial_position.z
-            } if self.initial_position else None,
+            "initial_position": (
+                {"x": self.initial_position.x, "y": self.initial_position.y, "z": self.initial_position.z}
+                if self.initial_position else None
+            ),
             "random_move_chance": self.random_move_chance,
             "behavior_strategy_type": self.behavior_strategy_type,
-            "phase_thresholds": list(self.phase_thresholds),
-            "pack_id": self.pack_id.value if self.pack_id else None,
             "is_pack_leader": self.is_pack_leader,
             "ecology_type": self.ecology_type.value,
             "ambush_chase_range": self.ambush_chase_range,
@@ -557,11 +406,6 @@ class AutonomousBehaviorComponent(ActorComponent):
             "active_time": self.active_time.value,
             "threat_races": list(self.threat_races),
             "prey_races": list(self.prey_races),
-            "hunger": self.hunger,
-            "hunger_increase_per_tick": self.hunger_increase_per_tick,
-            "hunger_starvation_threshold": self.hunger_starvation_threshold,
-            "starvation_ticks": self.starvation_ticks,
-            "starvation_timer": self.starvation_timer,
         })
         return data
 

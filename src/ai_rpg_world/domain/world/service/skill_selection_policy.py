@@ -6,7 +6,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional, TYPE_CHECKING
 
-from ai_rpg_world.domain.world.entity.world_object_component import MonsterSkillInfo
+from ai_rpg_world.domain.monster.value_object.monster_skill_info import MonsterSkillInfo
 from ai_rpg_world.domain.world.value_object.behavior_context import SkillSelectionContext
 
 if TYPE_CHECKING:

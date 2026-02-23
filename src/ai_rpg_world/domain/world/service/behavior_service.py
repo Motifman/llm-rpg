@@ -12,7 +12,6 @@ from ai_rpg_world.domain.world.value_object.behavior_context import (
 )
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
-from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
 from ai_rpg_world.domain.world.service.hostility_service import HostilityService, ConfigurableHostilityService
 from ai_rpg_world.domain.world.service.allegiance_service import AllegianceService
 from ai_rpg_world.domain.world.service.target_selection_policy import (
@@ -20,23 +19,6 @@ from ai_rpg_world.domain.world.service.target_selection_policy import (
     PreyPriorityTargetPolicy,
     HighestThreatTargetPolicy,
 )
-from ai_rpg_world.domain.world.service.skill_selection_policy import SkillSelectionPolicy, FirstInRangeSkillPolicy
-from ai_rpg_world.domain.world.service.behavior_strategy import (
-    BehaviorStrategy,
-    DefaultBehaviorStrategy,
-    BossBehaviorStrategy,
-)
-from ai_rpg_world.domain.monster.service.behavior_state_transition_service import BehaviorStateTransitionService
-
-
-def _default_strategy_factory(component: AutonomousBehaviorComponent, pathfinding_service: PathfindingService) -> BehaviorStrategy:
-    if component.behavior_strategy_type == "boss":
-        return BossBehaviorStrategy(pathfinding_service)
-    return DefaultBehaviorStrategy(
-        pathfinding_service,
-        FirstInRangeSkillPolicy(),
-        state_transition_service=BehaviorStateTransitionService(),
-    )
 
 
 def _default_target_policy_factory(
@@ -51,28 +33,20 @@ def _default_target_policy_factory(
 
 class BehaviorService:
     """
-    アクターの自律的な行動を制御するドメインサービス。
-    コンテキスト（視界内の脅威・敵対・ターゲット等）を収集し、状態遷移とアクション決定は戦略に委譲する。
+    観測（視界内の脅威・敵対・選択ターゲット等）を組み立てるドメインサービス。
+    モンスターの decide 用に build_observation を提供する。
     """
 
     def __init__(
         self,
-        pathfinding_service: PathfindingService,
         hostility_service: Optional[HostilityService] = None,
         allegiance_service: Optional[AllegianceService] = None,
         target_policy: Optional[TargetSelectionPolicy] = None,
-        strategy: Optional[BehaviorStrategy] = None,
-        strategy_factory: Optional[Callable[[AutonomousBehaviorComponent], BehaviorStrategy]] = None,
         target_policy_factory: Optional[Callable[[AutonomousBehaviorComponent], TargetSelectionPolicy]] = None,
     ):
-        self._pathfinding_service = pathfinding_service
         self._hostility_service = hostility_service or ConfigurableHostilityService()
         self._allegiance_service = allegiance_service
         self._target_policy = target_policy
-        self._strategy = strategy
-        self._strategy_factory = strategy_factory or (
-            lambda c: _default_strategy_factory(c, pathfinding_service)
-        )
         self._target_policy_factory = target_policy_factory or (
             lambda c: _default_target_policy_factory(c, self._hostility_service)
         )
