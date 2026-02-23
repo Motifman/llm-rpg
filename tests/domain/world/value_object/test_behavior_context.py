@@ -1,14 +1,18 @@
-"""行動コンテキスト（TargetSelectionContext, SkillSelectionContext, GrowthContext）のテスト"""
+"""行動コンテキスト（TargetSelectionContext, SkillSelectionContext, GrowthContext, PlanActionContext）のテスト"""
 
 import pytest
+from unittest.mock import MagicMock
 
 from ai_rpg_world.domain.world.value_object.behavior_context import (
     TargetSelectionContext,
     SkillSelectionContext,
     GrowthContext,
+    PlanActionContext,
 )
+from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
 from ai_rpg_world.domain.world.exception.behavior_exception import GrowthContextValidationException
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 
 
 class TestTargetSelectionContext:
@@ -102,3 +106,59 @@ class TestGrowthContextValidation:
         """allow_chase が bool でない場合は GrowthContextValidationException を投げること"""
         with pytest.raises(GrowthContextValidationException, match="allow_chase must be a bool"):
             GrowthContext(effective_flee_threshold=0.2, allow_chase=1)
+
+
+class TestPlanActionContext:
+    """PlanActionContext の observation と event_sink のテスト"""
+
+    def _minimal_observation(self):
+        """テスト用の最小限の BehaviorObservation を返す。"""
+        return BehaviorObservation(
+            visible_threats=[],
+            visible_hostiles=[],
+            selected_target=None,
+        )
+
+    def test_create_with_default_event_sink(self):
+        """event_sink を渡さない場合、デフォルトで空リストが設定されること"""
+        actor_id = WorldObjectId(1)
+        actor = MagicMock()
+        actor.object_id = actor_id
+        actor.coordinate = Coordinate(0, 0)
+        map_aggregate = MagicMock()
+        component = MagicMock()
+        observation = self._minimal_observation()
+        ctx = PlanActionContext(
+            actor_id=actor_id,
+            actor=actor,
+            map_aggregate=map_aggregate,
+            component=component,
+            observation=observation,
+        )
+        assert ctx.event_sink == []
+        assert isinstance(ctx.event_sink, list)
+        assert ctx.observation is observation
+
+    def test_create_with_custom_event_sink(self):
+        """event_sink を渡した場合、そのリストがそのまま使われること"""
+        actor_id = WorldObjectId(1)
+        actor = MagicMock()
+        actor.object_id = actor_id
+        actor.coordinate = Coordinate(0, 0)
+        map_aggregate = MagicMock()
+        component = MagicMock()
+        sink = []
+        observation = self._minimal_observation()
+        ctx = PlanActionContext(
+            actor_id=actor_id,
+            actor=actor,
+            map_aggregate=map_aggregate,
+            component=component,
+            observation=observation,
+            event_sink=sink,
+        )
+        assert ctx.event_sink is sink
+        ctx.event_sink.append("dummy")
+        assert sink == ["dummy"]
+        assert ctx.observation.visible_threats == []
+        assert ctx.observation.selected_target is None

@@ -21,10 +21,8 @@ from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRep
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.entity.tile import Tile
-from ai_rpg_world.domain.world.entity.world_object_component import (
-    AutonomousBehaviorComponent,
-    MonsterSkillInfo,
-)
+from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
+from ai_rpg_world.domain.monster.value_object.monster_skill_info import MonsterSkillInfo
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
@@ -180,8 +178,6 @@ class TestMonsterSpawnedMapPlacementHandler:
             assert obj.object_type == ObjectTypeEnum.NPC
             assert isinstance(obj.component, AutonomousBehaviorComponent)
             assert obj.component.vision_range == 8
-            assert obj.component.flee_threshold == 0.3
-            assert obj.component.hp_percentage == 1.0
             assert len(obj.component.available_skills) == 1
             assert obj.component.available_skills[0].slot_index == 0
             assert obj.component.available_skills[0].range == 4
@@ -224,8 +220,7 @@ class TestMonsterSpawnedMapPlacementHandler:
             assert obj is not None
             assert obj.coordinate == Coordinate(1, 2, 0)
             assert isinstance(obj.component, AutonomousBehaviorComponent)
-            assert obj.component.vision_range == 7  # default from template
-            assert obj.component.flee_threshold == 0.25
+            assert obj.component.vision_range == 7  # from template
 
         def test_monster_not_found_raises(self, setup):
             """モンスターが存在しない場合は MonsterNotFoundException を投げること"""

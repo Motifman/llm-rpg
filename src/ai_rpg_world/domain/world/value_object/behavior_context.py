@@ -6,12 +6,14 @@
 from dataclasses import dataclass, field
 from typing import Dict, Set, List, Optional, TYPE_CHECKING
 
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.exception.behavior_exception import GrowthContextValidationException
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.entity.world_object import WorldObject
+    from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
     from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
     from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
 
@@ -66,15 +68,13 @@ class PlanActionContext:
     """
     行動計画（状態更新・アクション決定）に必要なコンテキストを一括で渡すための値オブジェクト。
     BehaviorService が収集し、戦略の update_state / decide_action に渡す。
+    観測（視界内脅威・敵対・選択ターゲット等）は observation に集約する。
+    行動イベント（TargetSpotted, ActorStateChanged 等）は event_sink に追加し、
+    呼び出し元でモンスター集約等に積み直す。
     """
     actor_id: WorldObjectId
     actor: "WorldObject"
     map_aggregate: "PhysicalMapAggregate"
     component: "AutonomousBehaviorComponent"
-    visible_threats: List["WorldObject"]
-    visible_hostiles: List["WorldObject"]
-    target: Optional["WorldObject"]
-    target_context: Optional[TargetSelectionContext] = None
-    skill_context: Optional[SkillSelectionContext] = None
-    pack_rally_coordinate: Optional[Coordinate] = None
-    growth_context: Optional[GrowthContext] = None
+    observation: "BehaviorObservation"
+    event_sink: List[DomainEvent] = field(default_factory=list)

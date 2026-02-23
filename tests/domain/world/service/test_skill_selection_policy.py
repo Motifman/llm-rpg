@@ -5,8 +5,8 @@ from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import (
     ActorComponent,
     AutonomousBehaviorComponent,
-    MonsterSkillInfo,
 )
+from ai_rpg_world.domain.monster.value_object.monster_skill_info import MonsterSkillInfo
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.behavior_context import SkillSelectionContext
