@@ -82,13 +82,12 @@ class TestMonsterDeathHungerHandler:
         return InMemoryMonsterAggregateRepository()
 
     @pytest.fixture
-    def handler(self, map_repo, monster_repo):
-        return MonsterDeathHungerHandler(map_repo, monster_repo, _FakeUow())
+    def handler(self, monster_repo):
+        return MonsterDeathHungerHandler(monster_repo, _FakeUow())
 
-    def test_prey_kill_reduces_killer_hunger(self, handler, map_repo, monster_repo):
-        """獲物（prey_races）を倒したキラーモンスターの飢餓が減少すること"""
+    def test_prey_kill_reduces_killer_hunger(self, handler, monster_repo):
+        """獲物（prey_races）を倒したキラーモンスターの飢餓が減少すること（Monster 集約の飢餓を更新）"""
         spot_id = SpotId(1)
-        pmap = _create_map(1)
         killer_world_id = WorldObjectId.create(100)
         dead_monster_id = MonsterId.create(1)
         killer_template = _template_with_prey(1, frozenset({"goblin"}), 0.4)
@@ -120,23 +119,15 @@ class TestMonsterDeathHungerHandler:
             world_object_id=WorldObjectId.create(101),
             skill_loadout=dead_loadout,
         )
-        killer_comp = AutonomousBehaviorComponent(
-            hunger=0.9,
-            hunger_increase_per_tick=0.01,
-            hunger_starvation_threshold=0.8,
-            starvation_ticks=10,
-        )
-        killer_obj = WorldObject(
-            killer_world_id,
+        from ai_rpg_world.domain.common.value_object import WorldTick
+        killer_monster.spawn(
             Coordinate(2, 2, 0),
-            ObjectTypeEnum.NPC,
-            is_blocking=False,
-            component=killer_comp,
+            spot_id,
+            WorldTick(0),
+            initial_hunger=0.9,
         )
-        pmap.add_object(killer_obj)
         monster_repo.save(killer_monster)
         monster_repo.save(dead_monster)
-        map_repo.save(pmap)
 
         event = MonsterDiedEvent.create(
             aggregate_id=dead_monster_id,
@@ -152,9 +143,9 @@ class TestMonsterDeathHungerHandler:
         )
         handler.handle(event)
 
-        pmap_after = map_repo.find_by_spot_id(spot_id)
-        killer_after = pmap_after.get_object(killer_world_id)
-        assert killer_after.component.hunger == pytest.approx(0.5)  # 0.9 - 0.4
+        killer_after = monster_repo.find_by_world_object_id(killer_world_id)
+        assert killer_after is not None
+        assert killer_after.hunger == pytest.approx(0.5)  # 0.9 - 0.4
 
     def test_skip_when_killer_world_object_id_none(self, handler, map_repo, monster_repo):
         """killer_world_object_id が None のとき何もしない"""
@@ -173,7 +164,7 @@ class TestMonsterDeathHungerHandler:
         handler.handle(event)  # 例外なしで終了
 
     def test_skip_when_spot_id_none(self, handler):
-        """spot_id が None のとき何もしない"""
+        """spot_id が None でも killer_world_object_id が有効なら処理する（飢餓は Monster 集約のみ参照するため spot 不要）"""
         event = MonsterDiedEvent.create(
             aggregate_id=MonsterId.create(1),
             aggregate_type="MonsterAggregate",
@@ -186,12 +177,12 @@ class TestMonsterDeathHungerHandler:
             cause=None,
             spot_id=None,
         )
-        handler.handle(event)
+        handler.handle(event)  # 例外なく終了（キラー未登録の場合はスキップ）
 
-    def test_skip_when_dead_not_prey(self, handler, map_repo, monster_repo):
+    def test_skip_when_dead_not_prey(self, handler, monster_repo):
         """死亡モンスターの race がキラーの prey_races に含まれないとき飢餓は減らない"""
+        from ai_rpg_world.domain.common.value_object import WorldTick
         spot_id = SpotId(1)
-        pmap = _create_map(1)
         killer_world_id = WorldObjectId.create(100)
         killer_template = _template_with_prey(1, frozenset({"orc"}))  # prey は orc のみ
         dead_template = MonsterTemplate(
@@ -220,19 +211,9 @@ class TestMonsterDeathHungerHandler:
                 SkillLoadoutId(2), owner_id=1002, normal_capacity=5, awakened_capacity=5
             ),
         )
-        killer_comp = AutonomousBehaviorComponent(
-            hunger=0.9,
-            hunger_increase_per_tick=0.01,
-            hunger_starvation_threshold=0.8,
-            starvation_ticks=10,
-        )
-        pmap.add_object(WorldObject(
-            killer_world_id, Coordinate(1, 1, 0), ObjectTypeEnum.NPC,
-            is_blocking=False, component=killer_comp,
-        ))
+        killer_monster.spawn(Coordinate(1, 1, 0), spot_id, WorldTick(0), initial_hunger=0.9)
         monster_repo.save(killer_monster)
         monster_repo.save(dead_monster)
-        map_repo.save(pmap)
 
         event = MonsterDiedEvent.create(
             aggregate_id=dead_monster.monster_id,
@@ -248,6 +229,6 @@ class TestMonsterDeathHungerHandler:
         )
         handler.handle(event)
 
-        pmap_after = map_repo.find_by_spot_id(spot_id)
-        killer_after = pmap_after.get_object(killer_world_id)
-        assert killer_after.component.hunger == 0.9  # 変化なし（goblin は prey ではない）
+        killer_after = monster_repo.find_by_world_object_id(killer_world_id)
+        assert killer_after is not None
+        assert killer_after.hunger == pytest.approx(0.9)  # 変化なし（goblin は prey ではない）

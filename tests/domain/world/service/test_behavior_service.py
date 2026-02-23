@@ -100,7 +100,7 @@ class TestAutonomousBehaviorComponent:
         assert comp.state == BehaviorStateEnum.SEARCH
 
         # 3. 捕捉 (HP低時 -> FLEE)
-        comp.update_hp(0.1)
+        comp.hp_percentage = 0.1
         comp.spot_target(target_id, coord)
         assert comp.state == BehaviorStateEnum.FLEE
 

@@ -28,7 +28,7 @@ from ai_rpg_world.domain.monster.exception.monster_exceptions import (
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.enum.world_enum import BehaviorStateEnum
+from ai_rpg_world.domain.world.enum.world_enum import BehaviorStateEnum, EcologyTypeEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.value_object.behavior_state_snapshot import BehaviorStateSnapshot
@@ -81,6 +81,8 @@ class MonsterAggregate(AggregateRoot):
         behavior_patrol_index: int = 0,
         behavior_search_timer: int = 0,
         behavior_failure_count: int = 0,
+        hunger: float = 0.0,
+        starvation_timer: int = 0,
     ):
         super().__init__()
         self._monster_id = monster_id
@@ -105,6 +107,8 @@ class MonsterAggregate(AggregateRoot):
         self._behavior_patrol_index = behavior_patrol_index
         self._behavior_search_timer = behavior_search_timer
         self._behavior_failure_count = behavior_failure_count
+        self._hunger = max(0.0, min(1.0, hunger))
+        self._starvation_timer = max(0, starvation_timer)
 
     @classmethod
     def create(
@@ -293,12 +297,17 @@ class MonsterAggregate(AggregateRoot):
             self._behavior_patrol_index + 1
         ) % patrol_points_count
 
-    def _initialize_status(self, coordinate: Coordinate, spot_id: SpotId, current_tick: WorldTick) -> None:
+    def _initialize_status(
+        self,
+        coordinate: Coordinate,
+        spot_id: SpotId,
+        current_tick: WorldTick,
+        initial_hunger: float = 0.0,
+    ) -> None:
         """
         ステータスを初期化（出現/リスポーン時）。
         呼び出し元で _spawned_at_tick を current_tick に設定したうえで呼ぶこと。
-        HP/MP は実効ステータス（成長段階を反映した max_hp/max_mp）で満タンに初期化する。
-        行動状態もリセットし、_behavior_initial_position を設定する。
+        HP/MP は実効ステータスで満タンに初期化。行動状態・飢餓もリセット（initial_hunger で指定可能）。
         """
         self._coordinate = coordinate
         self._spot_id = spot_id
@@ -314,6 +323,13 @@ class MonsterAggregate(AggregateRoot):
         self._behavior_patrol_index = 0
         self._behavior_search_timer = 0
         self._behavior_failure_count = 0
+        self._hunger = max(0.0, min(1.0, initial_hunger))
+        self._starvation_timer = 0
+
+    @property
+    def hunger(self) -> float:
+        """現在の飢餓値（0.0〜1.0）。"""
+        return self._hunger
 
     def update_map_placement(self, spot_id: SpotId, coordinate: Coordinate) -> None:
         """ゲートウェイ等によるマップ間移動時に座標・スポットを更新する（ALIVE時のみ想定）"""
@@ -329,13 +345,14 @@ class MonsterAggregate(AggregateRoot):
         current_tick: WorldTick,
         pack_id: Optional["PackId"] = None,
         is_pack_leader: bool = False,
+        initial_hunger: float = 0.0,
     ):
         """モンスターを出現させる。pack_id / is_pack_leader はインスタンス単位で設定する。"""
         if self._coordinate is not None or self._status == MonsterStatusEnum.ALIVE:
             raise MonsterAlreadySpawnedException(f"Monster {self._monster_id} is already spawned at {self._coordinate}")
 
         self._spawned_at_tick = current_tick
-        self._initialize_status(coordinate, spot_id, current_tick)
+        self._initialize_status(coordinate, spot_id, current_tick, initial_hunger=initial_hunger)
         self._pack_id = pack_id
         self._is_pack_leader = is_pack_leader
         self._initial_spawn_coordinate = coordinate
@@ -488,6 +505,75 @@ class MonsterAggregate(AggregateRoot):
         if self._coordinate is None:
             raise MonsterNotSpawnedException(f"Monster {self._monster_id} is not spawned yet")
         self._die(current_tick, cause=DeathCauseEnum.STARVATION)
+
+    def tick_hunger(self, current_tick: WorldTick) -> bool:
+        """
+        1 tick 分の飢餓を適用し、飢餓死すべきか返す。
+        飢餓が無効（template.starvation_ticks <= 0）の場合は False。
+        ALIVE かつスポーン済みのときのみ有効。
+        """
+        if self._status != MonsterStatusEnum.ALIVE:
+            return False
+        if self._coordinate is None:
+            return False
+        t = self._template
+        if t.starvation_ticks <= 0 or t.hunger_increase_per_tick <= 0:
+            return False
+        self._hunger = min(1.0, self._hunger + t.hunger_increase_per_tick)
+        if self._hunger >= t.hunger_starvation_threshold:
+            self._starvation_timer += 1
+            return self._starvation_timer >= t.starvation_ticks
+        self._starvation_timer = 0
+        return False
+
+    def record_prey_kill(self, hunger_decrease: float) -> None:
+        """獲物を倒したときに飢餓を減らす。ALIVE 時のみ。飢餓無効時は何もしない。"""
+        if self._status != MonsterStatusEnum.ALIVE:
+            raise MonsterAlreadyDeadException(f"Monster {self._monster_id} is not alive")
+        if self._template.starvation_ticks <= 0 or hunger_decrease <= 0:
+            return
+        self._hunger = max(0.0, min(1.0, self._hunger - hunger_decrease))
+
+    def record_attacked_by(
+        self,
+        attacker_id: WorldObjectId,
+        attacker_coordinate: Coordinate,
+        current_tick: WorldTick,
+    ) -> None:
+        """
+        外部から攻撃されたことを記録し、行動状態を更新する（被弾時のターゲット認識）。
+        生態タイプ・成長段階に応じて CHASE / FLEE 等に遷移する。
+        """
+        if self._status != MonsterStatusEnum.ALIVE:
+            raise MonsterAlreadyDeadException(f"Monster {self._monster_id} is not alive")
+        if self._coordinate is None:
+            raise MonsterNotSpawnedException(f"Monster {self._monster_id} is not spawned yet")
+        eco = self._template.ecology_type
+        if eco == EcologyTypeEnum.PATROL_ONLY:
+            return
+        if eco == EcologyTypeEnum.FLEE_ONLY:
+            self._behavior_target_id = attacker_id
+            self._behavior_last_known_position = attacker_coordinate
+            self._behavior_state = BehaviorStateEnum.FLEE
+            return
+        if (
+            eco == EcologyTypeEnum.AMBUSH
+            and self._behavior_initial_position is not None
+            and self._template.ambush_chase_range is not None
+        ):
+            if self._behavior_initial_position.distance_to(attacker_coordinate) > self._template.ambush_chase_range:
+                return
+        self._behavior_target_id = attacker_id
+        self._behavior_last_known_position = attacker_coordinate
+        hp_percentage = (
+            self._hp.value / self._hp.max_hp if self._hp.max_hp > 0 else 1.0
+        )
+        flee_th = self.get_effective_flee_threshold(current_tick)
+        allow_chase = self.get_allow_chase(current_tick)
+        if hp_percentage <= flee_th:
+            self._behavior_state = BehaviorStateEnum.FLEE
+        elif allow_chase and self._behavior_state != BehaviorStateEnum.ENRAGE:
+            self._behavior_state = BehaviorStateEnum.CHASE
 
     def die_from_old_age(self, current_tick: WorldTick) -> bool:
         """

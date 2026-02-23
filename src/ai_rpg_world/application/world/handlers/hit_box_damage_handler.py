@@ -15,9 +15,7 @@ from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerS
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
 from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
@@ -137,12 +135,7 @@ class HitBoxDamageHandler(EventHandler[HitBoxHitRecordedEvent]):
             self._player_status_repository.save(target_aggregate)
         else:
             self._monster_repository.save(target_aggregate)
-            self._sync_monster_hp_to_map(
-                physical_map=physical_map,
-                target_obj=target_obj,
-                monster=target_aggregate,
-                current_tick=current_tick,
-            )
+            # HP の真実の源は Monster 集約。Component への HP 同期は行わない（計画: モンスター情報を Monster ドメインに集約）
 
     def _resolve_combatant(self, world_object: WorldObject) -> Optional[_Combatant]:
         if world_object.player_id is not None:
@@ -171,23 +164,3 @@ class HitBoxDamageHandler(EventHandler[HitBoxHitRecordedEvent]):
 
         current_tick = self._time_provider.get_current_tick()
         monster.apply_damage(damage, current_tick=current_tick, attacker_id=attacker_id, killer_player_id=killer_player_id)
-
-    def _sync_monster_hp_to_map(
-        self,
-        physical_map: PhysicalMapAggregate,
-        target_obj: WorldObject,
-        monster: MonsterAggregate,
-        current_tick,
-    ) -> None:
-        """同一マップ上の対応する WorldObject の AutonomousBehaviorComponent に HP% を反映する"""
-        component = target_obj.component
-        if not isinstance(component, AutonomousBehaviorComponent):
-            return
-        effective = monster.get_effective_stats(current_tick)
-        max_hp = effective.max_hp
-        if max_hp <= 0:
-            return
-        hp_percentage = monster.hp.value / max_hp
-        hp_percentage = max(0.0, min(1.0, hp_percentage))
-        component.update_hp(hp_percentage)
-        self._physical_map_repository.save(physical_map)

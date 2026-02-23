@@ -7,8 +7,10 @@ from ai_rpg_world.application.world.aggro_store import AggroStore
 from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.combat.event.combat_events import HitBoxHitRecordedEvent
 from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
+from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
 from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
@@ -16,18 +18,20 @@ from ai_rpg_world.domain.world.repository.physical_map_repository import Physica
 
 
 class CombatAggroHandler(EventHandler[HitBoxHitRecordedEvent]):
-    """HitBoxヒットイベントを受けて被弾したアクターのヘイト（ターゲット）を更新するハンドラ"""
+    """HitBoxヒットイベントを受けて被弾したアクターのヘイト（ターゲット）を更新するハンドラ。被弾者がモンスターの場合は Monster 集約に記録する。"""
 
     def __init__(
         self,
         hit_box_repository: HitBoxRepository,
         physical_map_repository: PhysicalMapRepository,
+        monster_repository: MonsterRepository,
         unit_of_work: UnitOfWork,
         aggro_store: Optional[AggroStore] = None,
         game_time_provider: Optional[GameTimeProvider] = None,
     ):
         self._hit_box_repository = hit_box_repository
         self._physical_map_repository = physical_map_repository
+        self._monster_repository = monster_repository
         self._unit_of_work = unit_of_work
         self._aggro_store = aggro_store
         self._game_time_provider = game_time_provider
@@ -68,22 +72,37 @@ class CombatAggroHandler(EventHandler[HitBoxHitRecordedEvent]):
         if not target_obj.is_actor:
             return
 
-        component = target_obj.component
-        if not isinstance(component, AutonomousBehaviorComponent):
+        if not isinstance(target_obj.component, AutonomousBehaviorComponent):
             return
 
-        component.spot_target(owner_obj.object_id, owner_obj.coordinate)
+        current_tick_value = (
+            self._game_time_provider.get_current_tick().value
+            if self._game_time_provider is not None
+            else 0
+        )
+        current_tick = WorldTick(current_tick_value)
+
+        target_monster = self._monster_repository.find_by_world_object_id(event.target_id)
+        if target_monster is not None:
+            try:
+                target_monster.record_attacked_by(
+                    owner_obj.object_id,
+                    owner_obj.coordinate,
+                    current_tick,
+                )
+                self._monster_repository.save(target_monster)
+            except DomainException as e:
+                self._logger.debug(
+                    "Monster record_attacked_by skipped (target=%s): %s",
+                    event.target_id,
+                    str(e),
+                )
+
         if self._aggro_store is not None:
-            current_tick = (
-                self._game_time_provider.get_current_tick().value
-                if self._game_time_provider is not None
-                else 0
-            )
             self._aggro_store.add_aggro(
                 spot_id=hit_box.spot_id,
                 victim_id=event.target_id,
                 attacker_id=event.owner_id,
                 amount=1,
-                current_tick=current_tick,
+                current_tick=current_tick_value,
             )
-        self._physical_map_repository.save(physical_map)

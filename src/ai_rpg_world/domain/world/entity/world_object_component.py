@@ -457,37 +457,6 @@ class AutonomousBehaviorComponent(ActorComponent):
     def update_last_known_position(self, coordinate: Coordinate):
         self.last_known_target_position = coordinate
 
-    def update_hp(self, hp_percentage: float):
-        if not (0.0 <= hp_percentage <= 1.0):
-            raise HPPercentageValidationException("HP percentage must be between 0.0 and 1.0")
-        self.hp_percentage = hp_percentage
-
-    def add_hunger(self, delta: float) -> None:
-        """飢餓値を増やす（上限 1.0）"""
-        if self.starvation_ticks <= 0:
-            return
-        self.hunger = max(0.0, min(1.0, self.hunger + delta))
-
-    def reduce_hunger(self, delta: float) -> None:
-        """飢餓値を減らす（下限 0.0）"""
-        if self.starvation_ticks <= 0:
-            return
-        self.hunger = max(0.0, min(1.0, self.hunger - delta))
-
-    def tick_hunger_and_starvation(self) -> bool:
-        """
-        1 tick 分の飢餓を適用し、飢餓死すべきか返す。
-        飢餓が無効（starvation_ticks <= 0）の場合は False。
-        """
-        if self.starvation_ticks <= 0 or self.hunger_increase_per_tick <= 0:
-            return False
-        self.hunger = min(1.0, self.hunger + self.hunger_increase_per_tick)
-        if self.hunger >= self.hunger_starvation_threshold:
-            self.starvation_timer += 1
-            return self.starvation_timer >= self.starvation_ticks
-        self.starvation_timer = 0
-        return False
-
     def spot_target(
         self,
         target_id: WorldObjectId,
