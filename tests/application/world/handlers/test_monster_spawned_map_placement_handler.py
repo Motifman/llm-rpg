@@ -92,7 +92,7 @@ def _sample_template(
         template_id=MonsterTemplateId(template_id),
         name="Goblin",
         base_stats=BaseStats(80, 30, 12, 8, 9, 0.05, 0.05),
-        reward_info=RewardInfo(15, 8, "loot_goblin"),
+        reward_info=RewardInfo(15, 8, 1),
         respawn_info=RespawnInfo(respawn_interval_ticks=80, is_auto_respawn=True),
         race=Race.GOBLIN,
         faction=MonsterFactionEnum.ENEMY,

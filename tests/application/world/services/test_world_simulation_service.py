@@ -156,6 +156,8 @@ class TestWorldSimulationApplicationService:
         from ai_rpg_world.application.world.services.monster_action_resolver import create_monster_action_resolver_factory
         from ai_rpg_world.application.world.handlers.monster_decided_to_move_handler import MonsterDecidedToMoveHandler
         from ai_rpg_world.application.world.handlers.monster_decided_to_use_skill_handler import MonsterDecidedToUseSkillHandler
+        from ai_rpg_world.application.world.handlers.monster_decided_to_interact_handler import MonsterDecidedToInteractHandler
+        from ai_rpg_world.application.world.handlers.monster_fed_handler import MonsterFedHandler
         from ai_rpg_world.infrastructure.events.monster_event_handler_registry import MonsterEventHandlerRegistry
 
         hit_box_factory = HitBoxFactory()
@@ -175,9 +177,15 @@ class TestWorldSimulationApplicationService:
             hit_box_repository=hit_box_repo,
             skill_loadout_repository=skill_loadout_repo,
         )
+        monster_decided_to_interact_handler = MonsterDecidedToInteractHandler(
+            physical_map_repository=repository,
+        )
+        monster_fed_handler = MonsterFedHandler(monster_repository=monster_repo)
         MonsterEventHandlerRegistry(
             monster_decided_to_move_handler,
             monster_decided_to_use_skill_handler,
+            monster_decided_to_interact_handler,
+            monster_fed_handler,
         ).register_handlers(event_publisher)
 
         service = WorldSimulationApplicationService(
@@ -1166,7 +1174,7 @@ class TestWorldSimulationApplicationService:
             template_id=MonsterTemplateId(1),
             name="test",
             base_stats=BaseStats(100, 100, 10, 10, 10, 0.05, 0.05),
-            reward_info=RewardInfo(10, 10, "loot"),
+            reward_info=RewardInfo(10, 10, 1),
             respawn_info=RespawnInfo(100, True),
             race=Race.HUMAN,
             faction=MonsterFactionEnum.ENEMY,
@@ -2322,7 +2330,7 @@ class TestWorldSimulationApplicationService:
                 template_id=MonsterTemplateId(1),
                 name="test",
                 base_stats=BaseStats(100, 100, 10, 10, 10, 0.05, 0.05),
-                reward_info=RewardInfo(10, 10, "loot"),
+                reward_info=RewardInfo(10, 10, 1),
                 respawn_info=RespawnInfo(respawn_interval_ticks=respawn_interval, is_auto_respawn=True),
                 race=Race.HUMAN,
                 faction=MonsterFactionEnum.ENEMY,

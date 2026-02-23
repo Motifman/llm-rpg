@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 @dataclass(frozen=True)
@@ -10,6 +11,7 @@ class BehaviorAction:
     action_type: BehaviorActionType
     coordinate: Optional[Coordinate] = None
     skill_slot_index: Optional[int] = None
+    target_id: Optional[WorldObjectId] = None
 
     @classmethod
     def move(cls, coordinate: Coordinate) -> "BehaviorAction":
@@ -18,6 +20,10 @@ class BehaviorAction:
     @classmethod
     def use_skill(cls, slot_index: int) -> "BehaviorAction":
         return cls(action_type=BehaviorActionType.USE_SKILL, skill_slot_index=slot_index)
+
+    @classmethod
+    def interact(cls, target_id: WorldObjectId) -> "BehaviorAction":
+        return cls(action_type=BehaviorActionType.INTERACT, target_id=target_id)
 
     @classmethod
     def wait(cls) -> "BehaviorAction":

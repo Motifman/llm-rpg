@@ -1,6 +1,7 @@
 from .item_instance_id import ItemInstanceId
 from .item_spec_id import ItemSpecId
 from .item_spec import ItemSpec
+from .loot_table_id import LootTableId
 from .max_stack_size import MaxStackSize
 from .durability import Durability
 from .recipe_id import RecipeId
@@ -12,6 +13,7 @@ __all__ = [
     "ItemInstanceId",
     "ItemSpecId",
     "ItemSpec",
+    "LootTableId",
     "MaxStackSize",
     "Durability",
     "RecipeId",

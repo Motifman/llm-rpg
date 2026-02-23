@@ -8,6 +8,7 @@ from ai_rpg_world.domain.monster.enum.monster_enum import DeathCauseEnum
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
 
@@ -38,7 +39,7 @@ class MonsterDiedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
     respawn_tick: int
     exp: int
     gold: int
-    loot_table_id: Optional[str] = None
+    loot_table_id: Optional[LootTableId] = None
     killer_player_id: Optional[PlayerId] = None
     killer_world_object_id: Optional[WorldObjectId] = None
     cause: Optional[DeathCauseEnum] = None
@@ -86,6 +87,40 @@ class MonsterDecidedToUseSkillEvent(BaseDomainEvent[MonsterId, "MonsterAggregate
     target_id: Optional[WorldObjectId]
     spot_id: SpotId
     current_tick: WorldTick
+
+
+@dataclass(frozen=True)
+class MonsterDecidedToInteractEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
+    """モンスターがインタラクション（採食等）を決定したことを表すイベント。ハンドラが interact_with を実行する。"""
+    actor_id: WorldObjectId
+    target_id: WorldObjectId
+    spot_id: SpotId
+    current_tick: WorldTick
+
+
+@dataclass(frozen=True)
+class MonsterFedEvent(BaseDomainEvent[WorldObjectId, str]):
+    """モンスターが Harvestable で採食したイベント。ハンドラが record_feed と餌場記憶を更新する。"""
+    actor_id: WorldObjectId
+    target_id: WorldObjectId
+    target_coordinate: Coordinate
+
+    @classmethod
+    def create(
+        cls,
+        aggregate_id: WorldObjectId,
+        aggregate_type: str,
+        actor_id: WorldObjectId,
+        target_id: WorldObjectId,
+        target_coordinate: Coordinate,
+    ) -> "MonsterFedEvent":
+        return super().create(
+            aggregate_id=aggregate_id,
+            aggregate_type=aggregate_type,
+            actor_id=actor_id,
+            target_id=target_id,
+            target_coordinate=target_coordinate,
+        )
 
 
 # モンスターの行動状態変化イベント（Monster 集約から発行）

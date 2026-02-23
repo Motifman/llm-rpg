@@ -20,6 +20,7 @@ from ai_rpg_world.domain.world.exception.harvest_exception import (
     HarvestInProgressException,
     HarvestNotStartedException
 )
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 from ai_rpg_world.domain.world.exception.map_exception import (
     InteractionOutOfRangeException,
     NotFacingTargetException,
@@ -56,7 +57,7 @@ class TestPhysicalMapHarvest:
             coordinate=Coordinate(1, 0, 0),
             object_type=ObjectTypeEnum.RESOURCE,
             component=HarvestableComponent(
-                loot_table_id="iron_ore",
+                loot_table_id=1,
                 max_quantity=1,
                 harvest_duration=10
             )
@@ -94,7 +95,7 @@ class TestPhysicalMapHarvest:
             object_id=WorldObjectId(200),
             coordinate=Coordinate(2, 0, 0),
             object_type=ObjectTypeEnum.RESOURCE,
-            component=HarvestableComponent(loot_table_id="iron_ore")
+            component=HarvestableComponent(loot_table_id=1)
         )
         map_aggregate.add_object(actor)
         map_aggregate.add_object(resource)
@@ -148,7 +149,7 @@ class TestPhysicalMapHarvest:
         comp_event = next(e for e in events if isinstance(e, HarvestCompletedEvent))
         assert comp_event.actor_id == actor.object_id
         assert comp_event.target_id == resource.object_id
-        assert comp_event.loot_table_id == "iron_ore"
+        assert comp_event.loot_table_id == LootTableId(1)
         
         # 資源が減少していること
         assert resource.component.get_available_quantity(current_tick) == 0

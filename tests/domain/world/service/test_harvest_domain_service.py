@@ -35,7 +35,7 @@ class TestHarvestDomainService:
     @pytest.fixture
     def harvestable_comp(self):
         return HarvestableComponent(
-            loot_table_id="iron_ore",
+            loot_table_id=1,
             stamina_cost=15
         )
 

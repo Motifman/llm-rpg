@@ -1,4 +1,4 @@
-from typing import Optional, List, TYPE_CHECKING
+from typing import Optional, List, Tuple, TYPE_CHECKING
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
@@ -17,6 +17,7 @@ from ai_rpg_world.domain.monster.event.monster_events import (
     MonsterMpRecoveredEvent,
     MonsterDecidedToMoveEvent,
     MonsterDecidedToUseSkillEvent,
+    MonsterDecidedToInteractEvent,
 )
 from ai_rpg_world.domain.monster.exception.monster_exceptions import (
     MonsterAlreadyDeadException,
@@ -32,6 +33,7 @@ from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum, Eco
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.value_object.behavior_state_snapshot import BehaviorStateSnapshot
+from ai_rpg_world.domain.monster.value_object.feed_memory_entry import FeedMemoryEntry
 from ai_rpg_world.domain.monster.service.monster_config_service import MonsterConfigService, DefaultMonsterConfigService
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
 from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
@@ -52,6 +54,10 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.world.value_object.pack_id import PackId
     from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
     from ai_rpg_world.domain.monster.action_resolver import IMonsterActionResolver
+
+
+# 餌場記憶の最大件数（LRU で古いものを追い出す）
+MAX_FEED_MEMORIES = 3
 
 
 class MonsterAggregate(AggregateRoot):
@@ -83,6 +89,7 @@ class MonsterAggregate(AggregateRoot):
         behavior_failure_count: int = 0,
         hunger: float = 0.0,
         starvation_timer: int = 0,
+        behavior_last_known_feed: Optional[List[FeedMemoryEntry]] = None,
     ):
         super().__init__()
         self._monster_id = monster_id
@@ -109,6 +116,9 @@ class MonsterAggregate(AggregateRoot):
         self._behavior_failure_count = behavior_failure_count
         self._hunger = max(0.0, min(1.0, hunger))
         self._starvation_timer = max(0, starvation_timer)
+        self._behavior_last_known_feed: List[FeedMemoryEntry] = (
+            list(behavior_last_known_feed) if behavior_last_known_feed is not None else []
+        )
 
     @classmethod
     def create(
@@ -289,6 +299,26 @@ class MonsterAggregate(AggregateRoot):
     def behavior_failure_count(self) -> int:
         return self._behavior_failure_count
 
+    @property
+    def behavior_last_known_feed(self) -> List[FeedMemoryEntry]:
+        """餌場の記憶（最大 MAX_FEED_MEMORIES 件、古い順）。適用時は距離が近い順に使う。"""
+        return list(self._behavior_last_known_feed)
+
+    def remember_feed(self, object_id: WorldObjectId, coordinate: Coordinate) -> None:
+        """
+        餌オブジェクトの位置を記憶する。最大 MAX_FEED_MEMORIES 件を LRU で保持し、
+        超えた分は古いものから追い出す。既に同じ object_id がある場合は更新（末尾に移動）。
+        """
+        if self._status != MonsterStatusEnum.ALIVE:
+            return
+        entry = FeedMemoryEntry(object_id=object_id, coordinate=coordinate)
+        # 同じ object_id を除いたリストにし、末尾に追加
+        new_list = [e for e in self._behavior_last_known_feed if e.object_id != object_id]
+        new_list.append(entry)
+        if len(new_list) > MAX_FEED_MEMORIES:
+            new_list = new_list[-MAX_FEED_MEMORIES:]
+        self._behavior_last_known_feed = new_list
+
     def advance_patrol_index(self, patrol_points_count: int) -> None:
         """パトロール点に到達したときにインデックスを進める。patrol_points_count は点の数。"""
         if patrol_points_count <= 0:
@@ -320,6 +350,7 @@ class MonsterAggregate(AggregateRoot):
         self._behavior_state = BehaviorStateEnum.IDLE
         self._behavior_target_id = None
         self._behavior_last_known_position = None
+        self._behavior_last_known_feed = []
         self._behavior_patrol_index = 0
         self._behavior_search_timer = 0
         self._behavior_failure_count = 0
@@ -528,6 +559,14 @@ class MonsterAggregate(AggregateRoot):
 
     def record_prey_kill(self, hunger_decrease: float) -> None:
         """獲物を倒したときに飢餓を減らす。ALIVE 時のみ。飢餓無効時は何もしない。"""
+        if self._status != MonsterStatusEnum.ALIVE:
+            raise MonsterAlreadyDeadException(f"Monster {self._monster_id} is not alive")
+        if self._template.starvation_ticks <= 0 or hunger_decrease <= 0:
+            return
+        self._hunger = max(0.0, min(1.0, self._hunger - hunger_decrease))
+
+    def record_feed(self, hunger_decrease: float) -> None:
+        """採食したときに飢餓を減らす。ALIVE 時のみ。飢餓無効時は何もしない。"""
         if self._status != MonsterStatusEnum.ALIVE:
             raise MonsterAlreadyDeadException(f"Monster {self._monster_id} is not alive")
         if self._template.starvation_ticks <= 0 or hunger_decrease <= 0:
@@ -843,6 +882,17 @@ class MonsterAggregate(AggregateRoot):
                     actor_id=self._world_object_id,
                     skill_slot_index=action.skill_slot_index,
                     target_id=self._behavior_target_id,
+                    spot_id=self._spot_id,
+                    current_tick=current_tick,
+                )
+            )
+        elif action.action_type == BehaviorActionType.INTERACT and action.target_id is not None:
+            self.add_event(
+                MonsterDecidedToInteractEvent.create(
+                    aggregate_id=self._monster_id,
+                    aggregate_type="MonsterAggregate",
+                    actor_id=self._world_object_id,
+                    target_id=action.target_id,
                     spot_id=self._spot_id,
                     current_tick=current_tick,
                 )
