@@ -1,18 +1,17 @@
 import math
 from typing import Optional, List, Callable
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
 from ai_rpg_world.domain.world.value_object.behavior_context import (
-    PlanActionContext,
     TargetSelectionContext,
     SkillSelectionContext,
     GrowthContext,
 )
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, BehaviorActionType
-from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent
-from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
-from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
 from ai_rpg_world.domain.world.service.hostility_service import HostilityService, ConfigurableHostilityService
 from ai_rpg_world.domain.world.service.allegiance_service import AllegianceService
 from ai_rpg_world.domain.world.service.target_selection_policy import (
@@ -20,18 +19,6 @@ from ai_rpg_world.domain.world.service.target_selection_policy import (
     PreyPriorityTargetPolicy,
     HighestThreatTargetPolicy,
 )
-from ai_rpg_world.domain.world.service.skill_selection_policy import SkillSelectionPolicy, FirstInRangeSkillPolicy
-from ai_rpg_world.domain.world.service.behavior_strategy import (
-    BehaviorStrategy,
-    DefaultBehaviorStrategy,
-    BossBehaviorStrategy,
-)
-
-
-def _default_strategy_factory(component: AutonomousBehaviorComponent, pathfinding_service: PathfindingService) -> BehaviorStrategy:
-    if component.behavior_strategy_type == "boss":
-        return BossBehaviorStrategy(pathfinding_service)
-    return DefaultBehaviorStrategy(pathfinding_service, FirstInRangeSkillPolicy())
 
 
 def _default_target_policy_factory(
@@ -46,33 +33,25 @@ def _default_target_policy_factory(
 
 class BehaviorService:
     """
-    アクターの自律的な行動を制御するドメインサービス。
-    コンテキスト（視界内の脅威・敵対・ターゲット等）を収集し、状態遷移とアクション決定は戦略に委譲する。
+    観測（視界内の脅威・敵対・選択ターゲット等）を組み立てるドメインサービス。
+    モンスターの decide 用に build_observation を提供する。
     """
 
     def __init__(
         self,
-        pathfinding_service: PathfindingService,
         hostility_service: Optional[HostilityService] = None,
         allegiance_service: Optional[AllegianceService] = None,
         target_policy: Optional[TargetSelectionPolicy] = None,
-        strategy: Optional[BehaviorStrategy] = None,
-        strategy_factory: Optional[Callable[[AutonomousBehaviorComponent], BehaviorStrategy]] = None,
         target_policy_factory: Optional[Callable[[AutonomousBehaviorComponent], TargetSelectionPolicy]] = None,
     ):
-        self._pathfinding_service = pathfinding_service
         self._hostility_service = hostility_service or ConfigurableHostilityService()
         self._allegiance_service = allegiance_service
         self._target_policy = target_policy
-        self._strategy = strategy
-        self._strategy_factory = strategy_factory or (
-            lambda c: _default_strategy_factory(c, pathfinding_service)
-        )
         self._target_policy_factory = target_policy_factory or (
             lambda c: _default_target_policy_factory(c, self._hostility_service)
         )
 
-    def plan_action(
+    def build_observation(
         self,
         actor_id: WorldObjectId,
         map_aggregate: PhysicalMapAggregate,
@@ -80,66 +59,47 @@ class BehaviorService:
         skill_context: Optional[SkillSelectionContext] = None,
         pack_rally_coordinate: Optional[Coordinate] = None,
         growth_context: Optional[GrowthContext] = None,
-    ) -> BehaviorAction:
+        current_tick: Optional[WorldTick] = None,
+    ) -> BehaviorObservation:
         """
-        アクターの現在の状態に基づいて次のアクションを決定する。
-        コンテキストを収集し、戦略の update_state / decide_action に委譲する。
+        アクターの観測（視界内脅威・敵対・選択ターゲット等）を組み立てて返す。
+        モンスターの decide 用にアプリ層から呼ぶ。
         """
         actor = map_aggregate.get_object(actor_id)
         component = actor.component
-
         if not isinstance(component, AutonomousBehaviorComponent):
-            return BehaviorAction.wait()
-
-        if component.initial_position is None:
-            component.initial_position = actor.coordinate
-
+            return BehaviorObservation(
+                visible_threats=[],
+                visible_hostiles=[],
+                selected_target=None,
+                skill_context=skill_context,
+                growth_context=growth_context,
+                target_context=target_context,
+                pack_rally_coordinate=pack_rally_coordinate,
+                current_tick=current_tick,
+            )
         target_policy = (
             self._target_policy
             if self._target_policy is not None
             else self._target_policy_factory(component)
         )
-        strategy = (
-            self._strategy
-            if self._strategy is not None
-            else self._strategy_factory(component)
-        )
-
         visible_threats = self._collect_visible_threats(actor, map_aggregate, component)
         visible_hostiles = self._collect_visible_hostiles(actor, map_aggregate, component)
-        target = (
+        selected_target = (
             target_policy.select_target(actor, visible_hostiles, target_context)
             if visible_hostiles
             else None
         )
-
-        context = PlanActionContext(
-            actor_id=actor_id,
-            actor=actor,
-            map_aggregate=map_aggregate,
-            component=component,
+        return BehaviorObservation(
             visible_threats=visible_threats,
             visible_hostiles=visible_hostiles,
-            target=target,
-            target_context=target_context,
+            selected_target=selected_target,
             skill_context=skill_context,
-            pack_rally_coordinate=pack_rally_coordinate,
             growth_context=growth_context,
+            target_context=target_context,
+            pack_rally_coordinate=pack_rally_coordinate,
+            current_tick=current_tick,
         )
-
-        strategy.update_state(context)
-        return strategy.decide_action(context)
-
-    def plan_next_move(
-        self,
-        actor_id: WorldObjectId,
-        map_aggregate: PhysicalMapAggregate
-    ) -> Optional[Coordinate]:
-        """互換性のために残す。内部で plan_action を呼び出す。"""
-        action = self.plan_action(actor_id, map_aggregate)
-        if action.action_type == BehaviorActionType.MOVE:
-            return action.coordinate
-        return None
 
     def _collect_visible_threats(
         self,

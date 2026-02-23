@@ -15,7 +15,7 @@ from ai_rpg_world.domain.world.service.hostility_service import ConfigurableHost
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
 from ai_rpg_world.domain.world.service.weather_config_service import DefaultWeatherConfigService
 from ai_rpg_world.domain.world.service.world_time_config_service import DefaultWorldTimeConfigService
-from ai_rpg_world.domain.world.enum.world_enum import ActiveTimeType
+from ai_rpg_world.domain.monster.enum.monster_enum import ActiveTimeType
 from ai_rpg_world.domain.monster.enum.monster_enum import MonsterStatusEnum
 from ai_rpg_world.domain.monster.value_object.spawn_condition import SpawnCondition
 from ai_rpg_world.domain.world.value_object.time_of_day import TimeOfDay
@@ -40,7 +40,8 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, BehaviorStateEnum, DirectionEnum, BehaviorActionType
+from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, DirectionEnum, BehaviorActionType
+from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
@@ -64,7 +65,8 @@ from ai_rpg_world.domain.skill.value_object.skill_hit_pattern import SkillHitPat
 from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
 from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
 from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
-from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent, MonsterSkillInfo
+from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent
+from ai_rpg_world.domain.monster.value_object.monster_skill_info import MonsterSkillInfo
 from ai_rpg_world.domain.world.value_object.behavior_context import (
     SkillSelectionContext,
     TargetSelectionContext,
@@ -89,6 +91,11 @@ from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxObstacleCollidedEvent,
     HitBoxDeactivatedEvent,
 )
+from ai_rpg_world.domain.monster.event.monster_events import (
+    TargetSpottedEvent,
+    ActorStateChangedEvent,
+)
+from ai_rpg_world.domain.world.enum.world_enum import Disposition
 
 
 class _InMemorySkillLoadoutRepo:
@@ -131,7 +138,7 @@ class TestWorldSimulationApplicationService:
             time_provider=time_provider,
             ttl_ticks=5,
         )
-        behavior_service = BehaviorService(caching_pathfinding)
+        behavior_service = BehaviorService()
         weather_config = DefaultWeatherConfigService(update_interval_ticks=1)
         hit_box_config = DefaultHitBoxConfigService(substeps_per_tick=4)
         hit_box_collision_service = HitBoxCollisionDomainService()
@@ -145,7 +152,33 @@ class TestWorldSimulationApplicationService:
         )
         monster_skill_execution_domain_service = MonsterSkillExecutionDomainService(skill_execution_service)
         from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
+        from ai_rpg_world.domain.world.service.skill_selection_policy import FirstInRangeSkillPolicy
+        from ai_rpg_world.application.world.services.monster_action_resolver import create_monster_action_resolver_factory
+        from ai_rpg_world.application.world.handlers.monster_decided_to_move_handler import MonsterDecidedToMoveHandler
+        from ai_rpg_world.application.world.handlers.monster_decided_to_use_skill_handler import MonsterDecidedToUseSkillHandler
+        from ai_rpg_world.infrastructure.events.monster_event_handler_registry import MonsterEventHandlerRegistry
+
         hit_box_factory = HitBoxFactory()
+        monster_action_resolver_factory = create_monster_action_resolver_factory(
+            caching_pathfinding,
+            FirstInRangeSkillPolicy(),
+        )
+        monster_decided_to_move_handler = MonsterDecidedToMoveHandler(
+            physical_map_repository=repository,
+            monster_repository=monster_repo,
+        )
+        monster_decided_to_use_skill_handler = MonsterDecidedToUseSkillHandler(
+            physical_map_repository=repository,
+            monster_repository=monster_repo,
+            monster_skill_execution_domain_service=monster_skill_execution_domain_service,
+            hit_box_factory=hit_box_factory,
+            hit_box_repository=hit_box_repo,
+            skill_loadout_repository=skill_loadout_repo,
+        )
+        MonsterEventHandlerRegistry(
+            monster_decided_to_move_handler,
+            monster_decided_to_use_skill_handler,
+        ).register_handlers(event_publisher)
 
         service = WorldSimulationApplicationService(
             time_provider=time_provider,
@@ -163,6 +196,7 @@ class TestWorldSimulationApplicationService:
             hit_box_config_service=hit_box_config,
             hit_box_collision_service=hit_box_collision_service,
             world_time_config_service=DefaultWorldTimeConfigService(ticks_per_day=24),
+            monster_action_resolver_factory=monster_action_resolver_factory,
         )
         
         return service, time_provider, repository, weather_zone_repo, player_status_repo, hit_box_repo, uow, event_publisher, monster_repo, skill_loadout_repo
@@ -178,10 +212,9 @@ class TestWorldSimulationApplicationService:
         assert time_provider.get_current_tick() == WorldTick(11)
 
     def test_tick_updates_autonomous_actors(self, setup_service):
-        """tickによって自律行動アクターの行動が計画・実行されること（アクティブスポットのみ更新）"""
-        service, _, repository, _, _, _, _, _, _, _ = setup_service
-        
-        # マップのセットアップ（プレイヤーがいるスポットのみ更新されるためプレイヤーを配置）
+        """tickによって自律行動アクター（モンスター）の行動が計画・実行されること（アクティブスポットのみ更新）"""
+        service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
+
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
         physical_map = PhysicalMapAggregate.create(spot_id, tiles)
@@ -189,30 +222,99 @@ class TestWorldSimulationApplicationService:
             WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
             component=ActorComponent(player_id=PlayerId(100)),
         ))
-        # 自律行動アクターの追加
         actor_id = WorldObjectId(1)
         actor = WorldObject(
-            actor_id, 
-            Coordinate(2, 2), 
+            actor_id,
+            Coordinate(2, 2),
             ObjectTypeEnum.NPC,
             component=AutonomousBehaviorComponent(
-                state=BehaviorStateEnum.PATROL,
                 vision_range=5,
-                patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]
-            )
+                patrol_points=[Coordinate(2, 2), Coordinate(2, 3)],
+            ),
         )
         physical_map.add_object(actor)
         repository.save(physical_map)
-        
-        # 1回実行
-        service.tick()
-        
-        # アクターが移動している（またはビジーになっている）ことを確認
+
+        template = MonsterTemplate(
+            template_id=MonsterTemplateId(1),
+            name="Slime",
+            base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+            reward_info=RewardInfo(0, 0),
+            respawn_info=RespawnInfo(1, True),
+            race=Race.HUMAN,
+            faction=MonsterFactionEnum.ENEMY,
+            description="Slime",
+            skill_ids=[],
+        )
+        loadout = SkillLoadoutAggregate.create(SkillLoadoutId(1), actor_id.value, 10, 10)
+        monster = MonsterAggregate.create(MonsterId(1), template, actor_id, skill_loadout=loadout)
+        monster.spawn(Coordinate(2, 2, 0), spot_id, WorldTick(0))
+        monster_repo.save(monster)
+        skill_loadout_repo.save(loadout)
+
+        # リゾルバが MOVE(2,3) を返すようにモック（decide → 移動イベント → ハンドラで座標更新）
+        move_action = BehaviorAction.move(Coordinate(2, 3))
+        fake_resolver = mock.Mock()
+        fake_resolver.resolve_action.return_value = move_action
+        with mock.patch.object(service, "_monster_action_resolver_factory", return_value=fake_resolver):
+            service.tick()
+
         updated_map = repository.find_by_spot_id(spot_id)
         updated_actor = updated_map.get_object(actor_id)
-        
-        # 移動したかビジー状態ならOK
-        assert updated_actor.coordinate != Coordinate(2, 2) or updated_actor.is_busy(WorldTick(11))
+        assert updated_actor.coordinate == Coordinate(2, 3)
+
+    def test_tick_publishes_behavior_events_from_monster_aggregate(self, setup_service):
+        """tick で自律アクターがモンスターの場合、行動イベントがモンスター集約経由で発行されること（Map に積まれない）"""
+        service, _, repository, _, _, _, _, event_publisher, monster_repo, skill_loadout_repo = setup_service
+        from ai_rpg_world.domain.world.service.hostility_service import ConfigurableHostilityService
+
+        # 敵対設定: goblin が human を敵視するようにする
+        service._behavior_service._hostility_service = ConfigurableHostilityService(
+            race_disposition_table={"goblin": {"human": Disposition.HOSTILE}}
+        )
+
+        spot_id = SpotId(1)
+        tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        player_id = PlayerId(100)
+        physical_map.add_object(WorldObject(
+            WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+            component=ActorComponent(player_id=player_id, race="human"),
+        ))
+        actor_id = WorldObjectId(1)
+        physical_map.add_object(WorldObject(
+            actor_id,
+            Coordinate(1, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(race="goblin", vision_range=5, fov_angle=360),
+        ))
+        repository.save(physical_map)
+
+        # 同一 actor_id でモンスター集約を登録（tick で find_by_world_object_id が返す）
+        template = MonsterTemplate(
+            template_id=MonsterTemplateId(1),
+            name="Goblin",
+            base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+            reward_info=RewardInfo(0, 0),
+            respawn_info=RespawnInfo(1, True),
+            race=Race.HUMAN,
+            faction=MonsterFactionEnum.ENEMY,
+            description="Goblin",
+            skill_ids=[],
+        )
+        loadout = SkillLoadoutAggregate.create(SkillLoadoutId(1), actor_id.value, 10, 10)
+        monster = MonsterAggregate.create(MonsterId(1), template, actor_id, skill_loadout=loadout)
+        monster.spawn(Coordinate(1, 0, 0), spot_id, WorldTick(0))
+        monster_repo.save(monster)
+        skill_loadout_repo.save(loadout)
+
+        service.tick()
+
+        # 行動イベントが発行されていること（モンスターに積んで save → commit で発行）
+        events = event_publisher.get_published_events()
+        assert any(isinstance(e, (TargetSpottedEvent, ActorStateChangedEvent)) for e in events), (
+            f"Expected TargetSpottedEvent or ActorStateChangedEvent in published events, got: {[type(e).__name__ for e in events]}"
+        )
 
     def test_busy_actor_is_skipped(self, setup_service):
         """Busy状態のアクターはシミュレーションでスキップされること"""
@@ -244,9 +346,9 @@ class TestWorldSimulationApplicationService:
         assert updated_actor.busy_until == WorldTick(20)
 
     def test_tick_handles_actor_error_gracefully(self, setup_service):
-        """1つのアクターでエラーが発生しても他のアクターの更新が継続されること"""
-        service, _, repository, _, _, _, _, _, _, _ = setup_service
-        
+        """1つのモンスターでエラーが発生しても他のモンスターの更新が継続されること"""
+        service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
+
         spot_id = SpotId(1)
         tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
         physical_map = PhysicalMapAggregate.create(spot_id, tiles)
@@ -258,32 +360,52 @@ class TestWorldSimulationApplicationService:
         actor2_id = WorldObjectId(2)
         actor1 = WorldObject(
             actor1_id, Coordinate(2, 2), ObjectTypeEnum.NPC,
-            component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(2, 2), Coordinate(2, 3)])
+            component=AutonomousBehaviorComponent(patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
         )
         actor2 = WorldObject(
             actor2_id, Coordinate(3, 3), ObjectTypeEnum.NPC,
-            component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(3, 3), Coordinate(3, 4)])
+            component=AutonomousBehaviorComponent(patrol_points=[Coordinate(3, 3), Coordinate(3, 4)]),
         )
         physical_map.add_object(actor1)
         physical_map.add_object(actor2)
         repository.save(physical_map)
-        
-        player_wo_id = WorldObjectId(100)
-        call_count = [0]
-        def plan_action_side_effect(actor_id_arg, map_agg, **kwargs):
-            call_count[0] += 1
-            if actor_id_arg == player_wo_id:
-                return BehaviorAction.wait()
+
+        def _add_monster(wo_id, mid, coord):
+            loadout = SkillLoadoutAggregate.create(SkillLoadoutId(mid), wo_id.value, 10, 10)
+            t = MonsterTemplate(
+                template_id=MonsterTemplateId(mid),
+                name="M",
+                base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+                reward_info=RewardInfo(0, 0),
+                respawn_info=RespawnInfo(1, True),
+                race=Race.HUMAN,
+                faction=MonsterFactionEnum.ENEMY,
+                description="M",
+                skill_ids=[],
+            )
+            m = MonsterAggregate.create(MonsterId(mid), t, wo_id, skill_loadout=loadout)
+            m.spawn(coord, spot_id, WorldTick(0))
+            monster_repo.save(m)
+            skill_loadout_repo.save(loadout)
+
+        _add_monster(actor1_id, 1, Coordinate(2, 2, 0))
+        _add_monster(actor2_id, 2, Coordinate(3, 3, 0))
+
+        def build_observation_side_effect(actor_id_arg, map_agg, **kwargs):
+            from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
             if actor_id_arg == actor1_id:
                 raise Exception("Plan error")
-            return BehaviorAction.move(Coordinate(3, 4))
-        
-        import unittest.mock as mock
-        with mock.patch.object(service._behavior_service, "plan_action", side_effect=plan_action_side_effect):
-            service.tick()
-        
+            return BehaviorObservation()
+
+        # actor2 はリゾルバが MOVE(3,4) を返すようにモック
+        move_action = BehaviorAction.move(Coordinate(3, 4))
+        fake_resolver = mock.Mock()
+        fake_resolver.resolve_action.return_value = move_action
+        with mock.patch.object(service._behavior_service, "build_observation", side_effect=build_observation_side_effect):
+            with mock.patch.object(service, "_monster_action_resolver_factory", return_value=fake_resolver):
+                service.tick()
+
         updated_map = repository.find_by_spot_id(spot_id)
-        assert call_count[0] == 3
         assert updated_map.get_object(actor1_id).coordinate == Coordinate(2, 2)
         assert updated_map.get_object(actor2_id).coordinate == Coordinate(3, 4)
 
@@ -317,33 +439,6 @@ class TestWorldSimulationApplicationService:
         assert "failed" in str(excinfo.value).lower()
         assert excinfo.value.original_exception is not None
         assert isinstance(excinfo.value.original_exception, RuntimeError)
-
-    def test_tick_raises_application_exception_when_use_skill_has_no_slot_index(self, setup_service):
-        """USE_SKILLアクションでskill_slot_indexがNoneの場合にApplicationExceptionが発生すること"""
-        service, _, repository, _, _, _, _, _, _, _ = setup_service
-        
-        spot_id = SpotId(1)
-        tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
-        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
-        physical_map.add_object(WorldObject(
-            WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
-            component=ActorComponent(player_id=PlayerId(100)),
-        ))
-        actor_id = WorldObjectId(1)
-        physical_map.add_object(WorldObject(
-            actor_id, Coordinate(2, 2), ObjectTypeEnum.NPC,
-            component=AutonomousBehaviorComponent()
-        ))
-        repository.save(physical_map)
-        
-        invalid_action = BehaviorAction(
-            action_type=BehaviorActionType.USE_SKILL,
-            coordinate=None,
-            skill_slot_index=None,
-        )
-        with mock.patch.object(service._behavior_service, "plan_action", return_value=invalid_action):
-            with pytest.raises(ApplicationException, match="skill_slot_index"):
-                service.tick()
 
     def test_tick_applies_environmental_stamina_drain(self, setup_service):
         """過酷な天候下でプレイヤーのスタミナが減少すること（正常系）"""
@@ -1048,13 +1143,10 @@ class TestWorldSimulationApplicationService:
         monster_obj_id = WorldObjectId(100)
         skills = [MonsterSkillInfo(slot_index=0, range=2, mp_cost=10)]
         monster_comp = AutonomousBehaviorComponent(
-            state=BehaviorStateEnum.CHASE,
             vision_range=5,
             available_skills=skills,
             fov_angle=360.0,
         )
-        monster_comp.target_id = WorldObjectId(1)
-        monster_comp.last_known_target_position = Coordinate(7, 5)
         monster_obj = WorldObject(monster_obj_id, Coordinate(5, 5), ObjectTypeEnum.NPC, component=monster_comp)
         physical_map.add_object(monster_obj)
         
@@ -1100,13 +1192,15 @@ class TestWorldSimulationApplicationService:
         monster.spawn(Coordinate(5, 5, 0), spot_id, WorldTick(0))
         monster_repo.save(monster)
         
-        # plan_action が USE_SKILL を返すようにモック
+        # リゾルバが USE_SKILL を返すようにモック（decide が MonsterDecidedToUseSkillEvent を発行しハンドラが実行）
         use_skill_action = BehaviorAction(
             action_type=BehaviorActionType.USE_SKILL,
             coordinate=None,
             skill_slot_index=0,
         )
-        with mock.patch.object(service._behavior_service, "plan_action", return_value=use_skill_action):
+        fake_resolver = mock.Mock()
+        fake_resolver.resolve_action.return_value = use_skill_action
+        with mock.patch.object(service, "_monster_action_resolver_factory", return_value=fake_resolver):
             service.tick()
         
         # HitBox が 1 つ生成されていること
@@ -1136,9 +1230,9 @@ class TestWorldSimulationApplicationService:
         )
 
     class TestSkillContextAndTargetContext:
-        """skill_context / target_context の組み立てと plan_action への渡し（正常・境界）"""
+        """skill_context / target_context の組み立てと build_observation への渡し（正常・境界）"""
 
-        def test_plan_action_receives_skill_context_for_monster_with_usable_slots(self, setup_service):
+        def test_build_observation_receives_skill_context_for_monster_with_usable_slots(self, setup_service):
             # Given: モンスターが存在し、available_skills のスロットが can_use_skill で使用可能（アクティブスポットのためプレイヤーを配置）
             service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
             spot_id = SpotId(1)
@@ -1198,49 +1292,48 @@ class TestWorldSimulationApplicationService:
             monster_repo.save(monster)
 
             captured = []
-            def capture_plan_action(actor_id_arg, map_agg, **kwargs):
+            def capture_build_observation(actor_id_arg, map_agg, **kwargs):
+                from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
                 captured.append(kwargs)
-                return BehaviorAction.move(Coordinate(2, 3))
+                return BehaviorObservation(**{k: kwargs.get(k) for k in (
+                    "visible_threats", "visible_hostiles", "selected_target", "skill_context",
+                    "growth_context", "target_context", "pack_rally_coordinate", "current_tick",
+                ) if k in kwargs})
 
-            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_plan_action):
+            with mock.patch.object(service._behavior_service, "build_observation", side_effect=capture_build_observation):
                 service.tick()
 
-            assert len(captured) == 2
-            monster_captured = next(c for c in captured if c.get("skill_context") is not None)
-            ctx = monster_captured["skill_context"]
+            assert len(captured) == 1
+            ctx = captured[0]["skill_context"]
             assert isinstance(ctx, SkillSelectionContext)
             assert 0 in ctx.usable_slot_indices
 
-        def test_plan_action_receives_none_skill_context_for_non_autonomous_actor(self, setup_service):
-            # Given: プレイヤー（ActorComponent）のみのマップ
+        def test_build_observation_receives_none_skill_context_for_non_autonomous_actor(self, setup_service):
+            # プレイヤーのみのマップでは自律アクターがおらず build_observation は呼ばれない（モンスターのみ処理するため）
             service, _, repository, _, _, _, _, _, _, _ = setup_service
             spot_id = SpotId(1)
             tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
             physical_map = PhysicalMapAggregate.create(spot_id, tiles)
-            player_id = PlayerId(100)
-            actor = WorldObject(
-                WorldObjectId(100),
-                Coordinate(0, 0),
-                ObjectTypeEnum.PLAYER,
-                component=ActorComponent(player_id=player_id),
-            )
-            physical_map.add_object(actor)
+            physical_map.add_object(WorldObject(
+                WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=PlayerId(100)),
+            ))
             repository.save(physical_map)
 
             captured = []
-            def capture_plan_action(actor_id_arg, map_agg, **kwargs):
+            def capture_build_observation(actor_id_arg, map_agg, **kwargs):
+                from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
                 captured.append(kwargs)
-                return BehaviorAction.wait()
+                return BehaviorObservation()
 
-            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_plan_action):
+            with mock.patch.object(service._behavior_service, "build_observation", side_effect=capture_build_observation):
                 service.tick()
 
-            assert len(captured) == 1
-            assert captured[0].get("skill_context") is None
+            assert len(captured) == 0
 
-        def test_plan_action_receives_target_context_when_aggro_store_has_data(self, setup_service):
+        def test_build_observation_receives_target_context_when_aggro_store_has_data(self, setup_service):
             # Given: aggro_store を注入し、該当アクターのヘイトデータを事前に登録（アクティブスポットのためプレイヤーを配置）
-            service, _, repository, _, _, _, _, _, _, _ = setup_service
+            service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
             aggro_store = InMemoryAggroStore()
             aggro_store.add_aggro(SpotId(1), WorldObjectId(200), WorldObjectId(1), 5)
             service._aggro_store = aggro_store
@@ -1262,23 +1355,47 @@ class TestWorldSimulationApplicationService:
             physical_map.add_object(actor)
             repository.save(physical_map)
 
-            captured = []
-            def capture_plan_action(actor_id_arg, map_agg, **kwargs):
-                captured.append(kwargs)
-                return BehaviorAction.move(Coordinate(2, 3))
+            loadout = SkillLoadoutAggregate.create(SkillLoadoutId.create(1), 1, 10, 10)
+            skill_loadout_repo.save(loadout)
+            monster = MonsterAggregate.create(
+                MonsterId(1),
+                MonsterTemplate(
+                    template_id=MonsterTemplateId(1),
+                    name="M",
+                    base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+                    reward_info=RewardInfo(0, 0),
+                    respawn_info=RespawnInfo(1, True),
+                    race=Race.HUMAN,
+                    faction=MonsterFactionEnum.ENEMY,
+                    description="M",
+                    skill_ids=[],
+                ),
+                WorldObjectId(1),
+                skill_loadout=loadout,
+            )
+            monster.spawn(Coordinate(2, 2, 0), spot_id, WorldTick(0))
+            monster_repo.save(monster)
 
-            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_plan_action):
+            captured = []
+            def capture_build_observation(actor_id_arg, map_agg, **kwargs):
+                from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
+                captured.append(kwargs)
+                return BehaviorObservation(**{k: kwargs.get(k) for k in (
+                    "visible_threats", "visible_hostiles", "selected_target", "skill_context",
+                    "growth_context", "target_context", "pack_rally_coordinate", "current_tick",
+                ) if k in kwargs})
+
+            with mock.patch.object(service._behavior_service, "build_observation", side_effect=capture_build_observation):
                 service.tick()
 
-            assert len(captured) == 2
-            npc_captured = next(c for c in captured if c.get("target_context") is not None)
-            ctx = npc_captured["target_context"]
+            assert len(captured) == 1
+            ctx = captured[0]["target_context"]
             assert isinstance(ctx, TargetSelectionContext)
             assert ctx.threat_by_id == {WorldObjectId(200): 5}
 
-        def test_plan_action_receives_none_target_context_when_aggro_store_not_injected(self, setup_service):
-            # Given: aggro_store は None（デフォルト）。アクティブスポットのためプレイヤーを配置
-            service, _, repository, _, _, _, _, _, _, _ = setup_service
+        def test_build_observation_receives_none_target_context_when_aggro_store_not_injected(self, setup_service):
+            # aggro_store は None（デフォルト）。モンスター1体で build_observation が1回呼ばれ target_context は None
+            service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
             assert service._aggro_store is None
 
             spot_id = SpotId(1)
@@ -1297,20 +1414,45 @@ class TestWorldSimulationApplicationService:
             physical_map.add_object(actor)
             repository.save(physical_map)
 
-            captured = []
-            def capture_plan_action(actor_id_arg, map_agg, **kwargs):
-                captured.append(kwargs)
-                return BehaviorAction.move(Coordinate(2, 3))
+            loadout = SkillLoadoutAggregate.create(SkillLoadoutId.create(1), 1, 10, 10)
+            skill_loadout_repo.save(loadout)
+            monster = MonsterAggregate.create(
+                MonsterId(1),
+                MonsterTemplate(
+                    template_id=MonsterTemplateId(1),
+                    name="M",
+                    base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+                    reward_info=RewardInfo(0, 0),
+                    respawn_info=RespawnInfo(1, True),
+                    race=Race.HUMAN,
+                    faction=MonsterFactionEnum.ENEMY,
+                    description="M",
+                    skill_ids=[],
+                ),
+                WorldObjectId(1),
+                skill_loadout=loadout,
+            )
+            monster.spawn(Coordinate(2, 2, 0), spot_id, WorldTick(0))
+            monster_repo.save(monster)
 
-            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_plan_action):
+            captured = []
+            def capture_build_observation(actor_id_arg, map_agg, **kwargs):
+                from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
+                captured.append(kwargs)
+                return BehaviorObservation(**{k: kwargs.get(k) for k in (
+                    "visible_threats", "visible_hostiles", "selected_target", "skill_context",
+                    "growth_context", "target_context", "pack_rally_coordinate", "current_tick",
+                ) if k in kwargs})
+
+            with mock.patch.object(service._behavior_service, "build_observation", side_effect=capture_build_observation):
                 service.tick()
 
-            assert len(captured) == 2
-            assert all(c.get("target_context") is None for c in captured)
+            assert len(captured) == 1
+            assert captured[0].get("target_context") is None
 
-        def test_plan_action_receives_target_context_with_memory_policy_forgotten_excluded(self, setup_service):
+        def test_build_observation_receives_target_context_with_memory_policy_forgotten_excluded(self, setup_service):
             """aggro_memory_policy で忘却済みのヘイトは target_context に含まれないこと（last_seen から経過で忘却）"""
-            service, _, repository, _, _, _, _, _, _, _ = setup_service
+            service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
             aggro_store = InMemoryAggroStore()
             aggro_store.add_aggro(SpotId(1), WorldObjectId(200), WorldObjectId(1), 5, current_tick=0)
             service._aggro_store = aggro_store
@@ -1335,12 +1477,37 @@ class TestWorldSimulationApplicationService:
             physical_map.add_object(actor)
             repository.save(physical_map)
 
-            captured = []
-            def capture_plan_action(actor_id_arg, map_agg, **kwargs):
-                captured.append(kwargs)
-                return BehaviorAction.wait()
+            loadout = SkillLoadoutAggregate.create(SkillLoadoutId.create(1), 1, 10, 10)
+            skill_loadout_repo.save(loadout)
+            monster = MonsterAggregate.create(
+                MonsterId(1),
+                MonsterTemplate(
+                    template_id=MonsterTemplateId(1),
+                    name="M",
+                    base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+                    reward_info=RewardInfo(0, 0),
+                    respawn_info=RespawnInfo(1, True),
+                    race=Race.HUMAN,
+                    faction=MonsterFactionEnum.ENEMY,
+                    description="M",
+                    skill_ids=[],
+                ),
+                WorldObjectId(1),
+                skill_loadout=loadout,
+            )
+            monster.spawn(Coordinate(2, 2, 0), spot_id, WorldTick(0))
+            monster_repo.save(monster)
 
-            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_plan_action):
+            captured = []
+            def capture_build_observation(actor_id_arg, map_agg, **kwargs):
+                from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
+                captured.append(kwargs)
+                return BehaviorObservation(**{k: kwargs.get(k) for k in (
+                    "visible_threats", "visible_hostiles", "selected_target", "skill_context",
+                    "growth_context", "target_context", "pack_rally_coordinate", "current_tick",
+                ) if k in kwargs})
+
+            with mock.patch.object(service._behavior_service, "build_observation", side_effect=capture_build_observation):
                 service.tick()
 
             assert service._time_provider.get_current_tick().value == 21
@@ -1471,54 +1638,62 @@ class TestWorldSimulationApplicationService:
         """実行順ソート（同一スポット内でプレイヤーとの距離順）の正常・境界・異常系"""
 
         def test_actors_processed_in_order_of_distance_to_player_when_player_on_map(self, setup_service):
-            """同一マップにプレイヤーがいる場合、プレイヤーに近いアクターから順に plan_action が呼ばれること"""
-            service, _, repository, _, _, _, _, _, _, _ = setup_service
+            """同一マップにプレイヤーがいる場合、モンスターはプレイヤーに近い順に build_observation が呼ばれること"""
+            service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
             spot_id = SpotId(1)
             tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(10) for y in range(10)]
             physical_map = PhysicalMapAggregate.create(spot_id, tiles)
 
-            player_id = PlayerId(100)
-            player_coord = Coordinate(0, 0)
             physical_map.add_object(WorldObject(
-                WorldObjectId(100),
-                player_coord,
-                ObjectTypeEnum.PLAYER,
-                component=ActorComponent(player_id=player_id),
+                WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=PlayerId(100)),
             ))
 
             near_id = WorldObjectId(1)
             mid_id = WorldObjectId(2)
             far_id = WorldObjectId(3)
-            physical_map.add_object(WorldObject(
-                near_id, Coordinate(1, 0), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(1, 0), Coordinate(1, 1)]),
-            ))
-            physical_map.add_object(WorldObject(
-                mid_id, Coordinate(3, 0), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(3, 0), Coordinate(3, 1)]),
-            ))
-            physical_map.add_object(WorldObject(
-                far_id, Coordinate(5, 0), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(5, 0), Coordinate(5, 1)]),
-            ))
+            template = MonsterTemplate(
+                template_id=MonsterTemplateId(1),
+                name="M",
+                base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+                reward_info=RewardInfo(0, 0),
+                respawn_info=RespawnInfo(1, True),
+                race=Race.HUMAN,
+                faction=MonsterFactionEnum.ENEMY,
+                description="M",
+                skill_ids=[],
+            )
+            for oid, coord in [(near_id, Coordinate(1, 0)), (mid_id, Coordinate(3, 0)), (far_id, Coordinate(5, 0))]:
+                physical_map.add_object(WorldObject(
+                    oid, coord, ObjectTypeEnum.NPC,
+                    component=AutonomousBehaviorComponent(patrol_points=[coord, coord]),
+                ))
+                loadout = SkillLoadoutAggregate.create(SkillLoadoutId.create(oid.value), 1, 10, 10)
+                skill_loadout_repo.save(loadout)
+                monster = MonsterAggregate.create(MonsterId(oid.value), template, oid, skill_loadout=loadout)
+                monster.spawn(Coordinate(coord.x, coord.y, 0), spot_id, WorldTick(0))
+                monster_repo.save(monster)
             repository.save(physical_map)
 
             call_order = []
             def capture_order(actor_id_arg, map_agg, **kwargs):
+                from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
                 call_order.append(actor_id_arg)
-                return BehaviorAction.move(Coordinate(0, 0))
+                return BehaviorObservation(**{k: kwargs.get(k) for k in (
+                    "visible_threats", "visible_hostiles", "selected_target", "skill_context",
+                    "growth_context", "target_context", "pack_rally_coordinate", "current_tick",
+                ) if k in kwargs})
 
-            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_order):
+            with mock.patch.object(service._behavior_service, "build_observation", side_effect=capture_order):
                 service.tick()
 
-            assert len(call_order) == 4
-            assert call_order[0] == WorldObjectId(100)
-            assert call_order[1] == near_id
-            assert call_order[2] == mid_id
-            assert call_order[3] == far_id
+            assert len(call_order) == 3
+            assert call_order[0] == near_id
+            assert call_order[1] == mid_id
+            assert call_order[2] == far_id
 
         def test_actors_processed_when_no_player_on_map(self, setup_service):
-            """同一マップにプレイヤーがいない場合、そのスポットは凍結され plan_action は呼ばれないこと"""
+            """同一マップにプレイヤーがいない場合、そのスポットは凍結され build_observation は呼ばれないこと"""
             service, _, repository, _, _, _, _, _, _, _ = setup_service
             spot_id = SpotId(1)
             tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
@@ -1528,7 +1703,7 @@ class TestWorldSimulationApplicationService:
                 actor_id = WorldObjectId(10 + i)
                 physical_map.add_object(WorldObject(
                     actor_id, coord, ObjectTypeEnum.NPC,
-                    component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[coord, coord]),
+                    component=AutonomousBehaviorComponent(patrol_points=[coord, coord]),
                 ))
             repository.save(physical_map)
 
@@ -1537,14 +1712,14 @@ class TestWorldSimulationApplicationService:
                 call_count[0] += 1
                 return BehaviorAction.move(Coordinate(0, 0))
 
-            with mock.patch.object(service._behavior_service, "plan_action", side_effect=count_calls):
+            with mock.patch.object(service._behavior_service, "build_observation", side_effect=count_calls):
                 service.tick()
 
             assert call_count[0] == 0
 
         def test_actors_sorted_by_nearest_player_when_multiple_players(self, setup_service):
-            """同一マップに複数プレイヤーがいる場合、最も近いプレイヤーとの距離でソートされること"""
-            service, _, repository, _, _, _, _, _, _, _ = setup_service
+            """同一マップに複数プレイヤーがいる場合、モンスターは最も近いプレイヤーとの距離でソートされ build_observation が呼ばれること"""
+            service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
             spot_id = SpotId(1)
             tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(15) for y in range(5)]
             physical_map = PhysicalMapAggregate.create(spot_id, tiles)
@@ -1561,36 +1736,52 @@ class TestWorldSimulationApplicationService:
             near_p1_id = WorldObjectId(1)
             mid_id = WorldObjectId(2)
             near_p2_id = WorldObjectId(3)
-            physical_map.add_object(WorldObject(
-                near_p1_id, Coordinate(1, 0), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(1, 0), Coordinate(1, 1)]),
-            ))
-            physical_map.add_object(WorldObject(
-                mid_id, Coordinate(5, 0), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(5, 0), Coordinate(5, 1)]),
-            ))
-            physical_map.add_object(WorldObject(
-                near_p2_id, Coordinate(9, 0), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(9, 0), Coordinate(9, 1)]),
-            ))
+            template = MonsterTemplate(
+                template_id=MonsterTemplateId(1),
+                name="M",
+                base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+                reward_info=RewardInfo(0, 0),
+                respawn_info=RespawnInfo(1, True),
+                race=Race.HUMAN,
+                faction=MonsterFactionEnum.ENEMY,
+                description="M",
+                skill_ids=[],
+            )
+            for oid, coord in [
+                (near_p1_id, Coordinate(1, 0)),
+                (mid_id, Coordinate(5, 0)),
+                (near_p2_id, Coordinate(9, 0)),
+            ]:
+                physical_map.add_object(WorldObject(
+                    oid, coord, ObjectTypeEnum.NPC,
+                    component=AutonomousBehaviorComponent(patrol_points=[coord, coord]),
+                ))
+                loadout = SkillLoadoutAggregate.create(SkillLoadoutId.create(oid.value), 1, 10, 10)
+                skill_loadout_repo.save(loadout)
+                monster = MonsterAggregate.create(MonsterId(oid.value), template, oid, skill_loadout=loadout)
+                monster.spawn(Coordinate(coord.x, coord.y, 0), spot_id, WorldTick(0))
+                monster_repo.save(monster)
             repository.save(physical_map)
 
             call_order = []
             def capture_order(actor_id_arg, map_agg, **kwargs):
+                from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
                 call_order.append(actor_id_arg)
-                return BehaviorAction.move(Coordinate(0, 0))
+                return BehaviorObservation(**{k: kwargs.get(k) for k in (
+                    "visible_threats", "visible_hostiles", "selected_target", "skill_context",
+                    "growth_context", "target_context", "pack_rally_coordinate", "current_tick",
+                ) if k in kwargs})
 
-            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_order):
+            with mock.patch.object(service._behavior_service, "build_observation", side_effect=capture_order):
                 service.tick()
 
-            assert len(call_order) == 5
-            npc_order = [oid for oid in call_order if oid in (near_p1_id, mid_id, near_p2_id)]
-            assert npc_order[0] == near_p1_id
-            assert npc_order[1] == near_p2_id
-            assert npc_order[2] == mid_id
+            assert len(call_order) == 3
+            assert call_order[0] == near_p1_id
+            assert call_order[1] == near_p2_id
+            assert call_order[2] == mid_id
 
         def test_single_actor_no_player_on_map(self, setup_service):
-            """プレイヤーがいないマップではスポットが凍結され plan_action は呼ばれないこと"""
+            """プレイヤーがいないマップではスポットが凍結され build_observation は呼ばれないこと"""
             service, _, repository, _, _, _, _, _, _, _ = setup_service
             spot_id = SpotId(1)
             tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
@@ -1598,7 +1789,7 @@ class TestWorldSimulationApplicationService:
             actor_id = WorldObjectId(1)
             physical_map.add_object(WorldObject(
                 actor_id, Coordinate(2, 2), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
+                component=AutonomousBehaviorComponent(patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
             ))
             repository.save(physical_map)
 
@@ -1607,50 +1798,67 @@ class TestWorldSimulationApplicationService:
                 call_count[0] += 1
                 return BehaviorAction.move(Coordinate(2, 3))
 
-            with mock.patch.object(service._behavior_service, "plan_action", side_effect=count_calls):
+            with mock.patch.object(service._behavior_service, "build_observation", side_effect=count_calls):
                 service.tick()
 
             assert call_count[0] == 0
 
         def test_busy_actors_skipped_regardless_of_execution_order(self, setup_service):
-            """実行順ソート後も、Busy なアクターは plan_action が呼ばれずスキップされること"""
-            service, _, repository, _, _, _, _, _, _, _ = setup_service
+            """実行順ソート後も、Busy なモンスターは build_observation が呼ばれずスキップされること"""
+            service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
             spot_id = SpotId(1)
             tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
             physical_map = PhysicalMapAggregate.create(spot_id, tiles)
 
-            player_id = PlayerId(100)
             physical_map.add_object(WorldObject(
                 WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
-                component=ActorComponent(player_id=player_id),
+                component=ActorComponent(player_id=PlayerId(100)),
             ))
             near_id = WorldObjectId(1)
             far_busy_id = WorldObjectId(2)
-            physical_map.add_object(WorldObject(
-                near_id, Coordinate(1, 0), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(1, 0), Coordinate(1, 1)]),
-            ))
-            physical_map.add_object(WorldObject(
-                far_busy_id, Coordinate(3, 0), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(3, 0), Coordinate(3, 1)]),
-                busy_until=WorldTick(999),
-            ))
+            template = MonsterTemplate(
+                template_id=MonsterTemplateId(1),
+                name="M",
+                base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+                reward_info=RewardInfo(0, 0),
+                respawn_info=RespawnInfo(1, True),
+                race=Race.HUMAN,
+                faction=MonsterFactionEnum.ENEMY,
+                description="M",
+                skill_ids=[],
+            )
+            for oid, coord, busy in [(near_id, Coordinate(1, 0), None), (far_busy_id, Coordinate(3, 0), WorldTick(999))]:
+                physical_map.add_object(WorldObject(
+                    oid, coord, ObjectTypeEnum.NPC,
+                    component=AutonomousBehaviorComponent(
+                        patrol_points=[coord, coord],
+                    ),
+                    busy_until=busy,
+                ))
+                loadout = SkillLoadoutAggregate.create(SkillLoadoutId.create(oid.value), 1, 10, 10)
+                skill_loadout_repo.save(loadout)
+                monster = MonsterAggregate.create(MonsterId(oid.value), template, oid, skill_loadout=loadout)
+                monster.spawn(Coordinate(coord.x, coord.y, 0), spot_id, WorldTick(0))
+                monster_repo.save(monster)
             repository.save(physical_map)
 
             called_ids = []
             def capture_called(actor_id_arg, map_agg, **kwargs):
+                from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
                 called_ids.append(actor_id_arg)
-                return BehaviorAction.wait()
+                return BehaviorObservation(**{k: kwargs.get(k) for k in (
+                    "visible_threats", "visible_hostiles", "selected_target", "skill_context",
+                    "growth_context", "target_context", "pack_rally_coordinate", "current_tick",
+                ) if k in kwargs})
 
-            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_called):
+            with mock.patch.object(service._behavior_service, "build_observation", side_effect=capture_called):
                 service.tick()
 
             assert near_id in called_ids
-            assert WorldObjectId(100) in called_ids
             assert far_busy_id not in called_ids
 
         def test_empty_actors_no_crash(self, setup_service):
-            """アクターが0体のマップ（プレイヤーもいない）でも plan_action が呼ばれず正常終了すること"""
+            """アクターが0体のマップ（プレイヤーもいない）でも build_observation が呼ばれず正常終了すること"""
             service, _, repository, _, _, _, _, _, _, _ = setup_service
             spot_id = SpotId(1)
             tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(3) for y in range(3)]
@@ -1662,21 +1870,20 @@ class TestWorldSimulationApplicationService:
                 call_count[0] += 1
                 return BehaviorAction.wait()
 
-            with mock.patch.object(service._behavior_service, "plan_action", side_effect=count_calls):
+            with mock.patch.object(service._behavior_service, "build_observation", side_effect=count_calls):
                 service.tick()
 
             assert call_count[0] == 0
 
         def test_player_only_map_execution_order(self, setup_service):
-            """プレイヤーのみがいるマップでは plan_action が1回だけ呼ばれること"""
+            """プレイヤーのみがいるマップではモンスターがいないため build_observation は呼ばれないこと"""
             service, _, repository, _, _, _, _, _, _, _ = setup_service
             spot_id = SpotId(1)
             tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
             physical_map = PhysicalMapAggregate.create(spot_id, tiles)
-            player_id = PlayerId(100)
             physical_map.add_object(WorldObject(
                 WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
-                component=ActorComponent(player_id=player_id),
+                component=ActorComponent(player_id=PlayerId(100)),
             ))
             repository.save(physical_map)
 
@@ -1685,43 +1892,63 @@ class TestWorldSimulationApplicationService:
                 call_order.append(actor_id_arg)
                 return BehaviorAction.wait()
 
-            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_order):
+            with mock.patch.object(service._behavior_service, "build_observation", side_effect=capture_order):
                 service.tick()
 
-            assert len(call_order) == 1
-            assert call_order[0] == WorldObjectId(100)
+            assert len(call_order) == 0
 
     class TestActiveSpotFreeze:
         """スポット単位凍結（プレイヤーが存在するマップでのみ逐次更新）の正常・境界・異常系"""
 
-        def test_only_active_spot_gets_plan_action_and_save(self, setup_service):
-            """プレイヤーがいるスポットのみ plan_action が呼ばれ、そのスポットのみ save されること"""
-            service, _, repository, _, _, _, _, _, _, _ = setup_service
+        def test_only_active_spot_gets_build_observation_and_save(self, setup_service):
+            """プレイヤーがいるスポットのみモンスターに build_observation が呼ばれ、そのスポットのみ save されること"""
+            service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
             spot_a = SpotId(1)
             spot_b = SpotId(2)
             tiles_5x5 = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
             map_a = PhysicalMapAggregate.create(spot_a, tiles_5x5)
             map_b = PhysicalMapAggregate.create(spot_b, tiles_5x5)
-            player_id = PlayerId(100)
             map_a.add_object(WorldObject(
                 WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
-                component=ActorComponent(player_id=player_id),
+                component=ActorComponent(player_id=PlayerId(100)),
             ))
             map_a.add_object(WorldObject(
                 WorldObjectId(1), Coordinate(1, 1), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(1, 1), Coordinate(1, 2)]),
+                component=AutonomousBehaviorComponent(patrol_points=[Coordinate(1, 1), Coordinate(1, 2)]),
             ))
             map_b.add_object(WorldObject(
                 WorldObjectId(2), Coordinate(2, 2), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
+                component=AutonomousBehaviorComponent(patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
             ))
             repository.save(map_a)
             repository.save(map_b)
 
-            plan_action_calls = []
-            def capture_plan(actor_id_arg, map_agg, **kwargs):
-                plan_action_calls.append((actor_id_arg, map_agg.spot_id))
-                return BehaviorAction.wait()
+            template = MonsterTemplate(
+                template_id=MonsterTemplateId(1),
+                name="M",
+                base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+                reward_info=RewardInfo(0, 0),
+                respawn_info=RespawnInfo(1, True),
+                race=Race.HUMAN,
+                faction=MonsterFactionEnum.ENEMY,
+                description="M",
+                skill_ids=[],
+            )
+            for oid, spot_id, coord in [(1, spot_a, Coordinate(1, 1)), (2, spot_b, Coordinate(2, 2))]:
+                loadout = SkillLoadoutAggregate.create(SkillLoadoutId.create(oid), 1, 10, 10)
+                skill_loadout_repo.save(loadout)
+                monster = MonsterAggregate.create(MonsterId(oid), template, WorldObjectId(oid), skill_loadout=loadout)
+                monster.spawn(Coordinate(coord.x, coord.y, 0), spot_id, WorldTick(0))
+                monster_repo.save(monster)
+
+            build_observation_calls = []
+            def capture_build(actor_id_arg, map_agg, **kwargs):
+                from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
+                build_observation_calls.append((actor_id_arg, map_agg.spot_id))
+                return BehaviorObservation(**{k: kwargs.get(k) for k in (
+                    "visible_threats", "visible_hostiles", "selected_target", "skill_context",
+                    "growth_context", "target_context", "pack_rally_coordinate", "current_tick",
+                ) if k in kwargs})
 
             save_calls = []
             original_save = repository.save
@@ -1729,16 +1956,16 @@ class TestWorldSimulationApplicationService:
                 save_calls.append(physical_map.spot_id)
                 return original_save(physical_map)
 
-            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_plan):
+            with mock.patch.object(service._behavior_service, "build_observation", side_effect=capture_build):
                 with mock.patch.object(service._physical_map_repository, "save", side_effect=capture_save):
                     service.tick()
 
-            assert all(spot_id == spot_a for _, spot_id in plan_action_calls)
-            assert len(plan_action_calls) == 2
+            assert all(spot_id == spot_a for _, spot_id in build_observation_calls)
+            assert len(build_observation_calls) == 1
             assert save_calls == [spot_a]
 
-        def test_no_player_on_any_map_no_plan_action_no_save(self, setup_service):
-            """全マップにプレイヤーがいない場合、plan_action も save も呼ばれないこと"""
+        def test_no_player_on_any_map_no_build_observation_no_save(self, setup_service):
+            """全マップにプレイヤーがいない場合、build_observation も save も呼ばれないこと"""
             service, _, repository, _, _, _, _, _, _, _ = setup_service
             spot_a = SpotId(10)
             spot_b = SpotId(20)
@@ -1747,35 +1974,36 @@ class TestWorldSimulationApplicationService:
             map_b = PhysicalMapAggregate.create(spot_b, tiles)
             map_a.add_object(WorldObject(
                 WorldObjectId(1), Coordinate(0, 0), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(0, 0)]),
+                component=AutonomousBehaviorComponent(patrol_points=[Coordinate(0, 0)]),
             ))
             map_b.add_object(WorldObject(
                 WorldObjectId(2), Coordinate(0, 0), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(0, 0)]),
+                component=AutonomousBehaviorComponent(patrol_points=[Coordinate(0, 0)]),
             ))
             repository.save(map_a)
             repository.save(map_b)
 
-            plan_count = [0]
+            build_observation_count = [0]
             save_count = [0]
-            def count_plan(*args, **kwargs):
-                plan_count[0] += 1
-                return BehaviorAction.wait()
+            def count_build_observation(*args, **kwargs):
+                from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
+                build_observation_count[0] += 1
+                return BehaviorObservation()
             original_save = repository.save
             def count_save(physical_map):
                 save_count[0] += 1
                 return original_save(physical_map)
 
-            with mock.patch.object(service._behavior_service, "plan_action", side_effect=count_plan):
+            with mock.patch.object(service._behavior_service, "build_observation", side_effect=count_build_observation):
                 with mock.patch.object(service._physical_map_repository, "save", side_effect=count_save):
                     service.tick()
 
-            assert plan_count[0] == 0
+            assert build_observation_count[0] == 0
             assert save_count[0] == 0
 
         def test_both_spots_with_players_both_updated(self, setup_service):
-            """複数スポットにそれぞれプレイヤーがいる場合、両方のスポットで plan_action と save が行われること"""
-            service, _, repository, _, _, _, _, _, _, _ = setup_service
+            """複数スポットにそれぞれプレイヤーとモンスターがいる場合、両方のスポットで build_observation と save が行われること"""
+            service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
             spot_a = SpotId(1)
             spot_b = SpotId(2)
             tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(3) for y in range(3)]
@@ -1789,13 +2017,43 @@ class TestWorldSimulationApplicationService:
                 WorldObjectId(101), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
                 component=ActorComponent(player_id=PlayerId(101)),
             ))
+            map_a.add_object(WorldObject(
+                WorldObjectId(1), Coordinate(1, 0), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(patrol_points=[Coordinate(1, 0)]),
+            ))
+            map_b.add_object(WorldObject(
+                WorldObjectId(2), Coordinate(1, 0), ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(patrol_points=[Coordinate(1, 0)]),
+            ))
             repository.save(map_a)
             repository.save(map_b)
 
-            plan_spot_ids = []
+            template = MonsterTemplate(
+                template_id=MonsterTemplateId(1),
+                name="M",
+                base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+                reward_info=RewardInfo(0, 0),
+                respawn_info=RespawnInfo(1, True),
+                race=Race.HUMAN,
+                faction=MonsterFactionEnum.ENEMY,
+                description="M",
+                skill_ids=[],
+            )
+            for oid, spot_id in [(1, spot_a), (2, spot_b)]:
+                loadout = SkillLoadoutAggregate.create(SkillLoadoutId.create(oid), 1, 10, 10)
+                skill_loadout_repo.save(loadout)
+                monster = MonsterAggregate.create(MonsterId(oid), template, WorldObjectId(oid), skill_loadout=loadout)
+                monster.spawn(Coordinate(1, 0, 0), spot_id, WorldTick(0))
+                monster_repo.save(monster)
+
+            build_observation_spot_ids = []
             def capture_spot(actor_id_arg, map_agg, **kwargs):
-                plan_spot_ids.append(map_agg.spot_id)
-                return BehaviorAction.wait()
+                from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
+                build_observation_spot_ids.append(map_agg.spot_id)
+                return BehaviorObservation(**{k: kwargs.get(k) for k in (
+                    "visible_threats", "visible_hostiles", "selected_target", "skill_context",
+                    "growth_context", "target_context", "pack_rally_coordinate", "current_tick",
+                ) if k in kwargs})
 
             save_spot_ids = []
             original_save = repository.save
@@ -1803,16 +2061,16 @@ class TestWorldSimulationApplicationService:
                 save_spot_ids.append(physical_map.spot_id)
                 return original_save(physical_map)
 
-            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_spot):
+            with mock.patch.object(service._behavior_service, "build_observation", side_effect=capture_spot):
                 with mock.patch.object(service._physical_map_repository, "save", side_effect=capture_save):
                     service.tick()
 
-            assert set(plan_spot_ids) == {spot_a, spot_b}
+            assert set(build_observation_spot_ids) == {spot_a, spot_b}
             assert set(save_spot_ids) == {spot_a, spot_b}
 
-        def test_inactive_spot_actors_never_get_plan_action(self, setup_service):
-            """プレイヤーがいないスポットのアクターには plan_action が一度も呼ばれないこと"""
-            service, _, repository, _, _, _, _, _, _, _ = setup_service
+        def test_inactive_spot_actors_never_get_build_observation(self, setup_service):
+            """プレイヤーがいないスポットのモンスターには build_observation が一度も呼ばれないこと"""
+            service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
             spot_active = SpotId(1)
             spot_inactive = SpotId(2)
             tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
@@ -1824,52 +2082,88 @@ class TestWorldSimulationApplicationService:
             ))
             map_active.add_object(WorldObject(
                 WorldObjectId(1), Coordinate(1, 0), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(1, 0), Coordinate(1, 1)]),
+                component=AutonomousBehaviorComponent(patrol_points=[Coordinate(1, 0), Coordinate(1, 1)]),
             ))
             npc_on_inactive_id = WorldObjectId(2)
             map_inactive.add_object(WorldObject(
                 npc_on_inactive_id, Coordinate(2, 2), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
+                component=AutonomousBehaviorComponent(patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
             ))
             repository.save(map_active)
             repository.save(map_inactive)
 
-            plan_actor_ids = []
-            def capture_actor(actor_id_arg, map_agg, **kwargs):
-                plan_actor_ids.append(actor_id_arg)
-                return BehaviorAction.wait()
+            template = MonsterTemplate(
+                template_id=MonsterTemplateId(1),
+                name="M",
+                base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+                reward_info=RewardInfo(0, 0),
+                respawn_info=RespawnInfo(1, True),
+                race=Race.HUMAN,
+                faction=MonsterFactionEnum.ENEMY,
+                description="M",
+                skill_ids=[],
+            )
+            for oid, spot_id, coord in [(1, spot_active, Coordinate(1, 0)), (2, spot_inactive, Coordinate(2, 2))]:
+                loadout = SkillLoadoutAggregate.create(SkillLoadoutId.create(oid), 1, 10, 10)
+                skill_loadout_repo.save(loadout)
+                monster = MonsterAggregate.create(MonsterId(oid), template, WorldObjectId(oid), skill_loadout=loadout)
+                monster.spawn(Coordinate(coord.x, coord.y, 0), spot_id, WorldTick(0))
+                monster_repo.save(monster)
 
-            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_actor):
+            build_observation_actor_ids = []
+            def capture_actor(actor_id_arg, map_agg, **kwargs):
+                from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
+                build_observation_actor_ids.append(actor_id_arg)
+                return BehaviorObservation(**{k: kwargs.get(k) for k in (
+                    "visible_threats", "visible_hostiles", "selected_target", "skill_context",
+                    "growth_context", "target_context", "pack_rally_coordinate", "current_tick",
+                ) if k in kwargs})
+
+            with mock.patch.object(service._behavior_service, "build_observation", side_effect=capture_actor):
                 service.tick()
 
-            assert npc_on_inactive_id not in plan_actor_ids
-            assert WorldObjectId(100) in plan_actor_ids
-            assert WorldObjectId(1) in plan_actor_ids
+            assert npc_on_inactive_id not in build_observation_actor_ids
+            assert WorldObjectId(1) in build_observation_actor_ids
 
         def test_single_map_with_player_behaves_as_before(self, setup_service):
-            """プレイヤーが1人いるマップが1つの場合は従来どおり更新され、tick が正常終了すること"""
-            service, _, repository, _, _, _, _, _, _, _ = setup_service
+            """プレイヤーとモンスターが1体いるマップでは decide → 移動イベント → ハンドラで座標が更新されること"""
+            service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
             spot_id = SpotId(1)
             tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
             physical_map = PhysicalMapAggregate.create(spot_id, tiles)
-            player_id_wo = WorldObjectId(100)
             actor_id = WorldObjectId(1)
             physical_map.add_object(WorldObject(
-                player_id_wo, Coordinate(0, 0), ObjectTypeEnum.PLAYER,
+                WorldObjectId(100), Coordinate(0, 0), ObjectTypeEnum.PLAYER,
                 component=ActorComponent(player_id=PlayerId(100)),
             ))
             physical_map.add_object(WorldObject(
                 actor_id, Coordinate(2, 2), ObjectTypeEnum.NPC,
-                component=AutonomousBehaviorComponent(state=BehaviorStateEnum.PATROL, patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
+                component=AutonomousBehaviorComponent(patrol_points=[Coordinate(2, 2), Coordinate(2, 3)]),
             ))
             repository.save(physical_map)
 
-            def plan_by_actor(actor_id_arg, map_agg, **kwargs):
-                if actor_id_arg == player_id_wo:
-                    return BehaviorAction.wait()
-                return BehaviorAction.move(Coordinate(2, 3))
+            loadout = SkillLoadoutAggregate.create(SkillLoadoutId.create(1), 1, 10, 10)
+            skill_loadout_repo.save(loadout)
+            template = MonsterTemplate(
+                template_id=MonsterTemplateId(1),
+                name="M",
+                base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+                reward_info=RewardInfo(0, 0),
+                respawn_info=RespawnInfo(1, True),
+                race=Race.HUMAN,
+                faction=MonsterFactionEnum.ENEMY,
+                description="M",
+                skill_ids=[],
+            )
+            monster = MonsterAggregate.create(MonsterId(1), template, actor_id, skill_loadout=loadout)
+            monster.spawn(Coordinate(2, 2, 0), spot_id, WorldTick(0))
+            monster_repo.save(monster)
 
-            with mock.patch.object(service._behavior_service, "plan_action", side_effect=plan_by_actor):
+            # リゾルバが MOVE を返すようにモック（decide → MonsterDecidedToMoveEvent → ハンドラで移動）
+            move_action = BehaviorAction.move(Coordinate(2, 3))
+            fake_resolver = mock.Mock()
+            fake_resolver.resolve_action.return_value = move_action
+            with mock.patch.object(service, "_monster_action_resolver_factory", return_value=fake_resolver):
                 service.tick()
 
             updated = repository.find_by_spot_id(spot_id)
@@ -1899,16 +2193,14 @@ class TestWorldSimulationApplicationService:
             assert save_count[0] == 1
 
     class TestActiveTimeSkip:
-        """活動時間帯でない自律アクターは plan_action をスキップするテスト"""
+        """活動時間帯でない自律アクター（モンスター）は build_observation をスキップするテスト"""
 
         def test_nocturnal_actor_skipped_during_day(self, setup_service):
-            """昼の時間帯では夜行性アクターは plan_action を呼ばれないこと"""
-            service, time_provider, repository, _, _, _, _, _, _, _ = setup_service
-            # ticks_per_day=24 で initial_tick=12 → advance で 13 → DAY
+            """昼の時間帯では夜行性モンスターには build_observation が呼ばれないこと"""
+            service, time_provider, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
             time_provider.advance_tick()
             time_provider.advance_tick()
             time_provider.advance_tick()
-            # 現在 13 (DAY)
             spot_id = SpotId(1)
             tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
             physical_map = PhysicalMapAggregate.create(spot_id, tiles)
@@ -1922,28 +2214,43 @@ class TestWorldSimulationApplicationService:
                 Coordinate(2, 2),
                 ObjectTypeEnum.NPC,
                 component=AutonomousBehaviorComponent(
-                    state=BehaviorStateEnum.PATROL,
                     patrol_points=[Coordinate(2, 2), Coordinate(2, 3)],
                     active_time=ActiveTimeType.NOCTURNAL,
                 ),
             ))
             repository.save(physical_map)
 
-            plan_actor_ids = []
-            def capture_actor(actor_id_arg, map_agg, **kwargs):
-                plan_actor_ids.append(actor_id_arg)
-                return BehaviorAction.wait()
+            loadout = SkillLoadoutAggregate.create(SkillLoadoutId.create(1), 1, 10, 10)
+            skill_loadout_repo.save(loadout)
+            template = MonsterTemplate(
+                template_id=MonsterTemplateId(1),
+                name="M",
+                base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+                reward_info=RewardInfo(0, 0),
+                respawn_info=RespawnInfo(1, True),
+                race=Race.HUMAN,
+                faction=MonsterFactionEnum.ENEMY,
+                description="M",
+                skill_ids=[],
+            )
+            monster = MonsterAggregate.create(MonsterId(1), template, nocturnal_id, skill_loadout=loadout)
+            monster.spawn(Coordinate(2, 2, 0), spot_id, WorldTick(0))
+            monster_repo.save(monster)
 
-            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_actor):
+            build_observation_actor_ids = []
+            def capture_actor(actor_id_arg, map_agg, **kwargs):
+                from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
+                build_observation_actor_ids.append(actor_id_arg)
+                return BehaviorObservation()
+
+            with mock.patch.object(service._behavior_service, "build_observation", side_effect=capture_actor):
                 service.tick()
 
-            # プレイヤー(100)は ActorComponent のみなので plan_action は呼ばれる（自律でないのでスキップ判定は通る）
-            # NOCTURNAL の NPC(1) は活動時間でないので plan_action が呼ばれない
-            assert nocturnal_id not in plan_actor_ids
+            assert nocturnal_id not in build_observation_actor_ids
 
         def test_diurnal_actor_acts_during_day(self, setup_service):
-            """昼の時間帯では昼行性アクターは plan_action が呼ばれること"""
-            service, time_provider, repository, _, _, _, _, _, _, _ = setup_service
+            """昼の時間帯では昼行性モンスターには build_observation が呼ばれること"""
+            service, time_provider, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
             time_provider.advance_tick()
             time_provider.advance_tick()
             time_provider.advance_tick()
@@ -1960,22 +2267,39 @@ class TestWorldSimulationApplicationService:
                 Coordinate(2, 2),
                 ObjectTypeEnum.NPC,
                 component=AutonomousBehaviorComponent(
-                    state=BehaviorStateEnum.PATROL,
                     patrol_points=[Coordinate(2, 2), Coordinate(2, 3)],
                     active_time=ActiveTimeType.DIURNAL,
                 ),
             ))
             repository.save(physical_map)
 
-            plan_actor_ids = []
-            def capture_actor(actor_id_arg, map_agg, **kwargs):
-                plan_actor_ids.append(actor_id_arg)
-                return BehaviorAction.wait()
+            loadout = SkillLoadoutAggregate.create(SkillLoadoutId.create(1), 1, 10, 10)
+            skill_loadout_repo.save(loadout)
+            template = MonsterTemplate(
+                template_id=MonsterTemplateId(1),
+                name="M",
+                base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+                reward_info=RewardInfo(0, 0),
+                respawn_info=RespawnInfo(1, True),
+                race=Race.HUMAN,
+                faction=MonsterFactionEnum.ENEMY,
+                description="M",
+                skill_ids=[],
+            )
+            monster = MonsterAggregate.create(MonsterId(1), template, diurnal_id, skill_loadout=loadout)
+            monster.spawn(Coordinate(2, 2, 0), spot_id, WorldTick(0))
+            monster_repo.save(monster)
 
-            with mock.patch.object(service._behavior_service, "plan_action", side_effect=capture_actor):
+            build_observation_actor_ids = []
+            def capture_actor(actor_id_arg, map_agg, **kwargs):
+                from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
+                build_observation_actor_ids.append(actor_id_arg)
+                return BehaviorObservation()
+
+            with mock.patch.object(service._behavior_service, "build_observation", side_effect=capture_actor):
                 service.tick()
 
-            assert diurnal_id in plan_actor_ids
+            assert diurnal_id in build_observation_actor_ids
 
     class TestRespawnLoop:
         """リスポーンループのテスト"""

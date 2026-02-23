@@ -1,5 +1,5 @@
 import logging
-from typing import List, Callable, Any, Dict, Optional, Set
+from typing import List, Callable, Any, Dict, Optional, Set, TYPE_CHECKING
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
@@ -20,7 +20,6 @@ from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
-from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
 from ai_rpg_world.domain.world.value_object.behavior_context import (
     SkillSelectionContext,
@@ -65,6 +64,9 @@ from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.world.aggro_store import AggroStore
 
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.monster.action_resolver import IMonsterActionResolver
+
 
 class WorldSimulationApplicationService:
     """ワールド全体の進行・シミュレーションを管理するアプリケーションサービス"""
@@ -83,6 +85,9 @@ class WorldSimulationApplicationService:
         skill_loadout_repository: SkillLoadoutRepository,
         monster_skill_execution_domain_service: MonsterSkillExecutionDomainService,
         hit_box_factory: HitBoxFactory,
+        monster_action_resolver_factory: Callable[
+            [PhysicalMapAggregate, WorldObject], "IMonsterActionResolver"
+        ],
         hit_box_config_service: Optional[HitBoxConfigService] = None,
         hit_box_collision_service: Optional[HitBoxCollisionDomainService] = None,
         aggro_store: Optional[AggroStore] = None,
@@ -108,6 +113,7 @@ class WorldSimulationApplicationService:
         self._unit_of_work = unit_of_work
         self._aggro_store = aggro_store
         self._world_time_config_service = world_time_config_service or DefaultWorldTimeConfigService()
+        self._monster_action_resolver_factory = monster_action_resolver_factory
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def tick(self) -> WorldTick:
@@ -196,20 +202,19 @@ class WorldSimulationApplicationService:
                         time_of_day = time_of_day_from_tick(current_tick.value, ticks_per_day)
                         if not is_active_at_time(actor.component.active_time, time_of_day):
                             continue
-                        # Phase 6: 飢餓ティックと飢餓死判定
-                        if actor.component.tick_hunger_and_starvation():
-                            monster = self._monster_repository.find_by_world_object_id(actor.object_id)
-                            if monster:
-                                try:
-                                    monster.starve(current_tick)
-                                    self._monster_repository.save(monster)
-                                    self._unit_of_work.process_sync_events()
-                                except DomainException as e:
-                                    self._logger.warning(
-                                        "Starvation skipped for actor %s: %s",
-                                        actor.object_id,
-                                        str(e),
-                                    )
+                        # Phase 6: 飢餓ティックと飢餓死判定（Monster 集約の飢餓状態を参照）
+                        monster = self._monster_repository.find_by_world_object_id(actor.object_id)
+                        if monster and monster.tick_hunger(current_tick):
+                            try:
+                                monster.starve(current_tick)
+                                self._monster_repository.save(monster)
+                                self._unit_of_work.process_sync_events()
+                            except DomainException as e:
+                                self._logger.warning(
+                                    "Starvation skipped for actor %s: %s",
+                                    actor.object_id,
+                                    str(e),
+                                )
                             continue
                         # 寿命判定（経過ティック ≥ max_age_ticks で NATURAL 死亡）
                         monster = self._monster_repository.find_by_world_object_id(actor.object_id)
@@ -229,31 +234,31 @@ class WorldSimulationApplicationService:
                         skill_context = self._build_skill_context_for_actor(actor, physical_map, current_tick)
                         target_context = self._build_target_context_for_actor(actor, physical_map, current_tick)
                         growth_context = self._build_growth_context_for_actor(actor, current_tick)
-                        action = self._behavior_service.plan_action(
+
+                        monster = self._monster_repository.find_by_world_object_id(actor.object_id)
+                        if not monster:
+                            continue
+                        # モンスター: 観測を組み立て → Monster.decide（イベント発行）→ save → process_sync_events でハンドラが移動・スキル実行
+                        observation = self._behavior_service.build_observation(
                             actor.object_id,
                             physical_map,
-                            skill_context=skill_context,
                             target_context=target_context,
+                            skill_context=skill_context,
                             growth_context=growth_context,
+                            pack_rally_coordinate=None,
+                            current_tick=current_tick,
                         )
-                        
-                        if action.action_type == BehaviorActionType.MOVE:
-                            # 移動実行
-                            physical_map.move_object(actor.object_id, action.coordinate, current_tick)
-                        elif action.action_type == BehaviorActionType.USE_SKILL:
-                            # USE_SKILL 時は skill_slot_index が必ず指定されていることを保証
-                            if action.skill_slot_index is None:
-                                raise ApplicationException(
-                                    "USE_SKILL action must have skill_slot_index",
-                                    action_type=BehaviorActionType.USE_SKILL,
-                                )
-                            self._execute_monster_skill_in_tick(
-                                actor_id=actor.object_id,
-                                physical_map=physical_map,
-                                slot_index=action.skill_slot_index,
-                                current_tick=current_tick,
-                            )
-                        # WAIT の場合は何もしない
+                        resolver = self._monster_action_resolver_factory(
+                            physical_map, actor
+                        )
+                        monster.decide(
+                            observation,
+                            current_tick,
+                            actor.coordinate,
+                            resolver,
+                        )
+                        self._monster_repository.save(monster)
+                        self._unit_of_work.process_sync_events()
                     except DomainException as e:
                         # ドメインルール違反（移動不可など）は警告ログにとどめる
                         self._logger.warning(
@@ -269,9 +274,11 @@ class WorldSimulationApplicationService:
                         )
 
                 # 4.5 HitBoxの更新（移動・衝突判定）
+                # 同期イベントハンドラがマップを更新している可能性があるため、最新のマップを再取得してから HitBox 更新・保存する
+                latest_map = self._physical_map_repository.find_by_spot_id(physical_map.spot_id)
+                if latest_map is not None:
+                    physical_map = latest_map
                 self._update_hit_boxes(physical_map, current_tick)
-                
-                # マップの状態を保存
                 self._physical_map_repository.save(physical_map)
             
             return current_tick
