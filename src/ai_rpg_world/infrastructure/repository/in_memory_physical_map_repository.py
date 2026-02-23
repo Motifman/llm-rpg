@@ -2,6 +2,7 @@ from typing import List, Optional, Dict
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from .in_memory_repository_base import InMemoryRepositoryBase
 from .in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
@@ -49,3 +50,9 @@ class InMemoryPhysicalMapRepository(PhysicalMapRepository, InMemoryRepositoryBas
     
     def find_all(self) -> List[PhysicalMapAggregate]:
         return list(self._maps.values())
+
+    def generate_world_object_id(self) -> WorldObjectId:
+        """設置オブジェクト・落ちアイテム用の新規 WorldObjectId を発行する"""
+        wid = WorldObjectId(self._data_store.next_world_object_id)
+        self._data_store.next_world_object_id += 1
+        return wid

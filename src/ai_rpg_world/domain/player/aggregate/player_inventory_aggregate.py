@@ -290,6 +290,20 @@ class PlayerInventoryAggregate(AggregateRoot):
             )
         self._inventory_slots[slot_id] = None
 
+    def remove_item_for_placement(self, slot_id: SlotId) -> ItemInstanceId:
+        """設置のため、指定スロットのアイテムをインベントリから削除する。
+        イベントは発行しない（設置側で発行する想定）。
+        戻り値は削除したアイテムの ItemInstanceId。"""
+        item_instance_id = self.get_item_instance_id_by_slot(slot_id)
+        if item_instance_id is None:
+            raise ItemNotInSlotException(f"No item in inventory slot {slot_id.value}")
+        if item_instance_id in self._reserved_item_ids:
+            raise ItemReservedException(
+                f"Item {item_instance_id} is reserved and cannot be placed"
+            )
+        self._inventory_slots[slot_id] = None
+        return item_instance_id
+
     def request_equip_item(self, inventory_slot_id: SlotId, equipment_slot: EquipmentSlotType) -> None:
         """アイテム装備を要求する（装備要求イベントを発行）"""
         # インベントリスロットからアイテムを取得

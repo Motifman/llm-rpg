@@ -104,3 +104,32 @@ class TakeItemFromChestCommand:
             raise ValueError("chest_world_object_id must be greater than 0")
         if self.item_instance_id <= 0:
             raise ValueError("item_instance_id must be greater than 0")
+
+
+@dataclass(frozen=True)
+class PlaceObjectCommand:
+    """インベントリの指定スロットのアイテムをプレイヤー前方に設置するコマンド"""
+    player_id: int
+    spot_id: int
+    inventory_slot_id: int
+
+    def __post_init__(self):
+        if self.player_id <= 0:
+            raise ValueError("player_id must be greater than 0")
+        if self.spot_id <= 0:
+            raise ValueError("spot_id must be greater than 0")
+        if self.inventory_slot_id < 0:
+            raise ValueError("inventory_slot_id must be non-negative")
+
+
+@dataclass(frozen=True)
+class DestroyPlaceableCommand:
+    """プレイヤー前方の設置物を破壊してアイテム化し、インベントリに収納するコマンド"""
+    player_id: int
+    spot_id: int
+
+    def __post_init__(self):
+        if self.player_id <= 0:
+            raise ValueError("player_id must be greater than 0")
+        if self.spot_id <= 0:
+            raise ValueError("spot_id must be greater than 0")

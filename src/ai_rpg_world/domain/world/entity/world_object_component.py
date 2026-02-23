@@ -4,9 +4,11 @@ from typing import Dict, Any, Optional, Set, TYPE_CHECKING, Union, List
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.value_object.pack_id import PackId
     from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+    from ai_rpg_world.domain.world.entity.map_trigger import MapTrigger
 from ai_rpg_world.domain.world.exception.map_exception import LockedDoorException, ItemAlreadyInChestException
 from ai_rpg_world.domain.world.event.map_events import WorldObjectBlockingChangedEvent
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.enum.world_enum import (
     DirectionEnum,
     InteractionTypeEnum,
@@ -82,6 +84,13 @@ class WorldObjectComponent(ABC):
         サブクラスでオーバーライドする。デフォルトは何もしない。
         """
         pass
+
+    def get_trigger_on_step(self) -> Optional["MapTrigger"]:
+        """
+        このマスに乗ったときに発火するトリガーを返す。
+        罠など受動的トリガーを持つオブジェクトはオーバーライドする。デフォルトはNone。
+        """
+        return None
 
     @property
     def player_id(self) -> Optional["PlayerId"]:
@@ -228,6 +237,85 @@ class DoorComponent(WorldObjectComponent):
             "is_open": self.is_open,
             "is_locked": self.is_locked
         }
+
+
+class GroundItemComponent(WorldObjectComponent):
+    """落ちているアイテム用コンポーネント。当たり判定なし・同一座標に複数可。"""
+    def __init__(self, item_instance_id: ItemInstanceId):
+        self._item_instance_id = item_instance_id
+
+    @property
+    def item_instance_id(self) -> ItemInstanceId:
+        return self._item_instance_id
+
+    def get_type_name(self) -> str:
+        return "ground_item"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"item_instance_id": self._item_instance_id.value}
+
+
+class StaticPlaceableInnerComponent(WorldObjectComponent):
+    """設置物の内側でインタラクションがない場合のダミー（罠など）。"""
+    def get_type_name(self) -> str:
+        return "static"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {}
+
+
+class PlaceableComponent(WorldObjectComponent):
+    """プレイヤーが設置したオブジェクト用コンポーネント。破壊時に返却するItemSpecIdと、任意で踏んだら発火するトリガーを持つ。"""
+    def __init__(
+        self,
+        item_spec_id: ItemSpecId,
+        inner: WorldObjectComponent,
+        trigger_on_step: Optional["MapTrigger"] = None,
+    ):
+        self._item_spec_id = item_spec_id
+        self._inner = inner
+        self._trigger_on_step = trigger_on_step
+
+    @property
+    def item_spec_id(self) -> ItemSpecId:
+        return self._item_spec_id
+
+    def get_drop_item_spec_id(self) -> ItemSpecId:
+        """破壊時にインベントリに返すアイテムスペックID"""
+        return self._item_spec_id
+
+    def get_trigger_on_step(self) -> Optional["MapTrigger"]:
+        return self._trigger_on_step
+
+    def get_type_name(self) -> str:
+        return f"placeable({self._inner.get_type_name()})"
+
+    @property
+    def interaction_type(self) -> Optional[InteractionTypeEnum]:
+        return self._inner.interaction_type
+
+    @property
+    def interaction_data(self) -> Dict[str, Any]:
+        return self._inner.interaction_data
+
+    @property
+    def interaction_duration(self) -> int:
+        return self._inner.interaction_duration
+
+    def apply_interaction_from(
+        self,
+        actor_id: WorldObjectId,
+        target_id: WorldObjectId,
+        map_aggregate: "PhysicalMapAggregate",
+        current_tick: WorldTick,
+    ) -> None:
+        self._inner.apply_interaction_from(actor_id, target_id, map_aggregate, current_tick)
+
+    def to_dict(self) -> Dict[str, Any]:
+        d = {"item_spec_id": self._item_spec_id.value, "inner": self._inner.to_dict()}
+        if self._trigger_on_step:
+            d["trigger_on_step"] = self._trigger_on_step.to_dict()
+        return d
 
 
 class ActorComponent(WorldObjectComponent):

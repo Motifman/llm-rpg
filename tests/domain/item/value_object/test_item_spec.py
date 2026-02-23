@@ -273,3 +273,59 @@ class TestItemSpec:
         """不変性のテスト"""
         with pytest.raises(AttributeError):
             sample_item_spec.name = "New Name"
+
+
+class TestItemSpecPlaceable:
+    """ItemSpec 設置可能フラグと placeable_object_type のバリデーション"""
+
+    @pytest.fixture
+    def base_spec_params(self):
+        return {
+            "item_spec_id": ItemSpecId(100),
+            "name": "Placeable Chest",
+            "item_type": ItemType.OTHER,
+            "rarity": Rarity.COMMON,
+            "description": "A placeable chest",
+            "max_stack_size": MaxStackSize(1),
+        }
+
+    def test_placeable_with_valid_object_type(self, base_spec_params):
+        """設置可能で placeable_object_type が有効な値のとき作成できる"""
+        spec = ItemSpec(**base_spec_params, is_placeable=True, placeable_object_type="CHEST")
+        assert spec.is_placeable_item() is True
+        assert spec.get_placeable_object_type() == "CHEST"
+
+    def test_placeable_doer_sign_switch(self, base_spec_params):
+        """DOOR, SIGN, SWITCH も有効な設置先として作成できる"""
+        for obj_type in ("DOOR", "SIGN", "SWITCH", "GATE"):
+            spec = ItemSpec(**base_spec_params, is_placeable=True, placeable_object_type=obj_type)
+            assert spec.get_placeable_object_type() == obj_type
+
+    def test_non_placeable_default(self, base_spec_params):
+        """デフォルトは設置不可・placeable_object_type は None"""
+        spec = ItemSpec(**base_spec_params)
+        assert spec.is_placeable_item() is False
+        assert spec.get_placeable_object_type() is None
+
+    def test_placeable_without_object_type_raises(self, base_spec_params):
+        """設置可能なのに placeable_object_type が未設定ならバリデーションエラー"""
+        with pytest.raises(ItemSpecValidationException) as exc_info:
+            ItemSpec(**base_spec_params, is_placeable=True, placeable_object_type=None)
+        assert "placeable items must have placeable_object_type" in str(exc_info.value)
+
+    def test_placeable_with_empty_object_type_raises(self, base_spec_params):
+        """設置可能なのに placeable_object_type が空文字ならバリデーションエラー"""
+        with pytest.raises(ItemSpecValidationException):
+            ItemSpec(**base_spec_params, is_placeable=True, placeable_object_type="")
+
+    def test_placeable_with_invalid_object_type_raises(self, base_spec_params):
+        """設置可能なのに許可されていない placeable_object_type ならバリデーションエラー"""
+        with pytest.raises(ItemSpecValidationException) as exc_info:
+            ItemSpec(**base_spec_params, is_placeable=True, placeable_object_type="INVALID_TYPE")
+        assert "placeable_object_type must be one of" in str(exc_info.value)
+
+    def test_non_placeable_with_object_type_raises(self, base_spec_params):
+        """設置不可なのに placeable_object_type が設定されていればバリデーションエラー"""
+        with pytest.raises(ItemSpecValidationException) as exc_info:
+            ItemSpec(**base_spec_params, is_placeable=False, placeable_object_type="CHEST")
+        assert "non-placeable items must not have placeable_object_type" in str(exc_info.value)

@@ -781,3 +781,26 @@ class TestPlayerInventoryAggregate:
         aggregate.reserve_item(SlotId(0))
         with pytest.raises(ItemReservedException):
             aggregate.remove_item_for_storage(ItemInstanceId(100))
+
+    def test_remove_item_for_placement_success(self):
+        """remove_item_for_placement: 指定スロットのアイテムを削除し削除した ItemInstanceId を返す"""
+        aggregate = create_test_inventory_aggregate(inventory_slots={0: 100})
+        aggregate.clear_events()
+        returned_id = aggregate.remove_item_for_placement(SlotId(0))
+        assert returned_id == ItemInstanceId(100)
+        assert aggregate.get_item_instance_id_by_slot(SlotId(0)) is None
+        assert not aggregate.has_item(ItemInstanceId(100))
+        assert len(aggregate.get_events()) == 0
+
+    def test_remove_item_for_placement_raises_when_empty_slot(self):
+        """remove_item_for_placement: 空スロットの場合は ItemNotInSlotException"""
+        aggregate = create_test_inventory_aggregate()
+        with pytest.raises(ItemNotInSlotException):
+            aggregate.remove_item_for_placement(SlotId(0))
+
+    def test_remove_item_for_placement_raises_when_reserved(self):
+        """remove_item_for_placement: 予約中は ItemReservedException"""
+        aggregate = create_test_inventory_aggregate(inventory_slots={0: 100})
+        aggregate.reserve_item(SlotId(0))
+        with pytest.raises(ItemReservedException):
+            aggregate.remove_item_for_placement(SlotId(0))

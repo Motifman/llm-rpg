@@ -23,6 +23,8 @@ class ItemSpecReadModel:
     max_stack_size: MaxStackSize
     durability_max: Optional[int] = None
     equipment_type: Optional[EquipmentType] = None
+    is_placeable: bool = False
+    placeable_object_type: Optional[str] = None
 
     @classmethod
     def create_from_item_spec(
@@ -34,7 +36,9 @@ class ItemSpecReadModel:
         description: str,
         max_stack_size: MaxStackSize,
         durability_max: Optional[int] = None,
-        equipment_type: Optional[EquipmentType] = None
+        equipment_type: Optional[EquipmentType] = None,
+        is_placeable: bool = False,
+        placeable_object_type: Optional[str] = None,
     ) -> "ItemSpecReadModel":
         """ItemSpecからReadModelを作成"""
         return cls(
@@ -45,7 +49,9 @@ class ItemSpecReadModel:
             description=description,
             max_stack_size=max_stack_size,
             durability_max=durability_max,
-            equipment_type=equipment_type
+            equipment_type=equipment_type,
+            is_placeable=is_placeable,
+            placeable_object_type=placeable_object_type,
         )
 
     @property
@@ -58,6 +64,11 @@ class ItemSpecReadModel:
         """耐久度を持つことができるかどうか"""
         return self.durability_max is not None
 
+    @property
+    def is_placeable_item(self) -> bool:
+        """設置可能アイテムかどうか"""
+        return self.is_placeable
+
     def to_item_spec(self) -> "ItemSpec":
         """ItemSpecReadModelをItemSpecに変換"""
         from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
@@ -69,5 +80,7 @@ class ItemSpecReadModel:
             description=self.description,
             max_stack_size=self.max_stack_size,
             durability_max=self.durability_max,
-            equipment_type=self.equipment_type
+            equipment_type=self.equipment_type,
+            is_placeable=self.is_placeable,
+            placeable_object_type=self.placeable_object_type,
         )
