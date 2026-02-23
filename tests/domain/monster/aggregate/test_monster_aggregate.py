@@ -39,6 +39,7 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.world.enum.world_enum import BehaviorStateEnum, EcologyTypeEnum
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 
@@ -433,6 +434,145 @@ class TestMonsterAggregate:
             monster.apply_damage(100, WorldTick(10))
             with pytest.raises(MonsterAlreadyDeadException):
                 monster.starve(WorldTick(20))
+
+    class TestTickHunger:
+        """tick_hunger のテスト"""
+
+        def test_tick_hunger_returns_false_when_disabled(self, monster: MonsterAggregate, spot_id: SpotId):
+            """飢餓無効（starvation_ticks=0）のとき False"""
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            result = monster.tick_hunger(WorldTick(1))
+            assert result is False
+            assert monster.hunger == 0.0
+
+        def test_tick_hunger_increases_hunger_and_returns_true_when_starving(
+            self, monster_template: MonsterTemplate, respawn_info: RespawnInfo, skill_loadout: SkillLoadoutAggregate, spot_id: SpotId
+        ):
+            """飢餓有効で閾値超過持続で True、STARVATION 死亡"""
+            template = MonsterTemplate(
+                template_id=monster_template.template_id,
+                name=monster_template.name,
+                base_stats=monster_template.base_stats,
+                reward_info=monster_template.reward_info,
+                respawn_info=respawn_info,
+                race=monster_template.race,
+                faction=monster_template.faction,
+                description=monster_template.description,
+                hunger_increase_per_tick=0.5,
+                hunger_starvation_threshold=0.8,
+                starvation_ticks=2,
+            )
+            monster = MonsterAggregate.create(
+                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout
+            )
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0), initial_hunger=0.0)
+            assert monster.tick_hunger(WorldTick(1)) is False
+            assert monster.hunger == 0.5
+            monster.tick_hunger(WorldTick(2))
+            assert monster.hunger == 1.0
+            # tick(3): hunger>=threshold で starvation_timer=2 に達し True を返す
+            assert monster.tick_hunger(WorldTick(3)) is True
+            monster.starve(WorldTick(3))
+            assert monster.status == MonsterStatusEnum.DEAD
+
+        def test_tick_hunger_returns_false_when_not_spawned(self, monster: MonsterAggregate):
+            """未スポーンでは False"""
+            assert monster.tick_hunger(WorldTick(1)) is False
+
+    class TestRecordPreyKill:
+        """record_prey_kill のテスト"""
+
+        def test_record_prey_kill_reduces_hunger(self, monster_template: MonsterTemplate, respawn_info: RespawnInfo, skill_loadout: SkillLoadoutAggregate, spot_id: SpotId):
+            """獲物撃破で飢餓が減る"""
+            template = MonsterTemplate(
+                template_id=monster_template.template_id,
+                name=monster_template.name,
+                base_stats=monster_template.base_stats,
+                reward_info=monster_template.reward_info,
+                respawn_info=respawn_info,
+                race=monster_template.race,
+                faction=monster_template.faction,
+                description=monster_template.description,
+                starvation_ticks=10,
+                hunger_decrease_on_prey_kill=0.3,
+            )
+            monster = MonsterAggregate.create(
+                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout
+            )
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0), initial_hunger=0.8)
+            monster.record_prey_kill(0.3)
+            assert monster.hunger == pytest.approx(0.5)
+
+        def test_record_prey_kill_when_dead_raises(self, monster_template: MonsterTemplate, respawn_info: RespawnInfo, skill_loadout: SkillLoadoutAggregate, spot_id: SpotId):
+            """死亡時は MonsterAlreadyDeadException"""
+            template = MonsterTemplate(
+                template_id=monster_template.template_id,
+                name=monster_template.name,
+                base_stats=monster_template.base_stats,
+                reward_info=monster_template.reward_info,
+                respawn_info=respawn_info,
+                race=monster_template.race,
+                faction=monster_template.faction,
+                description=monster_template.description,
+                starvation_ticks=10,
+            )
+            monster = MonsterAggregate.create(
+                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout
+            )
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            monster.apply_damage(999, WorldTick(10))
+            with pytest.raises(MonsterAlreadyDeadException):
+                monster.record_prey_kill(0.2)
+
+    class TestRecordAttackedBy:
+        """record_attacked_by のテスト"""
+
+        def test_record_attacked_by_sets_chase(self, monster: MonsterAggregate, spot_id: SpotId):
+            """攻撃者を記録すると CHASE に遷移（NORMAL・HP十分）"""
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            attacker_id = WorldObjectId.create(200)
+            attacker_coord = Coordinate(5, 5, 0)
+            monster.record_attacked_by(attacker_id, attacker_coord, WorldTick(1))
+            assert monster.behavior_target_id == attacker_id
+            assert monster.behavior_last_known_position == attacker_coord
+            assert monster.behavior_state == BehaviorStateEnum.CHASE
+
+        def test_record_attacked_by_flee_only_sets_flee(self, monster_template: MonsterTemplate, respawn_info: RespawnInfo, skill_loadout: SkillLoadoutAggregate, spot_id: SpotId):
+            """FLEE_ONLY のとき FLEE に遷移"""
+            template = MonsterTemplate(
+                template_id=monster_template.template_id,
+                name=monster_template.name,
+                base_stats=monster_template.base_stats,
+                reward_info=monster_template.reward_info,
+                respawn_info=respawn_info,
+                race=monster_template.race,
+                faction=monster_template.faction,
+                description=monster_template.description,
+                ecology_type=EcologyTypeEnum.FLEE_ONLY,
+            )
+            monster = MonsterAggregate.create(
+                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout
+            )
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            monster.record_attacked_by(WorldObjectId.create(99), Coordinate(1, 1, 0), WorldTick(1))
+            assert monster.behavior_state == BehaviorStateEnum.FLEE
+            assert monster.behavior_target_id == WorldObjectId.create(99)
+
+        def test_record_attacked_by_when_not_spawned_raises(self, monster: MonsterAggregate):
+            """未スポーン（DEAD 状態）では MonsterAlreadyDeadException"""
+            with pytest.raises(MonsterAlreadyDeadException):
+                monster.record_attacked_by(
+                    WorldObjectId.create(99), Coordinate(1, 1, 0), WorldTick(1)
+                )
+
+        def test_record_attacked_by_when_dead_raises(self, monster: MonsterAggregate, spot_id: SpotId):
+            """死亡時は MonsterAlreadyDeadException"""
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            monster.apply_damage(999, WorldTick(10))
+            with pytest.raises(MonsterAlreadyDeadException):
+                monster.record_attacked_by(
+                    WorldObjectId.create(99), Coordinate(1, 1, 0), WorldTick(20)
+                )
 
     class TestDieFromOldAge:
         """die_from_old_age のテスト"""

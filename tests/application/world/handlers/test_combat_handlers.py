@@ -339,8 +339,8 @@ class TestHitBoxDamageHandler:
         assert target.hp.value == 85
         assert len(target._active_effects) == 0 # クリーンアップされていること
 
-    def test_monster_hp_synced_to_map_component(self, setup):
-        """モンスターにダメージ適用後、同一マップ上の AutonomousBehaviorComponent.hp_percentage が同期されること"""
+    def test_monster_hp_updated_in_aggregate_only(self, setup):
+        """モンスターにダメージ適用後、Monster 集約の HP のみが更新されること（Component への HP 同期は行わない）"""
         s = setup
         pmap = _create_map()
         # プレイヤー（攻撃者）
@@ -374,14 +374,15 @@ class TestHitBoxDamageHandler:
         with s["uow"]:
             s["handler"].handle(event)
 
-        # 集約の HP が減っていること (50 - 8/2 = 46 ダメージ → 100 - 46 = 54)
+        # Monster 集約の HP が減っていること (50 - 8/2 = 46 ダメージ → 100 - 46 = 54)
         updated_monster = s["monster_repo"].find_by_world_object_id(monster_world_object_id)
         assert updated_monster.hp.value == 54
-        # マップ上のコンポーネントの hp_percentage が同期されていること
+        # HP の真実の源は Monster 集約。Component には同期しない（モンスター情報は Monster ドメインに集約）
         updated_map = s["map_repo"].find_by_spot_id(SpotId(1))
         target_obj = updated_map.get_object(monster_world_object_id)
         assert isinstance(target_obj.component, AutonomousBehaviorComponent)
-        assert target_obj.component.hp_percentage == pytest.approx(0.54, rel=1e-5)
+        # 初期値のまま（同期しないため）
+        assert target_obj.component.hp_percentage == pytest.approx(1.0, rel=1e-5)
 
     def test_skip_damage_when_target_already_dead(self, setup):
         # Given
@@ -487,8 +488,9 @@ class TestCombatAggroHandler:
         uow, _ = InMemoryUnitOfWork.create_with_event_publisher(create_uow, data_store)
         
         map_repo = InMemoryPhysicalMapRepository(data_store, uow)
+        monster_repo = InMemoryMonsterAggregateRepository(data_store, uow)
         hit_box_repo = InMemoryHitBoxRepository(data_store, uow)
-        handler = CombatAggroHandler(hit_box_repo, map_repo, uow)
+        handler = CombatAggroHandler(hit_box_repo, map_repo, monster_repo, uow)
         return locals()
 
     def test_aggro_skipped_when_attacker_not_actor(self, setup):
@@ -574,11 +576,12 @@ class TestCombatAggroHandler:
         assert True
 
     def test_aggro_store_receives_aggro_when_target_is_autonomous(self, setup):
-        # Given: アタッカーと被弾者ともにアクター、被弾者は AutonomousBehaviorComponent、aggro_store を注入
+        # Given: アタッカーと被弾者ともにアクター、被弾者はモンスター、aggro_store を注入
         s = setup
         aggro_store = InMemoryAggroStore()
         handler = CombatAggroHandler(
-            s["hit_box_repo"], s["map_repo"], s["uow"], aggro_store=aggro_store
+            s["hit_box_repo"], s["map_repo"], s["monster_repo"], s["uow"],
+            aggro_store=aggro_store,
         )
         pmap = _create_map()
         attacker_id = WorldObjectId(100)
@@ -591,6 +594,8 @@ class TestCombatAggroHandler:
         pmap.add_object(attacker_obj)
         pmap.add_object(monster_obj)
         s["map_repo"].save(pmap)
+        monster = _create_monster(1, 300, Coordinate(1, 1, 0))
+        s["monster_repo"].save(monster)
 
         hb = HitBoxAggregate.create(
             hit_box_id=HitBoxId.create(1),
@@ -615,10 +620,10 @@ class TestCombatAggroHandler:
         with s["uow"]:
             handler.handle(event)
 
-        # Then: 被弾者側のコンポーネントに spot_target が呼ばれ、aggro_store にヘイトが加算されている
-        updated_map = s["map_repo"].find_by_spot_id(SpotId(1))
-        target = updated_map.get_object(target_id)
-        assert target.component.target_id == attacker_id
+        # Then: 被弾者（モンスター）集約に record_attacked_by が反映され、aggro_store にヘイトが加算されている
+        updated_monster = s["monster_repo"].find_by_world_object_id(target_id)
+        assert updated_monster is not None
+        assert updated_monster.behavior_target_id == attacker_id
         threat = aggro_store.get_threat_by_attacker(SpotId(1), attacker_id)
         assert threat == {target_id: 1}
 
@@ -628,7 +633,7 @@ class TestCombatAggroHandler:
         aggro_store = InMemoryAggroStore()
         time_provider = InMemoryGameTimeProvider(initial_tick=50)
         handler = CombatAggroHandler(
-            s["hit_box_repo"], s["map_repo"], s["uow"],
+            s["hit_box_repo"], s["map_repo"], s["monster_repo"], s["uow"],
             aggro_store=aggro_store,
             game_time_provider=time_provider,
         )
@@ -641,6 +646,7 @@ class TestCombatAggroHandler:
             component=AutonomousBehaviorComponent(state=BehaviorStateEnum.IDLE),
         ))
         s["map_repo"].save(pmap)
+        s["monster_repo"].save(_create_monster(1, 300, Coordinate(1, 1, 0)))
         hb = HitBoxAggregate.create(
             hit_box_id=HitBoxId.create(1),
             spot_id=SpotId(1),
@@ -682,6 +688,7 @@ class TestCombatAggroHandler:
         pmap.add_object(attacker_obj)
         pmap.add_object(monster_obj)
         s["map_repo"].save(pmap)
+        s["monster_repo"].save(_create_monster(1, 300, Coordinate(1, 1, 0)))
 
         hb = HitBoxAggregate.create(
             hit_box_id=HitBoxId.create(1),
@@ -705,10 +712,10 @@ class TestCombatAggroHandler:
         with s["uow"]:
             s["handler"].handle(event)
 
-        # Then: エラーにならず、spot_target は反映されている（既存の test と同様）
-        updated_map = s["map_repo"].find_by_spot_id(SpotId(1))
-        target = updated_map.get_object(WorldObjectId(300))
-        assert target.component.target_id == WorldObjectId(100)
+        # Then: エラーにならず、モンスター集約に record_attacked_by が反映されている
+        updated_monster = s["monster_repo"].find_by_world_object_id(WorldObjectId(300))
+        assert updated_monster is not None
+        assert updated_monster.behavior_target_id == WorldObjectId(100)
 
     def test_handle_hit_box_not_found(self, setup):
         """HitBox が存在しないイベントの場合は例外を出さずに return する"""
@@ -1142,11 +1149,11 @@ class TestCombatIntegration:
         weather_zone_repo = InMemoryWeatherZoneRepository(data_store, uow)
 
         damage_handler = HitBoxDamageHandler(hit_box_repo, map_repo, player_repo, monster_repo, time_provider, uow)
-        aggro_handler = CombatAggroHandler(hit_box_repo, map_repo, uow)
+        aggro_handler = CombatAggroHandler(hit_box_repo, map_repo, monster_repo, uow)
         reward_handler = MonsterDeathRewardHandler(player_repo, inventory_repo, loot_repo, item_spec_repo, item_repo, uow)
         from ai_rpg_world.application.world.handlers.monster_death_hunger_handler import MonsterDeathHungerHandler
         from ai_rpg_world.application.world.handlers.monster_died_map_removal_handler import MonsterDiedMapRemovalHandler
-        hunger_handler = MonsterDeathHungerHandler(map_repo, monster_repo, uow)
+        hunger_handler = MonsterDeathHungerHandler(monster_repo, uow)
         map_removal_handler = MonsterDiedMapRemovalHandler(map_repo, monster_repo, uow)
         monster_spawned_map_placement_handler = MonsterSpawnedMapPlacementHandler(
             monster_repository=monster_repo,
