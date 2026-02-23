@@ -24,6 +24,7 @@ from ai_rpg_world.domain.world.value_object.area import PointArea
 from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.domain.world.value_object.connection import Connection
 from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, SpotCategoryEnum
+from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
@@ -447,3 +448,55 @@ class TestProcessHungerMigrationForSpot:
         assert after is not None
         assert after.spot_id == spot1_id
         assert after.coordinate == Coordinate(2, 2, 0)
+
+    def test_skips_migration_when_transition_raises_domain_exception(
+        self,
+        data_store,
+        spot1_id,
+        spot2_id,
+        map_repo,
+        monster_repo,
+        world_map_repo,
+        map1_with_gateway,
+        map2,
+        migrant_monster_on_map1,
+    ):
+        """transition_object が DomainException を投げた場合は移住をスキップし、モンスターは元のスポットに残る"""
+        class FailingMapTransitionService(MapTransitionService):
+            def transition_object(self, from_map, to_map, object_id, landing_coordinate):
+                raise DomainException("Transition blocked for test")
+
+        uow = InMemoryUnitOfWork(
+            unit_of_work_factory=lambda: None,
+            data_store=data_store,
+        )
+        service = WorldSimulationApplicationService(
+            time_provider=None,
+            physical_map_repository=map_repo,
+            weather_zone_repository=None,
+            player_status_repository=None,
+            hit_box_repository=None,
+            behavior_service=None,
+            weather_config_service=None,
+            unit_of_work=uow,
+            monster_repository=monster_repo,
+            skill_loadout_repository=None,
+            monster_skill_execution_domain_service=None,
+            hit_box_factory=None,
+            monster_action_resolver_factory=None,
+            loot_table_repository=InMemoryLootTableRepository(),
+            world_map_repository=world_map_repo,
+            map_transition_service=FailingMapTransitionService(),
+        )
+        physical_map = map_repo.find_by_spot_id(spot1_id)
+        assert physical_map is not None
+        with uow:
+            service._process_hunger_migration_for_spot(
+                physical_map, WorldTick(1), {spot1_id}
+            )
+        after = monster_repo.find_by_world_object_id(WorldObjectId(1000))
+        assert after is not None
+        assert after.spot_id == spot1_id
+        assert after.coordinate == Coordinate(2, 2, 0)
+        map1_after = map_repo.find_by_spot_id(spot1_id)
+        assert map1_after.get_object(WorldObjectId(1000)) is not None

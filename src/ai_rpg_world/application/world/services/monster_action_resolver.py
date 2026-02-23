@@ -4,6 +4,7 @@ PhysicalMapAggregate と PathfindingService, SkillSelectionPolicy を使って
 移動先座標またはスキルスロットを決定する。
 """
 
+import logging
 import math
 import random
 from typing import Optional, Callable
@@ -62,6 +63,7 @@ class MonsterActionResolverImpl:
             raise TypeError(
                 "MonsterActionResolverImpl requires actor with AutonomousBehaviorComponent"
             )
+        self._logger = logging.getLogger(self.__class__.__name__)
         self._map_aggregate = map_aggregate
         self._pathfinding_service = pathfinding_service
         self._skill_policy = skill_policy
@@ -168,8 +170,13 @@ class MonsterActionResolverImpl:
             )
             if len(path) > 1:
                 return path[1]
-        except (PathNotFoundException, InvalidPathRequestException):
-            pass
+        except (PathNotFoundException, InvalidPathRequestException) as e:
+            self._logger.debug(
+                "Path calculation failed for %s -> %s, skipping move: %s",
+                start,
+                goal,
+                e,
+            )
         return None
 
     def _calculate_chase_move(

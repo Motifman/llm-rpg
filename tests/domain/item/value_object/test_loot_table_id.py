@@ -23,22 +23,22 @@ class TestLootTableId:
 
     def test_invalid_id_zero(self):
         """無効なID（0）のテスト"""
-        with pytest.raises(LootTableIdValidationException):
+        with pytest.raises(LootTableIdValidationException, match="LootTableId must be positive: 0"):
             LootTableId(0)
 
     def test_invalid_id_negative(self):
         """無効なID（負の値）のテスト"""
-        with pytest.raises(LootTableIdValidationException):
+        with pytest.raises(LootTableIdValidationException, match="LootTableId must be positive: -1"):
             LootTableId(-1)
 
     def test_invalid_string_non_numeric(self):
         """非数値文字列のテスト"""
-        with pytest.raises(LootTableIdValidationException):
+        with pytest.raises(LootTableIdValidationException, match="Invalid LootTableId format: abc"):
             LootTableId.create("abc")
 
     def test_invalid_string_empty(self):
         """空文字列のテスト"""
-        with pytest.raises(LootTableIdValidationException):
+        with pytest.raises(LootTableIdValidationException, match="Invalid LootTableId format:"):
             LootTableId.create("")
 
     def test_str_conversion(self):
