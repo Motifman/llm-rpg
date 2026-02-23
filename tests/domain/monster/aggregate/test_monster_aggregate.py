@@ -2,7 +2,11 @@ import pytest
 from unittest.mock import patch
 
 from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
+from ai_rpg_world.domain.monster.aggregate.monster_aggregate import (
+    MonsterAggregate,
+    MAX_FEED_MEMORIES,
+)
+from ai_rpg_world.domain.monster.value_object.feed_memory_entry import FeedMemoryEntry
 from ai_rpg_world.domain.monster.enum.monster_enum import (
     DeathCauseEnum,
     MonsterFactionEnum,
@@ -523,6 +527,63 @@ class TestMonsterAggregate:
             monster.apply_damage(999, WorldTick(10))
             with pytest.raises(MonsterAlreadyDeadException):
                 monster.record_prey_kill(0.2)
+
+    class TestRememberFeed:
+        """餌場記憶（remember_feed / behavior_last_known_feed）のテスト"""
+
+        def test_remember_feed_adds_entry(self, monster: MonsterAggregate, spot_id: SpotId):
+            """ALIVE 時に remember_feed で記憶が 1 件追加される"""
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            assert monster.behavior_last_known_feed == []
+            monster.remember_feed(WorldObjectId.create(100), Coordinate(1, 2, 0))
+            assert len(monster.behavior_last_known_feed) == 1
+            assert monster.behavior_last_known_feed[0].object_id == WorldObjectId.create(100)
+            assert monster.behavior_last_known_feed[0].coordinate == Coordinate(1, 2, 0)
+
+        def test_remember_feed_lru_evicts_oldest(self, monster: MonsterAggregate, spot_id: SpotId):
+            """MAX_FEED_MEMORIES を超えると古い記憶が追い出される"""
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            for i in range(MAX_FEED_MEMORIES + 1):
+                monster.remember_feed(
+                    WorldObjectId.create(100 + i),
+                    Coordinate(i, i, 0),
+                )
+            assert len(monster.behavior_last_known_feed) == MAX_FEED_MEMORIES
+            # 最初の 1 件（object_id=100）が追い出され、100+1, 100+2, 100+3 が残る
+            ids = [e.object_id for e in monster.behavior_last_known_feed]
+            assert WorldObjectId.create(100) not in ids
+            assert WorldObjectId.create(101) in ids
+            assert WorldObjectId.create(102) in ids
+            assert WorldObjectId.create(103) in ids
+
+        def test_remember_feed_same_object_id_moves_to_end(self, monster: MonsterAggregate, spot_id: SpotId):
+            """同じ object_id で remember_feed すると末尾に移動（更新）"""
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            monster.remember_feed(WorldObjectId.create(100), Coordinate(1, 0, 0))
+            monster.remember_feed(WorldObjectId.create(101), Coordinate(2, 0, 0))
+            monster.remember_feed(WorldObjectId.create(100), Coordinate(1, 1, 0))  # 更新
+            assert len(monster.behavior_last_known_feed) == 2
+            assert monster.behavior_last_known_feed[0].object_id == WorldObjectId.create(101)
+            assert monster.behavior_last_known_feed[1].object_id == WorldObjectId.create(100)
+            assert monster.behavior_last_known_feed[1].coordinate == Coordinate(1, 1, 0)
+
+        def test_remember_feed_when_dead_does_nothing(self, monster: MonsterAggregate, spot_id: SpotId):
+            """死亡時は remember_feed で何も追加されない（例外なし）"""
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            monster.apply_damage(999, WorldTick(10))
+            monster.remember_feed(WorldObjectId.create(100), Coordinate(1, 0, 0))
+            assert monster.behavior_last_known_feed == []
+
+        def test_behavior_last_known_feed_cleared_on_spawn(self, monster: MonsterAggregate, spot_id: SpotId, respawn_info: RespawnInfo):
+            """spawn 時 _initialize_status で餌場記憶がクリアされる"""
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            monster.remember_feed(WorldObjectId.create(100), Coordinate(1, 0, 0))
+            assert len(monster.behavior_last_known_feed) == 1
+            monster.apply_damage(999, WorldTick(10))
+            # respawn_interval を満たす tick でリスポーン
+            respawn_tick = 10 + respawn_info.respawn_interval_ticks
+            monster.respawn(Coordinate(5, 5, 0), WorldTick(respawn_tick), spot_id)
+            assert monster.behavior_last_known_feed == []
 
     class TestRecordAttackedBy:
         """record_attacked_by のテスト"""

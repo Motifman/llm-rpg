@@ -672,12 +672,14 @@ class HarvestableComponent(WorldObjectComponent):
             return
         self._current_quantity = available - 1
         self._last_update_tick = current_tick
+        target_coordinate = map_aggregate.get_object(target_id).coordinate
         map_aggregate.add_event(
             MonsterFedEvent.create(
                 aggregate_id=target_id,
                 aggregate_type="WorldObject",
                 actor_id=actor_id,
                 target_id=target_id,
+                target_coordinate=target_coordinate,
             )
         )
 
