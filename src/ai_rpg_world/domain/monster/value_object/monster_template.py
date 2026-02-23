@@ -1,6 +1,8 @@
 from dataclasses import dataclass
-from typing import List, Optional, Set
+from typing import List, Optional, Set, TYPE_CHECKING
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.monster.value_object.growth_stage import GrowthStage, MAX_GROWTH_STAGES
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
@@ -42,6 +44,10 @@ class MonsterTemplate:
     starvation_ticks: int = 0
     # 寿命（Optional[int]、None/0 で無効。経過ティック ≥ max_age_ticks で NATURAL 死亡）
     max_age_ticks: Optional[int] = None
+    # 採食: この値以上で餌探し優先。1回の採食で減らす飢餓量。餌とみなす LootTable の item_spec_id 集合
+    forage_threshold: float = 1.0
+    hunger_decrease_on_feed: float = 0.0
+    preferred_feed_item_spec_ids: Optional[Set["ItemSpecId"]] = None
 
     def __post_init__(self):
         object.__setattr__(self, "skill_ids", self.skill_ids or [])
@@ -49,6 +55,7 @@ class MonsterTemplate:
         object.__setattr__(self, "threat_races", self.threat_races or frozenset())
         object.__setattr__(self, "prey_races", self.prey_races or frozenset())
         object.__setattr__(self, "growth_stages", self.growth_stages or [])
+        object.__setattr__(self, "preferred_feed_item_spec_ids", self.preferred_feed_item_spec_ids or frozenset())
         if not isinstance(self.skill_ids, list):
             raise MonsterTemplateValidationException(
                 f"skill_ids must be a list, got {type(self.skill_ids).__name__}"
@@ -153,4 +160,12 @@ class MonsterTemplate:
         if self.max_age_ticks is not None and self.max_age_ticks < 0:
             raise MonsterTemplateValidationException(
                 f"max_age_ticks cannot be negative: {self.max_age_ticks}"
+            )
+        if not (0.0 <= self.forage_threshold <= 1.0):
+            raise MonsterTemplateValidationException(
+                f"forage_threshold must be between 0.0 and 1.0: {self.forage_threshold}"
+            )
+        if self.hunger_decrease_on_feed < 0.0:
+            raise MonsterTemplateValidationException(
+                f"hunger_decrease_on_feed cannot be negative: {self.hunger_decrease_on_feed}"
             )

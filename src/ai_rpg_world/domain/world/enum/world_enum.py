@@ -73,6 +73,7 @@ class BehaviorActionType(Enum):
     """AIが決定したアクションの種類"""
     MOVE = "MOVE"
     USE_SKILL = "USE_SKILL"
+    INTERACT = "INTERACT"
     WAIT = "WAIT"
 
 

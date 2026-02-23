@@ -95,7 +95,7 @@ class TestHarvestCommandService:
             Tile(Coordinate(1, 0, 0), TerrainType.grass())
         ]
         
-        harvestable = HarvestableComponent(loot_table_id="iron_loot", harvest_duration=5, stamina_cost=10)
+        harvestable = HarvestableComponent(loot_table_id=1, harvest_duration=5, stamina_cost=10)
         target_obj = WorldObject(target_id, Coordinate(1, 0, 0), ObjectTypeEnum.RESOURCE, component=harvestable)
         actor_comp = ActorComponent(direction=DirectionEnum.EAST) # ターゲットの方を向かせる
         actor_obj = WorldObject(actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.NPC, component=actor_comp)
@@ -104,7 +104,7 @@ class TestHarvestCommandService:
         s["physical_map_repo"].save(physical_map)
         
         # ドロップテーブルの作成
-        loot_table = LootTableAggregate.create("iron_loot", [LootEntry(ItemSpecId(9), weight=100)]) # 鉄鉱石(ID:9)確定
+        loot_table = LootTableAggregate.create(1, [LootEntry(ItemSpecId(9), weight=100)]) # 鉄鉱石(ID:9)確定
         s["loot_table_repo"].save(loot_table)
         
         # プレイヤー状態の作成
@@ -183,7 +183,7 @@ class TestHarvestCommandService:
         from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
         tiles = [Tile(Coordinate(0, 0, 0), TerrainType.grass()), Tile(Coordinate(1, 0, 0), TerrainType.grass())]
         
-        harvestable = HarvestableComponent(loot_table_id="iron_loot", stamina_cost=10)
+        harvestable = HarvestableComponent(loot_table_id=1, stamina_cost=10)
         target_obj = WorldObject(target_id, Coordinate(1, 0, 0), ObjectTypeEnum.RESOURCE, component=harvestable)
         actor_obj = WorldObject(actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.NPC, component=ActorComponent(direction=DirectionEnum.EAST))
         
@@ -219,7 +219,7 @@ class TestHarvestCommandService:
         from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
         tiles = [Tile(Coordinate(0, 0, 0), TerrainType.grass()), Tile(Coordinate(1, 0, 0), TerrainType.grass())]
         
-        harvestable = HarvestableComponent(loot_table_id="iron_loot", stamina_cost=10)
+        harvestable = HarvestableComponent(loot_table_id=1, stamina_cost=10)
         target_obj = WorldObject(target_id, Coordinate(1, 0, 0), ObjectTypeEnum.RESOURCE, component=harvestable)
         from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
         actor_obj = WorldObject(actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.NPC, component=ActorComponent(direction=DirectionEnum.EAST))
@@ -298,7 +298,7 @@ class TestHarvestCommandService:
         spot_id = SpotId.create(1)
         actor_id = WorldObjectId(1)
         target_id = WorldObjectId(2)
-        harvestable = HarvestableComponent(loot_table_id="iron_loot", harvest_duration=5)
+        harvestable = HarvestableComponent(loot_table_id=1, harvest_duration=5)
         target_obj = WorldObject(target_id, Coordinate(1, 0, 0), ObjectTypeEnum.RESOURCE, component=harvestable)
         actor_comp = ActorComponent(direction=DirectionEnum.EAST)
         actor_obj = WorldObject(actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.NPC, component=actor_comp)
@@ -326,7 +326,7 @@ class TestHarvestCommandService:
         spot_id = SpotId.create(1)
         actor_id = WorldObjectId(1)
         target_id = WorldObjectId(2)
-        harvestable = HarvestableComponent(loot_table_id="missing_loot", harvest_duration=5)
+        harvestable = HarvestableComponent(loot_table_id=998, harvest_duration=5)
         target_obj = WorldObject(target_id, Coordinate(1, 0, 0), ObjectTypeEnum.RESOURCE, component=harvestable)
         from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
         actor_obj = WorldObject(actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.NPC, component=ActorComponent(direction=DirectionEnum.EAST))
@@ -341,7 +341,7 @@ class TestHarvestCommandService:
 
         # 完了試行
         from ai_rpg_world.application.harvest.exceptions.command.harvest_command_exception import HarvestCommandException
-        with pytest.raises(HarvestCommandException, match="Loot table missing_loot not found"):
+        with pytest.raises(HarvestCommandException, match="Loot table 998 not found"):
             service.finish_harvest(FinishHarvestCommand(actor_id="1", target_id="2", spot_id="1", current_tick=105))
 
     def test_finish_harvest_missing_item_spec(self, setup_service):
@@ -355,7 +355,7 @@ class TestHarvestCommandService:
         spot_id = SpotId.create(1)
         actor_id = WorldObjectId(1)
         target_id = WorldObjectId(2)
-        harvestable = HarvestableComponent(loot_table_id="iron_loot", harvest_duration=5)
+        harvestable = HarvestableComponent(loot_table_id=1, harvest_duration=5)
         target_obj = WorldObject(target_id, Coordinate(1, 0, 0), ObjectTypeEnum.RESOURCE, component=harvestable)
         from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
         actor_obj = WorldObject(actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.NPC, component=ActorComponent(direction=DirectionEnum.EAST))
@@ -369,7 +369,7 @@ class TestHarvestCommandService:
         service.start_harvest(StartHarvestCommand(actor_id="1", target_id="2", spot_id="1", current_tick=100))
 
         # ドロップテーブルはあるが、その中のアイテムIDに対応する仕様がない
-        loot_table = LootTableAggregate.create("iron_loot", [LootEntry(ItemSpecId(999), weight=100)])
+        loot_table = LootTableAggregate.create(1, [LootEntry(ItemSpecId(999), weight=100)])
         s["loot_table_repo"].save(loot_table)
         # item_spec_repo には ID 999 を登録しない
         
@@ -389,7 +389,7 @@ class TestHarvestCommandService:
         spot_id = SpotId.create(1)
         actor_id = WorldObjectId(1)
         target_id = WorldObjectId(2)
-        harvestable = HarvestableComponent(loot_table_id="iron_loot", harvest_duration=5)
+        harvestable = HarvestableComponent(loot_table_id=1, harvest_duration=5)
         target_obj = WorldObject(target_id, Coordinate(1, 0, 0), ObjectTypeEnum.RESOURCE, component=harvestable)
         from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
         actor_obj = WorldObject(actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.NPC, component=ActorComponent(direction=DirectionEnum.EAST))
@@ -403,7 +403,7 @@ class TestHarvestCommandService:
         # 開始
         service.start_harvest(StartHarvestCommand(actor_id="1", target_id="2", spot_id="1", current_tick=100))
 
-        loot_table = LootTableAggregate.create("iron_loot", [LootEntry(ItemSpecId(9), weight=100)])
+        loot_table = LootTableAggregate.create(1, [LootEntry(ItemSpecId(9), weight=100)])
         s["loot_table_repo"].save(loot_table)
         
         # ItemSpecReadModel を保存する
@@ -453,7 +453,7 @@ class TestHarvestCommandService:
         # 距離2の場所に配置
         tiles = [Tile(Coordinate(0, 0, 0), TerrainType.grass()), Tile(Coordinate(1, 0, 0), TerrainType.grass()), Tile(Coordinate(2, 0, 0), TerrainType.grass())]
         
-        harvestable = HarvestableComponent(loot_table_id="iron_loot")
+        harvestable = HarvestableComponent(loot_table_id=1)
         target_obj = WorldObject(target_id, Coordinate(2, 0, 0), ObjectTypeEnum.RESOURCE, component=harvestable)
         actor_obj = WorldObject(actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.NPC, component=ActorComponent(direction=DirectionEnum.EAST))
         
@@ -480,7 +480,7 @@ class TestHarvestCommandService:
         from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
         tiles = [Tile(Coordinate(0, 0, 0), TerrainType.grass()), Tile(Coordinate(1, 0, 0), TerrainType.grass())]
         
-        harvestable = HarvestableComponent(loot_table_id="iron_loot")
+        harvestable = HarvestableComponent(loot_table_id=1)
         target_obj = WorldObject(target_id, Coordinate(1, 0, 0), ObjectTypeEnum.RESOURCE, component=harvestable)
         # ターゲットはEASTだが、アクターはWESTを向いている
         actor_obj = WorldObject(actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.NPC, component=ActorComponent(direction=DirectionEnum.WEST))
@@ -509,7 +509,7 @@ class TestHarvestCommandService:
         from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
         tiles = [Tile(Coordinate(0, 0, 0), TerrainType.grass()), Tile(Coordinate(1, 0, 0), TerrainType.grass()), Tile(Coordinate(1, 1, 0), TerrainType.grass())]
         
-        harvestable = HarvestableComponent(loot_table_id="iron_loot")
+        harvestable = HarvestableComponent(loot_table_id=1)
         target_obj = WorldObject(target_id, Coordinate(1, 0, 0), ObjectTypeEnum.RESOURCE, component=harvestable)
         actor1_obj = WorldObject(actor1_id, Coordinate(0, 0, 0), ObjectTypeEnum.NPC, component=ActorComponent(direction=DirectionEnum.EAST))
         actor2_obj = WorldObject(actor2_id, Coordinate(1, 1, 0), ObjectTypeEnum.NPC, component=ActorComponent(direction=DirectionEnum.NORTH)) 
@@ -545,7 +545,7 @@ class TestHarvestCommandService:
         from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
         tiles = [Tile(Coordinate(0, 0, 0), TerrainType.grass()), Tile(Coordinate(1, 0, 0), TerrainType.grass())]
         
-        harvestable = HarvestableComponent(loot_table_id="iron_loot")
+        harvestable = HarvestableComponent(loot_table_id=1)
         target_obj = WorldObject(target_id, Coordinate(1, 0, 0), ObjectTypeEnum.RESOURCE, component=harvestable)
         actor_obj = WorldObject(actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.NPC, component=ActorComponent(direction=DirectionEnum.EAST))
         # アクターをビジーにする
@@ -574,7 +574,7 @@ class TestHarvestCommandService:
         from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
         tiles = [Tile(Coordinate(0, 0, 0), TerrainType.grass()), Tile(Coordinate(1, 0, 0), TerrainType.grass())]
         
-        harvestable = HarvestableComponent(loot_table_id="iron_loot")
+        harvestable = HarvestableComponent(loot_table_id=1)
         target_obj = WorldObject(target_id, Coordinate(1, 0, 0), ObjectTypeEnum.RESOURCE, component=harvestable)
         actor_obj = WorldObject(actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.NPC, component=ActorComponent(direction=DirectionEnum.EAST))
         

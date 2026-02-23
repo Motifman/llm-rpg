@@ -17,6 +17,7 @@ from ai_rpg_world.domain.world.service.allegiance_service import AllegianceServi
 from ai_rpg_world.domain.world.service.target_selection_policy import (
     TargetSelectionPolicy,
     PreyPriorityTargetPolicy,
+    PackLeaderTargetPolicy,
     HighestThreatTargetPolicy,
 )
 
@@ -27,7 +28,7 @@ def _default_target_policy_factory(
 ) -> TargetSelectionPolicy:
     return PreyPriorityTargetPolicy(
         hostility_service,
-        HighestThreatTargetPolicy(),
+        PackLeaderTargetPolicy(HighestThreatTargetPolicy()),
     )
 
 
@@ -60,6 +61,8 @@ class BehaviorService:
         pack_rally_coordinate: Optional[Coordinate] = None,
         growth_context: Optional[GrowthContext] = None,
         current_tick: Optional[WorldTick] = None,
+        visible_feed: Optional[List] = None,
+        selected_feed_target=None,
     ) -> BehaviorObservation:
         """
         アクターの観測（視界内脅威・敵対・選択ターゲット等）を組み立てて返す。
@@ -72,6 +75,8 @@ class BehaviorService:
                 visible_threats=[],
                 visible_hostiles=[],
                 selected_target=None,
+                visible_feed=visible_feed or [],
+                selected_feed_target=selected_feed_target,
                 skill_context=skill_context,
                 growth_context=growth_context,
                 target_context=target_context,
@@ -94,6 +99,8 @@ class BehaviorService:
             visible_threats=visible_threats,
             visible_hostiles=visible_hostiles,
             selected_target=selected_target,
+            visible_feed=visible_feed or [],
+            selected_feed_target=selected_feed_target,
             skill_context=skill_context,
             growth_context=growth_context,
             target_context=target_context,

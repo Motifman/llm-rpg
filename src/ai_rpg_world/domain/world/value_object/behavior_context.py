@@ -23,9 +23,11 @@ class TargetSelectionContext:
     """
     ターゲット選択の補助情報（ボスAI等で利用）。
     与ダメージ・HP% 等はアプリ層が集約し渡す。
+    群れのフォロワーは pack_leader_target_id を最優先で攻撃する。
     """
     hp_percentage_by_id: Dict[WorldObjectId, float] = field(default_factory=dict)
     threat_by_id: Dict[WorldObjectId, int] = field(default_factory=dict)
+    pack_leader_target_id: Optional[WorldObjectId] = None
 
 
 @dataclass(frozen=True)

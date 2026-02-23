@@ -8,10 +8,16 @@ from ai_rpg_world.application.world.handlers.monster_decided_to_move_handler imp
 from ai_rpg_world.application.world.handlers.monster_decided_to_use_skill_handler import (
     MonsterDecidedToUseSkillHandler,
 )
+from ai_rpg_world.application.world.handlers.monster_decided_to_interact_handler import (
+    MonsterDecidedToInteractHandler,
+)
+from ai_rpg_world.application.world.handlers.monster_fed_handler import MonsterFedHandler
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.monster.event.monster_events import (
     MonsterDecidedToMoveEvent,
     MonsterDecidedToUseSkillEvent,
+    MonsterDecidedToInteractEvent,
+    MonsterFedEvent,
 )
 
 if TYPE_CHECKING:
@@ -19,15 +25,19 @@ if TYPE_CHECKING:
 
 
 class MonsterEventHandlerRegistry:
-    """モンスターの意思決定イベント（移動・スキル使用）のハンドラを登録する"""
+    """モンスターの意思決定イベント（移動・スキル使用・インタラクション）と採食イベントのハンドラを登録する"""
 
     def __init__(
         self,
         monster_decided_to_move_handler: MonsterDecidedToMoveHandler,
         monster_decided_to_use_skill_handler: MonsterDecidedToUseSkillHandler,
+        monster_decided_to_interact_handler: MonsterDecidedToInteractHandler,
+        monster_fed_handler: MonsterFedHandler,
     ):
         self._monster_decided_to_move_handler = monster_decided_to_move_handler
         self._monster_decided_to_use_skill_handler = monster_decided_to_use_skill_handler
+        self._monster_decided_to_interact_handler = monster_decided_to_interact_handler
+        self._monster_fed_handler = monster_fed_handler
 
     def register_handlers(self, event_publisher: EventPublisher) -> None:
         event_publisher.register_handler(
@@ -38,6 +48,16 @@ class MonsterEventHandlerRegistry:
         event_publisher.register_handler(
             MonsterDecidedToUseSkillEvent,
             self._create_event_handler(self._monster_decided_to_use_skill_handler.handle),
+            is_synchronous=True,
+        )
+        event_publisher.register_handler(
+            MonsterDecidedToInteractEvent,
+            self._create_event_handler(self._monster_decided_to_interact_handler.handle),
+            is_synchronous=True,
+        )
+        event_publisher.register_handler(
+            MonsterFedEvent,
+            self._create_event_handler(self._monster_fed_handler.handle),
             is_synchronous=True,
         )
 

@@ -17,6 +17,7 @@ from ai_rpg_world.domain.world.enum.world_enum import (
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 
 
 @dataclass(frozen=True)
@@ -170,8 +171,8 @@ class ResourceHarvestedEvent(BaseDomainEvent[WorldObjectId, str]):
     """資源を採集・採掘したイベント"""
     object_id: WorldObjectId
     actor_id: WorldObjectId
-    loot_table_id: str
-    obtained_items: List[dict] # {"item_spec_id": str, "quantity": int}
+    loot_table_id: LootTableId
+    obtained_items: List[dict]  # {"item_spec_id": str, "quantity": int}
 
     @classmethod
     def create(
@@ -180,7 +181,7 @@ class ResourceHarvestedEvent(BaseDomainEvent[WorldObjectId, str]):
         aggregate_type: str,
         object_id: WorldObjectId,
         actor_id: WorldObjectId,
-        loot_table_id: str,
+        loot_table_id: LootTableId,
         obtained_items: List[dict]
     ) -> "ResourceHarvestedEvent":
         return super().create(
