@@ -13,6 +13,7 @@ from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
+from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterAlreadyDeadException
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -155,3 +156,29 @@ class TestMonsterFedHandler:
         assert len(after.behavior_last_known_feed) == 1
         assert after.behavior_last_known_feed[0].object_id == WorldObjectId(300)
         assert after.behavior_last_known_feed[0].coordinate == feed_coord
+
+    def test_domain_exception_re_raised_when_record_feed_raises(self, handler, monster_repo):
+        """record_feed が DomainException（MonsterAlreadyDeadException）を投げた場合はそのまま再 raise される"""
+        template = _template_with_feed(hunger_decrease_on_feed=0.3)
+        loadout = SkillLoadoutAggregate.create(
+            SkillLoadoutId(1), owner_id=300, normal_capacity=5, awakened_capacity=5
+        )
+        monster = MonsterAggregate.create(
+            monster_id=MonsterId(4),
+            template=template,
+            world_object_id=WorldObjectId(300),
+            skill_loadout=loadout,
+        )
+        monster.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0), initial_hunger=0.5)
+        monster.apply_damage(999, WorldTick(10))
+        monster_repo.save(monster)
+
+        event = MonsterFedEvent.create(
+            aggregate_id=WorldObjectId(400),
+            aggregate_type="WorldObject",
+            actor_id=WorldObjectId(300),
+            target_id=WorldObjectId(400),
+            target_coordinate=Coordinate(0, 0, 0),
+        )
+        with pytest.raises(MonsterAlreadyDeadException):
+            handler.handle(event)

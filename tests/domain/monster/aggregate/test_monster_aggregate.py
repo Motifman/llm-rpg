@@ -528,6 +528,72 @@ class TestMonsterAggregate:
             with pytest.raises(MonsterAlreadyDeadException):
                 monster.record_prey_kill(0.2)
 
+    class TestRecordFeed:
+        """record_feed（採食時の飢餓減少）のテスト"""
+
+        def test_record_feed_success(self, monster_template: MonsterTemplate, respawn_info: RespawnInfo, skill_loadout: SkillLoadoutAggregate, spot_id: SpotId):
+            """ALIVE 時に record_feed で飢餓が減少する"""
+            template = MonsterTemplate(
+                template_id=monster_template.template_id,
+                name=monster_template.name,
+                base_stats=monster_template.base_stats,
+                reward_info=monster_template.reward_info,
+                respawn_info=respawn_info,
+                race=monster_template.race,
+                faction=monster_template.faction,
+                description=monster_template.description,
+                starvation_ticks=10,
+                hunger_decrease_on_feed=0.3,
+            )
+            monster = MonsterAggregate.create(
+                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout
+            )
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0), initial_hunger=0.8)
+            monster.record_feed(0.3)
+            assert monster.hunger == pytest.approx(0.5)
+
+        def test_record_feed_when_dead_raises(self, monster_template: MonsterTemplate, respawn_info: RespawnInfo, skill_loadout: SkillLoadoutAggregate, spot_id: SpotId):
+            """死亡時は record_feed で MonsterAlreadyDeadException"""
+            template = MonsterTemplate(
+                template_id=monster_template.template_id,
+                name=monster_template.name,
+                base_stats=monster_template.base_stats,
+                reward_info=monster_template.reward_info,
+                respawn_info=respawn_info,
+                race=monster_template.race,
+                faction=monster_template.faction,
+                description=monster_template.description,
+                starvation_ticks=10,
+                hunger_decrease_on_feed=0.3,
+            )
+            monster = MonsterAggregate.create(
+                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout
+            )
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            monster.apply_damage(999, WorldTick(10))
+            with pytest.raises(MonsterAlreadyDeadException):
+                monster.record_feed(0.2)
+
+        def test_record_feed_when_not_spawned_raises(self, monster_template: MonsterTemplate, skill_loadout: SkillLoadoutAggregate):
+            """未スポーン（DEAD 状態）では record_feed で MonsterAlreadyDeadException"""
+            template = MonsterTemplate(
+                template_id=monster_template.template_id,
+                name=monster_template.name,
+                base_stats=monster_template.base_stats,
+                reward_info=monster_template.reward_info,
+                respawn_info=monster_template.respawn_info,
+                race=monster_template.race,
+                faction=monster_template.faction,
+                description=monster_template.description,
+                starvation_ticks=10,
+                hunger_decrease_on_feed=0.3,
+            )
+            monster = MonsterAggregate.create(
+                MonsterId.create(1), template, WorldObjectId.create(1001), skill_loadout
+            )
+            with pytest.raises(MonsterAlreadyDeadException):
+                monster.record_feed(0.2)
+
     class TestRememberFeed:
         """餌場記憶（remember_feed / behavior_last_known_feed）のテスト"""
 
