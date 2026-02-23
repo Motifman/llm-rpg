@@ -75,6 +75,15 @@ class TileTriggeredEvent(BaseDomainEvent[SpotId, str]):
 
 
 @dataclass(frozen=True)
+class ObjectTriggeredEvent(BaseDomainEvent[WorldObjectId, str]):
+    """オブジェクトの踏んだら発火トリガーが発火したイベント（罠など）"""
+    object_id: WorldObjectId
+    spot_id: SpotId
+    actor_id: WorldObjectId
+    trigger_type: TriggerTypeEnum
+
+
+@dataclass(frozen=True)
 class AreaTriggeredEvent(BaseDomainEvent[AreaTriggerId, str]):
     """エリアトリガーが発火したイベント"""
     trigger_id: AreaTriggerId

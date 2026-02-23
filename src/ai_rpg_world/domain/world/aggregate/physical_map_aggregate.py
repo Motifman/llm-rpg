@@ -41,6 +41,7 @@ from ai_rpg_world.domain.world.event.map_events import (
     WorldObjectAddedEvent,
     TileTerrainChangedEvent,
     TileTriggeredEvent,
+    ObjectTriggeredEvent,
     AreaEnteredEvent,
     AreaExitedEvent,
     AreaTriggeredEvent,
@@ -278,6 +279,16 @@ class PhysicalMapAggregate(AggregateRoot):
         except TileNotFoundException:
             return False
 
+    def get_objects_at(self, coordinate: Coordinate) -> List[WorldObject]:
+        """指定座標にあるオブジェクトのリストを返す（当たり判定なしのオブジェクト含む）"""
+        if coordinate not in self._object_positions:
+            return []
+        return [self._objects[oid] for oid in self._object_positions[coordinate]]
+
+    def validate_placement(self, coordinate: Coordinate, is_blocking: bool = True) -> None:
+        """指定座標にオブジェクトを配置可能か検証する。不可の場合例外を投げる。"""
+        self._validate_placement(coordinate, is_blocking, capability=None, exclude_object_id=None)
+
     def get_object(self, object_id: WorldObjectId) -> WorldObject:
         if object_id not in self._objects:
             raise ObjectNotFoundException(f"Object {object_id} not found in spot {self._spot_id}")
@@ -367,6 +378,29 @@ class PhysicalMapAggregate(AggregateRoot):
 
         # エリアトリガーの判定
         self._check_area_triggers(object_id, old_coordinate, new_coordinate)
+        # 同一マスのオブジェクトの「踏んだら発火」トリガー判定
+        self._check_object_triggers_on_step(object_id, new_coordinate)
+
+    def _check_object_triggers_on_step(self, actor_id: WorldObjectId, new_coordinate: Coordinate):
+        """指定座標にあるオブジェクトの get_trigger_on_step を発火させる"""
+        if new_coordinate not in self._object_positions:
+            return
+        for obj_id in self._object_positions[new_coordinate]:
+            if obj_id == actor_id:
+                continue
+            obj = self._objects[obj_id]
+            if not obj.component:
+                continue
+            trigger = obj.component.get_trigger_on_step()
+            if trigger is not None:
+                self.add_event(ObjectTriggeredEvent.create(
+                    aggregate_id=obj_id,
+                    aggregate_type="WorldObject",
+                    object_id=obj_id,
+                    spot_id=self._spot_id,
+                    actor_id=actor_id,
+                    trigger_type=trigger.get_trigger_type(),
+                ))
 
     def _check_area_triggers(self, object_id: WorldObjectId, old_coordinate: Optional[Coordinate], new_coordinate: Coordinate):
         """進入・退出・滞在判定"""

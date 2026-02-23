@@ -21,6 +21,7 @@ class ObjectTypeEnum(Enum):
     PLAYER = "PLAYER"
     NPC = "NPC"
     RESOURCE = "RESOURCE"
+    GROUND_ITEM = "GROUND_ITEM"  # 落ちているアイテム（当たり判定なし・同一座標に複数可）
 
 
 class SpotCategoryEnum(Enum):
@@ -37,7 +38,7 @@ class SpotCategoryEnum(Enum):
 
 
 class TriggerTypeEnum(Enum):
-    """タイルトリガーの種類"""
+    """タイル／オブジェクトトリガーの種類"""
     WARP = "WARP"
     DAMAGE = "DAMAGE"
     EVENT = "EVENT"

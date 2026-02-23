@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, FrozenSet
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
 from ai_rpg_world.domain.item.exception import ItemSpecValidationException
+
+# 設置可能アイテムが設置後にどのオブジェクト種別になるか（ObjectTypeEnum と対応）
+PLACEABLE_OBJECT_TYPES: FrozenSet[str] = frozenset({
+    "CHEST", "DOOR", "GATE", "SIGN", "SWITCH",
+})
 
 
 @dataclass(frozen=True)
@@ -22,6 +27,8 @@ class ItemSpec:
     max_stack_size: MaxStackSize
     durability_max: Optional[int] = None
     equipment_type: Optional[EquipmentType] = None
+    is_placeable: bool = False
+    placeable_object_type: Optional[str] = None
 
     def __post_init__(self):
         """バリデーションは__post_init__で実行"""
@@ -41,6 +48,21 @@ class ItemSpec:
         else:
             if self.equipment_type is not None:
                 raise ItemSpecValidationException(f"Item spec: non-equipment items must not have equipment_type, got {self.equipment_type}")
+        # 設置可能フラグと設置先オブジェクト種別のバリデーション
+        if self.is_placeable:
+            if not self.placeable_object_type or not self.placeable_object_type.strip():
+                raise ItemSpecValidationException(
+                    "Item spec: placeable items must have placeable_object_type set"
+                )
+            if self.placeable_object_type not in PLACEABLE_OBJECT_TYPES:
+                raise ItemSpecValidationException(
+                    f"Item spec: placeable_object_type must be one of {sorted(PLACEABLE_OBJECT_TYPES)}, got '{self.placeable_object_type}'"
+                )
+        else:
+            if self.placeable_object_type is not None:
+                raise ItemSpecValidationException(
+                    "Item spec: non-placeable items must not have placeable_object_type set"
+                )
 
     def can_create_durability(self) -> bool:
         """耐久度を作成可能かどうか"""
@@ -53,6 +75,14 @@ class ItemSpec:
     def get_equipment_type(self) -> Optional[EquipmentType]:
         """装備タイプを取得（装備品でない場合はNone）"""
         return self.equipment_type
+
+    def is_placeable_item(self) -> bool:
+        """設置可能アイテムかどうか"""
+        return self.is_placeable
+
+    def get_placeable_object_type(self) -> Optional[str]:
+        """設置時のワールドオブジェクト種別（設置可能時のみ）。ObjectTypeEnum の value と一致。"""
+        return self.placeable_object_type
 
     def __eq__(self, other: object) -> bool:
         """等価性比較（スペックが同じかどうか）"""
