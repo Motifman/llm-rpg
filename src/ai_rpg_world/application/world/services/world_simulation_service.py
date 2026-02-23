@@ -35,6 +35,9 @@ from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggre
 from ai_rpg_world.domain.monster.enum.monster_enum import MonsterStatusEnum
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
 from ai_rpg_world.domain.monster.value_object.spawn_slot import SpawnSlot
+from ai_rpg_world.domain.item.repository.loot_table_repository import LootTableRepository
+from ai_rpg_world.domain.world.entity.world_object_component import HarvestableComponent
+from ai_rpg_world.domain.world.service.feed_eligibility_service import is_feed_for_monster
 from ai_rpg_world.domain.skill.repository.skill_repository import SkillLoadoutRepository
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
@@ -94,8 +97,10 @@ class WorldSimulationApplicationService:
         world_time_config_service: Optional[WorldTimeConfigService] = None,
         spawn_table_repository: Optional[SpawnTableRepository] = None,
         monster_template_repository: Optional[MonsterTemplateRepository] = None,
+        loot_table_repository: Optional[LootTableRepository] = None,
     ):
         self._time_provider = time_provider
+        self._loot_table_repository = loot_table_repository
         self._physical_map_repository = physical_map_repository
         self._weather_zone_repository = weather_zone_repository
         self._player_status_repository = player_status_repository
@@ -238,7 +243,9 @@ class WorldSimulationApplicationService:
                         monster = self._monster_repository.find_by_world_object_id(actor.object_id)
                         if not monster:
                             continue
-                        # モンスター: 観測を組み立て → Monster.decide（イベント発行）→ save → process_sync_events でハンドラが移動・スキル実行
+                        visible_feed, selected_feed_target = self._build_feed_observation(
+                            actor, physical_map, monster, current_tick
+                        )
                         observation = self._behavior_service.build_observation(
                             actor.object_id,
                             physical_map,
@@ -247,6 +254,8 @@ class WorldSimulationApplicationService:
                             growth_context=growth_context,
                             pack_rally_coordinate=None,
                             current_tick=current_tick,
+                            visible_feed=visible_feed,
+                            selected_feed_target=selected_feed_target,
                         )
                         resolver = self._monster_action_resolver_factory(
                             physical_map, actor
@@ -456,6 +465,44 @@ class WorldSimulationApplicationService:
             allow_chase=monster.get_allow_chase(current_tick),
         )
 
+    def _build_feed_observation(
+        self,
+        actor: WorldObject,
+        physical_map: PhysicalMapAggregate,
+        monster: MonsterAggregate,
+        current_tick: WorldTick,
+    ):
+        """視界内の餌オブジェクトと、飢餓時の選択餌ターゲットを組み立てる。"""
+        visible_feed: List[WorldObject] = []
+        selected_feed_target: Optional[WorldObject] = None
+        if self._loot_table_repository is None or not monster.template.preferred_feed_item_spec_ids:
+            return visible_feed, selected_feed_target
+        component = actor.component
+        if not isinstance(component, AutonomousBehaviorComponent):
+            return visible_feed, selected_feed_target
+        preferred = monster.template.preferred_feed_item_spec_ids
+        nearby = physical_map.get_objects_in_range(actor.coordinate, component.vision_range)
+        for obj in nearby:
+            if obj.object_id == actor.object_id:
+                continue
+            if not isinstance(obj.component, HarvestableComponent):
+                continue
+            harvestable = obj.component
+            if harvestable.get_available_quantity(current_tick) <= 0:
+                continue
+            loot_table = self._loot_table_repository.find_by_id(harvestable.loot_table_id)
+            if not loot_table or not is_feed_for_monster(loot_table.entries, preferred):
+                continue
+            if not physical_map.is_visible(actor.coordinate, obj.coordinate):
+                continue
+            visible_feed.append(obj)
+        if visible_feed and monster.hunger >= monster.template.forage_threshold:
+            selected_feed_target = min(
+                visible_feed,
+                key=lambda o: actor.coordinate.distance_to(o.coordinate),
+            )
+        return visible_feed, selected_feed_target
+
     def _build_target_context_for_actor(
         self,
         actor: WorldObject,
@@ -464,24 +511,43 @@ class WorldSimulationApplicationService:
     ) -> Optional[TargetSelectionContext]:
         """
         自律行動のモンスターについて、ヘイト等から TargetSelectionContext を組み立てる。
+        フォロワーの場合は pack_leader_target_id にリーダーの behavior_target_id を設定する。
         AggroMemoryPolicy があれば last_seen_tick からの経過で忘却したエントリは除外する。
-        ヘイトストア未注入時や該当データなしの場合は None を返す。
         """
         if not isinstance(actor.component, AutonomousBehaviorComponent):
             return None
-        if self._aggro_store is None:
-            return None
         component = actor.component
-        policy = getattr(component, "aggro_memory_policy", None)
-        threat_by_id = self._aggro_store.get_threat_by_attacker(
-            physical_map.spot_id,
-            actor.object_id,
-            current_tick=current_tick.value,
-            memory_policy=policy,
-        )
-        if not threat_by_id:
+        pack_leader_target_id: Optional[WorldObjectId] = None
+        if component.pack_id is not None and not component.is_pack_leader:
+            pack_actors = physical_map.get_actors_in_pack(component.pack_id)
+            leader_obj = next(
+                (a for a in pack_actors if getattr(a.component, "is_pack_leader", False)),
+                None,
+            )
+            if leader_obj is not None:
+                leader_monster = self._monster_repository.find_by_world_object_id(
+                    leader_obj.object_id
+                )
+                if leader_monster is not None and leader_monster.behavior_target_id is not None:
+                    pack_leader_target_id = leader_monster.behavior_target_id
+
+        if self._aggro_store is None and pack_leader_target_id is None:
             return None
-        return TargetSelectionContext(threat_by_id=threat_by_id)
+        threat_by_id: Dict[WorldObjectId, int] = {}
+        if self._aggro_store is not None:
+            policy = getattr(component, "aggro_memory_policy", None)
+            threat_by_id = self._aggro_store.get_threat_by_attacker(
+                physical_map.spot_id,
+                actor.object_id,
+                current_tick=current_tick.value,
+                memory_policy=policy,
+            ) or {}
+        if not threat_by_id and pack_leader_target_id is None:
+            return None
+        return TargetSelectionContext(
+            threat_by_id=threat_by_id,
+            pack_leader_target_id=pack_leader_target_id,
+        )
 
     def _execute_monster_skill_in_tick(
         self,

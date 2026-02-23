@@ -45,7 +45,7 @@ def _sample_template(template_id: int = 1) -> MonsterTemplate:
         template_id=MonsterTemplateId(template_id),
         name="test-monster",
         base_stats=BaseStats(100, 100, 10, 10, 10, 0.05, 0.05),
-        reward_info=RewardInfo(10, 10, "loot"),
+        reward_info=RewardInfo(10, 10, 1),
         respawn_info=RespawnInfo(respawn_interval_ticks=100, is_auto_respawn=True),
         race=Race.HUMAN,
         faction=MonsterFactionEnum.ENEMY,

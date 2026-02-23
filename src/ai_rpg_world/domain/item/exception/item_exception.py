@@ -93,6 +93,11 @@ class StackSizeExceededException(ItemDomainException, BusinessRuleException):
 class InsufficientQuantityException(ItemDomainException, BusinessRuleException):
     """数量不足例外"""
     error_code = "ITEM.INSUFFICIENT_QUANTITY"
+class LootTableIdValidationException(ItemDomainException, ValidationException):
+    """LootTableIdのバリデーション例外"""
+    error_code = "ITEM.LOOT_TABLE_ID_VALIDATION"
+
+
 class LootTableValidationException(ItemDomainException, ValidationException):
     """ドロップテーブルのバリデーション例外"""
     error_code = "ITEM.LOOT_TABLE_VALIDATION"

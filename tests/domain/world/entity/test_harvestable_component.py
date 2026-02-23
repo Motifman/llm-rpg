@@ -7,7 +7,8 @@ from ai_rpg_world.domain.world.exception.harvest_exception import (
     HarvestIntervalValidationException,
     ResourceExhaustedException
 )
-from ai_rpg_world.domain.common.exception import ValidationException
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
+from ai_rpg_world.domain.item.exception.item_exception import LootTableIdValidationException
 
 
 class TestHarvestableComponent:
@@ -16,44 +17,47 @@ class TestHarvestableComponent:
     def test_constructor_success(self):
         """正常なコンストラクタテスト"""
         comp = HarvestableComponent(
-            loot_table_id="iron_ore",
+            loot_table_id=1,
             max_quantity=5,
             respawn_interval=100,
             initial_quantity=3,
             last_harvest_tick=WorldTick(50),
             required_tool_category="pickaxe"
         )
-        assert comp.loot_table_id == "iron_ore"
+        assert comp.loot_table_id == LootTableId(1)
         assert comp.required_tool_category == "pickaxe"
         assert comp.get_available_quantity(WorldTick(50)) == 3
 
     def test_validation_invalid_params(self):
         """不正なパラメータに対するバリデーションテスト"""
-        # 空のloot_table_id
-        with pytest.raises(ValidationException, match="Loot table ID cannot be empty"):
+        # 不正なloot_table_id（空文字は数値変換で例外）
+        with pytest.raises(LootTableIdValidationException):
             HarvestableComponent("", max_quantity=1)
-        
+        # 非数値文字列のloot_table_id
+        with pytest.raises(LootTableIdValidationException):
+            HarvestableComponent("id", max_quantity=1)
+        # 0以下のloot_table_id
+        with pytest.raises(LootTableIdValidationException):
+            HarvestableComponent(0, max_quantity=1)
+
         # max_quantityが0以下
         with pytest.raises(HarvestQuantityValidationException, match="Max quantity must be positive"):
-            HarvestableComponent("id", max_quantity=0)
-            
+            HarvestableComponent(1, max_quantity=0)
         # respawn_intervalが負
         with pytest.raises(HarvestIntervalValidationException, match="cannot be negative"):
-            HarvestableComponent("id", max_quantity=1, respawn_interval=-1)
-            
+            HarvestableComponent(1, max_quantity=1, respawn_interval=-1)
         # initial_quantityが負
         with pytest.raises(HarvestQuantityValidationException, match="cannot be negative"):
-            HarvestableComponent("id", max_quantity=1, initial_quantity=-1)
-            
+            HarvestableComponent(1, max_quantity=1, initial_quantity=-1)
         # initial_quantity > max_quantity
         with pytest.raises(HarvestQuantityValidationException, match="cannot exceed max quantity"):
-            HarvestableComponent("id", max_quantity=5, initial_quantity=6)
+            HarvestableComponent(1, max_quantity=5, initial_quantity=6)
 
     def test_lazy_recovery_scenarios(self):
         """様々な状況下でのLazy Recoveryテスト"""
         # 100ティックごとに1回復、最大5、初期2、最終更新100ティック目
         comp = HarvestableComponent(
-            loot_table_id="iron_ore",
+            loot_table_id=1,
             max_quantity=5,
             respawn_interval=100,
             initial_quantity=2,
@@ -81,7 +85,7 @@ class TestHarvestableComponent:
     def test_harvest_flow(self):
         """採取フローのテスト"""
         comp = HarvestableComponent(
-            loot_table_id="herbs",
+            loot_table_id=2,
             max_quantity=1,
             respawn_interval=100,
             initial_quantity=1,
@@ -110,7 +114,7 @@ class TestHarvestableComponent:
         from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
         actor_id = WorldObjectId(1)
         comp = HarvestableComponent(
-            loot_table_id="iron",
+            loot_table_id=3,
             harvest_duration=10
         )
         
@@ -134,7 +138,7 @@ class TestHarvestableComponent:
         """採取の中断テスト"""
         from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
         actor_id = WorldObjectId(1)
-        comp = HarvestableComponent(loot_table_id="iron", harvest_duration=10)
+        comp = HarvestableComponent(loot_table_id=3, harvest_duration=10)
         
         comp.start_harvest(actor_id, WorldTick(100))
         assert comp.current_actor_id == actor_id
@@ -155,7 +159,7 @@ class TestHarvestableComponent:
         
         actor1 = WorldObjectId(1)
         actor2 = WorldObjectId(2)
-        comp = HarvestableComponent(loot_table_id="iron")
+        comp = HarvestableComponent(loot_table_id=3)
         
         comp.start_harvest(actor1, WorldTick(100))
         
@@ -166,7 +170,7 @@ class TestHarvestableComponent:
     def test_to_dict_and_properties(self):
         """シリアライズとプロパティのテスト"""
         comp = HarvestableComponent(
-            loot_table_id="gold",
+            loot_table_id=4,
             max_quantity=10,
             respawn_interval=500,
             initial_quantity=5,
@@ -177,12 +181,12 @@ class TestHarvestableComponent:
         assert comp.get_type_name() == "harvestable"
         assert comp.interaction_type == InteractionTypeEnum.HARVEST
         assert comp.interaction_data == {
-            "loot_table_id": "gold",
+            "loot_table_id": "4",
             "required_tool_category": "special_pickaxe"
         }
         
         data = comp.to_dict()
-        assert data["loot_table_id"] == "gold"
+        assert data["loot_table_id"] == "4"
         assert data["max_quantity"] == 10
         assert data["current_quantity"] == 5
         assert data["respawn_interval"] == 500

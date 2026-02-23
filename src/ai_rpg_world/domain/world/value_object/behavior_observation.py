@@ -30,6 +30,8 @@ class BehaviorObservation:
     visible_threats: List["WorldObject"] = field(default_factory=list)
     visible_hostiles: List["WorldObject"] = field(default_factory=list)
     selected_target: Optional["WorldObject"] = None
+    visible_feed: List["WorldObject"] = field(default_factory=list)
+    selected_feed_target: Optional["WorldObject"] = None
     skill_context: Optional[SkillSelectionContext] = None
     growth_context: Optional[GrowthContext] = None
     target_context: Optional[TargetSelectionContext] = None

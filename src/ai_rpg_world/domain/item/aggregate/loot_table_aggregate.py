@@ -1,9 +1,9 @@
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Union
 import random
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 
 from ai_rpg_world.domain.item.exception.item_exception import (
     LootTableValidationException,
@@ -45,13 +45,14 @@ class LootTableAggregate(AggregateRoot):
     """
     def __init__(
         self,
-        loot_table_id: str,
+        loot_table_id: Union[LootTableId, int],
         entries: List[LootEntry],
         name: str = ""
     ):
         super().__init__()
+        lid = LootTableId.create(loot_table_id) if not isinstance(loot_table_id, LootTableId) else loot_table_id
         self._validate_entries(entries)
-        self._loot_table_id = loot_table_id
+        self._loot_table_id = lid
         self._entries = entries
         self._name = name
         self._total_weight = sum(entry.weight for entry in entries)
@@ -59,11 +60,12 @@ class LootTableAggregate(AggregateRoot):
     @classmethod
     def create(
         cls,
-        loot_table_id: str,
+        loot_table_id: Union[LootTableId, int, str],
         entries: List[LootEntry],
         name: str = ""
     ) -> "LootTableAggregate":
-        return cls(loot_table_id, entries, name)
+        lid = LootTableId.create(loot_table_id) if not isinstance(loot_table_id, LootTableId) else loot_table_id
+        return cls(lid, entries, name)
 
     def _validate_entries(self, entries: List[LootEntry]):
         if not entries:
@@ -74,7 +76,7 @@ class LootTableAggregate(AggregateRoot):
             raise LootWeightValidationException("Total weight must be positive if entries exist")
 
     @property
-    def loot_table_id(self) -> str:
+    def loot_table_id(self) -> LootTableId:
         return self._loot_table_id
 
     @property

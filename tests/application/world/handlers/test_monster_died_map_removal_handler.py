@@ -10,6 +10,7 @@ from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
@@ -54,7 +55,7 @@ def _sample_template() -> MonsterTemplate:
         template_id=MonsterTemplateId(1),
         name="Slime",
         base_stats=BaseStats(50, 0, 5, 3, 4, 0, 0),
-        reward_info=RewardInfo(10, 5, "loot_slime"),
+        reward_info=RewardInfo(10, 5, 1),
         respawn_info=RespawnInfo(respawn_interval_ticks=60, is_auto_respawn=True),
         race=Race.BEAST,
         faction=MonsterFactionEnum.ENEMY,
@@ -110,7 +111,7 @@ class TestMonsterDiedMapRemovalHandler:
             respawn_tick=70,
             exp=10,
             gold=5,
-            loot_table_id="loot_slime",
+            loot_table_id=LootTableId(1),
             killer_player_id=None,
             killer_world_object_id=None,
             cause=None,

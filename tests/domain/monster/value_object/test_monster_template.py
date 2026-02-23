@@ -27,7 +27,7 @@ def valid_base_stats():
 
 @pytest.fixture
 def valid_reward_info():
-    return RewardInfo(exp=100, gold=50, loot_table_id="loot_slime_01")
+    return RewardInfo(exp=100, gold=50, loot_table_id=1)
 
 
 @pytest.fixture

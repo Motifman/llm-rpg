@@ -1,15 +1,17 @@
 import pytest
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterRewardValidationException
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
+
 
 class TestRewardInfo:
     """RewardInfo値オブジェクトのテスト"""
 
     def test_create_success(self):
-        reward = RewardInfo(exp=100, gold=50, loot_table_id="loot_01")
+        reward = RewardInfo(exp=100, gold=50, loot_table_id=1)
         assert reward.exp == 100
         assert reward.gold == 50
-        assert reward.loot_table_id == "loot_01"
+        assert reward.loot_table_id == LootTableId(1)
 
     def test_create_success_minimal(self):
         reward = RewardInfo(exp=0, gold=0)

@@ -9,6 +9,7 @@ from ai_rpg_world.domain.world.exception.map_exception import LockedDoorExceptio
 from ai_rpg_world.domain.world.event.map_events import WorldObjectBlockingChangedEvent
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 from ai_rpg_world.domain.world.enum.world_enum import (
     DirectionEnum,
     InteractionTypeEnum,
@@ -506,6 +507,7 @@ from ai_rpg_world.domain.world.exception.harvest_exception import (
     HarvestInProgressException,
     HarvestNotStartedException
 )
+from ai_rpg_world.domain.monster.event.monster_events import MonsterFedEvent
 
 
 class HarvestableComponent(WorldObjectComponent):
@@ -515,7 +517,7 @@ class HarvestableComponent(WorldObjectComponent):
     """
     def __init__(
         self,
-        loot_table_id: str,
+        loot_table_id: Union[LootTableId, int, str],
         max_quantity: int = 1,
         respawn_interval: int = 100,
         initial_quantity: Optional[int] = None,
@@ -524,8 +526,9 @@ class HarvestableComponent(WorldObjectComponent):
         harvest_duration: int = 5,
         stamina_cost: int = 10
     ):
-        self._validate_params(loot_table_id, max_quantity, respawn_interval, initial_quantity, harvest_duration, stamina_cost)
-        self._loot_table_id = loot_table_id
+        lid = LootTableId.create(loot_table_id) if not isinstance(loot_table_id, LootTableId) else loot_table_id
+        self._validate_params(lid, max_quantity, respawn_interval, initial_quantity, harvest_duration, stamina_cost)
+        self._loot_table_id = lid
         self._max_quantity = max_quantity
         self._respawn_interval = respawn_interval
         self._current_quantity = initial_quantity if initial_quantity is not None else max_quantity
@@ -538,9 +541,8 @@ class HarvestableComponent(WorldObjectComponent):
         self._current_actor_id: Optional[WorldObjectId] = None
         self._harvest_finish_tick: Optional[WorldTick] = None
 
-    def _validate_params(self, loot_table_id, max_quantity, respawn_interval, initial_quantity, harvest_duration, stamina_cost):
-        if not loot_table_id:
-            raise ValidationException("Loot table ID cannot be empty")
+    def _validate_params(self, loot_table_id: LootTableId, max_quantity, respawn_interval, initial_quantity, harvest_duration, stamina_cost):
+        # LootTableId は値オブジェクトで既にバリデーション済み
         if max_quantity <= 0:
             raise HarvestQuantityValidationException(f"Max quantity must be positive: {max_quantity}")
         if respawn_interval < 0:
@@ -561,7 +563,7 @@ class HarvestableComponent(WorldObjectComponent):
         return "harvestable"
 
     @property
-    def loot_table_id(self) -> str:
+    def loot_table_id(self) -> LootTableId:
         return self._loot_table_id
 
     @property
@@ -647,6 +649,38 @@ class HarvestableComponent(WorldObjectComponent):
         self._harvest_finish_tick = None
         return True
 
+    def apply_interaction_from(
+        self,
+        actor_id: WorldObjectId,
+        target_id: WorldObjectId,
+        map_aggregate: "PhysicalMapAggregate",
+        current_tick: WorldTick,
+    ) -> None:
+        """モンスターの採食時は資源1消費し MonsterFedEvent を発行。プレイヤー採取は start/finish_resource_harvest 経由のためここでは何もしない。"""
+        try:
+            actor_obj = map_aggregate.get_object(actor_id)
+        except Exception:
+            return
+        comp = actor_obj.component
+        from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
+        if not isinstance(comp, AutonomousBehaviorComponent):
+            return
+        if getattr(comp, "player_id", None) is not None:
+            return
+        available = self.get_available_quantity(current_tick)
+        if available <= 0:
+            return
+        self._current_quantity = available - 1
+        self._last_update_tick = current_tick
+        map_aggregate.add_event(
+            MonsterFedEvent.create(
+                aggregate_id=target_id,
+                aggregate_type="WorldObject",
+                actor_id=actor_id,
+                target_id=target_id,
+            )
+        )
+
     @property
     def interaction_type(self) -> InteractionTypeEnum:
         return InteractionTypeEnum.HARVEST
@@ -654,13 +688,13 @@ class HarvestableComponent(WorldObjectComponent):
     @property
     def interaction_data(self) -> Dict[str, Any]:
         return {
-            "loot_table_id": self._loot_table_id,
+            "loot_table_id": str(self._loot_table_id),
             "required_tool_category": self._required_tool_category
         }
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "loot_table_id": self._loot_table_id,
+            "loot_table_id": str(self._loot_table_id),
             "max_quantity": self._max_quantity,
             "current_quantity": self._current_quantity,
             "respawn_interval": self._respawn_interval,

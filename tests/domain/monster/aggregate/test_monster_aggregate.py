@@ -61,7 +61,7 @@ class TestMonsterAggregate:
 
     @pytest.fixture
     def reward_info(self) -> RewardInfo:
-        return RewardInfo(exp=100, gold=50, loot_table_id="loot_slime_01")
+        return RewardInfo(exp=100, gold=50, loot_table_id=1)
 
     @pytest.fixture
     def respawn_info(self) -> RespawnInfo:

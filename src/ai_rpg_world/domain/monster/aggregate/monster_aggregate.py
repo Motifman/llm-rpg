@@ -17,6 +17,7 @@ from ai_rpg_world.domain.monster.event.monster_events import (
     MonsterMpRecoveredEvent,
     MonsterDecidedToMoveEvent,
     MonsterDecidedToUseSkillEvent,
+    MonsterDecidedToInteractEvent,
 )
 from ai_rpg_world.domain.monster.exception.monster_exceptions import (
     MonsterAlreadyDeadException,
@@ -534,6 +535,14 @@ class MonsterAggregate(AggregateRoot):
             return
         self._hunger = max(0.0, min(1.0, self._hunger - hunger_decrease))
 
+    def record_feed(self, hunger_decrease: float) -> None:
+        """採食したときに飢餓を減らす。ALIVE 時のみ。飢餓無効時は何もしない。"""
+        if self._status != MonsterStatusEnum.ALIVE:
+            raise MonsterAlreadyDeadException(f"Monster {self._monster_id} is not alive")
+        if self._template.starvation_ticks <= 0 or hunger_decrease <= 0:
+            return
+        self._hunger = max(0.0, min(1.0, self._hunger - hunger_decrease))
+
     def record_attacked_by(
         self,
         attacker_id: WorldObjectId,
@@ -843,6 +852,17 @@ class MonsterAggregate(AggregateRoot):
                     actor_id=self._world_object_id,
                     skill_slot_index=action.skill_slot_index,
                     target_id=self._behavior_target_id,
+                    spot_id=self._spot_id,
+                    current_tick=current_tick,
+                )
+            )
+        elif action.action_type == BehaviorActionType.INTERACT and action.target_id is not None:
+            self.add_event(
+                MonsterDecidedToInteractEvent.create(
+                    aggregate_id=self._monster_id,
+                    aggregate_type="MonsterAggregate",
+                    actor_id=self._world_object_id,
+                    target_id=action.target_id,
                     spot_id=self._spot_id,
                     current_tick=current_tick,
                 )

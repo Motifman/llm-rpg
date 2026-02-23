@@ -12,6 +12,7 @@ from ai_rpg_world.domain.world.service.target_selection_policy import (
     NearestTargetPolicy,
     HighestThreatTargetPolicy,
     LowestHpTargetPolicy,
+    PackLeaderTargetPolicy,
     PreyPriorityTargetPolicy,
 )
 from ai_rpg_world.domain.world.service.hostility_service import ConfigurableHostilityService
@@ -312,6 +313,91 @@ class TestLowestHpTargetPolicy:
         result = policy.select_target(actor, candidates, context)
         assert result is not None
         assert result.object_id == WorldObjectId(1)
+
+
+class TestPackLeaderTargetPolicy:
+    """PackLeaderTargetPolicy の正常・境界・フォールバックのテスト"""
+
+    @pytest.fixture
+    def fallback_policy(self) -> NearestTargetPolicy:
+        return NearestTargetPolicy()
+
+    @pytest.fixture
+    def policy(self, fallback_policy) -> PackLeaderTargetPolicy:
+        return PackLeaderTargetPolicy(fallback_policy)
+
+    @pytest.fixture
+    def actor(self) -> WorldObject:
+        comp = AutonomousBehaviorComponent(vision_range=5)
+        return WorldObject(
+            object_id=WorldObjectId(100),
+            coordinate=Coordinate(5, 5),
+            object_type=ObjectTypeEnum.NPC,
+            is_blocking=False,
+            component=comp,
+        )
+
+    @pytest.fixture
+    def candidate_leader_target(self) -> WorldObject:
+        return WorldObject(
+            object_id=WorldObjectId(1),
+            coordinate=Coordinate(7, 7),
+            object_type=ObjectTypeEnum.PLAYER,
+            is_blocking=False,
+            component=ActorComponent(race="human"),
+        )
+
+    @pytest.fixture
+    def candidate_near(self) -> WorldObject:
+        return WorldObject(
+            object_id=WorldObjectId(2),
+            coordinate=Coordinate(6, 5),
+            object_type=ObjectTypeEnum.PLAYER,
+            is_blocking=False,
+            component=ActorComponent(race="human"),
+        )
+
+    def test_select_target_returns_none_when_empty(self, policy, actor):
+        """候補が空のとき None を返すこと"""
+        result = policy.select_target(actor, [])
+        assert result is None
+
+    def test_select_target_prefers_pack_leader_target_when_in_candidates(
+        self, policy, actor, candidate_leader_target, candidate_near
+    ):
+        """context.pack_leader_target_id が候補に含まれるときその候補を返すこと"""
+        context = TargetSelectionContext(pack_leader_target_id=WorldObjectId(1))
+        candidates = [candidate_near, candidate_leader_target]
+        result = policy.select_target(actor, candidates, context)
+        assert result is not None
+        assert result.object_id == WorldObjectId(1)
+
+    def test_select_target_falls_back_when_pack_leader_target_not_in_candidates(
+        self, policy, actor, candidate_near
+    ):
+        """pack_leader_target_id が候補に含まれないときはフォールバックで選ぶこと"""
+        context = TargetSelectionContext(pack_leader_target_id=WorldObjectId(999))
+        candidates = [candidate_near]
+        result = policy.select_target(actor, candidates, context)
+        assert result is not None
+        assert result.object_id == WorldObjectId(2)
+
+    def test_select_target_falls_back_when_context_none(self, policy, actor, candidate_leader_target, candidate_near):
+        """context が None のときはフォールバックで選ぶこと"""
+        candidates = [candidate_leader_target, candidate_near]
+        result = policy.select_target(actor, candidates, None)
+        assert result is not None
+        assert result.object_id == WorldObjectId(2)
+
+    def test_select_target_falls_back_when_pack_leader_target_id_none(
+        self, policy, actor, candidate_leader_target, candidate_near
+    ):
+        """context.pack_leader_target_id が None のときはフォールバックで選ぶこと"""
+        context = TargetSelectionContext(pack_leader_target_id=None)
+        candidates = [candidate_leader_target, candidate_near]
+        result = policy.select_target(actor, candidates, context)
+        assert result is not None
+        assert result.object_id == WorldObjectId(2)
 
 
 class TestPreyPriorityTargetPolicy:
