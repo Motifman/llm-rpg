@@ -4,6 +4,7 @@ PhysicalMapAggregate と PathfindingService, SkillSelectionPolicy を使って
 移動先座標またはスキルスロットを決定する。
 """
 
+import logging
 import math
 import random
 from typing import Optional, Callable
@@ -62,6 +63,7 @@ class MonsterActionResolverImpl:
             raise TypeError(
                 "MonsterActionResolverImpl requires actor with AutonomousBehaviorComponent"
             )
+        self._logger = logging.getLogger(self.__class__.__name__)
         self._map_aggregate = map_aggregate
         self._pathfinding_service = pathfinding_service
         self._skill_policy = skill_policy
@@ -75,6 +77,15 @@ class MonsterActionResolverImpl:
         actor_coordinate: Coordinate,
     ) -> BehaviorAction:
         """モンスターの状態と観測から次の一手を返す。"""
+        feed_target = observation.selected_feed_target
+        if feed_target is not None:
+            dist = actor_coordinate.distance_to(feed_target.coordinate)
+            if dist <= 1:
+                return BehaviorAction.interact(feed_target.object_id)
+            next_coord = self._get_next_step_to(actor_coordinate, feed_target.coordinate)
+            if next_coord is not None:
+                return BehaviorAction.move(next_coord)
+
         target = observation.selected_target
         attack_states = (BehaviorStateEnum.CHASE, BehaviorStateEnum.ENRAGE)
         if monster.behavior_state in attack_states and target is not None:
@@ -159,8 +170,13 @@ class MonsterActionResolverImpl:
             )
             if len(path) > 1:
                 return path[1]
-        except (PathNotFoundException, InvalidPathRequestException):
-            pass
+        except (PathNotFoundException, InvalidPathRequestException) as e:
+            self._logger.debug(
+                "Path calculation failed for %s -> %s, skipping move: %s",
+                start,
+                goal,
+                e,
+            )
         return None
 
     def _calculate_chase_move(

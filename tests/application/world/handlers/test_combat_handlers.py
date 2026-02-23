@@ -37,6 +37,7 @@ from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTem
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
 from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
@@ -144,7 +145,7 @@ def _create_player_status(
     )
 
 
-def _create_monster(monster_id: int, world_object_id: int, coordinate: Coordinate, max_hp: int = 120, attack: int = 15, loot_table_id: str = None) -> MonsterAggregate:
+def _create_monster(monster_id: int, world_object_id: int, coordinate: Coordinate, max_hp: int = 120, attack: int = 15, loot_table_id=None) -> MonsterAggregate:
     template = MonsterTemplate(
         template_id=MonsterTemplateId(monster_id),
         name=f"monster-{monster_id}",
@@ -861,7 +862,7 @@ class TestMonsterDeathRewardHandler:
 
         # ドロップテーブルの設定 (100%で鉄の剣が出る)
         spec = s["item_spec_repo"].find_by_id(ItemSpecId(1)) # 鉄の剣
-        loot_table = LootTableAggregate.create("test_table", [LootEntry(spec.item_spec_id, 100, 1, 1)])
+        loot_table = LootTableAggregate.create(1, [LootEntry(spec.item_spec_id, 100, 1, 1)])
         s["loot_repo"].save(loot_table)
 
         event = MonsterDiedEvent.create(
@@ -870,7 +871,7 @@ class TestMonsterDeathRewardHandler:
             respawn_tick=100,
             exp=50,
             gold=20,
-            loot_table_id="test_table",
+            loot_table_id=LootTableId(1),
             killer_player_id=player_id
         )
 
@@ -902,7 +903,7 @@ class TestMonsterDeathRewardHandler:
             respawn_tick=100,
             exp=50,
             gold=20,
-            loot_table_id="table",
+            loot_table_id=None,
             killer_player_id=None
         )
 
@@ -924,7 +925,7 @@ class TestMonsterDeathRewardHandler:
             respawn_tick=100,
             exp=50,
             gold=20,
-            loot_table_id="table",
+            loot_table_id=LootTableId(1),
             killer_player_id=player_id,
         )
 
@@ -944,14 +945,14 @@ class TestMonsterDeathRewardHandler:
             respawn_tick=100,
             exp=50,
             gold=20,
-            loot_table_id="missing_table",
+            loot_table_id=LootTableId(999),
             killer_player_id=player_id,
         )
 
         with pytest.raises(ApplicationException) as excinfo:
             with s["uow"]:
                 s["handler"].handle(event)
-        assert "missing_table" in str(excinfo.value) or "LootTable" in str(excinfo.value)
+        assert "999" in str(excinfo.value) or "LootTable" in str(excinfo.value)
 
 
 class TestMonsterDecidedToMoveHandler:
@@ -1198,12 +1199,20 @@ class TestCombatIntegration:
             map_removal_handler,
             monster_spawned_map_placement_handler,
         ).register_handlers(event_publisher)
+        from ai_rpg_world.application.world.handlers.monster_decided_to_interact_handler import MonsterDecidedToInteractHandler
+        from ai_rpg_world.application.world.handlers.monster_fed_handler import MonsterFedHandler
         from ai_rpg_world.infrastructure.events.monster_event_handler_registry import (
             MonsterEventHandlerRegistry,
         )
+        monster_decided_to_interact_handler = MonsterDecidedToInteractHandler(
+            physical_map_repository=map_repo,
+        )
+        monster_fed_handler = MonsterFedHandler(monster_repository=monster_repo)
         MonsterEventHandlerRegistry(
             monster_decided_to_move_handler,
             monster_decided_to_use_skill_handler,
+            monster_decided_to_interact_handler,
+            monster_fed_handler,
         ).register_handlers(event_publisher)
         MapInteractionEventHandlerRegistry(
             item_stored_in_chest_handler=item_stored_handler,

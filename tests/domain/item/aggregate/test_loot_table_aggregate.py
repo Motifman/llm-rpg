@@ -1,6 +1,7 @@
 import pytest
 from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import LootTableAggregate, LootEntry, LootResult
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 from ai_rpg_world.domain.item.exception.item_exception import (
     LootWeightValidationException,
     QuantityValidationException
@@ -14,9 +15,9 @@ class TestLootTableAggregate:
         """正常なLootTableAggregateのコンストラクタテスト"""
         entry = LootEntry(ItemSpecId(1), weight=10, min_quantity=1, max_quantity=5)
         entries = [entry]
-        table = LootTableAggregate("table-1", entries, "Test Table")
+        table = LootTableAggregate(1, entries, "Test Table")
 
-        assert table.loot_table_id == "table-1"
+        assert table.loot_table_id == LootTableId(1)
         assert table.name == "Test Table"
         assert len(table.entries) == 1
         assert table.entries[0] == entry
@@ -24,8 +25,8 @@ class TestLootTableAggregate:
     def test_create_method_success(self):
         """create()メソッドの正常動作テスト"""
         entries = [LootEntry(ItemSpecId(1), weight=1)]
-        table = LootTableAggregate.create("table-1", entries)
-        assert table.loot_table_id == "table-1"
+        table = LootTableAggregate.create(1, entries)
+        assert table.loot_table_id == LootTableId(1)
 
     def test_loot_entry_validation_negative_weight(self):
         """負の重みに対するバリデーションテスト"""
@@ -46,12 +47,12 @@ class TestLootTableAggregate:
         """合計重みが0の場合のバリデーションテスト"""
         entries = [LootEntry(ItemSpecId(1), weight=0)]
         with pytest.raises(LootWeightValidationException, match="Total weight must be positive"):
-            LootTableAggregate("table-1", entries)
+            LootTableAggregate(1, entries)
 
     def test_roll_deterministic(self):
         """確定的な抽選のテスト"""
         entry = LootEntry(ItemSpecId(1), weight=100, min_quantity=2, max_quantity=2)
-        table = LootTableAggregate("table-1", [entry])
+        table = LootTableAggregate(1, [entry])
         
         result = table.roll()
         assert result is not None
@@ -62,13 +63,13 @@ class TestLootTableAggregate:
         """空のテーブル作成時に例外が投げられるテスト"""
         from ai_rpg_world.domain.item.exception.item_exception import LootTableValidationException
         with pytest.raises(LootTableValidationException):
-            LootTableAggregate("table-empty", [])
+            LootTableAggregate(1, [])
 
     def test_roll_probability_distribution(self):
         """抽選確率の分布テスト"""
         entry1 = LootEntry(ItemSpecId(101), weight=90)
         entry2 = LootEntry(ItemSpecId(102), weight=10)
-        table = LootTableAggregate("table-prob", [entry1, entry2])
+        table = LootTableAggregate(2, [entry1, entry2])
         
         results = {101: 0, 102: 0}
         iterations = 1000
@@ -83,7 +84,7 @@ class TestLootTableAggregate:
     def test_entries_immutability(self):
         """entriesプロパティの不変性テスト"""
         entry = LootEntry(ItemSpecId(1), weight=10)
-        table = LootTableAggregate("table-1", [entry])
+        table = LootTableAggregate(1, [entry])
         
         entries = table.entries
         entries.append(LootEntry(ItemSpecId(2), weight=20))

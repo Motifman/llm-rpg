@@ -109,6 +109,30 @@ class LowestHpTargetPolicy(TargetSelectionPolicy):
         )
 
 
+class PackLeaderTargetPolicy(TargetSelectionPolicy):
+    """
+    群れのリーダーのターゲットを最優先する。context.pack_leader_target_id が
+    候補に含まれていればそれを返し、そうでなければ fallback_policy に委譲する。
+    """
+
+    def __init__(self, fallback_policy: TargetSelectionPolicy):
+        self._fallback_policy = fallback_policy
+
+    def select_target(
+        self,
+        actor: "WorldObject",
+        candidates: List["WorldObject"],
+        context: Optional[TargetSelectionContext] = None,
+    ) -> Optional["WorldObject"]:
+        if not candidates:
+            return None
+        if context and context.pack_leader_target_id is not None:
+            for c in candidates:
+                if c.object_id == context.pack_leader_target_id:
+                    return c
+        return self._fallback_policy.select_target(actor, candidates, context)
+
+
 class PreyPriorityTargetPolicy(TargetSelectionPolicy):
     """
     獲物(PREY)を優先し、同列ならフォールバックポリシーで選択する。

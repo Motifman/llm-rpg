@@ -3,6 +3,7 @@ from typing import Optional, Any, Dict
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 
 
 @dataclass(frozen=True)
@@ -60,7 +61,7 @@ class HarvestCompletedEvent(BaseDomainEvent[WorldObjectId, str]):
     """採取アクションが完了した際のイベント"""
     actor_id: WorldObjectId
     target_id: WorldObjectId
-    loot_table_id: str
+    loot_table_id: LootTableId
 
     @classmethod
     def create(
@@ -69,7 +70,7 @@ class HarvestCompletedEvent(BaseDomainEvent[WorldObjectId, str]):
         aggregate_type: str,
         actor_id: WorldObjectId,
         target_id: WorldObjectId,
-        loot_table_id: str
+        loot_table_id: LootTableId
     ) -> "HarvestCompletedEvent":
         return super().create(
             aggregate_id=aggregate_id,

@@ -27,7 +27,7 @@ def _sample_template() -> MonsterTemplate:
         template_id=MonsterTemplateId.create(1),
         name="Slime",
         base_stats=BaseStats(100, 50, 20, 15, 10, 0.05, 0.03),
-        reward_info=RewardInfo(exp=10, gold=5, loot_table_id="loot_01"),
+        reward_info=RewardInfo(exp=10, gold=5, loot_table_id=1),
         respawn_info=RespawnInfo(respawn_interval_ticks=100, is_auto_respawn=True),
         race=Race.BEAST,
         faction=MonsterFactionEnum.ENEMY,
