@@ -15,6 +15,7 @@ from ai_rpg_world.application.conversation.exceptions import (
     DialogueNodeNotFoundException,
     NoActiveSessionException,
     ConversationCommandException,
+    ConversationSystemErrorException,
 )
 from ai_rpg_world.domain.conversation.value_object.dialogue_tree_id import DialogueTreeId
 from ai_rpg_world.domain.conversation.value_object.dialogue_node_id import DialogueNodeId
@@ -158,6 +159,99 @@ class TestConversationCommandService:
                     choice_index=99,
                 )
             )
+
+    def test_advance_next_node_not_in_repository_raises_dialogue_node_not_found(
+        self, dialogue_repo, event_publisher
+    ):
+        """選択肢の指す次ノードがリポジトリに存在しない場合 DialogueNodeNotFoundException"""
+        # ノード0のみ登録し、選択肢は存在しないノード99を指す
+        repo = InMemoryDialogueTreeRepository()
+        node0 = DialogueNode(
+            node_id=0,
+            text="Choose path.",
+            choices=(("To missing", 99),),
+            next_node_id=None,
+            is_terminal=False,
+        )
+        repo.register_tree(tree_id=10, entry_node_id=0, nodes={0: node0})
+        service = ConversationCommandService(
+            dialogue_tree_repository=repo,
+            event_publisher=event_publisher,
+        )
+        service.start_conversation(
+            StartConversationCommand(player_id=1, npc_id_value=100, dialogue_tree_id=10)
+        )
+        with pytest.raises(DialogueNodeNotFoundException) as exc_info:
+            service.advance_conversation(
+                AdvanceConversationCommand(
+                    player_id=1,
+                    npc_id_value=100,
+                    choice_index=0,
+                )
+            )
+        assert "ダイアログノードが見つかりません" in str(exc_info.value)
+        assert "tree_id=10" in str(exc_info.value) and "node_id=99" in str(exc_info.value)
+
+    def test_unexpected_exception_wrapped_as_system_error(
+        self, dialogue_repo, event_publisher
+    ):
+        """想定外の例外は ConversationSystemErrorException にラップされる"""
+        original_error = RuntimeError("database connection failed")
+        dialogue_repo.get_entry_node_id = Mock(side_effect=original_error)
+        service = ConversationCommandService(
+            dialogue_tree_repository=dialogue_repo,
+            event_publisher=event_publisher,
+        )
+        cmd = StartConversationCommand(
+            player_id=1,
+            npc_id_value=100,
+            dialogue_tree_id=1,
+        )
+        with pytest.raises(ConversationSystemErrorException) as exc_info:
+            service.start_conversation(cmd)
+        assert exc_info.value.original_exception is original_error
+
+
+class TestConversationCommandServiceNonTerminalNoNext:
+    """終端でないのに次ノードがない場合のテスト"""
+
+    @pytest.fixture
+    def dialogue_repo(self):
+        repo = InMemoryDialogueTreeRepository()
+        # 終端でないが next_node_id も choices もない不正なノード
+        node0 = DialogueNode(
+            node_id=0,
+            text="Stuck.",
+            choices=(),
+            next_node_id=None,
+            is_terminal=False,
+        )
+        repo.register_tree(tree_id=20, entry_node_id=0, nodes={0: node0})
+        return repo
+
+    @pytest.fixture
+    def event_publisher(self):
+        pub = Mock()
+        pub.publish = Mock()
+        return pub
+
+    @pytest.fixture
+    def service(self, dialogue_repo, event_publisher):
+        return ConversationCommandService(
+            dialogue_tree_repository=dialogue_repo,
+            event_publisher=event_publisher,
+        )
+
+    def test_advance_non_terminal_with_no_next_raises(self, service):
+        """終端ノードでないのに次ノードが無い場合 ConversationCommandException"""
+        service.start_conversation(
+            StartConversationCommand(player_id=1, npc_id_value=100, dialogue_tree_id=20)
+        )
+        with pytest.raises(ConversationCommandException) as exc_info:
+            service.advance_conversation(
+                AdvanceConversationCommand(player_id=1, npc_id_value=100)
+            )
+        assert "終端ノードでないのに次ノードがありません" in str(exc_info.value)
 
 
 class TestConversationCommandServiceWithNextNode:
