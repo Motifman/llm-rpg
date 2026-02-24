@@ -21,6 +21,7 @@ from ai_rpg_world.domain.quest.value_object.quest_objective import QuestObjectiv
 from ai_rpg_world.domain.quest.value_object.quest_reward import QuestReward
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 
 
 class TestQuestAggregate:
@@ -129,6 +130,39 @@ class TestQuestAggregate:
                     issuer_player_id=None,
                     guild_id=None,
                 )
+
+        def test_issue_quest_with_reserved_rewards_player_issued(
+            self, quest_id, objectives, reward, scope, player_id
+        ):
+            """プレイヤー発行時は reserved_gold / reserved_item_instance_ids を保持する"""
+            reserved_gold = 50
+            reserved_ids = (ItemInstanceId(1001), ItemInstanceId(1002))
+            q = QuestAggregate.issue_quest(
+                quest_id=quest_id,
+                objectives=objectives,
+                reward=reward,
+                scope=scope,
+                issuer_player_id=player_id,
+                guild_id=None,
+                reserved_gold=reserved_gold,
+                reserved_item_instance_ids=reserved_ids,
+            )
+            assert q.issuer_player_id == player_id
+            assert q.reserved_gold == reserved_gold
+            assert q.reserved_item_instance_ids == reserved_ids
+
+        def test_issue_quest_system_issued_has_no_reserved(self, quest_id, objectives, reward, scope):
+            """システム発行時は reserved_gold=0, reserved_item_instance_ids=()"""
+            q = QuestAggregate.issue_quest(
+                quest_id=quest_id,
+                objectives=objectives,
+                reward=reward,
+                scope=scope,
+                issuer_player_id=None,
+                guild_id=None,
+            )
+            assert q.reserved_gold == 0
+            assert q.reserved_item_instance_ids == ()
 
     class TestAcceptBy:
         def test_accept_by_success(self, open_quest, player_id):

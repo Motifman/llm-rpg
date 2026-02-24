@@ -220,3 +220,69 @@ class TestQuestProgressHandler:
         mock_status.gain_exp.assert_called_once_with(50)
         player_status_repository.save.assert_called_once()
         player_inventory_repository.save.assert_called_once()
+
+    def test_handle_completes_player_issued_quest_grants_reserved_reward(
+        self,
+        handler,
+        quest_repository,
+        monster_repository,
+        player_status_repository,
+        player_inventory_repository,
+    ):
+        """プレイヤー発行クエスト完了時は確保済みゴールドを受託者に付与し、経験値は付与しない"""
+        from ai_rpg_world.domain.quest.enum.quest_enum import QuestStatus
+
+        quest_id = quest_repository.generate_quest_id()
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.KILL_MONSTER,
+                target_id=101,
+                required_count=1,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=50, exp=0)
+        scope = QuestScope.public_scope()
+        issuer_id = PlayerId(2)
+        acceptor_id = PlayerId(1)
+        quest = QuestAggregate(
+            quest_id=quest_id,
+            status=QuestStatus.ACCEPTED,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=issuer_id,
+            guild_id=None,
+            acceptor_player_id=acceptor_id,
+            reserved_gold=50,
+            reserved_item_instance_ids=(),
+        )
+        quest_repository.save(quest)
+
+        mock_acceptor_status = Mock()
+        mock_acceptor_inventory = Mock()
+        mock_issuer_inventory = Mock()
+        player_status_repository.find_by_id.side_effect = lambda pid: (
+            mock_acceptor_status if pid == acceptor_id else None
+        )
+        player_inventory_repository.find_by_id.side_effect = lambda pid: (
+            mock_acceptor_inventory if pid == acceptor_id else mock_issuer_inventory if pid == issuer_id else None
+        )
+
+        event = MonsterDiedEvent.create(
+            aggregate_id=MonsterId(1),
+            aggregate_type="MonsterAggregate",
+            respawn_tick=0,
+            exp=10,
+            gold=5,
+            killer_player_id=acceptor_id,
+        )
+        handler.handle(event)
+
+        q = quest_repository.find_by_id(quest_id)
+        assert q.status.value == "completed"
+        mock_acceptor_status.earn_gold.assert_called_once_with(50)
+        mock_acceptor_status.gain_exp.assert_not_called()
+        mock_issuer_inventory.remove_reserved_item.assert_not_called()
+        player_status_repository.save.assert_called_once()
+        player_inventory_repository.save.assert_called_once()

@@ -123,7 +123,7 @@ class QuestProgressHandler(EventHandler[MonsterDiedEvent]):
         )
 
     def _grant_reward(self, quest) -> None:
-        """完了したクエストの報酬を受託者に付与する"""
+        """完了したクエストの報酬を受託者に付与する。プレイヤー発行時は確保済み報酬を転送する。"""
         acceptor_id = quest.acceptor_player_id
         reward = quest.reward
         player_status = self._player_status_repository.find_by_id(acceptor_id)
@@ -138,6 +138,40 @@ class QuestProgressHandler(EventHandler[MonsterDiedEvent]):
                 "Player inventory not found for quest reward: %s", acceptor_id
             )
             return
+
+        if quest.issuer_player_id is not None and (
+            quest.reserved_gold > 0 or quest.reserved_item_instance_ids
+        ):
+            self._grant_reserved_reward(quest, player_status, inventory)
+        else:
+            self._grant_system_reward(quest, player_status, inventory)
+
+        self._player_status_repository.save(player_status)
+        self._player_inventory_repository.save(inventory)
+
+    def _grant_reserved_reward(self, quest, player_status, inventory) -> None:
+        """プレイヤー発行クエストの確保済み報酬を受託者に付与する。"""
+        if quest.reserved_gold > 0:
+            player_status.earn_gold(quest.reserved_gold)
+        if not quest.reserved_item_instance_ids:
+            return
+        issuer_inventory = self._player_inventory_repository.find_by_id(
+            quest.issuer_player_id
+        )
+        if not issuer_inventory:
+            self._logger.warning(
+                "Issuer inventory not found for quest reward transfer: %s",
+                quest.issuer_player_id,
+            )
+            return
+        for item_id in quest.reserved_item_instance_ids:
+            issuer_inventory.remove_reserved_item(item_id)
+            inventory.acquire_item(item_id)
+        self._player_inventory_repository.save(issuer_inventory)
+
+    def _grant_system_reward(self, quest, player_status, inventory) -> None:
+        """システム発行クエストの報酬（ゴールド・経験値・新規アイテム）を受託者に付与する。"""
+        reward = quest.reward
         if reward.gold > 0:
             player_status.earn_gold(reward.gold)
         if reward.exp > 0:
@@ -157,5 +191,3 @@ class QuestProgressHandler(EventHandler[MonsterDiedEvent]):
             )
             self._item_repository.save(item_aggregate)
             inventory.acquire_item(instance_id)
-        self._player_status_repository.save(player_status)
-        self._player_inventory_repository.save(inventory)

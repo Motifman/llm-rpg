@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from datetime import datetime
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
@@ -20,6 +20,7 @@ from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
 from ai_rpg_world.domain.quest.value_object.quest_objective import QuestObjective
 from ai_rpg_world.domain.quest.value_object.quest_reward import QuestReward
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 
 
 class QuestAggregate(AggregateRoot):
@@ -35,6 +36,8 @@ class QuestAggregate(AggregateRoot):
         issuer_player_id: Optional[PlayerId] = None,
         guild_id: Optional[int] = None,
         acceptor_player_id: Optional[PlayerId] = None,
+        reserved_gold: int = 0,
+        reserved_item_instance_ids: Tuple[ItemInstanceId, ...] = (),
         version: int = 0,
         created_at: Optional[datetime] = None,
     ):
@@ -47,6 +50,8 @@ class QuestAggregate(AggregateRoot):
         self.issuer_player_id = issuer_player_id
         self.guild_id = guild_id
         self.acceptor_player_id = acceptor_player_id
+        self.reserved_gold = reserved_gold
+        self.reserved_item_instance_ids = reserved_item_instance_ids
         self.version = version
         self.created_at = created_at or datetime.now()
 
@@ -59,8 +64,10 @@ class QuestAggregate(AggregateRoot):
         scope: QuestScope,
         issuer_player_id: Optional[PlayerId] = None,
         guild_id: Optional[int] = None,
+        reserved_gold: int = 0,
+        reserved_item_instance_ids: Tuple[ItemInstanceId, ...] = (),
     ) -> "QuestAggregate":
-        """クエストを発行する（Phase 1 ではシステム発行のみ: issuer_player_id=None）"""
+        """クエストを発行する。システム発行は issuer_player_id=None、プレイヤー発行は reserved_* を渡す。"""
         if not objectives:
             raise ValueError("objectives must not be empty")
         status = QuestStatus.OPEN
@@ -73,6 +80,8 @@ class QuestAggregate(AggregateRoot):
             issuer_player_id=issuer_player_id,
             guild_id=guild_id,
             acceptor_player_id=None,
+            reserved_gold=reserved_gold,
+            reserved_item_instance_ids=reserved_item_instance_ids,
             version=0,
         )
         event = QuestIssuedEvent.create(
