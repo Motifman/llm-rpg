@@ -140,12 +140,13 @@ class ConnectionAddedEvent(BaseDomainEvent[WorldId, str]):
 
 @dataclass(frozen=True)
 class LocationEnteredEvent(BaseDomainEvent[LocationAreaId, str]):
-    """ロケーションエリアに進入したイベント"""
+    """ロケーションエリアに進入したイベント。object がプレイヤーキャラのとき player_id_value を設定する。"""
     location_id: LocationAreaId
     spot_id: SpotId
     object_id: WorldObjectId
     name: str
     description: str
+    player_id_value: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -158,12 +159,13 @@ class LocationExitedEvent(BaseDomainEvent[LocationAreaId, str]):
 
 @dataclass(frozen=True)
 class GatewayTriggeredEvent(BaseDomainEvent[GatewayId, str]):
-    """ゲートウェイ（出口）を通過したイベント"""
+    """ゲートウェイ（出口）を通過したイベント。object がプレイヤーキャラのとき player_id_value を設定する。"""
     gateway_id: GatewayId
     spot_id: SpotId
     object_id: WorldObjectId
     target_spot_id: SpotId
     landing_coordinate: Coordinate
+    player_id_value: Optional[int] = None
 
 
 @dataclass(frozen=True)

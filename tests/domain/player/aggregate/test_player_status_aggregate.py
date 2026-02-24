@@ -172,6 +172,22 @@ class TestPlayerStatusAggregate:
         assert len(events) == 1
         assert isinstance(events[0], PlayerDownedEvent)
         assert events[0].aggregate_id == aggregate.player_id
+        assert events[0].killer_player_id is None
+
+    def test_apply_damage_down_with_killer_player_id(self):
+        """プレイヤーによって倒された場合、PlayerDownedEvent に killer_player_id が記録されること"""
+        aggregate = create_test_status_aggregate(hp=50)
+        killer_id = PlayerId(2)
+
+        aggregate.apply_damage(50, killer_player_id=killer_id)
+
+        assert aggregate.hp.value == 0
+        assert aggregate.is_down is True
+        events = aggregate.get_events()
+        assert len(events) == 1
+        assert isinstance(events[0], PlayerDownedEvent)
+        assert events[0].aggregate_id == aggregate.player_id
+        assert events[0].killer_player_id == killer_id
 
     def test_apply_damage_over_kill(self):
         """ダメージがHPを超える場合、HPが0になること"""

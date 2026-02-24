@@ -1,0 +1,543 @@
+"""
+MonsterDiedEvent / PlayerDownedEvent / ItemTakenFromChestEvent / LocationEnteredEvent /
+GatewayTriggeredEvent / ItemAddedToInventoryEvent / ConversationEndedEvent を受けて、
+受託中クエストの目標（KILL_MONSTER / KILL_PLAYER / TAKE_FROM_CHEST / REACH_SPOT /
+REACH_LOCATION / OBTAIN_ITEM / TALK_TO_NPC）を進め、全目標達成時は完了＋報酬付与を行う非同期ハンドラ。
+"""
+import logging
+from typing import Callable, Any
+
+from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
+from ai_rpg_world.application.quest.exceptions import (
+    QuestApplicationException,
+    QuestRewardGrantException,
+)
+from ai_rpg_world.domain.common.event_handler import EventHandler
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
+from ai_rpg_world.domain.quest.enum.quest_enum import QuestObjectiveType
+from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
+from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
+from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
+from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
+from ai_rpg_world.domain.player.event.inventory_events import ItemAddedToInventoryEvent
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.repository.player_inventory_repository import (
+    PlayerInventoryRepository,
+)
+from ai_rpg_world.domain.player.repository.player_status_repository import (
+    PlayerStatusRepository,
+)
+from ai_rpg_world.domain.world.event.map_events import (
+    ItemTakenFromChestEvent,
+    LocationEnteredEvent,
+    GatewayTriggeredEvent,
+)
+from ai_rpg_world.domain.conversation.event.conversation_event import (
+    ConversationEndedEvent,
+)
+from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
+from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
+
+
+class QuestProgressHandler(EventHandler[MonsterDiedEvent]):
+    """モンスター死亡イベントで、キラーの受託中クエストの KILL_MONSTER 目標を更新し、完了時は報酬付与するハンドラ（非同期）"""
+
+    def __init__(
+        self,
+        quest_repository: QuestRepository,
+        monster_repository: MonsterRepository,
+        player_status_repository: PlayerStatusRepository,
+        player_inventory_repository: PlayerInventoryRepository,
+        item_repository: ItemRepository,
+        item_spec_repository: ItemSpecRepository,
+        unit_of_work_factory: UnitOfWorkFactory,
+    ):
+        self._quest_repository = quest_repository
+        self._monster_repository = monster_repository
+        self._player_status_repository = player_status_repository
+        self._player_inventory_repository = player_inventory_repository
+        self._item_repository = item_repository
+        self._item_spec_repository = item_spec_repository
+        self._unit_of_work_factory = unit_of_work_factory
+        self._logger = logging.getLogger(self.__class__.__name__)
+
+    def handle(self, event: MonsterDiedEvent) -> None:
+        try:
+            self._handle_impl(event)
+        except (ApplicationException, DomainException, QuestApplicationException):
+            raise
+        except Exception as e:
+            self._logger.exception(
+                "Unexpected error in QuestProgressHandler: %s", e
+            )
+            raise SystemErrorException(
+                f"Quest progress handling failed: {e}",
+                original_exception=e,
+            ) from e
+
+    def _execute_in_separate_transaction(
+        self, operation: Callable[[], None], context: dict
+    ) -> None:
+        """別トランザクションで操作を実行（event-handler-patterns に従う）"""
+        unit_of_work = self._unit_of_work_factory.create()
+        try:
+            with unit_of_work:
+                operation()
+        except (ApplicationException, DomainException, QuestApplicationException):
+            raise
+        except Exception as e:
+            self._logger.exception(
+                "Failed to handle event in %s: %s",
+                context.get("handler", "unknown"),
+                e,
+                extra=context,
+            )
+            raise SystemErrorException(
+                f"Quest progress handling failed in {context.get('handler', 'unknown')}: {e}",
+                original_exception=e,
+            ) from e
+
+    def _handle_impl(self, event: MonsterDiedEvent) -> None:
+        if event.killer_player_id is None:
+            return
+
+        def operation():
+            monster = self._monster_repository.find_by_id(event.aggregate_id)
+            if monster is None:
+                self._logger.debug(
+                    "Dead monster %s not found, skipping quest progress",
+                    event.aggregate_id,
+                )
+                return
+            template_id_value = monster.template.template_id.value
+
+            quests = self._quest_repository.find_accepted_quests_by_player(
+                event.killer_player_id
+            )
+            for quest in quests:
+                advanced = quest.advance_objective(
+                    QuestObjectiveType.KILL_MONSTER, template_id_value
+                )
+                if not advanced:
+                    continue
+                if not quest.is_all_objectives_completed():
+                    self._quest_repository.save(quest)
+                    continue
+                quest.complete()
+                self._grant_reward(quest)
+                self._quest_repository.save(quest)
+                self._logger.info(
+                    "Quest completed: quest_id=%s, acceptor=%s",
+                    quest.quest_id.value,
+                    quest.acceptor_player_id,
+                )
+
+        self._execute_in_separate_transaction(
+            operation,
+            context={"handler": "quest_progress_monster_died"},
+        )
+
+    def handle_player_downed(self, event: PlayerDownedEvent) -> None:
+        """PlayerDownedEvent で、キラーの受託中クエストの KILL_PLAYER 目標を進める（非同期）。"""
+        try:
+            self._handle_player_downed_impl(event)
+        except (ApplicationException, DomainException, QuestApplicationException):
+            raise
+        except Exception as e:
+            self._logger.exception(
+                "Unexpected error in QuestProgressHandler.handle_player_downed: %s",
+                e,
+            )
+            raise SystemErrorException(
+                f"Quest progress handling (player_downed) failed: {e}",
+                original_exception=e,
+            ) from e
+
+    def _handle_player_downed_impl(self, event: PlayerDownedEvent) -> None:
+        if event.killer_player_id is None:
+            return
+        victim_player_id_value = int(event.aggregate_id)
+
+        def operation():
+            quests = self._quest_repository.find_accepted_quests_by_player(
+                event.killer_player_id
+            )
+            for quest in quests:
+                advanced = quest.advance_objective(
+                    QuestObjectiveType.KILL_PLAYER, victim_player_id_value
+                )
+                if not advanced:
+                    continue
+                if not quest.is_all_objectives_completed():
+                    self._quest_repository.save(quest)
+                    continue
+                quest.complete()
+                self._grant_reward(quest)
+                self._quest_repository.save(quest)
+                self._logger.info(
+                    "Quest completed (KILL_PLAYER): quest_id=%s, acceptor=%s",
+                    quest.quest_id.value,
+                    quest.acceptor_player_id,
+                )
+
+        self._execute_in_separate_transaction(
+            operation,
+            context={"handler": "quest_progress_player_downed"},
+        )
+
+    def handle_item_taken_from_chest(self, event: ItemTakenFromChestEvent) -> None:
+        """ItemTakenFromChestEvent で、取得者の受託中クエストの TAKE_FROM_CHEST 目標を進める（非同期）。"""
+        try:
+            self._handle_item_taken_from_chest_impl(event)
+        except (ApplicationException, DomainException, QuestApplicationException):
+            raise
+        except Exception as e:
+            self._logger.exception(
+                "Unexpected error in QuestProgressHandler.handle_item_taken_from_chest: %s",
+                e,
+            )
+            raise SystemErrorException(
+                f"Quest progress handling (item_taken_from_chest) failed: {e}",
+                original_exception=e,
+            ) from e
+
+    def _handle_item_taken_from_chest_impl(
+        self, event: ItemTakenFromChestEvent
+    ) -> None:
+        acceptor_id = PlayerId.create(event.player_id_value)
+        spot_id_value = event.spot_id.value
+        chest_id_value = event.chest_id.value
+
+        def operation():
+            quests = self._quest_repository.find_accepted_quests_by_player(
+                acceptor_id
+            )
+            for quest in quests:
+                advanced = quest.advance_objective(
+                    QuestObjectiveType.TAKE_FROM_CHEST,
+                    spot_id_value,
+                    target_id_secondary=chest_id_value,
+                )
+                if not advanced:
+                    continue
+                if not quest.is_all_objectives_completed():
+                    self._quest_repository.save(quest)
+                    continue
+                quest.complete()
+                self._grant_reward(quest)
+                self._quest_repository.save(quest)
+                self._logger.info(
+                    "Quest completed (TAKE_FROM_CHEST): quest_id=%s, acceptor=%s",
+                    quest.quest_id.value,
+                    quest.acceptor_player_id,
+                )
+
+        self._execute_in_separate_transaction(
+            operation,
+            context={"handler": "quest_progress_item_taken_from_chest"},
+        )
+
+    def handle_location_entered(self, event: LocationEnteredEvent) -> None:
+        """LocationEnteredEvent で、到達プレイヤーの受託中クエストの REACH_SPOT / REACH_LOCATION 目標を進める（非同期）。"""
+        try:
+            self._handle_location_entered_impl(event)
+        except (ApplicationException, DomainException, QuestApplicationException):
+            raise
+        except Exception as e:
+            self._logger.exception(
+                "Unexpected error in QuestProgressHandler.handle_location_entered: %s",
+                e,
+            )
+            raise SystemErrorException(
+                f"Quest progress handling (location_entered) failed: {e}",
+                original_exception=e,
+            ) from e
+
+    def _handle_location_entered_impl(self, event: LocationEnteredEvent) -> None:
+        if event.player_id_value is None:
+            return
+        acceptor_id = PlayerId.create(event.player_id_value)
+        spot_id_value = event.spot_id.value
+        location_id_value = event.location_id.value
+
+        def operation():
+            quests = self._quest_repository.find_accepted_quests_by_player(
+                acceptor_id
+            )
+            for quest in quests:
+                any_advanced = False
+                # REACH_SPOT: target_id = spot_id, target_id_secondary = None
+                if quest.advance_objective(
+                    QuestObjectiveType.REACH_SPOT, spot_id_value
+                ):
+                    any_advanced = True
+                # REACH_LOCATION: target_id = location_id, target_id_secondary = spot_id
+                if quest.advance_objective(
+                    QuestObjectiveType.REACH_LOCATION,
+                    location_id_value,
+                    target_id_secondary=spot_id_value,
+                ):
+                    any_advanced = True
+                if not any_advanced:
+                    continue
+                if not quest.is_all_objectives_completed():
+                    self._quest_repository.save(quest)
+                    continue
+                quest.complete()
+                self._grant_reward(quest)
+                self._quest_repository.save(quest)
+                self._logger.info(
+                    "Quest completed (REACH_SPOT/REACH_LOCATION): quest_id=%s, acceptor=%s",
+                    quest.quest_id.value,
+                    quest.acceptor_player_id,
+                )
+
+        self._execute_in_separate_transaction(
+            operation,
+            context={"handler": "quest_progress_location_entered"},
+        )
+
+    def handle_gateway_triggered(self, event: GatewayTriggeredEvent) -> None:
+        """GatewayTriggeredEvent で、通過プレイヤーの受託中クエストの REACH_SPOT 目標を進める（非同期）。"""
+        try:
+            self._handle_gateway_triggered_impl(event)
+        except (ApplicationException, DomainException, QuestApplicationException):
+            raise
+        except Exception as e:
+            self._logger.exception(
+                "Unexpected error in QuestProgressHandler.handle_gateway_triggered: %s",
+                e,
+            )
+            raise SystemErrorException(
+                f"Quest progress handling (gateway_triggered) failed: {e}",
+                original_exception=e,
+            ) from e
+
+    def _handle_gateway_triggered_impl(
+        self, event: GatewayTriggeredEvent
+    ) -> None:
+        if event.player_id_value is None:
+            return
+        acceptor_id = PlayerId.create(event.player_id_value)
+        # 着地先スポットで REACH_SPOT を判定（通過した先のスポットに「到達」したとみなす）
+        target_spot_id_value = event.target_spot_id.value
+        spot_id_value = event.spot_id.value
+
+        def operation():
+            quests = self._quest_repository.find_accepted_quests_by_player(
+                acceptor_id
+            )
+            for quest in quests:
+                # 着地先スポットで進捗
+                advanced = quest.advance_objective(
+                    QuestObjectiveType.REACH_SPOT, target_spot_id_value
+                )
+                if not advanced:
+                    # 通過元スポットでも進捗を試す（「このゲートを通過する」目標の場合）
+                    advanced = quest.advance_objective(
+                        QuestObjectiveType.REACH_SPOT, spot_id_value
+                    )
+                if not advanced:
+                    continue
+                if not quest.is_all_objectives_completed():
+                    self._quest_repository.save(quest)
+                    continue
+                quest.complete()
+                self._grant_reward(quest)
+                self._quest_repository.save(quest)
+                self._logger.info(
+                    "Quest completed (REACH_SPOT gateway): quest_id=%s, acceptor=%s",
+                    quest.quest_id.value,
+                    quest.acceptor_player_id,
+                )
+
+        self._execute_in_separate_transaction(
+            operation,
+            context={"handler": "quest_progress_gateway_triggered"},
+        )
+
+    def handle_item_added_to_inventory(
+        self, event: ItemAddedToInventoryEvent
+    ) -> None:
+        """ItemAddedToInventoryEvent で、取得者の受託中クエストの OBTAIN_ITEM 目標を進める（非同期）。"""
+        try:
+            self._handle_item_added_to_inventory_impl(event)
+        except (ApplicationException, DomainException, QuestApplicationException):
+            raise
+        except Exception as e:
+            self._logger.exception(
+                "Unexpected error in QuestProgressHandler.handle_item_added_to_inventory: %s",
+                e,
+            )
+            raise SystemErrorException(
+                f"Quest progress handling (item_added_to_inventory) failed: {e}",
+                original_exception=e,
+            ) from e
+
+    def _handle_item_added_to_inventory_impl(
+        self, event: ItemAddedToInventoryEvent
+    ) -> None:
+        acceptor_id = event.aggregate_id
+        item_aggregate = self._item_repository.find_by_id(event.item_instance_id)
+        if item_aggregate is None:
+            self._logger.debug(
+                "Item %s not found, skipping OBTAIN_ITEM progress",
+                event.item_instance_id,
+            )
+            return
+        item_spec_id_value = item_aggregate.item_spec.item_spec_id.value
+
+        def operation():
+            quests = self._quest_repository.find_accepted_quests_by_player(
+                acceptor_id
+            )
+            for quest in quests:
+                advanced = quest.advance_objective(
+                    QuestObjectiveType.OBTAIN_ITEM, item_spec_id_value
+                )
+                if not advanced:
+                    continue
+                if not quest.is_all_objectives_completed():
+                    self._quest_repository.save(quest)
+                    continue
+                quest.complete()
+                self._grant_reward(quest)
+                self._quest_repository.save(quest)
+                self._logger.info(
+                    "Quest completed (OBTAIN_ITEM): quest_id=%s, acceptor=%s",
+                    quest.quest_id.value,
+                    quest.acceptor_player_id,
+                )
+
+        self._execute_in_separate_transaction(
+            operation,
+            context={"handler": "quest_progress_item_added_to_inventory"},
+        )
+
+    def handle_conversation_ended(self, event: ConversationEndedEvent) -> None:
+        """ConversationEndedEvent で、話したプレイヤーの受託中クエストの TALK_TO_NPC 目標を進める（非同期）。"""
+        try:
+            self._handle_conversation_ended_impl(event)
+        except (ApplicationException, DomainException, QuestApplicationException):
+            raise
+        except Exception as e:
+            self._logger.exception(
+                "Unexpected error in QuestProgressHandler.handle_conversation_ended: %s",
+                e,
+            )
+            raise SystemErrorException(
+                f"Quest progress handling (conversation_ended) failed: {e}",
+                original_exception=e,
+            ) from e
+
+    def _handle_conversation_ended_impl(
+        self, event: ConversationEndedEvent
+    ) -> None:
+        acceptor_id = event.aggregate_id
+        npc_id_value = event.npc_id_value
+
+        def operation():
+            quests = self._quest_repository.find_accepted_quests_by_player(
+                acceptor_id
+            )
+            for quest in quests:
+                advanced = quest.advance_objective(
+                    QuestObjectiveType.TALK_TO_NPC, npc_id_value
+                )
+                if not advanced:
+                    continue
+                if not quest.is_all_objectives_completed():
+                    self._quest_repository.save(quest)
+                    continue
+                quest.complete()
+                self._grant_reward(quest)
+                self._quest_repository.save(quest)
+                self._logger.info(
+                    "Quest completed (TALK_TO_NPC): quest_id=%s, acceptor=%s",
+                    quest.quest_id.value,
+                    quest.acceptor_player_id,
+                )
+
+        self._execute_in_separate_transaction(
+            operation,
+            context={"handler": "quest_progress_conversation_ended"},
+        )
+
+    def _grant_reward(self, quest) -> None:
+        """完了したクエストの報酬を受託者に付与する。プレイヤー発行時は確保済み報酬を転送する。
+        付与に失敗した場合は QuestRewardGrantException を投げ、イベント再配送によるリトライを促す。
+        """
+        acceptor_id = quest.acceptor_player_id
+        reward = quest.reward
+        quest_id_val = quest.quest_id.value
+        acceptor_id_val = acceptor_id.value if acceptor_id else None
+        player_status = self._player_status_repository.find_by_id(acceptor_id)
+        if not player_status:
+            raise QuestRewardGrantException(
+                f"報酬付与に失敗しました: 受託者のステータスが見つかりません (acceptor_player_id={acceptor_id})",
+                quest_id=quest_id_val,
+                acceptor_player_id=acceptor_id_val,
+            )
+        inventory = self._player_inventory_repository.find_by_id(acceptor_id)
+        if not inventory:
+            raise QuestRewardGrantException(
+                f"報酬付与に失敗しました: 受託者のインベントリが見つかりません (acceptor_player_id={acceptor_id})",
+                quest_id=quest_id_val,
+                acceptor_player_id=acceptor_id_val,
+            )
+
+        if quest.issuer_player_id is not None and (
+            quest.reserved_gold > 0 or quest.reserved_item_instance_ids
+        ):
+            self._grant_reserved_reward(quest, player_status, inventory)
+        else:
+            self._grant_system_reward(quest, player_status, inventory)
+
+        self._player_status_repository.save(player_status)
+        self._player_inventory_repository.save(inventory)
+
+    def _grant_reserved_reward(self, quest, player_status, inventory) -> None:
+        """プレイヤー発行クエストの確保済み報酬を受託者に付与する。"""
+        if quest.reserved_gold > 0:
+            player_status.earn_gold(quest.reserved_gold)
+        if not quest.reserved_item_instance_ids:
+            return
+        issuer_inventory = self._player_inventory_repository.find_by_id(
+            quest.issuer_player_id
+        )
+        if not issuer_inventory:
+            raise QuestRewardGrantException(
+                f"報酬付与に失敗しました: 発行者のインベントリが見つかりません (issuer_player_id={quest.issuer_player_id})",
+                quest_id=quest.quest_id.value,
+                acceptor_player_id=quest.acceptor_player_id.value if quest.acceptor_player_id else None,
+            )
+        for item_id in quest.reserved_item_instance_ids:
+            issuer_inventory.remove_reserved_item(item_id)
+            inventory.acquire_item(item_id)
+        self._player_inventory_repository.save(issuer_inventory)
+
+    def _grant_system_reward(self, quest, player_status, inventory) -> None:
+        """システム発行クエストの報酬（ゴールド・経験値・新規アイテム）を受託者に付与する。"""
+        reward = quest.reward
+        if reward.gold > 0:
+            player_status.earn_gold(reward.gold)
+        if reward.exp > 0:
+            player_status.gain_exp(reward.exp)
+        for item_spec_id, quantity in reward.item_rewards:
+            item_spec = self._item_spec_repository.find_by_id(item_spec_id)
+            if not item_spec:
+                raise QuestRewardGrantException(
+                    f"報酬付与に失敗しました: 報酬アイテムの仕様が見つかりません (item_spec_id={item_spec_id.value})",
+                    quest_id=quest.quest_id.value,
+                    acceptor_player_id=quest.acceptor_player_id.value if quest.acceptor_player_id else None,
+                )
+            instance_id = self._item_repository.generate_item_instance_id()
+            item_aggregate = ItemAggregate.create(
+                item_instance_id=instance_id,
+                item_spec=item_spec,
+                quantity=quantity,
+            )
+            self._item_repository.save(item_aggregate)
+            inventory.acquire_item(instance_id)
