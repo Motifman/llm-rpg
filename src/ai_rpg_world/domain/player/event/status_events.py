@@ -10,7 +10,8 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 
 @dataclass(frozen=True)
 class PlayerDownedEvent(BaseDomainEvent[PlayerId, "PlayerStatusAggregate"]):
-    """プレイヤー戦闘不能イベント"""
+    """プレイヤー戦闘不能イベント。死因は様々なため killer_player_id は Optional。"""
+    killer_player_id: Optional[PlayerId] = None
 
 
 @dataclass(frozen=True)

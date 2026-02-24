@@ -154,7 +154,7 @@ class HitBoxDamageHandler(EventHandler[HitBoxHitRecordedEvent]):
             if is_evaded:
                 player.record_evasion()
                 return
-            player.apply_damage(damage)
+            player.apply_damage(damage, killer_player_id=killer_player_id)
             return
 
         monster: MonsterAggregate = combatant.stats_owner

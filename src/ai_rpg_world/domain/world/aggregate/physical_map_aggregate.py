@@ -440,6 +440,8 @@ class PhysicalMapAggregate(AggregateRoot):
 
             if not was_in and is_in:
                 # Entering a location area - send detailed info
+                obj = self._objects.get(object_id)
+                player_id_value = obj.player_id.value if (obj and obj.player_id) else None
                 self.add_event(LocationEnteredEvent.create(
                     aggregate_id=loc.location_id,
                     aggregate_type="LocationArea",
@@ -447,7 +449,8 @@ class PhysicalMapAggregate(AggregateRoot):
                     spot_id=self._spot_id,
                     object_id=object_id,
                     name=loc.name,
-                    description=loc.description
+                    description=loc.description,
+                    player_id_value=player_id_value,
                 ))
             elif was_in and not is_in:
                 # Exiting a location area
@@ -466,6 +469,8 @@ class PhysicalMapAggregate(AggregateRoot):
 
             if not was_in and is_in:
                 # Entering a gateway area triggers the transition
+                obj = self._objects.get(object_id)
+                player_id_value = obj.player_id.value if (obj and obj.player_id) else None
                 self.add_event(GatewayTriggeredEvent.create(
                     aggregate_id=gateway.gateway_id,
                     aggregate_type="Gateway",
@@ -473,7 +478,8 @@ class PhysicalMapAggregate(AggregateRoot):
                     spot_id=self._spot_id,
                     object_id=object_id,
                     target_spot_id=gateway.target_spot_id,
-                    landing_coordinate=gateway.landing_coordinate
+                    landing_coordinate=gateway.landing_coordinate,
+                    player_id_value=player_id_value,
                 ))
 
     def _activate_area_trigger(self, trigger: AreaTrigger, object_id: WorldObjectId):
