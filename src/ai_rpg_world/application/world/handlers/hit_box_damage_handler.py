@@ -1,12 +1,14 @@
 import logging
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
 from ai_rpg_world.domain.combat.event.combat_events import HitBoxHitRecordedEvent
 from ai_rpg_world.domain.combat.service.combat_logic_service import CombatLogicService
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
@@ -20,6 +22,19 @@ from ai_rpg_world.domain.world.repository.physical_map_repository import Physica
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
 from ai_rpg_world.domain.monster.exception.monster_exceptions import MonsterAlreadyDeadException
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+
+
+def _effective_stats_for_combatant(
+    stats_owner: Union[PlayerStatusAggregate, MonsterAggregate],
+    current_tick: WorldTick,
+) -> BaseStats:
+    """アプリ層から集約の実効ステータスを取得する（ドメインサービスを仲介）。"""
+    if isinstance(stats_owner, MonsterAggregate):
+        base = stats_owner.get_base_stats_with_growth(current_tick)
+    else:
+        base = stats_owner.base_stats
+    return compute_effective_stats(base, stats_owner.active_effects, current_tick)
 
 
 @dataclass(frozen=True)
@@ -95,12 +110,18 @@ class HitBoxDamageHandler(EventHandler[HitBoxHitRecordedEvent]):
             self._logger.debug("Target object %s is not a combatant", event.target_id)
             return
 
+        raw_tick = self._time_provider.get_current_tick()
+        current_tick = WorldTick(raw_tick if isinstance(raw_tick, int) else raw_tick.value)
+
+        # 期限切れ効果を集約側で除去（実効ステータス計算前に実行）
+        if attacker is not None:
+            attacker.stats_owner.cleanup_expired_effects(current_tick)
+        defender.stats_owner.cleanup_expired_effects(current_tick)
+
         if hit_box.attacker_stats:
             attacker_stats = hit_box.attacker_stats
         elif attacker is not None:
-            attacker_stats = attacker.stats_owner.get_effective_stats(
-                self._time_provider.get_current_tick()
-            )
+            attacker_stats = _effective_stats_for_combatant(attacker.stats_owner, current_tick)
         else:
             self._logger.debug(
                 "Attacker stats not available for HitBox %s (expected if owner gone)",
@@ -108,8 +129,7 @@ class HitBoxDamageHandler(EventHandler[HitBoxHitRecordedEvent]):
             )
             return
 
-        current_tick = self._time_provider.get_current_tick()
-        defender_stats = defender.stats_owner.get_effective_stats(current_tick)
+        defender_stats = _effective_stats_for_combatant(defender.stats_owner, current_tick)
         damage = CombatLogicService.calculate_damage(
             attacker_stats=attacker_stats,
             defender_stats=defender_stats,
@@ -126,6 +146,7 @@ class HitBoxDamageHandler(EventHandler[HitBoxHitRecordedEvent]):
             defender,
             damage.value,
             damage.is_evaded,
+            current_tick=current_tick,
             attacker_id=event.owner_id,
             killer_player_id=killer_player_id,
         )
@@ -148,7 +169,15 @@ class HitBoxDamageHandler(EventHandler[HitBoxHitRecordedEvent]):
             return _Combatant(kind="monster", stats_owner=monster)
         return None
 
-    def _apply_damage_or_evasion(self, combatant: _Combatant, damage: int, is_evaded: bool, attacker_id: Optional[WorldObjectId] = None, killer_player_id: Optional[PlayerId] = None) -> None:
+    def _apply_damage_or_evasion(
+        self,
+        combatant: _Combatant,
+        damage: int,
+        is_evaded: bool,
+        current_tick: WorldTick,
+        attacker_id: Optional[WorldObjectId] = None,
+        killer_player_id: Optional[PlayerId] = None,
+    ) -> None:
         if combatant.kind == "player":
             player: PlayerStatusAggregate = combatant.stats_owner
             if is_evaded:
@@ -162,5 +191,4 @@ class HitBoxDamageHandler(EventHandler[HitBoxHitRecordedEvent]):
             monster.record_evasion()
             return
 
-        current_tick = self._time_provider.get_current_tick()
         monster.apply_damage(damage, current_tick=current_tick, attacker_id=attacker_id, killer_player_id=killer_player_id)

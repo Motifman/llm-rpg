@@ -8,6 +8,7 @@ MP消費・クールダウン開始・ヒットボックス生成パラメータ
 from typing import List, TYPE_CHECKING
 
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
 from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecutionDomainService
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.combat.value_object.hit_box_spawn_param import HitBoxSpawnParam
@@ -63,9 +64,15 @@ class MonsterSkillExecutionDomainService:
         monster.use_mp(skill_spec.mp_cost)
         loadout.use_skill(slot_index, current_tick.value, actor_id=loadout.owner_id)
 
+        attacker_stats = compute_effective_stats(
+            monster.get_base_stats_with_growth(current_tick),
+            monster.active_effects,
+            current_tick,
+        )
         return self._skill_execution_service.execute_monster_skill(
             physical_map=physical_map,
             monster=monster,
             skill_spec=skill_spec,
             current_tick=current_tick,
+            attacker_stats=attacker_stats,
         )

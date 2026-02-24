@@ -46,6 +46,7 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum, EcologyTypeEnum
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
+from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
 
 
 class TestMonsterAggregate:
@@ -962,8 +963,12 @@ class TestMonsterAggregate:
             monster.use_mp(40)
             monster.clear_events()
 
-            # When
-            monster.on_tick(WorldTick(11))
+            # When（実効ステータスはアプリ層で算出して渡す）
+            tick_11 = WorldTick(11)
+            regen_stats = compute_effective_stats(
+                monster.get_base_stats_with_growth(tick_11), monster.active_effects, tick_11
+            )
+            monster.on_tick(tick_11, regen_stats=regen_stats)
 
             # Then
             # Default rate is 0.01 (1%). 100 * 0.01 = 1.
@@ -981,9 +986,13 @@ class TestMonsterAggregate:
             
             # Rate 10%
             config = DefaultMonsterConfigService(regeneration_rate=0.1)
-            monster.on_tick(WorldTick(11), config=config)
-            
-            assert monster.hp.value == 60 # 50 + 100 * 0.1
+            tick_11 = WorldTick(11)
+            regen_stats = compute_effective_stats(
+                monster.get_base_stats_with_growth(tick_11), monster.active_effects, tick_11
+            )
+            monster.on_tick(tick_11, config=config, regen_stats=regen_stats)
+
+            assert monster.hp.value == 60  # 50 + 100 * 0.1
 
     class TestMpUsage:
         def test_use_mp_success(self, monster: MonsterAggregate, spot_id: SpotId):
@@ -1001,58 +1010,52 @@ class TestMonsterAggregate:
                 monster.use_mp(1)
 
     class TestStatusEffects:
-        def test_get_effective_stats_with_multiplicative_buffs(self, monster: MonsterAggregate, spot_id: SpotId):
-            # Given
+        def test_effective_stats_with_multiplicative_buffs_via_domain_service(
+            self, monster: MonsterAggregate, spot_id: SpotId
+        ):
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            # 攻撃力 20
-            # 1.5倍バフと1.2倍バフを付与
             from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
             from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
             monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(100)))
             monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.2, WorldTick(100)))
-            
-            # When
-            effective_stats = monster.get_effective_stats(WorldTick(10))
-            
-            # Then
-            # 20 * 1.5 * 1.2 = 36
-            assert effective_stats.attack == 36
 
-        def test_get_effective_stats_filters_expired_effects(self, monster: MonsterAggregate, spot_id: SpotId):
-            # Given
+            tick = WorldTick(10)
+            effective_stats = compute_effective_stats(
+                monster.get_base_stats_with_growth(tick), monster.active_effects, tick
+            )
+            assert effective_stats.attack == 36  # 20 * 1.5 * 1.2
+
+        def test_effective_stats_filters_expired_effects_via_domain_service(
+            self, monster: MonsterAggregate, spot_id: SpotId
+        ):
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            # 攻撃力 20
-            # 期限切れ(Tick 5)の 2.0倍バフ
             from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
             from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
             monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 2.0, WorldTick(5)))
-            # 有効な 1.5倍バフ
             monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(20)))
-            
-            # When
-            effective_stats = monster.get_effective_stats(WorldTick(10))
-            
-            # Then
-            # 20 * 1.5 = 30
-            assert effective_stats.attack == 30
-            assert len(monster._active_effects) == 1
 
-        def test_buff_and_debuff_stacking(self, monster: MonsterAggregate, spot_id: SpotId):
-            # Given
+            tick = WorldTick(10)
+            effective_stats = compute_effective_stats(
+                monster.get_base_stats_with_growth(tick), monster.active_effects, tick
+            )
+            assert effective_stats.attack == 30  # 20 * 1.5 のみ
+            monster.cleanup_expired_effects(tick)
+            assert len(monster.active_effects) == 1
+
+        def test_buff_and_debuff_stacking_via_domain_service(
+            self, monster: MonsterAggregate, spot_id: SpotId
+        ):
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            # 攻撃力 20
-            # 1.5倍バフと 0.5倍デバフ
             from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
             from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
             monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(100)))
             monster.add_status_effect(StatusEffect(StatusEffectType.ATTACK_DOWN, 0.5, WorldTick(100)))
-            
-            # When
-            effective_stats = monster.get_effective_stats(WorldTick(10))
-            
-            # Then
-            # 20 * 1.5 * 0.5 = 15
-            assert effective_stats.attack == 15
+
+            tick = WorldTick(10)
+            effective_stats = compute_effective_stats(
+                monster.get_base_stats_with_growth(tick), monster.active_effects, tick
+            )
+            assert effective_stats.attack == 15  # 20 * 1.5 * 0.5
 
     class TestSpawnedAtTick:
         """spawned_at_tick のテスト"""
@@ -1070,7 +1073,7 @@ class TestMonsterAggregate:
             assert monster.spawned_at_tick == tick
 
     class TestGrowthStages:
-        """成長段階（get_current_growth_multiplier / get_effective_stats）のテスト"""
+        """成長段階（get_current_growth_multiplier / get_base_stats_with_growth + compute_effective_stats）のテスト"""
 
         @pytest.fixture
         def template_with_growth_stages(
@@ -1135,23 +1138,23 @@ class TestMonsterAggregate:
             assert monster_with_growth.get_current_growth_multiplier(WorldTick(100)) == 1.0
             assert monster_with_growth.get_current_growth_multiplier(WorldTick(200)) == 1.0
 
-        def test_get_effective_stats_applies_growth_multiplier_juvenile(
+        def test_get_base_stats_with_growth_applies_growth_multiplier_juvenile(
             self, monster_with_growth: MonsterAggregate, spot_id: SpotId
         ):
-            """幼体時は get_effective_stats の攻撃・防御・速度に 0.8 が掛かること"""
+            """幼体時は get_base_stats_with_growth の攻撃・防御・速度に 0.8 が掛かること"""
             monster_with_growth.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            stats = monster_with_growth.get_effective_stats(WorldTick(50))
+            stats = monster_with_growth.get_base_stats_with_growth(WorldTick(50))
             # base: attack=20, defense=15, speed=10
             assert stats.attack == 16  # 20 * 0.8
             assert stats.defense == 12  # 15 * 0.8
             assert stats.speed == 8  # 10 * 0.8
 
-        def test_get_effective_stats_applies_growth_multiplier_adult(
+        def test_get_base_stats_with_growth_applies_growth_multiplier_adult(
             self, monster_with_growth: MonsterAggregate, spot_id: SpotId
         ):
-            """成体時は get_effective_stats がベースのままであること"""
+            """成体時は get_base_stats_with_growth がベースのままであること"""
             monster_with_growth.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            stats = monster_with_growth.get_effective_stats(WorldTick(150))
+            stats = monster_with_growth.get_base_stats_with_growth(WorldTick(150))
             assert stats.attack == 20
             assert stats.defense == 15
             assert stats.speed == 10
@@ -1165,21 +1168,21 @@ class TestMonsterAggregate:
             assert monster_with_growth.get_effective_flee_threshold(WorldTick(50)) == 0.2
             assert monster_with_growth.get_allow_chase(WorldTick(50)) is True
 
-        def test_get_effective_stats_no_growth_stages_uses_one(
+        def test_get_base_stats_with_growth_no_growth_stages_uses_one(
             self, monster: MonsterAggregate, spot_id: SpotId
         ):
             """growth_stages が空のテンプレートでは乗率 1.0 であること"""
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            stats = monster.get_effective_stats(WorldTick(1000))
+            stats = monster.get_base_stats_with_growth(WorldTick(1000))
             assert stats.attack == monster.template.base_stats.attack
             assert stats.defense == monster.template.base_stats.defense
 
-        def test_get_effective_stats_applies_growth_to_max_hp_mp(
+        def test_get_base_stats_with_growth_applies_growth_to_max_hp_mp(
             self, monster_with_growth: MonsterAggregate, spot_id: SpotId
         ):
             """成長段階の乗率が max_hp, max_mp にも適用されること"""
             monster_with_growth.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            stats = monster_with_growth.get_effective_stats(WorldTick(50))
+            stats = monster_with_growth.get_base_stats_with_growth(WorldTick(50))
             # base max_hp=100, max_mp=50、幼体 0.8 → 80, 40
             assert stats.max_hp == 80
             assert stats.max_mp == 40
