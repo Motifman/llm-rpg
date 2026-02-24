@@ -26,3 +26,27 @@ class QuestSystemErrorException(QuestApplicationException):
             context["original_exception"] = original_exception
         super().__init__(message, error_code="QUEST_SYSTEM_ERROR", **context)
         self.original_exception = original_exception
+
+
+class QuestRewardGrantException(QuestApplicationException):
+    """クエスト報酬付与に失敗した場合の例外（イベント再配送・リトライ対象）"""
+
+    def __init__(
+        self,
+        message: str,
+        quest_id: Optional[int] = None,
+        acceptor_player_id: Optional[int] = None,
+        **context,
+    ):
+        ctx = dict(context)
+        if quest_id is not None:
+            ctx["quest_id"] = quest_id
+        if acceptor_player_id is not None:
+            ctx["acceptor_player_id"] = acceptor_player_id
+        super().__init__(
+            message,
+            error_code="QUEST_REWARD_GRANT_ERROR",
+            **ctx,
+        )
+        self.quest_id = quest_id
+        self.acceptor_player_id = acceptor_player_id

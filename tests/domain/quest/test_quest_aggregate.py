@@ -333,6 +333,22 @@ class TestQuestAggregate:
         ):
             assert accepted_quest.can_be_accepted_by(other_player_id) is False
 
+        def test_open_guild_scope_can_be_accepted_by_any_player_for_phase3(
+            self, quest_id, objectives, reward, player_id, other_player_id
+        ):
+            """ギルドスコープ時は現状どのプレイヤーも受託可能。Phase 3 でギルドメンバー制限を実装する際にこのテストを更新する。"""
+            scope = QuestScope.guild_scope(guild_id=10)
+            q = QuestAggregate.issue_quest(
+                quest_id=quest_id,
+                objectives=objectives,
+                reward=reward,
+                scope=scope,
+                issuer_player_id=None,
+                guild_id=10,
+            )
+            assert q.can_be_accepted_by(player_id) is True
+            assert q.can_be_accepted_by(other_player_id) is True
+
     class TestIsIssuerOrAcceptor:
         def test_issuer_is_included(
             self, quest_id, objectives, reward, scope, player_id
