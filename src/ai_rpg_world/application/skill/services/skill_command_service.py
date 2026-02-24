@@ -18,6 +18,8 @@ from ai_rpg_world.application.skill.exceptions.command.skill_command_exception i
 )
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
@@ -243,6 +245,10 @@ class SkillCommandService:
                     raise SkillCommandException(f"invalid direction: {command.target_direction}")
 
             try:
+                current_tick_vo = WorldTick(command.current_tick)
+                attacker_stats = compute_effective_stats(
+                    status.base_stats, status.active_effects, current_tick_vo
+                )
                 spawn_params = self._skill_execution_service.execute_skill(
                     physical_map=physical_map,
                     player_status=status,
@@ -250,6 +256,7 @@ class SkillCommandService:
                     skill_spec=skill_spec,
                     slot_index=command.slot_index,
                     current_tick=command.current_tick,
+                    attacker_stats=attacker_stats,
                     auto_aim=command.auto_aim,
                     target_direction_override=target_direction_override
                 )

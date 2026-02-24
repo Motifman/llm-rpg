@@ -23,6 +23,7 @@ from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHit
 from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
 from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
 from ai_rpg_world.domain.combat.event.combat_events import HitBoxHitRecordedEvent
 from ai_rpg_world.domain.combat.service.hit_box_collision_service import HitBoxCollisionDomainService
@@ -1269,11 +1270,16 @@ class TestCombatIntegration:
         s["inventory_repo"].save(PlayerInventoryAggregate.create_new_inventory(player_id))
         s["monster_repo"].save(_create_monster(1, 300, Coordinate(1, 0, 0)))
 
-        # 攻撃者のステータスを込めてHitBox生成
+        # 攻撃者のステータスを込めてHitBox生成（実効ステータスはドメインサービスで算出）
+        tick10 = WorldTick(10)
+        player_status = s["player_repo"].find_by_id(player_id)
+        attacker_stats = compute_effective_stats(
+            player_status.base_stats, player_status.active_effects, tick10
+        )
         hb = HitBoxAggregate.create(
             HitBoxId.create(1), SpotId(1), WorldObjectId(100), HitBoxShape.single_cell(),
-            Coordinate(0, 0, 0), WorldTick(10), 5, velocity=HitBoxVelocity(1, 0, 0),
-            attacker_stats=s["player_repo"].find_by_id(player_id).get_effective_stats(WorldTick(10))
+            Coordinate(0, 0, 0), tick10, 5, velocity=HitBoxVelocity(1, 0, 0),
+            attacker_stats=attacker_stats,
         )
         s["hit_box_repo"].save(hb)
 

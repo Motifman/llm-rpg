@@ -28,6 +28,9 @@ from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, ObjectTypeE
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
+
 
 class TestSkillExecutionDomainService:
     @pytest.fixture
@@ -79,14 +82,17 @@ class TestSkillExecutionDomainService:
 
     def test_execute_skill_success(self, setup):
         service, pmap, status, loadout, skill_spec = setup
-        
+        tick = WorldTick(0)
+        attacker_stats = compute_effective_stats(status.base_stats, status.active_effects, tick)
+
         params = service.execute_skill(
             physical_map=pmap,
             player_status=status,
             skill_loadout=loadout,
             skill_spec=skill_spec,
             slot_index=0,
-            current_tick=0
+            current_tick=0,
+            attacker_stats=attacker_stats,
         )
         
         assert len(params) == 1
@@ -105,7 +111,9 @@ class TestSkillExecutionDomainService:
             component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(200))
         )
         pmap.add_object(enemy)
-        
+        tick = WorldTick(0)
+        attacker_stats = compute_effective_stats(status.base_stats, status.active_effects, tick)
+
         params = service.execute_skill(
             physical_map=pmap,
             player_status=status,
@@ -113,7 +121,8 @@ class TestSkillExecutionDomainService:
             skill_spec=skill_spec,
             slot_index=0,
             current_tick=0,
-            auto_aim=True
+            attacker_stats=attacker_stats,
+            auto_aim=True,
         )
         
         assert pmap.get_actor(WorldObjectId(100)).direction == DirectionEnum.EAST
@@ -121,8 +130,10 @@ class TestSkillExecutionDomainService:
 
     def test_execute_skill_insufficient_mp(self, setup):
         service, pmap, status, loadout, skill_spec = setup
-        status.consume_resources(mp_cost=95) # Remaining MP 5
-        
+        status.consume_resources(mp_cost=95)  # Remaining MP 5
+        tick = WorldTick(0)
+        attacker_stats = compute_effective_stats(status.base_stats, status.active_effects, tick)
+
         from ai_rpg_world.domain.player.exception.player_exceptions import InsufficientMpException
         with pytest.raises(InsufficientMpException):
             service.execute_skill(
@@ -131,16 +142,25 @@ class TestSkillExecutionDomainService:
                 skill_loadout=loadout,
                 skill_spec=skill_spec,
                 slot_index=0,
-                current_tick=0
+                current_tick=0,
+                attacker_stats=attacker_stats,
             )
 
     def test_execute_skill_on_cooldown(self, setup):
         service, pmap, status, loadout, skill_spec = setup
-        
+        tick0 = WorldTick(0)
+        tick5 = WorldTick(5)
+        attacker_stats_0 = compute_effective_stats(status.base_stats, status.active_effects, tick0)
+        attacker_stats_5 = compute_effective_stats(status.base_stats, status.active_effects, tick5)
+
         # 1回目
-        service.execute_skill(pmap, status, loadout, skill_spec, 0, 0)
-        
+        service.execute_skill(
+            pmap, status, loadout, skill_spec, 0, 0, attacker_stats=attacker_stats_0
+        )
+
         # 2回目 (Tick 5, Cooldown 10)
         from ai_rpg_world.domain.skill.exception.skill_exceptions import SkillCooldownActiveException
         with pytest.raises(SkillCooldownActiveException):
-            service.execute_skill(pmap, status, loadout, skill_spec, 0, 5)
+            service.execute_skill(
+                pmap, status, loadout, skill_spec, 0, 5, attacker_stats=attacker_stats_5
+            )

@@ -36,7 +36,6 @@ from ai_rpg_world.domain.monster.value_object.behavior_state_snapshot import Beh
 from ai_rpg_world.domain.monster.value_object.feed_memory_entry import FeedMemoryEntry
 from ai_rpg_world.domain.monster.service.monster_config_service import MonsterConfigService, DefaultMonsterConfigService
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
-from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.monster.service.behavior_state_transition_service import (
@@ -192,40 +191,24 @@ class MonsterAggregate(AggregateRoot):
         stage = self._get_current_growth_stage(current_tick)
         return stage.allow_chase if stage else True
 
-    def get_effective_stats(self, current_tick: WorldTick) -> BaseStats:
-        """バフ・デバフ・成長段階適用後の実効ステータス（期限切れを除外）"""
-        # 期限切れエフェクトのクリーンアップ
-        self.cleanup_expired_effects(current_tick)
-        
+    def get_base_stats_with_growth(self, current_tick: WorldTick) -> BaseStats:
+        """成長段階のみ適用した BaseStats（バフ・デバフは含まない）。実効ステータスはアプリ層で compute_effective_stats を使用すること。"""
         base = self._template.base_stats
         growth_mult = self.get_current_growth_multiplier(current_tick)
-        atk_mult = growth_mult
-        def_mult = growth_mult
-        spd_mult = growth_mult
-        
-        for effect in self._active_effects:
-            if effect.effect_type == StatusEffectType.ATTACK_UP:
-                atk_mult *= effect.value
-            elif effect.effect_type == StatusEffectType.ATTACK_DOWN:
-                atk_mult *= effect.value
-            elif effect.effect_type == StatusEffectType.DEFENSE_UP:
-                def_mult *= effect.value
-            elif effect.effect_type == StatusEffectType.DEFENSE_DOWN:
-                def_mult *= effect.value
-            elif effect.effect_type == StatusEffectType.SPEED_UP:
-                spd_mult *= effect.value
-            elif effect.effect_type == StatusEffectType.SPEED_DOWN:
-                spd_mult *= effect.value
-                
         return BaseStats(
             max_hp=max(1, int(base.max_hp * growth_mult)),
             max_mp=max(1, int(base.max_mp * growth_mult)),
-            attack=int(base.attack * atk_mult),
-            defense=int(base.defense * def_mult),
-            speed=int(base.speed * spd_mult),
+            attack=int(base.attack * growth_mult),
+            defense=int(base.defense * growth_mult),
+            speed=int(base.speed * growth_mult),
             critical_rate=base.critical_rate,
             evasion_rate=base.evasion_rate,
         )
+
+    @property
+    def active_effects(self) -> List[StatusEffect]:
+        """適用中のステータス効果（変更不可のコピー）。実効ステータスはアプリ層で compute_effective_stats を使用すること。"""
+        return list(self._active_effects)
 
     @property
     def world_object_id(self) -> WorldObjectId:
@@ -342,9 +325,9 @@ class MonsterAggregate(AggregateRoot):
         self._coordinate = coordinate
         self._spot_id = spot_id
         self._status = MonsterStatusEnum.ALIVE
-        effective = self.get_effective_stats(current_tick)
-        self._hp = MonsterHp.create(effective.max_hp, effective.max_hp)
-        self._mp = MonsterMp.create(effective.max_mp, effective.max_mp)
+        base_with_growth = self.get_base_stats_with_growth(current_tick)
+        self._hp = MonsterHp.create(base_with_growth.max_hp, base_with_growth.max_hp)
+        self._mp = MonsterMp.create(base_with_growth.max_mp, base_with_growth.max_mp)
         self._last_death_tick = None
         self._behavior_initial_position = coordinate
         self._behavior_state = BehaviorStateEnum.IDLE
@@ -483,13 +466,17 @@ class MonsterAggregate(AggregateRoot):
         # MonsterMp.use 内で MonsterInsufficientMpException が投げられる
         self._mp = self._mp.use(amount)
 
-    def on_tick(self, current_tick: WorldTick, config: MonsterConfigService = DefaultMonsterConfigService()):
-        """時間経過による処理（自然回復など）。自然回復量は実効ステータス（成長段階反映後）の max_hp/max_mp を基準とする。"""
-        if self._status == MonsterStatusEnum.ALIVE:
-            effective = self.get_effective_stats(current_tick)
+    def on_tick(
+        self,
+        current_tick: WorldTick,
+        config: MonsterConfigService = DefaultMonsterConfigService(),
+        regen_stats: Optional[BaseStats] = None,
+    ):
+        """時間経過による処理（自然回復など）。regen_stats はアプリ層で compute_effective_stats により算出して渡す。"""
+        if self._status == MonsterStatusEnum.ALIVE and regen_stats is not None:
             regen_rate = config.get_regeneration_rate()
-            hp_regen = max(1, int(effective.max_hp * regen_rate))
-            mp_regen = max(1, int(effective.max_mp * regen_rate))
+            hp_regen = max(1, int(regen_stats.max_hp * regen_rate))
+            mp_regen = max(1, int(regen_stats.max_mp * regen_rate))
             self.heal_hp(hp_regen)
             self.recover_mp(mp_regen)
         

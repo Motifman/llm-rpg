@@ -1,6 +1,7 @@
 from typing import List, Optional, TYPE_CHECKING
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.skill.value_object.skill_spec import SkillSpec
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
@@ -34,11 +35,13 @@ class SkillExecutionDomainService:
         skill_spec: SkillSpec,
         slot_index: int,
         current_tick: int,
+        attacker_stats: BaseStats,
         auto_aim: bool = False,
         target_direction_override: Optional[DirectionEnum] = None,
     ) -> List[HitBoxSpawnParam]:
         """
         スキルを実行し、消費リソースの反映とヒットボックス生成パラメータのリストを返す。
+        attacker_stats はアプリ層で compute_effective_stats により算出して渡す。
         """
         actor_id = WorldObjectId(player_status.player_id.value)
         actor = physical_map.get_actor(actor_id)
@@ -82,7 +85,7 @@ class SkillExecutionDomainService:
             direction=target_direction,
             start_tick=WorldTick(current_tick),
             base_power_multiplier=skill_spec.power_multiplier,
-            attacker_stats=player_status.get_effective_stats(WorldTick(current_tick))
+            attacker_stats=attacker_stats,
         )
 
     def execute_monster_skill(
@@ -91,9 +94,11 @@ class SkillExecutionDomainService:
         monster: "MonsterAggregate",
         skill_spec: SkillSpec,
         current_tick: WorldTick,
+        attacker_stats: BaseStats,
     ) -> List[HitBoxSpawnParam]:
         """
         モンスターがスキルを実行し、ヒットボックス生成パラメータのリストを返す。
+        attacker_stats はアプリ層で compute_effective_stats により算出して渡す。
         クールダウンやリソース消費は呼び出し元（アプリケーション層など）で制御されることを想定。
         """
         actor_id = monster.world_object_id
@@ -111,5 +116,5 @@ class SkillExecutionDomainService:
             direction=target_direction,
             start_tick=current_tick,
             base_power_multiplier=skill_spec.power_multiplier,
-            attacker_stats=monster.get_effective_stats(current_tick)
+            attacker_stats=attacker_stats,
         )

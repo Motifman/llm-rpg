@@ -12,7 +12,6 @@ from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.service.player_config_service import PlayerConfigService, DefaultPlayerConfigService
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
-from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
@@ -87,38 +86,10 @@ class PlayerStatusAggregate(AggregateRoot):
         """基礎ステータス"""
         return self._base_stats
 
-    def get_effective_stats(self, current_tick: WorldTick) -> BaseStats:
-        """バフ・デバフ適用後の実効ステータス（期限切れを除外）"""
-        # 期限切れエフェクトのクリーンアップ
-        self.cleanup_expired_effects(current_tick)
-        
-        atk_mult = 1.0
-        def_mult = 1.0
-        spd_mult = 1.0
-        
-        for effect in self._active_effects:
-            if effect.effect_type == StatusEffectType.ATTACK_UP:
-                atk_mult *= effect.value
-            elif effect.effect_type == StatusEffectType.ATTACK_DOWN:
-                atk_mult *= effect.value
-            elif effect.effect_type == StatusEffectType.DEFENSE_UP:
-                def_mult *= effect.value
-            elif effect.effect_type == StatusEffectType.DEFENSE_DOWN:
-                def_mult *= effect.value
-            elif effect.effect_type == StatusEffectType.SPEED_UP:
-                spd_mult *= effect.value
-            elif effect.effect_type == StatusEffectType.SPEED_DOWN:
-                spd_mult *= effect.value
-                
-        return BaseStats(
-            max_hp=self._base_stats.max_hp,
-            max_mp=self._base_stats.max_mp,
-            attack=int(self._base_stats.attack * atk_mult),
-            defense=int(self._base_stats.defense * def_mult),
-            speed=int(self._base_stats.speed * spd_mult),
-            critical_rate=self._base_stats.critical_rate,
-            evasion_rate=self._base_stats.evasion_rate,
-        )
+    @property
+    def active_effects(self) -> List[StatusEffect]:
+        """適用中のステータス効果（変更不可のコピー）。実効ステータスはアプリ層で compute_effective_stats を使用すること。"""
+        return list(self._active_effects)
 
     @property
     def stat_growth_factor(self) -> StatGrowthFactor:

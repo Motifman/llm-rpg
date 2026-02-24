@@ -743,55 +743,50 @@ class TestPlayerStatusAggregate:
             aggregate.consume_resources(stamina_cost=10, hp_cost=10)
 
     class TestStatusEffects:
-        def test_get_effective_stats_with_multiplicative_buffs(self):
-            # Given
-            aggregate = create_test_status_aggregate(base_stats=create_test_base_stats(attack=20))
-            # 1.5倍バフと1.2倍バフを付与
+        def test_effective_stats_with_multiplicative_buffs_via_domain_service(self):
+            # 実効ステータスはアプリ層で compute_effective_stats を使用する
             from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
             from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
             from ai_rpg_world.domain.common.value_object import WorldTick
+            from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
+
+            aggregate = create_test_status_aggregate(base_stats=create_test_base_stats(attack=20))
             aggregate.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(100)))
             aggregate.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.2, WorldTick(100)))
-            
-            # When
-            effective_stats = aggregate.get_effective_stats(WorldTick(10))
-            
-            # Then
-            # 20 * 1.5 * 1.2 = 36
-            assert effective_stats.attack == 36
 
-        def test_get_effective_stats_filters_expired_effects(self):
-            # Given
-            aggregate = create_test_status_aggregate(base_stats=create_test_base_stats(attack=20))
-            # 期限切れ(Tick 5)の 2.0倍バフ
+            effective_stats = compute_effective_stats(
+                aggregate.base_stats, aggregate.active_effects, WorldTick(10)
+            )
+            assert effective_stats.attack == 36  # 20 * 1.5 * 1.2
+
+        def test_effective_stats_filters_expired_effects_via_domain_service(self):
             from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
             from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
             from ai_rpg_world.domain.common.value_object import WorldTick
+            from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
+
+            aggregate = create_test_status_aggregate(base_stats=create_test_base_stats(attack=20))
             aggregate.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 2.0, WorldTick(5)))
-            # 有効な 1.5倍バフ
             aggregate.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(20)))
-            
-            # When
-            effective_stats = aggregate.get_effective_stats(WorldTick(10))
-            
-            # Then
-            # 20 * 1.5 = 30
-            assert effective_stats.attack == 30
-            assert len(aggregate._active_effects) == 1
 
-        def test_buff_and_debuff_stacking(self):
-            # Given
-            aggregate = create_test_status_aggregate(base_stats=create_test_base_stats(attack=20))
-            # 1.5倍バフと 0.5倍デバフ
+            effective_stats = compute_effective_stats(
+                aggregate.base_stats, aggregate.active_effects, WorldTick(10)
+            )
+            assert effective_stats.attack == 30  # 20 * 1.5 のみ（期限切れは除外）
+            aggregate.cleanup_expired_effects(WorldTick(10))
+            assert len(aggregate.active_effects) == 1
+
+        def test_buff_and_debuff_stacking_via_domain_service(self):
             from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
             from ai_rpg_world.domain.combat.enum.combat_enum import StatusEffectType
             from ai_rpg_world.domain.common.value_object import WorldTick
+            from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
+
+            aggregate = create_test_status_aggregate(base_stats=create_test_base_stats(attack=20))
             aggregate.add_status_effect(StatusEffect(StatusEffectType.ATTACK_UP, 1.5, WorldTick(100)))
             aggregate.add_status_effect(StatusEffect(StatusEffectType.ATTACK_DOWN, 0.5, WorldTick(100)))
-            
-            # When
-            effective_stats = aggregate.get_effective_stats(WorldTick(10))
-            
-            # Then
-            # 20 * 1.5 * 0.5 = 15
-            assert effective_stats.attack == 15
+
+            effective_stats = compute_effective_stats(
+                aggregate.base_stats, aggregate.active_effects, WorldTick(10)
+            )
+            assert effective_stats.attack == 15  # 20 * 1.5 * 0.5
