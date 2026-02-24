@@ -9,6 +9,9 @@ from ai_rpg_world.domain.world.event.map_events import (
     LocationEnteredEvent,
     GatewayTriggeredEvent,
 )
+from ai_rpg_world.domain.conversation.event.conversation_event import (
+    ConversationEndedEvent,
+)
 from ai_rpg_world.application.quest.handlers.quest_progress_handler import (
     QuestProgressHandler,
 )
@@ -62,6 +65,13 @@ class QuestEventHandlerRegistry:
             ItemAddedToInventoryEvent,
             self._create_event_handler(
                 self._quest_progress_handler.handle_item_added_to_inventory
+            ),
+            is_synchronous=False,
+        )
+        event_publisher.register_handler(
+            ConversationEndedEvent,
+            self._create_event_handler(
+                self._quest_progress_handler.handle_conversation_ended
             ),
             is_synchronous=False,
         )
