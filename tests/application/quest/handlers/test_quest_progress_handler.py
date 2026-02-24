@@ -27,6 +27,9 @@ from ai_rpg_world.domain.world.value_object.location_area_id import LocationArea
 from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.player.event.inventory_events import ItemAddedToInventoryEvent
+from ai_rpg_world.domain.conversation.event.conversation_event import (
+    ConversationEndedEvent,
+)
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.infrastructure.repository.in_memory_quest_repository import (
@@ -1332,6 +1335,138 @@ class TestQuestProgressHandler:
             item_instance_id=ItemInstanceId.create(100),
         )
         handler.handle_item_added_to_inventory(event)
+
+        q = quest_repository.find_by_id(quest_id)
+        assert q.objectives[0].current_count == 0
+        assert q.status.value == "accepted"
+
+    # --- handle_conversation_ended (TALK_TO_NPC) ---
+
+    def test_handle_conversation_ended_advances_talk_to_npc_objective(
+        self, handler, quest_repository
+    ):
+        """ConversationEndedEvent で受託中クエストの TALK_TO_NPC 目標が進むこと"""
+        quest_id = quest_repository.generate_quest_id()
+        npc_id_value = 300
+        acceptor_id = PlayerId(1)
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.TALK_TO_NPC,
+                target_id=npc_id_value,
+                required_count=2,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=100, exp=50)
+        scope = QuestScope.public_scope()
+        quest = QuestAggregate.issue_quest(
+            quest_id=quest_id,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+        )
+        quest.accept_by(acceptor_id)
+        quest_repository.save(quest)
+
+        event = ConversationEndedEvent.create(
+            aggregate_id=acceptor_id,
+            aggregate_type="Conversation",
+            npc_id_value=npc_id_value,
+            end_node_id_value=1,
+        )
+        handler.handle_conversation_ended(event)
+
+        q = quest_repository.find_by_id(quest_id)
+        assert q.objectives[0].current_count == 1
+        assert q.status.value == "accepted"  # required_count=2 なので1回会話後はまだ未完了
+
+    def test_handle_conversation_ended_completes_quest_when_all_objectives_done(
+        self,
+        handler,
+        quest_repository,
+        player_status_repository,
+        player_inventory_repository,
+    ):
+        """TALK_TO_NPC が最後の目標で、会話終了でクエスト完了・報酬付与されること"""
+        quest_id = quest_repository.generate_quest_id()
+        npc_id_value = 301
+        acceptor_id = PlayerId(1)
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.TALK_TO_NPC,
+                target_id=npc_id_value,
+                required_count=1,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=80, exp=40)
+        scope = QuestScope.public_scope()
+        quest = QuestAggregate.issue_quest(
+            quest_id=quest_id,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+        )
+        quest.accept_by(acceptor_id)
+        quest_repository.save(quest)
+
+        mock_status = Mock()
+        mock_inventory = Mock()
+        player_status_repository.find_by_id.return_value = mock_status
+        player_inventory_repository.find_by_id.return_value = mock_inventory
+
+        event = ConversationEndedEvent.create(
+            aggregate_id=acceptor_id,
+            aggregate_type="Conversation",
+            npc_id_value=npc_id_value,
+            end_node_id_value=1,
+        )
+        handler.handle_conversation_ended(event)
+
+        q = quest_repository.find_by_id(quest_id)
+        assert q.status.value == "completed"
+        assert q.objectives[0].current_count == 1
+        mock_status.earn_gold.assert_called_once_with(80)
+        mock_status.gain_exp.assert_called_once_with(40)
+
+    def test_handle_conversation_ended_skips_when_npc_not_target(
+        self, handler, quest_repository
+    ):
+        """TALK_TO_NPC の target_id がイベントの npc_id_value と一致しないクエストは進捗しない"""
+        quest_id = quest_repository.generate_quest_id()
+        acceptor_id = PlayerId(1)
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.TALK_TO_NPC,
+                target_id=999,
+                required_count=1,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=100, exp=50)
+        scope = QuestScope.public_scope()
+        quest = QuestAggregate.issue_quest(
+            quest_id=quest_id,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+        )
+        quest.accept_by(acceptor_id)
+        quest_repository.save(quest)
+
+        event = ConversationEndedEvent.create(
+            aggregate_id=acceptor_id,
+            aggregate_type="Conversation",
+            npc_id_value=100,
+            end_node_id_value=1,
+        )
+        handler.handle_conversation_ended(event)
 
         q = quest_repository.find_by_id(quest_id)
         assert q.objectives[0].current_count == 0

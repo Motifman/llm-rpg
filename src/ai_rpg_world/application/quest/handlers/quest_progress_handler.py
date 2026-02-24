@@ -1,8 +1,8 @@
 """
 MonsterDiedEvent / PlayerDownedEvent / ItemTakenFromChestEvent / LocationEnteredEvent /
-GatewayTriggeredEvent / ItemAddedToInventoryEvent を受けて、
+GatewayTriggeredEvent / ItemAddedToInventoryEvent / ConversationEndedEvent を受けて、
 受託中クエストの目標（KILL_MONSTER / KILL_PLAYER / TAKE_FROM_CHEST / REACH_SPOT /
-REACH_LOCATION / OBTAIN_ITEM）を進め、全目標達成時は完了＋報酬付与を行う非同期ハンドラ。
+REACH_LOCATION / OBTAIN_ITEM / TALK_TO_NPC）を進め、全目標達成時は完了＋報酬付与を行う非同期ハンドラ。
 """
 import logging
 from typing import Callable, Any
@@ -32,6 +32,9 @@ from ai_rpg_world.domain.world.event.map_events import (
     ItemTakenFromChestEvent,
     LocationEnteredEvent,
     GatewayTriggeredEvent,
+)
+from ai_rpg_world.domain.conversation.event.conversation_event import (
+    ConversationEndedEvent,
 )
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
@@ -411,6 +414,55 @@ class QuestProgressHandler(EventHandler[MonsterDiedEvent]):
         self._execute_in_separate_transaction(
             operation,
             context={"handler": "quest_progress_item_added_to_inventory"},
+        )
+
+    def handle_conversation_ended(self, event: ConversationEndedEvent) -> None:
+        """ConversationEndedEvent で、話したプレイヤーの受託中クエストの TALK_TO_NPC 目標を進める（非同期）。"""
+        try:
+            self._handle_conversation_ended_impl(event)
+        except (ApplicationException, DomainException, QuestApplicationException):
+            raise
+        except Exception as e:
+            self._logger.exception(
+                "Unexpected error in QuestProgressHandler.handle_conversation_ended: %s",
+                e,
+            )
+            raise SystemErrorException(
+                f"Quest progress handling (conversation_ended) failed: {e}",
+                original_exception=e,
+            ) from e
+
+    def _handle_conversation_ended_impl(
+        self, event: ConversationEndedEvent
+    ) -> None:
+        acceptor_id = event.aggregate_id
+        npc_id_value = event.npc_id_value
+
+        def operation():
+            quests = self._quest_repository.find_accepted_quests_by_player(
+                acceptor_id
+            )
+            for quest in quests:
+                advanced = quest.advance_objective(
+                    QuestObjectiveType.TALK_TO_NPC, npc_id_value
+                )
+                if not advanced:
+                    continue
+                if not quest.is_all_objectives_completed():
+                    self._quest_repository.save(quest)
+                    continue
+                quest.complete()
+                self._grant_reward(quest)
+                self._quest_repository.save(quest)
+                self._logger.info(
+                    "Quest completed (TALK_TO_NPC): quest_id=%s, acceptor=%s",
+                    quest.quest_id.value,
+                    quest.acceptor_player_id,
+                )
+
+        self._execute_in_separate_transaction(
+            operation,
+            context={"handler": "quest_progress_conversation_ended"},
         )
 
     def _grant_reward(self, quest) -> None:
