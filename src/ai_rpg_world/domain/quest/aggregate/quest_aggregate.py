@@ -11,6 +11,8 @@ from ai_rpg_world.domain.quest.exception.quest_exception import (
 )
 from ai_rpg_world.domain.quest.event.quest_event import (
     QuestIssuedEvent,
+    QuestPendingApprovalEvent,
+    QuestApprovedEvent,
     QuestAcceptedEvent,
     QuestCompletedEvent,
     QuestCancelledEvent,
@@ -67,10 +69,10 @@ class QuestAggregate(AggregateRoot):
         reserved_gold: int = 0,
         reserved_item_instance_ids: Tuple[ItemInstanceId, ...] = (),
     ) -> "QuestAggregate":
-        """クエストを発行する。システム発行は issuer_player_id=None、プレイヤー発行は reserved_* を渡す。"""
+        """クエストを発行する。ギルド掲示時は guild_id を渡すと status=PENDING_APPROVAL になる。"""
         if not objectives:
             raise ValueError("objectives must not be empty")
-        status = QuestStatus.OPEN
+        status = QuestStatus.PENDING_APPROVAL if guild_id is not None else QuestStatus.OPEN
         quest = cls(
             quest_id=quest_id,
             status=status,
@@ -84,15 +86,42 @@ class QuestAggregate(AggregateRoot):
             reserved_item_instance_ids=reserved_item_instance_ids,
             version=0,
         )
-        event = QuestIssuedEvent.create(
-            aggregate_id=quest_id,
-            aggregate_type="QuestAggregate",
-            issuer_player_id=issuer_player_id,
-            scope=scope,
-            reward=reward,
-        )
+        if status == QuestStatus.PENDING_APPROVAL:
+            event = QuestPendingApprovalEvent.create(
+                aggregate_id=quest_id,
+                aggregate_type="QuestAggregate",
+                guild_id=guild_id,
+                issuer_player_id=issuer_player_id,
+                scope=scope,
+                reward=reward,
+            )
+        else:
+            event = QuestIssuedEvent.create(
+                aggregate_id=quest_id,
+                aggregate_type="QuestAggregate",
+                issuer_player_id=issuer_player_id,
+                scope=scope,
+                reward=reward,
+            )
         quest.add_event(event)
         return quest
+
+    def is_pending_approval(self) -> bool:
+        return self.status == QuestStatus.PENDING_APPROVAL
+
+    def approve_by(self, approver_player_id: PlayerId) -> None:
+        """ギルド掲示クエストを承認して OPEN にする。権限チェックはアプリ層で行う。"""
+        if self.status != QuestStatus.PENDING_APPROVAL:
+            raise InvalidQuestStatusException(
+                f"Quest is not pending approval: {self.status}"
+            )
+        self.status = QuestStatus.OPEN
+        event = QuestApprovedEvent.create(
+            aggregate_id=self.quest_id,
+            aggregate_type="QuestAggregate",
+            approved_by=approver_player_id,
+        )
+        self.add_event(event)
 
     def is_open(self) -> bool:
         return self.status == QuestStatus.OPEN

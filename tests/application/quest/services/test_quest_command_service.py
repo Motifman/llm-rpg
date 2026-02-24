@@ -6,6 +6,7 @@ from ai_rpg_world.application.quest.services.quest_command_service import QuestC
 from ai_rpg_world.application.quest.contracts.commands import (
     IssueQuestCommand,
     AcceptQuestCommand,
+    ApproveQuestCommand,
     CancelQuestCommand,
 )
 from ai_rpg_world.application.quest.contracts.dtos import QuestCommandResultDto
@@ -63,6 +64,11 @@ from ai_rpg_world.infrastructure.repository.in_memory_item_repository import (
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from ai_rpg_world.infrastructure.repository.in_memory_guild_repository import (
+    InMemoryGuildRepository,
+)
+from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
+from ai_rpg_world.domain.quest.enum.quest_enum import QuestStatus
 
 
 def _create_player_status(player_id: PlayerId, gold_amount: int = 0) -> PlayerStatusAggregate:
@@ -106,11 +112,42 @@ class TestQuestCommandService:
             data_store=data_store,
             unit_of_work=uow,
         )
+        guild_repository = InMemoryGuildRepository(
+            data_store=data_store,
+            unit_of_work=uow,
+        )
         service = QuestCommandService(
             quest_repository=quest_repository,
             unit_of_work=uow,
+            guild_repository=guild_repository,
         )
         return service, quest_repository, uow
+
+    @pytest.fixture
+    def setup_service_with_guild(self):
+        """Quest + Guild リポジトリ付き（ギルド掲示・承認・受託テスト用）"""
+        def create_uow():
+            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
+
+        data_store = InMemoryDataStore()
+        uow = InMemoryUnitOfWork(
+            unit_of_work_factory=create_uow,
+            data_store=data_store,
+        )
+        quest_repository = InMemoryQuestRepository(
+            data_store=data_store,
+            unit_of_work=uow,
+        )
+        guild_repository = InMemoryGuildRepository(
+            data_store=data_store,
+            unit_of_work=uow,
+        )
+        service = QuestCommandService(
+            quest_repository=quest_repository,
+            unit_of_work=uow,
+            guild_repository=guild_repository,
+        )
+        return service, quest_repository, guild_repository, uow
 
     def test_issue_quest_success(self, setup_service):
         service, quest_repo, uow = setup_service
@@ -561,3 +598,152 @@ class TestQuestCommandService:
 
         updated_status = s["status_repo"].find_by_id(issuer_id)
         assert updated_status.gold.value == 200
+
+    # --- Phase 3: ギルド掲示・承認・受託 ---
+
+    def test_issue_quest_with_guild_id_sets_pending_approval(self, setup_service_with_guild):
+        """guild_id を指定して発行すると status=PENDING_APPROVAL になる"""
+        service, quest_repo, guild_repo, _ = setup_service_with_guild
+        from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
+        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+        guild_id = guild_repo.generate_guild_id()
+        guild = GuildAggregate.create_guild(
+            guild_id=guild_id,
+            name="G",
+            description="",
+            creator_player_id=PlayerId(1),
+        )
+        guild_repo.save(guild)
+
+        command = IssueQuestCommand(
+            objectives=[("kill_monster", 101, 2)],
+            reward_gold=0,
+            reward_exp=50,
+            guild_id=guild_id.value,
+        )
+        result = service.issue_quest(command)
+        assert result.success is True
+        quest_id_val = result.data["quest_id"]
+        quest = quest_repo.find_by_id(QuestId(quest_id_val))
+        assert quest.status == QuestStatus.PENDING_APPROVAL
+        assert quest.guild_id == guild_id.value
+        assert quest.scope.is_guild() is True
+
+    def test_approve_quest_success(self, setup_service_with_guild):
+        """オフィサー以上が承認すると status=OPEN になる"""
+        service, quest_repo, guild_repo, _ = setup_service_with_guild
+        from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
+        guild_id = guild_repo.generate_guild_id()
+        guild = GuildAggregate.create_guild(
+            guild_id=guild_id,
+            name="G",
+            description="",
+            creator_player_id=PlayerId(1),
+        )
+        guild_repo.save(guild)
+
+        issue_cmd = IssueQuestCommand(
+            objectives=[("kill_monster", 101, 2)],
+            reward_gold=0,
+            reward_exp=50,
+            guild_id=guild_id.value,
+        )
+        issue_result = service.issue_quest(issue_cmd)
+        quest_id_val = issue_result.data["quest_id"]
+
+        approve_cmd = ApproveQuestCommand(
+            quest_id=quest_id_val,
+            approver_player_id=1,
+        )
+        result = service.approve_quest(approve_cmd)
+        assert result.success is True
+        quest = quest_repo.find_by_id(QuestId(quest_id_val))
+        assert quest.status == QuestStatus.OPEN
+
+    def test_approve_quest_not_officer_raises(self, setup_service_with_guild):
+        """MEMBER は承認権限がない"""
+        service, quest_repo, guild_repo, _ = setup_service_with_guild
+        from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
+        guild_id = guild_repo.generate_guild_id()
+        guild = GuildAggregate.create_guild(
+            guild_id=guild_id,
+            name="G",
+            description="",
+            creator_player_id=PlayerId(1),
+        )
+        guild.add_member(inviter_player_id=PlayerId(1), new_player_id=PlayerId(2))
+        guild_repo.save(guild)
+
+        issue_cmd = IssueQuestCommand(
+            objectives=[("kill_monster", 101, 2)],
+            reward_gold=0,
+            reward_exp=50,
+            guild_id=guild_id.value,
+        )
+        issue_result = service.issue_quest(issue_cmd)
+        quest_id_val = issue_result.data["quest_id"]
+
+        approve_cmd = ApproveQuestCommand(
+            quest_id=quest_id_val,
+            approver_player_id=2,
+        )
+        with pytest.raises(QuestAccessDeniedException):
+            service.approve_quest(approve_cmd)
+
+    def test_accept_quest_guild_scope_member_success(self, setup_service_with_guild):
+        """ギルドスコープのクエストはギルドメンバーが受託可能"""
+        service, quest_repo, guild_repo, _ = setup_service_with_guild
+        from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
+        guild_id = guild_repo.generate_guild_id()
+        guild = GuildAggregate.create_guild(
+            guild_id=guild_id,
+            name="G",
+            description="",
+            creator_player_id=PlayerId(1),
+        )
+        guild.add_member(inviter_player_id=PlayerId(1), new_player_id=PlayerId(2))
+        guild_repo.save(guild)
+
+        issue_cmd = IssueQuestCommand(
+            objectives=[("kill_monster", 101, 2)],
+            reward_gold=0,
+            reward_exp=50,
+            guild_id=guild_id.value,
+        )
+        issue_result = service.issue_quest(issue_cmd)
+        quest_id_val = issue_result.data["quest_id"]
+        service.approve_quest(ApproveQuestCommand(quest_id=quest_id_val, approver_player_id=1))
+
+        accept_cmd = AcceptQuestCommand(quest_id=quest_id_val, player_id=2)
+        result = service.accept_quest(accept_cmd)
+        assert result.success is True
+        q = quest_repo.find_by_id(QuestId(quest_id_val))
+        assert q.status == QuestStatus.ACCEPTED
+        assert q.acceptor_player_id == PlayerId(2)
+
+    def test_accept_quest_guild_scope_non_member_raises(self, setup_service_with_guild):
+        """ギルドスコープのクエストは非メンバーは受託できない"""
+        service, quest_repo, guild_repo, _ = setup_service_with_guild
+        from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
+        guild_id = guild_repo.generate_guild_id()
+        guild = GuildAggregate.create_guild(
+            guild_id=guild_id,
+            name="G",
+            description="",
+            creator_player_id=PlayerId(1),
+        )
+        guild_repo.save(guild)
+
+        issue_cmd = IssueQuestCommand(
+            objectives=[("kill_monster", 101, 2)],
+            reward_gold=0,
+            reward_exp=50,
+            guild_id=guild_id.value,
+        )
+        issue_result = service.issue_quest(issue_cmd)
+        quest_id_val = issue_result.data["quest_id"]
+        service.approve_quest(ApproveQuestCommand(quest_id=quest_id_val, approver_player_id=1))
+
+        accept_cmd = AcceptQuestCommand(quest_id=quest_id_val, player_id=99)
+        with pytest.raises(QuestAccessDeniedException):
+            service.accept_quest(accept_cmd)
