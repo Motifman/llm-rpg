@@ -44,18 +44,67 @@ class QuestAggregate(AggregateRoot):
         created_at: Optional[datetime] = None,
     ):
         super().__init__()
-        self.quest_id = quest_id
-        self.status = status
-        self.objectives = list(objectives)
-        self.reward = reward
-        self.scope = scope
-        self.issuer_player_id = issuer_player_id
-        self.guild_id = guild_id
-        self.acceptor_player_id = acceptor_player_id
-        self.reserved_gold = reserved_gold
-        self.reserved_item_instance_ids = reserved_item_instance_ids
-        self.version = version
-        self.created_at = created_at or datetime.now()
+        self._quest_id = quest_id
+        self._status = status
+        self._objectives = list(objectives)
+        self._reward = reward
+        self._scope = scope
+        self._issuer_player_id = issuer_player_id
+        self._guild_id = guild_id
+        self._acceptor_player_id = acceptor_player_id
+        self._reserved_gold = reserved_gold
+        self._reserved_item_instance_ids = reserved_item_instance_ids
+        self._version = version
+        self._created_at = created_at or datetime.now()
+
+    # --- 永続化・参照用プロパティ（不変条件はメソッド経由でのみ変更） ---
+    @property
+    def quest_id(self) -> QuestId:
+        return self._quest_id
+
+    @property
+    def status(self) -> QuestStatus:
+        return self._status
+
+    @property
+    def objectives(self) -> List[QuestObjective]:
+        return list(self._objectives)
+
+    @property
+    def reward(self) -> QuestReward:
+        return self._reward
+
+    @property
+    def scope(self) -> QuestScope:
+        return self._scope
+
+    @property
+    def issuer_player_id(self) -> Optional[PlayerId]:
+        return self._issuer_player_id
+
+    @property
+    def guild_id(self) -> Optional[int]:
+        return self._guild_id
+
+    @property
+    def acceptor_player_id(self) -> Optional[PlayerId]:
+        return self._acceptor_player_id
+
+    @property
+    def reserved_gold(self) -> int:
+        return self._reserved_gold
+
+    @property
+    def reserved_item_instance_ids(self) -> Tuple[ItemInstanceId, ...]:
+        return self._reserved_item_instance_ids
+
+    @property
+    def version(self) -> int:
+        return self._version
+
+    @property
+    def created_at(self) -> datetime:
+        return self._created_at
 
     @classmethod
     def issue_quest(
@@ -85,6 +134,7 @@ class QuestAggregate(AggregateRoot):
             reserved_gold=reserved_gold,
             reserved_item_instance_ids=reserved_item_instance_ids,
             version=0,
+            created_at=None,
         )
         if status == QuestStatus.PENDING_APPROVAL:
             event = QuestPendingApprovalEvent.create(
@@ -107,57 +157,57 @@ class QuestAggregate(AggregateRoot):
         return quest
 
     def is_pending_approval(self) -> bool:
-        return self.status == QuestStatus.PENDING_APPROVAL
+        return self._status == QuestStatus.PENDING_APPROVAL
 
     def approve_by(self, approver_player_id: PlayerId) -> None:
         """ギルド掲示クエストを承認して OPEN にする。権限チェックはアプリ層で行う。"""
-        if self.status != QuestStatus.PENDING_APPROVAL:
+        if self._status != QuestStatus.PENDING_APPROVAL:
             raise InvalidQuestStatusException(
-                f"Quest is not pending approval: {self.status}"
+                f"Quest is not pending approval: {self._status}"
             )
-        self.status = QuestStatus.OPEN
+        self._status = QuestStatus.OPEN
         event = QuestApprovedEvent.create(
-            aggregate_id=self.quest_id,
+            aggregate_id=self._quest_id,
             aggregate_type="QuestAggregate",
             approved_by=approver_player_id,
         )
         self.add_event(event)
 
     def is_open(self) -> bool:
-        return self.status == QuestStatus.OPEN
+        return self._status == QuestStatus.OPEN
 
     def is_accepted(self) -> bool:
-        return self.status == QuestStatus.ACCEPTED
+        return self._status == QuestStatus.ACCEPTED
 
     def is_completed(self) -> bool:
-        return self.status == QuestStatus.COMPLETED
+        return self._status == QuestStatus.COMPLETED
 
     def is_cancelled(self) -> bool:
-        return self.status == QuestStatus.CANCELLED
+        return self._status == QuestStatus.CANCELLED
 
     def can_be_accepted_by(self, player_id: PlayerId) -> bool:
         """指定プレイヤーが受託可能か"""
-        if self.status != QuestStatus.OPEN:
+        if self._status != QuestStatus.OPEN:
             return False
-        if self.scope.is_direct() and self.scope.target_player_id != player_id:
+        if self._scope.is_direct() and self._scope.target_player_id != player_id:
             return False
-        if self.scope.is_guild():
+        if self._scope.is_guild():
             # Phase 3: ギルドメンバーかどうかはアプリ層でチェック
             pass
         return True
 
     def accept_by(self, player_id: PlayerId) -> None:
         """クエストを受託する"""
-        if self.status != QuestStatus.OPEN:
-            raise InvalidQuestStatusException(f"Quest is not open: {self.status}")
+        if self._status != QuestStatus.OPEN:
+            raise InvalidQuestStatusException(f"Quest is not open: {self._status}")
         if not self.can_be_accepted_by(player_id):
             raise CannotAcceptQuestException(
-                f"Player {player_id} cannot accept quest {self.quest_id}"
+                f"Player {player_id} cannot accept quest {self._quest_id}"
             )
-        self.acceptor_player_id = player_id
-        self.status = QuestStatus.ACCEPTED
+        self._acceptor_player_id = player_id
+        self._status = QuestStatus.ACCEPTED
         event = QuestAcceptedEvent.create(
-            aggregate_id=self.quest_id,
+            aggregate_id=self._quest_id,
             aggregate_type="QuestAggregate",
             acceptor_player_id=player_id,
         )
@@ -175,9 +225,9 @@ class QuestAggregate(AggregateRoot):
         既に達成済みの目標は変更しない（True を返す）。
         TAKE_FROM_CHEST など target_id_secondary を持つ目標は両方一致で判定する。
         """
-        if self.status != QuestStatus.ACCEPTED:
+        if self._status != QuestStatus.ACCEPTED:
             return False
-        for i, obj in enumerate(self.objectives):
+        for i, obj in enumerate(self._objectives):
             type_ok = obj.objective_type == objective_type
             primary_ok = obj.target_id == target_id
             secondary_ok = (
@@ -188,48 +238,48 @@ class QuestAggregate(AggregateRoot):
             if type_ok and primary_ok and secondary_ok:
                 if obj.is_completed():
                     return True
-                self.objectives[i] = obj.with_progress(1)
+                self._objectives[i] = obj.with_progress(1)
                 return True
         return False
 
     def is_all_objectives_completed(self) -> bool:
-        return all(obj.is_completed() for obj in self.objectives)
+        return all(obj.is_completed() for obj in self._objectives)
 
     def complete(self) -> None:
         """クエストを完了する（全目標達成時のみ呼ぶ）"""
-        if self.status != QuestStatus.ACCEPTED:
-            raise InvalidQuestStatusException(f"Quest is not accepted: {self.status}")
+        if self._status != QuestStatus.ACCEPTED:
+            raise InvalidQuestStatusException(f"Quest is not accepted: {self._status}")
         if not self.is_all_objectives_completed():
             raise QuestObjectivesNotCompleteException(
                 "Cannot complete quest: not all objectives completed"
             )
-        self.status = QuestStatus.COMPLETED
+        self._status = QuestStatus.COMPLETED
         event = QuestCompletedEvent.create(
-            aggregate_id=self.quest_id,
+            aggregate_id=self._quest_id,
             aggregate_type="QuestAggregate",
-            acceptor_player_id=self.acceptor_player_id,
-            reward=self.reward,
+            acceptor_player_id=self._acceptor_player_id,
+            reward=self._reward,
         )
         self.add_event(event)
 
     def is_issuer_or_acceptor(self, player_id: PlayerId) -> bool:
-        if self.issuer_player_id and self.issuer_player_id == player_id:
+        if self._issuer_player_id and self._issuer_player_id == player_id:
             return True
-        if self.acceptor_player_id and self.acceptor_player_id == player_id:
+        if self._acceptor_player_id and self._acceptor_player_id == player_id:
             return True
         return False
 
     def cancel_by(self, player_id: PlayerId) -> None:
         """クエストをキャンセルする（発行者または受託者のみ）"""
-        if self.status not in (QuestStatus.OPEN, QuestStatus.ACCEPTED):
-            raise InvalidQuestStatusException(f"Quest cannot be cancelled: {self.status}")
+        if self._status not in (QuestStatus.OPEN, QuestStatus.ACCEPTED):
+            raise InvalidQuestStatusException(f"Quest cannot be cancelled: {self._status}")
         if not self.is_issuer_or_acceptor(player_id):
             raise CannotCancelQuestException(
-                f"Player {player_id} is not issuer or acceptor of quest {self.quest_id}"
+                f"Player {player_id} is not issuer or acceptor of quest {self._quest_id}"
             )
-        self.status = QuestStatus.CANCELLED
+        self._status = QuestStatus.CANCELLED
         event = QuestCancelledEvent.create(
-            aggregate_id=self.quest_id,
+            aggregate_id=self._quest_id,
             aggregate_type="QuestAggregate",
         )
         self.add_event(event)
