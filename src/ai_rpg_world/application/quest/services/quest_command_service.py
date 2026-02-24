@@ -153,6 +153,11 @@ class QuestCommandService:
                         current_count=0,
                     )
                 )
+            if not objectives:
+                raise QuestCreationException(
+                    "クエストには1件以上の目標が必要です",
+                    user_id=command.issuer_player_id,
+                )
             item_rewards = []
             if command.reward_items:
                 for item_spec_id_val, qty in command.reward_items:

@@ -6,6 +6,10 @@ import logging
 from typing import Callable, Any
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
+from ai_rpg_world.application.quest.exceptions import (
+    QuestApplicationException,
+    QuestRewardGrantException,
+)
 from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
@@ -49,7 +53,7 @@ class QuestProgressHandler(EventHandler[MonsterDiedEvent]):
     def handle(self, event: MonsterDiedEvent) -> None:
         try:
             self._handle_impl(event)
-        except (ApplicationException, DomainException):
+        except (ApplicationException, DomainException, QuestApplicationException):
             raise
         except Exception as e:
             self._logger.exception(
@@ -68,7 +72,7 @@ class QuestProgressHandler(EventHandler[MonsterDiedEvent]):
         try:
             with unit_of_work:
                 operation()
-        except (ApplicationException, DomainException):
+        except (ApplicationException, DomainException, QuestApplicationException):
             raise
         except Exception as e:
             self._logger.exception(
@@ -123,21 +127,27 @@ class QuestProgressHandler(EventHandler[MonsterDiedEvent]):
         )
 
     def _grant_reward(self, quest) -> None:
-        """完了したクエストの報酬を受託者に付与する。プレイヤー発行時は確保済み報酬を転送する。"""
+        """完了したクエストの報酬を受託者に付与する。プレイヤー発行時は確保済み報酬を転送する。
+        付与に失敗した場合は QuestRewardGrantException を投げ、イベント再配送によるリトライを促す。
+        """
         acceptor_id = quest.acceptor_player_id
         reward = quest.reward
+        quest_id_val = quest.quest_id.value
+        acceptor_id_val = acceptor_id.value if acceptor_id else None
         player_status = self._player_status_repository.find_by_id(acceptor_id)
         if not player_status:
-            self._logger.warning(
-                "Player status not found for quest reward: %s", acceptor_id
+            raise QuestRewardGrantException(
+                f"報酬付与に失敗しました: 受託者のステータスが見つかりません (acceptor_player_id={acceptor_id})",
+                quest_id=quest_id_val,
+                acceptor_player_id=acceptor_id_val,
             )
-            return
         inventory = self._player_inventory_repository.find_by_id(acceptor_id)
         if not inventory:
-            self._logger.warning(
-                "Player inventory not found for quest reward: %s", acceptor_id
+            raise QuestRewardGrantException(
+                f"報酬付与に失敗しました: 受託者のインベントリが見つかりません (acceptor_player_id={acceptor_id})",
+                quest_id=quest_id_val,
+                acceptor_player_id=acceptor_id_val,
             )
-            return
 
         if quest.issuer_player_id is not None and (
             quest.reserved_gold > 0 or quest.reserved_item_instance_ids
@@ -159,11 +169,11 @@ class QuestProgressHandler(EventHandler[MonsterDiedEvent]):
             quest.issuer_player_id
         )
         if not issuer_inventory:
-            self._logger.warning(
-                "Issuer inventory not found for quest reward transfer: %s",
-                quest.issuer_player_id,
+            raise QuestRewardGrantException(
+                f"報酬付与に失敗しました: 発行者のインベントリが見つかりません (issuer_player_id={quest.issuer_player_id})",
+                quest_id=quest.quest_id.value,
+                acceptor_player_id=quest.acceptor_player_id.value if quest.acceptor_player_id else None,
             )
-            return
         for item_id in quest.reserved_item_instance_ids:
             issuer_inventory.remove_reserved_item(item_id)
             inventory.acquire_item(item_id)
@@ -179,10 +189,11 @@ class QuestProgressHandler(EventHandler[MonsterDiedEvent]):
         for item_spec_id, quantity in reward.item_rewards:
             item_spec = self._item_spec_repository.find_by_id(item_spec_id)
             if not item_spec:
-                self._logger.warning(
-                    "ItemSpec not found for quest reward: %s", item_spec_id
+                raise QuestRewardGrantException(
+                    f"報酬付与に失敗しました: 報酬アイテムの仕様が見つかりません (item_spec_id={item_spec_id.value})",
+                    quest_id=quest.quest_id.value,
+                    acceptor_player_id=quest.acceptor_player_id.value if quest.acceptor_player_id else None,
                 )
-                continue
             instance_id = self._item_repository.generate_item_instance_id()
             item_aggregate = ItemAggregate.create(
                 item_instance_id=instance_id,

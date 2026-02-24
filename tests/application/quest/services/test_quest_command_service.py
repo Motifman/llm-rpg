@@ -1,5 +1,6 @@
 import pytest
 from datetime import datetime
+from unittest.mock import Mock
 
 from ai_rpg_world.application.quest.services.quest_command_service import QuestCommandService
 from ai_rpg_world.application.quest.contracts.commands import (
@@ -12,6 +13,13 @@ from ai_rpg_world.application.quest.exceptions.command.quest_command_exception i
     QuestCreationException,
     QuestNotFoundForCommandException,
     QuestAccessDeniedException,
+    QuestCommandException,
+)
+from ai_rpg_world.application.quest.exceptions.base_exception import (
+    QuestSystemErrorException,
+)
+from ai_rpg_world.domain.quest.exception.quest_exception import (
+    InvalidQuestStatusException,
 )
 from ai_rpg_world.domain.quest.aggregate.quest_aggregate import QuestAggregate
 from ai_rpg_world.domain.quest.enum.quest_enum import QuestStatus, QuestObjectiveType
@@ -133,6 +141,14 @@ class TestQuestCommandService:
         with pytest.raises(QuestCreationException):
             service.issue_quest(command)
 
+    def test_issue_quest_empty_objectives_raises(self, setup_service):
+        """目標が空のとき QuestCreationException"""
+        service, _, _ = setup_service
+        command = IssueQuestCommand(objectives=[], reward_gold=0, reward_exp=0)
+        with pytest.raises(QuestCreationException) as exc_info:
+            service.issue_quest(command)
+        assert "目標" in str(exc_info.value)
+
     def test_accept_quest_success(self, setup_service):
         service, quest_repo, uow = setup_service
         quest_id = quest_repo.generate_quest_id()
@@ -168,6 +184,45 @@ class TestQuestCommandService:
         command = AcceptQuestCommand(quest_id=99999, player_id=1)
         with pytest.raises(QuestNotFoundForCommandException):
             service.accept_quest(command)
+
+    def test_cancel_quest_when_completed_raises_quest_command_exception(
+        self, setup_service
+    ):
+        """完了済みクエストをキャンセルすると DomainException が QuestCommandException にラップされる"""
+        service, quest_repo, _ = setup_service
+        quest_id = quest_repo.generate_quest_id()
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.KILL_MONSTER,
+                target_id=101,
+                required_count=1,
+                current_count=1,
+            ),
+        ]
+        reward = QuestReward.of(gold=100)
+        scope = QuestScope.public_scope()
+        acceptor_id = PlayerId(1)
+        quest = QuestAggregate(
+            quest_id=quest_id,
+            status=QuestStatus.ACCEPTED,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+            acceptor_player_id=acceptor_id,
+            reserved_gold=0,
+            reserved_item_instance_ids=(),
+        )
+        quest.complete()
+        quest_repo.save(quest)
+        command = CancelQuestCommand(quest_id=quest_id.value, player_id=1)
+        with pytest.raises(QuestCommandException) as exc_info:
+            service.cancel_quest(command)
+        assert exc_info.value.__cause__ is not None
+        assert isinstance(
+            exc_info.value.__cause__, InvalidQuestStatusException
+        )
 
     def test_accept_quest_direct_scope_wrong_player_raises(self, setup_service):
         service, quest_repo, uow = setup_service
@@ -258,6 +313,18 @@ class TestQuestCommandService:
         command = CancelQuestCommand(quest_id=99999, player_id=1)
         with pytest.raises(QuestNotFoundForCommandException):
             service.cancel_quest(command)
+
+    def test_accept_quest_unexpected_exception_wrapped_as_quest_system_error(
+        self, setup_service
+    ):
+        """リポジトリ等が想定外の例外を投げたとき QuestSystemErrorException にラップされる"""
+        service, quest_repo, uow = setup_service
+        original_error = RuntimeError("database connection failed")
+        quest_repo.find_by_id = Mock(side_effect=original_error)
+        command = AcceptQuestCommand(quest_id=1, player_id=1)
+        with pytest.raises(QuestSystemErrorException) as exc_info:
+            service.accept_quest(command)
+        assert exc_info.value.original_exception is original_error
 
     def test_cancel_quest_access_denied_raises(self, setup_service):
         service, quest_repo, uow = setup_service

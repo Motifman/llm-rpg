@@ -1,7 +1,10 @@
 import pytest
 from unittest.mock import Mock
 
+from ai_rpg_world.application.common.exceptions import SystemErrorException
+from ai_rpg_world.application.quest.exceptions import QuestRewardGrantException
 from ai_rpg_world.application.quest.handlers.quest_progress_handler import QuestProgressHandler
+from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
@@ -286,3 +289,222 @@ class TestQuestProgressHandler:
         mock_issuer_inventory.remove_reserved_item.assert_not_called()
         player_status_repository.save.assert_called_once()
         player_inventory_repository.save.assert_called_once()
+
+    def test_handle_domain_exception_re_raised(
+        self, handler, quest_repository, monster_repository, data_store
+    ):
+        """トランザクション内で DomainException が発生した場合はそのまま再送出される"""
+        quest_repository.find_accepted_quests_by_player = Mock(
+            side_effect=DomainException("domain rule violated")
+        )
+        event = MonsterDiedEvent.create(
+            aggregate_id=MonsterId(1),
+            aggregate_type="MonsterAggregate",
+            respawn_tick=0,
+            exp=10,
+            gold=5,
+            killer_player_id=PlayerId(1),
+        )
+        with pytest.raises(DomainException, match="domain rule violated"):
+            handler.handle(event)
+
+    def test_handle_unexpected_exception_raises_system_error(
+        self, handler, quest_repository
+    ):
+        """トランザクション内で想定外の例外が発生した場合は SystemErrorException にラップされる"""
+        quest_repository.find_accepted_quests_by_player = Mock(
+            side_effect=RuntimeError("unexpected failure")
+        )
+        event = MonsterDiedEvent.create(
+            aggregate_id=MonsterId(1),
+            aggregate_type="MonsterAggregate",
+            respawn_tick=0,
+            exp=10,
+            gold=5,
+            killer_player_id=PlayerId(1),
+        )
+        with pytest.raises(SystemErrorException) as exc_info:
+            handler.handle(event)
+        assert exc_info.value.original_exception is not None
+        assert isinstance(
+            exc_info.value.original_exception, RuntimeError
+        )
+
+    def test_handle_reward_grant_failure_when_player_status_not_found(
+        self,
+        handler,
+        quest_repository,
+        monster_repository,
+        player_status_repository,
+        player_inventory_repository,
+    ):
+        """報酬付与時に受託者の PlayerStatus が存在しない場合、QuestRewardGrantException が投げられ、クエストは完了保存されない（リトライ可能）"""
+        from ai_rpg_world.domain.quest.enum.quest_enum import QuestStatus
+
+        quest_id = quest_repository.generate_quest_id()
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.KILL_MONSTER,
+                target_id=101,
+                required_count=1,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=100, exp=50)
+        scope = QuestScope.public_scope()
+        acceptor_id = PlayerId(1)
+        quest = QuestAggregate(
+            quest_id=quest_id,
+            status=QuestStatus.ACCEPTED,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+            acceptor_player_id=acceptor_id,
+            reserved_gold=0,
+            reserved_item_instance_ids=(),
+        )
+        quest_repository.save(quest)
+        player_status_repository.find_by_id.return_value = None
+        player_inventory_repository.find_by_id.return_value = Mock()
+
+        event = MonsterDiedEvent.create(
+            aggregate_id=MonsterId(1),
+            aggregate_type="MonsterAggregate",
+            respawn_tick=0,
+            exp=10,
+            gold=5,
+            killer_player_id=acceptor_id,
+        )
+        with pytest.raises(QuestRewardGrantException) as exc_info:
+            handler.handle(event)
+        assert "受託者のステータスが見つかりません" in str(exc_info.value)
+        assert exc_info.value.quest_id == quest_id.value
+        assert exc_info.value.acceptor_player_id == acceptor_id.value
+
+        q = quest_repository.find_by_id(quest_id)
+        assert q.status.value == "accepted"
+        assert q.objectives[0].current_count == 0
+        player_status_repository.save.assert_not_called()
+
+    def test_handle_reward_grant_failure_when_issuer_inventory_not_found(
+        self,
+        handler,
+        quest_repository,
+        monster_repository,
+        player_status_repository,
+        player_inventory_repository,
+    ):
+        """プレイヤー発行クエストで発行者インベントリがない場合、QuestRewardGrantException が投げられる"""
+        from ai_rpg_world.domain.quest.enum.quest_enum import QuestStatus
+
+        quest_id = quest_repository.generate_quest_id()
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.KILL_MONSTER,
+                target_id=101,
+                required_count=1,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=0, exp=0)
+        scope = QuestScope.public_scope()
+        issuer_id = PlayerId(2)
+        acceptor_id = PlayerId(1)
+        from ai_rpg_world.domain.item.value_object.item_instance_id import (
+            ItemInstanceId,
+        )
+        quest = QuestAggregate(
+            quest_id=quest_id,
+            status=QuestStatus.ACCEPTED,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=issuer_id,
+            guild_id=None,
+            acceptor_player_id=acceptor_id,
+            reserved_gold=0,
+            reserved_item_instance_ids=(ItemInstanceId(1001),),
+        )
+        quest_repository.save(quest)
+        mock_acceptor_status = Mock()
+        mock_acceptor_inventory = Mock()
+        player_status_repository.find_by_id.side_effect = lambda pid: (
+            mock_acceptor_status if pid == acceptor_id else None
+        )
+        player_inventory_repository.find_by_id.side_effect = lambda pid: (
+            mock_acceptor_inventory if pid == acceptor_id else None
+        )
+
+        event = MonsterDiedEvent.create(
+            aggregate_id=MonsterId(1),
+            aggregate_type="MonsterAggregate",
+            respawn_tick=0,
+            exp=10,
+            gold=5,
+            killer_player_id=acceptor_id,
+        )
+        with pytest.raises(QuestRewardGrantException) as exc_info:
+            handler.handle(event)
+        assert "発行者のインベントリが見つかりません" in str(exc_info.value)
+
+    def test_handle_reward_grant_failure_when_item_spec_not_found(
+        self,
+        handler,
+        quest_repository,
+        monster_repository,
+        player_status_repository,
+        player_inventory_repository,
+        item_spec_repository,
+    ):
+        """システム報酬の ItemSpec が見つからない場合、QuestRewardGrantException が投げられる"""
+        from ai_rpg_world.domain.quest.enum.quest_enum import QuestStatus
+
+        quest_id = quest_repository.generate_quest_id()
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.KILL_MONSTER,
+                target_id=101,
+                required_count=1,
+                current_count=0,
+            ),
+        ]
+        from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+        reward = QuestReward.of(
+            gold=100,
+            exp=50,
+            item_rewards=[(ItemSpecId(999), 1)],
+        )
+        scope = QuestScope.public_scope()
+        acceptor_id = PlayerId(1)
+        quest = QuestAggregate(
+            quest_id=quest_id,
+            status=QuestStatus.ACCEPTED,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+            acceptor_player_id=acceptor_id,
+            reserved_gold=0,
+            reserved_item_instance_ids=(),
+        )
+        quest_repository.save(quest)
+        mock_status = Mock()
+        mock_inventory = Mock()
+        player_status_repository.find_by_id.return_value = mock_status
+        player_inventory_repository.find_by_id.return_value = mock_inventory
+        item_spec_repository.find_by_id.return_value = None
+
+        event = MonsterDiedEvent.create(
+            aggregate_id=MonsterId(1),
+            aggregate_type="MonsterAggregate",
+            respawn_tick=0,
+            exp=10,
+            gold=5,
+            killer_player_id=acceptor_id,
+        )
+        with pytest.raises(QuestRewardGrantException) as exc_info:
+            handler.handle(event)
+        assert "報酬アイテムの仕様が見つかりません" in str(exc_info.value)

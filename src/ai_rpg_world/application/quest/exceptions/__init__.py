@@ -1,6 +1,7 @@
 from ai_rpg_world.application.quest.exceptions.base_exception import (
     QuestApplicationException,
     QuestSystemErrorException,
+    QuestRewardGrantException,
 )
 from ai_rpg_world.application.quest.exceptions.command.quest_command_exception import (
     QuestCommandException,
@@ -12,6 +13,7 @@ from ai_rpg_world.application.quest.exceptions.command.quest_command_exception i
 __all__ = [
     "QuestApplicationException",
     "QuestSystemErrorException",
+    "QuestRewardGrantException",
     "QuestCommandException",
     "QuestCreationException",
     "QuestNotFoundForCommandException",
