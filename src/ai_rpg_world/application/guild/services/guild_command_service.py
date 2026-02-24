@@ -4,16 +4,24 @@ from typing import Callable, Any, Optional
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
+from ai_rpg_world.domain.guild.aggregate.guild_bank_aggregate import GuildBankAggregate
 from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole
 from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
+from ai_rpg_world.domain.guild.repository.guild_bank_repository import GuildBankRepository
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.repository.player_status_repository import (
+    PlayerStatusRepository,
+)
 
 from ai_rpg_world.application.guild.contracts.commands import (
     CreateGuildCommand,
     AddGuildMemberCommand,
     LeaveGuildCommand,
     ChangeGuildRoleCommand,
+    DepositToGuildBankCommand,
+    WithdrawFromGuildBankCommand,
+    DisbandGuildCommand,
 )
 from ai_rpg_world.application.guild.contracts.dtos import GuildCommandResultDto
 from ai_rpg_world.application.guild.exceptions.base_exception import (
@@ -25,6 +33,8 @@ from ai_rpg_world.application.guild.exceptions.command.guild_command_exception i
     GuildCreationException,
     GuildNotFoundForCommandException,
     GuildAccessDeniedException,
+    GuildBankNotFoundForCommandException,
+    InsufficientGuildBankBalanceForCommandException,
 )
 
 
@@ -39,8 +49,16 @@ def _parse_guild_role(s: str) -> GuildRole:
 class GuildCommandService:
     """ギルドコマンドサービス"""
 
-    def __init__(self, guild_repository: GuildRepository, unit_of_work: UnitOfWork):
+    def __init__(
+        self,
+        guild_repository: GuildRepository,
+        guild_bank_repository: GuildBankRepository,
+        player_status_repository: PlayerStatusRepository,
+        unit_of_work: UnitOfWork,
+    ):
         self._guild_repository = guild_repository
+        self._guild_bank_repository = guild_bank_repository
+        self._player_status_repository = player_status_repository
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -95,6 +113,8 @@ class GuildCommandService:
                 creator_player_id=creator_id,
             )
             self._guild_repository.save(guild)
+            bank = GuildBankAggregate.create_for_guild(guild_id)
+            self._guild_bank_repository.save(bank)
             self._logger.info("Guild created: guild_id=%s, creator=%s", guild_id.value, creator_id)
             return GuildCommandResultDto(
                 success=True,
@@ -200,5 +220,179 @@ class GuildCommandService:
             return GuildCommandResultDto(
                 success=True,
                 message="役職を変更しました",
+                data={"guild_id": command.guild_id},
+            )
+
+    def deposit_to_guild_bank(
+        self, command: DepositToGuildBankCommand
+    ) -> GuildCommandResultDto:
+        """ギルド金庫に入金する（メンバー全員可能）。プレイヤーのゴールドを差し引き、金庫に加算する。"""
+        return self._execute_with_error_handling(
+            operation=lambda: self._deposit_to_guild_bank_impl(command),
+            context={
+                "action": "deposit_to_guild_bank",
+                "user_id": command.player_id,
+                "guild_id": command.guild_id,
+            },
+        )
+
+    def _deposit_to_guild_bank_impl(
+        self, command: DepositToGuildBankCommand
+    ) -> GuildCommandResultDto:
+        with self._unit_of_work:
+            guild_id = GuildId(command.guild_id)
+            guild = self._guild_repository.find_by_id(guild_id)
+            if guild is None:
+                raise GuildNotFoundForCommandException(
+                    command.guild_id, "deposit_to_guild_bank"
+                )
+            bank = self._guild_bank_repository.find_by_id(guild_id)
+            if bank is None:
+                raise GuildBankNotFoundForCommandException(
+                    command.guild_id, "deposit_to_guild_bank"
+                )
+            player_id = PlayerId(command.player_id)
+            if not guild.is_member(player_id):
+                raise GuildAccessDeniedException(
+                    command.guild_id, command.player_id, "deposit_to_guild_bank"
+                )
+            membership = guild.get_member(player_id)
+            if membership is None or not membership.can_deposit_to_bank():
+                raise GuildAccessDeniedException(
+                    command.guild_id, command.player_id, "deposit_to_guild_bank"
+                )
+            if command.amount <= 0:
+                raise GuildCommandException(
+                    "入金額は正の整数である必要があります",
+                    user_id=command.player_id,
+                    guild_id=command.guild_id,
+                )
+            player_status = self._player_status_repository.find_by_id(player_id)
+            if player_status is None:
+                raise GuildCommandException(
+                    "プレイヤーステータスが見つかりません",
+                    user_id=command.player_id,
+                    guild_id=command.guild_id,
+                )
+            player_status.pay_gold(command.amount)
+            bank.deposit_gold(command.amount, player_id)
+            self._player_status_repository.save(player_status)
+            self._guild_bank_repository.save(bank)
+            self._logger.info(
+                "Guild bank deposited: guild_id=%s, player_id=%s, amount=%s",
+                command.guild_id,
+                command.player_id,
+                command.amount,
+            )
+            return GuildCommandResultDto(
+                success=True,
+                message=f"{command.amount} ゴールドをギルド金庫に入金しました",
+                data={"guild_id": command.guild_id, "amount": command.amount},
+            )
+
+    def withdraw_from_guild_bank(
+        self, command: WithdrawFromGuildBankCommand
+    ) -> GuildCommandResultDto:
+        """ギルド金庫から出金する（オフィサー以上のみ）。金庫から差し引き、プレイヤーに付与する。"""
+        return self._execute_with_error_handling(
+            operation=lambda: self._withdraw_from_guild_bank_impl(command),
+            context={
+                "action": "withdraw_from_guild_bank",
+                "user_id": command.player_id,
+                "guild_id": command.guild_id,
+            },
+        )
+
+    def _withdraw_from_guild_bank_impl(
+        self, command: WithdrawFromGuildBankCommand
+    ) -> GuildCommandResultDto:
+        with self._unit_of_work:
+            guild_id = GuildId(command.guild_id)
+            guild = self._guild_repository.find_by_id(guild_id)
+            if guild is None:
+                raise GuildNotFoundForCommandException(
+                    command.guild_id, "withdraw_from_guild_bank"
+                )
+            bank = self._guild_bank_repository.find_by_id(guild_id)
+            if bank is None:
+                raise GuildBankNotFoundForCommandException(
+                    command.guild_id, "withdraw_from_guild_bank"
+                )
+            player_id = PlayerId(command.player_id)
+            membership = guild.get_member(player_id)
+            if membership is None:
+                raise GuildAccessDeniedException(
+                    command.guild_id, command.player_id, "withdraw_from_guild_bank"
+                )
+            if not membership.can_withdraw_from_bank():
+                raise GuildAccessDeniedException(
+                    command.guild_id, command.player_id, "withdraw_from_guild_bank"
+                )
+            if command.amount <= 0:
+                raise GuildCommandException(
+                    "出金額は正の整数である必要があります",
+                    user_id=command.player_id,
+                    guild_id=command.guild_id,
+                )
+            if command.amount > bank.gold:
+                raise InsufficientGuildBankBalanceForCommandException(
+                    command.guild_id, command.amount, bank.gold
+                )
+            player_status = self._player_status_repository.find_by_id(player_id)
+            if player_status is None:
+                raise GuildCommandException(
+                    "プレイヤーステータスが見つかりません",
+                    user_id=command.player_id,
+                    guild_id=command.guild_id,
+                )
+            bank.withdraw_gold(command.amount, player_id)
+            player_status.earn_gold(command.amount)
+            self._guild_bank_repository.save(bank)
+            self._player_status_repository.save(player_status)
+            self._logger.info(
+                "Guild bank withdrawn: guild_id=%s, player_id=%s, amount=%s",
+                command.guild_id,
+                command.player_id,
+                command.amount,
+            )
+            return GuildCommandResultDto(
+                success=True,
+                message=f"{command.amount} ゴールドをギルド金庫から出金しました",
+                data={"guild_id": command.guild_id, "amount": command.amount},
+            )
+
+    def disband_guild(self, command: DisbandGuildCommand) -> GuildCommandResultDto:
+        """ギルドを解散する（リーダーのみ）。ギルドと金庫を削除する。"""
+        return self._execute_with_error_handling(
+            operation=lambda: self._disband_guild_impl(command),
+            context={
+                "action": "disband_guild",
+                "user_id": command.player_id,
+                "guild_id": command.guild_id,
+            },
+        )
+
+    def _disband_guild_impl(
+        self, command: DisbandGuildCommand
+    ) -> GuildCommandResultDto:
+        with self._unit_of_work:
+            guild_id = GuildId(command.guild_id)
+            guild = self._guild_repository.find_by_id(guild_id)
+            if guild is None:
+                raise GuildNotFoundForCommandException(
+                    command.guild_id, "disband_guild"
+                )
+            player_id = PlayerId(command.player_id)
+            guild.disband(player_id)
+            self._guild_repository.delete(guild_id)
+            self._guild_bank_repository.delete(guild_id)
+            self._logger.info(
+                "Guild disbanded: guild_id=%s, disbanded_by=%s",
+                command.guild_id,
+                command.player_id,
+            )
+            return GuildCommandResultDto(
+                success=True,
+                message="ギルドを解散しました",
                 data={"guild_id": command.guild_id},
             )

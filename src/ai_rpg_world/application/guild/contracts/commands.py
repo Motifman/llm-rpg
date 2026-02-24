@@ -32,3 +32,26 @@ class ChangeGuildRoleCommand:
     changer_player_id: int
     target_player_id: int
     new_role: str  # "leader" | "officer" | "member"
+
+
+@dataclass(frozen=True)
+class DepositToGuildBankCommand:
+    """ギルド金庫入金コマンド（メンバー全員可能）"""
+    guild_id: int
+    player_id: int
+    amount: int
+
+
+@dataclass(frozen=True)
+class WithdrawFromGuildBankCommand:
+    """ギルド金庫出金コマンド（オフィサー以上のみ）"""
+    guild_id: int
+    player_id: int
+    amount: int
+
+
+@dataclass(frozen=True)
+class DisbandGuildCommand:
+    """ギルド解散コマンド（リーダーのみ）"""
+    guild_id: int
+    player_id: int

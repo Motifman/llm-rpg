@@ -16,10 +16,19 @@ from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
 from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
 from ai_rpg_world.domain.quest.value_object.quest_objective import QuestObjective
 from ai_rpg_world.domain.quest.value_object.quest_reward import QuestReward
-from ai_rpg_world.domain.world.event.map_events import ItemTakenFromChestEvent
+from ai_rpg_world.domain.world.event.map_events import (
+    ItemTakenFromChestEvent,
+    LocationEnteredEvent,
+    GatewayTriggeredEvent,
+)
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.player.event.inventory_events import ItemAddedToInventoryEvent
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.infrastructure.repository.in_memory_quest_repository import (
     InMemoryQuestRepository,
 )
@@ -799,6 +808,530 @@ class TestQuestProgressHandler:
             player_id_value=1,
         )
         handler.handle_item_taken_from_chest(event)
+
+        q = quest_repository.find_by_id(quest_id)
+        assert q.objectives[0].current_count == 0
+        assert q.status.value == "accepted"
+
+    # --- handle_location_entered (REACH_SPOT / REACH_LOCATION) ---
+
+    def test_handle_location_entered_skips_when_no_player_id(self, handler):
+        """player_id_value が None のとき何もしない"""
+        event = LocationEnteredEvent.create(
+            aggregate_id=LocationAreaId(1),
+            aggregate_type="LocationArea",
+            location_id=LocationAreaId(1),
+            spot_id=SpotId(5),
+            object_id=WorldObjectId.create(999),
+            name="test",
+            description="desc",
+            player_id_value=None,
+        )
+        handler.handle_location_entered(event)
+        # 例外なく完了することのみ確認
+
+    def test_handle_location_entered_advances_reach_spot_when_quest_accepted(
+        self, handler, quest_repository
+    ):
+        """受託中クエストの REACH_SPOT 目標が進むこと"""
+        quest_id = quest_repository.generate_quest_id()
+        spot_id_value = 5
+        acceptor_id = PlayerId(1)
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.REACH_SPOT,
+                target_id=spot_id_value,
+                required_count=2,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=100, exp=50)
+        scope = QuestScope.public_scope()
+        quest = QuestAggregate.issue_quest(
+            quest_id=quest_id,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+        )
+        quest.accept_by(acceptor_id)
+        quest_repository.save(quest)
+
+        event = LocationEnteredEvent.create(
+            aggregate_id=LocationAreaId(10),
+            aggregate_type="LocationArea",
+            location_id=LocationAreaId(10),
+            spot_id=SpotId(spot_id_value),
+            object_id=WorldObjectId.create(1),
+            name="area",
+            description="desc",
+            player_id_value=acceptor_id.value,
+        )
+        handler.handle_location_entered(event)
+
+        q = quest_repository.find_by_id(quest_id)
+        assert q.objectives[0].current_count == 1
+        assert q.status.value == "accepted"
+
+    def test_handle_location_entered_advances_reach_location_when_quest_accepted(
+        self, handler, quest_repository
+    ):
+        """受託中クエストの REACH_LOCATION 目標が進むこと"""
+        quest_id = quest_repository.generate_quest_id()
+        location_id_value = 10
+        spot_id_value = 5
+        acceptor_id = PlayerId(1)
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.REACH_LOCATION,
+                target_id=location_id_value,
+                target_id_secondary=spot_id_value,
+                required_count=2,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=100, exp=50)
+        scope = QuestScope.public_scope()
+        quest = QuestAggregate.issue_quest(
+            quest_id=quest_id,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+        )
+        quest.accept_by(acceptor_id)
+        quest_repository.save(quest)
+
+        event = LocationEnteredEvent.create(
+            aggregate_id=LocationAreaId(location_id_value),
+            aggregate_type="LocationArea",
+            location_id=LocationAreaId(location_id_value),
+            spot_id=SpotId(spot_id_value),
+            object_id=WorldObjectId.create(1),
+            name="area",
+            description="desc",
+            player_id_value=acceptor_id.value,
+        )
+        handler.handle_location_entered(event)
+
+        q = quest_repository.find_by_id(quest_id)
+        assert q.objectives[0].current_count == 1
+        assert q.status.value == "accepted"
+
+    def test_handle_location_entered_completes_quest_and_grants_reward_when_all_done(
+        self,
+        handler,
+        quest_repository,
+        player_status_repository,
+        player_inventory_repository,
+    ):
+        """REACH_SPOT 目標が全て達成でクエスト完了し報酬付与が行われること"""
+        quest_id = quest_repository.generate_quest_id()
+        spot_id_value = 5
+        acceptor_id = PlayerId(1)
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.REACH_SPOT,
+                target_id=spot_id_value,
+                required_count=1,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=100, exp=50)
+        scope = QuestScope.public_scope()
+        quest = QuestAggregate.issue_quest(
+            quest_id=quest_id,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+        )
+        quest.accept_by(acceptor_id)
+        quest_repository.save(quest)
+
+        mock_status = Mock()
+        mock_inventory = Mock()
+        player_status_repository.find_by_id.return_value = mock_status
+        player_inventory_repository.find_by_id.return_value = mock_inventory
+
+        event = LocationEnteredEvent.create(
+            aggregate_id=LocationAreaId(10),
+            aggregate_type="LocationArea",
+            location_id=LocationAreaId(10),
+            spot_id=SpotId(spot_id_value),
+            object_id=WorldObjectId.create(1),
+            name="area",
+            description="desc",
+            player_id_value=acceptor_id.value,
+        )
+        handler.handle_location_entered(event)
+
+        q = quest_repository.find_by_id(quest_id)
+        assert q.status.value == "completed"
+        assert q.objectives[0].current_count == 1
+        mock_status.earn_gold.assert_called_once_with(100)
+        mock_status.gain_exp.assert_called_once_with(50)
+        player_status_repository.save.assert_called_once()
+        player_inventory_repository.save.assert_called_once()
+
+    def test_handle_location_entered_skips_when_no_matching_quest(
+        self, handler, quest_repository
+    ):
+        """REACH_SPOT / REACH_LOCATION 目標が一致しないクエストは進捗しない"""
+        quest_id = quest_repository.generate_quest_id()
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.REACH_SPOT,
+                target_id=99,
+                required_count=1,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=100, exp=50)
+        scope = QuestScope.public_scope()
+        quest = QuestAggregate.issue_quest(
+            quest_id=quest_id,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+        )
+        quest.accept_by(PlayerId(1))
+        quest_repository.save(quest)
+
+        event = LocationEnteredEvent.create(
+            aggregate_id=LocationAreaId(10),
+            aggregate_type="LocationArea",
+            location_id=LocationAreaId(10),
+            spot_id=SpotId(5),
+            object_id=WorldObjectId.create(1),
+            name="area",
+            description="desc",
+            player_id_value=1,
+        )
+        handler.handle_location_entered(event)
+
+        q = quest_repository.find_by_id(quest_id)
+        assert q.objectives[0].current_count == 0
+        assert q.status.value == "accepted"
+
+    # --- handle_gateway_triggered (REACH_SPOT) ---
+
+    def test_handle_gateway_triggered_skips_when_no_player_id(self, handler):
+        """player_id_value が None のとき何もしない"""
+        event = GatewayTriggeredEvent.create(
+            aggregate_id=GatewayId(1),
+            aggregate_type="Gateway",
+            gateway_id=GatewayId(1),
+            spot_id=SpotId(5),
+            object_id=WorldObjectId.create(999),
+            target_spot_id=SpotId(6),
+            landing_coordinate=Coordinate(0, 0),
+            player_id_value=None,
+        )
+        handler.handle_gateway_triggered(event)
+        # 例外なく完了することのみ確認
+
+    def test_handle_gateway_triggered_advances_reach_spot_when_quest_accepted(
+        self, handler, quest_repository
+    ):
+        """受託中クエストの REACH_SPOT 目標が進むこと（着地先スポットで判定）"""
+        quest_id = quest_repository.generate_quest_id()
+        target_spot_id_value = 6
+        acceptor_id = PlayerId(1)
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.REACH_SPOT,
+                target_id=target_spot_id_value,
+                required_count=2,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=100, exp=50)
+        scope = QuestScope.public_scope()
+        quest = QuestAggregate.issue_quest(
+            quest_id=quest_id,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+        )
+        quest.accept_by(acceptor_id)
+        quest_repository.save(quest)
+
+        event = GatewayTriggeredEvent.create(
+            aggregate_id=GatewayId(1),
+            aggregate_type="Gateway",
+            gateway_id=GatewayId(1),
+            spot_id=SpotId(5),
+            object_id=WorldObjectId.create(1),
+            target_spot_id=SpotId(target_spot_id_value),
+            landing_coordinate=Coordinate(0, 0),
+            player_id_value=acceptor_id.value,
+        )
+        handler.handle_gateway_triggered(event)
+
+        q = quest_repository.find_by_id(quest_id)
+        assert q.objectives[0].current_count == 1
+        assert q.status.value == "accepted"
+
+    def test_handle_gateway_triggered_completes_quest_and_grants_reward_when_all_done(
+        self,
+        handler,
+        quest_repository,
+        player_status_repository,
+        player_inventory_repository,
+    ):
+        """REACH_SPOT（ゲート通過）目標が全て達成でクエスト完了し報酬付与が行われること"""
+        quest_id = quest_repository.generate_quest_id()
+        target_spot_id_value = 6
+        acceptor_id = PlayerId(1)
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.REACH_SPOT,
+                target_id=target_spot_id_value,
+                required_count=1,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=100, exp=50)
+        scope = QuestScope.public_scope()
+        quest = QuestAggregate.issue_quest(
+            quest_id=quest_id,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+        )
+        quest.accept_by(acceptor_id)
+        quest_repository.save(quest)
+
+        mock_status = Mock()
+        mock_inventory = Mock()
+        player_status_repository.find_by_id.return_value = mock_status
+        player_inventory_repository.find_by_id.return_value = mock_inventory
+
+        event = GatewayTriggeredEvent.create(
+            aggregate_id=GatewayId(1),
+            aggregate_type="Gateway",
+            gateway_id=GatewayId(1),
+            spot_id=SpotId(5),
+            object_id=WorldObjectId.create(1),
+            target_spot_id=SpotId(target_spot_id_value),
+            landing_coordinate=Coordinate(0, 0),
+            player_id_value=acceptor_id.value,
+        )
+        handler.handle_gateway_triggered(event)
+
+        q = quest_repository.find_by_id(quest_id)
+        assert q.status.value == "completed"
+        assert q.objectives[0].current_count == 1
+        mock_status.earn_gold.assert_called_once_with(100)
+        mock_status.gain_exp.assert_called_once_with(50)
+        player_status_repository.save.assert_called_once()
+        player_inventory_repository.save.assert_called_once()
+
+    def test_handle_gateway_triggered_skips_when_no_matching_quest(
+        self, handler, quest_repository
+    ):
+        """REACH_SPOT 目標が一致しないクエストは進捗しない"""
+        quest_id = quest_repository.generate_quest_id()
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.REACH_SPOT,
+                target_id=99,
+                required_count=1,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=100, exp=50)
+        scope = QuestScope.public_scope()
+        quest = QuestAggregate.issue_quest(
+            quest_id=quest_id,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+        )
+        quest.accept_by(PlayerId(1))
+        quest_repository.save(quest)
+
+        event = GatewayTriggeredEvent.create(
+            aggregate_id=GatewayId(1),
+            aggregate_type="Gateway",
+            gateway_id=GatewayId(1),
+            spot_id=SpotId(5),
+            object_id=WorldObjectId.create(1),
+            target_spot_id=SpotId(6),
+            landing_coordinate=Coordinate(0, 0),
+            player_id_value=1,
+        )
+        handler.handle_gateway_triggered(event)
+
+        q = quest_repository.find_by_id(quest_id)
+        assert q.objectives[0].current_count == 0
+        assert q.status.value == "accepted"
+
+    # --- handle_item_added_to_inventory (OBTAIN_ITEM) ---
+
+    def test_handle_item_added_to_inventory_skips_when_item_not_found(
+        self, handler, quest_repository, item_repository
+    ):
+        """アイテムがリポジトリにないときはスキップ"""
+        item_repository.find_by_id.return_value = None
+        event = ItemAddedToInventoryEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerInventoryAggregate",
+            item_instance_id=ItemInstanceId.create(100),
+        )
+        handler.handle_item_added_to_inventory(event)
+        item_repository.find_by_id.assert_called_once()
+
+    def test_handle_item_added_to_inventory_advances_objective_when_quest_accepted(
+        self, handler, quest_repository, item_repository
+    ):
+        """受託中クエストの OBTAIN_ITEM 目標が進むこと"""
+        quest_id = quest_repository.generate_quest_id()
+        item_spec_id_value = 201
+        acceptor_id = PlayerId(1)
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.OBTAIN_ITEM,
+                target_id=item_spec_id_value,
+                required_count=2,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=100, exp=50)
+        scope = QuestScope.public_scope()
+        quest = QuestAggregate.issue_quest(
+            quest_id=quest_id,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+        )
+        quest.accept_by(acceptor_id)
+        quest_repository.save(quest)
+
+        mock_item = Mock()
+        mock_item.item_spec = Mock()
+        mock_item.item_spec.item_spec_id = Mock(value=item_spec_id_value)
+        item_repository.find_by_id.return_value = mock_item
+
+        event = ItemAddedToInventoryEvent.create(
+            aggregate_id=acceptor_id,
+            aggregate_type="PlayerInventoryAggregate",
+            item_instance_id=ItemInstanceId.create(100),
+        )
+        handler.handle_item_added_to_inventory(event)
+
+        q = quest_repository.find_by_id(quest_id)
+        assert q.objectives[0].current_count == 1
+        assert q.status.value == "accepted"
+
+    def test_handle_item_added_to_inventory_completes_quest_and_grants_reward_when_all_done(
+        self,
+        handler,
+        quest_repository,
+        item_repository,
+        player_status_repository,
+        player_inventory_repository,
+    ):
+        """OBTAIN_ITEM 目標が全て達成でクエスト完了し報酬付与が行われること"""
+        quest_id = quest_repository.generate_quest_id()
+        item_spec_id_value = 201
+        acceptor_id = PlayerId(1)
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.OBTAIN_ITEM,
+                target_id=item_spec_id_value,
+                required_count=1,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=100, exp=50)
+        scope = QuestScope.public_scope()
+        quest = QuestAggregate.issue_quest(
+            quest_id=quest_id,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+        )
+        quest.accept_by(acceptor_id)
+        quest_repository.save(quest)
+
+        mock_item = Mock()
+        mock_item.item_spec = Mock()
+        mock_item.item_spec.item_spec_id = Mock(value=item_spec_id_value)
+        item_repository.find_by_id.return_value = mock_item
+        mock_status = Mock()
+        mock_inventory = Mock()
+        player_status_repository.find_by_id.return_value = mock_status
+        player_inventory_repository.find_by_id.return_value = mock_inventory
+
+        event = ItemAddedToInventoryEvent.create(
+            aggregate_id=acceptor_id,
+            aggregate_type="PlayerInventoryAggregate",
+            item_instance_id=ItemInstanceId.create(100),
+        )
+        handler.handle_item_added_to_inventory(event)
+
+        q = quest_repository.find_by_id(quest_id)
+        assert q.status.value == "completed"
+        assert q.objectives[0].current_count == 1
+        mock_status.earn_gold.assert_called_once_with(100)
+        mock_status.gain_exp.assert_called_once_with(50)
+        player_status_repository.save.assert_called_once()
+        player_inventory_repository.save.assert_called_once()
+
+    def test_handle_item_added_to_inventory_skips_when_item_spec_mismatch(
+        self, handler, quest_repository, item_repository
+    ):
+        """OBTAIN_ITEM で item_spec_id が一致しないクエストは進捗しない"""
+        quest_id = quest_repository.generate_quest_id()
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.OBTAIN_ITEM,
+                target_id=201,
+                required_count=1,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=100, exp=50)
+        scope = QuestScope.public_scope()
+        quest = QuestAggregate.issue_quest(
+            quest_id=quest_id,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+        )
+        quest.accept_by(PlayerId(1))
+        quest_repository.save(quest)
+
+        mock_item = Mock()
+        mock_item.item_spec = Mock()
+        mock_item.item_spec.item_spec_id = Mock(value=999)
+        item_repository.find_by_id.return_value = mock_item
+
+        event = ItemAddedToInventoryEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerInventoryAggregate",
+            item_instance_id=ItemInstanceId.create(100),
+        )
+        handler.handle_item_added_to_inventory(event)
 
         q = quest_repository.find_by_id(quest_id)
         assert q.objectives[0].current_count == 0

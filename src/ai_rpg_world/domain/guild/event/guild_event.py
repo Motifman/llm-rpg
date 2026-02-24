@@ -38,3 +38,23 @@ class GuildRoleChangedEvent(BaseDomainEvent[GuildId, "GuildAggregate"]):
     old_role: GuildRole
     new_role: GuildRole
     changed_by: PlayerId
+
+
+@dataclass(frozen=True)
+class GuildBankDepositedEvent(BaseDomainEvent[GuildId, "GuildBankAggregate"]):
+    """ギルド金庫入金イベント"""
+    amount: int
+    deposited_by: PlayerId
+
+
+@dataclass(frozen=True)
+class GuildBankWithdrawnEvent(BaseDomainEvent[GuildId, "GuildBankAggregate"]):
+    """ギルド金庫出金イベント"""
+    amount: int
+    withdrawn_by: PlayerId
+
+
+@dataclass(frozen=True)
+class GuildDisbandedEvent(BaseDomainEvent[GuildId, "GuildAggregate"]):
+    """ギルド解散イベント（リーダーによる解散）"""
+    disbanded_by: PlayerId

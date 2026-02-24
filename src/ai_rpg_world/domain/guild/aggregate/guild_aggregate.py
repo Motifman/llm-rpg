@@ -10,12 +10,14 @@ from ai_rpg_world.domain.guild.exception.guild_exception import (
     NotGuildMemberException,
     InsufficientGuildPermissionException,
     AlreadyGuildMemberException,
+    CannotDisbandGuildException,
 )
 from ai_rpg_world.domain.guild.event.guild_event import (
     GuildCreatedEvent,
     GuildMemberJoinedEvent,
     GuildMemberLeftEvent,
     GuildRoleChangedEvent,
+    GuildDisbandedEvent,
 )
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.guild.value_object.guild_membership import GuildMembership
@@ -117,22 +119,50 @@ class GuildAggregate(AggregateRoot):
         )
         self.add_event(event)
 
+    def _assign_successor_leader(self, leaving_player_id: PlayerId) -> None:
+        """リーダー脱退時に後継リーダーを任命する。貢献度は未実装のため joined_at が最も古いオフィサー、いなければ最も古いメンバーを昇格させる。"""
+        candidates = [
+            (pid, m)
+            for pid, m in self._members.items()
+            if pid != leaving_player_id
+        ]
+        if not candidates:
+            return
+        # オフィサーを joined_at 昇順、次にメンバーを joined_at 昇順で並べ、先頭をリーダーに
+        officers = [(pid, m) for pid, m in candidates if m.role == GuildRole.OFFICER]
+        members_only = [(pid, m) for pid, m in candidates if m.role == GuildRole.MEMBER]
+        officers.sort(key=lambda x: x[1].joined_at)
+        members_only.sort(key=lambda x: x[1].joined_at)
+        successor_candidates = officers + members_only
+        if not successor_candidates:
+            return
+        new_leader_id, new_leader_membership = successor_candidates[0]
+        new_membership = GuildMembership(
+            player_id=new_leader_id,
+            role=GuildRole.LEADER,
+            joined_at=new_leader_membership.joined_at,
+            contribution_points=new_leader_membership.contribution_points,
+        )
+        self._members[new_leader_id] = new_membership
+        event = GuildRoleChangedEvent.create(
+            aggregate_id=self.guild_id,
+            aggregate_type="GuildAggregate",
+            player_id=new_leader_id,
+            old_role=new_leader_membership.role,
+            new_role=GuildRole.LEADER,
+            changed_by=leaving_player_id,
+        )
+        self.add_event(event)
+
     def leave(self, player_id: PlayerId) -> None:
-        """ギルドから脱退する。"""
+        """ギルドから脱退する。リーダー脱退時は joined_at が最も古いオフィサー（いなければメンバー）を後継リーダーに任命する。"""
         membership = self._members.get(player_id)
         if membership is None:
             raise CannotLeaveGuildException(
                 f"Player {player_id} is not a member of guild {self.guild_id}"
             )
-        if membership.role == GuildRole.LEADER:
-            # リーダーは脱退前に後継者を決める必要がある（Phase 5 で詳細化）
-            if len(self._members) <= 1:
-                # 1人だけなら脱退＝ギルド実質解散は許可する
-                pass
-            else:
-                raise CannotLeaveGuildException(
-                    "Leader cannot leave until a successor is appointed. Use change_role first."
-                )
+        if membership.role == GuildRole.LEADER and len(self._members) > 1:
+            self._assign_successor_leader(player_id)
         del self._members[player_id]
         event = GuildMemberLeftEvent.create(
             aggregate_id=self.guild_id,
@@ -141,6 +171,25 @@ class GuildAggregate(AggregateRoot):
             role=membership.role,
         )
         self.add_event(event)
+
+    def disband(self, disbanded_by: PlayerId) -> None:
+        """ギルドを解散する。リーダーのみ実行可能。権限チェックはアプリ層でも行う。"""
+        membership = self._members.get(disbanded_by)
+        if membership is None:
+            raise NotGuildMemberException(
+                f"Player {disbanded_by} is not a member of guild {self.guild_id}"
+            )
+        if membership.role != GuildRole.LEADER:
+            raise CannotDisbandGuildException(
+                "Only the guild leader can disband the guild"
+            )
+        self.add_event(
+            GuildDisbandedEvent.create(
+                aggregate_id=self.guild_id,
+                aggregate_type="GuildAggregate",
+                disbanded_by=disbanded_by,
+            )
+        )
 
     def change_role(
         self,

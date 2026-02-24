@@ -23,6 +23,7 @@ class QuestObjectiveType(Enum):
     KILL_MONSTER = "kill_monster"
     KILL_PLAYER = "kill_player"
     REACH_SPOT = "reach_spot"
+    REACH_LOCATION = "reach_location"  # スポット内の特定ロケーション（target_id=location_id, target_id_secondary=spot_id）
     TALK_TO_NPC = "talk_to_npc"
     OBTAIN_ITEM = "obtain_item"
     TAKE_FROM_CHEST = "take_from_chest"

@@ -3,6 +3,9 @@ from ai_rpg_world.domain.guild.event.guild_event import (
     GuildMemberJoinedEvent,
     GuildMemberLeftEvent,
     GuildRoleChangedEvent,
+    GuildBankDepositedEvent,
+    GuildBankWithdrawnEvent,
+    GuildDisbandedEvent,
 )
 
 __all__ = [
@@ -10,4 +13,7 @@ __all__ = [
     "GuildMemberJoinedEvent",
     "GuildMemberLeftEvent",
     "GuildRoleChangedEvent",
+    "GuildBankDepositedEvent",
+    "GuildBankWithdrawnEvent",
+    "GuildDisbandedEvent",
 ]

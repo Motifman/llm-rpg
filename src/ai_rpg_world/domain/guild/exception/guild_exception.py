@@ -62,3 +62,13 @@ class InsufficientGuildPermissionException(GuildDomainException, BusinessRuleExc
 class AlreadyGuildMemberException(GuildDomainException, StateException):
     """既にギルドメンバーである例外"""
     error_code = "GUILD.ALREADY_MEMBER"
+
+
+class InsufficientGuildBankBalanceException(GuildDomainException, BusinessRuleException):
+    """ギルド金庫の残高不足例外"""
+    error_code = "GUILD.INSUFFICIENT_BANK_BALANCE"
+
+
+class CannotDisbandGuildException(GuildDomainException, BusinessRuleException):
+    """ギルドを解散できない例外（リーダーのみ解散可能）"""
+    error_code = "GUILD.CANNOT_DISBAND"

@@ -46,3 +46,19 @@ class GuildAccessDeniedException(GuildCommandException):
     def __init__(self, guild_id: int, user_id: int, action: str):
         message = f"ギルド {guild_id} に対するアクション '{action}' の実行権限がありません: ユーザー {user_id}"
         super().__init__(message, "GUILD_ACCESS_DENIED", guild_id=guild_id, user_id=user_id)
+
+
+class GuildBankNotFoundForCommandException(GuildCommandException):
+    """コマンド実行時にギルド金庫が見つからない場合の例外"""
+
+    def __init__(self, guild_id: int, command_name: str):
+        message = f"コマンド '{command_name}' の実行時にギルド金庫が見つかりません: {guild_id}"
+        super().__init__(message, "GUILD_BANK_NOT_FOUND_FOR_COMMAND", guild_id=guild_id)
+
+
+class InsufficientGuildBankBalanceForCommandException(GuildCommandException):
+    """ギルド金庫の残高不足で出金できない場合の例外"""
+
+    def __init__(self, guild_id: int, requested: int, available: int):
+        message = f"ギルド金庫の残高不足: リクエスト {requested}, 残高 {available}"
+        super().__init__(message, "GUILD_BANK_INSUFFICIENT_BALANCE", guild_id=guild_id)
