@@ -249,11 +249,14 @@ class PlayerStatusAggregate(AggregateRoot):
         """
         return not self._is_down
 
-    def apply_damage(self, damage: int) -> None:
+    def apply_damage(
+        self, damage: int, killer_player_id: Optional[PlayerId] = None
+    ) -> None:
         """計算済みのダメージを適用する
 
         Args:
             damage: ダメージ量
+            killer_player_id: プレイヤーによって倒された場合の加害者プレイヤーID。死因が様々なため Optional。
         """
         self._hp = self._hp.damage(damage)
 
@@ -263,6 +266,7 @@ class PlayerStatusAggregate(AggregateRoot):
             self.add_event(PlayerDownedEvent.create(
                 aggregate_id=self._player_id,
                 aggregate_type="PlayerStatusAggregate",
+                killer_player_id=killer_player_id,
             ))
 
     def record_evasion(self) -> None:

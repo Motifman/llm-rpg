@@ -163,16 +163,29 @@ class QuestAggregate(AggregateRoot):
         )
         self.add_event(event)
 
-    def advance_objective(self, objective_type: QuestObjectiveType, target_id: int) -> bool:
+    def advance_objective(
+        self,
+        objective_type: QuestObjectiveType,
+        target_id: int,
+        target_id_secondary: Optional[int] = None,
+    ) -> bool:
         """
         指定した目標の進捗を 1 進める。
         該当する目標がなければ False、進めたら True。
         既に達成済みの目標は変更しない（True を返す）。
+        TAKE_FROM_CHEST など target_id_secondary を持つ目標は両方一致で判定する。
         """
         if self.status != QuestStatus.ACCEPTED:
             return False
         for i, obj in enumerate(self.objectives):
-            if obj.objective_type == objective_type and obj.target_id == target_id:
+            type_ok = obj.objective_type == objective_type
+            primary_ok = obj.target_id == target_id
+            secondary_ok = (
+                obj.target_id_secondary == target_id_secondary
+                if obj.target_id_secondary is not None
+                else target_id_secondary is None
+            )
+            if type_ok and primary_ok and secondary_ok:
                 if obj.is_completed():
                     return True
                 self.objectives[i] = obj.with_progress(1)

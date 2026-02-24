@@ -2,6 +2,8 @@ from typing import TYPE_CHECKING
 
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
+from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
+from ai_rpg_world.domain.world.event.map_events import ItemTakenFromChestEvent
 from ai_rpg_world.application.quest.handlers.quest_progress_handler import (
     QuestProgressHandler,
 )
@@ -21,6 +23,20 @@ class QuestEventHandlerRegistry:
         event_publisher.register_handler(
             MonsterDiedEvent,
             self._create_event_handler(self._quest_progress_handler.handle),
+            is_synchronous=False,
+        )
+        event_publisher.register_handler(
+            PlayerDownedEvent,
+            self._create_event_handler(
+                self._quest_progress_handler.handle_player_downed
+            ),
+            is_synchronous=False,
+        )
+        event_publisher.register_handler(
+            ItemTakenFromChestEvent,
+            self._create_event_handler(
+                self._quest_progress_handler.handle_item_taken_from_chest
+            ),
             is_synchronous=False,
         )
 
