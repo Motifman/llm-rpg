@@ -31,3 +31,11 @@ class GuildMembership:
     def can_change_role(self) -> bool:
         """役職変更権限（オフィサー以上）"""
         return self.role in (GuildRole.LEADER, GuildRole.OFFICER)
+
+    def can_deposit_to_bank(self) -> bool:
+        """金庫入金権限（メンバー全員）"""
+        return True
+
+    def can_withdraw_from_bank(self) -> bool:
+        """金庫出金権限（オフィサー以上）"""
+        return self.role in (GuildRole.LEADER, GuildRole.OFFICER)

@@ -3,7 +3,12 @@ from typing import TYPE_CHECKING
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
 from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
-from ai_rpg_world.domain.world.event.map_events import ItemTakenFromChestEvent
+from ai_rpg_world.domain.player.event.inventory_events import ItemAddedToInventoryEvent
+from ai_rpg_world.domain.world.event.map_events import (
+    ItemTakenFromChestEvent,
+    LocationEnteredEvent,
+    GatewayTriggeredEvent,
+)
 from ai_rpg_world.application.quest.handlers.quest_progress_handler import (
     QuestProgressHandler,
 )
@@ -36,6 +41,27 @@ class QuestEventHandlerRegistry:
             ItemTakenFromChestEvent,
             self._create_event_handler(
                 self._quest_progress_handler.handle_item_taken_from_chest
+            ),
+            is_synchronous=False,
+        )
+        event_publisher.register_handler(
+            LocationEnteredEvent,
+            self._create_event_handler(
+                self._quest_progress_handler.handle_location_entered
+            ),
+            is_synchronous=False,
+        )
+        event_publisher.register_handler(
+            GatewayTriggeredEvent,
+            self._create_event_handler(
+                self._quest_progress_handler.handle_gateway_triggered
+            ),
+            is_synchronous=False,
+        )
+        event_publisher.register_handler(
+            ItemAddedToInventoryEvent,
+            self._create_event_handler(
+                self._quest_progress_handler.handle_item_added_to_inventory
             ),
             is_synchronous=False,
         )

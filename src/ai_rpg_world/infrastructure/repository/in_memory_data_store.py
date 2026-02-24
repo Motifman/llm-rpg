@@ -36,6 +36,7 @@ from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceI
 from ai_rpg_world.domain.quest.aggregate.quest_aggregate import QuestAggregate
 from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
 from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
+from ai_rpg_world.domain.guild.aggregate.guild_bank_aggregate import GuildBankAggregate
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 
 
@@ -74,6 +75,7 @@ class InMemoryDataStore:
 
         # Guild Domain
         self.guilds: Dict[GuildId, GuildAggregate] = {}
+        self.guild_banks: Dict[GuildId, GuildBankAggregate] = {}
         self.next_guild_id = 1
 
         # Item Domain
@@ -278,6 +280,7 @@ class InMemoryDataStore:
         self.quests.clear()
         self.next_quest_id = 1
         self.guilds.clear()
+        self.guild_banks.clear()
         self.next_guild_id = 1
         self.items.clear()
         self.next_item_instance_id = 1
@@ -307,6 +310,7 @@ class InMemoryDataStore:
             "trades": copy.deepcopy(self.trades),
             "quests": copy.deepcopy(self.quests),
             "guilds": copy.deepcopy(self.guilds),
+            "guild_banks": copy.deepcopy(self.guild_banks),
             "items": copy.deepcopy(self.items),
             "sns_users": copy.deepcopy(self.sns_users),
             "posts": copy.deepcopy(self.posts),
@@ -326,6 +330,7 @@ class InMemoryDataStore:
         self.trades = snapshot["trades"]
         self.quests = snapshot.get("quests", {})
         self.guilds = snapshot.get("guilds", {})
+        self.guild_banks = snapshot.get("guild_banks", {})
         self.items = snapshot["items"]
         self.sns_users = snapshot["sns_users"]
         self.posts = snapshot["posts"]
