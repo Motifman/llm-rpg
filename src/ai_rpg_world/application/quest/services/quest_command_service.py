@@ -22,10 +22,13 @@ from ai_rpg_world.domain.player.repository.player_inventory_repository import (
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
+from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 
 from ai_rpg_world.application.quest.contracts.commands import (
     IssueQuestCommand,
     AcceptQuestCommand,
+    ApproveQuestCommand,
     CancelQuestCommand,
 )
 from ai_rpg_world.application.quest.contracts.dtos import QuestCommandResultDto
@@ -97,12 +100,14 @@ class QuestCommandService:
         player_status_repository: Optional[PlayerStatusRepository] = None,
         player_inventory_repository: Optional[PlayerInventoryRepository] = None,
         item_repository: Optional[ItemRepository] = None,
+        guild_repository: Optional[GuildRepository] = None,
     ):
         self._quest_repository = quest_repository
         self._unit_of_work = unit_of_work
         self._player_status_repository = player_status_repository
         self._player_inventory_repository = player_inventory_repository
         self._item_repository = item_repository
+        self._guild_repository = guild_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _execute_with_error_handling(
@@ -167,7 +172,10 @@ class QuestCommandService:
                 exp=command.reward_exp,
                 item_rewards=item_rewards,
             )
-            scope = QuestScope.public_scope()
+            if command.guild_id is not None:
+                scope = QuestScope.guild_scope(command.guild_id)
+            else:
+                scope = QuestScope.public_scope()
             issuer_player_id: Optional[PlayerId] = None
             reserved_gold = 0
             reserved_item_instance_ids: Tuple[ItemInstanceId, ...] = ()
@@ -232,7 +240,7 @@ class QuestCommandService:
                 reward=reward,
                 scope=scope,
                 issuer_player_id=issuer_player_id,
-                guild_id=None,
+                guild_id=command.guild_id,
                 reserved_gold=reserved_gold,
                 reserved_item_instance_ids=reserved_item_instance_ids,
             )
@@ -242,6 +250,54 @@ class QuestCommandService:
                 success=True,
                 message="クエストを発行しました",
                 data={"quest_id": quest_id.value},
+            )
+
+    def approve_quest(self, command: ApproveQuestCommand) -> QuestCommandResultDto:
+        """ギルド掲示クエストを承認して OPEN にする（オフィサー以上のみ）"""
+        return self._execute_with_error_handling(
+            operation=lambda: self._approve_quest_impl(command),
+            context={
+                "action": "approve_quest",
+                "user_id": command.approver_player_id,
+                "quest_id": command.quest_id,
+            },
+        )
+
+    def _approve_quest_impl(self, command: ApproveQuestCommand) -> QuestCommandResultDto:
+        with self._unit_of_work:
+            quest_id = QuestId(command.quest_id)
+            approver_id = PlayerId(command.approver_player_id)
+            quest = self._quest_repository.find_by_id(quest_id)
+            if quest is None:
+                raise QuestNotFoundForCommandException(command.quest_id, "approve_quest")
+            if not quest.is_pending_approval():
+                raise QuestAccessDeniedException(
+                    command.quest_id, command.approver_player_id, "approve_quest"
+                )
+            if quest.guild_id is None or self._guild_repository is None:
+                raise QuestAccessDeniedException(
+                    command.quest_id, command.approver_player_id, "approve_quest"
+                )
+            guild = self._guild_repository.find_by_id(GuildId(quest.guild_id))
+            if guild is None:
+                raise QuestAccessDeniedException(
+                    command.quest_id, command.approver_player_id, "approve_quest"
+                )
+            if not guild.can_approve_quest(approver_id):
+                raise QuestAccessDeniedException(
+                    command.quest_id, command.approver_player_id, "approve_quest"
+                )
+            quest.approve_by(approver_id)
+            self._quest_repository.save(quest)
+            self._logger.info(
+                "Quest approved: quest_id=%s, approver_id=%s",
+                command.quest_id,
+                command.approver_player_id,
+            )
+            return QuestCommandResultDto(
+                success=True,
+                message="クエストを承認しました",
+                data={"quest_id": command.quest_id},
             )
 
     def accept_quest(self, command: AcceptQuestCommand) -> QuestCommandResultDto:
@@ -262,6 +318,16 @@ class QuestCommandService:
             quest = self._quest_repository.find_by_id(quest_id)
             if quest is None:
                 raise QuestNotFoundForCommandException(command.quest_id, "accept_quest")
+            if quest.scope.is_guild():
+                if quest.guild_id is None or self._guild_repository is None:
+                    raise QuestAccessDeniedException(
+                        command.quest_id, command.player_id, "accept_quest"
+                    )
+                guild = self._guild_repository.find_by_id(GuildId(quest.guild_id))
+                if guild is None or not guild.is_member(player_id):
+                    raise QuestAccessDeniedException(
+                        command.quest_id, command.player_id, "accept_quest"
+                    )
             if not quest.can_be_accepted_by(player_id):
                 raise QuestAccessDeniedException(
                     command.quest_id, command.player_id, "accept_quest"

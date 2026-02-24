@@ -11,6 +11,8 @@ from ai_rpg_world.domain.quest.exception.quest_exception import (
 )
 from ai_rpg_world.domain.quest.event.quest_event import (
     QuestIssuedEvent,
+    QuestPendingApprovalEvent,
+    QuestApprovedEvent,
     QuestAcceptedEvent,
     QuestCompletedEvent,
     QuestCancelledEvent,
@@ -163,6 +165,66 @@ class TestQuestAggregate:
             )
             assert q.reserved_gold == 0
             assert q.reserved_item_instance_ids == ()
+
+        def test_issue_quest_with_guild_id_sets_pending_approval(
+            self, quest_id, objectives, reward, player_id
+        ):
+            """ギルド掲示時は status=PENDING_APPROVAL となり QuestPendingApprovalEvent を発行する"""
+            scope = QuestScope.guild_scope(10)
+            q = QuestAggregate.issue_quest(
+                quest_id=quest_id,
+                objectives=objectives,
+                reward=reward,
+                scope=scope,
+                issuer_player_id=player_id,
+                guild_id=10,
+            )
+            assert q.status == QuestStatus.PENDING_APPROVAL
+            assert q.guild_id == 10
+            events = q.get_events()
+            assert len(events) == 1
+            assert isinstance(events[0], QuestPendingApprovalEvent)
+            assert events[0].guild_id == 10
+
+        def test_issue_quest_without_guild_id_sets_open(
+            self, quest_id, objectives, reward, scope
+        ):
+            """ギルド掲示でない場合は status=OPEN"""
+            q = QuestAggregate.issue_quest(
+                quest_id=quest_id,
+                objectives=objectives,
+                reward=reward,
+                scope=scope,
+                issuer_player_id=None,
+                guild_id=None,
+            )
+            assert q.status == QuestStatus.OPEN
+            assert isinstance(q.get_events()[0], QuestIssuedEvent)
+
+    class TestApproveBy:
+        def test_approve_by_success(self, quest_id, objectives, reward, player_id):
+            """承認により status=OPEN になり QuestApprovedEvent を発行する"""
+            scope = QuestScope.guild_scope(10)
+            q = QuestAggregate.issue_quest(
+                quest_id=quest_id,
+                objectives=objectives,
+                reward=reward,
+                scope=scope,
+                issuer_player_id=None,
+                guild_id=10,
+            )
+            approver_id = PlayerId(2)
+            q.approve_by(approver_id)
+            assert q.status == QuestStatus.OPEN
+            events = q.get_events()
+            assert any(isinstance(e, QuestApprovedEvent) for e in events)
+            approved_ev = next(e for e in events if isinstance(e, QuestApprovedEvent))
+            assert approved_ev.approved_by == approver_id
+
+        def test_approve_by_when_not_pending_raises(self, open_quest, player_id):
+            """OPEN のクエストを承認すると InvalidQuestStatusException"""
+            with pytest.raises(InvalidQuestStatusException):
+                open_quest.approve_by(player_id)
 
     class TestAcceptBy:
         def test_accept_by_success(self, open_quest, player_id):
@@ -333,11 +395,11 @@ class TestQuestAggregate:
         ):
             assert accepted_quest.can_be_accepted_by(other_player_id) is False
 
-        def test_open_guild_scope_can_be_accepted_by_any_player_for_phase3(
+        def test_open_guild_scope_can_be_accepted_by_any_player_aggregate_only(
             self, quest_id, objectives, reward, player_id, other_player_id
         ):
-            """ギルドスコープ時は現状どのプレイヤーも受託可能。Phase 3 でギルドメンバー制限を実装する際にこのテストを更新する。"""
-            scope = QuestScope.guild_scope(guild_id=10)
+            """ギルドスコープかつ OPEN のとき、集約上はどのプレイヤーも受託可能。ギルドメンバー制限はアプリ層でチェック。"""
+            scope = QuestScope.guild_scope(10)
             q = QuestAggregate.issue_quest(
                 quest_id=quest_id,
                 objectives=objectives,
@@ -346,6 +408,10 @@ class TestQuestAggregate:
                 issuer_player_id=None,
                 guild_id=10,
             )
+            assert q.is_pending_approval() is True
+            assert q.can_be_accepted_by(player_id) is False  # OPEN でないので受託不可
+            q.approve_by(other_player_id)
+            assert q.is_open() is True
             assert q.can_be_accepted_by(player_id) is True
             assert q.can_be_accepted_by(other_player_id) is True
 

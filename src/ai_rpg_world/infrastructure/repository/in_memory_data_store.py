@@ -35,6 +35,8 @@ from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.quest.aggregate.quest_aggregate import QuestAggregate
 from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
+from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
+from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 
 
 class InMemoryDataStore:
@@ -69,6 +71,10 @@ class InMemoryDataStore:
         # Quest Domain
         self.quests: Dict[QuestId, QuestAggregate] = {}
         self.next_quest_id = 1
+
+        # Guild Domain
+        self.guilds: Dict[GuildId, GuildAggregate] = {}
+        self.next_guild_id = 1
 
         # Item Domain
         self.items: Dict[ItemInstanceId, ItemAggregate] = {}
@@ -271,6 +277,8 @@ class InMemoryDataStore:
         self.next_trade_id = 1
         self.quests.clear()
         self.next_quest_id = 1
+        self.guilds.clear()
+        self.next_guild_id = 1
         self.items.clear()
         self.next_item_instance_id = 1
         self.physical_maps.clear()
@@ -298,6 +306,7 @@ class InMemoryDataStore:
             "player_inventories": copy.deepcopy(self.player_inventories),
             "trades": copy.deepcopy(self.trades),
             "quests": copy.deepcopy(self.quests),
+            "guilds": copy.deepcopy(self.guilds),
             "items": copy.deepcopy(self.items),
             "sns_users": copy.deepcopy(self.sns_users),
             "posts": copy.deepcopy(self.posts),
@@ -316,6 +325,7 @@ class InMemoryDataStore:
         self.player_inventories = snapshot["player_inventories"]
         self.trades = snapshot["trades"]
         self.quests = snapshot.get("quests", {})
+        self.guilds = snapshot.get("guilds", {})
         self.items = snapshot["items"]
         self.sns_users = snapshot["sns_users"]
         self.posts = snapshot["posts"]
