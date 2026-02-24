@@ -34,15 +34,12 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.value_object.behavior_state_snapshot import BehaviorStateSnapshot
 from ai_rpg_world.domain.monster.value_object.feed_memory_entry import FeedMemoryEntry
-from ai_rpg_world.domain.monster.service.monster_config_service import MonsterConfigService, DefaultMonsterConfigService
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.monster.service.behavior_state_transition_service import (
-    BehaviorStateTransitionService,
     StateTransitionResult,
 )
-from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
 from ai_rpg_world.domain.monster.event.monster_events import (
     ActorStateChangedEvent,
     TargetSpottedEvent,
@@ -52,7 +49,6 @@ from ai_rpg_world.domain.monster.event.monster_events import (
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.value_object.pack_id import PackId
     from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
-    from ai_rpg_world.domain.monster.action_resolver import IMonsterActionResolver
 
 
 # 餌場記憶の最大件数（LRU で古いものを追い出す）
@@ -469,12 +465,19 @@ class MonsterAggregate(AggregateRoot):
     def on_tick(
         self,
         current_tick: WorldTick,
-        config: MonsterConfigService = DefaultMonsterConfigService(),
         regen_stats: Optional[BaseStats] = None,
-    ):
-        """時間経過による処理（自然回復など）。regen_stats はアプリ層で compute_effective_stats により算出して渡す。"""
-        if self._status == MonsterStatusEnum.ALIVE and regen_stats is not None:
-            regen_rate = config.get_regeneration_rate()
+        regen_rate: Optional[float] = None,
+    ) -> None:
+        """時間経過による処理（自然回復など）。
+
+        regen_stats はアプリ層で compute_effective_stats により算出して渡す。
+        regen_rate はアプリ層で MonsterConfigService 等から取得して渡す。集約は値のみで計算する。
+        """
+        if (
+            self._status == MonsterStatusEnum.ALIVE
+            and regen_stats is not None
+            and regen_rate is not None
+        ):
             hp_regen = max(1, int(regen_stats.max_hp * regen_rate))
             mp_regen = max(1, int(regen_stats.max_mp * regen_rate))
             self.heal_hp(hp_regen)
@@ -663,12 +666,29 @@ class MonsterAggregate(AggregateRoot):
             flee_threshold=flee_threshold,
         )
 
-    def _apply_behavior_transition(
+    def _ensure_can_perform_behavior(self) -> None:
+        """状態遷移・アクション記録の前提条件（ALIVE・スポーン済み・spot_id あり）を検証する。"""
+        if self._status != MonsterStatusEnum.ALIVE:
+            raise MonsterAlreadyDeadException(
+                f"Monster {self._monster_id} is not alive, cannot perform behavior"
+            )
+        if self._coordinate is None:
+            raise MonsterNotSpawnedException(
+                f"Monster {self._monster_id} is not spawned yet, cannot perform behavior"
+            )
+        if self._spot_id is None:
+            raise MonsterNotSpawnedException(
+                f"Monster {self._monster_id} has no spot_id, cannot perform behavior"
+            )
+
+    def apply_behavior_transition(
         self, result: StateTransitionResult, current_tick: WorldTick
     ) -> None:
         """
         状態遷移結果を自身の _behavior_* に反映し、イベントを集約内で生成・add_event する。
+        アプリ層で BehaviorStateTransitionService.compute_transition の結果を渡す。
         """
+        self._ensure_can_perform_behavior()
         old_state = self._behavior_state
         hp_percentage = (
             self._hp.value / self._hp.max_hp if self._hp.max_hp > 0 else 1.0
@@ -780,42 +800,12 @@ class MonsterAggregate(AggregateRoot):
                     )
                 )
 
-    def decide(
-        self,
-        observation: "BehaviorObservation",
-        current_tick: WorldTick,
-        actor_coordinate: Coordinate,
-        action_resolver: "IMonsterActionResolver",
-    ) -> None:
+    def apply_territory_return_if_needed(self, actor_coordinate: Coordinate) -> None:
         """
-        観測と現在状態に基づき状態遷移とイベント発行を行う。
-        実行すべきアクションは action_resolver で解決し、MOVE/USE_SKILL の場合は
-        MonsterDecidedToMoveEvent / MonsterDecidedToUseSkillEvent を発行する。実行はハンドラが行う。
+        テリトリを超えていたら RETURN に遷移する（Monster の責務）。
+        アプリ層で apply_behavior_transition の後に呼ぶ。
         """
-        if self._status != MonsterStatusEnum.ALIVE:
-            raise MonsterAlreadyDeadException(
-                f"Monster {self._monster_id} is not alive, cannot decide"
-            )
-        if self._coordinate is None:
-            raise MonsterNotSpawnedException(
-                f"Monster {self._monster_id} is not spawned yet, cannot decide"
-            )
-        if self._spot_id is None:
-            raise MonsterNotSpawnedException(
-                f"Monster {self._monster_id} has no spot_id, cannot decide"
-            )
-
-        transition_service = BehaviorStateTransitionService()
-        snapshot = self.to_behavior_state_snapshot(actor_coordinate, current_tick)
-        result = transition_service.compute_transition(
-            observation=observation,
-            snapshot=snapshot,
-            actor_id=self._world_object_id,
-            actor_coordinate=actor_coordinate,
-        )
-        self._apply_behavior_transition(result, current_tick)
-
-        # テリトリを超えていたら RETURN に遷移（Monster の責務）
+        self._ensure_can_perform_behavior()
         territory_radius = self._template.territory_radius
         if (
             territory_radius is not None
@@ -843,48 +833,61 @@ class MonsterAggregate(AggregateRoot):
                     )
                 )
 
-        action = action_resolver.resolve_action(
-            self, observation, actor_coordinate
+    def record_move(
+        self, coordinate: Coordinate, current_tick: WorldTick
+    ) -> None:
+        """決まった移動先を記録し MonsterDecidedToMoveEvent を発行する。アプリ層で resolve_action の結果に応じて呼ぶ。"""
+        self._ensure_can_perform_behavior()
+        self.add_event(
+            MonsterDecidedToMoveEvent.create(
+                aggregate_id=self._monster_id,
+                aggregate_type="MonsterAggregate",
+                actor_id=self._world_object_id,
+                coordinate={
+                    "x": coordinate.x,
+                    "y": coordinate.y,
+                    "z": coordinate.z,
+                },
+                spot_id=self._spot_id,
+                current_tick=current_tick,
+            )
         )
-        if action.action_type == BehaviorActionType.MOVE and action.coordinate is not None:
-            self.add_event(
-                MonsterDecidedToMoveEvent.create(
-                    aggregate_id=self._monster_id,
-                    aggregate_type="MonsterAggregate",
-                    actor_id=self._world_object_id,
-                    coordinate={
-                        "x": action.coordinate.x,
-                        "y": action.coordinate.y,
-                        "z": action.coordinate.z,
-                    },
-                    spot_id=self._spot_id,
-                    current_tick=current_tick,
-                )
+
+    def record_use_skill(
+        self,
+        skill_slot_index: int,
+        target_id: Optional[WorldObjectId],
+        current_tick: WorldTick,
+    ) -> None:
+        """決まったスキル使用を記録し MonsterDecidedToUseSkillEvent を発行する。アプリ層で resolve_action の結果に応じて呼ぶ。"""
+        self._ensure_can_perform_behavior()
+        self.add_event(
+            MonsterDecidedToUseSkillEvent.create(
+                aggregate_id=self._monster_id,
+                aggregate_type="MonsterAggregate",
+                actor_id=self._world_object_id,
+                skill_slot_index=skill_slot_index,
+                target_id=target_id,
+                spot_id=self._spot_id,
+                current_tick=current_tick,
             )
-        elif action.action_type == BehaviorActionType.USE_SKILL and action.skill_slot_index is not None:
-            self.add_event(
-                MonsterDecidedToUseSkillEvent.create(
-                    aggregate_id=self._monster_id,
-                    aggregate_type="MonsterAggregate",
-                    actor_id=self._world_object_id,
-                    skill_slot_index=action.skill_slot_index,
-                    target_id=self._behavior_target_id,
-                    spot_id=self._spot_id,
-                    current_tick=current_tick,
-                )
+        )
+
+    def record_interact(
+        self, target_id: WorldObjectId, current_tick: WorldTick
+    ) -> None:
+        """決まったインタラクト対象を記録し MonsterDecidedToInteractEvent を発行する。アプリ層で resolve_action の結果に応じて呼ぶ。"""
+        self._ensure_can_perform_behavior()
+        self.add_event(
+            MonsterDecidedToInteractEvent.create(
+                aggregate_id=self._monster_id,
+                aggregate_type="MonsterAggregate",
+                actor_id=self._world_object_id,
+                target_id=target_id,
+                spot_id=self._spot_id,
+                current_tick=current_tick,
             )
-        elif action.action_type == BehaviorActionType.INTERACT and action.target_id is not None:
-            self.add_event(
-                MonsterDecidedToInteractEvent.create(
-                    aggregate_id=self._monster_id,
-                    aggregate_type="MonsterAggregate",
-                    actor_id=self._world_object_id,
-                    target_id=action.target_id,
-                    spot_id=self._spot_id,
-                    current_tick=current_tick,
-                )
-            )
-        # WAIT の場合は何も発行しない
+        )
 
     def respawn(self, coordinate: Coordinate, current_tick: WorldTick, spot_id: SpotId):
         """リスポーンさせる"""

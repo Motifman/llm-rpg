@@ -465,10 +465,10 @@ class TestPlayerStatusAggregate:
         assert aggregate.stamina.value == 100
 
     def test_revive_normal(self):
-        """戦闘不能状態から復帰すること"""
+        """戦闘不能状態から復帰すること（回復率を値で渡す）"""
         aggregate = create_test_status_aggregate(hp=0, is_down=True)
 
-        aggregate.revive()  # デフォルト設定(10%)で復帰
+        aggregate.revive(hp_recovery_rate=0.1)  # 10%で復帰
 
         assert aggregate.hp.value == 10  # max_hp(100) * 0.1
         assert aggregate.is_down == False
@@ -480,13 +480,11 @@ class TestPlayerStatusAggregate:
         assert events[0].hp_recovered == 10
         assert events[0].total_hp == 10
 
-    def test_revive_custom_config(self):
-        """カスタム設定で復帰すること"""
-        from ai_rpg_world.domain.player.service.player_config_service import DefaultPlayerConfigService
+    def test_revive_custom_rate(self):
+        """指定した回復率で復帰すること"""
         aggregate = create_test_status_aggregate(hp=0, is_down=True)
-        config = DefaultPlayerConfigService(revive_hp_rate=0.5)
 
-        aggregate.revive(config=config)
+        aggregate.revive(hp_recovery_rate=0.5)
 
         assert aggregate.hp.value == 50
         assert aggregate.is_down == False
@@ -506,8 +504,8 @@ class TestPlayerStatusAggregate:
         assert aggregate.hp.value == 0
         assert len(aggregate.get_events()) == 0
         
-        # 3. 蘇生
-        aggregate.revive()
+        # 3. 蘇生（回復率を値で渡す）
+        aggregate.revive(hp_recovery_rate=0.1)
         assert aggregate.is_down is False
         assert aggregate.hp.value == 10
         assert aggregate.can_receive_healing() is True
@@ -524,7 +522,7 @@ class TestPlayerStatusAggregate:
         aggregate = create_test_status_aggregate(is_down=False)
 
         with pytest.raises(ValueError, match="プレイヤーは戦闘不能状態ではありません"):
-            aggregate.revive(0.5)
+            aggregate.revive(hp_recovery_rate=0.5)
 
     def test_earn_gold(self):
         """ゴールドを獲得すること"""

@@ -10,7 +10,6 @@ from ai_rpg_world.domain.player.value_object.gold import Gold
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
-from ai_rpg_world.domain.player.service.player_config_service import PlayerConfigService, DefaultPlayerConfigService
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -494,11 +493,11 @@ class PlayerStatusAggregate(AggregateRoot):
             total_stamina=self._stamina.value,
         ))
 
-    def revive(self, config: PlayerConfigService = DefaultPlayerConfigService()) -> None:
+    def revive(self, hp_recovery_rate: float) -> None:
         """戦闘不能状態から復帰する
 
         Args:
-            config: プレイヤー設定サービス
+            hp_recovery_rate: 復帰時のHP回復率（0.0〜1.0）。アプリ層で設定から取得して渡す。
 
         Raises:
             ValueError: 既にダウン状態でない場合
@@ -506,9 +505,8 @@ class PlayerStatusAggregate(AggregateRoot):
         if not self._is_down:
             raise ValueError("プレイヤーは戦闘不能状態ではありません")
 
-        # HPを設定された率に応じて回復
-        hp_recovery_percent = config.get_revive_hp_rate()
-        recovery_hp = int(self._base_stats.max_hp * hp_recovery_percent)
+        # HPを渡された率に応じて回復
+        recovery_hp = int(self._base_stats.max_hp * hp_recovery_rate)
         old_hp = self._hp.value
         self._hp = Hp.create(recovery_hp, self._base_stats.max_hp)
 

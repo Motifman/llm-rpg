@@ -9,7 +9,8 @@ from ai_rpg_world.domain.item.value_object.item_effect import (
     CompositeItemEffect
 )
 from ai_rpg_world.domain.item.exception import ItemEffectValidationException
-from ai_rpg_world.domain.common.value_object import Gold, Exp
+from ai_rpg_world.domain.common.value_object import Exp
+from ai_rpg_world.domain.player.value_object.gold import Gold
 
 
 class TestHealEffect:

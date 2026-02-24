@@ -311,7 +311,7 @@ class TestGuildCommandService:
         bank = bank_repo.find_by_id(guild_id)
         assert bank is not None
         assert bank.guild_id == guild_id
-        assert bank.gold == 0
+        assert bank.gold.value == 0
 
     # --- deposit_to_guild_bank (Phase 5) ---
     def test_deposit_to_guild_bank_success(self, setup_service):
@@ -334,7 +334,7 @@ class TestGuildCommandService:
         assert result.success is True
         assert result.data["amount"] == 100
         bank = bank_repo.find_by_id(GuildId(guild_id_val))
-        assert bank.gold == 100
+        assert bank.gold.value == 100
         mock_status.pay_gold.assert_called_once_with(100)
 
     def test_deposit_to_guild_bank_guild_not_found_raises(self, setup_service):
@@ -390,7 +390,7 @@ class TestGuildCommandService:
         assert result.success is True
         assert result.data["amount"] == 50
         bank = bank_repo.find_by_id(GuildId(guild_id_val))
-        assert bank.gold == 150
+        assert bank.gold.value == 150
         mock_status.earn_gold.assert_called_once_with(50)
 
     def test_withdraw_from_guild_bank_member_cannot_withdraw_raises(self, setup_service):

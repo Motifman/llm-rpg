@@ -6,39 +6,38 @@ from ai_rpg_world.domain.guild.event.guild_event import (
     GuildBankWithdrawnEvent,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.gold import Gold
 from ai_rpg_world.domain.guild.exception.guild_exception import (
     InsufficientGuildBankBalanceException,
 )
 
 
 class GuildBankAggregate(AggregateRoot):
-    """ギルド金庫集約（GuildId に 1:1）"""
+    """ギルド金庫集約（GuildId に 1:1）。残高は Gold 値オブジェクトで表現する。"""
 
-    def __init__(self, guild_id: GuildId, gold: int = 0):
+    def __init__(self, guild_id: GuildId, gold: Gold):
         super().__init__()
-        if gold < 0:
-            raise ValueError("Guild bank gold must be non-negative")
         self._guild_id = guild_id
         self._gold = gold
 
     @classmethod
     def create_for_guild(cls, guild_id: GuildId) -> "GuildBankAggregate":
         """新規ギルド用の金庫を作成（残高 0）"""
-        return cls(guild_id=guild_id, gold=0)
+        return cls(guild_id=guild_id, gold=Gold.create(0))
 
     @property
     def guild_id(self) -> GuildId:
         return self._guild_id
 
     @property
-    def gold(self) -> int:
+    def gold(self) -> Gold:
         return self._gold
 
     def deposit_gold(self, amount: int, deposited_by: PlayerId) -> None:
         """金庫に入金する。権限チェックはアプリ層で行う。"""
         if amount <= 0:
             raise ValueError("Deposit amount must be positive")
-        self._gold += amount
+        self._gold = self._gold.add(amount)
         self.add_event(
             GuildBankDepositedEvent.create(
                 aggregate_id=self._guild_id,
@@ -52,11 +51,11 @@ class GuildBankAggregate(AggregateRoot):
         """金庫から出金する。権限チェックはアプリ層で行う。"""
         if amount <= 0:
             raise ValueError("Withdraw amount must be positive")
-        if amount > self._gold:
+        if not self._gold.can_subtract(amount):
             raise InsufficientGuildBankBalanceException(
-                f"Insufficient guild bank balance: have {self._gold}, requested {amount}"
+                f"Insufficient guild bank balance: have {self._gold.value}, requested {amount}"
             )
-        self._gold -= amount
+        self._gold = self._gold.subtract(amount)
         self.add_event(
             GuildBankWithdrawnEvent.create(
                 aggregate_id=self._guild_id,

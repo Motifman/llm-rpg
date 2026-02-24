@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List, TYPE_CHECKING, Union
-from ai_rpg_world.domain.common.value_object import Exp, Gold
+from ai_rpg_world.domain.common.value_object import Exp
+from ai_rpg_world.domain.player.value_object.gold import Gold
 from ai_rpg_world.domain.item.exception import ItemEffectValidationException
 
 if TYPE_CHECKING:

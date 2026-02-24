@@ -70,6 +70,10 @@ from ai_rpg_world.application.world.aggro_store import AggroStore
 from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
 from ai_rpg_world.domain.world.repository.world_map_repository import WorldMapRepository
 from ai_rpg_world.domain.world.service.map_transition_service import MapTransitionService
+from ai_rpg_world.domain.monster.service.behavior_state_transition_service import (
+    BehaviorStateTransitionService,
+)
+from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.monster.action_resolver import IMonsterActionResolver
@@ -278,15 +282,48 @@ class WorldSimulationApplicationService:
                             visible_feed=visible_feed,
                             selected_feed_target=selected_feed_target,
                         )
+                        # 状態遷移の計算はアプリ層、適用とイベントは集約
+                        snapshot = monster.to_behavior_state_snapshot(
+                            actor.coordinate, current_tick
+                        )
+                        transition_result = BehaviorStateTransitionService().compute_transition(
+                            observation=observation,
+                            snapshot=snapshot,
+                            actor_id=monster.world_object_id,
+                            actor_coordinate=actor.coordinate,
+                        )
+                        monster.apply_behavior_transition(
+                            transition_result, current_tick
+                        )
+                        monster.apply_territory_return_if_needed(actor.coordinate)
+                        # アクション解決はアプリ層、記録とイベント発行は集約
                         resolver = self._monster_action_resolver_factory(
                             physical_map, actor
                         )
-                        monster.decide(
-                            observation,
-                            current_tick,
-                            actor.coordinate,
-                            resolver,
+                        action = resolver.resolve_action(
+                            monster, observation, actor.coordinate
                         )
+                        if (
+                            action.action_type == BehaviorActionType.MOVE
+                            and action.coordinate is not None
+                        ):
+                            monster.record_move(action.coordinate, current_tick)
+                        elif (
+                            action.action_type == BehaviorActionType.USE_SKILL
+                            and action.skill_slot_index is not None
+                        ):
+                            monster.record_use_skill(
+                                action.skill_slot_index,
+                                monster.behavior_target_id,
+                                current_tick,
+                            )
+                        elif (
+                            action.action_type == BehaviorActionType.INTERACT
+                            and action.target_id is not None
+                        ):
+                            monster.record_interact(
+                                action.target_id, current_tick
+                            )
                         self._monster_repository.save(monster)
                         self._unit_of_work.process_sync_events()
                     except DomainException as e:
