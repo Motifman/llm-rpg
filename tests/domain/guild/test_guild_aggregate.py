@@ -126,10 +126,20 @@ class TestGuildAggregate:
             guild.leave(creator_id)
             assert guild.is_member(creator_id) is False
 
-        def test_leave_leader_when_other_members_raises(self, guild_with_members, creator_id):
-            """他にメンバーがいる場合リーダーは脱退できない"""
-            with pytest.raises(CannotLeaveGuildException):
-                guild_with_members.leave(creator_id)
+        def test_leave_leader_when_other_members_appoints_successor(
+            self, guild_with_members, creator_id, player_2_id
+        ):
+            """他にメンバーがいる場合リーダー脱退時は後継リーダーが任命され、脱退できる（Phase 5 仕様）"""
+            guild_with_members.leave(creator_id)
+            assert guild_with_members.is_member(creator_id) is False
+            assert guild_with_members.is_member(player_2_id) is True
+            assert guild_with_members.get_member(player_2_id).role == GuildRole.LEADER
+            events = guild_with_members.get_events()
+            assert any(isinstance(e, GuildMemberLeftEvent) for e in events)
+            assert any(
+                isinstance(e, GuildRoleChangedEvent) and e.new_role == GuildRole.LEADER
+                for e in events
+            )
 
         def test_leave_not_member_raises(self, guild, player_2_id):
             with pytest.raises(CannotLeaveGuildException):
