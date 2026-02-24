@@ -8,6 +8,7 @@ from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
+from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.quest.aggregate.quest_aggregate import QuestAggregate
 from ai_rpg_world.domain.quest.enum.quest_enum import QuestObjectiveType
@@ -15,6 +16,10 @@ from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
 from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
 from ai_rpg_world.domain.quest.value_object.quest_objective import QuestObjective
 from ai_rpg_world.domain.quest.value_object.quest_reward import QuestReward
+from ai_rpg_world.domain.world.event.map_events import ItemTakenFromChestEvent
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.infrastructure.repository.in_memory_quest_repository import (
     InMemoryQuestRepository,
 )
@@ -508,3 +513,293 @@ class TestQuestProgressHandler:
         with pytest.raises(QuestRewardGrantException) as exc_info:
             handler.handle(event)
         assert "報酬アイテムの仕様が見つかりません" in str(exc_info.value)
+
+    # --- handle_player_downed (KILL_PLAYER) ---
+
+    def test_handle_player_downed_skips_when_no_killer(self, handler):
+        """killer_player_id が None のとき何もしない"""
+        victim_id = PlayerId(2)
+        event = PlayerDownedEvent.create(
+            aggregate_id=victim_id,
+            aggregate_type="PlayerStatusAggregate",
+            killer_player_id=None,
+        )
+        handler.handle_player_downed(event)
+        # 例外なく完了することのみ確認
+
+    def test_handle_player_downed_advances_objective_when_quest_accepted(
+        self, handler, quest_repository
+    ):
+        """受託中クエストの KILL_PLAYER 目標が進むこと（キラー＝受託者、被害者＝目標）"""
+        quest_id = quest_repository.generate_quest_id()
+        victim_player_id_value = 2
+        killer_id = PlayerId(1)
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.KILL_PLAYER,
+                target_id=victim_player_id_value,
+                required_count=2,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=100, exp=50)
+        scope = QuestScope.public_scope()
+        quest = QuestAggregate.issue_quest(
+            quest_id=quest_id,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+        )
+        quest.accept_by(killer_id)
+        quest_repository.save(quest)
+
+        event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(victim_player_id_value),
+            aggregate_type="PlayerStatusAggregate",
+            killer_player_id=killer_id,
+        )
+        handler.handle_player_downed(event)
+
+        q = quest_repository.find_by_id(quest_id)
+        assert q.objectives[0].current_count == 1
+        assert q.status.value == "accepted"
+
+    def test_handle_player_downed_completes_quest_and_grants_reward_when_all_done(
+        self,
+        handler,
+        quest_repository,
+        player_status_repository,
+        player_inventory_repository,
+    ):
+        """KILL_PLAYER 目標が全て達成でクエスト完了し報酬付与が行われること"""
+        quest_id = quest_repository.generate_quest_id()
+        victim_player_id_value = 2
+        killer_id = PlayerId(1)
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.KILL_PLAYER,
+                target_id=victim_player_id_value,
+                required_count=1,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=100, exp=50)
+        scope = QuestScope.public_scope()
+        quest = QuestAggregate.issue_quest(
+            quest_id=quest_id,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+        )
+        quest.accept_by(killer_id)
+        quest_repository.save(quest)
+
+        mock_status = Mock()
+        mock_inventory = Mock()
+        player_status_repository.find_by_id.return_value = mock_status
+        player_inventory_repository.find_by_id.return_value = mock_inventory
+
+        event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(victim_player_id_value),
+            aggregate_type="PlayerStatusAggregate",
+            killer_player_id=killer_id,
+        )
+        handler.handle_player_downed(event)
+
+        q = quest_repository.find_by_id(quest_id)
+        assert q.status.value == "completed"
+        assert q.objectives[0].current_count == 1
+        mock_status.earn_gold.assert_called_once_with(100)
+        mock_status.gain_exp.assert_called_once_with(50)
+        player_status_repository.save.assert_called_once()
+        player_inventory_repository.save.assert_called_once()
+
+    def test_handle_player_downed_skips_when_no_matching_quest(
+        self, handler, quest_repository
+    ):
+        """KILL_PLAYER 目標が一致しないクエストは進捗しない"""
+        quest_id = quest_repository.generate_quest_id()
+        # 目標は「プレイヤー3をキル」、イベントは「プレイヤー2がダウン」
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.KILL_PLAYER,
+                target_id=3,
+                required_count=1,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=100, exp=50)
+        scope = QuestScope.public_scope()
+        quest = QuestAggregate.issue_quest(
+            quest_id=quest_id,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+        )
+        quest.accept_by(PlayerId(1))
+        quest_repository.save(quest)
+
+        event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(2),  # 被害者=2、目標は3
+            aggregate_type="PlayerStatusAggregate",
+            killer_player_id=PlayerId(1),
+        )
+        handler.handle_player_downed(event)
+
+        q = quest_repository.find_by_id(quest_id)
+        assert q.objectives[0].current_count == 0
+        assert q.status.value == "accepted"
+
+    # --- handle_item_taken_from_chest (TAKE_FROM_CHEST) ---
+
+    def test_handle_item_taken_from_chest_advances_objective_when_quest_accepted(
+        self, handler, quest_repository
+    ):
+        """受託中クエストの TAKE_FROM_CHEST 目標が進むこと"""
+        quest_id = quest_repository.generate_quest_id()
+        spot_id_value = 10
+        chest_id_value = 20
+        acceptor_id = PlayerId(1)
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.TAKE_FROM_CHEST,
+                target_id=spot_id_value,
+                target_id_secondary=chest_id_value,
+                required_count=2,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=100, exp=50)
+        scope = QuestScope.public_scope()
+        quest = QuestAggregate.issue_quest(
+            quest_id=quest_id,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+        )
+        quest.accept_by(acceptor_id)
+        quest_repository.save(quest)
+
+        event = ItemTakenFromChestEvent.create(
+            aggregate_id=SpotId(spot_id_value),
+            aggregate_type="PhysicalMap",
+            spot_id=SpotId(spot_id_value),
+            chest_id=WorldObjectId.create(chest_id_value),
+            actor_id=WorldObjectId.create(1),
+            item_instance_id=ItemInstanceId.create(100),
+            player_id_value=acceptor_id.value,
+        )
+        handler.handle_item_taken_from_chest(event)
+
+        q = quest_repository.find_by_id(quest_id)
+        assert q.objectives[0].current_count == 1
+        assert q.status.value == "accepted"
+
+    def test_handle_item_taken_from_chest_completes_quest_and_grants_reward_when_all_done(
+        self,
+        handler,
+        quest_repository,
+        player_status_repository,
+        player_inventory_repository,
+    ):
+        """TAKE_FROM_CHEST 目標が全て達成でクエスト完了し報酬付与が行われること"""
+        quest_id = quest_repository.generate_quest_id()
+        spot_id_value = 10
+        chest_id_value = 20
+        acceptor_id = PlayerId(1)
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.TAKE_FROM_CHEST,
+                target_id=spot_id_value,
+                target_id_secondary=chest_id_value,
+                required_count=1,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=100, exp=50)
+        scope = QuestScope.public_scope()
+        quest = QuestAggregate.issue_quest(
+            quest_id=quest_id,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+        )
+        quest.accept_by(acceptor_id)
+        quest_repository.save(quest)
+
+        mock_status = Mock()
+        mock_inventory = Mock()
+        player_status_repository.find_by_id.return_value = mock_status
+        player_inventory_repository.find_by_id.return_value = mock_inventory
+
+        event = ItemTakenFromChestEvent.create(
+            aggregate_id=SpotId(spot_id_value),
+            aggregate_type="PhysicalMap",
+            spot_id=SpotId(spot_id_value),
+            chest_id=WorldObjectId.create(chest_id_value),
+            actor_id=WorldObjectId.create(1),
+            item_instance_id=ItemInstanceId.create(100),
+            player_id_value=acceptor_id.value,
+        )
+        handler.handle_item_taken_from_chest(event)
+
+        q = quest_repository.find_by_id(quest_id)
+        assert q.status.value == "completed"
+        assert q.objectives[0].current_count == 1
+        mock_status.earn_gold.assert_called_once_with(100)
+        mock_status.gain_exp.assert_called_once_with(50)
+        player_status_repository.save.assert_called_once()
+        player_inventory_repository.save.assert_called_once()
+
+    def test_handle_item_taken_from_chest_skips_when_spot_or_chest_mismatch(
+        self, handler, quest_repository
+    ):
+        """TAKE_FROM_CHEST で spot/chest が一致しないクエストは進捗しない"""
+        quest_id = quest_repository.generate_quest_id()
+        objectives = [
+            QuestObjective(
+                objective_type=QuestObjectiveType.TAKE_FROM_CHEST,
+                target_id=10,
+                target_id_secondary=20,
+                required_count=1,
+                current_count=0,
+            ),
+        ]
+        reward = QuestReward.of(gold=100, exp=50)
+        scope = QuestScope.public_scope()
+        quest = QuestAggregate.issue_quest(
+            quest_id=quest_id,
+            objectives=objectives,
+            reward=reward,
+            scope=scope,
+            issuer_player_id=None,
+            guild_id=None,
+        )
+        quest.accept_by(PlayerId(1))
+        quest_repository.save(quest)
+
+        # 別のチェスト（spot=10, chest=99）から取得
+        event = ItemTakenFromChestEvent.create(
+            aggregate_id=SpotId(10),
+            aggregate_type="PhysicalMap",
+            spot_id=SpotId(10),
+            chest_id=WorldObjectId.create(99),
+            actor_id=WorldObjectId.create(1),
+            item_instance_id=ItemInstanceId.create(100),
+            player_id_value=1,
+        )
+        handler.handle_item_taken_from_chest(event)
+
+        q = quest_repository.find_by_id(quest_id)
+        assert q.objectives[0].current_count == 0
+        assert q.status.value == "accepted"

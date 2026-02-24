@@ -84,3 +84,31 @@ class TestQuestObjective:
                 required_count=3,
                 current_count=4,
             )
+
+    def test_create_take_from_chest_with_target_id_secondary(self):
+        """TAKE_FROM_CHEST 目標で target_id_secondary が保持されること"""
+        obj = QuestObjective(
+            objective_type=QuestObjectiveType.TAKE_FROM_CHEST,
+            target_id=10,  # spot_id.value
+            target_id_secondary=20,  # chest_id.value
+            required_count=1,
+            current_count=0,
+        )
+        assert obj.objective_type == QuestObjectiveType.TAKE_FROM_CHEST
+        assert obj.target_id == 10
+        assert obj.target_id_secondary == 20
+        assert obj.required_count == 1
+        assert obj.current_count == 0
+
+    def test_with_progress_preserves_target_id_secondary(self):
+        """with_progress で target_id_secondary が保持されること"""
+        obj = QuestObjective(
+            objective_type=QuestObjectiveType.TAKE_FROM_CHEST,
+            target_id=10,
+            target_id_secondary=20,
+            required_count=1,
+            current_count=0,
+        )
+        obj2 = obj.with_progress(1)
+        assert obj2.target_id_secondary == 20
+        assert obj2.current_count == 1

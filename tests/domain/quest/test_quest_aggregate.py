@@ -304,6 +304,55 @@ class TestQuestAggregate:
             assert q.objectives[0].current_count == 2
             assert q.is_all_objectives_completed() is True
 
+        def test_advance_objective_take_from_chest_with_secondary_success(
+            self, quest_id, reward, scope, player_id
+        ):
+            """TAKE_FROM_CHEST 目標で target_id と target_id_secondary が一致すると進捗する"""
+            obj = QuestObjective(
+                objective_type=QuestObjectiveType.TAKE_FROM_CHEST,
+                target_id=10,  # spot_id.value
+                target_id_secondary=20,  # chest_id.value
+                required_count=1,
+                current_count=0,
+            )
+            q = QuestAggregate.issue_quest(
+                quest_id=quest_id,
+                objectives=[obj],
+                reward=reward,
+                scope=scope,
+            )
+            q.accept_by(player_id)
+            r = q.advance_objective(
+                QuestObjectiveType.TAKE_FROM_CHEST, 10, target_id_secondary=20
+            )
+            assert r is True
+            assert q.objectives[0].current_count == 1
+            assert q.objectives[0].is_completed() is True
+
+        def test_advance_objective_take_from_chest_wrong_secondary_returns_false(
+            self, quest_id, reward, scope, player_id
+        ):
+            """TAKE_FROM_CHEST で target_id_secondary が一致しないと False"""
+            obj = QuestObjective(
+                objective_type=QuestObjectiveType.TAKE_FROM_CHEST,
+                target_id=10,
+                target_id_secondary=20,
+                required_count=1,
+                current_count=0,
+            )
+            q = QuestAggregate.issue_quest(
+                quest_id=quest_id,
+                objectives=[obj],
+                reward=reward,
+                scope=scope,
+            )
+            q.accept_by(player_id)
+            r = q.advance_objective(
+                QuestObjectiveType.TAKE_FROM_CHEST, 10, target_id_secondary=99
+            )
+            assert r is False
+            assert q.objectives[0].current_count == 0
+
     class TestComplete:
         def test_complete_success(self, quest_id, objectives, reward, scope, player_id):
             obj = QuestObjective(

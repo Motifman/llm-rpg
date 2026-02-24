@@ -1,5 +1,6 @@
 """
-MonsterDiedEvent を受けて、受託中クエストの KILL_MONSTER 目標を進め、
+MonsterDiedEvent / PlayerDownedEvent / ItemTakenFromChestEvent を受けて、
+受託中クエストの目標（KILL_MONSTER / KILL_PLAYER / TAKE_FROM_CHEST）を進め、
 全目標達成時は完了＋報酬付与を行う非同期ハンドラ。
 """
 import logging
@@ -17,12 +18,15 @@ from ai_rpg_world.domain.quest.enum.quest_enum import QuestObjectiveType
 from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
 from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
+from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
 )
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
+from ai_rpg_world.domain.world.event.map_events import ItemTakenFromChestEvent
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
@@ -124,6 +128,106 @@ class QuestProgressHandler(EventHandler[MonsterDiedEvent]):
         self._execute_in_separate_transaction(
             operation,
             context={"handler": "quest_progress_monster_died"},
+        )
+
+    def handle_player_downed(self, event: PlayerDownedEvent) -> None:
+        """PlayerDownedEvent で、キラーの受託中クエストの KILL_PLAYER 目標を進める（非同期）。"""
+        try:
+            self._handle_player_downed_impl(event)
+        except (ApplicationException, DomainException, QuestApplicationException):
+            raise
+        except Exception as e:
+            self._logger.exception(
+                "Unexpected error in QuestProgressHandler.handle_player_downed: %s",
+                e,
+            )
+            raise SystemErrorException(
+                f"Quest progress handling (player_downed) failed: {e}",
+                original_exception=e,
+            ) from e
+
+    def _handle_player_downed_impl(self, event: PlayerDownedEvent) -> None:
+        if event.killer_player_id is None:
+            return
+        victim_player_id_value = int(event.aggregate_id)
+
+        def operation():
+            quests = self._quest_repository.find_accepted_quests_by_player(
+                event.killer_player_id
+            )
+            for quest in quests:
+                advanced = quest.advance_objective(
+                    QuestObjectiveType.KILL_PLAYER, victim_player_id_value
+                )
+                if not advanced:
+                    continue
+                if not quest.is_all_objectives_completed():
+                    self._quest_repository.save(quest)
+                    continue
+                quest.complete()
+                self._grant_reward(quest)
+                self._quest_repository.save(quest)
+                self._logger.info(
+                    "Quest completed (KILL_PLAYER): quest_id=%s, acceptor=%s",
+                    quest.quest_id.value,
+                    quest.acceptor_player_id,
+                )
+
+        self._execute_in_separate_transaction(
+            operation,
+            context={"handler": "quest_progress_player_downed"},
+        )
+
+    def handle_item_taken_from_chest(self, event: ItemTakenFromChestEvent) -> None:
+        """ItemTakenFromChestEvent で、取得者の受託中クエストの TAKE_FROM_CHEST 目標を進める（非同期）。"""
+        try:
+            self._handle_item_taken_from_chest_impl(event)
+        except (ApplicationException, DomainException, QuestApplicationException):
+            raise
+        except Exception as e:
+            self._logger.exception(
+                "Unexpected error in QuestProgressHandler.handle_item_taken_from_chest: %s",
+                e,
+            )
+            raise SystemErrorException(
+                f"Quest progress handling (item_taken_from_chest) failed: {e}",
+                original_exception=e,
+            ) from e
+
+    def _handle_item_taken_from_chest_impl(
+        self, event: ItemTakenFromChestEvent
+    ) -> None:
+        acceptor_id = PlayerId.create(event.player_id_value)
+        spot_id_value = event.spot_id.value
+        chest_id_value = event.chest_id.value
+
+        def operation():
+            quests = self._quest_repository.find_accepted_quests_by_player(
+                acceptor_id
+            )
+            for quest in quests:
+                advanced = quest.advance_objective(
+                    QuestObjectiveType.TAKE_FROM_CHEST,
+                    spot_id_value,
+                    target_id_secondary=chest_id_value,
+                )
+                if not advanced:
+                    continue
+                if not quest.is_all_objectives_completed():
+                    self._quest_repository.save(quest)
+                    continue
+                quest.complete()
+                self._grant_reward(quest)
+                self._quest_repository.save(quest)
+                self._logger.info(
+                    "Quest completed (TAKE_FROM_CHEST): quest_id=%s, acceptor=%s",
+                    quest.quest_id.value,
+                    quest.acceptor_player_id,
+                )
+
+        self._execute_in_separate_transaction(
+            operation,
+            context={"handler": "quest_progress_item_taken_from_chest"},
         )
 
     def _grant_reward(self, quest) -> None:
