@@ -21,6 +21,14 @@ from ai_rpg_world.domain.monster.event.monster_events import (
     MonsterMpRecoveredEvent,
     MonsterRespawnedEvent,
     MonsterSpawnedEvent,
+    MonsterDecidedToMoveEvent,
+    MonsterDecidedToUseSkillEvent,
+    MonsterDecidedToInteractEvent,
+    ActorStateChangedEvent,
+    TargetSpottedEvent,
+)
+from ai_rpg_world.domain.monster.service.behavior_state_transition_service import (
+    StateTransitionResult,
 )
 from ai_rpg_world.domain.monster.exception.monster_exceptions import (
     MonsterAlreadyDeadException,
@@ -968,31 +976,47 @@ class TestMonsterAggregate:
             regen_stats = compute_effective_stats(
                 monster.get_base_stats_with_growth(tick_11), monster.active_effects, tick_11
             )
-            monster.on_tick(tick_11, regen_stats=regen_stats)
+            monster.on_tick(tick_11, regen_stats=regen_stats, regen_rate=0.01)
 
-            # Then
-            # Default rate is 0.01 (1%). 100 * 0.01 = 1.
+            # Then（1% で回復。100 * 0.01 = 1）
             assert monster.hp.value == 51
             assert monster.mp.value == 11
             events = monster.get_events()
             assert any(isinstance(e, MonsterHealedEvent) for e in events)
             assert any(isinstance(e, MonsterMpRecoveredEvent) for e in events)
 
-        def test_on_tick_custom_config(self, monster: MonsterAggregate, spot_id: SpotId):
-            from ai_rpg_world.domain.monster.service.monster_config_service import DefaultMonsterConfigService
+        def test_on_tick_custom_regen_rate(self, monster: MonsterAggregate, spot_id: SpotId):
+            """回復率を値で渡した場合にその率で回復すること"""
             monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
             monster.apply_damage(50, WorldTick(10))
             monster.clear_events()
-            
-            # Rate 10%
-            config = DefaultMonsterConfigService(regeneration_rate=0.1)
+
             tick_11 = WorldTick(11)
             regen_stats = compute_effective_stats(
                 monster.get_base_stats_with_growth(tick_11), monster.active_effects, tick_11
             )
-            monster.on_tick(tick_11, config=config, regen_stats=regen_stats)
+            monster.on_tick(tick_11, regen_stats=regen_stats, regen_rate=0.1)
 
             assert monster.hp.value == 60  # 50 + 100 * 0.1
+
+        def test_on_tick_no_regen_when_rate_none(self, monster: MonsterAggregate, spot_id: SpotId):
+            """regen_rate を渡さない場合は回復しないこと"""
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            monster.apply_damage(50, WorldTick(10))
+            monster.use_mp(40)
+            monster.clear_events()
+
+            tick_11 = WorldTick(11)
+            regen_stats = compute_effective_stats(
+                monster.get_base_stats_with_growth(tick_11), monster.active_effects, tick_11
+            )
+            monster.on_tick(tick_11, regen_stats=regen_stats, regen_rate=None)
+
+            assert monster.hp.value == 50
+            assert monster.mp.value == 10
+            events = monster.get_events()
+            assert not any(isinstance(e, MonsterHealedEvent) for e in events)
+            assert not any(isinstance(e, MonsterMpRecoveredEvent) for e in events)
 
     class TestMpUsage:
         def test_use_mp_success(self, monster: MonsterAggregate, spot_id: SpotId):
@@ -1305,102 +1329,222 @@ class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
         snap = agg.to_behavior_state_snapshot(Coordinate(0, 0, 0), WorldTick(0))
         assert snap.phase_thresholds == (0.5, 0.25)
 
-    def test_decide_when_not_spawned_raises(self, monster):
-        """未スポーンのモンスター（DEAD）で decide を呼ぶと MonsterAlreadyDeadException"""
-        from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
-        from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
+    class TestApplyBehaviorTransition:
+        """apply_behavior_transition のテスト"""
 
-        class MockResolver:
-            def resolve_action(self, monster_agg, observation, actor_coordinate):
-                return BehaviorAction.wait()
+        def test_apply_behavior_transition_success_empty_result(
+            self, spawned_monster
+        ):
+            """空の StateTransitionResult で呼んでも状態が変わらず例外が出ないこと"""
+            result = StateTransitionResult()
+            spawned_monster.clear_events()
+            spawned_monster.apply_behavior_transition(result, WorldTick(10))
+            assert spawned_monster.behavior_state == BehaviorStateEnum.IDLE
+            events = spawned_monster.get_events()
+            assert len(events) == 0
 
-        obs = BehaviorObservation()
-        with pytest.raises(MonsterAlreadyDeadException):
-            monster.decide(obs, WorldTick(0), Coordinate(0, 0, 0), MockResolver())
+        def test_apply_behavior_transition_when_not_spawned_raises(self, monster):
+            """未スポーンのモンスターで呼ぶと MonsterAlreadyDeadException"""
+            result = StateTransitionResult()
+            with pytest.raises(MonsterAlreadyDeadException):
+                monster.apply_behavior_transition(result, WorldTick(0))
 
-    def test_decide_when_dead_raises(self, monster, spot_id):
-        """死亡済みモンスターで decide を呼ぶと MonsterAlreadyDeadException"""
-        from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
-        from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
+        def test_apply_behavior_transition_when_dead_raises(
+            self, monster, spot_id
+        ):
+            """死亡済みモンスターで呼ぶと MonsterAlreadyDeadException"""
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            monster.apply_damage(999, WorldTick(1))
+            assert monster.status == MonsterStatusEnum.DEAD
+            result = StateTransitionResult()
+            with pytest.raises(MonsterAlreadyDeadException):
+                monster.apply_behavior_transition(result, WorldTick(2))
 
-        monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-        monster.apply_damage(999, WorldTick(1))
-        assert monster.status == MonsterStatusEnum.DEAD
+        def test_apply_behavior_transition_flee_result_updates_state(
+            self, spawned_monster
+        ):
+            """FLEE の StateTransitionResult で呼ぶと状態が FLEE になりイベントが発行されること"""
+            spawned_monster.clear_events()
+            result = StateTransitionResult(
+                flee_from_threat_id=WorldObjectId(999),
+                flee_from_threat_coordinate=Coordinate(10, 10, 0),
+            )
+            spawned_monster.apply_behavior_transition(result, WorldTick(10))
+            assert spawned_monster.behavior_state == BehaviorStateEnum.FLEE
+            assert spawned_monster.behavior_target_id == WorldObjectId(999)
+            events = spawned_monster.get_events()
+            assert any(isinstance(e, TargetSpottedEvent) for e in events)
+            assert any(isinstance(e, ActorStateChangedEvent) for e in events)
 
-        class MockResolver:
-            def resolve_action(self, monster_agg, observation, actor_coordinate):
-                return BehaviorAction.wait()
+    class TestApplyTerritoryReturnIfNeeded:
+        """apply_territory_return_if_needed のテスト"""
 
-        obs = BehaviorObservation()
-        with pytest.raises(MonsterAlreadyDeadException):
-            monster.decide(obs, WorldTick(2), Coordinate(0, 0, 0), MockResolver())
+        def test_apply_territory_return_when_outside_radius(
+            self, base_stats, reward_info, respawn_info, skill_loadout, spot_id
+        ):
+            """テリトリ外で CHASE のとき RETURN に遷移すること"""
+            template = MonsterTemplate(
+                template_id=MonsterTemplateId.create(2),
+                name="Territory",
+                base_stats=base_stats,
+                reward_info=reward_info,
+                respawn_info=respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="x",
+                territory_radius=5,
+            )
+            agg = MonsterAggregate.create(
+                monster_id=MonsterId.create(2),
+                template=template,
+                world_object_id=WorldObjectId(2),
+                skill_loadout=skill_loadout,
+            )
+            agg.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            agg._behavior_state = BehaviorStateEnum.CHASE
+            agg.clear_events()
+            # 座標 (10, 0, 0) は初期位置 (0,0,0) から距離 10 > territory_radius 5
+            agg.apply_territory_return_if_needed(Coordinate(10, 0, 0))
+            assert agg.behavior_state == BehaviorStateEnum.RETURN
+            events = agg.get_events()
+            assert any(
+                isinstance(e, ActorStateChangedEvent)
+                and e.new_state == BehaviorStateEnum.RETURN
+                for e in events
+            )
 
-    def test_decide_calls_resolver_and_emits_move_event(self, spawned_monster):
-        """decide が状態遷移後にリゾルバを呼び、MOVE の場合は MonsterDecidedToMoveEvent を発行すること"""
-        from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
-        from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
-        from ai_rpg_world.domain.monster.event.monster_events import MonsterDecidedToMoveEvent
+        def test_apply_territory_return_when_inside_radius_no_change(
+            self, base_stats, reward_info, respawn_info, skill_loadout, spot_id
+        ):
+            """テリトリ内のときは状態が変わらないこと"""
+            template = MonsterTemplate(
+                template_id=MonsterTemplateId.create(2),
+                name="Territory",
+                base_stats=base_stats,
+                reward_info=reward_info,
+                respawn_info=respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="x",
+                territory_radius=10,
+            )
+            agg = MonsterAggregate.create(
+                monster_id=MonsterId.create(2),
+                template=template,
+                world_object_id=WorldObjectId(2),
+                skill_loadout=skill_loadout,
+            )
+            agg.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            agg._behavior_state = BehaviorStateEnum.CHASE
+            agg.clear_events()
+            agg.apply_territory_return_if_needed(Coordinate(2, 0, 0))
+            assert agg.behavior_state == BehaviorStateEnum.CHASE
+            events = agg.get_events()
+            assert not any(
+                isinstance(e, ActorStateChangedEvent)
+                and e.new_state == BehaviorStateEnum.RETURN
+                for e in events
+            )
 
-        class MockResolver:
-            def resolve_action(self, monster, observation, actor_coordinate):
-                return BehaviorAction.move(Coordinate(6, 5, 0))
+        def test_apply_territory_return_when_not_spawned_raises(self, monster):
+            """未スポーンのモンスターで呼ぶと MonsterAlreadyDeadException"""
+            with pytest.raises(MonsterAlreadyDeadException):
+                monster.apply_territory_return_if_needed(Coordinate(0, 0, 0))
 
-        obs = BehaviorObservation()
-        spawned_monster.decide(
-            obs, WorldTick(10), Coordinate(5, 5, 0), MockResolver()
-        )
-        events = spawned_monster.get_events()
-        move_events = [e for e in events if isinstance(e, MonsterDecidedToMoveEvent)]
-        assert len(move_events) == 1
-        assert move_events[0].actor_id == spawned_monster.world_object_id
-        assert move_events[0].coordinate == {"x": 6, "y": 5, "z": 0}
-        assert move_events[0].spot_id == spawned_monster.spot_id
-        assert move_events[0].current_tick == WorldTick(10)
+    class TestRecordMove:
+        """record_move のテスト"""
 
-    def test_decide_emits_use_skill_event(self, spawned_monster):
-        """decide でリゾルバが USE_SKILL を返した場合 MonsterDecidedToUseSkillEvent を発行すること"""
-        from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
-        from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
-        from ai_rpg_world.domain.monster.event.monster_events import MonsterDecidedToUseSkillEvent
+        def test_record_move_success(self, spawned_monster):
+            """record_move で MonsterDecidedToMoveEvent が 1 件発行されること"""
+            spawned_monster.clear_events()
+            spawned_monster.record_move(
+                Coordinate(6, 5, 0), WorldTick(10)
+            )
+            events = spawned_monster.get_events()
+            move_events = [
+                e for e in events if isinstance(e, MonsterDecidedToMoveEvent)
+            ]
+            assert len(move_events) == 1
+            assert move_events[0].actor_id == spawned_monster.world_object_id
+            assert move_events[0].coordinate == {"x": 6, "y": 5, "z": 0}
+            assert move_events[0].spot_id == spawned_monster.spot_id
+            assert move_events[0].current_tick == WorldTick(10)
 
-        class MockResolver:
-            def resolve_action(self, monster, observation, actor_coordinate):
-                return BehaviorAction.use_skill(0)
+        def test_record_move_when_not_spawned_raises(self, monster):
+            """未スポーンのモンスターで呼ぶと MonsterAlreadyDeadException"""
+            with pytest.raises(MonsterAlreadyDeadException):
+                monster.record_move(Coordinate(1, 1, 0), WorldTick(0))
 
-        obs = BehaviorObservation()
-        spawned_monster.decide(
-            obs, WorldTick(10), Coordinate(5, 5, 0), MockResolver()
-        )
-        events = spawned_monster.get_events()
-        skill_events = [e for e in events if isinstance(e, MonsterDecidedToUseSkillEvent)]
-        assert len(skill_events) == 1
-        assert skill_events[0].actor_id == spawned_monster.world_object_id
-        assert skill_events[0].skill_slot_index == 0
-        assert skill_events[0].spot_id == spawned_monster.spot_id
-        assert skill_events[0].current_tick == WorldTick(10)
+        def test_record_move_when_dead_raises(self, monster, spot_id):
+            """死亡済みモンスターで呼ぶと MonsterAlreadyDeadException"""
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            monster.apply_damage(999, WorldTick(1))
+            with pytest.raises(MonsterAlreadyDeadException):
+                monster.record_move(Coordinate(1, 1, 0), WorldTick(2))
 
-    def test_decide_emits_no_decision_event_on_wait(self, spawned_monster):
-        """decide でリゾルバが WAIT を返した場合は移動・スキルイベントを発行しないこと"""
-        from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
-        from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorAction
-        from ai_rpg_world.domain.monster.event.monster_events import (
-            MonsterDecidedToMoveEvent,
-            MonsterDecidedToUseSkillEvent,
-        )
+    class TestRecordUseSkill:
+        """record_use_skill のテスト"""
 
-        class MockResolver:
-            def resolve_action(self, monster, observation, actor_coordinate):
-                return BehaviorAction.wait()
+        def test_record_use_skill_success(self, spawned_monster):
+            """record_use_skill で MonsterDecidedToUseSkillEvent が 1 件発行されること"""
+            spawned_monster.clear_events()
+            spawned_monster.record_use_skill(0, None, WorldTick(10))
+            events = spawned_monster.get_events()
+            skill_events = [
+                e
+                for e in events
+                if isinstance(e, MonsterDecidedToUseSkillEvent)
+            ]
+            assert len(skill_events) == 1
+            assert skill_events[0].actor_id == spawned_monster.world_object_id
+            assert skill_events[0].skill_slot_index == 0
+            assert skill_events[0].target_id is None
+            assert skill_events[0].spot_id == spawned_monster.spot_id
+            assert skill_events[0].current_tick == WorldTick(10)
 
-        obs = BehaviorObservation()
-        spawned_monster.decide(
-            obs, WorldTick(10), Coordinate(5, 5, 0), MockResolver()
-        )
-        events = spawned_monster.get_events()
-        move_events = [e for e in events if isinstance(e, MonsterDecidedToMoveEvent)]
-        skill_events = [e for e in events if isinstance(e, MonsterDecidedToUseSkillEvent)]
-        assert len(move_events) == 0
-        assert len(skill_events) == 0
+        def test_record_use_skill_when_not_spawned_raises(self, monster):
+            """未スポーンのモンスターで呼ぶと MonsterAlreadyDeadException"""
+            with pytest.raises(MonsterAlreadyDeadException):
+                monster.record_use_skill(0, None, WorldTick(0))
+
+        def test_record_use_skill_when_dead_raises(self, monster, spot_id):
+            """死亡済みモンスターで呼ぶと MonsterAlreadyDeadException"""
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            monster.apply_damage(999, WorldTick(1))
+            with pytest.raises(MonsterAlreadyDeadException):
+                monster.record_use_skill(0, None, WorldTick(2))
+
+    class TestRecordInteract:
+        """record_interact のテスト"""
+
+        def test_record_interact_success(self, spawned_monster):
+            """record_interact で MonsterDecidedToInteractEvent が 1 件発行されること"""
+            target_id = WorldObjectId(99)
+            spawned_monster.clear_events()
+            spawned_monster.record_interact(target_id, WorldTick(10))
+            events = spawned_monster.get_events()
+            interact_events = [
+                e
+                for e in events
+                if isinstance(e, MonsterDecidedToInteractEvent)
+            ]
+            assert len(interact_events) == 1
+            assert interact_events[0].actor_id == spawned_monster.world_object_id
+            assert interact_events[0].target_id == target_id
+            assert interact_events[0].spot_id == spawned_monster.spot_id
+            assert interact_events[0].current_tick == WorldTick(10)
+
+        def test_record_interact_when_not_spawned_raises(self, monster):
+            """未スポーンのモンスターで呼ぶと MonsterAlreadyDeadException"""
+            with pytest.raises(MonsterAlreadyDeadException):
+                monster.record_interact(WorldObjectId(1), WorldTick(0))
+
+        def test_record_interact_when_dead_raises(self, monster, spot_id):
+            """死亡済みモンスターで呼ぶと MonsterAlreadyDeadException"""
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            monster.apply_damage(999, WorldTick(1))
+            with pytest.raises(MonsterAlreadyDeadException):
+                monster.record_interact(WorldObjectId(1), WorldTick(2))
 
     def test_advance_patrol_index(self, spawned_monster):
         """advance_patrol_index がインデックスを進めること"""

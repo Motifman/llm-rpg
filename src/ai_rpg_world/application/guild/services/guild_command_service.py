@@ -334,9 +334,9 @@ class GuildCommandService:
                     user_id=command.player_id,
                     guild_id=command.guild_id,
                 )
-            if command.amount > bank.gold:
+            if command.amount > bank.gold.value:
                 raise InsufficientGuildBankBalanceForCommandException(
-                    command.guild_id, command.amount, bank.gold
+                    command.guild_id, command.amount, bank.gold.value
                 )
             player_status = self._player_status_repository.find_by_id(player_id)
             if player_status is None:
