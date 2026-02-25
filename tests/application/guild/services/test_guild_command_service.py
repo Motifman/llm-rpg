@@ -144,8 +144,9 @@ class TestGuildCommandService:
             description="",
             creator_player_id=2,
         )
-        with pytest.raises(GuildCreationException):
+        with pytest.raises(GuildCreationException) as exc_info:
             service.create_guild(cmd2)
+        assert "ロケーション" in str(exc_info.value) or "施設" in str(exc_info.value)
 
     def test_create_guild_after_disband_same_location_success(self, setup_service):
         """解散後に同じロケーションで create_guild が成功すること"""
@@ -174,6 +175,34 @@ class TestGuildCommandService:
         assert create_result2.data["guild_id"] != guild_id
         guild = guild_repo.find_by_id(GuildId(create_result2.data["guild_id"]))
         assert guild.name == "G2"
+
+    def test_create_guild_invalid_spot_id_raises(self, setup_service):
+        """無効な spot_id でギルド作成すると例外（ドメイン例外が GuildCommandException にラップされる）"""
+        service, _, _, _ = setup_service
+        command = CreateGuildCommand(
+            spot_id=0,
+            location_area_id=TEST_LOCATION_AREA_ID,
+            name="G",
+            description="",
+            creator_player_id=1,
+        )
+        with pytest.raises(GuildCommandException) as exc_info:
+            service.create_guild(command)
+        assert "spot" in str(exc_info.value).lower() or "SPOT" in str(exc_info.value)
+
+    def test_create_guild_invalid_location_area_id_raises(self, setup_service):
+        """無効な location_area_id でギルド作成すると例外（ドメイン例外が GuildCommandException にラップされる）"""
+        service, _, _, _ = setup_service
+        command = CreateGuildCommand(
+            spot_id=TEST_SPOT_ID,
+            location_area_id=0,
+            name="G",
+            description="",
+            creator_player_id=1,
+        )
+        with pytest.raises(GuildCommandException) as exc_info:
+            service.create_guild(command)
+        assert "location" in str(exc_info.value).lower() or "LOCATION" in str(exc_info.value)
 
     # --- add_member ---
     def test_add_member_success(self, setup_service):
