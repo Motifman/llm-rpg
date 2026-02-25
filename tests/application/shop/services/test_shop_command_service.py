@@ -186,10 +186,11 @@ class TestShopCommandService:
         s = setup_service
         cmd = CreateShopCommand(spot_id=1, location_area_id=1, owner_id=1)
         s["service"].create_shop(cmd)
-        with pytest.raises(ShopAlreadyExistsAtLocationException):
+        with pytest.raises(ShopAlreadyExistsAtLocationException) as exc_info:
             s["service"].create_shop(
                 CreateShopCommand(spot_id=1, location_area_id=1, owner_id=2)
             )
+        assert "1" in str(exc_info.value)
 
     def test_create_shop_invalid_spot_id_raises(self, setup_service):
         """無効なspot_idでショップ作成すると例外（ドメイン例外がラップされる）"""
@@ -199,8 +200,9 @@ class TestShopCommandService:
             location_area_id=1,
             owner_id=1,
         )
-        with pytest.raises(ShopCommandException):
+        with pytest.raises(ShopCommandException) as exc_info:
             s["service"].create_shop(cmd)
+        assert "spot" in str(exc_info.value).lower() or "0" in str(exc_info.value)
 
     def test_create_shop_invalid_location_area_id_raises(self, setup_service):
         """無効なlocation_area_idでショップ作成すると例外（ドメイン例外がラップされる）"""
@@ -210,8 +212,9 @@ class TestShopCommandService:
             location_area_id=0,
             owner_id=1,
         )
-        with pytest.raises(ShopCommandException):
+        with pytest.raises(ShopCommandException) as exc_info:
             s["service"].create_shop(cmd)
+        assert "location" in str(exc_info.value).lower() or "0" in str(exc_info.value)
 
     # ----- CloseShop -----
 
@@ -238,14 +241,63 @@ class TestShopCommandService:
             CreateShopCommand(spot_id=1, location_area_id=1, owner_id=1)
         )
         shop_id = create_result.data["shop_id"]
-        with pytest.raises(NotShopOwnerException):
+        with pytest.raises(NotShopOwnerException) as exc_info:
             s["service"].close_shop(CloseShopCommand(shop_id=shop_id, player_id=2))
+        assert "オーナー" in str(exc_info.value) or "2" in str(exc_info.value)
 
     def test_close_shop_not_found_raises(self, setup_service):
         """存在しないショップを閉鎖すると例外"""
         s = setup_service
-        with pytest.raises(ShopNotFoundForCommandException):
+        with pytest.raises(ShopNotFoundForCommandException) as exc_info:
             s["service"].close_shop(CloseShopCommand(shop_id=99999, player_id=1))
+        assert "見つかりません" in str(exc_info.value) or "99999" in str(exc_info.value)
+
+    def test_close_shop_returns_listed_items_to_owner(self, setup_service):
+        """閉鎖時に全リストを取り下げ、在庫をオーナーに返却すること（仕様 3.3）"""
+        s = setup_service
+        owner_id = 1
+        create_result = s["service"].create_shop(
+            CreateShopCommand(
+                spot_id=1,
+                location_area_id=1,
+                owner_id=owner_id,
+                name="店",
+                description="",
+            )
+        )
+        shop_id = create_result.data["shop_id"]
+
+        item_spec = _create_stackable_item_spec()
+        item_id = s["item_repo"].generate_item_instance_id()
+        item = ItemAggregate.create(
+            item_instance_id=item_id, item_spec=item_spec, quantity=3
+        )
+        s["item_repo"].save(item)
+
+        inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(owner_id))
+        inv.acquire_item(item_id)
+        s["inv_repo"].save(inv)
+
+        list_result = s["service"].list_shop_item(
+            ListShopItemCommand(
+                shop_id=shop_id,
+                player_id=owner_id,
+                slot_id=0,
+                price_per_unit=10,
+            )
+        )
+        assert list_result.success is True
+        assert s["inv_repo"].find_by_id(PlayerId(owner_id)).get_item_instance_id_by_slot(SlotId(0)) is None
+
+        result = s["service"].close_shop(
+            CloseShopCommand(shop_id=shop_id, player_id=owner_id)
+        )
+        assert result.success is True
+        assert s["shop_repo"].find_by_id(ShopId(shop_id)) is None
+
+        owner_inv = s["inv_repo"].find_by_id(PlayerId(owner_id))
+        assert owner_inv is not None
+        assert owner_inv.get_item_instance_id_by_slot(SlotId(0)) == item_id
 
     # ----- ListShopItem -----
 
