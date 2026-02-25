@@ -38,6 +38,8 @@ from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
 from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
 from ai_rpg_world.domain.guild.aggregate.guild_bank_aggregate import GuildBankAggregate
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
+from ai_rpg_world.domain.shop.aggregate.shop_aggregate import ShopAggregate
+from ai_rpg_world.domain.shop.value_object.shop_id import ShopId
 
 
 class InMemoryDataStore:
@@ -68,6 +70,11 @@ class InMemoryDataStore:
         # Trade Domain
         self.trades: Dict[Any, Any] = {}
         self.next_trade_id = 1
+
+        # Shop Domain
+        self.shops: Dict[ShopId, ShopAggregate] = {}
+        self.next_shop_id = 1
+        self.next_shop_listing_id = 1
 
         # Quest Domain
         self.quests: Dict[QuestId, QuestAggregate] = {}
@@ -277,6 +284,9 @@ class InMemoryDataStore:
         self.player_statuses.clear()
         self.trades.clear()
         self.next_trade_id = 1
+        self.shops.clear()
+        self.next_shop_id = 1
+        self.next_shop_listing_id = 1
         self.quests.clear()
         self.next_quest_id = 1
         self.guilds.clear()
@@ -308,6 +318,9 @@ class InMemoryDataStore:
             "hit_boxes": copy.deepcopy(self.hit_boxes),
             "player_inventories": copy.deepcopy(self.player_inventories),
             "trades": copy.deepcopy(self.trades),
+            "shops": copy.deepcopy(self.shops),
+            "next_shop_id": self.next_shop_id,
+            "next_shop_listing_id": self.next_shop_listing_id,
             "quests": copy.deepcopy(self.quests),
             "guilds": copy.deepcopy(self.guilds),
             "guild_banks": copy.deepcopy(self.guild_banks),
@@ -328,6 +341,9 @@ class InMemoryDataStore:
         self.hit_boxes = snapshot["hit_boxes"]
         self.player_inventories = snapshot["player_inventories"]
         self.trades = snapshot["trades"]
+        self.shops = snapshot.get("shops", {})
+        self.next_shop_id = snapshot.get("next_shop_id", 1)
+        self.next_shop_listing_id = snapshot.get("next_shop_listing_id", 1)
         self.quests = snapshot.get("quests", {})
         self.guilds = snapshot.get("guilds", {})
         self.guild_banks = snapshot.get("guild_banks", {})
