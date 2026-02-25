@@ -6,6 +6,8 @@ from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.guild.value_object.guild_membership import GuildMembership
 from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 
 
 @dataclass(frozen=True)
@@ -13,6 +15,8 @@ class GuildCreatedEvent(BaseDomainEvent[GuildId, "GuildAggregate"]):
     """ギルド作成イベント"""
     name: str
     description: str
+    spot_id: SpotId
+    location_area_id: LocationAreaId
     creator_player_id: PlayerId
     creator_role: GuildRole
 

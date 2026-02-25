@@ -6,6 +6,7 @@ from ai_rpg_world.application.shop.contracts.commands import (
     ListShopItemCommand,
     UnlistShopItemCommand,
     PurchaseFromShopCommand,
+    CloseShopCommand,
 )
 from ai_rpg_world.application.shop.contracts.dtos import ShopCommandResultDto
 from ai_rpg_world.application.shop.exceptions.command_exception import (
@@ -62,6 +63,9 @@ from ai_rpg_world.infrastructure.repository.in_memory_item_repository import (
 )
 from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
     InMemoryPhysicalMapRepository,
+)
+from ai_rpg_world.infrastructure.repository.in_memory_location_establishment_repository import (
+    InMemoryLocationEstablishmentRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
@@ -133,6 +137,10 @@ class TestShopCommandService:
         status_repository = InMemoryPlayerStatusRepository(data_store, unit_of_work)
         item_repository = InMemoryItemRepository(data_store, unit_of_work)
         physical_map_repository = InMemoryPhysicalMapRepository(data_store, unit_of_work)
+        location_establishment_repository = InMemoryLocationEstablishmentRepository(
+            data_store=data_store,
+            unit_of_work=unit_of_work,
+        )
 
         service = ShopCommandService(
             shop_repository=shop_repository,
@@ -140,6 +148,7 @@ class TestShopCommandService:
             player_status_repository=status_repository,
             item_repository=item_repository,
             physical_map_repository=physical_map_repository,
+            location_establishment_repository=location_establishment_repository,
             unit_of_work=unit_of_work,
         )
         return {
@@ -203,6 +212,40 @@ class TestShopCommandService:
         )
         with pytest.raises(ShopCommandException):
             s["service"].create_shop(cmd)
+
+    # ----- CloseShop -----
+
+    def test_close_shop_success(self, setup_service):
+        """オーナーがショップを閉鎖すると削除され、同じロケーションで再開店できる"""
+        s = setup_service
+        create_result = s["service"].create_shop(
+            CreateShopCommand(spot_id=1, location_area_id=1, owner_id=1, name="店", description="")
+        )
+        shop_id = create_result.data["shop_id"]
+        result = s["service"].close_shop(CloseShopCommand(shop_id=shop_id, player_id=1))
+        assert result.success is True
+        assert s["shop_repo"].find_by_id(ShopId(shop_id)) is None
+        create_result2 = s["service"].create_shop(
+            CreateShopCommand(spot_id=1, location_area_id=1, owner_id=1, name="店2", description="")
+        )
+        assert create_result2.success is True
+        assert create_result2.data["shop_id"] != shop_id
+
+    def test_close_shop_non_owner_raises(self, setup_service):
+        """非オーナーが閉鎖すると例外"""
+        s = setup_service
+        create_result = s["service"].create_shop(
+            CreateShopCommand(spot_id=1, location_area_id=1, owner_id=1)
+        )
+        shop_id = create_result.data["shop_id"]
+        with pytest.raises(NotShopOwnerException):
+            s["service"].close_shop(CloseShopCommand(shop_id=shop_id, player_id=2))
+
+    def test_close_shop_not_found_raises(self, setup_service):
+        """存在しないショップを閉鎖すると例外"""
+        s = setup_service
+        with pytest.raises(ShopNotFoundForCommandException):
+            s["service"].close_shop(CloseShopCommand(shop_id=99999, player_id=1))
 
     # ----- ListShopItem -----
 

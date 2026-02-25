@@ -4,6 +4,7 @@ from ai_rpg_world.application.shop.contracts.commands import (
     ListShopItemCommand,
     UnlistShopItemCommand,
     PurchaseFromShopCommand,
+    CloseShopCommand,
 )
 from ai_rpg_world.application.shop.contracts.dtos import (
     ShopCommandResultDto,
@@ -17,6 +18,7 @@ __all__ = [
     "ListShopItemCommand",
     "UnlistShopItemCommand",
     "PurchaseFromShopCommand",
+    "CloseShopCommand",
     "ShopCommandResultDto",
     "ShopSummaryDto",
     "ShopListingDto",

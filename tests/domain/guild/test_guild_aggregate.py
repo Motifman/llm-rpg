@@ -19,6 +19,8 @@ from ai_rpg_world.domain.guild.event.guild_event import (
 )
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 
 
 class TestGuildAggregate:
@@ -44,6 +46,8 @@ class TestGuildAggregate:
     def guild(self, guild_id, creator_id) -> GuildAggregate:
         return GuildAggregate.create_guild(
             guild_id=guild_id,
+            spot_id=SpotId.create(1),
+            location_area_id=LocationAreaId.create(1),
             name="Test Guild",
             description="A test guild",
             creator_player_id=creator_id,
@@ -59,6 +63,8 @@ class TestGuildAggregate:
         def test_create_guild_success(self, guild_id, creator_id):
             g = GuildAggregate.create_guild(
                 guild_id=guild_id,
+                spot_id=SpotId.create(1),
+                location_area_id=LocationAreaId.create(1),
                 name=" My Guild ",
                 description=" Desc ",
                 creator_player_id=creator_id,
@@ -77,6 +83,8 @@ class TestGuildAggregate:
             with pytest.raises(ValueError):
                 GuildAggregate.create_guild(
                     guild_id=guild_id,
+                    spot_id=SpotId.create(1),
+                    location_area_id=LocationAreaId.create(1),
                     name="   ",
                     description="x",
                     creator_player_id=creator_id,

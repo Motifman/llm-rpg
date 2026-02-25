@@ -29,6 +29,8 @@ from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
 from ai_rpg_world.domain.quest.value_object.quest_objective import QuestObjective
 from ai_rpg_world.domain.quest.value_object.quest_reward import QuestReward
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.player.value_object.gold import Gold
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
@@ -609,6 +611,8 @@ class TestQuestCommandService:
         guild_id = guild_repo.generate_guild_id()
         guild = GuildAggregate.create_guild(
             guild_id=guild_id,
+            spot_id=SpotId.create(1),
+            location_area_id=LocationAreaId.create(1),
             name="G",
             description="",
             creator_player_id=PlayerId(1),
@@ -636,6 +640,8 @@ class TestQuestCommandService:
         guild_id = guild_repo.generate_guild_id()
         guild = GuildAggregate.create_guild(
             guild_id=guild_id,
+            spot_id=SpotId.create(1),
+            location_area_id=LocationAreaId.create(1),
             name="G",
             description="",
             creator_player_id=PlayerId(1),
@@ -667,6 +673,8 @@ class TestQuestCommandService:
         guild_id = guild_repo.generate_guild_id()
         guild = GuildAggregate.create_guild(
             guild_id=guild_id,
+            spot_id=SpotId.create(1),
+            location_area_id=LocationAreaId.create(1),
             name="G",
             description="",
             creator_player_id=PlayerId(1),
@@ -697,6 +705,8 @@ class TestQuestCommandService:
         guild_id = guild_repo.generate_guild_id()
         guild = GuildAggregate.create_guild(
             guild_id=guild_id,
+            spot_id=SpotId.create(1),
+            location_area_id=LocationAreaId.create(1),
             name="G",
             description="",
             creator_player_id=PlayerId(1),
@@ -728,6 +738,8 @@ class TestQuestCommandService:
         guild_id = guild_repo.generate_guild_id()
         guild = GuildAggregate.create_guild(
             guild_id=guild_id,
+            spot_id=SpotId.create(1),
+            location_area_id=LocationAreaId.create(1),
             name="G",
             description="",
             creator_player_id=PlayerId(1),

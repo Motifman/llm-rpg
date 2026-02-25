@@ -42,3 +42,9 @@ class ShopItemPurchasedEvent(BaseDomainEvent[ShopId, "ShopAggregate"]):
     quantity: int
     total_gold: int
     seller_id: PlayerId
+
+
+@dataclass(frozen=True)
+class ShopClosedEvent(BaseDomainEvent[ShopId, "ShopAggregate"]):
+    """ショップ閉鎖イベント（オーナーによる閉鎖）"""
+    closed_by: PlayerId

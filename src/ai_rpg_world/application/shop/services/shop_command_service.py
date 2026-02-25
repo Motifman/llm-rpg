@@ -18,12 +18,23 @@ from ai_rpg_world.domain.player.repository.player_status_repository import Playe
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
+from ai_rpg_world.domain.world.repository.location_establishment_repository import (
+    LocationEstablishmentRepository,
+)
+from ai_rpg_world.domain.world.aggregate.location_establishment_aggregate import (
+    LocationEstablishmentAggregate,
+)
+from ai_rpg_world.domain.world.enum.world_enum import EstablishmentType
+from ai_rpg_world.domain.world.exception.map_exception import (
+    LocationAlreadyOccupiedException,
+)
 
 from ai_rpg_world.application.shop.contracts.commands import (
     CreateShopCommand,
     ListShopItemCommand,
     UnlistShopItemCommand,
     PurchaseFromShopCommand,
+    CloseShopCommand,
 )
 from ai_rpg_world.application.shop.contracts.dtos import ShopCommandResultDto
 from ai_rpg_world.application.shop.exceptions.base_exception import (
@@ -52,6 +63,7 @@ class ShopCommandService:
         player_status_repository: PlayerStatusRepository,
         item_repository: ItemRepository,
         physical_map_repository: PhysicalMapRepository,
+        location_establishment_repository: LocationEstablishmentRepository,
         unit_of_work: UnitOfWork,
     ):
         self._shop_repository = shop_repository
@@ -59,6 +71,7 @@ class ShopCommandService:
         self._player_status_repository = player_status_repository
         self._item_repository = item_repository
         self._physical_map_repository = physical_map_repository
+        self._location_establishment_repository = location_establishment_repository
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -122,15 +135,22 @@ class ShopCommandService:
             location_area_id = LocationAreaId.create(command.location_area_id)
             owner_id = PlayerId(command.owner_id)
 
-            existing = self._shop_repository.find_by_spot_and_location(
+            shop_id = self._shop_repository.generate_shop_id()
+            slot = self._location_establishment_repository.find_by_spot_and_location(
                 spot_id, location_area_id
             )
-            if existing is not None:
+            if slot is None:
+                slot = LocationEstablishmentAggregate.create(
+                    spot_id=spot_id,
+                    location_area_id=location_area_id,
+                )
+            try:
+                slot.claim(EstablishmentType.SHOP, shop_id.value)
+            except LocationAlreadyOccupiedException:
                 raise ShopAlreadyExistsAtLocationException(
                     command.spot_id, command.location_area_id
-                )
+                ) from None
 
-            shop_id = self._shop_repository.generate_shop_id()
             shop = ShopAggregate.create(
                 shop_id=shop_id,
                 spot_id=spot_id,
@@ -140,6 +160,7 @@ class ShopCommandService:
                 description=command.description,
             )
             self._shop_repository.save(shop)
+            self._location_establishment_repository.save(slot)
             self._logger.info(
                 f"Shop created: shop_id={shop_id.value}, owner_id={command.owner_id}"
             )
@@ -411,4 +432,61 @@ class ShopCommandService:
                     "quantity": command.quantity,
                     "total_gold": total_gold,
                 },
+            )
+
+    def close_shop(self, command: CloseShopCommand) -> ShopCommandResultDto:
+        """ショップを閉鎖する（オーナーのみ）。全リストを取り下げ、在庫をオーナーに返却してから削除する。"""
+        return self._execute_with_error_handling(
+            operation=lambda: self._close_shop_impl(command),
+            context={
+                "action": "close_shop",
+                "user_id": command.player_id,
+                "shop_id": command.shop_id,
+            },
+        )
+
+    def _close_shop_impl(self, command: CloseShopCommand) -> ShopCommandResultDto:
+        with self._unit_of_work:
+            shop_id = ShopId.create(command.shop_id)
+            player_id = PlayerId(command.player_id)
+            shop = self._shop_repository.find_by_id(shop_id)
+            if shop is None:
+                raise ShopNotFoundForCommandException(
+                    command.shop_id, "close_shop"
+                )
+            if not shop.is_owner(player_id):
+                raise AppNotShopOwnerException(
+                    command.player_id, command.shop_id, "close_shop"
+                )
+            shop.close(player_id)
+
+            # 閉鎖時: 全リストを取り下げ、在庫を各オーナーに返却（仕様 3.3）
+            for listing_id, listing in list(shop.listings.items()):
+                owner_inventory = self._player_inventory_repository.find_by_id(
+                    listing.listed_by
+                )
+                if owner_inventory is not None:
+                    owner_inventory.acquire_item(listing.item_instance_id)
+                    self._player_inventory_repository.save(owner_inventory)
+                shop.remove_listing(listing_id)
+
+            slot = self._location_establishment_repository.find_by_spot_and_location(
+                shop.spot_id, shop.location_area_id
+            )
+            if (
+                slot is not None
+                and slot.establishment_type == EstablishmentType.SHOP
+                and slot.establishment_id == shop_id.value
+            ):
+                slot.release()
+                self._location_establishment_repository.save(slot)
+
+            self._shop_repository.delete(shop_id)
+            self._logger.info(
+                f"Shop closed: shop_id={command.shop_id}, closed_by={command.player_id}"
+            )
+            return ShopCommandResultDto(
+                success=True,
+                message="ショップを閉鎖しました",
+                data={"shop_id": command.shop_id},
             )

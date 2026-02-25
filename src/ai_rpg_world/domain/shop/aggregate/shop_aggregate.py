@@ -10,6 +10,7 @@ from ai_rpg_world.domain.shop.event.shop_event import (
     ShopItemListedEvent,
     ShopItemUnlistedEvent,
     ShopItemPurchasedEvent,
+    ShopClosedEvent,
 )
 from ai_rpg_world.domain.shop.exception.shop_exception import (
     NotShopOwnerException,
@@ -204,5 +205,18 @@ class ShopAggregate(AggregateRoot):
             quantity=quantity,
             total_gold=total_gold,
             seller_id=listing.listed_by,
+        )
+        self.add_event(event)
+
+    def close(self, closed_by: PlayerId) -> None:
+        """ショップを閉鎖する。オーナーのみ実行可能。閉鎖イベントを発行する。"""
+        if closed_by not in self._owner_ids:
+            raise NotShopOwnerException(
+                f"Player {closed_by} is not an owner of shop {self._shop_id}"
+            )
+        event = ShopClosedEvent.create(
+            aggregate_id=self._shop_id,
+            aggregate_type="ShopAggregate",
+            closed_by=closed_by,
         )
         self.add_event(event)
