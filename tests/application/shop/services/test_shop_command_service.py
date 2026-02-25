@@ -182,6 +182,28 @@ class TestShopCommandService:
                 CreateShopCommand(spot_id=1, location_area_id=1, owner_id=2)
             )
 
+    def test_create_shop_invalid_spot_id_raises(self, setup_service):
+        """無効なspot_idでショップ作成すると例外（ドメイン例外がラップされる）"""
+        s = setup_service
+        cmd = CreateShopCommand(
+            spot_id=0,
+            location_area_id=1,
+            owner_id=1,
+        )
+        with pytest.raises(ShopCommandException):
+            s["service"].create_shop(cmd)
+
+    def test_create_shop_invalid_location_area_id_raises(self, setup_service):
+        """無効なlocation_area_idでショップ作成すると例外（ドメイン例外がラップされる）"""
+        s = setup_service
+        cmd = CreateShopCommand(
+            spot_id=1,
+            location_area_id=0,
+            owner_id=1,
+        )
+        with pytest.raises(ShopCommandException):
+            s["service"].create_shop(cmd)
+
     # ----- ListShopItem -----
 
     def test_list_shop_item_success(self, setup_service):
@@ -248,6 +270,50 @@ class TestShopCommandService:
         with pytest.raises(NotShopOwnerException):
             s["service"].list_shop_item(cmd)
 
+    def test_list_shop_item_player_inventory_not_found_raises(self, setup_service):
+        """出品者インベントリが存在しないと例外"""
+        s = setup_service
+        shop_id = s["shop_repo"].generate_shop_id()
+        shop = ShopAggregate.create(
+            shop_id=shop_id,
+            spot_id=SpotId(1),
+            location_area_id=LocationAreaId.create(1),
+            owner_id=PlayerId(1),
+        )
+        s["shop_repo"].save(shop)
+        cmd = ListShopItemCommand(
+            shop_id=shop_id.value,
+            player_id=999,
+            slot_id=0,
+            price_per_unit=10,
+        )
+        with pytest.raises(ShopCommandException) as exc_info:
+            s["service"].list_shop_item(cmd)
+        assert "inventory" in str(exc_info.value).lower() or "999" in str(exc_info.value)
+
+    def test_list_shop_item_slot_empty_raises(self, setup_service):
+        """指定スロットにアイテムがないと例外（ドメイン例外がラップされる）"""
+        s = setup_service
+        owner_id = 1
+        shop_id = s["shop_repo"].generate_shop_id()
+        shop = ShopAggregate.create(
+            shop_id=shop_id,
+            spot_id=SpotId(1),
+            location_area_id=LocationAreaId.create(1),
+            owner_id=PlayerId(owner_id),
+        )
+        s["shop_repo"].save(shop)
+        inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(owner_id))
+        s["inv_repo"].save(inv)
+        cmd = ListShopItemCommand(
+            shop_id=shop_id.value,
+            player_id=owner_id,
+            slot_id=0,
+            price_per_unit=10,
+        )
+        with pytest.raises(ShopCommandException):
+            s["service"].list_shop_item(cmd)
+
     # ----- UnlistShopItem -----
 
     def test_unlist_shop_item_success(self, setup_service):
@@ -302,6 +368,43 @@ class TestShopCommandService:
         s["shop_repo"].save(shop)
         cmd = UnlistShopItemCommand(shop_id=shop_id.value, listing_id=999, player_id=1)
         with pytest.raises(ListingNotFoundForCommandException):
+            s["service"].unlist_shop_item(cmd)
+
+    def test_unlist_shop_item_shop_not_found_raises(self, setup_service):
+        """存在しないショップのリストを取り下げると例外"""
+        s = setup_service
+        cmd = UnlistShopItemCommand(
+            shop_id=999,
+            listing_id=1,
+            player_id=1,
+        )
+        with pytest.raises(ShopNotFoundForCommandException):
+            s["service"].unlist_shop_item(cmd)
+
+    def test_unlist_shop_item_not_owner_raises(self, setup_service):
+        """オーナー以外が取り下げると例外"""
+        s = setup_service
+        shop_id = s["shop_repo"].generate_shop_id()
+        listing_id = s["shop_repo"].generate_listing_id()
+        shop = ShopAggregate.create(
+            shop_id=shop_id,
+            spot_id=SpotId(1),
+            location_area_id=LocationAreaId.create(1),
+            owner_id=PlayerId(1),
+        )
+        shop.list_item(
+            listing_id=listing_id,
+            item_instance_id=ItemInstanceId(100),
+            price_per_unit=ShopListingPrice.of(20),
+            listed_by=PlayerId(1),
+        )
+        s["shop_repo"].save(shop)
+        cmd = UnlistShopItemCommand(
+            shop_id=shop_id.value,
+            listing_id=listing_id.value,
+            player_id=2,
+        )
+        with pytest.raises(NotShopOwnerException):
             s["service"].unlist_shop_item(cmd)
 
     # ----- PurchaseFromShop -----
@@ -512,3 +615,90 @@ class TestShopCommandService:
         )
         with pytest.raises(ShopCommandException):
             s["service"].purchase_from_shop(cmd)
+
+    def test_purchase_from_shop_shop_not_found_raises(self, setup_service):
+        """存在しないショップから購入すると例外"""
+        s = setup_service
+        spot_id_val, loc_id_val = 1, 1
+        coord = Coordinate(0, 0, 0)
+        s["map_repo"].save(_create_physical_map_with_location(spot_id_val, loc_id_val, coord))
+        s["status_repo"].save(_create_player_status(2, 1000, spot_id_val, coord))
+        buyer_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(2))
+        s["inv_repo"].save(buyer_inv)
+        cmd = PurchaseFromShopCommand(
+            shop_id=999,
+            listing_id=1,
+            buyer_id=2,
+            quantity=1,
+        )
+        with pytest.raises(ShopNotFoundForCommandException):
+            s["service"].purchase_from_shop(cmd)
+
+    def test_purchase_from_shop_listing_not_found_raises(self, setup_service):
+        """存在しないリストを購入すると例外"""
+        s = setup_service
+        spot_id_val, loc_id_val = 1, 1
+        coord = Coordinate(0, 0, 0)
+        s["map_repo"].save(_create_physical_map_with_location(spot_id_val, loc_id_val, coord))
+        owner_id, buyer_id = 1, 2
+        shop_id = s["shop_repo"].generate_shop_id()
+        shop = ShopAggregate.create(
+            shop_id=shop_id,
+            spot_id=SpotId(spot_id_val),
+            location_area_id=LocationAreaId.create(loc_id_val),
+            owner_id=PlayerId(owner_id),
+        )
+        s["shop_repo"].save(shop)
+        s["status_repo"].save(_create_player_status(owner_id, 0))
+        s["status_repo"].save(_create_player_status(buyer_id, 1000, spot_id_val, coord))
+        buyer_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(buyer_id))
+        s["inv_repo"].save(buyer_inv)
+        cmd = PurchaseFromShopCommand(
+            shop_id=shop_id.value,
+            listing_id=999,
+            buyer_id=buyer_id,
+            quantity=1,
+        )
+        with pytest.raises(ListingNotFoundForCommandException):
+            s["service"].purchase_from_shop(cmd)
+
+    def test_purchase_from_shop_insufficient_gold_raises(self, setup_service):
+        """購入者ゴールド不足で例外（ドメイン例外がラップされる）"""
+        s = setup_service
+        spot_id_val, loc_id_val = 1, 1
+        coord = Coordinate(0, 0, 0)
+        s["map_repo"].save(_create_physical_map_with_location(spot_id_val, loc_id_val, coord))
+        owner_id, buyer_id = 1, 2
+        shop_id = s["shop_repo"].generate_shop_id()
+        shop = ShopAggregate.create(
+            shop_id=shop_id,
+            spot_id=SpotId(spot_id_val),
+            location_area_id=LocationAreaId.create(loc_id_val),
+            owner_id=PlayerId(owner_id),
+        )
+        item_spec = _create_stackable_item_spec()
+        item_id = s["item_repo"].generate_item_instance_id()
+        item = ItemAggregate.create(item_instance_id=item_id, item_spec=item_spec, quantity=1)
+        s["item_repo"].save(item)
+        listing_id = s["shop_repo"].generate_listing_id()
+        shop.list_item(
+            listing_id=listing_id,
+            item_instance_id=item_id,
+            price_per_unit=ShopListingPrice.of(500),
+            listed_by=PlayerId(owner_id),
+        )
+        s["shop_repo"].save(shop)
+        s["status_repo"].save(_create_player_status(owner_id, 0))
+        s["status_repo"].save(_create_player_status(buyer_id, 100, spot_id_val, coord))
+        buyer_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(buyer_id))
+        s["inv_repo"].save(buyer_inv)
+        cmd = PurchaseFromShopCommand(
+            shop_id=shop_id.value,
+            listing_id=listing_id.value,
+            buyer_id=buyer_id,
+            quantity=1,
+        )
+        with pytest.raises(ShopCommandException) as exc_info:
+            s["service"].purchase_from_shop(cmd)
+        assert "ゴールド" in str(exc_info.value) or "gold" in str(exc_info.value).lower()
+
