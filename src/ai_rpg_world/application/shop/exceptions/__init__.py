@@ -13,6 +13,9 @@ from ai_rpg_world.application.shop.exceptions.command_exception import (
     CannotPartiallyPurchaseException,
     ShopAlreadyExistsAtLocationException,
 )
+from ai_rpg_world.application.shop.exceptions.query_exception import (
+    ShopQueryApplicationException,
+)
 
 __all__ = [
     "ShopApplicationException",
@@ -25,4 +28,5 @@ __all__ = [
     "InsufficientStockForPurchaseException",
     "CannotPartiallyPurchaseException",
     "ShopAlreadyExistsAtLocationException",
+    "ShopQueryApplicationException",
 ]
