@@ -21,8 +21,12 @@ from ai_rpg_world.domain.sns.aggregate.reply_aggregate import ReplyAggregate
 from ai_rpg_world.domain.sns.entity.notification import Notification as SnsNotification
 from ai_rpg_world.domain.sns.value_object.notification_id import NotificationId
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.aggregate.location_establishment_aggregate import (
+    LocationEstablishmentAggregate,
+)
 from ai_rpg_world.domain.world.aggregate.weather_zone import WeatherZone
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.location_slot_id import LocationSlotId
 from ai_rpg_world.domain.world.value_object.weather_zone_id import WeatherZoneId
 from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
 from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
@@ -101,7 +105,8 @@ class InMemoryDataStore:
         self.next_hit_box_id = 1
         self.world_maps: Dict[Any, Any] = {} # Dict[WorldId, WorldMapAggregate]
         self.spot_to_world_id: Dict[SpotId, Any] = {} # Dict[SpotId, WorldId]
-        
+        self.location_establishments: Dict[LocationSlotId, LocationEstablishmentAggregate] = {}
+
         # サンプルデータの投入
         self._setup_sample_data()
 
@@ -304,6 +309,7 @@ class InMemoryDataStore:
         self.hit_boxes.clear()
         self.world_maps.clear()
         self.spot_to_world_id.clear()
+        self.location_establishments.clear()
 
     def take_snapshot(self) -> Dict[str, Any]:
         """現在のデータのスナップショットを作成する"""
@@ -328,6 +334,7 @@ class InMemoryDataStore:
             "sns_users": copy.deepcopy(self.sns_users),
             "posts": copy.deepcopy(self.posts),
             "replies": copy.deepcopy(self.replies),
+            "location_establishments": copy.deepcopy(self.location_establishments),
         }
 
     def restore_snapshot(self, snapshot: Dict[str, Any]):
@@ -351,3 +358,4 @@ class InMemoryDataStore:
         self.sns_users = snapshot["sns_users"]
         self.posts = snapshot["posts"]
         self.replies = snapshot["replies"]
+        self.location_establishments = snapshot.get("location_establishments", {})

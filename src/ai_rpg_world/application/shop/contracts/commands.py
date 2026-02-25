@@ -37,3 +37,10 @@ class PurchaseFromShopCommand:
     listing_id: int
     buyer_id: int
     quantity: int
+
+
+@dataclass(frozen=True)
+class CloseShopCommand:
+    """ショップ閉鎖コマンド（オーナーのみ）"""
+    shop_id: int
+    player_id: int  # 閉鎖を実行するオーナー

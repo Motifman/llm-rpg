@@ -96,3 +96,10 @@ class InteractionTypeEnum(Enum):
     OPEN_DOOR = "open_door"            # ドアを開閉
     STORE_IN_CHEST = "store_in_chest"  # 宝箱にアイテムを収納（Command で item 指定）
     TAKE_FROM_CHEST = "take_from_chest"  # 宝箱からアイテムを取得
+
+
+class EstablishmentType(Enum):
+    """ロケーションに割り当て可能な施設の種類"""
+    SHOP = "SHOP"
+    GUILD = "GUILD"
+    # 将来: WAREHOUSE = "WAREHOUSE", TAVERN = "TAVERN" 等

@@ -5,6 +5,8 @@ from typing import Optional
 @dataclass(frozen=True)
 class CreateGuildCommand:
     """ギルド作成コマンド"""
+    spot_id: int
+    location_area_id: int
     name: str
     description: str
     creator_player_id: int

@@ -212,3 +212,13 @@ class ItemAlreadyInChestException(MapDomainException, BusinessRuleException):
 class NotADoorException(MapDomainException, BusinessRuleException):
     """対象がドアではない例外"""
     error_code = "MAP.NOT_A_DOOR"
+
+
+class LocationAlreadyOccupiedException(MapDomainException, StateException):
+    """ロケーションが既に別の施設に占有されている例外"""
+    error_code = "MAP.LOCATION_ALREADY_OCCUPIED"
+
+
+class LocationNotOccupiedException(MapDomainException, StateException):
+    """未割当のロケーションに対して release を呼んだ場合の例外"""
+    error_code = "MAP.LOCATION_NOT_OCCUPIED"

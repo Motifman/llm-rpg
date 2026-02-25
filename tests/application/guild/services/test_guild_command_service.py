@@ -30,10 +30,17 @@ from ai_rpg_world.infrastructure.repository.in_memory_guild_repository import (
 from ai_rpg_world.infrastructure.repository.in_memory_guild_bank_repository import (
     InMemoryGuildBankRepository,
 )
+from ai_rpg_world.infrastructure.repository.in_memory_location_establishment_repository import (
+    InMemoryLocationEstablishmentRepository,
+)
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+
+# テスト用の共通ロケーション（1ロケーション1ギルドの検証用）
+TEST_SPOT_ID = 1
+TEST_LOCATION_AREA_ID = 1
 
 
 class TestGuildCommandService:
@@ -57,11 +64,16 @@ class TestGuildCommandService:
             data_store=data_store,
             unit_of_work=uow,
         )
+        location_establishment_repository = InMemoryLocationEstablishmentRepository(
+            data_store=data_store,
+            unit_of_work=uow,
+        )
         player_status_repository = Mock()
         service = GuildCommandService(
             guild_repository=guild_repository,
             guild_bank_repository=guild_bank_repository,
             player_status_repository=player_status_repository,
+            location_establishment_repository=location_establishment_repository,
             unit_of_work=uow,
         )
         return service, guild_repository, guild_bank_repository, uow
@@ -70,6 +82,8 @@ class TestGuildCommandService:
     def test_create_guild_success(self, setup_service):
         service, guild_repo, _, _ = setup_service
         command = CreateGuildCommand(
+            spot_id=TEST_SPOT_ID,
+            location_area_id=TEST_LOCATION_AREA_ID,
             name="Adventurers",
             description="We adventure together",
             creator_player_id=1,
@@ -88,6 +102,8 @@ class TestGuildCommandService:
     def test_create_guild_empty_name_raises(self, setup_service):
         service, _, _, _ = setup_service
         command = CreateGuildCommand(
+            spot_id=TEST_SPOT_ID,
+            location_area_id=TEST_LOCATION_AREA_ID,
             name="   ",
             description="x",
             creator_player_id=1,
@@ -98,6 +114,8 @@ class TestGuildCommandService:
     def test_create_guild_strips_whitespace(self, setup_service):
         service, guild_repo, _, _ = setup_service
         command = CreateGuildCommand(
+            spot_id=TEST_SPOT_ID,
+            location_area_id=TEST_LOCATION_AREA_ID,
             name="  Guild Name  ",
             description="  Desc  ",
             creator_player_id=1,
@@ -108,11 +126,60 @@ class TestGuildCommandService:
         assert guild.name == "Guild Name"
         assert guild.description == "Desc"
 
+    def test_create_guild_duplicate_location_raises(self, setup_service):
+        """同一 spot/location で2回 create_guild すると2回目は GuildCreationException"""
+        service, guild_repo, _, _ = setup_service
+        cmd = CreateGuildCommand(
+            spot_id=TEST_SPOT_ID,
+            location_area_id=TEST_LOCATION_AREA_ID,
+            name="First",
+            description="",
+            creator_player_id=1,
+        )
+        service.create_guild(cmd)
+        cmd2 = CreateGuildCommand(
+            spot_id=TEST_SPOT_ID,
+            location_area_id=TEST_LOCATION_AREA_ID,
+            name="Second",
+            description="",
+            creator_player_id=2,
+        )
+        with pytest.raises(GuildCreationException):
+            service.create_guild(cmd2)
+
+    def test_create_guild_after_disband_same_location_success(self, setup_service):
+        """解散後に同じロケーションで create_guild が成功すること"""
+        service, guild_repo, _, _ = setup_service
+        create_result = service.create_guild(
+            CreateGuildCommand(
+                spot_id=TEST_SPOT_ID,
+                location_area_id=TEST_LOCATION_AREA_ID,
+                name="G",
+                description="",
+                creator_player_id=1,
+            )
+        )
+        guild_id = create_result.data["guild_id"]
+        service.disband_guild(DisbandGuildCommand(guild_id=guild_id, player_id=1))
+        create_result2 = service.create_guild(
+            CreateGuildCommand(
+                spot_id=TEST_SPOT_ID,
+                location_area_id=TEST_LOCATION_AREA_ID,
+                name="G2",
+                description="",
+                creator_player_id=1,
+            )
+        )
+        assert create_result2.success is True
+        assert create_result2.data["guild_id"] != guild_id
+        guild = guild_repo.find_by_id(GuildId(create_result2.data["guild_id"]))
+        assert guild.name == "G2"
+
     # --- add_member ---
     def test_add_member_success(self, setup_service):
         service, guild_repo, _, _ = setup_service
         create_result = service.create_guild(
-            CreateGuildCommand(name="G", description="", creator_player_id=1)
+            CreateGuildCommand(spot_id=TEST_SPOT_ID, location_area_id=TEST_LOCATION_AREA_ID, name="G", description="", creator_player_id=1)
         )
         guild_id = create_result.data["guild_id"]
         command = AddGuildMemberCommand(
@@ -140,7 +207,7 @@ class TestGuildCommandService:
         """MEMBER は招待権限がない（ドメインの InsufficientGuildPermissionException が GuildCommandException にラップされる）"""
         service, guild_repo, _, _ = setup_service
         create_result = service.create_guild(
-            CreateGuildCommand(name="G", description="", creator_player_id=1)
+            CreateGuildCommand(spot_id=TEST_SPOT_ID, location_area_id=TEST_LOCATION_AREA_ID, name="G", description="", creator_player_id=1)
         )
         guild_id = create_result.data["guild_id"]
         service.add_member(
@@ -162,7 +229,7 @@ class TestGuildCommandService:
     def test_leave_guild_success(self, setup_service):
         service, guild_repo, _, _ = setup_service
         create_result = service.create_guild(
-            CreateGuildCommand(name="G", description="", creator_player_id=1)
+            CreateGuildCommand(spot_id=TEST_SPOT_ID, location_area_id=TEST_LOCATION_AREA_ID, name="G", description="", creator_player_id=1)
         )
         guild_id = create_result.data["guild_id"]
         service.add_member(
@@ -187,7 +254,7 @@ class TestGuildCommandService:
     def test_leave_guild_leader_when_only_member_success(self, setup_service):
         service, guild_repo, _, _ = setup_service
         create_result = service.create_guild(
-            CreateGuildCommand(name="G", description="", creator_player_id=1)
+            CreateGuildCommand(spot_id=TEST_SPOT_ID, location_area_id=TEST_LOCATION_AREA_ID, name="G", description="", creator_player_id=1)
         )
         guild_id = create_result.data["guild_id"]
         command = LeaveGuildCommand(guild_id=guild_id, player_id=1)
@@ -200,7 +267,7 @@ class TestGuildCommandService:
     def test_change_role_success(self, setup_service):
         service, guild_repo, _, _ = setup_service
         create_result = service.create_guild(
-            CreateGuildCommand(name="G", description="", creator_player_id=1)
+            CreateGuildCommand(spot_id=TEST_SPOT_ID, location_area_id=TEST_LOCATION_AREA_ID, name="G", description="", creator_player_id=1)
         )
         guild_id = create_result.data["guild_id"]
         service.add_member(
@@ -235,7 +302,7 @@ class TestGuildCommandService:
     def test_change_role_invalid_role_raises(self, setup_service):
         service, _, _, _ = setup_service
         create_result = service.create_guild(
-            CreateGuildCommand(name="G", description="", creator_player_id=1)
+            CreateGuildCommand(spot_id=TEST_SPOT_ID, location_area_id=TEST_LOCATION_AREA_ID, name="G", description="", creator_player_id=1)
         )
         guild_id = create_result.data["guild_id"]
         service.add_member(
@@ -258,7 +325,7 @@ class TestGuildCommandService:
         """MEMBER は役職変更権限がない（ドメインの InsufficientGuildPermissionException が GuildCommandException にラップされる）"""
         service, _, _, _ = setup_service
         create_result = service.create_guild(
-            CreateGuildCommand(name="G", description="", creator_player_id=1)
+            CreateGuildCommand(spot_id=TEST_SPOT_ID, location_area_id=TEST_LOCATION_AREA_ID, name="G", description="", creator_player_id=1)
         )
         guild_id = create_result.data["guild_id"]
         service.add_member(
@@ -289,7 +356,7 @@ class TestGuildCommandService:
         service, guild_repo, _, _ = setup_service
         original_error = RuntimeError("database connection failed")
         guild_repo.find_by_id = Mock(side_effect=original_error)
-        command = CreateGuildCommand(name="G", description="", creator_player_id=1)
+        command = CreateGuildCommand(spot_id=TEST_SPOT_ID, location_area_id=TEST_LOCATION_AREA_ID, name="G", description="", creator_player_id=1)
         service.create_guild(command)
         command2 = AddGuildMemberCommand(
             guild_id=1,
@@ -305,7 +372,7 @@ class TestGuildCommandService:
         """ギルド作成時に金庫も作成され、残高 0 であること"""
         service, guild_repo, bank_repo, _ = setup_service
         result = service.create_guild(
-            CreateGuildCommand(name="G", description="", creator_player_id=1)
+            CreateGuildCommand(spot_id=TEST_SPOT_ID, location_area_id=TEST_LOCATION_AREA_ID, name="G", description="", creator_player_id=1)
         )
         guild_id = GuildId(result.data["guild_id"])
         bank = bank_repo.find_by_id(guild_id)
@@ -318,7 +385,7 @@ class TestGuildCommandService:
         """メンバーが金庫に入金できること（プレイヤーゴールドはモックで差し引く）"""
         service, guild_repo, bank_repo, _ = setup_service
         create_result = service.create_guild(
-            CreateGuildCommand(name="G", description="", creator_player_id=1)
+            CreateGuildCommand(spot_id=TEST_SPOT_ID, location_area_id=TEST_LOCATION_AREA_ID, name="G", description="", creator_player_id=1)
         )
         guild_id_val = create_result.data["guild_id"]
         mock_status = Mock()
@@ -353,7 +420,7 @@ class TestGuildCommandService:
         """非メンバーは入金できない"""
         service, guild_repo, _, _ = setup_service
         service.create_guild(
-            CreateGuildCommand(name="G", description="", creator_player_id=1)
+            CreateGuildCommand(spot_id=TEST_SPOT_ID, location_area_id=TEST_LOCATION_AREA_ID, name="G", description="", creator_player_id=1)
         )
         guild_id = 1
         command = DepositToGuildBankCommand(
@@ -369,7 +436,7 @@ class TestGuildCommandService:
         """オフィサーが金庫から出金できること"""
         service, guild_repo, bank_repo, _ = setup_service
         create_result = service.create_guild(
-            CreateGuildCommand(name="G", description="", creator_player_id=1)
+            CreateGuildCommand(spot_id=TEST_SPOT_ID, location_area_id=TEST_LOCATION_AREA_ID, name="G", description="", creator_player_id=1)
         )
         guild_id_val = create_result.data["guild_id"]
         service.add_member(AddGuildMemberCommand(guild_id=guild_id_val, inviter_player_id=1, new_member_player_id=2))
@@ -397,7 +464,7 @@ class TestGuildCommandService:
         """メンバー（オフィサーでない）は出金できない"""
         service, guild_repo, bank_repo, _ = setup_service
         create_result = service.create_guild(
-            CreateGuildCommand(name="G", description="", creator_player_id=1)
+            CreateGuildCommand(spot_id=TEST_SPOT_ID, location_area_id=TEST_LOCATION_AREA_ID, name="G", description="", creator_player_id=1)
         )
         guild_id_val = create_result.data["guild_id"]
         service.add_member(AddGuildMemberCommand(guild_id=guild_id_val, inviter_player_id=1, new_member_player_id=2))
@@ -416,7 +483,7 @@ class TestGuildCommandService:
         """残高不足では出金できない"""
         service, guild_repo, bank_repo, _ = setup_service
         create_result = service.create_guild(
-            CreateGuildCommand(name="G", description="", creator_player_id=1)
+            CreateGuildCommand(spot_id=TEST_SPOT_ID, location_area_id=TEST_LOCATION_AREA_ID, name="G", description="", creator_player_id=1)
         )
         guild_id_val = create_result.data["guild_id"]
         mock_status = Mock()
@@ -436,7 +503,7 @@ class TestGuildCommandService:
         """リーダーがギルドを解散できること（ギルドと金庫が削除される）"""
         service, guild_repo, bank_repo, _ = setup_service
         create_result = service.create_guild(
-            CreateGuildCommand(name="G", description="", creator_player_id=1)
+            CreateGuildCommand(spot_id=TEST_SPOT_ID, location_area_id=TEST_LOCATION_AREA_ID, name="G", description="", creator_player_id=1)
         )
         guild_id_val = create_result.data["guild_id"]
         command = DisbandGuildCommand(guild_id=guild_id_val, player_id=1)
@@ -449,7 +516,7 @@ class TestGuildCommandService:
         """リーダー以外は解散できない"""
         service, guild_repo, _, _ = setup_service
         create_result = service.create_guild(
-            CreateGuildCommand(name="G", description="", creator_player_id=1)
+            CreateGuildCommand(spot_id=TEST_SPOT_ID, location_area_id=TEST_LOCATION_AREA_ID, name="G", description="", creator_player_id=1)
         )
         guild_id_val = create_result.data["guild_id"]
         service.add_member(AddGuildMemberCommand(guild_id=guild_id_val, inviter_player_id=1, new_member_player_id=2))
@@ -462,7 +529,7 @@ class TestGuildCommandService:
         """リーダー脱退時、joined_at が最も古いオフィサー（いなければメンバー）が後継リーダーになること"""
         service, guild_repo, _, _ = setup_service
         create_result = service.create_guild(
-            CreateGuildCommand(name="G", description="", creator_player_id=1)
+            CreateGuildCommand(spot_id=TEST_SPOT_ID, location_area_id=TEST_LOCATION_AREA_ID, name="G", description="", creator_player_id=1)
         )
         guild_id_val = create_result.data["guild_id"]
         service.add_member(AddGuildMemberCommand(guild_id=guild_id_val, inviter_player_id=1, new_member_player_id=2))

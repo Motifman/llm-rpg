@@ -13,6 +13,18 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
+from ai_rpg_world.domain.world.repository.location_establishment_repository import (
+    LocationEstablishmentRepository,
+)
+from ai_rpg_world.domain.world.aggregate.location_establishment_aggregate import (
+    LocationEstablishmentAggregate,
+)
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.enum.world_enum import EstablishmentType
+from ai_rpg_world.domain.world.exception.map_exception import (
+    LocationAlreadyOccupiedException,
+)
 
 from ai_rpg_world.application.guild.contracts.commands import (
     CreateGuildCommand,
@@ -54,11 +66,13 @@ class GuildCommandService:
         guild_repository: GuildRepository,
         guild_bank_repository: GuildBankRepository,
         player_status_repository: PlayerStatusRepository,
+        location_establishment_repository: LocationEstablishmentRepository,
         unit_of_work: UnitOfWork,
     ):
         self._guild_repository = guild_repository
         self._guild_bank_repository = guild_bank_repository
         self._player_status_repository = player_status_repository
+        self._location_establishment_repository = location_establishment_repository
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -104,10 +118,31 @@ class GuildCommandService:
                     "ギルド名を入力してください",
                     user_id=command.creator_player_id,
                 )
+            spot_id = SpotId.create(command.spot_id)
+            location_area_id = LocationAreaId.create(command.location_area_id)
             guild_id = self._guild_repository.generate_guild_id()
             creator_id = PlayerId(command.creator_player_id)
+
+            slot = self._location_establishment_repository.find_by_spot_and_location(
+                spot_id, location_area_id
+            )
+            if slot is None:
+                slot = LocationEstablishmentAggregate.create(
+                    spot_id=spot_id,
+                    location_area_id=location_area_id,
+                )
+            try:
+                slot.claim(EstablishmentType.GUILD, guild_id.value)
+            except LocationAlreadyOccupiedException:
+                raise GuildCreationException(
+                    "このロケーションには既に施設があります",
+                    user_id=command.creator_player_id,
+                ) from None
+
             guild = GuildAggregate.create_guild(
                 guild_id=guild_id,
+                spot_id=spot_id,
+                location_area_id=location_area_id,
                 name=command.name.strip(),
                 description=command.description.strip(),
                 creator_player_id=creator_id,
@@ -115,7 +150,10 @@ class GuildCommandService:
             self._guild_repository.save(guild)
             bank = GuildBankAggregate.create_for_guild(guild_id)
             self._guild_bank_repository.save(bank)
-            self._logger.info("Guild created: guild_id=%s, creator=%s", guild_id.value, creator_id)
+            self._location_establishment_repository.save(slot)
+            self._logger.info(
+                "Guild created: guild_id=%s, creator=%s", guild_id.value, creator_id
+            )
             return GuildCommandResultDto(
                 success=True,
                 message="ギルドを作成しました",
@@ -384,6 +422,18 @@ class GuildCommandService:
                 )
             player_id = PlayerId(command.player_id)
             guild.disband(player_id)
+
+            slot = self._location_establishment_repository.find_by_spot_and_location(
+                guild.spot_id, guild.location_area_id
+            )
+            if (
+                slot is not None
+                and slot.establishment_type == EstablishmentType.GUILD
+                and slot.establishment_id == guild_id.value
+            ):
+                slot.release()
+                self._location_establishment_repository.save(slot)
+
             self._guild_repository.delete(guild_id)
             self._guild_bank_repository.delete(guild_id)
             self._logger.info(

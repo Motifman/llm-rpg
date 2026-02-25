@@ -22,28 +22,44 @@ from ai_rpg_world.domain.guild.event.guild_event import (
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.guild.value_object.guild_membership import GuildMembership
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 
 
 class GuildAggregate(AggregateRoot):
-    """ギルド集約"""
+    """ギルド集約。1ロケーションに1ギルドのみ開設可能（LocationEstablishment で保証）。"""
 
     def __init__(
         self,
         guild_id: GuildId,
+        spot_id: SpotId,
+        location_area_id: LocationAreaId,
         name: str,
         description: str,
         members: Optional[Dict[PlayerId, GuildMembership]] = None,
     ):
         super().__init__()
         self.guild_id = guild_id
+        self._spot_id = spot_id
+        self._location_area_id = location_area_id
         self.name = name
         self.description = description
         self._members: Dict[PlayerId, GuildMembership] = dict(members) if members else {}
+
+    @property
+    def spot_id(self) -> SpotId:
+        return self._spot_id
+
+    @property
+    def location_area_id(self) -> LocationAreaId:
+        return self._location_area_id
 
     @classmethod
     def create_guild(
         cls,
         guild_id: GuildId,
+        spot_id: SpotId,
+        location_area_id: LocationAreaId,
         name: str,
         description: str,
         creator_player_id: PlayerId,
@@ -59,6 +75,8 @@ class GuildAggregate(AggregateRoot):
         )
         guild = cls(
             guild_id=guild_id,
+            spot_id=spot_id,
+            location_area_id=location_area_id,
             name=name.strip(),
             description=description.strip(),
             members={creator_player_id: membership},
@@ -68,6 +86,8 @@ class GuildAggregate(AggregateRoot):
             aggregate_type="GuildAggregate",
             name=guild.name,
             description=guild.description,
+            spot_id=spot_id,
+            location_area_id=location_area_id,
             creator_player_id=creator_player_id,
             creator_role=GuildRole.LEADER,
         )
