@@ -9,6 +9,7 @@ from ai_rpg_world.domain.shop.event.shop_event import (
     ShopCreatedEvent,
     ShopItemListedEvent,
     ShopItemUnlistedEvent,
+    ShopItemPurchasedEvent,
 )
 from ai_rpg_world.domain.shop.exception.shop_exception import (
     NotShopOwnerException,
@@ -176,3 +177,32 @@ class ShopAggregate(AggregateRoot):
     def get_listing(self, listing_id: ShopListingId) -> Optional[ShopListing]:
         """指定リストを取得"""
         return self._listings.get(listing_id)
+
+    def record_purchase(
+        self,
+        listing_id: ShopListingId,
+        buyer_id: PlayerId,
+        quantity: int,
+        total_gold: int,
+    ) -> None:
+        """購入を記録し ShopItemPurchasedEvent を発行する（ReadModel 更新用）。
+
+        購入処理の一環としてアプリケーション層から呼ばれる。
+        remove_listing の前に呼ぶこと（リスト情報がイベントに必要）。
+        """
+        listing = self._listings.get(listing_id)
+        if listing is None:
+            raise ListingNotFoundException(
+                f"Listing {listing_id} not found in shop {self._shop_id}"
+            )
+        event = ShopItemPurchasedEvent.create(
+            aggregate_id=self._shop_id,
+            aggregate_type="ShopAggregate",
+            listing_id=listing_id,
+            item_instance_id=listing.item_instance_id,
+            buyer_id=buyer_id,
+            quantity=quantity,
+            total_gold=total_gold,
+            seller_id=listing.listed_by,
+        )
+        self.add_event(event)

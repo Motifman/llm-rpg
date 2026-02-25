@@ -9,6 +9,7 @@ from ai_rpg_world.domain.shop.event.shop_event import (
     ShopCreatedEvent,
     ShopItemListedEvent,
     ShopItemUnlistedEvent,
+    ShopItemPurchasedEvent,
 )
 from ai_rpg_world.domain.shop.exception.shop_exception import (
     NotShopOwnerException,
@@ -110,6 +111,31 @@ class TestShopAggregate:
             assert events[0].location_area_id == location_area_id
             assert events[0].owner_id == owner_id
 
+        def test_create_event_contains_all_fields(
+            self,
+            shop_id: ShopId,
+            spot_id: SpotId,
+            location_area_id: LocationAreaId,
+            owner_id: PlayerId,
+        ):
+            """ShopCreatedEventが全てのフィールドを含む"""
+            shop = ShopAggregate.create(
+                shop_id=shop_id,
+                spot_id=spot_id,
+                location_area_id=location_area_id,
+                owner_id=owner_id,
+            )
+            events = shop.get_events()
+            event = events[0]
+            assert isinstance(event, ShopCreatedEvent)
+            assert event.aggregate_id == shop_id
+            assert event.aggregate_type == "ShopAggregate"
+            assert event.spot_id == spot_id
+            assert event.location_area_id == location_area_id
+            assert event.owner_id == owner_id
+            assert hasattr(event, "occurred_at")
+            assert hasattr(event, "event_id")
+
     class TestIsOwner:
         """is_ownerメソッドのテスト"""
 
@@ -169,6 +195,34 @@ class TestShopAggregate:
                     listed_by=other_player_id,
                 )
 
+        def test_list_item_event_contains_all_fields(
+            self,
+            shop: ShopAggregate,
+            owner_id: PlayerId,
+        ):
+            """ShopItemListedEventが全てのフィールドを含む"""
+            shop.clear_events()
+            listing_id = ShopListingId(1)
+            item_id = ItemInstanceId(100)
+            price = ShopListingPrice.of(50)
+            shop.list_item(
+                listing_id=listing_id,
+                item_instance_id=item_id,
+                price_per_unit=price,
+                listed_by=owner_id,
+            )
+            events = shop.get_events()
+            event = events[0]
+            assert isinstance(event, ShopItemListedEvent)
+            assert event.aggregate_id == shop.shop_id
+            assert event.aggregate_type == "ShopAggregate"
+            assert event.listing_id == listing_id
+            assert event.item_instance_id == item_id
+            assert event.price_per_unit == price
+            assert event.listed_by == owner_id
+            assert hasattr(event, "occurred_at")
+            assert hasattr(event, "event_id")
+
     class TestUnlistItem:
         """unlist_itemメソッドのテスト"""
 
@@ -218,6 +272,111 @@ class TestShopAggregate:
             """存在しないリストを取り下げると例外"""
             with pytest.raises(ListingNotFoundException):
                 shop.unlist_item(ShopListingId(999), owner_id)
+
+        def test_unlist_item_event_contains_all_fields(
+            self,
+            shop: ShopAggregate,
+            owner_id: PlayerId,
+        ):
+            """ShopItemUnlistedEventが全てのフィールドを含む"""
+            listing_id = ShopListingId(1)
+            shop.list_item(
+                listing_id=listing_id,
+                item_instance_id=ItemInstanceId(100),
+                price_per_unit=ShopListingPrice.of(50),
+                listed_by=owner_id,
+            )
+            shop.clear_events()
+            shop.unlist_item(listing_id, owner_id)
+            events = shop.get_events()
+            event = events[0]
+            assert isinstance(event, ShopItemUnlistedEvent)
+            assert event.aggregate_id == shop.shop_id
+            assert event.aggregate_type == "ShopAggregate"
+            assert event.listing_id == listing_id
+            assert event.unlisted_by == owner_id
+            assert hasattr(event, "occurred_at")
+            assert hasattr(event, "event_id")
+
+    class TestRecordPurchase:
+        """record_purchaseメソッドのテスト"""
+
+        def test_record_purchase_success(
+            self,
+            shop: ShopAggregate,
+            owner_id: PlayerId,
+            other_player_id: PlayerId,
+        ):
+            """購入記録が成功しイベントが発行される"""
+            listing_id = ShopListingId(1)
+            item_id = ItemInstanceId(100)
+            shop.list_item(
+                listing_id=listing_id,
+                item_instance_id=item_id,
+                price_per_unit=ShopListingPrice.of(50),
+                listed_by=owner_id,
+            )
+            shop.clear_events()
+            shop.record_purchase(
+                listing_id=listing_id,
+                buyer_id=other_player_id,
+                quantity=2,
+                total_gold=100,
+            )
+            events = shop.get_events()
+            assert len(events) == 1
+            assert isinstance(events[0], ShopItemPurchasedEvent)
+
+        def test_record_purchase_adds_event_with_all_fields(
+            self,
+            shop: ShopAggregate,
+            owner_id: PlayerId,
+            other_player_id: PlayerId,
+        ):
+            """record_purchaseでShopItemPurchasedEventが全てのフィールドを含む"""
+            listing_id = ShopListingId(1)
+            item_id = ItemInstanceId(100)
+            price = ShopListingPrice.of(50)
+            shop.list_item(
+                listing_id=listing_id,
+                item_instance_id=item_id,
+                price_per_unit=price,
+                listed_by=owner_id,
+            )
+            shop.clear_events()
+            shop.record_purchase(
+                listing_id=listing_id,
+                buyer_id=other_player_id,
+                quantity=2,
+                total_gold=100,
+            )
+            events = shop.get_events()
+            event = events[0]
+            assert isinstance(event, ShopItemPurchasedEvent)
+            assert event.aggregate_id == shop.shop_id
+            assert event.aggregate_type == "ShopAggregate"
+            assert event.listing_id == listing_id
+            assert event.item_instance_id == item_id
+            assert event.buyer_id == other_player_id
+            assert event.quantity == 2
+            assert event.total_gold == 100
+            assert event.seller_id == owner_id
+            assert hasattr(event, "occurred_at")
+            assert hasattr(event, "event_id")
+
+        def test_record_purchase_listing_not_found_raises(
+            self,
+            shop: ShopAggregate,
+            other_player_id: PlayerId,
+        ):
+            """存在しないリストでrecord_purchaseすると例外"""
+            with pytest.raises(ListingNotFoundException):
+                shop.record_purchase(
+                    listing_id=ShopListingId(999),
+                    buyer_id=other_player_id,
+                    quantity=1,
+                    total_gold=50,
+                )
 
     class TestRemoveListing:
         """remove_listingメソッドのテスト"""

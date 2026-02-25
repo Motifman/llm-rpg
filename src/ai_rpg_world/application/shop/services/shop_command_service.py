@@ -356,6 +356,13 @@ class ShopCommandService:
                         "スタック不可アイテムは部分購入できません",
                     )
 
+            shop.record_purchase(
+                listing_id=listing_id,
+                buyer_id=buyer_id,
+                quantity=command.quantity,
+                total_gold=total_gold,
+            )
+
             buyer_status.pay_gold(total_gold)
             seller_status.earn_gold(total_gold)
 
