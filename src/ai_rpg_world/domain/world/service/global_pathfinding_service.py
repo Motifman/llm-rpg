@@ -5,7 +5,7 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.aggregate.world_map_aggregate import WorldMapAggregate
+from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
 from ai_rpg_world.domain.world.entity.gateway import Gateway
 from ai_rpg_world.domain.world.value_object.area import PointArea, RectArea, CircleArea
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
@@ -24,10 +24,10 @@ class GlobalPathfindingService:
         target_spot_id: SpotId,
         target_coord: Coordinate,
         physical_map: PhysicalMapAggregate,
-        world_map: WorldMapAggregate,
+        connected_spots_provider: IConnectedSpotsProvider,
         world_object_id: WorldObjectId,
         capability: MovementCapability
-    ) -> Tuple[Coordinate, List[Coordinate]]:
+    ) -> Tuple[Optional[Coordinate], List[Coordinate]]:
         """
         目的地までの経路（現在のスポット内での暫定目的地とそのパス）を計算する。
         スポットを跨ぐ場合は、最適なゲートウェイを中継地点としてパスを生成する。
@@ -53,15 +53,17 @@ class GlobalPathfindingService:
         target_gateway = next((g for g in gateways if g.target_spot_id == target_spot_id), None)
         
         if not target_gateway:
-            # 2. 直接の接続がない場合、WorldMapから経路を探す（BFSを使用）
-            next_spot_id = self._find_next_spot_in_world_path(current_spot_id, target_spot_id, world_map)
+            # 2. 直接の接続がない場合、接続プロバイダから経路を探す（BFSを使用）
+            next_spot_id = self._find_next_spot_in_world_path(
+                current_spot_id, target_spot_id, connected_spots_provider
+            )
             if not next_spot_id:
                 return None, []
             
             # 次のスポットへのゲートウェイを探す
             target_gateway = next((g for g in gateways if g.target_spot_id == next_spot_id), None)
             if not target_gateway:
-                # 世界地図には接続があるが、物理マップにゲートウェイがない不整合
+                # 接続グラフには接続があるが、物理マップにゲートウェイがない不整合
                 return None, []
             
         # ゲートウェイの進入可能座標を取得
@@ -91,12 +93,12 @@ class GlobalPathfindingService:
         return None
 
     def _find_next_spot_in_world_path(
-        self, 
-        start_id: SpotId, 
-        goal_id: SpotId, 
-        world_map: WorldMapAggregate
+        self,
+        start_id: SpotId,
+        goal_id: SpotId,
+        connected_spots_provider: IConnectedSpotsProvider,
     ) -> Optional[SpotId]:
-        """世界地図上で最短経路を探索し、次に向かうべき隣接スポットIDを返す"""
+        """接続グラフ上で最短経路を探索し、次に向かうべき隣接スポットIDを返す"""
         if start_id == goal_id:
             return None
 
@@ -105,15 +107,14 @@ class GlobalPathfindingService:
 
         while queue:
             current, path = queue.popleft()
-            
+
             if current == goal_id:
-                # 最初のステップを返す
                 return path[0] if path else None
 
-            for neighbor_id in world_map.get_connected_spots(current):
+            for neighbor_id in connected_spots_provider.get_connected_spots(current):
                 if neighbor_id not in visited:
                     visited.add(neighbor_id)
                     new_path = path + [neighbor_id]
                     queue.append((neighbor_id, new_path))
-        
+
         return None

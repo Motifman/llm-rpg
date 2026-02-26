@@ -2,10 +2,8 @@ from dataclasses import dataclass
 from typing import Optional, Dict, Any, List
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_id import WorldId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.connection import Connection
 from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
@@ -116,26 +114,6 @@ class WorldObjectInteractedEvent(BaseDomainEvent[WorldObjectId, str]):
     target_id: WorldObjectId
     interaction_type: InteractionTypeEnum
     data: Dict[str, Any]
-
-
-@dataclass(frozen=True)
-class WorldMapCreatedEvent(BaseDomainEvent[WorldId, str]):
-    """世界地図が作成されたイベント"""
-    world_id: WorldId
-
-
-@dataclass(frozen=True)
-class SpotAddedEvent(BaseDomainEvent[WorldId, str]):
-    """スポットが追加されたイベント"""
-    world_id: WorldId
-    spot_id: SpotId
-
-
-@dataclass(frozen=True)
-class ConnectionAddedEvent(BaseDomainEvent[WorldId, str]):
-    """接続が追加されたイベント"""
-    world_id: WorldId
-    connection: Connection
 
 
 @dataclass(frozen=True)
