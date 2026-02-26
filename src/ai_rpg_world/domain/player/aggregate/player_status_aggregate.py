@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Literal
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -14,6 +14,7 @@ from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.player.event.status_events import (
     PlayerDownedEvent,
     PlayerEvadedEvent,
@@ -55,6 +56,9 @@ class PlayerStatusAggregate(AggregateRoot):
         current_coordinate: Optional[Coordinate] = None,
         current_destination: Optional[Coordinate] = None,
         planned_path: List[Coordinate] = None,
+        goal_destination_type: Optional[Literal["spot", "location"]] = None,
+        goal_spot_id: Optional[SpotId] = None,
+        goal_location_area_id: Optional[LocationAreaId] = None,
         is_down: bool = False,
         active_effects: List[StatusEffect] = None,
     ):
@@ -72,6 +76,9 @@ class PlayerStatusAggregate(AggregateRoot):
         self._current_coordinate = current_coordinate
         self._current_destination = current_destination
         self._planned_path = planned_path or []
+        self._goal_destination_type = goal_destination_type
+        self._goal_spot_id = goal_spot_id
+        self._goal_location_area_id = goal_location_area_id
         self._is_down = is_down
         self._active_effects = active_effects or []
 
@@ -150,15 +157,43 @@ class PlayerStatusAggregate(AggregateRoot):
         """計画された経路"""
         return self._planned_path.copy()
 
-    def set_destination(self, destination: Coordinate, path: List[Coordinate]) -> None:
-        """目的地と経路を設定する"""
+    @property
+    def goal_destination_type(self) -> Optional[Literal["spot", "location"]]:
+        """目的地の種別（spot=スポット到着で完了、location=ロケーション内到着で完了）"""
+        return self._goal_destination_type
+
+    @property
+    def goal_spot_id(self) -> Optional[SpotId]:
+        """目標スポットID"""
+        return self._goal_spot_id
+
+    @property
+    def goal_location_area_id(self) -> Optional[LocationAreaId]:
+        """目標ロケーションエリアID（destination_type が location のときのみ）"""
+        return self._goal_location_area_id
+
+    def set_destination(
+        self,
+        destination: Coordinate,
+        path: List[Coordinate],
+        goal_destination_type: Optional[Literal["spot", "location"]] = None,
+        goal_spot_id: Optional[SpotId] = None,
+        goal_location_area_id: Optional[LocationAreaId] = None,
+    ) -> None:
+        """目的地と経路、および到着判定用の目標情報を設定する"""
         self._current_destination = destination
         self._planned_path = path
+        self._goal_destination_type = goal_destination_type
+        self._goal_spot_id = goal_spot_id
+        self._goal_location_area_id = goal_location_area_id
 
     def clear_path(self) -> None:
-        """経路をクリアする"""
+        """経路と目標情報をクリアする"""
         self._planned_path = []
         self._current_destination = None
+        self._goal_destination_type = None
+        self._goal_spot_id = None
+        self._goal_location_area_id = None
 
     def advance_path(self) -> Optional[Coordinate]:
         """経路を1ステップ進める。次に進むべき座標を返し、経路から削除する。"""

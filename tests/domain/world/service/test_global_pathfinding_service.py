@@ -162,6 +162,9 @@ class TestGlobalPathfindingServiceGatewayEntryCoordinate:
             def contains(self, coordinate: Coordinate) -> bool:
                 return coordinate.x == 5 and coordinate.y == 5
 
+            def get_reference_coordinate(self) -> Coordinate:
+                return Coordinate(5, 5, 0)
+
         gateway = Gateway(
             GatewayId(101), "To Spot 2",
             CustomArea(),
