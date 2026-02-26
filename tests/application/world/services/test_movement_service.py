@@ -1,6 +1,7 @@
 import pytest
 from datetime import datetime
 from typing import List, Dict
+from unittest.mock import patch
 
 from ai_rpg_world.application.world.services.movement_service import MovementApplicationService
 from ai_rpg_world.application.world.contracts.commands import (
@@ -12,13 +13,16 @@ from ai_rpg_world.application.world.contracts.commands import (
 from ai_rpg_world.domain.world.entity.location_area import LocationArea
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
+    MovementCommandException,
     PlayerNotFoundException,
     MapNotFoundException,
     MovementInvalidException,
     PlayerStaminaExhaustedException,
     PathBlockedException,
-    ActorBusyException
+    ActorBusyException,
 )
+from ai_rpg_world.application.world.exceptions.base_exception import WorldSystemErrorException
+from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -604,6 +608,28 @@ class TestMovementApplicationService:
         assert loc.x == 3
         assert loc.y == 4
 
+    def test_get_player_location_returns_none_when_not_placed(self, setup_service):
+        """プレイヤーが未配置（current_spot_id または current_coordinate が None）の場合は None を返すこと"""
+        service, status_repo, profile_repo, _, spot_repo, _, _, _ = setup_service
+
+        player_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        # 座標なしの状態で保存（未配置）
+        status = self._create_sample_status(player_id)
+        status._current_spot_id = None
+        status._current_coordinate = None
+        status_repo.save(status)
+
+        loc = service.get_player_location(GetPlayerLocationCommand(player_id=player_id))
+        assert loc is None
+
+    def test_get_player_location_returns_none_when_player_not_found(self, setup_service):
+        """存在しないプレイヤーIDで get_player_location を呼んだ場合も None を返すこと（未配置扱い）"""
+        service, _, _, _, _, _, _, _ = setup_service
+
+        loc = service.get_player_location(GetPlayerLocationCommand(player_id=99999))
+        assert loc is None
+
     def test_multi_spot_pathfinding_initial_step(self, setup_service):
         """スポットを跨ぐ目的地設定時に、まずゲートウェイを目指すパスが生成されること"""
         service, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
@@ -716,6 +742,96 @@ class TestMovementApplicationService:
         # ティックが進む前に2回目の移動を試みる
         with pytest.raises(ActorBusyException):
             service.move_tile(MoveTileCommand(player_id=player_id, direction=DirectionEnum.SOUTH))
+
+    def test_domain_exception_converted_to_movement_command_exception(self, setup_service):
+        """ドメイン例外が発生した場合、MovementCommandException に変換されて投げられること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
+
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+        self._register_spots(spot_repo, [{"id": spot_id, "name": "S1"}])
+
+        with patch.object(
+            phys_repo,
+            "find_by_spot_id",
+            side_effect=DomainException("test domain error"),
+        ):
+            with pytest.raises(MovementCommandException) as exc_info:
+                service.move_tile(MoveTileCommand(player_id=player_id, direction=DirectionEnum.SOUTH))
+            assert "test domain error" in str(exc_info.value)
+
+    def test_unexpected_exception_converted_to_world_system_error(self, setup_service):
+        """操作中に想定外の例外が発生した場合は WorldSystemErrorException が投げられること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
+
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+        self._register_spots(spot_repo, [{"id": spot_id, "name": "S1"}])
+
+        with patch.object(
+            phys_repo,
+            "find_by_spot_id",
+            side_effect=RuntimeError("unexpected"),
+        ):
+            with pytest.raises(WorldSystemErrorException) as exc_info:
+                service.move_tile(MoveTileCommand(player_id=player_id, direction=DirectionEnum.SOUTH))
+            assert exc_info.value.original_exception is not None
+            assert isinstance(exc_info.value.original_exception, RuntimeError)
+
+    def test_get_player_location_profile_missing_raises_player_not_found(self, setup_service):
+        """get_player_location でプロフィールが存在しない場合に PlayerNotFoundException が発生すること"""
+        service, status_repo, _, phys_repo, spot_repo, _, _, _ = setup_service
+
+        player_id = 1
+        spot_id = 1
+        # プロフィールは保存しない
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+        self._register_spots(spot_repo, [{"id": spot_id, "name": "S1"}])
+
+        with pytest.raises(PlayerNotFoundException):
+            service.get_player_location(GetPlayerLocationCommand(player_id=player_id))
+
+    def test_get_player_location_spot_missing_raises_map_not_found(self, setup_service):
+        """get_player_location でスポットが存在しない場合に MapNotFoundException が発生すること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
+
+        player_id = 1
+        spot_id = 999  # 物理マップには存在するが SpotRepository に未登録
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+        # spot_repo には spot_id を登録しない
+
+        with pytest.raises(MapNotFoundException):
+            service.get_player_location(GetPlayerLocationCommand(player_id=player_id))
+
+    def test_get_player_location_unexpected_exception_raises_world_system_error(self, setup_service):
+        """get_player_location 内で想定外の例外が発生した場合は WorldSystemErrorException が投げられること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
+
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+        self._register_spots(spot_repo, [{"id": spot_id, "name": "S1"}])
+
+        with patch.object(
+            spot_repo,
+            "find_by_id",
+            side_effect=RuntimeError("unexpected in get_player_location"),
+        ):
+            with pytest.raises(WorldSystemErrorException) as exc_info:
+                service.get_player_location(GetPlayerLocationCommand(player_id=player_id))
+            assert exc_info.value.original_exception is not None
+            assert isinstance(exc_info.value.original_exception, RuntimeError)
 
     def test_location_area_retrieval(self, setup_service):
         """ロケーションエリア内にいる場合、その情報が取得できること"""

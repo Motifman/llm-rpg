@@ -413,27 +413,34 @@ class MovementApplicationService:
         )
 
     def get_player_location(self, command: GetPlayerLocationCommand) -> Optional[PlayerLocationDto]:
-        """プレイヤーの現在位置を取得"""
+        """プレイヤーの現在位置を取得。未配置の場合は None、プレイヤー／スポット不在時は例外。"""
+        return self._execute_with_error_handling(
+            operation=lambda: self._get_player_location_impl(command),
+            context={"action": "get_player_location", "player_id": command.player_id}
+        )
+
+    def _get_player_location_impl(self, command: GetPlayerLocationCommand) -> Optional[PlayerLocationDto]:
+        """プレイヤーの現在位置を取得する実装。未配置時は None を返す。"""
         player_id = PlayerId(command.player_id)
         player_status = self._player_status_repository.find_by_id(player_id)
         if not player_status or not player_status.current_spot_id or not player_status.current_coordinate:
             return None
-            
+
         spot_id = player_status.current_spot_id
         coord = player_status.current_coordinate
-        
+
         # 名前情報の取得
         profile = self._player_profile_repository.find_by_id(player_id)
         if not profile:
             raise PlayerNotFoundException(command.player_id)
         player_name = profile.name.value
-            
+
         spot = self._spot_repository.find_by_id(spot_id)
         if not spot:
             raise MapNotFoundException(int(spot_id))
         spot_name = spot.name
         spot_desc = spot.description
-         
+
         # LocationArea情報の取得
         area_id = None
         area_name = None
@@ -443,7 +450,7 @@ class MovementApplicationService:
             if areas:
                 area_id = int(areas[0].location_id)
                 area_name = areas[0].name
-         
+
         return PlayerLocationDto(
             player_id=command.player_id,
             player_name=player_name,

@@ -3,6 +3,7 @@
 import pytest
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.transition_condition import (
+    TransitionCondition,
     RequireRelation,
     RequireToll,
     block_if_weather,
@@ -156,3 +157,43 @@ class TestTransitionConditionEvaluatorMultipleConditions:
         allowed, msg = evaluator.evaluate(conditions, context_blizzard)
         assert allowed is False
         assert "悪天候" in msg or "通行止め" in msg
+
+
+class TestTransitionConditionEvaluatorUnknownConditionType:
+    """未知の遷移条件タイプを渡した場合の挙動"""
+
+    @pytest.fixture
+    def context(self):
+        status = _minimal_player_status(1, gold_value=500)
+        return TransitionContext(
+            player_id=1,
+            player_status=status,
+            from_spot_id=SpotId(1),
+            to_spot_id=SpotId(2),
+            current_weather=WeatherState.clear(),
+        )
+
+    def test_unknown_condition_type_returns_false_with_message(self, context):
+        """未対応の遷移条件サブクラスを渡すと (False, '不明な遷移条件です') が返ること"""
+        class UnknownCondition(TransitionCondition):
+            """評価器が扱わない条件タイプ（将来の拡張用など）"""
+            pass
+
+        evaluator = TransitionConditionEvaluator()
+        allowed, msg = evaluator.evaluate([UnknownCondition()], context)
+        assert allowed is False
+        assert msg == "不明な遷移条件です"
+
+    def test_unknown_condition_fails_before_known_conditions_evaluated(self, context):
+        """未知条件が先頭にある場合、その時点で不許可となりメッセージが返ること"""
+        class UnknownCondition(TransitionCondition):
+            pass
+
+        evaluator = TransitionConditionEvaluator()
+        conditions = [
+            UnknownCondition(),
+            RequireToll(amount_gold=0),  # こちらは満たすが評価されない
+        ]
+        allowed, msg = evaluator.evaluate(conditions, context)
+        assert allowed is False
+        assert "不明な遷移条件" in msg

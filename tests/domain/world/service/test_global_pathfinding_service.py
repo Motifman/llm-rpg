@@ -11,7 +11,7 @@ from ai_rpg_world.domain.world.value_object.movement_capability import MovementC
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.gateway import Gateway
 from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
-from ai_rpg_world.domain.world.value_object.area import RectArea
+from ai_rpg_world.domain.world.value_object.area import Area, RectArea
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import AStarPathfindingStrategy
 
@@ -135,6 +135,52 @@ class TestGlobalPathfindingService:
             connected_spots_provider=provider,
             world_object_id=WorldObjectId.create(1),
             capability=MovementCapability.normal_walk()
+        )
+
+        assert goal is None
+        assert path == []
+
+
+class TestGlobalPathfindingServiceGatewayEntryCoordinate:
+    """ゲートウェイ進入座標の取得（未対応 Area 型など）"""
+
+    @pytest.fixture
+    def service(self):
+        return GlobalPathfindingService(PathfindingService(AStarPathfindingStrategy()))
+
+    def _create_simple_map(self, spot_id: int, gateways=None):
+        tiles = []
+        for x in range(10):
+            for y in range(10):
+                tiles.append(Tile(Coordinate(x, y, 0), TerrainType.grass()))
+        return PhysicalMapAggregate.create(SpotId(spot_id), tiles, gateways=gateways)
+
+    def test_gateway_with_unsupported_area_type_returns_none_and_empty_path(self, service):
+        """PointArea / RectArea / CircleArea 以外の Area を持つゲートウェイの場合、(None, []) が返ること"""
+        # 未対応の Area サブクラス（将来の拡張で追加される型をシミュレート）
+        class CustomArea(Area):
+            def contains(self, coordinate: Coordinate) -> bool:
+                return coordinate.x == 5 and coordinate.y == 5
+
+        gateway = Gateway(
+            GatewayId(101), "To Spot 2",
+            CustomArea(),
+            SpotId(2),
+            Coordinate(0, 0, 0),
+        )
+
+        phys_map = self._create_simple_map(1, gateways=[gateway])
+        provider = _DictConnectedSpotsProvider({1: [2]})
+
+        goal, path = service.calculate_global_path(
+            current_spot_id=SpotId(1),
+            current_coord=Coordinate(0, 0, 0),
+            target_spot_id=SpotId(2),
+            target_coord=Coordinate(10, 10, 0),
+            physical_map=phys_map,
+            connected_spots_provider=provider,
+            world_object_id=WorldObjectId.create(1),
+            capability=MovementCapability.normal_walk(),
         )
 
         assert goal is None
