@@ -15,6 +15,11 @@ class TestArea:
             assert area.contains(Coordinate(1, 2, 0)) is False
             assert area.contains(Coordinate(0, 0, 0)) is False
 
+        def test_get_reference_coordinate(self):
+            target = Coordinate(1, 2, 3)
+            area = PointArea(target)
+            assert area.get_reference_coordinate() == target
+
     class TestRectArea:
         def test_boundary_values(self):
             # 1,1,0 から 2,2,0 の範囲 (0は避けることで境界外テストをしやすくする)
@@ -61,6 +66,14 @@ class TestArea:
             assert area.max_z == 1
             assert area.contains(Coordinate(2, 2, 0)) is True
 
+        def test_get_reference_coordinate(self):
+            area = RectArea(0, 4, 0, 6, 0, 0)
+            ref = area.get_reference_coordinate()
+            assert ref.x == 2
+            assert ref.y == 3
+            assert ref.z == 0
+            assert area.contains(ref) is True
+
     class TestCircleArea:
         def test_boundary_values_manhattan(self):
             # 中心(2,2,0), 半径2 (マンハッタン距離)
@@ -96,3 +109,8 @@ class TestArea:
             assert area.contains(Coordinate(4, 3, 0)) is False # 距離3
             assert area.contains(Coordinate(2, 2, 3)) is False # 距離3
             assert area.contains(Coordinate(0, 0, 0)) is False # 距離4
+
+        def test_get_reference_coordinate(self):
+            center = Coordinate(3, 4, 0)
+            area = CircleArea(center, 2)
+            assert area.get_reference_coordinate() == center

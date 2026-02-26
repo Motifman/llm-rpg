@@ -5,10 +5,15 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 
 class Area(ABC):
     """範囲を定義する基底クラス"""
-    
+
     @abstractmethod
     def contains(self, coordinate: Coordinate) -> bool:
         """指定された座標が範囲内にあるか判定する"""
+        pass
+
+    @abstractmethod
+    def get_reference_coordinate(self) -> Coordinate:
+        """経路探索などの目標として使う代表座標を返す（範囲内の1点）"""
         pass
 
 
@@ -19,6 +24,9 @@ class PointArea(Area):
 
     def contains(self, coordinate: Coordinate) -> bool:
         return self.coordinate == coordinate
+
+    def get_reference_coordinate(self) -> Coordinate:
+        return self.coordinate
 
 
 @dataclass(frozen=True)
@@ -50,6 +58,14 @@ class RectArea(Area):
             self.min_z <= coordinate.z <= self.max_z
         )
 
+    def get_reference_coordinate(self) -> Coordinate:
+        """矩形の中心に近い座標を返す（整数）"""
+        return Coordinate(
+            (self.min_x + self.max_x) // 2,
+            (self.min_y + self.max_y) // 2,
+            (self.min_z + self.max_z) // 2,
+        )
+
 
 @dataclass(frozen=True)
 class CircleArea(Area):
@@ -60,3 +76,6 @@ class CircleArea(Area):
     def contains(self, coordinate: Coordinate) -> bool:
         # Coordinate.distance_to (マンハッタン距離) を使用
         return self.center.distance_to(coordinate) <= self.radius
+
+    def get_reference_coordinate(self) -> Coordinate:
+        return self.center
