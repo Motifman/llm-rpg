@@ -44,6 +44,10 @@ class LocationArea:
     def contains(self, coordinate: Coordinate) -> bool:
         return self._is_active and self._area.contains(coordinate)
 
+    def get_reference_coordinate(self) -> Coordinate:
+        """経路探索の目標として使う代表座標（ロケーション内の1点）を返す"""
+        return self._area.get_reference_coordinate()
+
     def set_active(self, is_active: bool):
         self._is_active = is_active
 

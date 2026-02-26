@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Literal
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 
 
@@ -16,18 +16,19 @@ class MoveTileCommand:
 
 @dataclass(frozen=True)
 class SetDestinationCommand:
-    """目的地設定コマンド（LLMエージェントまたは自動移動用）"""
+    """目的地設定コマンド（LLMエージェントまたは自動移動用）。座標は不要で、スポットまたはロケーションを指定する。"""
     player_id: int
+    destination_type: Literal["spot", "location"]
     target_spot_id: int
-    target_x: int
-    target_y: int
-    target_z: int = 0
-    
+    target_location_area_id: Optional[int] = None  # destination_type == "location" のとき必須
+
     def __post_init__(self):
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
         if self.target_spot_id <= 0:
             raise ValueError("target_spot_id must be greater than 0")
+        if self.destination_type == "location" and (self.target_location_area_id is None or self.target_location_area_id <= 0):
+            raise ValueError("target_location_area_id must be positive when destination_type is 'location'")
 
 
 @dataclass(frozen=True)
@@ -36,17 +37,6 @@ class TickMovementCommand:
     player_id: int
     
     def __post_init__(self):
-        if self.player_id <= 0:
-            raise ValueError("player_id must be greater than 0")
-
-
-@dataclass(frozen=True)
-class GetPlayerLocationCommand:
-    """プレイヤー位置取得コマンド"""
-    player_id: int
-    
-    def __post_init__(self):
-        """バリデーション"""
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
 
