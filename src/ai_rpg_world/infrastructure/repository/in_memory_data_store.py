@@ -21,6 +21,7 @@ from ai_rpg_world.domain.sns.aggregate.reply_aggregate import ReplyAggregate
 from ai_rpg_world.domain.sns.entity.notification import Notification as SnsNotification
 from ai_rpg_world.domain.sns.value_object.notification_id import NotificationId
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.entity.spot import Spot
 from ai_rpg_world.domain.world.aggregate.location_establishment_aggregate import (
     LocationEstablishmentAggregate,
 )
@@ -103,8 +104,7 @@ class InMemoryDataStore:
         self.spawn_tables: Dict[SpotId, SpotSpawnTable] = {}
         self.hit_boxes: Dict[HitBoxId, HitBoxAggregate] = {}
         self.next_hit_box_id = 1
-        self.world_maps: Dict[Any, Any] = {} # Dict[WorldId, WorldMapAggregate]
-        self.spot_to_world_id: Dict[SpotId, Any] = {} # Dict[SpotId, WorldId]
+        self.spots: Dict[SpotId, Spot] = {}
         self.location_establishments: Dict[LocationSlotId, LocationEstablishmentAggregate] = {}
 
         # サンプルデータの投入
@@ -307,8 +307,7 @@ class InMemoryDataStore:
         self.next_world_object_id = 100000
         self.spawn_tables.clear()
         self.hit_boxes.clear()
-        self.world_maps.clear()
-        self.spot_to_world_id.clear()
+        self.spots.clear()
         self.location_establishments.clear()
 
     def take_snapshot(self) -> Dict[str, Any]:
@@ -322,6 +321,7 @@ class InMemoryDataStore:
             "world_object_to_monster_id": copy.deepcopy(self.world_object_to_monster_id),
             "spawn_tables": copy.deepcopy(self.spawn_tables),
             "hit_boxes": copy.deepcopy(self.hit_boxes),
+            "spots": copy.deepcopy(self.spots),
             "player_inventories": copy.deepcopy(self.player_inventories),
             "trades": copy.deepcopy(self.trades),
             "shops": copy.deepcopy(self.shops),
@@ -346,6 +346,7 @@ class InMemoryDataStore:
         self.world_object_to_monster_id = snapshot["world_object_to_monster_id"]
         self.spawn_tables = snapshot.get("spawn_tables", {})
         self.hit_boxes = snapshot["hit_boxes"]
+        self.spots = snapshot.get("spots", {})
         self.player_inventories = snapshot["player_inventories"]
         self.trades = snapshot["trades"]
         self.shops = snapshot.get("shops", {})

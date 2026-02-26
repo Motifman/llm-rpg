@@ -9,10 +9,15 @@ from ai_rpg_world.domain.player.repository.player_status_repository import Playe
 from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.aggregate.world_map_aggregate import WorldMapAggregate
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
-from ai_rpg_world.domain.world.repository.world_map_repository import WorldMapRepository
+from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
+from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
+from ai_rpg_world.domain.world.repository.transition_policy_repository import ITransitionPolicyRepository
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.application.world.services.transition_condition_evaluator import (
+    TransitionConditionEvaluator,
+    TransitionContext,
+)
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
@@ -58,20 +63,26 @@ class MovementApplicationService:
         player_status_repository: PlayerStatusRepository,
         player_profile_repository: PlayerProfileRepository,
         physical_map_repository: PhysicalMapRepository,
-        world_map_repository: WorldMapRepository,
+        spot_repository: SpotRepository,
+        connected_spots_provider: IConnectedSpotsProvider,
         global_pathfinding_service: GlobalPathfindingService,
         movement_config_service: MovementConfigService,
         time_provider: GameTimeProvider,
-        unit_of_work: UnitOfWork
+        unit_of_work: UnitOfWork,
+        transition_policy_repository: Optional[ITransitionPolicyRepository] = None,
+        transition_condition_evaluator: Optional[TransitionConditionEvaluator] = None,
     ):
         self._player_status_repository = player_status_repository
         self._player_profile_repository = player_profile_repository
         self._physical_map_repository = physical_map_repository
-        self._world_map_repository = world_map_repository
+        self._spot_repository = spot_repository
+        self._connected_spots_provider = connected_spots_provider
         self._global_pathfinding_service = global_pathfinding_service
         self._movement_config_service = movement_config_service
         self._time_provider = time_provider
         self._unit_of_work = unit_of_work
+        self._transition_policy_repository = transition_policy_repository
+        self._transition_condition_evaluator = transition_condition_evaluator
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
@@ -138,9 +149,6 @@ class MovementApplicationService:
             if not physical_map:
                 raise MapNotFoundException(int(current_spot_id))
 
-            # 世界地図を取得
-            world_map = self._get_world_map_for_spot(current_spot_id)
-
             # プレイヤーオブジェクト情報の取得
             world_object_id = WorldObjectId.create(int(player_id))
             try:
@@ -154,12 +162,12 @@ class MovementApplicationService:
                 target_spot_id=target_spot_id,
                 target_coord=target_coord,
                 physical_map=physical_map,
-                world_map=world_map,
+                connected_spots_provider=self._connected_spots_provider,
                 world_object_id=world_object_id,
                 capability=actor.capability or MovementCapability.normal_walk()
             )
             
-            if not path:
+            if not path or temp_goal is None:
                 return self._create_failure_dto(command.player_id, "目的地への経路が見つかりません", player_status)
 
             player_status.set_destination(temp_goal, path)
@@ -254,6 +262,32 @@ class MovementApplicationService:
         else:
             raise MovementInvalidException("No movement target specified", player_id_int)
 
+        # 3.5 ゲートウェイ遷移条件の評価（該当ゲートウェイがある場合のみ）
+        if self._transition_policy_repository and self._transition_condition_evaluator:
+            for gateway in physical_map.get_all_gateways():
+                if gateway.contains(to_coord):
+                    conditions = self._transition_policy_repository.get_conditions(
+                        current_spot_id, gateway.target_spot_id
+                    )
+                    if conditions:
+                        context = TransitionContext(
+                            player_id=player_id_int,
+                            player_status=player_status,
+                            from_spot_id=current_spot_id,
+                            to_spot_id=gateway.target_spot_id,
+                            current_weather=physical_map.weather_state,
+                        )
+                        allowed, failure_message = self._transition_condition_evaluator.evaluate(
+                            conditions, context
+                        )
+                        if not allowed:
+                            return self._create_failure_dto(
+                                player_id_int,
+                                failure_message or "この出口は通過できません",
+                                player_status,
+                            )
+                    break
+
         # 4. スタミナ消費の計算とチェック
         try:
             tile = physical_map.get_tile(to_coord)
@@ -308,13 +342,13 @@ class MovementApplicationService:
             raise PlayerNotFoundException(int(player_status.player_id))
         player_name = profile.name.value
             
-        # スポット名の取得（WorldMapRepositoryを使用）
-        from_spot = self._world_map_repository.find_spot_by_id(from_spot_id)
+        # スポット名の取得（SpotRepositoryを使用）
+        from_spot = self._spot_repository.find_by_id(from_spot_id)
         if not from_spot:
             raise MapNotFoundException(int(from_spot_id))
         from_spot_name = from_spot.name
-            
-        to_spot = self._world_map_repository.find_spot_by_id(player_status.current_spot_id)
+
+        to_spot = self._spot_repository.find_by_id(player_status.current_spot_id)
         if not to_spot:
             raise MapNotFoundException(int(player_status.current_spot_id))
         to_spot_name = to_spot.name
@@ -352,7 +386,7 @@ class MovementApplicationService:
             if player_status.current_spot_id:
                 from_spot_id = int(player_status.current_spot_id)
                 to_spot_id = from_spot_id
-                spot = self._world_map_repository.find_spot_by_id(player_status.current_spot_id)
+                spot = self._spot_repository.find_by_id(player_status.current_spot_id)
                 if spot:
                     from_spot_name = spot.name
                     to_spot_name = spot.name
@@ -378,35 +412,35 @@ class MovementApplicationService:
             error_message=message
         )
 
-    def _get_world_map_for_spot(self, spot_id: SpotId) -> WorldMapAggregate:
-        """指定されたスポットを含む世界地図を取得"""
-        world_map = self._world_map_repository.find_by_spot_id(spot_id)
-        if world_map:
-            return world_map
-        raise MapNotFoundException(int(spot_id))
-
     def get_player_location(self, command: GetPlayerLocationCommand) -> Optional[PlayerLocationDto]:
-        """プレイヤーの現在位置を取得"""
+        """プレイヤーの現在位置を取得。未配置の場合は None、プレイヤー／スポット不在時は例外。"""
+        return self._execute_with_error_handling(
+            operation=lambda: self._get_player_location_impl(command),
+            context={"action": "get_player_location", "player_id": command.player_id}
+        )
+
+    def _get_player_location_impl(self, command: GetPlayerLocationCommand) -> Optional[PlayerLocationDto]:
+        """プレイヤーの現在位置を取得する実装。未配置時は None を返す。"""
         player_id = PlayerId(command.player_id)
         player_status = self._player_status_repository.find_by_id(player_id)
         if not player_status or not player_status.current_spot_id or not player_status.current_coordinate:
             return None
-            
+
         spot_id = player_status.current_spot_id
         coord = player_status.current_coordinate
-        
+
         # 名前情報の取得
         profile = self._player_profile_repository.find_by_id(player_id)
         if not profile:
             raise PlayerNotFoundException(command.player_id)
         player_name = profile.name.value
-            
-        spot = self._world_map_repository.find_spot_by_id(spot_id)
+
+        spot = self._spot_repository.find_by_id(spot_id)
         if not spot:
             raise MapNotFoundException(int(spot_id))
         spot_name = spot.name
         spot_desc = spot.description
-         
+
         # LocationArea情報の取得
         area_id = None
         area_name = None
@@ -416,7 +450,7 @@ class MovementApplicationService:
             if areas:
                 area_id = int(areas[0].location_id)
                 area_name = areas[0].name
-         
+
         return PlayerLocationDto(
             player_id=command.player_id,
             player_name=player_name,
