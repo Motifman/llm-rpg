@@ -33,6 +33,31 @@ class SpotInfoDto:
 
 
 @dataclass
+class VisibleObjectDto:
+    """視界内オブジェクト1件のDTO"""
+    object_id: int
+    object_type: str
+    x: int
+    y: int
+    z: int
+    distance: int
+
+
+@dataclass
+class VisibleContextDto:
+    """プレイヤー視点の視界内コンテキストDTO"""
+    player_id: int
+    player_name: str
+    spot_id: int
+    spot_name: str
+    center_x: int
+    center_y: int
+    center_z: int
+    view_distance: int
+    visible_objects: List["VisibleObjectDto"]
+
+
+@dataclass
 class MoveResultDto:
     """移動結果DTO"""
     success: bool

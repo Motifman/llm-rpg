@@ -137,6 +137,7 @@ class TestMovementApplicationService:
             player_profile_repository=player_profile_repo,
             physical_map_repository=physical_map_repo,
             spot_repository=spot_repo,
+            connected_spots_provider=connected_spots_provider,
         )
 
         # デフォルトのスポットを登録しておく
