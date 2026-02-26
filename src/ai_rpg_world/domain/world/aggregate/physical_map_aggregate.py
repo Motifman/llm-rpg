@@ -52,6 +52,7 @@ from ai_rpg_world.domain.world.event.map_events import (
     GatewayTriggeredEvent,
     ItemStoredInChestEvent,
     ItemTakenFromChestEvent,
+    SpotWeatherChangedEvent,
 )
 from ai_rpg_world.domain.world.event.harvest_events import (
     HarvestStartedEvent,
@@ -223,9 +224,20 @@ class PhysicalMapAggregate(AggregateRoot):
         return self._weather_state
 
     def set_weather(self, weather_state: WeatherState):
-        """天候状態を設定する。屋内や地下の場合は常に晴れとして扱う。"""
+        """天候状態を設定する。屋内や地下の場合は常に晴れとして扱う。屋外で実際に変化した場合のみ SpotWeatherChangedEvent を発行する。"""
         if self._environment_type == EnvironmentTypeEnum.OUTDOOR:
+            old_state = self._weather_state
             self._weather_state = weather_state
+            if old_state != weather_state:
+                self.add_event(
+                    SpotWeatherChangedEvent.create(
+                        aggregate_id=self._spot_id,
+                        aggregate_type="PhysicalMap",
+                        spot_id=self._spot_id,
+                        old_weather_state=old_state,
+                        new_weather_state=weather_state,
+                    )
+                )
         else:
             self._weather_state = WeatherState.clear()
 
