@@ -4,7 +4,7 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
 class IConnectedSpotsProvider(ABC):
-    """指定スポットから接続されているスポットID一覧を提供するポート（WorldMap に依存しない）"""
+    """指定スポットから接続されているスポットID一覧を提供するポート。接続は各 PhysicalMap のゲートウェイから導出する。"""
 
     @abstractmethod
     def get_connected_spots(self, spot_id: SpotId) -> List[SpotId]:
