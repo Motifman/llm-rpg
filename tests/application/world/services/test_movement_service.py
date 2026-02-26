@@ -33,10 +33,7 @@ from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.enum.player_enum import Role
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.aggregate.world_map_aggregate import WorldMapAggregate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.world_id import WorldId
-from ai_rpg_world.domain.world.value_object.connection import Connection
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
@@ -62,8 +59,16 @@ from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy im
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import InMemoryPlayerStatusRepository
 from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import InMemoryPlayerProfileRepository
 from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import InMemoryPhysicalMapRepository
-from ai_rpg_world.infrastructure.repository.in_memory_world_map_repository import InMemoryWorldMapRepository
+from ai_rpg_world.infrastructure.repository.in_memory_spot_repository import InMemorySpotRepository
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.application.world.services.gateway_based_connected_spots_provider import (
+    GatewayBasedConnectedSpotsProvider,
+)
+from ai_rpg_world.application.world.services.transition_condition_evaluator import TransitionConditionEvaluator
+from ai_rpg_world.domain.world.value_object.transition_condition import RequireToll, block_if_weather
+from ai_rpg_world.infrastructure.repository.in_memory_transition_policy_repository import (
+    InMemoryTransitionPolicyRepository,
+)
 from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import (
     InMemoryMonsterAggregateRepository,
 )
@@ -88,7 +93,8 @@ class TestMovementApplicationService:
         player_status_repo = InMemoryPlayerStatusRepository(data_store, unit_of_work)
         player_profile_repo = InMemoryPlayerProfileRepository(data_store, unit_of_work)
         physical_map_repo = InMemoryPhysicalMapRepository(data_store, unit_of_work)
-        world_map_repo = InMemoryWorldMapRepository(data_store, unit_of_work)
+        spot_repo = InMemorySpotRepository(data_store, unit_of_work)
+        connected_spots_provider = GatewayBasedConnectedSpotsProvider(physical_map_repo)
         monster_repo = InMemoryMonsterAggregateRepository(data_store, unit_of_work)
 
         pathfinding_service = PathfindingService(AStarPathfindingStrategy())
@@ -112,18 +118,39 @@ class TestMovementApplicationService:
             player_status_repository=player_status_repo,
             player_profile_repository=player_profile_repo,
             physical_map_repository=physical_map_repo,
-            world_map_repository=world_map_repo,
+            spot_repository=spot_repo,
+            connected_spots_provider=connected_spots_provider,
             global_pathfinding_service=global_pathfinding_service,
             movement_config_service=movement_config_service,
             time_provider=time_provider,
             unit_of_work=unit_of_work
         )
-        
+
         # デフォルトのスポットを登録しておく
-        world_map = WorldMapAggregate(WorldId(1), spots=[Spot(SpotId(1), "Default Spot", "")])
-        world_map_repo.save(world_map)
-        
-        return service, player_status_repo, player_profile_repo, physical_map_repo, world_map_repo, unit_of_work, time_provider, event_publisher
+        spot_repo.save(Spot(SpotId(1), "Default Spot", ""))
+
+        return service, player_status_repo, player_profile_repo, physical_map_repo, spot_repo, unit_of_work, time_provider, event_publisher
+
+    @pytest.fixture
+    def setup_service_with_transition_policy(self, setup_service):
+        """遷移条件評価付きの MovementApplicationService を返す（Phase 6 用）"""
+        service, status_repo, profile_repo, phys_repo, spot_repo, uow, time_provider, event_publisher = setup_service
+        policy_repo = InMemoryTransitionPolicyRepository()
+        evaluator = TransitionConditionEvaluator()
+        service_with_policy = MovementApplicationService(
+            player_status_repository=status_repo,
+            player_profile_repository=profile_repo,
+            physical_map_repository=phys_repo,
+            spot_repository=spot_repo,
+            connected_spots_provider=service._connected_spots_provider,
+            global_pathfinding_service=service._global_pathfinding_service,
+            movement_config_service=service._movement_config_service,
+            time_provider=time_provider,
+            unit_of_work=uow,
+            transition_policy_repository=policy_repo,
+            transition_condition_evaluator=evaluator,
+        )
+        return service_with_policy, status_repo, profile_repo, phys_repo, spot_repo, policy_repo, uow, time_provider, event_publisher
 
     def _create_sample_status(self, player_id: int, spot_id: int = 1, x: int = 0, y: int = 0):
         exp_table = ExpTable(100, 1.5)
@@ -162,9 +189,10 @@ class TestMovementApplicationService:
             gateways=gateways or []
         )
 
-    def _create_world_map(self, world_id_val: int, spots_data: List[Dict]):
-        spots = [Spot(SpotId(s["id"]), s["name"], s.get("desc", "")) for s in spots_data]
-        return WorldMapAggregate(WorldId(world_id_val), spots=spots)
+    def _register_spots(self, spot_repo, spots_data: List[Dict]):
+        """SpotRepository にスポットを登録する"""
+        for s in spots_data:
+            spot_repo.save(Spot(SpotId(s["id"]), s["name"], s.get("desc", "")))
 
     def _create_player_object(self, player_id: int, x: int = 0, y: int = 0):
         """プレイヤー用の WorldObject。Gateway ハンドラがプレイヤー判定するため player_id を渡す"""
@@ -180,16 +208,15 @@ class TestMovementApplicationService:
 
     def test_move_tile_success_and_dto_completeness(self, setup_service):
         """タイルベースの移動が成功し、DTOが完全に埋まっていること"""
-        service, status_repo, profile_repo, phys_repo, world_repo, uow, _, event_publisher = setup_service
-        
+        service, status_repo, profile_repo, phys_repo, spot_repo, uow, _, event_publisher = setup_service
+
         player_id = 1
         spot_id = 1
-        # プロフィールとワールドマップの準備
+        # プロフィールとスポットの準備
         profile = self._create_sample_profile(player_id, "Alice")
         profile_repo.save(profile)
-        
-        world_map = self._create_world_map(1, [{"id": spot_id, "name": "Starting Village"}])
-        world_repo.save(world_map)
+
+        self._register_spots(spot_repo, [{"id": spot_id, "name": "Starting Village"}])
         
         # プレイヤー状態と物理マップの準備
         status = self._create_sample_status(player_id, spot_id, 0, 0)
@@ -216,35 +243,29 @@ class TestMovementApplicationService:
         assert any(isinstance(e, PlayerLocationChangedEvent) for e in events)
         assert any(isinstance(e, PlayerStaminaConsumedEvent) for e in events)
 
-    def test_find_correct_world_map(self, setup_service):
-        """複数の世界地図がある場合、正しい世界地図が選択されること"""
-        service, status_repo, profile_repo, phys_repo, world_repo, _, _, _ = setup_service
-        
+    def test_find_correct_spot_set_destination_same_spot(self, setup_service):
+        """同一スポット内で目的地設定が正しく動作すること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
+
         player_id = 1
         spot1_id = 101
         spot2_id = 201
-        
-        # 2つの世界地図を作成
-        world1 = self._create_world_map(1, [{"id": spot1_id, "name": "World 1 Spot"}])
-        world2 = self._create_world_map(2, [{"id": spot2_id, "name": "World 2 Spot"}])
-        world_repo.save(world1)
-        world_repo.save(world2)
-        
-        # プレイヤーをWorld 2のスポットに配置
+
+        self._register_spots(spot_repo, [{"id": spot1_id, "name": "World 1 Spot"}, {"id": spot2_id, "name": "World 2 Spot"}])
+
         profile_repo.save(self._create_sample_profile(player_id))
         status_repo.save(self._create_sample_status(player_id, spot2_id, 0, 0))
         phys_repo.save(self._create_sample_map(spot2_id, objects=[self._create_player_object(player_id)]))
-        
-        # 目的地を同じWorld 2内の別の座標に設定
+
         command = SetDestinationCommand(player_id=player_id, target_spot_id=spot2_id, target_x=1, target_y=1)
         result = service.set_destination(command)
-        
+
         assert result.success is True
         assert result.to_spot_id == spot2_id
 
     def test_set_destination_player_not_on_map(self, setup_service):
         """プレイヤーがどのマップにも配置されていない場合、エラーになること"""
-        service, status_repo, profile_repo, _, _, _, _, _ = setup_service
+        service, status_repo, profile_repo, _, spot_repo, _, _, _ = setup_service
         
         player_id = 1
         profile_repo.save(self._create_sample_profile(player_id))
@@ -259,7 +280,7 @@ class TestMovementApplicationService:
 
     def test_move_tile_player_object_missing_from_map(self, setup_service):
         """プレイヤー状態はあるが物理マップ上にオブジェクトがない場合、エラーになること"""
-        service, status_repo, profile_repo, phys_repo, world_repo, _, _, _ = setup_service
+        service, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
         
         player_id = 1
         spot_id = 1
@@ -276,7 +297,7 @@ class TestMovementApplicationService:
 
     def test_move_tile_out_of_bounds(self, setup_service):
         """マップ範囲外への移動が失敗し、例外が発生すること"""
-        service, status_repo, profile_repo, phys_repo, world_repo, _, _, _ = setup_service
+        service, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
         
         player_id = 1
         spot_id = 1
@@ -293,7 +314,7 @@ class TestMovementApplicationService:
 
     def test_tick_movement_failure_context_in_dto(self, setup_service):
         """tick_movement 失敗時の DTO にプレイヤー名などのコンテキストが含まれること"""
-        service, status_repo, profile_repo, phys_repo, world_repo, _, _, _ = setup_service
+        service, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
         
         player_id = 1
         spot_id = 1
@@ -319,7 +340,7 @@ class TestMovementApplicationService:
 
     def test_movement_cost_affects_busy_tick(self, setup_service):
         """地形コストが到着ティック（busy_until_tick）に影響すること"""
-        service, status_repo, profile_repo, phys_repo, world_repo, _, time_provider, _ = setup_service
+        service, status_repo, profile_repo, phys_repo, spot_repo, _, time_provider, _ = setup_service
         
         player_id = 1
         spot_id = 1
@@ -339,18 +360,16 @@ class TestMovementApplicationService:
 
     def test_set_destination_and_tick_movement_persists_path(self, setup_service):
         """目的地と経路が集約に保存され、複数ステップの移動が可能であること"""
-        service, status_repo, profile_repo, phys_repo, world_repo, _, time_provider, _ = setup_service
-        
+        service, status_repo, profile_repo, phys_repo, spot_repo, _, time_provider, _ = setup_service
+
         player_id = 1
         spot_id = 1
         profile_repo.save(self._create_sample_profile(player_id))
         status = self._create_sample_status(player_id, spot_id, 0, 0)
         status_repo.save(status)
-        
+
         phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
-        
-        # ワールドマップ情報が必要
-        world_repo.save(self._create_world_map(1, [{"id": spot_id, "name": "Spot 1"}]))
+        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
         
         # 目的地を設定
         service.set_destination(SetDestinationCommand(player_id=player_id, target_spot_id=spot_id, target_x=2, target_y=0))
@@ -372,13 +391,12 @@ class TestMovementApplicationService:
 
     def test_gateway_transition_uses_service(self, setup_service):
         """ゲートウェイ移動がドメインサービスを通じて正しく処理されること"""
-        service, status_repo, profile_repo, phys_repo, world_repo, _, _, _ = setup_service
-        
+        service, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
+
         player_id = 1
         spot1_id = 1
         spot2_id = 2
-        
-        # ゲートウェイ設置
+
         gateway = Gateway(
             gateway_id=GatewayId(101),
             name="To Spot 2",
@@ -386,14 +404,12 @@ class TestMovementApplicationService:
             target_spot_id=SpotId(spot2_id),
             landing_coordinate=Coordinate(5, 5, 0)
         )
-        
+
         profile_repo.save(self._create_sample_profile(player_id))
         status_repo.save(self._create_sample_status(player_id, spot1_id, 0, 0))
         phys_repo.save(self._create_sample_map(spot1_id, objects=[self._create_player_object(player_id)], gateways=[gateway]))
-        phys_repo.save(self._create_sample_map(spot2_id)) # 移動先マップ
-        
-        # ワールドマップ情報
-        world_repo.save(self._create_world_map(1, [{"id": spot1_id, "name": "Spot 1"}, {"id": spot2_id, "name": "Spot 2"}]))
+        phys_repo.save(self._create_sample_map(spot2_id))
+        self._register_spots(spot_repo, [{"id": spot1_id, "name": "Spot 1"}, {"id": spot2_id, "name": "Spot 2"}])
         
         # 移動
         result = service.move_tile(MoveTileCommand(player_id=player_id, direction=DirectionEnum.EAST))
@@ -408,9 +424,150 @@ class TestMovementApplicationService:
         assert updated_status.planned_path == []
         assert updated_status.current_destination is None
 
+    def test_gateway_transition_blocked_by_require_toll(self, setup_service_with_transition_policy):
+        """ゲートウェイに RequireToll 条件があり所持金が不足している場合、失敗 DTO が返ること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo, policy_repo, _, _, _ = setup_service_with_transition_policy
+        player_id = 1
+        spot1_id = 1
+        spot2_id = 2
+        gateway = Gateway(
+            gateway_id=GatewayId(101),
+            name="To Spot 2",
+            area=RectArea.from_coordinates(Coordinate(1, 0, 0), Coordinate(1, 0, 0)),
+            target_spot_id=SpotId(spot2_id),
+            landing_coordinate=Coordinate(5, 5, 0),
+        )
+        policy_repo.set_conditions(SpotId(spot1_id), SpotId(spot2_id), [RequireToll(amount_gold=5000)])
+        profile_repo.save(self._create_sample_profile(player_id))
+        status = self._create_sample_status(player_id, spot1_id, 0, 0)
+        assert status.gold.value == 1000
+        status_repo.save(status)
+        phys_repo.save(self._create_sample_map(spot1_id, objects=[self._create_player_object(player_id)], gateways=[gateway]))
+        phys_repo.save(self._create_sample_map(spot2_id))
+        self._register_spots(spot_repo, [{"id": spot1_id, "name": "Spot 1"}, {"id": spot2_id, "name": "Spot 2"}])
+
+        result = service.move_tile(MoveTileCommand(player_id=player_id, direction=DirectionEnum.EAST))
+
+        assert result.success is False
+        assert "通行料" in result.error_message
+        assert "5000" in result.error_message
+        updated_status = status_repo.find_by_id(PlayerId(player_id))
+        assert updated_status.current_spot_id == SpotId(spot1_id)
+        assert updated_status.current_coordinate == Coordinate(0, 0, 0)
+
+    def test_gateway_transition_allowed_with_sufficient_toll(self, setup_service_with_transition_policy):
+        """ゲートウェイに RequireToll 条件があり所持金が足りる場合、遷移が成功すること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo, policy_repo, _, _, _ = setup_service_with_transition_policy
+        player_id = 1
+        spot1_id = 1
+        spot2_id = 2
+        gateway = Gateway(
+            gateway_id=GatewayId(101),
+            name="To Spot 2",
+            area=RectArea.from_coordinates(Coordinate(1, 0, 0), Coordinate(1, 0, 0)),
+            target_spot_id=SpotId(spot2_id),
+            landing_coordinate=Coordinate(5, 5, 0),
+        )
+        policy_repo.set_conditions(SpotId(spot1_id), SpotId(spot2_id), [RequireToll(amount_gold=100)])
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot1_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot1_id, objects=[self._create_player_object(player_id)], gateways=[gateway]))
+        phys_repo.save(self._create_sample_map(spot2_id))
+        self._register_spots(spot_repo, [{"id": spot1_id, "name": "Spot 1"}, {"id": spot2_id, "name": "Spot 2"}])
+
+        result = service.move_tile(MoveTileCommand(player_id=player_id, direction=DirectionEnum.EAST))
+
+        assert result.success is True
+        assert result.to_spot_id == spot2_id
+        assert result.to_spot_name == "Spot 2"
+
+    def test_gateway_transition_blocked_by_weather(self, setup_service_with_transition_policy):
+        """ゲートウェイに BlockIfWeather 条件があり該当天候の場合、失敗 DTO が返ること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo, policy_repo, _, _, _ = setup_service_with_transition_policy
+        player_id = 1
+        spot1_id = 1
+        spot2_id = 2
+        gateway = Gateway(
+            gateway_id=GatewayId(101),
+            name="To Spot 2",
+            area=RectArea.from_coordinates(Coordinate(1, 0, 0), Coordinate(1, 0, 0)),
+            target_spot_id=SpotId(spot2_id),
+            landing_coordinate=Coordinate(5, 5, 0),
+        )
+        policy_repo.set_conditions(
+            SpotId(spot1_id), SpotId(spot2_id),
+            [block_if_weather([WeatherTypeEnum.BLIZZARD, WeatherTypeEnum.STORM])],
+        )
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot1_id, 0, 0))
+        phys_map = self._create_sample_map(spot1_id, objects=[self._create_player_object(player_id)], gateways=[gateway])
+        phys_map.set_weather(WeatherState(WeatherTypeEnum.BLIZZARD, 1.0))
+        phys_repo.save(phys_map)
+        phys_repo.save(self._create_sample_map(spot2_id))
+        self._register_spots(spot_repo, [{"id": spot1_id, "name": "Spot 1"}, {"id": spot2_id, "name": "Spot 2"}])
+
+        result = service.move_tile(MoveTileCommand(player_id=player_id, direction=DirectionEnum.EAST))
+
+        assert result.success is False
+        assert "悪天候" in result.error_message or "通行止め" in result.error_message
+        updated_status = status_repo.find_by_id(PlayerId(player_id))
+        assert updated_status.current_spot_id == SpotId(spot1_id)
+
+    def test_gateway_transition_allowed_when_weather_clear(self, setup_service_with_transition_policy):
+        """ゲートウェイに BlockIfWeather 条件があり天候が該当しない場合、遷移が成功すること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo, policy_repo, _, _, _ = setup_service_with_transition_policy
+        player_id = 1
+        spot1_id = 1
+        spot2_id = 2
+        gateway = Gateway(
+            gateway_id=GatewayId(101),
+            name="To Spot 2",
+            area=RectArea.from_coordinates(Coordinate(1, 0, 0), Coordinate(1, 0, 0)),
+            target_spot_id=SpotId(spot2_id),
+            landing_coordinate=Coordinate(5, 5, 0),
+        )
+        policy_repo.set_conditions(
+            SpotId(spot1_id), SpotId(spot2_id),
+            [block_if_weather([WeatherTypeEnum.BLIZZARD])],
+        )
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot1_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot1_id, objects=[self._create_player_object(player_id)], gateways=[gateway]))
+        phys_repo.save(self._create_sample_map(spot2_id))
+        self._register_spots(spot_repo, [{"id": spot1_id, "name": "Spot 1"}, {"id": spot2_id, "name": "Spot 2"}])
+
+        result = service.move_tile(MoveTileCommand(player_id=player_id, direction=DirectionEnum.EAST))
+
+        assert result.success is True
+        assert result.to_spot_id == spot2_id
+
+    def test_gateway_transition_without_policy_unchanged(self, setup_service):
+        """遷移ポリシーを渡していない場合、従来どおりゲートウェイ通過が成功すること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
+        player_id = 1
+        spot1_id = 1
+        spot2_id = 2
+        gateway = Gateway(
+            gateway_id=GatewayId(101),
+            name="To Spot 2",
+            area=RectArea.from_coordinates(Coordinate(1, 0, 0), Coordinate(1, 0, 0)),
+            target_spot_id=SpotId(spot2_id),
+            landing_coordinate=Coordinate(5, 5, 0),
+        )
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot1_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot1_id, objects=[self._create_player_object(player_id)], gateways=[gateway]))
+        phys_repo.save(self._create_sample_map(spot2_id))
+        self._register_spots(spot_repo, [{"id": spot1_id, "name": "Spot 1"}, {"id": spot2_id, "name": "Spot 2"}])
+
+        result = service.move_tile(MoveTileCommand(player_id=player_id, direction=DirectionEnum.EAST))
+
+        assert result.success is True
+        assert result.to_spot_id == spot2_id
+
     def test_domain_exception_handling(self, setup_service):
         """ドメイン例外が適切にキャッチされ、失敗DTOとして返されること"""
-        service, status_repo, profile_repo, phys_repo, _, _, _, _ = setup_service
+        service, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
         
         player_id = 1
         spot_id = 1
@@ -429,14 +586,14 @@ class TestMovementApplicationService:
 
     def test_get_player_location_populates_all_names(self, setup_service):
         """現在地取得時に全ての名前情報が正しく取得できること"""
-        service, status_repo, profile_repo, phys_repo, world_repo, _, _, _ = setup_service
-        
+        service, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
+
         player_id = 1
         spot_id = 1
         profile_repo.save(self._create_sample_profile(player_id, "Bob"))
         status_repo.save(self._create_sample_status(player_id, spot_id, 3, 4))
-        
-        world_repo.save(self._create_world_map(1, [{"id": spot_id, "name": "Secret Base", "desc": "Hidden location"}]))
+
+        self._register_spots(spot_repo, [{"id": spot_id, "name": "Secret Base", "desc": "Hidden location"}])
         
         loc = service.get_player_location(GetPlayerLocationCommand(player_id=player_id))
         
@@ -449,12 +606,12 @@ class TestMovementApplicationService:
 
     def test_multi_spot_pathfinding_initial_step(self, setup_service):
         """スポットを跨ぐ目的地設定時に、まずゲートウェイを目指すパスが生成されること"""
-        service, status_repo, profile_repo, phys_repo, world_repo, _, _, _ = setup_service
-        
+        service, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
+
         player_id = 1
         spot1_id = 1
         spot2_id = 2
-        
+
         gateway = Gateway(
             gateway_id=GatewayId(101),
             name="To Spot 2",
@@ -462,13 +619,12 @@ class TestMovementApplicationService:
             target_spot_id=SpotId(spot2_id),
             landing_coordinate=Coordinate(0, 0, 0)
         )
-        
+
         profile_repo.save(self._create_sample_profile(player_id))
         status_repo.save(self._create_sample_status(player_id, spot1_id, 0, 0))
         phys_repo.save(self._create_sample_map(spot1_id, objects=[self._create_player_object(player_id)], gateways=[gateway]))
-        
-        # ワールドマップ情報
-        world_repo.save(self._create_world_map(1, [{"id": spot1_id, "name": "Spot 1"}, {"id": spot2_id, "name": "Spot 2"}]))
+        phys_repo.save(self._create_sample_map(spot2_id))
+        self._register_spots(spot_repo, [{"id": spot1_id, "name": "Spot 1"}, {"id": spot2_id, "name": "Spot 2"}])
         
         # 別スポットを目的地に設定
         service.set_destination(SetDestinationCommand(player_id=player_id, target_spot_id=spot2_id, target_x=10, target_y=10))
@@ -481,14 +637,14 @@ class TestMovementApplicationService:
 
     def test_player_not_found(self, setup_service):
         """存在しないプレイヤーを指定した場合に PlayerNotFoundException が発生すること"""
-        service, _, _, _, _, _, _, _ = setup_service
+        service, _, _, _, spot_repo, _, _, _ = setup_service
         
         with pytest.raises(PlayerNotFoundException):
             service.move_tile(MoveTileCommand(player_id=999, direction=DirectionEnum.NORTH))
 
     def test_map_not_found(self, setup_service):
         """プレイヤーがいるはずのマップが存在しない場合に MapNotFoundException が発生すること"""
-        service, status_repo, profile_repo, _, _, _, _, _ = setup_service
+        service, status_repo, profile_repo, _, spot_repo, _, _, _ = setup_service
         
         player_id = 1
         profile_repo.save(self._create_sample_profile(player_id))
@@ -500,7 +656,7 @@ class TestMovementApplicationService:
 
     def test_stamina_exhaustion(self, setup_service):
         """スタミナ不足時に PlayerStaminaExhaustedException が発生すること"""
-        service, status_repo, profile_repo, phys_repo, _, _, _, _ = setup_service
+        service, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
         
         player_id = 1
         spot_id = 1
@@ -518,7 +674,7 @@ class TestMovementApplicationService:
 
     def test_path_blocked_by_wall(self, setup_service):
         """壁などの障害物がある場合に PathBlockedException が発生すること"""
-        service, status_repo, profile_repo, phys_repo, _, _, _, _ = setup_service
+        service, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
         
         player_id = 1
         spot_id = 1
@@ -563,7 +719,7 @@ class TestMovementApplicationService:
 
     def test_location_area_retrieval(self, setup_service):
         """ロケーションエリア内にいる場合、その情報が取得できること"""
-        service, status_repo, profile_repo, phys_repo, world_repo, _, _, _ = setup_service
+        service, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
         
         player_id = 1
         spot_id = 1
@@ -589,38 +745,30 @@ class TestMovementApplicationService:
 
     def test_multi_hop_destination_and_movement(self, setup_service):
         """複数スポットを跨ぐ移動のテスト"""
-        service, status_repo, profile_repo, phys_repo, world_repo, _, time_provider, _ = setup_service
-        
+        service, status_repo, profile_repo, phys_repo, spot_repo, _, time_provider, _ = setup_service
+
         player_id = 1
         spot1_id = 1
         spot2_id = 2
         spot3_id = 3
-        
-        # Spot1 -> Spot2 へのゲートウェイ
+
         gw1to2 = Gateway(
-            GatewayId(101), "To Spot 2", 
+            GatewayId(101), "To Spot 2",
             RectArea.from_coordinates(Coordinate(5, 5, 0), Coordinate(5, 5, 0)),
             SpotId(spot2_id), Coordinate(0, 0, 0)
         )
-        
+        gw2to3 = Gateway(
+            GatewayId(102), "To Spot 3",
+            RectArea.from_coordinates(Coordinate(5, 5, 0), Coordinate(5, 5, 0)),
+            SpotId(spot3_id), Coordinate(0, 0, 0)
+        )
+
         profile_repo.save(self._create_sample_profile(player_id))
         status_repo.save(self._create_sample_status(player_id, spot1_id, 0, 0))
         phys_repo.save(self._create_sample_map(spot1_id, objects=[self._create_player_object(player_id)], gateways=[gw1to2]))
-        phys_repo.save(self._create_sample_map(spot2_id)) # Spot2
-        phys_repo.save(self._create_sample_map(spot3_id)) # Spot3
-        
-        # ワールドマップ接続: 1 -> 2 -> 3
-        world_map = WorldMapAggregate(
-            WorldId(1), 
-            spots=[
-                Spot(SpotId(spot1_id), "S1", ""), 
-                Spot(SpotId(spot2_id), "S2", ""), 
-                Spot(SpotId(spot3_id), "S3", "")
-            ]
-        )
-        world_map.add_connection(Connection(SpotId(spot1_id), SpotId(spot2_id)))
-        world_map.add_connection(Connection(SpotId(spot2_id), SpotId(spot3_id)))
-        world_repo.save(world_map)
+        phys_repo.save(self._create_sample_map(spot2_id, gateways=[gw2to3]))
+        phys_repo.save(self._create_sample_map(spot3_id))
+        self._register_spots(spot_repo, [{"id": spot1_id, "name": "S1"}, {"id": spot2_id, "name": "S2"}, {"id": spot3_id, "name": "S3"}])
         
         # 目的地を Spot3 に設定（2ホップ先）
         service.set_destination(SetDestinationCommand(player_id=player_id, target_spot_id=spot3_id, target_x=10, target_y=10))
@@ -649,26 +797,24 @@ class TestMovementApplicationService:
 
     def test_map_transition_failure_rollbacks(self, setup_service):
         """遷移先マップが見つからない場合にロールバックされること"""
-        service, status_repo, profile_repo, phys_repo, world_repo, uow, _, _ = setup_service
-        
+        service, status_repo, profile_repo, phys_repo, spot_repo, uow, _, _ = setup_service
+
         player_id = 1
         spot1_id = 1
-        spot2_id = 999 # 存在しないマップ
-        
+        spot2_id = 999  # 存在しないマップ（物理マップ未登録）
+
         gw = Gateway(
-            GatewayId(101), "To Nowhere", 
+            GatewayId(101), "To Nowhere",
             RectArea.from_coordinates(Coordinate(1, 0, 0), Coordinate(1, 0, 0)),
             SpotId(spot2_id), Coordinate(0, 0, 0)
         )
-        
+
         profile_repo.save(self._create_sample_profile(player_id))
         status = self._create_sample_status(player_id, spot1_id, 0, 0)
         initial_stamina = status.stamina.value
         status_repo.save(status)
         phys_repo.save(self._create_sample_map(spot1_id, objects=[self._create_player_object(player_id)], gateways=[gw]))
-        
-        # ワールドマップには登録しておく
-        world_repo.save(self._create_world_map(1, [{"id": spot1_id, "name": "S1"}, {"id": spot2_id, "name": "S2"}]))
+        self._register_spots(spot_repo, [{"id": spot1_id, "name": "S1"}, {"id": spot2_id, "name": "S2"}])
         
         # 移動実行
         with pytest.raises(MapNotFoundException):
@@ -683,13 +829,13 @@ class TestMovementApplicationService:
 
     def test_tick_movement_path_blocked_clears_path(self, setup_service):
         """自動移動中に道が塞がれた場合、経路がクリアされること"""
-        service, status_repo, profile_repo, phys_repo, world_repo, _, _, _ = setup_service
-        
+        service, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
+
         player_id = 1
         spot_id = 1
         profile_repo.save(self._create_sample_profile(player_id))
         status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
-        world_repo.save(self._create_world_map(1, [{"id": spot_id, "name": "S1"}]))
+        self._register_spots(spot_repo, [{"id": spot_id, "name": "S1"}])
         
         # マップ作成。 (1, 0) は通れる状態
         phys_map = self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)])
@@ -715,44 +861,42 @@ class TestMovementApplicationService:
 
     def test_missing_profile_raises_exception(self, setup_service):
         """プロフィールがない場合に例外が発生すること"""
-        service, status_repo, _, phys_repo, world_repo, _, _, _ = setup_service
-        
+        service, status_repo, _, phys_repo, spot_repo, _, _, _ = setup_service
+
         player_id = 1
         spot_id = 1
         # プロフィールは保存しない
         status_repo.save(self._create_sample_status(player_id, spot_id))
         phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
-        world_repo.save(self._create_world_map(1, [{"id": spot_id, "name": "S1"}]))
+        self._register_spots(spot_repo, [{"id": spot_id, "name": "S1"}])
         
         with pytest.raises(PlayerNotFoundException):
             service.move_tile(MoveTileCommand(player_id=player_id, direction=DirectionEnum.SOUTH))
 
     def test_missing_spot_raises_exception(self, setup_service):
         """スポット情報がない場合に例外が発生すること"""
-        service, status_repo, profile_repo, phys_repo, world_repo, _, _, _ = setup_service
-        
+        service, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
+
         player_id = 1
-        spot_id = 1
+        spot_id = 999  # 物理マップには存在するが SpotRepository に未登録のスポット
         profile_repo.save(self._create_sample_profile(player_id))
         status_repo.save(self._create_sample_status(player_id, spot_id))
         phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
-        # ワールドマップにスポットを登録しない
-        world_repo.save(self._create_world_map(1, []))
-        
+        # spot_repo には spot_id を登録しない（移動成功後に DTO 作成で MapNotFoundException）
+
         with pytest.raises(MapNotFoundException):
             service.move_tile(MoveTileCommand(player_id=player_id, direction=DirectionEnum.SOUTH))
 
     def test_movement_stamina_cost_with_weather(self, setup_service):
         """天候によって移動時のスタミナ消費が変化すること"""
-        service, status_repo, profile_repo, phys_repo, world_repo, uow, _, event_publisher = setup_service
-        
-        # スタミナ基本消費を10に設定
+        service, status_repo, profile_repo, phys_repo, spot_repo, uow, _, event_publisher = setup_service
+
         service._movement_config_service = DefaultMovementConfigService(base_stamina_cost=10.0)
-        
+
         player_id = 1
         spot_id = 1
         profile_repo.save(self._create_sample_profile(player_id))
-        world_repo.save(self._create_world_map(1, [{"id": spot_id, "name": "S1"}]))
+        self._register_spots(spot_repo, [{"id": spot_id, "name": "S1"}])
         
         # 1. 吹雪のマップを作成 (Roadを使用)
         # BLIZZARD multiplier is 1.8. Road cost is 1.0. 

@@ -68,7 +68,7 @@ from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.world.aggro_store import AggroStore
 from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
-from ai_rpg_world.domain.world.repository.world_map_repository import WorldMapRepository
+from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
 from ai_rpg_world.domain.world.service.map_transition_service import MapTransitionService
 from ai_rpg_world.domain.monster.service.behavior_state_transition_service import (
     BehaviorStateTransitionService,
@@ -106,12 +106,12 @@ class WorldSimulationApplicationService:
         spawn_table_repository: Optional[SpawnTableRepository] = None,
         monster_template_repository: Optional[MonsterTemplateRepository] = None,
         loot_table_repository: Optional[LootTableRepository] = None,
-        world_map_repository: Optional[WorldMapRepository] = None,
+        connected_spots_provider: Optional[IConnectedSpotsProvider] = None,
         map_transition_service: Optional[MapTransitionService] = None,
     ):
         self._time_provider = time_provider
         self._loot_table_repository = loot_table_repository
-        self._world_map_repository = world_map_repository
+        self._connected_spots_provider = connected_spots_provider
         self._map_transition_service = map_transition_service
         self._physical_map_repository = physical_map_repository
         self._weather_zone_repository = weather_zone_repository
@@ -207,7 +207,7 @@ class WorldSimulationApplicationService:
 
             # 3.6 飢餓時のスポット転移（移住）：飢餓 ≥ 閾値かつ現在スポットに餌がなければ接続スポットへ 1 体のみ移住
             if (
-                self._world_map_repository is not None
+                self._connected_spots_provider is not None
                 and self._map_transition_service is not None
                 and self._loot_table_repository is not None
             ):
@@ -641,7 +641,7 @@ class WorldSimulationApplicationService:
             return
         # 飢餓が最も高い 1 体
         migrant = max(candidates, key=lambda m: m.hunger)
-        connected = self._world_map_repository.find_all_connected_spots(
+        connected = self._connected_spots_provider.get_connected_spots(
             physical_map.spot_id
         )
         if not connected:
