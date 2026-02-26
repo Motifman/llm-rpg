@@ -103,3 +103,15 @@ class EstablishmentType(Enum):
     SHOP = "SHOP"
     GUILD = "GUILD"
     # 将来: WAREHOUSE = "WAREHOUSE", TAVERN = "TAVERN" 等
+
+
+class SpotTraitEnum(Enum):
+    """スポット（マップ）が持つ環境・雰囲気の特性。複数選択可能（タグ）。"""
+    FOREST = "FOREST"           # 森
+    WATER_EDGE = "WATER_EDGE"   # 水辺
+    LAVA = "LAVA"               # 溶岩地帯
+    DANGEROUS = "DANGEROUS"     # 危険地帯
+    SAFE_ZONE = "SAFE_ZONE"     # 安全地帯
+    DUNGEON_DEPTH = "DUNGEON_DEPTH"  # ダンジョン奥
+    OPEN_FIELD = "OPEN_FIELD"   # 開けた野原
+    OTHER = "OTHER"             # その他
