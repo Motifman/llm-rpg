@@ -5,7 +5,12 @@ from typing import List, Dict
 from unittest.mock import patch
 
 from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
-from ai_rpg_world.application.world.contracts.queries import GetPlayerLocationQuery
+from ai_rpg_world.application.world.contracts.queries import (
+    GetPlayerLocationQuery,
+    GetSpotContextForPlayerQuery,
+    GetVisibleContextQuery,
+    GetAvailableMovesQuery,
+)
 from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
     PlayerNotFoundException,
     MapNotFoundException,
@@ -40,6 +45,9 @@ from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository 
 from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import InMemoryPhysicalMapRepository
 from ai_rpg_world.infrastructure.repository.in_memory_spot_repository import InMemorySpotRepository
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.application.world.services.gateway_based_connected_spots_provider import (
+    GatewayBasedConnectedSpotsProvider,
+)
 
 
 class TestWorldQueryService:
@@ -53,12 +61,14 @@ class TestWorldQueryService:
         phys_repo = InMemoryPhysicalMapRepository(data_store)
         spot_repo = InMemorySpotRepository(data_store)
         spot_repo.save(Spot(SpotId(1), "Default Spot", ""))
+        connected_spots_provider = GatewayBasedConnectedSpotsProvider(phys_repo)
 
         service = WorldQueryService(
             player_status_repository=status_repo,
             player_profile_repository=profile_repo,
             physical_map_repository=phys_repo,
             spot_repository=spot_repo,
+            connected_spots_provider=connected_spots_provider,
         )
         return service, status_repo, profile_repo, phys_repo, spot_repo
 
@@ -208,6 +218,323 @@ class TestWorldQueryService:
             assert exc_info.value.original_exception is not None
             assert isinstance(exc_info.value.original_exception, RuntimeError)
 
+    # --- get_spot_context_for_player 正常ケース ---
+
+    def test_get_spot_context_returns_spot_info_when_placed(self, setup_service):
+        """配置済みプレイヤーの現在スポット情報＋接続先が SpotInfoDto で返ること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id, "Alice"))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 2, 3))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id, 2, 3)]))
+        spot_repo.save(Spot(SpotId(1), "Town", "A starting town"))
+
+        result = service.get_spot_context_for_player(GetSpotContextForPlayerQuery(player_id=player_id))
+
+        assert result is not None
+        assert result.spot_id == spot_id
+        assert result.name == "Town"
+        assert result.description == "A starting town"
+        assert result.current_player_count >= 1
+        assert player_id in result.current_player_ids
+        assert isinstance(result.connected_spot_ids, set)
+        assert isinstance(result.connected_spot_names, set)
+
+    def test_get_spot_context_returns_none_when_not_placed(self, setup_service):
+        """未配置の場合は None を返すこと"""
+        service, status_repo, profile_repo, _, spot_repo = setup_service
+        player_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status = self._create_sample_status(player_id)
+        status._current_spot_id = None
+        status._current_coordinate = None
+        status_repo.save(status)
+
+        result = service.get_spot_context_for_player(GetSpotContextForPlayerQuery(player_id=player_id))
+
+        assert result is None
+
+    def test_get_spot_context_includes_connected_spots_when_gateway_exists(self, setup_service):
+        """ゲートウェイで接続されたスポットが connected_spot_ids / names に含まれること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        from ai_rpg_world.domain.world.entity.gateway import Gateway
+        from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
+        from ai_rpg_world.domain.world.value_object.area import RectArea
+
+        spot_repo.save(Spot(SpotId(1), "SpotA", "First"))
+        spot_repo.save(Spot(SpotId(2), "SpotB", "Second"))
+        gateway = Gateway(
+            GatewayId(1),
+            "GateToB",
+            RectArea(min_x=5, max_x=6, min_y=5, max_y=6, min_z=0, max_z=0),
+            SpotId(2),
+            Coordinate(0, 0, 0),
+        )
+        tiles = {}
+        for x in range(10):
+            for y in range(10):
+                coord = Coordinate(x, y, 0)
+                tiles[coord] = Tile(coord, TerrainType.grass())
+        map1 = PhysicalMapAggregate(
+            spot_id=SpotId(1),
+            tiles=tiles,
+            objects=[self._create_player_object(1, 0, 0)],
+            gateways=[gateway],
+        )
+        phys_repo.save(map1)
+        phys_repo.save(self._create_sample_map(2))
+        profile_repo.save(self._create_sample_profile(1))
+        status_repo.save(self._create_sample_status(1, 1, 0, 0))
+
+        result = service.get_spot_context_for_player(GetSpotContextForPlayerQuery(player_id=1))
+
+        assert result is not None
+        assert 2 in result.connected_spot_ids
+        assert "SpotB" in result.connected_spot_names
+
+    def test_get_spot_context_raises_player_not_found_when_profile_missing(self, setup_service):
+        """プロフィールが存在しない場合に PlayerNotFoundException が発生すること"""
+        service, status_repo, _, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 1
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+
+        with pytest.raises(PlayerNotFoundException):
+            service.get_spot_context_for_player(GetSpotContextForPlayerQuery(player_id=player_id))
+
+    def test_get_spot_context_raises_map_not_found_when_spot_missing(self, setup_service):
+        """スポットが存在しない場合に MapNotFoundException が発生すること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 999
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+
+        with pytest.raises(MapNotFoundException):
+            service.get_spot_context_for_player(GetSpotContextForPlayerQuery(player_id=player_id))
+
+    def test_get_spot_context_raises_world_system_error_on_unexpected_exception(self, setup_service):
+        """想定外の例外時に WorldSystemErrorException が発生すること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+
+        with patch.object(spot_repo, "find_by_id", side_effect=RuntimeError("unexpected")):
+            with pytest.raises(WorldSystemErrorException) as exc_info:
+                service.get_spot_context_for_player(GetSpotContextForPlayerQuery(player_id=player_id))
+            assert exc_info.value.original_exception is not None
+
+    # --- get_visible_context 正常・例外 ---
+
+    def test_get_visible_context_returns_dto_when_placed(self, setup_service):
+        """配置済みプレイヤーの視界内オブジェクトが VisibleContextDto で返ること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id, "Bob"))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 5, 5))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id, 5, 5)]))
+
+        result = service.get_visible_context(GetVisibleContextQuery(player_id=player_id, distance=3))
+
+        assert result is not None
+        assert result.player_id == player_id
+        assert result.player_name == "Bob"
+        assert result.spot_id == spot_id
+        assert result.center_x == 5
+        assert result.center_y == 5
+        assert result.view_distance == 3
+        assert isinstance(result.visible_objects, list)
+        assert len(result.visible_objects) >= 1
+        obj = result.visible_objects[0]
+        assert obj.object_type == "PLAYER"
+        assert obj.distance >= 0
+
+    def test_get_visible_context_returns_none_when_not_placed(self, setup_service):
+        """未配置の場合は None を返すこと"""
+        service, status_repo, profile_repo, _, spot_repo = setup_service
+        player_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status = self._create_sample_status(player_id)
+        status._current_spot_id = None
+        status._current_coordinate = None
+        status_repo.save(status)
+
+        result = service.get_visible_context(GetVisibleContextQuery(player_id=player_id))
+
+        assert result is None
+
+    def test_get_visible_context_raises_player_not_found_when_profile_missing(self, setup_service):
+        """プロフィールが存在しない場合に PlayerNotFoundException が発生すること"""
+        service, status_repo, _, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 1
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+
+        with pytest.raises(PlayerNotFoundException):
+            service.get_visible_context(GetVisibleContextQuery(player_id=player_id))
+
+    def test_get_visible_context_raises_map_not_found_when_spot_missing(self, setup_service):
+        """スポットが存在しない場合に MapNotFoundException が発生すること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 999
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+
+        with pytest.raises(MapNotFoundException):
+            service.get_visible_context(GetVisibleContextQuery(player_id=player_id))
+
+    def test_get_visible_context_distance_zero_returns_center_only(self, setup_service):
+        """distance=0 のとき視界内は自身のみ（または空）となること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 1, 1))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id, 1, 1)]))
+
+        result = service.get_visible_context(GetVisibleContextQuery(player_id=player_id, distance=0))
+
+        assert result is not None
+        assert result.view_distance == 0
+        assert len(result.visible_objects) >= 1
+
+    def test_get_visible_context_raises_world_system_error_on_unexpected_exception(self, setup_service):
+        """想定外の例外時に WorldSystemErrorException が発生すること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+
+        with patch.object(phys_repo, "find_by_spot_id", side_effect=RuntimeError("unexpected")):
+            with pytest.raises(WorldSystemErrorException) as exc_info:
+                service.get_visible_context(GetVisibleContextQuery(player_id=player_id))
+            assert exc_info.value.original_exception is not None
+
+    # --- get_available_moves 正常・例外 ---
+
+    def test_get_available_moves_returns_dto_when_placed(self, setup_service):
+        """配置済みプレイヤーの利用可能な移動先が PlayerMovementOptionsDto で返ること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id, "Charlie"))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+
+        result = service.get_available_moves(GetAvailableMovesQuery(player_id=player_id))
+
+        assert result is not None
+        assert result.player_id == player_id
+        assert result.player_name == "Charlie"
+        assert result.current_spot_id == spot_id
+        assert isinstance(result.available_moves, list)
+        assert result.total_available_moves == len(result.available_moves)
+
+    def test_get_available_moves_returns_none_when_not_placed(self, setup_service):
+        """未配置の場合は None を返すこと"""
+        service, status_repo, profile_repo, _, spot_repo = setup_service
+        player_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status = self._create_sample_status(player_id)
+        status._current_spot_id = None
+        status._current_coordinate = None
+        status_repo.save(status)
+
+        result = service.get_available_moves(GetAvailableMovesQuery(player_id=player_id))
+
+        assert result is None
+
+    def test_get_available_moves_includes_connected_spot_when_gateway_exists(self, setup_service):
+        """ゲートウェイで接続されたスポットが available_moves に含まれること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        from ai_rpg_world.domain.world.entity.gateway import Gateway
+        from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
+        from ai_rpg_world.domain.world.value_object.area import RectArea
+
+        spot_repo.save(Spot(SpotId(1), "Here", ""))
+        spot_repo.save(Spot(SpotId(2), "There", ""))
+        gateway = Gateway(
+            GatewayId(1),
+            "GateToThere",
+            RectArea(min_x=5, max_x=6, min_y=5, max_y=6, min_z=0, max_z=0),
+            SpotId(2),
+            Coordinate(0, 0, 0),
+        )
+        tiles = {}
+        for x in range(10):
+            for y in range(10):
+                coord = Coordinate(x, y, 0)
+                tiles[coord] = Tile(coord, TerrainType.grass())
+        map1 = PhysicalMapAggregate(
+            spot_id=SpotId(1),
+            tiles=tiles,
+            objects=[self._create_player_object(1, 0, 0)],
+            gateways=[gateway],
+        )
+        phys_repo.save(map1)
+        phys_repo.save(self._create_sample_map(2))
+        profile_repo.save(self._create_sample_profile(1))
+        status_repo.save(self._create_sample_status(1, 1, 0, 0))
+
+        result = service.get_available_moves(GetAvailableMovesQuery(player_id=1))
+
+        assert result is not None
+        assert result.total_available_moves >= 1
+        spot_ids = [m.spot_id for m in result.available_moves]
+        assert 2 in spot_ids
+        move_to_2 = next(m for m in result.available_moves if m.spot_id == 2)
+        assert move_to_2.spot_name == "There"
+        assert move_to_2.conditions_met is True
+
+    def test_get_available_moves_raises_player_not_found_when_profile_missing(self, setup_service):
+        """プロフィールが存在しない場合に PlayerNotFoundException が発生すること"""
+        service, status_repo, _, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 1
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+
+        with pytest.raises(PlayerNotFoundException):
+            service.get_available_moves(GetAvailableMovesQuery(player_id=player_id))
+
+    def test_get_available_moves_raises_map_not_found_when_spot_missing(self, setup_service):
+        """スポットが存在しない場合に MapNotFoundException が発生すること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 999
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+
+        with pytest.raises(MapNotFoundException):
+            service.get_available_moves(GetAvailableMovesQuery(player_id=player_id))
+
+    def test_get_available_moves_raises_world_system_error_on_unexpected_exception(self, setup_service):
+        """想定外の例外時に WorldSystemErrorException が発生すること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+
+        with patch.object(spot_repo, "find_by_id", side_effect=RuntimeError("unexpected")):
+            with pytest.raises(WorldSystemErrorException) as exc_info:
+                service.get_available_moves(GetAvailableMovesQuery(player_id=player_id))
+            assert exc_info.value.original_exception is not None
+
 
 class TestGetPlayerLocationQueryValidation:
     """GetPlayerLocationQuery のバリデーション"""
@@ -222,4 +549,49 @@ class TestGetPlayerLocationQueryValidation:
 
     def test_query_accepts_positive_player_id(self):
         q = GetPlayerLocationQuery(player_id=1)
+        assert q.player_id == 1
+
+
+class TestGetSpotContextForPlayerQueryValidation:
+    """GetSpotContextForPlayerQuery のバリデーション"""
+
+    def test_query_raises_value_error_for_invalid_player_id_zero(self):
+        with pytest.raises(ValueError, match="player_id must be greater than 0"):
+            GetSpotContextForPlayerQuery(player_id=0)
+
+    def test_query_accepts_positive_player_id(self):
+        q = GetSpotContextForPlayerQuery(player_id=1)
+        assert q.player_id == 1
+
+
+class TestGetVisibleContextQueryValidation:
+    """GetVisibleContextQuery のバリデーション"""
+
+    def test_query_raises_value_error_for_invalid_player_id_zero(self):
+        with pytest.raises(ValueError, match="player_id must be greater than 0"):
+            GetVisibleContextQuery(player_id=0)
+
+    def test_query_raises_value_error_for_negative_distance(self):
+        with pytest.raises(ValueError, match="distance must be 0 or greater"):
+            GetVisibleContextQuery(player_id=1, distance=-1)
+
+    def test_query_accepts_positive_player_id_and_default_distance(self):
+        q = GetVisibleContextQuery(player_id=1)
+        assert q.player_id == 1
+        assert q.distance == 5
+
+    def test_query_accepts_custom_distance(self):
+        q = GetVisibleContextQuery(player_id=1, distance=10)
+        assert q.distance == 10
+
+
+class TestGetAvailableMovesQueryValidation:
+    """GetAvailableMovesQuery のバリデーション"""
+
+    def test_query_raises_value_error_for_invalid_player_id_zero(self):
+        with pytest.raises(ValueError, match="player_id must be greater than 0"):
+            GetAvailableMovesQuery(player_id=0)
+
+    def test_query_accepts_positive_player_id(self):
+        q = GetAvailableMovesQuery(player_id=1)
         assert q.player_id == 1
