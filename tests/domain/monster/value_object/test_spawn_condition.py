@@ -4,6 +4,7 @@ import pytest
 from ai_rpg_world.domain.monster.value_object.spawn_condition import SpawnCondition
 from ai_rpg_world.domain.world.value_object.time_of_day import TimeOfDay
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
+from ai_rpg_world.domain.world.enum.world_enum import SpotTraitEnum
 
 
 class TestSpawnCondition:
@@ -70,26 +71,27 @@ class TestSpawnCondition:
         def test_required_area_traits_none_ignored(self):
             """required_area_traits が None のときはエリアを無視"""
             condition = SpawnCondition(time_band=None, required_area_traits=None)
-            assert condition.is_satisfied(TimeOfDay.DAY, area_traits=set()) is True
+            assert condition.is_satisfied(TimeOfDay.DAY, area_traits=frozenset()) is True
 
         def test_required_area_traits_subset_returns_true(self):
             """area_traits が required_area_traits を包含すると True"""
             condition = SpawnCondition(
                 time_band=None,
-                required_area_traits=frozenset({"lava", "nest_exit"}),
+                required_area_traits=frozenset({SpotTraitEnum.LAVA, SpotTraitEnum.DUNGEON_DEPTH}),
             )
             assert condition.is_satisfied(
-                TimeOfDay.DAY, area_traits={"lava", "nest_exit", "other"}
+                TimeOfDay.DAY,
+                area_traits={SpotTraitEnum.LAVA, SpotTraitEnum.DUNGEON_DEPTH, SpotTraitEnum.OTHER},
             ) is True
 
         def test_required_area_traits_missing_returns_false(self):
             """area_traits に required が欠けていると False"""
             condition = SpawnCondition(
                 time_band=None,
-                required_area_traits=frozenset({"lava", "nest_exit"}),
+                required_area_traits=frozenset({SpotTraitEnum.LAVA, SpotTraitEnum.DUNGEON_DEPTH}),
             )
             assert condition.is_satisfied(
-                TimeOfDay.DAY, area_traits={"lava"}
+                TimeOfDay.DAY, area_traits={SpotTraitEnum.LAVA}
             ) is False
             assert condition.is_satisfied(TimeOfDay.DAY, area_traits=None) is False
 
@@ -98,25 +100,25 @@ class TestSpawnCondition:
             condition = SpawnCondition(
                 time_band=TimeOfDay.NIGHT,
                 preferred_weather=frozenset({WeatherTypeEnum.RAIN}),
-                required_area_traits=frozenset({"lava"}),
+                required_area_traits=frozenset({SpotTraitEnum.LAVA}),
             )
             assert condition.is_satisfied(
                 TimeOfDay.NIGHT,
                 weather_type=WeatherTypeEnum.RAIN,
-                area_traits={"lava"},
+                area_traits={SpotTraitEnum.LAVA},
             ) is True
             assert condition.is_satisfied(
                 TimeOfDay.DAY,
                 weather_type=WeatherTypeEnum.RAIN,
-                area_traits={"lava"},
+                area_traits={SpotTraitEnum.LAVA},
             ) is False
             assert condition.is_satisfied(
                 TimeOfDay.NIGHT,
                 weather_type=WeatherTypeEnum.CLEAR,
-                area_traits={"lava"},
+                area_traits={SpotTraitEnum.LAVA},
             ) is False
             assert condition.is_satisfied(
                 TimeOfDay.NIGHT,
                 weather_type=WeatherTypeEnum.RAIN,
-                area_traits=set(),
+                area_traits=frozenset(),
             ) is False

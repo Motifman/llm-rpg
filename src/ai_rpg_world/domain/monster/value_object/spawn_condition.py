@@ -1,10 +1,11 @@
 """スポーン・リスポーン条件を表す値オブジェクト"""
 
 from dataclasses import dataclass
-from typing import Optional, Set, FrozenSet
+from typing import Optional, FrozenSet, AbstractSet
 
 from ai_rpg_world.domain.world.value_object.time_of_day import TimeOfDay
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
+from ai_rpg_world.domain.world.enum.world_enum import SpotTraitEnum
 
 
 @dataclass(frozen=True)
@@ -15,7 +16,7 @@ class SpawnCondition:
     """
     time_band: Optional[TimeOfDay] = None
     preferred_weather: Optional[FrozenSet[WeatherTypeEnum]] = None  # 許容する天候。None で無視
-    required_area_traits: Optional[FrozenSet[str]] = None  # 必要なエリア特性ID。None で無視
+    required_area_traits: Optional[FrozenSet[SpotTraitEnum]] = None  # 必要なエリア特性。None で無視
 
     def is_satisfied_at(self, time_of_day: TimeOfDay) -> bool:
         """
@@ -30,7 +31,7 @@ class SpawnCondition:
         self,
         time_of_day: TimeOfDay,
         weather_type: Optional[WeatherTypeEnum] = None,
-        area_traits: Optional[Set[str]] = None,
+        area_traits: Optional[AbstractSet[SpotTraitEnum]] = None,
     ) -> bool:
         """
         時間帯・天候・エリア特性で条件を満たすかどうかを返す。

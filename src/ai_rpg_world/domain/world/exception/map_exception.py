@@ -222,3 +222,8 @@ class LocationAlreadyOccupiedException(MapDomainException, StateException):
 class LocationNotOccupiedException(MapDomainException, StateException):
     """未割当のロケーションに対して release を呼んだ場合の例外"""
     error_code = "MAP.LOCATION_NOT_OCCUPIED"
+
+
+class InvalidAreaTraitException(MapDomainException, ValidationException):
+    """不正なエリア特性が指定された場合の例外"""
+    error_code = "MAP.INVALID_AREA_TRAIT"

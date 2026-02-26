@@ -1,5 +1,5 @@
 import math
-from typing import List, Dict, Optional, Any, Tuple
+from typing import List, Dict, Optional, Any, Tuple, Iterable, FrozenSet
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
@@ -29,6 +29,7 @@ from ai_rpg_world.domain.world.enum.world_enum import (
     DirectionEnum,
     EnvironmentTypeEnum,
     InteractionTypeEnum,
+    SpotTraitEnum,
 )
 from ai_rpg_world.domain.world.service.map_geometry_service import MapGeometryService
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
@@ -80,6 +81,7 @@ from ai_rpg_world.domain.world.exception.map_exception import (
     ItemNotInChestException,
     NotADoorException,
     LockedDoorException,
+    InvalidAreaTraitException,
 )
 from ai_rpg_world.domain.world.exception.harvest_exception import (
     NotHarvestableException,
@@ -102,7 +104,8 @@ class PhysicalMapAggregate(AggregateRoot):
         area_triggers: List[AreaTrigger] = None,
         location_areas: List[LocationArea] = None,
         gateways: List[Gateway] = None,
-        environment_type: EnvironmentTypeEnum = EnvironmentTypeEnum.OUTDOOR
+        environment_type: EnvironmentTypeEnum = EnvironmentTypeEnum.OUTDOOR,
+        area_traits: Optional[Iterable[SpotTraitEnum]] = None,
     ):
         super().__init__()
         self._spot_id = spot_id
@@ -114,24 +117,41 @@ class PhysicalMapAggregate(AggregateRoot):
         self._gateways: Dict[GatewayId, Gateway] = {g.gateway_id: g for g in (gateways or [])}
         self._environment_type = environment_type
         self._weather_state = WeatherState.clear()
-        
+        self._area_traits: FrozenSet[SpotTraitEnum] = self._normalize_area_traits(area_traits)
+
         if objects:
             for obj in objects:
                 self._add_object_to_internal_storage(obj)
 
+    def _normalize_area_traits(self, area_traits: Optional[Iterable[SpotTraitEnum]]) -> FrozenSet[SpotTraitEnum]:
+        """area_traits を FrozenSet[SpotTraitEnum] に正規化し、要素の妥当性を検証する。"""
+        if area_traits is None:
+            return frozenset()
+        traits = frozenset(area_traits)
+        for t in traits:
+            if not isinstance(t, SpotTraitEnum):
+                raise InvalidAreaTraitException(
+                    f"Area trait must be SpotTraitEnum, got {type(t).__name__}: {t}"
+                )
+        return traits
+
     @classmethod
     def create(
-        cls, 
-        spot_id: SpotId, 
-        tiles: List[Tile], 
+        cls,
+        spot_id: SpotId,
+        tiles: List[Tile],
         objects: List[WorldObject] = None,
         area_triggers: List[AreaTrigger] = None,
         location_areas: List[LocationArea] = None,
         gateways: List[Gateway] = None,
-        environment_type: EnvironmentTypeEnum = EnvironmentTypeEnum.OUTDOOR
+        environment_type: EnvironmentTypeEnum = EnvironmentTypeEnum.OUTDOOR,
+        area_traits: Optional[Iterable[SpotTraitEnum]] = None,
     ) -> "PhysicalMapAggregate":
         tile_dict = {tile.coordinate: tile for tile in tiles}
-        aggregate = cls(spot_id, tile_dict, objects, area_triggers, location_areas, gateways, environment_type)
+        aggregate = cls(
+            spot_id, tile_dict, objects, area_triggers, location_areas, gateways,
+            environment_type, area_traits
+        )
         aggregate.add_event(PhysicalMapCreatedEvent.create(
             aggregate_id=spot_id,
             aggregate_type="PhysicalMapAggregate",
@@ -208,6 +228,11 @@ class PhysicalMapAggregate(AggregateRoot):
             self._weather_state = weather_state
         else:
             self._weather_state = WeatherState.clear()
+
+    @property
+    def area_traits(self) -> FrozenSet[SpotTraitEnum]:
+        """このマップが持つ環境・雰囲気の特性（複数可）。"""
+        return self._area_traits
 
     def is_passable(self, coordinate: Coordinate, capability: MovementCapability, exclude_object_id: Optional[WorldObjectId] = None) -> bool:
         """指定された座標が特定のアクター能力で通行可能か判定する"""

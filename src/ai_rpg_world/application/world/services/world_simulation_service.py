@@ -367,7 +367,7 @@ class WorldSimulationApplicationService:
                 if physical_map and physical_map.weather_state
                 else None
             )
-            area_traits = getattr(physical_map, "area_traits", None) if physical_map else None
+            area_traits = physical_map.area_traits if physical_map else None
             monsters_for_spot = self._monster_repository.find_by_spot_id(spot_id)
             for slot in table.slots:
                 if slot.condition is not None and not slot.condition.is_satisfied(
