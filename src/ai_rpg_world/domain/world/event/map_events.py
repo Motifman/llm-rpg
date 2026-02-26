@@ -16,6 +16,7 @@ from ai_rpg_world.domain.world.enum.world_enum import (
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
+from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 
 
 @dataclass(frozen=True)
@@ -192,3 +193,11 @@ class ItemTakenFromChestEvent(BaseDomainEvent[SpotId, str]):
     actor_id: WorldObjectId
     item_instance_id: ItemInstanceId
     player_id_value: int
+
+
+@dataclass(frozen=True)
+class SpotWeatherChangedEvent(BaseDomainEvent[SpotId, str]):
+    """スポットの天候が変化したイベント（屋外のみ・実際に変化した場合に発行）"""
+    spot_id: SpotId
+    old_weather_state: WeatherState
+    new_weather_state: WeatherState
