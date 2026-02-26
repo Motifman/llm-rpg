@@ -327,43 +327,21 @@ class MovementApplicationService:
             raise MovementInvalidException("No movement target specified", player_id_int)
 
         # 3.5 ゲートウェイ遷移条件の評価（該当ゲートウェイがある場合のみ）
-        if self._transition_policy_repository and self._transition_condition_evaluator:
-            for gateway in physical_map.get_all_gateways():
-                if gateway.contains(to_coord):
-                    conditions = self._transition_policy_repository.get_conditions(
-                        current_spot_id, gateway.target_spot_id
-                    )
-                    if conditions:
-                        context = TransitionContext(
-                            player_id=player_id_int,
-                            player_status=player_status,
-                            from_spot_id=current_spot_id,
-                            to_spot_id=gateway.target_spot_id,
-                            current_weather=physical_map.weather_state,
-                        )
-                        allowed, failure_message = self._transition_condition_evaluator.evaluate(
-                            conditions, context
-                        )
-                        if not allowed:
-                            return self._create_failure_dto(
-                                player_id_int,
-                                failure_message or "この出口は通過できません",
-                                player_status,
-                            )
-                    break
+        transition_result = self._evaluate_gateway_transition_conditions(
+            physical_map, to_coord, current_spot_id, player_id_int, player_status
+        )
+        if transition_result is not None:
+            allowed, failure_message = transition_result
+            if not allowed:
+                return self._create_failure_dto(
+                    player_id_int,
+                    failure_message or "この出口は通過できません",
+                    player_status,
+                )
 
         # 4. スタミナ消費の計算とチェック
         try:
-            tile = physical_map.get_tile(to_coord)
-            base_stamina_cost = self._movement_config_service.get_stamina_cost(tile.terrain_type)
-            
-            # 天候による倍率適用
-            weather_multiplier = WeatherEffectService.calculate_stamina_multiplier(
-                physical_map.weather_state,
-                physical_map.environment_type
-            )
-            stamina_cost = base_stamina_cost * weather_multiplier
-            
+            stamina_cost = self._compute_stamina_cost_for_move(physical_map, to_coord)
             if player_status.stamina.value < stamina_cost:
                 raise PlayerStaminaExhaustedException(player_id_int, stamina_cost, player_status.stamina.value)
             
@@ -398,6 +376,50 @@ class MovementApplicationService:
             raise ActorBusyException(player_id_int, int(actor.busy_until.value - current_tick.value))
         except (TileNotFoundException, InvalidMovementException) as e:
             raise PathBlockedException(player_id_int, {"x": to_coord.x, "y": to_coord.y, "z": to_coord.z})
+
+    def _evaluate_gateway_transition_conditions(
+        self,
+        physical_map: PhysicalMapAggregate,
+        to_coord: Coordinate,
+        current_spot_id: SpotId,
+        player_id_int: int,
+        player_status: PlayerStatusAggregate,
+    ) -> Optional[Tuple[bool, Optional[str]]]:
+        """
+        移動先がゲートウェイに含まれる場合、遷移条件を評価する。
+        該当ゲートウェイがなければ None、条件がなければ (True, None)、
+        条件ありなら (allowed, failure_message) を返す。
+        """
+        if not self._transition_policy_repository or not self._transition_condition_evaluator:
+            return None
+        for gateway in physical_map.get_all_gateways():
+            if gateway.contains(to_coord):
+                conditions = self._transition_policy_repository.get_conditions(
+                    current_spot_id, gateway.target_spot_id
+                )
+                if conditions:
+                    context = TransitionContext(
+                        player_id=player_id_int,
+                        player_status=player_status,
+                        from_spot_id=current_spot_id,
+                        to_spot_id=gateway.target_spot_id,
+                        current_weather=physical_map.weather_state,
+                    )
+                    return self._transition_condition_evaluator.evaluate(conditions, context)
+                break
+        return None
+
+    def _compute_stamina_cost_for_move(
+        self, physical_map: PhysicalMapAggregate, to_coord: Coordinate
+    ) -> float:
+        """移動先タイルのスタミナコスト（天候倍率込み）を計算する。"""
+        tile = physical_map.get_tile(to_coord)
+        base_stamina_cost = self._movement_config_service.get_stamina_cost(tile.terrain_type)
+        weather_multiplier = WeatherEffectService.calculate_stamina_multiplier(
+            physical_map.weather_state,
+            physical_map.environment_type,
+        )
+        return base_stamina_cost * weather_multiplier
 
     def _create_success_dto(self, player_status, from_spot_id, from_coord, to_coord, arrival_tick, message) -> MoveResultDto:
         # 名前情報の取得

@@ -60,6 +60,7 @@ from ai_rpg_world.domain.world.service.movement_config_service import DefaultMov
 from ai_rpg_world.domain.player.event.status_events import PlayerLocationChangedEvent, PlayerStaminaConsumedEvent
 from ai_rpg_world.domain.world.event.map_events import WorldObjectMovedEvent, GatewayTriggeredEvent
 from ai_rpg_world.application.world.handlers.gateway_handler import GatewayTriggeredEventHandler
+from ai_rpg_world.infrastructure.events import EventHandlerComposition, EventHandlerProfile
 from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import AStarPathfindingStrategy
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import InMemoryPlayerStatusRepository
 from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import InMemoryPlayerProfileRepository
@@ -108,7 +109,7 @@ class TestMovementApplicationService:
         map_transition_service = MapTransitionService()
         time_provider = InMemoryGameTimeProvider(initial_tick=100)
 
-        # 同期イベントハンドラの登録
+        # 同期イベントハンドラの登録（プロファイルで移動・ゲートウェイのみ）
         gateway_handler = GatewayTriggeredEventHandler(
             physical_map_repository=physical_map_repo,
             player_status_repository=player_status_repo,
@@ -117,7 +118,8 @@ class TestMovementApplicationService:
             unit_of_work=unit_of_work,
             event_publisher=event_publisher,
         )
-        event_publisher.register_handler(GatewayTriggeredEvent, gateway_handler, is_synchronous=True)
+        composition = EventHandlerComposition(gateway_handler=gateway_handler)
+        composition.register_for_profile(event_publisher, EventHandlerProfile.MOVEMENT_ONLY)
 
         service = MovementApplicationService(
             player_status_repository=player_status_repo,
