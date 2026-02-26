@@ -182,28 +182,7 @@ class WorldSimulationApplicationService:
                     time_of_day=time_of_day,
                 )
             else:
-                for monster in self._monster_repository.find_all():
-                    if monster.status != MonsterStatusEnum.DEAD:
-                        continue
-                    if monster.spot_id is None or monster.spot_id not in active_spot_ids:
-                        continue
-                    if not monster.should_respawn(current_tick):
-                        continue
-                    condition = monster.template.respawn_info.condition
-                    if condition is not None and not condition.is_satisfied_at(time_of_day):
-                        continue
-                    respawn_coord = monster.get_respawn_coordinate()
-                    if respawn_coord is None:
-                        continue
-                    try:
-                        monster.respawn(respawn_coord, current_tick, monster.spot_id)
-                        self._monster_repository.save(monster)
-                    except DomainException as e:
-                        self._logger.warning(
-                            "Respawn skipped for monster %s: %s",
-                            monster.monster_id,
-                            str(e),
-                        )
+                self._process_respawn_legacy(active_spot_ids, current_tick, time_of_day)
 
             # 3.6 飢餓時のスポット転移（移住）：飢餓 ≥ 閾値かつ現在スポットに餌がなければ接続スポットへ 1 体のみ移住
             if (
@@ -260,72 +239,7 @@ class WorldSimulationApplicationService:
                                 )
                             continue
                     try:
-                        # 自律行動アクター用の skill_context / target_context / growth_context を組み立て
-                        skill_context = self._build_skill_context_for_actor(actor, physical_map, current_tick)
-                        target_context = self._build_target_context_for_actor(actor, physical_map, current_tick)
-                        growth_context = self._build_growth_context_for_actor(actor, current_tick)
-
-                        monster = self._monster_repository.find_by_world_object_id(actor.object_id)
-                        if not monster:
-                            continue
-                        visible_feed, selected_feed_target = self._build_feed_observation(
-                            actor, physical_map, monster, current_tick
-                        )
-                        observation = self._behavior_service.build_observation(
-                            actor.object_id,
-                            physical_map,
-                            target_context=target_context,
-                            skill_context=skill_context,
-                            growth_context=growth_context,
-                            pack_rally_coordinate=None,
-                            current_tick=current_tick,
-                            visible_feed=visible_feed,
-                            selected_feed_target=selected_feed_target,
-                        )
-                        # 状態遷移の計算はアプリ層、適用とイベントは集約
-                        snapshot = monster.to_behavior_state_snapshot(
-                            actor.coordinate, current_tick
-                        )
-                        transition_result = BehaviorStateTransitionService().compute_transition(
-                            observation=observation,
-                            snapshot=snapshot,
-                            actor_id=monster.world_object_id,
-                            actor_coordinate=actor.coordinate,
-                        )
-                        monster.apply_behavior_transition(
-                            transition_result, current_tick
-                        )
-                        monster.apply_territory_return_if_needed(actor.coordinate)
-                        # アクション解決はアプリ層、記録とイベント発行は集約
-                        resolver = self._monster_action_resolver_factory(
-                            physical_map, actor
-                        )
-                        action = resolver.resolve_action(
-                            monster, observation, actor.coordinate
-                        )
-                        if (
-                            action.action_type == BehaviorActionType.MOVE
-                            and action.coordinate is not None
-                        ):
-                            monster.record_move(action.coordinate, current_tick)
-                        elif (
-                            action.action_type == BehaviorActionType.USE_SKILL
-                            and action.skill_slot_index is not None
-                        ):
-                            monster.record_use_skill(
-                                action.skill_slot_index,
-                                monster.behavior_target_id,
-                                current_tick,
-                            )
-                        elif (
-                            action.action_type == BehaviorActionType.INTERACT
-                            and action.target_id is not None
-                        ):
-                            monster.record_interact(
-                                action.target_id, current_tick
-                            )
-                        self._monster_repository.save(monster)
-                        self._unit_of_work.process_sync_events()
+                        self._process_single_actor_behavior(actor, physical_map, current_tick)
                     except DomainException as e:
                         # ドメインルール違反（移動不可など）は警告ログにとどめる
                         self._logger.warning(
@@ -434,6 +348,97 @@ class WorldSimulationApplicationService:
                             slot.coordinate,
                             str(e),
                         )
+
+    def _process_respawn_legacy(
+        self,
+        active_spot_ids: Set[SpotId],
+        current_tick: WorldTick,
+        time_of_day: TimeOfDay,
+    ) -> None:
+        """従来方式: DEAD のモンスターを走査し、リスポーン条件を満たせばリスポーンする。"""
+        for monster in self._monster_repository.find_all():
+            if monster.status != MonsterStatusEnum.DEAD:
+                continue
+            if monster.spot_id is None or monster.spot_id not in active_spot_ids:
+                continue
+            if not monster.should_respawn(current_tick):
+                continue
+            condition = monster.template.respawn_info.condition
+            if condition is not None and not condition.is_satisfied_at(time_of_day):
+                continue
+            respawn_coord = monster.get_respawn_coordinate()
+            if respawn_coord is None:
+                continue
+            try:
+                monster.respawn(respawn_coord, current_tick, monster.spot_id)
+                self._monster_repository.save(monster)
+            except DomainException as e:
+                self._logger.warning(
+                    "Respawn skipped for monster %s: %s",
+                    monster.monster_id,
+                    str(e),
+                )
+
+    def _process_single_actor_behavior(
+        self,
+        actor: WorldObject,
+        physical_map: PhysicalMapAggregate,
+        current_tick: WorldTick,
+    ) -> None:
+        """自律行動アクター1体分の観測・状態遷移・アクション解決・記録・保存を行う。"""
+        skill_context = self._build_skill_context_for_actor(actor, physical_map, current_tick)
+        target_context = self._build_target_context_for_actor(actor, physical_map, current_tick)
+        growth_context = self._build_growth_context_for_actor(actor, current_tick)
+
+        monster = self._monster_repository.find_by_world_object_id(actor.object_id)
+        if not monster:
+            return
+        visible_feed, selected_feed_target = self._build_feed_observation(
+            actor, physical_map, monster, current_tick
+        )
+        observation = self._behavior_service.build_observation(
+            actor.object_id,
+            physical_map,
+            target_context=target_context,
+            skill_context=skill_context,
+            growth_context=growth_context,
+            pack_rally_coordinate=None,
+            current_tick=current_tick,
+            visible_feed=visible_feed,
+            selected_feed_target=selected_feed_target,
+        )
+        snapshot = monster.to_behavior_state_snapshot(actor.coordinate, current_tick)
+        transition_result = BehaviorStateTransitionService().compute_transition(
+            observation=observation,
+            snapshot=snapshot,
+            actor_id=monster.world_object_id,
+            actor_coordinate=actor.coordinate,
+        )
+        monster.apply_behavior_transition(transition_result, current_tick)
+        monster.apply_territory_return_if_needed(actor.coordinate)
+        resolver = self._monster_action_resolver_factory(physical_map, actor)
+        action = resolver.resolve_action(monster, observation, actor.coordinate)
+        if (
+            action.action_type == BehaviorActionType.MOVE
+            and action.coordinate is not None
+        ):
+            monster.record_move(action.coordinate, current_tick)
+        elif (
+            action.action_type == BehaviorActionType.USE_SKILL
+            and action.skill_slot_index is not None
+        ):
+            monster.record_use_skill(
+                action.skill_slot_index,
+                monster.behavior_target_id,
+                current_tick,
+            )
+        elif (
+            action.action_type == BehaviorActionType.INTERACT
+            and action.target_id is not None
+        ):
+            monster.record_interact(action.target_id, current_tick)
+        self._monster_repository.save(monster)
+        self._unit_of_work.process_sync_events()
 
     def _find_monster_for_slot(self, slot: SpawnSlot, monsters: List[MonsterAggregate]) -> Optional[MonsterAggregate]:
         """スロットに割り当てられたモンスターを1体返す（get_respawn_coordinate と template_id で一致）。"""
