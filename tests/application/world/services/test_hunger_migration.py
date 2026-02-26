@@ -6,7 +6,6 @@ from ai_rpg_world.application.world.services.world_simulation_service import (
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.aggregate.world_map_aggregate import WorldMapAggregate
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import (
@@ -21,8 +20,6 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
 from ai_rpg_world.domain.world.value_object.area import PointArea
-from ai_rpg_world.domain.world.value_object.world_id import WorldId
-from ai_rpg_world.domain.world.value_object.connection import Connection
 from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, SpotCategoryEnum
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
@@ -51,8 +48,8 @@ from ai_rpg_world.infrastructure.repository.in_memory_loot_table_repository impo
     InMemoryLootTableRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.infrastructure.repository.in_memory_world_map_repository import (
-    InMemoryWorldMapRepository,
+from ai_rpg_world.application.world.services.gateway_based_connected_spots_provider import (
+    GatewayBasedConnectedSpotsProvider,
 )
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 
@@ -269,16 +266,6 @@ class TestProcessHungerMigrationForSpot:
         return SpotId(2)
 
     @pytest.fixture
-    def world_map(self, spot1_id, spot2_id):
-        spots = [
-            Spot(spot1_id, "Forest", "No feed", SpotCategoryEnum.OTHER),
-            Spot(spot2_id, "Town", "Has feed", SpotCategoryEnum.OTHER),
-        ]
-        conn = Connection(source_id=spot1_id, destination_id=spot2_id)
-        wm = WorldMapAggregate.create(WorldId(1), spots=spots, connections=[conn])
-        return wm
-
-    @pytest.fixture
     def map_repo(self, data_store):
         return InMemoryPhysicalMapRepository(data_store=data_store)
 
@@ -287,10 +274,9 @@ class TestProcessHungerMigrationForSpot:
         return InMemoryMonsterAggregateRepository(data_store=data_store)
 
     @pytest.fixture
-    def world_map_repo(self, data_store, world_map):
-        repo = InMemoryWorldMapRepository(data_store=data_store)
-        repo.save(world_map)
-        return repo
+    def connected_spots_provider(self, map_repo):
+        """ゲートウェイから接続を導出するプロバイダ（map1_with_gateway, map2 登録後に使用）"""
+        return GatewayBasedConnectedSpotsProvider(map_repo)
 
     @pytest.fixture
     def map1_with_gateway(self, spot1_id, spot2_id, map_repo):
@@ -356,7 +342,7 @@ class TestProcessHungerMigrationForSpot:
         spot2_id,
         map_repo,
         monster_repo,
-        world_map_repo,
+        connected_spots_provider,
         map1_with_gateway,
         map2,
         migrant_monster_on_map1,
@@ -381,7 +367,7 @@ class TestProcessHungerMigrationForSpot:
             hit_box_factory=None,
             monster_action_resolver_factory=None,
             loot_table_repository=InMemoryLootTableRepository(),
-            world_map_repository=world_map_repo,
+            connected_spots_provider=connected_spots_provider,
             map_transition_service=MapTransitionService(),
         )
         physical_map = map_repo.find_by_spot_id(spot1_id)
@@ -409,14 +395,13 @@ class TestProcessHungerMigrationForSpot:
         map1_with_gateway,
         migrant_monster_on_map1,
     ):
-        """接続スポットが0なら移住しない"""
-        world_map_single = WorldMapAggregate.create(
-            WorldId(1),
-            spots=[Spot(spot1_id, "Alone", "No connections", SpotCategoryEnum.OTHER)],
-            connections=[],
-        )
-        world_map_repo = InMemoryWorldMapRepository(data_store=data_store)
-        world_map_repo.save(world_map_single)
+        """接続スポットが0なら移住しない（接続プロバイダが空リストを返す場合）"""
+        from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
+
+        class EmptyConnectedSpotsProvider(IConnectedSpotsProvider):
+            def get_connected_spots(self, spot_id):
+                return []
+
         uow = InMemoryUnitOfWork(
             unit_of_work_factory=lambda: None,
             data_store=data_store,
@@ -436,7 +421,7 @@ class TestProcessHungerMigrationForSpot:
             hit_box_factory=None,
             monster_action_resolver_factory=None,
             loot_table_repository=InMemoryLootTableRepository(),
-            world_map_repository=world_map_repo,
+            connected_spots_provider=EmptyConnectedSpotsProvider(),
             map_transition_service=MapTransitionService(),
         )
         physical_map = map_repo.find_by_spot_id(spot1_id)
@@ -456,7 +441,7 @@ class TestProcessHungerMigrationForSpot:
         spot2_id,
         map_repo,
         monster_repo,
-        world_map_repo,
+        connected_spots_provider,
         map1_with_gateway,
         map2,
         migrant_monster_on_map1,
@@ -485,7 +470,7 @@ class TestProcessHungerMigrationForSpot:
             hit_box_factory=None,
             monster_action_resolver_factory=None,
             loot_table_repository=InMemoryLootTableRepository(),
-            world_map_repository=world_map_repo,
+            connected_spots_provider=connected_spots_provider,
             map_transition_service=FailingMapTransitionService(),
         )
         physical_map = map_repo.find_by_spot_id(spot1_id)
