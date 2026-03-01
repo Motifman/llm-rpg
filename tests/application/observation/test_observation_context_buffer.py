@@ -1,4 +1,4 @@
-"""DefaultObservationContextBuffer のテスト（正常・境界）"""
+"""DefaultObservationContextBuffer のテスト（正常・境界・例外）"""
 
 import pytest
 from datetime import datetime
@@ -11,7 +11,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 class TestDefaultObservationContextBuffer:
-    """DefaultObservationContextBuffer の正常・境界ケース"""
+    """DefaultObservationContextBuffer の正常・境界・例外ケース"""
 
     @pytest.fixture
     def buffer(self):
@@ -71,3 +71,35 @@ class TestDefaultObservationContextBuffer:
         buffer.append(PlayerId(2), sample_entry)
         buffer.drain(PlayerId(1))
         assert len(buffer.get_observations(PlayerId(2))) == 1
+
+    # --- 例外ケース（不正入力で TypeError）---
+
+    def test_append_raises_type_error_when_player_id_none(self, buffer, sample_entry):
+        """append に player_id が None のとき TypeError"""
+        with pytest.raises(TypeError, match="player_id must be PlayerId"):
+            buffer.append(None, sample_entry)  # type: ignore[arg-type]
+
+    def test_append_raises_type_error_when_player_id_not_player_id(self, buffer, sample_entry):
+        """append に player_id が PlayerId でないとき TypeError"""
+        with pytest.raises(TypeError, match="player_id must be PlayerId"):
+            buffer.append(1, sample_entry)  # type: ignore[arg-type]
+
+    def test_append_raises_type_error_when_entry_none(self, buffer):
+        """append に entry が None のとき TypeError"""
+        with pytest.raises(TypeError, match="entry must be ObservationEntry"):
+            buffer.append(PlayerId(1), None)  # type: ignore[arg-type]
+
+    def test_append_raises_type_error_when_entry_not_observation_entry(self, buffer):
+        """append に entry が ObservationEntry でないとき TypeError"""
+        with pytest.raises(TypeError, match="entry must be ObservationEntry"):
+            buffer.append(PlayerId(1), "invalid")  # type: ignore[arg-type]
+
+    def test_get_observations_raises_type_error_when_player_id_none(self, buffer):
+        """get_observations に player_id が None のとき TypeError"""
+        with pytest.raises(TypeError, match="player_id must be PlayerId"):
+            buffer.get_observations(None)  # type: ignore[arg-type]
+
+    def test_drain_raises_type_error_when_player_id_none(self, buffer):
+        """drain に player_id が None のとき TypeError"""
+        with pytest.raises(TypeError, match="player_id must be PlayerId"):
+            buffer.drain(None)  # type: ignore[arg-type]
