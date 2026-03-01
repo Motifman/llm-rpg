@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import MagicMock
 
-from ai_rpg_world.application.common.exceptions import SystemErrorException
+from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.observation.handlers.observation_event_handler import ObservationEventHandler
 from ai_rpg_world.application.observation.services.observation_context_buffer import (
     DefaultObservationContextBuffer,
@@ -27,6 +27,7 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.player.event.status_events import PlayerGoldEarnedEvent
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
@@ -170,6 +171,118 @@ class TestObservationEventHandler:
             total_gold=1010,
         )
         with pytest.raises(SystemErrorException, match="Observation.*failed"):
+            handler.handle(event)
+
+    def test_handle_when_formatter_raises_propagates_after_system_error_wrap(
+        self, resolver, buffer, data_store
+    ):
+        """Formatter が例外を投げた場合、SystemErrorException でラップされて伝播する"""
+        class Factory:
+            def __init__(self, ds):
+                self._ds = ds
+            def create(self):
+                return InMemoryUnitOfWork(
+                    unit_of_work_factory=self, data_store=self._ds
+                )
+        broken_formatter = MagicMock()
+        broken_formatter.format.side_effect = RuntimeError("format error")
+        handler = ObservationEventHandler(
+            resolver=resolver,
+            formatter=broken_formatter,
+            buffer=buffer,
+            unit_of_work_factory=Factory(data_store),
+        )
+        event = PlayerGoldEarnedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            earned_amount=10,
+            total_gold=1010,
+        )
+        with pytest.raises(SystemErrorException, match="Observation.*failed"):
+            handler.handle(event)
+
+    def test_handle_when_buffer_append_raises_propagates_after_system_error_wrap(
+        self, resolver, formatter, data_store
+    ):
+        """Buffer.append が例外を投げた場合、SystemErrorException でラップされて伝播する"""
+        class Factory:
+            def __init__(self, ds):
+                self._ds = ds
+            def create(self):
+                return InMemoryUnitOfWork(
+                    unit_of_work_factory=self, data_store=self._ds
+                )
+        broken_buffer = MagicMock()
+        broken_buffer.append.side_effect = RuntimeError("buffer write error")
+        handler = ObservationEventHandler(
+            resolver=resolver,
+            formatter=formatter,
+            buffer=broken_buffer,
+            unit_of_work_factory=Factory(data_store),
+        )
+        event = PlayerGoldEarnedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            earned_amount=10,
+            total_gold=1010,
+        )
+        with pytest.raises(SystemErrorException, match="Observation.*failed"):
+            handler.handle(event)
+
+    def test_handle_when_domain_exception_raised_propagates_unchanged(
+        self, buffer, formatter, data_store
+    ):
+        """Resolver が DomainException を投げた場合、ラップせずそのまま伝播する"""
+        class Factory:
+            def __init__(self, ds):
+                self._ds = ds
+            def create(self):
+                return InMemoryUnitOfWork(
+                    unit_of_work_factory=self, data_store=self._ds
+                )
+        broken_resolver = MagicMock()
+        broken_resolver.resolve.side_effect = DomainException("domain validation failed")
+        handler = ObservationEventHandler(
+            resolver=broken_resolver,
+            formatter=formatter,
+            buffer=buffer,
+            unit_of_work_factory=Factory(data_store),
+        )
+        event = PlayerGoldEarnedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            earned_amount=10,
+            total_gold=1010,
+        )
+        with pytest.raises(DomainException, match="domain validation failed"):
+            handler.handle(event)
+
+    def test_handle_when_application_exception_raised_propagates_unchanged(
+        self, resolver, buffer, data_store
+    ):
+        """Formatter が ApplicationException を投げた場合、ラップせずそのまま伝播する"""
+        class Factory:
+            def __init__(self, ds):
+                self._ds = ds
+            def create(self):
+                return InMemoryUnitOfWork(
+                    unit_of_work_factory=self, data_store=self._ds
+                )
+        broken_formatter = MagicMock()
+        broken_formatter.format.side_effect = ApplicationException("app validation failed")
+        handler = ObservationEventHandler(
+            resolver=resolver,
+            formatter=broken_formatter,
+            buffer=buffer,
+            unit_of_work_factory=Factory(data_store),
+        )
+        event = PlayerGoldEarnedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            earned_amount=10,
+            total_gold=1010,
+        )
+        with pytest.raises(ApplicationException, match="app validation failed"):
             handler.handle(event)
 
 

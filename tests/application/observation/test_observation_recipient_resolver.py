@@ -1,7 +1,8 @@
-"""ObservationRecipientResolver のテスト（正常・観測対象外・境界）"""
+"""ObservationRecipientResolver のテスト（正常・観測対象外・境界・例外）"""
 
 import pytest
 from datetime import datetime
+from unittest.mock import MagicMock
 
 from ai_rpg_world.application.observation.services.observation_recipient_resolver import (
     ObservationRecipientResolver,
@@ -140,6 +141,31 @@ class TestObservationRecipientResolver:
         assert 1 in values
         assert 2 in values
         assert 3 in values
+
+    def test_resolve_deduplicates_recipients_when_same_player_in_multiple_sources(
+        self, resolver, status_repo
+    ):
+        """同一プレイヤーが複数ソース（本人＋同一スポット）で含まれる場合、重複せず1回のみ配信先に含まれる"""
+        # プレイヤー1が target_spot (2) にいる。かつ player_id_value=1（本人）なので二重に add されうる
+        status_repo.save(_make_status(1, spot_id=2))
+        status_repo.save(_make_status(2, spot_id=2))
+        event = GatewayTriggeredEvent.create(
+            aggregate_id=GatewayId(1),
+            aggregate_type="Gateway",
+            gateway_id=GatewayId(1),
+            spot_id=SpotId(1),
+            object_id=WorldObjectId(1),
+            target_spot_id=SpotId(2),
+            landing_coordinate=Coordinate(0, 0, 0),
+            player_id_value=1,
+        )
+        ids = resolver.resolve(event)
+        values = [p.value for p in ids]
+        assert 1 in values
+        assert 2 in values
+        assert values.count(1) == 1
+        assert values.count(2) == 1
+        assert len(ids) == 2
 
     def test_resolve_gateway_triggered_no_player_id_value_only_target_spot_players(
         self, resolver, status_repo
@@ -356,3 +382,25 @@ class TestObservationRecipientResolver:
         )
         ids = resolver.resolve(event)
         assert ids == []
+
+    # --- 例外ケース（リポジトリが例外を投げた場合は伝播）---
+
+    def test_resolve_when_player_status_find_all_raises_propagates(
+        self, physical_map_repo, data_store
+    ):
+        """PlayerStatusRepository.find_all が例外を投げた場合、その例外が伝播する"""
+        status_repo = MagicMock()
+        status_repo.find_all.side_effect = RuntimeError("find_all failed")
+        resolver = ObservationRecipientResolver(
+            player_status_repository=status_repo,
+            physical_map_repository=physical_map_repo,
+        )
+        event = SpotWeatherChangedEvent.create(
+            aggregate_id=SpotId(1),
+            aggregate_type="Weather",
+            spot_id=SpotId(1),
+            old_weather_state=WeatherState.clear(),
+            new_weather_state=WeatherState(WeatherTypeEnum.RAIN, 0.5),
+        )
+        with pytest.raises(RuntimeError, match="find_all failed"):
+            resolver.resolve(event)

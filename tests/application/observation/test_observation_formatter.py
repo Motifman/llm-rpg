@@ -1,6 +1,7 @@
-"""ObservationFormatter のテスト（プローズ・構造化の両方・未知イベント）"""
+"""ObservationFormatter のテスト（プローズ・構造化・未知イベント・リポジトリ有無・フォールバック）"""
 
 import pytest
+from unittest.mock import MagicMock
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.observation_formatter import ObservationFormatter
@@ -126,3 +127,133 @@ class TestObservationFormatter:
             pass
         out = formatter.format(UnknownEvent(), PlayerId(1))
         assert out is None
+
+    # --- スポット名・プレイヤー名のリポジトリ有無・フォールバック ---
+
+    def test_format_spot_name_returns_fallback_when_repository_none(self, formatter):
+        """spot_repository が None のとき、スポット名は「スポット{id}」のフォールバックになる"""
+        event = GatewayTriggeredEvent.create(
+            aggregate_id=GatewayId(1),
+            aggregate_type="Gateway",
+            gateway_id=GatewayId(1),
+            spot_id=SpotId(1),
+            object_id=WorldObjectId(1),
+            target_spot_id=SpotId(2),
+            landing_coordinate=Coordinate(0, 0, 0),
+            player_id_value=1,
+        )
+        out = formatter.format(event, PlayerId(1))
+        assert out is not None
+        assert out.structured.get("spot_name") == "スポット2"
+        assert "スポット2" in out.prose
+
+    def test_format_spot_name_uses_repository_when_available(self):
+        """spot_repository でスポットが取得できるとき、その名前が観測に含まれる"""
+        spot_repo = MagicMock()
+        spot = MagicMock()
+        spot.name = "町の広場"
+        spot_repo.find_by_id.return_value = spot
+        formatter = ObservationFormatter(
+            spot_repository=spot_repo,
+            player_profile_repository=None,
+        )
+        event = GatewayTriggeredEvent.create(
+            aggregate_id=GatewayId(1),
+            aggregate_type="Gateway",
+            gateway_id=GatewayId(1),
+            spot_id=SpotId(1),
+            object_id=WorldObjectId(1),
+            target_spot_id=SpotId(2),
+            landing_coordinate=Coordinate(0, 0, 0),
+            player_id_value=1,
+        )
+        out = formatter.format(event, PlayerId(1))
+        assert out is not None
+        assert out.structured.get("spot_name") == "町の広場"
+        assert "町の広場" in out.prose
+
+    def test_format_spot_name_returns_fallback_when_repository_returns_none(self):
+        """spot_repository が設定されていても find_by_id が None を返すときはフォールバック名"""
+        spot_repo = MagicMock()
+        spot_repo.find_by_id.return_value = None
+        formatter = ObservationFormatter(
+            spot_repository=spot_repo,
+            player_profile_repository=None,
+        )
+        event = GatewayTriggeredEvent.create(
+            aggregate_id=GatewayId(1),
+            aggregate_type="Gateway",
+            gateway_id=GatewayId(1),
+            spot_id=SpotId(1),
+            object_id=WorldObjectId(1),
+            target_spot_id=SpotId(2),
+            landing_coordinate=Coordinate(0, 0, 0),
+            player_id_value=1,
+        )
+        out = formatter.format(event, PlayerId(1))
+        assert out is not None
+        assert out.structured.get("spot_name") == "スポット2"
+
+    def test_format_player_name_returns_fallback_when_repository_none(self, formatter):
+        """player_profile_repository が None のとき、他プレイヤー名は「プレイヤー{id}」のフォールバックになる"""
+        event = GatewayTriggeredEvent.create(
+            aggregate_id=GatewayId(1),
+            aggregate_type="Gateway",
+            gateway_id=GatewayId(1),
+            spot_id=SpotId(1),
+            object_id=WorldObjectId(1),
+            target_spot_id=SpotId(2),
+            landing_coordinate=Coordinate(0, 0, 0),
+            player_id_value=1,
+        )
+        out = formatter.format(event, PlayerId(2))
+        assert out is not None
+        assert out.structured.get("actor") == "プレイヤー1"
+        assert "プレイヤー1" in out.prose
+
+    def test_format_player_name_uses_repository_when_available(self):
+        """player_profile_repository でプロフィールが取得できるとき、その名前が観測に含まれる"""
+        profile_repo = MagicMock()
+        profile = MagicMock()
+        profile.name.value = "Alice"
+        profile_repo.find_by_id.return_value = profile
+        formatter = ObservationFormatter(
+            spot_repository=None,
+            player_profile_repository=profile_repo,
+        )
+        event = GatewayTriggeredEvent.create(
+            aggregate_id=GatewayId(1),
+            aggregate_type="Gateway",
+            gateway_id=GatewayId(1),
+            spot_id=SpotId(1),
+            object_id=WorldObjectId(1),
+            target_spot_id=SpotId(2),
+            landing_coordinate=Coordinate(0, 0, 0),
+            player_id_value=1,
+        )
+        out = formatter.format(event, PlayerId(2))
+        assert out is not None
+        assert out.structured.get("actor") == "Alice"
+        assert "Alice" in out.prose
+
+    def test_format_player_name_returns_fallback_when_repository_returns_none(self):
+        """player_profile_repository が設定されていても find_by_id が None を返すときはフォールバック名"""
+        profile_repo = MagicMock()
+        profile_repo.find_by_id.return_value = None
+        formatter = ObservationFormatter(
+            spot_repository=None,
+            player_profile_repository=profile_repo,
+        )
+        event = GatewayTriggeredEvent.create(
+            aggregate_id=GatewayId(1),
+            aggregate_type="Gateway",
+            gateway_id=GatewayId(1),
+            spot_id=SpotId(1),
+            object_id=WorldObjectId(1),
+            target_spot_id=SpotId(2),
+            landing_coordinate=Coordinate(0, 0, 0),
+            player_id_value=1,
+        )
+        out = formatter.format(event, PlayerId(2))
+        assert out is not None
+        assert out.structured.get("actor") == "プレイヤー1"

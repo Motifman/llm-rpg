@@ -17,14 +17,22 @@ class DefaultObservationContextBuffer(IObservationContextBuffer):
         return player_id.value
 
     def append(self, player_id: PlayerId, entry: ObservationEntry) -> None:
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
+        if not isinstance(entry, ObservationEntry):
+            raise TypeError("entry must be ObservationEntry")
         if self._key(player_id) not in self._buffer:
             self._buffer[self._key(player_id)] = []
         self._buffer[self._key(player_id)].append(entry)
 
     def get_observations(self, player_id: PlayerId) -> List[ObservationEntry]:
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
         return list(self._buffer.get(self._key(player_id), []))
 
     def drain(self, player_id: PlayerId) -> List[ObservationEntry]:
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
         key = self._key(player_id)
         entries = self._buffer.get(key, [])
         self._buffer[key] = []
