@@ -31,21 +31,36 @@ class InMemoryPhysicalMapRepository(PhysicalMapRepository, InMemoryRepositoryBas
     
     def save(self, physical_map: PhysicalMapAggregate) -> PhysicalMapAggregate:
         cloned_map = self._clone(physical_map)
+        index = self._data_store.world_object_id_to_spot_id
+
         def operation():
+            old_map = self._maps.get(cloned_map.spot_id)
+            if old_map is not None:
+                for obj in old_map.get_all_objects():
+                    if obj.object_id in index:
+                        del index[obj.object_id]
+            for obj in cloned_map.get_all_objects():
+                index[obj.object_id] = cloned_map.spot_id
             self._maps[cloned_map.spot_id] = cloned_map
             return cloned_map
 
         self._register_aggregate(physical_map)
         self._register_pending_if_uow(physical_map.spot_id, physical_map)
         return self._execute_operation(operation)
-    
+
     def delete(self, spot_id: SpotId) -> bool:
+        index = self._data_store.world_object_id_to_spot_id
+
         def operation():
-            if spot_id in self._maps:
-                del self._maps[spot_id]
-                return True
-            return False
-            
+            if spot_id not in self._maps:
+                return False
+            old_map = self._maps[spot_id]
+            for obj in old_map.get_all_objects():
+                if obj.object_id in index:
+                    del index[obj.object_id]
+            del self._maps[spot_id]
+            return True
+
         return self._execute_operation(operation)
     
     def find_all(self) -> List[PhysicalMapAggregate]:
@@ -56,3 +71,7 @@ class InMemoryPhysicalMapRepository(PhysicalMapRepository, InMemoryRepositoryBas
         wid = WorldObjectId(self._data_store.next_world_object_id)
         self._data_store.next_world_object_id += 1
         return wid
+
+    def find_spot_id_by_object_id(self, object_id: WorldObjectId) -> Optional[SpotId]:
+        """指定した WorldObjectId が配置されているスポットIDを返す。O(1) のインデックス参照。"""
+        return self._data_store.world_object_id_to_spot_id.get(object_id)

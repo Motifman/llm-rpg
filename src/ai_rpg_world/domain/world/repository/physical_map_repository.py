@@ -17,3 +17,8 @@ class PhysicalMapRepository(Repository["PhysicalMapAggregate", SpotId], ABC):
     def generate_world_object_id(self) -> WorldObjectId:
         """設置オブジェクト・落ちアイテム用の新規 WorldObjectId を発行する"""
         pass
+
+    @abstractmethod
+    def find_spot_id_by_object_id(self, object_id: WorldObjectId) -> Optional[SpotId]:
+        """指定した WorldObjectId が配置されているスポットIDを返す。見つからなければ None。"""
+        pass

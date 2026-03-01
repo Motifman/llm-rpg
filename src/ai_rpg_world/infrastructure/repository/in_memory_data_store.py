@@ -99,6 +99,7 @@ class InMemoryDataStore:
         self.weather_zones: Dict[WeatherZoneId, WeatherZone] = {}
         self.monsters: Dict[MonsterId, MonsterAggregate] = {}
         self.world_object_to_monster_id: Dict[WorldObjectId, MonsterId] = {}
+        self.world_object_id_to_spot_id: Dict[WorldObjectId, SpotId] = {}
         self.next_monster_id = 1
         self.next_world_object_id = 100000  # NPC用。プレイヤーIDと衝突しない範囲
         self.spawn_tables: Dict[SpotId, SpotSpawnTable] = {}
@@ -303,6 +304,7 @@ class InMemoryDataStore:
         self.weather_zones.clear()
         self.monsters.clear()
         self.world_object_to_monster_id.clear()
+        self.world_object_id_to_spot_id.clear()
         self.next_monster_id = 1
         self.next_world_object_id = 100000
         self.spawn_tables.clear()
@@ -319,6 +321,7 @@ class InMemoryDataStore:
             "weather_zones": copy.deepcopy(self.weather_zones),
             "monsters": copy.deepcopy(self.monsters),
             "world_object_to_monster_id": copy.deepcopy(self.world_object_to_monster_id),
+            "world_object_id_to_spot_id": copy.deepcopy(self.world_object_id_to_spot_id),
             "spawn_tables": copy.deepcopy(self.spawn_tables),
             "hit_boxes": copy.deepcopy(self.hit_boxes),
             "spots": copy.deepcopy(self.spots),
@@ -344,6 +347,7 @@ class InMemoryDataStore:
         self.weather_zones = snapshot["weather_zones"]
         self.monsters = snapshot["monsters"]
         self.world_object_to_monster_id = snapshot["world_object_to_monster_id"]
+        self.world_object_id_to_spot_id = snapshot.get("world_object_id_to_spot_id", {})
         self.spawn_tables = snapshot.get("spawn_tables", {})
         self.hit_boxes = snapshot["hit_boxes"]
         self.spots = snapshot.get("spots", {})
