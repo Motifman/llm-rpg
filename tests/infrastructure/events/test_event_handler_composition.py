@@ -110,3 +110,17 @@ class TestEventHandlerComposition:
         composition.register_for_profile(event_publisher, EventHandlerProfile.FULL)
         assert event_publisher.register_handler.call_count == 1
         mock_registry.register_handlers.assert_called_once_with(event_publisher)
+
+    def test_register_for_profile_full_invokes_observation_registry_when_provided(
+        self, event_publisher, mock_registry
+    ):
+        """FULL で observation_registry を渡すと register_handlers が呼ばれる"""
+        observation_reg = MagicMock()
+        observation_reg.register_handlers = MagicMock()
+        composition = EventHandlerComposition(
+            gateway_handler=MagicMock(),
+            map_interaction_registry=mock_registry,
+            observation_registry=observation_reg,
+        )
+        composition.register_for_profile(event_publisher, EventHandlerProfile.FULL)
+        observation_reg.register_handlers.assert_called_once_with(event_publisher)
