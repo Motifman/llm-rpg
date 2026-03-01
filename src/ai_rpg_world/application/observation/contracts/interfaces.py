@@ -8,6 +8,7 @@ from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationOutput,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 
 
 class IObservationRecipientResolver(ABC):
@@ -27,12 +28,12 @@ class IObservationFormatter(ABC):
         self,
         event: Any,
         recipient_player_id: PlayerId,
-        attention_level: Optional[str] = None,
+        attention_level: Optional[AttentionLevel] = None,
     ) -> Optional[ObservationOutput]:
         """
         指定プレイヤー向けの観測出力を生成する。
         スキップする場合は None を返す。
-        attention_level は将来の注意レベル（FULL / FILTER_SOCIAL / IGNORE）用。現状は未使用可。
+        attention_level に応じて FILTER_SOCIAL / IGNORE の場合は要約・スキップする。
         """
         pass
 

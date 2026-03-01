@@ -48,3 +48,18 @@ class GetAvailableMovesQuery:
     def __post_init__(self):
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
+
+
+@dataclass(frozen=True)
+class GetPlayerCurrentStateQuery:
+    """プレイヤーの現在状態（位置・スポット・天気・地形・視界・移動先・注意レベル）を一括取得するクエリ"""
+
+    player_id: int
+    include_available_moves: bool = True
+    view_distance: int = 5
+
+    def __post_init__(self):
+        if self.player_id <= 0:
+            raise ValueError("player_id must be greater than 0")
+        if self.view_distance < 0:
+            raise ValueError("view_distance must be 0 or greater")

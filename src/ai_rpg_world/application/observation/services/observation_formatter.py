@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional, TYPE_CHECKING
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.contracts.interfaces import IObservationFormatter
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.world.event.map_events import (
     GatewayTriggeredEvent,
     LocationEnteredEvent,
@@ -54,9 +55,9 @@ class ObservationFormatter(IObservationFormatter):
         self,
         event: Any,
         recipient_player_id: PlayerId,
-        attention_level: Optional[str] = None,
+        attention_level: Optional[AttentionLevel] = None,
     ) -> Optional[ObservationOutput]:
-        """指定プレイヤー向けの観測出力を生成。attention_level は将来用で未使用。"""
+        """指定プレイヤー向けの観測出力を生成。attention_level に応じてスキップ・要約する（FULL でなければ他プレイヤー関連等を省略可能）。"""
         if isinstance(event, GatewayTriggeredEvent):
             return self._format_gateway_triggered(event, recipient_player_id)
         if isinstance(event, LocationEnteredEvent):
@@ -99,14 +100,14 @@ class ObservationFormatter(IObservationFormatter):
         if self._spot_repository:
             spot = self._spot_repository.find_by_id(spot_id)
             if spot:
-                return getattr(spot, "name", str(spot_id.value))
+                return spot.name
         return f"スポット{spot_id.value}"
 
     def _player_name(self, player_id: PlayerId) -> str:
         if self._player_profile_repository:
             profile = self._player_profile_repository.find_by_id(player_id)
             if profile and hasattr(profile, "name"):
-                return getattr(profile.name, "value", str(player_id.value))
+                return profile.name.value
         return f"プレイヤー{player_id.value}"
 
     def _format_gateway_triggered(
@@ -127,7 +128,7 @@ class ObservationFormatter(IObservationFormatter):
     def _format_location_entered(
         self, event: LocationEnteredEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
-        loc_name = getattr(event, "name", f"ロケーション{event.location_id}")
+        loc_name = event.name
         is_self = event.player_id_value is not None and event.player_id_value == recipient_id.value
         if is_self:
             prose = f"{loc_name}に着きました。"
@@ -223,16 +224,8 @@ class ObservationFormatter(IObservationFormatter):
     def _format_spot_weather_changed(
         self, event: SpotWeatherChangedEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
-        old_s = getattr(
-            getattr(event.old_weather_state, "weather_type", event.old_weather_state),
-            "name",
-            str(event.old_weather_state),
-        )
-        new_s = getattr(
-            getattr(event.new_weather_state, "weather_type", event.new_weather_state),
-            "name",
-            str(event.new_weather_state),
-        )
+        old_s = event.old_weather_state.weather_type.value
+        new_s = event.new_weather_state.weather_type.value
         prose = f"天気が{old_s}から{new_s}に変わりました。"
         structured = {"type": "weather_changed", "old": old_s, "new": new_s}
         return ObservationOutput(prose=prose, structured=structured)
