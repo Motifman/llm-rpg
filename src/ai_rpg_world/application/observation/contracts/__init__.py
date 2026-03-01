@@ -5,6 +5,8 @@ from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
 )
 from ai_rpg_world.application.observation.contracts.interfaces import (
+    IWorldObjectToPlayerResolver,
+    IRecipientResolutionStrategy,
     IObservationRecipientResolver,
     IObservationFormatter,
     IObservationContextBuffer,
@@ -13,6 +15,8 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
 __all__ = [
     "ObservationOutput",
     "ObservationEntry",
+    "IWorldObjectToPlayerResolver",
+    "IRecipientResolutionStrategy",
     "IObservationRecipientResolver",
     "IObservationFormatter",
     "IObservationContextBuffer",

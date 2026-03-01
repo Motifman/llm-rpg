@@ -10,7 +10,7 @@ from ai_rpg_world.application.observation.services.observation_context_buffer im
 )
 from ai_rpg_world.application.observation.services.observation_formatter import ObservationFormatter
 from ai_rpg_world.application.observation.services.observation_recipient_resolver import (
-    ObservationRecipientResolver,
+    create_observation_recipient_resolver,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
@@ -86,7 +86,7 @@ class TestObservationEventHandler:
 
     @pytest.fixture
     def resolver(self, status_repo, physical_map_repo):
-        return ObservationRecipientResolver(
+        return create_observation_recipient_resolver(
             player_status_repository=status_repo,
             physical_map_repository=physical_map_repo,
         )

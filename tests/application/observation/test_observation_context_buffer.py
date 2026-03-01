@@ -1,4 +1,8 @@
-"""DefaultObservationContextBuffer のテスト（正常・境界・例外）"""
+"""DefaultObservationContextBuffer のテスト（正常・境界・例外）
+
+仕様: 観測は observation_category を持つ。バッファテストでは蓄積する観測として
+self_only を明示し、ObservationOutput の新仕様をテストに反映する。
+"""
 
 import pytest
 from datetime import datetime
@@ -21,7 +25,11 @@ class TestDefaultObservationContextBuffer:
     def sample_entry(self):
         return ObservationEntry(
             occurred_at=datetime.now(),
-            output=ObservationOutput(prose="観測", structured={"type": "test"}),
+            output=ObservationOutput(
+                prose="観測",
+                structured={"type": "test"},
+                observation_category="self_only",
+            ),
         )
 
     def test_append_and_get_observations_returns_appended_entries(self, buffer, sample_entry):
@@ -42,7 +50,11 @@ class TestDefaultObservationContextBuffer:
         player_id = PlayerId(1)
         entry2 = ObservationEntry(
             occurred_at=datetime.now(),
-            output=ObservationOutput(prose="2", structured={"type": "b"}),
+            output=ObservationOutput(
+                prose="2",
+                structured={"type": "b"},
+                observation_category="self_only",
+            ),
         )
         buffer.append(player_id, sample_entry)
         buffer.append(player_id, entry2)

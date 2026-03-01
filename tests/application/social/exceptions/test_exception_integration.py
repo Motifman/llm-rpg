@@ -1,9 +1,20 @@
 """
 SNS例外の統合テスト（エンドツーエンドテスト）
+DomainException のサブクラスのみ create_from_domain_exception に渡す設計を検証する。
 """
 import pytest
-from unittest.mock import Mock
-from ai_rpg_world.application.social.exceptions.exception_factory import ApplicationExceptionFactory
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.sns.exception.user_profile_exceptions import (
+    UserNotFoundException as DomainUserNotFoundException,
+    UserIdValidationException,
+)
+from ai_rpg_world.domain.sns.exception.relationship_exceptions import (
+    FollowException,
+    BlockException,
+)
+from ai_rpg_world.application.social.exceptions.exception_factory import (
+    ApplicationExceptionFactory,
+)
 from ai_rpg_world.application.social.exceptions.query.user_query_exception import (
     UserQueryException,
     UserNotFoundException,
@@ -19,25 +30,14 @@ class TestExceptionIntegration:
     """例外システムの統合テスト"""
 
     def test_domain_exception_to_application_exception_flow(self):
-        """ドメイン例外からアプリケーション例外への変換フロー"""
-        # 実際のドメイン例外をシミュレート
-        class MockUserNotFoundDomainException(Exception):
-            def __init__(self, user_id):
-                self.user_id = user_id
-                super().__init__(f"User with id {user_id} not found")
-
-        class MockFollowDomainException(Exception):
-            def __init__(self, follower_id, followee_id):
-                self.follower_id = follower_id
-                self.followee_id = followee_id
-                self.relationship_type = "follow"
-                super().__init__(f"Cannot follow user {followee_id}")
-
-        # 1. ユーザー検索のドメイン例外
-        user_not_found = MockUserNotFoundDomainException(123)
+        """ドメイン例外からアプリケーション例外への変換フロー（正常系）"""
+        # 1. ユーザー検索のドメイン例外（実ドメイン例外を使用）
+        user_not_found = DomainUserNotFoundException(
+            123, "User with id 123 not found"
+        )
         app_exception = ApplicationExceptionFactory.create_from_domain_exception(
             user_not_found,
-            user_id=456
+            user_id=456,
         )
 
         assert isinstance(app_exception, UserQueryException)
@@ -45,11 +45,18 @@ class TestExceptionIntegration:
         assert app_exception.user_id == 123  # 便利プロパティから
         assert str(app_exception) == "User with id 123 not found"
 
-        # 2. 関係性のドメイン例外
-        follow_error = MockFollowDomainException(1, 2)
-        app_exception2 = ApplicationExceptionFactory.create_from_domain_exception(follow_error)
+        # 2. 関係性のドメイン例外（実ドメイン例外を使用）
+        follow_error = FollowException("Cannot follow user 2")
+        follow_error.follower_id = 1
+        follow_error.followee_id = 2
+        follow_error.relationship_type = "follow"
+        app_exception2 = ApplicationExceptionFactory.create_from_domain_exception(
+            follow_error
+        )
 
-        assert isinstance(app_exception2, UserQueryException)  # マッピングでUserQueryExceptionに変換
+        assert isinstance(
+            app_exception2, UserCommandException
+        )  # マッピングで UserCommandException に変換
         assert app_exception2.context["relationship_type"] == "follow"
         assert str(app_exception2) == "Cannot follow user 2"
 
@@ -68,39 +75,44 @@ class TestExceptionIntegration:
         assert str(invalid_id) == "無効なユーザーIDです: 0"
 
     def test_exception_context_propagation(self):
-        """例外コンテキストの伝播テスト"""
-        # 複雑なドメイン例外
-        class MockComplexDomainException(Exception):
-            def __init__(self):
-                self.user_id = 100
-                self.relationship_type = "block"
-                self.error_detail = "User is already blocked"
-                super().__init__("Complex domain error")
+        """例外コンテキストの伝播テスト（正常系）"""
+        domain_exc = BlockException("Complex domain error")
+        domain_exc.user_id = 100
+        domain_exc.relationship_type = "block"
+        domain_exc.error_detail = "User is already blocked"
 
-        domain_exc = MockComplexDomainException()
         app_exc = ApplicationExceptionFactory.create_from_domain_exception(
             domain_exc,
             user_id=200,
             target_user_id=300,
-            additional_info="test"
+            additional_info="test",
         )
 
-        # コンテキストが適切にマージされていることを確認
         assert app_exc.context["user_id"] == 100  # ドメイン例外から
         assert app_exc.context["target_user_id"] == 300  # パラメータから
         assert app_exc.context["relationship_type"] == "block"  # ドメイン例外から
         assert app_exc.context["additional_info"] == "test"  # パラメータから
-        assert app_exc.context["error_detail"] == "User is already blocked"  # ドメイン例外から
+        assert (
+            app_exc.context["error_detail"] == "User is already blocked"
+        )  # ドメイン例外から
 
     def test_exception_chain_preservation(self):
-        """例外チェーンの保存テスト"""
-        original_exception = ValueError("元のエラー")
-        domain_exception = RuntimeError("ドメインエラー")
+        """例外チェーンの保存テスト（正常系）"""
+        domain_exception = DomainException("ドメインエラー")
 
-        app_exception = ApplicationExceptionFactory.create_from_domain_exception(domain_exception)
+        app_exception = ApplicationExceptionFactory.create_from_domain_exception(
+            domain_exception
+        )
 
-        # 例外チェーンが保存されていることを確認
         assert app_exception.__cause__ is domain_exception
+
+    def test_non_domain_exception_raises_type_error(self):
+        """DomainException 以外を渡すと TypeError（例外系）"""
+        with pytest.raises(TypeError) as exc_info:
+            ApplicationExceptionFactory.create_from_domain_exception(
+                RuntimeError("ドメインエラー")
+            )
+        assert "domain_exception must be a DomainException" in str(exc_info.value)
 
     def test_exception_mapping_completeness(self):
         """例外マッピングの完全性テスト"""
@@ -119,50 +131,45 @@ class TestExceptionIntegration:
             assert issubclass(exception_class, Exception), f"{exception_name}のマッピングが不正: {exception_class}"
 
     def test_real_world_usage_scenario(self):
-        """実世界での使用シナリオテスト"""
-        # 実際のサービスでの使用をシミュレート
+        """実世界での使用シナリオテスト（正常・例外系）"""
+        # ドメイン層が DomainException を投げ、サービスがアプリ例外に変換する流れ
 
-        # 1. ユーザー検索時の例外
         class UserRepository:
             def find_by_id(self, user_id):
                 if user_id <= 0:
-                    raise ValueError(f"Invalid user id: {user_id}")
+                    raise UserIdValidationException(
+                        user_id, f"Invalid user id: {user_id}"
+                    )
                 if user_id == 999:
-                    raise RuntimeError(f"User {user_id} not found in database")
+                    raise DomainUserNotFoundException(
+                        999, f"User {user_id} not found in database"
+                    )
                 return f"user_{user_id}"
 
         repo = UserRepository()
 
-        # 2. サービスでの例外処理
         def get_user_profile(user_id):
             try:
                 user = repo.find_by_id(user_id)
                 return f"Profile of {user}"
-            except ValueError as e:
-                # ドメイン例外をアプリケーション例外に変換
+            except DomainException as e:
                 app_exc = ApplicationExceptionFactory.create_from_domain_exception(
                     e,
-                    user_id=user_id
-                )
-                raise app_exc
-            except RuntimeError as e:
-                app_exc = ApplicationExceptionFactory.create_from_domain_exception(
-                    e,
-                    user_id=user_id
+                    user_id=user_id,
                 )
                 raise app_exc
 
-        # 3. 正常系
+        # 正常系
         profile = get_user_profile(1)
         assert profile == "Profile of user_1"
 
-        # 4. 無効なユーザーID
+        # 無効なユーザーID（ドメイン例外 → アプリ例外）
         with pytest.raises(UserQueryException) as exc_info:
             get_user_profile(0)
         assert exc_info.value.context["user_id"] == 0
         assert "Invalid user id: 0" in str(exc_info.value)
 
-        # 5. 存在しないユーザー
+        # 存在しないユーザー（ドメイン例外 → アプリ例外）
         with pytest.raises(UserQueryException) as exc_info:
             get_user_profile(999)
         assert exc_info.value.context["user_id"] == 999

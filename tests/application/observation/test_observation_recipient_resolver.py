@@ -5,7 +5,14 @@ from datetime import datetime
 from unittest.mock import MagicMock
 
 from ai_rpg_world.application.observation.services.observation_recipient_resolver import (
+    create_observation_recipient_resolver,
     ObservationRecipientResolver,
+)
+from ai_rpg_world.application.observation.services.world_object_to_player_resolver import (
+    WorldObjectToPlayerResolver,
+)
+from ai_rpg_world.application.observation.services.recipient_strategies import (
+    DefaultRecipientStrategy,
 )
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
@@ -113,7 +120,7 @@ class TestObservationRecipientResolver:
 
     @pytest.fixture
     def resolver(self, status_repo, physical_map_repo):
-        return ObservationRecipientResolver(
+        return create_observation_recipient_resolver(
             player_status_repository=status_repo,
             physical_map_repository=physical_map_repo,
         )
@@ -260,6 +267,19 @@ class TestObservationRecipientResolver:
         ids = resolver.resolve(UnknownEvent())
         assert ids == []
 
+    def test_resolve_with_empty_strategies_returns_empty_list(self):
+        """戦略が空の Resolver はどのイベントでも空リストを返す"""
+        resolver = ObservationRecipientResolver(strategies=[])
+        event = PlayerLevelUpEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            old_level=1,
+            new_level=2,
+            stat_growth=BaseStats(0, 0, 0, 0, 0, 0.0, 0.0),
+        )
+        ids = resolver.resolve(event)
+        assert ids == []
+
     def test_resolve_player_location_changed_includes_self_and_players_at_new_spot(
         self, resolver, status_repo
     ):
@@ -391,10 +411,12 @@ class TestObservationRecipientResolver:
         """PlayerStatusRepository.find_all が例外を投げた場合、その例外が伝播する"""
         status_repo = MagicMock()
         status_repo.find_all.side_effect = RuntimeError("find_all failed")
-        resolver = ObservationRecipientResolver(
+        world_object_resolver = WorldObjectToPlayerResolver(physical_map_repo)
+        default_strategy = DefaultRecipientStrategy(
             player_status_repository=status_repo,
-            physical_map_repository=physical_map_repo,
+            world_object_to_player_resolver=world_object_resolver,
         )
+        resolver = ObservationRecipientResolver(strategies=[default_strategy])
         event = SpotWeatherChangedEvent.create(
             aggregate_id=SpotId(1),
             aggregate_type="Weather",
@@ -404,3 +426,108 @@ class TestObservationRecipientResolver:
         )
         with pytest.raises(RuntimeError, match="find_all failed"):
             resolver.resolve(event)
+
+
+class TestDefaultRecipientStrategy:
+    """DefaultRecipientStrategy の単体テスト（supports / resolve）"""
+
+    @pytest.fixture
+    def data_store(self):
+        return InMemoryDataStore()
+
+    @pytest.fixture
+    def status_repo(self, data_store):
+        return InMemoryPlayerStatusRepository(data_store=data_store)
+
+    @pytest.fixture
+    def physical_map_repo(self, data_store):
+        return InMemoryPhysicalMapRepository(data_store=data_store)
+
+    @pytest.fixture
+    def world_object_resolver(self, physical_map_repo):
+        return WorldObjectToPlayerResolver(physical_map_repo)
+
+    @pytest.fixture
+    def strategy(self, status_repo, world_object_resolver):
+        return DefaultRecipientStrategy(
+            player_status_repository=status_repo,
+            world_object_to_player_resolver=world_object_resolver,
+        )
+
+    def test_supports_gateway_triggered_event(self, strategy):
+        """GatewayTriggeredEvent を supports する"""
+        event = GatewayTriggeredEvent.create(
+            aggregate_id=GatewayId(1),
+            aggregate_type="Gateway",
+            gateway_id=GatewayId(1),
+            spot_id=SpotId(1),
+            object_id=WorldObjectId(1),
+            target_spot_id=SpotId(2),
+            landing_coordinate=Coordinate(0, 0, 0),
+            player_id_value=1,
+        )
+        assert strategy.supports(event) is True
+
+    def test_supports_player_level_up_event(self, strategy):
+        """PlayerLevelUpEvent を supports する"""
+        event = PlayerLevelUpEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            old_level=1,
+            new_level=2,
+            stat_growth=BaseStats(0, 0, 0, 0, 0, 0.0, 0.0),
+        )
+        assert strategy.supports(event) is True
+
+    def test_supports_returns_false_for_unknown_event(self, strategy):
+        """未知のイベントでは supports が False"""
+        class UnknownEvent:
+            pass
+        assert strategy.supports(UnknownEvent()) is False
+
+    def test_resolve_player_level_up_returns_aggregate_id(self, strategy):
+        """PlayerLevelUpEvent の resolve が aggregate_id を返す"""
+        event = PlayerLevelUpEvent.create(
+            aggregate_id=PlayerId(7),
+            aggregate_type="PlayerStatusAggregate",
+            old_level=1,
+            new_level=2,
+            stat_growth=BaseStats(0, 0, 0, 0, 0, 0.0, 0.0),
+        )
+        ids = strategy.resolve(event)
+        assert len(ids) == 1
+        assert ids[0].value == 7
+
+
+class TestWorldObjectToPlayerResolver:
+    """WorldObjectToPlayerResolver の単体テスト（正常・対象不在・例外）"""
+
+    @pytest.fixture
+    def data_store(self):
+        return InMemoryDataStore()
+
+    @pytest.fixture
+    def physical_map_repo(self, data_store):
+        return InMemoryPhysicalMapRepository(data_store=data_store)
+
+    @pytest.fixture
+    def resolver(self, physical_map_repo):
+        return WorldObjectToPlayerResolver(physical_map_repo)
+
+    def test_resolve_player_id_returns_player_when_object_on_map(
+        self, resolver, physical_map_repo
+    ):
+        """マップ上にプレイヤーオブジェクトがある場合その PlayerId を返す（正常系）"""
+        physical_map_repo.save(
+            _make_minimal_map(10, [_create_player_object(3)])
+        )
+        pid = resolver.resolve_player_id(WorldObjectId.create(3))
+        assert pid is not None
+        assert pid.value == 3
+
+    def test_resolve_player_id_returns_none_when_object_not_on_any_map(
+        self, resolver
+    ):
+        """どのマップにも存在しない object_id の場合は None（境界）"""
+        pid = resolver.resolve_player_id(WorldObjectId(99999))
+        assert pid is None

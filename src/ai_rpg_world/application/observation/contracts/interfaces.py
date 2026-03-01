@@ -9,6 +9,30 @@ from ai_rpg_world.application.observation.contracts.dtos import (
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+
+
+class IWorldObjectToPlayerResolver(ABC):
+    """WorldObjectId に紐づくプレイヤーIDを解決するポート（観測配信先解決で利用）"""
+
+    @abstractmethod
+    def resolve_player_id(self, object_id: WorldObjectId) -> Optional[PlayerId]:
+        """WorldObjectId に紐づくプレイヤーIDを返す。プレイヤーでなければ None。"""
+        pass
+
+
+class IRecipientResolutionStrategy(ABC):
+    """イベント型ごとの配信先解決戦略。Resolver が supports が True の先頭戦略に委譲する。"""
+
+    @abstractmethod
+    def supports(self, event: Any) -> bool:
+        """このイベントを扱うかどうか。"""
+        pass
+
+    @abstractmethod
+    def resolve(self, event: Any) -> List[PlayerId]:
+        """配信先プレイヤーIDのリストを返す（重複含み可。Resolver が重複除去する）。"""
+        pass
 
 
 class IObservationRecipientResolver(ABC):
