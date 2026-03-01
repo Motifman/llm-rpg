@@ -57,44 +57,57 @@ class ObservationFormatter(IObservationFormatter):
         recipient_player_id: PlayerId,
         attention_level: Optional[AttentionLevel] = None,
     ) -> Optional[ObservationOutput]:
-        """指定プレイヤー向けの観測出力を生成。attention_level に応じてスキップ・要約する（FULL でなければ他プレイヤー関連等を省略可能）。"""
+        """指定プレイヤー向けの観測出力を生成。attention_level に応じてスキップする。"""
+        output: Optional[ObservationOutput] = None
         if isinstance(event, GatewayTriggeredEvent):
-            return self._format_gateway_triggered(event, recipient_player_id)
-        if isinstance(event, LocationEnteredEvent):
-            return self._format_location_entered(event, recipient_player_id)
-        if isinstance(event, LocationExitedEvent):
-            return self._format_location_exited(event, recipient_player_id)
-        if isinstance(event, PlayerLocationChangedEvent):
-            return self._format_player_location_changed(event, recipient_player_id)
-        if isinstance(event, PlayerDownedEvent):
-            return self._format_player_downed(event, recipient_player_id)
-        if isinstance(event, PlayerRevivedEvent):
-            return self._format_player_revived(event, recipient_player_id)
-        if isinstance(event, PlayerLevelUpEvent):
-            return self._format_player_level_up(event, recipient_player_id)
-        if isinstance(event, PlayerGoldEarnedEvent):
-            return self._format_player_gold_earned(event, recipient_player_id)
-        if isinstance(event, PlayerGoldPaidEvent):
-            return self._format_player_gold_paid(event, recipient_player_id)
-        if isinstance(event, ItemTakenFromChestEvent):
-            return self._format_item_taken_from_chest(event, recipient_player_id)
-        if isinstance(event, ItemStoredInChestEvent):
-            return self._format_item_stored_in_chest(event, recipient_player_id)
-        if isinstance(event, SpotWeatherChangedEvent):
-            return self._format_spot_weather_changed(event, recipient_player_id)
-        if isinstance(event, WorldObjectInteractedEvent):
-            return self._format_world_object_interacted(event, recipient_player_id)
-        if isinstance(event, ItemAddedToInventoryEvent):
-            return self._format_item_added_to_inventory(event, recipient_player_id)
-        if isinstance(event, ItemDroppedFromInventoryEvent):
-            return self._format_item_dropped(event, recipient_player_id)
-        if isinstance(event, ItemEquippedEvent):
-            return self._format_item_equipped(event, recipient_player_id)
-        if isinstance(event, ItemUnequippedEvent):
-            return self._format_item_unequipped(event, recipient_player_id)
-        if isinstance(event, InventorySlotOverflowEvent):
-            return self._format_inventory_slot_overflow(event, recipient_player_id)
-        return None
+            output = self._format_gateway_triggered(event, recipient_player_id)
+        elif isinstance(event, LocationEnteredEvent):
+            output = self._format_location_entered(event, recipient_player_id)
+        elif isinstance(event, LocationExitedEvent):
+            output = self._format_location_exited(event, recipient_player_id)
+        elif isinstance(event, PlayerLocationChangedEvent):
+            output = self._format_player_location_changed(event, recipient_player_id)
+        elif isinstance(event, PlayerDownedEvent):
+            output = self._format_player_downed(event, recipient_player_id)
+        elif isinstance(event, PlayerRevivedEvent):
+            output = self._format_player_revived(event, recipient_player_id)
+        elif isinstance(event, PlayerLevelUpEvent):
+            output = self._format_player_level_up(event, recipient_player_id)
+        elif isinstance(event, PlayerGoldEarnedEvent):
+            output = self._format_player_gold_earned(event, recipient_player_id)
+        elif isinstance(event, PlayerGoldPaidEvent):
+            output = self._format_player_gold_paid(event, recipient_player_id)
+        elif isinstance(event, ItemTakenFromChestEvent):
+            output = self._format_item_taken_from_chest(event, recipient_player_id)
+        elif isinstance(event, ItemStoredInChestEvent):
+            output = self._format_item_stored_in_chest(event, recipient_player_id)
+        elif isinstance(event, SpotWeatherChangedEvent):
+            output = self._format_spot_weather_changed(event, recipient_player_id)
+        elif isinstance(event, WorldObjectInteractedEvent):
+            output = self._format_world_object_interacted(event, recipient_player_id)
+        elif isinstance(event, ItemAddedToInventoryEvent):
+            output = self._format_item_added_to_inventory(event, recipient_player_id)
+        elif isinstance(event, ItemDroppedFromInventoryEvent):
+            output = self._format_item_dropped(event, recipient_player_id)
+        elif isinstance(event, ItemEquippedEvent):
+            output = self._format_item_equipped(event, recipient_player_id)
+        elif isinstance(event, ItemUnequippedEvent):
+            output = self._format_item_unequipped(event, recipient_player_id)
+        elif isinstance(event, InventorySlotOverflowEvent):
+            output = self._format_inventory_slot_overflow(event, recipient_player_id)
+
+        if output is None:
+            return None
+        # attention_level に応じたフィルタ（FULL または未指定はそのまま）
+        if attention_level is None or attention_level == AttentionLevel.FULL:
+            return output
+        if attention_level == AttentionLevel.FILTER_SOCIAL:
+            if output.observation_category == "social":
+                return None
+        if attention_level == AttentionLevel.IGNORE:
+            if output.observation_category != "self_only":
+                return None
+        return output
 
     def _spot_name(self, spot_id: SpotId) -> str:
         if self._spot_repository:
@@ -118,12 +131,12 @@ class ObservationFormatter(IObservationFormatter):
         if is_self:
             prose = f"{target_name}に到着しました。"
             structured = {"type": "gateway_arrival", "spot_name": target_name, "role": "self"}
-        else:
-            # 他プレイヤー向け: 「〇〇がこのスポットにやってきました」
-            actor_label = f"誰か" if event.player_id_value is None else self._player_name(PlayerId(event.player_id_value))
-            prose = f"{actor_label}がこのスポットにやってきました。"
-            structured = {"type": "player_entered_spot", "actor": actor_label, "spot_name": target_name}
-        return ObservationOutput(prose=prose, structured=structured)
+            return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
+        # 他プレイヤー向け: 「〇〇がこのスポットにやってきました」
+        actor_label = f"誰か" if event.player_id_value is None else self._player_name(PlayerId(event.player_id_value))
+        prose = f"{actor_label}がこのスポットにやってきました。"
+        structured = {"type": "player_entered_spot", "actor": actor_label, "spot_name": target_name}
+        return ObservationOutput(prose=prose, structured=structured, observation_category="social")
 
     def _format_location_entered(
         self, event: LocationEnteredEvent, recipient_id: PlayerId
@@ -133,18 +146,18 @@ class ObservationFormatter(IObservationFormatter):
         if is_self:
             prose = f"{loc_name}に着きました。"
             structured = {"type": "location_entered", "location_name": loc_name, "role": "self"}
-        else:
-            actor_label = "誰か" if event.player_id_value is None else self._player_name(PlayerId(event.player_id_value))
-            prose = f"{actor_label}が{loc_name}に着きました。"
-            structured = {"type": "player_entered_location", "actor": actor_label, "location_name": loc_name}
-        return ObservationOutput(prose=prose, structured=structured)
+            return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
+        actor_label = "誰か" if event.player_id_value is None else self._player_name(PlayerId(event.player_id_value))
+        prose = f"{actor_label}が{loc_name}に着きました。"
+        structured = {"type": "player_entered_location", "actor": actor_label, "location_name": loc_name}
+        return ObservationOutput(prose=prose, structured=structured, observation_category="social")
 
     def _format_location_exited(
         self, event: LocationExitedEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
         prose = "ロケーションを出ました。"
         structured = {"type": "location_exited"}
-        return ObservationOutput(prose=prose, structured=structured)
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_player_location_changed(
         self, event: PlayerLocationChangedEvent, recipient_id: PlayerId
@@ -154,11 +167,11 @@ class ObservationFormatter(IObservationFormatter):
         if is_self:
             prose = f"現在地: {spot_name}"
             structured = {"type": "current_location", "spot_name": spot_name, "role": "self"}
-        else:
-            actor_name = self._player_name(event.aggregate_id)
-            prose = f"{actor_name}がこのスポットにやってきました。"
-            structured = {"type": "player_entered_spot", "actor": actor_name, "spot_name": spot_name}
-        return ObservationOutput(prose=prose, structured=structured)
+            return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
+        actor_name = self._player_name(event.aggregate_id)
+        prose = f"{actor_name}がこのスポットにやってきました。"
+        structured = {"type": "player_entered_spot", "actor": actor_name, "spot_name": spot_name}
+        return ObservationOutput(prose=prose, structured=structured, observation_category="social")
 
     def _format_player_downed(
         self, event: PlayerDownedEvent, recipient_id: PlayerId
@@ -167,11 +180,11 @@ class ObservationFormatter(IObservationFormatter):
         if is_self:
             prose = "戦闘不能になりました。"
             structured = {"type": "player_downed", "role": "self"}
-        else:
-            actor_name = self._player_name(event.aggregate_id)
-            prose = f"{actor_name}が戦闘不能になりました。"
-            structured = {"type": "player_downed", "actor": actor_name}
-        return ObservationOutput(prose=prose, structured=structured)
+            return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
+        actor_name = self._player_name(event.aggregate_id)
+        prose = f"{actor_name}が戦闘不能になりました。"
+        structured = {"type": "player_downed", "actor": actor_name}
+        return ObservationOutput(prose=prose, structured=structured, observation_category="social")
 
     def _format_player_revived(
         self, event: PlayerRevivedEvent, recipient_id: PlayerId
@@ -180,46 +193,46 @@ class ObservationFormatter(IObservationFormatter):
         if is_self:
             prose = "復帰しました。"
             structured = {"type": "player_revived", "role": "self"}
-        else:
-            actor_name = self._player_name(event.aggregate_id)
-            prose = f"{actor_name}が復帰しました。"
-            structured = {"type": "player_revived", "actor": actor_name}
-        return ObservationOutput(prose=prose, structured=structured)
+            return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
+        actor_name = self._player_name(event.aggregate_id)
+        prose = f"{actor_name}が復帰しました。"
+        structured = {"type": "player_revived", "actor": actor_name}
+        return ObservationOutput(prose=prose, structured=structured, observation_category="social")
 
     def _format_player_level_up(
         self, event: PlayerLevelUpEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
         prose = f"レベルが上がりました（{event.old_level} → {event.new_level}）。"
         structured = {"type": "level_up", "old_level": event.old_level, "new_level": event.new_level}
-        return ObservationOutput(prose=prose, structured=structured)
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_player_gold_earned(
         self, event: PlayerGoldEarnedEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
         prose = f"{event.earned_amount}ゴールドを獲得しました。"
         structured = {"type": "gold_earned", "amount": event.earned_amount}
-        return ObservationOutput(prose=prose, structured=structured)
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_player_gold_paid(
         self, event: PlayerGoldPaidEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
         prose = f"{event.paid_amount}ゴールドを支払いました。"
         structured = {"type": "gold_paid", "amount": event.paid_amount}
-        return ObservationOutput(prose=prose, structured=structured)
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_item_taken_from_chest(
         self, event: ItemTakenFromChestEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
         prose = "チェストからアイテムを取得しました。"
         structured = {"type": "item_taken_from_chest"}
-        return ObservationOutput(prose=prose, structured=structured)
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_item_stored_in_chest(
         self, event: ItemStoredInChestEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
         prose = "チェストにアイテムを収納しました。"
         structured = {"type": "item_stored_in_chest"}
-        return ObservationOutput(prose=prose, structured=structured)
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_spot_weather_changed(
         self, event: SpotWeatherChangedEvent, recipient_id: PlayerId
@@ -228,46 +241,46 @@ class ObservationFormatter(IObservationFormatter):
         new_s = event.new_weather_state.weather_type.value
         prose = f"天気が{old_s}から{new_s}に変わりました。"
         structured = {"type": "weather_changed", "old": old_s, "new": new_s}
-        return ObservationOutput(prose=prose, structured=structured)
+        return ObservationOutput(prose=prose, structured=structured, observation_category="environment")
 
     def _format_world_object_interacted(
         self, event: WorldObjectInteractedEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
         prose = "オブジェクトとインタラクションしました。"
         structured = {"type": "object_interacted"}
-        return ObservationOutput(prose=prose, structured=structured)
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_item_added_to_inventory(
         self, event: ItemAddedToInventoryEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
         prose = "アイテムを入手しました。"
         structured = {"type": "item_added_to_inventory"}
-        return ObservationOutput(prose=prose, structured=structured)
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_item_dropped(
         self, event: ItemDroppedFromInventoryEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
         prose = "アイテムを捨てました。"
         structured = {"type": "item_dropped"}
-        return ObservationOutput(prose=prose, structured=structured)
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_item_equipped(
         self, event: ItemEquippedEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
         prose = "アイテムを装備しました。"
         structured = {"type": "item_equipped"}
-        return ObservationOutput(prose=prose, structured=structured)
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_item_unequipped(
         self, event: ItemUnequippedEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
         prose = "アイテムを外しました。"
         structured = {"type": "item_unequipped"}
-        return ObservationOutput(prose=prose, structured=structured)
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_inventory_slot_overflow(
         self, event: InventorySlotOverflowEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
         prose = "インベントリが満杯でアイテムが溢れました。"
         structured = {"type": "inventory_overflow"}
-        return ObservationOutput(prose=prose, structured=structured)
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")

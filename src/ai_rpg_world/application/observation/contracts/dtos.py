@@ -2,21 +2,30 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Literal
+
+ObservationCategory = Literal["self_only", "social", "environment"]
 
 
 @dataclass(frozen=True)
 class ObservationOutput:
-    """1イベント分の観測出力（プローズ文と構造化データの両方）"""
+    """1イベント分の観測出力（プローズ文と構造化データの両方）。
+    observation_category は attention_level によるフィルタで使用する。
+    """
 
     prose: str
     structured: Dict[str, Any]
+    observation_category: ObservationCategory = "self_only"
 
     def __post_init__(self) -> None:
         if not isinstance(self.prose, str):
             raise TypeError("prose must be str")
         if not isinstance(self.structured, dict):
             raise TypeError("structured must be dict")
+        if self.observation_category not in ("self_only", "social", "environment"):
+            raise TypeError(
+                "observation_category must be 'self_only', 'social', or 'environment'"
+            )
 
 
 @dataclass(frozen=True)
