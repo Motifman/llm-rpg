@@ -788,3 +788,39 @@ class TestPlayerStatusAggregate:
                 aggregate.base_stats, aggregate.active_effects, WorldTick(10)
             )
             assert effective_stats.attack == 15  # 20 * 1.5 * 0.5
+
+
+class TestPlayerStatusAttentionLevel:
+    """PlayerStatusAggregate の注意レベル（attention_level）のテスト"""
+
+    def test_default_attention_level_is_full(self):
+        from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+
+        aggregate = create_test_status_aggregate()
+        assert aggregate.attention_level == AttentionLevel.FULL
+
+    def test_set_attention_level_changes_value(self):
+        from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+
+        aggregate = create_test_status_aggregate()
+        aggregate.set_attention_level(AttentionLevel.IGNORE)
+        assert aggregate.attention_level == AttentionLevel.IGNORE
+        aggregate.set_attention_level(AttentionLevel.FILTER_SOCIAL)
+        assert aggregate.attention_level == AttentionLevel.FILTER_SOCIAL
+
+    def test_constructor_accepts_attention_level(self):
+        from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+
+        aggregate = PlayerStatusAggregate(
+            player_id=PlayerId(1),
+            base_stats=create_test_base_stats(),
+            stat_growth_factor=create_test_stat_growth_factor(),
+            exp_table=create_test_exp_table(),
+            growth=create_test_growth(),
+            gold=Gold.create(1000),
+            hp=Hp.create(100, 100),
+            mp=Mp.create(50, 50),
+            stamina=Stamina.create(100, 100),
+            attention_level=AttentionLevel.FILTER_SOCIAL,
+        )
+        assert aggregate.attention_level == AttentionLevel.FILTER_SOCIAL

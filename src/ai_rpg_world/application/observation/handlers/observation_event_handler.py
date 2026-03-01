@@ -5,7 +5,7 @@
 """
 
 import logging
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
@@ -17,6 +17,8 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
+from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
 class ObservationEventHandler(EventHandler[Any]):
@@ -32,11 +34,13 @@ class ObservationEventHandler(EventHandler[Any]):
         formatter: IObservationFormatter,
         buffer: IObservationContextBuffer,
         unit_of_work_factory: UnitOfWorkFactory,
+        player_status_repository: Optional[Any] = None,
     ) -> None:
         self._resolver = resolver
         self._formatter = formatter
         self._buffer = buffer
         self._unit_of_work_factory = unit_of_work_factory
+        self._player_status_repository = player_status_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def handle(self, event: Any) -> None:
@@ -78,15 +82,25 @@ class ObservationEventHandler(EventHandler[Any]):
                 original_exception=e,
             ) from e
 
+    def _get_attention_level(self, player_id: PlayerId) -> AttentionLevel:
+        """プレイヤーの注意レベルを取得。リポジトリ未設定時は FULL。"""
+        if self._player_status_repository is None:
+            return AttentionLevel.FULL
+        status = self._player_status_repository.find_by_id(player_id)
+        if status is None:
+            return AttentionLevel.FULL
+        return status.attention_level
+
     def _handle_impl(self, event: Any) -> None:
         recipients = self._resolver.resolve(event)
-        occurred_at = getattr(event, "occurred_at", None)
+        occurred_at = event.occurred_at
         if occurred_at is None:
             from datetime import datetime
             occurred_at = datetime.now()
 
         for player_id in recipients:
-            output = self._formatter.format(event, player_id)
+            attention_level = self._get_attention_level(player_id)
+            output = self._formatter.format(event, player_id, attention_level=attention_level)
             if output is not None:
                 entry = ObservationEntry(occurred_at=occurred_at, output=output)
                 self._buffer.append(player_id, entry)

@@ -36,6 +36,7 @@ from ai_rpg_world.domain.player.exception import (
     InsufficientGoldException,
     PlayerDownedException
 )
+from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 
 
 class PlayerStatusAggregate(AggregateRoot):
@@ -61,6 +62,7 @@ class PlayerStatusAggregate(AggregateRoot):
         goal_location_area_id: Optional[LocationAreaId] = None,
         is_down: bool = False,
         active_effects: List[StatusEffect] = None,
+        attention_level: Optional[AttentionLevel] = None,
     ):
         super().__init__()
         self._player_id = player_id
@@ -81,6 +83,16 @@ class PlayerStatusAggregate(AggregateRoot):
         self._goal_location_area_id = goal_location_area_id
         self._is_down = is_down
         self._active_effects = active_effects or []
+        self._attention_level = attention_level if attention_level is not None else AttentionLevel.FULL
+
+    @property
+    def attention_level(self) -> AttentionLevel:
+        """観測の注意レベル（集中状態）。"""
+        return self._attention_level
+
+    def set_attention_level(self, level: AttentionLevel) -> None:
+        """注意レベルを変更する。"""
+        self._attention_level = level
 
     @property
     def player_id(self) -> PlayerId:

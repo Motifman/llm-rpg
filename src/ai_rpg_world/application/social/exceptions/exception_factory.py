@@ -154,7 +154,8 @@ class ApplicationExceptionFactory:
 
         # アプリケーション例外を作成
         # Exceptionクラスに定義されたエラーコードを使用
-        error_code = getattr(domain_exception, 'error_code', domain_class_name.upper())
+        # テストの Mock や DomainException 以外の例外が渡される場合があるためフォールバックを許容する
+        error_code = getattr(domain_exception, "error_code", domain_class_name.upper())
         try:
             app_exception = app_exception_class(
                 message=str(domain_exception),

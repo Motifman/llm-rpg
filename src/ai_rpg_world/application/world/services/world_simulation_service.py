@@ -699,7 +699,7 @@ class WorldSimulationApplicationService:
         if component.pack_id is not None and not component.is_pack_leader:
             pack_actors = physical_map.get_actors_in_pack(component.pack_id)
             leader_obj = next(
-                (a for a in pack_actors if getattr(a.component, "is_pack_leader", False)),
+                (a for a in pack_actors if a.component.is_pack_leader),
                 None,
             )
             if leader_obj is not None:
@@ -713,7 +713,7 @@ class WorldSimulationApplicationService:
             return None
         threat_by_id: Dict[WorldObjectId, int] = {}
         if self._aggro_store is not None:
-            policy = getattr(component, "aggro_memory_policy", None)
+            policy = component.aggro_memory_policy
             threat_by_id = self._aggro_store.get_threat_by_attacker(
                 physical_map.spot_id,
                 actor.object_id,

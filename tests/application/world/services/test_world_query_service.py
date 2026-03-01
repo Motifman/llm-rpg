@@ -10,7 +10,9 @@ from ai_rpg_world.application.world.contracts.queries import (
     GetSpotContextForPlayerQuery,
     GetVisibleContextQuery,
     GetAvailableMovesQuery,
+    GetPlayerCurrentStateQuery,
 )
+from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
     PlayerNotFoundException,
     MapNotFoundException,
@@ -29,7 +31,7 @@ from ai_rpg_world.domain.player.value_object.gold import Gold
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
-from ai_rpg_world.domain.player.enum.player_enum import Role
+from ai_rpg_world.domain.player.enum.player_enum import Role, AttentionLevel
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
@@ -535,6 +537,128 @@ class TestWorldQueryService:
                 service.get_available_moves(GetAvailableMovesQuery(player_id=player_id))
             assert exc_info.value.original_exception is not None
 
+    # --- get_player_current_state 正常ケース ---
+
+    def test_get_player_current_state_returns_dto_when_placed(self, setup_service):
+        """配置済みプレイヤーの現在状態が PlayerCurrentStateDto で返ること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id, "Alice"))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 3, 4))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id, 3, 4)]))
+        spot_repo.save(Spot(SpotId(1), "Town", "A town"))
+
+        result = service.get_player_current_state(GetPlayerCurrentStateQuery(player_id=player_id))
+
+        assert result is not None
+        assert isinstance(result, PlayerCurrentStateDto)
+        assert result.player_id == player_id
+        assert result.player_name == "Alice"
+        assert result.current_spot_id == spot_id
+        assert result.current_spot_name == "Town"
+        assert result.x == 3
+        assert result.y == 4
+        assert result.weather_type is not None
+        assert result.weather_intensity >= 0
+        assert result.current_player_count >= 1
+        assert result.attention_level is AttentionLevel.FULL
+        assert isinstance(result.visible_objects, list)
+        assert result.available_moves is not None
+        assert result.total_available_moves is not None
+
+    def test_get_player_current_state_returns_none_when_not_placed(self, setup_service):
+        """未配置の場合は None を返すこと"""
+        service, status_repo, profile_repo, _, spot_repo = setup_service
+        player_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status = self._create_sample_status(player_id)
+        status._current_spot_id = None
+        status._current_coordinate = None
+        status_repo.save(status)
+
+        result = service.get_player_current_state(GetPlayerCurrentStateQuery(player_id=player_id))
+
+        assert result is None
+
+    def test_get_player_current_state_returns_none_when_player_not_in_repo(self, setup_service):
+        """プレイヤーがリポジトリに存在しない場合は None を返すこと"""
+        service, _, _, _, _ = setup_service
+
+        result = service.get_player_current_state(GetPlayerCurrentStateQuery(player_id=99999))
+
+        assert result is None
+
+    def test_get_player_current_state_includes_attention_level_from_status(self, setup_service):
+        """PlayerStatus の attention_level が DTO に含まれること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status = self._create_sample_status(player_id, spot_id, 0, 0)
+        status.set_attention_level(AttentionLevel.IGNORE)
+        status_repo.save(status)
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+
+        result = service.get_player_current_state(GetPlayerCurrentStateQuery(player_id=player_id))
+
+        assert result is not None
+        assert result.attention_level == AttentionLevel.IGNORE
+
+    def test_get_player_current_state_include_available_moves_false_omits_moves(self, setup_service):
+        """include_available_moves=False のとき available_moves が None であること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+
+        result = service.get_player_current_state(
+            GetPlayerCurrentStateQuery(player_id=player_id, include_available_moves=False)
+        )
+
+        assert result is not None
+        assert result.available_moves is None
+        assert result.total_available_moves is None
+
+    def test_get_player_current_state_raises_player_not_found_when_profile_missing(self, setup_service):
+        """プロフィールが存在しない場合に PlayerNotFoundException が発生すること"""
+        service, status_repo, _, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 1
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+
+        with pytest.raises(PlayerNotFoundException):
+            service.get_player_current_state(GetPlayerCurrentStateQuery(player_id=player_id))
+
+    def test_get_player_current_state_raises_map_not_found_when_spot_missing(self, setup_service):
+        """スポットが存在しない場合に MapNotFoundException が発生すること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 999
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+
+        with pytest.raises(MapNotFoundException):
+            service.get_player_current_state(GetPlayerCurrentStateQuery(player_id=player_id))
+
+    def test_get_player_current_state_raises_world_system_error_on_unexpected_exception(self, setup_service):
+        """想定外の例外時に WorldSystemErrorException が発生すること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+
+        with patch.object(spot_repo, "find_by_id", side_effect=RuntimeError("unexpected")):
+            with pytest.raises(WorldSystemErrorException) as exc_info:
+                service.get_player_current_state(GetPlayerCurrentStateQuery(player_id=player_id))
+            assert exc_info.value.original_exception is not None
+
 
 class TestGetPlayerLocationQueryValidation:
     """GetPlayerLocationQuery のバリデーション"""
@@ -595,3 +719,26 @@ class TestGetAvailableMovesQueryValidation:
     def test_query_accepts_positive_player_id(self):
         q = GetAvailableMovesQuery(player_id=1)
         assert q.player_id == 1
+
+
+class TestGetPlayerCurrentStateQueryValidation:
+    """GetPlayerCurrentStateQuery のバリデーション"""
+
+    def test_query_raises_value_error_for_invalid_player_id_zero(self):
+        with pytest.raises(ValueError, match="player_id must be greater than 0"):
+            GetPlayerCurrentStateQuery(player_id=0)
+
+    def test_query_raises_value_error_for_negative_view_distance(self):
+        with pytest.raises(ValueError, match="view_distance must be 0 or greater"):
+            GetPlayerCurrentStateQuery(player_id=1, view_distance=-1)
+
+    def test_query_accepts_positive_player_id_and_defaults(self):
+        q = GetPlayerCurrentStateQuery(player_id=1)
+        assert q.player_id == 1
+        assert q.include_available_moves is True
+        assert q.view_distance == 5
+
+    def test_query_accepts_custom_include_available_moves_and_view_distance(self):
+        q = GetPlayerCurrentStateQuery(player_id=1, include_available_moves=False, view_distance=10)
+        assert q.include_available_moves is False
+        assert q.view_distance == 10
