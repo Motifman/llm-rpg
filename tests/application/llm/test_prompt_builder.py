@@ -18,11 +18,20 @@ from ai_rpg_world.application.llm.services.current_state_formatter import (
 from ai_rpg_world.application.llm.services.recent_events_formatter import (
     DefaultRecentEventsFormatter,
 )
+from ai_rpg_world.application.llm.services.available_tools_provider import (
+    DefaultAvailableToolsProvider,
+)
 from ai_rpg_world.application.llm.services.context_format_strategy import (
     SectionBasedContextFormatStrategy,
 )
+from ai_rpg_world.application.llm.services.game_tool_registry import (
+    DefaultGameToolRegistry,
+)
 from ai_rpg_world.application.llm.services.system_prompt_builder import (
     DefaultSystemPromptBuilder,
+)
+from ai_rpg_world.application.llm.services.tool_definitions import (
+    register_default_tools,
 )
 from ai_rpg_world.application.llm.exceptions import PlayerProfileNotFoundForPromptException
 from ai_rpg_world.application.observation.services.observation_context_buffer import (
@@ -101,6 +110,9 @@ class TestDefaultPromptBuilder:
         recent_formatter = DefaultRecentEventsFormatter()
         strategy = SectionBasedContextFormatStrategy()
         system_builder = DefaultSystemPromptBuilder()
+        registry = DefaultGameToolRegistry()
+        register_default_tools(registry)
+        tools_provider = DefaultAvailableToolsProvider(registry)
         prompt_builder = DefaultPromptBuilder(
             observation_buffer=buffer,
             sliding_window_memory=sliding,
@@ -111,6 +123,7 @@ class TestDefaultPromptBuilder:
             recent_events_formatter=recent_formatter,
             context_format_strategy=strategy,
             system_prompt_builder=system_builder,
+            available_tools_provider=tools_provider,
         )
         return prompt_builder, profile_repo, status_repo, phys_repo, spot_repo, buffer
 
@@ -137,6 +150,11 @@ class TestDefaultPromptBuilder:
         assert "Alice" in result["messages"][0]["content"]
         assert "現在地: 未配置" in result["messages"][1]["content"]
         assert MESSAGE_WHEN_PLAYER_NOT_PLACED in result["messages"][1]["content"]
+        # 未配置でも no_op は常に利用可能なので tools は空でない
+        assert isinstance(result["tools"], list)
+        assert len(result["tools"]) >= 1
+        tool_names = [t["function"]["name"] for t in result["tools"] if t.get("type") == "function"]
+        assert "world_no_op" in tool_names
 
     def test_build_raises_when_profile_not_found(self, setup_prompt_builder):
         """プロフィールが存在しないとき PlayerProfileNotFoundForPromptException"""
@@ -182,6 +200,41 @@ class TestDefaultPromptBuilder:
         )
         assert "次のアクションを選んでください。" in result["messages"][1]["content"]
 
+    def test_init_available_tools_provider_not_provider_raises_type_error(
+        self, setup_prompt_builder
+    ):
+        """コンストラクタで available_tools_provider が IAvailableToolsProvider でないとき TypeError"""
+        _, profile_repo, status_repo, phys_repo, spot_repo, buffer = setup_prompt_builder
+        sliding = DefaultSlidingWindowMemory()
+        action_store = DefaultActionResultStore()
+        formatter = DefaultCurrentStateFormatter()
+        recent_formatter = DefaultRecentEventsFormatter()
+        strategy = SectionBasedContextFormatStrategy()
+        system_builder = DefaultSystemPromptBuilder()
+        registry = DefaultGameToolRegistry()
+        register_default_tools(registry)
+        connected = GatewayBasedConnectedSpotsProvider(phys_repo)
+        world_query = WorldQueryService(
+            player_status_repository=status_repo,
+            player_profile_repository=profile_repo,
+            physical_map_repository=phys_repo,
+            spot_repository=spot_repo,
+            connected_spots_provider=connected,
+        )
+        with pytest.raises(TypeError, match="available_tools_provider must be IAvailableToolsProvider"):
+            DefaultPromptBuilder(
+                observation_buffer=buffer,
+                sliding_window_memory=sliding,
+                action_result_store=action_store,
+                world_query_service=world_query,
+                player_profile_repository=profile_repo,
+                current_state_formatter=formatter,
+                recent_events_formatter=recent_formatter,
+                context_format_strategy=strategy,
+                system_prompt_builder=system_builder,
+                available_tools_provider=None,  # type: ignore[arg-type]
+            )
+
     def test_init_default_action_instruction_not_str_raises_type_error(
         self, setup_prompt_builder
     ):
@@ -193,6 +246,9 @@ class TestDefaultPromptBuilder:
         recent_formatter = DefaultRecentEventsFormatter()
         strategy = SectionBasedContextFormatStrategy()
         system_builder = DefaultSystemPromptBuilder()
+        registry = DefaultGameToolRegistry()
+        register_default_tools(registry)
+        tools_provider = DefaultAvailableToolsProvider(registry)
         connected = GatewayBasedConnectedSpotsProvider(phys_repo)
         world_query = WorldQueryService(
             player_status_repository=status_repo,
@@ -212,5 +268,6 @@ class TestDefaultPromptBuilder:
                 recent_events_formatter=recent_formatter,
                 context_format_strategy=strategy,
                 system_prompt_builder=system_builder,
+                available_tools_provider=tools_provider,
                 default_action_instruction=123,  # type: ignore[arg-type]
             )

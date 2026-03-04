@@ -1,11 +1,13 @@
-"""LLM 向け DTO（SystemPromptPlayerInfoDto, ActionResultEntry）のテスト（正常・例外）"""
+"""LLM 向け DTO（SystemPromptPlayerInfoDto, ActionResultEntry, LlmCommandResultDto, ToolDefinitionDto）のテスト（正常・例外）"""
 
 import pytest
 from datetime import datetime
 
 from ai_rpg_world.application.llm.contracts.dtos import (
-    SystemPromptPlayerInfoDto,
     ActionResultEntry,
+    LlmCommandResultDto,
+    SystemPromptPlayerInfoDto,
+    ToolDefinitionDto,
 )
 
 
@@ -134,4 +136,99 @@ class TestActionResultEntry:
                 occurred_at=datetime.now(),
                 action_summary="a",
                 result_summary=None,  # type: ignore[arg-type]
+            )
+
+
+class TestLlmCommandResultDto:
+    """LlmCommandResultDto の正常・例外ケース"""
+
+    def test_create_success_minimal(self):
+        """成功時は message のみで error_code / remediation は None"""
+        dto = LlmCommandResultDto(success=True, message="完了しました。")
+        assert dto.success is True
+        assert dto.message == "完了しました。"
+        assert dto.error_code is None
+        assert dto.remediation is None
+
+    def test_create_failure_with_remediation(self):
+        """失敗時は message / error_code / remediation を指定できる"""
+        dto = LlmCommandResultDto(
+            success=False,
+            message="移動に失敗しました。",
+            error_code="MOVEMENT_INVALID",
+            remediation="接続先を確認してください。",
+        )
+        assert dto.success is False
+        assert dto.message == "移動に失敗しました。"
+        assert dto.error_code == "MOVEMENT_INVALID"
+        assert dto.remediation == "接続先を確認してください。"
+
+    def test_success_not_bool_raises_type_error(self):
+        """success が bool でない場合 TypeError"""
+        with pytest.raises(TypeError, match="success must be bool"):
+            LlmCommandResultDto(success=1, message="ok")  # type: ignore[arg-type]
+
+    def test_message_not_str_raises_type_error(self):
+        """message が str でない場合 TypeError"""
+        with pytest.raises(TypeError, match="message must be str"):
+            LlmCommandResultDto(success=True, message=None)  # type: ignore[arg-type]
+
+    def test_error_code_not_str_raises_type_error(self):
+        """error_code が str でない場合（None 以外）TypeError"""
+        with pytest.raises(TypeError, match="error_code must be str or None"):
+            LlmCommandResultDto(
+                success=False,
+                message="err",
+                error_code=123,  # type: ignore[arg-type]
+            )
+
+    def test_remediation_not_str_raises_type_error(self):
+        """remediation が str でない場合（None 以外）TypeError"""
+        with pytest.raises(TypeError, match="remediation must be str or None"):
+            LlmCommandResultDto(
+                success=False,
+                message="err",
+                remediation=[],  # type: ignore[arg-type]
+            )
+
+
+class TestToolDefinitionDto:
+    """ToolDefinitionDto の正常・例外ケース"""
+
+    def test_create_with_valid_fields(self):
+        """name / description / parameters が正しい型なら正常"""
+        dto = ToolDefinitionDto(
+            name="world_no_op",
+            description="何もしない。",
+            parameters={"type": "object", "properties": {}, "required": []},
+        )
+        assert dto.name == "world_no_op"
+        assert dto.description == "何もしない。"
+        assert dto.parameters == {"type": "object", "properties": {}, "required": []}
+
+    def test_name_not_str_raises_type_error(self):
+        """name が str でない場合 TypeError"""
+        with pytest.raises(TypeError, match="name must be str"):
+            ToolDefinitionDto(
+                name=123,  # type: ignore[arg-type]
+                description="d",
+                parameters={},
+            )
+
+    def test_description_not_str_raises_type_error(self):
+        """description が str でない場合 TypeError"""
+        with pytest.raises(TypeError, match="description must be str"):
+            ToolDefinitionDto(
+                name="n",
+                description=None,  # type: ignore[arg-type]
+                parameters={},
+            )
+
+    def test_parameters_not_dict_raises_type_error(self):
+        """parameters が dict でない場合 TypeError"""
+        with pytest.raises(TypeError, match="parameters must be dict"):
+            ToolDefinitionDto(
+                name="n",
+                description="d",
+                parameters="{}",  # type: ignore[arg-type]
             )
