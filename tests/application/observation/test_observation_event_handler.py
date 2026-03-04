@@ -12,6 +12,7 @@ from ai_rpg_world.application.observation.services.observation_formatter import 
 from ai_rpg_world.application.observation.services.observation_recipient_resolver import (
     create_observation_recipient_resolver,
 )
+from ai_rpg_world.application.llm.services.llm_player_resolver import SetBasedLlmPlayerResolver
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
@@ -284,6 +285,193 @@ class TestObservationEventHandler:
         )
         with pytest.raises(ApplicationException, match="app validation failed"):
             handler.handle(event)
+
+
+class TestObservationEventHandlerLlmTurnScheduling:
+    """turn_trigger と llm_player_resolver を渡したときの LLM ターンスケジュール（正常・境界）"""
+
+    @pytest.fixture
+    def data_store(self):
+        return InMemoryDataStore()
+
+    @pytest.fixture
+    def status_repo(self, data_store):
+        return InMemoryPlayerStatusRepository(data_store=data_store)
+
+    @pytest.fixture
+    def unit_of_work_factory(self, data_store):
+        class Factory:
+            def __init__(self, ds):
+                self._ds = ds
+            def create(self):
+                return InMemoryUnitOfWork(
+                    unit_of_work_factory=self, data_store=self._ds
+                )
+        return Factory(data_store)
+
+    @pytest.fixture
+    def buffer(self):
+        return DefaultObservationContextBuffer()
+
+    @pytest.fixture
+    def physical_map_repo(self, data_store):
+        return InMemoryPhysicalMapRepository(data_store=data_store)
+
+    @pytest.fixture
+    def resolver(self, status_repo, physical_map_repo):
+        return create_observation_recipient_resolver(
+            player_status_repository=status_repo,
+            physical_map_repository=physical_map_repo,
+        )
+
+    @pytest.fixture
+    def formatter(self):
+        return ObservationFormatter()
+
+    @pytest.fixture
+    def turn_trigger(self):
+        return MagicMock()
+
+    @pytest.fixture
+    def llm_player_resolver_include_one(self):
+        """プレイヤー 1 を LLM 制御とするリゾルバ"""
+        return SetBasedLlmPlayerResolver({1})
+
+    @pytest.fixture
+    def llm_player_resolver_include_two_only(self):
+        """プレイヤー 2 のみ LLM 制御とするリゾルバ"""
+        return SetBasedLlmPlayerResolver({2})
+
+    def test_handle_when_llm_player_appends_and_schedules_turn(
+        self,
+        resolver,
+        formatter,
+        buffer,
+        unit_of_work_factory,
+        turn_trigger,
+        llm_player_resolver_include_one,
+    ):
+        """配信先が LLM プレイヤーのとき観測を append したあと schedule_turn が呼ばれる"""
+        handler = ObservationEventHandler(
+            resolver=resolver,
+            formatter=formatter,
+            buffer=buffer,
+            unit_of_work_factory=unit_of_work_factory,
+            turn_trigger=turn_trigger,
+            llm_player_resolver=llm_player_resolver_include_one,
+        )
+        event = PlayerGoldEarnedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            earned_amount=100,
+            total_gold=1100,
+        )
+        handler.handle(event)
+
+        assert len(buffer.get_observations(PlayerId(1))) == 1
+        turn_trigger.schedule_turn.assert_called_once_with(PlayerId(1))
+
+    def test_handle_when_not_llm_player_does_not_schedule_turn(
+        self,
+        resolver,
+        formatter,
+        buffer,
+        unit_of_work_factory,
+        turn_trigger,
+        llm_player_resolver_include_two_only,
+    ):
+        """配信先が LLM プレイヤーでないとき schedule_turn は呼ばれない"""
+        handler = ObservationEventHandler(
+            resolver=resolver,
+            formatter=formatter,
+            buffer=buffer,
+            unit_of_work_factory=unit_of_work_factory,
+            turn_trigger=turn_trigger,
+            llm_player_resolver=llm_player_resolver_include_two_only,
+        )
+        event = PlayerGoldEarnedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            earned_amount=100,
+            total_gold=1100,
+        )
+        handler.handle(event)
+
+        assert len(buffer.get_observations(PlayerId(1))) == 1
+        turn_trigger.schedule_turn.assert_not_called()
+
+    def test_handle_when_turn_trigger_none_does_not_schedule(self, resolver, formatter, buffer, unit_of_work_factory, llm_player_resolver_include_one):
+        """turn_trigger が None のとき schedule_turn は呼ばれない（通常の観測のみ）"""
+        handler = ObservationEventHandler(
+            resolver=resolver,
+            formatter=formatter,
+            buffer=buffer,
+            unit_of_work_factory=unit_of_work_factory,
+            turn_trigger=None,
+            llm_player_resolver=llm_player_resolver_include_one,
+        )
+        event = PlayerGoldEarnedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            earned_amount=100,
+            total_gold=1100,
+        )
+        handler.handle(event)
+
+        assert len(buffer.get_observations(PlayerId(1))) == 1
+
+    def test_handle_when_llm_player_resolver_none_does_not_schedule(self, resolver, formatter, buffer, unit_of_work_factory, turn_trigger):
+        """llm_player_resolver が None のとき schedule_turn は呼ばれない"""
+        handler = ObservationEventHandler(
+            resolver=resolver,
+            formatter=formatter,
+            buffer=buffer,
+            unit_of_work_factory=unit_of_work_factory,
+            turn_trigger=turn_trigger,
+            llm_player_resolver=None,
+        )
+        event = PlayerGoldEarnedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            earned_amount=100,
+            total_gold=1100,
+        )
+        handler.handle(event)
+
+        assert len(buffer.get_observations(PlayerId(1))) == 1
+        turn_trigger.schedule_turn.assert_not_called()
+
+    def test_handle_when_schedule_turn_raises_propagates_as_system_error_exception(
+        self,
+        resolver,
+        formatter,
+        buffer,
+        unit_of_work_factory,
+        llm_player_resolver_include_one,
+    ):
+        """LLM プレイヤーで観測追加後に schedule_turn が例外を投げた場合、SystemErrorException でラップされて伝播する"""
+        turn_trigger = MagicMock()
+        turn_trigger.schedule_turn.side_effect = RuntimeError("schedule_turn failed")
+        handler = ObservationEventHandler(
+            resolver=resolver,
+            formatter=formatter,
+            buffer=buffer,
+            unit_of_work_factory=unit_of_work_factory,
+            turn_trigger=turn_trigger,
+            llm_player_resolver=llm_player_resolver_include_one,
+        )
+        event = PlayerGoldEarnedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            earned_amount=100,
+            total_gold=1100,
+        )
+
+        with pytest.raises(SystemErrorException, match="Observation.*failed"):
+            handler.handle(event)
+
+        assert len(buffer.get_observations(PlayerId(1))) == 1
+        turn_trigger.schedule_turn.assert_called_once_with(PlayerId(1))
 
 
 class TestObservationEventHandlerRegistry:

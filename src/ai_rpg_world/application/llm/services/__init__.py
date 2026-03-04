@@ -22,6 +22,8 @@ from ai_rpg_world.application.llm.services.game_tool_registry import (
 )
 from ai_rpg_world.application.llm.services.llm_agent_turn_runner import LlmAgentTurnRunner
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+from ai_rpg_world.application.llm.services.llm_player_resolver import SetBasedLlmPlayerResolver
+from ai_rpg_world.application.llm.services.llm_turn_trigger import DefaultLlmTurnTrigger
 from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
 from ai_rpg_world.application.llm.services.recent_events_formatter import (
     DefaultRecentEventsFormatter,
@@ -44,12 +46,14 @@ __all__ = [
     "DefaultAvailableToolsProvider",
     "DefaultCurrentStateFormatter",
     "DefaultGameToolRegistry",
+    "DefaultLlmTurnTrigger",
+    "LlmAgentOrchestrator",
     "LlmAgentTurnRunner",
     "DefaultPromptBuilder",
     "DefaultRecentEventsFormatter",
+    "SetBasedLlmPlayerResolver",
     "DefaultSlidingWindowMemory",
     "DefaultSystemPromptBuilder",
-    "LlmAgentOrchestrator",
     "NoOpAvailabilityResolver",
     "SectionBasedContextFormatStrategy",
     "SetDestinationAvailabilityResolver",

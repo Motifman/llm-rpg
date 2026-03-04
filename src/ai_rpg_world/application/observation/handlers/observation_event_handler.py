@@ -2,6 +2,7 @@
 観測用イベントハンドラ。
 ドメインイベントを購読し、配信先を解決・観測テキストに変換してコンテキストバッファに追加する。
 非同期で実行する（LLM 用のため eventual でよい）。
+LLM ターン駆動用に、turn_trigger と llm_player_resolver を渡すと観測を蓄積したあと schedule_turn する。
 """
 
 import logging
@@ -9,6 +10,10 @@ from typing import Any, Callable, Optional
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
+from ai_rpg_world.application.llm.contracts.interfaces import (
+    ILLMPlayerResolver,
+    ILlmTurnTrigger,
+)
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
     IObservationFormatter,
@@ -35,12 +40,16 @@ class ObservationEventHandler(EventHandler[Any]):
         buffer: IObservationContextBuffer,
         unit_of_work_factory: UnitOfWorkFactory,
         player_status_repository: Optional[Any] = None,
+        turn_trigger: Optional[ILlmTurnTrigger] = None,
+        llm_player_resolver: Optional[ILLMPlayerResolver] = None,
     ) -> None:
         self._resolver = resolver
         self._formatter = formatter
         self._buffer = buffer
         self._unit_of_work_factory = unit_of_work_factory
         self._player_status_repository = player_status_repository
+        self._turn_trigger = turn_trigger
+        self._llm_player_resolver = llm_player_resolver
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def handle(self, event: Any) -> None:
@@ -104,3 +113,9 @@ class ObservationEventHandler(EventHandler[Any]):
             if output is not None:
                 entry = ObservationEntry(occurred_at=occurred_at, output=output)
                 self._buffer.append(player_id, entry)
+                if (
+                    self._turn_trigger is not None
+                    and self._llm_player_resolver is not None
+                    and self._llm_player_resolver.is_llm_controlled(player_id)
+                ):
+                    self._turn_trigger.schedule_turn(player_id)
