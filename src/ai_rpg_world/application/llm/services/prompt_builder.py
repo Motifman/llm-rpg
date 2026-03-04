@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 from ai_rpg_world.application.llm.contracts.dtos import SystemPromptPlayerInfoDto
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
+    IAvailableToolsProvider,
     IContextFormatStrategy,
     ICurrentStateFormatter,
     IPromptBuilder,
@@ -47,6 +48,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         recent_events_formatter: IRecentEventsFormatter,
         context_format_strategy: IContextFormatStrategy,
         system_prompt_builder: ISystemPromptBuilder,
+        available_tools_provider: IAvailableToolsProvider,
         recent_observations_limit: int = DEFAULT_RECENT_OBSERVATIONS_LIMIT,
         recent_actions_limit: int = DEFAULT_RECENT_ACTIONS_LIMIT,
         default_action_instruction: str = DEFAULT_ACTION_INSTRUCTION,
@@ -69,6 +71,8 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError("context_format_strategy must be IContextFormatStrategy")
         if not isinstance(system_prompt_builder, ISystemPromptBuilder):
             raise TypeError("system_prompt_builder must be ISystemPromptBuilder")
+        if not isinstance(available_tools_provider, IAvailableToolsProvider):
+            raise TypeError("available_tools_provider must be IAvailableToolsProvider")
         if recent_observations_limit < 0:
             raise ValueError("recent_observations_limit must be 0 or greater")
         if recent_actions_limit < 0:
@@ -85,6 +89,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._recent_events_formatter = recent_events_formatter
         self._context_format_strategy = context_format_strategy
         self._system_prompt_builder = system_prompt_builder
+        self._available_tools_provider = available_tools_provider
         self._recent_observations_limit = recent_observations_limit
         self._recent_actions_limit = recent_actions_limit
         self._default_action_instruction = default_action_instruction
@@ -147,11 +152,14 @@ class DefaultPromptBuilder(IPromptBuilder):
         instruction = action_instruction or self._default_action_instruction
         user_content = context.rstrip() + "\n\n" + instruction
 
+        # 7. 利用可能ツール（ToolAvailabilityContext = PlayerCurrentStateDto）
+        tools = self._available_tools_provider.get_available_tools(current_state_dto)
+
         return {
             "messages": [
                 {"role": "system", "content": system_content},
                 {"role": "user", "content": user_content},
             ],
-            "tools": [],
+            "tools": tools,
             "tool_choice": "required",
         }

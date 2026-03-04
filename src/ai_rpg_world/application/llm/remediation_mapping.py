@@ -12,7 +12,11 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "PLAYER_NOT_FOUND": "指定したプレイヤーが存在しません。",
     "MAP_NOT_FOUND": "現在地または目的地のマップ情報が見つかりません。",
     "MOVEMENT_FAILED": "現在地にいるか、目的地が接続されているか確認してください。",
+    "MOVEMENT_INVALID": "現在地にいるか、目的地が接続されているか確認してください。",
     "INVALID_DESTINATION": "有効な移動先を選んでください。接続先スポット一覧を確認してください。",
+    "GATEWAY_OBJECT_NOT_FOUND": "移動先のゲートウェイまたはオブジェクトを確認してください。",
+    "GATEWAY_MONSTER_NOT_FOUND": "移動先のゲートウェイを確認してください。",
+    "UNKNOWN_TOOL": "利用可能なツール一覧から選択してください。",
     "SYSTEM_ERROR": "しばらくしてから再度お試しください。",
 }
 

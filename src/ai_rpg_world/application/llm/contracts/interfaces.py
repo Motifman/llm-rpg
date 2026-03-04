@@ -2,11 +2,12 @@
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
     SystemPromptPlayerInfoDto,
+    ToolDefinitionDto,
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
@@ -110,5 +111,71 @@ class IPromptBuilder(ABC):
         OpenAI 互換の辞書を返す。
         {"messages": [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}], "tools": [], "tool_choice": "required"}
         action_instruction は user 末尾に付与する行動選択の説明。省略時はデフォルト文言。
+        """
+        pass
+
+
+# --- ツール利用可否・ツール一覧（ToolAvailabilityContext = PlayerCurrentStateDto） ---
+
+
+class IAvailabilityResolver(ABC):
+    """あるツールが現在のコンテキストで利用可能かどうかを判定する。"""
+
+    @abstractmethod
+    def is_available(
+        self, context: Optional[PlayerCurrentStateDto]
+    ) -> bool:
+        """context でこのツールを提示するか。未配置時は context が None のことがある。"""
+        pass
+
+
+class IGameToolRegistry(ABC):
+    """全ツール定義の登録・取得。"""
+
+    @abstractmethod
+    def register(
+        self,
+        definition: ToolDefinitionDto,
+        resolver: IAvailabilityResolver,
+    ) -> None:
+        """ツール定義とその利用可否リゾルバを登録する。"""
+        pass
+
+    @abstractmethod
+    def get_definitions_with_resolvers(
+        self,
+    ) -> List[Tuple[ToolDefinitionDto, "IAvailabilityResolver"]]:
+        """登録済みの (ToolDefinitionDto, IAvailabilityResolver) のリストを返す。"""
+        pass
+
+
+class IAvailableToolsProvider(ABC):
+    """現在状況から利用可能なツールのリスト（OpenAI tools 形式）を返す。"""
+
+    @abstractmethod
+    def get_available_tools(
+        self,
+        context: Optional[PlayerCurrentStateDto],
+    ) -> List[Dict[str, Any]]:
+        """context に応じて利用可能なツールだけを OpenAI の tools 形式で返す。"""
+        pass
+
+
+# --- LLM API 抽象化 ---
+
+
+class ILLMClient(ABC):
+    """LLM API 呼び出しのポート。messages + tools を送り、1 つの tool_call を受け取る。"""
+
+    @abstractmethod
+    def invoke(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: List[Dict[str, Any]],
+        tool_choice: str = "required",
+    ) -> Optional[Dict[str, Any]]:
+        """
+        1 回の LLM 呼び出しを行い、tool_call があればそれを返す。
+        戻り値: {"name": str, "arguments": dict} または tool_call が無い場合 None。
         """
         pass

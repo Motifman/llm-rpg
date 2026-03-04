@@ -137,6 +137,16 @@
 - **ツールスキーマ**: まずは**コード内**で定義する。後に YAML/JSON 等で外部化する予定であり、実装時はレジストリやツール定義の読み込み部分を差し替え可能にしておく。
 - 既存コマンド（SetDestinationCommand, MoveTileCommand, ChangeAttentionLevelCommand, チェスト・設置物関連など）と 1:1 でツールを用意し、動的に「今使えるもの」だけを返すことで、ツール数过多を防ぐ。
 
+### 5.4 目的地設定（set_destination）とティック移動（tick_movement）を分ける利点
+
+現在の仕様では、**set_destination**（目的地・経路の設定）と **tick_movement**（経路に沿った 1 ステップ実行）が別ツールとして分かれている。この分離の利点は以下のとおりである。
+
+- **ゲームループとの整合**: 実際の移動はゲームのティック（時間経過）に合わせて行うため、LLM が「目的地を決める」ことと「1 マス進む」ことを同一の API で扱うと、1 回の応答で複数マス進む・進まないの制御が難しくなる。経路を先に設定し、ティックごとに tick_movement で進めることで、シミュレーション側の進行と一致する。
+- **失敗の局所化**: 経路設定時の失敗（接続先なし・条件不達など）と、移動実行時の失敗（スタミナ切れ・ブロックなど）を区別できる。LLM は「直近の出来事」で「目的地を設定した → 結果: 成功」と「その後 tick で進もうとした → 結果: 失敗」を別々に受け取り、次の行動を選びやすい。
+- **将来の変更に強い**: のちに「1 回のツールで目的地まで一気に移動」する仕様に変える場合でも、set_destination の意味を「目的地まで移動を開始する」に拡張するか、新ツールを追加するだけで済む。内部の経路計算・ティック進行はそのまま利用できる。
+
+一方で、プレイヤー体験としては「どこかへ行く」が 2 段階（設定＋進行）に分かれるため、後から「移動は 1 ツールにまとめる」などの仕様変更を検討する余地はある。
+
 ---
 
 ## 6. インターフェース一覧（差し替え可能にすべきもの）
@@ -274,17 +284,20 @@
 
 | 項目 | 配置 | 備考 |
 |------|------|------|
-| **契約（interfaces / dtos）** | `application/llm/contracts/` | ICurrentStateFormatter, IRecentEventsFormatter, IContextFormatStrategy, ISystemPromptBuilder, IPromptBuilder, ISlidingWindowMemory, IActionResultStore。SystemPromptPlayerInfoDto, ActionResultEntry。 |
+| **契約（interfaces / dtos）** | `application/llm/contracts/` | ICurrentStateFormatter, IRecentEventsFormatter, IContextFormatStrategy, ISystemPromptBuilder, IPromptBuilder, ISlidingWindowMemory, IActionResultStore, IAvailabilityResolver, IGameToolRegistry, IAvailableToolsProvider, ILLMClient。SystemPromptPlayerInfoDto, ActionResultEntry, LlmCommandResultDto, ToolDefinitionDto。ToolAvailabilityContext は PlayerCurrentStateDto を利用。 |
+| **ツール名プレフィックス** | `application/llm/tool_constants.py` | TOOL_NAME_PREFIX_WORLD, TOOL_NAME_PREFIX_MOVE, TOOL_NAME_PREFIXES, TOOL_NAME_NO_OP, TOOL_NAME_SET_DESTINATION。 |
 | **スライディングウィンドウ** | `application/llm/services/sliding_window_memory.py` | DefaultSlidingWindowMemory（in-memory）。観測の append / append_all / get_recent。 |
 | **行動結果ストア** | `application/llm/services/action_result_store.py` | DefaultActionResultStore（in-memory）。 |
 | **フォーマッタ・戦略** | `application/llm/services/` | DefaultCurrentStateFormatter, DefaultRecentEventsFormatter, SectionBasedContextFormatStrategy（案A）。 |
-| **システムプロンプト・プロンプト組み立て** | `application/llm/services/` | DefaultSystemPromptBuilder（初版テンプレート）, DefaultPromptBuilder。drain → SlidingWindow への append は DefaultPromptBuilder.build() 内で実施。 |
-| **失敗時 remediation** | `application/llm/remediation_mapping.py` | error_code → 対処法のマッピング。オーケストレータ実装時に利用。 |
+| **システムプロンプト・プロンプト組み立て** | `application/llm/services/` | DefaultSystemPromptBuilder（初版テンプレート）, DefaultPromptBuilder。drain → SlidingWindow への append は DefaultPromptBuilder.build() 内で実施。IAvailableToolsProvider で tools を取得し返り辞書に含める。 |
+| **ツール・オーケストレータ** | `application/llm/services/` | DefaultGameToolRegistry, NoOpAvailabilityResolver, SetDestinationAvailabilityResolver, DefaultAvailableToolsProvider, tool_definitions（register_default_tools）, ToolCommandMapper, LlmAgentOrchestrator。StubLlmClient（テスト用）。 |
+| **結果標準化** | `application/llm/` | LlmCommandResultDto（成功/失敗＋message, error_code, remediation）, result_summary_builder.build_result_summary。 |
+| **失敗時 remediation** | `application/llm/remediation_mapping.py` | error_code → 対処法のマッピング。MOVEMENT_INVALID, GATEWAY_*, UNKNOWN_TOOL 等を追加。 |
 | **例外** | `application/llm/exceptions/` | LlmApplicationException, PlayerProfileNotFoundForPromptException。 |
 
 - **Phase 1**: 上記のうち、プロンプト組み立て・スライディングウィンドウ・コンテキスト（案A）・現在状態／直近の出来事フォーマットまで実装済み。直近の出来事には観測に加え IActionResultStore の行動結果を時刻でマージして含めている。
-- **Phase 2**: IActionResultStore および直近の出来事への統合（IRecentEventsFormatter で観測＋行動結果をマージ）まで実装済み。オーケストレータでの「ツール実行 → append」は未実装（Phase 3 で実施予定）。
-- **Phase 3**: IGameToolRegistry, IAvailabilityResolver, IAvailableToolsProvider, オーケストレータ（tool_call → コマンド実行 → IActionResultStore 記録）は未実装。
+- **Phase 2**: IActionResultStore および直近の出来事への統合（IRecentEventsFormatter で観測＋行動結果をマージ）まで実装済み。
+- **Phase 3**: 実装済み。IGameToolRegistry, IAvailabilityResolver, IAvailableToolsProvider（ToolAvailabilityContext = PlayerCurrentStateDto）, ILLMClient, ツール定義（world_no_op, move_set_destination）, ToolCommandMapper（ツール名→コマンド実行→LlmCommandResultDto）, LlmAgentOrchestrator（build → invoke → execute → IActionResultStore.append）。DefaultPromptBuilder は IAvailableToolsProvider で tools を組み立て。実際の LLM API 呼び出しは ILLMClient の実装（インフラ層）で差し替え可能。
 
 ---
 

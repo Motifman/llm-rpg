@@ -2,12 +2,18 @@
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
+    LlmCommandResultDto,
     SystemPromptPlayerInfoDto,
+    ToolDefinitionDto,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
+    IAvailabilityResolver,
+    IAvailableToolsProvider,
     IContextFormatStrategy,
     ICurrentStateFormatter,
+    IGameToolRegistry,
+    ILLMClient,
     IPromptBuilder,
     IRecentEventsFormatter,
     ISlidingWindowMemory,
@@ -16,10 +22,16 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
 
 __all__ = [
     "ActionResultEntry",
+    "LlmCommandResultDto",
     "SystemPromptPlayerInfoDto",
+    "ToolDefinitionDto",
     "IActionResultStore",
+    "IAvailabilityResolver",
+    "IAvailableToolsProvider",
     "IContextFormatStrategy",
     "ICurrentStateFormatter",
+    "IGameToolRegistry",
+    "ILLMClient",
     "IPromptBuilder",
     "IRecentEventsFormatter",
     "ISlidingWindowMemory",
