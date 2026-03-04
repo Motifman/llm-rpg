@@ -1,0 +1,35 @@
+"""システムプロンプト生成のデフォルト実装（初版テンプレート）"""
+
+from ai_rpg_world.application.llm.contracts.dtos import SystemPromptPlayerInfoDto
+from ai_rpg_world.application.llm.contracts.interfaces import ISystemPromptBuilder
+
+
+DEFAULT_SYSTEM_PROMPT_TEMPLATE = """あなたはMMO RPGの冒険者「{{player_name}}」です。
+{{game_description}}
+
+【基本情報】
+役職: {{role}} / 種族: {{race}} / 属性: {{element}}
+
+【ルール】
+- ゲーム世界と相互作用する唯一の手段は、提供されるツール（関数）の呼び出しです。必ずいずれか1つのツールを呼び出して行動してください。
+- 現在の状況と直近の出来事を踏まえ、次に取る行動を1つ選び、対応するツールを呼び出してください。
+- 行動に失敗した場合は、エラー内容と対処のヒントが「直近の出来事」に含まれます。それを参考に別の行動を選ぶことができます。
+"""
+
+
+class DefaultSystemPromptBuilder(ISystemPromptBuilder):
+    """SystemPromptPlayerInfoDto からシステムプロンプト文字列を生成する。"""
+
+    def __init__(self, template: str = DEFAULT_SYSTEM_PROMPT_TEMPLATE) -> None:
+        if not isinstance(template, str):
+            raise TypeError("template must be str")
+        self._template = template
+
+    def build(self, player_info: SystemPromptPlayerInfoDto) -> str:
+        if not isinstance(player_info, SystemPromptPlayerInfoDto):
+            raise TypeError("player_info must be SystemPromptPlayerInfoDto")
+        return self._template.replace("{{player_name}}", player_info.player_name).replace(
+            "{{game_description}}", player_info.game_description or ""
+        ).replace("{{role}}", player_info.role).replace(
+            "{{race}}", player_info.race
+        ).replace("{{element}}", player_info.element)
