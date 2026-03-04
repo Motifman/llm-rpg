@@ -212,12 +212,47 @@ class TestWorldSimulationApplicationService:
     def test_tick_advances_time(self, setup_service):
         """tickによってゲーム時間が進むこと"""
         service, time_provider, _, _, _, _, _, _, _, _ = setup_service
-        
+
         assert time_provider.get_current_tick() == WorldTick(10)
-        
+
         service.tick()
-        
+
         assert time_provider.get_current_tick() == WorldTick(11)
+
+    def test_tick_calls_llm_turn_trigger_run_scheduled_turns_when_provided(self, setup_service):
+        """llm_turn_trigger を渡しているとき、tick の末尾で run_scheduled_turns が 1 回呼ばれる"""
+        service, _, _, _, _, _, _, _, _, _ = setup_service
+        mock_trigger = mock.MagicMock()
+        service._llm_turn_trigger = mock_trigger
+
+        service.tick()
+
+        mock_trigger.run_scheduled_turns.assert_called_once()
+
+    def test_tick_when_llm_turn_trigger_none_does_not_call_run_scheduled_turns(self, setup_service):
+        """llm_turn_trigger を渡していない（None）とき、tick 内で run_scheduled_turns は呼ばれない"""
+        service, _, _, _, _, _, _, _, _, _ = setup_service
+        assert service._llm_turn_trigger is None
+        # tick が正常完了すれば、run_scheduled_turns は呼ばれていない（None のため）
+        result = service.tick()
+        assert result is not None
+
+    def test_tick_when_llm_turn_trigger_run_scheduled_turns_raises_propagates_as_system_error(
+        self, setup_service
+    ):
+        """llm_turn_trigger.run_scheduled_turns が例外を投げた場合、SystemErrorException でラップされて伝播する"""
+        service, _, _, _, _, _, _, _, _, _ = setup_service
+        mock_trigger = mock.MagicMock()
+        mock_trigger.run_scheduled_turns.side_effect = RuntimeError("run_scheduled_turns failed")
+        service._llm_turn_trigger = mock_trigger
+
+        with pytest.raises(SystemErrorException, match="tick failed") as exc_info:
+            service.tick()
+
+        assert exc_info.value.original_exception is not None
+        assert isinstance(exc_info.value.original_exception, RuntimeError)
+        assert "run_scheduled_turns failed" in str(exc_info.value.original_exception)
+        mock_trigger.run_scheduled_turns.assert_called_once()
 
     def test_tick_updates_autonomous_actors(self, setup_service):
         """tickによって自律行動アクター（モンスター）の行動が計画・実行されること（アクティブスポットのみ更新）"""

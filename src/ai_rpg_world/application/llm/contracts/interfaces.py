@@ -161,6 +161,32 @@ class IAvailableToolsProvider(ABC):
         pass
 
 
+# --- LLM ターン駆動（スケジュール＋実行） ---
+
+
+class ILLMPlayerResolver(ABC):
+    """プレイヤーが LLM 制御かどうかを判定するポート。"""
+
+    @abstractmethod
+    def is_llm_controlled(self, player_id: PlayerId) -> bool:
+        """指定プレイヤーが LLM 制御なら True。"""
+        pass
+
+
+class ILlmTurnTrigger(ABC):
+    """LLM ターンのスケジュールと一括実行のポート。観測到着時に schedule_turn、ループ/ティックで run_scheduled_turns を呼ぶ。"""
+
+    @abstractmethod
+    def schedule_turn(self, player_id: PlayerId) -> None:
+        """指定プレイヤーのターン実行を 1 回スケジュールする（重複は 1 回にまとまる）。"""
+        pass
+
+    @abstractmethod
+    def run_scheduled_turns(self) -> None:
+        """スケジュール済みの全プレイヤーについて run_turn を 1 回ずつ実行し、キューをクリアする。"""
+        pass
+
+
 # --- LLM API 抽象化 ---
 
 

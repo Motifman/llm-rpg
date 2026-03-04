@@ -295,6 +295,7 @@
 - **Phase 1**: 上記のうち、プロンプト組み立て・スライディングウィンドウ・コンテキスト（案A）・現在状態／直近の出来事フォーマットまで実装済み。直近の出来事には観測に加え IActionResultStore の行動結果を時刻でマージして含めている。
 - **Phase 2**: IActionResultStore および直近の出来事への統合（IRecentEventsFormatter で観測＋行動結果をマージ）まで実装済み。
 - **Phase 3**: 実装済み。IGameToolRegistry, IAvailabilityResolver, IAvailableToolsProvider（ToolAvailabilityContext = PlayerCurrentStateDto）, ILLMClient, ツール定義（world_no_op, move_set_destination）, ToolCommandMapper（ツール名→コマンド実行→LlmCommandResultDto）, LlmAgentOrchestrator（build → invoke → execute → IActionResultStore.append）。DefaultPromptBuilder は IAvailableToolsProvider で tools を組み立て。実際の LLM API 呼び出しは ILLMClient の実装（インフラ層）で差し替え可能。
+- **run_turn 駆動**: ILLMPlayerResolver（プレイヤーが LLM 制御か判定）, ILlmTurnTrigger（スケジュール＋一括実行）を定義。SetBasedLlmPlayerResolver（ID 集合で LLM プレイヤーを指定）, DefaultLlmTurnTrigger（LlmAgentTurnRunner に run_turn を委譲）を実装。ObservationEventHandler は turn_trigger と llm_player_resolver をオプションで受け取り、観測を append したあと LLM プレイヤーなら schedule_turn を呼ぶ。WorldSimulationApplicationService.tick の末尾で llm_turn_trigger が渡されていれば run_scheduled_turns() を実行。
 
 ---
 

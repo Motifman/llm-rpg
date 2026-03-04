@@ -2,6 +2,7 @@ import logging
 import random
 from typing import List, Callable, Any, Dict, Optional, Set, TYPE_CHECKING
 
+from ai_rpg_world.application.llm.contracts.interfaces import ILlmTurnTrigger
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
@@ -108,8 +109,10 @@ class WorldSimulationApplicationService:
         loot_table_repository: Optional[LootTableRepository] = None,
         connected_spots_provider: Optional[IConnectedSpotsProvider] = None,
         map_transition_service: Optional[MapTransitionService] = None,
+        llm_turn_trigger: Optional[ILlmTurnTrigger] = None,
     ):
         self._time_provider = time_provider
+        self._llm_turn_trigger = llm_turn_trigger
         self._loot_table_repository = loot_table_repository
         self._connected_spots_provider = connected_spots_provider
         self._map_transition_service = map_transition_service
@@ -261,8 +264,10 @@ class WorldSimulationApplicationService:
                     physical_map = latest_map
                 self._update_hit_boxes(physical_map, current_tick)
                 self._physical_map_repository.save(physical_map)
-            
-            return current_tick
+
+        if self._llm_turn_trigger is not None:
+            self._llm_turn_trigger.run_scheduled_turns()
+        return current_tick
 
     def _process_spawn_and_respawn_by_slots(
         self,
