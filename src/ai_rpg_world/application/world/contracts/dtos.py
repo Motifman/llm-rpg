@@ -135,3 +135,5 @@ class PlayerCurrentStateDto:
     total_available_moves: Optional[int]
     # 注意レベル
     attention_level: AttentionLevel
+    # 複数ティックの行動中か（経路設定済みの移動中など）。割り込み判定に利用。
+    is_busy: bool = False

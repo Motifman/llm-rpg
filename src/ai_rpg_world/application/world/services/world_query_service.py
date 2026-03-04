@@ -436,6 +436,7 @@ class WorldQueryService:
                 total_available_moves = moves_result.total_available_moves
 
         attention_level = player_status.attention_level
+        is_busy = player_status.goal_spot_id is not None
 
         return PlayerCurrentStateDto(
             player_id=query.player_id,
@@ -460,4 +461,5 @@ class WorldQueryService:
             available_moves=available_moves,
             total_available_moves=total_available_moves,
             attention_level=attention_level,
+            is_busy=is_busy,
         )

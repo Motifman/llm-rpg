@@ -20,6 +20,7 @@ from ai_rpg_world.application.llm.services.current_state_formatter import (
 from ai_rpg_world.application.llm.services.game_tool_registry import (
     DefaultGameToolRegistry,
 )
+from ai_rpg_world.application.llm.services.llm_agent_turn_runner import LlmAgentTurnRunner
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
 from ai_rpg_world.application.llm.services.recent_events_formatter import (
@@ -43,6 +44,7 @@ __all__ = [
     "DefaultAvailableToolsProvider",
     "DefaultCurrentStateFormatter",
     "DefaultGameToolRegistry",
+    "LlmAgentTurnRunner",
     "DefaultPromptBuilder",
     "DefaultRecentEventsFormatter",
     "DefaultSlidingWindowMemory",
