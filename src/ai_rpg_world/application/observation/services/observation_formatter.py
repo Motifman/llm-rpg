@@ -132,11 +132,13 @@ class ObservationFormatter(IObservationFormatter):
             prose = f"{target_name}に到着しました。"
             structured = {"type": "gateway_arrival", "spot_name": target_name, "role": "self"}
             return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
-        # 他プレイヤー向け: 「〇〇がこのスポットにやってきました」
+        # 他プレイヤー向け: 「〇〇がこのスポットにやってきました」（話しかけられる可能性 → 割り込み）
         actor_label = f"誰か" if event.player_id_value is None else self._player_name(PlayerId(event.player_id_value))
         prose = f"{actor_label}がこのスポットにやってきました。"
         structured = {"type": "player_entered_spot", "actor": actor_label, "spot_name": target_name}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="social")
+        return ObservationOutput(
+            prose=prose, structured=structured, observation_category="social", causes_interrupt=True
+        )
 
     def _format_location_entered(
         self, event: LocationEnteredEvent, recipient_id: PlayerId
@@ -180,7 +182,9 @@ class ObservationFormatter(IObservationFormatter):
         if is_self:
             prose = "戦闘不能になりました。"
             structured = {"type": "player_downed", "role": "self"}
-            return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
+            return ObservationOutput(
+                prose=prose, structured=structured, observation_category="self_only", causes_interrupt=True
+            )
         actor_name = self._player_name(event.aggregate_id)
         prose = f"{actor_name}が戦闘不能になりました。"
         structured = {"type": "player_downed", "actor": actor_name}
@@ -255,7 +259,9 @@ class ObservationFormatter(IObservationFormatter):
     ) -> Optional[ObservationOutput]:
         prose = "アイテムを入手しました。"
         structured = {"type": "item_added_to_inventory"}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
+        return ObservationOutput(
+            prose=prose, structured=structured, observation_category="self_only", causes_interrupt=True
+        )
 
     def _format_item_dropped(
         self, event: ItemDroppedFromInventoryEvent, recipient_id: PlayerId

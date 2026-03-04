@@ -64,6 +64,28 @@ class TestObservationOutput:
         with pytest.raises(TypeError, match="structured must be dict"):
             ObservationOutput(prose="a", structured="not a dict")
 
+    def test_causes_interrupt_default_is_false(self):
+        """causes_interrupt を省略した場合デフォルトは False"""
+        out = ObservationOutput(prose="x", structured={})
+        assert out.causes_interrupt is False
+
+    def test_causes_interrupt_true(self):
+        """causes_interrupt=True で生成できる"""
+        out = ObservationOutput(
+            prose="戦闘不能になりました。",
+            structured={"type": "player_downed"},
+            observation_category="self_only",
+            causes_interrupt=True,
+        )
+        assert out.causes_interrupt is True
+
+    def test_causes_interrupt_not_bool_raises_type_error(self):
+        """causes_interrupt が bool でない場合 TypeError"""
+        with pytest.raises(TypeError, match="causes_interrupt must be bool"):
+            ObservationOutput(
+                prose="x", structured={}, causes_interrupt="yes"  # type: ignore[arg-type]
+            )
+
 
 class TestObservationEntry:
     """ObservationEntry の正常・例外ケース"""

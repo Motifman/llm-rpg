@@ -18,10 +18,13 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.player.event.status_events import (
+    PlayerDownedEvent,
     PlayerLevelUpEvent,
     PlayerGoldEarnedEvent,
     PlayerGoldPaidEvent,
 )
+from ai_rpg_world.domain.player.event.inventory_events import ItemAddedToInventoryEvent
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 
 
@@ -67,6 +70,46 @@ class TestObservationFormatter:
         assert out is not None
         assert "やってきました" in out.prose
         assert out.structured.get("type") == "player_entered_spot"
+        assert out.causes_interrupt is True
+
+    def test_format_gateway_triggered_self_does_not_cause_interrupt(self, formatter):
+        """GatewayTriggeredEvent 本人向けは causes_interrupt=False（到着は割り込み不要）"""
+        event = GatewayTriggeredEvent.create(
+            aggregate_id=GatewayId(1),
+            aggregate_type="Gateway",
+            gateway_id=GatewayId(1),
+            spot_id=SpotId(1),
+            object_id=WorldObjectId(1),
+            target_spot_id=SpotId(2),
+            landing_coordinate=Coordinate(0, 0, 0),
+            player_id_value=1,
+        )
+        out = formatter.format(event, PlayerId(1))
+        assert out is not None
+        assert out.causes_interrupt is False
+
+    def test_format_player_downed_self_causes_interrupt(self, formatter):
+        """PlayerDownedEvent 本人向けは causes_interrupt=True（ダメージで割り込み）"""
+        event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+        )
+        out = formatter.format(event, PlayerId(1))
+        assert out is not None
+        assert "戦闘不能" in out.prose
+        assert out.causes_interrupt is True
+
+    def test_format_item_added_to_inventory_causes_interrupt(self, formatter):
+        """ItemAddedToInventoryEvent 本人向けは causes_interrupt=True（アイテム発見で割り込み）"""
+        event = ItemAddedToInventoryEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerInventoryAggregate",
+            item_instance_id=ItemInstanceId.create(1),
+        )
+        out = formatter.format(event, PlayerId(1))
+        assert out is not None
+        assert "入手" in out.prose
+        assert out.causes_interrupt is True
 
     def test_format_player_level_up_returns_prose_and_structured(self, formatter):
         """PlayerLevelUpEvent: レベルアップ文と構造化"""
@@ -380,3 +423,22 @@ class TestObservationFormatter:
         )
         out_env = formatter.format(event_weather, PlayerId(1), attention_level=AttentionLevel.IGNORE)
         assert out_env is None
+
+    def test_format_event_none_returns_none(self, formatter):
+        """event が None のときは None を返す（未知イベント扱い）"""
+        out = formatter.format(None, PlayerId(1))  # type: ignore[arg-type]
+        assert out is None
+
+    def test_format_unknown_attention_level_treated_as_full_returns_output(self, formatter):
+        """attention_level が enum 外の値のときはフィルタされず output がそのまま返る（実装の境界）"""
+        event = PlayerLevelUpEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            old_level=1,
+            new_level=2,
+            stat_growth=BaseStats(0, 0, 0, 0, 0, 0.0, 0.0),
+        )
+        # enum 以外の値を渡す（型チェックでは Optional[AttentionLevel] のため type: ignore 使用）
+        out = formatter.format(event, PlayerId(1), attention_level="invalid")  # type: ignore[arg-type]
+        assert out is not None
+        assert out.observation_category == "self_only"

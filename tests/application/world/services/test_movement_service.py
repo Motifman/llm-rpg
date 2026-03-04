@@ -6,6 +6,7 @@ from unittest.mock import patch
 from ai_rpg_world.application.world.services.movement_service import MovementApplicationService
 from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
 from ai_rpg_world.application.world.contracts.commands import (
+    CancelMovementCommand,
     MoveTileCommand,
     SetDestinationCommand,
     TickMovementCommand,
@@ -412,6 +413,81 @@ class TestMovementApplicationService:
         # 状態が更新されているか（パスが短くなっているか）
         status_after_step = status_repo.find_by_id(PlayerId(player_id))
         assert len(status_after_step.planned_path) < initial_path_len
+
+    def test_cancel_movement_clears_path_and_returns_success(self, setup_service):
+        """cancel_movement で経路がクリアされ、成功 DTO が返ること"""
+        service, _, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
+
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id, "Alice"))
+        status = self._create_sample_status(player_id, spot_id, 0, 0)
+        status_repo.save(status)
+
+        location_area = LocationArea(
+            location_id=LocationAreaId(10),
+            name="Goal",
+            description="",
+            area=RectArea.from_coordinates(Coordinate(2, 0, 0), Coordinate(2, 0, 0)),
+        )
+        phys_map = self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)])
+        phys_map.add_location_area(location_area)
+        phys_repo.save(phys_map)
+        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
+
+        service.set_destination(
+            SetDestinationCommand(
+                player_id=player_id,
+                destination_type="location",
+                target_spot_id=spot_id,
+                target_location_area_id=10,
+            )
+        )
+        saved_before = status_repo.find_by_id(PlayerId(player_id))
+        assert saved_before.goal_spot_id is not None
+
+        result = service.cancel_movement(CancelMovementCommand(player_id=player_id))
+
+        assert result.success is True
+        assert "中断" in result.message
+        saved_after = status_repo.find_by_id(PlayerId(player_id))
+        assert saved_after.goal_spot_id is None
+        assert saved_after.planned_path == []
+
+    def test_cancel_movement_player_not_found_raises(self, setup_service):
+        """cancel_movement でプレイヤーが存在しない場合 PlayerNotFoundException"""
+        service, _, status_repo, _, _, spot_repo, _, _, _ = setup_service
+
+        self._register_spots(spot_repo, [{"id": 1, "name": "Spot 1"}])
+        # プレイヤーを登録しない
+        command = CancelMovementCommand(player_id=999)
+        with pytest.raises(PlayerNotFoundException):
+            service.cancel_movement(command)
+
+    def test_cancel_movement_when_no_current_spot_returns_failure_dto(self, setup_service):
+        """cancel_movement で経路クリア後も現在地が取得できない場合、失敗 DTO を返す（キャンセルは成功）"""
+        service, _, status_repo, profile_repo, _, spot_repo, _, _, _ = setup_service
+
+        player_id = 1
+        profile_repo.save(self._create_sample_profile(player_id, "Alice"))
+        status = self._create_sample_status(player_id, spot_id=1, x=0, y=0)
+        status._current_spot_id = None
+        status._current_coordinate = None
+        status_repo.save(status)
+
+        result = service.cancel_movement(CancelMovementCommand(player_id=player_id))
+
+        assert result.success is False
+        assert "現在地が不明です" in result.error_message
+        # 経路はクリアされている
+        saved = status_repo.find_by_id(PlayerId(player_id))
+        assert saved.goal_spot_id is None
+        assert saved.planned_path == []
+
+    def test_cancel_movement_command_player_id_invalid_raises(self):
+        """CancelMovementCommand の player_id が 0 以下の場合 ValueError"""
+        with pytest.raises(ValueError, match="player_id must be greater than 0"):
+            CancelMovementCommand(player_id=0)
 
     def test_gateway_transition_uses_service(self, setup_service):
         """ゲートウェイ移動がドメインサービスを通じて正しく処理されること"""

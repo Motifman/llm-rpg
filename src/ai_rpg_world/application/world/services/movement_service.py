@@ -34,6 +34,7 @@ from ai_rpg_world.domain.player.exception import PlayerDownedException
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.application.world.contracts.commands import (
+    CancelMovementCommand,
     MoveTileCommand,
     SetDestinationCommand,
     TickMovementCommand,
@@ -235,6 +236,34 @@ class MovementApplicationService:
                 "player_id": command.player_id
             }
         )
+
+    def cancel_movement(self, command: CancelMovementCommand) -> MoveResultDto:
+        """経路をキャンセルする（割り込み時など）。目的地設定を解除する。"""
+        return self._execute_with_error_handling(
+            operation=lambda: self._cancel_movement_impl(command),
+            context={"action": "cancel_movement", "player_id": command.player_id},
+        )
+
+    def _cancel_movement_impl(self, command: CancelMovementCommand) -> MoveResultDto:
+        """経路をクリアする。キャンセル自体は成功するが、現在地が取得できない場合は失敗 DTO を返す（成功 DTO を組み立てられないため）。"""
+        player_id = PlayerId(command.player_id)
+        with self._unit_of_work:
+            player_status = self._player_status_repository.find_by_id(player_id)
+            if not player_status:
+                raise PlayerNotFoundException(command.player_id)
+            player_status.clear_path()
+            self._player_status_repository.save(player_status)
+            if not player_status.current_spot_id or not player_status.current_coordinate:
+                return self._create_failure_dto(command.player_id, "現在地が不明です", player_status)
+            coord = player_status.current_coordinate
+            return self._create_success_dto(
+                player_status,
+                player_status.current_spot_id,
+                coord,
+                coord,
+                0,
+                "移動を中断しました。",
+            )
 
     def _tick_movement_impl(self, command: TickMovementCommand) -> MoveResultDto:
         player_id = PlayerId(command.player_id)

@@ -11,11 +11,14 @@ ObservationCategory = Literal["self_only", "social", "environment"]
 class ObservationOutput:
     """1イベント分の観測出力（プローズ文と構造化データの両方）。
     observation_category は attention_level によるフィルタで使用する。
+    causes_interrupt: リアルタイム性を要求する観測（話しかけ・ダメージ・アイテム発見等）で True。
+    プレイヤーが複数ティックの行動中でも、この観測が届いたら行動を中断して LLM に渡す。
     """
 
     prose: str
     structured: Dict[str, Any]
     observation_category: ObservationCategory = "self_only"
+    causes_interrupt: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.prose, str):
@@ -26,6 +29,8 @@ class ObservationOutput:
             raise TypeError(
                 "observation_category must be 'self_only', 'social', or 'environment'"
             )
+        if not isinstance(self.causes_interrupt, bool):
+            raise TypeError("causes_interrupt must be bool")
 
 
 @dataclass(frozen=True)
