@@ -294,6 +294,33 @@ class TestMovementApplicationService:
         with pytest.raises(MovementInvalidException, match="not placed on any map"):
             service.set_destination(command)
 
+    def test_move_to_destination_delegates_to_set_destination_same_spot(self, setup_service):
+        """move_to_destination は set_destination に委譲し、同一スポット時は同じ結果を返すこと"""
+        service, world_query_service, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
+        player_id = 1
+        spot1_id = 101
+        spot2_id = 201
+        self._register_spots(spot_repo, [{"id": spot1_id, "name": "World 1 Spot"}, {"id": spot2_id, "name": "World 2 Spot"}])
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot2_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot2_id, objects=[self._create_player_object(player_id)]))
+        result = service.move_to_destination(player_id, "spot", spot2_id)
+        assert result.success is True
+        assert result.to_spot_id == spot2_id
+        assert "既に目的地のスポットにいます" in result.message
+
+    def test_move_to_destination_invalid_destination_type_raises(self, setup_service):
+        """move_to_destination で destination_type が spot/location 以外なら MovementInvalidException"""
+        service, *_ = setup_service
+        with pytest.raises(MovementInvalidException, match="spot.*location"):
+            service.move_to_destination(1, "invalid", 2)
+
+    def test_move_to_destination_location_without_area_id_raises(self, setup_service):
+        """move_to_destination で destination_type=location かつ target_location_area_id なしなら MovementInvalidException"""
+        service, *_ = setup_service
+        with pytest.raises(MovementInvalidException, match="target_location_area_id"):
+            service.move_to_destination(1, "location", 2, target_location_area_id=None)
+
     def test_move_tile_player_object_missing_from_map(self, setup_service):
         """プレイヤー状態はあるが物理マップ上にオブジェクトがない場合、エラーになること"""
         service, world_query_service, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service

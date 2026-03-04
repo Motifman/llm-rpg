@@ -3,12 +3,12 @@
 import pytest
 
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_PREFIXES,
     TOOL_NAME_PREFIX_DESCRIPTIONS,
     TOOL_NAME_PREFIX_MOVE,
     TOOL_NAME_PREFIX_WORLD,
     TOOL_NAME_NO_OP,
-    TOOL_NAME_SET_DESTINATION,
 )
 
 
@@ -38,7 +38,7 @@ class TestToolNames:
         assert TOOL_NAME_NO_OP.startswith(TOOL_NAME_PREFIX_WORLD)
         assert TOOL_NAME_NO_OP == "world_no_op"
 
-    def test_set_destination_has_move_prefix(self):
-        """set_destination は move_ プレフィックスを持つ"""
-        assert TOOL_NAME_SET_DESTINATION.startswith(TOOL_NAME_PREFIX_MOVE)
-        assert TOOL_NAME_SET_DESTINATION == "move_set_destination"
+    def test_move_to_destination_has_move_prefix(self):
+        """move_to_destination は move_ プレフィックスを持つ"""
+        assert TOOL_NAME_MOVE_TO_DESTINATION.startswith(TOOL_NAME_PREFIX_MOVE)
+        assert TOOL_NAME_MOVE_TO_DESTINATION == "move_to_destination"

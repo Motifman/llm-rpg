@@ -14,8 +14,8 @@ from ai_rpg_world.application.llm.services.game_tool_registry import (
     DefaultGameToolRegistry,
 )
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
-    TOOL_NAME_SET_DESTINATION,
 )
 from ai_rpg_world.application.llm.services.tool_definitions import (
     register_default_tools,
@@ -69,7 +69,7 @@ class TestDefaultAvailableToolsProvider:
         return DefaultAvailableToolsProvider(registry)
 
     def test_get_available_tools_context_none_returns_no_op_only(self, provider):
-        """context が None のときは no_op のみ（set_destination は利用不可）"""
+        """context が None のときは no_op のみ（move_to_destination は利用不可）"""
         tools = provider.get_available_tools(None)
         assert isinstance(tools, list)
         assert len(tools) == 1
@@ -77,12 +77,12 @@ class TestDefaultAvailableToolsProvider:
         assert tools[0]["function"]["name"] == TOOL_NAME_NO_OP
 
     def test_get_available_tools_context_with_moves_returns_both(self, provider):
-        """context に移動先があるときは no_op と set_destination の両方"""
+        """context に移動先があるときは no_op と move_to_destination の両方"""
         ctx = _context_with_moves(1)
         tools = provider.get_available_tools(ctx)
         names = [t["function"]["name"] for t in tools if t.get("type") == "function"]
         assert TOOL_NAME_NO_OP in names
-        assert TOOL_NAME_SET_DESTINATION in names
+        assert TOOL_NAME_MOVE_TO_DESTINATION in names
 
     def test_tool_format_openai_compatible(self, provider):
         """返却形式が OpenAI の function ツール形式である"""

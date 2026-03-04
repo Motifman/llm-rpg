@@ -7,8 +7,8 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
     SetDestinationAvailabilityResolver,
 )
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
-    TOOL_NAME_SET_DESTINATION,
 )
 
 # no_op: パラメータなし
@@ -18,8 +18,8 @@ NO_OP_DEFINITION = ToolDefinitionDto(
     parameters={"type": "object", "properties": {}, "required": []},
 )
 
-# set_destination: SetDestinationCommand に合わせたスキーマ
-SET_DESTINATION_PARAMETERS = {
+# 移動（1 ツール）。内部で SetDestinationCommand を使用。パラメータは同スキーマ。
+MOVE_TO_DESTINATION_PARAMETERS = {
     "type": "object",
     "properties": {
         "destination_type": {
@@ -39,16 +39,16 @@ SET_DESTINATION_PARAMETERS = {
     "required": ["destination_type", "target_spot_id"],
 }
 
-SET_DESTINATION_DEFINITION = ToolDefinitionDto(
-    name=TOOL_NAME_SET_DESTINATION,
-    description="目的地（スポットまたはロケーション）を設定し、経路を計画します。実際の移動はゲームの進行に合わせて行われます。",
-    parameters=SET_DESTINATION_PARAMETERS,
+MOVE_TO_DESTINATION_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_MOVE_TO_DESTINATION,
+    description="指定した目的地（スポットまたはロケーション）へ移動します。",
+    parameters=MOVE_TO_DESTINATION_PARAMETERS,
 )
 
 
 def register_default_tools(registry: IGameToolRegistry) -> None:
-    """no_op と set_destination をレジストリに登録する。"""
+    """no_op と move_to_destination をレジストリに登録する。"""
     if not isinstance(registry, IGameToolRegistry):
         raise TypeError("registry must be IGameToolRegistry")
     registry.register(NO_OP_DEFINITION, NoOpAvailabilityResolver())
-    registry.register(SET_DESTINATION_DEFINITION, SetDestinationAvailabilityResolver())
+    registry.register(MOVE_TO_DESTINATION_DEFINITION, SetDestinationAvailabilityResolver())

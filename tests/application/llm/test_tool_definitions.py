@@ -6,13 +6,13 @@ from ai_rpg_world.application.llm.services.game_tool_registry import (
     DefaultGameToolRegistry,
 )
 from ai_rpg_world.application.llm.services.tool_definitions import (
+    MOVE_TO_DESTINATION_DEFINITION,
     NO_OP_DEFINITION,
-    SET_DESTINATION_DEFINITION,
     register_default_tools,
 )
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
-    TOOL_NAME_SET_DESTINATION,
 )
 
 
@@ -25,10 +25,10 @@ class TestToolDefinitions:
         assert NO_OP_DEFINITION.parameters.get("type") == "object"
         assert NO_OP_DEFINITION.parameters.get("required") == []
 
-    def test_set_destination_definition_has_expected_name_and_params(self):
-        """SET_DESTINATION_DEFINITION は destination_type, target_spot_id 等を持つ"""
-        assert SET_DESTINATION_DEFINITION.name == TOOL_NAME_SET_DESTINATION
-        params = SET_DESTINATION_DEFINITION.parameters
+    def test_move_to_destination_definition_has_expected_name_and_params(self):
+        """MOVE_TO_DESTINATION_DEFINITION は destination_type, target_spot_id 等を持つ"""
+        assert MOVE_TO_DESTINATION_DEFINITION.name == TOOL_NAME_MOVE_TO_DESTINATION
+        params = MOVE_TO_DESTINATION_DEFINITION.parameters
         assert "destination_type" in params.get("properties", {})
         assert "target_spot_id" in params.get("properties", {})
         assert "target_location_area_id" in params.get("properties", {})
@@ -39,14 +39,14 @@ class TestToolDefinitions:
 class TestRegisterDefaultTools:
     """register_default_tools の正常・例外"""
 
-    def test_register_default_tools_adds_no_op_and_set_destination(self):
-        """登録後は no_op と set_destination が取得できる"""
+    def test_register_default_tools_adds_no_op_and_move_to_destination(self):
+        """登録後は no_op と move_to_destination が取得できる"""
         registry = DefaultGameToolRegistry()
         register_default_tools(registry)
         entries = registry.get_definitions_with_resolvers()
         names = [e[0].name for e in entries]
         assert TOOL_NAME_NO_OP in names
-        assert TOOL_NAME_SET_DESTINATION in names
+        assert TOOL_NAME_MOVE_TO_DESTINATION in names
 
     def test_register_default_tools_registry_not_registry_raises_type_error(self):
         """registry が IGameToolRegistry でないとき TypeError"""
