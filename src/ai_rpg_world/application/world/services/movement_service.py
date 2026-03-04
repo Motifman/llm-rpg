@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, List, Dict, Tuple, Callable, Any
+from typing import Optional, List, Dict, Tuple, Callable, Any, Literal
 from datetime import datetime
 
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
@@ -113,8 +113,51 @@ class MovementApplicationService:
         with self._unit_of_work:
             return self._execute_movement_step(command.player_id, direction=command.direction)
 
+    def move_to_destination(
+        self,
+        player_id: int,
+        destination_type: Literal["spot", "location"],
+        target_spot_id: int,
+        target_location_area_id: Optional[int] = None,
+    ) -> MoveResultDto:
+        """
+        指定した目的地（スポットまたはロケーション）へ移動する。
+        LLMエージェント・オーケストレータ等から呼ぶ統一API。内部で set_destination に委譲する。
+        """
+        if destination_type not in ("spot", "location"):
+            raise MovementInvalidException(
+                f"destination_type は 'spot' または 'location' で指定してください。取得値: {destination_type!r}",
+                player_id,
+            )
+        if not isinstance(target_spot_id, (int, float)) or int(target_spot_id) <= 0:
+            raise MovementInvalidException(
+                f"target_spot_id は正の整数で指定してください。取得値: {target_spot_id!r}",
+                player_id,
+            )
+        target_spot_id_int = int(target_spot_id)
+        area_opt: Optional[int] = None
+        if destination_type == "location":
+            if target_location_area_id is None:
+                raise MovementInvalidException(
+                    "destination_type が 'location' のときは target_location_area_id が必須です。",
+                    player_id,
+                )
+            if not isinstance(target_location_area_id, (int, float)) or int(target_location_area_id) <= 0:
+                raise MovementInvalidException(
+                    f"target_location_area_id は正の整数で指定してください。取得値: {target_location_area_id!r}",
+                    player_id,
+                )
+            area_opt = int(target_location_area_id)
+        command = SetDestinationCommand(
+            player_id=player_id,
+            destination_type=destination_type,
+            target_spot_id=target_spot_id_int,
+            target_location_area_id=area_opt,
+        )
+        return self.set_destination(command)
+
     def set_destination(self, command: SetDestinationCommand) -> MoveResultDto:
-        """目的地を設定する（LLMエージェントまたは自動移動用）。スポットまたはロケーション指定で座標不要。"""
+        """目的地を設定する（内部・既存呼び出し用）。スポットまたはロケーション指定で座標不要。"""
         return self._execute_with_error_handling(
             operation=lambda: self._set_destination_impl(command),
             context={

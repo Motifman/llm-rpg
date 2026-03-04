@@ -7,10 +7,10 @@ from typing import Any, Dict, Optional
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
-    TOOL_NAME_SET_DESTINATION,
 )
-from ai_rpg_world.application.world.contracts.commands import SetDestinationCommand
+from ai_rpg_world.application.world.contracts.dtos import MoveResultDto
 from ai_rpg_world.application.world.services.movement_service import (
     MovementApplicationService,
 )
@@ -26,9 +26,9 @@ class ToolCommandMapper:
         self,
         movement_service: MovementApplicationService,
     ) -> None:
-        set_destination = getattr(movement_service, "set_destination", None)
-        if not callable(set_destination):
-            raise TypeError("movement_service must have a callable set_destination")
+        move_to_destination = getattr(movement_service, "move_to_destination", None)
+        if not callable(move_to_destination):
+            raise TypeError("movement_service must have a callable move_to_destination")
         self._movement_service = movement_service
 
     def execute(
@@ -56,8 +56,8 @@ class ToolCommandMapper:
                 success=True,
                 message="何もしませんでした。",
             )
-        if tool_name == TOOL_NAME_SET_DESTINATION:
-            return self._execute_set_destination(player_id, args)
+        if tool_name == TOOL_NAME_MOVE_TO_DESTINATION:
+            return self._execute_move_to_destination(player_id, args)
         return LlmCommandResultDto(
             success=False,
             message="未知のツールです。",
@@ -65,7 +65,7 @@ class ToolCommandMapper:
             remediation=get_remediation("UNKNOWN_TOOL"),
         )
 
-    def _execute_set_destination(
+    def _execute_move_to_destination(
         self,
         player_id: int,
         args: Dict[str, Any],
@@ -74,46 +74,20 @@ class ToolCommandMapper:
             destination_type = args.get("destination_type")
             target_spot_id = args.get("target_spot_id")
             target_location_area_id = args.get("target_location_area_id")
-            if destination_type not in ("spot", "location"):
-                return LlmCommandResultDto(
-                    success=False,
-                    message=f"destination_type は 'spot' または 'location' で指定してください。取得値: {destination_type!r}",
-                    error_code="INVALID_DESTINATION",
-                    remediation=get_remediation("INVALID_DESTINATION"),
-                )
-            if not isinstance(target_spot_id, (int, float)) or int(target_spot_id) <= 0:
-                return LlmCommandResultDto(
-                    success=False,
-                    message=f"target_spot_id は正の整数で指定してください。取得値: {target_spot_id!r}",
-                    error_code="INVALID_DESTINATION",
-                    remediation=get_remediation("INVALID_DESTINATION"),
-                )
-            target_spot_id_int = int(target_spot_id)
+            target_spot_id_int = int(target_spot_id) if isinstance(target_spot_id, (int, float)) else 0
             target_location_area_id_opt: Optional[int] = None
-            if destination_type == "location":
-                if target_location_area_id is None:
-                    return LlmCommandResultDto(
-                        success=False,
-                        message="destination_type が 'location' のときは target_location_area_id が必須です。",
-                        error_code="INVALID_DESTINATION",
-                        remediation=get_remediation("INVALID_DESTINATION"),
-                    )
-                if not isinstance(target_location_area_id, (int, float)) or int(target_location_area_id) <= 0:
-                    return LlmCommandResultDto(
-                        success=False,
-                        message=f"target_location_area_id は正の整数で指定してください。取得値: {target_location_area_id!r}",
-                        error_code="INVALID_DESTINATION",
-                        remediation=get_remediation("INVALID_DESTINATION"),
-                    )
-                target_location_area_id_opt = int(target_location_area_id)
-
-            command = SetDestinationCommand(
+            if destination_type == "location" and target_location_area_id is not None:
+                target_location_area_id_opt = (
+                    int(target_location_area_id)
+                    if isinstance(target_location_area_id, (int, float))
+                    else None
+                )
+            result: MoveResultDto = self._movement_service.move_to_destination(
                 player_id=player_id,
                 destination_type=destination_type,  # type: ignore[arg-type]
                 target_spot_id=target_spot_id_int,
                 target_location_area_id=target_location_area_id_opt,
             )
-            result = self._movement_service.set_destination(command)
             return LlmCommandResultDto(
                 success=result.success,
                 message=result.message if result.success else (result.error_message or result.message),

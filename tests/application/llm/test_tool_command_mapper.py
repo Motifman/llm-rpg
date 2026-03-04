@@ -1,5 +1,6 @@
 """ToolCommandMapper のテスト（正常・例外・失敗時 remediation）"""
 
+from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -7,11 +8,13 @@ import pytest
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.tool_command_mapper import ToolCommandMapper
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
-    TOOL_NAME_SET_DESTINATION,
 )
 from ai_rpg_world.application.world.contracts.dtos import MoveResultDto
-from datetime import datetime
+from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
+    MovementInvalidException,
+)
 
 
 class TestToolCommandMapperNoOp:
@@ -35,8 +38,8 @@ class TestToolCommandMapperNoOp:
         assert result.success is True
 
 
-class TestToolCommandMapperSetDestination:
-    """set_destination ツールの実行（MovementService モック）"""
+class TestToolCommandMapperMoveToDestination:
+    """move_to_destination ツールの実行（MovementApplicationService.move_to_destination を呼ぶ）"""
 
     @pytest.fixture
     def movement_service(self):
@@ -46,9 +49,9 @@ class TestToolCommandMapperSetDestination:
     def mapper(self, movement_service):
         return ToolCommandMapper(movement_service=movement_service)
 
-    def test_execute_set_destination_success_returns_dto(self, mapper, movement_service):
-        """set_destination 成功時は MoveResultDto.message を message に"""
-        movement_service.set_destination.return_value = MoveResultDto(
+    def test_execute_move_to_destination_success_returns_dto(self, mapper, movement_service):
+        """move_to_destination 成功時は MoveResultDto.message を message に"""
+        movement_service.move_to_destination.return_value = MoveResultDto(
             success=True,
             player_id=1,
             player_name="P",
@@ -64,28 +67,38 @@ class TestToolCommandMapperSetDestination:
         )
         result = mapper.execute(
             1,
-            TOOL_NAME_SET_DESTINATION,
+            TOOL_NAME_MOVE_TO_DESTINATION,
             {"destination_type": "spot", "target_spot_id": 2},
         )
         assert result.success is True
         assert result.message == "目的地を設定しました。"
 
-    def test_execute_set_destination_invalid_destination_type_returns_failure_dto(self, mapper):
-        """destination_type が spot/location 以外なら失敗 DTO"""
+    def test_execute_move_to_destination_invalid_destination_type_returns_failure_dto(
+        self, mapper, movement_service
+    ):
+        """サービスが MovementInvalidException を投げたとき失敗 DTO（error_code=MOVEMENT_INVALID）"""
+        movement_service.move_to_destination.side_effect = MovementInvalidException(
+            "destination_type は 'spot' または 'location' で指定してください。", 1
+        )
         result = mapper.execute(
             1,
-            TOOL_NAME_SET_DESTINATION,
+            TOOL_NAME_MOVE_TO_DESTINATION,
             {"destination_type": "invalid", "target_spot_id": 2},
         )
         assert result.success is False
-        assert result.error_code == "INVALID_DESTINATION"
+        assert result.error_code == "MOVEMENT_INVALID"
         assert result.remediation is not None
 
-    def test_execute_set_destination_location_without_area_id_returns_failure(self, mapper):
-        """destination_type=location で target_location_area_id なしなら失敗"""
+    def test_execute_move_to_destination_location_without_area_id_returns_failure(
+        self, mapper, movement_service
+    ):
+        """サービスが target_location_area_id 必須で例外を投げたとき失敗 DTO"""
+        movement_service.move_to_destination.side_effect = MovementInvalidException(
+            "destination_type が 'location' のときは target_location_area_id が必須です。", 1
+        )
         result = mapper.execute(
             1,
-            TOOL_NAME_SET_DESTINATION,
+            TOOL_NAME_MOVE_TO_DESTINATION,
             {"destination_type": "location", "target_spot_id": 2},
         )
         assert result.success is False
@@ -126,7 +139,7 @@ class TestToolCommandMapperValidation:
         with pytest.raises(TypeError, match="arguments must be dict or None"):
             mapper.execute(1, TOOL_NAME_NO_OP, "{}")  # type: ignore[arg-type]
 
-    def test_init_movement_service_no_set_destination_raises_type_error(self):
-        """movement_service に set_destination が無いとき TypeError"""
-        with pytest.raises(TypeError, match="set_destination"):
+    def test_init_movement_service_no_move_to_destination_raises_type_error(self):
+        """movement_service に move_to_destination が無いとき TypeError"""
+        with pytest.raises(TypeError, match="move_to_destination"):
             ToolCommandMapper(movement_service=object())  # type: ignore[arg-type]

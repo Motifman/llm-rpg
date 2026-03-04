@@ -25,4 +25,5 @@ TOOL_NAME_PREFIX_DESCRIPTIONS: List[Tuple[str, str]] = [
 
 # --- ツール名（プレフィックス付き） ---
 TOOL_NAME_NO_OP = TOOL_NAME_PREFIX_WORLD + "no_op"
-TOOL_NAME_SET_DESTINATION = TOOL_NAME_PREFIX_MOVE + "set_destination"
+# 移動は 1 ツール（set_destination と tick_movement を分けない）。内部で SetDestinationCommand を使用。
+TOOL_NAME_MOVE_TO_DESTINATION = TOOL_NAME_PREFIX_MOVE + "to_destination"
