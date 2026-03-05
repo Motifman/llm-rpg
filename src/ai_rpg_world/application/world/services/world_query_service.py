@@ -16,6 +16,7 @@ from ai_rpg_world.application.world.contracts.queries import (
     GetSpotContextForPlayerQuery,
     GetVisibleContextQuery,
     GetAvailableMovesQuery,
+    GetPlayerCurrentStateQuery,
 )
 from ai_rpg_world.application.world.contracts.dtos import (
     PlayerLocationDto,
@@ -24,7 +25,12 @@ from ai_rpg_world.application.world.contracts.dtos import (
     VisibleObjectDto,
     PlayerMovementOptionsDto,
     AvailableMoveDto,
+    PlayerCurrentStateDto,
 )
+from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
+from ai_rpg_world.domain.world.exception.map_exception import TileNotFoundException
 from ai_rpg_world.application.world.services.transition_condition_evaluator import (
     TransitionConditionEvaluator,
     TransitionContext,
@@ -336,4 +342,124 @@ class WorldQueryService:
             current_spot_name=spot.name,
             available_moves=available_moves,
             total_available_moves=len(available_moves),
+        )
+
+    def get_player_current_state(
+        self, query: GetPlayerCurrentStateQuery
+    ) -> Optional[PlayerCurrentStateDto]:
+        """プレイヤーの現在状態を一括取得（位置・スポット・天気・地形・視界・移動先・注意レベル）。未配置時は None。"""
+        return self._execute_with_error_handling(
+            operation=lambda: self._get_player_current_state_impl(query),
+            context={"action": "get_player_current_state", "player_id": query.player_id},
+        )
+
+    def _get_player_current_state_impl(
+        self, query: GetPlayerCurrentStateQuery
+    ) -> Optional[PlayerCurrentStateDto]:
+        player_id = PlayerId(query.player_id)
+        player_status = self._player_status_repository.find_by_id(player_id)
+        if not player_status or not player_status.current_spot_id or not player_status.current_coordinate:
+            return None
+
+        profile = self._player_profile_repository.find_by_id(player_id)
+        if not profile:
+            raise PlayerNotFoundException(query.player_id)
+        player_name = profile.name.value
+        spot_id = player_status.current_spot_id
+        coord = player_status.current_coordinate
+
+        spot = self._spot_repository.find_by_id(spot_id)
+        if not spot:
+            raise MapNotFoundException(int(spot_id))
+
+        physical_map = self._physical_map_repository.find_by_spot_id(spot_id)
+        if not physical_map:
+            raise MapNotFoundException(int(spot_id))
+
+        area_id = None
+        area_name = None
+        areas = physical_map.get_location_areas_at(coord)
+        if areas:
+            area_id = int(areas[0].location_id)
+            area_name = areas[0].name
+
+        current_player_ids = set()
+        for s in self._player_status_repository.find_all():
+            if s.current_spot_id == spot_id:
+                current_player_ids.add(int(s.player_id))
+        connected_spot_ids = set()
+        connected_spot_names = set()
+        for conn_id in self._connected_spots_provider.get_connected_spots(spot_id):
+            connected_spot_ids.add(int(conn_id))
+            conn_spot = self._spot_repository.find_by_id(conn_id)
+            if conn_spot:
+                connected_spot_names.add(conn_spot.name)
+
+        weather_state = (
+            physical_map.weather_state
+            if physical_map.weather_state
+            else WeatherState(WeatherTypeEnum.CLEAR, 0.0)
+        )
+        weather_type = weather_state.weather_type.value
+        weather_intensity = weather_state.intensity
+
+        current_terrain_type = None
+        try:
+            tile = physical_map.get_tile(coord)
+            current_terrain_type = tile.terrain_type.type.value
+        except TileNotFoundException:
+            pass
+
+        distance = max(0, query.view_distance)
+        objects_in_range = physical_map.get_objects_in_range(coord, distance)
+        visible_objects = []
+        for obj in objects_in_range:
+            d = coord.distance_to(obj.coordinate)
+            visible_objects.append(
+                VisibleObjectDto(
+                    object_id=obj.object_id.value,
+                    object_type=obj.object_type.value,
+                    x=obj.coordinate.x,
+                    y=obj.coordinate.y,
+                    z=obj.coordinate.z,
+                    distance=d,
+                )
+            )
+
+        available_moves = None
+        total_available_moves = None
+        if query.include_available_moves:
+            moves_query = GetAvailableMovesQuery(player_id=query.player_id)
+            moves_result = self._get_available_moves_impl(moves_query)
+            if moves_result:
+                available_moves = moves_result.available_moves
+                total_available_moves = moves_result.total_available_moves
+
+        attention_level = player_status.attention_level
+        is_busy = player_status.goal_spot_id is not None
+
+        return PlayerCurrentStateDto(
+            player_id=query.player_id,
+            player_name=player_name,
+            current_spot_id=int(spot_id),
+            current_spot_name=spot.name,
+            current_spot_description=spot.description,
+            x=coord.x,
+            y=coord.y,
+            z=coord.z,
+            area_id=area_id,
+            area_name=area_name,
+            current_player_count=len(current_player_ids),
+            current_player_ids=current_player_ids,
+            connected_spot_ids=connected_spot_ids,
+            connected_spot_names=connected_spot_names,
+            weather_type=weather_type,
+            weather_intensity=weather_intensity,
+            current_terrain_type=current_terrain_type,
+            visible_objects=visible_objects,
+            view_distance=distance,
+            available_moves=available_moves,
+            total_available_moves=total_available_moves,
+            attention_level=attention_level,
+            is_busy=is_busy,
         )

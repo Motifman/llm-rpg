@@ -2,6 +2,7 @@ import logging
 import random
 from typing import List, Callable, Any, Dict, Optional, Set, TYPE_CHECKING
 
+from ai_rpg_world.application.llm.contracts.interfaces import ILlmTurnTrigger
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
@@ -108,8 +109,10 @@ class WorldSimulationApplicationService:
         loot_table_repository: Optional[LootTableRepository] = None,
         connected_spots_provider: Optional[IConnectedSpotsProvider] = None,
         map_transition_service: Optional[MapTransitionService] = None,
+        llm_turn_trigger: Optional[ILlmTurnTrigger] = None,
     ):
         self._time_provider = time_provider
+        self._llm_turn_trigger = llm_turn_trigger
         self._loot_table_repository = loot_table_repository
         self._connected_spots_provider = connected_spots_provider
         self._map_transition_service = map_transition_service
@@ -261,8 +264,10 @@ class WorldSimulationApplicationService:
                     physical_map = latest_map
                 self._update_hit_boxes(physical_map, current_tick)
                 self._physical_map_repository.save(physical_map)
-            
-            return current_tick
+
+        if self._llm_turn_trigger is not None:
+            self._llm_turn_trigger.run_scheduled_turns()
+        return current_tick
 
     def _process_spawn_and_respawn_by_slots(
         self,
@@ -699,7 +704,7 @@ class WorldSimulationApplicationService:
         if component.pack_id is not None and not component.is_pack_leader:
             pack_actors = physical_map.get_actors_in_pack(component.pack_id)
             leader_obj = next(
-                (a for a in pack_actors if getattr(a.component, "is_pack_leader", False)),
+                (a for a in pack_actors if a.component.is_pack_leader),
                 None,
             )
             if leader_obj is not None:
@@ -713,7 +718,7 @@ class WorldSimulationApplicationService:
             return None
         threat_by_id: Dict[WorldObjectId, int] = {}
         if self._aggro_store is not None:
-            policy = getattr(component, "aggro_memory_policy", None)
+            policy = component.aggro_memory_policy
             threat_by_id = self._aggro_store.get_threat_by_attacker(
                 physical_map.spot_id,
                 actor.object_id,

@@ -1,8 +1,12 @@
 """
 SNS例外ファクトリのテスト
+DomainException のサブクラスのみ create_from_domain_exception に渡す設計を検証する。
 """
 import pytest
-from unittest.mock import Mock
+from ai_rpg_world.domain.common.exception import DomainException
+from ai_rpg_world.domain.sns.exception.user_profile_exceptions import (
+    UserNotFoundException as DomainUserNotFoundException,
+)
 from ai_rpg_world.application.social.exceptions.exception_factory import ApplicationExceptionFactory
 from ai_rpg_world.application.social.exceptions.base_exception import ApplicationException
 from ai_rpg_world.application.social.exceptions.query.user_query_exception import (
@@ -20,83 +24,90 @@ class TestApplicationExceptionFactory:
     """ApplicationExceptionFactoryのテスト"""
 
     def test_create_from_domain_exception_mapped(self):
-        """マッピングされたドメイン例外からの変換テスト"""
-        # Mockドメイン例外
-        class MockUserNotFoundException(Exception):
-            def __init__(self):
-                super().__init__("User not found")
+        """マッピングされたドメイン例外からの変換テスト（正常系）"""
+        domain_exception = DomainUserNotFoundException(123, "User not found")
+        app_exception = ApplicationExceptionFactory.create_from_domain_exception(
+            domain_exception
+        )
 
-        domain_exception = MockUserNotFoundException()
-        app_exception = ApplicationExceptionFactory.create_from_domain_exception(domain_exception)
-
-        # マッピングでUserQueryExceptionに変換されるはず
         assert isinstance(app_exception, UserQueryException)
         assert str(app_exception) == "User not found"
-        assert app_exception.error_code == "MOCKUSERNOTFOUNDEXCEPTION"
+        assert app_exception.error_code == "USER_NOT_FOUND"
         assert app_exception.__cause__ is domain_exception
 
     def test_create_from_domain_exception_not_mapped(self):
-        """マッピングされていないドメイン例外からの変換テスト"""
-        # Mockドメイン例外（マッピングに存在しない）
-        class MockUnknownException(Exception):
-            def __init__(self):
-                super().__init__("Unknown error")
+        """マッピングされていないドメイン例外からの変換テスト（正常系）"""
+        # DomainException のサブクラスでマッピングに存在しないもの
+        class TestUnknownDomainException(DomainException):
+            error_code = "TEST_UNKNOWN"
 
-        domain_exception = MockUnknownException()
-        app_exception = ApplicationExceptionFactory.create_from_domain_exception(domain_exception)
+        domain_exception = TestUnknownDomainException("Unknown error")
+        app_exception = ApplicationExceptionFactory.create_from_domain_exception(
+            domain_exception
+        )
 
-        # デフォルトでUserQueryExceptionに変換されるはず
         assert isinstance(app_exception, UserQueryException)
         assert str(app_exception) == "Unknown error"
-        assert app_exception.error_code == "MOCKUNKNOWNEXCEPTION"
+        assert app_exception.error_code == "TEST_UNKNOWN"
 
     def test_create_from_domain_exception_with_context(self):
-        """コンテキスト付きのドメイン例外からの変換テスト"""
-        # Mockドメイン例外
-        class MockDomainExceptionWithUserId(Exception):
-            def __init__(self, user_id):
-                self.user_id = user_id
-                super().__init__(f"Error for user {user_id}")
-
-        domain_exception = MockDomainExceptionWithUserId(123)
+        """コンテキスト付きのドメイン例外からの変換テスト（正常系）"""
+        domain_exception = DomainUserNotFoundException(123)
         app_exception = ApplicationExceptionFactory.create_from_domain_exception(
             domain_exception,
             user_id=456,
-            target_user_id=789
+            target_user_id=789,
         )
 
         assert isinstance(app_exception, UserQueryException)
         assert app_exception.context["user_id"] == 123  # ドメイン例外から
         assert app_exception.context["target_user_id"] == 789
-        # ドメイン例外のuser_idが優先される
+        # ドメイン例外の user_id が優先される
 
     def test_create_from_domain_exception_with_relationship_type(self):
-        """関係性タイプ付きのドメイン例外からの変換テスト"""
-        # Mockドメイン例外
-        class MockRelationshipException(Exception):
-            def __init__(self, relationship_type):
-                self.relationship_type = relationship_type
-                super().__init__(f"Relationship error: {relationship_type}")
+        """関係性タイプ付きのドメイン例外からの変換テスト（正常系）"""
+        from ai_rpg_world.domain.sns.exception.relationship_exceptions import (
+            FollowException,
+        )
 
-        domain_exception = MockRelationshipException("follow")
-        app_exception = ApplicationExceptionFactory.create_from_domain_exception(domain_exception)
+        domain_exception = FollowException("Relationship error: follow")
+        domain_exception.relationship_type = "follow"
+        app_exception = ApplicationExceptionFactory.create_from_domain_exception(
+            domain_exception
+        )
 
-        assert isinstance(app_exception, UserQueryException)
+        assert isinstance(app_exception, UserCommandException)
         assert app_exception.context["relationship_type"] == "follow"
 
     def test_create_from_domain_exception_constructor_fallback(self):
-        """コンストラクタが失敗した場合のフォールバックテスト"""
-        # 特殊なコンストラクタを持つMockドメイン例外
-        class MockSpecialException(Exception):
-            def __init__(self):
-                super().__init__("Special error")
+        """コンストラクタが失敗した場合のフォールバックテスト（正常系）"""
+        # マッピングに存在しない DomainException サブクラス
+        class TestSpecialDomainException(DomainException):
+            error_code = "TEST_SPECIAL"
 
-        domain_exception = MockSpecialException()
-        app_exception = ApplicationExceptionFactory.create_from_domain_exception(domain_exception)
+        domain_exception = TestSpecialDomainException("Special error")
+        app_exception = ApplicationExceptionFactory.create_from_domain_exception(
+            domain_exception
+        )
 
-        # フォールバックで基本コンストラクタが使用されるはず
         assert isinstance(app_exception, UserQueryException)
         assert str(app_exception) == "Special error"
+
+    def test_create_from_domain_exception_rejects_non_domain_exception(self):
+        """DomainException 以外を渡すと TypeError（例外系）"""
+        with pytest.raises(TypeError) as exc_info:
+            ApplicationExceptionFactory.create_from_domain_exception(
+                ValueError("invalid value")
+            )
+        assert "domain_exception must be a DomainException" in str(exc_info.value)
+        assert "ValueError" in str(exc_info.value)
+
+        with pytest.raises(TypeError) as exc_info:
+            ApplicationExceptionFactory.create_from_domain_exception(
+                RuntimeError("runtime error")
+            )
+        assert "domain_exception must be a DomainException" in str(exc_info.value)
+        assert "RuntimeError" in str(exc_info.value)
 
     def test_create_user_not_found_exception(self):
         """UserNotFoundException作成のテスト"""

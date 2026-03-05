@@ -1,9 +1,11 @@
 """
 アプリケーション例外ファクトリ
-ドメイン例外から適切なアプリケーション例外を生成する
+ドメイン例外から適切なアプリケーション例外を生成する。
+create_from_domain_exception には DomainException のサブクラスのみ渡すこと。
 """
 
 from typing import Optional, Dict, Type, Any, Tuple
+from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.application.social.exceptions.base_exception import ApplicationException
 from ai_rpg_world.application.social.exceptions.query.user_query_exception import (
     UserQueryException,
@@ -108,7 +110,7 @@ class ApplicationExceptionFactory:
         ドメイン例外から適切なアプリケーション例外を作成
 
         Args:
-            domain_exception: ドメイン例外
+            domain_exception: DomainException のサブクラスであること。それ以外は TypeError。
             user_id: ユーザーID
             target_user_id: 対象ユーザーID
             post_id: ポストID
@@ -116,7 +118,15 @@ class ApplicationExceptionFactory:
 
         Returns:
             適切なアプリケーション例外
+
+        Raises:
+            TypeError: domain_exception が DomainException のインスタンスでない場合
         """
+        if not isinstance(domain_exception, DomainException):
+            raise TypeError(
+                "domain_exception must be a DomainException, "
+                f"got {type(domain_exception).__name__}"
+            )
         # ドメイン例外から情報を抽出
         domain_class_name = domain_exception.__class__.__name__
 
@@ -153,8 +163,8 @@ class ApplicationExceptionFactory:
                 context[attr] = getattr(domain_exception, attr)
 
         # アプリケーション例外を作成
-        # Exceptionクラスに定義されたエラーコードを使用
-        error_code = getattr(domain_exception, 'error_code', domain_class_name.upper())
+        # DomainException のサブクラスが error_code を定義していない場合のフォールバック
+        error_code = getattr(domain_exception, "error_code", domain_class_name.upper())
         try:
             app_exception = app_exception_class(
                 message=str(domain_exception),

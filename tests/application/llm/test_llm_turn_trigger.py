@@ -1,0 +1,166 @@
+"""DefaultLlmTurnTrigger のテスト（正常・境界・例外・初期化）"""
+
+from unittest.mock import MagicMock
+
+import pytest
+
+from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
+from ai_rpg_world.application.llm.services.agent_orchestrator import LlmAgentOrchestrator
+from ai_rpg_world.application.llm.services.llm_agent_turn_runner import LlmAgentTurnRunner
+from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+from ai_rpg_world.application.llm.services.llm_turn_trigger import DefaultLlmTurnTrigger
+from ai_rpg_world.application.llm.services.tool_command_mapper import ToolCommandMapper
+from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_NO_OP
+from ai_rpg_world.application.llm.contracts.interfaces import IPromptBuilder
+from ai_rpg_world.application.observation.services.observation_context_buffer import (
+    DefaultObservationContextBuffer,
+)
+from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
+from ai_rpg_world.application.world.exceptions.base_exception import WorldApplicationException
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+
+class _StubPromptBuilder(IPromptBuilder):
+    def build(self, player_id, action_instruction=None):
+        return {
+            "messages": [{"role": "system", "content": "s"}, {"role": "user", "content": "u"}],
+            "tools": [{"type": "function", "function": {"name": TOOL_NAME_NO_OP, "description": "", "parameters": {}}}],
+            "tool_choice": "required",
+        }
+
+
+def _make_runner():
+    action_result_store = DefaultActionResultStore(max_entries_per_player=10)
+    prompt_builder = _StubPromptBuilder()
+    llm_client = StubLlmClient(tool_call_to_return={"name": TOOL_NAME_NO_OP, "arguments": {}})
+    orchestrator = LlmAgentOrchestrator(
+        prompt_builder=prompt_builder,
+        llm_client=llm_client,
+        tool_command_mapper=ToolCommandMapper(movement_service=MagicMock()),
+        action_result_store=action_result_store,
+    )
+    return LlmAgentTurnRunner(
+        observation_buffer=DefaultObservationContextBuffer(),
+        world_query_service=MagicMock(get_player_current_state=lambda q: MagicMock(spec=PlayerCurrentStateDto, is_busy=False)),
+        movement_service=MagicMock(),
+        action_result_store=action_result_store,
+        orchestrator=orchestrator,
+    )
+
+
+class TestDefaultLlmTurnTriggerScheduleAndRun:
+    """schedule_turn と run_scheduled_turns の正常・境界ケース"""
+
+    @pytest.fixture
+    def trigger(self):
+        return DefaultLlmTurnTrigger(_make_runner())
+
+    def test_schedule_one_run_scheduled_turns_calls_run_turn_once(self, trigger):
+        """1 プレイヤーをスケジュールして run_scheduled_turns で run_turn が 1 回呼ばれる"""
+        runner = trigger._turn_runner
+        spy = MagicMock(wraps=runner.run_turn)
+        trigger._turn_runner.run_turn = spy
+
+        trigger.schedule_turn(PlayerId(1))
+        trigger.run_scheduled_turns()
+
+        spy.assert_called_once_with(PlayerId(1))
+
+    def test_schedule_two_players_run_scheduled_turns_calls_both(self, trigger):
+        """2 プレイヤーをスケジュールすると両方 run_turn される"""
+        runner = trigger._turn_runner
+        spy = MagicMock(wraps=runner.run_turn)
+        trigger._turn_runner.run_turn = spy
+
+        trigger.schedule_turn(PlayerId(1))
+        trigger.schedule_turn(PlayerId(2))
+        trigger.run_scheduled_turns()
+
+        assert spy.call_count == 2
+        spy.assert_any_call(PlayerId(1))
+        spy.assert_any_call(PlayerId(2))
+
+    def test_schedule_same_player_twice_run_turn_once(self, trigger):
+        """同一プレイヤーを複数回スケジュールしても run_turn は 1 回だけ"""
+        runner = trigger._turn_runner
+        spy = MagicMock(wraps=runner.run_turn)
+        trigger._turn_runner.run_turn = spy
+
+        trigger.schedule_turn(PlayerId(1))
+        trigger.schedule_turn(PlayerId(1))
+        trigger.run_scheduled_turns()
+
+        spy.assert_called_once_with(PlayerId(1))
+
+    def test_run_scheduled_turns_empty_no_op(self, trigger):
+        """スケジュールなしで run_scheduled_turns は何も呼ばない"""
+        spy = MagicMock()
+        trigger._turn_runner.run_turn = spy
+
+        trigger.run_scheduled_turns()
+
+        spy.assert_not_called()
+
+    def test_run_scheduled_turns_clears_pending(self, trigger):
+        """run_scheduled_turns 後はキューが空になり、2 回目は no-op"""
+        spy = MagicMock(wraps=trigger._turn_runner.run_turn)
+        trigger._turn_runner.run_turn = spy
+
+        trigger.schedule_turn(PlayerId(1))
+        trigger.run_scheduled_turns()
+        assert spy.call_count == 1
+        trigger.run_scheduled_turns()
+        assert spy.call_count == 1
+
+    def test_schedule_turn_player_id_not_player_id_raises(self, trigger):
+        """schedule_turn に PlayerId でない値を渡すと TypeError"""
+        with pytest.raises(TypeError, match="player_id must be PlayerId"):
+            trigger.schedule_turn(1)  # type: ignore[arg-type]
+        with pytest.raises(TypeError, match="player_id must be PlayerId"):
+            trigger.schedule_turn(None)  # type: ignore[arg-type]
+
+
+class TestDefaultLlmTurnTriggerRunScheduledTurnsExceptions:
+    """run_scheduled_turns 実行中の例外伝播"""
+
+    @pytest.fixture
+    def trigger(self):
+        return DefaultLlmTurnTrigger(_make_runner())
+
+    def test_run_turn_raises_propagates_and_pending_cleared(self, trigger):
+        """run_turn が例外を投げたら伝播し、キューは既にクリア済み"""
+        trigger._turn_runner.run_turn = MagicMock(side_effect=RuntimeError("run_turn failed"))
+        trigger.schedule_turn(PlayerId(1))
+        trigger.schedule_turn(PlayerId(2))
+
+        with pytest.raises(RuntimeError, match="run_turn failed"):
+            trigger.run_scheduled_turns()
+
+        # 1 人目で失敗しているので 2 人目は実行されていない
+        assert trigger._turn_runner.run_turn.call_count == 1
+        # キューはクリアされている（次回 run_scheduled_turns は no-op）
+        trigger._turn_runner.run_turn = MagicMock(return_value=LlmCommandResultDto(success=True, message="ok"))
+        trigger.run_scheduled_turns()
+        trigger._turn_runner.run_turn.assert_not_called()
+
+    def test_run_turn_raises_world_application_exception_propagates(self, trigger):
+        """run_turn が WorldApplicationException を投げたらそのまま伝播"""
+        trigger._turn_runner.run_turn = MagicMock(
+            side_effect=WorldApplicationException("app error")
+        )
+        trigger.schedule_turn(PlayerId(1))
+
+        with pytest.raises(WorldApplicationException, match="app error"):
+            trigger.run_scheduled_turns()
+
+
+class TestDefaultLlmTurnTriggerInit:
+    """コンストラクタのバリデーション"""
+
+    def test_turn_runner_not_llm_agent_turn_runner_raises(self):
+        """turn_runner が LlmAgentTurnRunner でないとき TypeError"""
+        with pytest.raises(TypeError, match="turn_runner must be LlmAgentTurnRunner"):
+            DefaultLlmTurnTrigger(None)  # type: ignore[arg-type]
+        with pytest.raises(TypeError, match="turn_runner must be LlmAgentTurnRunner"):
+            DefaultLlmTurnTrigger(MagicMock())

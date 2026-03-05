@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional, Literal
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 
 
 @dataclass(frozen=True)
@@ -35,7 +36,17 @@ class SetDestinationCommand:
 class TickMovementCommand:
     """ティックごとの移動実行コマンド"""
     player_id: int
-    
+
+    def __post_init__(self):
+        if self.player_id <= 0:
+            raise ValueError("player_id must be greater than 0")
+
+
+@dataclass(frozen=True)
+class CancelMovementCommand:
+    """経路をキャンセルするコマンド（割り込み時など）。目的地設定を解除し、行動中フラグをクリアする。"""
+    player_id: int
+
     def __post_init__(self):
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
@@ -123,3 +134,16 @@ class DestroyPlaceableCommand:
             raise ValueError("player_id must be greater than 0")
         if self.spot_id <= 0:
             raise ValueError("spot_id must be greater than 0")
+
+
+@dataclass(frozen=True)
+class ChangeAttentionLevelCommand:
+    """プレイヤーの注意レベル（観測フィルタ）を変更するコマンド"""
+    player_id: int
+    attention_level: AttentionLevel
+
+    def __post_init__(self):
+        if self.player_id <= 0:
+            raise ValueError("player_id must be greater than 0")
+        if not isinstance(self.attention_level, AttentionLevel):
+            raise ValueError("attention_level must be an AttentionLevel enum value")

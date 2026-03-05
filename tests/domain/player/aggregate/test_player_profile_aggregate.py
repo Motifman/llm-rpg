@@ -2,7 +2,7 @@ import pytest
 from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_name import PlayerName
-from ai_rpg_world.domain.player.enum.player_enum import Role, Race, Element
+from ai_rpg_world.domain.player.enum.player_enum import ControlType, Role, Race, Element
 from ai_rpg_world.domain.player.event.profile_events import PlayerProfileChangedEvent
 
 
@@ -12,7 +12,8 @@ def create_test_profile(
     name: str = "TestPlayer",
     role: Role = Role.CITIZEN,
     race: Race = Race.HUMAN,
-    element: Element = Element.NEUTRAL
+    element: Element = Element.NEUTRAL,
+    control_type: ControlType = ControlType.HUMAN,
 ) -> PlayerProfileAggregate:
     """テスト用のPlayerProfileAggregateを作成"""
     return PlayerProfileAggregate(
@@ -20,7 +21,8 @@ def create_test_profile(
         name=PlayerName(name),
         role=role,
         race=race,
-        element=element
+        element=element,
+        control_type=control_type,
     )
 
 
@@ -324,3 +326,56 @@ class TestPlayerProfileAggregate:
         # 再度取得すると空になる
         events_after = profile.get_events()
         assert len(events_after) == 0
+
+
+class TestPlayerProfileAggregateControlType:
+    """control_type / change_control_type / is_llm_controlled のテスト"""
+
+    def test_create_default_control_type_is_human(self):
+        """create で control_type を省略した場合 HUMAN"""
+        profile = create_test_profile()
+        assert profile.control_type == ControlType.HUMAN
+        assert profile.is_llm_controlled() is False
+
+    def test_create_with_control_type_llm(self):
+        """create で control_type=LLM を指定できる"""
+        profile = PlayerProfileAggregate.create(
+            PlayerId(1),
+            PlayerName("LLMPlayer"),
+            control_type=ControlType.LLM,
+        )
+        assert profile.control_type == ControlType.LLM
+        assert profile.is_llm_controlled() is True
+
+    def test_create_with_control_type_bot(self):
+        """create で control_type=BOT を指定できる"""
+        profile = PlayerProfileAggregate.create(
+            PlayerId(1),
+            PlayerName("Bot"),
+            control_type=ControlType.BOT,
+        )
+        assert profile.control_type == ControlType.BOT
+        assert profile.is_llm_controlled() is False
+
+    def test_change_control_type(self):
+        """change_control_type で操作主体を変更できる"""
+        profile = create_test_profile()
+        assert profile.control_type == ControlType.HUMAN
+
+        profile.change_control_type(ControlType.LLM)
+        assert profile.control_type == ControlType.LLM
+        assert profile.is_llm_controlled() is True
+
+        profile.change_control_type(ControlType.BOT)
+        assert profile.control_type == ControlType.BOT
+        assert profile.is_llm_controlled() is False
+
+    def test_change_control_type_no_change(self):
+        """同じ control_type の場合は変更されない（イベント等の影響なし）"""
+        profile = PlayerProfileAggregate.create(
+            PlayerId(1),
+            PlayerName("Player"),
+            control_type=ControlType.LLM,
+        )
+        profile.change_control_type(ControlType.LLM)
+        assert profile.control_type == ControlType.LLM
