@@ -62,6 +62,13 @@ class PlayerState(Enum):
     TRADING = "trading"        # 取引状態
 
 
+class ControlType(Enum):
+    """プレイヤーの操作主体。誰が操作するかを表す。"""
+    HUMAN = "human"   # 人間が操作
+    LLM = "llm"       # LLM エージェントが操作
+    BOT = "bot"       # ルールベース Bot（将来用）
+
+
 class AttentionLevel(Enum):
     """観測の注意レベル（集中状態）。どの程度の観測をLLMに渡すかを制御する。"""
     FULL = "FULL"                      # 全ての観測をそのまま渡す
