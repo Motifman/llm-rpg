@@ -3,15 +3,27 @@ LLM エージェント用ワイヤリング（方針 B）。
 
 観測 → schedule_turn → tick → run_scheduled_turns および
 プロンプト組み立て・ツール実行・結果記録までを一括で組み立てる。
-呼び出し元は返却された observation_registry を EventHandlerComposition に、
-llm_turn_trigger を WorldSimulationApplicationService に渡す。
+
+本モジュールは**ライブラリ**として提供する。ゲームの組み立て（WorldSimulationApplicationService や
+EventHandlerComposition のインスタンス化）は**呼び出し元（外部）**で行い、本関数の返り値を渡す。
+
+【ブートストラップ契約（呼び出し元が守ること）】
+1. create_llm_agent_wiring(...) を呼び、返り値 (observation_registry, llm_turn_trigger) を取得する。
+2. observation_registry を EventHandlerComposition の observation_registry 引数に渡す。
+   - register_for_profile(event_publisher, EventHandlerProfile.FULL) 時に観測ハンドラが登録される。
+3. llm_turn_trigger を WorldSimulationApplicationService の llm_turn_trigger 引数に渡す。
+   - tick() の末尾で run_scheduled_turns() が呼ばれ、スケジュール済み LLM プレイヤーのターンが実行される。
+上記を満たすことで、観測イベント発生 → schedule_turn → tick → run_scheduled_turns の一連の流れが動作する。
 
 LLM クライアント: 環境変数 LLM_CLIENT で "stub"（デフォルト）または "litellm" を指定。
 開発では stub、本番では litellm を指定する。
+"stub" / "litellm" 以外の値の場合は ValueError を送出する。
 """
 
 import os
 from typing import Any, Optional, Tuple
+
+_VALID_LLM_CLIENT_VALUES = frozenset({"stub", "litellm"})
 
 from ai_rpg_world.application.llm.contracts.interfaces import (
     ILLMClient,
@@ -90,8 +102,12 @@ _DEFAULT_LLM_CLIENT = "stub"
 
 
 def _create_llm_client_from_env() -> ILLMClient:
-    """環境変数 LLM_CLIENT に応じて ILLMClient 実装を返す。stub（デフォルト） or litellm。"""
+    """環境変数 LLM_CLIENT に応じて ILLMClient 実装を返す。stub（デフォルト） or litellm。未知の値は ValueError。"""
     value = (os.environ.get(_ENV_LLM_CLIENT) or _DEFAULT_LLM_CLIENT).strip().lower()
+    if value not in _VALID_LLM_CLIENT_VALUES:
+        raise ValueError(
+            f"LLM_CLIENT must be one of {sorted(_VALID_LLM_CLIENT_VALUES)}, got: {value!r}"
+        )
     if value == "litellm":
         from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
         return LiteLLMClient()
@@ -129,7 +145,9 @@ def create_llm_agent_wiring(
         llm_client: 省略時は環境変数 LLM_CLIENT に従い作成（stub / litellm）
 
     Returns:
-        (ObservationEventHandlerRegistry, ILlmTurnTrigger)
+        (ObservationEventHandlerRegistry, ILlmTurnTrigger)。
+        呼び出し元は返り値の第1要素を EventHandlerComposition(observation_registry=...)、
+        第2要素を WorldSimulationApplicationService(llm_turn_trigger=...) に渡すこと（ブートストラップ契約）。
     """
     if player_status_repository is None:
         raise TypeError("player_status_repository must not be None")

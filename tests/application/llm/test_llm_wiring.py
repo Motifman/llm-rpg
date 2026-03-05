@@ -8,6 +8,7 @@ from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.wiring import create_llm_agent_wiring
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
+    IObservationFormatter,
 )
 from ai_rpg_world.application.world.services.world_query_service import (
     WorldQueryService,
@@ -102,6 +103,14 @@ class TestCreateLlmAgentWiringReturnValues:
         registry, _ = create_llm_agent_wiring(**deps)
         assert registry._handler._buffer is custom_buffer
 
+    def test_accepts_optional_observation_formatter(self):
+        """observation_formatter を渡した場合、そのフォーマッタがハンドラに渡される"""
+        custom_formatter = MagicMock(spec=IObservationFormatter)
+        deps = _minimal_wiring_deps()
+        deps["observation_formatter"] = custom_formatter
+        registry, _ = create_llm_agent_wiring(**deps)
+        assert registry._handler._formatter is custom_formatter
+
 
 class TestCreateLlmAgentWiringRequiredParams:
     """必須引数が None のときに TypeError を出す"""
@@ -163,3 +172,33 @@ class TestCreateLlmAgentWiringEnvClient:
         deps = _minimal_wiring_deps()
         registry, trigger = create_llm_agent_wiring(**deps)
         trigger.run_scheduled_turns()
+
+    def test_env_litellm_uses_litellm_client(self, monkeypatch):
+        """LLM_CLIENT=litellm のとき LiteLLMClient が使われ run_scheduled_turns が動作する（llm_client 未指定時）"""
+        monkeypatch.setenv("LLM_CLIENT", "litellm")
+        deps = _minimal_wiring_deps()
+        registry, trigger = create_llm_agent_wiring(**deps)
+        assert registry is not None
+        assert trigger is not None
+        trigger.run_scheduled_turns()
+
+    def test_env_unknown_raises_value_error(self, monkeypatch):
+        """LLM_CLIENT が stub / litellm 以外のとき ValueError が発生する"""
+        monkeypatch.setenv("LLM_CLIENT", "openai")
+        deps = _minimal_wiring_deps()
+        with pytest.raises(ValueError, match="LLM_CLIENT must be one of"):
+            create_llm_agent_wiring(**deps)
+
+    def test_env_whitespace_only_raises_value_error(self, monkeypatch):
+        """LLM_CLIENT が空白のみのとき strip 後に空となり ValueError が発生する"""
+        monkeypatch.setenv("LLM_CLIENT", "   ")
+        deps = _minimal_wiring_deps()
+        with pytest.raises(ValueError, match="LLM_CLIENT must be one of"):
+            create_llm_agent_wiring(**deps)
+
+    def test_env_typo_raises_value_error(self, monkeypatch):
+        """LLM_CLIENT の typo（litellm 以外の不明な値）で ValueError が発生する"""
+        monkeypatch.setenv("LLM_CLIENT", "litelm")
+        deps = _minimal_wiring_deps()
+        with pytest.raises(ValueError, match="got: 'litelm'"):
+            create_llm_agent_wiring(**deps)

@@ -297,6 +297,18 @@
 - **Phase 3**: 実装済み。IGameToolRegistry, IAvailabilityResolver, IAvailableToolsProvider（ToolAvailabilityContext = PlayerCurrentStateDto）, ILLMClient, ツール定義（world_no_op, move_set_destination）, ToolCommandMapper（ツール名→コマンド実行→LlmCommandResultDto）, LlmAgentOrchestrator（build → invoke → execute → IActionResultStore.append）。DefaultPromptBuilder は IAvailableToolsProvider で tools を組み立て。実際の LLM API 呼び出しは ILLMClient の実装（インフラ層）で差し替え可能。
 - **run_turn 駆動**: ILLMPlayerResolver（プレイヤーが LLM 制御か判定）, ILlmTurnTrigger（スケジュール＋一括実行）を定義。SetBasedLlmPlayerResolver（ID 集合で LLM プレイヤーを指定）, DefaultLlmTurnTrigger（LlmAgentTurnRunner に run_turn を委譲）を実装。ObservationEventHandler は turn_trigger と llm_player_resolver をオプションで受け取り、観測を append したあと LLM プレイヤーなら schedule_turn を呼ぶ。WorldSimulationApplicationService.tick の末尾で llm_turn_trigger が渡されていれば run_scheduled_turns() を実行。
 
+### 12.1 ブートストラップ方針と契約（ライブラリ利用）
+
+本コードは**ライブラリ**として提供する。ゲームの組み立て（WorldSimulationApplicationService や EventHandlerComposition のインスタンス化）は**呼び出し元（外部）**で行う方針とする。
+
+**呼び出し元が守る契約:**
+
+1. `create_llm_agent_wiring(...)` を呼び、返り値 `(observation_registry, llm_turn_trigger)` を取得する。
+2. **observation_registry** を `EventHandlerComposition(observation_registry=...)` に渡す。`register_for_profile(event_publisher, EventHandlerProfile.FULL)` 時に観測ハンドラが登録される。
+3. **llm_turn_trigger** を `WorldSimulationApplicationService(llm_turn_trigger=...)` に渡す。`tick()` の末尾で `run_scheduled_turns()` が呼ばれ、スケジュール済み LLM プレイヤーのターンが実行される。
+
+上記を満たすことで、観測イベント発生 → schedule_turn → tick → run_scheduled_turns の一連の流れが動作する。契約の検証は `tests/application/llm/test_llm_wiring_integration.py` の統合テストで行う。
+
 ---
 
 ## 13. 処理フロー（Mermaid）
