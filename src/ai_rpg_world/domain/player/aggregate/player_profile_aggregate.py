@@ -3,7 +3,7 @@ from typing import Optional
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_name import PlayerName
-from ai_rpg_world.domain.player.enum.player_enum import Role, Race, Element
+from ai_rpg_world.domain.player.enum.player_enum import ControlType, Role, Race, Element
 from ai_rpg_world.domain.player.event.profile_events import PlayerProfileChangedEvent
 
 
@@ -17,6 +17,7 @@ class PlayerProfileAggregate(AggregateRoot):
         role: Role,
         race: Race = Race.HUMAN,
         element: Element = Element.NEUTRAL,
+        control_type: ControlType = ControlType.HUMAN,
     ):
         super().__init__()
         self._player_id = player_id
@@ -24,6 +25,7 @@ class PlayerProfileAggregate(AggregateRoot):
         self._role = role
         self._race = race
         self._element = element
+        self._control_type = control_type
 
     @classmethod
     def create(
@@ -33,9 +35,10 @@ class PlayerProfileAggregate(AggregateRoot):
         role: Role = Role.CITIZEN,
         race: Race = Race.HUMAN,
         element: Element = Element.NEUTRAL,
+        control_type: ControlType = ControlType.HUMAN,
     ) -> "PlayerProfileAggregate":
         """新しいプロフィール集約を作成"""
-        return cls(player_id, name, role, race, element)
+        return cls(player_id, name, role, race, element, control_type)
 
     @property
     def player_id(self) -> PlayerId:
@@ -61,6 +64,11 @@ class PlayerProfileAggregate(AggregateRoot):
     def element(self) -> Element:
         """属性"""
         return self._element
+
+    @property
+    def control_type(self) -> ControlType:
+        """操作主体（誰が操作するか）。"""
+        return self._control_type
 
     def change_name(self, new_name: PlayerName) -> None:
         """名前を変更する"""
@@ -204,3 +212,13 @@ class PlayerProfileAggregate(AggregateRoot):
     def is_element(self, element: Element) -> bool:
         """指定した属性かどうかをチェック"""
         return self._element == element
+
+    def change_control_type(self, new_control_type: ControlType) -> None:
+        """操作主体を変更する"""
+        if self._control_type == new_control_type:
+            return
+        self._control_type = new_control_type
+
+    def is_llm_controlled(self) -> bool:
+        """LLM エージェントが操作するプレイヤーかどうか"""
+        return self._control_type == ControlType.LLM
