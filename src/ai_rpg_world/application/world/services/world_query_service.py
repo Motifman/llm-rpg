@@ -1,7 +1,7 @@
 """ワールドクエリサービス（読み取り専用の位置情報等）"""
 
 import logging
-from typing import Optional, Callable, Any, List
+from typing import Optional, Callable, Any, List, TYPE_CHECKING
 
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
@@ -31,6 +31,8 @@ from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.exception.map_exception import TileNotFoundException
+from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.application.world.services.transition_condition_evaluator import (
     TransitionConditionEvaluator,
     TransitionContext,
@@ -43,6 +45,11 @@ from ai_rpg_world.application.world.exceptions.command.movement_command_exceptio
     MapNotFoundException,
 )
 
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.monster.repository.monster_repository import (
+        MonsterRepository,
+    )
+
 
 class WorldQueryService:
     """ワールドに関する読み取り専用クエリを提供するサービス"""
@@ -54,6 +61,7 @@ class WorldQueryService:
         physical_map_repository: PhysicalMapRepository,
         spot_repository: SpotRepository,
         connected_spots_provider: IConnectedSpotsProvider,
+        monster_repository: Optional["MonsterRepository"] = None,
         transition_policy_repository: Optional[ITransitionPolicyRepository] = None,
         transition_condition_evaluator: Optional[TransitionConditionEvaluator] = None,
     ):
@@ -62,9 +70,70 @@ class WorldQueryService:
         self._physical_map_repository = physical_map_repository
         self._spot_repository = spot_repository
         self._connected_spots_provider = connected_spots_provider
+        self._monster_repository = monster_repository
         self._transition_policy_repository = transition_policy_repository
         self._transition_condition_evaluator = transition_condition_evaluator
         self._logger = logging.getLogger(self.__class__.__name__)
+
+    def _direction_from_to(self, origin, target) -> str:
+        dx = target.x - origin.x
+        dy = target.y - origin.y
+        if dx == 0 and dy == 0:
+            return "ここ"
+
+        vertical = ""
+        horizontal = ""
+        if dy < 0:
+            vertical = "北"
+        elif dy > 0:
+            vertical = "南"
+        if dx > 0:
+            horizontal = "東"
+        elif dx < 0:
+            horizontal = "西"
+        return vertical + horizontal or "ここ"
+
+    def _visible_object_display_name(self, obj) -> str:
+        if obj.object_type == ObjectTypeEnum.PLAYER and obj.player_id is not None:
+            profile = self._player_profile_repository.find_by_id(obj.player_id)
+            if profile is not None:
+                return profile.name.value
+            return "不明なプレイヤー"
+
+        if obj.object_type == ObjectTypeEnum.NPC:
+            if self._monster_repository is not None:
+                monster = self._monster_repository.find_by_world_object_id(obj.object_id)
+                if monster is not None:
+                    return monster.template.name
+            return "誰か"
+
+        name_by_type = {
+            ObjectTypeEnum.CHEST: "宝箱",
+            ObjectTypeEnum.DOOR: "ドア",
+            ObjectTypeEnum.GATE: "門",
+            ObjectTypeEnum.SIGN: "看板",
+            ObjectTypeEnum.SWITCH: "スイッチ",
+            ObjectTypeEnum.RESOURCE: "資源",
+            ObjectTypeEnum.GROUND_ITEM: "落ちているアイテム",
+        }
+        return name_by_type.get(obj.object_type, obj.object_type.value)
+
+    def _visible_object_kind(self, obj) -> str:
+        if obj.object_type == ObjectTypeEnum.PLAYER:
+            return "player"
+        if obj.object_type == ObjectTypeEnum.NPC:
+            if getattr(obj, "interaction_type", None) is not None:
+                return "npc"
+            return "monster"
+        if obj.object_type == ObjectTypeEnum.CHEST:
+            return "chest"
+        if obj.object_type == ObjectTypeEnum.DOOR:
+            return "door"
+        if obj.object_type == ObjectTypeEnum.RESOURCE:
+            return "resource"
+        if obj.object_type == ObjectTypeEnum.GROUND_ITEM:
+            return "ground_item"
+        return "object"
 
     def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
         """共通の例外処理を実行"""
@@ -245,6 +314,12 @@ class WorldQueryService:
                     y=obj.coordinate.y,
                     z=obj.coordinate.z,
                     distance=d,
+                    display_name=self._visible_object_display_name(obj),
+                    object_kind=self._visible_object_kind(obj),
+                    direction_from_player=self._direction_from_to(coord, obj.coordinate),
+                    is_interactable=obj.interaction_type is not None,
+                    player_id_value=int(obj.player_id) if obj.player_id is not None else None,
+                    is_self=obj.player_id == player_id,
                 )
             )
 
@@ -423,6 +498,12 @@ class WorldQueryService:
                     y=obj.coordinate.y,
                     z=obj.coordinate.z,
                     distance=d,
+                    display_name=self._visible_object_display_name(obj),
+                    object_kind=self._visible_object_kind(obj),
+                    direction_from_player=self._direction_from_to(coord, obj.coordinate),
+                    is_interactable=obj.interaction_type is not None,
+                    player_id_value=int(obj.player_id) if obj.player_id is not None else None,
+                    is_self=obj.player_id == player_id,
                 )
             )
 

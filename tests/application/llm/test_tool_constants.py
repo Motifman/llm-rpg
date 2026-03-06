@@ -7,8 +7,10 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_PREFIXES,
     TOOL_NAME_PREFIX_DESCRIPTIONS,
     TOOL_NAME_PREFIX_MOVE,
+    TOOL_NAME_PREFIX_SPEECH,
     TOOL_NAME_PREFIX_WORLD,
     TOOL_NAME_NO_OP,
+    TOOL_NAME_WHISPER,
 )
 
 
@@ -16,9 +18,10 @@ class TestToolNamePrefixes:
     """プレフィックス定数の一貫性"""
 
     def test_prefixes_list_contains_expected(self):
-        """TOOL_NAME_PREFIXES に world と move が含まれる"""
+        """TOOL_NAME_PREFIXES に world / move / speech が含まれる"""
         assert TOOL_NAME_PREFIX_WORLD in TOOL_NAME_PREFIXES
         assert TOOL_NAME_PREFIX_MOVE in TOOL_NAME_PREFIXES
+        assert TOOL_NAME_PREFIX_SPEECH in TOOL_NAME_PREFIXES
 
     def test_prefix_descriptions_length_matches_prefixes(self):
         """プレフィックス説明の数がプレフィックス数と一致する"""
@@ -42,3 +45,8 @@ class TestToolNames:
         """move_to_destination は move_ プレフィックスを持つ"""
         assert TOOL_NAME_MOVE_TO_DESTINATION.startswith(TOOL_NAME_PREFIX_MOVE)
         assert TOOL_NAME_MOVE_TO_DESTINATION == "move_to_destination"
+
+    def test_whisper_has_speech_prefix(self):
+        """whisper は speech_ プレフィックスを持つ"""
+        assert TOOL_NAME_WHISPER.startswith(TOOL_NAME_PREFIX_SPEECH)
+        assert TOOL_NAME_WHISPER == "speech_whisper"

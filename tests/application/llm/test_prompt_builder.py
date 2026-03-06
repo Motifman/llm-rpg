@@ -71,8 +71,15 @@ from ai_rpg_world.domain.world.entity.spot import Spot
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import (
     PhysicalMapAggregate,
 )
+from ai_rpg_world.domain.world.entity.world_object import WorldObject
+from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
+from ai_rpg_world.domain.world.enum.world_enum import (
+    DirectionEnum,
+    ObjectTypeEnum,
+)
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import (
     InMemoryPlayerProfileRepository,
@@ -154,6 +161,7 @@ class TestDefaultPromptBuilder:
         assert "tools" in result
         assert result["tool_choice"] == "required"
         assert "overflow" in result
+        assert "tool_runtime_context" in result
         assert len(result["messages"]) == 2
         assert result["messages"][0]["role"] == "system"
         assert result["messages"][1]["role"] == "user"
@@ -165,6 +173,84 @@ class TestDefaultPromptBuilder:
         assert len(result["tools"]) >= 1
         tool_names = [t["function"]["name"] for t in result["tools"] if t.get("type") == "function"]
         assert "world_no_op" in tool_names
+
+    def test_build_includes_labeled_visible_targets_and_runtime_context(
+        self, setup_prompt_builder
+    ):
+        """配置済みで他プレイヤーが見えるとき、user にラベル付き対象一覧が含まれる"""
+        prompt_builder, profile_repo, status_repo, phys_repo, spot_repo, _ = setup_prompt_builder
+        profile_repo.save(self._create_profile(1, "Alice"))
+        profile_repo.save(self._create_profile(2, "Bob"))
+
+        exp_table = ExpTable(100, 1.5)
+        status_repo.save(
+            PlayerStatusAggregate(
+                player_id=PlayerId(1),
+                base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
+                stat_growth_factor=StatGrowthFactor(1.1, 1.1, 1.1, 1.1, 1.1, 0.01, 0.01),
+                exp_table=exp_table,
+                growth=Growth(1, 0, exp_table),
+                gold=Gold.create(0),
+                hp=Hp.create(10, 10),
+                mp=Mp.create(10, 10),
+                stamina=Stamina.create(10, 10),
+                current_spot_id=SpotId(1),
+                current_coordinate=Coordinate(0, 0, 0),
+            )
+        )
+        status_repo.save(
+            PlayerStatusAggregate(
+                player_id=PlayerId(2),
+                base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
+                stat_growth_factor=StatGrowthFactor(1.1, 1.1, 1.1, 1.1, 1.1, 0.01, 0.01),
+                exp_table=exp_table,
+                growth=Growth(1, 0, exp_table),
+                gold=Gold.create(0),
+                hp=Hp.create(10, 10),
+                mp=Mp.create(10, 10),
+                stamina=Stamina.create(10, 10),
+                current_spot_id=SpotId(1),
+                current_coordinate=Coordinate(1, 0, 0),
+            )
+        )
+        tiles = {
+            Coordinate(0, 0, 0): Tile(Coordinate(0, 0, 0), TerrainType.grass()),
+            Coordinate(1, 0, 0): Tile(Coordinate(1, 0, 0), TerrainType.grass()),
+        }
+        phys_repo.save(
+            PhysicalMapAggregate(
+                spot_id=SpotId(1),
+                tiles=tiles,
+                objects=[
+                    WorldObject(
+                        object_id=WorldObjectId.create(1),
+                        coordinate=Coordinate(0, 0, 0),
+                        object_type=ObjectTypeEnum.PLAYER,
+                        component=ActorComponent(
+                            direction=DirectionEnum.SOUTH,
+                            player_id=PlayerId(1),
+                        ),
+                    ),
+                    WorldObject(
+                        object_id=WorldObjectId.create(2),
+                        coordinate=Coordinate(1, 0, 0),
+                        object_type=ObjectTypeEnum.PLAYER,
+                        component=ActorComponent(
+                            direction=DirectionEnum.SOUTH,
+                            player_id=PlayerId(2),
+                        ),
+                    ),
+                ],
+            )
+        )
+
+        result = prompt_builder.build(PlayerId(1))
+        user_content = result["messages"][1]["content"]
+
+        assert "視界内の対象ラベル" in user_content
+        assert "P1: Bob" in user_content
+        assert "tool_runtime_context" in result
+        assert result["tool_runtime_context"].targets["P1"].player_id == 2
 
     def test_build_with_predictive_retriever_includes_related_memories_section(
         self, setup_prompt_builder

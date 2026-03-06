@@ -5,7 +5,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
-from ai_rpg_world.application.llm.contracts.interfaces import IPromptBuilder
+from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
+from ai_rpg_world.application.llm.contracts.interfaces import (
+    IPromptBuilder,
+    IToolArgumentResolver,
+)
 from ai_rpg_world.application.llm.services.action_result_store import (
     DefaultActionResultStore,
 )
@@ -34,6 +38,15 @@ class _StubPromptBuilder(IPromptBuilder):
 
     def build(self, player_id, action_instruction=None):
         return self._return_value
+
+
+class _RecordingResolver(IToolArgumentResolver):
+    def __init__(self):
+        self.calls = []
+
+    def resolve(self, tool_name, arguments, runtime_context):
+        self.calls.append((tool_name, arguments, runtime_context))
+        return arguments or {}
 
 
 class TestLlmAgentOrchestratorRunTurn:
@@ -89,6 +102,24 @@ class TestLlmAgentOrchestratorRunTurn:
         result = orchestrator.run_turn(PlayerId(1))
         assert isinstance(result, LlmCommandResultDto)
         assert result.success is True
+
+    def test_run_turn_passes_runtime_context_to_argument_resolver(self, prompt_builder, action_result_store, mapper):
+        resolver = _RecordingResolver()
+        prompt_builder._return_value["tool_runtime_context"] = ToolRuntimeContextDto.empty()
+        llm_client = StubLlmClient(tool_call_to_return={"name": TOOL_NAME_NO_OP, "arguments": {}})
+        orchestrator = LlmAgentOrchestrator(
+            prompt_builder=prompt_builder,
+            llm_client=llm_client,
+            tool_command_mapper=mapper,
+            action_result_store=action_result_store,
+            tool_argument_resolver=resolver,
+        )
+
+        orchestrator.run_turn(PlayerId(1))
+
+        assert len(resolver.calls) == 1
+        assert resolver.calls[0][0] == TOOL_NAME_NO_OP
+        assert isinstance(resolver.calls[0][2], ToolRuntimeContextDto)
 
     def test_run_turn_when_no_tool_call_appends_no_tool_message(self, action_result_store, mapper):
         """LLM が tool_call を返さないとき「ツールが選択されませんでした」が store に記録される"""

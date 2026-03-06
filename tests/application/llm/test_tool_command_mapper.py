@@ -10,7 +10,10 @@ from ai_rpg_world.application.llm.services.tool_command_mapper import ToolComman
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
+    TOOL_NAME_WHISPER,
 )
+from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
+from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.application.world.contracts.dtos import MoveResultDto
 from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
     MovementInvalidException,
@@ -143,3 +146,52 @@ class TestToolCommandMapperValidation:
         """movement_service に move_to_destination が無いとき TypeError"""
         with pytest.raises(TypeError, match="move_to_destination"):
             ToolCommandMapper(movement_service=object())  # type: ignore[arg-type]
+
+
+class TestToolCommandMapperWhisper:
+    @pytest.fixture
+    def movement_service(self):
+        return MagicMock()
+
+    @pytest.fixture
+    def speech_service(self):
+        return MagicMock()
+
+    @pytest.fixture
+    def mapper(self, movement_service, speech_service):
+        return ToolCommandMapper(
+            movement_service=movement_service,
+            speech_service=speech_service,
+        )
+
+    def test_execute_whisper_success_returns_dto(self, mapper, speech_service):
+        result = mapper.execute(
+            1,
+            TOOL_NAME_WHISPER,
+            {
+                "content": "こんにちは",
+                "channel": SpeechChannel.WHISPER,
+                "target_player_id": 2,
+            },
+        )
+        assert result.success is True
+        assert "囁き" in result.message
+        speech_service.speak.assert_called_once()
+        command = speech_service.speak.call_args[0][0]
+        assert isinstance(command, SpeakCommand)
+        assert command.speaker_player_id == 1
+        assert command.target_player_id == 2
+
+    def test_execute_whisper_without_speech_service_returns_failure(self, movement_service):
+        mapper = ToolCommandMapper(movement_service=movement_service)
+        result = mapper.execute(
+            1,
+            TOOL_NAME_WHISPER,
+            {
+                "content": "こんにちは",
+                "channel": SpeechChannel.WHISPER,
+                "target_player_id": 2,
+            },
+        )
+        assert result.success is False
+        assert result.error_code == "UNKNOWN_TOOL"

@@ -6,11 +6,14 @@ from datetime import datetime
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
     EpisodeMemoryEntry,
+    LlmUiContextDto,
     LlmCommandResultDto,
     LongTermFactEntry,
     MemoryLawEntry,
     SystemPromptPlayerInfoDto,
     ToolDefinitionDto,
+    ToolRuntimeContextDto,
+    ToolRuntimeTargetDto,
 )
 
 
@@ -217,6 +220,31 @@ class TestToolDefinitionDto:
                 description="d",
                 parameters={},
             )
+
+
+class TestToolRuntimeDtos:
+    def test_tool_runtime_target_dto_valid(self):
+        dto = ToolRuntimeTargetDto(
+            label="P1",
+            kind="player",
+            display_name="Alice",
+            player_id=1,
+        )
+        assert dto.label == "P1"
+        assert dto.player_id == 1
+
+    def test_tool_runtime_context_empty(self):
+        ctx = ToolRuntimeContextDto.empty()
+        assert ctx.targets == {}
+
+    def test_llm_ui_context_dto_valid(self):
+        ctx = ToolRuntimeContextDto.empty()
+        dto = LlmUiContextDto(
+            current_state_text="現在地: 広場",
+            tool_runtime_context=ctx,
+        )
+        assert dto.current_state_text == "現在地: 広場"
+        assert dto.tool_runtime_context is ctx
 
     def test_description_not_str_raises_type_error(self):
         """description が str でない場合 TypeError"""

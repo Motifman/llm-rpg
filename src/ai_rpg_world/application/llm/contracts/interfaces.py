@@ -7,10 +7,12 @@ from typing import Any, Dict, List, Optional, Tuple
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
     EpisodeMemoryEntry,
+    LlmUiContextDto,
     LongTermFactEntry,
     MemoryLawEntry,
     SystemPromptPlayerInfoDto,
     ToolDefinitionDto,
+    ToolRuntimeContextDto,
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
@@ -233,6 +235,19 @@ class ICurrentStateFormatter(ABC):
         pass
 
 
+class ILlmUiContextBuilder(ABC):
+    """現在状態テキストに一時ラベル付きUIを重ね、内部用 runtime context を組み立てる。"""
+
+    @abstractmethod
+    def build(
+        self,
+        current_state_text: str,
+        current_state: Optional[PlayerCurrentStateDto],
+    ) -> LlmUiContextDto:
+        """LLM向け現在状態テキストと tool runtime context を返す。"""
+        pass
+
+
 class IRecentEventsFormatter(ABC):
     """観測リストと行動結果リストを「直近の出来事」テキストに変換する。"""
 
@@ -329,6 +344,20 @@ class IAvailableToolsProvider(ABC):
         context: Optional[PlayerCurrentStateDto],
     ) -> List[Dict[str, Any]]:
         """context に応じて利用可能なツールだけを OpenAI の tools 形式で返す。"""
+        pass
+
+
+class IToolArgumentResolver(ABC):
+    """LLM の UI 用引数を、アプリケーション層へ渡す canonical args に解決する。"""
+
+    @abstractmethod
+    def resolve(
+        self,
+        tool_name: str,
+        arguments: Optional[Dict[str, Any]],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        """tool 名・UI引数・runtime context から canonical args を返す。"""
         pass
 
 

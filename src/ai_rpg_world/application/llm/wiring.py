@@ -78,8 +78,14 @@ from ai_rpg_world.application.llm.services.sliding_window_memory import (
 from ai_rpg_world.application.llm.services.tool_command_mapper import (
     ToolCommandMapper,
 )
+from ai_rpg_world.application.llm.services.tool_argument_resolver import (
+    DefaultToolArgumentResolver,
+)
 from ai_rpg_world.application.llm.services.tool_definitions import (
     register_default_tools,
+)
+from ai_rpg_world.application.llm.services.ui_context_builder import (
+    DefaultLlmUiContextBuilder,
 )
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
@@ -132,6 +138,7 @@ def create_llm_agent_wiring(
     physical_map_repository: PhysicalMapRepository,
     world_query_service: Any,
     movement_service: Any,
+    speech_service: Optional[Any] = None,
     player_profile_repository: PlayerProfileRepository,
     unit_of_work_factory: UnitOfWorkFactory,
     observation_buffer: Optional[IObservationContextBuffer] = None,
@@ -204,15 +211,23 @@ def create_llm_agent_wiring(
     sliding_window = DefaultSlidingWindowMemory()
     action_result_store = DefaultActionResultStore()
     current_state_formatter = DefaultCurrentStateFormatter()
+    ui_context_builder = DefaultLlmUiContextBuilder()
     recent_events_formatter = DefaultRecentEventsFormatter()
     context_format_strategy = SectionBasedContextFormatStrategy()
     system_prompt_builder = DefaultSystemPromptBuilder()
     game_tool_registry = DefaultGameToolRegistry()
-    register_default_tools(game_tool_registry)
+    register_default_tools(
+        game_tool_registry,
+        speech_enabled=speech_service is not None,
+    )
     available_tools_provider = DefaultAvailableToolsProvider(game_tool_registry)
 
     client = llm_client if llm_client is not None else _create_llm_client_from_env()
-    tool_command_mapper = ToolCommandMapper(movement_service=movement_service)
+    tool_command_mapper = ToolCommandMapper(
+        movement_service=movement_service,
+        speech_service=speech_service,
+    )
+    tool_argument_resolver = DefaultToolArgumentResolver()
     episode_memory_store = InMemoryEpisodeMemoryStore()
     long_term_memory_store = InMemoryLongTermMemoryStore()
     memory_extractor = RuleBasedMemoryExtractor()
@@ -231,6 +246,7 @@ def create_llm_agent_wiring(
         context_format_strategy=context_format_strategy,
         system_prompt_builder=system_prompt_builder,
         available_tools_provider=available_tools_provider,
+        ui_context_builder=ui_context_builder,
         predictive_memory_retriever=predictive_retriever,
     )
     orchestrator = LlmAgentOrchestrator(
@@ -238,6 +254,7 @@ def create_llm_agent_wiring(
         llm_client=client,
         tool_command_mapper=tool_command_mapper,
         action_result_store=action_result_store,
+        tool_argument_resolver=tool_argument_resolver,
         memory_extractor=memory_extractor,
         episode_memory_store=episode_memory_store,
     )
