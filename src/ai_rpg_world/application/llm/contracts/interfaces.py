@@ -6,6 +6,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
+    EpisodeMemoryEntry,
+    LongTermFactEntry,
+    MemoryLawEntry,
     SystemPromptPlayerInfoDto,
     ToolDefinitionDto,
 )
@@ -23,13 +26,181 @@ class ISlidingWindowMemory(ABC):
         pass
 
     @abstractmethod
-    def append_all(self, player_id: PlayerId, entries: List[ObservationEntry]) -> None:
-        """指定プレイヤーに観測を複数件追加する。"""
+    def append_all(
+        self, player_id: PlayerId, entries: List[ObservationEntry]
+    ) -> List[ObservationEntry]:
+        """
+        指定プレイヤーに観測を複数件追加する。
+        戻り値は今回の追加によりウィンドウから溢れた（捨てられた）観測のリスト。
+        """
         pass
 
     @abstractmethod
     def get_recent(self, player_id: PlayerId, limit: int) -> List[ObservationEntry]:
         """指定プレイヤーの直近 limit 件の観測を新しい順で返す。"""
+        pass
+
+
+# --- 記憶モジュール（Phase 4）---
+
+
+class IEpisodeMemoryStore(ABC):
+    """エピソード記憶の格納・取得。"""
+
+    @abstractmethod
+    def add(self, player_id: PlayerId, entry: EpisodeMemoryEntry) -> None:
+        """1 件追加。"""
+        pass
+
+    @abstractmethod
+    def add_many(
+        self, player_id: PlayerId, entries: List[EpisodeMemoryEntry]
+    ) -> None:
+        """複数件追加。"""
+        pass
+
+    @abstractmethod
+    def get_recent(
+        self,
+        player_id: PlayerId,
+        limit: int,
+        since: Optional[datetime] = None,
+    ) -> List[EpisodeMemoryEntry]:
+        """新しい順で取得。since は Reflection 用の「直近 N 日」など。"""
+        pass
+
+    @abstractmethod
+    def find_by_entities_and_actions(
+        self,
+        player_id: PlayerId,
+        entity_ids: Optional[List[str]] = None,
+        action_names: Optional[List[str]] = None,
+        limit: int = 10,
+    ) -> List[EpisodeMemoryEntry]:
+        """ルールベース検索（コンテキスト・予測検索で使用）。"""
+        pass
+
+    @abstractmethod
+    def increment_recall_count(self, player_id: PlayerId, episode_id: str) -> None:
+        """検索ヒット時の想起回数を加算。"""
+        pass
+
+    @abstractmethod
+    def get_important_or_high_recall(
+        self,
+        player_id: PlayerId,
+        since: datetime,
+        min_importance: Optional[str] = None,
+        min_recall_count: Optional[int] = None,
+        limit: int = 20,
+    ) -> List[EpisodeMemoryEntry]:
+        """Reflection 用: 重要度・想起回数でフィルタしたエピソードを取得。"""
+        pass
+
+
+class IMemoryExtractor(ABC):
+    """観測＋直近の行動結果から記憶すべきエピソードを抽出する。"""
+
+    @abstractmethod
+    def extract(
+        self,
+        player_id: PlayerId,
+        overflow_observations: List[ObservationEntry],
+        action_summary: str,
+        result_summary: str,
+    ) -> List[EpisodeMemoryEntry]:
+        """
+        溢れた観測とこのターンの行動結果からエピソード候補を返す。
+        run_turn の末尾で 1 回だけ呼ぶ。
+        """
+        pass
+
+
+class IPredictiveMemoryRetriever(ABC):
+    """
+    現在状態と候補行動から、予測に役立つエピソード・長期記憶（事実・法則）を取得する。
+    プロンプトの「関連する記憶」に載せる文字列を返す。ヒットしたエピソードの想起回数を更新する。
+    """
+
+    @abstractmethod
+    def retrieve_for_prediction(
+        self,
+        player_id: PlayerId,
+        current_state_summary: str,
+        candidate_action_names: List[str],
+        episode_limit: int = 5,
+        fact_limit: int = 5,
+        law_limit: int = 5,
+    ) -> str:
+        """
+        現在状態と候補行動名に基づき、関連するエピソード・事実・法則を取得し、
+        「関連する記憶」セクション用の 1 本のテキストにフォーマットして返す。
+        返す前にヒットしたエピソードの recall_count をインクリメントする。
+        """
+        pass
+
+
+class IReflectionService(ABC):
+    """
+    重要・高想起エピソードから教訓・法則を抽出し長期記憶に反映する。
+    日次または閾値ベースで実行する。
+    """
+
+    @abstractmethod
+    def run(
+        self,
+        player_id: PlayerId,
+        since: datetime,
+        min_importance: Optional[str] = None,
+        min_recall_count: Optional[int] = None,
+        episode_limit: int = 20,
+    ) -> None:
+        """
+        指定プレイヤーについて、since 以降の重要・高想起エピソードを取得し、
+        教訓・法則を抽出して長期記憶に add/update する。
+        """
+        pass
+
+
+class ILongTermMemoryStore(ABC):
+    """長期記憶（事実・教訓と法則・共起）の格納・検索。"""
+
+    @abstractmethod
+    def add_fact(self, player_id: PlayerId, content: str) -> str:
+        """事実を追加し id を返す。"""
+        pass
+
+    @abstractmethod
+    def search_facts(
+        self,
+        player_id: PlayerId,
+        keywords: Optional[List[str]] = None,
+        limit: int = 10,
+    ) -> List[LongTermFactEntry]:
+        """事実をキーワードで検索。"""
+        pass
+
+    @abstractmethod
+    def upsert_law(
+        self,
+        player_id: PlayerId,
+        subject: str,
+        relation: str,
+        target: str,
+        delta_strength: float = 1.0,
+    ) -> None:
+        """法則を追加または同一 (subject, relation, target) で強度を更新。"""
+        pass
+
+    @abstractmethod
+    def find_laws(
+        self,
+        player_id: PlayerId,
+        subject: Optional[str] = None,
+        action_name: Optional[str] = None,
+        limit: int = 10,
+    ) -> List[MemoryLawEntry]:
+        """法則を検索。action_name は relation の簡易検索用。"""
         pass
 
 

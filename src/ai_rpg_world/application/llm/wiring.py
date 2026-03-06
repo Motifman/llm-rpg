@@ -45,10 +45,22 @@ from ai_rpg_world.application.llm.services.current_state_formatter import (
 from ai_rpg_world.application.llm.services.game_tool_registry import (
     DefaultGameToolRegistry,
 )
+from ai_rpg_world.application.llm.services.in_memory_episode_memory_store import (
+    InMemoryEpisodeMemoryStore,
+)
+from ai_rpg_world.application.llm.services.in_memory_long_term_memory_store import (
+    InMemoryLongTermMemoryStore,
+)
 from ai_rpg_world.application.llm.services.llm_agent_turn_runner import (
     LlmAgentTurnRunner,
 )
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+from ai_rpg_world.application.llm.services.memory_extractor import (
+    RuleBasedMemoryExtractor,
+)
+from ai_rpg_world.application.llm.services.predictive_memory_retriever import (
+    DefaultPredictiveMemoryRetriever,
+)
 from ai_rpg_world.application.llm.services.llm_player_resolver import (
     ProfileBasedLlmPlayerResolver,
 )
@@ -173,6 +185,15 @@ def create_llm_agent_wiring(
     register_default_tools(game_tool_registry)
     available_tools_provider = DefaultAvailableToolsProvider(game_tool_registry)
 
+    client = llm_client if llm_client is not None else _create_llm_client_from_env()
+    tool_command_mapper = ToolCommandMapper(movement_service=movement_service)
+    episode_memory_store = InMemoryEpisodeMemoryStore()
+    long_term_memory_store = InMemoryLongTermMemoryStore()
+    memory_extractor = RuleBasedMemoryExtractor()
+    predictive_retriever = DefaultPredictiveMemoryRetriever(
+        episode_store=episode_memory_store,
+        long_term_store=long_term_memory_store,
+    )
     prompt_builder = DefaultPromptBuilder(
         observation_buffer=buffer,
         sliding_window_memory=sliding_window,
@@ -184,14 +205,15 @@ def create_llm_agent_wiring(
         context_format_strategy=context_format_strategy,
         system_prompt_builder=system_prompt_builder,
         available_tools_provider=available_tools_provider,
+        predictive_memory_retriever=predictive_retriever,
     )
-    client = llm_client if llm_client is not None else _create_llm_client_from_env()
-    tool_command_mapper = ToolCommandMapper(movement_service=movement_service)
     orchestrator = LlmAgentOrchestrator(
         prompt_builder=prompt_builder,
         llm_client=client,
         tool_command_mapper=tool_command_mapper,
         action_result_store=action_result_store,
+        memory_extractor=memory_extractor,
+        episode_memory_store=episode_memory_store,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,
