@@ -27,6 +27,15 @@ from ai_rpg_world.application.llm.services.context_format_strategy import (
 from ai_rpg_world.application.llm.services.game_tool_registry import (
     DefaultGameToolRegistry,
 )
+from ai_rpg_world.application.llm.services.in_memory_episode_memory_store import (
+    InMemoryEpisodeMemoryStore,
+)
+from ai_rpg_world.application.llm.services.in_memory_long_term_memory_store import (
+    InMemoryLongTermMemoryStore,
+)
+from ai_rpg_world.application.llm.services.predictive_memory_retriever import (
+    DefaultPredictiveMemoryRetriever,
+)
 from ai_rpg_world.application.llm.services.system_prompt_builder import (
     DefaultSystemPromptBuilder,
 )
@@ -144,6 +153,7 @@ class TestDefaultPromptBuilder:
         assert "messages" in result
         assert "tools" in result
         assert result["tool_choice"] == "required"
+        assert "overflow" in result
         assert len(result["messages"]) == 2
         assert result["messages"][0]["role"] == "system"
         assert result["messages"][1]["role"] == "user"
@@ -155,6 +165,37 @@ class TestDefaultPromptBuilder:
         assert len(result["tools"]) >= 1
         tool_names = [t["function"]["name"] for t in result["tools"] if t.get("type") == "function"]
         assert "world_no_op" in tool_names
+
+    def test_build_with_predictive_retriever_includes_related_memories_section(
+        self, setup_prompt_builder
+    ):
+        """predictive_memory_retriever を渡すと user に「関連する記憶」が含まれる"""
+        prompt_builder, profile_repo, *_ = setup_prompt_builder
+        profile_repo.save(self._create_profile(1, "Alice"))
+        episode_store = InMemoryEpisodeMemoryStore()
+        long_term_store = InMemoryLongTermMemoryStore()
+        long_term_store.add_fact(PlayerId(1), "洞窟の奥には宝箱がある")
+        retriever = DefaultPredictiveMemoryRetriever(
+            episode_store=episode_store,
+            long_term_store=long_term_store,
+        )
+        pb_with_memory = DefaultPromptBuilder(
+            observation_buffer=setup_prompt_builder[0]._observation_buffer,
+            sliding_window_memory=setup_prompt_builder[0]._sliding_window,
+            action_result_store=setup_prompt_builder[0]._action_result_store,
+            world_query_service=setup_prompt_builder[0]._world_query_service,
+            player_profile_repository=profile_repo,
+            current_state_formatter=setup_prompt_builder[0]._current_state_formatter,
+            recent_events_formatter=setup_prompt_builder[0]._recent_events_formatter,
+            context_format_strategy=setup_prompt_builder[0]._context_format_strategy,
+            system_prompt_builder=setup_prompt_builder[0]._system_prompt_builder,
+            available_tools_provider=setup_prompt_builder[0]._available_tools_provider,
+            predictive_memory_retriever=retriever,
+        )
+        result = pb_with_memory.build(PlayerId(1))
+        user_content = result["messages"][1]["content"]
+        assert "関連する記憶" in user_content
+        assert "宝箱" in user_content
 
     def test_build_raises_when_profile_not_found(self, setup_prompt_builder):
         """プロフィールが存在しないとき PlayerProfileNotFoundForPromptException"""
