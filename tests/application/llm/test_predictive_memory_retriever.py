@@ -123,6 +123,52 @@ class TestDefaultPredictiveMemoryRetriever:
                 episode_limit=-1,
             )
 
+    def test_retrieve_for_prediction_current_state_summary_not_str_raises_type_error(
+        self, retriever, player_id
+    ):
+        """current_state_summary が str でないとき TypeError"""
+        with pytest.raises(TypeError, match="current_state_summary must be str"):
+            retriever.retrieve_for_prediction(
+                player_id,
+                123,  # type: ignore[arg-type]
+                ["move_to_destination"],
+            )
+
+    def test_retrieve_for_prediction_candidate_action_names_not_list_raises_type_error(
+        self, retriever, player_id
+    ):
+        """candidate_action_names が list でないとき TypeError"""
+        with pytest.raises(TypeError, match="candidate_action_names must be list"):
+            retriever.retrieve_for_prediction(
+                player_id,
+                "現在地: 洞窟",
+                "move_to_destination",  # type: ignore[arg-type]
+            )
+
+    def test_retrieve_for_prediction_negative_fact_limit_raises_value_error(
+        self, retriever, player_id
+    ):
+        """fact_limit が負のとき ValueError"""
+        with pytest.raises(ValueError, match="fact_limit must be 0 or greater"):
+            retriever.retrieve_for_prediction(
+                player_id,
+                "現在地: 洞窟",
+                [],
+                fact_limit=-1,
+            )
+
+    def test_retrieve_for_prediction_negative_law_limit_raises_value_error(
+        self, retriever, player_id
+    ):
+        """law_limit が負のとき ValueError"""
+        with pytest.raises(ValueError, match="law_limit must be 0 or greater"):
+            retriever.retrieve_for_prediction(
+                player_id,
+                "現在地: 洞窟",
+                [],
+                law_limit=-1,
+            )
+
     def test_init_episode_store_not_interface_raises_type_error(self, long_term_store):
         """episode_store が IEpisodeMemoryStore でないとき TypeError"""
         with pytest.raises(TypeError, match="episode_store must be IEpisodeMemoryStore"):

@@ -60,6 +60,14 @@ class TestInMemoryLongTermMemoryStore:
         assert len(got) == 1
         assert got[0].strength == 2.0
 
+    def test_upsert_law_negative_delta_strength_clips_to_zero(self, store, player_id):
+        """負の delta_strength で upsert すると強度は 0 以上にクリップされる"""
+        store.upsert_law(player_id, "A", "rel", "B", delta_strength=2.0)
+        store.upsert_law(player_id, "A", "rel", "B", delta_strength=-10.0)
+        got = store.find_laws(player_id, limit=10)
+        assert len(got) == 1
+        assert got[0].strength == 0.0
+
     def test_find_laws_subject_filter(self, store, player_id):
         """find_laws の subject でフィルタできる"""
         store.upsert_law(player_id, "チェスト", "開けると", "回復")
@@ -103,3 +111,8 @@ class TestInMemoryLongTermMemoryStore:
         """find_laws に player_id が None のとき TypeError"""
         with pytest.raises(TypeError, match="player_id must be PlayerId"):
             store.find_laws(None, limit=10)  # type: ignore[arg-type]
+
+    def test_find_laws_negative_limit_raises_value_error(self, store, player_id):
+        """find_laws の limit が負のとき ValueError"""
+        with pytest.raises(ValueError, match="limit must be 0 or greater"):
+            store.find_laws(player_id, limit=-1)

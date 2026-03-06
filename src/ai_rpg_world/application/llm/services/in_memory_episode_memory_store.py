@@ -148,15 +148,17 @@ class InMemoryEpisodeMemoryStore(IEpisodeMemoryStore):
         entries = [e for e in entries if e.timestamp >= since]
         if min_importance:
             order = ("low", "medium", "high")
-            try:
-                min_idx = order.index(min_importance)
-                entries = [
-                    e
-                    for e in entries
-                    if order.index(e.importance) >= min_idx
-                ]
-            except (ValueError, IndexError):
-                pass
+            if min_importance not in order:
+                raise ValueError(
+                    "min_importance must be 'low', 'medium', or 'high', "
+                    f"got: {min_importance!r}"
+                )
+            min_idx = order.index(min_importance)
+            entries = [
+                e
+                for e in entries
+                if order.index(e.importance) >= min_idx
+            ]
         if min_recall_count is not None:
             entries = [e for e in entries if e.recall_count >= min_recall_count]
         sorted_entries = sorted(

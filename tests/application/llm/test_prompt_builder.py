@@ -312,3 +312,77 @@ class TestDefaultPromptBuilder:
                 available_tools_provider=tools_provider,
                 default_action_instruction=123,  # type: ignore[arg-type]
             )
+
+    def test_init_recent_observations_limit_negative_raises_value_error(
+        self, setup_prompt_builder
+    ):
+        """コンストラクタで recent_observations_limit が負のとき ValueError"""
+        _, profile_repo, status_repo, phys_repo, spot_repo, buffer = setup_prompt_builder
+        sliding = DefaultSlidingWindowMemory()
+        action_store = DefaultActionResultStore()
+        formatter = DefaultCurrentStateFormatter()
+        recent_formatter = DefaultRecentEventsFormatter()
+        strategy = SectionBasedContextFormatStrategy()
+        system_builder = DefaultSystemPromptBuilder()
+        registry = DefaultGameToolRegistry()
+        register_default_tools(registry)
+        tools_provider = DefaultAvailableToolsProvider(registry)
+        connected = GatewayBasedConnectedSpotsProvider(phys_repo)
+        world_query = WorldQueryService(
+            player_status_repository=status_repo,
+            player_profile_repository=profile_repo,
+            physical_map_repository=phys_repo,
+            spot_repository=spot_repo,
+            connected_spots_provider=connected,
+        )
+        with pytest.raises(ValueError, match="recent_observations_limit must be 0 or greater"):
+            DefaultPromptBuilder(
+                observation_buffer=buffer,
+                sliding_window_memory=sliding,
+                action_result_store=action_store,
+                world_query_service=world_query,
+                player_profile_repository=profile_repo,
+                current_state_formatter=formatter,
+                recent_events_formatter=recent_formatter,
+                context_format_strategy=strategy,
+                system_prompt_builder=system_builder,
+                available_tools_provider=tools_provider,
+                recent_observations_limit=-1,
+            )
+
+    def test_init_recent_actions_limit_negative_raises_value_error(
+        self, setup_prompt_builder
+    ):
+        """コンストラクタで recent_actions_limit が負のとき ValueError"""
+        _, profile_repo, status_repo, phys_repo, spot_repo, buffer = setup_prompt_builder
+        sliding = DefaultSlidingWindowMemory()
+        action_store = DefaultActionResultStore()
+        formatter = DefaultCurrentStateFormatter()
+        recent_formatter = DefaultRecentEventsFormatter()
+        strategy = SectionBasedContextFormatStrategy()
+        system_builder = DefaultSystemPromptBuilder()
+        registry = DefaultGameToolRegistry()
+        register_default_tools(registry)
+        tools_provider = DefaultAvailableToolsProvider(registry)
+        connected = GatewayBasedConnectedSpotsProvider(phys_repo)
+        world_query = WorldQueryService(
+            player_status_repository=status_repo,
+            player_profile_repository=profile_repo,
+            physical_map_repository=phys_repo,
+            spot_repository=spot_repo,
+            connected_spots_provider=connected,
+        )
+        with pytest.raises(ValueError, match="recent_actions_limit must be 0 or greater"):
+            DefaultPromptBuilder(
+                observation_buffer=buffer,
+                sliding_window_memory=sliding,
+                action_result_store=action_store,
+                world_query_service=world_query,
+                player_profile_repository=profile_repo,
+                current_state_formatter=formatter,
+                recent_events_formatter=recent_formatter,
+                context_format_strategy=strategy,
+                system_prompt_builder=system_builder,
+                available_tools_provider=tools_provider,
+                recent_actions_limit=-1,
+            )
