@@ -12,6 +12,8 @@ import os
 from typing import Any, Dict, List, Optional
 
 import litellm
+from litellm import AuthenticationError as LitellmAuthenticationError
+from litellm import RateLimitError as LitellmRateLimitError
 
 from ai_rpg_world.application.llm.contracts.interfaces import ILLMClient
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
@@ -49,8 +51,9 @@ class LiteLLMClient(ILLMClient):
             raise TypeError("api_key must be str or None")
         self._model = model.strip()
         self._api_key_env_var = api_key_env_var
-        if api_key is not None and api_key.strip():
-            self._api_key = api_key.strip()
+        if api_key is not None:
+            # 明示的に渡されたとき（空文字含む）はその値を使う。空なら invoke で LLM_API_KEY_MISSING になる。
+            self._api_key = (api_key.strip() if isinstance(api_key, str) else "")
         else:
             _load_dotenv_if_available()
             self._api_key = (os.environ.get(api_key_env_var) or "").strip()
@@ -83,9 +86,9 @@ class LiteLLMClient(ILLMClient):
         except Exception as e:
             self._logger.exception("LiteLLM completion failed: %s", e)
             error_code = "LLM_API_CALL_FAILED"
-            if isinstance(e, litellm.AuthenticationError):
+            if isinstance(e, LitellmAuthenticationError):
                 error_code = "LLM_AUTHENTICATION_ERROR"
-            elif isinstance(e, litellm.RateLimitError):
+            elif isinstance(e, LitellmRateLimitError):
                 error_code = "LLM_RATE_LIMIT"
             raise LlmApiCallException(
                 f"LLM API call failed: {e}",

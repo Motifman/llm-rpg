@@ -1,15 +1,24 @@
 """観測配信先をイベントから解決する実装（戦略パターン）"""
 
-from typing import Any, List, Sequence, Set
+from typing import Any, List, Optional, Sequence, Set
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationRecipientResolver,
     IRecipientResolutionStrategy,
 )
+from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
+from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
+from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
+from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
+from ai_rpg_world.domain.skill.repository.skill_repository import (
+    SkillDeckProgressRepository,
+    SkillLoadoutRepository,
+)
 from ai_rpg_world.domain.world.repository.physical_map_repository import (
     PhysicalMapRepository,
 )
@@ -17,7 +26,15 @@ from ai_rpg_world.application.observation.services.world_object_to_player_resolv
     WorldObjectToPlayerResolver,
 )
 from ai_rpg_world.application.observation.services.recipient_strategies import (
+    CombatRecipientStrategy,
+    ConversationRecipientStrategy,
     DefaultRecipientStrategy,
+    GuildRecipientStrategy,
+    HarvestRecipientStrategy,
+    MonsterRecipientStrategy,
+    QuestRecipientStrategy,
+    ShopRecipientStrategy,
+    SkillRecipientStrategy,
 )
 
 
@@ -57,14 +74,52 @@ class ObservationRecipientResolver(IObservationRecipientResolver):
 def create_observation_recipient_resolver(
     player_status_repository: PlayerStatusRepository,
     physical_map_repository: PhysicalMapRepository,
+    quest_repository: Optional[QuestRepository] = None,
+    guild_repository: Optional[GuildRepository] = None,
+    shop_repository: Optional[ShopRepository] = None,
+    monster_repository: Optional[MonsterRepository] = None,
+    hit_box_repository: Optional[HitBoxRepository] = None,
+    skill_loadout_repository: Optional[SkillLoadoutRepository] = None,
+    skill_deck_progress_repository: Optional[SkillDeckProgressRepository] = None,
 ) -> IObservationRecipientResolver:
     """
     既存と同様の振る舞いになる Resolver を組み立てる。
     デフォルト戦略と WorldObjectToPlayerResolver を用いる。
     """
     world_object_resolver = WorldObjectToPlayerResolver(physical_map_repository)
-    default_strategy = DefaultRecipientStrategy(
-        player_status_repository=player_status_repository,
-        world_object_to_player_resolver=world_object_resolver,
-    )
-    return ObservationRecipientResolver(strategies=[default_strategy])
+    strategies: List[IRecipientResolutionStrategy] = [
+        ConversationRecipientStrategy(),
+        QuestRecipientStrategy(
+            player_status_repository=player_status_repository,
+            quest_repository=quest_repository,
+            guild_repository=guild_repository,
+        ),
+        ShopRecipientStrategy(
+            player_status_repository=player_status_repository,
+            shop_repository=shop_repository,
+        ),
+        GuildRecipientStrategy(
+            player_status_repository=player_status_repository,
+            guild_repository=guild_repository,
+        ),
+        HarvestRecipientStrategy(world_object_to_player_resolver=world_object_resolver),
+        MonsterRecipientStrategy(
+            player_status_repository=player_status_repository,
+            physical_map_repository=physical_map_repository,
+            world_object_to_player_resolver=world_object_resolver,
+            monster_repository=monster_repository,
+        ),
+        CombatRecipientStrategy(
+            world_object_to_player_resolver=world_object_resolver,
+            hit_box_repository=hit_box_repository,
+        ),
+        SkillRecipientStrategy(
+            skill_loadout_repository=skill_loadout_repository,
+            skill_deck_progress_repository=skill_deck_progress_repository,
+        ),
+        DefaultRecipientStrategy(
+            player_status_repository=player_status_repository,
+            world_object_to_player_resolver=world_object_resolver,
+        ),
+    ]
+    return ObservationRecipientResolver(strategies=strategies)
