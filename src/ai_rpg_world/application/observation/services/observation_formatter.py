@@ -92,6 +92,8 @@ from ai_rpg_world.domain.player.event.status_events import (
     PlayerGoldEarnedEvent,
     PlayerGoldPaidEvent,
 )
+from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
+from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.event.inventory_events import (
     ItemAddedToInventoryEvent,
     ItemDroppedFromInventoryEvent,
@@ -312,6 +314,8 @@ class ObservationFormatter(IObservationFormatter):
             output = self._format_item_unequipped(event, recipient_player_id)
         elif isinstance(event, InventorySlotOverflowEvent):
             output = self._format_inventory_slot_overflow(event, recipient_player_id)
+        elif isinstance(event, PlayerSpokeEvent):
+            output = self._format_player_spoke(event, recipient_player_id)
 
         if output is None:
             return None
@@ -469,6 +473,30 @@ class ObservationFormatter(IObservationFormatter):
         prose = f"{event.paid_amount}ゴールドを支払いました。"
         structured = {"type": "gold_paid", "amount": event.paid_amount}
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
+
+    def _format_player_spoke(
+        self, event: PlayerSpokeEvent, recipient_id: PlayerId
+    ) -> Optional[ObservationOutput]:
+        speaker_name = self._player_name(event.aggregate_id)
+        if event.channel == SpeechChannel.WHISPER:
+            verb = "囁いた"
+        elif event.channel == SpeechChannel.SAY:
+            verb = "言った"
+        else:
+            verb = "叫んだ"
+        prose = f"{speaker_name}が{verb}: 「{event.content}」"
+        is_self = event.aggregate_id.value == recipient_id.value
+        structured = {
+            "type": "player_spoke",
+            "speaker": speaker_name,
+            "channel": event.channel.value,
+            "content": event.content,
+            "role": "self" if is_self else "other",
+        }
+        category = "self_only" if is_self else "social"
+        return ObservationOutput(
+            prose=prose, structured=structured, observation_category=category
+        )
 
     def _format_item_taken_from_chest(
         self, event: ItemTakenFromChestEvent, recipient_id: PlayerId

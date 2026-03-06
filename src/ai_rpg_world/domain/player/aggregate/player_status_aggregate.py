@@ -29,13 +29,16 @@ from ai_rpg_world.domain.player.event.status_events import (
     PlayerGoldPaidEvent,
     PlayerLocationChangedEvent,
 )
+from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.exception import (
     InsufficientMpException,
     InsufficientStaminaException,
     InsufficientHpException,
     InsufficientGoldException,
-    PlayerDownedException
+    PlayerDownedException,
+    SpeechValidationException,
 )
+from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 
 
@@ -565,6 +568,44 @@ class PlayerStatusAggregate(AggregateRoot):
             aggregate_type="PlayerStatusAggregate",
             hp_recovered=self._hp.value - old_hp,
             total_hp=self._hp.value,
+        ))
+
+    def speak(
+        self,
+        content: str,
+        channel: SpeechChannel,
+        spot_id: SpotId,
+        speaker_coordinate: Coordinate,
+        target_player_id: Optional[PlayerId] = None,
+    ) -> None:
+        """発言する（囁き・発言・シャウト）。イベントを発火するのみで状態は変更しない。
+
+        Args:
+            content: 発言内容（空でないこと）
+            channel: 発言種別（WHISPER / SAY / SHOUT）
+            spot_id: 発言時のスポットID（配信先解決用）
+            speaker_coordinate: 発言時の座標（範囲計算用）
+            target_player_id: 囁き時のみ必須。宛先プレイヤーID。
+
+        Raises:
+            PlayerDownedException: 戦闘不能状態では発言できない
+            SpeechValidationException: 発言内容が空、または囁きで宛先未指定
+        """
+        if self._is_down:
+            raise PlayerDownedException("ダウン状態のプレイヤーは発言できません")
+        if not content or not content.strip():
+            raise SpeechValidationException("発言内容を空にできません")
+        if channel == SpeechChannel.WHISPER and target_player_id is None:
+            raise SpeechValidationException("囁きの場合は宛先プレイヤーを指定してください")
+
+        self.add_event(PlayerSpokeEvent.create(
+            aggregate_id=self._player_id,
+            aggregate_type="PlayerStatusAggregate",
+            content=content.strip(),
+            channel=channel,
+            spot_id=spot_id,
+            speaker_coordinate=speaker_coordinate,
+            target_player_id=target_player_id,
         ))
 
     def add_status_effect(self, effect: StatusEffect) -> None:

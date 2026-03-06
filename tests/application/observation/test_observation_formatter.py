@@ -46,6 +46,8 @@ from ai_rpg_world.domain.conversation.event.conversation_event import (
     ConversationEndedEvent,
     ConversationStartedEvent,
 )
+from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
+from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole
 from ai_rpg_world.domain.guild.event.guild_event import (
     GuildBankDepositedEvent,
@@ -248,6 +250,75 @@ class TestObservationFormatter:
         out = formatter.format(event, PlayerId(1))
         assert out is not None
         assert "30" in out.prose
+
+    def test_format_player_spoke_say_returns_prose_and_structured(self, formatter):
+        """PlayerSpokeEvent (SAY): プローズに話者と内容が含まれる"""
+        event = PlayerSpokeEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            content="こんにちは",
+            channel=SpeechChannel.SAY,
+            spot_id=SpotId(1),
+            speaker_coordinate=Coordinate(0, 0, 0),
+            target_player_id=None,
+        )
+        out = formatter.format(event, PlayerId(2))
+        assert out is not None
+        assert "言った" in out.prose
+        assert "こんにちは" in out.prose
+        assert out.structured.get("type") == "player_spoke"
+        assert out.structured.get("channel") == "say"
+        assert out.structured.get("content") == "こんにちは"
+        assert out.observation_category == "social"
+
+    def test_format_player_spoke_whisper_uses_verb_whisper(self, formatter):
+        """PlayerSpokeEvent (WHISPER): 囁いた と表示される"""
+        event = PlayerSpokeEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            content="内緒だよ",
+            channel=SpeechChannel.WHISPER,
+            spot_id=SpotId(1),
+            speaker_coordinate=Coordinate(0, 0, 0),
+            target_player_id=PlayerId(2),
+        )
+        out = formatter.format(event, PlayerId(2))
+        assert out is not None
+        assert "囁いた" in out.prose
+        assert "内緒だよ" in out.prose
+        assert out.structured.get("channel") == "whisper"
+
+    def test_format_player_spoke_shout_uses_verb_shout(self, formatter):
+        """PlayerSpokeEvent (SHOUT): 叫んだ と表示される"""
+        event = PlayerSpokeEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            content="助けて！",
+            channel=SpeechChannel.SHOUT,
+            spot_id=SpotId(1),
+            speaker_coordinate=Coordinate(0, 0, 0),
+            target_player_id=None,
+        )
+        out = formatter.format(event, PlayerId(2))
+        assert out is not None
+        assert "叫んだ" in out.prose
+        assert out.structured.get("channel") == "shout"
+
+    def test_format_player_spoke_self_category_is_self_only(self, formatter):
+        """発言者本人への観測は self_only"""
+        event = PlayerSpokeEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            content="テスト",
+            channel=SpeechChannel.SAY,
+            spot_id=SpotId(1),
+            speaker_coordinate=Coordinate(0, 0, 0),
+            target_player_id=None,
+        )
+        out = formatter.format(event, PlayerId(1))
+        assert out is not None
+        assert out.observation_category == "self_only"
+        assert out.structured.get("role") == "self"
 
     def test_format_spot_weather_changed_returns_old_new_in_prose(self, formatter):
         """SpotWeatherChangedEvent: 天気変化のプローズと構造化"""

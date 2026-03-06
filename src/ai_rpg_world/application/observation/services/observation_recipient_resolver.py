@@ -35,6 +35,7 @@ from ai_rpg_world.application.observation.services.recipient_strategies import (
     QuestRecipientStrategy,
     ShopRecipientStrategy,
     SkillRecipientStrategy,
+    SpeechRecipientStrategy,
 )
 
 
@@ -117,6 +118,7 @@ def create_observation_recipient_resolver(
             skill_loadout_repository=skill_loadout_repository,
             skill_deck_progress_repository=skill_deck_progress_repository,
         ),
+        SpeechRecipientStrategy(player_status_repository=player_status_repository),
         DefaultRecipientStrategy(
             player_status_repository=player_status_repository,
             world_object_to_player_resolver=world_object_resolver,

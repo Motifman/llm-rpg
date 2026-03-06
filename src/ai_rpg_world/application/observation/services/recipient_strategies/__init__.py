@@ -27,6 +27,9 @@ from ai_rpg_world.application.observation.services.recipient_strategies.shop_rec
 from ai_rpg_world.application.observation.services.recipient_strategies.skill_recipient_strategy import (
     SkillRecipientStrategy,
 )
+from ai_rpg_world.application.observation.services.recipient_strategies.speech_recipient_strategy import (
+    SpeechRecipientStrategy,
+)
 
 __all__ = [
     "DefaultRecipientStrategy",
@@ -38,4 +41,5 @@ __all__ = [
     "MonsterRecipientStrategy",
     "CombatRecipientStrategy",
     "SkillRecipientStrategy",
+    "SpeechRecipientStrategy",
 ]

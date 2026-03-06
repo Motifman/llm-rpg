@@ -13,6 +13,8 @@ from ai_rpg_world.domain.combat.event.combat_events import (
 )
 from ai_rpg_world.domain.combat.value_object.hit_box_id import HitBoxId
 from ai_rpg_world.domain.conversation.event.conversation_event import ConversationStartedEvent
+from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
+from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
 from ai_rpg_world.domain.guild.event.guild_event import (
     GuildCreatedEvent,
@@ -117,7 +119,13 @@ def _make_minimal_map(spot_id: int, objects: list[WorldObject]) -> PhysicalMapAg
     )
 
 
-def _make_status(player_id: int, spot_id: int) -> PlayerStatusAggregate:
+def _make_status(
+    player_id: int,
+    spot_id: int,
+    coord: Coordinate = None,
+) -> PlayerStatusAggregate:
+    if coord is None:
+        coord = Coordinate(0, 0, 0)
     exp_table = ExpTable(100, 1.5)
     return PlayerStatusAggregate(
         player_id=PlayerId(player_id),
@@ -130,7 +138,7 @@ def _make_status(player_id: int, spot_id: int) -> PlayerStatusAggregate:
         mp=Mp.create(50, 50),
         stamina=Stamina.create(100, 100),
         current_spot_id=SpotId(spot_id),
-        current_coordinate=Coordinate(0, 0, 0),
+        current_coordinate=coord,
     )
 
 
@@ -156,6 +164,70 @@ class TestObservationRecipientResolverExtendedEvents:
             entry_node_id_value=1,
         )
         assert [p.value for p in resolver.resolve(event)] == [1]
+
+    def test_player_spoke_whisper_delivers_to_target_only(self):
+        """囁きは宛先プレイヤーのみ配信先になる"""
+        resolver = create_observation_recipient_resolver(
+            player_status_repository=MagicMock(),
+            physical_map_repository=MagicMock(),
+        )
+        event = PlayerSpokeEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            content="内緒だよ",
+            channel=SpeechChannel.WHISPER,
+            spot_id=SpotId(1),
+            speaker_coordinate=Coordinate(0, 0, 0),
+            target_player_id=PlayerId(2),
+        )
+        assert [p.value for p in resolver.resolve(event)] == [2]
+
+    def test_player_spoke_say_delivers_to_players_within_range(self):
+        """発言（SAY）は同一スポットで範囲内のプレイヤーに配信される"""
+        data_store = InMemoryDataStore()
+        status_repo = InMemoryPlayerStatusRepository(data_store=data_store)
+        # 話し手(1)が (0,0)、他に (1,0)(2,0)(10,0) にプレイヤー。SAY_RANGE=5 なら (10,0) は届かない
+        status_repo.save(_make_status(1, 1, Coordinate(0, 0, 0)))
+        status_repo.save(_make_status(2, 1, Coordinate(1, 0, 0)))
+        status_repo.save(_make_status(3, 1, Coordinate(2, 0, 0)))
+        status_repo.save(_make_status(4, 1, Coordinate(10, 0, 0)))
+        resolver = create_observation_recipient_resolver(
+            player_status_repository=status_repo,
+            physical_map_repository=MagicMock(),
+        )
+        event = PlayerSpokeEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            content="こんにちは",
+            channel=SpeechChannel.SAY,
+            spot_id=SpotId(1),
+            speaker_coordinate=Coordinate(0, 0, 0),
+            target_player_id=None,
+        )
+        # 1,2,3 は距離 0,1,2 で範囲5以内。4 は距離10で範囲外
+        result_ids = {p.value for p in resolver.resolve(event)}
+        assert result_ids == {1, 2, 3}
+
+    def test_player_spoke_shout_delivers_to_wider_range(self):
+        """シャウトは同一スポットでより広い範囲に配信される"""
+        data_store = InMemoryDataStore()
+        status_repo = InMemoryPlayerStatusRepository(data_store=data_store)
+        status_repo.save(_make_status(1, 1, Coordinate(0, 0, 0)))
+        status_repo.save(_make_status(2, 1, Coordinate(10, 0, 0)))  # 距離10、SAYでは届かないがSHOUT(15)では届く
+        resolver = create_observation_recipient_resolver(
+            player_status_repository=status_repo,
+            physical_map_repository=MagicMock(),
+        )
+        event = PlayerSpokeEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            content="助けて！",
+            channel=SpeechChannel.SHOUT,
+            spot_id=SpotId(1),
+            speaker_coordinate=Coordinate(0, 0, 0),
+            target_player_id=None,
+        )
+        assert {p.value for p in resolver.resolve(event)} == {1, 2}
 
     def test_quest_issued_public_delivers_to_all_known_players(self):
         data_store = InMemoryDataStore()
