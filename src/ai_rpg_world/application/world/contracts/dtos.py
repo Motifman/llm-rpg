@@ -43,6 +43,12 @@ class VisibleObjectDto:
     y: int
     z: int
     distance: int
+    display_name: Optional[str] = None
+    object_kind: Optional[str] = None
+    direction_from_player: Optional[str] = None
+    is_interactable: bool = False
+    player_id_value: Optional[int] = None
+    is_self: bool = False
 
 
 @dataclass

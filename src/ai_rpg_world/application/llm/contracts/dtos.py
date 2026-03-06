@@ -85,6 +85,78 @@ class ToolDefinitionDto:
             raise TypeError("parameters must be dict")
 
 
+@dataclass(frozen=True)
+class ToolRuntimeTargetDto:
+    """一時ラベルから内部IDへ解決するためのターゲット情報。"""
+
+    label: str
+    kind: str
+    display_name: str
+    player_id: Optional[int] = None
+    world_object_id: Optional[int] = None
+    spot_id: Optional[int] = None
+    location_area_id: Optional[int] = None
+    destination_type: Optional[str] = None
+    distance: Optional[int] = None
+    direction: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.label, str):
+            raise TypeError("label must be str")
+        if not isinstance(self.kind, str):
+            raise TypeError("kind must be str")
+        if not isinstance(self.display_name, str):
+            raise TypeError("display_name must be str")
+        if self.player_id is not None and not isinstance(self.player_id, int):
+            raise TypeError("player_id must be int or None")
+        if self.world_object_id is not None and not isinstance(self.world_object_id, int):
+            raise TypeError("world_object_id must be int or None")
+        if self.spot_id is not None and not isinstance(self.spot_id, int):
+            raise TypeError("spot_id must be int or None")
+        if self.location_area_id is not None and not isinstance(self.location_area_id, int):
+            raise TypeError("location_area_id must be int or None")
+        if self.destination_type is not None and not isinstance(self.destination_type, str):
+            raise TypeError("destination_type must be str or None")
+        if self.distance is not None and not isinstance(self.distance, int):
+            raise TypeError("distance must be int or None")
+        if self.direction is not None and not isinstance(self.direction, str):
+            raise TypeError("direction must be str or None")
+
+
+@dataclass(frozen=True)
+class ToolRuntimeContextDto:
+    """LLM UIのそのターン限定ラベル解決コンテキスト。"""
+
+    targets: Dict[str, ToolRuntimeTargetDto]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.targets, dict):
+            raise TypeError("targets must be dict")
+        for label, target in self.targets.items():
+            if not isinstance(label, str):
+                raise TypeError("targets keys must be str")
+            if not isinstance(target, ToolRuntimeTargetDto):
+                raise TypeError("targets values must be ToolRuntimeTargetDto")
+
+    @classmethod
+    def empty(cls) -> "ToolRuntimeContextDto":
+        return cls(targets={})
+
+
+@dataclass(frozen=True)
+class LlmUiContextDto:
+    """LLM に見せる現在状態テキストと、内部用のツール実行コンテキスト。"""
+
+    current_state_text: str
+    tool_runtime_context: ToolRuntimeContextDto
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.current_state_text, str):
+            raise TypeError("current_state_text must be str")
+        if not isinstance(self.tool_runtime_context, ToolRuntimeContextDto):
+            raise TypeError("tool_runtime_context must be ToolRuntimeContextDto")
+
+
 # ToolAvailabilityContext は PlayerCurrentStateDto をそのまま利用する。
 # ツールの利用可否判定に必要な現在地・接続先・視界・移動先等はすべて PlayerCurrentStateDto に含まれる。
 

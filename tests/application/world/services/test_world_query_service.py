@@ -357,6 +357,11 @@ class TestWorldQueryService:
         obj = result.visible_objects[0]
         assert obj.object_type == "PLAYER"
         assert obj.distance >= 0
+        assert obj.display_name == "Bob"
+        assert obj.object_kind == "player"
+        assert obj.direction_from_player == "ここ"
+        assert obj.player_id_value == 1
+        assert obj.is_self is True
 
     def test_get_visible_context_returns_none_when_not_placed(self, setup_service):
         """未配置の場合は None を返すこと"""
@@ -564,6 +569,11 @@ class TestWorldQueryService:
         assert result.current_player_count >= 1
         assert result.attention_level is AttentionLevel.FULL
         assert isinstance(result.visible_objects, list)
+        if result.visible_objects:
+            visible = result.visible_objects[0]
+            assert visible.display_name is not None
+            assert visible.object_kind is not None
+            assert visible.direction_from_player is not None
         assert result.available_moves is not None
         assert result.total_available_moves is not None
 

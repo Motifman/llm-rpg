@@ -9,6 +9,11 @@ from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
+    TOOL_NAME_WHISPER,
+)
+from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
+from ai_rpg_world.application.speech.services.player_speech_service import (
+    PlayerSpeechApplicationService,
 )
 from ai_rpg_world.application.world.contracts.dtos import MoveResultDto
 from ai_rpg_world.application.world.services.movement_service import (
@@ -25,11 +30,15 @@ class ToolCommandMapper:
     def __init__(
         self,
         movement_service: MovementApplicationService,
+        speech_service: Optional[PlayerSpeechApplicationService] = None,
     ) -> None:
         move_to_destination = getattr(movement_service, "move_to_destination", None)
         if not callable(move_to_destination):
             raise TypeError("movement_service must have a callable move_to_destination")
+        if speech_service is not None and not callable(getattr(speech_service, "speak", None)):
+            raise TypeError("speech_service must have a callable speak")
         self._movement_service = movement_service
+        self._speech_service = speech_service
 
     def execute(
         self,
@@ -58,6 +67,8 @@ class ToolCommandMapper:
             )
         if tool_name == TOOL_NAME_MOVE_TO_DESTINATION:
             return self._execute_move_to_destination(player_id, args)
+        if tool_name == TOOL_NAME_WHISPER:
+            return self._execute_whisper(player_id, args)
         return LlmCommandResultDto(
             success=False,
             message="未知のツールです。",
@@ -91,6 +102,46 @@ class ToolCommandMapper:
             return LlmCommandResultDto(
                 success=result.success,
                 message=result.message if result.success else (result.error_message or result.message),
+            )
+        except Exception as e:
+            error_code = getattr(e, "error_code", "SYSTEM_ERROR")
+            return LlmCommandResultDto(
+                success=False,
+                message=str(e),
+                error_code=error_code,
+                remediation=get_remediation(error_code),
+            )
+
+    def _execute_whisper(
+        self,
+        player_id: int,
+        args: Dict[str, Any],
+    ) -> LlmCommandResultDto:
+        if self._speech_service is None:
+            return LlmCommandResultDto(
+                success=False,
+                message="囁きツールはまだ利用できません。",
+                error_code="UNKNOWN_TOOL",
+                remediation=get_remediation("UNKNOWN_TOOL"),
+            )
+        try:
+            target_player_id = args.get("target_player_id")
+            content = args.get("content", "")
+            self._speech_service.speak(
+                SpeakCommand(
+                    speaker_player_id=player_id,
+                    content=content if isinstance(content, str) else str(content),
+                    channel=args.get("channel"),
+                    target_player_id=(
+                        int(target_player_id)
+                        if isinstance(target_player_id, (int, float))
+                        else None
+                    ),
+                )
+            )
+            return LlmCommandResultDto(
+                success=True,
+                message="囁きを送信しました。",
             )
         except Exception as e:
             error_code = getattr(e, "error_code", "SYSTEM_ERROR")

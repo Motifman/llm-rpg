@@ -5,10 +5,12 @@ import pytest
 from ai_rpg_world.application.llm.services.availability_resolvers import (
     NoOpAvailabilityResolver,
     SetDestinationAvailabilityResolver,
+    WhisperAvailabilityResolver,
 )
 from ai_rpg_world.application.world.contracts.dtos import (
     AvailableMoveDto,
     PlayerCurrentStateDto,
+    VisibleObjectDto,
 )
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 
@@ -17,6 +19,7 @@ def _minimal_current_state(
     current_spot_id: int | None = 1,
     available_moves: list | None = None,
     total_available_moves: int | None = 0,
+    visible_objects: list | None = None,
 ) -> PlayerCurrentStateDto:
     """テスト用の最小限の PlayerCurrentStateDto"""
     return PlayerCurrentStateDto(
@@ -37,7 +40,7 @@ def _minimal_current_state(
         weather_type="clear",
         weather_intensity=0.0,
         current_terrain_type=None,
-        visible_objects=[],
+        visible_objects=visible_objects or [],
         view_distance=5,
         available_moves=available_moves,
         total_available_moves=total_available_moves,
@@ -100,5 +103,47 @@ class TestSetDestinationAvailabilityResolver:
         ctx = _minimal_current_state(
             available_moves=[move],
             total_available_moves=1,
+        )
+        assert resolver.is_available(ctx) is True
+
+
+class TestWhisperAvailabilityResolver:
+    def test_not_available_when_context_none(self):
+        resolver = WhisperAvailabilityResolver()
+        assert resolver.is_available(None) is False
+
+    def test_not_available_when_no_other_player_visible(self):
+        resolver = WhisperAvailabilityResolver()
+        ctx = _minimal_current_state(
+            visible_objects=[
+                VisibleObjectDto(
+                    object_id=1,
+                    object_type="PLAYER",
+                    x=0,
+                    y=0,
+                    z=0,
+                    distance=0,
+                    object_kind="player",
+                    is_self=True,
+                )
+            ]
+        )
+        assert resolver.is_available(ctx) is False
+
+    def test_available_when_other_player_visible(self):
+        resolver = WhisperAvailabilityResolver()
+        ctx = _minimal_current_state(
+            visible_objects=[
+                VisibleObjectDto(
+                    object_id=2,
+                    object_type="PLAYER",
+                    x=1,
+                    y=0,
+                    z=0,
+                    distance=1,
+                    object_kind="player",
+                    is_self=False,
+                )
+            ]
         )
         assert resolver.is_available(ctx) is True

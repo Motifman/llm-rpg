@@ -30,3 +30,18 @@ class SetDestinationAvailabilityResolver(IAvailabilityResolver):
         if context.available_moves is None or context.total_available_moves is None:
             return False
         return context.total_available_moves > 0
+
+
+class WhisperAvailabilityResolver(IAvailabilityResolver):
+    """囁きツールは、視界内に自分以外のプレイヤーがいるときに利用可能。"""
+
+    def is_available(
+        self,
+        context: Optional[PlayerCurrentStateDto],
+    ) -> bool:
+        if context is None:
+            return False
+        return any(
+            obj.object_kind == "player" and not obj.is_self
+            for obj in context.visible_objects
+        )

@@ -13,6 +13,7 @@ from ai_rpg_world.application.llm.services.agent_orchestrator import LlmAgentOrc
 from ai_rpg_world.application.llm.services.availability_resolvers import (
     NoOpAvailabilityResolver,
     SetDestinationAvailabilityResolver,
+    WhisperAvailabilityResolver,
 )
 from ai_rpg_world.application.llm.services.available_tools_provider import (
     DefaultAvailableToolsProvider,
@@ -55,8 +56,14 @@ from ai_rpg_world.application.llm.services.system_prompt_builder import (
 from ai_rpg_world.application.llm.services.tool_command_mapper import (
     ToolCommandMapper,
 )
+from ai_rpg_world.application.llm.services.tool_argument_resolver import (
+    DefaultToolArgumentResolver,
+)
 from ai_rpg_world.application.llm.services.tool_definitions import (
     register_default_tools,
+)
+from ai_rpg_world.application.llm.services.ui_context_builder import (
+    DefaultLlmUiContextBuilder,
 )
 
 __all__ = [
@@ -65,9 +72,11 @@ __all__ = [
     "InMemoryLongTermMemoryStore",
     "DefaultAvailableToolsProvider",
     "DefaultCurrentStateFormatter",
+    "DefaultLlmUiContextBuilder",
     "DefaultGameToolRegistry",
     "DefaultLlmTurnTrigger",
     "DefaultPredictiveMemoryRetriever",
+    "DefaultToolArgumentResolver",
     "LlmAgentOrchestrator",
     "LlmAgentTurnRunner",
     "RuleBasedMemoryExtractor",
@@ -83,5 +92,6 @@ __all__ = [
     "SetDestinationAvailabilityResolver",
     "StubLlmClient",
     "ToolCommandMapper",
+    "WhisperAvailabilityResolver",
     "register_default_tools",
 ]
