@@ -297,6 +297,8 @@ class TestBootstrapContractWorldSimulationService:
         ).register_handlers(_event_publisher)
 
         # create_llm_agent_wiring で trigger を取得（同一の repos を渡して契約どおりに組み立て）
+        # 観測にゲーム内時刻を付与するため、シミュレーションと同じ time_provider と world_time_config を渡す
+        world_time_config = DefaultWorldTimeConfigService(ticks_per_day=24)
         uow_factory = MagicMock(spec=UnitOfWorkFactory)
         uow_factory.create.return_value = uow
         wiring_deps = {
@@ -306,6 +308,8 @@ class TestBootstrapContractWorldSimulationService:
             "movement_service": MagicMock(spec=MovementApplicationService),
             "player_profile_repository": MagicMock(spec=PlayerProfileRepository),
             "unit_of_work_factory": uow_factory,
+            "game_time_provider": time_provider,
+            "world_time_config_service": world_time_config,
         }
         _registry, llm_turn_trigger = create_llm_agent_wiring(**wiring_deps)
         assert isinstance(llm_turn_trigger, ILlmTurnTrigger)
@@ -325,7 +329,7 @@ class TestBootstrapContractWorldSimulationService:
             hit_box_factory=hit_box_factory,
             hit_box_config_service=hit_box_config,
             hit_box_collision_service=hit_box_collision_service,
-            world_time_config_service=DefaultWorldTimeConfigService(ticks_per_day=24),
+            world_time_config_service=world_time_config,
             monster_action_resolver_factory=monster_action_resolver_factory,
             llm_turn_trigger=llm_turn_trigger,
         )

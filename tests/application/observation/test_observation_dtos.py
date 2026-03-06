@@ -116,3 +116,29 @@ class TestObservationEntry:
         now = datetime.now()
         with pytest.raises(TypeError, match="output must be ObservationOutput"):
             ObservationEntry(occurred_at=now, output="invalid")
+
+    def test_game_time_label_optional_default_none(self, sample_output):
+        """game_time_label を省略した場合デフォルトは None"""
+        now = datetime.now()
+        entry = ObservationEntry(occurred_at=now, output=sample_output)
+        assert entry.game_time_label is None
+
+    def test_game_time_label_can_be_set(self, sample_output):
+        """game_time_label に文字列を指定できること"""
+        now = datetime.now()
+        entry = ObservationEntry(
+            occurred_at=now,
+            output=sample_output,
+            game_time_label="1年2月3日 12:30:45",
+        )
+        assert entry.game_time_label == "1年2月3日 12:30:45"
+
+    def test_game_time_label_not_str_raises_type_error(self, sample_output):
+        """game_time_label が str でも None でもない場合 TypeError"""
+        now = datetime.now()
+        with pytest.raises(TypeError, match="game_time_label must be str or None"):
+            ObservationEntry(
+                occurred_at=now,
+                output=sample_output,
+                game_time_label=123,  # type: ignore[arg-type]
+            )

@@ -3,6 +3,7 @@
 ドメインイベントを購読し、配信先を解決・観測テキストに変換してコンテキストバッファに追加する。
 非同期で実行する（LLM 用のため eventual でよい）。
 LLM ターン駆動用に、turn_trigger と llm_player_resolver を渡すと観測を蓄積したあと schedule_turn する。
+ゲーム内時刻はハンドラの責務で付与する（game_time_provider と world_time_config を渡すと観測に付与）。
 """
 
 import logging
@@ -31,6 +32,7 @@ class ObservationEventHandler(EventHandler[Any]):
     観測対象のドメインイベントを購読し、
     Resolver → Formatter → Buffer のパイプラインでプレイヤーごとに観測を蓄積する。
     非同期ハンドラとして登録し、別 UoW で実行する。
+    game_time_provider と world_time_config を渡すと、観測エントリにゲーム内時刻ラベルを付与する。
     """
 
     def __init__(
@@ -42,6 +44,8 @@ class ObservationEventHandler(EventHandler[Any]):
         player_status_repository: Optional[Any] = None,
         turn_trigger: Optional[ILlmTurnTrigger] = None,
         llm_player_resolver: Optional[ILLMPlayerResolver] = None,
+        game_time_provider: Optional[Any] = None,
+        world_time_config: Optional[Any] = None,
     ) -> None:
         self._resolver = resolver
         self._formatter = formatter
@@ -50,6 +54,8 @@ class ObservationEventHandler(EventHandler[Any]):
         self._player_status_repository = player_status_repository
         self._turn_trigger = turn_trigger
         self._llm_player_resolver = llm_player_resolver
+        self._game_time_provider = game_time_provider
+        self._world_time_config = world_time_config
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def handle(self, event: Any) -> None:
@@ -100,6 +106,22 @@ class ObservationEventHandler(EventHandler[Any]):
             return AttentionLevel.FULL
         return status.attention_level
 
+    def _get_game_time_label(self) -> Optional[str]:
+        """現在のゲーム内時刻を人間向けラベルで返す。未設定時は None。"""
+        if self._game_time_provider is None or self._world_time_config is None:
+            return None
+        from ai_rpg_world.domain.world.value_object.game_date_time import (
+            game_date_time_from_tick,
+        )
+        tick = self._game_time_provider.get_current_tick()
+        ticks_per_day = self._world_time_config.get_ticks_per_day()
+        days_per_month = self._world_time_config.get_days_per_month()
+        months_per_year = self._world_time_config.get_months_per_year()
+        game_dt = game_date_time_from_tick(
+            tick.value, ticks_per_day, days_per_month, months_per_year
+        )
+        return game_dt.format_for_display()
+
     def _handle_impl(self, event: Any) -> None:
         recipients = self._resolver.resolve(event)
         occurred_at = event.occurred_at
@@ -107,11 +129,17 @@ class ObservationEventHandler(EventHandler[Any]):
             from datetime import datetime
             occurred_at = datetime.now()
 
+        game_time_label = self._get_game_time_label()
+
         for player_id in recipients:
             attention_level = self._get_attention_level(player_id)
             output = self._formatter.format(event, player_id, attention_level=attention_level)
             if output is not None:
-                entry = ObservationEntry(occurred_at=occurred_at, output=output)
+                entry = ObservationEntry(
+                    occurred_at=occurred_at,
+                    output=output,
+                    game_time_label=game_time_label,
+                )
                 self._buffer.append(player_id, entry)
                 if (
                     self._turn_trigger is not None

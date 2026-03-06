@@ -50,6 +50,34 @@ class TestDefaultRecentEventsFormatter:
         assert "プレイヤーがスポットに到着しました。" in text
         assert "- " in text
 
+    def test_format_observation_with_game_time_label_prepends_label(self, formatter):
+        """観測に game_time_label があるとき「[ラベル] 観測文」形式で出力される"""
+        entry_with_time = ObservationEntry(
+            occurred_at=datetime.now(),
+            output=ObservationOutput(
+                prose="宝箱を開けました。",
+                structured={"type": "chest"},
+                observation_category="self_only",
+            ),
+            game_time_label="1年2月3日 12:30:45",
+        )
+        text = formatter.format([entry_with_time], [])
+        assert "[1年2月3日 12:30:45] 宝箱を開けました。" in text
+
+    def test_format_observation_without_game_time_label_no_bracket_prefix(self, formatter):
+        """game_time_label が None のときは観測文のみ（[○年○月…] のプレフィックスなし）"""
+        entry_no_time = ObservationEntry(
+            occurred_at=datetime.now(),
+            output=ObservationOutput(
+                prose="宝箱を開けました。",
+                structured={"type": "chest"},
+                observation_category="self_only",
+            ),
+        )
+        text = formatter.format([entry_no_time], [])
+        assert "宝箱を開けました。" in text
+        assert "[1年" not in text and "[2年" not in text
+
     def test_format_action_results_only(self, formatter, sample_action_result):
         """行動結果のみのとき行動→結果が並ぶ"""
         text = formatter.format([], [sample_action_result])

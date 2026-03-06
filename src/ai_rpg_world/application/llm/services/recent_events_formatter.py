@@ -14,10 +14,14 @@ def _merge_by_time(
     """
     観測と行動結果を occurred_at でマージし、(occurred_at, kind, text) のリストを新しい順で返す。
     kind: "observation" | "action_result"
+    観測には game_time_label があれば "[ラベル] 観測文" とする。
     """
     merged: List[tuple] = []
     for e in observations:
-        merged.append((e.occurred_at, "observation", e.output.prose))
+        text = e.output.prose
+        if e.game_time_label:
+            text = f"[{e.game_time_label}] {text}"
+        merged.append((e.occurred_at, "observation", text))
     for e in action_results:
         text = f"[行動] {e.action_summary} → [結果] {e.result_summary}"
         merged.append((e.occurred_at, "action_result", text))
