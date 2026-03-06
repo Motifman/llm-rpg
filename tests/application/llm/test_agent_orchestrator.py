@@ -1,4 +1,4 @@
-"""LlmAgentOrchestrator のテスト（正常・例外・ツール未選択）"""
+"""LlmAgentOrchestrator のテスト（正常・例外・ツール未選択・記憶連携）"""
 
 from unittest.mock import MagicMock
 
@@ -12,7 +12,13 @@ from ai_rpg_world.application.llm.services.action_result_store import (
 from ai_rpg_world.application.llm.services.agent_orchestrator import (
     LlmAgentOrchestrator,
 )
+from ai_rpg_world.application.llm.services.in_memory_episode_memory_store import (
+    InMemoryEpisodeMemoryStore,
+)
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+from ai_rpg_world.application.llm.services.memory_extractor import (
+    RuleBasedMemoryExtractor,
+)
 from ai_rpg_world.application.llm.services.tool_command_mapper import (
     ToolCommandMapper,
 )
@@ -133,3 +139,78 @@ class TestLlmAgentOrchestratorInit:
                 tool_command_mapper=ToolCommandMapper(movement_service=MagicMock()),
                 action_result_store=DefaultActionResultStore(),
             )
+
+    def test_init_memory_extractor_only_raises_value_error(self):
+        """memory_extractor のみ渡し episode_memory_store を渡さないとき ValueError"""
+        with pytest.raises(ValueError, match="memory_extractor and episode_memory_store must be both set or both None"):
+            LlmAgentOrchestrator(
+                prompt_builder=_StubPromptBuilder(return_value={"messages": [], "tools": [], "tool_choice": "required"}),
+                llm_client=StubLlmClient(),
+                tool_command_mapper=ToolCommandMapper(movement_service=MagicMock()),
+                action_result_store=DefaultActionResultStore(),
+                memory_extractor=RuleBasedMemoryExtractor(),
+                episode_memory_store=None,
+            )
+
+    def test_init_episode_memory_store_only_raises_value_error(self):
+        """episode_memory_store のみ渡し memory_extractor を渡さないとき ValueError"""
+        with pytest.raises(ValueError, match="memory_extractor and episode_memory_store must be both set or both None"):
+            LlmAgentOrchestrator(
+                prompt_builder=_StubPromptBuilder(return_value={"messages": [], "tools": [], "tool_choice": "required"}),
+                llm_client=StubLlmClient(),
+                tool_command_mapper=ToolCommandMapper(movement_service=MagicMock()),
+                action_result_store=DefaultActionResultStore(),
+                memory_extractor=None,
+                episode_memory_store=InMemoryEpisodeMemoryStore(),
+            )
+
+
+class TestLlmAgentOrchestratorMemoryIntegration:
+    """記憶抽出・エピソード保存の統合（正常ケース）"""
+
+    @pytest.fixture
+    def episode_store(self):
+        return InMemoryEpisodeMemoryStore()
+
+    @pytest.fixture
+    def prompt_builder_with_overflow(self):
+        """overflow を返すスタブ（記憶抽出で使われる）"""
+        return _StubPromptBuilder(return_value={
+            "messages": [
+                {"role": "system", "content": "sys"},
+                {"role": "user", "content": "user"},
+            ],
+            "tools": [{"type": "function", "function": {"name": TOOL_NAME_NO_OP, "description": "", "parameters": {}}}],
+            "tool_choice": "required",
+            "overflow": [],
+        })
+
+    @pytest.fixture
+    def action_result_store(self):
+        return DefaultActionResultStore(max_entries_per_player=10)
+
+    @pytest.fixture
+    def mapper(self):
+        return ToolCommandMapper(movement_service=MagicMock())
+
+    def test_run_turn_with_memory_stores_episodes(
+        self, episode_store, prompt_builder_with_overflow, action_result_store, mapper
+    ):
+        """memory_extractor と episode_memory_store を両方渡したとき run_turn でエピソードが保存される"""
+        llm_client = StubLlmClient(tool_call_to_return={"name": TOOL_NAME_NO_OP, "arguments": {}})
+        orchestrator = LlmAgentOrchestrator(
+            prompt_builder=prompt_builder_with_overflow,
+            llm_client=llm_client,
+            tool_command_mapper=mapper,
+            action_result_store=action_result_store,
+            memory_extractor=RuleBasedMemoryExtractor(),
+            episode_memory_store=episode_store,
+        )
+        player_id = PlayerId(1)
+        orchestrator.run_turn(player_id)
+
+        recent_episodes = episode_store.get_recent(player_id, 10)
+        assert len(recent_episodes) == 1
+        assert recent_episodes[0].action_taken
+        assert recent_episodes[0].outcome_summary
+        assert recent_episodes[0].recall_count == 0

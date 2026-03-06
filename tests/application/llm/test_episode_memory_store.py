@@ -141,6 +141,31 @@ class TestInMemoryEpisodeMemoryStore:
         assert len(got) == 1
         assert got[0].id == "high"
 
+    def test_get_important_or_high_recall_invalid_min_importance_raises_value_error(
+        self, store, player_id
+    ):
+        """get_important_or_high_recall の min_importance が low/medium/high 以外のとき ValueError"""
+        base = datetime.now()
+        store.add(player_id, _make_entry(eid="e1", ts=base))
+        with pytest.raises(ValueError, match="min_importance must be 'low', 'medium', or 'high'"):
+            store.get_important_or_high_recall(
+                player_id,
+                since=base - timedelta(days=1),
+                min_importance="invalid",
+                limit=10,
+            )
+
+    def test_get_important_or_high_recall_negative_limit_raises_value_error(
+        self, store, player_id
+    ):
+        """get_important_or_high_recall の limit が負のとき ValueError"""
+        with pytest.raises(ValueError, match="limit must be 0 or greater"):
+            store.get_important_or_high_recall(
+                player_id,
+                since=datetime.now() - timedelta(days=1),
+                limit=-1,
+            )
+
     def test_add_player_id_none_raises_type_error(self, store):
         """add に player_id が None のとき TypeError"""
         with pytest.raises(TypeError, match="player_id must be PlayerId"):

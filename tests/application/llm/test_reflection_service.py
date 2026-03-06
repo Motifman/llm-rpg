@@ -101,6 +101,20 @@ class TestRuleBasedReflectionService:
                 episode_limit=-1,
             )
 
+    def test_run_invalid_min_importance_raises_value_error(
+        self, service, episode_store, player_id
+    ):
+        """min_importance が low/medium/high 以外のとき ValueError（ストア経由で伝播）"""
+        since = datetime.now() - timedelta(days=1)
+        episode_store.add(player_id, _make_episode("e1", ts=datetime.now()))
+        with pytest.raises(ValueError, match="min_importance must be 'low', 'medium', or 'high'"):
+            service.run(
+                player_id,
+                since=since,
+                min_importance="invalid",
+                episode_limit=10,
+            )
+
     def test_init_episode_store_not_interface_raises_type_error(
         self, long_term_store
     ):

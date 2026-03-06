@@ -1,11 +1,14 @@
-"""LLM 向け DTO（SystemPromptPlayerInfoDto, ActionResultEntry, LlmCommandResultDto, ToolDefinitionDto）のテスト（正常・例外）"""
+"""LLM 向け DTO（SystemPromptPlayerInfoDto, ActionResultEntry, LlmCommandResultDto, ToolDefinitionDto, EpisodeMemoryEntry, LongTermFactEntry, MemoryLawEntry）のテスト（正常・例外）"""
 
 import pytest
 from datetime import datetime
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
+    EpisodeMemoryEntry,
     LlmCommandResultDto,
+    LongTermFactEntry,
+    MemoryLawEntry,
     SystemPromptPlayerInfoDto,
     ToolDefinitionDto,
 )
@@ -231,4 +234,265 @@ class TestToolDefinitionDto:
                 name="n",
                 description="d",
                 parameters="{}",  # type: ignore[arg-type]
+            )
+
+
+class TestEpisodeMemoryEntry:
+    """EpisodeMemoryEntry の正常・例外ケース（記憶モジュール Phase 4）"""
+
+    def test_create_with_valid_fields(self):
+        """全フィールドが正しい型・値なら正常に生成される"""
+        now = datetime.now()
+        entry = EpisodeMemoryEntry(
+            id="ep1",
+            context_summary="洞窟にいた",
+            action_taken="move_to_destination を実行",
+            outcome_summary="到着した",
+            entity_ids=("loc_1",),
+            location_id="loc_1",
+            timestamp=now,
+            importance="medium",
+            surprise=False,
+            recall_count=0,
+        )
+        assert entry.id == "ep1"
+        assert entry.context_summary == "洞窟にいた"
+        assert entry.importance == "medium"
+        assert entry.recall_count == 0
+
+    def test_create_accepts_low_medium_high_importance(self):
+        """importance に low / medium / high を指定できる"""
+        now = datetime.now()
+        for imp in ("low", "medium", "high"):
+            entry = EpisodeMemoryEntry(
+                id="e",
+                context_summary="c",
+                action_taken="a",
+                outcome_summary="o",
+                entity_ids=(),
+                location_id=None,
+                timestamp=now,
+                importance=imp,
+                surprise=False,
+                recall_count=0,
+            )
+            assert entry.importance == imp
+
+    def test_importance_invalid_raises_type_error(self):
+        """importance が low/medium/high 以外の場合 TypeError"""
+        with pytest.raises(TypeError, match="importance must be 'low', 'medium', or 'high'"):
+            EpisodeMemoryEntry(
+                id="e",
+                context_summary="c",
+                action_taken="a",
+                outcome_summary="o",
+                entity_ids=(),
+                location_id=None,
+                timestamp=datetime.now(),
+                importance="invalid",  # type: ignore[arg-type]
+                surprise=False,
+                recall_count=0,
+            )
+
+    def test_recall_count_negative_raises_type_error(self):
+        """recall_count が負の場合 TypeError"""
+        with pytest.raises(TypeError, match="recall_count must be non-negative int"):
+            EpisodeMemoryEntry(
+                id="e",
+                context_summary="c",
+                action_taken="a",
+                outcome_summary="o",
+                entity_ids=(),
+                location_id=None,
+                timestamp=datetime.now(),
+                importance="medium",
+                surprise=False,
+                recall_count=-1,
+            )
+
+    def test_id_not_str_raises_type_error(self):
+        """id が str でない場合 TypeError"""
+        with pytest.raises(TypeError, match="id must be str"):
+            EpisodeMemoryEntry(
+                id=123,  # type: ignore[arg-type]
+                context_summary="c",
+                action_taken="a",
+                outcome_summary="o",
+                entity_ids=(),
+                location_id=None,
+                timestamp=datetime.now(),
+                importance="medium",
+                surprise=False,
+                recall_count=0,
+            )
+
+    def test_entity_ids_not_tuple_raises_type_error(self):
+        """entity_ids が tuple でない場合 TypeError"""
+        with pytest.raises(TypeError, match="entity_ids must be tuple"):
+            EpisodeMemoryEntry(
+                id="e",
+                context_summary="c",
+                action_taken="a",
+                outcome_summary="o",
+                entity_ids=["loc_1"],  # type: ignore[arg-type]
+                location_id=None,
+                timestamp=datetime.now(),
+                importance="medium",
+                surprise=False,
+                recall_count=0,
+            )
+
+    def test_entity_ids_contains_non_str_raises_type_error(self):
+        """entity_ids の要素が str でない場合 TypeError"""
+        with pytest.raises(TypeError, match="entity_ids must contain only str"):
+            EpisodeMemoryEntry(
+                id="e",
+                context_summary="c",
+                action_taken="a",
+                outcome_summary="o",
+                entity_ids=(1,),  # type: ignore[arg-type]
+                location_id=None,
+                timestamp=datetime.now(),
+                importance="medium",
+                surprise=False,
+                recall_count=0,
+            )
+
+
+class TestLongTermFactEntry:
+    """LongTermFactEntry の正常・例外ケース"""
+
+    def test_create_with_valid_fields(self):
+        """全フィールドが正しい型なら正常に生成される"""
+        now = datetime.now()
+        entry = LongTermFactEntry(
+            id="fact-1",
+            content="洞窟の奥には強敵がいる",
+            player_id=1,
+            updated_at=now,
+        )
+        assert entry.id == "fact-1"
+        assert entry.content == "洞窟の奥には強敵がいる"
+        assert entry.player_id == 1
+        assert entry.updated_at == now
+
+    def test_id_not_str_raises_type_error(self):
+        """id が str でない場合 TypeError"""
+        with pytest.raises(TypeError, match="id must be str"):
+            LongTermFactEntry(
+                id=1,  # type: ignore[arg-type]
+                content="c",
+                player_id=1,
+                updated_at=datetime.now(),
+            )
+
+    def test_content_not_str_raises_type_error(self):
+        """content が str でない場合 TypeError"""
+        with pytest.raises(TypeError, match="content must be str"):
+            LongTermFactEntry(
+                id="f",
+                content=None,  # type: ignore[arg-type]
+                player_id=1,
+                updated_at=datetime.now(),
+            )
+
+    def test_player_id_not_int_raises_type_error(self):
+        """player_id が int でない場合 TypeError"""
+        with pytest.raises(TypeError, match="player_id must be int"):
+            LongTermFactEntry(
+                id="f",
+                content="c",
+                player_id="1",  # type: ignore[arg-type]
+                updated_at=datetime.now(),
+            )
+
+    def test_updated_at_not_datetime_raises_type_error(self):
+        """updated_at が datetime でない場合 TypeError"""
+        with pytest.raises(TypeError, match="updated_at must be datetime"):
+            LongTermFactEntry(
+                id="f",
+                content="c",
+                player_id=1,
+                updated_at="2025-01-01",  # type: ignore[arg-type]
+            )
+
+
+class TestMemoryLawEntry:
+    """MemoryLawEntry の正常・例外ケース"""
+
+    def test_create_with_valid_fields(self):
+        """全フィールドが正しい型なら正常に生成される"""
+        entry = MemoryLawEntry(
+            id="law-1",
+            subject="チェスト",
+            relation="開けると",
+            target="回復アイテム",
+            strength=1.0,
+            player_id=1,
+        )
+        assert entry.id == "law-1"
+        assert entry.subject == "チェスト"
+        assert entry.relation == "開けると"
+        assert entry.target == "回復アイテム"
+        assert entry.strength == 1.0
+        assert entry.player_id == 1
+
+    def test_strength_int_accepted(self):
+        """strength に int を指定できる（float と同様）"""
+        entry = MemoryLawEntry(
+            id="l",
+            subject="s",
+            relation="r",
+            target="t",
+            strength=2,
+            player_id=1,
+        )
+        assert entry.strength == 2
+
+    def test_id_not_str_raises_type_error(self):
+        """id が str でない場合 TypeError"""
+        with pytest.raises(TypeError, match="id must be str"):
+            MemoryLawEntry(
+                id=1,  # type: ignore[arg-type]
+                subject="s",
+                relation="r",
+                target="t",
+                strength=1.0,
+                player_id=1,
+            )
+
+    def test_subject_not_str_raises_type_error(self):
+        """subject が str でない場合 TypeError"""
+        with pytest.raises(TypeError, match="subject must be str"):
+            MemoryLawEntry(
+                id="l",
+                subject=None,  # type: ignore[arg-type]
+                relation="r",
+                target="t",
+                strength=1.0,
+                player_id=1,
+            )
+
+    def test_strength_not_number_raises_type_error(self):
+        """strength が int/float でない場合 TypeError"""
+        with pytest.raises(TypeError, match="strength must be int or float"):
+            MemoryLawEntry(
+                id="l",
+                subject="s",
+                relation="r",
+                target="t",
+                strength="1.0",  # type: ignore[arg-type]
+                player_id=1,
+            )
+
+    def test_player_id_not_int_raises_type_error(self):
+        """player_id が int でない場合 TypeError"""
+        with pytest.raises(TypeError, match="player_id must be int"):
+            MemoryLawEntry(
+                id="l",
+                subject="s",
+                relation="r",
+                target="t",
+                strength=1.0,
+                player_id=None,  # type: ignore[arg-type]
             )
