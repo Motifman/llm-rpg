@@ -51,6 +51,7 @@ from ai_rpg_world.domain.player.event.status_events import (
     PlayerGoldEarnedEvent,
     PlayerGoldPaidEvent,
 )
+from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.event.inventory_events import (
     ItemAddedToInventoryEvent,
     ItemDroppedFromInventoryEvent,
@@ -91,6 +92,7 @@ _OBSERVED_EVENT_TYPES = (
     # --- 会話 ---
     ConversationStartedEvent,
     ConversationEndedEvent,
+    PlayerSpokeEvent,
     # --- クエスト ---
     QuestIssuedEvent,
     QuestAcceptedEvent,

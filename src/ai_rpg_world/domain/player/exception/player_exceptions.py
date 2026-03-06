@@ -54,6 +54,11 @@ class MessageValidationException(PlayerDomainException, ValidationException):
     error_code = "PLAYER.MESSAGE_VALIDATION"
 
 
+class SpeechValidationException(PlayerDomainException, ValidationException):
+    """発言バリデーション例外（囁きの宛先未指定・発言内容空など）"""
+    error_code = "PLAYER.SPEECH_VALIDATION"
+
+
 class PlayerInventorySlotIdValidationException(PlayerDomainException, ValidationException):
     """プレイヤーインベントリスロットIDバリデーション例外"""
     error_code = "PLAYER.INVENTORY_SLOT_ID_VALIDATION"
