@@ -139,6 +139,14 @@ def create_llm_agent_wiring(
     spot_repository: Optional[Any] = None,
     item_spec_repository: Optional[Any] = None,
     item_repository: Optional[Any] = None,
+    quest_repository: Optional[Any] = None,
+    shop_repository: Optional[Any] = None,
+    guild_repository: Optional[Any] = None,
+    monster_repository: Optional[Any] = None,
+    hit_box_repository: Optional[Any] = None,
+    skill_loadout_repository: Optional[Any] = None,
+    skill_deck_progress_repository: Optional[Any] = None,
+    skill_spec_repository: Optional[Any] = None,
     llm_client: Optional[ILLMClient] = None,
     game_time_provider: Optional[Any] = None,
     world_time_config_service: Optional[Any] = None,
@@ -162,6 +170,14 @@ def create_llm_agent_wiring(
         spot_repository: 観測文のスポット名解決用。省略時は「不明なスポット」となる。
         item_spec_repository: 観測文のアイテム名解決用（ResourceHarvested 等）。省略時は「何かのアイテム」となる。
         item_repository: 観測文のアイテム名解決用（チェスト・インベントリ系）。省略時は「何かのアイテム」となる。
+        quest_repository: クエスト観測の配信先解決（承認・キャンセル等）用（任意）。
+        shop_repository: ショップ観測の配信先解決（spot 解決）・観測文の名前解決用（任意）。
+        guild_repository: ギルド観測の配信先解決（全メンバー通知）・観測文の名前解決用（任意）。
+        monster_repository: モンスター/会話NPC観測の配信先解決・観測文の名前解決用（任意）。
+        hit_box_repository: 戦闘（HitBox）観測の配信先解決（owner 解決）用（任意）。
+        skill_loadout_repository: スキル（Loadout）観測の配信先解決（owner 解決）用（任意）。
+        skill_deck_progress_repository: スキル（DeckProgress）観測の配信先解決（owner 解決）用（任意）。
+        skill_spec_repository: スキル名の観測文解決用（任意）。
         llm_client: 省略時は環境変数 LLM_CLIENT に従い作成（stub / litellm）
         game_time_provider: 省略時は観測にゲーム内時刻を付与しない。指定時は world_time_config_service も必要。
         world_time_config_service: 省略時は観測にゲーム内時刻を付与しない。ticks_per_day 等を提供する設定サービス。
@@ -239,6 +255,13 @@ def create_llm_agent_wiring(
     observation_resolver = create_observation_recipient_resolver(
         player_status_repository=player_status_repository,
         physical_map_repository=physical_map_repository,
+        quest_repository=quest_repository,
+        guild_repository=guild_repository,
+        shop_repository=shop_repository,
+        monster_repository=monster_repository,
+        hit_box_repository=hit_box_repository,
+        skill_loadout_repository=skill_loadout_repository,
+        skill_deck_progress_repository=skill_deck_progress_repository,
     )
     formatter = observation_formatter
     if formatter is None:
@@ -250,6 +273,10 @@ def create_llm_agent_wiring(
             player_profile_repository=player_profile_repository,
             item_spec_repository=item_spec_repository,
             item_repository=item_repository,
+            shop_repository=shop_repository,
+            guild_repository=guild_repository,
+            monster_repository=monster_repository,
+            skill_spec_repository=skill_spec_repository,
         )
     observation_handler = ObservationEventHandler(
         resolver=observation_resolver,

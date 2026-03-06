@@ -3,7 +3,39 @@
 from ai_rpg_world.application.observation.services.recipient_strategies.default_recipient_strategy import (
     DefaultRecipientStrategy,
 )
+from ai_rpg_world.application.observation.services.recipient_strategies.combat_recipient_strategy import (
+    CombatRecipientStrategy,
+)
+from ai_rpg_world.application.observation.services.recipient_strategies.conversation_recipient_strategy import (
+    ConversationRecipientStrategy,
+)
+from ai_rpg_world.application.observation.services.recipient_strategies.guild_recipient_strategy import (
+    GuildRecipientStrategy,
+)
+from ai_rpg_world.application.observation.services.recipient_strategies.harvest_recipient_strategy import (
+    HarvestRecipientStrategy,
+)
+from ai_rpg_world.application.observation.services.recipient_strategies.monster_recipient_strategy import (
+    MonsterRecipientStrategy,
+)
+from ai_rpg_world.application.observation.services.recipient_strategies.quest_recipient_strategy import (
+    QuestRecipientStrategy,
+)
+from ai_rpg_world.application.observation.services.recipient_strategies.shop_recipient_strategy import (
+    ShopRecipientStrategy,
+)
+from ai_rpg_world.application.observation.services.recipient_strategies.skill_recipient_strategy import (
+    SkillRecipientStrategy,
+)
 
 __all__ = [
     "DefaultRecipientStrategy",
+    "ConversationRecipientStrategy",
+    "QuestRecipientStrategy",
+    "ShopRecipientStrategy",
+    "GuildRecipientStrategy",
+    "HarvestRecipientStrategy",
+    "MonsterRecipientStrategy",
+    "CombatRecipientStrategy",
+    "SkillRecipientStrategy",
 ]

@@ -2,6 +2,32 @@
 
 from ai_rpg_world.application.observation.handlers.observation_event_handler import ObservationEventHandler
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
+from ai_rpg_world.domain.combat.event.combat_events import (
+    HitBoxHitRecordedEvent,
+)
+from ai_rpg_world.domain.conversation.event.conversation_event import (
+    ConversationEndedEvent,
+    ConversationStartedEvent,
+)
+from ai_rpg_world.domain.guild.event.guild_event import (
+    GuildBankDepositedEvent,
+    GuildBankWithdrawnEvent,
+    GuildCreatedEvent,
+    GuildDisbandedEvent,
+    GuildMemberJoinedEvent,
+    GuildMemberLeftEvent,
+    GuildRoleChangedEvent,
+)
+from ai_rpg_world.domain.monster.event.monster_events import (
+    ActorStateChangedEvent,
+    MonsterDamagedEvent,
+    MonsterDiedEvent,
+    MonsterEvadedEvent,
+    MonsterFedEvent,
+    MonsterHealedEvent,
+    MonsterRespawnedEvent,
+    MonsterSpawnedEvent,
+)
 from ai_rpg_world.domain.world.event.map_events import (
     GatewayTriggeredEvent,
     LocationEnteredEvent,
@@ -11,6 +37,11 @@ from ai_rpg_world.domain.world.event.map_events import (
     ResourceHarvestedEvent,
     SpotWeatherChangedEvent,
     WorldObjectInteractedEvent,
+)
+from ai_rpg_world.domain.world.event.harvest_events import (
+    HarvestCancelledEvent,
+    HarvestCompletedEvent,
+    HarvestStartedEvent,
 )
 from ai_rpg_world.domain.player.event.status_events import (
     PlayerLocationChangedEvent,
@@ -27,9 +58,87 @@ from ai_rpg_world.domain.player.event.inventory_events import (
     ItemUnequippedEvent,
     InventorySlotOverflowEvent,
 )
+from ai_rpg_world.domain.quest.event.quest_event import (
+    QuestAcceptedEvent,
+    QuestApprovedEvent,
+    QuestCancelledEvent,
+    QuestCompletedEvent,
+    QuestIssuedEvent,
+    QuestPendingApprovalEvent,
+)
+from ai_rpg_world.domain.shop.event.shop_event import (
+    ShopClosedEvent,
+    ShopCreatedEvent,
+    ShopItemListedEvent,
+    ShopItemPurchasedEvent,
+    ShopItemUnlistedEvent,
+)
+from ai_rpg_world.domain.skill.event.skill_events import (
+    AwakenedModeActivatedEvent,
+    AwakenedModeExpiredEvent,
+    SkillDeckExpGainedEvent,
+    SkillDeckLeveledUpEvent,
+    SkillEquippedEvent,
+    SkillEvolutionAcceptedEvent,
+    SkillEvolutionRejectedEvent,
+    SkillLoadoutCapacityChangedEvent,
+    SkillUnequippedEvent,
+    SkillUsedEvent,
+)
 
 # 観測対象イベント型一覧（仕様に基づく）
 _OBSERVED_EVENT_TYPES = (
+    # --- 会話 ---
+    ConversationStartedEvent,
+    ConversationEndedEvent,
+    # --- クエスト ---
+    QuestIssuedEvent,
+    QuestAcceptedEvent,
+    QuestCompletedEvent,
+    QuestPendingApprovalEvent,
+    QuestApprovedEvent,
+    QuestCancelledEvent,
+    # --- ショップ ---
+    ShopCreatedEvent,
+    ShopItemListedEvent,
+    ShopItemUnlistedEvent,
+    ShopItemPurchasedEvent,
+    ShopClosedEvent,
+    # --- ギルド ---
+    GuildCreatedEvent,
+    GuildMemberJoinedEvent,
+    GuildMemberLeftEvent,
+    GuildRoleChangedEvent,
+    GuildBankDepositedEvent,
+    GuildBankWithdrawnEvent,
+    GuildDisbandedEvent,
+    # --- 採集 ---
+    HarvestStartedEvent,
+    HarvestCancelledEvent,
+    HarvestCompletedEvent,
+    # --- モンスター ---
+    MonsterSpawnedEvent,
+    MonsterDamagedEvent,
+    MonsterDiedEvent,
+    MonsterRespawnedEvent,
+    MonsterEvadedEvent,
+    MonsterHealedEvent,
+    MonsterFedEvent,
+    ActorStateChangedEvent,
+    # --- 戦闘 ---
+    HitBoxHitRecordedEvent,
+    # --- スキル ---
+    SkillEquippedEvent,
+    SkillUnequippedEvent,
+    SkillUsedEvent,
+    AwakenedModeActivatedEvent,
+    AwakenedModeExpiredEvent,
+    SkillLoadoutCapacityChangedEvent,
+    SkillDeckExpGainedEvent,
+    SkillDeckLeveledUpEvent,
+    SkillEvolutionAcceptedEvent,
+    SkillEvolutionRejectedEvent,
+    # --- 既存 ---
     GatewayTriggeredEvent,
     LocationEnteredEvent,
     LocationExitedEvent,

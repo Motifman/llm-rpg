@@ -579,6 +579,8 @@ class TestObservationEventHandlerRegistry:
         from ai_rpg_world.infrastructure.events.observation_event_handler_registry import (
             ObservationEventHandlerRegistry,
         )
+        from ai_rpg_world.domain.combat.event.combat_events import HitBoxCreatedEvent
+        from ai_rpg_world.domain.skill.event.skill_events import SkillCooldownStartedEvent
         from ai_rpg_world.domain.world.event.map_events import GatewayTriggeredEvent
 
         handler = MagicMock()
@@ -591,6 +593,8 @@ class TestObservationEventHandlerRegistry:
         assert len(calls) >= 10
         event_types_registered = {c[0][0] for c in calls}
         assert GatewayTriggeredEvent in event_types_registered
+        assert HitBoxCreatedEvent not in event_types_registered
+        assert SkillCooldownStartedEvent not in event_types_registered
         for call in calls:
             assert call[1]["is_synchronous"] is False
             assert call[0][1] is handler
