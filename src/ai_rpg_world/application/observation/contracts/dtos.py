@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Literal
+from typing import Any, Dict, Literal, Optional
 
 ObservationCategory = Literal["self_only", "social", "environment"]
 
@@ -35,13 +35,16 @@ class ObservationOutput:
 
 @dataclass(frozen=True)
 class ObservationEntry:
-    """バッファに蓄積する1件の観測（発生日時付き）"""
+    """バッファに蓄積する1件の観測（発生日時・ゲーム内時刻ラベル付き）"""
 
     occurred_at: datetime
     output: ObservationOutput
+    game_time_label: Optional[str] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.occurred_at, datetime):
             raise TypeError("occurred_at must be datetime")
         if not isinstance(self.output, ObservationOutput):
             raise TypeError("output must be ObservationOutput")
+        if self.game_time_label is not None and not isinstance(self.game_time_label, str):
+            raise TypeError("game_time_label must be str or None")

@@ -24,6 +24,9 @@ from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.world.event.map_events import GatewayTriggeredEvent
+from ai_rpg_world.domain.world.service.world_time_config_service import (
+    DefaultWorldTimeConfigService,
+)
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
@@ -38,6 +41,9 @@ from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository im
     InMemoryPhysicalMapRepository,
 )
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
+    InMemoryGameTimeProvider,
+)
 
 
 def _make_status(player_id: int, spot_id: int = 1) -> PlayerStatusAggregate:
@@ -125,6 +131,98 @@ class TestObservationEventHandler:
         assert len(entries) == 1
         assert "到着" in entries[0].output.prose
         assert entries[0].output.structured.get("type") == "gateway_arrival"
+
+    def test_handle_when_no_game_time_provider_entry_has_no_game_time_label(
+        self, handler, buffer
+    ):
+        """game_time_provider 未設定時は観測エントリの game_time_label が None"""
+        event = PlayerGoldEarnedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            earned_amount=100,
+            total_gold=1100,
+        )
+        handler.handle(event)
+        entries = buffer.get_observations(PlayerId(1))
+        assert len(entries) == 1
+        assert entries[0].game_time_label is None
+
+    def test_handle_when_game_time_provider_and_config_set_entry_has_game_time_label(
+        self, resolver, formatter, buffer, unit_of_work_factory
+    ):
+        """game_time_provider と world_time_config を渡すと観測にゲーム内時刻ラベルが付与される"""
+        game_time_provider = InMemoryGameTimeProvider(initial_tick=3600)
+        world_time_config = DefaultWorldTimeConfigService(
+            ticks_per_day=86400,
+            days_per_month=30,
+            months_per_year=12,
+        )
+        handler = ObservationEventHandler(
+            resolver=resolver,
+            formatter=formatter,
+            buffer=buffer,
+            unit_of_work_factory=unit_of_work_factory,
+            game_time_provider=game_time_provider,
+            world_time_config=world_time_config,
+        )
+        event = PlayerGoldEarnedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            earned_amount=100,
+            total_gold=1100,
+        )
+        handler.handle(event)
+        entries = buffer.get_observations(PlayerId(1))
+        assert len(entries) == 1
+        assert entries[0].game_time_label is not None
+        assert "1年1月1日" in entries[0].game_time_label
+        assert "01:00:00" in entries[0].game_time_label
+
+    def test_handle_when_only_game_time_provider_set_no_label(
+        self, resolver, formatter, buffer, unit_of_work_factory
+    ):
+        """game_time_provider のみで world_time_config が無いときは game_time_label は None"""
+        handler = ObservationEventHandler(
+            resolver=resolver,
+            formatter=formatter,
+            buffer=buffer,
+            unit_of_work_factory=unit_of_work_factory,
+            game_time_provider=InMemoryGameTimeProvider(0),
+            world_time_config=None,
+        )
+        event = PlayerGoldEarnedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            earned_amount=100,
+            total_gold=1100,
+        )
+        handler.handle(event)
+        entries = buffer.get_observations(PlayerId(1))
+        assert len(entries) == 1
+        assert entries[0].game_time_label is None
+
+    def test_handle_when_only_world_time_config_set_no_label(
+        self, resolver, formatter, buffer, unit_of_work_factory
+    ):
+        """world_time_config のみで game_time_provider が無いときは game_time_label は None"""
+        handler = ObservationEventHandler(
+            resolver=resolver,
+            formatter=formatter,
+            buffer=buffer,
+            unit_of_work_factory=unit_of_work_factory,
+            game_time_provider=None,
+            world_time_config=DefaultWorldTimeConfigService(ticks_per_day=86400),
+        )
+        event = PlayerGoldEarnedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            earned_amount=100,
+            total_gold=1100,
+        )
+        handler.handle(event)
+        entries = buffer.get_observations(PlayerId(1))
+        assert len(entries) == 1
+        assert entries[0].game_time_label is None
 
     def test_handle_player_gold_earned_appends_to_buffer(self, handler, buffer):
         """PlayerGoldEarnedEvent で観測が蓄積される"""

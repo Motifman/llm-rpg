@@ -137,6 +137,8 @@ def create_llm_agent_wiring(
     observation_buffer: Optional[IObservationContextBuffer] = None,
     observation_formatter: Optional[IObservationFormatter] = None,
     llm_client: Optional[ILLMClient] = None,
+    game_time_provider: Optional[Any] = None,
+    world_time_config_service: Optional[Any] = None,
 ) -> Tuple[ObservationEventHandlerRegistry, ILlmTurnTrigger]:
     """
     LLM エージェント用の観測ハンドラ登録用 Registry と LlmTurnTrigger を組み立てて返す。
@@ -155,6 +157,8 @@ def create_llm_agent_wiring(
         observation_buffer: 省略時は DefaultObservationContextBuffer を新規作成
         observation_formatter: 省略時は ObservationFormatter() を新規作成（spot/player_profile は None）
         llm_client: 省略時は環境変数 LLM_CLIENT に従い作成（stub / litellm）
+        game_time_provider: 省略時は観測にゲーム内時刻を付与しない。指定時は world_time_config_service も必要。
+        world_time_config_service: 省略時は観測にゲーム内時刻を付与しない。ticks_per_day 等を提供する設定サービス。
 
     Returns:
         (ObservationEventHandlerRegistry, ILlmTurnTrigger)。
@@ -244,6 +248,8 @@ def create_llm_agent_wiring(
         player_status_repository=player_status_repository,
         turn_trigger=llm_turn_trigger,
         llm_player_resolver=llm_player_resolver,
+        game_time_provider=game_time_provider,
+        world_time_config=world_time_config_service,
     )
     observation_registry = ObservationEventHandlerRegistry(
         observation_handler=observation_handler,
