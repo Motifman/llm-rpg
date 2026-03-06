@@ -12,9 +12,11 @@ from ai_rpg_world.domain.world.event.map_events import (
     LocationExitedEvent,
     ItemTakenFromChestEvent,
     ItemStoredInChestEvent,
+    ResourceHarvestedEvent,
     SpotWeatherChangedEvent,
     WorldObjectInteractedEvent,
 )
+from ai_rpg_world.domain.world.enum.world_enum import InteractionTypeEnum
 from ai_rpg_world.domain.player.event.status_events import (
     PlayerLocationChangedEvent,
     PlayerDownedEvent,
@@ -35,6 +37,14 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
     from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
+    from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
+    from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+
+
+# 名前解決に失敗したときのラベル（ID を露出しない）
+FALLBACK_SPOT_LABEL = "不明なスポット"
+FALLBACK_PLAYER_LABEL = "不明なプレイヤー"
+FALLBACK_ITEM_LABEL = "何かのアイテム"
 
 
 class ObservationFormatter(IObservationFormatter):
@@ -47,9 +57,13 @@ class ObservationFormatter(IObservationFormatter):
         self,
         spot_repository: Optional["SpotRepository"] = None,
         player_profile_repository: Optional["PlayerProfileRepository"] = None,
+        item_spec_repository: Optional["ItemSpecRepository"] = None,
+        item_repository: Optional["ItemRepository"] = None,
     ) -> None:
         self._spot_repository = spot_repository
         self._player_profile_repository = player_profile_repository
+        self._item_spec_repository = item_spec_repository
+        self._item_repository = item_repository
 
     def format(
         self,
@@ -81,6 +95,8 @@ class ObservationFormatter(IObservationFormatter):
             output = self._format_item_taken_from_chest(event, recipient_player_id)
         elif isinstance(event, ItemStoredInChestEvent):
             output = self._format_item_stored_in_chest(event, recipient_player_id)
+        elif isinstance(event, ResourceHarvestedEvent):
+            output = self._format_resource_harvested(event, recipient_player_id)
         elif isinstance(event, SpotWeatherChangedEvent):
             output = self._format_spot_weather_changed(event, recipient_player_id)
         elif isinstance(event, WorldObjectInteractedEvent):
@@ -114,14 +130,35 @@ class ObservationFormatter(IObservationFormatter):
             spot = self._spot_repository.find_by_id(spot_id)
             if spot:
                 return spot.name
-        return f"スポット{spot_id.value}"
+        return FALLBACK_SPOT_LABEL
 
     def _player_name(self, player_id: PlayerId) -> str:
         if self._player_profile_repository:
             profile = self._player_profile_repository.find_by_id(player_id)
             if profile and hasattr(profile, "name"):
                 return profile.name.value
-        return f"プレイヤー{player_id.value}"
+        return FALLBACK_PLAYER_LABEL
+
+    def _item_spec_name(self, item_spec_id_value: int) -> str:
+        if self._item_spec_repository is None:
+            return FALLBACK_ITEM_LABEL
+        try:
+            from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+            spec_id = ItemSpecId(item_spec_id_value)
+        except Exception:
+            return FALLBACK_ITEM_LABEL
+        spec = self._item_spec_repository.find_by_id(spec_id)
+        if spec is not None:
+            return spec.name
+        return FALLBACK_ITEM_LABEL
+
+    def _item_instance_name(self, item_instance_id: Any) -> str:
+        if self._item_repository is None:
+            return FALLBACK_ITEM_LABEL
+        agg = self._item_repository.find_by_id(item_instance_id)
+        if agg is not None:
+            return agg.item_spec.name
+        return FALLBACK_ITEM_LABEL
 
     def _format_gateway_triggered(
         self, event: GatewayTriggeredEvent, recipient_id: PlayerId
@@ -132,8 +169,7 @@ class ObservationFormatter(IObservationFormatter):
             prose = f"{target_name}に到着しました。"
             structured = {"type": "gateway_arrival", "spot_name": target_name, "role": "self"}
             return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
-        # 他プレイヤー向け: 「〇〇がこのスポットにやってきました」（話しかけられる可能性 → 割り込み）
-        actor_label = f"誰か" if event.player_id_value is None else self._player_name(PlayerId(event.player_id_value))
+        actor_label = FALLBACK_PLAYER_LABEL if event.player_id_value is None else self._player_name(PlayerId(event.player_id_value))
         prose = f"{actor_label}がこのスポットにやってきました。"
         structured = {"type": "player_entered_spot", "actor": actor_label, "spot_name": target_name}
         return ObservationOutput(
@@ -149,7 +185,7 @@ class ObservationFormatter(IObservationFormatter):
             prose = f"{loc_name}に着きました。"
             structured = {"type": "location_entered", "location_name": loc_name, "role": "self"}
             return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
-        actor_label = "誰か" if event.player_id_value is None else self._player_name(PlayerId(event.player_id_value))
+        actor_label = FALLBACK_PLAYER_LABEL if event.player_id_value is None else self._player_name(PlayerId(event.player_id_value))
         prose = f"{actor_label}が{loc_name}に着きました。"
         structured = {"type": "player_entered_location", "actor": actor_label, "location_name": loc_name}
         return ObservationOutput(prose=prose, structured=structured, observation_category="social")
@@ -227,15 +263,45 @@ class ObservationFormatter(IObservationFormatter):
     def _format_item_taken_from_chest(
         self, event: ItemTakenFromChestEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
-        prose = "チェストからアイテムを取得しました。"
-        structured = {"type": "item_taken_from_chest"}
+        item_name = self._item_instance_name(event.item_instance_id)
+        prose = f"チェストから{item_name}を取得しました。"
+        structured = {"type": "item_taken_from_chest", "item_name": item_name}
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_item_stored_in_chest(
         self, event: ItemStoredInChestEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
-        prose = "チェストにアイテムを収納しました。"
-        structured = {"type": "item_stored_in_chest"}
+        item_name = self._item_instance_name(event.item_instance_id)
+        prose = f"チェストに{item_name}を収納しました。"
+        structured = {"type": "item_stored_in_chest", "item_name": item_name}
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
+
+    def _format_resource_harvested(
+        self, event: ResourceHarvestedEvent, recipient_id: PlayerId
+    ) -> Optional[ObservationOutput]:
+        parts: list[str] = []
+        for entry in event.obtained_items:
+            if not isinstance(entry, dict):
+                continue
+            spec_id_raw = entry.get("item_spec_id")
+            qty = entry.get("quantity", 1)
+            if spec_id_raw is None:
+                parts.append(f"{FALLBACK_ITEM_LABEL}を{qty}個")
+                continue
+            try:
+                spec_id_value = int(spec_id_raw) if not isinstance(spec_id_raw, int) else spec_id_raw
+            except (TypeError, ValueError):
+                parts.append(f"{FALLBACK_ITEM_LABEL}を{qty}個")
+                continue
+            name = self._item_spec_name(spec_id_value)
+            parts.append(f"{name}を{qty}個")
+        if not parts:
+            prose = "採集しました。"
+            structured = {"type": "resource_harvested", "items": []}
+        else:
+            item_desc = "、".join(parts)
+            prose = f"採集し、{item_desc}入手しました。"
+            structured = {"type": "resource_harvested", "items": event.obtained_items}
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_spot_weather_changed(
@@ -247,18 +313,54 @@ class ObservationFormatter(IObservationFormatter):
         structured = {"type": "weather_changed", "old": old_s, "new": new_s}
         return ObservationOutput(prose=prose, structured=structured, observation_category="environment")
 
+    def _interaction_type_to_prose(self, interaction_type: InteractionTypeEnum, data: Dict[str, Any]) -> str:
+        """interaction_type を LLM 向けの 5W1H 観測文に変換する。"""
+        if interaction_type == InteractionTypeEnum.OPEN_CHEST:
+            return "宝箱を開けました。"
+        if interaction_type == InteractionTypeEnum.OPEN_DOOR:
+            is_open = data.get("is_open") if isinstance(data, dict) else None
+            if is_open is True:
+                return "ドアを開きました。"
+            if is_open is False:
+                return "ドアを閉めました。"
+            return "ドアを操作しました。"
+        if interaction_type == InteractionTypeEnum.HARVEST:
+            return "資源を採取しました。"
+        if interaction_type == InteractionTypeEnum.TALK:
+            return "話しかけました。"
+        if interaction_type == InteractionTypeEnum.EXAMINE:
+            return "調べました。"
+        if interaction_type == InteractionTypeEnum.STORE_IN_CHEST:
+            return "チェストに収納しました。"
+        if interaction_type == InteractionTypeEnum.TAKE_FROM_CHEST:
+            return "チェストから取得しました。"
+        if interaction_type == InteractionTypeEnum.MONSTER_FEED:
+            return "餌を与えました。"
+        return "何かに触れました。"
+
     def _format_world_object_interacted(
         self, event: WorldObjectInteractedEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
-        prose = "オブジェクトとインタラクションしました。"
-        structured = {"type": "object_interacted"}
+        prose = self._interaction_type_to_prose(event.interaction_type, event.data or {})
+        structured = {
+            "type": "object_interacted",
+            "interaction_type": event.interaction_type.value,
+        }
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_item_added_to_inventory(
         self, event: ItemAddedToInventoryEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
-        prose = "アイテムを入手しました。"
-        structured = {"type": "item_added_to_inventory"}
+        item_name = self._item_instance_name(event.item_instance_id)
+        agg = None
+        if self._item_repository:
+            agg = self._item_repository.find_by_id(event.item_instance_id)
+        qty = agg.quantity if agg is not None else 1
+        if qty != 1:
+            prose = f"{item_name}を{qty}個入手しました。"
+        else:
+            prose = f"{item_name}を入手しました。"
+        structured = {"type": "item_added_to_inventory", "item_name": item_name}
         return ObservationOutput(
             prose=prose, structured=structured, observation_category="self_only", causes_interrupt=True
         )
@@ -266,27 +368,31 @@ class ObservationFormatter(IObservationFormatter):
     def _format_item_dropped(
         self, event: ItemDroppedFromInventoryEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
-        prose = "アイテムを捨てました。"
-        structured = {"type": "item_dropped"}
+        item_name = self._item_instance_name(event.item_instance_id)
+        prose = f"{item_name}を捨てました。"
+        structured = {"type": "item_dropped", "item_name": item_name}
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_item_equipped(
         self, event: ItemEquippedEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
-        prose = "アイテムを装備しました。"
-        structured = {"type": "item_equipped"}
+        item_name = self._item_instance_name(event.item_instance_id)
+        prose = f"{item_name}を装備しました。"
+        structured = {"type": "item_equipped", "item_name": item_name}
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_item_unequipped(
         self, event: ItemUnequippedEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
-        prose = "アイテムを外しました。"
-        structured = {"type": "item_unequipped"}
+        item_name = self._item_instance_name(event.item_instance_id)
+        prose = f"{item_name}を外しました。"
+        structured = {"type": "item_unequipped", "item_name": item_name}
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_inventory_slot_overflow(
         self, event: InventorySlotOverflowEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
-        prose = "インベントリが満杯でアイテムが溢れました。"
-        structured = {"type": "inventory_overflow"}
+        item_name = self._item_instance_name(event.overflowed_item_instance_id)
+        prose = f"インベントリが満杯で{item_name}が溢れました。"
+        structured = {"type": "inventory_overflow", "item_name": item_name}
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")

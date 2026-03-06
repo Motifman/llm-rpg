@@ -136,6 +136,9 @@ def create_llm_agent_wiring(
     unit_of_work_factory: UnitOfWorkFactory,
     observation_buffer: Optional[IObservationContextBuffer] = None,
     observation_formatter: Optional[IObservationFormatter] = None,
+    spot_repository: Optional[Any] = None,
+    item_spec_repository: Optional[Any] = None,
+    item_repository: Optional[Any] = None,
     llm_client: Optional[ILLMClient] = None,
     game_time_provider: Optional[Any] = None,
     world_time_config_service: Optional[Any] = None,
@@ -155,7 +158,10 @@ def create_llm_agent_wiring(
         player_profile_repository: プロンプト用プロフィール・LLM 判定（ProfileBased）用
         unit_of_work_factory: 観測ハンドラの別トランザクション用
         observation_buffer: 省略時は DefaultObservationContextBuffer を新規作成
-        observation_formatter: 省略時は ObservationFormatter() を新規作成（spot/player_profile は None）
+        observation_formatter: 省略時は ObservationFormatter を新規作成。省略時は spot_repository / player_profile_repository / item_spec_repository / item_repository を渡すと名前解決に利用する。
+        spot_repository: 観測文のスポット名解決用。省略時は「不明なスポット」となる。
+        item_spec_repository: 観測文のアイテム名解決用（ResourceHarvested 等）。省略時は「何かのアイテム」となる。
+        item_repository: 観測文のアイテム名解決用（チェスト・インベントリ系）。省略時は「何かのアイテム」となる。
         llm_client: 省略時は環境変数 LLM_CLIENT に従い作成（stub / litellm）
         game_time_provider: 省略時は観測にゲーム内時刻を付与しない。指定時は world_time_config_service も必要。
         world_time_config_service: 省略時は観測にゲーム内時刻を付与しない。ticks_per_day 等を提供する設定サービス。
@@ -239,7 +245,12 @@ def create_llm_agent_wiring(
         from ai_rpg_world.application.observation.services.observation_formatter import (
             ObservationFormatter,
         )
-        formatter = ObservationFormatter()
+        formatter = ObservationFormatter(
+            spot_repository=spot_repository,
+            player_profile_repository=player_profile_repository,
+            item_spec_repository=item_spec_repository,
+            item_repository=item_repository,
+        )
     observation_handler = ObservationEventHandler(
         resolver=observation_resolver,
         formatter=formatter,

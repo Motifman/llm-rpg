@@ -4,6 +4,20 @@
 
 ---
 
+## 0. 観測文充実（レジストリ登録イベント）実施状況
+
+**実施済み**（`domain_events_observation_spec.md` の §8・§9 に基づく）:
+
+- **ID 非露出**: スポット・プレイヤー・アイテムは名前解決し、未ヒット時は「不明なスポット」「不明なプレイヤー」「何かのアイテム」で表示（数値 ID は出さない）。
+- **5W1H**: `WorldObjectInteractedEvent` を `interaction_type` に応じ「宝箱を開けました」「ドアを開きました」「資源を採取しました」等のプレイヤー視点の文言に変更。
+- **アイテム名**: `ObservationFormatter` に `ItemSpecRepository` / `ItemRepository` を任意で注入可能にし、チェスト・採集・インベントリ系でアイテム名を表示。
+- **ResourceHarvestedEvent**: フォーマットを追加（「採集し、〇〇を N 個入手しました」）。
+- **wiring**: `create_llm_agent_wiring` で `spot_repository` / `item_spec_repository` / `item_repository` を任意指定可能にし、デフォルトの `ObservationFormatter` に渡す。
+
+**今後の作業**（別セッション）: `domain_events_observation_spec.md` の **§10. 今後の作業** に記載（レジストリ未登録イベントの追加、WorldObjectInteracted の対象名表示、LocationExited の「〇〇を出た」、PlayerDowned の「〇〇に倒された」、ブートストラップでのリポジトリ注入など）。
+
+---
+
 ## 1. ObservationRecipientResolver の責務分離 実装計画
 
 ### 現状の課題
