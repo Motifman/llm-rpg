@@ -3,7 +3,12 @@
 import pytest
 from typing import List, Dict
 from unittest.mock import patch
+from unittest.mock import MagicMock
 
+from ai_rpg_world.application.conversation.contracts.dtos import (
+    ConversationNodeDto,
+    ConversationSessionDto,
+)
 from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
 from ai_rpg_world.application.world.contracts.queries import (
     GetPlayerLocationQuery,
@@ -40,6 +45,10 @@ from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.spot import Spot
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
+from ai_rpg_world.domain.world.entity.world_object_component import ChestComponent
+from ai_rpg_world.domain.world.entity.world_object_component import InteractableComponent
+from ai_rpg_world.domain.world.enum.world_enum import InteractionTypeEnum
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, DirectionEnum
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import InMemoryPlayerStatusRepository
@@ -256,6 +265,107 @@ class TestWorldQueryService:
         result = service.get_spot_context_for_player(GetSpotContextForPlayerQuery(player_id=player_id))
 
         assert result is None
+
+    def test_get_player_current_state_includes_extended_runtime_lists(self, setup_service):
+        service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        player_id = 1
+        profile_repo.save(self._create_sample_profile(player_id, "Alice"))
+        status_repo.save(self._create_sample_status(player_id, 1, 0, 0))
+
+        player_obj = self._create_player_object(player_id, 0, 0)
+        npc_obj = WorldObject(
+            object_id=WorldObjectId.create(200),
+            coordinate=Coordinate(0, 1, 0),
+            object_type=ObjectTypeEnum.NPC,
+            component=InteractableComponent(
+                interaction_type=InteractionTypeEnum.TALK,
+                data={"dialogue_tree_id": 1},
+            ),
+        )
+        chest_obj = WorldObject(
+            object_id=WorldObjectId.create(210),
+            coordinate=Coordinate(1, 0, 0),
+            object_type=ObjectTypeEnum.CHEST,
+            component=ChestComponent(is_open=True),
+        )
+        chest_obj.component.add_item(ItemInstanceId.create(500))
+        phys_repo.save(self._create_sample_map(1, objects=[player_obj, npc_obj, chest_obj]))
+
+        inventory_repo = MagicMock()
+        inventory = MagicMock()
+        inventory.max_slots = 1
+        inventory.get_item_instance_id_by_slot.return_value = MagicMock(value=400)
+        inventory_repo.find_by_id.return_value = inventory
+
+        item_repo = MagicMock()
+        inventory_item = MagicMock()
+        inventory_item.item_instance_id.value = 400
+        inventory_item.item_spec.name = "木箱"
+        inventory_item.item_spec.is_placeable_item.return_value = True
+        inventory_item.quantity = 1
+        chest_item = MagicMock()
+        chest_item.item_instance_id.value = 500
+        chest_item.item_spec.name = "ポーション"
+        chest_item.quantity = 2
+        item_repo.find_by_id.side_effect = [inventory_item, chest_item]
+
+        conversation_service = MagicMock()
+        conversation_service.get_current_node.return_value = ConversationSessionDto(
+            player_id=1,
+            npc_id_value=200,
+            dialogue_tree_id_value=1,
+            current_node=ConversationNodeDto(
+                node_id_value=1,
+                text="やあ",
+                choices=(("はい", 2),),
+                is_terminal=False,
+                has_next=False,
+            ),
+        )
+
+        skill_loadout_repo = MagicMock()
+        loadout = MagicMock()
+        loadout.loadout_id.value = 10
+        skill = MagicMock()
+        skill.skill_id.value = 1001
+        skill.name = "火球"
+        skill.mp_cost = 5
+        skill.stamina_cost = 0
+        skill.hp_cost = 0
+        loadout.get_current_deck.return_value = MagicMock(slots=(skill,))
+        loadout.can_use_skill.return_value = True
+        skill_loadout_repo.find_by_owner_id.return_value = loadout
+
+        time_provider = MagicMock()
+        time_provider.get_current_tick.return_value = MagicMock(value=100)
+
+        extended_service = WorldQueryService(
+            player_status_repository=status_repo,
+            player_profile_repository=profile_repo,
+            physical_map_repository=phys_repo,
+            spot_repository=spot_repo,
+            connected_spots_provider=service._connected_spots_provider,
+            player_inventory_repository=inventory_repo,
+            item_repository=item_repo,
+            conversation_command_service=conversation_service,
+            skill_loadout_repository=skill_loadout_repo,
+            game_time_provider=time_provider,
+        )
+
+        result = extended_service.get_player_current_state(
+            GetPlayerCurrentStateQuery(player_id=player_id)
+        )
+
+        assert result is not None
+        assert len(result.inventory_items) == 1
+        assert result.inventory_items[0].display_name == "木箱"
+        assert len(result.chest_items) == 1
+        assert result.chest_items[0].display_name == "ポーション"
+        assert result.active_conversation is not None
+        assert result.active_conversation.choices[0].display_text == "はい"
+        assert len(result.usable_skills) == 1
+        assert result.usable_skills[0].display_name == "火球"
+        assert result.attention_level_options
 
     def test_get_spot_context_includes_connected_spots_when_gateway_exists(self, setup_service):
         """ゲートウェイで接続されたスポットが connected_spot_ids / names に含まれること"""

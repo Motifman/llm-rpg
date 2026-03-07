@@ -110,6 +110,7 @@ class WorldSimulationApplicationService:
         connected_spots_provider: Optional[IConnectedSpotsProvider] = None,
         map_transition_service: Optional[MapTransitionService] = None,
         llm_turn_trigger: Optional[ILlmTurnTrigger] = None,
+        movement_service: Optional[Any] = None,
     ):
         self._time_provider = time_provider
         self._llm_turn_trigger = llm_turn_trigger
@@ -134,6 +135,7 @@ class WorldSimulationApplicationService:
         self._aggro_store = aggro_store
         self._world_time_config_service = world_time_config_service or DefaultWorldTimeConfigService()
         self._monster_action_resolver_factory = monster_action_resolver_factory
+        self._movement_service = movement_service
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def tick(self) -> WorldTick:
@@ -163,7 +165,13 @@ class WorldSimulationApplicationService:
                 # 3.1 天候の同期
                 self._sync_weather_to_map(physical_map, latest_weather)
 
-                # 3.2 プレイヤーIDの収集
+            # 3.1.5 プレイヤーの継続移動を進める
+            if self._movement_service is not None:
+                self._advance_pending_player_movements(current_tick)
+                maps = self._physical_map_repository.find_all()
+
+            # 3.2 プレイヤーIDの収集
+            for physical_map in maps:
                 for actor in physical_map.actors:
                     if actor.player_id:
                         player_map_map[actor.player_id] = physical_map
@@ -268,6 +276,34 @@ class WorldSimulationApplicationService:
         if self._llm_turn_trigger is not None:
             self._llm_turn_trigger.run_scheduled_turns()
         return current_tick
+
+    def _advance_pending_player_movements(self, current_tick: WorldTick) -> None:
+        """経路を保持しているプレイヤーの継続移動を 1 ティック分進める。"""
+        tick_movement = getattr(
+            self._movement_service,
+            "tick_movement_in_current_unit_of_work",
+            None,
+        )
+        if not callable(tick_movement):
+            return
+
+        for status in self._player_status_repository.find_all():
+            if status.goal_spot_id is None or status.current_spot_id is None:
+                continue
+
+            physical_map = self._physical_map_repository.find_by_spot_id(status.current_spot_id)
+            if physical_map is None:
+                continue
+
+            try:
+                actor = physical_map.get_actor(WorldObjectId.create(int(status.player_id)))
+            except ObjectNotFoundException:
+                continue
+
+            if actor.is_busy(current_tick):
+                continue
+
+            tick_movement(int(status.player_id))
 
     def _process_spawn_and_respawn_by_slots(
         self,

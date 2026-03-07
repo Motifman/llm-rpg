@@ -20,6 +20,8 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "INVALID_DESTINATION_KIND": "移動先として使えるラベルを選択してください。",
     "INVALID_TARGET_LABEL": "現在の状況に表示されている対象ラベルから選択してください。",
     "INVALID_TARGET_KIND": "そのラベルはこの操作には使えません。対象の種類を確認してください。",
+    "INTERACTION_INVALID": "相互作用できる距離や状態か確認し、別の対象を選んでください。",
+    "INTERACTION_TARGET_NOT_FOUND": "対象オブジェクトがまだ見えているか確認してください。",
     "UNKNOWN_TOOL": "利用可能なツール一覧から選択してください。",
     "SYSTEM_ERROR": "しばらくしてから再度お試しください。",
 }
