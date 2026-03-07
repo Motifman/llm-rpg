@@ -56,6 +56,9 @@ from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository 
 from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import InMemoryPhysicalMapRepository
 from ai_rpg_world.infrastructure.repository.in_memory_spot_repository import InMemorySpotRepository
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
+    InMemoryGameTimeProvider,
+)
 from ai_rpg_world.application.world.services.gateway_based_connected_spots_provider import (
     GatewayBasedConnectedSpotsProvider,
 )
@@ -525,6 +528,33 @@ class TestWorldQueryService:
         assert result.view_distance == 0
         assert len(result.visible_objects) >= 1
 
+    def test_get_visible_context_excludes_object_behind_opaque_wall(self, setup_service):
+        """遮蔽物の向こうにいる対象は visible_objects に含まれないこと"""
+        service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+
+        tiles = {
+            Coordinate(0, 0, 0): Tile(Coordinate(0, 0, 0), TerrainType.grass()),
+            Coordinate(1, 0, 0): Tile(Coordinate(1, 0, 0), TerrainType.wall()),
+            Coordinate(2, 0, 0): Tile(Coordinate(2, 0, 0), TerrainType.grass()),
+        }
+        hidden_player = self._create_player_object(2, 2, 0)
+        phys_repo.save(
+            PhysicalMapAggregate(
+                spot_id=SpotId(spot_id),
+                tiles=tiles,
+                objects=[self._create_player_object(player_id, 0, 0), hidden_player],
+            )
+        )
+
+        result = service.get_visible_context(GetVisibleContextQuery(player_id=player_id, distance=3))
+
+        assert result is not None
+        assert {obj.player_id_value for obj in result.visible_objects if obj.player_id_value is not None} == {1}
+
     def test_get_visible_context_raises_world_system_error_on_unexpected_exception(self, setup_service):
         """想定外の例外時に WorldSystemErrorException が発生すること"""
         service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
@@ -687,6 +717,54 @@ class TestWorldQueryService:
         assert result.available_moves is not None
         assert result.total_available_moves is not None
 
+    def test_get_player_current_state_delegates_assembly_to_builder(self, setup_service):
+        """現在状態の組み立ては builder に委譲すること"""
+        _service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id, "Alice"))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 3, 4))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id, 3, 4)]))
+        builder = MagicMock()
+        expected = PlayerCurrentStateDto(
+            player_id=1,
+            player_name="Alice",
+            current_spot_id=1,
+            current_spot_name="Town",
+            current_spot_description="A town",
+            x=3,
+            y=4,
+            z=0,
+            area_id=None,
+            area_name=None,
+            current_player_count=1,
+            current_player_ids={1},
+            connected_spot_ids=set(),
+            connected_spot_names=set(),
+            weather_type="clear",
+            weather_intensity=0.0,
+            current_terrain_type="grass",
+            visible_objects=[],
+            view_distance=5,
+            available_moves=[],
+            total_available_moves=0,
+            attention_level=AttentionLevel.FULL,
+        )
+        builder.build_player_current_state.return_value = expected
+        service = WorldQueryService(
+            player_status_repository=status_repo,
+            player_profile_repository=profile_repo,
+            physical_map_repository=phys_repo,
+            spot_repository=spot_repo,
+            connected_spots_provider=GatewayBasedConnectedSpotsProvider(phys_repo),
+            player_current_state_builder=builder,
+        )
+
+        result = service.get_player_current_state(GetPlayerCurrentStateQuery(player_id=player_id))
+
+        assert result is expected
+        builder.build_player_current_state.assert_called_once()
+
     def test_get_player_current_state_returns_none_when_not_placed(self, setup_service):
         """未配置の場合は None を返すこと"""
         service, status_repo, profile_repo, _, spot_repo = setup_service
@@ -741,6 +819,69 @@ class TestWorldQueryService:
         assert result is not None
         assert result.available_moves is None
         assert result.total_available_moves is None
+
+    def test_get_player_current_state_marks_far_targets_as_not_immediately_executable(self, setup_service):
+        """視認できても隣接していない対象には available_interactions が付かないこと"""
+        service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        far_npc = WorldObject(
+            object_id=WorldObjectId(200),
+            coordinate=Coordinate(2, 0, 0),
+            object_type=ObjectTypeEnum.NPC,
+            is_blocking=False,
+            component=InteractableComponent(InteractionTypeEnum.TALK),
+        )
+        phys_repo.save(
+            self._create_sample_map(
+                spot_id,
+                objects=[self._create_player_object(player_id, 0, 0), far_npc],
+            )
+        )
+
+        result = service.get_player_current_state(GetPlayerCurrentStateQuery(player_id=player_id))
+
+        assert result is not None
+        npc = next(obj for obj in result.visible_objects if obj.object_id == 200)
+        assert npc.available_interactions == []
+
+    def test_get_player_current_state_uses_actor_busy_state_and_path_state(self):
+        """is_busy / busy_until_tick / has_active_path がアクター状態と経路状態から導出されること"""
+        data_store = InMemoryDataStore()
+        data_store.clear_all()
+        status_repo = InMemoryPlayerStatusRepository(data_store)
+        profile_repo = InMemoryPlayerProfileRepository(data_store)
+        phys_repo = InMemoryPhysicalMapRepository(data_store)
+        spot_repo = InMemorySpotRepository(data_store)
+        spot_repo.save(Spot(SpotId(1), "Town", ""))
+        game_time_provider = InMemoryGameTimeProvider(initial_tick=10)
+        service = WorldQueryService(
+            player_status_repository=status_repo,
+            player_profile_repository=profile_repo,
+            physical_map_repository=phys_repo,
+            spot_repository=spot_repo,
+            connected_spots_provider=GatewayBasedConnectedSpotsProvider(phys_repo),
+            game_time_provider=game_time_provider,
+        )
+        profile_repo.save(self._create_sample_profile(1))
+        status = self._create_sample_status(1, 1, 0, 0)
+        status.set_destination(
+            Coordinate(2, 0, 0),
+            [Coordinate(0, 0, 0), Coordinate(1, 0, 0), Coordinate(2, 0, 0)],
+        )
+        status_repo.save(status)
+        actor = self._create_player_object(1, 0, 0)
+        actor.set_busy(game_time_provider.get_current_tick().add_duration(5))
+        phys_repo.save(self._create_sample_map(1, objects=[actor]))
+
+        result = service.get_player_current_state(GetPlayerCurrentStateQuery(player_id=1))
+
+        assert result is not None
+        assert result.is_busy is True
+        assert result.busy_until_tick == 15
+        assert result.has_active_path is True
 
     def test_get_player_current_state_raises_player_not_found_when_profile_missing(self, setup_service):
         """プロフィールが存在しない場合に PlayerNotFoundException が発生すること"""

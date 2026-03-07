@@ -106,14 +106,14 @@ class ObservationEventHandler(EventHandler[Any]):
             return AttentionLevel.FULL
         return status.attention_level
 
-    def _get_game_time_label(self) -> Optional[str]:
-        """現在のゲーム内時刻を人間向けラベルで返す。未設定時は None。"""
+    def _get_game_time_label(self, occurred_tick: Optional[Any] = None) -> Optional[str]:
+        """イベント発生時刻に対応するゲーム内時刻ラベルを返す。未設定時は None。"""
         if self._game_time_provider is None or self._world_time_config is None:
             return None
         from ai_rpg_world.domain.world.value_object.game_date_time import (
             game_date_time_from_tick,
         )
-        tick = self._game_time_provider.get_current_tick()
+        tick = occurred_tick or self._game_time_provider.get_current_tick()
         ticks_per_day = self._world_time_config.get_ticks_per_day()
         days_per_month = self._world_time_config.get_days_per_month()
         months_per_year = self._world_time_config.get_months_per_year()
@@ -129,7 +129,7 @@ class ObservationEventHandler(EventHandler[Any]):
             from datetime import datetime
             occurred_at = datetime.now()
 
-        game_time_label = self._get_game_time_label()
+        game_time_label = self._get_game_time_label(getattr(event, "occurred_tick", None))
 
         for player_id in recipients:
             attention_level = self._get_attention_level(player_id)
@@ -142,6 +142,8 @@ class ObservationEventHandler(EventHandler[Any]):
                 )
                 self._buffer.append(player_id, entry)
                 if (
+                    output.causes_interrupt
+                    and
                     self._turn_trigger is not None
                     and self._llm_player_resolver is not None
                     and self._llm_player_resolver.is_llm_controlled(player_id)

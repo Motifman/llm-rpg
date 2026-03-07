@@ -23,7 +23,6 @@ from ai_rpg_world.domain.player.value_object.gold import Gold
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
-from ai_rpg_world.domain.world.event.map_events import GatewayTriggeredEvent
 from ai_rpg_world.domain.world.service.world_time_config_service import (
     DefaultWorldTimeConfigService,
 )
@@ -32,7 +31,11 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.common.exception import DomainException
-from ai_rpg_world.domain.player.event.status_events import PlayerGoldEarnedEvent
+from ai_rpg_world.domain.player.event.status_events import (
+    PlayerDownedEvent,
+    PlayerGoldEarnedEvent,
+    PlayerLocationChangedEvent,
+)
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
     InMemoryPlayerStatusRepository,
@@ -111,26 +114,24 @@ class TestObservationEventHandler:
             unit_of_work_factory=unit_of_work_factory,
         )
 
-    def test_handle_gateway_triggered_appends_observation_to_buffer(
+    def test_handle_player_location_changed_appends_observation_to_buffer(
         self, handler, buffer, status_repo
     ):
-        """GatewayTriggeredEvent 処理で本人に観測が蓄積される"""
+        """PlayerLocationChangedEvent 処理で本人に観測が蓄積される"""
         status_repo.save(_make_status(1, spot_id=1))
-        event = GatewayTriggeredEvent.create(
-            aggregate_id=GatewayId(1),
-            aggregate_type="Gateway",
-            gateway_id=GatewayId(1),
-            spot_id=SpotId(1),
-            object_id=WorldObjectId(1),
-            target_spot_id=SpotId(2),
-            landing_coordinate=Coordinate(0, 0, 0),
-            player_id_value=1,
+        event = PlayerLocationChangedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            old_spot_id=SpotId(1),
+            old_coordinate=Coordinate(0, 0, 0),
+            new_spot_id=SpotId(2),
+            new_coordinate=Coordinate(0, 0, 0),
         )
         handler.handle(event)
         entries = buffer.get_observations(PlayerId(1))
         assert len(entries) == 1
-        assert "到着" in entries[0].output.prose
-        assert entries[0].output.structured.get("type") == "gateway_arrival"
+        assert "現在地" in entries[0].output.prose
+        assert entries[0].output.structured.get("type") == "current_location"
 
     def test_handle_when_no_game_time_provider_entry_has_no_game_time_label(
         self, handler, buffer
@@ -449,7 +450,7 @@ class TestObservationEventHandlerLlmTurnScheduling:
         turn_trigger,
         llm_player_resolver_include_one,
     ):
-        """配信先が LLM プレイヤーのとき観測を append したあと schedule_turn が呼ばれる"""
+        """割り込み観測を受けた LLM プレイヤーでは schedule_turn が呼ばれる"""
         handler = ObservationEventHandler(
             resolver=resolver,
             formatter=formatter,
@@ -458,11 +459,9 @@ class TestObservationEventHandlerLlmTurnScheduling:
             turn_trigger=turn_trigger,
             llm_player_resolver=llm_player_resolver_include_one,
         )
-        event = PlayerGoldEarnedEvent.create(
+        event = PlayerDownedEvent.create(
             aggregate_id=PlayerId(1),
             aggregate_type="PlayerStatusAggregate",
-            earned_amount=100,
-            total_gold=1100,
         )
         handler.handle(event)
 
@@ -478,7 +477,7 @@ class TestObservationEventHandlerLlmTurnScheduling:
         turn_trigger,
         llm_player_resolver_include_two_only,
     ):
-        """配信先が LLM プレイヤーでないとき schedule_turn は呼ばれない"""
+        """割り込み観測でも LLM プレイヤーでなければ schedule_turn は呼ばれない"""
         handler = ObservationEventHandler(
             resolver=resolver,
             formatter=formatter,
@@ -487,11 +486,9 @@ class TestObservationEventHandlerLlmTurnScheduling:
             turn_trigger=turn_trigger,
             llm_player_resolver=llm_player_resolver_include_two_only,
         )
-        event = PlayerGoldEarnedEvent.create(
+        event = PlayerDownedEvent.create(
             aggregate_id=PlayerId(1),
             aggregate_type="PlayerStatusAggregate",
-            earned_amount=100,
-            total_gold=1100,
         )
         handler.handle(event)
 
@@ -539,17 +536,16 @@ class TestObservationEventHandlerLlmTurnScheduling:
         assert len(buffer.get_observations(PlayerId(1))) == 1
         turn_trigger.schedule_turn.assert_not_called()
 
-    def test_handle_when_schedule_turn_raises_propagates_as_system_error_exception(
+    def test_handle_when_non_interrupting_event_does_not_schedule_turn(
         self,
         resolver,
         formatter,
         buffer,
         unit_of_work_factory,
+        turn_trigger,
         llm_player_resolver_include_one,
     ):
-        """LLM プレイヤーで観測追加後に schedule_turn が例外を投げた場合、SystemErrorException でラップされて伝播する"""
-        turn_trigger = MagicMock()
-        turn_trigger.schedule_turn.side_effect = RuntimeError("schedule_turn failed")
+        """LLM プレイヤーでも causes_interrupt=False の観測では schedule_turn しない"""
         handler = ObservationEventHandler(
             resolver=resolver,
             formatter=formatter,
@@ -563,6 +559,34 @@ class TestObservationEventHandlerLlmTurnScheduling:
             aggregate_type="PlayerStatusAggregate",
             earned_amount=100,
             total_gold=1100,
+        )
+        handler.handle(event)
+
+        assert len(buffer.get_observations(PlayerId(1))) == 1
+        turn_trigger.schedule_turn.assert_not_called()
+
+    def test_handle_when_schedule_turn_raises_propagates_as_system_error_exception(
+        self,
+        resolver,
+        formatter,
+        buffer,
+        unit_of_work_factory,
+        llm_player_resolver_include_one,
+    ):
+        """割り込み観測で schedule_turn が例外を投げた場合、SystemErrorException でラップされて伝播する"""
+        turn_trigger = MagicMock()
+        turn_trigger.schedule_turn.side_effect = RuntimeError("schedule_turn failed")
+        handler = ObservationEventHandler(
+            resolver=resolver,
+            formatter=formatter,
+            buffer=buffer,
+            unit_of_work_factory=unit_of_work_factory,
+            turn_trigger=turn_trigger,
+            llm_player_resolver=llm_player_resolver_include_one,
+        )
+        event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
         )
 
         with pytest.raises(SystemErrorException, match="Observation.*failed"):
@@ -581,7 +605,7 @@ class TestObservationEventHandlerRegistry:
         )
         from ai_rpg_world.domain.combat.event.combat_events import HitBoxCreatedEvent
         from ai_rpg_world.domain.skill.event.skill_events import SkillCooldownStartedEvent
-        from ai_rpg_world.domain.world.event.map_events import GatewayTriggeredEvent
+        from ai_rpg_world.domain.player.event.status_events import PlayerLocationChangedEvent
 
         handler = MagicMock()
         registry = ObservationEventHandlerRegistry(observation_handler=handler)
@@ -592,7 +616,7 @@ class TestObservationEventHandlerRegistry:
         calls = event_publisher.register_handler.call_args_list
         assert len(calls) >= 10
         event_types_registered = {c[0][0] for c in calls}
-        assert GatewayTriggeredEvent in event_types_registered
+        assert PlayerLocationChangedEvent in event_types_registered
         assert HitBoxCreatedEvent not in event_types_registered
         assert SkillCooldownStartedEvent not in event_types_registered
         for call in calls:

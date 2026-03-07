@@ -9,7 +9,6 @@ from ai_rpg_world.application.observation.services.observation_formatter import 
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.world.event.map_events import (
-    GatewayTriggeredEvent,
     ItemStoredInChestEvent,
     ItemTakenFromChestEvent,
     ResourceHarvestedEvent,
@@ -27,6 +26,7 @@ from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.player.event.status_events import (
     PlayerDownedEvent,
+    PlayerLocationChangedEvent,
     PlayerLevelUpEvent,
     PlayerGoldEarnedEvent,
     PlayerGoldPaidEvent,
@@ -124,53 +124,47 @@ class TestObservationFormatter:
         """リポジトリなし（フォールバック名のみ）"""
         return ObservationFormatter(spot_repository=None, player_profile_repository=None)
 
-    def test_format_gateway_triggered_self_returns_prose_and_structured(self, formatter):
-        """GatewayTriggeredEvent 本人向け: プローズと構造化の両方"""
-        event = GatewayTriggeredEvent.create(
-            aggregate_id=GatewayId(1),
-            aggregate_type="Gateway",
-            gateway_id=GatewayId(1),
-            spot_id=SpotId(1),
-            object_id=WorldObjectId(1),
-            target_spot_id=SpotId(2),
-            landing_coordinate=Coordinate(0, 0, 0),
-            player_id_value=1,
+    def test_format_player_location_changed_self_returns_prose_and_structured(self, formatter):
+        """PlayerLocationChangedEvent 本人向け: 現在地更新のプローズと構造化"""
+        event = PlayerLocationChangedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            old_spot_id=SpotId(1),
+            old_coordinate=Coordinate(0, 0, 0),
+            new_spot_id=SpotId(2),
+            new_coordinate=Coordinate(1, 1, 0),
         )
         out = formatter.format(event, PlayerId(1))
         assert out is not None
-        assert "到着" in out.prose
-        assert out.structured.get("type") == "gateway_arrival"
+        assert "現在地" in out.prose
+        assert out.structured.get("type") == "current_location"
         assert "spot_name" in out.structured
 
-    def test_format_gateway_triggered_other_returns_entered_message(self, formatter):
-        """GatewayTriggeredEvent 他プレイヤー向け: 誰かがやってきた"""
-        event = GatewayTriggeredEvent.create(
-            aggregate_id=GatewayId(1),
-            aggregate_type="Gateway",
-            gateway_id=GatewayId(1),
-            spot_id=SpotId(1),
-            object_id=WorldObjectId(1),
-            target_spot_id=SpotId(2),
-            landing_coordinate=Coordinate(0, 0, 0),
-            player_id_value=1,
+    def test_format_player_location_changed_other_returns_entered_message(self, formatter):
+        """PlayerLocationChangedEvent 他プレイヤー向け: 誰かがやってきた"""
+        event = PlayerLocationChangedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            old_spot_id=SpotId(1),
+            old_coordinate=Coordinate(0, 0, 0),
+            new_spot_id=SpotId(2),
+            new_coordinate=Coordinate(1, 1, 0),
         )
         out = formatter.format(event, PlayerId(2))
         assert out is not None
         assert "やってきました" in out.prose
         assert out.structured.get("type") == "player_entered_spot"
-        assert out.causes_interrupt is True
+        assert out.causes_interrupt is False
 
-    def test_format_gateway_triggered_self_does_not_cause_interrupt(self, formatter):
-        """GatewayTriggeredEvent 本人向けは causes_interrupt=False（到着は割り込み不要）"""
-        event = GatewayTriggeredEvent.create(
-            aggregate_id=GatewayId(1),
-            aggregate_type="Gateway",
-            gateway_id=GatewayId(1),
-            spot_id=SpotId(1),
-            object_id=WorldObjectId(1),
-            target_spot_id=SpotId(2),
-            landing_coordinate=Coordinate(0, 0, 0),
-            player_id_value=1,
+    def test_format_player_location_changed_self_does_not_cause_interrupt(self, formatter):
+        """PlayerLocationChangedEvent 本人向けは causes_interrupt=False"""
+        event = PlayerLocationChangedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            old_spot_id=SpotId(1),
+            old_coordinate=Coordinate(0, 0, 0),
+            new_spot_id=SpotId(2),
+            new_coordinate=Coordinate(1, 1, 0),
         )
         out = formatter.format(event, PlayerId(1))
         assert out is not None
@@ -467,15 +461,13 @@ class TestObservationFormatter:
 
     def test_format_spot_name_returns_fallback_when_repository_none(self, formatter):
         """spot_repository が None のとき、スポット名は「不明なスポット」になる（ID非露出）"""
-        event = GatewayTriggeredEvent.create(
-            aggregate_id=GatewayId(1),
-            aggregate_type="Gateway",
-            gateway_id=GatewayId(1),
-            spot_id=SpotId(1),
-            object_id=WorldObjectId(1),
-            target_spot_id=SpotId(2),
-            landing_coordinate=Coordinate(0, 0, 0),
-            player_id_value=1,
+        event = PlayerLocationChangedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            old_spot_id=SpotId(1),
+            old_coordinate=Coordinate(0, 0, 0),
+            new_spot_id=SpotId(2),
+            new_coordinate=Coordinate(1, 1, 0),
         )
         out = formatter.format(event, PlayerId(1))
         assert out is not None
@@ -493,15 +485,13 @@ class TestObservationFormatter:
             spot_repository=spot_repo,
             player_profile_repository=None,
         )
-        event = GatewayTriggeredEvent.create(
-            aggregate_id=GatewayId(1),
-            aggregate_type="Gateway",
-            gateway_id=GatewayId(1),
-            spot_id=SpotId(1),
-            object_id=WorldObjectId(1),
-            target_spot_id=SpotId(2),
-            landing_coordinate=Coordinate(0, 0, 0),
-            player_id_value=1,
+        event = PlayerLocationChangedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            old_spot_id=SpotId(1),
+            old_coordinate=Coordinate(0, 0, 0),
+            new_spot_id=SpotId(2),
+            new_coordinate=Coordinate(1, 1, 0),
         )
         out = formatter.format(event, PlayerId(1))
         assert out is not None
@@ -516,15 +506,13 @@ class TestObservationFormatter:
             spot_repository=spot_repo,
             player_profile_repository=None,
         )
-        event = GatewayTriggeredEvent.create(
-            aggregate_id=GatewayId(1),
-            aggregate_type="Gateway",
-            gateway_id=GatewayId(1),
-            spot_id=SpotId(1),
-            object_id=WorldObjectId(1),
-            target_spot_id=SpotId(2),
-            landing_coordinate=Coordinate(0, 0, 0),
-            player_id_value=1,
+        event = PlayerLocationChangedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            old_spot_id=SpotId(1),
+            old_coordinate=Coordinate(0, 0, 0),
+            new_spot_id=SpotId(2),
+            new_coordinate=Coordinate(1, 1, 0),
         )
         out = formatter.format(event, PlayerId(1))
         assert out is not None
@@ -532,15 +520,13 @@ class TestObservationFormatter:
 
     def test_format_player_name_returns_fallback_when_repository_none(self, formatter):
         """player_profile_repository が None のとき、他プレイヤー名は「不明なプレイヤー」になる（ID非露出）"""
-        event = GatewayTriggeredEvent.create(
-            aggregate_id=GatewayId(1),
-            aggregate_type="Gateway",
-            gateway_id=GatewayId(1),
-            spot_id=SpotId(1),
-            object_id=WorldObjectId(1),
-            target_spot_id=SpotId(2),
-            landing_coordinate=Coordinate(0, 0, 0),
-            player_id_value=1,
+        event = PlayerLocationChangedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            old_spot_id=SpotId(1),
+            old_coordinate=Coordinate(0, 0, 0),
+            new_spot_id=SpotId(2),
+            new_coordinate=Coordinate(1, 1, 0),
         )
         out = formatter.format(event, PlayerId(2))
         assert out is not None
@@ -558,15 +544,13 @@ class TestObservationFormatter:
             spot_repository=None,
             player_profile_repository=profile_repo,
         )
-        event = GatewayTriggeredEvent.create(
-            aggregate_id=GatewayId(1),
-            aggregate_type="Gateway",
-            gateway_id=GatewayId(1),
-            spot_id=SpotId(1),
-            object_id=WorldObjectId(1),
-            target_spot_id=SpotId(2),
-            landing_coordinate=Coordinate(0, 0, 0),
-            player_id_value=1,
+        event = PlayerLocationChangedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            old_spot_id=SpotId(1),
+            old_coordinate=Coordinate(0, 0, 0),
+            new_spot_id=SpotId(2),
+            new_coordinate=Coordinate(1, 1, 0),
         )
         out = formatter.format(event, PlayerId(2))
         assert out is not None
@@ -581,15 +565,13 @@ class TestObservationFormatter:
             spot_repository=None,
             player_profile_repository=profile_repo,
         )
-        event = GatewayTriggeredEvent.create(
-            aggregate_id=GatewayId(1),
-            aggregate_type="Gateway",
-            gateway_id=GatewayId(1),
-            spot_id=SpotId(1),
-            object_id=WorldObjectId(1),
-            target_spot_id=SpotId(2),
-            landing_coordinate=Coordinate(0, 0, 0),
-            player_id_value=1,
+        event = PlayerLocationChangedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            old_spot_id=SpotId(1),
+            old_coordinate=Coordinate(0, 0, 0),
+            new_spot_id=SpotId(2),
+            new_coordinate=Coordinate(1, 1, 0),
         )
         out = formatter.format(event, PlayerId(2))
         assert out is not None
@@ -613,15 +595,13 @@ class TestObservationFormatter:
         assert out_none is not None and out_none.observation_category == "self_only"
 
         # 他者向け（social）
-        event_gateway = GatewayTriggeredEvent.create(
-            aggregate_id=GatewayId(1),
-            aggregate_type="Gateway",
-            gateway_id=GatewayId(1),
-            spot_id=SpotId(1),
-            object_id=WorldObjectId(1),
-            target_spot_id=SpotId(2),
-            landing_coordinate=Coordinate(0, 0, 0),
-            player_id_value=1,
+        event_gateway = PlayerLocationChangedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            old_spot_id=SpotId(1),
+            old_coordinate=Coordinate(0, 0, 0),
+            new_spot_id=SpotId(2),
+            new_coordinate=Coordinate(1, 1, 0),
         )
         out_social = formatter.format(event_gateway, PlayerId(2), attention_level=AttentionLevel.FULL)
         assert out_social is not None and out_social.observation_category == "social"
@@ -640,15 +620,13 @@ class TestObservationFormatter:
     def test_format_with_filter_social_skips_social_category(self, formatter):
         """FILTER_SOCIAL のとき social カテゴリは None（スキップ）、self_only は返る（正常系）"""
         # 他者向け（social）→ スキップ
-        event_gateway = GatewayTriggeredEvent.create(
-            aggregate_id=GatewayId(1),
-            aggregate_type="Gateway",
-            gateway_id=GatewayId(1),
-            spot_id=SpotId(1),
-            object_id=WorldObjectId(1),
-            target_spot_id=SpotId(2),
-            landing_coordinate=Coordinate(0, 0, 0),
-            player_id_value=1,
+        event_gateway = PlayerLocationChangedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            old_spot_id=SpotId(1),
+            old_coordinate=Coordinate(0, 0, 0),
+            new_spot_id=SpotId(2),
+            new_coordinate=Coordinate(1, 1, 0),
         )
         out = formatter.format(event_gateway, PlayerId(2), attention_level=AttentionLevel.FILTER_SOCIAL)
         assert out is None
@@ -693,15 +671,13 @@ class TestObservationFormatter:
         assert out_self.observation_category == "self_only"
 
         # social → None
-        event_gateway = GatewayTriggeredEvent.create(
-            aggregate_id=GatewayId(1),
-            aggregate_type="Gateway",
-            gateway_id=GatewayId(1),
-            spot_id=SpotId(1),
-            object_id=WorldObjectId(1),
-            target_spot_id=SpotId(2),
-            landing_coordinate=Coordinate(0, 0, 0),
-            player_id_value=1,
+        event_gateway = PlayerLocationChangedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            old_spot_id=SpotId(1),
+            old_coordinate=Coordinate(0, 0, 0),
+            new_spot_id=SpotId(2),
+            new_coordinate=Coordinate(1, 1, 0),
         )
         out_social = formatter.format(event_gateway, PlayerId(2), attention_level=AttentionLevel.IGNORE)
         assert out_social is None

@@ -71,4 +71,14 @@ class DefaultCurrentStateFormatter(ICurrentStateFormatter):
         # 注意レベル
         lines.append(f"注意レベル: {dto.attention_level.value}")
 
+        if dto.is_busy:
+            suffix = (
+                f" (busy_until={dto.busy_until_tick})"
+                if dto.busy_until_tick is not None
+                else ""
+            )
+            lines.append(f"行動状態: 実行中{suffix}")
+        elif dto.has_active_path:
+            lines.append("行動状態: 移動計画あり")
+
         return "\n".join(lines)

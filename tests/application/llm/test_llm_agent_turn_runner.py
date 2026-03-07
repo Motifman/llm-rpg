@@ -91,7 +91,11 @@ class TestLlmAgentTurnRunnerRunTurn:
     def test_run_turn_normal_no_observations(self, runner, world_query_service, movement_service, action_result_store):
         """観測が無い場合は割り込みせずオーケストレータのみ実行"""
         player_id = PlayerId(1)
-        world_query_service.get_player_current_state.return_value = MagicMock(spec=PlayerCurrentStateDto, is_busy=False)
+        world_query_service.get_player_current_state.return_value = MagicMock(
+            spec=PlayerCurrentStateDto,
+            is_busy=False,
+            has_active_path=False,
+        )
 
         result = runner.run_turn(player_id)
 
@@ -109,7 +113,11 @@ class TestLlmAgentTurnRunnerRunTurn:
             output=ObservationOutput(prose="戦闘不能になりました。", structured={"type": "player_downed"}, causes_interrupt=True),
         )
         observation_buffer.append(player_id, entry)
-        world_query_service.get_player_current_state.return_value = MagicMock(spec=PlayerCurrentStateDto, is_busy=False)
+        world_query_service.get_player_current_state.return_value = MagicMock(
+            spec=PlayerCurrentStateDto,
+            is_busy=False,
+            has_active_path=False,
+        )
 
         result = runner.run_turn(player_id)
 
@@ -154,6 +162,24 @@ class TestLlmAgentTurnRunnerRunTurn:
         assert len(recent) == 2
         assert any("中断" in e.action_summary for e in recent)
         assert any("以下の観測により中断" in e.result_summary for e in recent)
+
+    def test_run_turn_with_interrupt_and_active_path_calls_cancel_and_appends(self, runner, observation_buffer, world_query_service, movement_service, action_result_store):
+        """is_busy が False でも has_active_path=True なら割り込み時に cancel_movement する"""
+        player_id = PlayerId(1)
+        entry = ObservationEntry(
+            occurred_at=datetime.now(),
+            output=ObservationOutput(prose="戦闘不能になりました。", structured={"type": "player_downed"}, causes_interrupt=True),
+        )
+        observation_buffer.append(player_id, entry)
+        world_query_service.get_player_current_state.return_value = MagicMock(
+            spec=PlayerCurrentStateDto,
+            is_busy=False,
+            has_active_path=True,
+        )
+
+        runner.run_turn(player_id)
+
+        movement_service.cancel_movement.assert_called_once()
 
     def test_run_turn_player_id_not_player_id_raises(self, runner):
         """player_id が PlayerId でないとき TypeError"""

@@ -6,6 +6,12 @@ from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResol
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 
 
+def _has_visible_action(obj, flag_name: str, legacy_name: str) -> bool:
+    if getattr(obj, flag_name, False):
+        return True
+    return legacy_name in getattr(obj, "available_interactions", [])
+
+
 class NoOpAvailabilityResolver(IAvailabilityResolver):
     """何もしないツールは常に利用可能。"""
 
@@ -25,7 +31,7 @@ class SetDestinationAvailabilityResolver(IAvailabilityResolver):
     ) -> bool:
         if context is None:
             return False
-        if context.is_busy:
+        if context.is_busy or context.has_active_path:
             return False
         if context.current_spot_id is None:
             return False
@@ -69,7 +75,7 @@ class InteractAvailabilityResolver(IAvailabilityResolver):
         if context is None:
             return False
         return any(
-            "interact" in obj.available_interactions
+            _has_visible_action(obj, "can_interact", "interact")
             for obj in context.visible_objects
             if not obj.is_self
         )
@@ -85,7 +91,7 @@ class HarvestStartAvailabilityResolver(IAvailabilityResolver):
         if context is None:
             return False
         return any(
-            "harvest" in obj.available_interactions
+            _has_visible_action(obj, "can_harvest", "harvest")
             for obj in context.visible_objects
             if not obj.is_self
         )
@@ -143,7 +149,7 @@ class ChestStoreAvailabilityResolver(IAvailabilityResolver):
         if context is None:
             return False
         has_open_chest = any(
-            "store_in_chest" in obj.available_interactions
+            _has_visible_action(obj, "can_store_in_chest", "store_in_chest")
             for obj in context.visible_objects
             if not obj.is_self
         )

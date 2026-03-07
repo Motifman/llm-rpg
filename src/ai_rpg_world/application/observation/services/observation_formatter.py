@@ -74,7 +74,6 @@ from ai_rpg_world.domain.skill.event.skill_events import (
     SkillUsedEvent,
 )
 from ai_rpg_world.domain.world.event.map_events import (
-    GatewayTriggeredEvent,
     LocationEnteredEvent,
     LocationExitedEvent,
     ItemTakenFromChestEvent,
@@ -276,8 +275,6 @@ class ObservationFormatter(IObservationFormatter):
             output = self._format_skill_evolution_rejected(event, recipient_player_id)
         elif isinstance(event, MonsterCreatedEvent):
             output = self._format_monster_created(event, recipient_player_id)
-        elif isinstance(event, GatewayTriggeredEvent):
-            output = self._format_gateway_triggered(event, recipient_player_id)
         elif isinstance(event, LocationEnteredEvent):
             output = self._format_location_entered(event, recipient_player_id)
         elif isinstance(event, LocationExitedEvent):
@@ -364,22 +361,6 @@ class ObservationFormatter(IObservationFormatter):
         if agg is not None:
             return agg.item_spec.name
         return FALLBACK_ITEM_LABEL
-
-    def _format_gateway_triggered(
-        self, event: GatewayTriggeredEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
-        target_name = self._spot_name(event.target_spot_id)
-        is_self = event.player_id_value is not None and event.player_id_value == recipient_id.value
-        if is_self:
-            prose = f"{target_name}に到着しました。"
-            structured = {"type": "gateway_arrival", "spot_name": target_name, "role": "self"}
-            return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
-        actor_label = FALLBACK_PLAYER_LABEL if event.player_id_value is None else self._player_name(PlayerId(event.player_id_value))
-        prose = f"{actor_label}がこのスポットにやってきました。"
-        structured = {"type": "player_entered_spot", "actor": actor_label, "spot_name": target_name}
-        return ObservationOutput(
-            prose=prose, structured=structured, observation_category="social", causes_interrupt=True
-        )
 
     def _format_location_entered(
         self, event: LocationEnteredEvent, recipient_id: PlayerId

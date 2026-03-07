@@ -170,13 +170,7 @@ class BehaviorService:
             return True
         if actor.coordinate == target_coord:
             return True
-        dir_vectors = {
-            DirectionEnum.NORTH: (0, -1),
-            DirectionEnum.SOUTH: (0, 1),
-            DirectionEnum.EAST: (1, 0),
-            DirectionEnum.WEST: (-1, 0),
-        }
-        actor_dir = dir_vectors.get(component.direction)
+        actor_dir = component.direction.to_2d_vector()
         if actor_dir is None:
             return True
         target_vec = (

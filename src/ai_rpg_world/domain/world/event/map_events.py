@@ -145,6 +145,7 @@ class GatewayTriggeredEvent(BaseDomainEvent[GatewayId, str]):
     target_spot_id: SpotId
     landing_coordinate: Coordinate
     player_id_value: Optional[int] = None
+    occurred_tick: Optional[WorldTick] = None
 
 
 @dataclass(frozen=True)

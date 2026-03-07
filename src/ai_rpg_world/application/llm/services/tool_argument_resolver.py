@@ -20,6 +20,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_WHISPER,
 )
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 
 
 class ToolArgumentResolutionException(Exception):
@@ -372,27 +373,19 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         target,
         runtime_context: ToolRuntimeContextDto,
     ) -> str:
-        if target.direction is None:
+        if target.relative_dx is None or target.relative_dy is None:
             raise ToolArgumentResolutionException(
                 f"対象の方向を特定できません: {target.label}",
                 "INVALID_TARGET_KIND",
             )
-        direction_map = {
-            "北": "NORTH",
-            "南": "SOUTH",
-            "東": "EAST",
-            "西": "WEST",
-            "北東": "EAST",
-            "南東": "EAST",
-            "北西": "WEST",
-            "南西": "WEST",
-            "上": "UP",
-            "下": "DOWN",
-        }
-        resolved = direction_map.get(target.direction)
-        if resolved is None:
+        if target.relative_dx == 0 and target.relative_dy == 0:
             raise ToolArgumentResolutionException(
-                f"対象の方向を特定できません: {target.direction}",
+                f"対象の方向を特定できません: {target.label}",
                 "INVALID_TARGET_KIND",
             )
-        return resolved
+        resolved = DirectionEnum.from_delta(
+            target.relative_dx,
+            target.relative_dy,
+            target.relative_dz or 0,
+        )
+        return resolved.value

@@ -226,7 +226,12 @@ class PlayerStatusAggregate(AggregateRoot):
             
         return next_coord
 
-    def update_location(self, spot_id: SpotId, coordinate: Coordinate) -> None:
+    def update_location(
+        self,
+        spot_id: SpotId,
+        coordinate: Coordinate,
+        current_tick: Optional[WorldTick] = None,
+    ) -> None:
         """現在地を更新する"""
         if self._current_spot_id == spot_id and self._current_coordinate == coordinate:
             return
@@ -243,6 +248,7 @@ class PlayerStatusAggregate(AggregateRoot):
             old_coordinate=old_coordinate,
             new_spot_id=spot_id,
             new_coordinate=coordinate,
+            occurred_tick=current_tick,
         ))
 
     def can_act(self) -> bool:

@@ -51,6 +51,10 @@ class VisibleObjectDto:
     is_self: bool = False
     interaction_type: Optional[str] = None
     available_interactions: List[str] = field(default_factory=list)
+    can_interact: bool = False
+    can_harvest: bool = False
+    can_store_in_chest: bool = False
+    can_take_from_chest: bool = False
 
 
 @dataclass
@@ -209,6 +213,8 @@ class PlayerCurrentStateDto:
     attention_level: AttentionLevel
     # 複数ティックの行動中か（経路設定済みの移動中など）。割り込み判定に利用。
     is_busy: bool = False
+    busy_until_tick: Optional[int] = None
+    has_active_path: bool = False
     # sibling-list UI context
     inventory_items: List[InventoryItemDto] = field(default_factory=list)
     chest_items: List[ChestItemDto] = field(default_factory=list)

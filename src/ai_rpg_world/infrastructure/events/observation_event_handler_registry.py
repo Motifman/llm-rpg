@@ -29,7 +29,6 @@ from ai_rpg_world.domain.monster.event.monster_events import (
     MonsterSpawnedEvent,
 )
 from ai_rpg_world.domain.world.event.map_events import (
-    GatewayTriggeredEvent,
     LocationEnteredEvent,
     LocationExitedEvent,
     ItemTakenFromChestEvent,
@@ -141,7 +140,6 @@ _OBSERVED_EVENT_TYPES = (
     SkillEvolutionAcceptedEvent,
     SkillEvolutionRejectedEvent,
     # --- 既存 ---
-    GatewayTriggeredEvent,
     LocationEnteredEvent,
     LocationExitedEvent,
     PlayerLocationChangedEvent,

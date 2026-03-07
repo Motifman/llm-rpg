@@ -125,6 +125,15 @@ class TestDefaultCurrentStateFormatter:
         assert "注意レベル" in text
         assert AttentionLevel.FULL.value in text
 
+    def test_format_includes_busy_state_when_busy(self, formatter):
+        """busy 状態があるとき行動状態が含まれる"""
+        dto = _minimal_current_state_dto()
+        dto.is_busy = True
+        dto.busy_until_tick = 42
+        text = formatter.format(dto)
+        assert "行動状態: 実行中" in text
+        assert "42" in text
+
     def test_format_dto_none_raises_type_error(self, formatter):
         """dto が None のとき TypeError"""
         with pytest.raises(TypeError, match="dto must be PlayerCurrentStateDto"):

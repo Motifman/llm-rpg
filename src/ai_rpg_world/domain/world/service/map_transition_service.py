@@ -5,6 +5,7 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.exception.map_exception import SpotNotFoundException
+from ai_rpg_world.domain.common.value_object import WorldTick
 
 
 class MapTransitionService:
@@ -15,7 +16,8 @@ class MapTransitionService:
         player_status: PlayerStatusAggregate,
         from_map: PhysicalMapAggregate,
         to_map: PhysicalMapAggregate,
-        landing_coordinate: Coordinate
+        landing_coordinate: Coordinate,
+        current_tick: WorldTick | None = None,
     ) -> None:
         """
         プレイヤーを現在のマップから別のマップへ遷移させる。
@@ -45,7 +47,11 @@ class MapTransitionService:
         to_map.add_object(new_object)
         
         # 3. プレイヤー状態の更新
-        player_status.update_location(to_map.spot_id, landing_coordinate)
+        player_status.update_location(
+            to_map.spot_id,
+            landing_coordinate,
+            current_tick=current_tick,
+        )
         
         # 4. 経路情報のクリア（スポットが変わったため）
         player_status.clear_path()

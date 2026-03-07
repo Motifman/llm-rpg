@@ -108,7 +108,7 @@ class PlayerHarvestApplicationService:
         except ObjectNotFoundException:
             raise HarvestResourceNotFoundException(target_world_object_id, int(status.current_spot_id))
 
-        if actor.coordinate.distance_to(target.coordinate) == 1:
+        if actor.coordinate.is_adjacent_8way(target.coordinate):
             actor.turn(actor.coordinate.direction_to(target.coordinate))
             self._physical_map_repository.save(physical_map)
 
