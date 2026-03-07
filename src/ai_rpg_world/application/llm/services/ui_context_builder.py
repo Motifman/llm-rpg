@@ -64,6 +64,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
 
         visible_lines = self._build_visible_target_lines(
             current_state.visible_objects,
+            current_state,
             counters,
             runtime_targets,
         )
@@ -129,6 +130,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
     def _build_visible_target_lines(
         self,
         visible_objects: list[VisibleObjectDto],
+        current_state: PlayerCurrentStateDto,
         counters: Dict[str, int],
         runtime_targets: Dict[str, ToolRuntimeTargetDto],
     ) -> list[str]:
@@ -153,17 +155,12 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             lines.append(
                 f"- {label}: {display_name}（{kind_label}, {direction}, 距離 {obj.distance}{action_hint}）"
             )
-            runtime_targets[label] = ToolRuntimeTargetDto(
+            runtime_targets[label] = self._build_visible_target(
                 label=label,
                 kind=kind,
                 display_name=display_name,
-                player_id=obj.player_id_value,
-                world_object_id=obj.object_id,
-                distance=obj.distance,
-                direction=direction,
-                spot_id=None,
-                interaction_type=obj.interaction_type,
-                available_interactions=tuple(obj.available_interactions),
+                obj=obj,
+                current_state=current_state,
             )
         return lines
 
@@ -183,6 +180,33 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
         if not labels:
             return ""
         return ", " + ", ".join(labels)
+
+    def _build_visible_target(
+        self,
+        *,
+        label: str,
+        kind: str,
+        display_name: str,
+        obj: VisibleObjectDto,
+        current_state: PlayerCurrentStateDto,
+    ) -> ToolRuntimeTargetDto:
+        return ToolRuntimeTargetDto(
+            label=label,
+            kind=kind,
+            display_name=display_name,
+            player_id=obj.player_id_value,
+            world_object_id=obj.object_id,
+            distance=obj.distance,
+            direction=obj.direction_from_player or "不明",
+            target_x=obj.x,
+            target_y=obj.y,
+            target_z=obj.z,
+            relative_dx=obj.x - current_state.x if current_state.x is not None else None,
+            relative_dy=obj.y - current_state.y if current_state.y is not None else None,
+            relative_dz=obj.z - current_state.z if current_state.z is not None else None,
+            interaction_type=obj.interaction_type,
+            available_interactions=tuple(obj.available_interactions),
+        )
 
     def _build_move_lines(
         self,

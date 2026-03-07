@@ -253,7 +253,9 @@ class TestDefaultToolArgumentResolver:
             label="M1",
             kind="monster",
             display_name="ゴブリン",
-            direction="北",
+            relative_dx=1,
+            relative_dy=-1,
+            relative_dz=0,
         )
 
         result = resolver.resolve(
@@ -264,7 +266,7 @@ class TestDefaultToolArgumentResolver:
 
         assert result["skill_loadout_id"] == 10
         assert result["skill_slot_index"] == 1
-        assert result["target_direction"] == "NORTH"
+        assert result["target_direction"] == "NORTHEAST"
         assert result["auto_aim"] is False
 
     def test_resolve_whisper_non_player_label_raises(self):

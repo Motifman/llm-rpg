@@ -44,7 +44,7 @@ class SkillTargetingDomainService:
 
     def _calculate_general_direction(self, from_coord: Coordinate, to_coord: Coordinate) -> DirectionEnum:
         """
-        2点間の座標から、大まかな4方向を計算する。
+        2点間の座標から、大まかな8方向を計算する。
         """
         dx = to_coord.x - from_coord.x
         dy = to_coord.y - from_coord.y
@@ -53,7 +53,4 @@ class SkillTargetingDomainService:
         if dx == 0 and dy == 0:
             return DirectionEnum.SOUTH
 
-        if abs(dx) >= abs(dy):
-            return DirectionEnum.EAST if dx > 0 else DirectionEnum.WEST
-        else:
-            return DirectionEnum.SOUTH if dy > 0 else DirectionEnum.NORTH
+        return DirectionEnum.from_delta(dx, dy)

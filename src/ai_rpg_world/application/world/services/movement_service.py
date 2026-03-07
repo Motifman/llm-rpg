@@ -408,6 +408,8 @@ class MovementApplicationService:
             to_coord = from_coord.neighbor(direction)
         elif target_coordinate:
             to_coord = target_coordinate
+            if to_coord != from_coord:
+                direction = from_coord.direction_to(to_coord)
         else:
             raise MovementInvalidException("No movement target specified", player_id_int)
 
@@ -431,13 +433,19 @@ class MovementApplicationService:
                 raise PlayerStaminaExhaustedException(player_id_int, stamina_cost, player_status.stamina.value)
             
             # 5. ドメインロジックの実行（物理マップ内移動）
+            if direction is not None:
+                actor.turn(direction)
             physical_map.move_object(world_object_id, to_coord, current_tick, actor.capability)
             
             # スタミナ消費
             player_status.consume_stamina(int(stamina_cost))
             
             # プレイヤー状態の更新（座標）
-            player_status.update_location(current_spot_id, to_coord)
+            player_status.update_location(
+                current_spot_id,
+                to_coord,
+                current_tick=current_tick,
+            )
             
             # 6. イベント収集と後処理
             # ゲートウェイ判定などは同期イベントハンドラに委譲される

@@ -141,6 +141,8 @@ class TestDefaultLlmUiContextBuilder:
         assert "採集可能" in result.current_state_text
         assert isinstance(result.tool_runtime_context, ToolRuntimeContextDto)
         assert result.tool_runtime_context.targets["P1"].player_id == 2
+        assert result.tool_runtime_context.targets["P1"].relative_dx == 1
+        assert result.tool_runtime_context.targets["P1"].relative_dy == 0
         assert result.tool_runtime_context.targets["N1"].world_object_id == 200
         assert result.tool_runtime_context.targets["N1"].interaction_type == "talk"
         assert result.tool_runtime_context.targets["O1"].available_interactions == ("harvest",)

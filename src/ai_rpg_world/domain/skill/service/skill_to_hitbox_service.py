@@ -1,3 +1,4 @@
+import math
 from typing import List
 from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape, RelativeCoordinate
 from ai_rpg_world.domain.combat.value_object.hit_box_velocity import HitBoxVelocity
@@ -68,29 +69,33 @@ class SkillToHitBoxDomainService:
         return HitBoxShape(rotated_rel_coords)
 
     def _rotate_relative_coordinate(self, rel: RelativeCoordinate, direction: DirectionEnum) -> RelativeCoordinate:
-        # スキル定義は SOUTH (dx=0, dy=1) を前方としていると仮定
-        if direction == DirectionEnum.SOUTH:
+        if direction in {DirectionEnum.UP, DirectionEnum.DOWN}:
             return rel
-        elif direction == DirectionEnum.NORTH:
-            return RelativeCoordinate(-rel.dx, -rel.dy, rel.dz)
-        elif direction == DirectionEnum.EAST:
-            # (x, y) -> (y, -x)  ※SOUTH(0,1) -> EAST(1,0) になるための変換
-            return RelativeCoordinate(rel.dy, -rel.dx, rel.dz)
-        elif direction == DirectionEnum.WEST:
-            # (x, y) -> (-y, x)
-            return RelativeCoordinate(-rel.dy, rel.dx, rel.dz)
-        return rel
+        rotated_dx, rotated_dy = self._rotate_xy(rel.dx, rel.dy, direction)
+        return RelativeCoordinate(rotated_dx, rotated_dy, rel.dz)
 
     def _rotate_velocity(self, vel: HitBoxVelocity, direction: DirectionEnum) -> HitBoxVelocity:
-        if direction == DirectionEnum.SOUTH:
+        if direction in {DirectionEnum.UP, DirectionEnum.DOWN}:
             return vel
-        elif direction == DirectionEnum.NORTH:
-            return HitBoxVelocity(-vel.dx, -vel.dy, vel.dz)
-        elif direction == DirectionEnum.EAST:
-            return HitBoxVelocity(vel.dy, -vel.dx, vel.dz)
-        elif direction == DirectionEnum.WEST:
-            return HitBoxVelocity(-vel.dy, vel.dx, vel.dz)
-        return vel
+        rotated_dx, rotated_dy = self._rotate_xy(vel.dx, vel.dy, direction)
+        return HitBoxVelocity(rotated_dx, rotated_dy, vel.dz)
 
     def _rotate_relative_offset(self, offset: RelativeCoordinate, direction: DirectionEnum) -> RelativeCoordinate:
         return self._rotate_relative_coordinate(offset, direction)
+
+    def _rotate_xy(self, dx: int, dy: int, direction: DirectionEnum) -> tuple[int, int]:
+        """SOUTH を基準としたローカル座標を指定方向へ回転する。"""
+        angles = {
+            DirectionEnum.SOUTH: 0.0,
+            DirectionEnum.SOUTHEAST: -45.0,
+            DirectionEnum.EAST: -90.0,
+            DirectionEnum.NORTHEAST: -135.0,
+            DirectionEnum.NORTH: 180.0,
+            DirectionEnum.NORTHWEST: 135.0,
+            DirectionEnum.WEST: 90.0,
+            DirectionEnum.SOUTHWEST: 45.0,
+        }
+        angle = math.radians(angles.get(direction, 0.0))
+        rotated_x = dx * math.cos(angle) - dy * math.sin(angle)
+        rotated_y = dx * math.sin(angle) + dy * math.cos(angle)
+        return int(round(rotated_x)), int(round(rotated_y))

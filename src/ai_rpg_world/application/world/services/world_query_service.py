@@ -1,17 +1,15 @@
 """ワールドクエリサービス（読み取り専用の位置情報等）"""
 
 import logging
-from typing import Optional, Callable, Any, List, TYPE_CHECKING
+from typing import Optional, Callable, Any, TYPE_CHECKING
 
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
 from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
 from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.application.world.contracts.queries import (
     GetPlayerLocationQuery,
     GetSpotContextForPlayerQuery,
@@ -20,27 +18,15 @@ from ai_rpg_world.application.world.contracts.queries import (
     GetPlayerCurrentStateQuery,
 )
 from ai_rpg_world.application.world.contracts.dtos import (
-    ActiveConversationDto,
-    AttentionLevelOptionDto,
     PlayerLocationDto,
     SpotInfoDto,
     VisibleContextDto,
-    VisibleObjectDto,
     PlayerMovementOptionsDto,
     AvailableMoveDto,
-    ChestItemDto,
-    ConversationChoiceDto,
-    InventoryItemDto,
     PlayerCurrentStateDto,
-    UsableSkillDto,
 )
-from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
-from ai_rpg_world.domain.world.exception.map_exception import TileNotFoundException
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.entity.world_object_component import PlaceableComponent
 from ai_rpg_world.application.world.services.transition_condition_evaluator import (
     TransitionConditionEvaluator,
     TransitionContext,
@@ -51,6 +37,9 @@ from ai_rpg_world.application.world.exceptions.command.movement_command_exceptio
     MovementCommandException,
     PlayerNotFoundException,
     MapNotFoundException,
+)
+from ai_rpg_world.application.world.services.player_current_state_builder import (
+    PlayerCurrentStateBuilder,
 )
 
 if TYPE_CHECKING:
@@ -86,6 +75,7 @@ class WorldQueryService:
         conversation_command_service: Optional["ConversationCommandService"] = None,
         skill_loadout_repository: Optional["SkillLoadoutRepository"] = None,
         game_time_provider: Optional["GameTimeProvider"] = None,
+        player_current_state_builder: Optional[PlayerCurrentStateBuilder] = None,
     ):
         self._player_status_repository = player_status_repository
         self._player_profile_repository = player_profile_repository
@@ -100,241 +90,24 @@ class WorldQueryService:
         self._conversation_command_service = conversation_command_service
         self._skill_loadout_repository = skill_loadout_repository
         self._game_time_provider = game_time_provider
+        self._player_current_state_builder = (
+            player_current_state_builder
+            or PlayerCurrentStateBuilder(
+                player_status_repository=player_status_repository,
+                player_profile_repository=player_profile_repository,
+                spot_repository=spot_repository,
+                connected_spots_provider=connected_spots_provider,
+                monster_repository=monster_repository,
+                transition_policy_repository=transition_policy_repository,
+                transition_condition_evaluator=transition_condition_evaluator,
+                player_inventory_repository=player_inventory_repository,
+                item_repository=item_repository,
+                conversation_command_service=conversation_command_service,
+                skill_loadout_repository=skill_loadout_repository,
+                game_time_provider=game_time_provider,
+            )
+        )
         self._logger = logging.getLogger(self.__class__.__name__)
-
-    def _direction_from_to(self, origin, target) -> str:
-        dx = target.x - origin.x
-        dy = target.y - origin.y
-        if dx == 0 and dy == 0:
-            return "ここ"
-
-        vertical = ""
-        horizontal = ""
-        if dy < 0:
-            vertical = "北"
-        elif dy > 0:
-            vertical = "南"
-        if dx > 0:
-            horizontal = "東"
-        elif dx < 0:
-            horizontal = "西"
-        return vertical + horizontal or "ここ"
-
-    def _visible_object_display_name(self, obj) -> str:
-        if obj.object_type == ObjectTypeEnum.PLAYER and obj.player_id is not None:
-            profile = self._player_profile_repository.find_by_id(obj.player_id)
-            if profile is not None:
-                return profile.name.value
-            return "不明なプレイヤー"
-
-        if obj.object_type == ObjectTypeEnum.NPC:
-            if self._monster_repository is not None:
-                monster = self._monster_repository.find_by_world_object_id(obj.object_id)
-                if monster is not None:
-                    return monster.template.name
-            return "誰か"
-
-        name_by_type = {
-            ObjectTypeEnum.CHEST: "宝箱",
-            ObjectTypeEnum.DOOR: "ドア",
-            ObjectTypeEnum.GATE: "門",
-            ObjectTypeEnum.SIGN: "看板",
-            ObjectTypeEnum.SWITCH: "スイッチ",
-            ObjectTypeEnum.RESOURCE: "資源",
-            ObjectTypeEnum.GROUND_ITEM: "落ちているアイテム",
-        }
-        return name_by_type.get(obj.object_type, obj.object_type.value)
-
-    def _visible_object_kind(self, obj) -> str:
-        if obj.object_type == ObjectTypeEnum.PLAYER:
-            return "player"
-        if obj.object_type == ObjectTypeEnum.NPC:
-            if getattr(obj, "interaction_type", None) is not None:
-                return "npc"
-            return "monster"
-        if obj.object_type == ObjectTypeEnum.CHEST:
-            return "chest"
-        if obj.object_type == ObjectTypeEnum.DOOR:
-            return "door"
-        if obj.object_type == ObjectTypeEnum.RESOURCE:
-            return "resource"
-        if obj.object_type == ObjectTypeEnum.GROUND_ITEM:
-            return "ground_item"
-        return "object"
-
-    def _visible_object_interaction_type(self, obj) -> Optional[str]:
-        interaction_type = getattr(obj, "interaction_type", None)
-        if interaction_type is None:
-            return None
-        return interaction_type.value
-
-    def _visible_object_available_interactions(self, obj) -> List[str]:
-        actions: List[str] = []
-        if obj.object_type == ObjectTypeEnum.RESOURCE:
-            actions.append("harvest")
-        if getattr(obj, "interaction_type", None) is not None:
-            actions.append("interact")
-        if obj.object_type == ObjectTypeEnum.CHEST:
-            interaction_data = getattr(obj, "interaction_data", {}) or {}
-            if interaction_data.get("is_open"):
-                actions.extend(["store_in_chest", "take_from_chest"])
-        return actions
-
-    def _build_inventory_items(
-        self,
-        player_id: PlayerId,
-    ) -> List[InventoryItemDto]:
-        if self._player_inventory_repository is None or self._item_repository is None:
-            return []
-        inventory = self._player_inventory_repository.find_by_id(player_id)
-        if inventory is None:
-            return []
-
-        items: List[InventoryItemDto] = []
-        for slot_index in range(inventory.max_slots):
-            item_id = inventory.get_item_instance_id_by_slot(SlotId(slot_index))
-            if item_id is None:
-                continue
-            item = self._item_repository.find_by_id(item_id)
-            if item is None:
-                continue
-            items.append(
-                InventoryItemDto(
-                    inventory_slot_id=slot_index,
-                    item_instance_id=item.item_instance_id.value,
-                    display_name=item.item_spec.name,
-                    quantity=item.quantity,
-                    is_placeable=item.item_spec.is_placeable_item(),
-                )
-            )
-        return items
-
-    def _build_chest_items(
-        self,
-        physical_map,
-        visible_objects: List[VisibleObjectDto],
-    ) -> List[ChestItemDto]:
-        if self._item_repository is None:
-            return []
-        items: List[ChestItemDto] = []
-        for obj in visible_objects:
-            if obj.object_kind != "chest" or "take_from_chest" not in obj.available_interactions:
-                continue
-            try:
-                chest = physical_map.get_object(WorldObjectId.create(obj.object_id))
-            except Exception:
-                continue
-            component = getattr(chest, "component", None)
-            item_ids = getattr(component, "item_ids", [])
-            for item_id in item_ids:
-                item = self._item_repository.find_by_id(item_id)
-                if item is None:
-                    continue
-                items.append(
-                    ChestItemDto(
-                        chest_world_object_id=obj.object_id,
-                        chest_display_name=obj.display_name or "宝箱",
-                        item_instance_id=item.item_instance_id.value,
-                        display_name=item.item_spec.name,
-                        quantity=item.quantity,
-                    )
-                )
-        return items
-
-    def _build_active_conversation(
-        self,
-        player_id: int,
-        visible_objects: List[VisibleObjectDto],
-    ) -> Optional[ActiveConversationDto]:
-        if self._conversation_command_service is None:
-            return None
-        from ai_rpg_world.application.conversation.contracts.commands import GetCurrentNodeQuery
-
-        for obj in visible_objects:
-            if obj.object_kind != "npc":
-                continue
-            session = self._conversation_command_service.get_current_node(
-                GetCurrentNodeQuery(player_id=player_id, npc_id_value=obj.object_id)
-            )
-            if session is None:
-                continue
-            choices: List[ConversationChoiceDto] = [
-                ConversationChoiceDto(display_text=text, choice_index=index)
-                for index, (text, _next_id) in enumerate(session.current_node.choices)
-            ]
-            if session.current_node.has_next and not session.current_node.choices:
-                choices.append(ConversationChoiceDto(display_text="次へ", is_next=True))
-            return ActiveConversationDto(
-                npc_world_object_id=obj.object_id,
-                npc_display_name=obj.display_name or "NPC",
-                node_text=session.current_node.text,
-                choices=choices,
-                is_terminal=session.current_node.is_terminal,
-            )
-        return None
-
-    def _build_usable_skills(
-        self,
-        player_id: int,
-    ) -> List[UsableSkillDto]:
-        if self._skill_loadout_repository is None or self._game_time_provider is None:
-            return []
-        loadout = self._skill_loadout_repository.find_by_owner_id(player_id)
-        if loadout is None:
-            return []
-        current_tick = self._game_time_provider.get_current_tick().value
-        deck = loadout.get_current_deck(current_tick)
-        skills: List[UsableSkillDto] = []
-        for slot_index, skill in enumerate(deck.slots):
-            if skill is None or not loadout.can_use_skill(slot_index, current_tick):
-                continue
-            skills.append(
-                UsableSkillDto(
-                    skill_loadout_id=loadout.loadout_id.value,
-                    skill_slot_index=slot_index,
-                    skill_id=skill.skill_id.value,
-                    display_name=skill.name,
-                    mp_cost=skill.mp_cost or 0,
-                    stamina_cost=skill.stamina_cost or 0,
-                    hp_cost=skill.hp_cost or 0,
-                )
-            )
-        return skills
-
-    def _build_attention_level_options(self) -> List[AttentionLevelOptionDto]:
-        return [
-            AttentionLevelOptionDto(
-                value=AttentionLevel.FULL.value,
-                display_name="フル",
-                description="すべての観測を受け取ります。",
-            ),
-            AttentionLevelOptionDto(
-                value=AttentionLevel.FILTER_SOCIAL.value,
-                display_name="会話重視",
-                description="社会的な観測を要約します。",
-            ),
-            AttentionLevelOptionDto(
-                value=AttentionLevel.IGNORE.value,
-                display_name="最小",
-                description="直接関係する観測を優先します。",
-            ),
-        ]
-
-    def _can_destroy_placeable(
-        self,
-        physical_map,
-        player_id: int,
-    ) -> bool:
-        try:
-            actor = physical_map.get_actor(WorldObjectId.create(player_id))
-        except Exception:
-            return False
-        front_coord = actor.coordinate.neighbor(actor.direction)
-        for obj in physical_map.get_objects_at(front_coord):
-            component = getattr(obj, "component", None)
-            if isinstance(component, PlaceableComponent):
-                return True
-        return False
 
     def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
         """共通の例外処理を実行"""
@@ -502,40 +275,13 @@ class WorldQueryService:
             raise MapNotFoundException(int(spot_id))
 
         distance = max(0, query.distance)
-        objects_in_range = physical_map.get_objects_in_range(coord, distance)
-
-        visible_objects: List[VisibleObjectDto] = []
-        for obj in objects_in_range:
-            d = coord.distance_to(obj.coordinate)
-            visible_objects.append(
-                VisibleObjectDto(
-                    object_id=obj.object_id.value,
-                    object_type=obj.object_type.value,
-                    x=obj.coordinate.x,
-                    y=obj.coordinate.y,
-                    z=obj.coordinate.z,
-                    distance=d,
-                    display_name=self._visible_object_display_name(obj),
-                    object_kind=self._visible_object_kind(obj),
-                    direction_from_player=self._direction_from_to(coord, obj.coordinate),
-                    is_interactable=obj.interaction_type is not None,
-                    player_id_value=int(obj.player_id) if obj.player_id is not None else None,
-                    is_self=obj.player_id == player_id,
-                    interaction_type=self._visible_object_interaction_type(obj),
-                    available_interactions=self._visible_object_available_interactions(obj),
-                )
-            )
-
-        return VisibleContextDto(
+        return self._player_current_state_builder.build_visible_context(
             player_id=query.player_id,
             player_name=profile.name.value,
-            spot_id=int(spot_id),
-            spot_name=spot.name,
-            center_x=coord.x,
-            center_y=coord.y,
-            center_z=coord.z,
+            spot=spot,
+            physical_map=physical_map,
+            origin=coord,
             view_distance=distance,
-            visible_objects=visible_objects,
         )
 
     def get_available_moves(
@@ -642,9 +388,7 @@ class WorldQueryService:
         profile = self._player_profile_repository.find_by_id(player_id)
         if not profile:
             raise PlayerNotFoundException(query.player_id)
-        player_name = profile.name.value
         spot_id = player_status.current_spot_id
-        coord = player_status.current_coordinate
 
         spot = self._spot_repository.find_by_id(spot_id)
         if not spot:
@@ -654,110 +398,16 @@ class WorldQueryService:
         if not physical_map:
             raise MapNotFoundException(int(spot_id))
 
-        area_id = None
-        area_name = None
-        areas = physical_map.get_location_areas_at(coord)
-        if areas:
-            area_id = int(areas[0].location_id)
-            area_name = areas[0].name
-
-        current_player_ids = set()
-        for s in self._player_status_repository.find_all():
-            if s.current_spot_id == spot_id:
-                current_player_ids.add(int(s.player_id))
-        connected_spot_ids = set()
-        connected_spot_names = set()
-        for conn_id in self._connected_spots_provider.get_connected_spots(spot_id):
-            connected_spot_ids.add(int(conn_id))
-            conn_spot = self._spot_repository.find_by_id(conn_id)
-            if conn_spot:
-                connected_spot_names.add(conn_spot.name)
-
-        weather_state = (
-            physical_map.weather_state
-            if physical_map.weather_state
-            else WeatherState(WeatherTypeEnum.CLEAR, 0.0)
-        )
-        weather_type = weather_state.weather_type.value
-        weather_intensity = weather_state.intensity
-
-        current_terrain_type = None
-        try:
-            tile = physical_map.get_tile(coord)
-            current_terrain_type = tile.terrain_type.type.value
-        except TileNotFoundException:
-            pass
-
-        distance = max(0, query.view_distance)
-        objects_in_range = physical_map.get_objects_in_range(coord, distance)
-        visible_objects = []
-        for obj in objects_in_range:
-            d = coord.distance_to(obj.coordinate)
-            visible_objects.append(
-                VisibleObjectDto(
-                    object_id=obj.object_id.value,
-                    object_type=obj.object_type.value,
-                    x=obj.coordinate.x,
-                    y=obj.coordinate.y,
-                    z=obj.coordinate.z,
-                    distance=d,
-                    display_name=self._visible_object_display_name(obj),
-                    object_kind=self._visible_object_kind(obj),
-                    direction_from_player=self._direction_from_to(coord, obj.coordinate),
-                    is_interactable=obj.interaction_type is not None,
-                    player_id_value=int(obj.player_id) if obj.player_id is not None else None,
-                    is_self=obj.player_id == player_id,
-                    interaction_type=self._visible_object_interaction_type(obj),
-                    available_interactions=self._visible_object_available_interactions(obj),
-                )
-            )
-
         available_moves = None
-        total_available_moves = None
         if query.include_available_moves:
             moves_query = GetAvailableMovesQuery(player_id=query.player_id)
-            moves_result = self._get_available_moves_impl(moves_query)
-            if moves_result:
-                available_moves = moves_result.available_moves
-                total_available_moves = moves_result.total_available_moves
+            available_moves = self._get_available_moves_impl(moves_query)
 
-        attention_level = player_status.attention_level
-        is_busy = player_status.goal_spot_id is not None
-        inventory_items = self._build_inventory_items(player_id)
-        chest_items = self._build_chest_items(physical_map, visible_objects)
-        active_conversation = self._build_active_conversation(query.player_id, visible_objects)
-        usable_skills = self._build_usable_skills(query.player_id)
-        attention_level_options = self._build_attention_level_options()
-        can_destroy_placeable = self._can_destroy_placeable(physical_map, query.player_id)
-
-        return PlayerCurrentStateDto(
-            player_id=query.player_id,
-            player_name=player_name,
-            current_spot_id=int(spot_id),
-            current_spot_name=spot.name,
-            current_spot_description=spot.description,
-            x=coord.x,
-            y=coord.y,
-            z=coord.z,
-            area_id=area_id,
-            area_name=area_name,
-            current_player_count=len(current_player_ids),
-            current_player_ids=current_player_ids,
-            connected_spot_ids=connected_spot_ids,
-            connected_spot_names=connected_spot_names,
-            weather_type=weather_type,
-            weather_intensity=weather_intensity,
-            current_terrain_type=current_terrain_type,
-            visible_objects=visible_objects,
-            view_distance=distance,
-            available_moves=available_moves,
-            total_available_moves=total_available_moves,
-            attention_level=attention_level,
-            is_busy=is_busy,
-            inventory_items=inventory_items,
-            chest_items=chest_items,
-            active_conversation=active_conversation,
-            usable_skills=usable_skills,
-            attention_level_options=attention_level_options,
-            can_destroy_placeable=can_destroy_placeable,
+        return self._player_current_state_builder.build_player_current_state(
+            query=query,
+            player_status=player_status,
+            player_name=profile.name.value,
+            spot=spot,
+            physical_map=physical_map,
+            available_moves_result=available_moves,
         )

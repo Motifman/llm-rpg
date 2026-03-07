@@ -99,6 +99,12 @@ class ToolRuntimeTargetDto:
     destination_type: Optional[str] = None
     distance: Optional[int] = None
     direction: Optional[str] = None
+    target_x: Optional[int] = None
+    target_y: Optional[int] = None
+    target_z: Optional[int] = None
+    relative_dx: Optional[int] = None
+    relative_dy: Optional[int] = None
+    relative_dz: Optional[int] = None
     interaction_type: Optional[str] = None
     available_interactions: Tuple[str, ...] = ()
     item_instance_id: Optional[int] = None
@@ -130,6 +136,18 @@ class ToolRuntimeTargetDto:
             raise TypeError("distance must be int or None")
         if self.direction is not None and not isinstance(self.direction, str):
             raise TypeError("direction must be str or None")
+        if self.target_x is not None and not isinstance(self.target_x, int):
+            raise TypeError("target_x must be int or None")
+        if self.target_y is not None and not isinstance(self.target_y, int):
+            raise TypeError("target_y must be int or None")
+        if self.target_z is not None and not isinstance(self.target_z, int):
+            raise TypeError("target_z must be int or None")
+        if self.relative_dx is not None and not isinstance(self.relative_dx, int):
+            raise TypeError("relative_dx must be int or None")
+        if self.relative_dy is not None and not isinstance(self.relative_dy, int):
+            raise TypeError("relative_dy must be int or None")
+        if self.relative_dz is not None and not isinstance(self.relative_dz, int):
+            raise TypeError("relative_dz must be int or None")
         if self.interaction_type is not None and not isinstance(self.interaction_type, str):
             raise TypeError("interaction_type must be str or None")
         if self.item_instance_id is not None and not isinstance(self.item_instance_id, int):

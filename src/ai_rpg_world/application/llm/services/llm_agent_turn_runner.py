@@ -93,7 +93,7 @@ class LlmAgentTurnRunner:
 
         if (
             current_state is not None
-            and current_state.is_busy
+            and (current_state.is_busy or current_state.has_active_path)
             and any(o.output.causes_interrupt for o in observations)
         ):
             self._movement_service.cancel_movement(

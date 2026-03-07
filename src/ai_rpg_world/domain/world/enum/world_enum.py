@@ -55,11 +55,48 @@ class MovementCapabilityEnum(Enum):
 class DirectionEnum(Enum):
     """向きの種類"""
     NORTH = "NORTH"
+    NORTHEAST = "NORTHEAST"
     SOUTH = "SOUTH"
+    SOUTHEAST = "SOUTHEAST"
     EAST = "EAST"
     WEST = "WEST"
+    NORTHWEST = "NORTHWEST"
+    SOUTHWEST = "SOUTHWEST"
     UP = "UP"
     DOWN = "DOWN"
+
+    def to_2d_vector(self) -> tuple[int, int] | None:
+        vectors = {
+            DirectionEnum.NORTH: (0, -1),
+            DirectionEnum.NORTHEAST: (1, -1),
+            DirectionEnum.EAST: (1, 0),
+            DirectionEnum.SOUTHEAST: (1, 1),
+            DirectionEnum.SOUTH: (0, 1),
+            DirectionEnum.SOUTHWEST: (-1, 1),
+            DirectionEnum.WEST: (-1, 0),
+            DirectionEnum.NORTHWEST: (-1, -1),
+        }
+        return vectors.get(self)
+
+    @classmethod
+    def from_delta(cls, dx: int, dy: int, dz: int = 0) -> "DirectionEnum":
+        if dz > 0:
+            return cls.UP
+        if dz < 0:
+            return cls.DOWN
+        step_x = 0 if dx == 0 else (1 if dx > 0 else -1)
+        step_y = 0 if dy == 0 else (1 if dy > 0 else -1)
+        mapping = {
+            (0, -1): cls.NORTH,
+            (1, -1): cls.NORTHEAST,
+            (1, 0): cls.EAST,
+            (1, 1): cls.SOUTHEAST,
+            (0, 1): cls.SOUTH,
+            (-1, 1): cls.SOUTHWEST,
+            (-1, 0): cls.WEST,
+            (-1, -1): cls.NORTHWEST,
+        }
+        return mapping[(step_x, step_y)]
 
 
 class EnvironmentTypeEnum(Enum):

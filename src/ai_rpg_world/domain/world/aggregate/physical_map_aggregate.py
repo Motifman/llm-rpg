@@ -414,7 +414,7 @@ class PhysicalMapAggregate(AggregateRoot):
         ))
 
         # エリアトリガーの判定
-        self._check_area_triggers(object_id, old_coordinate, new_coordinate)
+        self._check_area_triggers(object_id, old_coordinate, new_coordinate, current_tick)
         # 同一マスのオブジェクトの「踏んだら発火」トリガー判定
         self._check_object_triggers_on_step(object_id, new_coordinate)
 
@@ -439,7 +439,13 @@ class PhysicalMapAggregate(AggregateRoot):
                     trigger_type=trigger.get_trigger_type(),
                 ))
 
-    def _check_area_triggers(self, object_id: WorldObjectId, old_coordinate: Optional[Coordinate], new_coordinate: Coordinate):
+    def _check_area_triggers(
+        self,
+        object_id: WorldObjectId,
+        old_coordinate: Optional[Coordinate],
+        new_coordinate: Coordinate,
+        current_tick: Optional[WorldTick] = None,
+    ):
         """進入・退出・滞在判定"""
         # 1. AreaTriggerの判定
         for trigger in self._area_triggers.values():
@@ -517,6 +523,7 @@ class PhysicalMapAggregate(AggregateRoot):
                     target_spot_id=gateway.target_spot_id,
                     landing_coordinate=gateway.landing_coordinate,
                     player_id_value=player_id_value,
+                    occurred_tick=current_tick,
                 ))
 
     def _activate_area_trigger(self, trigger: AreaTrigger, object_id: WorldObjectId):
@@ -793,7 +800,7 @@ class PhysicalMapAggregate(AggregateRoot):
             raise ActorBusyException(f"Actor {actor_id} is busy until {actor.busy_until}")
 
         # 1. 距離チェック（隣接または同じマス）
-        distance = actor.coordinate.distance_to(target.coordinate)
+        distance = actor.coordinate.chebyshev_distance_to(target.coordinate)
         if distance > 1:
             raise InteractionOutOfRangeException(f"Target {target_id} is too far from actor {actor_id}")
 
@@ -845,7 +852,7 @@ class PhysicalMapAggregate(AggregateRoot):
         if not chest.is_open:
             raise ChestClosedException(f"Chest {target_chest_id} is closed")
 
-        distance = actor.coordinate.distance_to(chest_obj.coordinate)
+        distance = actor.coordinate.chebyshev_distance_to(chest_obj.coordinate)
         if distance > 1:
             raise InteractionOutOfRangeException(
                 f"Chest {target_chest_id} is too far from actor {actor_id}"
@@ -880,7 +887,7 @@ class PhysicalMapAggregate(AggregateRoot):
         if not chest.is_open:
             raise ChestClosedException(f"Chest {target_chest_id} is closed")
 
-        distance = actor.coordinate.distance_to(chest_obj.coordinate)
+        distance = actor.coordinate.chebyshev_distance_to(chest_obj.coordinate)
         if distance > 1:
             raise InteractionOutOfRangeException(
                 f"Chest {target_chest_id} is too far from actor {actor_id}"
@@ -911,7 +918,7 @@ class PhysicalMapAggregate(AggregateRoot):
             raise ActorBusyException(f"Actor {actor_id} is busy until {actor.busy_until}")
 
         # 1. 距離と向きのチェック
-        distance = actor.coordinate.distance_to(target.coordinate)
+        distance = actor.coordinate.chebyshev_distance_to(target.coordinate)
         if distance > 1:
             raise InteractionOutOfRangeException(f"Target {target_id} is too far from actor {actor_id}")
         if distance == 1:

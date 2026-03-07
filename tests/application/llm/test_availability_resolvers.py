@@ -95,6 +95,21 @@ class TestSetDestinationAvailabilityResolver:
         ctx = _minimal_current_state(available_moves=None, total_available_moves=None)
         assert resolver.is_available(ctx) is False
 
+    def test_not_available_when_has_active_path(self):
+        """移動計画が残っているとき利用不可"""
+        resolver = SetDestinationAvailabilityResolver()
+        move = AvailableMoveDto(
+            spot_id=2,
+            spot_name="Next",
+            road_id=1,
+            road_description="",
+            conditions_met=True,
+            failed_conditions=[],
+        )
+        ctx = _minimal_current_state(available_moves=[move], total_available_moves=1)
+        ctx.has_active_path = True
+        assert resolver.is_available(ctx) is False
+
     def test_not_available_when_total_zero(self):
         """total_available_moves が 0 のとき利用不可"""
         resolver = SetDestinationAvailabilityResolver()
@@ -204,6 +219,7 @@ class TestExtendedAvailabilityResolvers:
                     z=0,
                     distance=1,
                     object_kind="chest",
+                    can_store_in_chest=True,
                     available_interactions=["store_in_chest"],
                 )
             ]
