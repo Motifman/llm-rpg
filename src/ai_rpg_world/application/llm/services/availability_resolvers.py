@@ -12,6 +12,10 @@ def _has_visible_action(obj, flag_name: str, legacy_name: str) -> bool:
     return legacy_name in getattr(obj, "available_interactions", [])
 
 
+def _iter_actionable_objects(context: PlayerCurrentStateDto):
+    return context.actionable_objects or context.visible_objects
+
+
 class NoOpAvailabilityResolver(IAvailabilityResolver):
     """何もしないツールは常に利用可能。"""
 
@@ -76,7 +80,7 @@ class InteractAvailabilityResolver(IAvailabilityResolver):
             return False
         return any(
             _has_visible_action(obj, "can_interact", "interact")
-            for obj in context.visible_objects
+            for obj in _iter_actionable_objects(context)
             if not obj.is_self
         )
 
@@ -92,7 +96,7 @@ class HarvestStartAvailabilityResolver(IAvailabilityResolver):
             return False
         return any(
             _has_visible_action(obj, "can_harvest", "harvest")
-            for obj in context.visible_objects
+            for obj in _iter_actionable_objects(context)
             if not obj.is_self
         )
 
@@ -150,7 +154,7 @@ class ChestStoreAvailabilityResolver(IAvailabilityResolver):
             return False
         has_open_chest = any(
             _has_visible_action(obj, "can_store_in_chest", "store_in_chest")
-            for obj in context.visible_objects
+            for obj in _iter_actionable_objects(context)
             if not obj.is_self
         )
         return has_open_chest and bool(context.inventory_items)

@@ -198,7 +198,11 @@ class TestPlayerCurrentStateBuilder:
         assert result.is_busy is True
         assert result.busy_until_tick == 15
         assert result.has_active_path is True
+        assert any(obj.object_id == 200 for obj in result.actionable_objects)
+        assert any(obj.object_id == 200 for obj in result.notable_objects)
         assert chest_obj.can_store_in_chest is True
         assert chest_obj.can_take_from_chest is True
+        assert chest_obj.is_notable is True
         assert npc_obj.can_interact is False
+        assert npc_obj.is_notable is True
 

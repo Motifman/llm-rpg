@@ -6,6 +6,7 @@ from ai_rpg_world.domain.combat.value_object.hit_box_spawn_param import HitBoxSp
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.facing import Facing
 from ai_rpg_world.domain.skill.value_object.skill_hit_pattern import SkillHitPattern, SkillHitTimelineSegment
 from ai_rpg_world.domain.common.value_object import WorldTick
 
@@ -85,17 +86,9 @@ class SkillToHitBoxDomainService:
 
     def _rotate_xy(self, dx: int, dy: int, direction: DirectionEnum) -> tuple[int, int]:
         """SOUTH を基準としたローカル座標を指定方向へ回転する。"""
-        angles = {
-            DirectionEnum.SOUTH: 0.0,
-            DirectionEnum.SOUTHEAST: -45.0,
-            DirectionEnum.EAST: -90.0,
-            DirectionEnum.NORTHEAST: -135.0,
-            DirectionEnum.NORTH: 180.0,
-            DirectionEnum.NORTHWEST: 135.0,
-            DirectionEnum.WEST: 90.0,
-            DirectionEnum.SOUTHWEST: 45.0,
-        }
-        angle = math.radians(angles.get(direction, 0.0))
+        angle = math.radians(
+            Facing.from_direction(direction).rotation_from_south_degrees()
+        )
         rotated_x = dx * math.cos(angle) - dy * math.sin(angle)
         rotated_y = dx * math.sin(angle) + dy * math.cos(angle)
         return int(round(rotated_x)), int(round(rotated_y))

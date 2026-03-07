@@ -176,6 +176,41 @@ class ToolRuntimeTargetDto:
 
 
 @dataclass(frozen=True)
+class VisibleToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """視界内対象用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class DestinationToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """移動先用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class InventoryToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """インベントリアイテム用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class ChestItemToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """チェスト内アイテム用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class ConversationChoiceToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """会話選択肢用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class SkillToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """スキル用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class AttentionLevelToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """注意レベル用の runtime target。"""
+
+
+@dataclass(frozen=True)
 class ToolRuntimeContextDto:
     """LLM UIのそのターン限定ラベル解決コンテキスト。"""
 

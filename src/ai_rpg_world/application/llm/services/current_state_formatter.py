@@ -56,6 +56,14 @@ class DefaultCurrentStateFormatter(ICurrentStateFormatter):
         else:
             lines.append("視界内オブジェクト: なし")
 
+        if dto.notable_objects:
+            lines.append("注目対象:")
+            for obj in dto.notable_objects[:10]:
+                reason = f" ({obj.notable_reason})" if obj.notable_reason else ""
+                lines.append(
+                    f"  - {obj.display_name or obj.object_type}: 距離={obj.distance}, 方角={obj.direction_from_player}{reason}"
+                )
+
         # 利用可能な移動先
         if dto.available_moves is not None and dto.total_available_moves is not None:
             lines.append(f"利用可能な移動先: {dto.total_available_moves} 件")
