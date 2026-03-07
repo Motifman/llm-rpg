@@ -92,4 +92,3 @@ class PlayerLocationChangedEvent(BaseDomainEvent[PlayerId, "PlayerStatusAggregat
     old_coordinate: Optional[Coordinate]
     new_spot_id: SpotId
     new_coordinate: Coordinate
-    occurred_tick: Optional[WorldTick] = None

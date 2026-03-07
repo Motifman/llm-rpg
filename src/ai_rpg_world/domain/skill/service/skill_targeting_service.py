@@ -2,6 +2,7 @@ from typing import Optional
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.facing import Facing
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
@@ -53,4 +54,4 @@ class SkillTargetingDomainService:
         if dx == 0 and dy == 0:
             return DirectionEnum.SOUTH
 
-        return DirectionEnum.from_delta(dx, dy)
+        return Facing.from_delta(dx, dy).to_direction()

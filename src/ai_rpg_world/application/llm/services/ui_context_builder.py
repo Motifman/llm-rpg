@@ -3,9 +3,16 @@
 from typing import Dict, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
+    AttentionLevelToolRuntimeTargetDto,
+    ChestItemToolRuntimeTargetDto,
+    ConversationChoiceToolRuntimeTargetDto,
+    DestinationToolRuntimeTargetDto,
+    InventoryToolRuntimeTargetDto,
     LlmUiContextDto,
+    SkillToolRuntimeTargetDto,
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
+    VisibleToolRuntimeTargetDto,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import ILlmUiContextBuilder
 from ai_rpg_world.application.world.contracts.dtos import (
@@ -135,7 +142,9 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
         runtime_targets: Dict[str, ToolRuntimeTargetDto],
     ) -> list[str]:
         lines: list[str] = []
+        notable_ids = {obj.object_id for obj in current_state.notable_objects}
         sort_key = lambda obj: (
+            0 if obj.object_id in notable_ids else 1,
             obj.distance,
             obj.display_name or "",
             obj.object_kind or "",
@@ -152,8 +161,11 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             direction = obj.direction_from_player or "不明"
             kind_label = _VISIBLE_KIND_LABEL.get(kind, kind)
             action_hint = self._format_action_hint(obj.available_interactions)
+            notable_hint = ""
+            if obj.is_notable:
+                notable_hint = f", 注目({obj.notable_reason or 'notable'})"
             lines.append(
-                f"- {label}: {display_name}（{kind_label}, {direction}, 距離 {obj.distance}{action_hint}）"
+                f"- {label}: {display_name}（{kind_label}, {direction}, 距離 {obj.distance}{action_hint}{notable_hint}）"
             )
             runtime_targets[label] = self._build_visible_target(
                 label=label,
@@ -190,7 +202,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
         obj: VisibleObjectDto,
         current_state: PlayerCurrentStateDto,
     ) -> ToolRuntimeTargetDto:
-        return ToolRuntimeTargetDto(
+        return VisibleToolRuntimeTargetDto(
             label=label,
             kind=kind,
             display_name=display_name,
@@ -228,7 +240,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
                 else f"（{status}）"
             )
             lines.append(f"- {label}: {move.spot_name}{extra}")
-            runtime_targets[label] = ToolRuntimeTargetDto(
+            runtime_targets[label] = DestinationToolRuntimeTargetDto(
                 label=label,
                 kind="destination",
                 display_name=move.spot_name,
@@ -255,7 +267,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
                 + (f"（{', '.join(hints)}）" if hints else "")
             )
             available = ("place_object",) if item.is_placeable else ()
-            runtime_targets[label] = ToolRuntimeTargetDto(
+            runtime_targets[label] = InventoryToolRuntimeTargetDto(
                 label=label,
                 kind="inventory_item",
                 display_name=item.display_name,
@@ -278,7 +290,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             lines.append(
                 f"- {label}: {item.display_name} x{item.quantity}（{item.chest_display_name}）"
             )
-            runtime_targets[label] = ToolRuntimeTargetDto(
+            runtime_targets[label] = ChestItemToolRuntimeTargetDto(
                 label=label,
                 kind="chest_item",
                 display_name=item.display_name,
@@ -305,7 +317,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             label = f"R{counters['R']}"
             suffix = "（次へ）" if choice.is_next else ""
             lines.append(f"- {label}: {choice.display_text}{suffix}")
-            runtime_targets[label] = ToolRuntimeTargetDto(
+            runtime_targets[label] = ConversationChoiceToolRuntimeTargetDto(
                 label=label,
                 kind="conversation_choice",
                 display_name=choice.display_text,
@@ -333,7 +345,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
                 cost_parts.append(f"HP {skill.hp_cost}")
             suffix = f"（{', '.join(cost_parts)}）" if cost_parts else ""
             lines.append(f"- {label}: {skill.display_name}{suffix}")
-            runtime_targets[label] = ToolRuntimeTargetDto(
+            runtime_targets[label] = SkillToolRuntimeTargetDto(
                 label=label,
                 kind="skill",
                 display_name=skill.display_name,
@@ -353,7 +365,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             counters["A"] += 1
             label = f"A{counters['A']}"
             lines.append(f"- {label}: {option.display_name}（{option.description}）")
-            runtime_targets[label] = ToolRuntimeTargetDto(
+            runtime_targets[label] = AttentionLevelToolRuntimeTargetDto(
                 label=label,
                 kind="attention_level",
                 display_name=option.display_name,

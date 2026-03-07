@@ -55,6 +55,8 @@ class VisibleObjectDto:
     can_harvest: bool = False
     can_store_in_chest: bool = False
     can_take_from_chest: bool = False
+    is_notable: bool = False
+    notable_reason: Optional[str] = None
 
 
 @dataclass
@@ -222,3 +224,5 @@ class PlayerCurrentStateDto:
     usable_skills: List[UsableSkillDto] = field(default_factory=list)
     attention_level_options: List[AttentionLevelOptionDto] = field(default_factory=list)
     can_destroy_placeable: bool = False
+    actionable_objects: List[VisibleObjectDto] = field(default_factory=list)
+    notable_objects: List[VisibleObjectDto] = field(default_factory=list)

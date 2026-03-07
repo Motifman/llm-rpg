@@ -41,29 +41,10 @@ class Coordinate:
 
     def neighbor(self, direction: "DirectionEnum") -> "Coordinate":
         """指定された方向の隣接座標を返す"""
-        from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
-        
-        if direction == DirectionEnum.NORTH:
-            return Coordinate(self.x, self.y - 1, self.z)
-        elif direction == DirectionEnum.NORTHEAST:
-            return Coordinate(self.x + 1, self.y - 1, self.z)
-        elif direction == DirectionEnum.SOUTH:
-            return Coordinate(self.x, self.y + 1, self.z)
-        elif direction == DirectionEnum.SOUTHEAST:
-            return Coordinate(self.x + 1, self.y + 1, self.z)
-        elif direction == DirectionEnum.EAST:
-            return Coordinate(self.x + 1, self.y, self.z)
-        elif direction == DirectionEnum.WEST:
-            return Coordinate(self.x - 1, self.y, self.z)
-        elif direction == DirectionEnum.NORTHWEST:
-            return Coordinate(self.x - 1, self.y - 1, self.z)
-        elif direction == DirectionEnum.SOUTHWEST:
-            return Coordinate(self.x - 1, self.y + 1, self.z)
-        elif direction == DirectionEnum.UP:
-            return Coordinate(self.x, self.y, self.z + 1)
-        elif direction == DirectionEnum.DOWN:
-            return Coordinate(self.x, self.y, self.z - 1)
-        return self
+        from ai_rpg_world.domain.world.value_object.facing import Facing
+
+        dx, dy, dz = Facing.from_direction(direction).to_delta()
+        return Coordinate(self.x + dx, self.y + dy, self.z + dz)
 
     def direction_to(self, other: "Coordinate") -> "DirectionEnum":
         """別の座標への方向を取得する（隣接している前提）"""
@@ -81,7 +62,9 @@ class Coordinate:
         if dx == 0 and dy == 0:
             raise SameCoordinateDirectionException(f"Cannot determine direction for the same coordinate: {self}")
 
-        return DirectionEnum.from_delta(dx, dy)
+        from ai_rpg_world.domain.world.value_object.facing import Facing
+
+        return Facing.from_delta(dx, dy, dz).to_direction()
 
     def to_2d(self) -> tuple[int, int]:
         """(x, y) のタプルを返す"""
