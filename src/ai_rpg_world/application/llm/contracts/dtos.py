@@ -99,6 +99,15 @@ class ToolRuntimeTargetDto:
     destination_type: Optional[str] = None
     distance: Optional[int] = None
     direction: Optional[str] = None
+    interaction_type: Optional[str] = None
+    available_interactions: Tuple[str, ...] = ()
+    item_instance_id: Optional[int] = None
+    inventory_slot_id: Optional[int] = None
+    chest_world_object_id: Optional[int] = None
+    conversation_choice_index: Optional[int] = None
+    skill_loadout_id: Optional[int] = None
+    skill_slot_index: Optional[int] = None
+    attention_level_value: Optional[str] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.label, str):
@@ -121,6 +130,31 @@ class ToolRuntimeTargetDto:
             raise TypeError("distance must be int or None")
         if self.direction is not None and not isinstance(self.direction, str):
             raise TypeError("direction must be str or None")
+        if self.interaction_type is not None and not isinstance(self.interaction_type, str):
+            raise TypeError("interaction_type must be str or None")
+        if self.item_instance_id is not None and not isinstance(self.item_instance_id, int):
+            raise TypeError("item_instance_id must be int or None")
+        if self.inventory_slot_id is not None and not isinstance(self.inventory_slot_id, int):
+            raise TypeError("inventory_slot_id must be int or None")
+        if self.chest_world_object_id is not None and not isinstance(self.chest_world_object_id, int):
+            raise TypeError("chest_world_object_id must be int or None")
+        if self.conversation_choice_index is not None and not isinstance(
+            self.conversation_choice_index, int
+        ):
+            raise TypeError("conversation_choice_index must be int or None")
+        if self.skill_loadout_id is not None and not isinstance(self.skill_loadout_id, int):
+            raise TypeError("skill_loadout_id must be int or None")
+        if self.skill_slot_index is not None and not isinstance(self.skill_slot_index, int):
+            raise TypeError("skill_slot_index must be int or None")
+        if self.attention_level_value is not None and not isinstance(
+            self.attention_level_value, str
+        ):
+            raise TypeError("attention_level_value must be str or None")
+        if not isinstance(self.available_interactions, tuple):
+            raise TypeError("available_interactions must be tuple")
+        for value in self.available_interactions:
+            if not isinstance(value, str):
+                raise TypeError("available_interactions must contain only str")
 
 
 @dataclass(frozen=True)
@@ -128,6 +162,9 @@ class ToolRuntimeContextDto:
     """LLM UIのそのターン限定ラベル解決コンテキスト。"""
 
     targets: Dict[str, ToolRuntimeTargetDto]
+    current_x: Optional[int] = None
+    current_y: Optional[int] = None
+    current_z: Optional[int] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.targets, dict):
@@ -137,6 +174,13 @@ class ToolRuntimeContextDto:
                 raise TypeError("targets keys must be str")
             if not isinstance(target, ToolRuntimeTargetDto):
                 raise TypeError("targets values must be ToolRuntimeTargetDto")
+        for name, value in (
+            ("current_x", self.current_x),
+            ("current_y", self.current_y),
+            ("current_z", self.current_z),
+        ):
+            if value is not None and not isinstance(value, int):
+                raise TypeError(f"{name} must be int or None")
 
     @classmethod
     def empty(cls) -> "ToolRuntimeContextDto":

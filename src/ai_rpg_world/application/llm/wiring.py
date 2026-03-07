@@ -139,6 +139,13 @@ def create_llm_agent_wiring(
     world_query_service: Any,
     movement_service: Any,
     speech_service: Optional[Any] = None,
+    interaction_service: Optional[Any] = None,
+    harvest_service: Optional[Any] = None,
+    attention_service: Optional[Any] = None,
+    conversation_service: Optional[Any] = None,
+    place_object_service: Optional[Any] = None,
+    chest_service: Optional[Any] = None,
+    skill_tool_service: Optional[Any] = None,
     player_profile_repository: PlayerProfileRepository,
     unit_of_work_factory: UnitOfWorkFactory,
     observation_buffer: Optional[IObservationContextBuffer] = None,
@@ -219,6 +226,13 @@ def create_llm_agent_wiring(
     register_default_tools(
         game_tool_registry,
         speech_enabled=speech_service is not None,
+        interaction_enabled=interaction_service is not None,
+        harvest_enabled=harvest_service is not None,
+        attention_enabled=attention_service is not None,
+        conversation_enabled=conversation_service is not None,
+        place_enabled=place_object_service is not None,
+        chest_enabled=chest_service is not None,
+        combat_enabled=skill_tool_service is not None,
     )
     available_tools_provider = DefaultAvailableToolsProvider(game_tool_registry)
 
@@ -226,6 +240,13 @@ def create_llm_agent_wiring(
     tool_command_mapper = ToolCommandMapper(
         movement_service=movement_service,
         speech_service=speech_service,
+        interaction_service=interaction_service,
+        harvest_service=harvest_service,
+        attention_service=attention_service,
+        conversation_service=conversation_service,
+        place_object_service=place_object_service,
+        chest_service=chest_service,
+        skill_tool_service=skill_tool_service,
     )
     tool_argument_resolver = DefaultToolArgumentResolver()
     episode_memory_store = InMemoryEpisodeMemoryStore()

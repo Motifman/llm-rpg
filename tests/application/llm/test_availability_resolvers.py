@@ -3,13 +3,25 @@
 import pytest
 
 from ai_rpg_world.application.llm.services.availability_resolvers import (
+    ChangeAttentionAvailabilityResolver,
+    ChestStoreAvailabilityResolver,
+    CombatUseSkillAvailabilityResolver,
+    ConversationAdvanceAvailabilityResolver,
+    DestroyPlaceableAvailabilityResolver,
     NoOpAvailabilityResolver,
+    PlaceObjectAvailabilityResolver,
     SetDestinationAvailabilityResolver,
     WhisperAvailabilityResolver,
 )
 from ai_rpg_world.application.world.contracts.dtos import (
+    ActiveConversationDto,
     AvailableMoveDto,
+    AttentionLevelOptionDto,
+    ChestItemDto,
+    ConversationChoiceDto,
+    InventoryItemDto,
     PlayerCurrentStateDto,
+    UsableSkillDto,
     VisibleObjectDto,
 )
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
@@ -146,4 +158,61 @@ class TestWhisperAvailabilityResolver:
                 )
             ]
         )
+        assert resolver.is_available(ctx) is True
+
+
+class TestExtendedAvailabilityResolvers:
+    def test_change_attention_available_when_options_exist(self):
+        resolver = ChangeAttentionAvailabilityResolver()
+        ctx = _minimal_current_state()
+        ctx.attention_level_options = [AttentionLevelOptionDto("FULL", "フル", "すべて")]
+        assert resolver.is_available(ctx) is True
+
+    def test_conversation_advance_available_when_active_conversation_exists(self):
+        resolver = ConversationAdvanceAvailabilityResolver()
+        ctx = _minimal_current_state()
+        ctx.active_conversation = ActiveConversationDto(
+            npc_world_object_id=1,
+            npc_display_name="老人",
+            node_text="やあ",
+            choices=[ConversationChoiceDto(display_text="はい", choice_index=0)],
+            is_terminal=False,
+        )
+        assert resolver.is_available(ctx) is True
+
+    def test_place_object_available_when_placeable_inventory_exists(self):
+        resolver = PlaceObjectAvailabilityResolver()
+        ctx = _minimal_current_state()
+        ctx.inventory_items = [InventoryItemDto(0, 1, "木箱", 1, is_placeable=True)]
+        assert resolver.is_available(ctx) is True
+
+    def test_destroy_placeable_available_when_flag_true(self):
+        resolver = DestroyPlaceableAvailabilityResolver()
+        ctx = _minimal_current_state()
+        ctx.can_destroy_placeable = True
+        assert resolver.is_available(ctx) is True
+
+    def test_chest_store_available_with_open_chest_and_inventory(self):
+        resolver = ChestStoreAvailabilityResolver()
+        ctx = _minimal_current_state(
+            visible_objects=[
+                VisibleObjectDto(
+                    object_id=2,
+                    object_type="CHEST",
+                    x=1,
+                    y=0,
+                    z=0,
+                    distance=1,
+                    object_kind="chest",
+                    available_interactions=["store_in_chest"],
+                )
+            ]
+        )
+        ctx.inventory_items = [InventoryItemDto(0, 1, "木箱", 1)]
+        assert resolver.is_available(ctx) is True
+
+    def test_combat_use_skill_available_when_usable_skill_exists(self):
+        resolver = CombatUseSkillAvailabilityResolver()
+        ctx = _minimal_current_state()
+        ctx.usable_skills = [UsableSkillDto(10, 1, 100, "火球")]
         assert resolver.is_available(ctx) is True

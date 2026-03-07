@@ -5,8 +5,14 @@ from ai_rpg_world.application.llm.services.ui_context_builder import (
     DefaultLlmUiContextBuilder,
 )
 from ai_rpg_world.application.world.contracts.dtos import (
+    ActiveConversationDto,
     AvailableMoveDto,
+    AttentionLevelOptionDto,
+    ChestItemDto,
+    ConversationChoiceDto,
+    InventoryItemDto,
     PlayerCurrentStateDto,
+    UsableSkillDto,
     VisibleObjectDto,
 )
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
@@ -69,6 +75,20 @@ def _make_state() -> PlayerCurrentStateDto:
                 object_kind="npc",
                 direction_from_player="南",
                 is_interactable=True,
+                interaction_type="talk",
+                available_interactions=["interact"],
+            ),
+            VisibleObjectDto(
+                object_id=300,
+                object_type="RESOURCE",
+                x=-1,
+                y=0,
+                z=0,
+                distance=1,
+                display_name="薬草",
+                object_kind="resource",
+                direction_from_player="西",
+                available_interactions=["harvest"],
             ),
         ],
         view_distance=5,
@@ -84,6 +104,26 @@ def _make_state() -> PlayerCurrentStateDto:
         ],
         total_available_moves=1,
         attention_level=AttentionLevel.FULL,
+        inventory_items=[
+            InventoryItemDto(0, 401, "木箱", 1, is_placeable=True),
+        ],
+        chest_items=[
+            ChestItemDto(200, "宝箱", 501, "ポーション", 1),
+        ],
+        active_conversation=ActiveConversationDto(
+            npc_world_object_id=200,
+            npc_display_name="老人",
+            node_text="どうする？",
+            choices=[ConversationChoiceDto(display_text="はい", choice_index=0)],
+            is_terminal=False,
+        ),
+        usable_skills=[
+            UsableSkillDto(10, 1, 1001, "火球", mp_cost=5),
+        ],
+        attention_level_options=[
+            AttentionLevelOptionDto("FULL", "フル", "すべての観測を受け取ります。"),
+        ],
+        can_destroy_placeable=True,
     )
 
 
@@ -97,9 +137,29 @@ class TestDefaultLlmUiContextBuilder:
         assert "視界内の対象ラベル:" in result.current_state_text
         assert "P1: Bob" in result.current_state_text
         assert "N1: 老人" in result.current_state_text
+        assert "相互作用可能" in result.current_state_text
+        assert "採集可能" in result.current_state_text
         assert isinstance(result.tool_runtime_context, ToolRuntimeContextDto)
         assert result.tool_runtime_context.targets["P1"].player_id == 2
         assert result.tool_runtime_context.targets["N1"].world_object_id == 200
+        assert result.tool_runtime_context.targets["N1"].interaction_type == "talk"
+        assert result.tool_runtime_context.targets["O1"].available_interactions == ("harvest",)
+        assert "インベントリアイテム:" in result.current_state_text
+        assert "I1: 木箱" in result.current_state_text
+        assert "開いているチェストの中身:" in result.current_state_text
+        assert "C1: ポーション" in result.current_state_text
+        assert "会話中:" in result.current_state_text
+        assert "R1: はい" in result.current_state_text
+        assert "使用可能スキル:" in result.current_state_text
+        assert "K1: 火球" in result.current_state_text
+        assert "注意レベル変更:" in result.current_state_text
+        assert "A1: フル" in result.current_state_text
+        assert result.tool_runtime_context.current_x == 0
+        assert result.tool_runtime_context.targets["I1"].inventory_slot_id == 0
+        assert result.tool_runtime_context.targets["C1"].chest_world_object_id == 200
+        assert result.tool_runtime_context.targets["R1"].conversation_choice_index == 0
+        assert result.tool_runtime_context.targets["K1"].skill_slot_index == 1
+        assert result.tool_runtime_context.targets["A1"].attention_level_value == "FULL"
 
     def test_build_adds_move_labels(self):
         builder = DefaultLlmUiContextBuilder()
