@@ -216,7 +216,11 @@ class TestLlmAgentOrchestratorMemoryIntegration:
             occurred_at=datetime.now(),
             output=ObservationOutput(
                 prose="洞窟でチェストを発見した",
-                structured={"spot_name": "洞窟", "item_name": "チェスト"},
+                structured={
+                    "spot_name": "洞窟",
+                    "spot_id_value": 5,
+                    "item_name": "チェスト",
+                },
                 observation_category="self_only",
             ),
         )

@@ -122,10 +122,30 @@ class TestRuleBasedMemoryExtractor:
         )
         assert len(episodes) == 0
 
-    def test_extract_saves_when_has_entity_or_location_from_structured(
+    def test_extract_saves_when_has_stable_id_from_structured(
         self, extractor, player_id
     ):
-        """entity_ids または location_id が structured から抽出できれば保存する"""
+        """stable id（spot_id_value または world_object_id）が structured から抽出できれば保存する"""
+        episodes = extractor.extract(
+            player_id,
+            overflow_observations=[
+                _obs(
+                    "洞窟の入口で待機した",
+                    structured={"spot_name": "洞窟入口", "spot_id_value": 5},
+                ),
+            ],
+            action_summary="待機",
+            result_summary="何も起きなかった",
+        )
+        assert len(episodes) == 1
+        assert episodes[0].location_id == "洞窟入口"
+        assert episodes[0].spot_id_value == 5
+        assert "洞窟" in episodes[0].context_summary
+
+    def test_extract_does_not_save_when_only_entity_name_no_stable_id(
+        self, extractor, player_id
+    ):
+        """名前のみ（entity/location）で stable id がなければ保存しない"""
         episodes = extractor.extract(
             player_id,
             overflow_observations=[
@@ -134,9 +154,7 @@ class TestRuleBasedMemoryExtractor:
             action_summary="待機",
             result_summary="何も起きなかった",
         )
-        assert len(episodes) == 1
-        assert episodes[0].location_id == "洞窟入口"
-        assert "洞窟" in episodes[0].context_summary
+        assert len(episodes) == 0
 
     def test_extract_importance_high_when_breaks_movement(self, extractor, player_id):
         """breaks_movement ありの観測では importance=high"""

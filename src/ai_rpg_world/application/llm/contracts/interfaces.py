@@ -403,6 +403,34 @@ class ILlmTurnTrigger(ABC):
         pass
 
 
+class IReflectionStatePort(ABC):
+    """
+    Reflection の実行境界（cursor）を保持するポート。
+    次フェーズで永続化する場合はこのインターフェースを実装した永続化層に差し替える。
+    """
+
+    @abstractmethod
+    def get_last_reflection_game_day(self, player_id: PlayerId) -> Optional[int]:
+        """最終 Reflection 成功時の in-game day。None は未実行。"""
+        pass
+
+    @abstractmethod
+    def get_reflection_cursor(self, player_id: PlayerId) -> Optional[datetime]:
+        """
+        Reflection の since に渡す cursor。
+        この時刻以降のエピソードが対象。wall clock ではなく「反映済み境界」の意味。
+        None は全期間を対象。
+        """
+        pass
+
+    @abstractmethod
+    def mark_reflection_success(
+        self, player_id: PlayerId, game_day: int, cursor: datetime
+    ) -> None:
+        """Reflection 成功時に呼ぶ。game_day と cursor を記録。"""
+        pass
+
+
 class IReflectionRunner(ABC):
     """
     in-game day 境界や一定 tick ごとに Reflection を実行するランナーのポート。

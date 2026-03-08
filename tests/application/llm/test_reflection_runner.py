@@ -326,22 +326,28 @@ class TestDefaultReflectionRunner:
         failing_service = MagicMock(spec=type(reflection_service))
         failing_service.run.side_effect = RuntimeError("reflection failed")
 
+        from ai_rpg_world.application.llm.services.in_memory_reflection_state_port import (
+            InMemoryReflectionStatePort,
+        )
+
+        state_port = InMemoryReflectionStatePort()
         runner = DefaultReflectionRunner(
             reflection_service=failing_service,
             player_status_repository=player_status_repository,
             llm_player_resolver=SetBasedLlmPlayerResolver({1}),
             world_time_config=world_time_config,
+            state_port=state_port,
         )
 
         runner.run_after_tick(WorldTick(24))
-        assert 1 not in runner._last_reflection_game_day
+        assert state_port.get_last_reflection_game_day(PlayerId(1)) is None
 
         runner._reflection_service = reflection_service
         episode_store.add(PlayerId(1), _make_episode("e1"))
         runner.run_after_tick(WorldTick(24))
 
-        assert runner._last_reflection_game_day.get(1) == 1
-        assert 1 in runner._last_successful_reflection_at
+        assert state_port.get_last_reflection_game_day(PlayerId(1)) == 1
+        assert state_port.get_reflection_cursor(PlayerId(1)) is not None
 
     def test_run_after_tick_no_duplicate_reflection_same_game_day(
         self,

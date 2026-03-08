@@ -193,8 +193,8 @@ class TestObservationFormatter:
         assert "倒され" in out.prose
         assert "プレイヤー2" not in out.prose
 
-    def test_format_item_added_to_inventory_breaks_movement(self, formatter):
-        """ItemAddedToInventoryEvent 本人向けは breaks_movement=True（アイテム発見で割り込み）"""
+    def test_format_item_added_to_inventory_schedules_turn_only(self, formatter):
+        """ItemAddedToInventoryEvent 本人向けは schedules_turn のみ（過剰停止を減らす）"""
         event = ItemAddedToInventoryEvent.create(
             aggregate_id=PlayerId(1),
             aggregate_type="PlayerInventoryAggregate",
@@ -203,7 +203,8 @@ class TestObservationFormatter:
         out = formatter.format(event, PlayerId(1))
         assert out is not None
         assert "入手" in out.prose
-        assert out.breaks_movement is True
+        assert out.schedules_turn is True
+        assert out.breaks_movement is False
 
     def test_format_player_level_up_returns_prose_and_structured(self, formatter):
         """PlayerLevelUpEvent: レベルアップ文と構造化"""
@@ -314,8 +315,8 @@ class TestObservationFormatter:
         assert out.observation_category == "self_only"
         assert out.structured.get("role") == "self"
 
-    def test_format_spot_weather_changed_returns_old_new_in_prose(self, formatter):
-        """SpotWeatherChangedEvent: 天気変化のプローズと構造化"""
+    def test_format_spot_weather_changed_returns_old_new_in_prose_and_schedules_turn(self, formatter):
+        """SpotWeatherChangedEvent: 天気変化のプローズ・構造化・schedules_turn（環境通知）"""
         event = SpotWeatherChangedEvent.create(
             aggregate_id=SpotId(1),
             aggregate_type="Weather",
@@ -327,6 +328,8 @@ class TestObservationFormatter:
         assert out is not None
         assert "天気" in out.prose
         assert out.structured.get("type") == "weather_changed"
+        assert out.structured.get("spot_id_value") == 1
+        assert out.schedules_turn is True
 
     def test_format_unknown_event_returns_none(self, formatter):
         """未知のイベントは None"""
