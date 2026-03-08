@@ -15,6 +15,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     PlayerToolRuntimeTargetDto,
     QuestToolRuntimeTargetDto,
     SkillToolRuntimeTargetDto,
+    ShopListingToolRuntimeTargetDto,
     ShopToolRuntimeTargetDto,
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
@@ -538,28 +539,46 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         args: Dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
     ) -> Dict[str, Any]:
-        label = args.get("shop_label")
-        target = self._require_target_type(
-            label,
-            runtime_context,
-            "ショップラベル",
-            (ShopToolRuntimeTargetDto,),
-        )
-        if target.shop_id is None:
-            raise ToolArgumentResolutionException(
-                f"ショップとして解決できません: {label}",
-                "INVALID_TARGET_KIND",
+        shop_label = args.get("shop_label")
+        listing_label = args.get("listing_label")
+        listing_id_raw = args.get("listing_id")
+        if listing_label is not None:
+            listing_target = self._require_target_type(
+                listing_label,
+                runtime_context,
+                "出品ラベル",
+                (ShopListingToolRuntimeTargetDto,),
             )
-        listing_id = args.get("listing_id")
-        if listing_id is None:
+            if listing_target.shop_id is None or listing_target.listing_id is None:
+                raise ToolArgumentResolutionException(
+                    f"出品として解決できません: {listing_label}",
+                    "INVALID_TARGET_KIND",
+                )
+            shop_id = listing_target.shop_id
+            listing_id = listing_target.listing_id
+        elif listing_id_raw is not None:
+            shop_target = self._require_target_type(
+                shop_label,
+                runtime_context,
+                "ショップラベル",
+                (ShopToolRuntimeTargetDto,),
+            )
+            if shop_target.shop_id is None:
+                raise ToolArgumentResolutionException(
+                    f"ショップとして解決できません: {shop_label}",
+                    "INVALID_TARGET_KIND",
+                )
+            shop_id = shop_target.shop_id
+            listing_id = int(listing_id_raw)
+        else:
             raise ToolArgumentResolutionException(
-                "listing_id が指定されていません。",
+                "listing_label または listing_id を指定してください。",
                 "INVALID_TARGET_LABEL",
             )
         quantity = args.get("quantity", 1)
         return {
-            "shop_id": target.shop_id,
-            "listing_id": int(listing_id),
+            "shop_id": shop_id,
+            "listing_id": listing_id,
             "quantity": int(quantity),
         }
 
@@ -609,25 +628,43 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         args: Dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
     ) -> Dict[str, Any]:
-        label = args.get("shop_label")
-        target = self._require_target_type(
-            label,
-            runtime_context,
-            "ショップラベル",
-            (ShopToolRuntimeTargetDto,),
-        )
-        if target.shop_id is None:
-            raise ToolArgumentResolutionException(
-                f"ショップとして解決できません: {label}",
-                "INVALID_TARGET_KIND",
+        shop_label = args.get("shop_label")
+        listing_label = args.get("listing_label")
+        listing_id_raw = args.get("listing_id")
+        if listing_label is not None:
+            listing_target = self._require_target_type(
+                listing_label,
+                runtime_context,
+                "出品ラベル",
+                (ShopListingToolRuntimeTargetDto,),
             )
-        listing_id = args.get("listing_id")
-        if listing_id is None:
+            if listing_target.shop_id is None or listing_target.listing_id is None:
+                raise ToolArgumentResolutionException(
+                    f"出品として解決できません: {listing_label}",
+                    "INVALID_TARGET_KIND",
+                )
+            return {
+                "shop_id": listing_target.shop_id,
+                "listing_id": listing_target.listing_id,
+            }
+        elif listing_id_raw is not None:
+            shop_target = self._require_target_type(
+                shop_label,
+                runtime_context,
+                "ショップラベル",
+                (ShopToolRuntimeTargetDto,),
+            )
+            if shop_target.shop_id is None:
+                raise ToolArgumentResolutionException(
+                    f"ショップとして解決できません: {shop_label}",
+                    "INVALID_TARGET_KIND",
+                )
+            return {"shop_id": shop_target.shop_id, "listing_id": int(listing_id_raw)}
+        else:
             raise ToolArgumentResolutionException(
-                "listing_id が指定されていません。",
+                "listing_label または listing_id を指定してください。",
                 "INVALID_TARGET_LABEL",
             )
-        return {"shop_id": target.shop_id, "listing_id": int(listing_id)}
 
     def _resolve_trade_offer(
         self,
@@ -663,8 +700,18 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
             "slot_id": slot_id,
             "requested_gold": int(requested_gold),
         }
+        target_player_label = args.get("target_player_label")
         target_player_id = args.get("target_player_id")
-        if target_player_id is not None:
+        if target_player_label is not None:
+            player_target = self._require_target_type(
+                target_player_label,
+                runtime_context,
+                "プレイヤーラベル",
+                (PlayerToolRuntimeTargetDto,),
+            )
+            if player_target.player_id is not None:
+                result["target_player_id"] = player_target.player_id
+        elif target_player_id is not None:
             result["target_player_id"] = int(target_player_id)
         return result
 

@@ -198,12 +198,22 @@ class GuildMembershipSummaryDto:
 
 
 @dataclass
+class ShopListingSummaryDto:
+    """ショップ出品1件のサマリ（LLM current context 用、listing_label 解決の対象）"""
+
+    listing_id: int
+    item_name: str
+    price_per_unit: int
+
+
+@dataclass
 class NearbyShopSummaryDto:
     """近隣ショップのサマリ（LLM current context 用）"""
 
     shop_id: int
     shop_name: str
     listing_count: int
+    listings: List[ShopListingSummaryDto] = field(default_factory=list)
 
 
 @dataclass

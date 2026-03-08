@@ -6,11 +6,11 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 
 
 # 再スケジュール対象とする error_code（1起動1ツール前提で次tickで再試行する）
+# LLM_AUTHENTICATION_ERROR は恒久障害のため除外
 _RESCHEDULE_ERROR_CODES = frozenset({
     "NO_TOOL_CALL",           # LLM がツールを返さなかった
     "LLM_API_CALL_FAILED",    # 一時的 API 失敗
     "LLM_RATE_LIMIT",         # レート制限
-    "LLM_AUTHENTICATION_ERROR",
     "INVALID_DESTINATION_LABEL",  # ラベル未解決（次 tick で解消の可能性）
 })
 
@@ -304,6 +304,11 @@ class GuildToolRuntimeTargetDto(ToolRuntimeTargetDto):
 @dataclass(frozen=True)
 class ShopToolRuntimeTargetDto(ToolRuntimeTargetDto):
     """ショップ用の runtime target。shop_id を持つ。"""
+
+
+@dataclass(frozen=True)
+class ShopListingToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """ショップ出品用の runtime target。shop_id と listing_id を持つ。"""
 
 
 @dataclass(frozen=True)

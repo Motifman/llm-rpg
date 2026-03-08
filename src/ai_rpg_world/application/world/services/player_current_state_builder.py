@@ -164,6 +164,14 @@ class PlayerCurrentStateBuilder:
         physical_map: "PhysicalMapAggregate",
         available_moves_result: Optional[PlayerMovementOptionsDto],
     ) -> PlayerCurrentStateDto:
+        """
+        PlayerCurrentStateDto を組み立てる。
+
+        境界:
+        - 現在状態 (current state): 位置・天気・地形・同スポット人数・接続先
+        - ツール/runtime context: 視界オブジェクト・利用可能移動先・インベントリ・ショップ・取引等
+        - memory retrieval hints: active_quest_ids, guild_ids, nearby_shop_ids（関係性メモリ検索用）
+        """
         player_id = player_status.player_id
         coord = player_status.current_coordinate
         if coord is None:
@@ -240,6 +248,10 @@ class PlayerCurrentStateBuilder:
             else None
         )
 
+        # 境界: ツール/runtime context（LLM prompt 上のラベル解決・利用可否判定に利用）
+        # - available_moves, visible_objects, actionable/notable
+        # - inventory_items, chest_items, nearby_shops, available_trades
+        # - memory retrieval hints: active_quest_ids, guild_ids, nearby_shop_ids
         return PlayerCurrentStateDto(
             player_id=query.player_id,
             player_name=player_name,

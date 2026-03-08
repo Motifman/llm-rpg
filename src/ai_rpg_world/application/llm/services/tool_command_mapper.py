@@ -169,6 +169,33 @@ class ToolCommandMapper:
         self._place_object_service = place_object_service
         self._chest_service = chest_service
         self._skill_tool_service = skill_tool_service
+        self._executor_map: Dict[str, Any] = {
+            TOOL_NAME_NO_OP: lambda pid, a: LlmCommandResultDto(success=True, message="何もしませんでした。"),
+            TOOL_NAME_MOVE_TO_DESTINATION: self._execute_move_to_destination,
+            TOOL_NAME_WHISPER: self._execute_whisper,
+            TOOL_NAME_SAY: self._execute_say,
+            TOOL_NAME_INTERACT_WORLD_OBJECT: self._execute_interact_world_object,
+            TOOL_NAME_HARVEST_START: self._execute_harvest_start,
+            TOOL_NAME_CHANGE_ATTENTION: self._execute_change_attention,
+            TOOL_NAME_CONVERSATION_ADVANCE: self._execute_conversation_advance,
+            TOOL_NAME_PLACE_OBJECT: self._execute_place_object,
+            TOOL_NAME_DESTROY_PLACEABLE: lambda pid, a: self._execute_destroy_placeable(pid),
+            TOOL_NAME_CHEST_STORE: self._execute_chest_store,
+            TOOL_NAME_CHEST_TAKE: self._execute_chest_take,
+            TOOL_NAME_COMBAT_USE_SKILL: self._execute_combat_use_skill,
+            TOOL_NAME_QUEST_ACCEPT: self._execute_quest_accept,
+            TOOL_NAME_QUEST_CANCEL: self._execute_quest_cancel,
+            TOOL_NAME_QUEST_APPROVE: self._execute_quest_approve,
+            TOOL_NAME_GUILD_LEAVE: self._execute_guild_leave,
+            TOOL_NAME_GUILD_DEPOSIT_BANK: self._execute_guild_deposit_bank,
+            TOOL_NAME_GUILD_WITHDRAW_BANK: self._execute_guild_withdraw_bank,
+            TOOL_NAME_SHOP_PURCHASE: self._execute_shop_purchase,
+            TOOL_NAME_SHOP_LIST_ITEM: self._execute_shop_list_item,
+            TOOL_NAME_SHOP_UNLIST_ITEM: self._execute_shop_unlist_item,
+            TOOL_NAME_TRADE_OFFER: self._execute_trade_offer,
+            TOOL_NAME_TRADE_ACCEPT: self._execute_trade_accept,
+            TOOL_NAME_TRADE_CANCEL: self._execute_trade_cancel,
+        }
 
     def execute(
         self,
@@ -190,59 +217,9 @@ class ToolCommandMapper:
             raise TypeError("arguments must be dict or None")
         args = arguments if arguments is not None else {}
 
-        if tool_name == TOOL_NAME_NO_OP:
-            return LlmCommandResultDto(
-                success=True,
-                message="何もしませんでした。",
-            )
-        if tool_name == TOOL_NAME_MOVE_TO_DESTINATION:
-            return self._execute_move_to_destination(player_id, args)
-        if tool_name == TOOL_NAME_WHISPER:
-            return self._execute_whisper(player_id, args)
-        if tool_name == TOOL_NAME_SAY:
-            return self._execute_say(player_id, args)
-        if tool_name == TOOL_NAME_INTERACT_WORLD_OBJECT:
-            return self._execute_interact_world_object(player_id, args)
-        if tool_name == TOOL_NAME_HARVEST_START:
-            return self._execute_harvest_start(player_id, args)
-        if tool_name == TOOL_NAME_CHANGE_ATTENTION:
-            return self._execute_change_attention(player_id, args)
-        if tool_name == TOOL_NAME_CONVERSATION_ADVANCE:
-            return self._execute_conversation_advance(player_id, args)
-        if tool_name == TOOL_NAME_PLACE_OBJECT:
-            return self._execute_place_object(player_id, args)
-        if tool_name == TOOL_NAME_DESTROY_PLACEABLE:
-            return self._execute_destroy_placeable(player_id)
-        if tool_name == TOOL_NAME_CHEST_STORE:
-            return self._execute_chest_store(player_id, args)
-        if tool_name == TOOL_NAME_CHEST_TAKE:
-            return self._execute_chest_take(player_id, args)
-        if tool_name == TOOL_NAME_COMBAT_USE_SKILL:
-            return self._execute_combat_use_skill(player_id, args)
-        if tool_name == TOOL_NAME_QUEST_ACCEPT:
-            return self._execute_quest_accept(player_id, args)
-        if tool_name == TOOL_NAME_QUEST_CANCEL:
-            return self._execute_quest_cancel(player_id, args)
-        if tool_name == TOOL_NAME_QUEST_APPROVE:
-            return self._execute_quest_approve(player_id, args)
-        if tool_name == TOOL_NAME_GUILD_LEAVE:
-            return self._execute_guild_leave(player_id, args)
-        if tool_name == TOOL_NAME_GUILD_DEPOSIT_BANK:
-            return self._execute_guild_deposit_bank(player_id, args)
-        if tool_name == TOOL_NAME_GUILD_WITHDRAW_BANK:
-            return self._execute_guild_withdraw_bank(player_id, args)
-        if tool_name == TOOL_NAME_SHOP_PURCHASE:
-            return self._execute_shop_purchase(player_id, args)
-        if tool_name == TOOL_NAME_SHOP_LIST_ITEM:
-            return self._execute_shop_list_item(player_id, args)
-        if tool_name == TOOL_NAME_SHOP_UNLIST_ITEM:
-            return self._execute_shop_unlist_item(player_id, args)
-        if tool_name == TOOL_NAME_TRADE_OFFER:
-            return self._execute_trade_offer(player_id, args)
-        if tool_name == TOOL_NAME_TRADE_ACCEPT:
-            return self._execute_trade_accept(player_id, args)
-        if tool_name == TOOL_NAME_TRADE_CANCEL:
-            return self._execute_trade_cancel(player_id, args)
+        executor = self._executor_map.get(tool_name)
+        if executor is not None:
+            return executor(player_id, args)
         return LlmCommandResultDto(
             success=False,
             message="未知のツールです。",
