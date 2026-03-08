@@ -220,3 +220,33 @@ class TestCreateLlmAgentWiringEnvClient:
         deps = _minimal_wiring_deps()
         with pytest.raises(ValueError, match="got: 'litelm'"):
             create_llm_agent_wiring(**deps)
+
+
+class TestCreateLlmAgentWiringMemoryPersistence:
+    """memory_db_path による記憶永続化の切り替え"""
+
+    def test_memory_db_path_none_uses_in_memory_store(self):
+        """memory_db_path 未指定時は InMemoryEpisodeMemoryStore が使われる"""
+        from ai_rpg_world.application.llm.services.in_memory_episode_memory_store import (
+            InMemoryEpisodeMemoryStore,
+        )
+
+        deps = _minimal_wiring_deps()
+        result = create_llm_agent_wiring(**deps)
+        trigger = result.llm_turn_trigger
+        episode_store = trigger._turn_runner._orchestrator._episode_memory_store
+        assert isinstance(episode_store, InMemoryEpisodeMemoryStore)
+
+    def test_memory_db_path_provided_uses_sqlite_store(self, tmp_path):
+        """memory_db_path 指定時は SqliteEpisodeMemoryStore が使われる"""
+        from ai_rpg_world.infrastructure.llm.sqlite_episode_memory_store import (
+            SqliteEpisodeMemoryStore,
+        )
+
+        db_path = tmp_path / "llm_memory.db"
+        deps = _minimal_wiring_deps()
+        deps["memory_db_path"] = str(db_path)
+        result = create_llm_agent_wiring(**deps)
+        trigger = result.llm_turn_trigger
+        episode_store = trigger._turn_runner._orchestrator._episode_memory_store
+        assert isinstance(episode_store, SqliteEpisodeMemoryStore)
