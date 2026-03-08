@@ -86,6 +86,7 @@ class InMemoryEpisodeMemoryStore(IEpisodeMemoryStore):
                 e
                 for e in entries
                 if any(ent in entity_set for ent in e.entity_ids)
+                or (e.location_id is not None and e.location_id in entity_set)
             ]
         if action_names:
             action_set = set(a.lower() for a in action_names)

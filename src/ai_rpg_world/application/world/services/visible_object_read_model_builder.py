@@ -8,6 +8,7 @@ from ai_rpg_world.application.world.contracts.dtos import VisibleContextDto, Vis
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.facing import Facing
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
@@ -75,7 +76,7 @@ class VisibleObjectReadModelBuilder:
             visible_objects.append(
                 self._build_visible_object_dto(obj=obj, origin=origin, player_id=player_id)
             )
-        return visible_objects
+        return sorted(visible_objects, key=self._visible_object_sort_key)
 
     def build_actionable_objects(
         self, visible_objects: List[VisibleObjectDto]
@@ -90,6 +91,20 @@ class VisibleObjectReadModelBuilder:
         self, visible_objects: List[VisibleObjectDto]
     ) -> List[VisibleObjectDto]:
         return [obj for obj in visible_objects if obj.is_notable]
+
+    def _visible_object_sort_key(self, obj: VisibleObjectDto) -> tuple[int, int, int, str, str, int]:
+        actionable_rank = 0 if (
+            obj.can_interact or obj.can_harvest or obj.can_store_in_chest or obj.can_take_from_chest
+        ) else 1
+        notable_rank = 0 if obj.is_notable else 1
+        return (
+            notable_rank,
+            actionable_rank,
+            obj.distance,
+            obj.display_name or "",
+            obj.object_kind or "",
+            obj.object_id,
+        )
 
     def _build_visible_object_dto(
         self,
@@ -161,19 +176,10 @@ class VisibleObjectReadModelBuilder:
     def _direction_from_to(self, origin: Coordinate, target: Coordinate) -> str:
         dx = target.x - origin.x
         dy = target.y - origin.y
+        dz = target.z - origin.z
         if dx == 0 and dy == 0:
             return "ここ"
-        vertical = ""
-        horizontal = ""
-        if dy < 0:
-            vertical = "北"
-        elif dy > 0:
-            vertical = "南"
-        if dx > 0:
-            horizontal = "東"
-        elif dx < 0:
-            horizontal = "西"
-        return vertical + horizontal or "ここ"
+        return Facing.from_delta(dx, dy, dz).to_display_label()
 
     def _visible_object_display_name(self, obj) -> str:
         if obj.object_type == ObjectTypeEnum.PLAYER and obj.player_id is not None:

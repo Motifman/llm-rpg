@@ -7,6 +7,7 @@ LLM ターン駆動用に、turn_trigger と llm_player_resolver を渡すと観
 """
 
 import logging
+from datetime import datetime
 from typing import Any, Callable, Optional
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
@@ -124,28 +125,45 @@ class ObservationEventHandler(EventHandler[Any]):
 
     def _handle_impl(self, event: Any) -> None:
         recipients = self._resolver.resolve(event)
-        occurred_at = event.occurred_at
-        if occurred_at is None:
-            from datetime import datetime
-            occurred_at = datetime.now()
-
+        occurred_at = self._resolve_occurred_at(event)
         game_time_label = self._get_game_time_label(getattr(event, "occurred_tick", None))
 
         for player_id in recipients:
             attention_level = self._get_attention_level(player_id)
             output = self._formatter.format(event, player_id, attention_level=attention_level)
             if output is not None:
-                entry = ObservationEntry(
-                    occurred_at=occurred_at,
-                    output=output,
-                    game_time_label=game_time_label,
-                )
-                self._buffer.append(player_id, entry)
-                if (
-                    output.causes_interrupt
-                    and
-                    self._turn_trigger is not None
-                    and self._llm_player_resolver is not None
-                    and self._llm_player_resolver.is_llm_controlled(player_id)
-                ):
-                    self._turn_trigger.schedule_turn(player_id)
+                self._append_observation(player_id, output, occurred_at, game_time_label)
+                self._maybe_schedule_turn(player_id, output)
+
+    def _resolve_occurred_at(self, event: Any) -> datetime:
+        occurred_at = getattr(event, "occurred_at", None)
+        if occurred_at is None:
+            return datetime.now()
+        return occurred_at
+
+    def _append_observation(
+        self,
+        player_id: PlayerId,
+        output: ObservationOutput,
+        occurred_at: datetime,
+        game_time_label: Optional[str],
+    ) -> None:
+        entry = ObservationEntry(
+            occurred_at=occurred_at,
+            output=output,
+            game_time_label=game_time_label,
+        )
+        self._buffer.append(player_id, entry)
+
+    def _maybe_schedule_turn(
+        self,
+        player_id: PlayerId,
+        output: ObservationOutput,
+    ) -> None:
+        if not output.causes_interrupt:
+            return
+        if self._turn_trigger is None or self._llm_player_resolver is None:
+            return
+        if not self._llm_player_resolver.is_llm_controlled(player_id):
+            return
+        self._turn_trigger.schedule_turn(player_id)

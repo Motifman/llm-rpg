@@ -3,8 +3,18 @@
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import (
+    AttentionLevelToolRuntimeTargetDto,
+    ChestItemToolRuntimeTargetDto,
+    ChestToolRuntimeTargetDto,
+    ConversationChoiceToolRuntimeTargetDto,
+    DestinationToolRuntimeTargetDto,
+    InventoryToolRuntimeTargetDto,
+    MonsterToolRuntimeTargetDto,
+    NpcToolRuntimeTargetDto,
+    PlayerToolRuntimeTargetDto,
+    ResourceToolRuntimeTargetDto,
+    SkillToolRuntimeTargetDto,
     ToolRuntimeContextDto,
-    ToolRuntimeTargetDto,
 )
 from ai_rpg_world.application.llm.services.tool_argument_resolver import (
     DefaultToolArgumentResolver,
@@ -30,68 +40,69 @@ from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 def _make_context() -> ToolRuntimeContextDto:
     return ToolRuntimeContextDto(
         targets={
-            "S1": ToolRuntimeTargetDto(
+            "S1": DestinationToolRuntimeTargetDto(
                 label="S1",
                 kind="destination",
                 display_name="港町",
                 spot_id=2,
                 destination_type="spot",
             ),
-            "P1": ToolRuntimeTargetDto(
+            "P1": PlayerToolRuntimeTargetDto(
                 label="P1",
                 kind="player",
                 display_name="Bob",
                 player_id=2,
                 world_object_id=100,
             ),
-            "N1": ToolRuntimeTargetDto(
+            "N1": NpcToolRuntimeTargetDto(
                 label="N1",
                 kind="npc",
                 display_name="老人",
                 world_object_id=200,
             ),
-            "O2": ToolRuntimeTargetDto(
+            "O2": ChestToolRuntimeTargetDto(
                 label="O2",
                 kind="chest",
                 display_name="宝箱",
                 world_object_id=210,
             ),
-            "O1": ToolRuntimeTargetDto(
+            "O1": ResourceToolRuntimeTargetDto(
                 label="O1",
                 kind="resource",
                 display_name="薬草",
                 world_object_id=300,
             ),
-            "I1": ToolRuntimeTargetDto(
+            "I1": InventoryToolRuntimeTargetDto(
                 label="I1",
                 kind="inventory_item",
                 display_name="木箱",
                 item_instance_id=400,
                 inventory_slot_id=2,
+                is_placeable=True,
                 available_interactions=("place_object",),
             ),
-            "C1": ToolRuntimeTargetDto(
+            "C1": ChestItemToolRuntimeTargetDto(
                 label="C1",
                 kind="chest_item",
                 display_name="ポーション",
                 item_instance_id=500,
                 chest_world_object_id=210,
             ),
-            "R1": ToolRuntimeTargetDto(
+            "R1": ConversationChoiceToolRuntimeTargetDto(
                 label="R1",
                 kind="conversation_choice",
                 display_name="はい",
                 world_object_id=200,
                 conversation_choice_index=0,
             ),
-            "K1": ToolRuntimeTargetDto(
+            "K1": SkillToolRuntimeTargetDto(
                 label="K1",
                 kind="skill",
                 display_name="火球",
                 skill_loadout_id=10,
                 skill_slot_index=1,
             ),
-            "A1": ToolRuntimeTargetDto(
+            "A1": AttentionLevelToolRuntimeTargetDto(
                 label="A1",
                 kind="attention_level",
                 display_name="フル",
@@ -249,7 +260,7 @@ class TestDefaultToolArgumentResolver:
     def test_resolve_combat_use_skill_with_target(self):
         resolver = DefaultToolArgumentResolver()
         ctx = _make_context()
-        ctx.targets["M1"] = ToolRuntimeTargetDto(
+        ctx.targets["M1"] = MonsterToolRuntimeTargetDto(
             label="M1",
             kind="monster",
             display_name="ゴブリン",
@@ -308,7 +319,7 @@ class TestDefaultToolArgumentResolver:
     def test_resolve_place_object_non_placeable_label_raises(self):
         resolver = DefaultToolArgumentResolver()
         ctx = _make_context()
-        ctx.targets["I2"] = ToolRuntimeTargetDto(
+        ctx.targets["I2"] = InventoryToolRuntimeTargetDto(
             label="I2",
             kind="inventory_item",
             display_name="石",

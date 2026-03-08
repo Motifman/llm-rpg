@@ -43,18 +43,7 @@ class DefaultCurrentStateFormatter(ICurrentStateFormatter):
         if dto.current_terrain_type:
             lines.append(f"地形: {dto.current_terrain_type}")
 
-        # 視界内オブジェクト
-        if dto.visible_objects:
-            lines.append(f"視界内オブジェクト (視界距離={dto.view_distance}):")
-            for obj in dto.visible_objects[:20]:  # 最大20件
-                lines.append(
-                    f"  - タイプ={obj.object_type}, 距離={obj.distance}, "
-                    f"座標=({obj.x},{obj.y},{obj.z})"
-                )
-            if len(dto.visible_objects) > 20:
-                lines.append(f"  ... 他 {len(dto.visible_objects) - 20} 件")
-        else:
-            lines.append("視界内オブジェクト: なし")
+        lines.append(f"視界距離: {dto.view_distance}")
 
         if dto.notable_objects:
             lines.append("注目対象:")
@@ -62,6 +51,25 @@ class DefaultCurrentStateFormatter(ICurrentStateFormatter):
                 reason = f" ({obj.notable_reason})" if obj.notable_reason else ""
                 lines.append(
                     f"  - {obj.display_name or obj.object_type}: 距離={obj.distance}, 方角={obj.direction_from_player}{reason}"
+                )
+        else:
+            lines.append("注目対象: なし")
+
+        if dto.actionable_objects:
+            lines.append("今すぐ行動可能な対象:")
+            for obj in dto.actionable_objects[:10]:
+                action_labels: List[str] = []
+                if obj.can_interact:
+                    action_labels.append("相互作用")
+                if obj.can_harvest:
+                    action_labels.append("採集")
+                if obj.can_store_in_chest:
+                    action_labels.append("収納")
+                if obj.can_take_from_chest:
+                    action_labels.append("取り出し")
+                action_suffix = f" ({', '.join(action_labels)})" if action_labels else ""
+                lines.append(
+                    f"  - {obj.display_name or obj.object_type}: 距離={obj.distance}, 方角={obj.direction_from_player}{action_suffix}"
                 )
 
         # 利用可能な移動先

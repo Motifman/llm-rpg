@@ -2,7 +2,22 @@
 
 from typing import Any, Dict, Optional
 
-from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
+from ai_rpg_world.application.llm.contracts.dtos import (
+    AttentionLevelToolRuntimeTargetDto,
+    ChestItemToolRuntimeTargetDto,
+    ChestToolRuntimeTargetDto,
+    ConversationChoiceToolRuntimeTargetDto,
+    DestinationToolRuntimeTargetDto,
+    InventoryToolRuntimeTargetDto,
+    MonsterToolRuntimeTargetDto,
+    NpcToolRuntimeTargetDto,
+    PlayerToolRuntimeTargetDto,
+    SkillToolRuntimeTargetDto,
+    ToolRuntimeContextDto,
+    ToolRuntimeTargetDto,
+    WorldObjectToolRuntimeTargetDto,
+    ResourceToolRuntimeTargetDto,
+)
 from ai_rpg_world.application.llm.contracts.interfaces import IToolArgumentResolver
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_CHANGE_ATTENTION,
@@ -20,7 +35,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_WHISPER,
 )
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
-from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+from ai_rpg_world.domain.world.value_object.facing import Facing
 
 
 class ToolArgumentResolutionException(Exception):
@@ -91,13 +106,15 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
                 "移動先ラベルが指定されていません。",
                 "INVALID_DESTINATION_LABEL",
             )
-        target = runtime_context.targets.get(label)
-        if target is None:
-            raise ToolArgumentResolutionException(
-                f"指定された移動先ラベルは現在の候補にありません: {label}",
-                "INVALID_DESTINATION_LABEL",
-            )
-        if target.kind != "destination" or target.spot_id is None:
+        target = self._require_target_type(
+            label,
+            runtime_context,
+            "移動先ラベル",
+            (DestinationToolRuntimeTargetDto,),
+            invalid_label_code="INVALID_DESTINATION_LABEL",
+            invalid_kind_code="INVALID_DESTINATION_KIND",
+        )
+        if target.spot_id is None:
             raise ToolArgumentResolutionException(
                 f"移動先として使えないラベルです: {label}",
                 "INVALID_DESTINATION_KIND",
@@ -119,13 +136,13 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
                 "囁き先ラベルが指定されていません。",
                 "INVALID_TARGET_LABEL",
             )
-        target = runtime_context.targets.get(label)
-        if target is None:
-            raise ToolArgumentResolutionException(
-                f"指定された対象ラベルは現在の候補にありません: {label}",
-                "INVALID_TARGET_LABEL",
-            )
-        if target.kind != "player" or target.player_id is None:
+        target = self._require_target_type(
+            label,
+            runtime_context,
+            "囁き先ラベル",
+            (PlayerToolRuntimeTargetDto,),
+        )
+        if target.player_id is None:
             raise ToolArgumentResolutionException(
                 f"囁きはプレイヤー宛てにのみ送れます: {label}",
                 "INVALID_TARGET_KIND",
@@ -147,13 +164,17 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
                 "相互作用対象ラベルが指定されていません。",
                 "INVALID_TARGET_LABEL",
             )
-        target = runtime_context.targets.get(label)
-        if target is None:
-            raise ToolArgumentResolutionException(
-                f"指定された対象ラベルは現在の候補にありません: {label}",
-                "INVALID_TARGET_LABEL",
-            )
-        if target.world_object_id is None or target.kind not in {"npc", "chest", "door", "object"}:
+        target = self._require_target_type(
+            label,
+            runtime_context,
+            "相互作用対象ラベル",
+            (
+                NpcToolRuntimeTargetDto,
+                ChestToolRuntimeTargetDto,
+                WorldObjectToolRuntimeTargetDto,
+            ),
+        )
+        if target.world_object_id is None:
             raise ToolArgumentResolutionException(
                 f"相互作用に使えないラベルです: {label}",
                 "INVALID_TARGET_KIND",
@@ -174,13 +195,13 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
                 "採集対象ラベルが指定されていません。",
                 "INVALID_TARGET_LABEL",
             )
-        target = runtime_context.targets.get(label)
-        if target is None:
-            raise ToolArgumentResolutionException(
-                f"指定された対象ラベルは現在の候補にありません: {label}",
-                "INVALID_TARGET_LABEL",
-            )
-        if target.kind != "resource" or target.world_object_id is None:
+        target = self._require_target_type(
+            label,
+            runtime_context,
+            "採集対象ラベル",
+            (ResourceToolRuntimeTargetDto,),
+        )
+        if target.world_object_id is None:
             raise ToolArgumentResolutionException(
                 f"採集に使えないラベルです: {label}",
                 "INVALID_TARGET_KIND",
@@ -196,8 +217,13 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         runtime_context: ToolRuntimeContextDto,
     ) -> Dict[str, Any]:
         label = args.get("level_label")
-        target = self._require_target(label, runtime_context, "注意レベルラベル")
-        if target.kind != "attention_level" or target.attention_level_value is None:
+        target = self._require_target_type(
+            label,
+            runtime_context,
+            "注意レベルラベル",
+            (AttentionLevelToolRuntimeTargetDto,),
+        )
+        if target.attention_level_value is None:
             raise ToolArgumentResolutionException(
                 f"注意レベル変更に使えないラベルです: {label}",
                 "INVALID_TARGET_KIND",
@@ -210,8 +236,13 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         runtime_context: ToolRuntimeContextDto,
     ) -> Dict[str, Any]:
         target_label = args.get("target_label")
-        target = self._require_target(target_label, runtime_context, "会話対象ラベル")
-        if target.kind != "npc" or target.world_object_id is None:
+        target = self._require_target_type(
+            target_label,
+            runtime_context,
+            "会話対象ラベル",
+            (NpcToolRuntimeTargetDto,),
+        )
+        if target.world_object_id is None:
             raise ToolArgumentResolutionException(
                 f"会話対象に使えないラベルです: {target_label}",
                 "INVALID_TARGET_KIND",
@@ -219,11 +250,13 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         choice_label = args.get("choice_label")
         choice_index = None
         if choice_label is not None:
-            choice_target = self._require_target(choice_label, runtime_context, "会話選択肢ラベル")
-            if (
-                choice_target.kind != "conversation_choice"
-                or choice_target.world_object_id != target.world_object_id
-            ):
+            choice_target = self._require_target_type(
+                choice_label,
+                runtime_context,
+                "会話選択肢ラベル",
+                (ConversationChoiceToolRuntimeTargetDto,),
+            )
+            if choice_target.world_object_id != target.world_object_id:
                 raise ToolArgumentResolutionException(
                     f"会話相手に対応しない選択肢ラベルです: {choice_label}",
                     "INVALID_TARGET_KIND",
@@ -241,12 +274,13 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         runtime_context: ToolRuntimeContextDto,
     ) -> Dict[str, Any]:
         label = args.get("inventory_item_label")
-        target = self._require_target(label, runtime_context, "在庫アイテムラベル")
-        if (
-            target.kind != "inventory_item"
-            or target.inventory_slot_id is None
-            or "place_object" not in target.available_interactions
-        ):
+        target = self._require_target_type(
+            label,
+            runtime_context,
+            "在庫アイテムラベル",
+            (InventoryToolRuntimeTargetDto,),
+        )
+        if target.inventory_slot_id is None or not target.is_placeable:
             raise ToolArgumentResolutionException(
                 f"設置に使えない在庫ラベルです: {label}",
                 "INVALID_TARGET_KIND",
@@ -262,15 +296,25 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         runtime_context: ToolRuntimeContextDto,
     ) -> Dict[str, Any]:
         chest_label = args.get("target_label")
-        chest = self._require_target(chest_label, runtime_context, "宝箱ラベル")
-        if chest.world_object_id is None or chest.kind != "chest":
+        chest = self._require_target_type(
+            chest_label,
+            runtime_context,
+            "宝箱ラベル",
+            (ChestToolRuntimeTargetDto,),
+        )
+        if chest.world_object_id is None:
             raise ToolArgumentResolutionException(
                 f"宝箱として使えないラベルです: {chest_label}",
                 "INVALID_TARGET_KIND",
             )
         item_label = args.get("inventory_item_label")
-        item = self._require_target(item_label, runtime_context, "在庫アイテムラベル")
-        if item.kind != "inventory_item" or item.item_instance_id is None:
+        item = self._require_target_type(
+            item_label,
+            runtime_context,
+            "在庫アイテムラベル",
+            (InventoryToolRuntimeTargetDto,),
+        )
+        if item.item_instance_id is None:
             raise ToolArgumentResolutionException(
                 f"収納に使えない在庫ラベルです: {item_label}",
                 "INVALID_TARGET_KIND",
@@ -288,19 +332,25 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         runtime_context: ToolRuntimeContextDto,
     ) -> Dict[str, Any]:
         chest_label = args.get("target_label")
-        chest = self._require_target(chest_label, runtime_context, "宝箱ラベル")
-        if chest.world_object_id is None or chest.kind != "chest":
+        chest = self._require_target_type(
+            chest_label,
+            runtime_context,
+            "宝箱ラベル",
+            (ChestToolRuntimeTargetDto,),
+        )
+        if chest.world_object_id is None:
             raise ToolArgumentResolutionException(
                 f"宝箱として使えないラベルです: {chest_label}",
                 "INVALID_TARGET_KIND",
             )
         item_label = args.get("chest_item_label")
-        item = self._require_target(item_label, runtime_context, "チェスト中身ラベル")
-        if (
-            item.kind != "chest_item"
-            or item.item_instance_id is None
-            or item.chest_world_object_id != chest.world_object_id
-        ):
+        item = self._require_target_type(
+            item_label,
+            runtime_context,
+            "チェスト中身ラベル",
+            (ChestItemToolRuntimeTargetDto,),
+        )
+        if item.item_instance_id is None or item.chest_world_object_id != chest.world_object_id:
             raise ToolArgumentResolutionException(
                 f"対象の宝箱に対応しない中身ラベルです: {item_label}",
                 "INVALID_TARGET_KIND",
@@ -318,12 +368,13 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         runtime_context: ToolRuntimeContextDto,
     ) -> Dict[str, Any]:
         skill_label = args.get("skill_label")
-        skill = self._require_target(skill_label, runtime_context, "スキルラベル")
-        if (
-            skill.kind != "skill"
-            or skill.skill_loadout_id is None
-            or skill.skill_slot_index is None
-        ):
+        skill = self._require_target_type(
+            skill_label,
+            runtime_context,
+            "スキルラベル",
+            (SkillToolRuntimeTargetDto,),
+        )
+        if skill.skill_loadout_id is None or skill.skill_slot_index is None:
             raise ToolArgumentResolutionException(
                 f"スキルとして使えないラベルです: {skill_label}",
                 "INVALID_TARGET_KIND",
@@ -337,12 +388,16 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         target_label = args.get("target_label")
         if target_label is None:
             return resolved
-        target = self._require_target(target_label, runtime_context, "攻撃対象ラベル")
-        if target.kind not in {"player", "monster", "npc"}:
-            raise ToolArgumentResolutionException(
-                f"攻撃対象に使えないラベルです: {target_label}",
-                "INVALID_TARGET_KIND",
-            )
+        target = self._require_target_type(
+            target_label,
+            runtime_context,
+            "攻撃対象ラベル",
+            (
+                PlayerToolRuntimeTargetDto,
+                MonsterToolRuntimeTargetDto,
+                NpcToolRuntimeTargetDto,
+            ),
+        )
         direction = self._resolve_direction_from_context(target, runtime_context)
         resolved["auto_aim"] = False
         resolved["target_direction"] = direction
@@ -354,17 +409,42 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         label: Any,
         runtime_context: ToolRuntimeContextDto,
         label_name: str,
+        *,
+        invalid_label_code: str = "INVALID_TARGET_LABEL",
     ):
         if not isinstance(label, str) or not label:
             raise ToolArgumentResolutionException(
                 f"{label_name}が指定されていません。",
-                "INVALID_TARGET_LABEL",
+                invalid_label_code,
             )
         target = runtime_context.targets.get(label)
         if target is None:
             raise ToolArgumentResolutionException(
                 f"指定された対象ラベルは現在の候補にありません: {label}",
-                "INVALID_TARGET_LABEL",
+                invalid_label_code,
+            )
+        return target
+
+    def _require_target_type(
+        self,
+        label: Any,
+        runtime_context: ToolRuntimeContextDto,
+        label_name: str,
+        expected_types: tuple[type[ToolRuntimeTargetDto], ...],
+        *,
+        invalid_label_code: str = "INVALID_TARGET_LABEL",
+        invalid_kind_code: str = "INVALID_TARGET_KIND",
+    ) -> ToolRuntimeTargetDto:
+        target = self._require_target(
+            label,
+            runtime_context,
+            label_name,
+            invalid_label_code=invalid_label_code,
+        )
+        if not isinstance(target, expected_types):
+            raise ToolArgumentResolutionException(
+                f"{label_name}として使えないラベルです: {label}",
+                invalid_kind_code,
             )
         return target
 
@@ -383,9 +463,9 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
                 f"対象の方向を特定できません: {target.label}",
                 "INVALID_TARGET_KIND",
             )
-        resolved = DirectionEnum.from_delta(
+        resolved = Facing.from_delta(
             target.relative_dx,
             target.relative_dy,
             target.relative_dz or 0,
         )
-        return resolved.value
+        return resolved.to_direction().value
