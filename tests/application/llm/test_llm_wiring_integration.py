@@ -27,6 +27,9 @@ from ai_rpg_world.infrastructure.events.event_handler_profile import EventHandle
 from ai_rpg_world.infrastructure.events.observation_event_handler_registry import (
     ObservationEventHandlerRegistry,
 )
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
+    InMemoryUnitOfWork,
+)
 
 
 def _minimal_wiring_deps():
@@ -483,3 +486,132 @@ class TestBootstrapContractReturnValues:
         deps["observation_buffer"] = custom_buffer
         registry, _ = create_llm_agent_wiring(**deps)
         assert registry._handler._buffer is custom_buffer
+
+
+# ---------------------------------------------------------------------------
+# E2E: domain event -> observation buffer -> schedule_turn -> run_scheduled_turns -> episode memory save
+# ---------------------------------------------------------------------------
+
+
+class TestEventToEpisodeMemoryE2E:
+    """LLMイベント起点フローのE2E: ドメインイベント発行からエピソード記憶保存までの一連の流れを検証する"""
+
+    def test_domain_event_triggers_observation_schedule_turn_and_episode_memory_save(self):
+        """
+        PlayerDownedEvent 発行 → 観測バッファ追記 → schedule_turn → run_scheduled_turns
+        → ツール実行 → episode memory save の流れが動作すること。
+        注入した episode_memory_store にエピソードが保存されていることを検証する。
+        """
+        from ai_rpg_world.application.llm.services.in_memory_episode_memory_store import (
+            InMemoryEpisodeMemoryStore,
+        )
+        from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+        from ai_rpg_world.application.llm.services.llm_player_resolver import (
+            SetBasedLlmPlayerResolver,
+        )
+        from ai_rpg_world.application.llm.services.sliding_window_memory import (
+            DefaultSlidingWindowMemory,
+        )
+        from ai_rpg_world.domain.player.event.status_events import (
+            PlayerDownedEvent,
+            PlayerLocationChangedEvent,
+        )
+        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+        from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+        from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import (
+            PlayerProfileAggregate,
+        )
+        from ai_rpg_world.domain.player.enum.player_enum import ControlType
+        from ai_rpg_world.domain.player.value_object.player_name import PlayerName
+        from ai_rpg_world.domain.world.entity.spot import Spot
+        from ai_rpg_world.infrastructure.repository.in_memory_data_store import (
+            InMemoryDataStore,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import (
+            InMemoryPlayerProfileRepository,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
+            InMemoryPlayerStatusRepository,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
+            InMemoryPhysicalMapRepository,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_spot_repository import (
+            InMemorySpotRepository,
+        )
+
+        data_store = InMemoryDataStore()
+        data_store.clear_all()
+
+        def create_uow():
+            return InMemoryUnitOfWork(
+                unit_of_work_factory=create_uow, data_store=data_store
+            )
+
+        uow, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(
+            unit_of_work_factory=create_uow,
+            data_store=data_store,
+        )
+
+        profile_repo = InMemoryPlayerProfileRepository(data_store, None)
+        spot_repo = InMemorySpotRepository(data_store, None)
+        profile = PlayerProfileAggregate.create(
+            PlayerId(1), PlayerName("E2EPlayer"), control_type=ControlType.LLM
+        )
+        profile_repo.save(profile)
+        spot_repo.save(Spot(SpotId(1), "SpotA", "A"))
+        spot_repo.save(Spot(SpotId(2), "SpotB", "B"))
+
+        player_status_repo = InMemoryPlayerStatusRepository(data_store, None)
+        physical_map_repo = InMemoryPhysicalMapRepository(data_store, None)
+        world_query = MagicMock(spec=WorldQueryService)
+        world_query.get_player_current_state = MagicMock(return_value=None)
+        movement = MagicMock(spec=MovementApplicationService)
+        movement.move_to_destination = MagicMock()
+        movement.cancel_movement = MagicMock()
+
+        episode_memory_store = InMemoryEpisodeMemoryStore()
+        sliding_window = DefaultSlidingWindowMemory(max_entries_per_player=1)
+
+        uow_factory = MagicMock(spec=UnitOfWorkFactory)
+        uow_factory.create.return_value = uow
+
+        wiring_result = create_llm_agent_wiring(
+            player_status_repository=player_status_repo,
+            physical_map_repository=physical_map_repo,
+            world_query_service=world_query,
+            movement_service=movement,
+            player_profile_repository=profile_repo,
+            unit_of_work_factory=uow_factory,
+            spot_repository=spot_repo,
+            episode_memory_store=episode_memory_store,
+            sliding_window_memory=sliding_window,
+            llm_player_resolver=SetBasedLlmPlayerResolver({1}),
+            llm_client=StubLlmClient(),
+        )
+        registry = wiring_result.observation_registry
+        trigger = wiring_result.llm_turn_trigger
+
+        registry.register_handlers(event_publisher)
+
+        event1 = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+        )
+        event2 = PlayerLocationChangedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            old_spot_id=SpotId(1),
+            old_coordinate=Coordinate(0, 0, 0),
+            new_spot_id=SpotId(2),
+            new_coordinate=Coordinate(1, 0, 0),
+        )
+
+        with uow:
+            uow.add_events([event1, event2])
+
+        trigger.run_scheduled_turns()
+
+        entries = episode_memory_store.get_recent(PlayerId(1), limit=10)
+        assert len(entries) >= 1, "エピソード記憶に最低1件は保存されること（breaks_movement 観測）"

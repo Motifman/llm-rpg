@@ -18,6 +18,11 @@ EventHandlerComposition のインスタンス化）は**呼び出し元（外部
 LLM クライアント: 環境変数 LLM_CLIENT で "stub"（デフォルト）または "litellm" を指定。
 開発では stub、本番では litellm を指定する。
 "stub" / "litellm" 以外の値の場合は ValueError を送出する。
+
+SQLite 記憶永続化: 環境変数 LLM_MEMORY_DB_PATH に DB ファイルパスを指定すると、
+memory_db_path 引数なしでも episode / long-term / reflection state を SQLite に保存する。
+起動経路（bootstrap）で本関数に memory_db_path を渡すか、LLM_MEMORY_DB_PATH を設定することで
+restart 後の復元が可能になる。
 """
 
 import os
@@ -26,9 +31,13 @@ from typing import Any, Optional, Tuple
 _VALID_LLM_CLIENT_VALUES = frozenset({"stub", "litellm"})
 
 from ai_rpg_world.application.llm.contracts.interfaces import (
+    IActionResultStore,
+    IEpisodeMemoryStore,
     ILLMClient,
+    ILLMPlayerResolver,
     ILlmTurnTrigger,
     IReflectionRunner,
+    ISlidingWindowMemory,
 )
 from ai_rpg_world.application.llm.services.action_result_store import (
     DefaultActionResultStore,
@@ -127,6 +136,7 @@ from ai_rpg_world.infrastructure.events.observation_event_handler_registry impor
 
 _ENV_LLM_CLIENT = "LLM_CLIENT"
 _DEFAULT_LLM_CLIENT = "stub"
+_ENV_LLM_MEMORY_DB_PATH = "LLM_MEMORY_DB_PATH"
 
 
 class LlmAgentWiringResult:
@@ -183,16 +193,27 @@ def create_llm_agent_wiring(
     item_repository: Optional[Any] = None,
     quest_repository: Optional[Any] = None,
     shop_repository: Optional[Any] = None,
+    trade_repository: Optional[Any] = None,
     guild_repository: Optional[Any] = None,
     monster_repository: Optional[Any] = None,
     hit_box_repository: Optional[Any] = None,
     skill_loadout_repository: Optional[Any] = None,
     skill_deck_progress_repository: Optional[Any] = None,
     skill_spec_repository: Optional[Any] = None,
+    quest_command_service: Optional[Any] = None,
+    guild_command_service: Optional[Any] = None,
+    shop_command_service: Optional[Any] = None,
+    trade_command_service: Optional[Any] = None,
     llm_client: Optional[ILLMClient] = None,
     game_time_provider: Optional[Any] = None,
     world_time_config_service: Optional[Any] = None,
     memory_db_path: Optional[str] = None,
+    episode_memory_store: Optional[IEpisodeMemoryStore] = None,
+    long_term_memory_store: Optional[Any] = None,
+    reflection_state_port: Optional[Any] = None,
+    action_result_store: Optional[IActionResultStore] = None,
+    sliding_window_memory: Optional[ISlidingWindowMemory] = None,
+    llm_player_resolver: Optional[ILLMPlayerResolver] = None,
 ) -> "LlmAgentWiringResult":
     """
     LLM エージェント用の観測ハンドラ登録用 Registry と LlmTurnTrigger を組み立てて返す。
@@ -215,6 +236,7 @@ def create_llm_agent_wiring(
         item_repository: 観測文のアイテム名解決用（チェスト・インベントリ系）。省略時は「何かのアイテム」となる。
         quest_repository: クエスト観測の配信先解決（承認・キャンセル等）用（任意）。
         shop_repository: ショップ観測の配信先解決（spot 解決）・観測文の名前解決用（任意）。
+        trade_repository: 取引観測の配信先解決（TradeAccepted/TradeCancelled の seller/target 解決）用（任意）。
         guild_repository: ギルド観測の配信先解決（全メンバー通知）・観測文の名前解決用（任意）。
         monster_repository: モンスター/会話NPC観測の配信先解決・観測文の名前解決用（任意）。
         hit_box_repository: 戦闘（HitBox）観測の配信先解決（owner 解決）用（任意）。
@@ -224,7 +246,13 @@ def create_llm_agent_wiring(
         llm_client: 省略時は環境変数 LLM_CLIENT に従い作成（stub / litellm）
         game_time_provider: 省略時は観測にゲーム内時刻を付与しない。指定時は world_time_config_service も必要。
         world_time_config_service: 省略時は観測にゲーム内時刻を付与しない。ticks_per_day 等を提供する設定サービス。
-        memory_db_path: SQLite 記憶永続化の DB パス。指定時は episode / long-term / reflection state を SQLite に保存。省略時は in-memory。
+        memory_db_path: SQLite 記憶永続化の DB パス。指定時は episode / long-term / reflection state を SQLite に保存。省略時は環境変数 LLM_MEMORY_DB_PATH を参照し、それもなければ in-memory。
+        episode_memory_store: テスト用注入。省略時は memory_db_path または in-memory で作成。
+        long_term_memory_store: テスト用注入。省略時は memory_db_path または in-memory で作成。
+        reflection_state_port: テスト用注入。省略時は memory_db_path 時のみ SqliteReflectionStatePort を作成。
+        action_result_store: テスト用注入。省略時は DefaultActionResultStore を作成。
+        sliding_window_memory: テスト用注入。省略時は DefaultSlidingWindowMemory を作成。
+        llm_player_resolver: テスト用注入。省略時は ProfileBasedLlmPlayerResolver を作成。
 
     Returns:
         LlmAgentWiringResult。observation_registry, llm_turn_trigger, reflection_runner を持つ。
@@ -246,8 +274,16 @@ def create_llm_agent_wiring(
         raise TypeError("unit_of_work_factory must not be None")
 
     buffer = observation_buffer if observation_buffer is not None else DefaultObservationContextBuffer()
-    sliding_window = DefaultSlidingWindowMemory()
-    action_result_store = DefaultActionResultStore()
+    sliding_window = (
+        sliding_window_memory
+        if sliding_window_memory is not None
+        else DefaultSlidingWindowMemory()
+    )
+    action_result_store = (
+        action_result_store
+        if action_result_store is not None
+        else DefaultActionResultStore()
+    )
     current_state_formatter = DefaultCurrentStateFormatter()
     ui_context_builder = DefaultLlmUiContextBuilder()
     recent_events_formatter = DefaultRecentEventsFormatter()
@@ -264,6 +300,10 @@ def create_llm_agent_wiring(
         place_enabled=place_object_service is not None,
         chest_enabled=chest_service is not None,
         combat_enabled=skill_tool_service is not None,
+        quest_enabled=quest_command_service is not None,
+        guild_enabled=guild_command_service is not None,
+        shop_enabled=shop_command_service is not None,
+        trade_enabled=trade_command_service is not None,
     )
     available_tools_provider = DefaultAvailableToolsProvider(game_tool_registry)
 
@@ -278,29 +318,49 @@ def create_llm_agent_wiring(
         place_object_service=place_object_service,
         chest_service=chest_service,
         skill_tool_service=skill_tool_service,
+        quest_service=quest_command_service,
+        guild_service=guild_command_service,
+        shop_service=shop_command_service,
+        trade_service=trade_command_service,
     )
     tool_argument_resolver = DefaultToolArgumentResolver()
-    if memory_db_path:
-        from ai_rpg_world.infrastructure.llm.sqlite_episode_memory_store import (
-            SqliteEpisodeMemoryStore,
-        )
-        from ai_rpg_world.infrastructure.llm.sqlite_long_term_memory_store import (
-            SqliteLongTermMemoryStore,
-        )
-        from ai_rpg_world.infrastructure.llm.sqlite_reflection_state_port import (
-            SqliteReflectionStatePort,
-        )
-        episode_memory_store = SqliteEpisodeMemoryStore(memory_db_path)
-        long_term_memory_store = SqliteLongTermMemoryStore(memory_db_path)
-        reflection_state_port = SqliteReflectionStatePort(memory_db_path)
-    else:
-        episode_memory_store = InMemoryEpisodeMemoryStore()
-        long_term_memory_store = InMemoryLongTermMemoryStore()
-        reflection_state_port = None
-    memory_extractor = RuleBasedMemoryExtractor()
-    llm_player_resolver = ProfileBasedLlmPlayerResolver(
-        player_profile_repository=player_profile_repository,
+
+    # memory_db_path: 引数 > 環境変数 LLM_MEMORY_DB_PATH
+    effective_memory_db_path = memory_db_path or (
+        (os.environ.get(_ENV_LLM_MEMORY_DB_PATH) or "").strip() or None
     )
+
+    if episode_memory_store is None:
+        if effective_memory_db_path:
+            from ai_rpg_world.infrastructure.llm.sqlite_episode_memory_store import (
+                SqliteEpisodeMemoryStore,
+            )
+            episode_memory_store = SqliteEpisodeMemoryStore(effective_memory_db_path)
+        else:
+            episode_memory_store = InMemoryEpisodeMemoryStore()
+
+    if long_term_memory_store is None:
+        if effective_memory_db_path:
+            from ai_rpg_world.infrastructure.llm.sqlite_long_term_memory_store import (
+                SqliteLongTermMemoryStore,
+            )
+            long_term_memory_store = SqliteLongTermMemoryStore(effective_memory_db_path)
+        else:
+            long_term_memory_store = InMemoryLongTermMemoryStore()
+
+    if reflection_state_port is None:
+        if effective_memory_db_path:
+            from ai_rpg_world.infrastructure.llm.sqlite_reflection_state_port import (
+                SqliteReflectionStatePort,
+            )
+            reflection_state_port = SqliteReflectionStatePort(effective_memory_db_path)
+        else:
+            reflection_state_port = None
+    memory_extractor = RuleBasedMemoryExtractor()
+    if llm_player_resolver is None:
+        llm_player_resolver = ProfileBasedLlmPlayerResolver(
+            player_profile_repository=player_profile_repository,
+        )
     reflection_service = RuleBasedReflectionService(
         episode_store=episode_memory_store,
         long_term_store=long_term_memory_store,
@@ -357,6 +417,7 @@ def create_llm_agent_wiring(
         quest_repository=quest_repository,
         guild_repository=guild_repository,
         shop_repository=shop_repository,
+        trade_repository=trade_repository,
         monster_repository=monster_repository,
         hit_box_repository=hit_box_repository,
         skill_loadout_repository=skill_loadout_repository,

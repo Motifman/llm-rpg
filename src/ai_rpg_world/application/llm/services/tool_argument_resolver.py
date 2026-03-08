@@ -8,13 +8,17 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ChestToolRuntimeTargetDto,
     ConversationChoiceToolRuntimeTargetDto,
     DestinationToolRuntimeTargetDto,
+    GuildToolRuntimeTargetDto,
     InventoryToolRuntimeTargetDto,
     MonsterToolRuntimeTargetDto,
     NpcToolRuntimeTargetDto,
     PlayerToolRuntimeTargetDto,
+    QuestToolRuntimeTargetDto,
     SkillToolRuntimeTargetDto,
+    ShopToolRuntimeTargetDto,
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
+    TradeToolRuntimeTargetDto,
     WorldObjectToolRuntimeTargetDto,
     ResourceToolRuntimeTargetDto,
 )
@@ -26,12 +30,24 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_COMBAT_USE_SKILL,
     TOOL_NAME_CONVERSATION_ADVANCE,
     TOOL_NAME_DESTROY_PLACEABLE,
+    TOOL_NAME_GUILD_DEPOSIT_BANK,
+    TOOL_NAME_GUILD_LEAVE,
+    TOOL_NAME_GUILD_WITHDRAW_BANK,
     TOOL_NAME_HARVEST_START,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
     TOOL_NAME_PLACE_OBJECT,
+    TOOL_NAME_QUEST_ACCEPT,
+    TOOL_NAME_QUEST_APPROVE,
+    TOOL_NAME_QUEST_CANCEL,
     TOOL_NAME_SAY,
+    TOOL_NAME_SHOP_LIST_ITEM,
+    TOOL_NAME_SHOP_PURCHASE,
+    TOOL_NAME_SHOP_UNLIST_ITEM,
+    TOOL_NAME_TRADE_ACCEPT,
+    TOOL_NAME_TRADE_CANCEL,
+    TOOL_NAME_TRADE_OFFER,
     TOOL_NAME_WHISPER,
 )
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
@@ -93,6 +109,30 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
             return self._resolve_chest_take(args, runtime_context)
         if tool_name == TOOL_NAME_COMBAT_USE_SKILL:
             return self._resolve_combat_use_skill(args, runtime_context)
+        if tool_name == TOOL_NAME_QUEST_ACCEPT:
+            return self._resolve_quest_label(args, runtime_context, "quest_id")
+        if tool_name == TOOL_NAME_QUEST_CANCEL:
+            return self._resolve_quest_label(args, runtime_context, "quest_id")
+        if tool_name == TOOL_NAME_QUEST_APPROVE:
+            return self._resolve_quest_label(args, runtime_context, "quest_id")
+        if tool_name == TOOL_NAME_GUILD_LEAVE:
+            return self._resolve_guild_label(args, runtime_context)
+        if tool_name == TOOL_NAME_GUILD_DEPOSIT_BANK:
+            return self._resolve_guild_label(args, runtime_context, include_amount=True)
+        if tool_name == TOOL_NAME_GUILD_WITHDRAW_BANK:
+            return self._resolve_guild_label(args, runtime_context, include_amount=True)
+        if tool_name == TOOL_NAME_SHOP_PURCHASE:
+            return self._resolve_shop_purchase(args, runtime_context)
+        if tool_name == TOOL_NAME_SHOP_LIST_ITEM:
+            return self._resolve_shop_list_item(args, runtime_context)
+        if tool_name == TOOL_NAME_SHOP_UNLIST_ITEM:
+            return self._resolve_shop_unlist_item(args, runtime_context)
+        if tool_name == TOOL_NAME_TRADE_OFFER:
+            return self._resolve_trade_offer(args, runtime_context)
+        if tool_name == TOOL_NAME_TRADE_ACCEPT:
+            return self._resolve_trade_label(args, runtime_context)
+        if tool_name == TOOL_NAME_TRADE_CANCEL:
+            return self._resolve_trade_label(args, runtime_context)
         return dict(args)
 
     def _resolve_move_to_destination(
@@ -447,6 +487,205 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
                 invalid_kind_code,
             )
         return target
+
+    def _resolve_quest_label(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+        id_key: str,
+    ) -> Dict[str, Any]:
+        label = args.get("quest_label")
+        target = self._require_target_type(
+            label,
+            runtime_context,
+            "クエストラベル",
+            (QuestToolRuntimeTargetDto,),
+        )
+        if target.quest_id is None:
+            raise ToolArgumentResolutionException(
+                f"クエストとして解決できません: {label}",
+                "INVALID_TARGET_KIND",
+            )
+        return {"quest_id": target.quest_id}
+
+    def _resolve_guild_label(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+        include_amount: bool = False,
+    ) -> Dict[str, Any]:
+        label = args.get("guild_label")
+        target = self._require_target_type(
+            label,
+            runtime_context,
+            "ギルドラベル",
+            (GuildToolRuntimeTargetDto,),
+        )
+        if target.guild_id is None:
+            raise ToolArgumentResolutionException(
+                f"ギルドとして解決できません: {label}",
+                "INVALID_TARGET_KIND",
+            )
+        result: Dict[str, Any] = {"guild_id": target.guild_id}
+        if include_amount:
+            amount = args.get("amount")
+            if amount is not None:
+                result["amount"] = int(amount)
+        return result
+
+    def _resolve_shop_purchase(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        label = args.get("shop_label")
+        target = self._require_target_type(
+            label,
+            runtime_context,
+            "ショップラベル",
+            (ShopToolRuntimeTargetDto,),
+        )
+        if target.shop_id is None:
+            raise ToolArgumentResolutionException(
+                f"ショップとして解決できません: {label}",
+                "INVALID_TARGET_KIND",
+            )
+        listing_id = args.get("listing_id")
+        if listing_id is None:
+            raise ToolArgumentResolutionException(
+                "listing_id が指定されていません。",
+                "INVALID_TARGET_LABEL",
+            )
+        quantity = args.get("quantity", 1)
+        return {
+            "shop_id": target.shop_id,
+            "listing_id": int(listing_id),
+            "quantity": int(quantity),
+        }
+
+    def _resolve_shop_list_item(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        shop_label = args.get("shop_label")
+        shop_target = self._require_target_type(
+            shop_label,
+            runtime_context,
+            "ショップラベル",
+            (ShopToolRuntimeTargetDto,),
+        )
+        if shop_target.shop_id is None:
+            raise ToolArgumentResolutionException(
+                f"ショップとして解決できません: {shop_label}",
+                "INVALID_TARGET_KIND",
+            )
+        item_label = args.get("inventory_item_label")
+        item_target = self._require_target_type(
+            item_label,
+            runtime_context,
+            "在庫アイテムラベル",
+            (InventoryToolRuntimeTargetDto,),
+        )
+        if item_target.inventory_slot_id is None:
+            raise ToolArgumentResolutionException(
+                f"在庫アイテムとして解決できません: {item_label}",
+                "INVALID_TARGET_KIND",
+            )
+        price = args.get("price_per_unit")
+        if price is None:
+            raise ToolArgumentResolutionException(
+                "price_per_unit が指定されていません。",
+                "INVALID_TARGET_LABEL",
+            )
+        return {
+            "shop_id": shop_target.shop_id,
+            "slot_id": item_target.inventory_slot_id,
+            "price_per_unit": int(price),
+        }
+
+    def _resolve_shop_unlist_item(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        label = args.get("shop_label")
+        target = self._require_target_type(
+            label,
+            runtime_context,
+            "ショップラベル",
+            (ShopToolRuntimeTargetDto,),
+        )
+        if target.shop_id is None:
+            raise ToolArgumentResolutionException(
+                f"ショップとして解決できません: {label}",
+                "INVALID_TARGET_KIND",
+            )
+        listing_id = args.get("listing_id")
+        if listing_id is None:
+            raise ToolArgumentResolutionException(
+                "listing_id が指定されていません。",
+                "INVALID_TARGET_LABEL",
+            )
+        return {"shop_id": target.shop_id, "listing_id": int(listing_id)}
+
+    def _resolve_trade_offer(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        item_label = args.get("inventory_item_label")
+        item_target = self._require_target_type(
+            item_label,
+            runtime_context,
+            "在庫アイテムラベル",
+            (InventoryToolRuntimeTargetDto,),
+        )
+        if item_target.inventory_slot_id is None or item_target.item_instance_id is None:
+            raise ToolArgumentResolutionException(
+                f"出品に使えない在庫ラベルです: {item_label}",
+                "INVALID_TARGET_KIND",
+            )
+        requested_gold = args.get("requested_gold")
+        if requested_gold is None:
+            raise ToolArgumentResolutionException(
+                "requested_gold が指定されていません。",
+                "INVALID_TARGET_LABEL",
+            )
+        slot_id = item_target.inventory_slot_id
+        if slot_id is None:
+            raise ToolArgumentResolutionException(
+                f"出品に使えない在庫ラベルです: {item_label}",
+                "INVALID_TARGET_KIND",
+            )
+        result: Dict[str, Any] = {
+            "item_instance_id": item_target.item_instance_id,
+            "slot_id": slot_id,
+            "requested_gold": int(requested_gold),
+        }
+        target_player_id = args.get("target_player_id")
+        if target_player_id is not None:
+            result["target_player_id"] = int(target_player_id)
+        return result
+
+    def _resolve_trade_label(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        label = args.get("trade_label")
+        target = self._require_target_type(
+            label,
+            runtime_context,
+            "取引ラベル",
+            (TradeToolRuntimeTargetDto,),
+        )
+        if target.trade_id is None:
+            raise ToolArgumentResolutionException(
+                f"取引として解決できません: {label}",
+                "INVALID_TARGET_KIND",
+            )
+        return {"trade_id": target.trade_id}
 
     def _resolve_direction_from_context(
         self,

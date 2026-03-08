@@ -250,3 +250,19 @@ class TestCreateLlmAgentWiringMemoryPersistence:
         trigger = result.llm_turn_trigger
         episode_store = trigger._turn_runner._orchestrator._episode_memory_store
         assert isinstance(episode_store, SqliteEpisodeMemoryStore)
+
+    def test_memory_db_path_env_var_uses_sqlite_store_when_arg_not_passed(
+        self, tmp_path, monkeypatch
+    ):
+        """memory_db_path 未指定かつ LLM_MEMORY_DB_PATH 環境変数が設定されているとき SqliteEpisodeMemoryStore が使われる"""
+        from ai_rpg_world.infrastructure.llm.sqlite_episode_memory_store import (
+            SqliteEpisodeMemoryStore,
+        )
+
+        db_path = tmp_path / "llm_memory_env.db"
+        monkeypatch.setenv("LLM_MEMORY_DB_PATH", str(db_path))
+        deps = _minimal_wiring_deps()
+        result = create_llm_agent_wiring(**deps)
+        trigger = result.llm_turn_trigger
+        episode_store = trigger._turn_runner._orchestrator._episode_memory_store
+        assert isinstance(episode_store, SqliteEpisodeMemoryStore)

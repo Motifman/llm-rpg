@@ -297,6 +297,12 @@ class RuleBasedMemoryExtractor(IMemoryExtractor):
                 sid = structured.get("shop_id_value")
                 if isinstance(sid, int):
                     add(f"shop:{sid}")
+            if obs_type in (
+                "trade_offered", "trade_accepted", "trade_cancelled",
+            ):
+                tid = structured.get("trade_id_value")
+                if isinstance(tid, int):
+                    add(f"trade:{tid}")
             if obs_type in ("conversation_started", "conversation_ended"):
                 nid = structured.get("npc_id_value")
                 if isinstance(nid, int):

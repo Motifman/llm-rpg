@@ -179,6 +179,43 @@ class AttentionLevelOptionDto:
 
 
 @dataclass
+class ActiveQuestSummaryDto:
+    """受託中クエストのサマリ（LLM current context 用）"""
+
+    quest_id: int
+    summary_text: str
+    objectives_completed: int
+    objectives_total: int
+
+
+@dataclass
+class GuildMembershipSummaryDto:
+    """ギルド所属のサマリ（LLM current context 用）"""
+
+    guild_id: int
+    guild_name: str
+    role: str
+
+
+@dataclass
+class NearbyShopSummaryDto:
+    """近隣ショップのサマリ（LLM current context 用）"""
+
+    shop_id: int
+    shop_name: str
+    listing_count: int
+
+
+@dataclass
+class AvailableTradeSummaryDto:
+    """参加可能な取引のサマリ（LLM current context 用）"""
+
+    trade_id: int
+    item_name: str
+    requested_gold: int
+
+
+@dataclass
 class PlayerCurrentStateDto:
     """
     LLM 入力用の単一「現在状態」DTO。
@@ -231,3 +268,8 @@ class PlayerCurrentStateDto:
     active_quest_ids: List[int] = field(default_factory=list)
     guild_ids: List[int] = field(default_factory=list)
     nearby_shop_ids: List[int] = field(default_factory=list)
+    # Rich current context（サマリ DTO、LLM が読める形）
+    active_quests: List["ActiveQuestSummaryDto"] = field(default_factory=list)
+    guild_memberships: List["GuildMembershipSummaryDto"] = field(default_factory=list)
+    nearby_shops: List["NearbyShopSummaryDto"] = field(default_factory=list)
+    available_trades: List["AvailableTradeSummaryDto"] = field(default_factory=list)

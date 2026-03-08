@@ -2,7 +2,13 @@
 ツール名＋引数からコマンドを組み立てて実行し、LlmCommandResultDto を返すマッパー。
 """
 
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.quest.services.quest_command_service import QuestCommandService
+    from ai_rpg_world.application.guild.services.guild_command_service import GuildCommandService
+    from ai_rpg_world.application.shop.services.shop_command_service import ShopCommandService
+    from ai_rpg_world.application.trade.services.trade_command_service import TradeCommandService
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
@@ -13,12 +19,24 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_COMBAT_USE_SKILL,
     TOOL_NAME_CONVERSATION_ADVANCE,
     TOOL_NAME_DESTROY_PLACEABLE,
+    TOOL_NAME_GUILD_DEPOSIT_BANK,
+    TOOL_NAME_GUILD_LEAVE,
+    TOOL_NAME_GUILD_WITHDRAW_BANK,
     TOOL_NAME_HARVEST_START,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
     TOOL_NAME_PLACE_OBJECT,
+    TOOL_NAME_QUEST_ACCEPT,
+    TOOL_NAME_QUEST_APPROVE,
+    TOOL_NAME_QUEST_CANCEL,
     TOOL_NAME_SAY,
+    TOOL_NAME_SHOP_LIST_ITEM,
+    TOOL_NAME_SHOP_PURCHASE,
+    TOOL_NAME_SHOP_UNLIST_ITEM,
+    TOOL_NAME_TRADE_ACCEPT,
+    TOOL_NAME_TRADE_CANCEL,
+    TOOL_NAME_TRADE_OFFER,
     TOOL_NAME_WHISPER,
 )
 from ai_rpg_world.application.conversation.contracts.commands import AdvanceConversationCommand
@@ -60,6 +78,28 @@ from ai_rpg_world.application.world.services.movement_service import (
 )
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 
+# Optional domain command services
+from ai_rpg_world.application.quest.contracts.commands import (
+    AcceptQuestCommand,
+    ApproveQuestCommand,
+    CancelQuestCommand,
+)
+from ai_rpg_world.application.guild.contracts.commands import (
+    DepositToGuildBankCommand,
+    LeaveGuildCommand,
+    WithdrawFromGuildBankCommand,
+)
+from ai_rpg_world.application.shop.contracts.commands import (
+    ListShopItemCommand,
+    PurchaseFromShopCommand,
+    UnlistShopItemCommand,
+)
+from ai_rpg_world.application.trade.contracts.commands import (
+    AcceptTradeCommand,
+    CancelTradeCommand,
+    OfferItemCommand,
+)
+
 
 class ToolCommandMapper:
     """
@@ -78,6 +118,10 @@ class ToolCommandMapper:
         place_object_service: Optional[PlayerPlaceObjectApplicationService] = None,
         chest_service: Optional[PlayerChestApplicationService] = None,
         skill_tool_service: Optional[PlayerSkillToolApplicationService] = None,
+        quest_service: Optional[Any] = None,
+        guild_service: Optional[Any] = None,
+        shop_service: Optional[Any] = None,
+        trade_service: Optional[Any] = None,
     ) -> None:
         move_to_destination = getattr(movement_service, "move_to_destination", None)
         if not callable(move_to_destination):
@@ -112,6 +156,10 @@ class ToolCommandMapper:
             getattr(skill_tool_service, "use_skill", None)
         ):
             raise TypeError("skill_tool_service must have a callable use_skill")
+        self._quest_service = quest_service
+        self._guild_service = guild_service
+        self._shop_service = shop_service
+        self._trade_service = trade_service
         self._movement_service = movement_service
         self._speech_service = speech_service
         self._interaction_service = interaction_service
@@ -171,6 +219,30 @@ class ToolCommandMapper:
             return self._execute_chest_take(player_id, args)
         if tool_name == TOOL_NAME_COMBAT_USE_SKILL:
             return self._execute_combat_use_skill(player_id, args)
+        if tool_name == TOOL_NAME_QUEST_ACCEPT:
+            return self._execute_quest_accept(player_id, args)
+        if tool_name == TOOL_NAME_QUEST_CANCEL:
+            return self._execute_quest_cancel(player_id, args)
+        if tool_name == TOOL_NAME_QUEST_APPROVE:
+            return self._execute_quest_approve(player_id, args)
+        if tool_name == TOOL_NAME_GUILD_LEAVE:
+            return self._execute_guild_leave(player_id, args)
+        if tool_name == TOOL_NAME_GUILD_DEPOSIT_BANK:
+            return self._execute_guild_deposit_bank(player_id, args)
+        if tool_name == TOOL_NAME_GUILD_WITHDRAW_BANK:
+            return self._execute_guild_withdraw_bank(player_id, args)
+        if tool_name == TOOL_NAME_SHOP_PURCHASE:
+            return self._execute_shop_purchase(player_id, args)
+        if tool_name == TOOL_NAME_SHOP_LIST_ITEM:
+            return self._execute_shop_list_item(player_id, args)
+        if tool_name == TOOL_NAME_SHOP_UNLIST_ITEM:
+            return self._execute_shop_unlist_item(player_id, args)
+        if tool_name == TOOL_NAME_TRADE_OFFER:
+            return self._execute_trade_offer(player_id, args)
+        if tool_name == TOOL_NAME_TRADE_ACCEPT:
+            return self._execute_trade_accept(player_id, args)
+        if tool_name == TOOL_NAME_TRADE_CANCEL:
+            return self._execute_trade_cancel(player_id, args)
         return LlmCommandResultDto(
             success=False,
             message="未知のツールです。",
@@ -439,6 +511,167 @@ class ToolCommandMapper:
                 error_code=error_code,
                 remediation=get_remediation(error_code),
             )
+
+    def _execute_quest_accept(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        if self._quest_service is None:
+            return self._unknown_tool("クエスト受託ツールはまだ利用できません。")
+        try:
+            result = self._quest_service.accept_quest(
+                AcceptQuestCommand(quest_id=int(args["quest_id"]), player_id=player_id)
+            )
+            return LlmCommandResultDto(success=result.success, message=result.message)
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_quest_cancel(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        if self._quest_service is None:
+            return self._unknown_tool("クエストキャンセルツールはまだ利用できません。")
+        try:
+            result = self._quest_service.cancel_quest(
+                CancelQuestCommand(quest_id=int(args["quest_id"]), player_id=player_id)
+            )
+            return LlmCommandResultDto(success=result.success, message=result.message)
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_quest_approve(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        if self._quest_service is None:
+            return self._unknown_tool("クエスト承認ツールはまだ利用できません。")
+        try:
+            result = self._quest_service.approve_quest(
+                ApproveQuestCommand(quest_id=int(args["quest_id"]), approver_player_id=player_id)
+            )
+            return LlmCommandResultDto(success=result.success, message=result.message)
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_guild_leave(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        if self._guild_service is None:
+            return self._unknown_tool("ギルド脱退ツールはまだ利用できません。")
+        try:
+            result = self._guild_service.leave_guild(
+                LeaveGuildCommand(guild_id=int(args["guild_id"]), player_id=player_id)
+            )
+            return LlmCommandResultDto(success=result.success, message=result.message)
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_guild_deposit_bank(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        if self._guild_service is None:
+            return self._unknown_tool("ギルド金庫入金ツールはまだ利用できません。")
+        try:
+            result = self._guild_service.deposit_to_guild_bank(
+                DepositToGuildBankCommand(
+                    guild_id=int(args["guild_id"]),
+                    player_id=player_id,
+                    amount=int(args.get("amount", 0)),
+                )
+            )
+            return LlmCommandResultDto(success=result.success, message=result.message)
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_guild_withdraw_bank(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        if self._guild_service is None:
+            return self._unknown_tool("ギルド金庫出金ツールはまだ利用できません。")
+        try:
+            result = self._guild_service.withdraw_from_guild_bank(
+                WithdrawFromGuildBankCommand(
+                    guild_id=int(args["guild_id"]),
+                    player_id=player_id,
+                    amount=int(args.get("amount", 0)),
+                )
+            )
+            return LlmCommandResultDto(success=result.success, message=result.message)
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_shop_purchase(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        if self._shop_service is None:
+            return self._unknown_tool("ショップ購入ツールはまだ利用できません。")
+        try:
+            result = self._shop_service.purchase_from_shop(
+                PurchaseFromShopCommand(
+                    shop_id=int(args["shop_id"]),
+                    listing_id=int(args["listing_id"]),
+                    buyer_id=player_id,
+                    quantity=int(args.get("quantity", 1)),
+                )
+            )
+            return LlmCommandResultDto(success=result.success, message=result.message)
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_shop_list_item(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        if self._shop_service is None:
+            return self._unknown_tool("ショップ出品ツールはまだ利用できません。")
+        try:
+            result = self._shop_service.list_shop_item(
+                ListShopItemCommand(
+                    shop_id=int(args["shop_id"]),
+                    player_id=player_id,
+                    slot_id=int(args["slot_id"]),
+                    price_per_unit=int(args["price_per_unit"]),
+                )
+            )
+            return LlmCommandResultDto(success=result.success, message=result.message)
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_shop_unlist_item(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        if self._shop_service is None:
+            return self._unknown_tool("ショップ取り下げツールはまだ利用できません。")
+        try:
+            result = self._shop_service.unlist_shop_item(
+                UnlistShopItemCommand(
+                    shop_id=int(args["shop_id"]),
+                    listing_id=int(args["listing_id"]),
+                    player_id=player_id,
+                )
+            )
+            return LlmCommandResultDto(success=result.success, message=result.message)
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_trade_offer(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        if self._trade_service is None:
+            return self._unknown_tool("取引出品ツールはまだ利用できません。")
+        try:
+            result = self._trade_service.offer_item(
+                OfferItemCommand(
+                    seller_id=player_id,
+                    item_instance_id=int(args["item_instance_id"]),
+                    slot_id=int(args["slot_id"]),
+                    requested_gold=int(args["requested_gold"]),
+                    is_direct=args.get("target_player_id") is not None,
+                    target_player_id=args.get("target_player_id"),
+                )
+            )
+            return LlmCommandResultDto(success=result.success, message=result.message)
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_trade_accept(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        if self._trade_service is None:
+            return self._unknown_tool("取引受諾ツールはまだ利用できません。")
+        try:
+            result = self._trade_service.accept_trade(
+                AcceptTradeCommand(trade_id=int(args["trade_id"]), buyer_id=player_id)
+            )
+            return LlmCommandResultDto(success=result.success, message=result.message)
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_trade_cancel(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        if self._trade_service is None:
+            return self._unknown_tool("取引キャンセルツールはまだ利用できません。")
+        try:
+            result = self._trade_service.cancel_trade(
+                CancelTradeCommand(trade_id=int(args["trade_id"]), player_id=player_id)
+            )
+            return LlmCommandResultDto(success=result.success, message=result.message)
+        except Exception as e:
+            return self._exception_result(e)
 
     def _execute_whisper(
         self,

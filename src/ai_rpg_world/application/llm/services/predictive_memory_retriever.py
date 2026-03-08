@@ -132,6 +132,10 @@ def build_memory_retrieval_query_from_state(
     for sid in getattr(current_state_dto, "nearby_shop_ids", None) or []:
         if isinstance(sid, int):
             scope_keys_list.append(f"shop:{sid}")
+    for t in getattr(current_state_dto, "available_trades", None) or []:
+        tid = getattr(t, "trade_id", None)
+        if isinstance(tid, int):
+            scope_keys_list.append(f"trade:{tid}")
 
     free = (
         _extract_keywords_from_summary(current_state_summary)

@@ -178,3 +178,87 @@ class CombatUseSkillAvailabilityResolver(IAvailabilityResolver):
         context: Optional[PlayerCurrentStateDto],
     ) -> bool:
         return context is not None and bool(context.usable_skills)
+
+
+class QuestAcceptAvailabilityResolver(IAvailabilityResolver):
+    """クエスト受託はコンテキスト取得時に利用可能（受託可能なクエストは別途表示）。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None
+
+
+class QuestCancelAvailabilityResolver(IAvailabilityResolver):
+    """クエストキャンセルは受託中クエストがあるときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None and bool(context.active_quests)
+
+
+class QuestApproveAvailabilityResolver(IAvailabilityResolver):
+    """クエスト承認はギルド所属があるときに利用可能（オフィサー以上）。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None and bool(context.guild_memberships)
+
+
+class GuildLeaveAvailabilityResolver(IAvailabilityResolver):
+    """ギルド脱退は所属ギルドがあるときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None and bool(context.guild_memberships)
+
+
+class GuildDepositBankAvailabilityResolver(IAvailabilityResolver):
+    """ギルド金庫入金は所属ギルドがあるときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None and bool(context.guild_memberships)
+
+
+class GuildWithdrawBankAvailabilityResolver(IAvailabilityResolver):
+    """ギルド金庫出金は所属ギルドがあるときに利用可能（オフィサー以上）。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None and bool(context.guild_memberships)
+
+
+class ShopPurchaseAvailabilityResolver(IAvailabilityResolver):
+    """ショップ購入は近隣ショップがあるときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None and bool(context.nearby_shops)
+
+
+class ShopListItemAvailabilityResolver(IAvailabilityResolver):
+    """ショップ出品は近隣ショップがあるときに利用可能（オーナー時）。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None and bool(context.nearby_shops)
+
+
+class ShopUnlistItemAvailabilityResolver(IAvailabilityResolver):
+    """ショップ取り下げは近隣ショップがあるときに利用可能（オーナー時）。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None and bool(context.nearby_shops)
+
+
+class TradeOfferAvailabilityResolver(IAvailabilityResolver):
+    """取引出品はインベントリがあるときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None and bool(context.inventory_items)
+
+
+class TradeAcceptAvailabilityResolver(IAvailabilityResolver):
+    """取引受諾は宛先取引があるときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None and bool(context.available_trades)
+
+
+class TradeCancelAvailabilityResolver(IAvailabilityResolver):
+    """取引キャンセルは宛先取引または自分発信取引があるときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None and bool(context.available_trades)

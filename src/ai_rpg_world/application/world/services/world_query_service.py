@@ -58,6 +58,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
     from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
     from ai_rpg_world.domain.skill.repository.skill_repository import SkillLoadoutRepository
+    from ai_rpg_world.application.trade.services.personal_trade_query_service import (
+        PersonalTradeQueryService,
+    )
 
 
 class WorldQueryService:
@@ -81,6 +84,7 @@ class WorldQueryService:
         quest_repository: Optional["QuestRepository"] = None,
         guild_repository: Optional["GuildRepository"] = None,
         shop_repository: Optional["ShopRepository"] = None,
+        personal_trade_query_service: Optional["PersonalTradeQueryService"] = None,
         player_current_state_builder: Optional[PlayerCurrentStateBuilder] = None,
     ):
         self._player_status_repository = player_status_repository
@@ -114,6 +118,7 @@ class WorldQueryService:
                 quest_repository=quest_repository,
                 guild_repository=guild_repository,
                 shop_repository=shop_repository,
+                personal_trade_query_service=personal_trade_query_service,
             )
         )
         self._logger = logging.getLogger(self.__class__.__name__)
