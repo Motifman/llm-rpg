@@ -300,6 +300,38 @@ EpisodeImportance = Literal["low", "medium", "high"]
 
 
 @dataclass(frozen=True)
+class MemoryRetrievalQueryDto:
+    """
+    予測記憶検索用のクエリ DTO。
+    PlayerCurrentStateDto 由来の spot/notable/actionable と tool_names を渡すことで、
+    current_state_text の文字面依存を弱める。
+    検索優先度: entity_ids > location_ids > actionable/notable > action_names > free_text_keywords
+    """
+
+    entity_ids: Tuple[str, ...] = ()
+    location_ids: Tuple[str, ...] = ()
+    notable_labels: Tuple[str, ...] = ()
+    actionable_labels: Tuple[str, ...] = ()
+    action_names: Tuple[str, ...] = ()
+    free_text_keywords: Tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        for name, val in [
+            ("entity_ids", self.entity_ids),
+            ("location_ids", self.location_ids),
+            ("notable_labels", self.notable_labels),
+            ("actionable_labels", self.actionable_labels),
+            ("action_names", self.action_names),
+            ("free_text_keywords", self.free_text_keywords),
+        ]:
+            if not isinstance(val, tuple):
+                raise TypeError(f"{name} must be tuple")
+            for x in val:
+                if not isinstance(x, str):
+                    raise TypeError(f"{name} must contain only str")
+
+
+@dataclass(frozen=True)
 class EpisodeMemoryEntry:
     """エピソード記憶 1 件（記憶抽出の出力・ストアの保存単位）。"""
 

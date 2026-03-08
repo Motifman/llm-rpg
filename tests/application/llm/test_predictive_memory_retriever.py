@@ -1,8 +1,11 @@
-"""DefaultPredictiveMemoryRetriever のテスト（正常・境界・例外）"""
+"""DefaultPredictiveMemoryRetriever のテスト（正常・境界・例外・ranking・DTO）"""
 
 import pytest
 
-from ai_rpg_world.application.llm.contracts.dtos import EpisodeMemoryEntry
+from ai_rpg_world.application.llm.contracts.dtos import (
+    EpisodeMemoryEntry,
+    MemoryRetrievalQueryDto,
+)
 from ai_rpg_world.application.llm.services.in_memory_episode_memory_store import (
     InMemoryEpisodeMemoryStore,
 )
@@ -232,3 +235,52 @@ class TestDefaultPredictiveMemoryRetriever:
                 episode_store=episode_store,
                 long_term_store=None,  # type: ignore[arg-type]
             )
+
+    def test_retrieve_with_query_dto_uses_entity_location_priority(
+        self, retriever, episode_store, player_id
+    ):
+        """query_dto を渡したとき entity > location > action の優先度で検索する"""
+        episode_store.add(
+            player_id,
+            _make_episode(
+                "e_entity",
+                entity_ids=("老人",),
+                location_id="洞窟入口",
+                context_summary="洞窟入口で老人と会った",
+            ),
+        )
+        episode_store.add(
+            player_id,
+            _make_episode(
+                "e_loc",
+                entity_ids=("別のNPC",),
+                location_id="洞窟",
+                context_summary="洞窟にいた",
+            ),
+        )
+        q = MemoryRetrievalQueryDto(
+            entity_ids=("老人",),
+            location_ids=("洞窟",),
+            action_names=("world_no_op",),
+            free_text_keywords=(),
+        )
+        got = retriever.retrieve_for_prediction(
+            player_id,
+            "現在地: 洞窟",
+            ["world_no_op"],
+            query_dto=q,
+        )
+        assert "老人と会った" in got
+        assert "洞窟にいた" in got
+
+    def test_retrieve_dedupes_facts_by_content(
+        self, retriever, long_term_store, player_id
+    ):
+        """事実の重複（同一 content）が除去される"""
+        long_term_store.add_fact(player_id, "洞窟の奥には宝箱がある")
+        long_term_store.add_fact(player_id, "洞窟の奥には宝箱がある")
+        got = retriever.retrieve_for_prediction(
+            player_id, "現在地: 洞窟", [], fact_limit=10
+        )
+        count = got.count("洞窟の奥には宝箱がある")
+        assert count == 1

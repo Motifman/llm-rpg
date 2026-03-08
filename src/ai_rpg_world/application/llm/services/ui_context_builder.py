@@ -1,4 +1,11 @@
-"""LLM 用の一時ラベル付き UI コンテキストを組み立てる。"""
+"""LLM 用の一時ラベル付き UI コンテキストを組み立てる。
+
+責務: 詳細列挙専用。CurrentStateFormatter の要約に重ねて、
+visible targets / notable labels / actionable labels / inventory / chest /
+conversation / skills のラベル付き一覧を付与する。
+同一対象が要約（formatter）と詳細（本 builder）で二重に過剰列挙されないよう、
+formatter は件数のみ出力し本 builder がラベル一覧を担当する。
+"""
 
 from typing import Dict, Optional
 

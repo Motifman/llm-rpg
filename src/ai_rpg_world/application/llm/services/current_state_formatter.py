@@ -1,4 +1,9 @@
-"""現在状態をプロンプト用テキストに変換するデフォルト実装"""
+"""現在状態をプロンプト用テキストに変換するデフォルト実装。
+
+責務: 要約専用。場所・天気/地形・行動状態・高レベルな注目点のみ。
+詳細列挙（visible targets, notable/actionable ラベル, inventory 等）は
+LlmUiContextBuilder が担当し、二重に過剰列挙しない。
+"""
 
 from typing import List
 
@@ -7,14 +12,14 @@ from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 
 
 class DefaultCurrentStateFormatter(ICurrentStateFormatter):
-    """PlayerCurrentStateDto をセクション形式の現在状態テキストに変換する。"""
+    """PlayerCurrentStateDto を要約テキストに変換する。詳細は UiContextBuilder に委譲。"""
 
     def format(self, dto: PlayerCurrentStateDto) -> str:
         if not isinstance(dto, PlayerCurrentStateDto):
             raise TypeError("dto must be PlayerCurrentStateDto")
         lines: List[str] = []
 
-        # 現在地
+        # 場所
         if dto.current_spot_name is not None:
             lines.append(f"現在地: {dto.current_spot_name}")
             if dto.current_spot_description:
@@ -36,55 +41,24 @@ class DefaultCurrentStateFormatter(ICurrentStateFormatter):
             names = sorted(dto.connected_spot_names)
             lines.append(f"接続先スポット: {', '.join(names)}")
 
-        # 天気
+        # 天気・地形
         lines.append(f"天気: {dto.weather_type} (強度: {dto.weather_intensity})")
-
-        # 地形
         if dto.current_terrain_type:
             lines.append(f"地形: {dto.current_terrain_type}")
 
         lines.append(f"視界距離: {dto.view_distance}")
 
-        if dto.notable_objects:
-            lines.append("注目対象:")
-            for obj in dto.notable_objects[:10]:
-                reason = f" ({obj.notable_reason})" if obj.notable_reason else ""
-                lines.append(
-                    f"  - {obj.display_name or obj.object_type}: 距離={obj.distance}, 方角={obj.direction_from_player}{reason}"
-                )
-        else:
-            lines.append("注目対象: なし")
+        # 高レベルな注目点（件数のみ。詳細は UiContextBuilder）
+        notable_n = len(dto.notable_objects) if dto.notable_objects else 0
+        actionable_n = len(dto.actionable_objects) if dto.actionable_objects else 0
+        lines.append(f"注目対象: {notable_n}件")
+        lines.append(f"今すぐ行動可能な対象: {actionable_n}件")
 
-        if dto.actionable_objects:
-            lines.append("今すぐ行動可能な対象:")
-            for obj in dto.actionable_objects[:10]:
-                action_labels: List[str] = []
-                if obj.can_interact:
-                    action_labels.append("相互作用")
-                if obj.can_harvest:
-                    action_labels.append("採集")
-                if obj.can_store_in_chest:
-                    action_labels.append("収納")
-                if obj.can_take_from_chest:
-                    action_labels.append("取り出し")
-                action_suffix = f" ({', '.join(action_labels)})" if action_labels else ""
-                lines.append(
-                    f"  - {obj.display_name or obj.object_type}: 距離={obj.distance}, 方角={obj.direction_from_player}{action_suffix}"
-                )
-
-        # 利用可能な移動先
+        # 利用可能な移動先（件数のみ。詳細は UiContextBuilder）
         if dto.available_moves is not None and dto.total_available_moves is not None:
             lines.append(f"利用可能な移動先: {dto.total_available_moves} 件")
-            for move in dto.available_moves[:15]:
-                status = "条件充足" if move.conditions_met else "条件未達"
-                lines.append(
-                    f"  - {move.spot_name}: {status}"
-                    + (f" (未達: {move.failed_conditions})" if move.failed_conditions else "")
-                )
-            if len(dto.available_moves) > 15:
-                lines.append(f"  ... 他 {len(dto.available_moves) - 15} 件")
 
-        # 注意レベル
+        # 注意レベル・行動状態
         lines.append(f"注意レベル: {dto.attention_level.value}")
 
         if dto.is_busy:

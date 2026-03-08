@@ -2,7 +2,10 @@ import logging
 import random
 from typing import List, Callable, Any, Dict, Optional, Set, TYPE_CHECKING
 
-from ai_rpg_world.application.llm.contracts.interfaces import ILlmTurnTrigger
+from ai_rpg_world.application.llm.contracts.interfaces import (
+    ILlmTurnTrigger,
+    IReflectionRunner,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
@@ -110,10 +113,12 @@ class WorldSimulationApplicationService:
         connected_spots_provider: Optional[IConnectedSpotsProvider] = None,
         map_transition_service: Optional[MapTransitionService] = None,
         llm_turn_trigger: Optional[ILlmTurnTrigger] = None,
+        reflection_runner: Optional[IReflectionRunner] = None,
         movement_service: Optional[Any] = None,
     ):
         self._time_provider = time_provider
         self._llm_turn_trigger = llm_turn_trigger
+        self._reflection_runner = reflection_runner
         self._loot_table_repository = loot_table_repository
         self._connected_spots_provider = connected_spots_provider
         self._map_transition_service = map_transition_service
@@ -275,6 +280,8 @@ class WorldSimulationApplicationService:
 
         if self._llm_turn_trigger is not None:
             self._llm_turn_trigger.run_scheduled_turns()
+        if self._reflection_runner is not None:
+            self._reflection_runner.run_after_tick(current_tick)
         return current_tick
 
     def _advance_pending_player_movements(self, current_tick: WorldTick) -> None:

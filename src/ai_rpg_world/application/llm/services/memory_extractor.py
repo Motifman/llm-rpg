@@ -1,4 +1,11 @@
-"""記憶抽出のデフォルト実装（ルールベース）"""
+"""記憶抽出のデフォルト実装（ルールベース）
+
+保存方針: 量より質。以下のいずれかを満たす場合のみエピソードを保存する。
+- causes_interrupt あり（話しかけ・ダメージ・アイテム発見など）
+- entity_ids または location_id の抽出に成功
+- 強い成功/失敗結果（入手・撃破・達成・購入等の明確な帰結）
+- 明確な観測文脈あり（「（特になし）」以外で 5 文字以上）
+"""
 
 import uuid
 from datetime import datetime
@@ -9,6 +16,11 @@ from ai_rpg_world.application.llm.contracts.interfaces import IMemoryExtractor
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
+# 強い成功/失敗を示すキーワード（結果要約に含まれる場合に保存対象とする）
+_STRONG_RESULT_KEYWORDS = (
+    "入手", "撃破", "達成", "失敗", "成功", "倒した", "死亡", "レベル",
+    "購入", "完了", "選択", "発見", "獲得", "経験値", "ゴールド", "到着",
+)
 
 _ENTITY_KEYS = (
     "actor",
@@ -58,14 +70,28 @@ class RuleBasedMemoryExtractor(IMemoryExtractor):
         context_parts = [o.output.prose for o in overflow_observations]
         context_summary = " ".join(context_parts).strip() or "（特になし）"
         entity_ids, location_id = self._extract_entity_context(overflow_observations)
-        importance = (
-            "high"
-            if any(observation.output.causes_interrupt for observation in overflow_observations)
-            else "medium"
+        has_interrupt = any(
+            o.output.causes_interrupt for o in overflow_observations
         )
-        surprise = any(
-            observation.output.causes_interrupt for observation in overflow_observations
+        has_entity_or_location = bool(entity_ids) or location_id is not None
+        has_strong_result = self._is_strong_result(result_summary)
+        has_clear_context = (
+            context_summary != "（特になし）"
+            and len(context_summary.strip()) >= 5
         )
+
+        if not (
+            has_interrupt
+            or has_entity_or_location
+            or has_strong_result
+            or has_clear_context
+        ):
+            return []
+
+        importance = "high" if has_interrupt else "medium"
+        if has_strong_result and not has_interrupt:
+            importance = "medium"
+        surprise = has_interrupt
 
         entry = EpisodeMemoryEntry(
             id=str(uuid.uuid4()),
@@ -80,6 +106,13 @@ class RuleBasedMemoryExtractor(IMemoryExtractor):
             recall_count=0,
         )
         return [entry]
+
+    def _is_strong_result(self, result_summary: str) -> bool:
+        """結果要約が強い成功/失敗（明確な帰結）を含むか判定する。"""
+        if not result_summary or len(result_summary.strip()) < 5:
+            return False
+        normalized = result_summary.strip()
+        return any(kw in normalized for kw in _STRONG_RESULT_KEYWORDS)
 
     def _extract_entity_context(
         self,

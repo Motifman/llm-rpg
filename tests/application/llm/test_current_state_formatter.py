@@ -114,22 +114,19 @@ class TestDefaultCurrentStateFormatter:
         assert "天気: rain" in text
         assert "地形: grass" in text
 
-    def test_format_includes_notable_and_actionable_summary_when_present(self, formatter):
-        """注目対象と行動可能対象があるとき要約表示される"""
+    def test_format_includes_notable_and_actionable_count_only(self, formatter):
+        """注目対象と行動可能対象は件数のみ要約（詳細は UiContextBuilder の責務）"""
         dto = _minimal_current_state_dto(has_visible_objects=True)
         text = formatter.format(dto)
         assert "視界距離: 5" in text
-        assert "注目対象:" in text
-        assert "Bob" in text
-        assert "今すぐ行動可能な対象:" in text
-        assert "相互作用" in text
+        assert "注目対象: 1件" in text
+        assert "今すぐ行動可能な対象: 1件" in text
 
-    def test_format_includes_available_moves_when_present(self, formatter):
-        """利用可能な移動先があるとき表示される"""
+    def test_format_includes_available_moves_count_when_present(self, formatter):
+        """利用可能な移動先は件数のみ要約（詳細は UiContextBuilder）"""
         dto = _minimal_current_state_dto(has_available_moves=True)
         text = formatter.format(dto)
-        assert "利用可能な移動先" in text
-        assert "隣のスポット" in text
+        assert "利用可能な移動先: 1 件" in text
 
     def test_format_includes_attention_level(self, formatter):
         """注意レベルが含まれる（enum の value が表示される）"""

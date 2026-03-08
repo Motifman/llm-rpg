@@ -181,11 +181,23 @@ class DefaultPromptBuilder(IPromptBuilder):
 
         # 6. 関連する記憶（Retriever が設定されていれば取得）
         if self._predictive_memory_retriever is not None:
+            from ai_rpg_world.application.llm.services.predictive_memory_retriever import (
+                build_memory_retrieval_query_from_state,
+            )
+
+            query_dto = None
+            if current_state_dto is not None:
+                query_dto = build_memory_retrieval_query_from_state(
+                    current_state_dto,
+                    tool_names,
+                    current_state_summary=base_current_state_text,
+                )
             relevant_memories_text = (
                 self._predictive_memory_retriever.retrieve_for_prediction(
                     player_id,
                     base_current_state_text,
                     tool_names,
+                    query_dto=query_dto,
                 )
             )
         else:
