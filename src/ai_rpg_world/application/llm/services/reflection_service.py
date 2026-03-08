@@ -37,7 +37,7 @@ class RuleBasedReflectionService(IReflectionService):
         min_importance: Optional[str] = None,
         min_recall_count: Optional[int] = None,
         episode_limit: int = 20,
-    ) -> None:
+    ) -> Optional[datetime]:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         if not isinstance(since, datetime):
@@ -58,6 +58,7 @@ class RuleBasedReflectionService(IReflectionService):
             min_recall_count=min_recall_count,
             limit=episode_limit,
         )
+        max_ts: Optional[datetime] = None
         for ep in episodes:
             fact_content = (
                 f"状況: {ep.context_summary}; "
@@ -72,3 +73,6 @@ class RuleBasedReflectionService(IReflectionService):
                 target=ep.outcome_summary[:50] if len(ep.outcome_summary) > 50 else ep.outcome_summary,
                 delta_strength=1.0,
             )
+            if max_ts is None or ep.timestamp > max_ts:
+                max_ts = ep.timestamp
+        return max_ts

@@ -85,12 +85,13 @@ class IEpisodeMemoryStore(ABC):
         action_names: Optional[List[str]] = None,
         world_object_ids: Optional[List[int]] = None,
         spot_ids: Optional[List[int]] = None,
+        scope_keys: Optional[List[str]] = None,
         limit: int = 10,
     ) -> List[EpisodeMemoryEntry]:
         """
         ルールベース検索（コンテキスト・予測検索で使用）。
-        world_object_ids / spot_ids は stable id 優先検索用。指定時はそちらを優先し、
-        未指定時は entity_ids / action_names のみで検索する。
+        world_object_ids / spot_ids は stable id 優先検索用。scope_keys は関係性メモリ用。
+        指定時はそちらを優先し、未指定時は entity_ids / action_names のみで検索する。
         """
         pass
 
@@ -172,10 +173,11 @@ class IReflectionService(ABC):
         min_importance: Optional[str] = None,
         min_recall_count: Optional[int] = None,
         episode_limit: int = 20,
-    ) -> None:
+    ) -> Optional[datetime]:
         """
         指定プレイヤーについて、since 以降の重要・高想起エピソードを取得し、
         教訓・法則を抽出して長期記憶に add/update する。
+        戻り値: 今回反映したエピソード群の最大 timestamp。反映が 0 件の場合は None。
         """
         pass
 

@@ -28,6 +28,7 @@ def _make_episode(
     context_summary: str = "洞窟にいた",
     world_object_ids: tuple[int, ...] = (),
     spot_id_value: int | None = None,
+    scope_keys: tuple[str, ...] = (),
 ) -> EpisodeMemoryEntry:
     from datetime import datetime
     return EpisodeMemoryEntry(
@@ -43,6 +44,7 @@ def _make_episode(
         recall_count=0,
         world_object_ids=world_object_ids,
         spot_id_value=spot_id_value,
+        scope_keys=scope_keys,
     )
 
 
@@ -376,3 +378,58 @@ class TestDefaultPredictiveMemoryRetriever:
             player_id, "現在地: 広場", [], query_dto=q
         )
         assert "広場でクエストを受けた" in got
+
+    def test_retrieve_with_scope_keys_returns_relation_memory(
+        self, retriever, episode_store, player_id
+    ):
+        """scope_keys で quest/guild/shop の relation memory が引ける"""
+        episode_store.add(
+            player_id,
+            _make_episode(
+                "e_quest",
+                context_summary="伝説の剣クエストを受諾した",
+                scope_keys=("quest:1",),
+            ),
+        )
+        episode_store.add(
+            player_id,
+            _make_episode(
+                "e_guild",
+                context_summary="ギルドに寄付した",
+                scope_keys=("guild:3",),
+            ),
+        )
+        q = MemoryRetrievalQueryDto(
+            entity_ids=(),
+            location_ids=(),
+            world_object_ids=(),
+            spot_ids=(),
+            scope_keys=("quest:1",),
+        )
+        got = retriever.retrieve_for_prediction(
+            player_id, "現在地: 広場", [], query_dto=q
+        )
+        assert "伝説の剣" in got or "クエスト" in got
+
+    def test_build_query_includes_guild_and_shop_scope_keys(self):
+        """build_memory_retrieval_query_from_state は guild_ids と nearby_shop_ids を scope_keys に含める"""
+        mock_dto = type("MockDto", (), {})()
+        mock_dto.current_spot_id = 5
+        mock_dto.current_spot_name = "広場"
+        mock_dto.area_name = None
+        mock_dto.connected_spot_ids = set()
+        mock_dto.connected_spot_names = set()
+        mock_dto.visible_objects = []
+        mock_dto.notable_objects = []
+        mock_dto.actionable_objects = []
+        mock_dto.available_moves = []
+        mock_dto.active_conversation = None
+        mock_dto.active_quest_ids = []
+        mock_dto.guild_ids = [3, 5]
+        mock_dto.nearby_shop_ids = [9]
+        q = build_memory_retrieval_query_from_state(
+            mock_dto, ["talk_to"], current_state_summary=None
+        )
+        assert "guild:3" in q.scope_keys
+        assert "guild:5" in q.scope_keys
+        assert "shop:9" in q.scope_keys

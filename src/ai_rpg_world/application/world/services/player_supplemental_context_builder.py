@@ -24,15 +24,18 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.conversation.services.conversation_command_service import (
         ConversationCommandService,
     )
+    from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
     from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
     from ai_rpg_world.domain.player.repository.player_inventory_repository import (
         PlayerInventoryRepository,
     )
+    from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
+    from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
     from ai_rpg_world.domain.skill.repository.skill_repository import SkillLoadoutRepository
 
 
 class PlayerSupplementalContextBuilder:
-    """inventory / chest / conversation / skill / attention の read model を構築する。"""
+    """inventory / chest / conversation / skill / attention / guild / shop の read model を構築する。"""
 
     def __init__(
         self,
@@ -41,12 +44,18 @@ class PlayerSupplementalContextBuilder:
         conversation_command_service: Optional["ConversationCommandService"] = None,
         skill_loadout_repository: Optional["SkillLoadoutRepository"] = None,
         game_time_provider: Optional["GameTimeProvider"] = None,
+        quest_repository: Optional["QuestRepository"] = None,
+        guild_repository: Optional["GuildRepository"] = None,
+        shop_repository: Optional["ShopRepository"] = None,
     ) -> None:
         self._player_inventory_repository = player_inventory_repository
         self._item_repository = item_repository
         self._conversation_command_service = conversation_command_service
         self._skill_loadout_repository = skill_loadout_repository
         self._game_time_provider = game_time_provider
+        self._quest_repository = quest_repository
+        self._guild_repository = guild_repository
+        self._shop_repository = shop_repository
 
     def build_inventory_items(self, player_id: PlayerId) -> List[InventoryItemDto]:
         if self._player_inventory_repository is None or self._item_repository is None:
@@ -137,8 +146,37 @@ class PlayerSupplementalContextBuilder:
                 node_text=session.current_node.text,
                 choices=choices,
                 is_terminal=session.current_node.is_terminal,
+                dialogue_tree_id_value=getattr(session, "dialogue_tree_id_value", None),
             )
         return None
+
+    def build_active_quest_ids(self, player_id: int) -> List[int]:
+        """受託中クエストの ID 一覧を返す（scope_keys 用）"""
+        if self._quest_repository is None:
+            return []
+        quests = self._quest_repository.find_accepted_quests_by_player(PlayerId(player_id))
+        return [int(q.quest_id.value) for q in quests]
+
+    def build_guild_ids(self, player_id: int) -> List[int]:
+        """プレイヤーが所属するギルドの ID 一覧を返す（scope_keys 用）"""
+        if self._guild_repository is None:
+            return []
+        guilds = self._guild_repository.find_guilds_by_player_id(PlayerId(player_id))
+        return [int(g.guild_id.value) for g in guilds]
+
+    def build_nearby_shop_ids(
+        self, spot_id: int, location_area_id: Optional[int]
+    ) -> List[int]:
+        """現在地スポットのショップ ID 一覧を返す（scope_keys 用）。1ロケーション1ショップ。"""
+        if self._shop_repository is None or location_area_id is None:
+            return []
+        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+        from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+
+        shop = self._shop_repository.find_by_spot_and_location(
+            SpotId(spot_id), LocationAreaId(location_area_id)
+        )
+        return [int(shop.shop_id.value)] if shop else []
 
     def build_usable_skills(self, player_id: int) -> List[UsableSkillDto]:
         if self._skill_loadout_repository is None or self._game_time_provider is None:

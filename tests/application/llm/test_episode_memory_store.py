@@ -21,6 +21,7 @@ def _make_entry(
     importance: str = "medium",
     surprise: bool = False,
     recall_count: int = 0,
+    scope_keys: tuple = (),
 ) -> EpisodeMemoryEntry:
     return EpisodeMemoryEntry(
         id=eid,
@@ -33,6 +34,7 @@ def _make_entry(
         importance=importance,
         surprise=surprise,
         recall_count=recall_count,
+        scope_keys=scope_keys,
     )
 
 
@@ -215,3 +217,25 @@ class TestInMemoryEpisodeMemoryStore:
         store.increment_recall_count(player_id, "nonexistent")
         got = store.get_recent(player_id, 1)
         assert got[0].recall_count == 0
+
+    def test_find_by_entities_and_actions_filters_by_scope_keys(
+        self, store, player_id
+    ):
+        """find_by_entities_and_actions が scope_keys でフィルタする（関係性メモリ検索契約）"""
+        store.add(
+            player_id,
+            _make_entry(eid="e_quest", scope_keys=("quest:1",)),
+        )
+        store.add(
+            player_id,
+            _make_entry(eid="e_guild", scope_keys=("guild:3",)),
+        )
+        store.add(
+            player_id,
+            _make_entry(eid="e_noscope", scope_keys=()),
+        )
+        got = store.find_by_entities_and_actions(
+            player_id, scope_keys=["quest:1"], limit=10
+        )
+        assert len(got) == 1
+        assert got[0].id == "e_quest"
