@@ -14,6 +14,7 @@ from ai_rpg_world.application.llm.services.in_memory_long_term_memory_store impo
 )
 from ai_rpg_world.application.llm.services.predictive_memory_retriever import (
     DefaultPredictiveMemoryRetriever,
+    build_memory_retrieval_query_from_state,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -25,6 +26,8 @@ def _make_episode(
     entity_ids: tuple[str, ...] = ("loc_1",),
     location_id: str | None = None,
     context_summary: str = "洞窟にいた",
+    world_object_ids: tuple[int, ...] = (),
+    spot_id_value: int | None = None,
 ) -> EpisodeMemoryEntry:
     from datetime import datetime
     return EpisodeMemoryEntry(
@@ -38,6 +41,8 @@ def _make_episode(
         importance="medium",
         surprise=False,
         recall_count=0,
+        world_object_ids=world_object_ids,
+        spot_id_value=spot_id_value,
     )
 
 
@@ -239,7 +244,7 @@ class TestDefaultPredictiveMemoryRetriever:
     def test_retrieve_with_query_dto_uses_entity_location_priority(
         self, retriever, episode_store, player_id
     ):
-        """query_dto を渡したとき entity > location > action の優先度で検索する"""
+        """query_dto を渡したとき world_object_ids > spot_ids > entity > location > action の優先度で検索する"""
         episode_store.add(
             player_id,
             _make_episode(
@@ -284,3 +289,90 @@ class TestDefaultPredictiveMemoryRetriever:
         )
         count = got.count("洞窟の奥には宝箱がある")
         assert count == 1
+
+    def test_retrieve_with_world_object_ids_prioritizes_stable_id_match(
+        self, retriever, episode_store, player_id
+    ):
+        """world_object_ids 検索で stable id が名前より優先される（同名別 object で stable id が勝つ）"""
+        # 同じ display_name「老人」を持つ 2 件。wo_id=10 は「洞窟の老人」、wo_id=20 は「港町の老人」
+        episode_store.add(
+            player_id,
+            _make_episode(
+                "e_wo10",
+                entity_ids=("老人",),
+                location_id="洞窟",
+                context_summary="洞窟の老人と話した",
+                world_object_ids=(10,),
+                spot_id_value=1,
+            ),
+        )
+        episode_store.add(
+            player_id,
+            _make_episode(
+                "e_wo20",
+                entity_ids=("老人",),
+                location_id="港町",
+                context_summary="港町の老人と話した",
+                world_object_ids=(20,),
+                spot_id_value=2,
+            ),
+        )
+        q = MemoryRetrievalQueryDto(
+            entity_ids=("老人",),
+            world_object_ids=(10,),
+            spot_ids=(),
+        )
+        got = retriever.retrieve_for_prediction(
+            player_id, "現在地: 洞窟", [], query_dto=q, episode_limit=1
+        )
+        # stable id ヒットが先に add_unique されるため、limit=1 なら洞窟の老人のみ
+        assert "洞窟の老人と話した" in got
+        assert "港町の老人と話した" not in got
+
+    def test_build_query_includes_active_conversation_npc_id(
+        self,
+    ):
+        """build_memory_retrieval_query_from_state は active_conversation の npc_world_object_id を world_object_ids に含める"""
+        mock_dto = type("MockDto", (), {})()
+        mock_dto.current_spot_id = 5
+        mock_dto.current_spot_name = "広場"
+        mock_dto.area_name = None
+        mock_dto.connected_spot_ids = set()
+        mock_dto.connected_spot_names = set()
+        mock_dto.visible_objects = []
+        mock_dto.notable_objects = []
+        mock_dto.actionable_objects = []
+        mock_dto.available_moves = []
+        ac = type("MockAC", (), {"npc_world_object_id": 42})()
+        mock_dto.active_conversation = ac
+        q = build_memory_retrieval_query_from_state(
+            mock_dto, ["talk_to"], current_state_summary=None
+        )
+        assert 42 in q.world_object_ids
+        assert 5 in q.spot_ids
+
+    def test_retrieve_with_spot_ids_returns_revisit_memory(
+        self, retriever, episode_store, player_id
+    ):
+        """spot_ids だけで再訪記憶が引ける"""
+        episode_store.add(
+            player_id,
+            _make_episode(
+                "e_spot5",
+                entity_ids=("広場",),
+                location_id="広場",
+                context_summary="広場でクエストを受けた",
+                world_object_ids=(),
+                spot_id_value=5,
+            ),
+        )
+        q = MemoryRetrievalQueryDto(
+            entity_ids=(),
+            location_ids=(),
+            world_object_ids=(),
+            spot_ids=(5,),
+        )
+        got = retriever.retrieve_for_prediction(
+            player_id, "現在地: 広場", [], query_dto=q
+        )
+        assert "広場でクエストを受けた" in got

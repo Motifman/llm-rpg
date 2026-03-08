@@ -521,11 +521,12 @@ class ObservationFormatter(IObservationFormatter):
             if getattr(event, "killer_player_id", None) is not None
             else None
         )
+        killer_id = getattr(event.killer_player_id, "value", None) if getattr(event, "killer_player_id", None) else None
         if is_self:
             prose = "戦闘不能になりました。"
             if killer_name:
                 prose = f"{killer_name}に倒されました。"
-            structured = {"type": "player_downed", "role": "self"}
+            structured = {"type": "player_downed", "role": "self", "killer_player_id": killer_id}
             return ObservationOutput(
                 prose=prose,
                 structured=structured,
@@ -589,6 +590,7 @@ class ObservationFormatter(IObservationFormatter):
         structured = {
             "type": "player_spoke",
             "speaker": speaker_name,
+            "speaker_player_id": event.aggregate_id.value,
             "channel": event.channel.value,
             "content": event.content,
             "role": "self" if is_self else "other",
@@ -648,8 +650,18 @@ class ObservationFormatter(IObservationFormatter):
         old_s = event.old_weather_state.weather_type.value
         new_s = event.new_weather_state.weather_type.value
         prose = f"天気が{old_s}から{new_s}に変わりました。"
-        structured = {"type": "weather_changed", "old": old_s, "new": new_s}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="environment")
+        structured = {
+            "type": "weather_changed",
+            "old": old_s,
+            "new": new_s,
+            "spot_id_value": event.spot_id.value,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="environment",
+            schedules_turn=True,
+        )
 
     def _interaction_type_to_prose(self, interaction_type: InteractionTypeEnum, data: Dict[str, Any]) -> str:
         """interaction_type を LLM 向けの 5W1H 観測文に変換する。"""
@@ -680,9 +692,13 @@ class ObservationFormatter(IObservationFormatter):
         self, event: WorldObjectInteractedEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
         prose = self._interaction_type_to_prose(event.interaction_type, event.data or {})
+        actor_id = getattr(event.actor_id, "value", event.actor_id) if event.actor_id else None
+        target_id = getattr(event.target_id, "value", event.target_id) if event.target_id else None
         structured = {
             "type": "object_interacted",
             "interaction_type": event.interaction_type.value,
+            "actor_world_object_id": actor_id,
+            "target_world_object_id": target_id,
         }
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
@@ -698,13 +714,13 @@ class ObservationFormatter(IObservationFormatter):
             prose = f"{item_name}を{qty}個入手しました。"
         else:
             prose = f"{item_name}を入手しました。"
+        # 一般的なアイテム取得は即応不要。schedules_turn のみ（過剰停止を減らす）
         structured = {"type": "item_added_to_inventory", "item_name": item_name}
         return ObservationOutput(
             prose=prose,
             structured=structured,
             observation_category="self_only",
             schedules_turn=True,
-            breaks_movement=True,
         )
 
     def _format_item_dropped(
@@ -823,7 +839,11 @@ class ObservationFormatter(IObservationFormatter):
         prose = "新しいクエストが発行されました。"
         if reward_summary:
             prose += f" 報酬: {reward_summary}"
-        structured = {"type": "quest_issued", "reward": {"gold": event.reward.gold, "exp": event.reward.exp}}
+        structured = {
+            "type": "quest_issued",
+            "quest_id_value": event.aggregate_id.value if hasattr(event.aggregate_id, "value") else None,
+            "reward": {"gold": event.reward.gold, "exp": event.reward.exp},
+        }
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -833,7 +853,8 @@ class ObservationFormatter(IObservationFormatter):
 
     def _format_quest_accepted(self, event: QuestAcceptedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         prose = "クエストを受託しました。"
-        structured = {"type": "quest_accepted"}
+        quest_id = getattr(event.aggregate_id, "value", None) if event.aggregate_id else None
+        structured = {"type": "quest_accepted", "quest_id_value": quest_id}
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     def _format_quest_completed(self, event: QuestCompletedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
@@ -841,7 +862,8 @@ class ObservationFormatter(IObservationFormatter):
         prose = "クエストを完了しました。"
         if reward_summary:
             prose += f" 報酬: {reward_summary}"
-        structured = {"type": "quest_completed", "reward": {"gold": event.reward.gold, "exp": event.reward.exp}}
+        quest_id = getattr(event.aggregate_id, "value", None) if event.aggregate_id else None
+        structured = {"type": "quest_completed", "quest_id_value": quest_id, "reward": {"gold": event.reward.gold, "exp": event.reward.exp}}
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -854,7 +876,8 @@ class ObservationFormatter(IObservationFormatter):
         prose = "クエストが承認待ちになりました。"
         if reward_summary:
             prose += f" 報酬: {reward_summary}"
-        structured = {"type": "quest_pending_approval", "guild_id": event.guild_id}
+        quest_id = getattr(event.aggregate_id, "value", None) if event.aggregate_id else None
+        structured = {"type": "quest_pending_approval", "quest_id_value": quest_id, "guild_id": event.guild_id}
         return ObservationOutput(prose=prose, structured=structured, observation_category="environment")
 
     def _format_quest_approved(self, event: QuestApprovedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
@@ -875,7 +898,8 @@ class ObservationFormatter(IObservationFormatter):
 
     def _format_shop_created(self, event: ShopCreatedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         prose = "ショップが開設されました。"
-        structured = {"type": "shop_created"}
+        shop_id = getattr(event.aggregate_id, "value", event.aggregate_id) if event.aggregate_id else None
+        structured = {"type": "shop_created", "shop_id_value": shop_id}
         return ObservationOutput(prose=prose, structured=structured, observation_category="social")
 
     def _format_shop_item_listed(self, event: ShopItemListedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
@@ -894,12 +918,13 @@ class ObservationFormatter(IObservationFormatter):
         is_buyer = event.buyer_id.value == recipient_id.value
         buyer_name = self._player_name(event.buyer_id)
         seller_name = self._player_name(event.seller_id)
+        shop_id = getattr(event.aggregate_id, "value", event.aggregate_id) if event.aggregate_id else None
         if is_buyer:
             prose = f"{item_name}を{event.quantity}個購入しました（支払い: {event.total_gold}ゴールド）。"
-            structured = {"type": "shop_purchase", "role": "buyer", "item_name": item_name}
+            structured = {"type": "shop_purchase", "role": "buyer", "item_name": item_name, "shop_id_value": shop_id}
         else:
             prose = f"{buyer_name}が{item_name}を{event.quantity}個購入しました（受取: {event.total_gold}ゴールド）。"
-            structured = {"type": "shop_purchase", "role": "seller", "item_name": item_name, "buyer": buyer_name, "seller": seller_name}
+            structured = {"type": "shop_purchase", "role": "seller", "item_name": item_name, "buyer": buyer_name, "seller": seller_name, "shop_id_value": shop_id}
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -919,13 +944,15 @@ class ObservationFormatter(IObservationFormatter):
 
     def _format_guild_created(self, event: GuildCreatedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         prose = f"ギルド「{event.name}」が創設されました。"
-        structured = {"type": "guild_created", "guild_name": event.name}
+        guild_id = getattr(event.aggregate_id, "value", event.aggregate_id) if event.aggregate_id else None
+        structured = {"type": "guild_created", "guild_name": event.name, "guild_id_value": guild_id}
         return ObservationOutput(prose=prose, structured=structured, observation_category="social")
 
     def _format_guild_member_joined(self, event: GuildMemberJoinedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         member_name = self._player_name(event.membership.player_id)
         prose = f"{member_name}がギルドに加入しました。"
-        structured = {"type": "guild_member_joined", "member": member_name}
+        guild_id = getattr(event.aggregate_id, "value", event.aggregate_id) if event.aggregate_id else None
+        structured = {"type": "guild_member_joined", "member": member_name, "guild_id_value": guild_id}
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -959,7 +986,8 @@ class ObservationFormatter(IObservationFormatter):
 
     def _format_guild_disbanded(self, event: GuildDisbandedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         prose = "ギルドが解散しました。"
-        structured = {"type": "guild_disbanded"}
+        guild_id = getattr(event.aggregate_id, "value", event.aggregate_id) if event.aggregate_id else None
+        structured = {"type": "guild_disbanded", "guild_id_value": guild_id}
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -995,7 +1023,9 @@ class ObservationFormatter(IObservationFormatter):
 
     def _format_monster_spawned(self, event: MonsterSpawnedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         prose = "モンスターが現れました。"
-        structured = {"type": "monster_spawned"}
+        monster_id = getattr(event.aggregate_id, "value", event.aggregate_id) if event.aggregate_id else None
+        spot_id = getattr(event.spot_id, "value", event.spot_id) if event.spot_id else None
+        structured = {"type": "monster_spawned", "monster_id_value": monster_id, "spot_id_value": spot_id}
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -1017,7 +1047,9 @@ class ObservationFormatter(IObservationFormatter):
         prose = "モンスターが倒れました。"
         if event.killer_player_id is not None and event.killer_player_id.value == recipient_id.value:
             prose = f"モンスターを倒しました（報酬: {event.gold}ゴールド、{event.exp}EXP）。"
-        structured = {"type": "monster_died", "gold": event.gold, "exp": event.exp}
+        monster_id = getattr(event.aggregate_id, "value", event.aggregate_id) if event.aggregate_id else None
+        spot_id = getattr(event.spot_id, "value", event.spot_id) if event.spot_id else None
+        structured = {"type": "monster_died", "monster_id_value": monster_id, "spot_id_value": spot_id, "gold": event.gold, "exp": event.exp}
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -1076,7 +1108,9 @@ class ObservationFormatter(IObservationFormatter):
 
     def _format_hit_box_hit_recorded(self, event: HitBoxHitRecordedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         prose = "攻撃が命中しました。"
-        structured = {"type": "hitbox_hit"}
+        owner_id = getattr(event.owner_id, "value", event.owner_id) if event.owner_id else None
+        target_id = getattr(event.target_id, "value", event.target_id) if event.target_id else None
+        structured = {"type": "hitbox_hit", "owner_world_object_id": owner_id, "target_world_object_id": target_id}
         return ObservationOutput(
             prose=prose,
             structured=structured,

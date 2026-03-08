@@ -1,7 +1,8 @@
 """予測志向記憶検索のデフォルト実装
 
-検索優先度（ランキング）: entity 一致 > location 一致 > actionable/notable 一致
-> action 一致 > free text keyword
+検索優先度（ランキング）: world_object_ids > spot_ids > entity_ids > location_ids
+> actionable/notable > action_names > free_text
+stable id ヒットを先に集めて dedupe し、同名別 object では stable id が優先される。
 facts と laws は重複除去・件数制御を厳格にする。
 """
 import re
@@ -106,6 +107,13 @@ def build_memory_retrieval_query_from_state(
     for move in current_state_dto.available_moves or []:
         spot_ids_set.add(move.spot_id)
 
+    # 会話対象の stable id を追加（DTO 由来を優先、summary 依存を下げる）
+    ac = getattr(current_state_dto, "active_conversation", None)
+    if ac is not None:
+        npc_id = getattr(ac, "npc_world_object_id", None)
+        if npc_id is not None and isinstance(npc_id, int):
+            world_object_ids_set.add(npc_id)
+
     free = (
         _extract_keywords_from_summary(current_state_summary)
         if current_state_summary
@@ -179,6 +187,8 @@ class DefaultPredictiveMemoryRetriever(IPredictiveMemoryRetriever):
                 actionable_labels=(),
                 action_names=tuple(candidate_action_names),
                 free_text_keywords=tuple(free_text),
+                world_object_ids=(),
+                spot_ids=(),
             )
 
         episodes = self._collect_episode_candidates_ranked(
@@ -243,8 +253,10 @@ class DefaultPredictiveMemoryRetriever(IPredictiveMemoryRetriever):
         limit: int,
     ):
         """
-        検索優先度: entity > location > actionable/notable > action > free_text
-        同じエピソードが複数条件でヒットしても 1 件にまとめる。
+        検索優先度: world_object_ids > spot_ids > entity_ids > location_ids
+        > actionable/notable > action_names > free_text
+        同じエピソードが複数条件でヒットしても 1 件にまとめる（add_unique）。
+        stable id ヒットを先に集め、同名別 object では stable id が勝つ。
         """
         seen_ids: set[str] = set()
         result: List = []
@@ -256,7 +268,31 @@ class DefaultPredictiveMemoryRetriever(IPredictiveMemoryRetriever):
                     seen_ids.add(eid)
                     result.append(e)
 
-        # 1. entity 一致（最優先）
+        # 1. world_object_ids 一致（最優先）
+        if query.world_object_ids:
+            add_unique(
+                self._episode_store.find_by_entities_and_actions(
+                    player_id,
+                    world_object_ids=list(query.world_object_ids),
+                    spot_ids=None,
+                    entity_ids=None,
+                    action_names=None,
+                    limit=limit * 2,
+                )
+            )
+        # 2. spot_ids 一致
+        if query.spot_ids:
+            add_unique(
+                self._episode_store.find_by_entities_and_actions(
+                    player_id,
+                    world_object_ids=None,
+                    spot_ids=list(query.spot_ids),
+                    entity_ids=None,
+                    action_names=None,
+                    limit=limit * 2,
+                )
+            )
+        # 3. entity_ids 一致
         if query.entity_ids:
             add_unique(
                 self._episode_store.find_by_entities_and_actions(
@@ -266,7 +302,7 @@ class DefaultPredictiveMemoryRetriever(IPredictiveMemoryRetriever):
                     limit=limit * 2,
                 )
             )
-        # 2. location 一致
+        # 4. location_ids 一致
         if query.location_ids:
             add_unique(
                 self._episode_store.find_by_entities_and_actions(
@@ -276,7 +312,7 @@ class DefaultPredictiveMemoryRetriever(IPredictiveMemoryRetriever):
                     limit=limit * 2,
                 )
             )
-        # 3. actionable / notable 一致
+        # 5. actionable / notable 一致
         notable_actionable = list(query.actionable_labels) + list(
             query.notable_labels
         )
@@ -289,7 +325,7 @@ class DefaultPredictiveMemoryRetriever(IPredictiveMemoryRetriever):
                     limit=limit * 2,
                 )
             )
-        # 4. action 一致
+        # 6. action_names 一致
         if query.action_names:
             add_unique(
                 self._episode_store.find_by_entities_and_actions(
@@ -299,7 +335,7 @@ class DefaultPredictiveMemoryRetriever(IPredictiveMemoryRetriever):
                     limit=limit * 2,
                 )
             )
-        # 5. free text keyword
+        # 7. free text keyword
         if query.free_text_keywords:
             add_unique(
                 self._episode_store.find_by_entities_and_actions(

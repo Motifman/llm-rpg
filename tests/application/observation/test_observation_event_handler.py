@@ -441,7 +441,7 @@ class TestObservationEventHandlerLlmTurnScheduling:
         """プレイヤー 2 のみ LLM 制御とするリゾルバ"""
         return SetBasedLlmPlayerResolver({2})
 
-    def test_handle_when_llm_player_appends_and_schedules_turn(
+    def test_handle_when_llm_player_schedules_turn_only_on_schedules_turn(
         self,
         resolver,
         formatter,
@@ -450,7 +450,7 @@ class TestObservationEventHandlerLlmTurnScheduling:
         turn_trigger,
         llm_player_resolver_include_one,
     ):
-        """割り込み観測を受けた LLM プレイヤーでは schedule_turn が呼ばれる"""
+        """schedules_turn=True の観測（PlayerDowned は schedules_turn も breaks_movement も true）で schedule_turn が呼ばれる"""
         handler = ObservationEventHandler(
             resolver=resolver,
             formatter=formatter,
@@ -467,6 +467,79 @@ class TestObservationEventHandlerLlmTurnScheduling:
 
         assert len(buffer.get_observations(PlayerId(1))) == 1
         turn_trigger.schedule_turn.assert_called_once_with(PlayerId(1))
+
+    def test_handle_when_breaks_movement_only_cancels_but_does_not_schedule(
+        self,
+        resolver,
+        buffer,
+        unit_of_work_factory,
+        turn_trigger,
+        llm_player_resolver_include_one,
+    ):
+        """breaks_movement のみの観測では cancel_movement が呼ばれ schedule_turn は呼ばれない"""
+        mock_formatter = MagicMock()
+        mock_formatter.format.return_value = __import__(
+            "ai_rpg_world.application.observation.contracts.dtos", fromlist=["ObservationOutput"]
+        ).ObservationOutput(
+            prose="被弾した",
+            structured={"type": "damage"},
+            schedules_turn=False,
+            breaks_movement=True,
+        )
+        mock_resolver = MagicMock()
+        mock_resolver.resolve.return_value = [PlayerId(1)]
+        movement_service = MagicMock()
+        handler = ObservationEventHandler(
+            resolver=mock_resolver,
+            formatter=mock_formatter,
+            buffer=buffer,
+            unit_of_work_factory=unit_of_work_factory,
+            turn_trigger=turn_trigger,
+            llm_player_resolver=llm_player_resolver_include_one,
+            movement_service=movement_service,
+        )
+        handler.handle(object())
+
+        assert len(buffer.get_observations(PlayerId(1))) == 1
+        movement_service.cancel_movement.assert_called_once()
+        call_args = movement_service.cancel_movement.call_args[0][0]
+        assert call_args.player_id == 1
+        turn_trigger.schedule_turn.assert_not_called()
+
+    def test_handle_when_schedules_turn_only_does_not_cancel(
+        self,
+        resolver,
+        buffer,
+        unit_of_work_factory,
+        turn_trigger,
+        llm_player_resolver_include_one,
+    ):
+        """schedules_turn のみの観測では schedule_turn が呼ばれ cancel_movement は呼ばれない"""
+        from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
+        mock_formatter = MagicMock()
+        mock_formatter.format.return_value = ObservationOutput(
+            prose="天気が変わった",
+            structured={"type": "weather"},
+            schedules_turn=True,
+            breaks_movement=False,
+        )
+        mock_resolver = MagicMock()
+        mock_resolver.resolve.return_value = [PlayerId(1)]
+        movement_service = MagicMock()
+        handler = ObservationEventHandler(
+            resolver=mock_resolver,
+            formatter=mock_formatter,
+            buffer=buffer,
+            unit_of_work_factory=unit_of_work_factory,
+            turn_trigger=turn_trigger,
+            llm_player_resolver=llm_player_resolver_include_one,
+            movement_service=movement_service,
+        )
+        handler.handle(object())
+
+        assert len(buffer.get_observations(PlayerId(1))) == 1
+        turn_trigger.schedule_turn.assert_called_once_with(PlayerId(1))
+        movement_service.cancel_movement.assert_not_called()
 
     def test_handle_when_not_llm_player_does_not_schedule_turn(
         self,

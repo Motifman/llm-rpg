@@ -367,6 +367,7 @@ def create_llm_agent_wiring(
         player_status_repository=player_status_repository,
         turn_trigger=llm_turn_trigger,
         llm_player_resolver=llm_player_resolver,
+        movement_service=movement_service,
         game_time_provider=game_time_provider,
         world_time_config=world_time_config_service,
     )

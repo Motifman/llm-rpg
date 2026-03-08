@@ -88,36 +88,9 @@ class TestLlmAgentTurnRunnerRunTurn:
             orchestrator=orchestrator,
         )
 
-    def test_run_turn_normal_no_observations(self, runner, world_query_service, movement_service, action_result_store):
-        """観測が無い場合は割り込みせずオーケストレータのみ実行"""
+    def test_run_turn_normal_delegates_to_orchestrator(self, runner, movement_service, action_result_store):
+        """オーケストレータのみ実行。即時停止は ObservationEventHandler 側で行われる。"""
         player_id = PlayerId(1)
-        world_query_service.get_player_current_state.return_value = MagicMock(
-            spec=PlayerCurrentStateDto,
-            is_busy=False,
-            has_active_path=False,
-        )
-
-        result = runner.run_turn(player_id)
-
-        assert isinstance(result, LlmCommandResultDto)
-        movement_service.cancel_movement.assert_not_called()
-        recent = action_result_store.get_recent(player_id, 5)
-        assert len(recent) == 1
-        assert "中断" not in recent[0].action_summary
-
-    def test_run_turn_normal_not_busy(self, runner, observation_buffer, world_query_service, movement_service, action_result_store):
-        """is_busy が False の場合は割り込みしない"""
-        player_id = PlayerId(1)
-        entry = ObservationEntry(
-            occurred_at=datetime.now(),
-            output=ObservationOutput(prose="戦闘不能になりました。", structured={"type": "player_downed"}, schedules_turn=True, breaks_movement=True),
-        )
-        observation_buffer.append(player_id, entry)
-        world_query_service.get_player_current_state.return_value = MagicMock(
-            spec=PlayerCurrentStateDto,
-            is_busy=False,
-            has_active_path=False,
-        )
 
         result = runner.run_turn(player_id)
 
@@ -126,78 +99,14 @@ class TestLlmAgentTurnRunnerRunTurn:
         recent = action_result_store.get_recent(player_id, 5)
         assert len(recent) == 1
 
-    def test_run_turn_normal_no_interrupting_observation(self, runner, observation_buffer, world_query_service, movement_service, action_result_store):
-        """観測が breaks_movement=False のみの場合は割り込みしない"""
-        player_id = PlayerId(1)
-        entry = ObservationEntry(
-            occurred_at=datetime.now(),
-            output=ObservationOutput(prose="天気が変わった。", structured={"type": "weather"}, observation_category="environment"),
-        )
-        observation_buffer.append(player_id, entry)
-        world_query_service.get_player_current_state.return_value = MagicMock(
-            spec=PlayerCurrentStateDto,
-            is_busy=True,
-            has_active_path=True,
-        )
-
-        result = runner.run_turn(player_id)
-
-        movement_service.cancel_movement.assert_not_called()
-        recent = action_result_store.get_recent(player_id, 5)
-        assert len(recent) == 1
-
-    def test_run_turn_with_interrupt_and_active_path_calls_cancel_and_appends(
-        self,
-        runner,
-        observation_buffer,
-        world_query_service,
-        movement_service,
-        action_result_store,
-    ):
-        """移動経路ありかつ割り込み観測ありのとき cancel_movement と append が呼ばれる"""
+    def test_run_turn_with_observations_in_buffer_still_delegates_only(self, runner, observation_buffer, movement_service, action_result_store):
+        """観測バッファに breaks_movement 観測があっても cancel は呼ばない（ObservationEventHandler 側で済んでいる）"""
         player_id = PlayerId(1)
         entry = ObservationEntry(
             occurred_at=datetime.now(),
             output=ObservationOutput(prose="戦闘不能になりました。", structured={"type": "player_downed"}, schedules_turn=True, breaks_movement=True),
         )
         observation_buffer.append(player_id, entry)
-        world_query_service.get_player_current_state.return_value = MagicMock(
-            spec=PlayerCurrentStateDto,
-            is_busy=True,
-            has_active_path=True,
-        )
-
-        result = runner.run_turn(player_id)
-
-        assert isinstance(result, LlmCommandResultDto)
-        movement_service.cancel_movement.assert_called_once()
-        call_args = movement_service.cancel_movement.call_args[0][0]
-        assert call_args.player_id == 1
-        recent = action_result_store.get_recent(player_id, 5)
-        assert len(recent) == 2
-        assert any("移動" in e.action_summary and "中断" in e.action_summary for e in recent)
-        assert any("以下の観測により移動を中断" in e.result_summary for e in recent)
-
-    def test_run_turn_with_interrupt_and_only_busy_does_not_cancel(
-        self,
-        runner,
-        observation_buffer,
-        world_query_service,
-        movement_service,
-        action_result_store,
-    ):
-        """busy でも移動経路がなければ割り込みで cancel_movement しない"""
-        player_id = PlayerId(1)
-        entry = ObservationEntry(
-            occurred_at=datetime.now(),
-            output=ObservationOutput(prose="戦闘不能になりました。", structured={"type": "player_downed"}, schedules_turn=True, breaks_movement=True),
-        )
-        observation_buffer.append(player_id, entry)
-        world_query_service.get_player_current_state.return_value = MagicMock(
-            spec=PlayerCurrentStateDto,
-            is_busy=True,
-            has_active_path=False,
-        )
 
         result = runner.run_turn(player_id)
 
@@ -205,37 +114,15 @@ class TestLlmAgentTurnRunnerRunTurn:
         movement_service.cancel_movement.assert_not_called()
         recent = action_result_store.get_recent(player_id, 5)
         assert len(recent) == 1
-        assert all("移動が中断" not in e.action_summary for e in recent)
-
-    def test_run_turn_with_interrupt_and_active_path_calls_cancel_and_appends(self, runner, observation_buffer, world_query_service, movement_service, action_result_store):
-        """is_busy が False でも has_active_path=True なら割り込み時に cancel_movement する"""
-        player_id = PlayerId(1)
-        entry = ObservationEntry(
-            occurred_at=datetime.now(),
-            output=ObservationOutput(prose="戦闘不能になりました。", structured={"type": "player_downed"}, schedules_turn=True, breaks_movement=True),
-        )
-        observation_buffer.append(player_id, entry)
-        world_query_service.get_player_current_state.return_value = MagicMock(
-            spec=PlayerCurrentStateDto,
-            is_busy=False,
-            has_active_path=True,
-        )
-
-        runner.run_turn(player_id)
-
-        movement_service.cancel_movement.assert_called_once()
 
     def test_run_turn_player_id_not_player_id_raises(self, runner):
         """player_id が PlayerId でないとき TypeError"""
         with pytest.raises(TypeError, match="player_id must be PlayerId"):
             runner.run_turn(1)  # type: ignore[arg-type]
 
-    def test_run_turn_when_current_state_none_proceeds_to_orchestrator(
-        self, runner, world_query_service, movement_service, action_result_store
-    ):
-        """get_player_current_state が None（未配置）のときは割り込みせずオーケストレータのみ実行"""
+    def test_run_turn_proceeds_to_orchestrator(self, runner, movement_service, action_result_store):
+        """オーケストレータのみ実行。"""
         player_id = PlayerId(1)
-        world_query_service.get_player_current_state.return_value = None
 
         result = runner.run_turn(player_id)
 
@@ -286,13 +173,10 @@ class TestLlmAgentTurnRunnerRunTurnExceptions:
         )
 
     def test_run_turn_orchestrator_raises_runtime_error_wraps_in_world_system_error(
-        self, runner, world_query_service
+        self, runner
     ):
         """orchestrator.run_turn が RuntimeError を投げたとき WorldSystemErrorException に包まれて伝播"""
         player_id = PlayerId(1)
-        world_query_service.get_player_current_state.return_value = MagicMock(
-            spec=PlayerCurrentStateDto, is_busy=False
-        )
         runner._orchestrator.run_turn = MagicMock(side_effect=RuntimeError("orchestrator failed"))
 
         with pytest.raises(WorldSystemErrorException) as exc_info:
@@ -304,121 +188,16 @@ class TestLlmAgentTurnRunnerRunTurnExceptions:
         assert "run_turn" in str(exc_info.value)
 
     def test_run_turn_orchestrator_raises_world_application_exception_propagates(
-        self, runner, world_query_service
+        self, runner
     ):
         """orchestrator.run_turn が WorldApplicationException を投げたときそのまま伝播"""
         player_id = PlayerId(1)
-        world_query_service.get_player_current_state.return_value = MagicMock(
-            spec=PlayerCurrentStateDto, is_busy=False
-        )
         runner._orchestrator.run_turn = MagicMock(
             side_effect=WorldApplicationException("app error")
         )
 
         with pytest.raises(WorldApplicationException, match="app error"):
             runner.run_turn(player_id)
-
-    def test_run_turn_get_observations_raises_wraps_in_world_system_error(
-        self, runner, observation_buffer, world_query_service
-    ):
-        """observation_buffer.get_observations が例外を投げたとき WorldSystemErrorException に包まれる"""
-        player_id = PlayerId(1)
-        observation_buffer.get_observations = MagicMock(side_effect=RuntimeError("buffer failed"))
-        world_query_service.get_player_current_state.return_value = MagicMock(
-            spec=PlayerCurrentStateDto, is_busy=False
-        )
-
-        with pytest.raises(WorldSystemErrorException) as exc_info:
-            runner.run_turn(player_id)
-
-        assert exc_info.value.original_exception is not None
-        assert isinstance(exc_info.value.original_exception, RuntimeError)
-
-    def test_run_turn_world_query_service_raises_wraps_in_world_system_error(
-        self, runner, world_query_service
-    ):
-        """world_query_service.get_player_current_state が例外を投げたとき WorldSystemErrorException に包まれる"""
-        player_id = PlayerId(1)
-        world_query_service.get_player_current_state.side_effect = RuntimeError("query failed")
-
-        with pytest.raises(WorldSystemErrorException) as exc_info:
-            runner.run_turn(player_id)
-
-        assert exc_info.value.original_exception is not None
-        assert isinstance(exc_info.value.original_exception, RuntimeError)
-
-    def test_run_turn_cancel_movement_raises_wraps_in_world_system_error(
-        self,
-        runner,
-        observation_buffer,
-        world_query_service,
-        movement_service,
-        action_result_store,
-    ):
-        """割り込み時に cancel_movement が例外を投げたとき WorldSystemErrorException に包まれる"""
-        player_id = PlayerId(1)
-        entry = ObservationEntry(
-            occurred_at=datetime.now(),
-            output=ObservationOutput(
-                prose="戦闘不能になりました。",
-                structured={"type": "player_downed"},
-                schedules_turn=True,
-                breaks_movement=True,
-            ),
-        )
-        observation_buffer.append(player_id, entry)
-        world_query_service.get_player_current_state.return_value = MagicMock(
-            spec=PlayerCurrentStateDto,
-            is_busy=True,
-            has_active_path=True,
-        )
-        movement_service.cancel_movement.side_effect = RuntimeError("cancel failed")
-
-        with pytest.raises(WorldSystemErrorException) as exc_info:
-            runner.run_turn(player_id)
-
-        movement_service.cancel_movement.assert_called_once()
-        assert exc_info.value.original_exception is not None
-        assert isinstance(exc_info.value.original_exception, RuntimeError)
-        # append は cancel の後なので呼ばれない
-        recent = action_result_store.get_recent(player_id, 5)
-        assert len(recent) == 0
-
-    def test_run_turn_action_result_store_append_raises_wraps_in_world_system_error(
-        self,
-        runner,
-        observation_buffer,
-        world_query_service,
-        movement_service,
-        action_result_store,
-    ):
-        """割り込み時に action_result_store.append が例外を投げたとき WorldSystemErrorException に包まれる"""
-        player_id = PlayerId(1)
-        entry = ObservationEntry(
-            occurred_at=datetime.now(),
-            output=ObservationOutput(
-                prose="戦闘不能になりました。",
-                structured={"type": "player_downed"},
-                schedules_turn=True,
-                breaks_movement=True,
-            ),
-        )
-        observation_buffer.append(player_id, entry)
-        world_query_service.get_player_current_state.return_value = MagicMock(
-            spec=PlayerCurrentStateDto,
-            is_busy=True,
-            has_active_path=True,
-        )
-        movement_service.cancel_movement.return_value = MagicMock(success=True)
-        action_result_store.append = MagicMock(side_effect=RuntimeError("append failed"))
-
-        with pytest.raises(WorldSystemErrorException) as exc_info:
-            runner.run_turn(player_id)
-
-        movement_service.cancel_movement.assert_called_once()
-        action_result_store.append.assert_called_once()
-        assert exc_info.value.original_exception is not None
-        assert isinstance(exc_info.value.original_exception, RuntimeError)
 
 
 class TestLlmAgentTurnRunnerInit:
