@@ -545,7 +545,7 @@ class TestObservationEventHandlerLlmTurnScheduling:
         turn_trigger,
         llm_player_resolver_include_one,
     ):
-        """LLM プレイヤーでも causes_interrupt=False の観測では schedule_turn しない"""
+        """LLM プレイヤーでも schedules_turn/breaks_movement=False の観測では schedule_turn しない"""
         handler = ObservationEventHandler(
             resolver=resolver,
             formatter=formatter,

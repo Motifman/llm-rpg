@@ -464,11 +464,21 @@ class ObservationFormatter(IObservationFormatter):
         is_self = event.player_id_value is not None and event.player_id_value == recipient_id.value
         if is_self:
             prose = f"{loc_name}に着きました。"
-            structured = {"type": "location_entered", "location_name": loc_name, "role": "self"}
+            structured = {
+                "type": "location_entered",
+                "location_name": loc_name,
+                "spot_id_value": event.spot_id.value,
+                "role": "self",
+            }
             return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
         actor_label = FALLBACK_PLAYER_LABEL if event.player_id_value is None else self._player_name(PlayerId(event.player_id_value))
         prose = f"{actor_label}が{loc_name}に着きました。"
-        structured = {"type": "player_entered_location", "actor": actor_label, "location_name": loc_name}
+        structured = {
+            "type": "player_entered_location",
+            "actor": actor_label,
+            "location_name": loc_name,
+            "spot_id_value": event.spot_id.value,
+        }
         return ObservationOutput(prose=prose, structured=structured, observation_category="social")
 
     def _format_location_exited(
@@ -485,11 +495,21 @@ class ObservationFormatter(IObservationFormatter):
         is_self = event.aggregate_id.value == recipient_id.value
         if is_self:
             prose = f"現在地: {spot_name}"
-            structured = {"type": "current_location", "spot_name": spot_name, "role": "self"}
+            structured = {
+                "type": "current_location",
+                "spot_name": spot_name,
+                "spot_id_value": event.new_spot_id.value,
+                "role": "self",
+            }
             return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
         actor_name = self._player_name(event.aggregate_id)
         prose = f"{actor_name}がこのスポットにやってきました。"
-        structured = {"type": "player_entered_spot", "actor": actor_name, "spot_name": spot_name}
+        structured = {
+            "type": "player_entered_spot",
+            "actor": actor_name,
+            "spot_name": spot_name,
+            "spot_id_value": event.new_spot_id.value,
+        }
         return ObservationOutput(prose=prose, structured=structured, observation_category="social")
 
     def _format_player_downed(
@@ -507,7 +527,11 @@ class ObservationFormatter(IObservationFormatter):
                 prose = f"{killer_name}に倒されました。"
             structured = {"type": "player_downed", "role": "self"}
             return ObservationOutput(
-                prose=prose, structured=structured, observation_category="self_only", causes_interrupt=True
+                prose=prose,
+                structured=structured,
+                observation_category="self_only",
+                schedules_turn=True,
+                breaks_movement=True,
             )
         actor_name = self._player_name(event.aggregate_id)
         prose = f"{actor_name}が戦闘不能になりました。"
@@ -676,7 +700,11 @@ class ObservationFormatter(IObservationFormatter):
             prose = f"{item_name}を入手しました。"
         structured = {"type": "item_added_to_inventory", "item_name": item_name}
         return ObservationOutput(
-            prose=prose, structured=structured, observation_category="self_only", causes_interrupt=True
+            prose=prose,
+            structured=structured,
+            observation_category="self_only",
+            schedules_turn=True,
+            breaks_movement=True,
         )
 
     def _format_item_dropped(
@@ -721,12 +749,17 @@ class ObservationFormatter(IObservationFormatter):
     ) -> Optional[ObservationOutput]:
         npc_name = self._npc_name(event.npc_id_value)
         prose = f"{npc_name}と会話を始めました。"
-        structured = {"type": "conversation_started", "npc_name": npc_name}
+        structured = {
+            "type": "conversation_started",
+            "npc_name": npc_name,
+            "world_object_id": event.npc_id_value,
+        }
         return ObservationOutput(
             prose=prose,
             structured=structured,
             observation_category="self_only",
-            causes_interrupt=True,
+            schedules_turn=True,
+            breaks_movement=True,
         )
 
     def _format_conversation_ended(
@@ -751,6 +784,7 @@ class ObservationFormatter(IObservationFormatter):
         structured = {
             "type": "conversation_ended",
             "npc_name": npc_name,
+            "world_object_id": event.npc_id_value,
             "outcome": event.outcome,
             "rewards_claimed_gold": event.rewards_claimed_gold,
             "rewards_claimed_items": list(event.rewards_claimed_items),
@@ -790,7 +824,12 @@ class ObservationFormatter(IObservationFormatter):
         if reward_summary:
             prose += f" 報酬: {reward_summary}"
         structured = {"type": "quest_issued", "reward": {"gold": event.reward.gold, "exp": event.reward.exp}}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="environment", causes_interrupt=True)
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="environment",
+            schedules_turn=True,
+        )
 
     def _format_quest_accepted(self, event: QuestAcceptedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         prose = "クエストを受託しました。"
@@ -803,7 +842,12 @@ class ObservationFormatter(IObservationFormatter):
         if reward_summary:
             prose += f" 報酬: {reward_summary}"
         structured = {"type": "quest_completed", "reward": {"gold": event.reward.gold, "exp": event.reward.exp}}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only", causes_interrupt=True)
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="self_only",
+            schedules_turn=True,
+        )
 
     def _format_quest_pending_approval(self, event: QuestPendingApprovalEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         reward_summary = self._quest_reward_summary(event.reward)
@@ -856,7 +900,12 @@ class ObservationFormatter(IObservationFormatter):
         else:
             prose = f"{buyer_name}が{item_name}を{event.quantity}個購入しました（受取: {event.total_gold}ゴールド）。"
             structured = {"type": "shop_purchase", "role": "seller", "item_name": item_name, "buyer": buyer_name, "seller": seller_name}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only", causes_interrupt=True)
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="self_only",
+            schedules_turn=True,
+        )
 
     def _format_shop_closed(self, event: ShopClosedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         prose = "ショップが閉鎖されました。"
@@ -877,7 +926,12 @@ class ObservationFormatter(IObservationFormatter):
         member_name = self._player_name(event.membership.player_id)
         prose = f"{member_name}がギルドに加入しました。"
         structured = {"type": "guild_member_joined", "member": member_name}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="social", causes_interrupt=True)
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="social",
+            schedules_turn=True,
+        )
 
     def _format_guild_member_left(self, event: GuildMemberLeftEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         member_name = self._player_name(event.player_id)
@@ -906,7 +960,12 @@ class ObservationFormatter(IObservationFormatter):
     def _format_guild_disbanded(self, event: GuildDisbandedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         prose = "ギルドが解散しました。"
         structured = {"type": "guild_disbanded"}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="social", causes_interrupt=True)
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="social",
+            schedules_turn=True,
+        )
 
     # --- Harvest ---
 
@@ -937,7 +996,12 @@ class ObservationFormatter(IObservationFormatter):
     def _format_monster_spawned(self, event: MonsterSpawnedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         prose = "モンスターが現れました。"
         structured = {"type": "monster_spawned"}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="environment", causes_interrupt=True)
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="environment",
+            schedules_turn=True,
+        )
 
     def _format_monster_respawned(self, event: MonsterRespawnedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         prose = "モンスターが再出現しました。"
@@ -954,7 +1018,12 @@ class ObservationFormatter(IObservationFormatter):
         if event.killer_player_id is not None and event.killer_player_id.value == recipient_id.value:
             prose = f"モンスターを倒しました（報酬: {event.gold}ゴールド、{event.exp}EXP）。"
         structured = {"type": "monster_died", "gold": event.gold, "exp": event.exp}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="environment", causes_interrupt=True)
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="environment",
+            schedules_turn=True,
+        )
 
     def _format_monster_evaded(self, event: MonsterEvadedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         prose = "モンスターが回避しました。"
@@ -1008,7 +1077,13 @@ class ObservationFormatter(IObservationFormatter):
     def _format_hit_box_hit_recorded(self, event: HitBoxHitRecordedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         prose = "攻撃が命中しました。"
         structured = {"type": "hitbox_hit"}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only", causes_interrupt=True)
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="self_only",
+            schedules_turn=True,
+            breaks_movement=True,
+        )
 
     def _format_hit_box_deactivated(self, event: HitBoxDeactivatedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         return None
@@ -1037,7 +1112,12 @@ class ObservationFormatter(IObservationFormatter):
         name = self._skill_name(event.skill_id)
         prose = f"{name}を使用しました。"
         structured = {"type": "skill_used", "skill_name": name, "deck_tier": event.deck_tier.value}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only", causes_interrupt=True)
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="self_only",
+            schedules_turn=True,
+        )
 
     def _format_skill_cooldown_started(self, event: SkillCooldownStartedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         return None
@@ -1045,7 +1125,12 @@ class ObservationFormatter(IObservationFormatter):
     def _format_awakened_mode_activated(self, event: AwakenedModeActivatedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         prose = "覚醒モードが発動しました。"
         structured = {"type": "awakened_mode_activated", "expires_at_tick": event.expires_at_tick}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only", causes_interrupt=True)
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="self_only",
+            schedules_turn=True,
+        )
 
     def _format_awakened_mode_expired(self, event: AwakenedModeExpiredEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         prose = "覚醒モードが終了しました。"
@@ -1065,7 +1150,12 @@ class ObservationFormatter(IObservationFormatter):
     def _format_skill_deck_leveled_up(self, event: SkillDeckLeveledUpEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         prose = f"スキルデッキがレベルアップしました（{event.old_level}→{event.new_level}）。"
         structured = {"type": "skill_deck_leveled_up", "old_level": event.old_level, "new_level": event.new_level}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only", causes_interrupt=True)
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="self_only",
+            schedules_turn=True,
+        )
 
     def _format_skill_proposal_generated(self, event: SkillProposalGeneratedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         return None

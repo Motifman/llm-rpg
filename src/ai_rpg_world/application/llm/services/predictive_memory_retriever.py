@@ -58,21 +58,29 @@ def build_memory_retrieval_query_from_state(
     """
     PlayerCurrentStateDto と tool_names から MemoryRetrievalQueryDto を組み立てる。
     current_state_formatter の表現変更が retriever の品質に影響しにくい形にする。
+    world_object_ids と spot_ids は stable id 検索用。
     """
     entity_ids: list[str] = []
     location_ids: list[str] = []
     notable_labels: list[str] = []
     actionable_labels: list[str] = []
+    world_object_ids_set: set[int] = set()
+    spot_ids_set: set[int] = set()
 
+    if current_state_dto.current_spot_id is not None:
+        spot_ids_set.add(current_state_dto.current_spot_id)
     if current_state_dto.current_spot_name:
         location_ids.append(current_state_dto.current_spot_name)
     if current_state_dto.area_name:
         location_ids.append(current_state_dto.area_name)
+    for sid in current_state_dto.connected_spot_ids or []:
+        spot_ids_set.add(sid)
     for name in current_state_dto.connected_spot_names or []:
         if name and name not in location_ids:
             location_ids.append(name)
 
     for obj in current_state_dto.visible_objects or []:
+        world_object_ids_set.add(obj.object_id)
         dn = obj.display_name or getattr(obj, "display_name", None)
         if dn and isinstance(dn, str) and dn.strip():
             n = dn.strip()
@@ -80,6 +88,7 @@ def build_memory_retrieval_query_from_state(
                 entity_ids.append(n)
 
     for obj in current_state_dto.notable_objects or []:
+        world_object_ids_set.add(obj.object_id)
         dn = obj.display_name or getattr(obj, "display_name", None)
         if dn and isinstance(dn, str) and dn.strip():
             n = dn.strip()
@@ -87,11 +96,15 @@ def build_memory_retrieval_query_from_state(
                 notable_labels.append(n)
 
     for obj in current_state_dto.actionable_objects or []:
+        world_object_ids_set.add(obj.object_id)
         dn = obj.display_name or getattr(obj, "display_name", None)
         if dn and isinstance(dn, str) and dn.strip():
             n = dn.strip()
             if n not in actionable_labels:
                 actionable_labels.append(n)
+
+    for move in current_state_dto.available_moves or []:
+        spot_ids_set.add(move.spot_id)
 
     free = (
         _extract_keywords_from_summary(current_state_summary)
@@ -105,6 +118,8 @@ def build_memory_retrieval_query_from_state(
         actionable_labels=tuple(actionable_labels[:10]),
         action_names=tuple(tool_names[:15]),
         free_text_keywords=tuple(free[:10]),
+        world_object_ids=tuple(world_object_ids_set)[:20],
+        spot_ids=tuple(spot_ids_set)[:15],
     )
 
 

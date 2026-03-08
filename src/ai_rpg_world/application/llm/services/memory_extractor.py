@@ -1,10 +1,11 @@
 """記憶抽出のデフォルト実装（ルールベース）
 
 保存方針: 量より質。以下のいずれかを満たす場合のみエピソードを保存する。
-- causes_interrupt あり（話しかけ・ダメージ・アイテム発見など）
-- entity_ids または location_id の抽出に成功
+- breaks_movement あり（被ダメージ・会話開始・アイテム発見など即時反応が必要な観測）
+- entity_ids または location_id の抽出に成功（stable id 対応後は world_object_ids 等も対象）
 - 強い成功/失敗結果（入手・撃破・達成・購入等の明確な帰結）
-- 明確な観測文脈あり（「（特になし）」以外で 5 文字以上）
+
+has_clear_context 単独では保存しない。prose のみの文脈は importance 補正に留める。
 """
 
 import uuid
@@ -70,28 +71,26 @@ class RuleBasedMemoryExtractor(IMemoryExtractor):
         context_parts = [o.output.prose for o in overflow_observations]
         context_summary = " ".join(context_parts).strip() or "（特になし）"
         entity_ids, location_id = self._extract_entity_context(overflow_observations)
-        has_interrupt = any(
-            o.output.causes_interrupt for o in overflow_observations
+        world_object_ids, spot_id_value = self._extract_stable_ids(overflow_observations)
+        has_breaks_movement = any(
+            o.output.breaks_movement for o in overflow_observations
         )
         has_entity_or_location = bool(entity_ids) or location_id is not None
         has_strong_result = self._is_strong_result(result_summary)
-        has_clear_context = (
-            context_summary != "（特になし）"
-            and len(context_summary.strip()) >= 5
-        )
 
         if not (
-            has_interrupt
+            has_breaks_movement
             or has_entity_or_location
             or has_strong_result
-            or has_clear_context
         ):
             return []
 
-        importance = "high" if has_interrupt else "medium"
-        if has_strong_result and not has_interrupt:
+        importance = "high" if has_breaks_movement else "medium"
+        if has_strong_result and not has_breaks_movement:
             importance = "medium"
-        surprise = has_interrupt
+        if has_strong_result and self._is_combat_or_death_result(result_summary):
+            importance = "high"
+        surprise = has_breaks_movement
 
         entry = EpisodeMemoryEntry(
             id=str(uuid.uuid4()),
@@ -104,6 +103,8 @@ class RuleBasedMemoryExtractor(IMemoryExtractor):
             importance=importance,
             surprise=surprise,
             recall_count=0,
+            world_object_ids=world_object_ids,
+            spot_id_value=spot_id_value,
         )
         return [entry]
 
@@ -113,6 +114,11 @@ class RuleBasedMemoryExtractor(IMemoryExtractor):
             return False
         normalized = result_summary.strip()
         return any(kw in normalized for kw in _STRONG_RESULT_KEYWORDS)
+
+    def _is_combat_or_death_result(self, result_summary: str) -> bool:
+        """戦闘結果・死亡・撃破など urgency が高い帰結か。"""
+        combat_keywords = ("撃破", "倒した", "死亡", "戦闘不能", "ダメージ")
+        return any(kw in result_summary for kw in combat_keywords)
 
     def _extract_entity_context(
         self,
@@ -147,3 +153,21 @@ class RuleBasedMemoryExtractor(IMemoryExtractor):
         if location_id is not None and location_id not in entity_ids:
             entity_ids.append(location_id)
         return tuple(entity_ids), location_id
+
+    def _extract_stable_ids(
+        self,
+        overflow_observations: List[ObservationEntry],
+    ) -> tuple[tuple[int, ...], int | None]:
+        """structured から world_object_id / spot_id を抽出。なければ空・None。"""
+        world_object_ids: list[int] = []
+        spot_id_value: int | None = None
+        for observation in overflow_observations:
+            structured = observation.output.structured
+            wo_id = structured.get("world_object_id")
+            if wo_id is not None and isinstance(wo_id, int):
+                if wo_id not in world_object_ids:
+                    world_object_ids.append(wo_id)
+            sp_id = structured.get("spot_id_value")
+            if sp_id is not None and isinstance(sp_id, int) and spot_id_value is None:
+                spot_id_value = sp_id
+        return tuple(world_object_ids), spot_id_value

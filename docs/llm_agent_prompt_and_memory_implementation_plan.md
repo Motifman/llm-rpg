@@ -404,7 +404,7 @@ sequenceDiagram
 ### 14.5 ツール実行中（複数ティック）に観測が届く場合
 
 - **原則**: 現在のアクションが完了するまで、そのプレイヤーの新たな run_turn は発火しない。実行中に届いた観測はバッファに蓄積し、アクション完了後にトリガーされる run_turn のプロンプトに含める。
-- **割り込み**: リアルタイム性を要求する観測（友達に話しかけられた・探していたアイテムを発見・ダメージを受けた等）が届いた場合は、**現在の行動を中断**する。経路をキャンセルし、「行動が中断されたこと」とその観測を IActionResultStore に記録してから、改めて run_turn を実行し LLM に渡す。観測の `causes_interrupt` と PlayerCurrentStateDto の `is_busy` で判定し、LlmAgentTurnRunner が割り込み処理と run_turn を一括して行う。
+- **割り込み**: リアルタイム性を要求する観測（友達に話しかけられた・探していたアイテムを発見・ダメージを受けた等）が届いた場合は、**現在の行動を中断**する。経路をキャンセルし、「行動が中断されたこと」とその観測を IActionResultStore に記録してから、改めて run_turn を実行し LLM に渡す。観測の `schedules_turn` / `breaks_movement` と PlayerCurrentStateDto の `is_busy` で判定し、LlmAgentTurnRunner が割り込み処理と run_turn を一括して行う。
 
 ---
 

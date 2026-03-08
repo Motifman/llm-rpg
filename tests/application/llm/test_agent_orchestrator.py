@@ -218,7 +218,6 @@ class TestLlmAgentOrchestratorMemoryIntegration:
                 prose="洞窟でチェストを発見した",
                 structured={"spot_name": "洞窟", "item_name": "チェスト"},
                 observation_category="self_only",
-                causes_interrupt=False,
             ),
         )
         return _StubPromptBuilder(return_value={
