@@ -114,6 +114,25 @@ def build_memory_retrieval_query_from_state(
         if npc_id is not None and isinstance(npc_id, int):
             world_object_ids_set.add(npc_id)
 
+    # scope_keys: quest / conversation / guild / shop の relation memory 検索用
+    scope_keys_list: list[str] = []
+    for qid in getattr(current_state_dto, "active_quest_ids", None) or []:
+        if isinstance(qid, int):
+            scope_keys_list.append(f"quest:{qid}")
+    if ac is not None:
+        npc_id = getattr(ac, "npc_world_object_id", None)
+        if npc_id is not None and isinstance(npc_id, int):
+            scope_keys_list.append(f"conversation:npc:{npc_id}")
+        tree_id = getattr(ac, "dialogue_tree_id_value", None)
+        if tree_id is not None and isinstance(tree_id, int):
+            scope_keys_list.append(f"conversation:tree:{tree_id}")
+    for gid in getattr(current_state_dto, "guild_ids", None) or []:
+        if isinstance(gid, int):
+            scope_keys_list.append(f"guild:{gid}")
+    for sid in getattr(current_state_dto, "nearby_shop_ids", None) or []:
+        if isinstance(sid, int):
+            scope_keys_list.append(f"shop:{sid}")
+
     free = (
         _extract_keywords_from_summary(current_state_summary)
         if current_state_summary
@@ -128,6 +147,7 @@ def build_memory_retrieval_query_from_state(
         free_text_keywords=tuple(free[:10]),
         world_object_ids=tuple(world_object_ids_set)[:20],
         spot_ids=tuple(spot_ids_set)[:15],
+        scope_keys=tuple(scope_keys_list[:15]),
     )
 
 
@@ -189,6 +209,7 @@ class DefaultPredictiveMemoryRetriever(IPredictiveMemoryRetriever):
                 free_text_keywords=tuple(free_text),
                 world_object_ids=(),
                 spot_ids=(),
+                scope_keys=(),
             )
 
         episodes = self._collect_episode_candidates_ranked(
@@ -275,24 +296,39 @@ class DefaultPredictiveMemoryRetriever(IPredictiveMemoryRetriever):
                     player_id,
                     world_object_ids=list(query.world_object_ids),
                     spot_ids=None,
+                    scope_keys=None,
                     entity_ids=None,
                     action_names=None,
                     limit=limit * 2,
                 )
             )
-        # 2. spot_ids 一致
+        # 2. scope_keys 一致（関係性メモリ）
+        if query.scope_keys:
+            add_unique(
+                self._episode_store.find_by_entities_and_actions(
+                    player_id,
+                    world_object_ids=None,
+                    spot_ids=None,
+                    scope_keys=list(query.scope_keys),
+                    entity_ids=None,
+                    action_names=None,
+                    limit=limit * 2,
+                )
+            )
+        # 3. spot_ids 一致
         if query.spot_ids:
             add_unique(
                 self._episode_store.find_by_entities_and_actions(
                     player_id,
                     world_object_ids=None,
                     spot_ids=list(query.spot_ids),
+                    scope_keys=None,
                     entity_ids=None,
                     action_names=None,
                     limit=limit * 2,
                 )
             )
-        # 3. entity_ids 一致
+        # 4. entity_ids 一致
         if query.entity_ids:
             add_unique(
                 self._episode_store.find_by_entities_and_actions(
@@ -302,7 +338,7 @@ class DefaultPredictiveMemoryRetriever(IPredictiveMemoryRetriever):
                     limit=limit * 2,
                 )
             )
-        # 4. location_ids 一致
+        # 5. location_ids 一致
         if query.location_ids:
             add_unique(
                 self._episode_store.find_by_entities_and_actions(
@@ -312,7 +348,7 @@ class DefaultPredictiveMemoryRetriever(IPredictiveMemoryRetriever):
                     limit=limit * 2,
                 )
             )
-        # 5. actionable / notable 一致
+        # 6. actionable / notable 一致
         notable_actionable = list(query.actionable_labels) + list(
             query.notable_labels
         )
@@ -325,7 +361,7 @@ class DefaultPredictiveMemoryRetriever(IPredictiveMemoryRetriever):
                     limit=limit * 2,
                 )
             )
-        # 6. action_names 一致
+        # 7. action_names 一致
         if query.action_names:
             add_unique(
                 self._episode_store.find_by_entities_and_actions(
@@ -335,7 +371,7 @@ class DefaultPredictiveMemoryRetriever(IPredictiveMemoryRetriever):
                     limit=limit * 2,
                 )
             )
-        # 7. free text keyword
+        # 8. free text keyword
         if query.free_text_keywords:
             add_unique(
                 self._episode_store.find_by_entities_and_actions(

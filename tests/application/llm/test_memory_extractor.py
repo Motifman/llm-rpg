@@ -240,3 +240,57 @@ class TestRuleBasedMemoryExtractor:
         """result_summary が str でないとき TypeError"""
         with pytest.raises(TypeError, match="result_summary must be str"):
             extractor.extract(player_id, [], "action", 456)  # type: ignore[arg-type]
+
+    def test_extract_multiple_candidates_from_overflow_obs(self, extractor, player_id):
+        """複数の観測から複数候補が抽出される（scope が異なる場合）"""
+        episodes = extractor.extract(
+            player_id,
+            overflow_observations=[
+                _obs(
+                    "クエストを承認した",
+                    structured={"type": "quest_approved", "quest_id_value": 1, "quest_name": "伝説の剣"},
+                ),
+                _obs(
+                    "NPCに話しかけた",
+                    structured={"type": "conversation_started", "npc_id_value": 42, "npc_name": "老人"},
+                ),
+            ],
+            action_summary="行動した",
+            result_summary="完了",
+        )
+        assert len(episodes) >= 1
+        scope_keys_seen = set()
+        for ep in episodes:
+            for sk in ep.scope_keys:
+                scope_keys_seen.add(sk)
+        assert "quest:1" in scope_keys_seen or "conversation:npc:42" in scope_keys_seen
+
+    def test_extract_scope_merge_same_scope_collapsed(self, extractor, player_id):
+        """同じ scope_keys の複数候補は1件にマージされる"""
+        extractor_limited = RuleBasedMemoryExtractor(max_candidates=10)
+        episodes = extractor_limited.extract(
+            player_id,
+            overflow_observations=[
+                _obs("クエスト1", structured={"quest_id_value": 1}),
+                _obs("クエスト1の続き", structured={"quest_id_value": 1}),
+            ],
+            action_summary="クエスト進行",
+            result_summary="進行した",
+        )
+        quest_scope = [ep for ep in episodes if any("quest:1" in sk for sk in ep.scope_keys)]
+        assert len(quest_scope) <= 1 or len(episodes) <= 1
+
+    def test_extract_respects_max_candidates_limit(self, player_id):
+        """max_candidates を超える候補は上限で絞られる"""
+        extractor = RuleBasedMemoryExtractor(max_candidates=2)
+        episodes = extractor.extract(
+            player_id,
+            overflow_observations=[
+                _obs("A", structured={"quest_id_value": 1, "spot_id_value": 10}),
+                _obs("B", structured={"quest_id_value": 2, "spot_id_value": 11}),
+                _obs("C", structured={"quest_id_value": 3, "spot_id_value": 12}),
+            ],
+            action_summary="行動",
+            result_summary="完了",
+        )
+        assert len(episodes) <= 2

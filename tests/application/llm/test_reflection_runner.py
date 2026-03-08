@@ -436,3 +436,102 @@ class TestDefaultReflectionRunner:
         runner.run_after_tick(WorldTick(25))
         runner.run_after_tick(WorldTick(30))
         assert call_count == 1
+
+    def test_run_after_tick_cursor_is_max_processed_episode_timestamp(
+        self,
+        episode_store,
+        reflection_service,
+        world_time_config,
+    ):
+        """cursor は datetime.now() ではなく、実際に処理したエピソードの最大 timestamp になる"""
+        from datetime import datetime, timedelta
+
+        from ai_rpg_world.application.llm.services.in_memory_reflection_state_port import (
+            InMemoryReflectionStatePort,
+        )
+        from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
+            PlayerStatusAggregate,
+        )
+        from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+        from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
+        from ai_rpg_world.domain.player.value_object.gold import Gold
+        from ai_rpg_world.domain.player.value_object.growth import Growth
+        from ai_rpg_world.domain.player.value_object.hp import Hp
+        from ai_rpg_world.domain.player.value_object.mp import Mp
+        from ai_rpg_world.domain.player.value_object.stat_growth_factor import (
+            StatGrowthFactor,
+        )
+        from ai_rpg_world.domain.player.value_object.stamina import Stamina
+        from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+        from ai_rpg_world.infrastructure.repository.in_memory_data_store import (
+            InMemoryDataStore,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
+            InMemoryPlayerStatusRepository,
+        )
+        from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
+            InMemoryUnitOfWork,
+        )
+
+        fixed_ts = datetime.now() - timedelta(hours=1)
+        ep = EpisodeMemoryEntry(
+            id="e1",
+            context_summary="洞窟でチェストを発見",
+            action_taken="open_chest を実行",
+            outcome_summary="回復ポーションを入手",
+            entity_ids=("chest_1",),
+            location_id=None,
+            timestamp=fixed_ts,
+            importance="medium",
+            surprise=False,
+            recall_count=2,
+        )
+        episode_store.add(PlayerId(1), ep)
+
+        exp_table = ExpTable(100, 1.5)
+        status = PlayerStatusAggregate(
+            player_id=PlayerId(1),
+            base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
+            stat_growth_factor=StatGrowthFactor(1.1, 1.1, 1.1, 1.1, 1.1, 0.01, 0.01),
+            exp_table=exp_table,
+            growth=Growth(1, 0, exp_table),
+            gold=Gold.create(0),
+            hp=Hp.create(10, 10),
+            mp=Mp.create(10, 10),
+            stamina=Stamina.create(10, 10),
+            current_spot_id=SpotId(1),
+            current_coordinate=Coordinate(0, 0, 0),
+        )
+        data_store = InMemoryDataStore()
+        data_store.clear_all()
+
+        def create_uow():
+            return InMemoryUnitOfWork(
+                unit_of_work_factory=create_uow, data_store=data_store
+            )
+
+        uow, _ = InMemoryUnitOfWork.create_with_event_publisher(
+            unit_of_work_factory=create_uow, data_store=data_store
+        )
+        player_status_repository = InMemoryPlayerStatusRepository(
+            data_store=data_store, unit_of_work=uow
+        )
+        player_status_repository.save(status)
+
+        state_port = InMemoryReflectionStatePort()
+        runner = DefaultReflectionRunner(
+            reflection_service=reflection_service,
+            player_status_repository=player_status_repository,
+            llm_player_resolver=SetBasedLlmPlayerResolver({1}),
+            world_time_config=world_time_config,
+            state_port=state_port,
+        )
+        before_reflection = datetime.now()
+        runner.run_after_tick(WorldTick(24))
+        after_reflection = datetime.now()
+        cursor = state_port.get_reflection_cursor(PlayerId(1))
+        assert cursor is not None
+        assert cursor <= after_reflection
+        assert cursor >= fixed_ts
+        assert cursor <= before_reflection + timedelta(seconds=2)

@@ -7,7 +7,7 @@
 
 has_entity_or_location（名前のみ）単独では保存しない。prose のみのノイズは保存しない。
 importance: high=被ダメージ・死亡・戦闘勝敗・会話開始・重大報酬、medium=stable id 付き接触・クエスト更新・取得・発見、low=補助的。
-1 ターン 1 エピソード固定（将来複数候補化予定）。
+観測ごとに複数候補を抽出し、scope_keys 単位でマージ・重複除去・件数上限で絞る。
 """
 
 import uuid
@@ -43,11 +43,22 @@ _ENTITY_KEYS = (
 _LOCATION_KEYS = ("location_name", "spot_name", "area_name")
 
 
+# 複数候補の最大件数（scope マージ・重複除去後の上限）
+_MAX_EPISODE_CANDIDATES = 5
+
+# 高優先 scope プレフィックス（quest, conversation を優先）
+_HIGH_PRIORITY_SCOPE_PREFIXES = ("quest:", "conversation:")
+
+
 class RuleBasedMemoryExtractor(IMemoryExtractor):
     """
-    観測と行動結果から 1 エピソードを生成するルールベース実装。
+    観測と行動結果から複数エピソード候補を生成するルールベース実装。
     LLM を使わず、溢れた観測のプローズとこのターンの行動・結果で要約を組み立てる。
+    観測ごとに候補を抽出し、scope_keys 単位でマージ・重複除去・件数上限で絞る。
     """
+
+    def __init__(self, max_candidates: int = _MAX_EPISODE_CANDIDATES) -> None:
+        self._max_candidates = max(1, max_candidates)
 
     def extract(
         self,
@@ -70,45 +81,87 @@ class RuleBasedMemoryExtractor(IMemoryExtractor):
         if not isinstance(result_summary, str):
             raise TypeError("result_summary must be str")
 
-        context_parts = [o.output.prose for o in overflow_observations]
-        context_summary = " ".join(context_parts).strip() or "（特になし）"
-        entity_ids, location_id = self._extract_entity_context(overflow_observations)
-        world_object_ids, spot_id_value = self._extract_stable_ids(overflow_observations)
         has_breaks_movement = any(
             o.output.breaks_movement for o in overflow_observations
         )
-        has_stable_id = bool(world_object_ids) or spot_id_value is not None
         has_strong_result = self._is_strong_result(result_summary)
 
-        # 保存主条件: breaks_movement / stable id / 強い成功失敗。名前のみは保存しない
-        if not (
-            has_breaks_movement
-            or has_stable_id
-            or has_strong_result
-        ):
-            return []
+        # 観測ごとに候補を抽出
+        candidates: list[EpisodeMemoryEntry] = []
+        for obs in overflow_observations:
+            wo_ids, sp_val = self._extract_stable_ids([obs])
+            scope_keys = self._extract_scope_keys([obs])
+            ent_ids, loc_id = self._extract_entity_context([obs])
+            has_stable_this = bool(wo_ids) or sp_val is not None
+            has_scope_this = bool(scope_keys)
+            obs_breaks = bool(obs.output.breaks_movement)
 
-        # importance: high=被ダメージ・死亡・戦闘勝敗・会話開始・重大報酬、medium=stable id 付き・取得・発見、low=補助
-        importance = self._compute_importance(
-            has_breaks_movement, has_stable_id, has_strong_result, result_summary
-        )
-        surprise = has_breaks_movement
+            # この観測が候補に値するか
+            if not (
+                obs_breaks or has_stable_this or has_scope_this or has_strong_result
+            ):
+                continue
 
-        entry = EpisodeMemoryEntry(
-            id=str(uuid.uuid4()),
-            context_summary=context_summary,
-            action_taken=action_summary,
-            outcome_summary=result_summary,
-            entity_ids=entity_ids,
-            location_id=location_id,
-            timestamp=datetime.now(),
-            importance=importance,
-            surprise=surprise,
-            recall_count=0,
-            world_object_ids=world_object_ids,
-            spot_id_value=spot_id_value,
-        )
-        return [entry]
+            importance = self._compute_importance(
+                obs_breaks, has_stable_this or has_scope_this, has_strong_result, result_summary
+            )
+            surprise = obs_breaks
+            context = (obs.output.prose or "").strip() or "（特になし）"
+
+            entry = EpisodeMemoryEntry(
+                id=str(uuid.uuid4()),
+                context_summary=context,
+                action_taken=action_summary,
+                outcome_summary=result_summary,
+                entity_ids=ent_ids,
+                location_id=loc_id,
+                timestamp=datetime.now(),
+                importance=importance,
+                surprise=surprise,
+                recall_count=0,
+                world_object_ids=wo_ids,
+                spot_id_value=sp_val,
+                scope_keys=scope_keys,
+            )
+            candidates.append(entry)
+
+        # 1件も候補がなければ、従来どおり統合1件を返す（後方互換）
+        if not candidates:
+            wo_ids, sp_val = self._extract_stable_ids(overflow_observations)
+            if not (has_breaks_movement or wo_ids or sp_val is not None or has_strong_result):
+                return []
+            context_summary = " ".join(
+                (o.output.prose or "").strip() for o in overflow_observations
+            ).strip() or "（特になし）"
+            ent_ids, loc_id = self._extract_entity_context(overflow_observations)
+            scope_keys = self._extract_scope_keys(overflow_observations)
+            importance = self._compute_importance(
+                has_breaks_movement, bool(wo_ids) or sp_val is not None,
+                has_strong_result, result_summary
+            )
+            return [
+                EpisodeMemoryEntry(
+                    id=str(uuid.uuid4()),
+                    context_summary=context_summary,
+                    action_taken=action_summary,
+                    outcome_summary=result_summary,
+                    entity_ids=ent_ids,
+                    location_id=loc_id,
+                    timestamp=datetime.now(),
+                    importance=importance,
+                    surprise=has_breaks_movement,
+                    recall_count=0,
+                    world_object_ids=wo_ids,
+                    spot_id_value=sp_val,
+                    scope_keys=scope_keys,
+                )
+            ]
+
+        # scope_keys 単位でマージ: 同じ scope の候補は context を連結して1件に
+        merged = self._merge_by_scope(candidates)
+        # 重要度でソート（high > medium > low）、件数上限
+        merged.sort(key=lambda e: (0 if e.importance == "high" else 1 if e.importance == "medium" else 2, e.context_summary))
+        return merged[: self._max_candidates]
 
     def _is_strong_result(self, result_summary: str) -> bool:
         """結果要約が強い成功/失敗（明確な帰結）を含むか判定する。"""
@@ -202,3 +255,144 @@ class RuleBasedMemoryExtractor(IMemoryExtractor):
             if sp_id is not None and isinstance(sp_id, int) and spot_id_value is None:
                 spot_id_value = sp_id
         return tuple(world_object_ids), spot_id_value
+
+    def _extract_scope_keys(
+        self,
+        overflow_observations: List[ObservationEntry],
+    ) -> tuple[str, ...]:
+        """
+        structured から scope_keys を抽出。
+        例: quest:12, guild:3, shop:9, conversation:npc:42, conversation:tree:5
+        """
+        seen: set[str] = set()
+        keys: list[str] = []
+
+        def add(key: str) -> None:
+            if key and key not in seen:
+                seen.add(key)
+                keys.append(key)
+
+        for observation in overflow_observations:
+            structured = observation.output.structured
+            obs_type = structured.get("type")
+            if obs_type in (
+                "quest_issued", "quest_accepted", "quest_completed",
+                "quest_pending_approval", "quest_approved", "quest_cancelled",
+            ):
+                qid = structured.get("quest_id_value")
+                if isinstance(qid, int):
+                    add(f"quest:{qid}")
+            if obs_type in (
+                "guild_created", "guild_member_joined", "guild_member_left",
+                "guild_role_changed", "guild_bank_deposited", "guild_bank_withdrawn",
+                "guild_disbanded",
+            ):
+                gid = structured.get("guild_id_value")
+                if isinstance(gid, int):
+                    add(f"guild:{gid}")
+            if obs_type in (
+                "shop_created", "shop_item_listed", "shop_item_unlisted",
+                "shop_purchase", "shop_closed",
+            ):
+                sid = structured.get("shop_id_value")
+                if isinstance(sid, int):
+                    add(f"shop:{sid}")
+            if obs_type in ("conversation_started", "conversation_ended"):
+                nid = structured.get("npc_id_value")
+                if isinstance(nid, int):
+                    add(f"conversation:npc:{nid}")
+                tid = structured.get("dialogue_tree_id_value")
+                if isinstance(tid, int):
+                    add(f"conversation:tree:{tid}")
+
+        return tuple(keys)
+
+    def _merge_by_scope(
+        self, candidates: list[EpisodeMemoryEntry]
+    ) -> list[EpisodeMemoryEntry]:
+        """
+        scope_keys 単位でマージ。同じ scope_keys の候補は context を連結して1件にする。
+        重複除去も兼ねる。
+        """
+        from collections import defaultdict
+
+        groups: dict[frozenset[str], list[EpisodeMemoryEntry]] = defaultdict(list)
+        for c in candidates:
+            key = frozenset(c.scope_keys) if c.scope_keys else frozenset({"_no_scope_"})
+            groups[key].append(c)
+
+        result: list[EpisodeMemoryEntry] = []
+        for scope_key, entries in groups.items():
+            if scope_key == frozenset({"_no_scope_"}):
+                # scope のない候補は1件にマージ（従来の統合挙動）
+                if len(entries) == 1:
+                    result.append(entries[0])
+                else:
+                    best = max(entries, key=lambda e: 2 if e.importance == "high" else 1 if e.importance == "medium" else 0)
+                    combined = " ".join(e.context_summary for e in entries if e.context_summary).strip()
+                    all_wo = list(dict.fromkeys(w for e in entries for w in e.world_object_ids))
+                    sp_val = next((e.spot_id_value for e in entries if e.spot_id_value is not None), None)
+                    all_ent = list(dict.fromkeys(x for e in entries for x in e.entity_ids))
+                    loc_id = next((e.location_id for e in entries if e.location_id is not None), None)
+                    result.append(
+                        EpisodeMemoryEntry(
+                            id=best.id,
+                            context_summary=combined or best.context_summary,
+                            action_taken=best.action_taken,
+                            outcome_summary=best.outcome_summary,
+                            entity_ids=tuple(all_ent),
+                            location_id=loc_id,
+                            timestamp=best.timestamp,
+                            importance=best.importance,
+                            surprise=best.surprise,
+                            recall_count=best.recall_count,
+                            world_object_ids=tuple(all_wo),
+                            spot_id_value=sp_val,
+                            scope_keys=(),
+                        )
+                    )
+            else:
+                # 同一 scope は1件にマージ（最高重要度、context 連結）
+                entries_sorted = sorted(
+                    entries,
+                    key=lambda e: (0 if e.importance == "high" else 1 if e.importance == "medium" else 2),
+                )
+                best = entries_sorted[0]
+                contexts = [e.context_summary for e in entries if e.context_summary]
+                combined = " ".join(contexts).strip() if contexts else best.context_summary
+                all_wo: list[int] = []
+                for e in entries:
+                    for w in e.world_object_ids:
+                        if w not in all_wo:
+                            all_wo.append(w)
+                sp_val: int | None = next(
+                    (e.spot_id_value for e in entries if e.spot_id_value is not None),
+                    None,
+                )
+                all_ent: list[str] = []
+                for e in entries:
+                    for x in e.entity_ids:
+                        if x not in all_ent:
+                            all_ent.append(x)
+                loc_id: str | None = next(
+                    (e.location_id for e in entries if e.location_id is not None),
+                    None,
+                )
+                result.append(
+                    EpisodeMemoryEntry(
+                        id=best.id,
+                        context_summary=combined,
+                        action_taken=best.action_taken,
+                        outcome_summary=best.outcome_summary,
+                        entity_ids=tuple(all_ent),
+                        location_id=loc_id,
+                        timestamp=best.timestamp,
+                        importance=best.importance,
+                        surprise=best.surprise,
+                        recall_count=best.recall_count,
+                        world_object_ids=tuple(all_wo),
+                        spot_id_value=sp_val,
+                        scope_keys=best.scope_keys,
+                    )
+                )
+        return result
