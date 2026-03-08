@@ -24,17 +24,25 @@ def _minimal_current_state_dto(
 ):
     """テスト用の最小限の PlayerCurrentStateDto を組み立てる"""
     visible = []
+    notable = []
+    actionable = []
     if has_visible_objects:
-        visible = [
-            VisibleObjectDto(
-                object_id=1,
-                object_type="player",
-                x=1,
-                y=1,
-                z=0,
-                distance=2,
-            ),
-        ]
+        target = VisibleObjectDto(
+            object_id=1,
+            object_type="player",
+            x=1,
+            y=1,
+            z=0,
+            distance=2,
+            display_name="Bob",
+            direction_from_player="南東",
+            can_interact=True,
+            is_notable=True,
+            notable_reason="actionable",
+        )
+        visible = [target]
+        notable = [target]
+        actionable = [target]
     moves = None
     total_moves = None
     if has_available_moves:
@@ -72,6 +80,8 @@ def _minimal_current_state_dto(
         available_moves=moves,
         total_available_moves=total_moves,
         attention_level=AttentionLevel.FULL,
+        actionable_objects=actionable,
+        notable_objects=notable,
     )
 
 
@@ -104,12 +114,15 @@ class TestDefaultCurrentStateFormatter:
         assert "天気: rain" in text
         assert "地形: grass" in text
 
-    def test_format_includes_visible_objects_when_present(self, formatter):
-        """視界内オブジェクトがあるとき表示される"""
+    def test_format_includes_notable_and_actionable_summary_when_present(self, formatter):
+        """注目対象と行動可能対象があるとき要約表示される"""
         dto = _minimal_current_state_dto(has_visible_objects=True)
         text = formatter.format(dto)
-        assert "視界内オブジェクト" in text
-        assert "タイプ=player" in text
+        assert "視界距離: 5" in text
+        assert "注目対象:" in text
+        assert "Bob" in text
+        assert "今すぐ行動可能な対象:" in text
+        assert "相互作用" in text
 
     def test_format_includes_available_moves_when_present(self, formatter):
         """利用可能な移動先があるとき表示される"""

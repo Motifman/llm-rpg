@@ -15,15 +15,22 @@ from ai_rpg_world.application.llm.services.predictive_memory_retriever import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
-def _make_episode(eid: str, action: str = "move_to_destination") -> EpisodeMemoryEntry:
+def _make_episode(
+    eid: str,
+    action: str = "move_to_destination",
+    *,
+    entity_ids: tuple[str, ...] = ("loc_1",),
+    location_id: str | None = None,
+    context_summary: str = "洞窟にいた",
+) -> EpisodeMemoryEntry:
     from datetime import datetime
     return EpisodeMemoryEntry(
         id=eid,
-        context_summary="洞窟にいた",
+        context_summary=context_summary,
         action_taken=action,
         outcome_summary="到着した",
-        entity_ids=("loc_1",),
-        location_id=None,
+        entity_ids=entity_ids,
+        location_id=location_id,
         timestamp=datetime.now(),
         importance="medium",
         surprise=False,
@@ -77,6 +84,29 @@ class TestDefaultPredictiveMemoryRetriever:
         assert "洞窟にいた" in got
         assert "到着した" in got
 
+    def test_retrieve_for_prediction_returns_episodes_matching_current_state_keywords(
+        self, retriever, episode_store, player_id
+    ):
+        """現在状態のキーワードに一致するエピソードが候補行動に依存せず取得される"""
+        episode_store.add(
+            player_id,
+            _make_episode(
+                "e_state",
+                action="observe",
+                entity_ids=("洞窟入口", "老人"),
+                location_id="洞窟入口",
+                context_summary="洞窟入口で老人と会った",
+            ),
+        )
+
+        got = retriever.retrieve_for_prediction(
+            player_id,
+            "現在地: 洞窟入口\n注目対象:\n  - 老人: 距離=1, 方角=南",
+            ["world_no_op"],
+        )
+
+        assert "洞窟入口で老人と会った" in got
+
     def test_retrieve_for_prediction_increments_recall_count(
         self, retriever, episode_store, player_id
     ):
@@ -99,6 +129,22 @@ class TestDefaultPredictiveMemoryRetriever:
         )
         assert "【覚えていること】" in got
         assert "強敵" in got
+
+    def test_retrieve_for_prediction_filters_facts_by_current_state_keywords(
+        self, retriever, long_term_store, player_id
+    ):
+        """現在状態キーワードに一致する事実を優先して取得する"""
+        long_term_store.add_fact(player_id, "洞窟の奥には強敵がいる")
+        long_term_store.add_fact(player_id, "港町では魚が安い")
+
+        got = retriever.retrieve_for_prediction(
+            player_id,
+            "現在地: 洞窟",
+            [],
+        )
+
+        assert "洞窟の奥には強敵がいる" in got
+        assert "港町では魚が安い" not in got
 
     def test_retrieve_for_prediction_player_id_none_raises_type_error(
         self, retriever

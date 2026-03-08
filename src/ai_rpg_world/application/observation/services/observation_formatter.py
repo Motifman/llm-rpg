@@ -162,161 +162,28 @@ class ObservationFormatter(IObservationFormatter):
         attention_level: Optional[AttentionLevel] = None,
     ) -> Optional[ObservationOutput]:
         """指定プレイヤー向けの観測出力を生成。attention_level に応じてスキップする。"""
-        output: Optional[ObservationOutput] = None
-        if isinstance(event, ConversationStartedEvent):
-            output = self._format_conversation_started(event, recipient_player_id)
-        elif isinstance(event, ConversationEndedEvent):
-            output = self._format_conversation_ended(event, recipient_player_id)
-        elif isinstance(event, QuestIssuedEvent):
-            output = self._format_quest_issued(event, recipient_player_id)
-        elif isinstance(event, QuestAcceptedEvent):
-            output = self._format_quest_accepted(event, recipient_player_id)
-        elif isinstance(event, QuestCompletedEvent):
-            output = self._format_quest_completed(event, recipient_player_id)
-        elif isinstance(event, QuestPendingApprovalEvent):
-            output = self._format_quest_pending_approval(event, recipient_player_id)
-        elif isinstance(event, QuestApprovedEvent):
-            output = self._format_quest_approved(event, recipient_player_id)
-        elif isinstance(event, QuestCancelledEvent):
-            output = self._format_quest_cancelled(event, recipient_player_id)
-        elif isinstance(event, ShopCreatedEvent):
-            output = self._format_shop_created(event, recipient_player_id)
-        elif isinstance(event, ShopItemListedEvent):
-            output = self._format_shop_item_listed(event, recipient_player_id)
-        elif isinstance(event, ShopItemUnlistedEvent):
-            output = self._format_shop_item_unlisted(event, recipient_player_id)
-        elif isinstance(event, ShopItemPurchasedEvent):
-            output = self._format_shop_item_purchased(event, recipient_player_id)
-        elif isinstance(event, ShopClosedEvent):
-            output = self._format_shop_closed(event, recipient_player_id)
-        elif isinstance(event, GuildCreatedEvent):
-            output = self._format_guild_created(event, recipient_player_id)
-        elif isinstance(event, GuildMemberJoinedEvent):
-            output = self._format_guild_member_joined(event, recipient_player_id)
-        elif isinstance(event, GuildMemberLeftEvent):
-            output = self._format_guild_member_left(event, recipient_player_id)
-        elif isinstance(event, GuildRoleChangedEvent):
-            output = self._format_guild_role_changed(event, recipient_player_id)
-        elif isinstance(event, GuildBankDepositedEvent):
-            output = self._format_guild_bank_deposited(event, recipient_player_id)
-        elif isinstance(event, GuildBankWithdrawnEvent):
-            output = self._format_guild_bank_withdrawn(event, recipient_player_id)
-        elif isinstance(event, GuildDisbandedEvent):
-            output = self._format_guild_disbanded(event, recipient_player_id)
-        elif isinstance(event, HarvestStartedEvent):
-            output = self._format_harvest_started(event, recipient_player_id)
-        elif isinstance(event, HarvestCancelledEvent):
-            output = self._format_harvest_cancelled(event, recipient_player_id)
-        elif isinstance(event, HarvestCompletedEvent):
-            output = self._format_harvest_completed(event, recipient_player_id)
-        elif isinstance(event, MonsterSpawnedEvent):
-            output = self._format_monster_spawned(event, recipient_player_id)
-        elif isinstance(event, MonsterRespawnedEvent):
-            output = self._format_monster_respawned(event, recipient_player_id)
-        elif isinstance(event, MonsterDamagedEvent):
-            output = self._format_monster_damaged(event, recipient_player_id)
-        elif isinstance(event, MonsterDiedEvent):
-            output = self._format_monster_died(event, recipient_player_id)
-        elif isinstance(event, MonsterEvadedEvent):
-            output = self._format_monster_evaded(event, recipient_player_id)
-        elif isinstance(event, MonsterHealedEvent):
-            output = self._format_monster_healed(event, recipient_player_id)
-        elif isinstance(event, MonsterMpRecoveredEvent):
-            output = self._format_monster_mp_recovered(event, recipient_player_id)
-        elif isinstance(event, MonsterDecidedToMoveEvent):
-            output = self._format_monster_decided_to_move(event, recipient_player_id)
-        elif isinstance(event, MonsterDecidedToUseSkillEvent):
-            output = self._format_monster_decided_to_use_skill(event, recipient_player_id)
-        elif isinstance(event, MonsterDecidedToInteractEvent):
-            output = self._format_monster_decided_to_interact(event, recipient_player_id)
-        elif isinstance(event, MonsterFedEvent):
-            output = self._format_monster_fed(event, recipient_player_id)
-        elif isinstance(event, ActorStateChangedEvent):
-            output = self._format_actor_state_changed(event, recipient_player_id)
-        elif isinstance(event, TargetSpottedEvent):
-            output = self._format_target_spotted(event, recipient_player_id)
-        elif isinstance(event, TargetLostEvent):
-            output = self._format_target_lost(event, recipient_player_id)
-        elif isinstance(event, BehaviorStuckEvent):
-            output = self._format_behavior_stuck(event, recipient_player_id)
-        elif isinstance(event, HitBoxCreatedEvent):
-            output = self._format_hit_box_created(event, recipient_player_id)
-        elif isinstance(event, HitBoxMovedEvent):
-            output = self._format_hit_box_moved(event, recipient_player_id)
-        elif isinstance(event, HitBoxHitRecordedEvent):
-            output = self._format_hit_box_hit_recorded(event, recipient_player_id)
-        elif isinstance(event, HitBoxDeactivatedEvent):
-            output = self._format_hit_box_deactivated(event, recipient_player_id)
-        elif isinstance(event, HitBoxObstacleCollidedEvent):
-            output = self._format_hit_box_obstacle_collided(event, recipient_player_id)
-        elif isinstance(event, SkillEquippedEvent):
-            output = self._format_skill_equipped(event, recipient_player_id)
-        elif isinstance(event, SkillUnequippedEvent):
-            output = self._format_skill_unequipped(event, recipient_player_id)
-        elif isinstance(event, SkillUsedEvent):
-            output = self._format_skill_used(event, recipient_player_id)
-        elif isinstance(event, SkillCooldownStartedEvent):
-            output = self._format_skill_cooldown_started(event, recipient_player_id)
-        elif isinstance(event, AwakenedModeActivatedEvent):
-            output = self._format_awakened_mode_activated(event, recipient_player_id)
-        elif isinstance(event, AwakenedModeExpiredEvent):
-            output = self._format_awakened_mode_expired(event, recipient_player_id)
-        elif isinstance(event, SkillLoadoutCapacityChangedEvent):
-            output = self._format_skill_loadout_capacity_changed(event, recipient_player_id)
-        elif isinstance(event, SkillDeckExpGainedEvent):
-            output = self._format_skill_deck_exp_gained(event, recipient_player_id)
-        elif isinstance(event, SkillDeckLeveledUpEvent):
-            output = self._format_skill_deck_leveled_up(event, recipient_player_id)
-        elif isinstance(event, SkillProposalGeneratedEvent):
-            output = self._format_skill_proposal_generated(event, recipient_player_id)
-        elif isinstance(event, SkillEvolutionAcceptedEvent):
-            output = self._format_skill_evolution_accepted(event, recipient_player_id)
-        elif isinstance(event, SkillEvolutionRejectedEvent):
-            output = self._format_skill_evolution_rejected(event, recipient_player_id)
-        elif isinstance(event, MonsterCreatedEvent):
-            output = self._format_monster_created(event, recipient_player_id)
-        elif isinstance(event, LocationEnteredEvent):
-            output = self._format_location_entered(event, recipient_player_id)
-        elif isinstance(event, LocationExitedEvent):
-            output = self._format_location_exited(event, recipient_player_id)
-        elif isinstance(event, PlayerLocationChangedEvent):
-            output = self._format_player_location_changed(event, recipient_player_id)
-        elif isinstance(event, PlayerDownedEvent):
-            output = self._format_player_downed(event, recipient_player_id)
-        elif isinstance(event, PlayerRevivedEvent):
-            output = self._format_player_revived(event, recipient_player_id)
-        elif isinstance(event, PlayerLevelUpEvent):
-            output = self._format_player_level_up(event, recipient_player_id)
-        elif isinstance(event, PlayerGoldEarnedEvent):
-            output = self._format_player_gold_earned(event, recipient_player_id)
-        elif isinstance(event, PlayerGoldPaidEvent):
-            output = self._format_player_gold_paid(event, recipient_player_id)
-        elif isinstance(event, ItemTakenFromChestEvent):
-            output = self._format_item_taken_from_chest(event, recipient_player_id)
-        elif isinstance(event, ItemStoredInChestEvent):
-            output = self._format_item_stored_in_chest(event, recipient_player_id)
-        elif isinstance(event, ResourceHarvestedEvent):
-            output = self._format_resource_harvested(event, recipient_player_id)
-        elif isinstance(event, SpotWeatherChangedEvent):
-            output = self._format_spot_weather_changed(event, recipient_player_id)
-        elif isinstance(event, WorldObjectInteractedEvent):
-            output = self._format_world_object_interacted(event, recipient_player_id)
-        elif isinstance(event, ItemAddedToInventoryEvent):
-            output = self._format_item_added_to_inventory(event, recipient_player_id)
-        elif isinstance(event, ItemDroppedFromInventoryEvent):
-            output = self._format_item_dropped(event, recipient_player_id)
-        elif isinstance(event, ItemEquippedEvent):
-            output = self._format_item_equipped(event, recipient_player_id)
-        elif isinstance(event, ItemUnequippedEvent):
-            output = self._format_item_unequipped(event, recipient_player_id)
-        elif isinstance(event, InventorySlotOverflowEvent):
-            output = self._format_inventory_slot_overflow(event, recipient_player_id)
-        elif isinstance(event, PlayerSpokeEvent):
-            output = self._format_player_spoke(event, recipient_player_id)
+        output = (
+            self._format_conversation_event(event, recipient_player_id)
+            or self._format_quest_event(event, recipient_player_id)
+            or self._format_shop_event(event, recipient_player_id)
+            or self._format_guild_event(event, recipient_player_id)
+            or self._format_harvest_event(event, recipient_player_id)
+            or self._format_monster_event(event, recipient_player_id)
+            or self._format_combat_event(event, recipient_player_id)
+            or self._format_skill_event(event, recipient_player_id)
+            or self._format_world_event(event, recipient_player_id)
+            or self._format_player_event(event, recipient_player_id)
+        )
 
+        return self._apply_attention_filter(output, attention_level)
+
+    def _apply_attention_filter(
+        self,
+        output: Optional[ObservationOutput],
+        attention_level: Optional[AttentionLevel],
+    ) -> Optional[ObservationOutput]:
         if output is None:
             return None
-        # attention_level に応じたフィルタ（FULL または未指定はそのまま）
         if attention_level is None or attention_level == AttentionLevel.FULL:
             return output
         if attention_level == AttentionLevel.FILTER_SOCIAL:
@@ -326,6 +193,226 @@ class ObservationFormatter(IObservationFormatter):
             if output.observation_category != "self_only":
                 return None
         return output
+
+    def _format_conversation_event(
+        self,
+        event: Any,
+        recipient_player_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        if isinstance(event, ConversationStartedEvent):
+            return self._format_conversation_started(event, recipient_player_id)
+        if isinstance(event, ConversationEndedEvent):
+            return self._format_conversation_ended(event, recipient_player_id)
+        return None
+
+    def _format_quest_event(
+        self,
+        event: Any,
+        recipient_player_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        if isinstance(event, QuestIssuedEvent):
+            return self._format_quest_issued(event, recipient_player_id)
+        if isinstance(event, QuestAcceptedEvent):
+            return self._format_quest_accepted(event, recipient_player_id)
+        if isinstance(event, QuestCompletedEvent):
+            return self._format_quest_completed(event, recipient_player_id)
+        if isinstance(event, QuestPendingApprovalEvent):
+            return self._format_quest_pending_approval(event, recipient_player_id)
+        if isinstance(event, QuestApprovedEvent):
+            return self._format_quest_approved(event, recipient_player_id)
+        if isinstance(event, QuestCancelledEvent):
+            return self._format_quest_cancelled(event, recipient_player_id)
+        return None
+
+    def _format_shop_event(
+        self,
+        event: Any,
+        recipient_player_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        if isinstance(event, ShopCreatedEvent):
+            return self._format_shop_created(event, recipient_player_id)
+        if isinstance(event, ShopItemListedEvent):
+            return self._format_shop_item_listed(event, recipient_player_id)
+        if isinstance(event, ShopItemUnlistedEvent):
+            return self._format_shop_item_unlisted(event, recipient_player_id)
+        if isinstance(event, ShopItemPurchasedEvent):
+            return self._format_shop_item_purchased(event, recipient_player_id)
+        if isinstance(event, ShopClosedEvent):
+            return self._format_shop_closed(event, recipient_player_id)
+        return None
+
+    def _format_guild_event(
+        self,
+        event: Any,
+        recipient_player_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        if isinstance(event, GuildCreatedEvent):
+            return self._format_guild_created(event, recipient_player_id)
+        if isinstance(event, GuildMemberJoinedEvent):
+            return self._format_guild_member_joined(event, recipient_player_id)
+        if isinstance(event, GuildMemberLeftEvent):
+            return self._format_guild_member_left(event, recipient_player_id)
+        if isinstance(event, GuildRoleChangedEvent):
+            return self._format_guild_role_changed(event, recipient_player_id)
+        if isinstance(event, GuildBankDepositedEvent):
+            return self._format_guild_bank_deposited(event, recipient_player_id)
+        if isinstance(event, GuildBankWithdrawnEvent):
+            return self._format_guild_bank_withdrawn(event, recipient_player_id)
+        if isinstance(event, GuildDisbandedEvent):
+            return self._format_guild_disbanded(event, recipient_player_id)
+        return None
+
+    def _format_harvest_event(
+        self,
+        event: Any,
+        recipient_player_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        if isinstance(event, HarvestStartedEvent):
+            return self._format_harvest_started(event, recipient_player_id)
+        if isinstance(event, HarvestCancelledEvent):
+            return self._format_harvest_cancelled(event, recipient_player_id)
+        if isinstance(event, HarvestCompletedEvent):
+            return self._format_harvest_completed(event, recipient_player_id)
+        return None
+
+    def _format_monster_event(
+        self,
+        event: Any,
+        recipient_player_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        if isinstance(event, MonsterCreatedEvent):
+            return self._format_monster_created(event, recipient_player_id)
+        if isinstance(event, MonsterSpawnedEvent):
+            return self._format_monster_spawned(event, recipient_player_id)
+        if isinstance(event, MonsterRespawnedEvent):
+            return self._format_monster_respawned(event, recipient_player_id)
+        if isinstance(event, MonsterDamagedEvent):
+            return self._format_monster_damaged(event, recipient_player_id)
+        if isinstance(event, MonsterDiedEvent):
+            return self._format_monster_died(event, recipient_player_id)
+        if isinstance(event, MonsterEvadedEvent):
+            return self._format_monster_evaded(event, recipient_player_id)
+        if isinstance(event, MonsterHealedEvent):
+            return self._format_monster_healed(event, recipient_player_id)
+        if isinstance(event, MonsterMpRecoveredEvent):
+            return self._format_monster_mp_recovered(event, recipient_player_id)
+        if isinstance(event, MonsterDecidedToMoveEvent):
+            return self._format_monster_decided_to_move(event, recipient_player_id)
+        if isinstance(event, MonsterDecidedToUseSkillEvent):
+            return self._format_monster_decided_to_use_skill(event, recipient_player_id)
+        if isinstance(event, MonsterDecidedToInteractEvent):
+            return self._format_monster_decided_to_interact(event, recipient_player_id)
+        if isinstance(event, MonsterFedEvent):
+            return self._format_monster_fed(event, recipient_player_id)
+        if isinstance(event, ActorStateChangedEvent):
+            return self._format_actor_state_changed(event, recipient_player_id)
+        if isinstance(event, TargetSpottedEvent):
+            return self._format_target_spotted(event, recipient_player_id)
+        if isinstance(event, TargetLostEvent):
+            return self._format_target_lost(event, recipient_player_id)
+        if isinstance(event, BehaviorStuckEvent):
+            return self._format_behavior_stuck(event, recipient_player_id)
+        return None
+
+    def _format_combat_event(
+        self,
+        event: Any,
+        recipient_player_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        if isinstance(event, HitBoxCreatedEvent):
+            return self._format_hit_box_created(event, recipient_player_id)
+        if isinstance(event, HitBoxMovedEvent):
+            return self._format_hit_box_moved(event, recipient_player_id)
+        if isinstance(event, HitBoxHitRecordedEvent):
+            return self._format_hit_box_hit_recorded(event, recipient_player_id)
+        if isinstance(event, HitBoxDeactivatedEvent):
+            return self._format_hit_box_deactivated(event, recipient_player_id)
+        if isinstance(event, HitBoxObstacleCollidedEvent):
+            return self._format_hit_box_obstacle_collided(event, recipient_player_id)
+        return None
+
+    def _format_skill_event(
+        self,
+        event: Any,
+        recipient_player_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        if isinstance(event, SkillEquippedEvent):
+            return self._format_skill_equipped(event, recipient_player_id)
+        if isinstance(event, SkillUnequippedEvent):
+            return self._format_skill_unequipped(event, recipient_player_id)
+        if isinstance(event, SkillUsedEvent):
+            return self._format_skill_used(event, recipient_player_id)
+        if isinstance(event, SkillCooldownStartedEvent):
+            return self._format_skill_cooldown_started(event, recipient_player_id)
+        if isinstance(event, AwakenedModeActivatedEvent):
+            return self._format_awakened_mode_activated(event, recipient_player_id)
+        if isinstance(event, AwakenedModeExpiredEvent):
+            return self._format_awakened_mode_expired(event, recipient_player_id)
+        if isinstance(event, SkillLoadoutCapacityChangedEvent):
+            return self._format_skill_loadout_capacity_changed(event, recipient_player_id)
+        if isinstance(event, SkillDeckExpGainedEvent):
+            return self._format_skill_deck_exp_gained(event, recipient_player_id)
+        if isinstance(event, SkillDeckLeveledUpEvent):
+            return self._format_skill_deck_leveled_up(event, recipient_player_id)
+        if isinstance(event, SkillProposalGeneratedEvent):
+            return self._format_skill_proposal_generated(event, recipient_player_id)
+        if isinstance(event, SkillEvolutionAcceptedEvent):
+            return self._format_skill_evolution_accepted(event, recipient_player_id)
+        if isinstance(event, SkillEvolutionRejectedEvent):
+            return self._format_skill_evolution_rejected(event, recipient_player_id)
+        return None
+
+    def _format_world_event(
+        self,
+        event: Any,
+        recipient_player_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        if isinstance(event, LocationEnteredEvent):
+            return self._format_location_entered(event, recipient_player_id)
+        if isinstance(event, LocationExitedEvent):
+            return self._format_location_exited(event, recipient_player_id)
+        if isinstance(event, ItemTakenFromChestEvent):
+            return self._format_item_taken_from_chest(event, recipient_player_id)
+        if isinstance(event, ItemStoredInChestEvent):
+            return self._format_item_stored_in_chest(event, recipient_player_id)
+        if isinstance(event, ResourceHarvestedEvent):
+            return self._format_resource_harvested(event, recipient_player_id)
+        if isinstance(event, SpotWeatherChangedEvent):
+            return self._format_spot_weather_changed(event, recipient_player_id)
+        if isinstance(event, WorldObjectInteractedEvent):
+            return self._format_world_object_interacted(event, recipient_player_id)
+        return None
+
+    def _format_player_event(
+        self,
+        event: Any,
+        recipient_player_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        if isinstance(event, PlayerLocationChangedEvent):
+            return self._format_player_location_changed(event, recipient_player_id)
+        if isinstance(event, PlayerDownedEvent):
+            return self._format_player_downed(event, recipient_player_id)
+        if isinstance(event, PlayerRevivedEvent):
+            return self._format_player_revived(event, recipient_player_id)
+        if isinstance(event, PlayerLevelUpEvent):
+            return self._format_player_level_up(event, recipient_player_id)
+        if isinstance(event, PlayerGoldEarnedEvent):
+            return self._format_player_gold_earned(event, recipient_player_id)
+        if isinstance(event, PlayerGoldPaidEvent):
+            return self._format_player_gold_paid(event, recipient_player_id)
+        if isinstance(event, ItemAddedToInventoryEvent):
+            return self._format_item_added_to_inventory(event, recipient_player_id)
+        if isinstance(event, ItemDroppedFromInventoryEvent):
+            return self._format_item_dropped(event, recipient_player_id)
+        if isinstance(event, ItemEquippedEvent):
+            return self._format_item_equipped(event, recipient_player_id)
+        if isinstance(event, ItemUnequippedEvent):
+            return self._format_item_unequipped(event, recipient_player_id)
+        if isinstance(event, InventorySlotOverflowEvent):
+            return self._format_inventory_slot_overflow(event, recipient_player_id)
+        if isinstance(event, PlayerSpokeEvent):
+            return self._format_player_spoke(event, recipient_player_id)
+        return None
 
     def _spot_name(self, spot_id: SpotId) -> str:
         if self._spot_repository:

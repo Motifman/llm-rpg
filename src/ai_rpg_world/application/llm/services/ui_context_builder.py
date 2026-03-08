@@ -4,15 +4,21 @@ from typing import Dict, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     AttentionLevelToolRuntimeTargetDto,
+    ChestToolRuntimeTargetDto,
     ChestItemToolRuntimeTargetDto,
     ConversationChoiceToolRuntimeTargetDto,
     DestinationToolRuntimeTargetDto,
     InventoryToolRuntimeTargetDto,
     LlmUiContextDto,
+    MonsterToolRuntimeTargetDto,
+    NpcToolRuntimeTargetDto,
+    PlayerToolRuntimeTargetDto,
+    ResourceToolRuntimeTargetDto,
     SkillToolRuntimeTargetDto,
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
     VisibleToolRuntimeTargetDto,
+    WorldObjectToolRuntimeTargetDto,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import ILlmUiContextBuilder
 from ai_rpg_world.application.world.contracts.dtos import (
@@ -69,12 +75,32 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
         runtime_targets: Dict[str, ToolRuntimeTargetDto] = {}
         lines = [current_state_text.rstrip()]
 
-        visible_lines = self._build_visible_target_lines(
+        visible_lines, labels_by_object_id = self._build_visible_target_lines(
             current_state.visible_objects,
             current_state,
             counters,
             runtime_targets,
         )
+        notable_lines = self._build_object_summary_lines(
+            current_state.notable_objects,
+            labels_by_object_id,
+            include_reason=True,
+        )
+        if notable_lines:
+            lines.append("")
+            lines.append("注目対象ラベル:")
+            lines.extend(notable_lines)
+
+        actionable_lines = self._build_object_summary_lines(
+            current_state.actionable_objects,
+            labels_by_object_id,
+            include_actions=True,
+        )
+        if actionable_lines:
+            lines.append("")
+            lines.append("今すぐ行動可能な対象ラベル:")
+            lines.extend(actionable_lines)
+
         if visible_lines:
             lines.append("")
             lines.append("視界内の対象ラベル:")
@@ -140,23 +166,17 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
         current_state: PlayerCurrentStateDto,
         counters: Dict[str, int],
         runtime_targets: Dict[str, ToolRuntimeTargetDto],
-    ) -> list[str]:
+    ) -> tuple[list[str], dict[int, str]]:
         lines: list[str] = []
-        notable_ids = {obj.object_id for obj in current_state.notable_objects}
-        sort_key = lambda obj: (
-            0 if obj.object_id in notable_ids else 1,
-            obj.distance,
-            obj.display_name or "",
-            obj.object_kind or "",
-            obj.object_id,
-        )
-        for obj in sorted(visible_objects, key=sort_key):
+        labels_by_object_id: dict[int, str] = {}
+        for obj in visible_objects:
             if obj.is_self:
                 continue
             kind = obj.object_kind or "object"
             prefix = _VISIBLE_LABEL_PREFIX.get(kind, "O")
             counters[prefix] += 1
             label = f"{prefix}{counters[prefix]}"
+            labels_by_object_id[obj.object_id] = label
             display_name = obj.display_name or obj.object_type
             direction = obj.direction_from_player or "不明"
             kind_label = _VISIBLE_KIND_LABEL.get(kind, kind)
@@ -174,12 +194,43 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
                 obj=obj,
                 current_state=current_state,
             )
+        return lines, labels_by_object_id
+
+    def _build_object_summary_lines(
+        self,
+        objects: list[VisibleObjectDto],
+        labels_by_object_id: dict[int, str],
+        *,
+        include_reason: bool = False,
+        include_actions: bool = False,
+    ) -> list[str]:
+        lines: list[str] = []
+        seen_object_ids: set[int] = set()
+        for obj in objects:
+            if obj.is_self or obj.object_id in seen_object_ids:
+                continue
+            label = labels_by_object_id.get(obj.object_id)
+            if label is None:
+                continue
+            seen_object_ids.add(obj.object_id)
+            details: list[str] = []
+            if include_reason and obj.notable_reason:
+                details.append(f"理由: {obj.notable_reason}")
+            if include_actions:
+                action_labels = self._action_labels(obj.available_interactions)
+                if action_labels:
+                    details.append(f"可能: {', '.join(action_labels)}")
+            detail_text = f"（{'; '.join(details)}）" if details else ""
+            lines.append(f"- {label}: {obj.display_name or obj.object_type}{detail_text}")
         return lines
 
     def _format_action_hint(self, available_interactions: list[str]) -> str:
-        if not available_interactions:
+        labels = self._action_labels(available_interactions)
+        if not labels:
             return ""
+        return ", " + ", ".join(labels)
 
+    def _action_labels(self, available_interactions: list[str]) -> list[str]:
         labels: list[str] = []
         if "interact" in available_interactions:
             labels.append("相互作用可能")
@@ -189,9 +240,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             labels.append("収納可能")
         if "take_from_chest" in available_interactions:
             labels.append("取り出し可能")
-        if not labels:
-            return ""
-        return ", " + ", ".join(labels)
+        return labels
 
     def _build_visible_target(
         self,
@@ -202,7 +251,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
         obj: VisibleObjectDto,
         current_state: PlayerCurrentStateDto,
     ) -> ToolRuntimeTargetDto:
-        return VisibleToolRuntimeTargetDto(
+        common_kwargs = dict(
             label=label,
             kind=kind,
             display_name=display_name,
@@ -219,6 +268,19 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             interaction_type=obj.interaction_type,
             available_interactions=tuple(obj.available_interactions),
         )
+        if kind == "player":
+            return PlayerToolRuntimeTargetDto(**common_kwargs)
+        if kind == "npc":
+            return NpcToolRuntimeTargetDto(**common_kwargs)
+        if kind == "monster":
+            return MonsterToolRuntimeTargetDto(**common_kwargs)
+        if kind == "chest":
+            return ChestToolRuntimeTargetDto(**common_kwargs)
+        if kind == "resource":
+            return ResourceToolRuntimeTargetDto(**common_kwargs)
+        if kind in {"door", "object"}:
+            return WorldObjectToolRuntimeTargetDto(**common_kwargs)
+        return VisibleToolRuntimeTargetDto(**common_kwargs)
 
     def _build_move_lines(
         self,
@@ -273,6 +335,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
                 display_name=item.display_name,
                 item_instance_id=item.item_instance_id,
                 inventory_slot_id=item.inventory_slot_id,
+                is_placeable=item.is_placeable,
                 available_interactions=available,
             )
         return lines

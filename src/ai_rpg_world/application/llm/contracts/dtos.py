@@ -181,6 +181,36 @@ class VisibleToolRuntimeTargetDto(ToolRuntimeTargetDto):
 
 
 @dataclass(frozen=True)
+class PlayerToolRuntimeTargetDto(VisibleToolRuntimeTargetDto):
+    """プレイヤー対象用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class NpcToolRuntimeTargetDto(VisibleToolRuntimeTargetDto):
+    """NPC 対象用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class MonsterToolRuntimeTargetDto(VisibleToolRuntimeTargetDto):
+    """モンスター対象用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class ChestToolRuntimeTargetDto(VisibleToolRuntimeTargetDto):
+    """チェスト対象用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class ResourceToolRuntimeTargetDto(VisibleToolRuntimeTargetDto):
+    """採集対象用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class WorldObjectToolRuntimeTargetDto(VisibleToolRuntimeTargetDto):
+    """一般的な相互作用対象用の runtime target。"""
+
+
+@dataclass(frozen=True)
 class DestinationToolRuntimeTargetDto(ToolRuntimeTargetDto):
     """移動先用の runtime target。"""
 
@@ -188,6 +218,13 @@ class DestinationToolRuntimeTargetDto(ToolRuntimeTargetDto):
 @dataclass(frozen=True)
 class InventoryToolRuntimeTargetDto(ToolRuntimeTargetDto):
     """インベントリアイテム用の runtime target。"""
+
+    is_placeable: bool = False
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if not isinstance(self.is_placeable, bool):
+            raise TypeError("is_placeable must be bool")
 
 
 @dataclass(frozen=True)

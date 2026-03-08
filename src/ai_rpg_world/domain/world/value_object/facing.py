@@ -39,6 +39,23 @@ class Facing:
             return (0, 0, 0)
         return (vec[0] * step, vec[1] * step, 0)
 
+    def to_display_label(self) -> str:
+        from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+
+        labels = {
+            DirectionEnum.NORTH: "北",
+            DirectionEnum.NORTHEAST: "北東",
+            DirectionEnum.EAST: "東",
+            DirectionEnum.SOUTHEAST: "南東",
+            DirectionEnum.SOUTH: "南",
+            DirectionEnum.SOUTHWEST: "南西",
+            DirectionEnum.WEST: "西",
+            DirectionEnum.NORTHWEST: "北西",
+            DirectionEnum.UP: "上",
+            DirectionEnum.DOWN: "下",
+        }
+        return labels.get(self.direction, self.direction.value)
+
     def rotation_from_south_degrees(self) -> float:
         from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 

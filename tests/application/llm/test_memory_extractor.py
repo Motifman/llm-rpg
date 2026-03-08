@@ -14,13 +14,19 @@ from ai_rpg_world.application.observation.contracts.dtos import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
-def _obs(prose: str) -> ObservationEntry:
+def _obs(
+    prose: str,
+    *,
+    structured: dict | None = None,
+    causes_interrupt: bool = False,
+) -> ObservationEntry:
     return ObservationEntry(
         occurred_at=datetime.now(),
         output=ObservationOutput(
             prose=prose,
-            structured={},
+            structured=structured or {},
             observation_category="self_only",
+            causes_interrupt=causes_interrupt,
         ),
     )
 
@@ -67,6 +73,28 @@ class TestRuleBasedMemoryExtractor:
         assert len(episodes) == 1
         assert "洞窟" in episodes[0].context_summary
         assert "モンスター" in episodes[0].context_summary
+
+    def test_extract_populates_entity_ids_and_location_from_structured(
+        self, extractor, player_id
+    ):
+        """structured の名前情報と場所情報が記憶メタデータに反映される"""
+        episodes = extractor.extract(
+            player_id,
+            overflow_observations=[
+                _obs(
+                    "老人に話しかけた",
+                    structured={"npc_name": "老人", "spot_name": "洞窟入口"},
+                    causes_interrupt=True,
+                )
+            ],
+            action_summary="会話した",
+            result_summary="依頼を受けた",
+        )
+
+        assert episodes[0].entity_ids == ("老人", "洞窟入口")
+        assert episodes[0].location_id == "洞窟入口"
+        assert episodes[0].importance == "high"
+        assert episodes[0].surprise is True
 
     def test_extract_returns_empty_context_when_no_overflow(self, extractor, player_id):
         """溢れが無いとき context_summary は「（特になし）」"""

@@ -1,8 +1,8 @@
 """
 LLM エージェントの 1 ターン実行を「割り込み判定」付きで行うランナー。
 
-観測バッファを peek し、プレイヤーが行動中（is_busy）かつ割り込み観測がある場合に
-経路をキャンセルして「行動が中断された」旨を記録してから run_turn する。
+観測バッファを peek し、プレイヤーが移動中（active path あり）かつ割り込み観測がある場合に
+経路をキャンセルして「移動が中断された」旨を記録してから run_turn する。
 """
 
 import logging
@@ -24,7 +24,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 class LlmAgentTurnRunner:
     """
     観測到着時または定期で run_turn を実行する際に、
-    「行動中かつ割り込み観測あり」なら経路キャンセル＋中断メッセージを記録してから run_turn する。
+    「移動経路があり、かつ割り込み観測あり」なら経路キャンセル＋中断メッセージを記録してから run_turn する。
     """
 
     def __init__(
@@ -86,14 +86,14 @@ class LlmAgentTurnRunner:
         )
 
     def _run_turn_impl(self, player_id: PlayerId) -> LlmCommandResultDto:
-        """run_turn の実装。割り込み判定・キャンセル・記録のうえでオーケストレータを実行する。"""
+        """run_turn の実装。割り込み判定・必要時のみ移動キャンセルしてオーケストレータを実行する。"""
         observations = self._observation_buffer.get_observations(player_id)
         query = GetPlayerCurrentStateQuery(player_id=player_id.value)
         current_state = self._world_query_service.get_player_current_state(query)
 
         if (
             current_state is not None
-            and (current_state.is_busy or current_state.has_active_path)
+            and current_state.has_active_path
             and any(o.output.causes_interrupt for o in observations)
         ):
             self._movement_service.cancel_movement(
@@ -102,9 +102,9 @@ class LlmAgentTurnRunner:
             interrupt_prose_list = [
                 o.output.prose for o in observations if o.output.causes_interrupt
             ]
-            result_summary = "以下の観測により中断しました: " + "; ".join(interrupt_prose_list)
+            result_summary = "以下の観測により移動を中断しました: " + "; ".join(interrupt_prose_list)
             self._action_result_store.append(
-                player_id, "現在の行動が中断されました。", result_summary
+                player_id, "現在の移動が中断されました。", result_summary
             )
 
         return self._orchestrator.run_turn(player_id)
