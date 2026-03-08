@@ -9,12 +9,24 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
     CombatUseSkillAvailabilityResolver,
     ConversationAdvanceAvailabilityResolver,
     DestroyPlaceableAvailabilityResolver,
+    GuildDepositBankAvailabilityResolver,
+    GuildLeaveAvailabilityResolver,
+    GuildWithdrawBankAvailabilityResolver,
     HarvestStartAvailabilityResolver,
     InteractAvailabilityResolver,
     NoOpAvailabilityResolver,
     PlaceObjectAvailabilityResolver,
+    QuestAcceptAvailabilityResolver,
+    QuestApproveAvailabilityResolver,
+    QuestCancelAvailabilityResolver,
     SayAvailabilityResolver,
     SetDestinationAvailabilityResolver,
+    ShopListItemAvailabilityResolver,
+    ShopPurchaseAvailabilityResolver,
+    ShopUnlistItemAvailabilityResolver,
+    TradeAcceptAvailabilityResolver,
+    TradeCancelAvailabilityResolver,
+    TradeOfferAvailabilityResolver,
     WhisperAvailabilityResolver,
 )
 from ai_rpg_world.application.llm.tool_constants import (
@@ -24,12 +36,24 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_COMBAT_USE_SKILL,
     TOOL_NAME_CONVERSATION_ADVANCE,
     TOOL_NAME_DESTROY_PLACEABLE,
+    TOOL_NAME_GUILD_DEPOSIT_BANK,
+    TOOL_NAME_GUILD_LEAVE,
+    TOOL_NAME_GUILD_WITHDRAW_BANK,
     TOOL_NAME_HARVEST_START,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
     TOOL_NAME_PLACE_OBJECT,
+    TOOL_NAME_QUEST_ACCEPT,
+    TOOL_NAME_QUEST_APPROVE,
+    TOOL_NAME_QUEST_CANCEL,
     TOOL_NAME_SAY,
+    TOOL_NAME_SHOP_LIST_ITEM,
+    TOOL_NAME_SHOP_PURCHASE,
+    TOOL_NAME_SHOP_UNLIST_ITEM,
+    TOOL_NAME_TRADE_ACCEPT,
+    TOOL_NAME_TRADE_CANCEL,
+    TOOL_NAME_TRADE_OFFER,
     TOOL_NAME_WHISPER,
 )
 
@@ -254,6 +278,171 @@ COMBAT_USE_SKILL_DEFINITION = ToolDefinitionDto(
     parameters=COMBAT_USE_SKILL_PARAMETERS,
 )
 
+QUEST_ACCEPT_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "quest_label": {"type": "string", "description": "受託するクエストラベル（例: Q1）。"},
+    },
+    "required": ["quest_label"],
+}
+QUEST_ACCEPT_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_QUEST_ACCEPT,
+    description="掲示されているクエストを受託します。",
+    parameters=QUEST_ACCEPT_PARAMETERS,
+)
+
+QUEST_CANCEL_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "quest_label": {"type": "string", "description": "キャンセルするクエストラベル（例: Q1）。"},
+    },
+    "required": ["quest_label"],
+}
+QUEST_CANCEL_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_QUEST_CANCEL,
+    description="受託中のクエストをキャンセルします。",
+    parameters=QUEST_CANCEL_PARAMETERS,
+)
+
+QUEST_APPROVE_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "quest_label": {"type": "string", "description": "承認するクエストラベル（例: Q1）。"},
+    },
+    "required": ["quest_label"],
+}
+QUEST_APPROVE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_QUEST_APPROVE,
+    description="ギルド掲示のクエストを承認します（オフィサー以上）。",
+    parameters=QUEST_APPROVE_PARAMETERS,
+)
+
+GUILD_LEAVE_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "guild_label": {"type": "string", "description": "脱退するギルドラベル（例: G1）。"},
+    },
+    "required": ["guild_label"],
+}
+GUILD_LEAVE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_GUILD_LEAVE,
+    description="所属ギルドから脱退します。",
+    parameters=GUILD_LEAVE_PARAMETERS,
+)
+
+GUILD_DEPOSIT_BANK_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "guild_label": {"type": "string", "description": "入金先ギルドラベル（例: G1）。"},
+        "amount": {"type": "integer", "description": "入金するゴールド量。"},
+    },
+    "required": ["guild_label", "amount"],
+}
+GUILD_DEPOSIT_BANK_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_GUILD_DEPOSIT_BANK,
+    description="ギルド金庫にゴールドを入金します。",
+    parameters=GUILD_DEPOSIT_BANK_PARAMETERS,
+)
+
+GUILD_WITHDRAW_BANK_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "guild_label": {"type": "string", "description": "出金元ギルドラベル（例: G1）。"},
+        "amount": {"type": "integer", "description": "出金するゴールド量。"},
+    },
+    "required": ["guild_label", "amount"],
+}
+GUILD_WITHDRAW_BANK_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_GUILD_WITHDRAW_BANK,
+    description="ギルド金庫からゴールドを出金します（オフィサー以上）。",
+    parameters=GUILD_WITHDRAW_BANK_PARAMETERS,
+)
+
+SHOP_PURCHASE_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "shop_label": {"type": "string", "description": "購入先ショップラベル（例: SH1）。"},
+        "listing_id": {"type": "integer", "description": "購入する出品のID。"},
+        "quantity": {"type": "integer", "description": "購入数量。", "default": 1},
+    },
+    "required": ["shop_label", "listing_id"],
+}
+SHOP_PURCHASE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SHOP_PURCHASE,
+    description="ショップでアイテムを購入します。",
+    parameters=SHOP_PURCHASE_PARAMETERS,
+)
+
+SHOP_LIST_ITEM_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "shop_label": {"type": "string", "description": "出品先ショップラベル（例: SH1）。"},
+        "inventory_item_label": {"type": "string", "description": "出品する在庫アイテムラベル（例: I1）。"},
+        "price_per_unit": {"type": "integer", "description": "単価（ゴールド）。"},
+    },
+    "required": ["shop_label", "inventory_item_label", "price_per_unit"],
+}
+SHOP_LIST_ITEM_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SHOP_LIST_ITEM,
+    description="ショップにアイテムを出品します（オーナーのみ）。",
+    parameters=SHOP_LIST_ITEM_PARAMETERS,
+)
+
+SHOP_UNLIST_ITEM_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "shop_label": {"type": "string", "description": "取り下げ元ショップラベル（例: SH1）。"},
+        "listing_id": {"type": "integer", "description": "取り下げる出品のID。"},
+    },
+    "required": ["shop_label", "listing_id"],
+}
+SHOP_UNLIST_ITEM_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SHOP_UNLIST_ITEM,
+    description="ショップの出品を取り下げます（オーナーのみ）。",
+    parameters=SHOP_UNLIST_ITEM_PARAMETERS,
+)
+
+TRADE_OFFER_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "inventory_item_label": {"type": "string", "description": "出品する在庫アイテムラベル（例: I1）。"},
+        "requested_gold": {"type": "integer", "description": "希望価格（ゴールド）。"},
+        "target_player_id": {"type": "integer", "description": "宛先プレイヤーID。省略時は誰でも受諾可能。", "default": None},
+    },
+    "required": ["inventory_item_label", "requested_gold"],
+}
+TRADE_OFFER_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_TRADE_OFFER,
+    description="アイテムを他プレイヤーに直接取引で出品します。",
+    parameters=TRADE_OFFER_PARAMETERS,
+)
+
+TRADE_ACCEPT_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "trade_label": {"type": "string", "description": "受諾する取引ラベル（例: T1）。"},
+    },
+    "required": ["trade_label"],
+}
+TRADE_ACCEPT_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_TRADE_ACCEPT,
+    description="宛先の取引を受諾して購入します。",
+    parameters=TRADE_ACCEPT_PARAMETERS,
+)
+
+TRADE_CANCEL_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "trade_label": {"type": "string", "description": "キャンセルする取引ラベル（例: T1）。"},
+    },
+    "required": ["trade_label"],
+}
+TRADE_CANCEL_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_TRADE_CANCEL,
+    description="自分が発信した取引をキャンセルします。",
+    parameters=TRADE_CANCEL_PARAMETERS,
+)
+
 
 def register_default_tools(
     registry: IGameToolRegistry,
@@ -266,6 +455,10 @@ def register_default_tools(
     place_enabled: bool = False,
     chest_enabled: bool = False,
     combat_enabled: bool = False,
+    quest_enabled: bool = False,
+    guild_enabled: bool = False,
+    shop_enabled: bool = False,
+    trade_enabled: bool = False,
 ) -> None:
     """標準ツール群を登録し、依存サービスがあるカテゴリだけ追加する。"""
     if not isinstance(registry, IGameToolRegistry):
@@ -291,3 +484,19 @@ def register_default_tools(
         registry.register(CHEST_TAKE_DEFINITION, ChestTakeAvailabilityResolver())
     if combat_enabled:
         registry.register(COMBAT_USE_SKILL_DEFINITION, CombatUseSkillAvailabilityResolver())
+    if quest_enabled:
+        registry.register(QUEST_ACCEPT_DEFINITION, QuestAcceptAvailabilityResolver())
+        registry.register(QUEST_CANCEL_DEFINITION, QuestCancelAvailabilityResolver())
+        registry.register(QUEST_APPROVE_DEFINITION, QuestApproveAvailabilityResolver())
+    if guild_enabled:
+        registry.register(GUILD_LEAVE_DEFINITION, GuildLeaveAvailabilityResolver())
+        registry.register(GUILD_DEPOSIT_BANK_DEFINITION, GuildDepositBankAvailabilityResolver())
+        registry.register(GUILD_WITHDRAW_BANK_DEFINITION, GuildWithdrawBankAvailabilityResolver())
+    if shop_enabled:
+        registry.register(SHOP_PURCHASE_DEFINITION, ShopPurchaseAvailabilityResolver())
+        registry.register(SHOP_LIST_ITEM_DEFINITION, ShopListItemAvailabilityResolver())
+        registry.register(SHOP_UNLIST_ITEM_DEFINITION, ShopUnlistItemAvailabilityResolver())
+    if trade_enabled:
+        registry.register(TRADE_OFFER_DEFINITION, TradeOfferAvailabilityResolver())
+        registry.register(TRADE_ACCEPT_DEFINITION, TradeAcceptAvailabilityResolver())
+        registry.register(TRADE_CANCEL_DEFINITION, TradeCancelAvailabilityResolver())

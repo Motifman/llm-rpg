@@ -6,10 +6,14 @@ from typing import List, Optional, TYPE_CHECKING
 
 from ai_rpg_world.application.world.contracts.dtos import (
     ActiveConversationDto,
+    ActiveQuestSummaryDto,
     AttentionLevelOptionDto,
+    AvailableTradeSummaryDto,
     ChestItemDto,
     ConversationChoiceDto,
+    GuildMembershipSummaryDto,
     InventoryItemDto,
+    NearbyShopSummaryDto,
     UsableSkillDto,
     VisibleObjectDto,
 )
@@ -32,6 +36,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
     from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
     from ai_rpg_world.domain.skill.repository.skill_repository import SkillLoadoutRepository
+    from ai_rpg_world.application.trade.services.personal_trade_query_service import (
+        PersonalTradeQueryService,
+    )
 
 
 class PlayerSupplementalContextBuilder:
@@ -47,6 +54,7 @@ class PlayerSupplementalContextBuilder:
         quest_repository: Optional["QuestRepository"] = None,
         guild_repository: Optional["GuildRepository"] = None,
         shop_repository: Optional["ShopRepository"] = None,
+        personal_trade_query_service: Optional["PersonalTradeQueryService"] = None,
     ) -> None:
         self._player_inventory_repository = player_inventory_repository
         self._item_repository = item_repository
@@ -56,6 +64,7 @@ class PlayerSupplementalContextBuilder:
         self._quest_repository = quest_repository
         self._guild_repository = guild_repository
         self._shop_repository = shop_repository
+        self._personal_trade_query_service = personal_trade_query_service
 
     def build_inventory_items(self, player_id: PlayerId) -> List[InventoryItemDto]:
         if self._player_inventory_repository is None or self._item_repository is None:
@@ -177,6 +186,86 @@ class PlayerSupplementalContextBuilder:
             SpotId(spot_id), LocationAreaId(location_area_id)
         )
         return [int(shop.shop_id.value)] if shop else []
+
+    def build_active_quests(self, player_id: int) -> List[ActiveQuestSummaryDto]:
+        """受託中クエストのサマリ一覧（LLM readable）"""
+        if self._quest_repository is None:
+            return []
+        quests = self._quest_repository.find_accepted_quests_by_player(PlayerId(player_id))
+        result: List[ActiveQuestSummaryDto] = []
+        for q in quests:
+            total = len(q.objectives)
+            completed = sum(1 for obj in q.objectives if obj.is_completed())
+            summary_text = f"目標 {completed}/{total} 達成"
+            result.append(
+                ActiveQuestSummaryDto(
+                    quest_id=int(q.quest_id.value),
+                    summary_text=summary_text,
+                    objectives_completed=completed,
+                    objectives_total=total,
+                )
+            )
+        return result
+
+    def build_guild_memberships(self, player_id: int) -> List[GuildMembershipSummaryDto]:
+        """所属ギルドのサマリ一覧（LLM readable）"""
+        if self._guild_repository is None:
+            return []
+        guilds = self._guild_repository.find_guilds_by_player_id(PlayerId(player_id))
+        result: List[GuildMembershipSummaryDto] = []
+        for g in guilds:
+            membership = g.get_member(PlayerId(player_id))
+            if membership is not None:
+                result.append(
+                    GuildMembershipSummaryDto(
+                        guild_id=int(g.guild_id.value),
+                        guild_name=g.name,
+                        role=membership.role.value,
+                    )
+                )
+        return result
+
+    def build_nearby_shops(
+        self, spot_id: int, location_area_id: Optional[int]
+    ) -> List[NearbyShopSummaryDto]:
+        """現在地のショップサマリ一覧（LLM readable）"""
+        if self._shop_repository is None or location_area_id is None:
+            return []
+        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+        from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+
+        shop = self._shop_repository.find_by_spot_and_location(
+            SpotId(spot_id), LocationAreaId(location_area_id)
+        )
+        if shop is None:
+            return []
+        listing_count = len(shop.listings)
+        return [
+            NearbyShopSummaryDto(
+                shop_id=int(shop.shop_id.value),
+                shop_name=shop.name,
+                listing_count=listing_count,
+            )
+        ]
+
+    def build_available_trades(self, player_id: int, limit: int = 5) -> List[AvailableTradeSummaryDto]:
+        """プレイヤー宛の取引サマリ一覧（LLM readable）"""
+        if self._personal_trade_query_service is None:
+            return []
+        try:
+            trade_list = self._personal_trade_query_service.get_personal_trades(
+                player_id, limit=limit
+            )
+            return [
+                AvailableTradeSummaryDto(
+                    trade_id=int(listing.trade_id),
+                    item_name=listing.item_name or "不明",
+                    requested_gold=listing.requested_gold,
+                )
+                for listing in trade_list.listings
+            ]
+        except Exception:
+            return []
 
     def build_usable_skills(self, player_id: int) -> List[UsableSkillDto]:
         if self._skill_loadout_repository is None or self._game_time_provider is None:

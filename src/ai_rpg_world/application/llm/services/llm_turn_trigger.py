@@ -34,13 +34,17 @@ class DefaultLlmTurnTrigger(ILlmTurnTrigger):
     def run_scheduled_turns(self) -> None:
         """
         スケジュール済みの全プレイヤーについて run_turn を 1 回ずつ実行し、キューをクリアする。
+        1起動1ツール前提: 実行結果の should_reschedule が True の場合のみ、次 tick 用に _pending へ戻す。
+        同一 run_scheduled_turns 内の自己ループは作らず、次 tick 送りに固定する。
         プレイヤー単位で例外を隔離し、失敗したプレイヤーはログに記録するが他プレイヤーの実行は継続する。
         """
         to_run = list(self._pending)
         self._pending.clear()
         for pid in to_run:
             try:
-                self._turn_runner.run_turn(PlayerId(pid))
+                result = self._turn_runner.run_turn(PlayerId(pid))
+                if result.should_reschedule:
+                    self._pending.add(pid)
             except Exception as e:
                 self._logger.warning(
                     "LLM turn failed for player %s: %s",

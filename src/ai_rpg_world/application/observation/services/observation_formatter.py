@@ -18,6 +18,9 @@ from ai_rpg_world.application.observation.services.formatters.quest_formatter im
 from ai_rpg_world.application.observation.services.formatters.shop_formatter import (
     ShopObservationFormatter,
 )
+from ai_rpg_world.application.observation.services.formatters.trade_formatter import (
+    TradeObservationFormatter,
+)
 from ai_rpg_world.application.observation.services.formatters.guild_formatter import (
     GuildObservationFormatter,
 )
@@ -93,6 +96,11 @@ from ai_rpg_world.domain.shop.event.shop_event import (
     ShopItemListedEvent,
     ShopItemPurchasedEvent,
     ShopItemUnlistedEvent,
+)
+from ai_rpg_world.domain.trade.event.trade_event import (
+    TradeAcceptedEvent,
+    TradeCancelledEvent,
+    TradeOfferedEvent,
 )
 from ai_rpg_world.domain.skill.event.skill_events import (
     AwakenedModeActivatedEvent,
@@ -185,6 +193,7 @@ class ObservationFormatter(IObservationFormatter):
             ConversationObservationFormatter(self),
             QuestObservationFormatter(self),
             ShopObservationFormatter(self),
+            TradeObservationFormatter(self),
             GuildObservationFormatter(self),
             HarvestObservationFormatter(self),
             MonsterObservationFormatter(self),
@@ -270,6 +279,19 @@ class ObservationFormatter(IObservationFormatter):
             return self._format_shop_item_purchased(event, recipient_player_id)
         if isinstance(event, ShopClosedEvent):
             return self._format_shop_closed(event, recipient_player_id)
+        return None
+
+    def _format_trade_event(
+        self,
+        event: Any,
+        recipient_player_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        if isinstance(event, TradeOfferedEvent):
+            return self._format_trade_offered(event, recipient_player_id)
+        if isinstance(event, TradeAcceptedEvent):
+            return self._format_trade_accepted(event, recipient_player_id)
+        if isinstance(event, TradeCancelledEvent):
+            return self._format_trade_cancelled(event, recipient_player_id)
         return None
 
     def _format_guild_event(
@@ -936,6 +958,84 @@ class ObservationFormatter(IObservationFormatter):
         else:
             prose = f"{buyer_name}が{item_name}を{event.quantity}個購入しました（受取: {event.total_gold}ゴールド）。"
             structured = {"type": "shop_purchase", "role": "seller", "item_name": item_name, "buyer": buyer_name, "seller": seller_name, "shop_id_value": shop_id}
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="self_only",
+            schedules_turn=True,
+        )
+
+    def _format_trade_offered(
+        self, event: TradeOfferedEvent, recipient_id: PlayerId
+    ) -> Optional[ObservationOutput]:
+        item_name = self._item_instance_name(event.offered_item_id)
+        trade_id = getattr(event.aggregate_id, "value", event.aggregate_id)
+        is_seller = event.seller_id.value == recipient_id.value
+        if is_seller:
+            prose = f"アイテム「{item_name}」を{event.requested_gold.value}Gで出品しました。"
+            structured = {
+                "type": "trade_offered",
+                "role": "seller",
+                "trade_id_value": trade_id,
+                "item_name": item_name,
+                "requested_gold": event.requested_gold.value,
+            }
+            return ObservationOutput(
+                prose=prose,
+                structured=structured,
+                observation_category="self_only",
+                schedules_turn=True,
+            )
+        seller_name = self._player_name(event.seller_id)
+        prose = f"{seller_name}から「{item_name}」の取引提案が届きました（{event.requested_gold.value}G）。"
+        structured = {
+            "type": "trade_offered",
+            "role": "recipient",
+            "trade_id_value": trade_id,
+            "seller": seller_name,
+            "item_name": item_name,
+            "requested_gold": event.requested_gold.value,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="self_only",
+            schedules_turn=True,
+        )
+
+    def _format_trade_accepted(
+        self, event: TradeAcceptedEvent, recipient_id: PlayerId
+    ) -> Optional[ObservationOutput]:
+        trade_id = getattr(event.aggregate_id, "value", event.aggregate_id)
+        is_buyer = event.buyer_id.value == recipient_id.value
+        if is_buyer:
+            prose = "取引を受諾して購入しました。"
+            structured = {
+                "type": "trade_accepted",
+                "role": "buyer",
+                "trade_id_value": trade_id,
+            }
+        else:
+            prose = "取引が受諾されました。"
+            structured = {
+                "type": "trade_accepted",
+                "role": "seller",
+                "trade_id_value": trade_id,
+                "buyer_player_id": event.buyer_id.value,
+            }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="self_only",
+            schedules_turn=True,
+        )
+
+    def _format_trade_cancelled(
+        self, event: TradeCancelledEvent, recipient_id: PlayerId
+    ) -> Optional[ObservationOutput]:
+        trade_id = getattr(event.aggregate_id, "value", event.aggregate_id)
+        prose = "取引がキャンセルされました。"
+        structured = {"type": "trade_cancelled", "trade_id_value": trade_id}
         return ObservationOutput(
             prose=prose,
             structured=structured,

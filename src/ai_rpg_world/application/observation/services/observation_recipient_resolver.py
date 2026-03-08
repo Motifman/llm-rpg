@@ -14,6 +14,7 @@ from ai_rpg_world.domain.player.repository.player_status_repository import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
 from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
+from ai_rpg_world.domain.trade.repository.trade_repository import TradeRepository
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
 from ai_rpg_world.domain.skill.repository.skill_repository import (
     SkillDeckProgressRepository,
@@ -36,6 +37,7 @@ from ai_rpg_world.application.observation.services.recipient_strategies import (
     ShopRecipientStrategy,
     SkillRecipientStrategy,
     SpeechRecipientStrategy,
+    TradeRecipientStrategy,
 )
 
 
@@ -78,6 +80,7 @@ def create_observation_recipient_resolver(
     quest_repository: Optional[QuestRepository] = None,
     guild_repository: Optional[GuildRepository] = None,
     shop_repository: Optional[ShopRepository] = None,
+    trade_repository: Optional[TradeRepository] = None,
     monster_repository: Optional[MonsterRepository] = None,
     hit_box_repository: Optional[HitBoxRepository] = None,
     skill_loadout_repository: Optional[SkillLoadoutRepository] = None,
@@ -99,6 +102,7 @@ def create_observation_recipient_resolver(
             player_status_repository=player_status_repository,
             shop_repository=shop_repository,
         ),
+        TradeRecipientStrategy(trade_repository=trade_repository),
         GuildRecipientStrategy(
             player_status_repository=player_status_repository,
             guild_repository=guild_repository,

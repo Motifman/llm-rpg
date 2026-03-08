@@ -73,6 +73,11 @@ from ai_rpg_world.domain.shop.event.shop_event import (
     ShopItemPurchasedEvent,
     ShopItemUnlistedEvent,
 )
+from ai_rpg_world.domain.trade.event.trade_event import (
+    TradeAcceptedEvent,
+    TradeCancelledEvent,
+    TradeOfferedEvent,
+)
 from ai_rpg_world.domain.skill.event.skill_events import (
     AwakenedModeActivatedEvent,
     AwakenedModeExpiredEvent,
@@ -105,6 +110,10 @@ _OBSERVED_EVENT_TYPES = (
     ShopItemUnlistedEvent,
     ShopItemPurchasedEvent,
     ShopClosedEvent,
+    # --- トレード ---
+    TradeOfferedEvent,
+    TradeAcceptedEvent,
+    TradeCancelledEvent,
     # --- ギルド ---
     GuildCreatedEvent,
     GuildMemberJoinedEvent,

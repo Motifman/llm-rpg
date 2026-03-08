@@ -6,10 +6,12 @@ from datetime import datetime
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
     EpisodeMemoryEntry,
+    is_reschedulable_error_code,
     LlmUiContextDto,
     LlmCommandResultDto,
     LongTermFactEntry,
     MemoryLawEntry,
+    should_reschedule_for_next_tick,
     SystemPromptPlayerInfoDto,
     ToolDefinitionDto,
     ToolRuntimeContextDto,
@@ -155,6 +157,18 @@ class TestLlmCommandResultDto:
         assert dto.message == "完了しました。"
         assert dto.error_code is None
         assert dto.remediation is None
+        assert dto.should_reschedule is False
+
+    def test_create_failure_with_should_reschedule(self):
+        """失敗時は should_reschedule で次 tick 再試行を指定できる"""
+        dto = LlmCommandResultDto(
+            success=False,
+            message="LLM がツールを返しませんでした。",
+            error_code="NO_TOOL_CALL",
+            remediation="必ずいずれか 1 つのツールを呼び出してください。",
+            should_reschedule=True,
+        )
+        assert dto.should_reschedule is True
 
     def test_create_failure_with_remediation(self):
         """失敗時は message / error_code / remediation を指定できる"""
@@ -196,6 +210,37 @@ class TestLlmCommandResultDto:
                 message="err",
                 remediation=[],  # type: ignore[arg-type]
             )
+
+    def test_should_reschedule_for_next_tick_no_tool_call_returns_true(self):
+        """NO_TOOL_CALL のとき should_reschedule_for_next_tick は True"""
+        dto = LlmCommandResultDto(
+            success=False,
+            message="LLM がツールを返しませんでした。",
+            error_code="NO_TOOL_CALL",
+            remediation="...",
+        )
+        assert should_reschedule_for_next_tick(dto) is True
+
+    def test_should_reschedule_for_next_tick_success_returns_false(self):
+        """成功時は should_reschedule_for_next_tick は False"""
+        dto = LlmCommandResultDto(success=True, message="完了")
+        assert should_reschedule_for_next_tick(dto) is False
+
+    def test_should_reschedule_for_next_tick_unknown_tool_returns_false(self):
+        """UNKNOWN_TOOL のときは False（再スケジュールしない）"""
+        dto = LlmCommandResultDto(
+            success=False,
+            message="未知のツール",
+            error_code="UNKNOWN_TOOL",
+        )
+        assert should_reschedule_for_next_tick(dto) is False
+
+    def test_is_reschedulable_error_code(self):
+        """is_reschedulable_error_code の判定"""
+        assert is_reschedulable_error_code("NO_TOOL_CALL") is True
+        assert is_reschedulable_error_code("LLM_RATE_LIMIT") is True
+        assert is_reschedulable_error_code("UNKNOWN_TOOL") is False
+        assert is_reschedulable_error_code(None) is False
 
 
 class TestToolDefinitionDto:

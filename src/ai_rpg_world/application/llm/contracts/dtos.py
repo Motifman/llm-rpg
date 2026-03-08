@@ -5,17 +5,44 @@ from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
 
+# 再スケジュール対象とする error_code（1起動1ツール前提で次tickで再試行する）
+_RESCHEDULE_ERROR_CODES = frozenset({
+    "NO_TOOL_CALL",           # LLM がツールを返さなかった
+    "LLM_API_CALL_FAILED",    # 一時的 API 失敗
+    "LLM_RATE_LIMIT",         # レート制限
+    "LLM_AUTHENTICATION_ERROR",
+    "INVALID_DESTINATION_LABEL",  # ラベル未解決（次 tick で解消の可能性）
+})
+
+
+def should_reschedule_for_next_tick(dto: "LlmCommandResultDto") -> bool:
+    """
+    LlmCommandResultDto から次 tick で再スケジュールすべきか判定する。
+    1起動1ツール前提の保守的継続契約に従う。
+    """
+    if dto.success:
+        return False
+    return is_reschedulable_error_code(dto.error_code)
+
+
+def is_reschedulable_error_code(error_code: Optional[str]) -> bool:
+    """error_code が再スケジュール対象かどうか。1起動1ツール前提の継続契約用。"""
+    return error_code is not None and error_code in _RESCHEDULE_ERROR_CODES
+
+
 @dataclass(frozen=True)
 class LlmCommandResultDto:
     """
     オーケストレータがツール実行結果を IActionResultStore に渡す際の標準形。
     成功時は message に成功メッセージ、失敗時は message にエラー内容、remediation に対処ヒントを入れる。
+    should_reschedule: 次 tick で再スケジュールすべきか（1起動1ツール前提の継続契約用）。
     """
 
     success: bool
     message: str
     error_code: Optional[str] = None
     remediation: Optional[str] = None
+    should_reschedule: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.success, bool):
@@ -26,6 +53,8 @@ class LlmCommandResultDto:
             raise TypeError("error_code must be str or None")
         if self.remediation is not None and not isinstance(self.remediation, str):
             raise TypeError("remediation must be str or None")
+        if not isinstance(self.should_reschedule, bool):
+            raise TypeError("should_reschedule must be bool")
 
 
 @dataclass(frozen=True)
@@ -114,6 +143,11 @@ class ToolRuntimeTargetDto:
     skill_loadout_id: Optional[int] = None
     skill_slot_index: Optional[int] = None
     attention_level_value: Optional[str] = None
+    quest_id: Optional[int] = None
+    guild_id: Optional[int] = None
+    shop_id: Optional[int] = None
+    trade_id: Optional[int] = None
+    listing_id: Optional[int] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.label, str):
@@ -168,6 +202,16 @@ class ToolRuntimeTargetDto:
             self.attention_level_value, str
         ):
             raise TypeError("attention_level_value must be str or None")
+        if self.quest_id is not None and not isinstance(self.quest_id, int):
+            raise TypeError("quest_id must be int or None")
+        if self.guild_id is not None and not isinstance(self.guild_id, int):
+            raise TypeError("guild_id must be int or None")
+        if self.shop_id is not None and not isinstance(self.shop_id, int):
+            raise TypeError("shop_id must be int or None")
+        if self.trade_id is not None and not isinstance(self.trade_id, int):
+            raise TypeError("trade_id must be int or None")
+        if self.listing_id is not None and not isinstance(self.listing_id, int):
+            raise TypeError("listing_id must be int or None")
         if not isinstance(self.available_interactions, tuple):
             raise TypeError("available_interactions must be tuple")
         for value in self.available_interactions:
@@ -245,6 +289,26 @@ class SkillToolRuntimeTargetDto(ToolRuntimeTargetDto):
 @dataclass(frozen=True)
 class AttentionLevelToolRuntimeTargetDto(ToolRuntimeTargetDto):
     """注意レベル用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class QuestToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """クエスト用の runtime target。quest_id を持つ。"""
+
+
+@dataclass(frozen=True)
+class GuildToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """ギルド用の runtime target。guild_id を持つ。"""
+
+
+@dataclass(frozen=True)
+class ShopToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """ショップ用の runtime target。shop_id を持つ。"""
+
+
+@dataclass(frozen=True)
+class TradeToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """取引用の runtime target。trade_id を持つ。"""
 
 
 @dataclass(frozen=True)

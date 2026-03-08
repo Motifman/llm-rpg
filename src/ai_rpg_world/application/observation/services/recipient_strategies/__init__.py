@@ -24,6 +24,9 @@ from ai_rpg_world.application.observation.services.recipient_strategies.quest_re
 from ai_rpg_world.application.observation.services.recipient_strategies.shop_recipient_strategy import (
     ShopRecipientStrategy,
 )
+from ai_rpg_world.application.observation.services.recipient_strategies.trade_recipient_strategy import (
+    TradeRecipientStrategy,
+)
 from ai_rpg_world.application.observation.services.recipient_strategies.skill_recipient_strategy import (
     SkillRecipientStrategy,
 )
@@ -36,6 +39,7 @@ __all__ = [
     "ConversationRecipientStrategy",
     "QuestRecipientStrategy",
     "ShopRecipientStrategy",
+    "TradeRecipientStrategy",
     "GuildRecipientStrategy",
     "HarvestRecipientStrategy",
     "MonsterRecipientStrategy",

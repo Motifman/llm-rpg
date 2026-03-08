@@ -15,24 +15,32 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ChestItemToolRuntimeTargetDto,
     ConversationChoiceToolRuntimeTargetDto,
     DestinationToolRuntimeTargetDto,
+    GuildToolRuntimeTargetDto,
     InventoryToolRuntimeTargetDto,
     LlmUiContextDto,
     MonsterToolRuntimeTargetDto,
     NpcToolRuntimeTargetDto,
     PlayerToolRuntimeTargetDto,
+    QuestToolRuntimeTargetDto,
     ResourceToolRuntimeTargetDto,
+    ShopToolRuntimeTargetDto,
     SkillToolRuntimeTargetDto,
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
+    TradeToolRuntimeTargetDto,
     VisibleToolRuntimeTargetDto,
     WorldObjectToolRuntimeTargetDto,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import ILlmUiContextBuilder
 from ai_rpg_world.application.world.contracts.dtos import (
+    ActiveQuestSummaryDto,
     AttentionLevelOptionDto,
+    AvailableTradeSummaryDto,
     ChestItemDto,
     ConversationChoiceDto,
+    GuildMembershipSummaryDto,
     InventoryItemDto,
+    NearbyShopSummaryDto,
     PlayerCurrentStateDto,
     UsableSkillDto,
     VisibleObjectDto,
@@ -78,7 +86,10 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
                 tool_runtime_context=ToolRuntimeContextDto.empty(),
             )
 
-        counters: Dict[str, int] = {"P": 0, "N": 0, "M": 0, "O": 0, "S": 0, "I": 0, "C": 0, "R": 0, "K": 0, "A": 0}
+        counters: Dict[str, int] = {
+            "P": 0, "N": 0, "M": 0, "O": 0, "S": 0, "I": 0, "C": 0, "R": 0, "K": 0, "A": 0,
+            "Q": 0, "G": 0, "SH": 0, "T": 0,
+        }
         runtime_targets: Dict[str, ToolRuntimeTargetDto] = {}
         lines = [current_state_text.rstrip()]
 
@@ -152,6 +163,42 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             lines.append("")
             lines.append("注意レベル変更:")
             lines.extend(attention_lines)
+
+        quest_lines, quest_targets = self._build_active_quest_lines(
+            current_state.active_quests, counters, runtime_targets
+        )
+        if quest_lines:
+            lines.append("")
+            lines.append("受託中クエスト:")
+            lines.extend(quest_lines)
+            runtime_targets.update(quest_targets)
+
+        guild_lines, guild_targets = self._build_guild_membership_lines(
+            current_state.guild_memberships, counters, runtime_targets
+        )
+        if guild_lines:
+            lines.append("")
+            lines.append("所属ギルド:")
+            lines.extend(guild_lines)
+            runtime_targets.update(guild_targets)
+
+        shop_lines, shop_targets = self._build_nearby_shop_lines(
+            current_state.nearby_shops, counters, runtime_targets
+        )
+        if shop_lines:
+            lines.append("")
+            lines.append("近隣ショップ:")
+            lines.extend(shop_lines)
+            runtime_targets.update(shop_targets)
+
+        trade_lines, trade_targets = self._build_available_trade_lines(
+            current_state.available_trades, counters, runtime_targets
+        )
+        if trade_lines:
+            lines.append("")
+            lines.append("宛先取引:")
+            lines.extend(trade_lines)
+            runtime_targets.update(trade_targets)
 
         if current_state.can_destroy_placeable:
             lines.append("")
@@ -442,3 +489,83 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
                 attention_level_value=option.value,
             )
         return lines
+
+    def _build_active_quest_lines(
+        self,
+        quests: list[ActiveQuestSummaryDto],
+        counters: Dict[str, int],
+        runtime_targets: Dict[str, ToolRuntimeTargetDto],
+    ) -> tuple[list[str], Dict[str, ToolRuntimeTargetDto]]:
+        lines: list[str] = []
+        targets: Dict[str, ToolRuntimeTargetDto] = {}
+        for q in quests:
+            counters["Q"] += 1
+            label = f"Q{counters['Q']}"
+            lines.append(f"- {label}: クエスト {q.quest_id} {q.summary_text}（{q.objectives_completed}/{q.objectives_total}）")
+            targets[label] = QuestToolRuntimeTargetDto(
+                label=label,
+                kind="quest",
+                display_name=f"クエスト {q.quest_id}",
+                quest_id=q.quest_id,
+            )
+        return lines, targets
+
+    def _build_guild_membership_lines(
+        self,
+        memberships: list[GuildMembershipSummaryDto],
+        counters: Dict[str, int],
+        runtime_targets: Dict[str, ToolRuntimeTargetDto],
+    ) -> tuple[list[str], Dict[str, ToolRuntimeTargetDto]]:
+        lines: list[str] = []
+        targets: Dict[str, ToolRuntimeTargetDto] = {}
+        for m in memberships:
+            counters["G"] += 1
+            label = f"G{counters['G']}"
+            lines.append(f"- {label}: {m.guild_name}（ID:{m.guild_id}, 役職:{m.role}）")
+            targets[label] = GuildToolRuntimeTargetDto(
+                label=label,
+                kind="guild",
+                display_name=m.guild_name,
+                guild_id=m.guild_id,
+            )
+        return lines, targets
+
+    def _build_nearby_shop_lines(
+        self,
+        shops: list[NearbyShopSummaryDto],
+        counters: Dict[str, int],
+        runtime_targets: Dict[str, ToolRuntimeTargetDto],
+    ) -> tuple[list[str], Dict[str, ToolRuntimeTargetDto]]:
+        lines: list[str] = []
+        targets: Dict[str, ToolRuntimeTargetDto] = {}
+        for s in shops:
+            counters["SH"] += 1
+            label = f"SH{counters['SH']}"
+            lines.append(f"- {label}: {s.shop_name}（ID:{s.shop_id}, 出品:{s.listing_count}件）")
+            targets[label] = ShopToolRuntimeTargetDto(
+                label=label,
+                kind="shop",
+                display_name=s.shop_name,
+                shop_id=s.shop_id,
+            )
+        return lines, targets
+
+    def _build_available_trade_lines(
+        self,
+        trades: list[AvailableTradeSummaryDto],
+        counters: Dict[str, int],
+        runtime_targets: Dict[str, ToolRuntimeTargetDto],
+    ) -> tuple[list[str], Dict[str, ToolRuntimeTargetDto]]:
+        lines: list[str] = []
+        targets: Dict[str, ToolRuntimeTargetDto] = {}
+        for t in trades:
+            counters["T"] += 1
+            label = f"T{counters['T']}"
+            lines.append(f"- {label}: 取引 {t.trade_id} {t.item_name}（希望価格: {t.requested_gold}G）")
+            targets[label] = TradeToolRuntimeTargetDto(
+                label=label,
+                kind="trade",
+                display_name=t.item_name,
+                trade_id=t.trade_id,
+            )
+        return lines, targets

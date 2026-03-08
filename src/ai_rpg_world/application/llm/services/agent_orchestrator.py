@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 from ai_rpg_world.application.llm.contracts.dtos import (
     LlmCommandResultDto,
     ToolRuntimeContextDto,
+    is_reschedulable_error_code,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
@@ -125,6 +126,7 @@ class LlmAgentOrchestrator:
                 message="LLM がツールを返しませんでした。",
                 error_code="NO_TOOL_CALL",
                 remediation="必ずいずれか 1 つのツールを呼び出してください。",
+                should_reschedule=True,
             )
             result_summary = build_result_summary(result_dto)
             self._action_result_store.append(player_id, action_summary, result_summary)
@@ -158,6 +160,7 @@ class LlmAgentOrchestrator:
                 message=str(e),
                 error_code=e.error_code,
                 remediation=get_remediation(e.error_code),
+                should_reschedule=is_reschedulable_error_code(e.error_code),
             )
             action_summary = _format_action_summary(name, arguments)
             result_summary = build_result_summary(result_dto)

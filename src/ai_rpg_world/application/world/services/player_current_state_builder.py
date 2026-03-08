@@ -59,6 +59,9 @@ if TYPE_CHECKING:
     )
     from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
     from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
+    from ai_rpg_world.application.trade.services.personal_trade_query_service import (
+        PersonalTradeQueryService,
+    )
     from ai_rpg_world.domain.skill.repository.skill_repository import (
         SkillLoadoutRepository,
     )
@@ -89,6 +92,7 @@ class PlayerCurrentStateBuilder:
         quest_repository: Optional["QuestRepository"] = None,
         guild_repository: Optional["GuildRepository"] = None,
         shop_repository: Optional["ShopRepository"] = None,
+        personal_trade_query_service: Optional["PersonalTradeQueryService"] = None,
     ) -> None:
         self._player_status_repository = player_status_repository
         self._player_profile_repository = player_profile_repository
@@ -104,6 +108,7 @@ class PlayerCurrentStateBuilder:
         self._game_time_provider = game_time_provider
         self._guild_repository = guild_repository
         self._shop_repository = shop_repository
+        self._personal_trade_query_service = personal_trade_query_service
         self._visible_object_builder = VisibleObjectReadModelBuilder(
             player_profile_repository=player_profile_repository,
             monster_repository=monster_repository,
@@ -117,6 +122,7 @@ class PlayerCurrentStateBuilder:
             quest_repository=quest_repository,
             guild_repository=guild_repository,
             shop_repository=shop_repository,
+            personal_trade_query_service=personal_trade_query_service,
         )
 
     def build_visible_context(
@@ -270,6 +276,12 @@ class PlayerCurrentStateBuilder:
             nearby_shop_ids=self._supplemental_context_builder.build_nearby_shop_ids(
                 int(player_status.current_spot_id), area_id
             ),
+            active_quests=self._supplemental_context_builder.build_active_quests(query.player_id),
+            guild_memberships=self._supplemental_context_builder.build_guild_memberships(query.player_id),
+            nearby_shops=self._supplemental_context_builder.build_nearby_shops(
+                int(player_status.current_spot_id), area_id
+            ),
+            available_trades=self._supplemental_context_builder.build_available_trades(query.player_id),
             usable_skills=self._supplemental_context_builder.build_usable_skills(query.player_id),
             attention_level_options=self._supplemental_context_builder.build_attention_level_options(),
             can_destroy_placeable=self._supplemental_context_builder.can_destroy_placeable(

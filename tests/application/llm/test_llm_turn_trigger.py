@@ -113,6 +113,20 @@ class TestDefaultLlmTurnTriggerScheduleAndRun:
         trigger.run_scheduled_turns()
         assert spy.call_count == 1
 
+    def test_should_reschedule_true_re_adds_to_pending(self, trigger):
+        """run_turn が should_reschedule=True を返すと次 tick 用に _pending へ戻る"""
+        trigger._turn_runner.run_turn = MagicMock(
+            return_value=LlmCommandResultDto(
+                success=False,
+                message="NO_TOOL_CALL",
+                error_code="NO_TOOL_CALL",
+                should_reschedule=True,
+            )
+        )
+        trigger.schedule_turn(PlayerId(1))
+        trigger.run_scheduled_turns()
+        assert 1 in trigger._pending
+
     def test_schedule_turn_player_id_not_player_id_raises(self, trigger):
         """schedule_turn に PlayerId でない値を渡すと TypeError"""
         with pytest.raises(TypeError, match="player_id must be PlayerId"):
