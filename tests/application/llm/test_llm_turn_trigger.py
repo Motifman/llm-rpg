@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
 from ai_rpg_world.application.llm.services.agent_orchestrator import LlmAgentOrchestrator
 from ai_rpg_world.application.llm.services.llm_agent_turn_runner import LlmAgentTurnRunner
@@ -123,6 +124,34 @@ class TestDefaultLlmTurnTriggerScheduleAndRun:
                 should_reschedule=True,
             )
         )
+        trigger.schedule_turn(PlayerId(1))
+        trigger.run_scheduled_turns()
+        assert 1 in trigger._pending
+
+    def test_llm_api_exception_reschedulable_re_adds_to_pending(self):
+        """LlmApiCallException が DTO に正規化され should_reschedule で trigger が再スケジュールする"""
+        action_result_store = DefaultActionResultStore(max_entries_per_player=10)
+        llm_client = StubLlmClient(
+            exception_to_raise=LlmApiCallException("Rate limit", error_code="LLM_RATE_LIMIT")
+        )
+        orchestrator = LlmAgentOrchestrator(
+            prompt_builder=_StubPromptBuilder(),
+            llm_client=llm_client,
+            tool_command_mapper=ToolCommandMapper(movement_service=MagicMock()),
+            action_result_store=action_result_store,
+        )
+        runner = LlmAgentTurnRunner(
+            observation_buffer=DefaultObservationContextBuffer(),
+            world_query_service=MagicMock(
+                get_player_current_state=lambda q: MagicMock(
+                    spec=PlayerCurrentStateDto, is_busy=False
+                )
+            ),
+            movement_service=MagicMock(),
+            action_result_store=action_result_store,
+            orchestrator=orchestrator,
+        )
+        trigger = DefaultLlmTurnTrigger(runner)
         trigger.schedule_turn(PlayerId(1))
         trigger.run_scheduled_turns()
         assert 1 in trigger._pending

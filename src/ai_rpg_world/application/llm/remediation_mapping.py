@@ -24,6 +24,10 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "INTERACTION_TARGET_NOT_FOUND": "対象オブジェクトがまだ見えているか確認してください。",
     "UNKNOWN_TOOL": "利用可能なツール一覧から選択してください。",
     "SYSTEM_ERROR": "しばらくしてから再度お試しください。",
+    "LLM_API_CALL_FAILED": "LLM API が一時的に利用できません。しばらくしてから再度お試しください。",
+    "LLM_RATE_LIMIT": "リクエスト制限に達しました。しばらくしてから再度お試しください。",
+    "LLM_AUTHENTICATION_ERROR": "API 認証に失敗しました。設定を確認してください。",
+    "LLM_API_KEY_MISSING": "API キーが設定されていません。環境変数または設定を確認してください。",
 }
 
 

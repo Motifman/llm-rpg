@@ -23,6 +23,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     PlayerToolRuntimeTargetDto,
     QuestToolRuntimeTargetDto,
     ResourceToolRuntimeTargetDto,
+    ShopListingToolRuntimeTargetDto,
     ShopToolRuntimeTargetDto,
     SkillToolRuntimeTargetDto,
     ToolRuntimeContextDto,
@@ -42,6 +43,7 @@ from ai_rpg_world.application.world.contracts.dtos import (
     InventoryItemDto,
     NearbyShopSummaryDto,
     PlayerCurrentStateDto,
+    ShopListingSummaryDto,
     UsableSkillDto,
     VisibleObjectDto,
 )
@@ -88,7 +90,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
 
         counters: Dict[str, int] = {
             "P": 0, "N": 0, "M": 0, "O": 0, "S": 0, "I": 0, "C": 0, "R": 0, "K": 0, "A": 0,
-            "Q": 0, "G": 0, "SH": 0, "T": 0,
+            "Q": 0, "G": 0, "SH": 0, "L": 0, "T": 0,
         }
         runtime_targets: Dict[str, ToolRuntimeTargetDto] = {}
         lines = [current_state_text.rstrip()]
@@ -540,14 +542,27 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
         targets: Dict[str, ToolRuntimeTargetDto] = {}
         for s in shops:
             counters["SH"] += 1
-            label = f"SH{counters['SH']}"
-            lines.append(f"- {label}: {s.shop_name}（ID:{s.shop_id}, 出品:{s.listing_count}件）")
-            targets[label] = ShopToolRuntimeTargetDto(
-                label=label,
+            shop_label = f"SH{counters['SH']}"
+            lines.append(f"- {shop_label}: {s.shop_name}（ID:{s.shop_id}, 出品:{s.listing_count}件）")
+            targets[shop_label] = ShopToolRuntimeTargetDto(
+                label=shop_label,
                 kind="shop",
                 display_name=s.shop_name,
                 shop_id=s.shop_id,
             )
+            for listing in s.listings:
+                counters["L"] += 1
+                listing_label = f"L{counters['L']}"
+                lines.append(
+                    f"  - {listing_label}: {listing.item_name}（{listing.price_per_unit}G, ID:{listing.listing_id}）"
+                )
+                targets[listing_label] = ShopListingToolRuntimeTargetDto(
+                    label=listing_label,
+                    kind="shop_listing",
+                    display_name=listing.item_name,
+                    shop_id=s.shop_id,
+                    listing_id=listing.listing_id,
+                )
         return lines, targets
 
     def _build_available_trade_lines(

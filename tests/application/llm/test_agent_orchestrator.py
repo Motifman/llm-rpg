@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IPromptBuilder,
@@ -146,6 +147,50 @@ class TestLlmAgentOrchestratorRunTurn:
         """player_id が PlayerId でないとき TypeError"""
         with pytest.raises(TypeError, match="player_id must be PlayerId"):
             orchestrator.run_turn(1)  # type: ignore[arg-type]
+
+    def test_run_turn_llm_api_call_exception_reschedulable_returns_dto(
+        self, prompt_builder, action_result_store, mapper
+    ):
+        """LlmApiCallException (LLM_RATE_LIMIT) は DTO に正規化され should_reschedule=True で返る"""
+        llm_client = StubLlmClient(
+            exception_to_raise=LlmApiCallException("Rate limit", error_code="LLM_RATE_LIMIT")
+        )
+        orchestrator = LlmAgentOrchestrator(
+            prompt_builder=prompt_builder,
+            llm_client=llm_client,
+            tool_command_mapper=mapper,
+            action_result_store=action_result_store,
+        )
+        result = orchestrator.run_turn(PlayerId(1))
+        assert result.success is False
+        assert result.error_code == "LLM_RATE_LIMIT"
+        assert result.should_reschedule is True
+        assert "Rate limit" in result.message
+        recent = action_result_store.get_recent(PlayerId(1), 5)
+        assert len(recent) == 1
+        assert "失敗" in recent[0].action_summary or "LLM" in recent[0].action_summary
+
+    def test_run_turn_llm_api_call_exception_non_reschedulable_returns_dto(
+        self, prompt_builder, action_result_store, mapper
+    ):
+        """LlmApiCallException (LLM_AUTHENTICATION_ERROR) は DTO に正規化され should_reschedule=False で返る"""
+        llm_client = StubLlmClient(
+            exception_to_raise=LlmApiCallException(
+                "Invalid API key", error_code="LLM_AUTHENTICATION_ERROR"
+            )
+        )
+        orchestrator = LlmAgentOrchestrator(
+            prompt_builder=prompt_builder,
+            llm_client=llm_client,
+            tool_command_mapper=mapper,
+            action_result_store=action_result_store,
+        )
+        result = orchestrator.run_turn(PlayerId(1))
+        assert result.success is False
+        assert result.error_code == "LLM_AUTHENTICATION_ERROR"
+        assert result.should_reschedule is False
+        recent = action_result_store.get_recent(PlayerId(1), 5)
+        assert len(recent) == 1
 
 
 class TestLlmAgentOrchestratorInit:

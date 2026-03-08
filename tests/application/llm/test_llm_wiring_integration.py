@@ -6,10 +6,12 @@ EventHandlerComposition および WorldSimulationApplicationService に渡した
 契約どおり動作することを検証する。正常・例外の両方を網羅する。
 """
 
+import json
 import pytest
 import unittest.mock as mock
 from unittest.mock import MagicMock, patch
 
+from ai_rpg_world.application.llm.bootstrap import compose_llm_runtime, ComposeLlmRuntimeResult
 from ai_rpg_world.application.llm.wiring import create_llm_agent_wiring
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
@@ -489,6 +491,105 @@ class TestBootstrapContractReturnValues:
 
 
 # ---------------------------------------------------------------------------
+# compose_llm_runtime bootstrap seam
+# ---------------------------------------------------------------------------
+
+
+class TestComposeLlmRuntimeBootstrapSeam:
+    """compose_llm_runtime のブートストラップ窓口テスト"""
+
+    def test_compose_llm_runtime_returns_wiring_result_without_builders(self):
+        """composition_builder / service_builder なしで呼ぶと wiring_result のみ返る"""
+        deps = _minimal_wiring_deps()
+        result = compose_llm_runtime(**deps)
+        assert isinstance(result, ComposeLlmRuntimeResult)
+        assert result.wiring_result is not None
+        assert result.observation_registry is result.wiring_result.observation_registry
+        assert result.llm_turn_trigger is result.wiring_result.llm_turn_trigger
+        assert result.event_handler_composition is None
+        assert result.world_simulation_service is None
+
+    def test_compose_llm_runtime_with_builders_produces_composition_and_service(self):
+        """composition_builder / service_builder を渡すと composition と service が生成される"""
+        deps = _minimal_wiring_deps()
+        compositions = []
+
+        def comp_builder(registry):
+            comp = EventHandlerComposition(
+                gateway_handler=MagicMock(),
+                observation_registry=registry,
+            )
+            compositions.append(comp)
+            return comp
+
+        services = []
+
+        def svc_builder(trigger, reflection_runner):
+            svc = MagicMock()
+            svc._llm_turn_trigger = trigger
+            svc._reflection_runner = reflection_runner
+            services.append(svc)
+            return svc
+
+        result = compose_llm_runtime(
+            composition_builder=comp_builder,
+            service_builder=svc_builder,
+            **deps,
+        )
+        assert result.event_handler_composition is compositions[0]
+        assert result.event_handler_composition._observation_registry is result.observation_registry
+        assert result.world_simulation_service is services[0]
+        assert result.world_simulation_service._llm_turn_trigger is result.llm_turn_trigger
+
+
+# ---------------------------------------------------------------------------
+# SQLite memory restore guarantee
+# ---------------------------------------------------------------------------
+
+
+class TestSqliteMemoryRestore:
+    """memory_db_path 経由の再起動復元契約を統合テストで保証する"""
+
+    def test_wiring_recreate_restores_episode_from_sqlite(self, tmp_path):
+        """episode を書き込んだ後に wiring を再生成し、復元できること"""
+        from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+        from ai_rpg_world.application.llm.contracts.dtos import EpisodeMemoryEntry
+        from datetime import datetime
+        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+        db_path = tmp_path / "restore_test.db"
+        deps = _minimal_wiring_deps()
+        deps["memory_db_path"] = str(db_path)
+        deps["llm_client"] = StubLlmClient()
+
+        episode_entry = EpisodeMemoryEntry(
+            id="ep-restore-test",
+            context_summary="テスト",
+            action_taken="移動した",
+            outcome_summary="成功",
+            entity_ids=(),
+            location_id=None,
+            timestamp=datetime.now(),
+            importance="medium",
+            surprise=False,
+            recall_count=0,
+        )
+
+        # 1st wiring: add episode
+        wiring1 = create_llm_agent_wiring(**deps)
+        episode_store1 = wiring1.llm_turn_trigger._turn_runner._orchestrator._episode_memory_store
+        episode_store1.add(PlayerId(1), episode_entry)
+        del wiring1
+
+        # 2nd wiring: same path, verify restore
+        wiring2 = create_llm_agent_wiring(**deps)
+        episode_store2 = wiring2.llm_turn_trigger._turn_runner._orchestrator._episode_memory_store
+        recent = episode_store2.get_recent(PlayerId(1), limit=10)
+        assert len(recent) >= 1
+        assert any(e.id == "ep-restore-test" and e.action_taken == "移動した" for e in recent)
+
+
+# ---------------------------------------------------------------------------
 # E2E: domain event -> observation buffer -> schedule_turn -> run_scheduled_turns -> episode memory save
 # ---------------------------------------------------------------------------
 
@@ -615,3 +716,186 @@ class TestEventToEpisodeMemoryE2E:
 
         entries = episode_memory_store.get_recent(PlayerId(1), limit=10)
         assert len(entries) >= 1, "エピソード記憶に最低1件は保存されること（breaks_movement 観測）"
+
+
+# ---------------------------------------------------------------------------
+# E2E: domain event -> observation -> schedule_turn -> run_scheduled_turns -> tool execution -> world side effect
+# ---------------------------------------------------------------------------
+
+
+class TestEventToWorldSideEffectE2E:
+    """domain event から world side effect（move_to_destination 呼び出し）までを含む E2E"""
+
+    def test_domain_event_to_move_to_destination_invokes_movement_service(self):
+        """
+        domain event → 観測 → schedule_turn → run_scheduled_turns → move_to_destination ツール実行
+        → movement_service.move_to_destination が呼ばれること。
+        """
+        from ai_rpg_world.application.llm.services.in_memory_episode_memory_store import (
+            InMemoryEpisodeMemoryStore,
+        )
+        from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+        from ai_rpg_world.application.llm.services.llm_player_resolver import (
+            SetBasedLlmPlayerResolver,
+        )
+        from ai_rpg_world.application.llm.services.sliding_window_memory import (
+            DefaultSlidingWindowMemory,
+        )
+        from ai_rpg_world.application.world.contracts.dtos import (
+            AvailableMoveDto,
+            PlayerCurrentStateDto,
+        )
+        from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+        from ai_rpg_world.domain.player.event.status_events import (
+            PlayerDownedEvent,
+        )
+        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+        from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import (
+            PlayerProfileAggregate,
+        )
+        from ai_rpg_world.domain.player.enum.player_enum import ControlType
+        from ai_rpg_world.domain.player.value_object.player_name import PlayerName
+        from ai_rpg_world.domain.world.entity.spot import Spot
+        from ai_rpg_world.infrastructure.repository.in_memory_data_store import (
+            InMemoryDataStore,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import (
+            InMemoryPlayerProfileRepository,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
+            InMemoryPlayerStatusRepository,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
+            InMemoryPhysicalMapRepository,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_spot_repository import (
+            InMemorySpotRepository,
+        )
+        from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_MOVE_TO_DESTINATION
+
+        data_store = InMemoryDataStore()
+        data_store.clear_all()
+
+        def create_uow():
+            return InMemoryUnitOfWork(
+                unit_of_work_factory=create_uow, data_store=data_store
+            )
+
+        uow, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(
+            unit_of_work_factory=create_uow,
+            data_store=data_store,
+        )
+
+        profile_repo = InMemoryPlayerProfileRepository(data_store, None)
+        spot_repo = InMemorySpotRepository(data_store, None)
+        profile = PlayerProfileAggregate.create(
+            PlayerId(1), PlayerName("E2EPlayer"), control_type=ControlType.LLM
+        )
+        profile_repo.save(profile)
+        spot_repo.save(Spot(SpotId(1), "SpotA", "A"))
+        spot_repo.save(Spot(SpotId(2), "SpotB", "B"))
+
+        player_status_repo = InMemoryPlayerStatusRepository(data_store, None)
+        physical_map_repo = InMemoryPhysicalMapRepository(data_store, None)
+
+        movement_service = MagicMock(spec=MovementApplicationService)
+        movement_service.move_to_destination = MagicMock(
+            return_value=MagicMock(success=True, message="moved")
+        )
+        movement_service.cancel_movement = MagicMock()
+
+        available_moves = [
+            AvailableMoveDto(
+                spot_id=2,
+                spot_name="SpotB",
+                road_id=1,
+                road_description="道",
+                conditions_met=True,
+                failed_conditions=[],
+            )
+        ]
+        current_state = PlayerCurrentStateDto(
+            player_id=1,
+            player_name="E2EPlayer",
+            current_spot_id=1,
+            current_spot_name="SpotA",
+            current_spot_description="A",
+            x=0,
+            y=0,
+            z=0,
+            area_id=1,
+            area_name="Area1",
+            current_player_count=0,
+            current_player_ids=set(),
+            connected_spot_ids={2},
+            connected_spot_names={"SpotB"},
+            weather_type="clear",
+            weather_intensity=0.5,
+            current_terrain_type="grass",
+            visible_objects=[],
+            view_distance=5,
+            available_moves=available_moves,
+            total_available_moves=1,
+            attention_level=AttentionLevel.FULL,
+            is_busy=False,
+            inventory_items=[],
+            chest_items=[],
+            usable_skills=[],
+            nearby_shops=[],
+            available_trades=[],
+            active_quests=[],
+            guild_memberships=[],
+            notable_objects=[],
+            actionable_objects=[],
+        )
+
+        world_query = MagicMock(spec=WorldQueryService)
+        world_query.get_player_current_state = MagicMock(return_value=current_state)
+
+        episode_memory_store = InMemoryEpisodeMemoryStore()
+        sliding_window = DefaultSlidingWindowMemory(max_entries_per_player=1)
+
+        uow_factory = MagicMock(spec=UnitOfWorkFactory)
+        uow_factory.create.return_value = uow
+
+        stub_client = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_MOVE_TO_DESTINATION,
+                "arguments": json.dumps({"destination_label": "S1"}),
+            }
+        )
+
+        wiring_result = create_llm_agent_wiring(
+            player_status_repository=player_status_repo,
+            physical_map_repository=physical_map_repo,
+            world_query_service=world_query,
+            movement_service=movement_service,
+            player_profile_repository=profile_repo,
+            unit_of_work_factory=uow_factory,
+            spot_repository=spot_repo,
+            episode_memory_store=episode_memory_store,
+            sliding_window_memory=sliding_window,
+            llm_player_resolver=SetBasedLlmPlayerResolver({1}),
+            llm_client=stub_client,
+        )
+        registry = wiring_result.observation_registry
+        trigger = wiring_result.llm_turn_trigger
+
+        registry.register_handlers(event_publisher)
+
+        event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+        )
+
+        with uow:
+            uow.add_events([event])
+
+        trigger.run_scheduled_turns()
+
+        movement_service.move_to_destination.assert_called_once()
+        call_kw = movement_service.move_to_destination.call_args[1]
+        assert call_kw["player_id"] == 1
+        assert call_kw["target_spot_id"] == 2
+        assert call_kw["destination_type"] == "spot"

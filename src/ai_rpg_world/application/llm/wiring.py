@@ -274,6 +274,9 @@ def create_llm_agent_wiring(
         raise TypeError("unit_of_work_factory must not be None")
 
     buffer = observation_buffer if observation_buffer is not None else DefaultObservationContextBuffer()
+    current_state_formatter = DefaultCurrentStateFormatter()
+
+    # --- Memory wiring ---
     sliding_window = (
         sliding_window_memory
         if sliding_window_memory is not None
@@ -284,7 +287,6 @@ def create_llm_agent_wiring(
         if action_result_store is not None
         else DefaultActionResultStore()
     )
-    current_state_formatter = DefaultCurrentStateFormatter()
     ui_context_builder = DefaultLlmUiContextBuilder()
     recent_events_formatter = DefaultRecentEventsFormatter()
     context_format_strategy = SectionBasedContextFormatStrategy()
@@ -325,6 +327,7 @@ def create_llm_agent_wiring(
     )
     tool_argument_resolver = DefaultToolArgumentResolver()
 
+    # --- Memory persistence (episode / long-term / reflection) ---
     # memory_db_path: 引数 > 環境変数 LLM_MEMORY_DB_PATH
     effective_memory_db_path = memory_db_path or (
         (os.environ.get(_ENV_LLM_MEMORY_DB_PATH) or "").strip() or None
@@ -411,6 +414,8 @@ def create_llm_agent_wiring(
         orchestrator=orchestrator,
     )
     llm_turn_trigger = DefaultLlmTurnTrigger(turn_runner=turn_runner)
+
+    # --- Observation wiring ---
     observation_resolver = create_observation_recipient_resolver(
         player_status_repository=player_status_repository,
         physical_map_repository=physical_map_repository,

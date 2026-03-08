@@ -14,6 +14,7 @@ from ai_rpg_world.application.world.contracts.dtos import (
     GuildMembershipSummaryDto,
     InventoryItemDto,
     NearbyShopSummaryDto,
+    ShopListingSummaryDto,
     UsableSkillDto,
     VisibleObjectDto,
 )
@@ -228,7 +229,7 @@ class PlayerSupplementalContextBuilder:
     def build_nearby_shops(
         self, spot_id: int, location_area_id: Optional[int]
     ) -> List[NearbyShopSummaryDto]:
-        """現在地のショップサマリ一覧（LLM readable）"""
+        """現在地のショップサマリ一覧（LLM readable）。出品一覧も含み listing_label 解決に使う。"""
         if self._shop_repository is None or location_area_id is None:
             return []
         from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -239,12 +240,26 @@ class PlayerSupplementalContextBuilder:
         )
         if shop is None:
             return []
-        listing_count = len(shop.listings)
+        listings_dto: List[ShopListingSummaryDto] = []
+        for listing_id, listing in shop.listings.items():
+            item_name = "不明"
+            if self._item_repository is not None:
+                item = self._item_repository.find_by_id(listing.item_instance_id)
+                if item is not None:
+                    item_name = item.item_spec.name
+            listings_dto.append(
+                ShopListingSummaryDto(
+                    listing_id=listing_id.value,
+                    item_name=item_name,
+                    price_per_unit=listing.price_per_unit.value,
+                )
+            )
         return [
             NearbyShopSummaryDto(
                 shop_id=int(shop.shop_id.value),
                 shop_name=shop.name,
-                listing_count=listing_count,
+                listing_count=len(listings_dto),
+                listings=listings_dto,
             )
         ]
 

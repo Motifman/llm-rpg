@@ -22,6 +22,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IPromptBuilder,
     IToolArgumentResolver,
 )
+from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 from ai_rpg_world.application.llm.result_summary_builder import build_result_summary
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.services.tool_command_mapper import ToolCommandMapper
@@ -117,7 +118,26 @@ class LlmAgentOrchestrator:
         if not isinstance(runtime_context, ToolRuntimeContextDto):
             runtime_context = ToolRuntimeContextDto.empty()
 
-        tool_call = self._llm_client.invoke(messages, tools, tool_choice)
+        try:
+            tool_call = self._llm_client.invoke(messages, tools, tool_choice)
+        except LlmApiCallException as e:
+            action_summary = "LLM API 呼び出しに失敗しました。"
+            result_dto = LlmCommandResultDto(
+                success=False,
+                message=str(e),
+                error_code=e.error_code,
+                remediation=get_remediation(e.error_code),
+                should_reschedule=is_reschedulable_error_code(e.error_code),
+            )
+            result_summary = build_result_summary(result_dto)
+            self._action_result_store.append(player_id, action_summary, result_summary)
+            self._run_memory_extraction(
+                player_id,
+                request.get("overflow", []),
+                action_summary,
+                result_summary,
+            )
+            return result_dto
 
         if tool_call is None:
             action_summary = "ツールが選択されませんでした。"

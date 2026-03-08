@@ -362,10 +362,11 @@ SHOP_PURCHASE_PARAMETERS = {
     "type": "object",
     "properties": {
         "shop_label": {"type": "string", "description": "購入先ショップラベル（例: SH1）。"},
-        "listing_id": {"type": "integer", "description": "購入する出品のID。"},
+        "listing_label": {"type": "string", "description": "購入する出品ラベル（例: L1）。プロンプトの近隣ショップ出品一覧から選択。"},
+        "listing_id": {"type": "integer", "description": "購入する出品のID。listing_label の代わりに使用可。"},
         "quantity": {"type": "integer", "description": "購入数量。", "default": 1},
     },
-    "required": ["shop_label", "listing_id"],
+    "required": ["shop_label"],
 }
 SHOP_PURCHASE_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SHOP_PURCHASE,
@@ -392,9 +393,10 @@ SHOP_UNLIST_ITEM_PARAMETERS = {
     "type": "object",
     "properties": {
         "shop_label": {"type": "string", "description": "取り下げ元ショップラベル（例: SH1）。"},
-        "listing_id": {"type": "integer", "description": "取り下げる出品のID。"},
+        "listing_label": {"type": "string", "description": "取り下げる出品ラベル（例: L1）。プロンプトの近隣ショップ出品一覧から選択。"},
+        "listing_id": {"type": "integer", "description": "取り下げる出品のID。listing_label の代わりに使用可。"},
     },
-    "required": ["shop_label", "listing_id"],
+    "required": ["shop_label"],
 }
 SHOP_UNLIST_ITEM_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SHOP_UNLIST_ITEM,
@@ -407,7 +409,8 @@ TRADE_OFFER_PARAMETERS = {
     "properties": {
         "inventory_item_label": {"type": "string", "description": "出品する在庫アイテムラベル（例: I1）。"},
         "requested_gold": {"type": "integer", "description": "希望価格（ゴールド）。"},
-        "target_player_id": {"type": "integer", "description": "宛先プレイヤーID。省略時は誰でも受諾可能。", "default": None},
+        "target_player_label": {"type": "string", "description": "宛先プレイヤーラベル（例: P1）。プロンプトの視界内対象から選択。省略時は誰でも受諾可能。"},
+        "target_player_id": {"type": "integer", "description": "宛先プレイヤーID。target_player_label の代わりに使用可。", "default": None},
     },
     "required": ["inventory_item_label", "requested_gold"],
 }
