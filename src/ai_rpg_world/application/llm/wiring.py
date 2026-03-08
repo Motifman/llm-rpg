@@ -28,6 +28,7 @@ _VALID_LLM_CLIENT_VALUES = frozenset({"stub", "litellm"})
 from ai_rpg_world.application.llm.contracts.interfaces import (
     ILLMClient,
     ILlmTurnTrigger,
+    IReflectionRunner,
 )
 from ai_rpg_world.application.llm.services.action_result_store import (
     DefaultActionResultStore,
@@ -60,6 +61,12 @@ from ai_rpg_world.application.llm.services.memory_extractor import (
 )
 from ai_rpg_world.application.llm.services.predictive_memory_retriever import (
     DefaultPredictiveMemoryRetriever,
+)
+from ai_rpg_world.application.llm.services.reflection_runner import (
+    DefaultReflectionRunner,
+)
+from ai_rpg_world.application.llm.services.reflection_service import (
+    RuleBasedReflectionService,
 )
 from ai_rpg_world.application.llm.services.llm_player_resolver import (
     ProfileBasedLlmPlayerResolver,
@@ -101,6 +108,9 @@ from ai_rpg_world.application.observation.services.observation_recipient_resolve
     create_observation_recipient_resolver,
 )
 from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
+from ai_rpg_world.domain.world.service.world_time_config_service import (
+    WorldTimeConfigService,
+)
 from ai_rpg_world.domain.player.repository.player_profile_repository import (
     PlayerProfileRepository,
 )
@@ -117,6 +127,24 @@ from ai_rpg_world.infrastructure.events.observation_event_handler_registry impor
 
 _ENV_LLM_CLIENT = "LLM_CLIENT"
 _DEFAULT_LLM_CLIENT = "stub"
+
+
+class LlmAgentWiringResult:
+    """create_llm_agent_wiring の返り値。unpacking で (registry, trigger) も取得可能。"""
+
+    def __init__(
+        self,
+        observation_registry: "ObservationEventHandlerRegistry",
+        llm_turn_trigger: ILlmTurnTrigger,
+        reflection_runner: Optional[IReflectionRunner] = None,
+    ) -> None:
+        self.observation_registry = observation_registry
+        self.llm_turn_trigger = llm_turn_trigger
+        self.reflection_runner = reflection_runner
+
+    def __iter__(self) -> Any:
+        yield self.observation_registry
+        yield self.llm_turn_trigger
 
 
 def _create_llm_client_from_env() -> ILLMClient:
@@ -164,7 +192,7 @@ def create_llm_agent_wiring(
     llm_client: Optional[ILLMClient] = None,
     game_time_provider: Optional[Any] = None,
     world_time_config_service: Optional[Any] = None,
-) -> Tuple[ObservationEventHandlerRegistry, ILlmTurnTrigger]:
+) -> "LlmAgentWiringResult":
     """
     LLM エージェント用の観測ハンドラ登録用 Registry と LlmTurnTrigger を組み立てて返す。
 
@@ -197,9 +225,10 @@ def create_llm_agent_wiring(
         world_time_config_service: 省略時は観測にゲーム内時刻を付与しない。ticks_per_day 等を提供する設定サービス。
 
     Returns:
-        (ObservationEventHandlerRegistry, ILlmTurnTrigger)。
-        呼び出し元は返り値の第1要素を EventHandlerComposition(observation_registry=...)、
-        第2要素を WorldSimulationApplicationService(llm_turn_trigger=...) に渡すこと（ブートストラップ契約）。
+        LlmAgentWiringResult。observation_registry, llm_turn_trigger, reflection_runner を持つ。
+        既存の unpacking (registry, trigger) = create_llm_agent_wiring(...) も動作する。
+        reflection_runner は world_time_config_service 指定時のみ設定され、
+        WorldSimulationApplicationService(reflection_runner=...) に渡すと in-game day 境界で長期記憶が育つ。
     """
     if player_status_repository is None:
         raise TypeError("player_status_repository must not be None")
@@ -252,6 +281,23 @@ def create_llm_agent_wiring(
     episode_memory_store = InMemoryEpisodeMemoryStore()
     long_term_memory_store = InMemoryLongTermMemoryStore()
     memory_extractor = RuleBasedMemoryExtractor()
+    llm_player_resolver = ProfileBasedLlmPlayerResolver(
+        player_profile_repository=player_profile_repository,
+    )
+    reflection_service = RuleBasedReflectionService(
+        episode_store=episode_memory_store,
+        long_term_store=long_term_memory_store,
+    )
+    reflection_runner: Optional[IReflectionRunner] = None
+    if world_time_config_service is not None and isinstance(
+        world_time_config_service, WorldTimeConfigService
+    ):
+        reflection_runner = DefaultReflectionRunner(
+            reflection_service=reflection_service,
+            player_status_repository=player_status_repository,
+            llm_player_resolver=llm_player_resolver,
+            world_time_config=world_time_config_service,
+        )
     predictive_retriever = DefaultPredictiveMemoryRetriever(
         episode_store=episode_memory_store,
         long_term_store=long_term_memory_store,
@@ -287,9 +333,6 @@ def create_llm_agent_wiring(
         orchestrator=orchestrator,
     )
     llm_turn_trigger = DefaultLlmTurnTrigger(turn_runner=turn_runner)
-    llm_player_resolver = ProfileBasedLlmPlayerResolver(
-        player_profile_repository=player_profile_repository,
-    )
     observation_resolver = create_observation_recipient_resolver(
         player_status_repository=player_status_repository,
         physical_map_repository=physical_map_repository,
@@ -330,4 +373,8 @@ def create_llm_agent_wiring(
     observation_registry = ObservationEventHandlerRegistry(
         observation_handler=observation_handler,
     )
-    return (observation_registry, llm_turn_trigger)
+    return LlmAgentWiringResult(
+        observation_registry=observation_registry,
+        llm_turn_trigger=llm_turn_trigger,
+        reflection_runner=reflection_runner,
+    )

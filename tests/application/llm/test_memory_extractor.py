@@ -96,15 +96,37 @@ class TestRuleBasedMemoryExtractor:
         assert episodes[0].importance == "high"
         assert episodes[0].surprise is True
 
-    def test_extract_returns_empty_context_when_no_overflow(self, extractor, player_id):
-        """溢れが無いとき context_summary は「（特になし）」"""
+    def test_extract_does_not_save_when_no_conditions_met(self, extractor, player_id):
+        """保存条件を一切満たさないときはエピソードを保存しない（ノイズ抑制）"""
         episodes = extractor.extract(
             player_id,
             overflow_observations=[],
             action_summary="待機",
             result_summary="何も起きなかった",
         )
-        assert episodes[0].context_summary == "（特になし）"
+        assert len(episodes) == 0
+
+    def test_extract_saves_when_has_clear_context(self, extractor, player_id):
+        """明確な観測文脈（5文字以上）があれば保存する"""
+        episodes = extractor.extract(
+            player_id,
+            overflow_observations=[_obs("洞窟の入口で待機した")],
+            action_summary="待機",
+            result_summary="何も起きなかった",
+        )
+        assert len(episodes) == 1
+        assert "洞窟" in episodes[0].context_summary
+
+    def test_extract_saves_when_has_strong_result(self, extractor, player_id):
+        """強い成功/失敗結果があれば overflow が空でも保存する"""
+        episodes = extractor.extract(
+            player_id,
+            overflow_observations=[],
+            action_summary="open_chest を実行",
+            result_summary="回復ポーションを入手しました",
+        )
+        assert len(episodes) == 1
+        assert "入手" in episodes[0].outcome_summary
 
     def test_extract_player_id_none_raises_type_error(self, extractor):
         """player_id が None のとき TypeError"""

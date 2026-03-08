@@ -122,37 +122,40 @@ class TestDefaultLlmTurnTriggerScheduleAndRun:
 
 
 class TestDefaultLlmTurnTriggerRunScheduledTurnsExceptions:
-    """run_scheduled_turns 実行中の例外伝播"""
+    """run_scheduled_turns のプレイヤー単位例外隔離"""
 
     @pytest.fixture
     def trigger(self):
         return DefaultLlmTurnTrigger(_make_runner())
 
-    def test_run_turn_raises_propagates_and_pending_cleared(self, trigger):
-        """run_turn が例外を投げたら伝播し、キューは既にクリア済み"""
-        trigger._turn_runner.run_turn = MagicMock(side_effect=RuntimeError("run_turn failed"))
+    def test_run_turn_raises_isolated_second_player_still_runs(self, trigger):
+        """1 人目の run_turn が例外を投げても隔離され、2 人目は実行される"""
+        call_count = 0
+        def side_effect(pid):
+            nonlocal call_count
+            call_count += 1
+            if pid.value == 1:
+                raise RuntimeError("run_turn failed")
+            return LlmCommandResultDto(success=True, message="ok")
+
+        trigger._turn_runner.run_turn = MagicMock(side_effect=side_effect)
         trigger.schedule_turn(PlayerId(1))
         trigger.schedule_turn(PlayerId(2))
 
-        with pytest.raises(RuntimeError, match="run_turn failed"):
-            trigger.run_scheduled_turns()
-
-        # 1 人目で失敗しているので 2 人目は実行されていない
-        assert trigger._turn_runner.run_turn.call_count == 1
-        # キューはクリアされている（次回 run_scheduled_turns は no-op）
-        trigger._turn_runner.run_turn = MagicMock(return_value=LlmCommandResultDto(success=True, message="ok"))
         trigger.run_scheduled_turns()
-        trigger._turn_runner.run_turn.assert_not_called()
 
-    def test_run_turn_raises_world_application_exception_propagates(self, trigger):
-        """run_turn が WorldApplicationException を投げたらそのまま伝播"""
+        assert call_count == 2
+        trigger._turn_runner.run_turn.assert_any_call(PlayerId(1))
+        trigger._turn_runner.run_turn.assert_any_call(PlayerId(2))
+
+    def test_run_turn_raises_isolated_does_not_propagate(self, trigger):
+        """run_turn が例外を投げても run_scheduled_turns は伝播しない"""
         trigger._turn_runner.run_turn = MagicMock(
             side_effect=WorldApplicationException("app error")
         )
         trigger.schedule_turn(PlayerId(1))
 
-        with pytest.raises(WorldApplicationException, match="app error"):
-            trigger.run_scheduled_turns()
+        trigger.run_scheduled_turns()
 
 
 class TestDefaultLlmTurnTriggerInit:

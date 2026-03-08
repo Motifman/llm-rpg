@@ -251,6 +251,72 @@ class TestDefaultPromptBuilder:
         assert "P1: Bob" in user_content
         assert "tool_runtime_context" in result
         assert result["tool_runtime_context"].targets["P1"].player_id == 2
+        assert "注目対象:" in user_content
+        assert "今すぐ行動可能な対象:" in user_content
+
+    def test_build_formatter_summary_and_ui_labels_no_double_listing(
+        self, setup_prompt_builder
+    ):
+        """要約（formatter）は件数のみ、詳細（ui）はラベル。同一対象の二重過剰列挙なし"""
+        prompt_builder, profile_repo, status_repo, phys_repo, spot_repo, _ = setup_prompt_builder
+        profile_repo.save(self._create_profile(1, "Alice"))
+        profile_repo.save(self._create_profile(2, "Bob"))
+        exp_table = ExpTable(100, 1.5)
+        for pid, coord in [(1, Coordinate(0, 0, 0)), (2, Coordinate(1, 0, 0))]:
+            status_repo.save(
+                PlayerStatusAggregate(
+                    player_id=PlayerId(pid),
+                    base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
+                    stat_growth_factor=StatGrowthFactor(1.1, 1.1, 1.1, 1.1, 1.1, 0.01, 0.01),
+                    exp_table=exp_table,
+                    growth=Growth(1, 0, exp_table),
+                    gold=Gold.create(0),
+                    hp=Hp.create(10, 10),
+                    mp=Mp.create(10, 10),
+                    stamina=Stamina.create(10, 10),
+                    current_spot_id=SpotId(1),
+                    current_coordinate=coord,
+                )
+            )
+        tiles = {
+            Coordinate(0, 0, 0): Tile(Coordinate(0, 0, 0), TerrainType.grass()),
+            Coordinate(1, 0, 0): Tile(Coordinate(1, 0, 0), TerrainType.grass()),
+        }
+        phys_repo.save(
+            PhysicalMapAggregate(
+                spot_id=SpotId(1),
+                tiles=tiles,
+                objects=[
+                    WorldObject(
+                        object_id=WorldObjectId.create(1),
+                        coordinate=Coordinate(0, 0, 0),
+                        object_type=ObjectTypeEnum.PLAYER,
+                        component=ActorComponent(
+                            direction=DirectionEnum.SOUTH,
+                            player_id=PlayerId(1),
+                        ),
+                    ),
+                    WorldObject(
+                        object_id=WorldObjectId.create(2),
+                        coordinate=Coordinate(1, 0, 0),
+                        object_type=ObjectTypeEnum.PLAYER,
+                        component=ActorComponent(
+                            direction=DirectionEnum.SOUTH,
+                            player_id=PlayerId(2),
+                        ),
+                    ),
+                ],
+            )
+        )
+        result = prompt_builder.build(PlayerId(1))
+        user_content = result["messages"][1]["content"]
+        assert "注目対象: " in user_content
+        assert "件" in user_content
+        assert "今すぐ行動可能な対象: " in user_content
+        assert "視界内の対象ラベル" in user_content
+        assert "P1: Bob" in user_content
+        count_notable_section = user_content.count("注目対象:")
+        assert count_notable_section == 1
 
     def test_build_with_predictive_retriever_includes_related_memories_section(
         self, setup_prompt_builder

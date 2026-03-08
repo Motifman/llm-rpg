@@ -205,7 +205,22 @@ class TestLlmAgentOrchestratorMemoryIntegration:
 
     @pytest.fixture
     def prompt_builder_with_overflow(self):
-        """overflow を返すスタブ（記憶抽出で使われる）"""
+        """overflow を返すスタブ（記憶抽出で使われる）。保存条件を満たす観測を含む。"""
+        from ai_rpg_world.application.observation.contracts.dtos import (
+            ObservationEntry,
+            ObservationOutput,
+        )
+        from datetime import datetime
+
+        overflow_obs = ObservationEntry(
+            occurred_at=datetime.now(),
+            output=ObservationOutput(
+                prose="洞窟でチェストを発見した",
+                structured={"spot_name": "洞窟", "item_name": "チェスト"},
+                observation_category="self_only",
+                causes_interrupt=False,
+            ),
+        )
         return _StubPromptBuilder(return_value={
             "messages": [
                 {"role": "system", "content": "sys"},
@@ -213,7 +228,7 @@ class TestLlmAgentOrchestratorMemoryIntegration:
             ],
             "tools": [{"type": "function", "function": {"name": TOOL_NAME_NO_OP, "description": "", "parameters": {}}}],
             "tool_choice": "required",
-            "overflow": [],
+            "overflow": [overflow_obs],
         })
 
     @pytest.fixture
@@ -245,3 +260,31 @@ class TestLlmAgentOrchestratorMemoryIntegration:
         assert recent_episodes[0].action_taken
         assert recent_episodes[0].outcome_summary
         assert recent_episodes[0].recall_count == 0
+
+    def test_run_turn_does_not_store_episode_when_no_save_conditions_met(
+        self, episode_store, action_result_store, mapper
+    ):
+        """保存条件を満たさないとき（空の overflow、弱い結果）はエピソードを保存しない"""
+        prompt_builder = _StubPromptBuilder(return_value={
+            "messages": [
+                {"role": "system", "content": "sys"},
+                {"role": "user", "content": "user"},
+            ],
+            "tools": [{"type": "function", "function": {"name": TOOL_NAME_NO_OP, "description": "", "parameters": {}}}],
+            "tool_choice": "required",
+            "overflow": [],
+        })
+        llm_client = StubLlmClient(tool_call_to_return={"name": TOOL_NAME_NO_OP, "arguments": {}})
+        orchestrator = LlmAgentOrchestrator(
+            prompt_builder=prompt_builder,
+            llm_client=llm_client,
+            tool_command_mapper=mapper,
+            action_result_store=action_result_store,
+            memory_extractor=RuleBasedMemoryExtractor(),
+            episode_memory_store=episode_store,
+        )
+        player_id = PlayerId(1)
+        orchestrator.run_turn(player_id)
+
+        recent_episodes = episode_store.get_recent(player_id, 10)
+        assert len(recent_episodes) == 0

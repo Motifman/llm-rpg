@@ -4,6 +4,41 @@ from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.contracts.interfaces import IObservationFormatter
+from ai_rpg_world.application.observation.services.formatters.name_resolver import (
+    ObservationNameResolver,
+    FALLBACK_ITEM_LABEL,
+    FALLBACK_PLAYER_LABEL,
+)
+from ai_rpg_world.application.observation.services.formatters.conversation_formatter import (
+    ConversationObservationFormatter,
+)
+from ai_rpg_world.application.observation.services.formatters.quest_formatter import (
+    QuestObservationFormatter,
+)
+from ai_rpg_world.application.observation.services.formatters.shop_formatter import (
+    ShopObservationFormatter,
+)
+from ai_rpg_world.application.observation.services.formatters.guild_formatter import (
+    GuildObservationFormatter,
+)
+from ai_rpg_world.application.observation.services.formatters.harvest_formatter import (
+    HarvestObservationFormatter,
+)
+from ai_rpg_world.application.observation.services.formatters.monster_formatter import (
+    MonsterObservationFormatter,
+)
+from ai_rpg_world.application.observation.services.formatters.combat_formatter import (
+    CombatObservationFormatter,
+)
+from ai_rpg_world.application.observation.services.formatters.skill_formatter import (
+    SkillObservationFormatter,
+)
+from ai_rpg_world.application.observation.services.formatters.world_formatter import (
+    WorldObservationFormatter,
+)
+from ai_rpg_world.application.observation.services.formatters.player_formatter import (
+    PlayerObservationFormatter,
+)
 from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxCreatedEvent,
     HitBoxDeactivatedEvent,
@@ -118,17 +153,6 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.skill.repository.skill_repository import SkillSpecRepository
 
 
-# 名前解決に失敗したときのラベル（ID を露出しない）
-FALLBACK_SPOT_LABEL = "不明なスポット"
-FALLBACK_PLAYER_LABEL = "不明なプレイヤー"
-FALLBACK_ITEM_LABEL = "何かのアイテム"
-FALLBACK_NPC_LABEL = "誰か"
-FALLBACK_MONSTER_LABEL = "何かのモンスター"
-FALLBACK_SKILL_LABEL = "何かのスキル"
-FALLBACK_SHOP_LABEL = "どこかのショップ"
-FALLBACK_GUILD_LABEL = "どこかのギルド"
-
-
 class ObservationFormatter(IObservationFormatter):
     """
     イベント＋配信先を観測テキスト（プローズ文と構造化 dict）に変換する。
@@ -146,14 +170,29 @@ class ObservationFormatter(IObservationFormatter):
         monster_repository: Optional["MonsterRepository"] = None,
         skill_spec_repository: Optional["SkillSpecRepository"] = None,
     ) -> None:
-        self._spot_repository = spot_repository
-        self._player_profile_repository = player_profile_repository
-        self._item_spec_repository = item_spec_repository
-        self._item_repository = item_repository
-        self._shop_repository = shop_repository
-        self._guild_repository = guild_repository
-        self._monster_repository = monster_repository
-        self._skill_spec_repository = skill_spec_repository
+        self._name_resolver = ObservationNameResolver(
+            spot_repository=spot_repository,
+            player_profile_repository=player_profile_repository,
+            item_spec_repository=item_spec_repository,
+            item_repository=item_repository,
+            shop_repository=shop_repository,
+            guild_repository=guild_repository,
+            monster_repository=monster_repository,
+            skill_spec_repository=skill_spec_repository,
+        )
+        self._item_repository = item_repository  # _format_item_added_to_inventory で使用
+        self._formatters = [
+            ConversationObservationFormatter(self),
+            QuestObservationFormatter(self),
+            ShopObservationFormatter(self),
+            GuildObservationFormatter(self),
+            HarvestObservationFormatter(self),
+            MonsterObservationFormatter(self),
+            CombatObservationFormatter(self),
+            SkillObservationFormatter(self),
+            WorldObservationFormatter(self),
+            PlayerObservationFormatter(self),
+        ]
 
     def format(
         self,
@@ -162,19 +201,11 @@ class ObservationFormatter(IObservationFormatter):
         attention_level: Optional[AttentionLevel] = None,
     ) -> Optional[ObservationOutput]:
         """指定プレイヤー向けの観測出力を生成。attention_level に応じてスキップする。"""
-        output = (
-            self._format_conversation_event(event, recipient_player_id)
-            or self._format_quest_event(event, recipient_player_id)
-            or self._format_shop_event(event, recipient_player_id)
-            or self._format_guild_event(event, recipient_player_id)
-            or self._format_harvest_event(event, recipient_player_id)
-            or self._format_monster_event(event, recipient_player_id)
-            or self._format_combat_event(event, recipient_player_id)
-            or self._format_skill_event(event, recipient_player_id)
-            or self._format_world_event(event, recipient_player_id)
-            or self._format_player_event(event, recipient_player_id)
-        )
-
+        output: Optional[ObservationOutput] = None
+        for formatter in self._formatters:
+            output = formatter.format(event, recipient_player_id)
+            if output is not None:
+                break
         return self._apply_attention_filter(output, attention_level)
 
     def _apply_attention_filter(
@@ -415,39 +446,16 @@ class ObservationFormatter(IObservationFormatter):
         return None
 
     def _spot_name(self, spot_id: SpotId) -> str:
-        if self._spot_repository:
-            spot = self._spot_repository.find_by_id(spot_id)
-            if spot:
-                return spot.name
-        return FALLBACK_SPOT_LABEL
+        return self._name_resolver.spot_name(spot_id)
 
     def _player_name(self, player_id: PlayerId) -> str:
-        if self._player_profile_repository:
-            profile = self._player_profile_repository.find_by_id(player_id)
-            if profile and hasattr(profile, "name"):
-                return profile.name.value
-        return FALLBACK_PLAYER_LABEL
+        return self._name_resolver.player_name(player_id)
 
     def _item_spec_name(self, item_spec_id_value: int) -> str:
-        if self._item_spec_repository is None:
-            return FALLBACK_ITEM_LABEL
-        try:
-            from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
-            spec_id = ItemSpecId(item_spec_id_value)
-        except Exception:
-            return FALLBACK_ITEM_LABEL
-        spec = self._item_spec_repository.find_by_id(spec_id)
-        if spec is not None:
-            return spec.name
-        return FALLBACK_ITEM_LABEL
+        return self._name_resolver.item_spec_name(item_spec_id_value)
 
     def _item_instance_name(self, item_instance_id: Any) -> str:
-        if self._item_repository is None:
-            return FALLBACK_ITEM_LABEL
-        agg = self._item_repository.find_by_id(item_instance_id)
-        if agg is not None:
-            return agg.item_spec.name
-        return FALLBACK_ITEM_LABEL
+        return self._name_resolver.item_instance_name(item_instance_id)
 
     def _format_location_entered(
         self, event: LocationEnteredEvent, recipient_id: PlayerId
@@ -706,18 +714,7 @@ class ObservationFormatter(IObservationFormatter):
     # --- 会話 ---
 
     def _npc_name(self, npc_id_value: int) -> str:
-        if self._monster_repository is None:
-            return FALLBACK_NPC_LABEL
-        try:
-            from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-
-            npc_object_id = WorldObjectId(npc_id_value)
-        except Exception:
-            return FALLBACK_NPC_LABEL
-        npc = self._monster_repository.find_by_world_object_id(npc_object_id)
-        if npc is None:
-            return FALLBACK_NPC_LABEL
-        return npc.template.name or FALLBACK_NPC_LABEL
+        return self._name_resolver.npc_name(npc_id_value)
 
     def _format_conversation_started(
         self, event: ConversationStartedEvent, recipient_id: PlayerId
@@ -830,12 +827,7 @@ class ObservationFormatter(IObservationFormatter):
     # --- ショップ ---
 
     def _shop_name(self, shop_id: Any) -> str:
-        if self._shop_repository is None:
-            return FALLBACK_SHOP_LABEL
-        shop = self._shop_repository.find_by_id(shop_id)
-        if shop is None:
-            return FALLBACK_SHOP_LABEL
-        return shop.name.strip() if getattr(shop, "name", "").strip() else FALLBACK_SHOP_LABEL
+        return self._name_resolver.shop_name(shop_id)
 
     def _format_shop_created(self, event: ShopCreatedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         prose = "ショップが開設されました。"
@@ -874,12 +866,7 @@ class ObservationFormatter(IObservationFormatter):
     # --- ギルド ---
 
     def _guild_name(self, guild_id: Any) -> str:
-        if self._guild_repository is None:
-            return FALLBACK_GUILD_LABEL
-        guild = self._guild_repository.find_by_id(guild_id)
-        if guild is None:
-            return FALLBACK_GUILD_LABEL
-        return guild.name.strip() if getattr(guild, "name", "").strip() else FALLBACK_GUILD_LABEL
+        return self._name_resolver.guild_name(guild_id)
 
     def _format_guild_created(self, event: GuildCreatedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         prose = f"ギルド「{event.name}」が創設されました。"
@@ -941,12 +928,7 @@ class ObservationFormatter(IObservationFormatter):
     # --- Monster ---
 
     def _monster_name_by_monster_id(self, monster_id: Any) -> str:
-        if self._monster_repository is None:
-            return FALLBACK_MONSTER_LABEL
-        monster = self._monster_repository.find_by_id(monster_id)
-        if monster is None:
-            return FALLBACK_MONSTER_LABEL
-        return monster.template.name or FALLBACK_MONSTER_LABEL
+        return self._name_resolver.monster_name_by_monster_id(monster_id)
 
     def _format_monster_created(self, event: MonsterCreatedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         # システム内部向け。観測は出さない。
@@ -1037,12 +1019,7 @@ class ObservationFormatter(IObservationFormatter):
     # --- Skill ---
 
     def _skill_name(self, skill_id: Any) -> str:
-        if self._skill_spec_repository is None:
-            return FALLBACK_SKILL_LABEL
-        spec = self._skill_spec_repository.find_by_id(skill_id)
-        if spec is None:
-            return FALLBACK_SKILL_LABEL
-        return spec.name or FALLBACK_SKILL_LABEL
+        return self._name_resolver.skill_name(skill_id)
 
     def _format_skill_equipped(self, event: SkillEquippedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         name = self._skill_name(event.skill_id)

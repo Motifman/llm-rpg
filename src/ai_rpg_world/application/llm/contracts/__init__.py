@@ -6,6 +6,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     LlmCommandResultDto,
     LongTermFactEntry,
     MemoryLawEntry,
+    MemoryRetrievalQueryDto,
     SystemPromptPlayerInfoDto,
     ToolDefinitionDto,
 )
@@ -36,6 +37,7 @@ __all__ = [
     "LlmCommandResultDto",
     "LongTermFactEntry",
     "MemoryLawEntry",
+    "MemoryRetrievalQueryDto",
     "SystemPromptPlayerInfoDto",
     "ToolDefinitionDto",
     "IActionResultStore",

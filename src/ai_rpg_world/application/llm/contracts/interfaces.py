@@ -1,8 +1,13 @@
 """LLM 向け表示・記憶層のポート（インターフェース）"""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.common.value_object import WorldTick
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
@@ -10,6 +15,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     LlmUiContextDto,
     LongTermFactEntry,
     MemoryLawEntry,
+    MemoryRetrievalQueryDto,
     SystemPromptPlayerInfoDto,
     ToolDefinitionDto,
     ToolRuntimeContextDto,
@@ -122,6 +128,8 @@ class IPredictiveMemoryRetriever(ABC):
     """
     現在状態と候補行動から、予測に役立つエピソード・長期記憶（事実・法則）を取得する。
     プロンプトの「関連する記憶」に載せる文字列を返す。ヒットしたエピソードの想起回数を更新する。
+    query_dto を渡すと DTO 由来の entity/location/actionable/notable を優先検索し、
+    current_state_summary の文字面への依存を弱める。
     """
 
     @abstractmethod
@@ -133,11 +141,13 @@ class IPredictiveMemoryRetriever(ABC):
         episode_limit: int = 5,
         fact_limit: int = 5,
         law_limit: int = 5,
+        query_dto: Optional[MemoryRetrievalQueryDto] = None,
     ) -> str:
         """
         現在状態と候補行動名に基づき、関連するエピソード・事実・法則を取得し、
         「関連する記憶」セクション用の 1 本のテキストにフォーマットして返す。
         返す前にヒットしたエピソードの recall_count をインクリメントする。
+        query_dto 指定時は entity > location > actionable/notable > action > free_text の順で検索。
         """
         pass
 
@@ -384,6 +394,21 @@ class ILlmTurnTrigger(ABC):
     @abstractmethod
     def run_scheduled_turns(self) -> None:
         """スケジュール済みの全プレイヤーについて run_turn を 1 回ずつ実行し、キューをクリアする。"""
+        pass
+
+
+class IReflectionRunner(ABC):
+    """
+    in-game day 境界や一定 tick ごとに Reflection を実行するランナーのポート。
+    WorldSimulationApplicationService の tick 後に呼び出される。
+    """
+
+    @abstractmethod
+    def run_after_tick(self, current_tick: "WorldTick") -> None:
+        """
+        ティック後処理。game day が変わった場合などに、
+        LLM 制御プレイヤー向けに Reflection を実行する。
+        """
         pass
 
 
