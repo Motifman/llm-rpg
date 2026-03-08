@@ -7,6 +7,7 @@ from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
 from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from .in_memory_repository_base import InMemoryRepositoryBase
@@ -68,6 +69,13 @@ class InMemoryGuildRepository(GuildRepository, InMemoryRepositoryBase):
             if g.spot_id == spot_id and g.location_area_id == location_area_id:
                 return self._clone(g)
         return None
+
+    def find_guilds_by_player_id(self, player_id: PlayerId) -> List[GuildAggregate]:
+        return [
+            self._clone(g)
+            for g in self._guilds.values()
+            if g.is_member(player_id)
+        ]
 
     def generate_guild_id(self) -> GuildId:
         gid = self._data_store.next_guild_id

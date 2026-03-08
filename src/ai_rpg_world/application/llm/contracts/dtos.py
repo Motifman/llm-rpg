@@ -305,8 +305,9 @@ class MemoryRetrievalQueryDto:
     予測記憶検索用のクエリ DTO。
     PlayerCurrentStateDto 由来の spot/notable/actionable と tool_names を渡すことで、
     current_state_text の文字面依存を弱める。
-    検索優先度: world_object_ids/spot_ids (stable) > entity_ids > location_ids
+    検索優先度: world_object_ids > scope_keys > spot_ids > entity_ids > location_ids
     > actionable/notable > action_names > free_text_keywords
+    scope_keys: 関係性メモリ用。例: quest:12, guild:3, shop:9, conversation:npc:42
     """
 
     entity_ids: Tuple[str, ...] = ()
@@ -317,6 +318,7 @@ class MemoryRetrievalQueryDto:
     free_text_keywords: Tuple[str, ...] = ()
     world_object_ids: Tuple[int, ...] = ()
     spot_ids: Tuple[int, ...] = ()
+    scope_keys: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         for name, val in [
@@ -326,6 +328,7 @@ class MemoryRetrievalQueryDto:
             ("actionable_labels", self.actionable_labels),
             ("action_names", self.action_names),
             ("free_text_keywords", self.free_text_keywords),
+            ("scope_keys", self.scope_keys),
         ]:
             if not isinstance(val, tuple):
                 raise TypeError(f"{name} must be tuple")
@@ -348,6 +351,7 @@ class MemoryRetrievalQueryDto:
 class EpisodeMemoryEntry:
     """エピソード記憶 1 件（記憶抽出の出力・ストアの保存単位）。
     world_object_ids, spot_id_value は stable id 検索用。display name は entity_ids, location_id に保持。
+    scope_keys は関係性メモリ用。例: quest:12, guild:3, shop:9, conversation:npc:42
     """
 
     id: str
@@ -362,6 +366,7 @@ class EpisodeMemoryEntry:
     recall_count: int
     world_object_ids: Tuple[int, ...] = ()
     spot_id_value: Optional[int] = None
+    scope_keys: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.id, str):
@@ -394,6 +399,11 @@ class EpisodeMemoryEntry:
                 raise TypeError("world_object_ids must contain only int")
         if self.spot_id_value is not None and not isinstance(self.spot_id_value, int):
             raise TypeError("spot_id_value must be int or None")
+        if not isinstance(self.scope_keys, tuple):
+            raise TypeError("scope_keys must be tuple")
+        for x in self.scope_keys:
+            if not isinstance(x, str):
+                raise TypeError("scope_keys must contain only str")
 
 
 @dataclass(frozen=True)

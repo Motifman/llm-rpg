@@ -92,14 +92,15 @@ class DefaultReflectionRunner(IReflectionRunner):
             since = self._state_port.get_reflection_cursor(player_id) or _EPOCH_SINCE
 
             try:
-                self._reflection_service.run(
+                max_processed_ts = self._reflection_service.run(
                     player_id,
                     since=since,
                     episode_limit=20,
                 )
-                # cursor: 反映済み境界。次フェーズで in-game tick/day ベースに差し替え可能
+                # cursor: 実際に処理したエピソードの最大 timestamp。反映 0 件の場合は since を維持
+                cursor = max_processed_ts if max_processed_ts is not None else since
                 self._state_port.mark_reflection_success(
-                    player_id, current_game_day, datetime.now()
+                    player_id, current_game_day, cursor
                 )
             except Exception as e:
                 self._logger.warning(

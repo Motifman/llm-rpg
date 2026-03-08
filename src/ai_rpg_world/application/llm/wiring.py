@@ -192,6 +192,7 @@ def create_llm_agent_wiring(
     llm_client: Optional[ILLMClient] = None,
     game_time_provider: Optional[Any] = None,
     world_time_config_service: Optional[Any] = None,
+    memory_db_path: Optional[str] = None,
 ) -> "LlmAgentWiringResult":
     """
     LLM エージェント用の観測ハンドラ登録用 Registry と LlmTurnTrigger を組み立てて返す。
@@ -223,6 +224,7 @@ def create_llm_agent_wiring(
         llm_client: 省略時は環境変数 LLM_CLIENT に従い作成（stub / litellm）
         game_time_provider: 省略時は観測にゲーム内時刻を付与しない。指定時は world_time_config_service も必要。
         world_time_config_service: 省略時は観測にゲーム内時刻を付与しない。ticks_per_day 等を提供する設定サービス。
+        memory_db_path: SQLite 記憶永続化の DB パス。指定時は episode / long-term / reflection state を SQLite に保存。省略時は in-memory。
 
     Returns:
         LlmAgentWiringResult。observation_registry, llm_turn_trigger, reflection_runner を持つ。
@@ -278,8 +280,23 @@ def create_llm_agent_wiring(
         skill_tool_service=skill_tool_service,
     )
     tool_argument_resolver = DefaultToolArgumentResolver()
-    episode_memory_store = InMemoryEpisodeMemoryStore()
-    long_term_memory_store = InMemoryLongTermMemoryStore()
+    if memory_db_path:
+        from ai_rpg_world.infrastructure.llm.sqlite_episode_memory_store import (
+            SqliteEpisodeMemoryStore,
+        )
+        from ai_rpg_world.infrastructure.llm.sqlite_long_term_memory_store import (
+            SqliteLongTermMemoryStore,
+        )
+        from ai_rpg_world.infrastructure.llm.sqlite_reflection_state_port import (
+            SqliteReflectionStatePort,
+        )
+        episode_memory_store = SqliteEpisodeMemoryStore(memory_db_path)
+        long_term_memory_store = SqliteLongTermMemoryStore(memory_db_path)
+        reflection_state_port = SqliteReflectionStatePort(memory_db_path)
+    else:
+        episode_memory_store = InMemoryEpisodeMemoryStore()
+        long_term_memory_store = InMemoryLongTermMemoryStore()
+        reflection_state_port = None
     memory_extractor = RuleBasedMemoryExtractor()
     llm_player_resolver = ProfileBasedLlmPlayerResolver(
         player_profile_repository=player_profile_repository,
@@ -297,6 +314,7 @@ def create_llm_agent_wiring(
             player_status_repository=player_status_repository,
             llm_player_resolver=llm_player_resolver,
             world_time_config=world_time_config_service,
+            state_port=reflection_state_port,
         )
     predictive_retriever = DefaultPredictiveMemoryRetriever(
         episode_store=episode_memory_store,

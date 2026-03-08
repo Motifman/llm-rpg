@@ -153,6 +153,7 @@ class ActiveConversationDto:
     node_text: str
     choices: List[ConversationChoiceDto]
     is_terminal: bool
+    dialogue_tree_id_value: Optional[int] = None
 
 
 @dataclass
@@ -226,3 +227,7 @@ class PlayerCurrentStateDto:
     can_destroy_placeable: bool = False
     actionable_objects: List[VisibleObjectDto] = field(default_factory=list)
     notable_objects: List[VisibleObjectDto] = field(default_factory=list)
+    # LLM 関係性メモリ検索用（scope_keys 生成）
+    active_quest_ids: List[int] = field(default_factory=list)
+    guild_ids: List[int] = field(default_factory=list)
+    nearby_shop_ids: List[int] = field(default_factory=list)

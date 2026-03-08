@@ -769,6 +769,9 @@ class ObservationFormatter(IObservationFormatter):
             "type": "conversation_started",
             "npc_name": npc_name,
             "world_object_id": event.npc_id_value,
+            "npc_id_value": event.npc_id_value,
+            "dialogue_tree_id_value": event.dialogue_tree_id_value,
+            "entry_node_id_value": event.entry_node_id_value,
         }
         return ObservationOutput(
             prose=prose,
@@ -801,10 +804,14 @@ class ObservationFormatter(IObservationFormatter):
             "type": "conversation_ended",
             "npc_name": npc_name,
             "world_object_id": event.npc_id_value,
+            "npc_id_value": event.npc_id_value,
+            "end_node_id_value": event.end_node_id_value,
             "outcome": event.outcome,
             "rewards_claimed_gold": event.rewards_claimed_gold,
             "rewards_claimed_items": list(event.rewards_claimed_items),
             "quest_unlocked_count": len(event.quest_unlocked_ids),
+            "quest_unlocked_ids": list(event.quest_unlocked_ids),
+            "quest_completed_quest_ids": list(event.quest_completed_quest_ids),
         }
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
@@ -877,18 +884,20 @@ class ObservationFormatter(IObservationFormatter):
         if reward_summary:
             prose += f" 報酬: {reward_summary}"
         quest_id = getattr(event.aggregate_id, "value", None) if event.aggregate_id else None
-        structured = {"type": "quest_pending_approval", "quest_id_value": quest_id, "guild_id": event.guild_id}
+        structured = {"type": "quest_pending_approval", "quest_id_value": quest_id, "guild_id_value": event.guild_id}
         return ObservationOutput(prose=prose, structured=structured, observation_category="environment")
 
     def _format_quest_approved(self, event: QuestApprovedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         actor = self._player_name(event.approved_by)
         prose = f"クエストが承認されました（承認者: {actor}）。"
-        structured = {"type": "quest_approved", "approved_by": actor}
+        quest_id_value = getattr(event.aggregate_id, "value", event.aggregate_id) if event.aggregate_id else None
+        structured = {"type": "quest_approved", "approved_by": actor, "quest_id_value": quest_id_value}
         return ObservationOutput(prose=prose, structured=structured, observation_category="environment")
 
     def _format_quest_cancelled(self, event: QuestCancelledEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         prose = "クエストがキャンセルされました。"
-        structured = {"type": "quest_cancelled"}
+        quest_id_value = getattr(event.aggregate_id, "value", event.aggregate_id) if event.aggregate_id else None
+        structured = {"type": "quest_cancelled", "quest_id_value": quest_id_value}
         return ObservationOutput(prose=prose, structured=structured, observation_category="environment")
 
     # --- ショップ ---
@@ -905,12 +914,14 @@ class ObservationFormatter(IObservationFormatter):
     def _format_shop_item_listed(self, event: ShopItemListedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         item_name = self._item_instance_name(event.item_instance_id)
         prose = f"ショップに{item_name}が出品されました。"
-        structured = {"type": "shop_item_listed", "item_name": item_name}
+        shop_id_value = getattr(event.aggregate_id, "value", event.aggregate_id) if event.aggregate_id else None
+        structured = {"type": "shop_item_listed", "item_name": item_name, "shop_id_value": shop_id_value}
         return ObservationOutput(prose=prose, structured=structured, observation_category="social")
 
     def _format_shop_item_unlisted(self, event: ShopItemUnlistedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         prose = "ショップの出品が取り下げられました。"
-        structured = {"type": "shop_item_unlisted"}
+        shop_id_value = getattr(event.aggregate_id, "value", event.aggregate_id) if event.aggregate_id else None
+        structured = {"type": "shop_item_unlisted", "shop_id_value": shop_id_value}
         return ObservationOutput(prose=prose, structured=structured, observation_category="social")
 
     def _format_shop_item_purchased(self, event: ShopItemPurchasedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
@@ -934,7 +945,8 @@ class ObservationFormatter(IObservationFormatter):
 
     def _format_shop_closed(self, event: ShopClosedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         prose = "ショップが閉鎖されました。"
-        structured = {"type": "shop_closed"}
+        shop_id_value = getattr(event.aggregate_id, "value", event.aggregate_id) if event.aggregate_id else None
+        structured = {"type": "shop_closed", "shop_id_value": shop_id_value}
         return ObservationOutput(prose=prose, structured=structured, observation_category="social")
 
     # --- ギルド ---
@@ -963,25 +975,29 @@ class ObservationFormatter(IObservationFormatter):
     def _format_guild_member_left(self, event: GuildMemberLeftEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         member_name = self._player_name(event.player_id)
         prose = f"{member_name}がギルドから脱退しました。"
-        structured = {"type": "guild_member_left", "member": member_name, "role": event.role.value}
+        guild_id_value = getattr(event.aggregate_id, "value", event.aggregate_id) if event.aggregate_id else None
+        structured = {"type": "guild_member_left", "member": member_name, "role": event.role.value, "guild_id_value": guild_id_value}
         return ObservationOutput(prose=prose, structured=structured, observation_category="social")
 
     def _format_guild_role_changed(self, event: GuildRoleChangedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         member_name = self._player_name(event.player_id)
         prose = f"{member_name}の役職が{event.old_role.value}から{event.new_role.value}に変わりました。"
-        structured = {"type": "guild_role_changed", "member": member_name, "old": event.old_role.value, "new": event.new_role.value}
+        guild_id_value = getattr(event.aggregate_id, "value", event.aggregate_id) if event.aggregate_id else None
+        structured = {"type": "guild_role_changed", "member": member_name, "old": event.old_role.value, "new": event.new_role.value, "guild_id_value": guild_id_value}
         return ObservationOutput(prose=prose, structured=structured, observation_category="social")
 
     def _format_guild_bank_deposited(self, event: GuildBankDepositedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         actor = self._player_name(event.deposited_by)
         prose = f"{actor}がギルド金庫に{event.amount}ゴールドを入金しました。"
-        structured = {"type": "guild_bank_deposited", "amount": event.amount, "by": actor}
+        guild_id_value = getattr(event.aggregate_id, "value", event.aggregate_id) if event.aggregate_id else None
+        structured = {"type": "guild_bank_deposited", "amount": event.amount, "by": actor, "guild_id_value": guild_id_value}
         return ObservationOutput(prose=prose, structured=structured, observation_category="social")
 
     def _format_guild_bank_withdrawn(self, event: GuildBankWithdrawnEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         actor = self._player_name(event.withdrawn_by)
         prose = f"{actor}がギルド金庫から{event.amount}ゴールドを出金しました。"
-        structured = {"type": "guild_bank_withdrawn", "amount": event.amount, "by": actor}
+        guild_id_value = getattr(event.aggregate_id, "value", event.aggregate_id) if event.aggregate_id else None
+        structured = {"type": "guild_bank_withdrawn", "amount": event.amount, "by": actor, "guild_id_value": guild_id_value}
         return ObservationOutput(prose=prose, structured=structured, observation_category="social")
 
     def _format_guild_disbanded(self, event: GuildDisbandedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:

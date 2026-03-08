@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.world.services.transition_condition_evaluator import (
         TransitionConditionEvaluator,
     )
+    from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
     from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
     from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
     from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
@@ -56,6 +57,8 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.player.repository.player_status_repository import (
         PlayerStatusRepository,
     )
+    from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
+    from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
     from ai_rpg_world.domain.skill.repository.skill_repository import (
         SkillLoadoutRepository,
     )
@@ -83,6 +86,9 @@ class PlayerCurrentStateBuilder:
         conversation_command_service: Optional["ConversationCommandService"] = None,
         skill_loadout_repository: Optional["SkillLoadoutRepository"] = None,
         game_time_provider: Optional["GameTimeProvider"] = None,
+        quest_repository: Optional["QuestRepository"] = None,
+        guild_repository: Optional["GuildRepository"] = None,
+        shop_repository: Optional["ShopRepository"] = None,
     ) -> None:
         self._player_status_repository = player_status_repository
         self._player_profile_repository = player_profile_repository
@@ -96,6 +102,8 @@ class PlayerCurrentStateBuilder:
         self._conversation_command_service = conversation_command_service
         self._skill_loadout_repository = skill_loadout_repository
         self._game_time_provider = game_time_provider
+        self._guild_repository = guild_repository
+        self._shop_repository = shop_repository
         self._visible_object_builder = VisibleObjectReadModelBuilder(
             player_profile_repository=player_profile_repository,
             monster_repository=monster_repository,
@@ -106,6 +114,9 @@ class PlayerCurrentStateBuilder:
             conversation_command_service=conversation_command_service,
             skill_loadout_repository=skill_loadout_repository,
             game_time_provider=game_time_provider,
+            quest_repository=quest_repository,
+            guild_repository=guild_repository,
+            shop_repository=shop_repository,
         )
 
     def build_visible_context(
@@ -253,6 +264,11 @@ class PlayerCurrentStateBuilder:
             chest_items=self._supplemental_context_builder.build_chest_items(physical_map, visible_objects),
             active_conversation=self._supplemental_context_builder.build_active_conversation(
                 query.player_id, visible_objects
+            ),
+            active_quest_ids=self._supplemental_context_builder.build_active_quest_ids(query.player_id),
+            guild_ids=self._supplemental_context_builder.build_guild_ids(query.player_id),
+            nearby_shop_ids=self._supplemental_context_builder.build_nearby_shop_ids(
+                int(player_status.current_spot_id), area_id
             ),
             usable_skills=self._supplemental_context_builder.build_usable_skills(query.player_id),
             attention_level_options=self._supplemental_context_builder.build_attention_level_options(),
