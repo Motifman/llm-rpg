@@ -126,10 +126,12 @@ class GatewayTriggeredEventHandler(EventHandler[GatewayTriggeredEvent]):
             raise PlayerNotFoundException(int(player_id))
 
         self._map_transition_service.transition_player(
-            player_status, from_map, to_map, event.landing_coordinate
+            player_status,
+            from_map,
+            to_map,
+            event.landing_coordinate,
+            current_tick=getattr(event, "occurred_tick", None),
         )
-        if self._event_publisher:
-            self._event_publisher.publish_all(to_map.get_events())
         self._physical_map_repository.save(from_map)
         self._physical_map_repository.save(to_map)
         self._player_status_repository.save(player_status)

@@ -55,12 +55,13 @@ def _minimal_wiring_deps():
 class TestCreateLlmAgentWiringReturnValues:
     """create_llm_agent_wiring の戻り値（正常）"""
 
-    def test_returns_tuple_of_registry_and_trigger(self):
-        """(ObservationEventHandlerRegistry, ILlmTurnTrigger) のタプルを返す"""
+    def test_returns_wiring_result_unpackable_to_registry_and_trigger(self):
+        """返り値は unpacking で (registry, trigger) が取得でき、LlmAgentWiringResult を返す"""
+        from ai_rpg_world.application.llm.wiring import LlmAgentWiringResult
+
         deps = _minimal_wiring_deps()
         result = create_llm_agent_wiring(**deps)
-        assert isinstance(result, tuple)
-        assert len(result) == 2
+        assert isinstance(result, LlmAgentWiringResult)
         registry, trigger = result
         assert isinstance(registry, ObservationEventHandlerRegistry)
         assert isinstance(trigger, ILlmTurnTrigger)
@@ -110,6 +111,23 @@ class TestCreateLlmAgentWiringReturnValues:
         deps["observation_formatter"] = custom_formatter
         registry, _ = create_llm_agent_wiring(**deps)
         assert registry._handler._formatter is custom_formatter
+
+    def test_when_world_time_config_provided_reflection_runner_is_created(self):
+        """world_time_config_service を渡した場合 reflection_runner が作成される"""
+        from ai_rpg_world.domain.common.value_object import WorldTick
+        from ai_rpg_world.domain.world.service.world_time_config_service import (
+            DefaultWorldTimeConfigService,
+        )
+
+        deps = _minimal_wiring_deps()
+        deps["world_time_config_service"] = DefaultWorldTimeConfigService(
+            ticks_per_day=24
+        )
+        result = create_llm_agent_wiring(**deps)
+        assert result.reflection_runner is not None
+        assert hasattr(result.reflection_runner, "run_after_tick")
+        assert callable(result.reflection_runner.run_after_tick)
+        result.reflection_runner.run_after_tick(WorldTick(0))
 
 
 class TestCreateLlmAgentWiringRequiredParams:

@@ -16,6 +16,12 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "INVALID_DESTINATION": "有効な移動先を選んでください。接続先スポット一覧を確認してください。",
     "GATEWAY_OBJECT_NOT_FOUND": "移動先のゲートウェイまたはオブジェクトを確認してください。",
     "GATEWAY_MONSTER_NOT_FOUND": "移動先のゲートウェイを確認してください。",
+    "INVALID_DESTINATION_LABEL": "現在の状況に表示されている移動先ラベルから選択してください。",
+    "INVALID_DESTINATION_KIND": "移動先として使えるラベルを選択してください。",
+    "INVALID_TARGET_LABEL": "現在の状況に表示されている対象ラベルから選択してください。",
+    "INVALID_TARGET_KIND": "そのラベルはこの操作には使えません。対象の種類を確認してください。",
+    "INTERACTION_INVALID": "相互作用できる距離や状態か確認し、別の対象を選んでください。",
+    "INTERACTION_TARGET_NOT_FOUND": "対象オブジェクトがまだ見えているか確認してください。",
     "UNKNOWN_TOOL": "利用可能なツール一覧から選択してください。",
     "SYSTEM_ERROR": "しばらくしてから再度お試しください。",
 }

@@ -2,19 +2,33 @@
 LLM エージェントの 1 ターン実行を統合するオーケストレータ。
 
 プロンプト組み立て → LLM 呼び出し → tool_call 取得 → コマンド実行 → 結果を IActionResultStore に記録。
+オプションで記憶抽出（IMemoryExtractor）とエピソードストア（IEpisodeMemoryStore）を渡すと、
+ターン末尾で溢れ＋行動結果からエピソードを抽出して保存する。
 """
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
-from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.contracts.dtos import (
+    LlmCommandResultDto,
+    ToolRuntimeContextDto,
+)
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
+    IEpisodeMemoryStore,
     ILLMClient,
+    IMemoryExtractor,
     IPromptBuilder,
+    IToolArgumentResolver,
 )
 from ai_rpg_world.application.llm.result_summary_builder import build_result_summary
+from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.services.tool_command_mapper import ToolCommandMapper
+from ai_rpg_world.application.llm.services.tool_argument_resolver import (
+    DefaultToolArgumentResolver,
+    ToolArgumentResolutionException,
+)
+from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -41,6 +55,9 @@ class LlmAgentOrchestrator:
         llm_client: ILLMClient,
         tool_command_mapper: ToolCommandMapper,
         action_result_store: IActionResultStore,
+        tool_argument_resolver: Optional[IToolArgumentResolver] = None,
+        memory_extractor: Optional[IMemoryExtractor] = None,
+        episode_memory_store: Optional[IEpisodeMemoryStore] = None,
     ) -> None:
         if not isinstance(prompt_builder, IPromptBuilder):
             raise TypeError("prompt_builder must be IPromptBuilder")
@@ -50,10 +67,37 @@ class LlmAgentOrchestrator:
             raise TypeError("tool_command_mapper must be ToolCommandMapper")
         if not isinstance(action_result_store, IActionResultStore):
             raise TypeError("action_result_store must be IActionResultStore")
+        if tool_argument_resolver is not None and not isinstance(
+            tool_argument_resolver, IToolArgumentResolver
+        ):
+            raise TypeError(
+                "tool_argument_resolver must be IToolArgumentResolver or None"
+            )
+        if memory_extractor is not None and not isinstance(
+            memory_extractor, IMemoryExtractor
+        ):
+            raise TypeError("memory_extractor must be IMemoryExtractor or None")
+        if episode_memory_store is not None and not isinstance(
+            episode_memory_store, IEpisodeMemoryStore
+        ):
+            raise TypeError(
+                "episode_memory_store must be IEpisodeMemoryStore or None"
+            )
+        if (memory_extractor is None) != (episode_memory_store is None):
+            raise ValueError(
+                "memory_extractor and episode_memory_store must be both set or both None"
+            )
         self._prompt_builder = prompt_builder
         self._llm_client = llm_client
         self._tool_command_mapper = tool_command_mapper
         self._action_result_store = action_result_store
+        self._tool_argument_resolver = (
+            tool_argument_resolver
+            if tool_argument_resolver is not None
+            else DefaultToolArgumentResolver()
+        )
+        self._memory_extractor = memory_extractor
+        self._episode_memory_store = episode_memory_store
 
     def run_turn(self, player_id: PlayerId) -> LlmCommandResultDto:
         """
@@ -68,6 +112,9 @@ class LlmAgentOrchestrator:
         messages = request["messages"]
         tools = request["tools"]
         tool_choice = request.get("tool_choice", "required")
+        runtime_context = request.get("tool_runtime_context")
+        if not isinstance(runtime_context, ToolRuntimeContextDto):
+            runtime_context = ToolRuntimeContextDto.empty()
 
         tool_call = self._llm_client.invoke(messages, tools, tool_choice)
 
@@ -81,6 +128,12 @@ class LlmAgentOrchestrator:
             )
             result_summary = build_result_summary(result_dto)
             self._action_result_store.append(player_id, action_summary, result_summary)
+            self._run_memory_extraction(
+                player_id,
+                request.get("overflow", []),
+                action_summary,
+                result_summary,
+            )
             return result_dto
 
         name = tool_call.get("name", "")
@@ -93,12 +146,58 @@ class LlmAgentOrchestrator:
         else:
             arguments = raw_args if isinstance(raw_args, dict) else {}
 
+        try:
+            canonical_arguments = self._tool_argument_resolver.resolve(
+                name,
+                arguments,
+                runtime_context,
+            )
+        except ToolArgumentResolutionException as e:
+            result_dto = LlmCommandResultDto(
+                success=False,
+                message=str(e),
+                error_code=e.error_code,
+                remediation=get_remediation(e.error_code),
+            )
+            action_summary = _format_action_summary(name, arguments)
+            result_summary = build_result_summary(result_dto)
+            self._action_result_store.append(player_id, action_summary, result_summary)
+            self._run_memory_extraction(
+                player_id,
+                request.get("overflow", []),
+                action_summary,
+                result_summary,
+            )
+            return result_dto
+
         result_dto = self._tool_command_mapper.execute(
             player_id.value,
             name,
-            arguments,
+            canonical_arguments,
         )
         action_summary = _format_action_summary(name, arguments)
         result_summary = build_result_summary(result_dto)
         self._action_result_store.append(player_id, action_summary, result_summary)
+        self._run_memory_extraction(
+            player_id,
+            request.get("overflow", []),
+            action_summary,
+            result_summary,
+        )
         return result_dto
+
+    def _run_memory_extraction(
+        self,
+        player_id: PlayerId,
+        overflow: List[ObservationEntry],
+        action_summary: str,
+        result_summary: str,
+    ) -> None:
+        """記憶抽出とエピソード保存。extractor と store が両方設定されているときのみ実行。"""
+        if self._memory_extractor is None or self._episode_memory_store is None:
+            return
+        episodes = self._memory_extractor.extract(
+            player_id, overflow, action_summary, result_summary
+        )
+        if episodes:
+            self._episode_memory_store.add_many(player_id, episodes)

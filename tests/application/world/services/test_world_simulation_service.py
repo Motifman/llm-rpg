@@ -254,6 +254,52 @@ class TestWorldSimulationApplicationService:
         assert "run_scheduled_turns failed" in str(exc_info.value.original_exception)
         mock_trigger.run_scheduled_turns.assert_called_once()
 
+    def test_tick_advances_pending_player_movement_when_movement_service_provided(
+        self, setup_service
+    ):
+        service, _, repository, _, player_status_repo, _, _, _, _, _ = setup_service
+        status = PlayerStatusAggregate(
+            player_id=PlayerId(1),
+            base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
+            stat_growth_factor=StatGrowthFactor(1.1, 1.1, 1.1, 1.1, 1.1, 0.01, 0.01),
+            exp_table=ExpTable(100, 1.5),
+            growth=Growth(1, 0, ExpTable(100, 1.5)),
+            gold=Gold(0),
+            hp=Hp.create(100, 100),
+            mp=Mp.create(30, 30),
+            stamina=Stamina.create(100, 100),
+            current_spot_id=SpotId(1),
+            current_coordinate=Coordinate(0, 0, 0),
+        )
+        status.set_destination(
+            Coordinate(1, 0, 0),
+            [Coordinate(0, 0, 0), Coordinate(1, 0, 0)],
+            goal_destination_type="spot",
+            goal_spot_id=SpotId(1),
+        )
+        player_status_repo.save(status)
+
+        physical_map = PhysicalMapAggregate.create(
+            SpotId(1),
+            [Tile(Coordinate(x, y, 0), TerrainType.grass()) for x in range(3) for y in range(3)],
+            objects=[
+                WorldObject(
+                    WorldObjectId(1),
+                    Coordinate(0, 0, 0),
+                    ObjectTypeEnum.PLAYER,
+                    component=ActorComponent(direction=DirectionEnum.EAST, player_id=PlayerId(1)),
+                )
+            ],
+        )
+        repository.save(physical_map)
+
+        movement_service = mock.MagicMock()
+        service._movement_service = movement_service
+
+        service.tick()
+
+        movement_service.tick_movement_in_current_unit_of_work.assert_called_once_with(1)
+
     def test_tick_updates_autonomous_actors(self, setup_service):
         """tickによって自律行動アクター（モンスター）の行動が計画・実行されること（アクティブスポットのみ更新）"""
         service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service

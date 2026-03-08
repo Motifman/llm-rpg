@@ -267,7 +267,7 @@ class MovementApplicationService:
                 current_coord,
                 current_coord,
                 self._time_provider.get_current_tick().value,
-                "目的地を設定しました",
+                "目的地へ向かい始めました",
             )
 
     def tick_movement(self, command: TickMovementCommand) -> MoveResultDto:
@@ -278,6 +278,17 @@ class MovementApplicationService:
                 "action": "tick_movement",
                 "player_id": command.player_id
             }
+        )
+
+    def tick_movement_in_current_unit_of_work(self, player_id: int) -> MoveResultDto:
+        """既存の UnitOfWork 内で継続移動を 1 ステップ進める内部向け API。"""
+        command = TickMovementCommand(player_id=player_id)
+        return self._execute_with_error_handling(
+            operation=lambda: self._tick_movement_core(command),
+            context={
+                "action": "tick_movement",
+                "player_id": command.player_id,
+            },
         )
 
     def cancel_movement(self, command: CancelMovementCommand) -> MoveResultDto:
@@ -309,50 +320,52 @@ class MovementApplicationService:
             )
 
     def _tick_movement_impl(self, command: TickMovementCommand) -> MoveResultDto:
-        player_id = PlayerId(command.player_id)
-        
         with self._unit_of_work:
-            player_status = self._player_status_repository.find_by_id(player_id)
-            if not player_status:
-                raise PlayerNotFoundException(command.player_id)
+            return self._tick_movement_core(command)
 
-            next_coord = player_status.advance_path()
-            if not next_coord:
-                return self._create_failure_dto(command.player_id, "移動計画がないか、既に到着しています", player_status)
-            
-            # 移動実行
-            try:
-                result = self._execute_movement_step(
-                    command.player_id, target_coordinate=next_coord, player_status=player_status
-                )
-                if not result.success:
-                    player_status.clear_path()
-                    self._player_status_repository.save(player_status)
-                    return result
+    def _tick_movement_core(self, command: TickMovementCommand) -> MoveResultDto:
+        player_id = PlayerId(command.player_id)
+        player_status = self._player_status_repository.find_by_id(player_id)
+        if not player_status:
+            raise PlayerNotFoundException(command.player_id)
 
-                # 到着判定（スポット到着 or ロケーション到着）
-                player_status = self._player_status_repository.find_by_id(player_id)
-                if player_status.goal_spot_id and player_status.current_spot_id == player_status.goal_spot_id:
-                    if player_status.goal_destination_type == "spot":
-                        player_status.clear_path()
-                        self._player_status_repository.save(player_status)
-                    elif player_status.goal_destination_type == "location" and player_status.goal_location_area_id:
-                        physical_map = self._physical_map_repository.find_by_spot_id(player_status.current_spot_id)
-                        if physical_map and player_status.current_coordinate:
-                            try:
-                                loc_area = physical_map.get_location_area(player_status.goal_location_area_id)
-                                if loc_area.contains(player_status.current_coordinate):
-                                    player_status.clear_path()
-                                    self._player_status_repository.save(player_status)
-                            except Exception:
-                                pass
-
-                return result
-            except (MovementInvalidException, PathBlockedException, ActorBusyException, PlayerStaminaExhaustedException) as e:
-                # 業務的な失敗の場合は、経路をクリアした状態を保存して正常終了（失敗DTO）を返す
+        next_coord = player_status.advance_path()
+        if not next_coord:
+            return self._create_failure_dto(command.player_id, "移動計画がないか、既に到着しています", player_status)
+        
+        # 移動実行
+        try:
+            result = self._execute_movement_step(
+                command.player_id, target_coordinate=next_coord, player_status=player_status
+            )
+            if not result.success:
                 player_status.clear_path()
                 self._player_status_repository.save(player_status)
-                return self._create_failure_dto(command.player_id, str(e), player_status)
+                return result
+
+            # 到着判定（スポット到着 or ロケーション到着）
+            player_status = self._player_status_repository.find_by_id(player_id)
+            if player_status.goal_spot_id and player_status.current_spot_id == player_status.goal_spot_id:
+                if player_status.goal_destination_type == "spot":
+                    player_status.clear_path()
+                    self._player_status_repository.save(player_status)
+                elif player_status.goal_destination_type == "location" and player_status.goal_location_area_id:
+                    physical_map = self._physical_map_repository.find_by_spot_id(player_status.current_spot_id)
+                    if physical_map and player_status.current_coordinate:
+                        try:
+                            loc_area = physical_map.get_location_area(player_status.goal_location_area_id)
+                            if loc_area.contains(player_status.current_coordinate):
+                                player_status.clear_path()
+                                self._player_status_repository.save(player_status)
+                        except Exception:
+                            pass
+
+            return result
+        except (MovementInvalidException, PathBlockedException, ActorBusyException, PlayerStaminaExhaustedException) as e:
+            # 業務的な失敗の場合は、経路をクリアした状態を保存して正常終了（失敗DTO）を返す
+            player_status.clear_path()
+            self._player_status_repository.save(player_status)
+            return self._create_failure_dto(command.player_id, str(e), player_status)
 
     def _execute_movement_step(
         self, 
@@ -395,6 +408,8 @@ class MovementApplicationService:
             to_coord = from_coord.neighbor(direction)
         elif target_coordinate:
             to_coord = target_coordinate
+            if to_coord != from_coord:
+                direction = from_coord.direction_to(to_coord)
         else:
             raise MovementInvalidException("No movement target specified", player_id_int)
 
@@ -418,13 +433,19 @@ class MovementApplicationService:
                 raise PlayerStaminaExhaustedException(player_id_int, stamina_cost, player_status.stamina.value)
             
             # 5. ドメインロジックの実行（物理マップ内移動）
+            if direction is not None:
+                actor.turn(direction)
             physical_map.move_object(world_object_id, to_coord, current_tick, actor.capability)
             
             # スタミナ消費
             player_status.consume_stamina(int(stamina_cost))
             
             # プレイヤー状態の更新（座標）
-            player_status.update_location(current_spot_id, to_coord)
+            player_status.update_location(
+                current_spot_id,
+                to_coord,
+                current_tick=current_tick,
+            )
             
             # 6. イベント収集と後処理
             # ゲートウェイ判定などは同期イベントハンドラに委譲される

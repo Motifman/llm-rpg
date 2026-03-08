@@ -27,8 +27,13 @@ from ai_rpg_world.domain.player.exception import (
     InsufficientStaminaException,
     InsufficientHpException,
     InsufficientGoldException,
-    PlayerDownedException
+    PlayerDownedException,
+    SpeechValidationException,
 )
+from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.combat.service.combat_logic_service import CombatLogicService
 
 
@@ -97,7 +102,9 @@ def create_test_status_aggregate(
     hp: int = 100,
     mp: int = 50,
     stamina: int = 100,
-    is_down: bool = False
+    is_down: bool = False,
+    current_spot_id=None,
+    current_coordinate=None,
 ) -> PlayerStatusAggregate:
     """テスト用のPlayerStatusAggregateを作成"""
     if base_stats is None:
@@ -119,7 +126,9 @@ def create_test_status_aggregate(
         hp=Hp.create(hp, base_stats.max_hp),
         mp=Mp.create(mp, base_stats.max_mp),
         stamina=Stamina.create(stamina, stamina),  # max_stamina = stamina
-        is_down=is_down
+        is_down=is_down,
+        current_spot_id=current_spot_id,
+        current_coordinate=current_coordinate,
     )
 
 
@@ -739,6 +748,158 @@ class TestPlayerStatusAggregate:
         # スタミナとHPが両方不足している場合、スタミナ不足が優先される
         with pytest.raises(InsufficientStaminaException):
             aggregate.consume_resources(stamina_cost=10, hp_cost=10)
+
+    def test_speak_say_success(self):
+        """発言（SAY）で PlayerSpokeEvent が発火すること"""
+        spot_id = SpotId(1)
+        coord = Coordinate(0, 0, 0)
+        aggregate = create_test_status_aggregate(
+            player_id=1,
+            current_spot_id=spot_id,
+            current_coordinate=coord,
+        )
+        aggregate.speak(
+            content="こんにちは",
+            channel=SpeechChannel.SAY,
+            spot_id=spot_id,
+            speaker_coordinate=coord,
+        )
+        events = aggregate.get_events()
+        assert len(events) == 1
+        ev = events[0]
+        assert isinstance(ev, PlayerSpokeEvent)
+        assert ev.aggregate_id == aggregate.player_id
+        assert ev.content == "こんにちは"
+        assert ev.channel == SpeechChannel.SAY
+        assert ev.spot_id == spot_id
+        assert ev.speaker_coordinate == coord
+        assert ev.target_player_id is None
+
+    def test_speak_shout_success(self):
+        """シャウト（SHOUT）で PlayerSpokeEvent が発火すること"""
+        spot_id = SpotId(2)
+        coord = Coordinate(1, 1, 0)
+        aggregate = create_test_status_aggregate(
+            player_id=2,
+            current_spot_id=spot_id,
+            current_coordinate=coord,
+        )
+        aggregate.speak(
+            content="助けて！",
+            channel=SpeechChannel.SHOUT,
+            spot_id=spot_id,
+            speaker_coordinate=coord,
+        )
+        events = aggregate.get_events()
+        assert len(events) == 1
+        ev = events[0]
+        assert isinstance(ev, PlayerSpokeEvent)
+        assert ev.channel == SpeechChannel.SHOUT
+        assert ev.content == "助けて！"
+
+    def test_speak_whisper_success(self):
+        """囁き（WHISPER）で宛先を指定して PlayerSpokeEvent が発火すること"""
+        spot_id = SpotId(1)
+        coord = Coordinate(0, 0, 0)
+        target = PlayerId(99)
+        aggregate = create_test_status_aggregate(
+            player_id=1,
+            current_spot_id=spot_id,
+            current_coordinate=coord,
+        )
+        aggregate.speak(
+            content="内緒だよ",
+            channel=SpeechChannel.WHISPER,
+            spot_id=spot_id,
+            speaker_coordinate=coord,
+            target_player_id=target,
+        )
+        events = aggregate.get_events()
+        assert len(events) == 1
+        ev = events[0]
+        assert isinstance(ev, PlayerSpokeEvent)
+        assert ev.channel == SpeechChannel.WHISPER
+        assert ev.target_player_id == target
+        assert ev.content == "内緒だよ"
+
+    def test_speak_whisper_without_target_raises(self):
+        """囁きで宛先未指定の場合は SpeechValidationException"""
+        spot_id = SpotId(1)
+        coord = Coordinate(0, 0, 0)
+        aggregate = create_test_status_aggregate(
+            player_id=1,
+            current_spot_id=spot_id,
+            current_coordinate=coord,
+        )
+        with pytest.raises(SpeechValidationException, match="宛先プレイヤーを指定してください"):
+            aggregate.speak(
+                content="こんにちは",
+                channel=SpeechChannel.WHISPER,
+                spot_id=spot_id,
+                speaker_coordinate=coord,
+                target_player_id=None,
+            )
+
+    def test_speak_empty_content_raises(self):
+        """発言内容が空の場合は SpeechValidationException"""
+        spot_id = SpotId(1)
+        coord = Coordinate(0, 0, 0)
+        aggregate = create_test_status_aggregate(
+            player_id=1,
+            current_spot_id=spot_id,
+            current_coordinate=coord,
+        )
+        with pytest.raises(SpeechValidationException, match="発言内容を空にできません"):
+            aggregate.speak(
+                content="",
+                channel=SpeechChannel.SAY,
+                spot_id=spot_id,
+                speaker_coordinate=coord,
+            )
+        with pytest.raises(SpeechValidationException, match="発言内容を空にできません"):
+            aggregate.speak(
+                content="   ",
+                channel=SpeechChannel.SAY,
+                spot_id=spot_id,
+                speaker_coordinate=coord,
+            )
+
+    def test_speak_when_downed_raises(self):
+        """ダウン状態では発言できず PlayerDownedException"""
+        spot_id = SpotId(1)
+        coord = Coordinate(0, 0, 0)
+        aggregate = create_test_status_aggregate(
+            player_id=1,
+            is_down=True,
+            current_spot_id=spot_id,
+            current_coordinate=coord,
+        )
+        with pytest.raises(PlayerDownedException, match="ダウン状態のプレイヤーは発言できません"):
+            aggregate.speak(
+                content="助けて",
+                channel=SpeechChannel.SAY,
+                spot_id=spot_id,
+                speaker_coordinate=coord,
+            )
+
+    def test_speak_strips_content(self):
+        """発言内容の前後空白はトリムされてイベントに含まれること"""
+        spot_id = SpotId(1)
+        coord = Coordinate(0, 0, 0)
+        aggregate = create_test_status_aggregate(
+            player_id=1,
+            current_spot_id=spot_id,
+            current_coordinate=coord,
+        )
+        aggregate.speak(
+            content="  hello  ",
+            channel=SpeechChannel.SAY,
+            spot_id=spot_id,
+            speaker_coordinate=coord,
+        )
+        events = aggregate.get_events()
+        assert len(events) == 1
+        assert events[0].content == "hello"
 
     class TestStatusEffects:
         def test_effective_stats_with_multiplicative_buffs_via_domain_service(self):

@@ -64,26 +64,36 @@ class TestObservationOutput:
         with pytest.raises(TypeError, match="structured must be dict"):
             ObservationOutput(prose="a", structured="not a dict")
 
-    def test_causes_interrupt_default_is_false(self):
-        """causes_interrupt を省略した場合デフォルトは False"""
+    def test_schedules_turn_breaks_movement_default_are_false(self):
+        """schedules_turn / breaks_movement を省略した場合デフォルトは False"""
         out = ObservationOutput(prose="x", structured={})
-        assert out.causes_interrupt is False
+        assert out.schedules_turn is False
+        assert out.breaks_movement is False
 
-    def test_causes_interrupt_true(self):
-        """causes_interrupt=True で生成できる"""
+    def test_schedules_turn_breaks_movement_true(self):
+        """schedules_turn=True, breaks_movement=True で生成できる"""
         out = ObservationOutput(
             prose="戦闘不能になりました。",
             structured={"type": "player_downed"},
             observation_category="self_only",
-            causes_interrupt=True,
+            schedules_turn=True,
+            breaks_movement=True,
         )
-        assert out.causes_interrupt is True
+        assert out.schedules_turn is True
+        assert out.breaks_movement is True
 
-    def test_causes_interrupt_not_bool_raises_type_error(self):
-        """causes_interrupt が bool でない場合 TypeError"""
-        with pytest.raises(TypeError, match="causes_interrupt must be bool"):
+    def test_schedules_turn_not_bool_raises_type_error(self):
+        """schedules_turn が bool でない場合 TypeError"""
+        with pytest.raises(TypeError, match="schedules_turn must be bool"):
             ObservationOutput(
-                prose="x", structured={}, causes_interrupt="yes"  # type: ignore[arg-type]
+                prose="x", structured={}, schedules_turn="yes"  # type: ignore[arg-type]
+            )
+
+    def test_breaks_movement_not_bool_raises_type_error(self):
+        """breaks_movement が bool でない場合 TypeError"""
+        with pytest.raises(TypeError, match="breaks_movement must be bool"):
+            ObservationOutput(
+                prose="x", structured={}, breaks_movement="yes"  # type: ignore[arg-type]
             )
 
 
@@ -116,3 +126,29 @@ class TestObservationEntry:
         now = datetime.now()
         with pytest.raises(TypeError, match="output must be ObservationOutput"):
             ObservationEntry(occurred_at=now, output="invalid")
+
+    def test_game_time_label_optional_default_none(self, sample_output):
+        """game_time_label を省略した場合デフォルトは None"""
+        now = datetime.now()
+        entry = ObservationEntry(occurred_at=now, output=sample_output)
+        assert entry.game_time_label is None
+
+    def test_game_time_label_can_be_set(self, sample_output):
+        """game_time_label に文字列を指定できること"""
+        now = datetime.now()
+        entry = ObservationEntry(
+            occurred_at=now,
+            output=sample_output,
+            game_time_label="1年2月3日 12:30:45",
+        )
+        assert entry.game_time_label == "1年2月3日 12:30:45"
+
+    def test_game_time_label_not_str_raises_type_error(self, sample_output):
+        """game_time_label が str でも None でもない場合 TypeError"""
+        now = datetime.now()
+        with pytest.raises(TypeError, match="game_time_label must be str or None"):
+            ObservationEntry(
+                occurred_at=now,
+                output=sample_output,
+                game_time_label=123,  # type: ignore[arg-type]
+            )

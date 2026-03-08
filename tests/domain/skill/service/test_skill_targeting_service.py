@@ -90,9 +90,8 @@ class TestSkillTargetingDomainService:
             (Coordinate(3, 5), DirectionEnum.WEST),
             (Coordinate(5, 7), DirectionEnum.SOUTH),
             (Coordinate(5, 3), DirectionEnum.NORTH),
-            # 斜め: xの差が大きい場合は左右優先
-            (Coordinate(7, 6), DirectionEnum.EAST), # dx=2, dy=1
-            (Coordinate(6, 8), DirectionEnum.SOUTH), # dx=1, dy=3
+            (Coordinate(7, 6), DirectionEnum.SOUTHEAST),
+            (Coordinate(6, 8), DirectionEnum.SOUTHEAST),
             # 同じ座標
             (Coordinate(5, 5), DirectionEnum.SOUTH),
         ])

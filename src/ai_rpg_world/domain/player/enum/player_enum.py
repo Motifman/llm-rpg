@@ -74,3 +74,10 @@ class AttentionLevel(Enum):
     FULL = "FULL"                      # 全ての観測をそのまま渡す
     FILTER_SOCIAL = "FILTER_SOCIAL"    # 他プレイヤー入室・視界入り等を省略または要約
     IGNORE = "IGNORE"                  # 自分に直接関係するもの（ダメージ・アイテム・クエスト等）のみ渡す
+
+
+class SpeechChannel(Enum):
+    """プレイヤー間発言の届け方（囁き・発言・シャウト）。"""
+    WHISPER = "whisper"  # 範囲内の特定対象のみ
+    SAY = "say"          # 同一スポット内の一定範囲
+    SHOUT = "shout"     # 同一スポット内のより広い範囲

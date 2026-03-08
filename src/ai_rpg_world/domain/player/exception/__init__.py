@@ -22,6 +22,7 @@ from .player_exceptions import (
     PlayerDownedException,
     PlayerIdValidationException,
     PlayerNameValidationException,
+    SpeechValidationException,
     StatGrowthFactorValidationException,
     StaminaValidationException,
 )
@@ -42,6 +43,7 @@ __all__ = [
     "PlayerDownedException",
     "PlayerIdValidationException",
     "PlayerNameValidationException",
+    "SpeechValidationException",
     "StatGrowthFactorValidationException",
     "StaminaValidationException",
 ]

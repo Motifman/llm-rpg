@@ -11,7 +11,6 @@ from ai_rpg_world.domain.player.repository.player_status_repository import (
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.event.map_events import (
-    GatewayTriggeredEvent,
     LocationEnteredEvent,
     LocationExitedEvent,
     ItemTakenFromChestEvent,
@@ -55,8 +54,7 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
     def supports(self, event: Any) -> bool:
         """観測対象として定義されているイベント型なら True。"""
         return (
-            isinstance(event, GatewayTriggeredEvent)
-            or isinstance(event, LocationEnteredEvent)
+            isinstance(event, LocationEnteredEvent)
             or isinstance(event, LocationExitedEvent)
             or isinstance(event, PlayerLocationChangedEvent)
             or isinstance(event, PlayerDownedEvent)
@@ -87,9 +85,7 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
             seen.add(pid.value)
             result.append(pid)
 
-        if isinstance(event, GatewayTriggeredEvent):
-            self._resolve_gateway_triggered(event, add)
-        elif isinstance(event, LocationEnteredEvent):
+        if isinstance(event, LocationEnteredEvent):
             self._resolve_location_entered(event, add)
         elif isinstance(event, LocationExitedEvent):
             self._resolve_location_exited(event, add)
@@ -144,14 +140,6 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
             if s.current_spot_id is not None
             and s.current_spot_id.value == spot_id.value
         ]
-
-    def _resolve_gateway_triggered(
-        self, event: GatewayTriggeredEvent, add
-    ) -> None:
-        for pid in self._players_at_spot(event.target_spot_id):
-            add(pid)
-        if event.player_id_value is not None:
-            add(PlayerId(event.player_id_value))
 
     def _resolve_location_entered(
         self, event: LocationEnteredEvent, add

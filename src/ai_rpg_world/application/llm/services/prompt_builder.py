@@ -1,6 +1,7 @@
 """1 ターン分のプロンプト組み立てのデフォルト実装"""
 
-from typing import Any, Dict, Optional
+from importlib import import_module
+from typing import Any, Dict, List, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import SystemPromptPlayerInfoDto
 from ai_rpg_world.application.llm.contracts.interfaces import (
@@ -8,12 +9,15 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IAvailableToolsProvider,
     IContextFormatStrategy,
     ICurrentStateFormatter,
+    ILlmUiContextBuilder,
+    IPredictiveMemoryRetriever,
     IPromptBuilder,
     IRecentEventsFormatter,
     ISlidingWindowMemory,
     ISystemPromptBuilder,
 )
 from ai_rpg_world.application.llm.exceptions import PlayerProfileNotFoundForPromptException
+from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
 )
@@ -49,6 +53,8 @@ class DefaultPromptBuilder(IPromptBuilder):
         context_format_strategy: IContextFormatStrategy,
         system_prompt_builder: ISystemPromptBuilder,
         available_tools_provider: IAvailableToolsProvider,
+        ui_context_builder: Optional[ILlmUiContextBuilder] = None,
+        predictive_memory_retriever: Optional[IPredictiveMemoryRetriever] = None,
         recent_observations_limit: int = DEFAULT_RECENT_OBSERVATIONS_LIMIT,
         recent_actions_limit: int = DEFAULT_RECENT_ACTIONS_LIMIT,
         default_action_instruction: str = DEFAULT_ACTION_INSTRUCTION,
@@ -73,6 +79,16 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError("system_prompt_builder must be ISystemPromptBuilder")
         if not isinstance(available_tools_provider, IAvailableToolsProvider):
             raise TypeError("available_tools_provider must be IAvailableToolsProvider")
+        if ui_context_builder is not None and not isinstance(
+            ui_context_builder, ILlmUiContextBuilder
+        ):
+            raise TypeError("ui_context_builder must be ILlmUiContextBuilder or None")
+        if predictive_memory_retriever is not None and not isinstance(
+            predictive_memory_retriever, IPredictiveMemoryRetriever
+        ):
+            raise TypeError(
+                "predictive_memory_retriever must be IPredictiveMemoryRetriever or None"
+            )
         if recent_observations_limit < 0:
             raise ValueError("recent_observations_limit must be 0 or greater")
         if recent_actions_limit < 0:
@@ -90,6 +106,14 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._context_format_strategy = context_format_strategy
         self._system_prompt_builder = system_prompt_builder
         self._available_tools_provider = available_tools_provider
+        if ui_context_builder is not None:
+            self._ui_context_builder = ui_context_builder
+        else:
+            builder_module = import_module(
+                "ai_rpg_world.application.llm.services.ui_context_builder"
+            )
+            self._ui_context_builder = builder_module.DefaultLlmUiContextBuilder()
+        self._predictive_memory_retriever = predictive_memory_retriever
         self._recent_observations_limit = recent_observations_limit
         self._recent_actions_limit = recent_actions_limit
         self._default_action_instruction = default_action_instruction
@@ -116,19 +140,25 @@ class DefaultPromptBuilder(IPromptBuilder):
             game_description="",
         )
 
-        # 2. drain してスライディングウィンドウに append
+        # 2. drain してスライディングウィンドウに append（溢れは記憶抽出用に返す）
         drained = self._observation_buffer.drain(player_id)
+        overflow: List[ObservationEntry] = []
         if drained:
-            self._sliding_window.append_all(player_id, drained)
+            overflow = self._sliding_window.append_all(player_id, drained)
 
         # 3. 現在状態取得（None の場合はプレースホルダ）
         current_state_dto = self._world_query_service.get_player_current_state(
             GetPlayerCurrentStateQuery(player_id=player_id.value)
         )
         if current_state_dto is not None:
-            current_state_text = self._current_state_formatter.format(current_state_dto)
+            base_current_state_text = self._current_state_formatter.format(current_state_dto)
         else:
-            current_state_text = MESSAGE_WHEN_PLAYER_NOT_PLACED
+            base_current_state_text = MESSAGE_WHEN_PLAYER_NOT_PLACED
+        ui_context = self._ui_context_builder.build(
+            base_current_state_text,
+            current_state_dto,
+        )
+        current_state_text = ui_context.current_state_text
 
         # 4. 直近の出来事（観測＋行動結果をマージ）
         observations = self._sliding_window.get_recent(
@@ -141,21 +171,47 @@ class DefaultPromptBuilder(IPromptBuilder):
             observations, action_results
         )
 
-        # 5. コンテキスト 1 本（関連記憶は Phase 1 では空）
-        relevant_memories_text = ""
+        # 5. 利用可能ツール取得（関連記憶の候補行動名と返り値の両方で使用）
+        tools = self._available_tools_provider.get_available_tools(current_state_dto)
+        tool_names = [
+            t["function"]["name"]
+            for t in tools
+            if t.get("type") == "function" and "function" in t
+        ]
+
+        # 6. 関連する記憶（Retriever が設定されていれば取得）
+        if self._predictive_memory_retriever is not None:
+            from ai_rpg_world.application.llm.services.predictive_memory_retriever import (
+                build_memory_retrieval_query_from_state,
+            )
+
+            query_dto = None
+            if current_state_dto is not None:
+                query_dto = build_memory_retrieval_query_from_state(
+                    current_state_dto,
+                    tool_names,
+                    current_state_summary=base_current_state_text,
+                )
+            relevant_memories_text = (
+                self._predictive_memory_retriever.retrieve_for_prediction(
+                    player_id,
+                    base_current_state_text,
+                    tool_names,
+                    query_dto=query_dto,
+                )
+            )
+        else:
+            relevant_memories_text = ""
         context = self._context_format_strategy.format(
             current_state_text, recent_events_text, relevant_memories_text
         )
 
-        # 6. システムプロンプト・ユーザーメッセージ
+        # 7. システムプロンプト・ユーザーメッセージ
         system_content = self._system_prompt_builder.build(player_info)
         instruction = action_instruction or self._default_action_instruction
         user_content = context.rstrip() + "\n\n" + instruction
 
-        # 7. 利用可能ツール（ToolAvailabilityContext = PlayerCurrentStateDto）
-        tools = self._available_tools_provider.get_available_tools(current_state_dto)
-
-        return {
+        result: Dict[str, Any] = {
             "messages": [
                 {"role": "system", "content": system_content},
                 {"role": "user", "content": user_content},
@@ -163,3 +219,6 @@ class DefaultPromptBuilder(IPromptBuilder):
             "tools": tools,
             "tool_choice": "required",
         }
+        result["overflow"] = overflow
+        result["tool_runtime_context"] = ui_context.tool_runtime_context
+        return result
