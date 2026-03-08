@@ -45,7 +45,7 @@ class TestDefaultSlidingWindowMemory:
         assert got == []
 
     def test_append_all_adds_multiple_entries(self, memory, sample_entry):
-        """append_all で複数件追加できる"""
+        """append_all で複数件追加できる。溢れが無いときは空リストを返す"""
         player_id = PlayerId(1)
         entry2 = ObservationEntry(
             occurred_at=datetime.now(),
@@ -55,7 +55,8 @@ class TestDefaultSlidingWindowMemory:
                 observation_category="self_only",
             ),
         )
-        memory.append_all(player_id, [sample_entry, entry2])
+        overflow = memory.append_all(player_id, [sample_entry, entry2])
+        assert overflow == []
         got = memory.get_recent(player_id, 10)
         assert len(got) == 2
 
@@ -95,6 +96,34 @@ class TestDefaultSlidingWindowMemory:
             )
         got = memory.get_recent(player_id, 10)
         assert len(got) == 3
+
+    def test_append_all_returns_overflow_when_over_capacity(self, sample_entry):
+        """append_all で容量を超えると溢れた観測のリストを返す"""
+        memory = DefaultSlidingWindowMemory(max_entries_per_player=2)
+        player_id = PlayerId(1)
+        entry2 = ObservationEntry(
+            occurred_at=datetime.now(),
+            output=ObservationOutput(
+                prose="2",
+                structured={},
+                observation_category="self_only",
+            ),
+        )
+        entry3 = ObservationEntry(
+            occurred_at=datetime.now(),
+            output=ObservationOutput(
+                prose="3",
+                structured={},
+                observation_category="self_only",
+            ),
+        )
+        overflow = memory.append_all(player_id, [sample_entry, entry2, entry3])
+        assert len(overflow) == 1
+        assert overflow[0].output.prose == "観測"
+        got = memory.get_recent(player_id, 10)
+        assert len(got) == 2
+        assert got[0].output.prose == "3"
+        assert got[1].output.prose == "2"
 
     def test_init_max_entries_zero_raises_value_error(self):
         """max_entries_per_player が 0 以下で ValueError"""

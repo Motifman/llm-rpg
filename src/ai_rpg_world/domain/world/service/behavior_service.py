@@ -4,6 +4,7 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.facing import Facing
 from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
 from ai_rpg_world.domain.world.value_object.behavior_context import (
     TargetSelectionContext,
@@ -170,13 +171,7 @@ class BehaviorService:
             return True
         if actor.coordinate == target_coord:
             return True
-        dir_vectors = {
-            DirectionEnum.NORTH: (0, -1),
-            DirectionEnum.SOUTH: (0, 1),
-            DirectionEnum.EAST: (1, 0),
-            DirectionEnum.WEST: (-1, 0),
-        }
-        actor_dir = dir_vectors.get(component.direction)
+        actor_dir = Facing.from_direction(component.direction).to_2d_vector()
         if actor_dir is None:
             return True
         target_vec = (

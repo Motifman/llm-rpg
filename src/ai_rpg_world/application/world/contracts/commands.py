@@ -147,3 +147,17 @@ class ChangeAttentionLevelCommand:
             raise ValueError("player_id must be greater than 0")
         if not isinstance(self.attention_level, AttentionLevel):
             raise ValueError("attention_level must be an AttentionLevel enum value")
+
+
+@dataclass(frozen=True)
+class InteractWorldObjectCommand:
+    """追加引数不要のワールドオブジェクト相互作用コマンド"""
+
+    player_id: int
+    target_world_object_id: int
+
+    def __post_init__(self):
+        if self.player_id <= 0:
+            raise ValueError("player_id must be greater than 0")
+        if self.target_world_object_id <= 0:
+            raise ValueError("target_world_object_id must be greater than 0")

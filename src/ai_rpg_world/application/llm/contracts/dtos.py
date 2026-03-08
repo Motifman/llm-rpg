@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -85,5 +85,358 @@ class ToolDefinitionDto:
             raise TypeError("parameters must be dict")
 
 
+@dataclass(frozen=True)
+class ToolRuntimeTargetDto:
+    """一時ラベルから内部IDへ解決するためのターゲット情報。"""
+
+    label: str
+    kind: str
+    display_name: str
+    player_id: Optional[int] = None
+    world_object_id: Optional[int] = None
+    spot_id: Optional[int] = None
+    location_area_id: Optional[int] = None
+    destination_type: Optional[str] = None
+    distance: Optional[int] = None
+    direction: Optional[str] = None
+    target_x: Optional[int] = None
+    target_y: Optional[int] = None
+    target_z: Optional[int] = None
+    relative_dx: Optional[int] = None
+    relative_dy: Optional[int] = None
+    relative_dz: Optional[int] = None
+    interaction_type: Optional[str] = None
+    available_interactions: Tuple[str, ...] = ()
+    item_instance_id: Optional[int] = None
+    inventory_slot_id: Optional[int] = None
+    chest_world_object_id: Optional[int] = None
+    conversation_choice_index: Optional[int] = None
+    skill_loadout_id: Optional[int] = None
+    skill_slot_index: Optional[int] = None
+    attention_level_value: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.label, str):
+            raise TypeError("label must be str")
+        if not isinstance(self.kind, str):
+            raise TypeError("kind must be str")
+        if not isinstance(self.display_name, str):
+            raise TypeError("display_name must be str")
+        if self.player_id is not None and not isinstance(self.player_id, int):
+            raise TypeError("player_id must be int or None")
+        if self.world_object_id is not None and not isinstance(self.world_object_id, int):
+            raise TypeError("world_object_id must be int or None")
+        if self.spot_id is not None and not isinstance(self.spot_id, int):
+            raise TypeError("spot_id must be int or None")
+        if self.location_area_id is not None and not isinstance(self.location_area_id, int):
+            raise TypeError("location_area_id must be int or None")
+        if self.destination_type is not None and not isinstance(self.destination_type, str):
+            raise TypeError("destination_type must be str or None")
+        if self.distance is not None and not isinstance(self.distance, int):
+            raise TypeError("distance must be int or None")
+        if self.direction is not None and not isinstance(self.direction, str):
+            raise TypeError("direction must be str or None")
+        if self.target_x is not None and not isinstance(self.target_x, int):
+            raise TypeError("target_x must be int or None")
+        if self.target_y is not None and not isinstance(self.target_y, int):
+            raise TypeError("target_y must be int or None")
+        if self.target_z is not None and not isinstance(self.target_z, int):
+            raise TypeError("target_z must be int or None")
+        if self.relative_dx is not None and not isinstance(self.relative_dx, int):
+            raise TypeError("relative_dx must be int or None")
+        if self.relative_dy is not None and not isinstance(self.relative_dy, int):
+            raise TypeError("relative_dy must be int or None")
+        if self.relative_dz is not None and not isinstance(self.relative_dz, int):
+            raise TypeError("relative_dz must be int or None")
+        if self.interaction_type is not None and not isinstance(self.interaction_type, str):
+            raise TypeError("interaction_type must be str or None")
+        if self.item_instance_id is not None and not isinstance(self.item_instance_id, int):
+            raise TypeError("item_instance_id must be int or None")
+        if self.inventory_slot_id is not None and not isinstance(self.inventory_slot_id, int):
+            raise TypeError("inventory_slot_id must be int or None")
+        if self.chest_world_object_id is not None and not isinstance(self.chest_world_object_id, int):
+            raise TypeError("chest_world_object_id must be int or None")
+        if self.conversation_choice_index is not None and not isinstance(
+            self.conversation_choice_index, int
+        ):
+            raise TypeError("conversation_choice_index must be int or None")
+        if self.skill_loadout_id is not None and not isinstance(self.skill_loadout_id, int):
+            raise TypeError("skill_loadout_id must be int or None")
+        if self.skill_slot_index is not None and not isinstance(self.skill_slot_index, int):
+            raise TypeError("skill_slot_index must be int or None")
+        if self.attention_level_value is not None and not isinstance(
+            self.attention_level_value, str
+        ):
+            raise TypeError("attention_level_value must be str or None")
+        if not isinstance(self.available_interactions, tuple):
+            raise TypeError("available_interactions must be tuple")
+        for value in self.available_interactions:
+            if not isinstance(value, str):
+                raise TypeError("available_interactions must contain only str")
+
+
+@dataclass(frozen=True)
+class VisibleToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """視界内対象用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class PlayerToolRuntimeTargetDto(VisibleToolRuntimeTargetDto):
+    """プレイヤー対象用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class NpcToolRuntimeTargetDto(VisibleToolRuntimeTargetDto):
+    """NPC 対象用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class MonsterToolRuntimeTargetDto(VisibleToolRuntimeTargetDto):
+    """モンスター対象用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class ChestToolRuntimeTargetDto(VisibleToolRuntimeTargetDto):
+    """チェスト対象用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class ResourceToolRuntimeTargetDto(VisibleToolRuntimeTargetDto):
+    """採集対象用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class WorldObjectToolRuntimeTargetDto(VisibleToolRuntimeTargetDto):
+    """一般的な相互作用対象用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class DestinationToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """移動先用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class InventoryToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """インベントリアイテム用の runtime target。"""
+
+    is_placeable: bool = False
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if not isinstance(self.is_placeable, bool):
+            raise TypeError("is_placeable must be bool")
+
+
+@dataclass(frozen=True)
+class ChestItemToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """チェスト内アイテム用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class ConversationChoiceToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """会話選択肢用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class SkillToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """スキル用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class AttentionLevelToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """注意レベル用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class ToolRuntimeContextDto:
+    """LLM UIのそのターン限定ラベル解決コンテキスト。"""
+
+    targets: Dict[str, ToolRuntimeTargetDto]
+    current_x: Optional[int] = None
+    current_y: Optional[int] = None
+    current_z: Optional[int] = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.targets, dict):
+            raise TypeError("targets must be dict")
+        for label, target in self.targets.items():
+            if not isinstance(label, str):
+                raise TypeError("targets keys must be str")
+            if not isinstance(target, ToolRuntimeTargetDto):
+                raise TypeError("targets values must be ToolRuntimeTargetDto")
+        for name, value in (
+            ("current_x", self.current_x),
+            ("current_y", self.current_y),
+            ("current_z", self.current_z),
+        ):
+            if value is not None and not isinstance(value, int):
+                raise TypeError(f"{name} must be int or None")
+
+    @classmethod
+    def empty(cls) -> "ToolRuntimeContextDto":
+        return cls(targets={})
+
+
+@dataclass(frozen=True)
+class LlmUiContextDto:
+    """LLM に見せる現在状態テキストと、内部用のツール実行コンテキスト。"""
+
+    current_state_text: str
+    tool_runtime_context: ToolRuntimeContextDto
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.current_state_text, str):
+            raise TypeError("current_state_text must be str")
+        if not isinstance(self.tool_runtime_context, ToolRuntimeContextDto):
+            raise TypeError("tool_runtime_context must be ToolRuntimeContextDto")
+
+
 # ToolAvailabilityContext は PlayerCurrentStateDto をそのまま利用する。
 # ツールの利用可否判定に必要な現在地・接続先・視界・移動先等はすべて PlayerCurrentStateDto に含まれる。
+
+# --- 記憶モジュール（Phase 4）---
+
+EpisodeImportance = Literal["low", "medium", "high"]
+
+
+@dataclass(frozen=True)
+class MemoryRetrievalQueryDto:
+    """
+    予測記憶検索用のクエリ DTO。
+    PlayerCurrentStateDto 由来の spot/notable/actionable と tool_names を渡すことで、
+    current_state_text の文字面依存を弱める。
+    検索優先度: world_object_ids/spot_ids (stable) > entity_ids > location_ids
+    > actionable/notable > action_names > free_text_keywords
+    """
+
+    entity_ids: Tuple[str, ...] = ()
+    location_ids: Tuple[str, ...] = ()
+    notable_labels: Tuple[str, ...] = ()
+    actionable_labels: Tuple[str, ...] = ()
+    action_names: Tuple[str, ...] = ()
+    free_text_keywords: Tuple[str, ...] = ()
+    world_object_ids: Tuple[int, ...] = ()
+    spot_ids: Tuple[int, ...] = ()
+
+    def __post_init__(self) -> None:
+        for name, val in [
+            ("entity_ids", self.entity_ids),
+            ("location_ids", self.location_ids),
+            ("notable_labels", self.notable_labels),
+            ("actionable_labels", self.actionable_labels),
+            ("action_names", self.action_names),
+            ("free_text_keywords", self.free_text_keywords),
+        ]:
+            if not isinstance(val, tuple):
+                raise TypeError(f"{name} must be tuple")
+            for x in val:
+                if not isinstance(x, str):
+                    raise TypeError(f"{name} must contain only str")
+        if not isinstance(self.world_object_ids, tuple):
+            raise TypeError("world_object_ids must be tuple")
+        for x in self.world_object_ids:
+            if not isinstance(x, int):
+                raise TypeError("world_object_ids must contain only int")
+        if not isinstance(self.spot_ids, tuple):
+            raise TypeError("spot_ids must be tuple")
+        for x in self.spot_ids:
+            if not isinstance(x, int):
+                raise TypeError("spot_ids must contain only int")
+
+
+@dataclass(frozen=True)
+class EpisodeMemoryEntry:
+    """エピソード記憶 1 件（記憶抽出の出力・ストアの保存単位）。
+    world_object_ids, spot_id_value は stable id 検索用。display name は entity_ids, location_id に保持。
+    """
+
+    id: str
+    context_summary: str
+    action_taken: str
+    outcome_summary: str
+    entity_ids: Tuple[str, ...]
+    location_id: Optional[str]
+    timestamp: datetime
+    importance: EpisodeImportance
+    surprise: bool
+    recall_count: int
+    world_object_ids: Tuple[int, ...] = ()
+    spot_id_value: Optional[int] = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.id, str):
+            raise TypeError("id must be str")
+        if not isinstance(self.context_summary, str):
+            raise TypeError("context_summary must be str")
+        if not isinstance(self.action_taken, str):
+            raise TypeError("action_taken must be str")
+        if not isinstance(self.outcome_summary, str):
+            raise TypeError("outcome_summary must be str")
+        if not isinstance(self.entity_ids, tuple):
+            raise TypeError("entity_ids must be tuple")
+        for x in self.entity_ids:
+            if not isinstance(x, str):
+                raise TypeError("entity_ids must contain only str")
+        if self.location_id is not None and not isinstance(self.location_id, str):
+            raise TypeError("location_id must be str or None")
+        if not isinstance(self.timestamp, datetime):
+            raise TypeError("timestamp must be datetime")
+        if self.importance not in ("low", "medium", "high"):
+            raise TypeError("importance must be 'low', 'medium', or 'high'")
+        if not isinstance(self.surprise, bool):
+            raise TypeError("surprise must be bool")
+        if not isinstance(self.recall_count, int) or self.recall_count < 0:
+            raise TypeError("recall_count must be non-negative int")
+        if not isinstance(self.world_object_ids, tuple):
+            raise TypeError("world_object_ids must be tuple")
+        for x in self.world_object_ids:
+            if not isinstance(x, int):
+                raise TypeError("world_object_ids must contain only int")
+        if self.spot_id_value is not None and not isinstance(self.spot_id_value, int):
+            raise TypeError("spot_id_value must be int or None")
+
+
+@dataclass(frozen=True)
+class LongTermFactEntry:
+    """長期記憶（事実・教訓）1 件。"""
+
+    id: str
+    content: str
+    player_id: int
+    updated_at: datetime
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.id, str):
+            raise TypeError("id must be str")
+        if not isinstance(self.content, str):
+            raise TypeError("content must be str")
+        if not isinstance(self.player_id, int):
+            raise TypeError("player_id must be int")
+        if not isinstance(self.updated_at, datetime):
+            raise TypeError("updated_at must be datetime")
+
+
+@dataclass(frozen=True)
+class MemoryLawEntry:
+    """長期記憶（法則・共起）1 件。主体–関係–対象＋強度。"""
+
+    id: str
+    subject: str
+    relation: str
+    target: str  # 対象
+    strength: float
+    player_id: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.id, str):
+            raise TypeError("id must be str")
+        if not isinstance(self.subject, str):
+            raise TypeError("subject must be str")
+        if not isinstance(self.relation, str):
+            raise TypeError("relation must be str")
+        if not isinstance(self.target, str):
+            raise TypeError("target must be str")
+        if not isinstance(self.strength, (int, float)):
+            raise TypeError("strength must be int or float")
+        if not isinstance(self.player_id, int):
+            raise TypeError("player_id must be int")

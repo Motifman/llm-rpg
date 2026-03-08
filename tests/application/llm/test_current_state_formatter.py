@@ -24,17 +24,25 @@ def _minimal_current_state_dto(
 ):
     """テスト用の最小限の PlayerCurrentStateDto を組み立てる"""
     visible = []
+    notable = []
+    actionable = []
     if has_visible_objects:
-        visible = [
-            VisibleObjectDto(
-                object_id=1,
-                object_type="player",
-                x=1,
-                y=1,
-                z=0,
-                distance=2,
-            ),
-        ]
+        target = VisibleObjectDto(
+            object_id=1,
+            object_type="player",
+            x=1,
+            y=1,
+            z=0,
+            distance=2,
+            display_name="Bob",
+            direction_from_player="南東",
+            can_interact=True,
+            is_notable=True,
+            notable_reason="actionable",
+        )
+        visible = [target]
+        notable = [target]
+        actionable = [target]
     moves = None
     total_moves = None
     if has_available_moves:
@@ -72,6 +80,8 @@ def _minimal_current_state_dto(
         available_moves=moves,
         total_available_moves=total_moves,
         attention_level=AttentionLevel.FULL,
+        actionable_objects=actionable,
+        notable_objects=notable,
     )
 
 
@@ -104,19 +114,19 @@ class TestDefaultCurrentStateFormatter:
         assert "天気: rain" in text
         assert "地形: grass" in text
 
-    def test_format_includes_visible_objects_when_present(self, formatter):
-        """視界内オブジェクトがあるとき表示される"""
+    def test_format_includes_notable_and_actionable_count_only(self, formatter):
+        """注目対象と行動可能対象は件数のみ要約（詳細は UiContextBuilder の責務）"""
         dto = _minimal_current_state_dto(has_visible_objects=True)
         text = formatter.format(dto)
-        assert "視界内オブジェクト" in text
-        assert "タイプ=player" in text
+        assert "視界距離: 5" in text
+        assert "注目対象: 1件" in text
+        assert "今すぐ行動可能な対象: 1件" in text
 
-    def test_format_includes_available_moves_when_present(self, formatter):
-        """利用可能な移動先があるとき表示される"""
+    def test_format_includes_available_moves_count_when_present(self, formatter):
+        """利用可能な移動先は件数のみ要約（詳細は UiContextBuilder）"""
         dto = _minimal_current_state_dto(has_available_moves=True)
         text = formatter.format(dto)
-        assert "利用可能な移動先" in text
-        assert "隣のスポット" in text
+        assert "利用可能な移動先: 1 件" in text
 
     def test_format_includes_attention_level(self, formatter):
         """注意レベルが含まれる（enum の value が表示される）"""
@@ -124,6 +134,15 @@ class TestDefaultCurrentStateFormatter:
         text = formatter.format(dto)
         assert "注意レベル" in text
         assert AttentionLevel.FULL.value in text
+
+    def test_format_includes_busy_state_when_busy(self, formatter):
+        """busy 状態があるとき行動状態が含まれる"""
+        dto = _minimal_current_state_dto()
+        dto.is_busy = True
+        dto.busy_until_tick = 42
+        text = formatter.format(dto)
+        assert "行動状態: 実行中" in text
+        assert "42" in text
 
     def test_format_dto_none_raises_type_error(self, formatter):
         """dto が None のとき TypeError"""

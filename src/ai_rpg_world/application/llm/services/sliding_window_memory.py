@@ -32,7 +32,9 @@ class DefaultSlidingWindowMemory(ISlidingWindowMemory):
         if len(self._store[key]) > self._max_entries:
             self._store[key] = self._store[key][-self._max_entries :]
 
-    def append_all(self, player_id: PlayerId, entries: List[ObservationEntry]) -> None:
+    def append_all(
+        self, player_id: PlayerId, entries: List[ObservationEntry]
+    ) -> List[ObservationEntry]:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         if not isinstance(entries, list):
@@ -44,8 +46,12 @@ class DefaultSlidingWindowMemory(ISlidingWindowMemory):
         if key not in self._store:
             self._store[key] = []
         self._store[key].extend(entries)
+        overflow: List[ObservationEntry] = []
         if len(self._store[key]) > self._max_entries:
+            n_overflow = len(self._store[key]) - self._max_entries
+            overflow = self._store[key][:n_overflow]
             self._store[key] = self._store[key][-self._max_entries :]
+        return overflow
 
     def get_recent(self, player_id: PlayerId, limit: int) -> List[ObservationEntry]:
         if not isinstance(player_id, PlayerId):

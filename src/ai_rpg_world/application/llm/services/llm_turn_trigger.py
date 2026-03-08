@@ -1,7 +1,10 @@
 """
 LLM ターン駆動のデフォルト実装。
 スケジュール済みプレイヤーを保持し、run_scheduled_turns で LlmAgentTurnRunner.run_turn を 1 プレイヤーあたり 1 回ずつ実行する。
+プレイヤー単位で例外を隔離し、1 人の失敗で他プレイヤーの予定ターンが失われない。
 """
+
+import logging
 
 from ai_rpg_world.application.llm.contracts.interfaces import ILlmTurnTrigger
 from ai_rpg_world.application.llm.services.llm_agent_turn_runner import LlmAgentTurnRunner
@@ -13,6 +16,7 @@ class DefaultLlmTurnTrigger(ILlmTurnTrigger):
     観測到着時に schedule_turn でキューに追加し、
     ゲームループ等から run_scheduled_turns で一括実行する。
     同一プレイヤーは 1 回の run_scheduled_turns で 1 回だけ run_turn される。
+    プレイヤー単位で例外を隔離するため、1 人の run_turn 失敗でも他プレイヤーは実行される。
     """
 
     def __init__(self, turn_runner: LlmAgentTurnRunner) -> None:
@@ -20,6 +24,7 @@ class DefaultLlmTurnTrigger(ILlmTurnTrigger):
             raise TypeError("turn_runner must be LlmAgentTurnRunner")
         self._turn_runner = turn_runner
         self._pending: set[int] = set()
+        self._logger = logging.getLogger(self.__class__.__name__)
 
     def schedule_turn(self, player_id: PlayerId) -> None:
         if not isinstance(player_id, PlayerId):
@@ -27,8 +32,19 @@ class DefaultLlmTurnTrigger(ILlmTurnTrigger):
         self._pending.add(player_id.value)
 
     def run_scheduled_turns(self) -> None:
-        """スケジュール済みの全プレイヤーについて run_turn を 1 回ずつ実行し、キューをクリアする。"""
+        """
+        スケジュール済みの全プレイヤーについて run_turn を 1 回ずつ実行し、キューをクリアする。
+        プレイヤー単位で例外を隔離し、失敗したプレイヤーはログに記録するが他プレイヤーの実行は継続する。
+        """
         to_run = list(self._pending)
         self._pending.clear()
         for pid in to_run:
-            self._turn_runner.run_turn(PlayerId(pid))
+            try:
+                self._turn_runner.run_turn(PlayerId(pid))
+            except Exception as e:
+                self._logger.warning(
+                    "LLM turn failed for player %s: %s",
+                    pid,
+                    str(e),
+                    exc_info=True,
+                )

@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Set, Optional
 from datetime import datetime
 
@@ -43,6 +43,20 @@ class VisibleObjectDto:
     y: int
     z: int
     distance: int
+    display_name: Optional[str] = None
+    object_kind: Optional[str] = None
+    direction_from_player: Optional[str] = None
+    is_interactable: bool = False
+    player_id_value: Optional[int] = None
+    is_self: bool = False
+    interaction_type: Optional[str] = None
+    available_interactions: List[str] = field(default_factory=list)
+    can_interact: bool = False
+    can_harvest: bool = False
+    can_store_in_chest: bool = False
+    can_take_from_chest: bool = False
+    is_notable: bool = False
+    notable_reason: Optional[str] = None
 
 
 @dataclass
@@ -100,6 +114,70 @@ class PlayerMovementOptionsDto:
 
 
 @dataclass
+class InventoryItemDto:
+    """インベントリ内アイテム 1 件の DTO"""
+
+    inventory_slot_id: int
+    item_instance_id: int
+    display_name: str
+    quantity: int
+    is_placeable: bool = False
+
+
+@dataclass
+class ChestItemDto:
+    """チェスト内アイテム 1 件の DTO"""
+
+    chest_world_object_id: int
+    chest_display_name: str
+    item_instance_id: int
+    display_name: str
+    quantity: int
+
+
+@dataclass
+class ConversationChoiceDto:
+    """会話の選択肢または次へ操作の DTO"""
+
+    display_text: str
+    choice_index: Optional[int] = None
+    is_next: bool = False
+
+
+@dataclass
+class ActiveConversationDto:
+    """現在進行中の会話セッション DTO"""
+
+    npc_world_object_id: int
+    npc_display_name: str
+    node_text: str
+    choices: List[ConversationChoiceDto]
+    is_terminal: bool
+
+
+@dataclass
+class UsableSkillDto:
+    """使用可能スキル 1 件の DTO"""
+
+    skill_loadout_id: int
+    skill_slot_index: int
+    skill_id: int
+    display_name: str
+    mp_cost: int = 0
+    stamina_cost: int = 0
+    hp_cost: int = 0
+
+
+@dataclass
+class AttentionLevelOptionDto:
+    """選択可能な注意レベル DTO"""
+
+    value: str
+    display_name: str
+    description: str
+
+
+@dataclass
 class PlayerCurrentStateDto:
     """
     LLM 入力用の単一「現在状態」DTO。
@@ -137,3 +215,14 @@ class PlayerCurrentStateDto:
     attention_level: AttentionLevel
     # 複数ティックの行動中か（経路設定済みの移動中など）。割り込み判定に利用。
     is_busy: bool = False
+    busy_until_tick: Optional[int] = None
+    has_active_path: bool = False
+    # sibling-list UI context
+    inventory_items: List[InventoryItemDto] = field(default_factory=list)
+    chest_items: List[ChestItemDto] = field(default_factory=list)
+    active_conversation: Optional[ActiveConversationDto] = None
+    usable_skills: List[UsableSkillDto] = field(default_factory=list)
+    attention_level_options: List[AttentionLevelOptionDto] = field(default_factory=list)
+    can_destroy_placeable: bool = False
+    actionable_objects: List[VisibleObjectDto] = field(default_factory=list)
+    notable_objects: List[VisibleObjectDto] = field(default_factory=list)

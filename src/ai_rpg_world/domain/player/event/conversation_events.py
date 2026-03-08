@@ -1,25 +1,23 @@
-import uuid
+"""プレイヤー間発言のドメインイベント（囁き・発言・シャウト）"""
+
 from dataclasses import dataclass
 from typing import Optional
-from datetime import datetime
-from ai_rpg_world.domain.common.domain_event import DomainEvent
-from ai_rpg_world.domain.player.value_object.message import Message
+
+from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 
 
-@dataclass(frozen=True, kw_only=True)
-class PlayerSpokeEvent(DomainEvent):
-    sender_id: int
+@dataclass(frozen=True)
+class PlayerSpokeEvent(BaseDomainEvent[PlayerId, "PlayerStatusAggregate"]):
+    """プレイヤーが発言したイベント（aggregate_id = 話し手の PlayerId）。
+    囁き・発言・シャウトの種別と、配信先解決に必要な spot_id / speaker_coordinate を持つ。
+    """
+
     content: str
-    recipient_id: Optional[int] = None
-    
-    @classmethod
-    def create(cls, sender_id: int, content: str, recipient_id: Optional[int] = None):
-        return cls(
-            event_id=int(uuid.uuid4()),
-            occurred_at=datetime.now(),
-            aggregate_id=sender_id,
-            aggregate_type="Player",
-            sender_id=sender_id,
-            content=content,
-            recipient_id=recipient_id
-        )
+    channel: SpeechChannel
+    spot_id: SpotId
+    speaker_coordinate: Coordinate
+    target_player_id: Optional[PlayerId] = None  # WHISPER 時のみ使用

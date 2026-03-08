@@ -55,11 +55,26 @@ class MovementCapabilityEnum(Enum):
 class DirectionEnum(Enum):
     """向きの種類"""
     NORTH = "NORTH"
+    NORTHEAST = "NORTHEAST"
     SOUTH = "SOUTH"
+    SOUTHEAST = "SOUTHEAST"
     EAST = "EAST"
     WEST = "WEST"
+    NORTHWEST = "NORTHWEST"
+    SOUTHWEST = "SOUTHWEST"
     UP = "UP"
     DOWN = "DOWN"
+
+    def to_2d_vector(self) -> tuple[int, int] | None:
+        from ai_rpg_world.domain.world.value_object.facing import Facing
+
+        return Facing.from_direction(self).to_2d_vector()
+
+    @classmethod
+    def from_delta(cls, dx: int, dy: int, dz: int = 0) -> "DirectionEnum":
+        from ai_rpg_world.domain.world.value_object.facing import Facing
+
+        return Facing.from_delta(dx, dy, dz).to_direction()
 
 
 class EnvironmentTypeEnum(Enum):

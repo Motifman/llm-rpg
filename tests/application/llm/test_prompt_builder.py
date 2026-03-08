@@ -27,6 +27,15 @@ from ai_rpg_world.application.llm.services.context_format_strategy import (
 from ai_rpg_world.application.llm.services.game_tool_registry import (
     DefaultGameToolRegistry,
 )
+from ai_rpg_world.application.llm.services.in_memory_episode_memory_store import (
+    InMemoryEpisodeMemoryStore,
+)
+from ai_rpg_world.application.llm.services.in_memory_long_term_memory_store import (
+    InMemoryLongTermMemoryStore,
+)
+from ai_rpg_world.application.llm.services.predictive_memory_retriever import (
+    DefaultPredictiveMemoryRetriever,
+)
 from ai_rpg_world.application.llm.services.system_prompt_builder import (
     DefaultSystemPromptBuilder,
 )
@@ -62,8 +71,15 @@ from ai_rpg_world.domain.world.entity.spot import Spot
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import (
     PhysicalMapAggregate,
 )
+from ai_rpg_world.domain.world.entity.world_object import WorldObject
+from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
+from ai_rpg_world.domain.world.enum.world_enum import (
+    DirectionEnum,
+    ObjectTypeEnum,
+)
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import (
     InMemoryPlayerProfileRepository,
@@ -144,6 +160,8 @@ class TestDefaultPromptBuilder:
         assert "messages" in result
         assert "tools" in result
         assert result["tool_choice"] == "required"
+        assert "overflow" in result
+        assert "tool_runtime_context" in result
         assert len(result["messages"]) == 2
         assert result["messages"][0]["role"] == "system"
         assert result["messages"][1]["role"] == "user"
@@ -155,6 +173,181 @@ class TestDefaultPromptBuilder:
         assert len(result["tools"]) >= 1
         tool_names = [t["function"]["name"] for t in result["tools"] if t.get("type") == "function"]
         assert "world_no_op" in tool_names
+
+    def test_build_includes_labeled_visible_targets_and_runtime_context(
+        self, setup_prompt_builder
+    ):
+        """配置済みで他プレイヤーが見えるとき、user にラベル付き対象一覧が含まれる"""
+        prompt_builder, profile_repo, status_repo, phys_repo, spot_repo, _ = setup_prompt_builder
+        profile_repo.save(self._create_profile(1, "Alice"))
+        profile_repo.save(self._create_profile(2, "Bob"))
+
+        exp_table = ExpTable(100, 1.5)
+        status_repo.save(
+            PlayerStatusAggregate(
+                player_id=PlayerId(1),
+                base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
+                stat_growth_factor=StatGrowthFactor(1.1, 1.1, 1.1, 1.1, 1.1, 0.01, 0.01),
+                exp_table=exp_table,
+                growth=Growth(1, 0, exp_table),
+                gold=Gold.create(0),
+                hp=Hp.create(10, 10),
+                mp=Mp.create(10, 10),
+                stamina=Stamina.create(10, 10),
+                current_spot_id=SpotId(1),
+                current_coordinate=Coordinate(0, 0, 0),
+            )
+        )
+        status_repo.save(
+            PlayerStatusAggregate(
+                player_id=PlayerId(2),
+                base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
+                stat_growth_factor=StatGrowthFactor(1.1, 1.1, 1.1, 1.1, 1.1, 0.01, 0.01),
+                exp_table=exp_table,
+                growth=Growth(1, 0, exp_table),
+                gold=Gold.create(0),
+                hp=Hp.create(10, 10),
+                mp=Mp.create(10, 10),
+                stamina=Stamina.create(10, 10),
+                current_spot_id=SpotId(1),
+                current_coordinate=Coordinate(1, 0, 0),
+            )
+        )
+        tiles = {
+            Coordinate(0, 0, 0): Tile(Coordinate(0, 0, 0), TerrainType.grass()),
+            Coordinate(1, 0, 0): Tile(Coordinate(1, 0, 0), TerrainType.grass()),
+        }
+        phys_repo.save(
+            PhysicalMapAggregate(
+                spot_id=SpotId(1),
+                tiles=tiles,
+                objects=[
+                    WorldObject(
+                        object_id=WorldObjectId.create(1),
+                        coordinate=Coordinate(0, 0, 0),
+                        object_type=ObjectTypeEnum.PLAYER,
+                        component=ActorComponent(
+                            direction=DirectionEnum.SOUTH,
+                            player_id=PlayerId(1),
+                        ),
+                    ),
+                    WorldObject(
+                        object_id=WorldObjectId.create(2),
+                        coordinate=Coordinate(1, 0, 0),
+                        object_type=ObjectTypeEnum.PLAYER,
+                        component=ActorComponent(
+                            direction=DirectionEnum.SOUTH,
+                            player_id=PlayerId(2),
+                        ),
+                    ),
+                ],
+            )
+        )
+
+        result = prompt_builder.build(PlayerId(1))
+        user_content = result["messages"][1]["content"]
+
+        assert "視界内の対象ラベル" in user_content
+        assert "P1: Bob" in user_content
+        assert "tool_runtime_context" in result
+        assert result["tool_runtime_context"].targets["P1"].player_id == 2
+        assert "注目対象:" in user_content
+        assert "今すぐ行動可能な対象:" in user_content
+
+    def test_build_formatter_summary_and_ui_labels_no_double_listing(
+        self, setup_prompt_builder
+    ):
+        """要約（formatter）は件数のみ、詳細（ui）はラベル。同一対象の二重過剰列挙なし"""
+        prompt_builder, profile_repo, status_repo, phys_repo, spot_repo, _ = setup_prompt_builder
+        profile_repo.save(self._create_profile(1, "Alice"))
+        profile_repo.save(self._create_profile(2, "Bob"))
+        exp_table = ExpTable(100, 1.5)
+        for pid, coord in [(1, Coordinate(0, 0, 0)), (2, Coordinate(1, 0, 0))]:
+            status_repo.save(
+                PlayerStatusAggregate(
+                    player_id=PlayerId(pid),
+                    base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
+                    stat_growth_factor=StatGrowthFactor(1.1, 1.1, 1.1, 1.1, 1.1, 0.01, 0.01),
+                    exp_table=exp_table,
+                    growth=Growth(1, 0, exp_table),
+                    gold=Gold.create(0),
+                    hp=Hp.create(10, 10),
+                    mp=Mp.create(10, 10),
+                    stamina=Stamina.create(10, 10),
+                    current_spot_id=SpotId(1),
+                    current_coordinate=coord,
+                )
+            )
+        tiles = {
+            Coordinate(0, 0, 0): Tile(Coordinate(0, 0, 0), TerrainType.grass()),
+            Coordinate(1, 0, 0): Tile(Coordinate(1, 0, 0), TerrainType.grass()),
+        }
+        phys_repo.save(
+            PhysicalMapAggregate(
+                spot_id=SpotId(1),
+                tiles=tiles,
+                objects=[
+                    WorldObject(
+                        object_id=WorldObjectId.create(1),
+                        coordinate=Coordinate(0, 0, 0),
+                        object_type=ObjectTypeEnum.PLAYER,
+                        component=ActorComponent(
+                            direction=DirectionEnum.SOUTH,
+                            player_id=PlayerId(1),
+                        ),
+                    ),
+                    WorldObject(
+                        object_id=WorldObjectId.create(2),
+                        coordinate=Coordinate(1, 0, 0),
+                        object_type=ObjectTypeEnum.PLAYER,
+                        component=ActorComponent(
+                            direction=DirectionEnum.SOUTH,
+                            player_id=PlayerId(2),
+                        ),
+                    ),
+                ],
+            )
+        )
+        result = prompt_builder.build(PlayerId(1))
+        user_content = result["messages"][1]["content"]
+        assert "注目対象: " in user_content
+        assert "件" in user_content
+        assert "今すぐ行動可能な対象: " in user_content
+        assert "視界内の対象ラベル" in user_content
+        assert "P1: Bob" in user_content
+        count_notable_section = user_content.count("注目対象:")
+        assert count_notable_section == 1
+
+    def test_build_with_predictive_retriever_includes_related_memories_section(
+        self, setup_prompt_builder
+    ):
+        """predictive_memory_retriever を渡すと user に「関連する記憶」が含まれる"""
+        prompt_builder, profile_repo, *_ = setup_prompt_builder
+        profile_repo.save(self._create_profile(1, "Alice"))
+        episode_store = InMemoryEpisodeMemoryStore()
+        long_term_store = InMemoryLongTermMemoryStore()
+        long_term_store.add_fact(PlayerId(1), "洞窟の奥には宝箱がある")
+        retriever = DefaultPredictiveMemoryRetriever(
+            episode_store=episode_store,
+            long_term_store=long_term_store,
+        )
+        pb_with_memory = DefaultPromptBuilder(
+            observation_buffer=setup_prompt_builder[0]._observation_buffer,
+            sliding_window_memory=setup_prompt_builder[0]._sliding_window,
+            action_result_store=setup_prompt_builder[0]._action_result_store,
+            world_query_service=setup_prompt_builder[0]._world_query_service,
+            player_profile_repository=profile_repo,
+            current_state_formatter=setup_prompt_builder[0]._current_state_formatter,
+            recent_events_formatter=setup_prompt_builder[0]._recent_events_formatter,
+            context_format_strategy=setup_prompt_builder[0]._context_format_strategy,
+            system_prompt_builder=setup_prompt_builder[0]._system_prompt_builder,
+            available_tools_provider=setup_prompt_builder[0]._available_tools_provider,
+            predictive_memory_retriever=retriever,
+        )
+        result = pb_with_memory.build(PlayerId(1))
+        user_content = result["messages"][1]["content"]
+        assert "関連する記憶" in user_content
+        assert "宝箱" in user_content
 
     def test_build_raises_when_profile_not_found(self, setup_prompt_builder):
         """プロフィールが存在しないとき PlayerProfileNotFoundForPromptException"""
@@ -270,4 +463,78 @@ class TestDefaultPromptBuilder:
                 system_prompt_builder=system_builder,
                 available_tools_provider=tools_provider,
                 default_action_instruction=123,  # type: ignore[arg-type]
+            )
+
+    def test_init_recent_observations_limit_negative_raises_value_error(
+        self, setup_prompt_builder
+    ):
+        """コンストラクタで recent_observations_limit が負のとき ValueError"""
+        _, profile_repo, status_repo, phys_repo, spot_repo, buffer = setup_prompt_builder
+        sliding = DefaultSlidingWindowMemory()
+        action_store = DefaultActionResultStore()
+        formatter = DefaultCurrentStateFormatter()
+        recent_formatter = DefaultRecentEventsFormatter()
+        strategy = SectionBasedContextFormatStrategy()
+        system_builder = DefaultSystemPromptBuilder()
+        registry = DefaultGameToolRegistry()
+        register_default_tools(registry)
+        tools_provider = DefaultAvailableToolsProvider(registry)
+        connected = GatewayBasedConnectedSpotsProvider(phys_repo)
+        world_query = WorldQueryService(
+            player_status_repository=status_repo,
+            player_profile_repository=profile_repo,
+            physical_map_repository=phys_repo,
+            spot_repository=spot_repo,
+            connected_spots_provider=connected,
+        )
+        with pytest.raises(ValueError, match="recent_observations_limit must be 0 or greater"):
+            DefaultPromptBuilder(
+                observation_buffer=buffer,
+                sliding_window_memory=sliding,
+                action_result_store=action_store,
+                world_query_service=world_query,
+                player_profile_repository=profile_repo,
+                current_state_formatter=formatter,
+                recent_events_formatter=recent_formatter,
+                context_format_strategy=strategy,
+                system_prompt_builder=system_builder,
+                available_tools_provider=tools_provider,
+                recent_observations_limit=-1,
+            )
+
+    def test_init_recent_actions_limit_negative_raises_value_error(
+        self, setup_prompt_builder
+    ):
+        """コンストラクタで recent_actions_limit が負のとき ValueError"""
+        _, profile_repo, status_repo, phys_repo, spot_repo, buffer = setup_prompt_builder
+        sliding = DefaultSlidingWindowMemory()
+        action_store = DefaultActionResultStore()
+        formatter = DefaultCurrentStateFormatter()
+        recent_formatter = DefaultRecentEventsFormatter()
+        strategy = SectionBasedContextFormatStrategy()
+        system_builder = DefaultSystemPromptBuilder()
+        registry = DefaultGameToolRegistry()
+        register_default_tools(registry)
+        tools_provider = DefaultAvailableToolsProvider(registry)
+        connected = GatewayBasedConnectedSpotsProvider(phys_repo)
+        world_query = WorldQueryService(
+            player_status_repository=status_repo,
+            player_profile_repository=profile_repo,
+            physical_map_repository=phys_repo,
+            spot_repository=spot_repo,
+            connected_spots_provider=connected,
+        )
+        with pytest.raises(ValueError, match="recent_actions_limit must be 0 or greater"):
+            DefaultPromptBuilder(
+                observation_buffer=buffer,
+                sliding_window_memory=sliding,
+                action_result_store=action_store,
+                world_query_service=world_query,
+                player_profile_repository=profile_repo,
+                current_state_formatter=formatter,
+                recent_events_formatter=recent_formatter,
+                context_format_strategy=strategy,
+                system_prompt_builder=system_builder,
+                available_tools_provider=tools_provider,
+                recent_actions_limit=-1,
             )
