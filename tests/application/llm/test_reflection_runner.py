@@ -259,3 +259,174 @@ class TestDefaultReflectionRunner:
                 llm_player_resolver=llm_player_resolver,
                 world_time_config=world_time_config,
             )
+
+    def test_run_after_tick_updates_state_only_on_success(
+        self,
+        episode_store,
+        long_term_store,
+        reflection_service,
+        world_time_config,
+    ):
+        """reflection 成功時のみ last_reflection_game_day が進む。失敗時は更新されず翌 tick で再試行可能"""
+        from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
+            PlayerStatusAggregate,
+        )
+        from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+        from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
+        from ai_rpg_world.domain.player.value_object.gold import Gold
+        from ai_rpg_world.domain.player.value_object.growth import Growth
+        from ai_rpg_world.domain.player.value_object.hp import Hp
+        from ai_rpg_world.domain.player.value_object.mp import Mp
+        from ai_rpg_world.domain.player.value_object.stat_growth_factor import (
+            StatGrowthFactor,
+        )
+        from ai_rpg_world.domain.player.value_object.stamina import Stamina
+        from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+        from ai_rpg_world.infrastructure.repository.in_memory_data_store import (
+            InMemoryDataStore,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
+            InMemoryPlayerStatusRepository,
+        )
+        from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
+            InMemoryUnitOfWork,
+        )
+
+        exp_table = ExpTable(100, 1.5)
+        status = PlayerStatusAggregate(
+            player_id=PlayerId(1),
+            base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
+            stat_growth_factor=StatGrowthFactor(1.1, 1.1, 1.1, 1.1, 1.1, 0.01, 0.01),
+            exp_table=exp_table,
+            growth=Growth(1, 0, exp_table),
+            gold=Gold.create(0),
+            hp=Hp.create(10, 10),
+            mp=Mp.create(10, 10),
+            stamina=Stamina.create(10, 10),
+            current_spot_id=SpotId(1),
+            current_coordinate=Coordinate(0, 0, 0),
+        )
+        data_store = InMemoryDataStore()
+        data_store.clear_all()
+
+        def create_uow():
+            return InMemoryUnitOfWork(
+                unit_of_work_factory=create_uow, data_store=data_store
+            )
+
+        uow, _ = InMemoryUnitOfWork.create_with_event_publisher(
+            unit_of_work_factory=create_uow, data_store=data_store
+        )
+        player_status_repository = InMemoryPlayerStatusRepository(
+            data_store=data_store, unit_of_work=uow
+        )
+        player_status_repository.save(status)
+
+        failing_service = MagicMock(spec=type(reflection_service))
+        failing_service.run.side_effect = RuntimeError("reflection failed")
+
+        runner = DefaultReflectionRunner(
+            reflection_service=failing_service,
+            player_status_repository=player_status_repository,
+            llm_player_resolver=SetBasedLlmPlayerResolver({1}),
+            world_time_config=world_time_config,
+        )
+
+        runner.run_after_tick(WorldTick(24))
+        assert 1 not in runner._last_reflection_game_day
+
+        runner._reflection_service = reflection_service
+        episode_store.add(PlayerId(1), _make_episode("e1"))
+        runner.run_after_tick(WorldTick(24))
+
+        assert runner._last_reflection_game_day.get(1) == 1
+        assert 1 in runner._last_successful_reflection_at
+
+    def test_run_after_tick_no_duplicate_reflection_same_game_day(
+        self,
+        episode_store,
+        long_term_store,
+        reflection_service,
+        world_time_config,
+    ):
+        """同一 game day では 1 回成功後に重複実行されない"""
+        from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
+            PlayerStatusAggregate,
+        )
+        from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+        from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
+        from ai_rpg_world.domain.player.value_object.gold import Gold
+        from ai_rpg_world.domain.player.value_object.growth import Growth
+        from ai_rpg_world.domain.player.value_object.hp import Hp
+        from ai_rpg_world.domain.player.value_object.mp import Mp
+        from ai_rpg_world.domain.player.value_object.stat_growth_factor import (
+            StatGrowthFactor,
+        )
+        from ai_rpg_world.domain.player.value_object.stamina import Stamina
+        from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+        from ai_rpg_world.infrastructure.repository.in_memory_data_store import (
+            InMemoryDataStore,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
+            InMemoryPlayerStatusRepository,
+        )
+        from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
+            InMemoryUnitOfWork,
+        )
+
+        exp_table = ExpTable(100, 1.5)
+        status = PlayerStatusAggregate(
+            player_id=PlayerId(1),
+            base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
+            stat_growth_factor=StatGrowthFactor(1.1, 1.1, 1.1, 1.1, 1.1, 0.01, 0.01),
+            exp_table=exp_table,
+            growth=Growth(1, 0, exp_table),
+            gold=Gold.create(0),
+            hp=Hp.create(10, 10),
+            mp=Mp.create(10, 10),
+            stamina=Stamina.create(10, 10),
+            current_spot_id=SpotId(1),
+            current_coordinate=Coordinate(0, 0, 0),
+        )
+        data_store = InMemoryDataStore()
+        data_store.clear_all()
+
+        def create_uow():
+            return InMemoryUnitOfWork(
+                unit_of_work_factory=create_uow, data_store=data_store
+            )
+
+        uow, _ = InMemoryUnitOfWork.create_with_event_publisher(
+            unit_of_work_factory=create_uow, data_store=data_store
+        )
+        player_status_repository = InMemoryPlayerStatusRepository(
+            data_store=data_store, unit_of_work=uow
+        )
+        player_status_repository.save(status)
+
+        call_count = 0
+
+        def run_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            reflection_service.run(*args, **kwargs)
+
+        spy_service = MagicMock(spec=type(reflection_service))
+        spy_service.run.side_effect = run_side_effect
+
+        runner = DefaultReflectionRunner(
+            reflection_service=spy_service,
+            player_status_repository=player_status_repository,
+            llm_player_resolver=SetBasedLlmPlayerResolver({1}),
+            world_time_config=world_time_config,
+        )
+        episode_store.add(PlayerId(1), _make_episode("e1"))
+
+        runner.run_after_tick(WorldTick(24))
+        assert call_count == 1
+
+        runner.run_after_tick(WorldTick(25))
+        runner.run_after_tick(WorldTick(30))
+        assert call_count == 1

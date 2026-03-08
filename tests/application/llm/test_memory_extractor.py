@@ -18,7 +18,8 @@ def _obs(
     prose: str,
     *,
     structured: dict | None = None,
-    causes_interrupt: bool = False,
+    schedules_turn: bool = False,
+    breaks_movement: bool = False,
 ) -> ObservationEntry:
     return ObservationEntry(
         occurred_at=datetime.now(),
@@ -26,7 +27,8 @@ def _obs(
             prose=prose,
             structured=structured or {},
             observation_category="self_only",
-            causes_interrupt=causes_interrupt,
+            schedules_turn=schedules_turn,
+            breaks_movement=breaks_movement,
         ),
     )
 
@@ -63,12 +65,15 @@ class TestRuleBasedMemoryExtractor:
     def test_extract_uses_overflow_prose_as_context_summary(
         self, extractor, player_id
     ):
-        """溢れた観測のプローズが context_summary に使われる"""
+        """溢れた観測のプローズが context_summary に使われる（entity 抽出で保存条件を満たす）"""
         episodes = extractor.extract(
             player_id,
-            overflow_observations=[_obs("洞窟に入った"), _obs("モンスターを発見")],
+            overflow_observations=[
+                _obs("洞窟に入った", structured={"spot_name": "洞窟"}),
+                _obs("モンスターを発見"),
+            ],
             action_summary="攻撃した",
-            result_summary="倒した",
+            result_summary="モンスターを倒した",
         )
         assert len(episodes) == 1
         assert "洞窟" in episodes[0].context_summary
@@ -84,7 +89,8 @@ class TestRuleBasedMemoryExtractor:
                 _obs(
                     "老人に話しかけた",
                     structured={"npc_name": "老人", "spot_name": "洞窟入口"},
-                    causes_interrupt=True,
+                    schedules_turn=True,
+                    breaks_movement=True,
                 )
             ],
             action_summary="会話した",
@@ -106,16 +112,56 @@ class TestRuleBasedMemoryExtractor:
         )
         assert len(episodes) == 0
 
-    def test_extract_saves_when_has_clear_context(self, extractor, player_id):
-        """明確な観測文脈（5文字以上）があれば保存する"""
+    def test_extract_does_not_save_when_only_clear_context(self, extractor, player_id):
+        """prose のみで entity/location/breaks_movement/strong_result がなければ保存しない"""
         episodes = extractor.extract(
             player_id,
             overflow_observations=[_obs("洞窟の入口で待機した")],
             action_summary="待機",
             result_summary="何も起きなかった",
         )
+        assert len(episodes) == 0
+
+    def test_extract_saves_when_has_entity_or_location_from_structured(
+        self, extractor, player_id
+    ):
+        """entity_ids または location_id が structured から抽出できれば保存する"""
+        episodes = extractor.extract(
+            player_id,
+            overflow_observations=[
+                _obs("洞窟の入口で待機した", structured={"spot_name": "洞窟入口"}),
+            ],
+            action_summary="待機",
+            result_summary="何も起きなかった",
+        )
         assert len(episodes) == 1
+        assert episodes[0].location_id == "洞窟入口"
         assert "洞窟" in episodes[0].context_summary
+
+    def test_extract_importance_high_when_breaks_movement(self, extractor, player_id):
+        """breaks_movement ありの観測では importance=high"""
+        episodes = extractor.extract(
+            player_id,
+            overflow_observations=[
+                _obs("被弾した", structured={}, breaks_movement=True),
+            ],
+            action_summary="移動中",
+            result_summary="ダメージを受けた",
+        )
+        assert len(episodes) == 1
+        assert episodes[0].importance == "high"
+        assert episodes[0].surprise is True
+
+    def test_extract_importance_high_when_combat_result(self, extractor, player_id):
+        """強い戦闘結果（撃破・倒した等）では importance=high"""
+        episodes = extractor.extract(
+            player_id,
+            overflow_observations=[],
+            action_summary="攻撃した",
+            result_summary="モンスターを撃破しました",
+        )
+        assert len(episodes) == 1
+        assert episodes[0].importance == "high"
 
     def test_extract_saves_when_has_strong_result(self, extractor, player_id):
         """強い成功/失敗結果があれば overflow が空でも保存する"""

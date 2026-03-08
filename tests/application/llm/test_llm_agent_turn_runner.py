@@ -110,7 +110,7 @@ class TestLlmAgentTurnRunnerRunTurn:
         player_id = PlayerId(1)
         entry = ObservationEntry(
             occurred_at=datetime.now(),
-            output=ObservationOutput(prose="戦闘不能になりました。", structured={"type": "player_downed"}, causes_interrupt=True),
+            output=ObservationOutput(prose="戦闘不能になりました。", structured={"type": "player_downed"}, schedules_turn=True, breaks_movement=True),
         )
         observation_buffer.append(player_id, entry)
         world_query_service.get_player_current_state.return_value = MagicMock(
@@ -127,11 +127,11 @@ class TestLlmAgentTurnRunnerRunTurn:
         assert len(recent) == 1
 
     def test_run_turn_normal_no_interrupting_observation(self, runner, observation_buffer, world_query_service, movement_service, action_result_store):
-        """観測が causes_interrupt=False のみの場合は割り込みしない"""
+        """観測が breaks_movement=False のみの場合は割り込みしない"""
         player_id = PlayerId(1)
         entry = ObservationEntry(
             occurred_at=datetime.now(),
-            output=ObservationOutput(prose="天気が変わった。", structured={"type": "weather"}, observation_category="environment", causes_interrupt=False),
+            output=ObservationOutput(prose="天気が変わった。", structured={"type": "weather"}, observation_category="environment"),
         )
         observation_buffer.append(player_id, entry)
         world_query_service.get_player_current_state.return_value = MagicMock(
@@ -158,7 +158,7 @@ class TestLlmAgentTurnRunnerRunTurn:
         player_id = PlayerId(1)
         entry = ObservationEntry(
             occurred_at=datetime.now(),
-            output=ObservationOutput(prose="戦闘不能になりました。", structured={"type": "player_downed"}, causes_interrupt=True),
+            output=ObservationOutput(prose="戦闘不能になりました。", structured={"type": "player_downed"}, schedules_turn=True, breaks_movement=True),
         )
         observation_buffer.append(player_id, entry)
         world_query_service.get_player_current_state.return_value = MagicMock(
@@ -190,7 +190,7 @@ class TestLlmAgentTurnRunnerRunTurn:
         player_id = PlayerId(1)
         entry = ObservationEntry(
             occurred_at=datetime.now(),
-            output=ObservationOutput(prose="戦闘不能になりました。", structured={"type": "player_downed"}, causes_interrupt=True),
+            output=ObservationOutput(prose="戦闘不能になりました。", structured={"type": "player_downed"}, schedules_turn=True, breaks_movement=True),
         )
         observation_buffer.append(player_id, entry)
         world_query_service.get_player_current_state.return_value = MagicMock(
@@ -212,7 +212,7 @@ class TestLlmAgentTurnRunnerRunTurn:
         player_id = PlayerId(1)
         entry = ObservationEntry(
             occurred_at=datetime.now(),
-            output=ObservationOutput(prose="戦闘不能になりました。", structured={"type": "player_downed"}, causes_interrupt=True),
+            output=ObservationOutput(prose="戦闘不能になりました。", structured={"type": "player_downed"}, schedules_turn=True, breaks_movement=True),
         )
         observation_buffer.append(player_id, entry)
         world_query_service.get_player_current_state.return_value = MagicMock(
@@ -362,7 +362,8 @@ class TestLlmAgentTurnRunnerRunTurnExceptions:
             output=ObservationOutput(
                 prose="戦闘不能になりました。",
                 structured={"type": "player_downed"},
-                causes_interrupt=True,
+                schedules_turn=True,
+                breaks_movement=True,
             ),
         )
         observation_buffer.append(player_id, entry)
@@ -398,7 +399,8 @@ class TestLlmAgentTurnRunnerRunTurnExceptions:
             output=ObservationOutput(
                 prose="戦闘不能になりました。",
                 structured={"type": "player_downed"},
-                causes_interrupt=True,
+                schedules_turn=True,
+                breaks_movement=True,
             ),
         )
         observation_buffer.append(player_id, entry)

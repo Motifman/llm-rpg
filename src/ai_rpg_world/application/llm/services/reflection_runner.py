@@ -1,11 +1,12 @@
 """Reflection の定期実行を担うランナー。
 
 in-game day 境界で ReflectionService を LLM プレイヤー向けに実行する。
-重複実行を避けるため、プレイヤーごとの最終実行 game day を記録する。
+重複実行を避けるため、プレイヤーごとの最終成功 game day を記録する。
+実行済み state は reflection 成功後にのみ更新し、失敗時は翌 tick 以降に再試行可能。
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 
 from ai_rpg_world.application.llm.contracts.interfaces import (
@@ -23,10 +24,16 @@ from ai_rpg_world.domain.world.service.world_time_config_service import (
 )
 
 
+# 初回実行時に対象とするエピソードの最小 timestamp（十分昔）
+_EPOCH_SINCE = datetime.min
+
+
 class DefaultReflectionRunner(IReflectionRunner):
     """
     in-game day が変わったタイミングで ReflectionService.run を LLM プレイヤー全員に実行する。
-    プレイヤーごとの最終実行 game day を保持し、1 日に 1 回を超えて実行しない。
+    プレイヤーごとの最終成功 game day を保持し、1 日に 1 回を超えて成功記録しない。
+    失敗時は last_reflection_game_day を更新しないため、翌 tick 以降に再試行される。
+    since は前回成功時刻ベースとし、同一エピソードの重複反映を防ぐ。
     """
 
     def __init__(
@@ -54,6 +61,7 @@ class DefaultReflectionRunner(IReflectionRunner):
         self._llm_player_resolver = llm_player_resolver
         self._world_time_config = world_time_config
         self._last_reflection_game_day: dict[int, int] = {}
+        self._last_successful_reflection_at: dict[int, datetime] = {}
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def run_after_tick(self, current_tick: WorldTick) -> None:
@@ -72,14 +80,19 @@ class DefaultReflectionRunner(IReflectionRunner):
             if last_day is not None and last_day >= current_game_day:
                 continue
 
-            self._last_reflection_game_day[player_id.value] = current_game_day
-            since = datetime.now() - timedelta(days=1)
+            since = self._last_successful_reflection_at.get(
+                player_id.value, _EPOCH_SINCE
+            )
 
             try:
                 self._reflection_service.run(
                     player_id,
                     since=since,
                     episode_limit=20,
+                )
+                self._last_reflection_game_day[player_id.value] = current_game_day
+                self._last_successful_reflection_at[player_id.value] = (
+                    datetime.now()
                 )
             except Exception as e:
                 self._logger.warning(

@@ -305,7 +305,8 @@ class MemoryRetrievalQueryDto:
     予測記憶検索用のクエリ DTO。
     PlayerCurrentStateDto 由来の spot/notable/actionable と tool_names を渡すことで、
     current_state_text の文字面依存を弱める。
-    検索優先度: entity_ids > location_ids > actionable/notable > action_names > free_text_keywords
+    検索優先度: world_object_ids/spot_ids (stable) > entity_ids > location_ids
+    > actionable/notable > action_names > free_text_keywords
     """
 
     entity_ids: Tuple[str, ...] = ()
@@ -314,6 +315,8 @@ class MemoryRetrievalQueryDto:
     actionable_labels: Tuple[str, ...] = ()
     action_names: Tuple[str, ...] = ()
     free_text_keywords: Tuple[str, ...] = ()
+    world_object_ids: Tuple[int, ...] = ()
+    spot_ids: Tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         for name, val in [
@@ -329,11 +332,23 @@ class MemoryRetrievalQueryDto:
             for x in val:
                 if not isinstance(x, str):
                     raise TypeError(f"{name} must contain only str")
+        if not isinstance(self.world_object_ids, tuple):
+            raise TypeError("world_object_ids must be tuple")
+        for x in self.world_object_ids:
+            if not isinstance(x, int):
+                raise TypeError("world_object_ids must contain only int")
+        if not isinstance(self.spot_ids, tuple):
+            raise TypeError("spot_ids must be tuple")
+        for x in self.spot_ids:
+            if not isinstance(x, int):
+                raise TypeError("spot_ids must contain only int")
 
 
 @dataclass(frozen=True)
 class EpisodeMemoryEntry:
-    """エピソード記憶 1 件（記憶抽出の出力・ストアの保存単位）。"""
+    """エピソード記憶 1 件（記憶抽出の出力・ストアの保存単位）。
+    world_object_ids, spot_id_value は stable id 検索用。display name は entity_ids, location_id に保持。
+    """
 
     id: str
     context_summary: str
@@ -345,6 +360,8 @@ class EpisodeMemoryEntry:
     importance: EpisodeImportance
     surprise: bool
     recall_count: int
+    world_object_ids: Tuple[int, ...] = ()
+    spot_id_value: Optional[int] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.id, str):
@@ -370,6 +387,13 @@ class EpisodeMemoryEntry:
             raise TypeError("surprise must be bool")
         if not isinstance(self.recall_count, int) or self.recall_count < 0:
             raise TypeError("recall_count must be non-negative int")
+        if not isinstance(self.world_object_ids, tuple):
+            raise TypeError("world_object_ids must be tuple")
+        for x in self.world_object_ids:
+            if not isinstance(x, int):
+                raise TypeError("world_object_ids must contain only int")
+        if self.spot_id_value is not None and not isinstance(self.spot_id_value, int):
+            raise TypeError("spot_id_value must be int or None")
 
 
 @dataclass(frozen=True)

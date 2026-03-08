@@ -83,9 +83,15 @@ class IEpisodeMemoryStore(ABC):
         player_id: PlayerId,
         entity_ids: Optional[List[str]] = None,
         action_names: Optional[List[str]] = None,
+        world_object_ids: Optional[List[int]] = None,
+        spot_ids: Optional[List[int]] = None,
         limit: int = 10,
     ) -> List[EpisodeMemoryEntry]:
-        """ルールベース検索（コンテキスト・予測検索で使用）。"""
+        """
+        ルールベース検索（コンテキスト・予測検索で使用）。
+        world_object_ids / spot_ids は stable id 優先検索用。指定時はそちらを優先し、
+        未指定時は entity_ids / action_names のみで検索する。
+        """
         pass
 
     @abstractmethod

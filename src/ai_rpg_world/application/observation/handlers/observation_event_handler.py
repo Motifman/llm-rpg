@@ -160,7 +160,7 @@ class ObservationEventHandler(EventHandler[Any]):
         player_id: PlayerId,
         output: ObservationOutput,
     ) -> None:
-        if not output.causes_interrupt:
+        if not output.schedules_turn and not output.breaks_movement:
             return
         if self._turn_trigger is None or self._llm_player_resolver is None:
             return

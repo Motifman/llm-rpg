@@ -64,26 +64,36 @@ class TestObservationOutput:
         with pytest.raises(TypeError, match="structured must be dict"):
             ObservationOutput(prose="a", structured="not a dict")
 
-    def test_causes_interrupt_default_is_false(self):
-        """causes_interrupt を省略した場合デフォルトは False"""
+    def test_schedules_turn_breaks_movement_default_are_false(self):
+        """schedules_turn / breaks_movement を省略した場合デフォルトは False"""
         out = ObservationOutput(prose="x", structured={})
-        assert out.causes_interrupt is False
+        assert out.schedules_turn is False
+        assert out.breaks_movement is False
 
-    def test_causes_interrupt_true(self):
-        """causes_interrupt=True で生成できる"""
+    def test_schedules_turn_breaks_movement_true(self):
+        """schedules_turn=True, breaks_movement=True で生成できる"""
         out = ObservationOutput(
             prose="戦闘不能になりました。",
             structured={"type": "player_downed"},
             observation_category="self_only",
-            causes_interrupt=True,
+            schedules_turn=True,
+            breaks_movement=True,
         )
-        assert out.causes_interrupt is True
+        assert out.schedules_turn is True
+        assert out.breaks_movement is True
 
-    def test_causes_interrupt_not_bool_raises_type_error(self):
-        """causes_interrupt が bool でない場合 TypeError"""
-        with pytest.raises(TypeError, match="causes_interrupt must be bool"):
+    def test_schedules_turn_not_bool_raises_type_error(self):
+        """schedules_turn が bool でない場合 TypeError"""
+        with pytest.raises(TypeError, match="schedules_turn must be bool"):
             ObservationOutput(
-                prose="x", structured={}, causes_interrupt="yes"  # type: ignore[arg-type]
+                prose="x", structured={}, schedules_turn="yes"  # type: ignore[arg-type]
+            )
+
+    def test_breaks_movement_not_bool_raises_type_error(self):
+        """breaks_movement が bool でない場合 TypeError"""
+        with pytest.raises(TypeError, match="breaks_movement must be bool"):
+            ObservationOutput(
+                prose="x", structured={}, breaks_movement="yes"  # type: ignore[arg-type]
             )
 
 

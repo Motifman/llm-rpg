@@ -94,13 +94,13 @@ class LlmAgentTurnRunner:
         if (
             current_state is not None
             and current_state.has_active_path
-            and any(o.output.causes_interrupt for o in observations)
+            and any(o.output.breaks_movement for o in observations)
         ):
             self._movement_service.cancel_movement(
                 CancelMovementCommand(player_id=player_id.value)
             )
             interrupt_prose_list = [
-                o.output.prose for o in observations if o.output.causes_interrupt
+                o.output.prose for o in observations if o.output.breaks_movement
             ]
             result_summary = "以下の観測により移動を中断しました: " + "; ".join(interrupt_prose_list)
             self._action_result_store.append(

@@ -154,10 +154,10 @@ class TestObservationFormatter:
         assert out is not None
         assert "やってきました" in out.prose
         assert out.structured.get("type") == "player_entered_spot"
-        assert out.causes_interrupt is False
+        assert out.schedules_turn is False and out.breaks_movement is False
 
     def test_format_player_location_changed_self_does_not_cause_interrupt(self, formatter):
-        """PlayerLocationChangedEvent 本人向けは causes_interrupt=False"""
+        """PlayerLocationChangedEvent 本人向けは schedules_turn/breaks_movement=False"""
         event = PlayerLocationChangedEvent.create(
             aggregate_id=PlayerId(1),
             aggregate_type="PlayerStatusAggregate",
@@ -168,10 +168,10 @@ class TestObservationFormatter:
         )
         out = formatter.format(event, PlayerId(1))
         assert out is not None
-        assert out.causes_interrupt is False
+        assert out.schedules_turn is False and out.breaks_movement is False
 
-    def test_format_player_downed_self_causes_interrupt(self, formatter):
-        """PlayerDownedEvent 本人向けは causes_interrupt=True（ダメージで割り込み）"""
+    def test_format_player_downed_self_breaks_movement(self, formatter):
+        """PlayerDownedEvent 本人向けは breaks_movement=True（ダメージで割り込み）"""
         event = PlayerDownedEvent.create(
             aggregate_id=PlayerId(1),
             aggregate_type="PlayerStatusAggregate",
@@ -179,7 +179,7 @@ class TestObservationFormatter:
         out = formatter.format(event, PlayerId(1))
         assert out is not None
         assert "戦闘不能" in out.prose
-        assert out.causes_interrupt is True
+        assert out.breaks_movement is True
 
     def test_format_player_downed_with_killer_includes_killer_name_or_fallback(self, formatter):
         """PlayerDownedEvent killer_player_id があると「倒された」になる（ID非露出）"""
@@ -193,8 +193,8 @@ class TestObservationFormatter:
         assert "倒され" in out.prose
         assert "プレイヤー2" not in out.prose
 
-    def test_format_item_added_to_inventory_causes_interrupt(self, formatter):
-        """ItemAddedToInventoryEvent 本人向けは causes_interrupt=True（アイテム発見で割り込み）"""
+    def test_format_item_added_to_inventory_breaks_movement(self, formatter):
+        """ItemAddedToInventoryEvent 本人向けは breaks_movement=True（アイテム発見で割り込み）"""
         event = ItemAddedToInventoryEvent.create(
             aggregate_id=PlayerId(1),
             aggregate_type="PlayerInventoryAggregate",
@@ -203,7 +203,7 @@ class TestObservationFormatter:
         out = formatter.format(event, PlayerId(1))
         assert out is not None
         assert "入手" in out.prose
-        assert out.causes_interrupt is True
+        assert out.breaks_movement is True
 
     def test_format_player_level_up_returns_prose_and_structured(self, formatter):
         """PlayerLevelUpEvent: レベルアップ文と構造化"""
@@ -349,7 +349,7 @@ class TestObservationFormatter:
         assert "会話を始めました" in out.prose
         assert "誰か" in out.prose
         assert out.observation_category == "self_only"
-        assert out.causes_interrupt is True
+        assert out.breaks_movement is True
 
     def test_format_conversation_started_uses_monster_repository_when_available(self):
         """ConversationStartedEvent: monster_repository で NPC 名が解決できる"""
@@ -410,10 +410,10 @@ class TestObservationFormatter:
         out = formatter.format(event, PlayerId(1))
         assert out is not None
         assert "ファイアボルト" in out.prose
-        assert out.causes_interrupt is True
+        assert out.schedules_turn is True
 
-    def test_format_hit_box_hit_recorded_causes_interrupt_and_is_self_only(self, formatter):
-        """HitBoxHitRecordedEvent: 命中は割り込み対象"""
+    def test_format_hit_box_hit_recorded_breaks_movement_and_is_self_only(self, formatter):
+        """HitBoxHitRecordedEvent: 命中は割り込み対象（breaks_movement）"""
         event = HitBoxHitRecordedEvent.create(
             aggregate_id=HitBoxId(1),
             aggregate_type="HitBoxAggregate",
@@ -424,11 +424,11 @@ class TestObservationFormatter:
         out = formatter.format(event, PlayerId(1))
         assert out is not None
         assert "命中" in out.prose
-        assert out.causes_interrupt is True
+        assert out.breaks_movement is True
         assert out.observation_category == "self_only"
 
     def test_format_monster_spawned_is_environment_and_can_interrupt(self, formatter):
-        """MonsterSpawnedEvent: 出現は environment かつ割り込み可"""
+        """MonsterSpawnedEvent: 出現は environment かつ schedules_turn"""
         event = MonsterSpawnedEvent.create(
             aggregate_id=MonsterId(1),
             aggregate_type="MonsterAggregate",
@@ -439,7 +439,7 @@ class TestObservationFormatter:
         assert out is not None
         assert "現れ" in out.prose
         assert out.observation_category == "environment"
-        assert out.causes_interrupt is True
+        assert out.schedules_turn is True
 
     def test_format_monster_died_killer_gets_reward_summary(self, formatter):
         """MonsterDiedEvent: killer 本人には倒した＋報酬概要を含める"""
@@ -1152,7 +1152,7 @@ class TestObservationFormatter:
         )
         leveled_out = formatter.format(leveled, PlayerId(1))
         assert leveled_out is not None
-        assert leveled_out.causes_interrupt is True
+        assert leveled_out.schedules_turn is True
 
     @pytest.mark.parametrize(
         "event",

@@ -68,6 +68,8 @@ class InMemoryEpisodeMemoryStore(IEpisodeMemoryStore):
         player_id: PlayerId,
         entity_ids: Optional[List[str]] = None,
         action_names: Optional[List[str]] = None,
+        world_object_ids: Optional[List[int]] = None,
+        spot_ids: Optional[List[int]] = None,
         limit: int = 10,
     ) -> List[EpisodeMemoryEntry]:
         if not isinstance(player_id, PlayerId):
@@ -76,10 +78,24 @@ class InMemoryEpisodeMemoryStore(IEpisodeMemoryStore):
             raise TypeError("entity_ids must be list or None")
         if action_names is not None and not isinstance(action_names, list):
             raise TypeError("action_names must be list or None")
+        if world_object_ids is not None and not isinstance(world_object_ids, list):
+            raise TypeError("world_object_ids must be list or None")
+        if spot_ids is not None and not isinstance(spot_ids, list):
+            raise TypeError("spot_ids must be list or None")
         if limit < 0:
             raise ValueError("limit must be 0 or greater")
         key = self._key(player_id)
         entries = self._store.get(key, [])
+
+        wo_set = set(world_object_ids) if world_object_ids else None
+        sp_set = set(spot_ids) if spot_ids else None
+        if wo_set or sp_set:
+            entries = [
+                e
+                for e in entries
+                if (wo_set and any(wo in wo_set for wo in e.world_object_ids))
+                or (sp_set and e.spot_id_value is not None and e.spot_id_value in sp_set)
+            ]
         if entity_ids:
             entity_set = set(entity_ids)
             entries = [
@@ -121,6 +137,8 @@ class InMemoryEpisodeMemoryStore(IEpisodeMemoryStore):
             importance=entry.importance,
             surprise=entry.surprise,
             recall_count=entry.recall_count + 1,
+            world_object_ids=entry.world_object_ids,
+            spot_id_value=entry.spot_id_value,
         )
         self._store[key][idx] = new_entry
 
