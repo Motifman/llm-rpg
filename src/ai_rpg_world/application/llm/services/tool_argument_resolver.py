@@ -264,6 +264,11 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         runtime_context: ToolRuntimeContextDto,
     ) -> Dict[str, Any]:
         label = args.get("level_label")
+        if not isinstance(label, str) or not label:
+            raise ToolArgumentResolutionException(
+                "注意レベルラベルが指定されていません。",
+                "INVALID_TARGET_LABEL",
+            )
         target = self._require_target_type(
             label,
             runtime_context,

@@ -192,6 +192,7 @@ class TestDefaultToolArgumentResolver:
         assert result["target_display_name"] == "薬草"
 
     def test_resolve_change_attention_level_label(self):
+        """level_label が有効なとき attention_level_value が返る"""
         resolver = DefaultToolArgumentResolver()
 
         result = resolver.resolve(
@@ -201,6 +202,61 @@ class TestDefaultToolArgumentResolver:
         )
 
         assert result["attention_level_value"] == "FULL"
+
+    def test_resolve_change_attention_empty_label_raises(self):
+        """level_label が空文字のとき INVALID_TARGET_LABEL"""
+        resolver = DefaultToolArgumentResolver()
+
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_CHANGE_ATTENTION,
+                {"level_label": ""},
+                _make_context(),
+            )
+
+        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
+        assert "指定されていません" in str(exc_info.value)
+
+    def test_resolve_change_attention_none_label_raises(self):
+        """level_label が None（args に含まれない）のとき INVALID_TARGET_LABEL"""
+        resolver = DefaultToolArgumentResolver()
+
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_CHANGE_ATTENTION,
+                {},
+                _make_context(),
+            )
+
+        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
+
+    def test_resolve_change_attention_invalid_label_raises(self):
+        """level_label が候補に存在しないラベルのとき INVALID_TARGET_LABEL"""
+        resolver = DefaultToolArgumentResolver()
+
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_CHANGE_ATTENTION,
+                {"level_label": "X99"},
+                _make_context(),
+            )
+
+        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
+        assert "候補にありません" in str(exc_info.value)
+
+    def test_resolve_change_attention_wrong_type_label_raises(self):
+        """level_label が注意レベル以外（例: プレイヤーラベル）のとき INVALID_TARGET_KIND"""
+        resolver = DefaultToolArgumentResolver()
+
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_CHANGE_ATTENTION,
+                {"level_label": "P1"},
+                _make_context(),
+            )
+
+        assert exc_info.value.error_code == "INVALID_TARGET_KIND"
+        assert "使えないラベル" in str(exc_info.value)
 
     def test_resolve_conversation_advance_labels(self):
         resolver = DefaultToolArgumentResolver()
