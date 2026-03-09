@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import SubagentEvidenceEntry
+from ai_rpg_world.application.llm.exceptions import DslParseException
 from ai_rpg_world.application.llm.services.memory_query_executor import (
     MemoryQueryExecutor,
 )
@@ -72,6 +73,14 @@ class TestSubagentRunnerSuccess:
         assert executor.execute.call_count == 2
         assert len(result.evidence) == 2
         assert result.used_bindings == ("ep", "facts")
+
+    def test_run_empty_bindings_invokes_with_empty_data(self, runner, executor):
+        """空の bindings では executor は呼ばれず、invoke_text のみ呼ばれる"""
+        result = runner.run(PlayerId(1), {}, "要約して")
+        executor.execute.assert_not_called()
+        assert len(result.evidence) == 0
+        assert result.used_bindings == ()
+        assert result.answer_summary is not None
 
 
 class TestSubagentRunnerTruncation:
@@ -146,6 +155,77 @@ class TestSubagentRunnerValidation:
         """bindings の値が str でないとき TypeError"""
         with pytest.raises(TypeError, match="bindings keys and values must be str"):
             runner.run(PlayerId(1), {"a": 123}, "q")
+
+    def test_run_bindings_key_not_str_raises_type_error(self, runner):
+        """bindings のキーが str でないとき TypeError"""
+        ex = MagicMock(spec=MemoryQueryExecutor)
+        ex.execute.return_value = {"result": "x"}
+        r = SubagentRunner(
+            memory_query_executor=ex,
+            invoke_text=lambda s, u: "ok",
+        )
+        with pytest.raises(TypeError, match="bindings keys and values must be str"):
+            r.run(PlayerId(1), {123: "episodic.take(1)"}, "q")  # type: ignore[dict-item]
+
+    def test_run_query_empty_accepted(self, runner):
+        """query が空文字でも run は成功する（呼び出し側で検証）"""
+        result = runner.run(PlayerId(1), {"a": "episodic.take(1)"}, "")
+        assert result.answer_summary is not None
+
+
+class TestSubagentRunnerExceptionPropagation:
+    """例外伝播のテスト"""
+
+    def test_executor_execute_raises_propagates(self):
+        """executor.execute が例外を投げたとき run が伝播する"""
+        ex = MagicMock(spec=MemoryQueryExecutor)
+        ex.execute.side_effect = DslParseException(
+            "Unsupported DSL form", expr="invalid"
+        )
+        runner = SubagentRunner(
+            memory_query_executor=ex,
+            invoke_text=lambda s, u: "ok",
+        )
+        with pytest.raises(DslParseException, match="Unsupported DSL form"):
+            runner.run(
+                PlayerId(1),
+                {"a": "invalid"},
+                "要約して",
+            )
+
+    def test_invoke_text_raises_propagates(self):
+        """invoke_text が例外を投げたとき run が伝播する"""
+
+        def failing_invoke(_sys: str, _user: str) -> str:
+            raise ValueError("LLM エラー")
+
+        ex = MagicMock(spec=MemoryQueryExecutor)
+        ex.execute.return_value = {"result": "データ"}
+        runner = SubagentRunner(
+            memory_query_executor=ex,
+            invoke_text=failing_invoke,
+        )
+        with pytest.raises(ValueError, match="LLM エラー"):
+            runner.run(
+                PlayerId(1),
+                {"a": "episodic.take(1)"},
+                "要約して",
+            )
+
+    def test_executor_returns_none_result_handled(self):
+        """executor が result キーなしで返したとき空文字として扱う"""
+        ex = MagicMock(spec=MemoryQueryExecutor)
+        ex.execute.return_value = {}
+        runner = SubagentRunner(
+            memory_query_executor=ex,
+            invoke_text=lambda sys, user: "要約完了",
+        )
+        result = runner.run(
+            PlayerId(1),
+            {"a": "episodic.take(1)"},
+            "要約して",
+        )
+        assert result.answer_summary == "要約完了"
 
 
 class TestSubagentRunnerInit:

@@ -14,6 +14,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 from ai_rpg_world.application.llm.exceptions import (
     DslEvaluationException,
     DslParseException,
+    InvalidOutputModeException,
 )
 from ai_rpg_world.application.llm.services.in_memory_episode_memory_store import (
     InMemoryEpisodeMemoryStore,
@@ -41,6 +42,17 @@ from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationOutput,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+
+def _make_observation(prose: str = "洞窟に到着した") -> ObservationEntry:
+    """テスト用の ObservationEntry を作成"""
+    return ObservationEntry(
+        occurred_at=datetime.now(),
+        output=ObservationOutput(
+            prose=prose,
+            structured={"event": "arrival"},
+        ),
+    )
 
 
 def _make_episode(eid: str, context: str = "洞窟にいた") -> EpisodeMemoryEntry:
@@ -204,6 +216,82 @@ class TestMemoryQueryExecutorWorkingMemory:
         assert "仮説2" in got["result"]
 
 
+class TestMemoryQueryExecutorLaws:
+    """laws 変数のテスト"""
+
+    def test_laws_take_returns_entries(
+        self, executor, long_term_store, player_id
+    ):
+        """laws.take(n) で法則を取得"""
+        long_term_store.upsert_law(
+            player_id, subject="移動", relation="すると", target="到着"
+        )
+        long_term_store.upsert_law(
+            player_id, subject="攻撃", relation="で", target="ダメージ"
+        )
+        got = executor.execute(player_id, "laws.take(5)", "text")
+        assert "result" in got
+        assert "移動" in got["result"]
+        assert "攻撃" in got["result"]
+
+    def test_laws_take_respects_limit(
+        self, executor, long_term_store, player_id
+    ):
+        """laws.take(2) は最大 2 件"""
+        for i in range(5):
+            long_term_store.upsert_law(
+                player_id,
+                subject=f"法則{i}",
+                relation="すると",
+                target="結果",
+            )
+        got = executor.execute(player_id, "laws.take(2)", "count")
+        assert got["count"] == "2"
+
+    def test_laws_empty_returns_zero(self, executor, player_id):
+        """法則がなければ 0 件"""
+        got = executor.execute(player_id, "laws.take(10)", "text")
+        assert "（0件）" in (got.get("result") or "")
+
+
+class TestMemoryQueryExecutorRecentEvents:
+    """recent_events 変数のテスト"""
+
+    def test_recent_events_returns_formatted_output(
+        self,
+        executor,
+        sliding_window,
+        action_result_store,
+        player_id,
+    ):
+        """recent_events で観測と行動結果を取得"""
+        sliding_window.append(player_id, _make_observation("北へ移動した"))
+        action_result_store.append(
+            player_id,
+            "move_to を実行",
+            "洞窟に到着した",
+        )
+        got = executor.execute(player_id, "recent_events", "text")
+        assert "result" in got
+        result = got["result"] or ""
+        assert "北へ移動" in result or "洞窟" in result or "move_to" in result
+
+    def test_recent_events_with_take_ignores_take(
+        self, executor, sliding_window, player_id
+    ):
+        """recent_events は .take を無視して全体を返す（スカラ変数）"""
+        sliding_window.append(player_id, _make_observation("観測1"))
+        got = executor.execute(player_id, "recent_events.take(1)", "text")
+        assert "result" in got
+
+    def test_recent_events_empty_returns_formatted(
+        self, executor, player_id
+    ):
+        """観測・行動結果がなければ空のフォーマット"""
+        got = executor.execute(player_id, "recent_events", "text")
+        assert "result" in got
+
+
 class TestMemoryQueryExecutorOutputModes:
     """output_mode のテスト"""
 
@@ -219,6 +307,15 @@ class TestMemoryQueryExecutorOutputModes:
         got = executor.execute(player_id, "episodic.take(10)", "preview")
         assert "preview" in got
         assert "result" in got
+
+    def test_output_mode_text_default(
+        self, executor, episode_store, player_id
+    ):
+        """output_mode=text で本文"""
+        episode_store.add(player_id, _make_episode("e1"))
+        got = executor.execute(player_id, "episodic.take(10)", "text")
+        assert "result" in got
+        assert "洞窟にいた" in (got.get("result") or "")
 
 
 class TestMemoryQueryExecutorExceptions:
@@ -240,3 +337,48 @@ class TestMemoryQueryExecutorExceptions:
         """player_id が None で TypeError"""
         with pytest.raises(TypeError, match="player_id must be PlayerId"):
             executor.execute(None, "episodic.take(5)", "text")  # type: ignore[arg-type]
+
+    def test_expr_empty_raises_parse_error(self, executor, player_id):
+        """expr が空文字で DslParseException"""
+        with pytest.raises(DslParseException, match="must not be empty"):
+            executor.execute(player_id, "", "text")
+
+    def test_expr_whitespace_only_raises_parse_error(
+        self, executor, player_id
+    ):
+        """expr が空白のみで DslParseException"""
+        with pytest.raises(DslParseException, match="must not be empty"):
+            executor.execute(player_id, "   \t\n  ", "text")
+
+    def test_expr_not_str_raises_type_error(self, executor, player_id):
+        """expr が str でないとき TypeError"""
+        with pytest.raises(TypeError, match="expr must be str"):
+            executor.execute(player_id, 123, "text")  # type: ignore[arg-type]
+
+    def test_output_mode_not_str_raises_type_error(
+        self, executor, player_id
+    ):
+        """output_mode が str でないとき TypeError"""
+        with pytest.raises(TypeError, match="output_mode must be str"):
+            executor.execute(
+                player_id, "episodic.take(5)", 123  # type: ignore[arg-type]
+            )
+
+    def test_output_mode_invalid_raises_invalid_output_mode(
+        self, executor, episode_store, player_id
+    ):
+        """output_mode が不正なとき InvalidOutputModeException"""
+        episode_store.add(player_id, _make_episode("e1"))
+        with pytest.raises(
+            InvalidOutputModeException, match="output_mode must be one of"
+        ):
+            executor.execute(player_id, "episodic.take(5)", "invalid")
+
+    def test_output_mode_empty_raises_invalid_output_mode(
+        self, executor, player_id
+    ):
+        """output_mode が空文字で InvalidOutputModeException"""
+        with pytest.raises(
+            InvalidOutputModeException, match="output_mode must be one of"
+        ):
+            executor.execute(player_id, "episodic.take(5)", "")

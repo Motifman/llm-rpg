@@ -57,3 +57,16 @@ class DslEvaluationException(LlmApplicationException):
             **context,
         )
         self.expr = expr
+
+
+class InvalidOutputModeException(LlmApplicationException):
+    """output_mode が不正な場合"""
+
+    def __init__(self, message: str, output_mode: str, **context):
+        super().__init__(
+            f"{message} (output_mode={output_mode!r})",
+            error_code="MEMORY_QUERY_INVALID_OUTPUT_MODE",
+            output_mode=output_mode,
+            **context,
+        )
+        self.output_mode = output_mode
