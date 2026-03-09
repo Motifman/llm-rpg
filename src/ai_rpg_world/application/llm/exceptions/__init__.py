@@ -31,3 +31,29 @@ class LlmApiCallException(LlmApplicationException):
     def __init__(self, message: str, error_code: str = "LLM_API_CALL_FAILED", cause: Optional[Exception] = None, **context):
         super().__init__(message, cause=cause, error_code=error_code, **context)
         self.cause = cause
+
+
+class DslParseException(LlmApplicationException):
+    """DSL 式のパースに失敗した場合"""
+
+    def __init__(self, message: str, expr: str, **context):
+        super().__init__(
+            f"{message} (expr={expr!r})",
+            error_code="MEMORY_QUERY_DSL_PARSE_ERROR",
+            expr=expr,
+            **context,
+        )
+        self.expr = expr
+
+
+class DslEvaluationException(LlmApplicationException):
+    """DSL 評価中に失敗した場合"""
+
+    def __init__(self, message: str, expr: str, **context):
+        super().__init__(
+            f"{message} (expr={expr!r})",
+            error_code="MEMORY_QUERY_DSL_EVAL_ERROR",
+            expr=expr,
+            **context,
+        )
+        self.expr = expr

@@ -15,6 +15,12 @@ DEFAULT_SYSTEM_PROMPT_TEMPLATE = """あなたはMMO RPGの冒険者「{{player_n
 - 現在の状況と直近の出来事を踏まえ、次に取る行動を1つ選び、対応するツールを呼び出してください。
 - 対象や移動先を指定するときは、現在の状況に表示されたラベル（P1, N1, M1, O1, S1 など）を使ってください。
 - 行動に失敗した場合は、エラー内容と対処のヒントが「直近の出来事」に含まれます。それを参考に別の行動を選ぶことができます。
+
+【メモリ・TODO ツール（利用可能な場合）】
+- memory_query: episodic / facts / laws / recent_events / state / working_memory を DSL（例: episodic.take(10)）で絞り込んで取得できます。
+- subagent: 絞り込んだデータを副 LLM に渡し、要約や教訓を取得できます。
+- todo_add / todo_list / todo_complete: 計画やタスクを TODO として管理できます。
+- working_memory_append: 仮説やメモをセッション用の作業メモに追記できます。
 """
 
 

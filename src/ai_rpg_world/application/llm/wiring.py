@@ -61,6 +61,16 @@ from ai_rpg_world.application.llm.services.in_memory_episode_memory_store import
 from ai_rpg_world.application.llm.services.in_memory_long_term_memory_store import (
     InMemoryLongTermMemoryStore,
 )
+from ai_rpg_world.application.llm.services.in_memory_todo_store import (
+    InMemoryTodoStore,
+)
+from ai_rpg_world.application.llm.services.in_memory_working_memory_store import (
+    InMemoryWorkingMemoryStore,
+)
+from ai_rpg_world.application.llm.services.memory_query_executor import (
+    MemoryQueryExecutor,
+)
+from ai_rpg_world.application.llm.services.subagent_runner import SubagentRunner
 from ai_rpg_world.application.llm.services.llm_agent_turn_runner import (
     LlmAgentTurnRunner,
 )
@@ -97,6 +107,10 @@ from ai_rpg_world.application.llm.services.tool_command_mapper import (
 from ai_rpg_world.application.llm.services.tool_argument_resolver import (
     DefaultToolArgumentResolver,
 )
+from ai_rpg_world.application.world.contracts.queries import (
+    GetPlayerCurrentStateQuery,
+)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.application.llm.services.tool_definitions import (
     register_default_tools,
 )
@@ -168,6 +182,34 @@ def _create_llm_client_from_env() -> ILLMClient:
         from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
         return LiteLLMClient()
     return StubLlmClient()
+
+
+def _create_subagent_invoke_text(client: ILLMClient):
+    """subagent 用のテキスト完了呼び出しを返す。"""
+    if client is None or isinstance(client, StubLlmClient):
+        return lambda _sys, _user: "（subagent はスタブです。実 LLM 設定時に要約が返ります。）"
+
+    try:
+        from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
+        if isinstance(client, LiteLLMClient):
+            import litellm
+            def _invoke(system: str, user: str) -> str:
+                r = litellm.completion(
+                    model=client._model,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
+                    api_key=client._api_key,
+                )
+                if r and r.choices:
+                    content = getattr(r.choices[0].message, "content", None)
+                    return (content or "").strip()
+                return ""
+            return _invoke
+    except ImportError:
+        pass
+    return lambda _sys, _user: "（subagent は未対応のクライアントです）"
 
 
 def create_llm_agent_wiring(
@@ -294,6 +336,55 @@ def create_llm_agent_wiring(
     context_format_strategy = SectionBasedContextFormatStrategy()
     system_prompt_builder = DefaultSystemPromptBuilder()
     game_tool_registry = DefaultGameToolRegistry()
+
+    # --- Memory persistence (episode / long-term) ---
+    effective_memory_db_path = memory_db_path or (
+        (os.environ.get(_ENV_LLM_MEMORY_DB_PATH) or "").strip() or None
+    )
+    if episode_memory_store is None:
+        if effective_memory_db_path:
+            from ai_rpg_world.infrastructure.llm.sqlite_episode_memory_store import (
+                SqliteEpisodeMemoryStore,
+            )
+            episode_memory_store = SqliteEpisodeMemoryStore(effective_memory_db_path)
+        else:
+            episode_memory_store = InMemoryEpisodeMemoryStore()
+    if long_term_memory_store is None:
+        if effective_memory_db_path:
+            from ai_rpg_world.infrastructure.llm.sqlite_long_term_memory_store import (
+                SqliteLongTermMemoryStore,
+            )
+            long_term_memory_store = SqliteLongTermMemoryStore(effective_memory_db_path)
+        else:
+            long_term_memory_store = InMemoryLongTermMemoryStore()
+
+    working_memory_store = InMemoryWorkingMemoryStore()
+    todo_store = InMemoryTodoStore()
+
+    def _state_provider(pid: PlayerId) -> str:
+        dto = world_query_service.get_player_current_state(
+            GetPlayerCurrentStateQuery(player_id=pid.value)
+        )
+        if dto is None:
+            return "（情報なし）"
+        return current_state_formatter.format(dto)
+
+    memory_query_executor = MemoryQueryExecutor(
+        episode_store=episode_memory_store,
+        long_term_store=long_term_memory_store,
+        sliding_window=sliding_window,
+        action_result_store=action_result_store,
+        working_memory_store=working_memory_store,
+        state_provider=_state_provider,
+        recent_events_formatter=recent_events_formatter,
+    )
+    client = llm_client if llm_client is not None else _create_llm_client_from_env()
+    subagent_invoke_text = _create_subagent_invoke_text(client)
+    subagent_runner = SubagentRunner(
+        memory_query_executor=memory_query_executor,
+        invoke_text=subagent_invoke_text,
+    )
+
     register_default_tools(
         game_tool_registry,
         speech_enabled=speech_service is not None,
@@ -314,10 +405,13 @@ def create_llm_agent_wiring(
             and physical_map_repository is not None
             and player_status_repository is not None
         ),
+        memory_query_enabled=True,
+        subagent_enabled=True,
+        todo_enabled=True,
+        working_memory_enabled=True,
     )
     available_tools_provider = DefaultAvailableToolsProvider(game_tool_registry)
 
-    client = llm_client if llm_client is not None else _create_llm_client_from_env()
     tool_command_mapper = ToolCommandMapper(
         movement_service=movement_service,
         speech_service=speech_service,
@@ -336,33 +430,14 @@ def create_llm_agent_wiring(
         monster_repository=monster_repository,
         physical_map_repository=physical_map_repository,
         player_status_repository=player_status_repository,
+        memory_query_executor=memory_query_executor,
+        subagent_runner=subagent_runner,
+        todo_store=todo_store,
+        working_memory_store=working_memory_store,
     )
     tool_argument_resolver = DefaultToolArgumentResolver()
 
-    # --- Memory persistence (episode / long-term / reflection) ---
-    # memory_db_path: 引数 > 環境変数 LLM_MEMORY_DB_PATH
-    effective_memory_db_path = memory_db_path or (
-        (os.environ.get(_ENV_LLM_MEMORY_DB_PATH) or "").strip() or None
-    )
-
-    if episode_memory_store is None:
-        if effective_memory_db_path:
-            from ai_rpg_world.infrastructure.llm.sqlite_episode_memory_store import (
-                SqliteEpisodeMemoryStore,
-            )
-            episode_memory_store = SqliteEpisodeMemoryStore(effective_memory_db_path)
-        else:
-            episode_memory_store = InMemoryEpisodeMemoryStore()
-
-    if long_term_memory_store is None:
-        if effective_memory_db_path:
-            from ai_rpg_world.infrastructure.llm.sqlite_long_term_memory_store import (
-                SqliteLongTermMemoryStore,
-            )
-            long_term_memory_store = SqliteLongTermMemoryStore(effective_memory_db_path)
-        else:
-            long_term_memory_store = InMemoryLongTermMemoryStore()
-
+    # --- Reflection state ---
     if reflection_state_port is None:
         if effective_memory_db_path:
             from ai_rpg_world.infrastructure.llm.sqlite_reflection_state_port import (

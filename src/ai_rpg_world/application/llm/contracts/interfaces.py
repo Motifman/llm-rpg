@@ -19,6 +19,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     SystemPromptPlayerInfoDto,
     ToolDefinitionDto,
     ToolRuntimeContextDto,
+    TodoEntry,
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
@@ -241,6 +242,49 @@ class IActionResultStore(ABC):
     @abstractmethod
     def get_recent(self, player_id: PlayerId, limit: int) -> List[ActionResultEntry]:
         """指定プレイヤーの直近 limit 件の行動結果を新しい順で返す。"""
+        pass
+
+
+class ITodoStore(ABC):
+    """TODO の格納・取得。LLM が管理するタスクリスト用。"""
+
+    @abstractmethod
+    def add(self, player_id: PlayerId, content: str) -> str:
+        """TODO を追加し、todo_id を返す。"""
+        pass
+
+    @abstractmethod
+    def list_uncompleted(self, player_id: PlayerId) -> List[TodoEntry]:
+        """未完了の TODO を追加日時の新しい順で返す。"""
+        pass
+
+    @abstractmethod
+    def complete(self, player_id: PlayerId, todo_id: str) -> bool:
+        """指定した TODO を完了にする。存在しない id の場合は False。"""
+        pass
+
+    @abstractmethod
+    def remove(self, player_id: PlayerId, todo_id: str) -> bool:
+        """指定した TODO を削除する。存在しない id の場合は False。"""
+        pass
+
+
+class IWorkingMemoryStore(ABC):
+    """作業メモ（仮説・中間結論）の格納・取得。セッション寄りの短期記憶。"""
+
+    @abstractmethod
+    def append(self, player_id: PlayerId, text: str) -> None:
+        """テキストを追加する。"""
+        pass
+
+    @abstractmethod
+    def get_recent(self, player_id: PlayerId, limit: int) -> List[str]:
+        """直近 limit 件を新しい順で返す。"""
+        pass
+
+    @abstractmethod
+    def clear(self, player_id: PlayerId) -> None:
+        """指定プレイヤーの作業メモをクリアする。"""
         pass
 
 

@@ -26,14 +26,26 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
     ShopListItemAvailabilityResolver,
     ShopPurchaseAvailabilityResolver,
     ShopUnlistItemAvailabilityResolver,
+    MemoryQueryAvailabilityResolver,
+    SubagentAvailabilityResolver,
     TradeAcceptAvailabilityResolver,
     TradeCancelAvailabilityResolver,
     TradeOfferAvailabilityResolver,
+    TodoAddAvailabilityResolver,
+    TodoCompleteAvailabilityResolver,
+    TodoListAvailabilityResolver,
     WhisperAvailabilityResolver,
+    WorkingMemoryAppendAvailabilityResolver,
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_CHANGE_ATTENTION,
     TOOL_NAME_CHEST_STORE,
+    TOOL_NAME_MEMORY_QUERY,
+    TOOL_NAME_SUBAGENT,
+    TOOL_NAME_TODO_ADD,
+    TOOL_NAME_TODO_COMPLETE,
+    TOOL_NAME_TODO_LIST,
+    TOOL_NAME_WORKING_MEMORY_APPEND,
     TOOL_NAME_CHEST_TAKE,
     TOOL_NAME_COMBAT_USE_SKILL,
     TOOL_NAME_CONVERSATION_ADVANCE,
@@ -484,6 +496,93 @@ TRADE_CANCEL_DEFINITION = ToolDefinitionDto(
     parameters=TRADE_CANCEL_PARAMETERS,
 )
 
+# --- メモリ・TODO・作業メモ ---
+MEMORY_QUERY_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "expr": {
+            "type": "string",
+            "description": "DSL 式。例: episodic.take(10), facts.take(5), state",
+        },
+        "output_mode": {
+            "type": "string",
+            "enum": ["text", "preview", "count"],
+            "description": "出力形式。text=全文, preview=先頭5件, count=件数のみ",
+        },
+    },
+    "required": ["expr"],
+}
+MEMORY_QUERY_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_MEMORY_QUERY,
+    description="メモリ変数（episodic, facts, laws, recent_events, state, working_memory）を DSL 式で検索します。",
+    parameters=MEMORY_QUERY_PARAMETERS,
+)
+
+SUBAGENT_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "bindings": {
+            "type": "object",
+            "description": "名前付き入力。各値は DSL 式。例: {\"episodes\": \"episodic.take(20)\"}",
+        },
+        "query": {
+            "type": "string",
+            "description": "自然言語クエリ。bindings のデータを使って要約・教訓を求めます。",
+        },
+    },
+    "required": ["bindings", "query"],
+}
+SUBAGENT_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SUBAGENT,
+    description="絞り込んだメモリを渡し、要約・教訓を取得します（read-only）。",
+    parameters=SUBAGENT_PARAMETERS,
+)
+
+TODO_ADD_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "content": {"type": "string", "description": "TODO の内容"},
+    },
+    "required": ["content"],
+}
+TODO_ADD_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_TODO_ADD,
+    description="TODO を追加します。",
+    parameters=TODO_ADD_PARAMETERS,
+)
+
+TODO_LIST_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_TODO_LIST,
+    description="未完了の TODO 一覧を取得します。",
+    parameters={"type": "object", "properties": {}, "required": []},
+)
+
+TODO_COMPLETE_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "todo_id": {"type": "string", "description": "完了する TODO の ID"},
+    },
+    "required": ["todo_id"],
+}
+TODO_COMPLETE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_TODO_COMPLETE,
+    description="指定した TODO を完了にします。",
+    parameters=TODO_COMPLETE_PARAMETERS,
+)
+
+WORKING_MEMORY_APPEND_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "text": {"type": "string", "description": "追加するテキスト（仮説・メモなど）"},
+    },
+    "required": ["text"],
+}
+WORKING_MEMORY_APPEND_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_WORKING_MEMORY_APPEND,
+    description="作業メモにテキストを追加します。仮説や中間結論を記録できます。",
+    parameters=WORKING_MEMORY_APPEND_PARAMETERS,
+)
+
 
 def register_default_tools(
     registry: IGameToolRegistry,
@@ -502,6 +601,10 @@ def register_default_tools(
     trade_enabled: bool = False,
     inspect_item_enabled: bool = False,
     inspect_target_enabled: bool = False,
+    memory_query_enabled: bool = False,
+    subagent_enabled: bool = False,
+    todo_enabled: bool = False,
+    working_memory_enabled: bool = False,
 ) -> None:
     """標準ツール群を登録し、依存サービスがあるカテゴリだけ追加する。"""
     if not isinstance(registry, IGameToolRegistry):
@@ -547,3 +650,16 @@ def register_default_tools(
         registry.register(TRADE_OFFER_DEFINITION, TradeOfferAvailabilityResolver())
         registry.register(TRADE_ACCEPT_DEFINITION, TradeAcceptAvailabilityResolver())
         registry.register(TRADE_CANCEL_DEFINITION, TradeCancelAvailabilityResolver())
+    if memory_query_enabled:
+        registry.register(MEMORY_QUERY_DEFINITION, MemoryQueryAvailabilityResolver())
+    if subagent_enabled:
+        registry.register(SUBAGENT_DEFINITION, SubagentAvailabilityResolver())
+    if todo_enabled:
+        registry.register(TODO_ADD_DEFINITION, TodoAddAvailabilityResolver())
+        registry.register(TODO_LIST_DEFINITION, TodoListAvailabilityResolver())
+        registry.register(TODO_COMPLETE_DEFINITION, TodoCompleteAvailabilityResolver())
+    if working_memory_enabled:
+        registry.register(
+            WORKING_MEMORY_APPEND_DEFINITION,
+            WorkingMemoryAppendAvailabilityResolver(),
+        )
