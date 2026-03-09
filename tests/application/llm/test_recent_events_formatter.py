@@ -1,7 +1,7 @@
 """DefaultRecentEventsFormatter のテスト（正常・境界・例外）"""
 
 import pytest
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationOutput,
@@ -93,6 +93,67 @@ class TestDefaultRecentEventsFormatter:
         text = formatter.format([sample_observation], [sample_action_result])
         assert "プレイヤーがスポットに到着しました。" in text
         assert "move_to を実行" in text
+
+    def test_format_output_is_chronological_order_oldest_first(self, formatter):
+        """出力は時系列順（古い順）で、先頭が最も古い出来事・末尾が最も新しい出来事となる"""
+        base = datetime(2025, 1, 1, 12, 0, 0)
+        obs_oldest = ObservationEntry(
+            occurred_at=base,
+            output=ObservationOutput(
+                prose="最も古い観測です。",
+                structured={},
+                observation_category="environment",
+            ),
+        )
+        action_middle = ActionResultEntry(
+            occurred_at=base + timedelta(minutes=5),
+            action_summary="move を実行",
+            result_summary="移動した。",
+        )
+        obs_newest = ObservationEntry(
+            occurred_at=base + timedelta(minutes=10),
+            output=ObservationOutput(
+                prose="最も新しい観測です。",
+                structured={},
+                observation_category="environment",
+            ),
+        )
+        # get_recent は新しい順で返すが、formatter は時系列順に並び替える
+        observations = [obs_newest, obs_oldest]
+        action_results = [action_middle]
+        text = formatter.format(observations, action_results)
+        lines = [line.strip() for line in text.split("\n") if line.strip()]
+        assert len(lines) == 3
+        assert "最も古い観測です。" in lines[0]
+        assert "[行動]" in lines[1] and "move を実行" in lines[1]
+        assert "最も新しい観測です。" in lines[2]
+
+    def test_format_chronological_order_with_game_time_labels(self, formatter):
+        """時系列順かつ game_time_label が正しく付与される"""
+        base = datetime(2025, 1, 1, 8, 0, 0)
+        obs1 = ObservationEntry(
+            occurred_at=base,
+            output=ObservationOutput(
+                prose="朝の観測",
+                structured={},
+                observation_category="environment",
+            ),
+            game_time_label="1年1月1日 朝",
+        )
+        obs2 = ObservationEntry(
+            occurred_at=base + timedelta(hours=1),
+            output=ObservationOutput(
+                prose="昼の観測",
+                structured={},
+                observation_category="environment",
+            ),
+            game_time_label="1年1月1日 昼",
+        )
+        text = formatter.format([obs2, obs1], [])
+        lines = [line.strip() for line in text.split("\n") if line.strip()]
+        assert len(lines) == 2
+        assert "[1年1月1日 朝] 朝の観測" in lines[0]
+        assert "[1年1月1日 昼] 昼の観測" in lines[1]
 
     def test_observations_not_list_raises_type_error(
         self, formatter, sample_action_result

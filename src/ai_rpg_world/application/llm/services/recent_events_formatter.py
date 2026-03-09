@@ -12,7 +12,8 @@ def _merge_by_time(
     action_results: List[ActionResultEntry],
 ) -> List[tuple]:
     """
-    観測と行動結果を occurred_at でマージし、(occurred_at, kind, text) のリストを新しい順で返す。
+    観測と行動結果を occurred_at でマージし、(occurred_at, kind, text) のリストを時系列順（古い順）で返す。
+    キャッシュ効率とLLMの出力位置重視のため、新しい情報が末尾に来るようにする。
     kind: "observation" | "action_result"
     観測には game_time_label があれば "[ラベル] 観測文" とする。
     """
@@ -25,12 +26,12 @@ def _merge_by_time(
     for e in action_results:
         text = f"[行動] {e.action_summary} → [結果] {e.result_summary}"
         merged.append((e.occurred_at, "action_result", text))
-    merged.sort(key=lambda x: x[0], reverse=True)
+    merged.sort(key=lambda x: x[0], reverse=False)
     return merged
 
 
 class DefaultRecentEventsFormatter(IRecentEventsFormatter):
-    """観測と行動結果を時刻でマージし、直近の出来事の 1 本テキストに変換する。"""
+    """観測と行動結果を時刻でマージし、直近の出来事を時系列順（古い順）で 1 本テキストに変換する。"""
 
     def format(
         self,

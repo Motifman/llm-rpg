@@ -50,6 +50,7 @@ logs/
 # デモスクリプトの出力（LLM プロンプト検証など）
 prompt_inspection_result.txt
 prompts_demo_out.txt
+out.txt
 
 # 一時ファイル
 *.tmp
