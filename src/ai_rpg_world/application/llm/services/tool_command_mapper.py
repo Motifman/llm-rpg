@@ -91,6 +91,7 @@ from ai_rpg_world.application.world.services.movement_service import (
 from ai_rpg_world.application.llm.exceptions import (
     DslEvaluationException,
     DslParseException,
+    InvalidOutputModeException,
 )
 from ai_rpg_world.application.llm.services.memory_query_executor import (
     MemoryQueryExecutor,
@@ -864,13 +865,13 @@ class ToolCommandMapper:
                     error_code="MEMORY_QUERY_DSL_PARSE_ERROR",
                     remediation=get_remediation("MEMORY_QUERY_DSL_PARSE_ERROR"),
                 )
-            output_mode = args.get("output_mode", "text")
+            output_mode = args.get("output_mode") or "text"
             result = self._memory_query_executor.execute(
                 PlayerId(player_id), expr, output_mode
             )
             msg = result.get("result") or result.get("count") or "（0件）"
             return LlmCommandResultDto(success=True, message=str(msg))
-        except (DslParseException, DslEvaluationException) as e:
+        except (DslParseException, DslEvaluationException, InvalidOutputModeException) as e:
             return self._exception_result(e)
         except Exception as e:
             return self._exception_result(e)

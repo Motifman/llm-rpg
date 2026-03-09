@@ -78,3 +78,46 @@ class TestDslEvaluator:
         """take 以外のメソッドで DslParseException"""
         with pytest.raises(DslParseException, match="Unsupported DSL form"):
             eval_expr("episodic.sort_by(timestamp)", [])
+
+
+class TestDslEvaluatorEdgeCases:
+    """DSL 境界値・エッジケース"""
+
+    def test_take_large_n_returns_available(self):
+        """take(999999) はデータ件数分のみ返す"""
+        data = [{"id": f"e{i}"} for i in range(3)]
+        got = eval_expr("episodic.take(999999)", data)
+        assert len(got) == 3
+
+    def test_take_exactly_length_returns_all(self):
+        """take(n) がデータ件数と同一のとき全件"""
+        data = [{"id": "e1"}, {"id": "e2"}, {"id": "e3"}]
+        got = eval_expr("facts.take(3)", data)
+        assert len(got) == 3
+        assert got[2]["id"] == "e3"
+
+    def test_var_name_with_underscore_accepted(self):
+        """アンダースコア付き変数名がパースできる"""
+        data = [{"id": "e1"}]
+        got = eval_expr("my_episodic.take(1)", data)
+        assert len(got) == 1
+
+    def test_expr_trailing_junk_rejected(self):
+        """expr 末尾の余計な文字はパースに失敗する"""
+        with pytest.raises(DslParseException, match="Unsupported DSL form"):
+            eval_expr("episodic.take(5)x", [])
+
+    def test_expr_leading_whitespace_accepted(self):
+        """expr 先頭のスペースは strip で許容"""
+        data = [{"id": "e1"}]
+        got = eval_expr("  episodic.take(1)", data)
+        assert len(got) == 1
+
+    def test_data_with_non_dict_items_returned_as_is(self):
+        """data に dict 以外が含まれてもそのまま返す（フォーマット層の責務）"""
+        data = [{"id": "e1"}, "string_item", 42]
+        got = eval_expr("episodic.take(3)", data)
+        assert len(got) == 3
+        assert got[0] == {"id": "e1"}
+        assert got[1] == "string_item"
+        assert got[2] == 42

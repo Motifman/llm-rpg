@@ -13,6 +13,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
 from ai_rpg_world.application.llm.exceptions import (
     DslEvaluationException,
     DslParseException,
+    InvalidOutputModeException,
 )
 from ai_rpg_world.application.llm.services.dsl_evaluator import eval_expr
 from ai_rpg_world.application.llm.services.memory_variable_serializer import (
@@ -29,6 +30,8 @@ _DEFAULT_LAW_LIMIT = 50
 _DEFAULT_RECENT_OBSERVATIONS = 50
 _DEFAULT_RECENT_ACTIONS = 50
 _DEFAULT_WORKING_MEMORY_LIMIT = 50
+
+_VALID_OUTPUT_MODES = frozenset({"text", "count", "preview"})
 
 
 class MemoryQueryExecutor:
@@ -103,9 +106,16 @@ class MemoryQueryExecutor:
             raise TypeError("player_id must be PlayerId")
         if not isinstance(expr, str):
             raise TypeError("expr must be str")
+        if not isinstance(output_mode, str):
+            raise TypeError("output_mode must be str")
         expr = expr.strip()
         if not expr:
             raise DslParseException("expr must not be empty", expr=expr)
+        if output_mode not in _VALID_OUTPUT_MODES:
+            raise InvalidOutputModeException(
+                f"output_mode must be one of {', '.join(sorted(_VALID_OUTPUT_MODES))}",
+                output_mode=output_mode,
+            )
 
         var_name = self._extract_var_name(expr)
 

@@ -5,6 +5,10 @@ from unittest.mock import MagicMock
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.exceptions import (
+    DslParseException,
+    InvalidOutputModeException,
+)
 from ai_rpg_world.application.llm.services.in_memory_todo_store import (
     InMemoryTodoStore,
 )
@@ -263,3 +267,117 @@ class TestUnknownTool:
         result = mapper.execute(1, "memory_unknown_tool", {})
         assert result.success is False
         assert result.error_code == "UNKNOWN_TOOL"
+
+
+class TestMemoryQueryExceptionPropagation:
+    """memory_query の例外伝播・エラーレスポンス"""
+
+    def test_dsl_parse_exception_returns_proper_error_response(
+        self, movement_service
+    ):
+        """executor が DslParseException を投げたとき適切なエラーレスポンス"""
+        mock_executor = MagicMock(spec=MemoryQueryExecutor)
+        mock_executor.execute.side_effect = DslParseException(
+            "Unsupported DSL form", expr="invalid"
+        )
+        mapper = ToolCommandMapper(
+            movement_service=movement_service,
+            memory_query_executor=mock_executor,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_MEMORY_QUERY,
+            {"expr": "invalid", "output_mode": "text"},
+        )
+        assert result.success is False
+        assert result.error_code == "MEMORY_QUERY_DSL_PARSE_ERROR"
+        assert result.remediation is not None
+        assert "DSL" in (result.remediation or "")
+
+    def test_invalid_output_mode_returns_proper_error_response(
+        self, movement_service
+    ):
+        """output_mode が不正なとき InvalidOutputModeException でエラーレスポンス"""
+        mock_executor = MagicMock(spec=MemoryQueryExecutor)
+        mock_executor.execute.side_effect = InvalidOutputModeException(
+            "output_mode must be one of text, count, preview",
+            output_mode="invalid",
+        )
+        mapper = ToolCommandMapper(
+            movement_service=movement_service,
+            memory_query_executor=mock_executor,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_MEMORY_QUERY,
+            {"expr": "episodic.take(5)", "output_mode": "invalid"},
+        )
+        assert result.success is False
+        assert result.error_code == "MEMORY_QUERY_INVALID_OUTPUT_MODE"
+        assert result.remediation is not None
+
+
+class TestSubagentExceptionPropagation:
+    """subagent の例外伝播・エラーレスポンス"""
+
+    def test_subagent_run_raises_returns_proper_error_response(
+        self,
+        movement_service,
+        memory_query_executor,
+        todo_store,
+        working_memory_store,
+    ):
+        """subagent_runner.run が例外を投げたとき適切なエラーレスポンス"""
+        def failing_invoke(_s: str, _u: str) -> str:
+            raise RuntimeError("副 LLM 呼び出し失敗")
+
+        runner = SubagentRunner(
+            memory_query_executor=memory_query_executor,
+            invoke_text=failing_invoke,
+        )
+        mapper = ToolCommandMapper(
+            movement_service=movement_service,
+            memory_query_executor=memory_query_executor,
+            subagent_runner=runner,
+            todo_store=todo_store,
+            working_memory_store=working_memory_store,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SUBAGENT,
+            {"bindings": {"a": "episodic.take(1)"}, "query": "要約して"},
+        )
+        assert result.success is False
+        assert "副 LLM" in result.message or "失敗" in result.message
+
+
+class TestTodoExceptionPropagation:
+    """todo_* の例外伝播・エラーレスポンス"""
+
+    def test_todo_add_type_error_returns_proper_error_response(
+        self,
+        movement_service,
+        memory_query_executor,
+        subagent_runner,
+        working_memory_store,
+    ):
+        """todo_store.add が TypeError を投げたとき _exception_result でラップ"""
+        store = MagicMock()
+        store.add.side_effect = TypeError("player_id must be PlayerId")
+        mapper = ToolCommandMapper(
+            movement_service=movement_service,
+            memory_query_executor=memory_query_executor,
+            subagent_runner=subagent_runner,
+            todo_store=store,
+            working_memory_store=working_memory_store,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_TODO_ADD,
+            {"content": "タスク"},
+        )
+        assert result.success is False
+        assert "player_id" in result.message.lower() or result.error_code in (
+            "SYSTEM_ERROR",
+            "TODO_ERROR",
+        )

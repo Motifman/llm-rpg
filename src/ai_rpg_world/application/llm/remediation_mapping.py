@@ -27,6 +27,7 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "UNKNOWN_TOOL": "利用可能なツール一覧から選択してください。",
     "MEMORY_QUERY_DSL_PARSE_ERROR": "DSL 式の形式を確認してください。例: episodic.take(10)",
     "MEMORY_QUERY_DSL_EVAL_ERROR": "DSL 式の評価に失敗しました。変数名と take の引数を確認してください。",
+    "MEMORY_QUERY_INVALID_OUTPUT_MODE": "output_mode は text / count / preview のいずれかを指定してください。",
     "SUBAGENT_ERROR": "bindings と query を正しく指定してください。",
     "TODO_ERROR": "正しい TODO ID または内容を指定してください。",
     "WORKING_MEMORY_ERROR": "追加するテキストを指定してください。",
