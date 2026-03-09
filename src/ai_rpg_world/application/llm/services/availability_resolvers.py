@@ -291,3 +291,45 @@ class TradeCancelAvailabilityResolver(IAvailabilityResolver):
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
         return context is not None and bool(context.available_trades)
+
+
+class MemoryQueryAvailabilityResolver(IAvailabilityResolver):
+    """memory_query は現在状態が取得できているときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None
+
+
+class SubagentAvailabilityResolver(IAvailabilityResolver):
+    """subagent は現在状態が取得できているときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None
+
+
+class TodoAddAvailabilityResolver(IAvailabilityResolver):
+    """TODO 追加は常に利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return True
+
+
+class TodoListAvailabilityResolver(IAvailabilityResolver):
+    """TODO 一覧は常に利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return True
+
+
+class TodoCompleteAvailabilityResolver(IAvailabilityResolver):
+    """TODO 完了は常に利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return True
+
+
+class WorkingMemoryAppendAvailabilityResolver(IAvailabilityResolver):
+    """作業メモ追加は常に利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return True

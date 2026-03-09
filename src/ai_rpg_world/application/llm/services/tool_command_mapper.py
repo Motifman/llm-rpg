@@ -19,6 +19,12 @@ from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_CHANGE_ATTENTION,
     TOOL_NAME_CHEST_STORE,
+    TOOL_NAME_MEMORY_QUERY,
+    TOOL_NAME_SUBAGENT,
+    TOOL_NAME_TODO_ADD,
+    TOOL_NAME_TODO_COMPLETE,
+    TOOL_NAME_TODO_LIST,
+    TOOL_NAME_WORKING_MEMORY_APPEND,
     TOOL_NAME_CHEST_TAKE,
     TOOL_NAME_COMBAT_USE_SKILL,
     TOOL_NAME_CONVERSATION_ADVANCE,
@@ -82,6 +88,14 @@ from ai_rpg_world.application.world.services.player_place_object_service import 
 from ai_rpg_world.application.world.services.movement_service import (
     MovementApplicationService,
 )
+from ai_rpg_world.application.llm.exceptions import (
+    DslEvaluationException,
+    DslParseException,
+)
+from ai_rpg_world.application.llm.services.memory_query_executor import (
+    MemoryQueryExecutor,
+)
+from ai_rpg_world.application.llm.services.subagent_runner import SubagentRunner
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -133,6 +147,10 @@ class ToolCommandMapper:
         monster_repository: Optional["MonsterRepository"] = None,
         physical_map_repository: Optional["PhysicalMapRepository"] = None,
         player_status_repository: Optional["PlayerStatusRepository"] = None,
+        memory_query_executor: Optional[MemoryQueryExecutor] = None,
+        subagent_runner: Optional[SubagentRunner] = None,
+        todo_store: Optional[Any] = None,
+        working_memory_store: Optional[Any] = None,
     ) -> None:
         move_to_destination = getattr(movement_service, "move_to_destination", None)
         if not callable(move_to_destination):
@@ -167,6 +185,10 @@ class ToolCommandMapper:
             getattr(skill_tool_service, "use_skill", None)
         ):
             raise TypeError("skill_tool_service must have a callable use_skill")
+        self._memory_query_executor = memory_query_executor
+        self._subagent_runner = subagent_runner
+        self._todo_store = todo_store
+        self._working_memory_store = working_memory_store
         self._quest_service = quest_service
         self._guild_service = guild_service
         self._shop_service = shop_service
@@ -213,6 +235,18 @@ class ToolCommandMapper:
             TOOL_NAME_TRADE_ACCEPT: self._execute_trade_accept,
             TOOL_NAME_TRADE_CANCEL: self._execute_trade_cancel,
         }
+        if memory_query_executor is not None:
+            self._executor_map[TOOL_NAME_MEMORY_QUERY] = self._execute_memory_query
+        if subagent_runner is not None:
+            self._executor_map[TOOL_NAME_SUBAGENT] = self._execute_subagent
+        if todo_store is not None:
+            self._executor_map[TOOL_NAME_TODO_ADD] = self._execute_todo_add
+            self._executor_map[TOOL_NAME_TODO_LIST] = self._execute_todo_list
+            self._executor_map[TOOL_NAME_TODO_COMPLETE] = self._execute_todo_complete
+        if working_memory_store is not None:
+            self._executor_map[TOOL_NAME_WORKING_MEMORY_APPEND] = (
+                self._execute_working_memory_append
+            )
 
     def execute(
         self,
@@ -813,6 +847,154 @@ class ToolCommandMapper:
                 CancelTradeCommand(trade_id=int(args["trade_id"]), player_id=player_id)
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_memory_query(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> LlmCommandResultDto:
+        if self._memory_query_executor is None:
+            return self._unknown_tool("memory_query ツールはまだ利用できません。")
+        try:
+            expr = args.get("expr", "").strip()
+            if not expr:
+                return LlmCommandResultDto(
+                    success=False,
+                    message="expr が指定されていません。",
+                    error_code="MEMORY_QUERY_DSL_PARSE_ERROR",
+                    remediation=get_remediation("MEMORY_QUERY_DSL_PARSE_ERROR"),
+                )
+            output_mode = args.get("output_mode", "text")
+            result = self._memory_query_executor.execute(
+                PlayerId(player_id), expr, output_mode
+            )
+            msg = result.get("result") or result.get("count") or "（0件）"
+            return LlmCommandResultDto(success=True, message=str(msg))
+        except (DslParseException, DslEvaluationException) as e:
+            return self._exception_result(e)
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_subagent(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> LlmCommandResultDto:
+        if self._subagent_runner is None:
+            return self._unknown_tool("subagent ツールはまだ利用できません。")
+        try:
+            bindings = args.get("bindings") or {}
+            if not isinstance(bindings, dict):
+                bindings = {}
+            query = args.get("query", "").strip()
+            if not query:
+                return LlmCommandResultDto(
+                    success=False,
+                    message="query が指定されていません。",
+                    error_code="SUBAGENT_ERROR",
+                    remediation="query を指定してください。",
+                )
+            dto = self._subagent_runner.run(
+                PlayerId(player_id), bindings, query
+            )
+            msg = dto.answer_summary
+            if dto.truncation_note:
+                msg = msg + "\n（注: " + dto.truncation_note + "）"
+            return LlmCommandResultDto(success=True, message=msg)
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_todo_add(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> LlmCommandResultDto:
+        if self._todo_store is None:
+            return self._unknown_tool("TODO ツールはまだ利用できません。")
+        try:
+            content = (args.get("content") or "").strip()
+            if not content:
+                return LlmCommandResultDto(
+                    success=False,
+                    message="content が指定されていません。",
+                    error_code="TODO_ERROR",
+                    remediation="TODO の内容を指定してください。",
+                )
+            todo_id = self._todo_store.add(PlayerId(player_id), content)
+            return LlmCommandResultDto(
+                success=True,
+                message=f"TODO を追加しました（ID: {todo_id}）。",
+            )
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_todo_list(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> LlmCommandResultDto:
+        if self._todo_store is None:
+            return self._unknown_tool("TODO ツールはまだ利用できません。")
+        try:
+            entries = self._todo_store.list_uncompleted(PlayerId(player_id))
+            if not entries:
+                return LlmCommandResultDto(
+                    success=True,
+                    message="未完了の TODO はありません。",
+                )
+            lines = [
+                f"- [{e.id}] {e.content} (追加: {e.added_at.strftime('%Y-%m-%d %H:%M')})"
+                for e in entries
+            ]
+            return LlmCommandResultDto(
+                success=True,
+                message="未完了の TODO:\n" + "\n".join(lines),
+            )
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_todo_complete(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> LlmCommandResultDto:
+        if self._todo_store is None:
+            return self._unknown_tool("TODO ツールはまだ利用できません。")
+        try:
+            todo_id = (args.get("todo_id") or "").strip()
+            if not todo_id:
+                return LlmCommandResultDto(
+                    success=False,
+                    message="todo_id が指定されていません。",
+                    error_code="TODO_ERROR",
+                    remediation="完了する TODO の ID を指定してください。",
+                )
+            ok = self._todo_store.complete(PlayerId(player_id), todo_id)
+            if ok:
+                return LlmCommandResultDto(
+                    success=True,
+                    message=f"TODO {todo_id} を完了にしました。",
+                )
+            return LlmCommandResultDto(
+                success=False,
+                message=f"TODO {todo_id} が見つかりません。",
+                error_code="TODO_ERROR",
+                remediation="正しい todo_id を指定してください。todo_list で一覧を確認できます。",
+            )
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_working_memory_append(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> LlmCommandResultDto:
+        if self._working_memory_store is None:
+            return self._unknown_tool("作業メモツールはまだ利用できません。")
+        try:
+            text = (args.get("text") or "").strip()
+            if not text:
+                return LlmCommandResultDto(
+                    success=False,
+                    message="text が指定されていません。",
+                    error_code="WORKING_MEMORY_ERROR",
+                    remediation="追加するテキストを指定してください。",
+                )
+            self._working_memory_store.append(PlayerId(player_id), text)
+            return LlmCommandResultDto(
+                success=True,
+                message="作業メモに追加しました。",
+            )
         except Exception as e:
             return self._exception_result(e)
 

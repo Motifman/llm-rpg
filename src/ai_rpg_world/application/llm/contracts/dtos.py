@@ -522,3 +522,68 @@ class MemoryLawEntry:
             raise TypeError("strength must be int or float")
         if not isinstance(self.player_id, int):
             raise TypeError("player_id must be int")
+
+
+@dataclass(frozen=True)
+class SubagentEvidenceEntry:
+    """subagent の evidence 1 件。"""
+
+    binding_name: str
+    source_var: str
+    entry_ids: Tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.binding_name, str):
+            raise TypeError("binding_name must be str")
+        if not isinstance(self.source_var, str):
+            raise TypeError("source_var must be str")
+        if not isinstance(self.entry_ids, tuple):
+            raise TypeError("entry_ids must be tuple")
+        for x in self.entry_ids:
+            if not isinstance(x, str):
+                raise TypeError("entry_ids must contain only str")
+
+
+@dataclass(frozen=True)
+class SubagentResultDto:
+    """subagent の返却値。"""
+
+    answer_summary: str
+    evidence: Tuple[SubagentEvidenceEntry, ...]
+    used_bindings: Tuple[str, ...]
+    truncation_note: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.answer_summary, str):
+            raise TypeError("answer_summary must be str")
+        if not isinstance(self.evidence, tuple):
+            raise TypeError("evidence must be tuple")
+        if not isinstance(self.used_bindings, tuple):
+            raise TypeError("used_bindings must be tuple")
+        for x in self.used_bindings:
+            if not isinstance(x, str):
+                raise TypeError("used_bindings must contain only str")
+        if self.truncation_note is not None and not isinstance(
+            self.truncation_note, str
+        ):
+            raise TypeError("truncation_note must be str or None")
+
+
+@dataclass(frozen=True)
+class TodoEntry:
+    """TODO 1 件。LLM が管理するタスクリスト用。"""
+
+    id: str
+    content: str
+    added_at: datetime
+    completed: bool = False
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.id, str):
+            raise TypeError("id must be str")
+        if not isinstance(self.content, str):
+            raise TypeError("content must be str")
+        if not isinstance(self.added_at, datetime):
+            raise TypeError("added_at must be datetime")
+        if not isinstance(self.completed, bool):
+            raise TypeError("completed must be bool")

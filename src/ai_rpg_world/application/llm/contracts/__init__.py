@@ -9,6 +9,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     MemoryRetrievalQueryDto,
     SystemPromptPlayerInfoDto,
     ToolDefinitionDto,
+    TodoEntry,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
@@ -29,6 +30,8 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IReflectionService,
     ISlidingWindowMemory,
     ISystemPromptBuilder,
+    ITodoStore,
+    IWorkingMemoryStore,
 )
 
 __all__ = [
@@ -40,6 +43,7 @@ __all__ = [
     "MemoryRetrievalQueryDto",
     "SystemPromptPlayerInfoDto",
     "ToolDefinitionDto",
+    "TodoEntry",
     "IActionResultStore",
     "IAvailabilityResolver",
     "IAvailableToolsProvider",
@@ -58,4 +62,6 @@ __all__ = [
     "IReflectionService",
     "ISlidingWindowMemory",
     "ISystemPromptBuilder",
+    "ITodoStore",
+    "IWorkingMemoryStore",
 ]
