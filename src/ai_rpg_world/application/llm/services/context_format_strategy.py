@@ -6,7 +6,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import IContextFormatStra
 class SectionBasedContextFormatStrategy(IContextFormatStrategy):
     """
     案A: セクション見出し形式でコンテキストを組み立てる。
-    ## 現在の状況 / ## 直近の出来事（新しい順） / ## 関連する記憶
+    ## 現在の状況 / ## 直近の出来事（時系列順） / ## 関連する記憶
     """
 
     def format(
@@ -26,7 +26,7 @@ class SectionBasedContextFormatStrategy(IContextFormatStrategy):
             "## 現在の状況",
             current_state_text.strip() or "（情報なし）",
             "",
-            "## 直近の出来事（新しい順）",
+            "## 直近の出来事（時系列順）",
             recent_events_text.strip() or "（なし）",
             "",
             "## 関連する記憶",

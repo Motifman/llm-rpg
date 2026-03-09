@@ -22,7 +22,7 @@ class TestSectionBasedContextFormatStrategy:
             relevant_memories_text="記憶なし",
         )
         assert "## 現在の状況" in text
-        assert "## 直近の出来事（新しい順）" in text
+        assert "## 直近の出来事（時系列順）" in text
         assert "## 関連する記憶" in text
         assert "現在地: 広場" in text
         assert "- イベント1" in text
