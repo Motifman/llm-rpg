@@ -458,6 +458,76 @@ class TestToolCommandMapperInspectItem:
         assert result.success is False
         assert result.error_code == "UNKNOWN_TOOL"
 
+    def test_execute_inspect_item_missing_item_instance_id_returns_invalid_target_label(
+        self, item_repository
+    ):
+        """item_instance_id が省略（None）のとき success=False, error_code=INVALID_TARGET_LABEL"""
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            item_repository=item_repository,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_INSPECT_ITEM,
+            {},
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        assert result.remediation is not None
+        item_repository.find_by_id.assert_not_called()
+
+    def test_execute_inspect_item_invalid_item_instance_id_type_returns_invalid_target_label(
+        self, item_repository
+    ):
+        """item_instance_id が不正な型（文字列 "abc"）のとき success=False, error_code=INVALID_TARGET_LABEL"""
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            item_repository=item_repository,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_INSPECT_ITEM,
+            {"item_instance_id": "abc"},
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        assert "正の整数" in result.message
+        item_repository.find_by_id.assert_not_called()
+
+    def test_execute_inspect_item_zero_item_instance_id_returns_invalid_target_label(
+        self, item_repository
+    ):
+        """item_instance_id が 0 のとき success=False, error_code=INVALID_TARGET_LABEL"""
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            item_repository=item_repository,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_INSPECT_ITEM,
+            {"item_instance_id": 0},
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        item_repository.find_by_id.assert_not_called()
+
+    def test_execute_inspect_item_negative_item_instance_id_returns_invalid_target_label(
+        self, item_repository
+    ):
+        """item_instance_id が負のとき success=False, error_code=INVALID_TARGET_LABEL"""
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            item_repository=item_repository,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_INSPECT_ITEM,
+            {"item_instance_id": -1},
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        item_repository.find_by_id.assert_not_called()
+
 
 class TestToolCommandMapperInspectTarget:
     """world_inspect_target ツールの実行テスト"""
@@ -531,3 +601,147 @@ class TestToolCommandMapperInspectTarget:
         )
         assert result.success is False
         assert result.error_code == "UNKNOWN_TOOL"
+
+    def test_execute_inspect_target_missing_target_world_object_id_returns_invalid_target_label(
+        self, monster_repository, player_status_repository, physical_map_repository
+    ):
+        """target_world_object_id が省略（None）のとき success=False, error_code=INVALID_TARGET_LABEL"""
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            monster_repository=monster_repository,
+            physical_map_repository=physical_map_repository,
+            player_status_repository=player_status_repository,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_INSPECT_TARGET,
+            {},
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        assert result.remediation is not None
+        monster_repository.find_by_world_object_id.assert_not_called()
+
+    def test_execute_inspect_target_invalid_target_world_object_id_type_returns_invalid_target_label(
+        self, monster_repository, player_status_repository, physical_map_repository
+    ):
+        """target_world_object_id が不正な型（文字列 "xyz"）のとき success=False, error_code=INVALID_TARGET_LABEL"""
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            monster_repository=monster_repository,
+            physical_map_repository=physical_map_repository,
+            player_status_repository=player_status_repository,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_INSPECT_TARGET,
+            {"target_world_object_id": "xyz"},
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        assert "正の整数" in result.message
+        monster_repository.find_by_world_object_id.assert_not_called()
+
+    def test_execute_inspect_target_zero_target_world_object_id_returns_invalid_target_label(
+        self, monster_repository, player_status_repository, physical_map_repository
+    ):
+        """target_world_object_id が 0 のとき success=False, error_code=INVALID_TARGET_LABEL"""
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            monster_repository=monster_repository,
+            physical_map_repository=physical_map_repository,
+            player_status_repository=player_status_repository,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_INSPECT_TARGET,
+            {"target_world_object_id": 0},
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        monster_repository.find_by_world_object_id.assert_not_called()
+
+    def test_execute_inspect_target_object_not_found_returns_target_not_found(
+        self, monster_repository, player_status_repository, physical_map_repository
+    ):
+        """physical_map.get_object が ObjectNotFoundException を投げるとき success=False, error_code=TARGET_NOT_FOUND"""
+        from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
+
+        monster_repository.find_by_world_object_id.return_value = None
+        physical_map = MagicMock()
+        physical_map.get_object.side_effect = ObjectNotFoundException("not found")
+        physical_map_repository.find_by_spot_id.return_value = physical_map
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            monster_repository=monster_repository,
+            physical_map_repository=physical_map_repository,
+            player_status_repository=player_status_repository,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_INSPECT_TARGET,
+            {"target_world_object_id": 999},
+        )
+        assert result.success is False
+        assert result.error_code == "TARGET_NOT_FOUND"
+        assert result.remediation is not None
+
+    def test_execute_inspect_target_player_status_none_returns_target_not_found(
+        self, monster_repository, player_status_repository, physical_map_repository
+    ):
+        """player_status が None のとき success=False, error_code=TARGET_NOT_FOUND"""
+        player_status_repository.find_by_id.return_value = None
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            monster_repository=monster_repository,
+            physical_map_repository=physical_map_repository,
+            player_status_repository=player_status_repository,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_INSPECT_TARGET,
+            {"target_world_object_id": 200},
+        )
+        assert result.success is False
+        assert result.error_code == "TARGET_NOT_FOUND"
+        monster_repository.find_by_world_object_id.assert_not_called()
+
+    def test_execute_inspect_target_player_current_spot_id_none_returns_target_not_found(
+        self, monster_repository, player_status_repository, physical_map_repository
+    ):
+        """player_status.current_spot_id が None のとき success=False, error_code=TARGET_NOT_FOUND"""
+        status = MagicMock()
+        status.current_spot_id = None
+        player_status_repository.find_by_id.return_value = status
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            monster_repository=monster_repository,
+            physical_map_repository=physical_map_repository,
+            player_status_repository=player_status_repository,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_INSPECT_TARGET,
+            {"target_world_object_id": 200},
+        )
+        assert result.success is False
+        assert result.error_code == "TARGET_NOT_FOUND"
+
+    def test_execute_inspect_target_physical_map_none_returns_target_not_found(
+        self, monster_repository, player_status_repository, physical_map_repository
+    ):
+        """physical_map_repository.find_by_spot_id が None のとき success=False, error_code=TARGET_NOT_FOUND"""
+        physical_map_repository.find_by_spot_id.return_value = None
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            monster_repository=monster_repository,
+            physical_map_repository=physical_map_repository,
+            player_status_repository=player_status_repository,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_INSPECT_TARGET,
+            {"target_world_object_id": 200},
+        )
+        assert result.success is False
+        assert result.error_code == "TARGET_NOT_FOUND"

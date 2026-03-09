@@ -444,6 +444,7 @@ class ToolCommandMapper:
                 remediation=get_remediation("UNKNOWN_TOOL"),
             )
         try:
+            from ai_rpg_world.domain.item.exception import ItemInstanceIdValidationException
             from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 
             item_instance_id_raw = args.get("item_instance_id")
@@ -454,7 +455,26 @@ class ToolCommandMapper:
                     error_code="INVALID_TARGET_LABEL",
                     remediation=get_remediation("INVALID_TARGET_LABEL"),
                 )
-            item_id = ItemInstanceId.create(int(item_instance_id_raw))
+            try:
+                raw_int = int(item_instance_id_raw) if isinstance(item_instance_id_raw, (int, float, str)) else None
+            except (ValueError, TypeError):
+                raw_int = None
+            if raw_int is None:
+                return LlmCommandResultDto(
+                    success=False,
+                    message="item_instance_id は正の整数で指定してください。",
+                    error_code="INVALID_TARGET_LABEL",
+                    remediation=get_remediation("INVALID_TARGET_LABEL"),
+                )
+            try:
+                item_id = ItemInstanceId.create(raw_int)
+            except ItemInstanceIdValidationException:
+                return LlmCommandResultDto(
+                    success=False,
+                    message="item_instance_id は正の整数で指定してください。",
+                    error_code="INVALID_TARGET_LABEL",
+                    remediation=get_remediation("INVALID_TARGET_LABEL"),
+                )
             item = self._item_repository.find_by_id(item_id)
             if item is None:
                 return LlmCommandResultDto(
@@ -485,7 +505,10 @@ class ToolCommandMapper:
                 remediation=get_remediation("UNKNOWN_TOOL"),
             )
         try:
-            from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
+            from ai_rpg_world.domain.world.exception.map_exception import (
+                ObjectNotFoundException,
+                WorldObjectIdValidationException,
+            )
             from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
             target_id_raw = args.get("target_world_object_id")
@@ -496,7 +519,26 @@ class ToolCommandMapper:
                     error_code="INVALID_TARGET_LABEL",
                     remediation=get_remediation("INVALID_TARGET_LABEL"),
                 )
-            world_object_id = WorldObjectId.create(int(target_id_raw))
+            try:
+                raw_int = int(target_id_raw) if isinstance(target_id_raw, (int, float, str)) else None
+            except (ValueError, TypeError):
+                raw_int = None
+            if raw_int is None:
+                return LlmCommandResultDto(
+                    success=False,
+                    message="target_world_object_id は正の整数で指定してください。",
+                    error_code="INVALID_TARGET_LABEL",
+                    remediation=get_remediation("INVALID_TARGET_LABEL"),
+                )
+            try:
+                world_object_id = WorldObjectId.create(raw_int)
+            except WorldObjectIdValidationException:
+                return LlmCommandResultDto(
+                    success=False,
+                    message="target_world_object_id は正の整数で指定してください。",
+                    error_code="INVALID_TARGET_LABEL",
+                    remediation=get_remediation("INVALID_TARGET_LABEL"),
+                )
 
             status = self._player_status_repository.find_by_id(PlayerId(player_id))
             if status is None or status.current_spot_id is None:

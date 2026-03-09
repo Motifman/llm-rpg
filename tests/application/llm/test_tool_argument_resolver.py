@@ -259,6 +259,33 @@ class TestDefaultToolArgumentResolver:
 
         assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
 
+    def test_resolve_inspect_item_empty_label_raises(self):
+        """inventory_item_label が空文字のとき INVALID_TARGET_LABEL"""
+        resolver = DefaultToolArgumentResolver()
+
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_INSPECT_ITEM,
+                {"inventory_item_label": ""},
+                _make_context(),
+            )
+
+        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
+        assert "指定されていません" in str(exc_info.value)
+
+    def test_resolve_inspect_item_none_label_raises(self):
+        """inventory_item_label が None（args に含まれない）のとき INVALID_TARGET_LABEL"""
+        resolver = DefaultToolArgumentResolver()
+
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_INSPECT_ITEM,
+                {},
+                _make_context(),
+            )
+
+        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
+
     def test_resolve_inspect_target_invalid_label_raises(self):
         resolver = DefaultToolArgumentResolver()
 
@@ -266,6 +293,33 @@ class TestDefaultToolArgumentResolver:
             resolver.resolve(
                 TOOL_NAME_INSPECT_TARGET,
                 {"target_label": "X99"},
+                _make_context(),
+            )
+
+        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
+
+    def test_resolve_inspect_target_empty_label_raises(self):
+        """target_label が空文字のとき INVALID_TARGET_LABEL"""
+        resolver = DefaultToolArgumentResolver()
+
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_INSPECT_TARGET,
+                {"target_label": ""},
+                _make_context(),
+            )
+
+        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
+        assert "指定されていません" in str(exc_info.value)
+
+    def test_resolve_inspect_target_none_label_raises(self):
+        """target_label が None（args に含まれない）のとき INVALID_TARGET_LABEL"""
+        resolver = DefaultToolArgumentResolver()
+
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_INSPECT_TARGET,
+                {},
                 _make_context(),
             )
 
