@@ -195,6 +195,7 @@ class GuildMembershipSummaryDto:
     guild_id: int
     guild_name: str
     role: str
+    description: Optional[str] = None
 
 
 @dataclass
@@ -214,6 +215,7 @@ class NearbyShopSummaryDto:
     shop_name: str
     listing_count: int
     listings: List[ShopListingSummaryDto] = field(default_factory=list)
+    description: Optional[str] = None
 
 
 @dataclass

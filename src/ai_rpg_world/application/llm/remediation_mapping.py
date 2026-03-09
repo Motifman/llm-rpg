@@ -22,6 +22,8 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "INVALID_TARGET_KIND": "そのラベルはこの操作には使えません。対象の種類を確認してください。",
     "INTERACTION_INVALID": "相互作用できる距離や状態か確認し、別の対象を選んでください。",
     "INTERACTION_TARGET_NOT_FOUND": "対象オブジェクトがまだ見えているか確認してください。",
+    "ITEM_NOT_FOUND": "指定されたアイテムがインベントリにないか、既に失われています。",
+    "TARGET_NOT_FOUND": "指定された対象が視界内にないか、既に去っています。",
     "UNKNOWN_TOOL": "利用可能なツール一覧から選択してください。",
     "SYSTEM_ERROR": "しばらくしてから再度お試しください。",
     "LLM_API_CALL_FAILED": "LLM API が一時的に利用できません。しばらくしてから再度お試しください。",

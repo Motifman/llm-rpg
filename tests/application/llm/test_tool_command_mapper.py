@@ -15,6 +15,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_CONVERSATION_ADVANCE,
     TOOL_NAME_DESTROY_PLACEABLE,
     TOOL_NAME_HARVEST_START,
+    TOOL_NAME_INSPECT_ITEM,
+    TOOL_NAME_INSPECT_TARGET,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
@@ -398,3 +400,134 @@ class TestToolCommandMapperExtendedTools:
         assert result.success is True
         assert "ゴブリン" in result.message
         mapper._skill_tool_service.use_skill.assert_called_once()
+
+
+class TestToolCommandMapperInspectItem:
+    """world_inspect_item ツールの実行テスト"""
+
+    @pytest.fixture
+    def item_repository(self):
+        repo = MagicMock()
+        item = MagicMock()
+        item.item_spec.description = " magical potion."
+        repo.find_by_id.return_value = item
+        return repo
+
+    @pytest.fixture
+    def mapper(self, item_repository):
+        return ToolCommandMapper(
+            movement_service=MagicMock(),
+            item_repository=item_repository,
+        )
+
+    def test_execute_inspect_item_success_returns_description(self, mapper, item_repository):
+        """item_repository がアイテムを返すとき、description が message に含まれる"""
+        result = mapper.execute(
+            1,
+            TOOL_NAME_INSPECT_ITEM,
+            {"item_instance_id": 400},
+        )
+        assert result.success is True
+        assert " magical potion." in result.message
+        item_repository.find_by_id.assert_called_once()
+
+    def test_execute_inspect_item_not_found_returns_failure(self, item_repository):
+        """アイテムが存在しないとき success=False, error_code=ITEM_NOT_FOUND"""
+        item_repository.find_by_id.return_value = None
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            item_repository=item_repository,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_INSPECT_ITEM,
+            {"item_instance_id": 999},
+        )
+        assert result.success is False
+        assert result.error_code == "ITEM_NOT_FOUND"
+        assert result.remediation is not None
+
+    def test_execute_inspect_item_without_repo_returns_failure(self):
+        """item_repository が None のとき success=False"""
+        mapper = ToolCommandMapper(movement_service=MagicMock())
+        result = mapper.execute(
+            1,
+            TOOL_NAME_INSPECT_ITEM,
+            {"item_instance_id": 400},
+        )
+        assert result.success is False
+        assert result.error_code == "UNKNOWN_TOOL"
+
+
+class TestToolCommandMapperInspectTarget:
+    """world_inspect_target ツールの実行テスト"""
+
+    @pytest.fixture
+    def monster_repository(self):
+        repo = MagicMock()
+        monster = MagicMock()
+        monster.template.description = "A fierce goblin warrior."
+        repo.find_by_world_object_id.return_value = monster
+        return repo
+
+    @pytest.fixture
+    def player_status_repository(self):
+        repo = MagicMock()
+        status = MagicMock()
+        status.current_spot_id = MagicMock()
+        status.current_spot_id.value = 1
+        status.current_spot_id.__int__ = lambda _: 1
+        repo.find_by_id.return_value = status
+        return repo
+
+    @pytest.fixture
+    def physical_map_repository(self):
+        repo = MagicMock()
+        physical_map = MagicMock()
+        obj = MagicMock()
+        obj.interaction_data = {"description": "A wooden door."}
+        physical_map.get_object.return_value = obj
+        repo.find_by_spot_id.return_value = physical_map
+        return repo
+
+    @pytest.fixture
+    def mapper(self, monster_repository, player_status_repository, physical_map_repository):
+        return ToolCommandMapper(
+            movement_service=MagicMock(),
+            monster_repository=monster_repository,
+            physical_map_repository=physical_map_repository,
+            player_status_repository=player_status_repository,
+        )
+
+    def test_execute_inspect_target_monster_returns_description(self, mapper, monster_repository):
+        """Monster が見つかったとき template.description を返す"""
+        result = mapper.execute(
+            1,
+            TOOL_NAME_INSPECT_TARGET,
+            {"target_world_object_id": 200},
+        )
+        assert result.success is True
+        assert "fierce goblin warrior" in result.message
+        monster_repository.find_by_world_object_id.assert_called_once()
+
+    def test_execute_inspect_target_object_when_monster_not_found(self, mapper, monster_repository, physical_map_repository):
+        """Monster で見つからず、physical_map の object から description を取得"""
+        monster_repository.find_by_world_object_id.return_value = None
+        result = mapper.execute(
+            1,
+            TOOL_NAME_INSPECT_TARGET,
+            {"target_world_object_id": 210},
+        )
+        assert result.success is True
+        assert "wooden door" in result.message
+
+    def test_execute_inspect_target_without_repos_returns_failure(self):
+        """必要な repository が None のとき success=False"""
+        mapper = ToolCommandMapper(movement_service=MagicMock())
+        result = mapper.execute(
+            1,
+            TOOL_NAME_INSPECT_TARGET,
+            {"target_world_object_id": 200},
+        )
+        assert result.success is False
+        assert result.error_code == "UNKNOWN_TOOL"

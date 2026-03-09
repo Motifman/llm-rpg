@@ -306,6 +306,12 @@ def create_llm_agent_wiring(
         guild_enabled=guild_command_service is not None,
         shop_enabled=shop_command_service is not None,
         trade_enabled=trade_command_service is not None,
+        inspect_item_enabled=item_repository is not None,
+        inspect_target_enabled=(
+            monster_repository is not None
+            and physical_map_repository is not None
+            and player_status_repository is not None
+        ),
     )
     available_tools_provider = DefaultAvailableToolsProvider(game_tool_registry)
 
@@ -324,6 +330,10 @@ def create_llm_agent_wiring(
         guild_service=guild_command_service,
         shop_service=shop_command_service,
         trade_service=trade_command_service,
+        item_repository=item_repository,
+        monster_repository=monster_repository,
+        physical_map_repository=physical_map_repository,
+        player_status_repository=player_status_repository,
     )
     tool_argument_resolver = DefaultToolArgumentResolver()
 

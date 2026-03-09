@@ -523,7 +523,10 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
         for m in memberships:
             counters["G"] += 1
             label = f"G{counters['G']}"
-            lines.append(f"- {label}: {m.guild_name}（ID:{m.guild_id}, 役職:{m.role}）")
+            base = f"- {label}: {m.guild_name}（ID:{m.guild_id}, 役職:{m.role}）"
+            if m.description:
+                base += f" {m.description}"
+            lines.append(base)
             targets[label] = GuildToolRuntimeTargetDto(
                 label=label,
                 kind="guild",
@@ -543,7 +546,10 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
         for s in shops:
             counters["SH"] += 1
             shop_label = f"SH{counters['SH']}"
-            lines.append(f"- {shop_label}: {s.shop_name}（ID:{s.shop_id}, 出品:{s.listing_count}件）")
+            base = f"- {shop_label}: {s.shop_name}（ID:{s.shop_id}, 出品:{s.listing_count}件）"
+            if s.description:
+                base += f" {s.description}"
+            lines.append(base)
             targets[shop_label] = ShopToolRuntimeTargetDto(
                 label=shop_label,
                 kind="shop",

@@ -13,6 +13,8 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
     GuildLeaveAvailabilityResolver,
     GuildWithdrawBankAvailabilityResolver,
     HarvestStartAvailabilityResolver,
+    InspectItemAvailabilityResolver,
+    InspectTargetAvailabilityResolver,
     InteractAvailabilityResolver,
     NoOpAvailabilityResolver,
     PlaceObjectAvailabilityResolver,
@@ -40,6 +42,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_GUILD_LEAVE,
     TOOL_NAME_GUILD_WITHDRAW_BANK,
     TOOL_NAME_HARVEST_START,
+    TOOL_NAME_INSPECT_ITEM,
+    TOOL_NAME_INSPECT_TARGET,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
@@ -213,6 +217,40 @@ DESTROY_PLACEABLE_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_DESTROY_PLACEABLE,
     description="プレイヤー前方の設置物を破壊して回収します。",
     parameters={"type": "object", "properties": {}, "required": []},
+)
+
+INSPECT_ITEM_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "inventory_item_label": {
+            "type": "string",
+            "description": "現在の状況に表示された在庫アイテムラベル（例: I1）。",
+        },
+    },
+    "required": ["inventory_item_label"],
+}
+
+INSPECT_ITEM_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_INSPECT_ITEM,
+    description="在庫アイテムの詳細説明を取得します。",
+    parameters=INSPECT_ITEM_PARAMETERS,
+)
+
+INSPECT_TARGET_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "target_label": {
+            "type": "string",
+            "description": "現在の状況に表示された対象ラベル（例: M1, O1, N1）。",
+        },
+    },
+    "required": ["target_label"],
+}
+
+INSPECT_TARGET_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_INSPECT_TARGET,
+    description="視界内の対象（モンスター、オブジェクト等）の詳細説明を取得します。",
+    parameters=INSPECT_TARGET_PARAMETERS,
 )
 
 CHEST_STORE_PARAMETERS = {
@@ -462,6 +500,8 @@ def register_default_tools(
     guild_enabled: bool = False,
     shop_enabled: bool = False,
     trade_enabled: bool = False,
+    inspect_item_enabled: bool = False,
+    inspect_target_enabled: bool = False,
 ) -> None:
     """標準ツール群を登録し、依存サービスがあるカテゴリだけ追加する。"""
     if not isinstance(registry, IGameToolRegistry):
@@ -473,6 +513,10 @@ def register_default_tools(
         registry.register(SAY_DEFINITION, SayAvailabilityResolver())
     if interaction_enabled:
         registry.register(INTERACT_WORLD_OBJECT_DEFINITION, InteractAvailabilityResolver())
+    if inspect_item_enabled:
+        registry.register(INSPECT_ITEM_DEFINITION, InspectItemAvailabilityResolver())
+    if inspect_target_enabled:
+        registry.register(INSPECT_TARGET_DEFINITION, InspectTargetAvailabilityResolver())
     if harvest_enabled:
         registry.register(HARVEST_START_DEFINITION, HarvestStartAvailabilityResolver())
     if attention_enabled:

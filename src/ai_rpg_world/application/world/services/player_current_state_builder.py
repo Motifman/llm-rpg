@@ -292,7 +292,9 @@ class PlayerCurrentStateBuilder:
                 int(player_status.current_spot_id), area_id
             ),
             active_quests=self._supplemental_context_builder.build_active_quests(query.player_id),
-            guild_memberships=self._supplemental_context_builder.build_guild_memberships(query.player_id),
+            guild_memberships=self._supplemental_context_builder.build_guild_memberships(
+                query.player_id, area_id
+            ),
             nearby_shops=self._supplemental_context_builder.build_nearby_shops(
                 int(player_status.current_spot_id), area_id
             ),
