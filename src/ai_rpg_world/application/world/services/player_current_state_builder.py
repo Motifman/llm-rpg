@@ -179,10 +179,12 @@ class PlayerCurrentStateBuilder:
 
         area_id = None
         area_name = None
+        area_description = None
         areas = physical_map.get_location_areas_at(coord)
         if areas:
             area_id = int(areas[0].location_id)
             area_name = areas[0].name
+            area_description = areas[0].description
 
         current_player_ids = {
             int(s.player_id)
@@ -263,6 +265,7 @@ class PlayerCurrentStateBuilder:
             z=coord.z,
             area_id=area_id,
             area_name=area_name,
+            current_location_description=area_description,
             current_player_count=len(current_player_ids),
             current_player_ids=current_player_ids,
             connected_spot_ids=connected_spot_ids,

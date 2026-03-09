@@ -479,6 +479,8 @@ class ObservationFormatter(IObservationFormatter):
     def _item_instance_name(self, item_instance_id: Any) -> str:
         return self._name_resolver.item_instance_name(item_instance_id)
 
+    _LOCATION_DESCRIPTION_TRUNCATE_LENGTH = 200
+
     def _format_location_entered(
         self, event: LocationEnteredEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
@@ -486,6 +488,11 @@ class ObservationFormatter(IObservationFormatter):
         is_self = event.player_id_value is not None and event.player_id_value == recipient_id.value
         if is_self:
             prose = f"{loc_name}に着きました。"
+            if event.description and event.description.strip():
+                desc = event.description.strip()
+                if len(desc) > self._LOCATION_DESCRIPTION_TRUNCATE_LENGTH:
+                    desc = desc[: self._LOCATION_DESCRIPTION_TRUNCATE_LENGTH] + "…"
+                prose += f" {desc}"
             structured = {
                 "type": "location_entered",
                 "location_name": loc_name,
@@ -714,6 +721,15 @@ class ObservationFormatter(IObservationFormatter):
         self, event: WorldObjectInteractedEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
         prose = self._interaction_type_to_prose(event.interaction_type, event.data or {})
+        if (
+            event.interaction_type == InteractionTypeEnum.EXAMINE
+            and event.data
+        ):
+            desc = (event.data.get("description") or "").strip()
+            if desc:
+                if len(desc) > self._LOCATION_DESCRIPTION_TRUNCATE_LENGTH:
+                    desc = desc[: self._LOCATION_DESCRIPTION_TRUNCATE_LENGTH] + "…"
+                prose += f" {desc}"
         actor_id = getattr(event.actor_id, "value", event.actor_id) if event.actor_id else None
         target_id = getattr(event.target_id, "value", event.target_id) if event.target_id else None
         structured = {
