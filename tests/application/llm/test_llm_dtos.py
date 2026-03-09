@@ -158,6 +158,19 @@ class TestLlmCommandResultDto:
         assert dto.error_code is None
         assert dto.remediation is None
         assert dto.should_reschedule is False
+        assert dto.was_no_op is False
+
+    def test_create_with_was_no_op(self):
+        """was_no_op=True で world_no_op 実行を表す"""
+        dto = LlmCommandResultDto(
+            success=True, message="何もしませんでした。", was_no_op=True
+        )
+        assert dto.was_no_op is True
+
+    def test_was_no_op_default_is_false(self):
+        """was_no_op 省略時は False"""
+        dto = LlmCommandResultDto(success=True, message="完了")
+        assert dto.was_no_op is False
 
     def test_create_failure_with_should_reschedule(self):
         """失敗時は should_reschedule で次 tick 再試行を指定できる"""
@@ -209,6 +222,15 @@ class TestLlmCommandResultDto:
                 success=False,
                 message="err",
                 remediation=[],  # type: ignore[arg-type]
+            )
+
+    def test_was_no_op_not_bool_raises_type_error(self):
+        """was_no_op が bool でない場合 TypeError"""
+        with pytest.raises(TypeError, match="was_no_op must be bool"):
+            LlmCommandResultDto(
+                success=True,
+                message="ok",
+                was_no_op="yes",  # type: ignore[arg-type]
             )
 
     def test_should_reschedule_for_next_tick_no_tool_call_returns_true(self):

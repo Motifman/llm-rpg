@@ -163,6 +163,72 @@ class TestDefaultLlmTurnTriggerScheduleAndRun:
         with pytest.raises(TypeError, match="player_id must be PlayerId"):
             trigger.schedule_turn(None)  # type: ignore[arg-type]
 
+    def test_was_no_op_does_not_continue(self, trigger):
+        """world_no_op のときは継続せず pending に追加しない"""
+        trigger._turn_runner.run_turn = MagicMock(
+            return_value=LlmCommandResultDto(
+                success=True,
+                message="何もしませんでした。",
+                was_no_op=True,
+            )
+        )
+        trigger.schedule_turn(PlayerId(1))
+        trigger.run_scheduled_turns()
+        assert 1 not in trigger._pending
+
+    def test_continues_until_max_turns_when_not_no_op(self, trigger):
+        """world_no_op 以外で max_turns 未達なら継続する"""
+        call_count = 0
+
+        def side_effect(_pid):
+            nonlocal call_count
+            call_count += 1
+            return LlmCommandResultDto(
+                success=True,
+                message="行動した",
+                was_no_op=False,
+            )
+
+        trigger._turn_runner.run_turn = MagicMock(side_effect=side_effect)
+        trigger.schedule_turn(PlayerId(1))
+        trigger.run_scheduled_turns()
+        assert 1 in trigger._pending
+        assert call_count == 1
+        trigger.run_scheduled_turns()
+        assert call_count == 2
+
+    def test_stops_at_max_turns(self):
+        """max_turns に達したら継続しない"""
+        runner = _make_runner()
+        trigger = DefaultLlmTurnTrigger(runner, max_turns=2)
+        trigger._turn_runner.run_turn = MagicMock(
+            return_value=LlmCommandResultDto(
+                success=True,
+                message="行動した",
+                was_no_op=False,
+            )
+        )
+        trigger.schedule_turn(PlayerId(1))
+        trigger.run_scheduled_turns()
+        assert 1 in trigger._pending
+        trigger.run_scheduled_turns()
+        assert 1 not in trigger._pending
+        assert trigger._turn_runner.run_turn.call_count == 2
+
+    def test_should_reschedule_takes_precedence_over_max_turns(self, trigger):
+        """should_reschedule のときは従来どおりエラー再試行として継続"""
+        trigger._turn_runner.run_turn = MagicMock(
+            return_value=LlmCommandResultDto(
+                success=False,
+                message="NO_TOOL_CALL",
+                error_code="NO_TOOL_CALL",
+                should_reschedule=True,
+            )
+        )
+        trigger.schedule_turn(PlayerId(1))
+        trigger.run_scheduled_turns()
+        assert 1 in trigger._pending
+
 
 class TestDefaultLlmTurnTriggerRunScheduledTurnsExceptions:
     """run_scheduled_turns のプレイヤー単位例外隔離"""
@@ -210,3 +276,15 @@ class TestDefaultLlmTurnTriggerInit:
             DefaultLlmTurnTrigger(None)  # type: ignore[arg-type]
         with pytest.raises(TypeError, match="turn_runner must be LlmAgentTurnRunner"):
             DefaultLlmTurnTrigger(MagicMock())
+
+    def test_max_turns_invalid_raises_value_error(self):
+        """max_turns が 1 未満のとき ValueError"""
+        with pytest.raises(ValueError, match="max_turns must be a positive int"):
+            DefaultLlmTurnTrigger(_make_runner(), max_turns=0)
+        with pytest.raises(ValueError, match="max_turns must be a positive int"):
+            DefaultLlmTurnTrigger(_make_runner(), max_turns=-1)
+
+    def test_max_turns_default_is_5(self):
+        """max_turns 省略時は 5"""
+        trigger = DefaultLlmTurnTrigger(_make_runner())
+        assert trigger._max_turns == 5

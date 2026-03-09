@@ -43,6 +43,7 @@ class LlmCommandResultDto:
     error_code: Optional[str] = None
     remediation: Optional[str] = None
     should_reschedule: bool = False
+    was_no_op: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.success, bool):
@@ -55,6 +56,8 @@ class LlmCommandResultDto:
             raise TypeError("remediation must be str or None")
         if not isinstance(self.should_reschedule, bool):
             raise TypeError("should_reschedule must be bool")
+        if not isinstance(self.was_no_op, bool):
+            raise TypeError("was_no_op must be bool")
 
 
 @dataclass(frozen=True)
