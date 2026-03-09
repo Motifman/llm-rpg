@@ -17,6 +17,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     IEpisodeMemoryStore,
+    IHandleStore,
     ILLMClient,
     IMemoryExtractor,
     IPromptBuilder,
@@ -60,6 +61,7 @@ class LlmAgentOrchestrator:
         tool_argument_resolver: Optional[IToolArgumentResolver] = None,
         memory_extractor: Optional[IMemoryExtractor] = None,
         episode_memory_store: Optional[IEpisodeMemoryStore] = None,
+        handle_store: Optional[IHandleStore] = None,
     ) -> None:
         if not isinstance(prompt_builder, IPromptBuilder):
             raise TypeError("prompt_builder must be IPromptBuilder")
@@ -89,6 +91,8 @@ class LlmAgentOrchestrator:
             raise ValueError(
                 "memory_extractor and episode_memory_store must be both set or both None"
             )
+        if handle_store is not None and not isinstance(handle_store, IHandleStore):
+            raise TypeError("handle_store must be IHandleStore or None")
         self._prompt_builder = prompt_builder
         self._llm_client = llm_client
         self._tool_command_mapper = tool_command_mapper
@@ -100,6 +104,7 @@ class LlmAgentOrchestrator:
         )
         self._memory_extractor = memory_extractor
         self._episode_memory_store = episode_memory_store
+        self._handle_store = handle_store
 
     def run_turn(self, player_id: PlayerId) -> LlmCommandResultDto:
         """
@@ -109,6 +114,9 @@ class LlmAgentOrchestrator:
         """
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
+
+        if self._handle_store is not None:
+            self._handle_store.clear_player(player_id)
 
         request = self._prompt_builder.build(player_id)
         messages = request["messages"]

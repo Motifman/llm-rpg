@@ -506,8 +506,8 @@ MEMORY_QUERY_PARAMETERS = {
         },
         "output_mode": {
             "type": "string",
-            "enum": ["text", "preview", "count"],
-            "description": "出力形式。text=全文, preview=先頭5件, count=件数のみ",
+            "enum": ["text", "preview", "count", "handle"],
+            "description": "出力形式。text=全文, preview=先頭5件, count=件数のみ, handle=サーバ内参照（subagent で再利用可）",
         },
     },
     "required": ["expr"],
@@ -523,7 +523,7 @@ SUBAGENT_PARAMETERS = {
     "properties": {
         "bindings": {
             "type": "object",
-            "description": "名前付き入力。各値は DSL 式。例: {\"episodes\": \"episodic.take(20)\"}",
+            "description": "名前付き入力。各値は DSL 式または handle:h_xxx。例: {\"episodes\": \"episodic.take(20)\"} または {\"episodes\": \"handle:h_abc123\"}",
         },
         "query": {
             "type": "string",

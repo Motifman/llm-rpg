@@ -70,3 +70,22 @@ class InvalidOutputModeException(LlmApplicationException):
             **context,
         )
         self.output_mode = output_mode
+
+
+class SubagentInvocationException(LlmApplicationException):
+    """subagent の LLM 呼び出し（invoke_text）が失敗した場合"""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        cause: Optional[Exception] = None,
+        **context,
+    ):
+        super().__init__(
+            message,
+            cause=cause,
+            error_code="SUBAGENT_LLM_ERROR",
+            **context,
+        )
+        self.cause = cause

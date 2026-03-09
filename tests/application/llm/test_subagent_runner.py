@@ -5,7 +5,10 @@ from unittest.mock import MagicMock
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import SubagentEvidenceEntry
-from ai_rpg_world.application.llm.exceptions import DslParseException
+from ai_rpg_world.application.llm.exceptions import (
+    DslParseException,
+    SubagentInvocationException,
+)
 from ai_rpg_world.application.llm.services.memory_query_executor import (
     MemoryQueryExecutor,
 )
@@ -193,8 +196,8 @@ class TestSubagentRunnerExceptionPropagation:
                 "要約して",
             )
 
-    def test_invoke_text_raises_propagates(self):
-        """invoke_text が例外を投げたとき run が伝播する"""
+    def test_invoke_text_raises_subagent_invocation_exception(self):
+        """invoke_text が例外を投げたとき SubagentInvocationException に包まれて伝播する"""
 
         def failing_invoke(_sys: str, _user: str) -> str:
             raise ValueError("LLM エラー")
@@ -205,12 +208,34 @@ class TestSubagentRunnerExceptionPropagation:
             memory_query_executor=ex,
             invoke_text=failing_invoke,
         )
-        with pytest.raises(ValueError, match="LLM エラー"):
+        with pytest.raises(SubagentInvocationException, match="subagent LLM 呼び出しに失敗"):
             runner.run(
                 PlayerId(1),
                 {"a": "episodic.take(1)"},
                 "要約して",
             )
+
+    def test_invoke_text_exception_has_cause_and_error_code(self):
+        """SubagentInvocationException に cause と error_code が設定される"""
+
+        def failing_invoke(_sys: str, _user: str) -> str:
+            raise RuntimeError("API 接続エラー")
+
+        ex = MagicMock(spec=MemoryQueryExecutor)
+        ex.execute.return_value = {"result": "データ"}
+        runner = SubagentRunner(
+            memory_query_executor=ex,
+            invoke_text=failing_invoke,
+        )
+        with pytest.raises(SubagentInvocationException) as exc_info:
+            runner.run(
+                PlayerId(1),
+                {"a": "episodic.take(1)"},
+                "要約して",
+            )
+        assert exc_info.value.error_code == "SUBAGENT_LLM_ERROR"
+        assert exc_info.value.cause is not None
+        assert isinstance(exc_info.value.cause, RuntimeError)
 
     def test_executor_returns_none_result_handled(self):
         """executor が result キーなしで返したとき空文字として扱う"""

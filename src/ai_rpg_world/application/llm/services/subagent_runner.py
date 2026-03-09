@@ -1,15 +1,19 @@
 """subagent ツールの実行器。bindings を評価し、副 LLM で要約・教訓を取得する。"""
 
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     SubagentEvidenceEntry,
     SubagentResultDto,
 )
+from ai_rpg_world.application.llm.contracts.interfaces import IHandleStore
+from ai_rpg_world.application.llm.exceptions import SubagentInvocationException
 from ai_rpg_world.application.llm.services.memory_query_executor import (
     MemoryQueryExecutor,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+_HANDLE_PREFIX = "handle:"
 
 # 制限（計画書 6.6）
 MAX_BINDINGS_PER_CALL = 3
@@ -31,6 +35,7 @@ class SubagentRunner:
         self,
         memory_query_executor: MemoryQueryExecutor,
         invoke_text: Callable[[str, str], str],
+        handle_store: Optional[IHandleStore] = None,
     ) -> None:
         if not isinstance(memory_query_executor, MemoryQueryExecutor):
             raise TypeError(
@@ -38,8 +43,11 @@ class SubagentRunner:
             )
         if not callable(invoke_text):
             raise TypeError("invoke_text must be callable")
+        if handle_store is not None and not isinstance(handle_store, IHandleStore):
+            raise TypeError("handle_store must be IHandleStore or None")
         self._executor = memory_query_executor
         self._invoke_text = invoke_text
+        self._handle_store = handle_store
 
     def run(
         self,
@@ -79,10 +87,30 @@ class SubagentRunner:
             if not isinstance(name, str) or not isinstance(expr, str):
                 raise TypeError("bindings keys and values must be str")
 
-            result = self._executor.execute(
-                player_id, expr.strip(), output_mode="text"
-            )
-            text = result.get("result") or ""
+            expr_stripped = expr.strip()
+            if expr_stripped.startswith(_HANDLE_PREFIX):
+                handle_id = expr_stripped[len(_HANDLE_PREFIX) :].strip()
+                if not handle_id:
+                    raise ValueError("handle: の後に handle_id を指定してください。")
+                if self._handle_store is None:
+                    raise ValueError(
+                        "handle の解決には handle_store の設定が必要です。"
+                    )
+                data = self._handle_store.get(player_id, handle_id)
+                if data is None:
+                    raise ValueError(
+                        f"handle {handle_id!r} が見つかりません。"
+                        " 有効期限が切れたか、無効な handle です。"
+                    )
+                text = self._format_data_as_text(data)
+                var_name = "handle"
+            else:
+                result = self._executor.execute(
+                    player_id, expr_stripped, output_mode="text"
+                )
+                text = result.get("result") or ""
+                var_name = self._extract_source_var(expr_stripped)
+
             if len(text) > MAX_CHARS_PER_BINDING:
                 text = text[:MAX_CHARS_PER_BINDING] + "... (truncated)"
                 truncation_note = (
@@ -91,7 +119,6 @@ class SubagentRunner:
             evaluated[name] = text
             total_chars += len(text)
 
-            var_name = self._extract_source_var(expr)
             evidence_entries.append(
                 SubagentEvidenceEntry(
                     binding_name=name,
@@ -112,7 +139,13 @@ class SubagentRunner:
         context_text = "\n\n".join(context_parts)
         user_content = f"【データ】\n{context_text}\n\n【クエリ】\n{query}"
 
-        answer_summary = self._invoke_text(_SUBAGENT_SYSTEM, user_content)
+        try:
+            answer_summary = self._invoke_text(_SUBAGENT_SYSTEM, user_content)
+        except Exception as e:
+            raise SubagentInvocationException(
+                f"subagent LLM 呼び出しに失敗しました: {e}",
+                cause=e,
+            ) from e
 
         return SubagentResultDto(
             answer_summary=answer_summary.strip(),
@@ -120,6 +153,17 @@ class SubagentRunner:
             used_bindings=tuple(evaluated.keys()),
             truncation_note=truncation_note.strip() if truncation_note else None,
         )
+
+    def _format_data_as_text(self, data: List[Dict[str, Any]]) -> str:
+        """List[Dict] を memory_query と同形式のテキストに変換する。"""
+        lines = []
+        for i, item in enumerate(data):
+            if isinstance(item, dict):
+                parts = [f"{k}={v!r}" for k, v in item.items()]
+                lines.append(f"  [{i+1}] " + ", ".join(parts))
+            else:
+                lines.append(f"  [{i+1}] {item!r}")
+        return "\n".join(lines) if lines else "（0件）"
 
     def _extract_source_var(self, expr: str) -> str:
         """式から変数名を抽出。episodic.take(10) -> episodic"""

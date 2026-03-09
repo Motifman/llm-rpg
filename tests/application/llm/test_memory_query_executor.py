@@ -25,6 +25,7 @@ from ai_rpg_world.application.llm.services.in_memory_long_term_memory_store impo
 from ai_rpg_world.application.llm.services.in_memory_working_memory_store import (
     InMemoryWorkingMemoryStore,
 )
+from ai_rpg_world.application.llm.services.handle_store import InMemoryHandleStore
 from ai_rpg_world.application.llm.services.memory_query_executor import (
     MemoryQueryExecutor,
 )
@@ -125,6 +126,34 @@ def recent_events_formatter():
 
 
 @pytest.fixture
+def handle_store():
+    return InMemoryHandleStore()
+
+
+@pytest.fixture
+def executor_without_handle_store(
+    episode_store,
+    long_term_store,
+    sliding_window,
+    action_result_store,
+    working_memory_store,
+    state_provider,
+    recent_events_formatter,
+):
+    """handle_store=None の Executor（handle モード未設定）"""
+    return MemoryQueryExecutor(
+        episode_store=episode_store,
+        long_term_store=long_term_store,
+        sliding_window=sliding_window,
+        action_result_store=action_result_store,
+        working_memory_store=working_memory_store,
+        state_provider=state_provider,
+        recent_events_formatter=recent_events_formatter,
+        handle_store=None,
+    )
+
+
+@pytest.fixture
 def executor(
     episode_store,
     long_term_store,
@@ -133,6 +162,7 @@ def executor(
     working_memory_store,
     state_provider,
     recent_events_formatter,
+    handle_store,
 ):
     return MemoryQueryExecutor(
         episode_store=episode_store,
@@ -142,6 +172,7 @@ def executor(
         working_memory_store=working_memory_store,
         state_provider=state_provider,
         recent_events_formatter=recent_events_formatter,
+        handle_store=handle_store,
     )
 
 
@@ -317,6 +348,21 @@ class TestMemoryQueryExecutorOutputModes:
         assert "result" in got
         assert "洞窟にいた" in (got.get("result") or "")
 
+    def test_output_mode_handle_returns_handle_id(
+        self, executor, handle_store, episode_store, player_id
+    ):
+        """output_mode=handle で handle_id と count を返す"""
+        episode_store.add(player_id, _make_episode("e1"))
+        episode_store.add(player_id, _make_episode("e2"))
+        got = executor.execute(player_id, "episodic.take(10)", "handle")
+        assert "handle_id" in got
+        assert got["handle_id"].startswith("h_")
+        assert got["count"] == "2"
+        # handle_store にデータが保存されている
+        data = handle_store.get(player_id, got["handle_id"])
+        assert data is not None
+        assert len(data) == 2
+
 
 class TestMemoryQueryExecutorExceptions:
     """例外ケース"""
@@ -326,12 +372,15 @@ class TestMemoryQueryExecutorExceptions:
         with pytest.raises(DslParseException, match="Unknown variable"):
             executor.execute(player_id, "unknown_var.take(5)", "text")
 
-    def test_episodic_without_take_raises_parse_error(
-        self, executor, player_id
+    def test_episodic_without_take_returns_all(
+        self, executor, episode_store, player_id
     ):
-        """episodic のみ（take なし）で DslParseException"""
-        with pytest.raises(DslParseException, match="Unsupported DSL form"):
-            executor.execute(player_id, "episodic", "text")
+        """episodic のみ（take なし）で全件取得（デフォルト上限まで）"""
+        episode_store.add(player_id, _make_episode("e1"))
+        episode_store.add(player_id, _make_episode("e2"))
+        result = executor.execute(player_id, "episodic", "text")
+        assert "result" in result
+        assert "e1" in result["result"] or "e2" in result["result"]
 
     def test_player_id_none_raises_type_error(self, executor):
         """player_id が None で TypeError"""
@@ -382,3 +431,134 @@ class TestMemoryQueryExecutorExceptions:
             InvalidOutputModeException, match="output_mode must be one of"
         ):
             executor.execute(player_id, "episodic.take(5)", "")
+
+    def test_output_mode_handle_without_handle_store_raises(
+        self, executor_without_handle_store, episode_store, player_id
+    ):
+        """handle_store 未設定で output_mode=handle は InvalidOutputModeException"""
+        episode_store.add(player_id, _make_episode("e1"))
+        with pytest.raises(
+            InvalidOutputModeException, match="handle_store"
+        ):
+            executor_without_handle_store.execute(
+                player_id, "episodic.take(10)", "handle"
+            )
+
+    def test_dsl_parse_error_propagates(self, executor, player_id):
+        """DSL パースエラーは DslParseException として伝播"""
+        with pytest.raises(DslParseException, match="Unsupported method"):
+            executor.execute(player_id, "episodic.join(1)", "text")
+
+    def test_dsl_eval_error_propagates(self, executor, player_id):
+        """DSL 評価エラーは DslEvaluationException として伝播"""
+        with pytest.raises(DslEvaluationException, match="n >= 0"):
+            executor.execute(player_id, "episodic.take(-1)", "text")
+
+
+class TestMemoryQueryExecutorHandleMode:
+    """output_mode=handle の詳細テスト"""
+
+    def test_state_with_handle_returns_handle_id(
+        self, executor, handle_store, player_id
+    ):
+        """state を output_mode=handle で取得すると handle_id が返る"""
+        got = executor.execute(player_id, "state", "handle")
+        assert "handle_id" in got
+        assert got["handle_id"].startswith("h_")
+        assert got["count"] == "1"
+        data = handle_store.get(player_id, got["handle_id"])
+        assert data is not None
+        assert len(data) == 1
+        assert data[0].get("text") == "現在地: テストスポット"
+
+    def test_recent_events_with_handle_returns_handle_id(
+        self, executor, handle_store, sliding_window, action_result_store, player_id
+    ):
+        """recent_events を output_mode=handle で取得すると handle_id が返る"""
+        sliding_window.append(player_id, _make_observation("観測A"))
+        action_result_store.append(player_id, "行動B", "結果B")
+        got = executor.execute(player_id, "recent_events", "handle")
+        assert "handle_id" in got
+        data = handle_store.get(player_id, got["handle_id"])
+        assert data is not None
+        assert len(data) == 1
+        assert "観測" in (data[0].get("text") or "") or "行動" in (
+            data[0].get("text") or ""
+        )
+
+
+class TestMemoryQueryExecutorConstructorValidation:
+    """MemoryQueryExecutor コンストラクタのバリデーション"""
+
+    @pytest.fixture
+    def valid_deps(
+        self,
+        episode_store,
+        long_term_store,
+        sliding_window,
+        action_result_store,
+        working_memory_store,
+        state_provider,
+        recent_events_formatter,
+    ):
+        return {
+            "episode_store": episode_store,
+            "long_term_store": long_term_store,
+            "sliding_window": sliding_window,
+            "action_result_store": action_result_store,
+            "working_memory_store": working_memory_store,
+            "state_provider": state_provider,
+            "recent_events_formatter": recent_events_formatter,
+        }
+
+    def test_episode_store_not_interface_raises(self, valid_deps):
+        """episode_store が IEpisodeMemoryStore でないとき TypeError"""
+        valid_deps["episode_store"] = object()
+        with pytest.raises(TypeError, match="episode_store must be IEpisodeMemoryStore"):
+            MemoryQueryExecutor(**valid_deps)
+
+    def test_state_provider_not_callable_raises(self, valid_deps):
+        """state_provider が callable でないとき TypeError"""
+        valid_deps["state_provider"] = "not_callable"
+        with pytest.raises(TypeError, match="state_provider must be callable"):
+            MemoryQueryExecutor(**valid_deps)
+
+    def test_handle_store_invalid_type_raises(
+        self,
+        valid_deps,
+        handle_store,
+    ):
+        """handle_store が IHandleStore でも None でもないとき TypeError"""
+        valid_deps["handle_store"] = "invalid"
+        with pytest.raises(TypeError, match="handle_store must be IHandleStore or None"):
+            MemoryQueryExecutor(**valid_deps)
+
+
+class TestMemoryQueryExecutorEdgeCases:
+    """境界・エッジケース"""
+
+    def test_episodic_empty_returns_zero_count(
+        self, executor, player_id
+    ):
+        """episodic が空のとき count は 0"""
+        got = executor.execute(player_id, "episodic.take(10)", "count")
+        assert got["count"] == "0"
+
+    def test_facts_empty_returns_zero_count(
+        self, executor, player_id
+    ):
+        """facts が空のとき count は 0"""
+        got = executor.execute(player_id, "facts.take(10)", "count")
+        assert got["count"] == "0"
+
+    def test_preview_with_many_entries_includes_truncation_note(
+        self, executor, episode_store, player_id
+    ):
+        """preview で6件以上あるとき「他 N 件」が含まれる"""
+        for i in range(8):
+            episode_store.add(player_id, _make_episode(f"e{i}"))
+        got = executor.execute(player_id, "episodic.take(10)", "preview")
+        assert "preview" in got
+        assert "result" in got
+        assert "他" in (got.get("preview") or "")
+        assert got.get("count") == "8"

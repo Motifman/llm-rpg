@@ -14,6 +14,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     IAvailabilityResolver,
+    IHandleStore,
     IAvailableToolsProvider,
     IContextFormatStrategy,
     ICurrentStateFormatter,
@@ -51,6 +52,7 @@ __all__ = [
     "ICurrentStateFormatter",
     "IEpisodeMemoryStore",
     "IGameToolRegistry",
+    "IHandleStore",
     "IMemoryExtractor",
     "ILLMClient",
     "ILLMPlayerResolver",

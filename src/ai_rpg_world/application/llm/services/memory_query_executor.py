@@ -5,6 +5,7 @@ from typing import Callable, Dict, List, Optional
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     IEpisodeMemoryStore,
+    IHandleStore,
     ILongTermMemoryStore,
     IRecentEventsFormatter,
     ISlidingWindowMemory,
@@ -16,6 +17,7 @@ from ai_rpg_world.application.llm.exceptions import (
     InvalidOutputModeException,
 )
 from ai_rpg_world.application.llm.services.dsl_evaluator import eval_expr
+from ai_rpg_world.application.llm.services.handle_store import generate_handle_id
 from ai_rpg_world.application.llm.services.memory_variable_serializer import (
     episodes_to_dicts,
     facts_to_dicts,
@@ -31,7 +33,7 @@ _DEFAULT_RECENT_OBSERVATIONS = 50
 _DEFAULT_RECENT_ACTIONS = 50
 _DEFAULT_WORKING_MEMORY_LIMIT = 50
 
-_VALID_OUTPUT_MODES = frozenset({"text", "count", "preview"})
+_VALID_OUTPUT_MODES = frozenset({"text", "count", "preview", "handle"})
 
 
 class MemoryQueryExecutor:
@@ -49,6 +51,7 @@ class MemoryQueryExecutor:
         working_memory_store: IWorkingMemoryStore,
         state_provider: Callable[[PlayerId], str],
         recent_events_formatter: IRecentEventsFormatter,
+        handle_store: Optional[IHandleStore] = None,
     ) -> None:
         if not isinstance(episode_store, IEpisodeMemoryStore):
             raise TypeError("episode_store must be IEpisodeMemoryStore")
@@ -66,6 +69,8 @@ class MemoryQueryExecutor:
             raise TypeError(
                 "recent_events_formatter must be IRecentEventsFormatter"
             )
+        if handle_store is not None and not isinstance(handle_store, IHandleStore):
+            raise TypeError("handle_store must be IHandleStore or None")
         self._episode_store = episode_store
         self._long_term_store = long_term_store
         self._sliding_window = sliding_window
@@ -73,6 +78,7 @@ class MemoryQueryExecutor:
         self._working_memory_store = working_memory_store
         self._state_provider = state_provider
         self._recent_events_formatter = recent_events_formatter
+        self._handle_store = handle_store
 
         self._known_vars = frozenset(
             {
@@ -116,6 +122,11 @@ class MemoryQueryExecutor:
                 f"output_mode must be one of {', '.join(sorted(_VALID_OUTPUT_MODES))}",
                 output_mode=output_mode,
             )
+        if output_mode == "handle" and self._handle_store is None:
+            raise InvalidOutputModeException(
+                "output_mode=handle requires handle_store to be configured",
+                output_mode=output_mode,
+            )
 
         var_name = self._extract_var_name(expr)
 
@@ -128,10 +139,19 @@ class MemoryQueryExecutor:
 
         if var_name in ("state", "recent_events"):
             result = self._resolve_scalar(player_id, var_name)
+            if output_mode == "handle":
+                data = [{"text": result}]
+                handle_id = generate_handle_id()
+                self._handle_store.put(player_id, handle_id, data, expr)
+                return {"handle_id": handle_id, "count": "1"}
             return self._format_output_scalar(result, output_mode)
 
         data = self._resolve_list_var(player_id, var_name)
         evaluated = eval_expr(expr, data)
+        if output_mode == "handle":
+            handle_id = generate_handle_id()
+            self._handle_store.put(player_id, handle_id, evaluated, expr)
+            return {"handle_id": handle_id, "count": str(len(evaluated))}
         return self._format_output_list(evaluated, output_mode)
 
     def _extract_var_name(self, expr: str) -> str:

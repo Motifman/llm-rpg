@@ -869,7 +869,15 @@ class ToolCommandMapper:
             result = self._memory_query_executor.execute(
                 PlayerId(player_id), expr, output_mode
             )
-            msg = result.get("result") or result.get("count") or "（0件）"
+            if "handle_id" in result:
+                h_id = result.get("handle_id", "")
+                count = result.get("count", "0")
+                msg = (
+                    f"handle_id: {h_id} (件数: {count}). "
+                    f"subagent の bindings で handle:{h_id} として使用できます。"
+                )
+            else:
+                msg = result.get("result") or result.get("count") or "（0件）"
             return LlmCommandResultDto(success=True, message=str(msg))
         except (DslParseException, DslEvaluationException, InvalidOutputModeException) as e:
             return self._exception_result(e)
