@@ -26,6 +26,33 @@ from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
+class IHandleStore(ABC):
+    """memory_query の output_mode=handle で保持する参照のストア。1 turn 限定。"""
+
+    @abstractmethod
+    def put(
+        self,
+        player_id: PlayerId,
+        handle_id: str,
+        data: List[Dict[str, Any]],
+        expr: str,
+    ) -> None:
+        """評価結果を handle_id で保存する。"""
+        pass
+
+    @abstractmethod
+    def get(
+        self, player_id: PlayerId, handle_id: str
+    ) -> Optional[List[Dict[str, Any]]]:
+        """handle_id に対応するデータを取得する。存在しなければ None。"""
+        pass
+
+    @abstractmethod
+    def clear_player(self, player_id: PlayerId) -> None:
+        """指定プレイヤーの全 handle を破棄する。ターン開始時に呼ぶ。"""
+        pass
+
+
 class ISlidingWindowMemory(ABC):
     """観測のスライディングウィンドウ記憶。直近 N 件を返す。"""
 

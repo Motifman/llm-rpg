@@ -16,6 +16,11 @@ class TestGetRemediation:
         result = get_remediation("PLAYER_NOT_FOUND")
         assert result == "指定したプレイヤーが存在しません。"
 
+    def test_get_remediation_subagent_llm_error(self):
+        """SUBAGENT_LLM_ERROR の対処法が返る"""
+        result = get_remediation("SUBAGENT_LLM_ERROR")
+        assert result == "要約・教訓の取得に失敗しました。しばらくしてから再度お試しください。"
+
     def test_get_remediation_returns_message_for_each_defined_code(self):
         """全定義済み error_code で対処法が返る"""
         for error_code, expected in DEFAULT_REMEDIATION_BY_ERROR_CODE.items():

@@ -10,26 +10,16 @@ EventHandlerComposition のインスタンス化）は**呼び出し元（外部
 【ブートストラップ契約（呼び出し元が守ること）】
 1. create_llm_agent_wiring(...) を呼び、返り値 (observation_registry, llm_turn_trigger) を取得する。
 2. observation_registry を EventHandlerComposition の observation_registry 引数に渡す。
-   - register_for_profile(event_publisher, EventHandlerProfile.FULL) 時に観測ハンドラが登録される。
 3. llm_turn_trigger を WorldSimulationApplicationService の llm_turn_trigger 引数に渡す。
-   - tick() の末尾で run_scheduled_turns() が呼ばれ、スケジュール済み LLM プレイヤーのターンが実行される。
-上記を満たすことで、観測イベント発生 → schedule_turn → tick → run_scheduled_turns の一連の流れが動作する。
-
-LLM クライアント: 環境変数 LLM_CLIENT で "stub"（デフォルト）または "litellm" を指定。
-開発では stub、本番では litellm を指定する。
-"stub" / "litellm" 以外の値の場合は ValueError を送出する。
-
-SQLite 記憶永続化: 環境変数 LLM_MEMORY_DB_PATH に DB ファイルパスを指定すると、
-memory_db_path 引数なしでも episode / long-term / reflection state を SQLite に保存する。
-起動経路（bootstrap）で本関数に memory_db_path を渡すか、LLM_MEMORY_DB_PATH を設定することで
-restart 後の復元が可能になる。
 """
 
 import os
-from typing import Any, Optional, Tuple
+from typing import Any, Optional
 
-_VALID_LLM_CLIENT_VALUES = frozenset({"stub", "litellm"})
-
+from ai_rpg_world.application.llm.wiring._llm_client_factory import (
+    create_llm_client_from_env,
+    create_subagent_invoke_text,
+)
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     IEpisodeMemoryStore,
@@ -67,6 +57,7 @@ from ai_rpg_world.application.llm.services.in_memory_todo_store import (
 from ai_rpg_world.application.llm.services.in_memory_working_memory_store import (
     InMemoryWorkingMemoryStore,
 )
+from ai_rpg_world.application.llm.services.handle_store import InMemoryHandleStore
 from ai_rpg_world.application.llm.services.memory_query_executor import (
     MemoryQueryExecutor,
 )
@@ -74,7 +65,6 @@ from ai_rpg_world.application.llm.services.subagent_runner import SubagentRunner
 from ai_rpg_world.application.llm.services.llm_agent_turn_runner import (
     LlmAgentTurnRunner,
 )
-from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.memory_extractor import (
     RuleBasedMemoryExtractor,
 )
@@ -148,8 +138,6 @@ from ai_rpg_world.infrastructure.events.observation_event_handler_registry impor
 )
 
 
-_ENV_LLM_CLIENT = "LLM_CLIENT"
-_DEFAULT_LLM_CLIENT = "stub"
 _ENV_LLM_MEMORY_DB_PATH = "LLM_MEMORY_DB_PATH"
 
 
@@ -169,47 +157,6 @@ class LlmAgentWiringResult:
     def __iter__(self) -> Any:
         yield self.observation_registry
         yield self.llm_turn_trigger
-
-
-def _create_llm_client_from_env() -> ILLMClient:
-    """環境変数 LLM_CLIENT に応じて ILLMClient 実装を返す。stub（デフォルト） or litellm。未知の値は ValueError。"""
-    value = (os.environ.get(_ENV_LLM_CLIENT) or _DEFAULT_LLM_CLIENT).strip().lower()
-    if value not in _VALID_LLM_CLIENT_VALUES:
-        raise ValueError(
-            f"LLM_CLIENT must be one of {sorted(_VALID_LLM_CLIENT_VALUES)}, got: {value!r}"
-        )
-    if value == "litellm":
-        from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
-        return LiteLLMClient()
-    return StubLlmClient()
-
-
-def _create_subagent_invoke_text(client: ILLMClient):
-    """subagent 用のテキスト完了呼び出しを返す。"""
-    if client is None or isinstance(client, StubLlmClient):
-        return lambda _sys, _user: "（subagent はスタブです。実 LLM 設定時に要約が返ります。）"
-
-    try:
-        from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
-        if isinstance(client, LiteLLMClient):
-            import litellm
-            def _invoke(system: str, user: str) -> str:
-                r = litellm.completion(
-                    model=client._model,
-                    messages=[
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user},
-                    ],
-                    api_key=client._api_key,
-                )
-                if r and r.choices:
-                    content = getattr(r.choices[0].message, "content", None)
-                    return (content or "").strip()
-                return ""
-            return _invoke
-    except ImportError:
-        pass
-    return lambda _sys, _user: "（subagent は未対応のクライアントです）"
 
 
 def create_llm_agent_wiring(
@@ -260,49 +207,6 @@ def create_llm_agent_wiring(
 ) -> "LlmAgentWiringResult":
     """
     LLM エージェント用の観測ハンドラ登録用 Registry と LlmTurnTrigger を組み立てて返す。
-
-    呼び出し元は:
-    - 返り値の observation_registry を EventHandlerComposition の observation_registry に渡す
-    - 返り値の llm_turn_trigger を WorldSimulationApplicationService の llm_turn_trigger に渡す
-
-    Args:
-        player_status_repository: 観測配信先解決・注意レベル取得用
-        physical_map_repository: 観測配信先解決（WorldObjectId → PlayerId）用
-        world_query_service: get_player_current_state を持つサービス
-        movement_service: cancel_movement, move_to_destination を持つサービス
-        player_profile_repository: プロンプト用プロフィール・LLM 判定（ProfileBased）用
-        unit_of_work_factory: 観測ハンドラの別トランザクション用
-        observation_buffer: 省略時は DefaultObservationContextBuffer を新規作成
-        observation_formatter: 省略時は ObservationFormatter を新規作成。省略時は spot_repository / player_profile_repository / item_spec_repository / item_repository を渡すと名前解決に利用する。
-        spot_repository: 観測文のスポット名解決用。省略時は「不明なスポット」となる。
-        item_spec_repository: 観測文のアイテム名解決用（ResourceHarvested 等）。省略時は「何かのアイテム」となる。
-        item_repository: 観測文のアイテム名解決用（チェスト・インベントリ系）。省略時は「何かのアイテム」となる。
-        quest_repository: クエスト観測の配信先解決（承認・キャンセル等）用（任意）。
-        shop_repository: ショップ観測の配信先解決（spot 解決）・観測文の名前解決用（任意）。
-        trade_repository: 取引観測の配信先解決（TradeAccepted/TradeCancelled の seller/target 解決）用（任意）。
-        guild_repository: ギルド観測の配信先解決（全メンバー通知）・観測文の名前解決用（任意）。
-        monster_repository: モンスター/会話NPC観測の配信先解決・観測文の名前解決用（任意）。
-        hit_box_repository: 戦闘（HitBox）観測の配信先解決（owner 解決）用（任意）。
-        skill_loadout_repository: スキル（Loadout）観測の配信先解決（owner 解決）用（任意）。
-        skill_deck_progress_repository: スキル（DeckProgress）観測の配信先解決（owner 解決）用（任意）。
-        skill_spec_repository: スキル名の観測文解決用（任意）。
-        llm_client: 省略時は環境変数 LLM_CLIENT に従い作成（stub / litellm）
-        game_time_provider: 省略時は観測にゲーム内時刻を付与しない。指定時は world_time_config_service も必要。
-        world_time_config_service: 省略時は観測にゲーム内時刻を付与しない。ticks_per_day 等を提供する設定サービス。
-        memory_db_path: SQLite 記憶永続化の DB パス。指定時は episode / long-term / reflection state を SQLite に保存。省略時は環境変数 LLM_MEMORY_DB_PATH を参照し、それもなければ in-memory。
-        episode_memory_store: テスト用注入。省略時は memory_db_path または in-memory で作成。
-        long_term_memory_store: テスト用注入。省略時は memory_db_path または in-memory で作成。
-        reflection_state_port: テスト用注入。省略時は memory_db_path 時のみ SqliteReflectionStatePort を作成。
-        action_result_store: テスト用注入。省略時は DefaultActionResultStore を作成。
-        sliding_window_memory: テスト用注入。省略時は DefaultSlidingWindowMemory を作成。
-        llm_player_resolver: テスト用注入。省略時は ProfileBasedLlmPlayerResolver を作成。
-        max_turns: 論理ターン内の最大 run_turn 回数。world_no_op またはこの回数に達するまで継続。省略時は 5。
-
-    Returns:
-        LlmAgentWiringResult。observation_registry, llm_turn_trigger, reflection_runner を持つ。
-        既存の unpacking (registry, trigger) = create_llm_agent_wiring(...) も動作する。
-        reflection_runner は world_time_config_service 指定時のみ設定され、
-        WorldSimulationApplicationService(reflection_runner=...) に渡すと in-game day 境界で長期記憶が育つ。
     """
     if player_status_repository is None:
         raise TypeError("player_status_repository must not be None")
@@ -320,7 +224,6 @@ def create_llm_agent_wiring(
     buffer = observation_buffer if observation_buffer is not None else DefaultObservationContextBuffer()
     current_state_formatter = DefaultCurrentStateFormatter()
 
-    # --- Memory wiring ---
     sliding_window = (
         sliding_window_memory
         if sliding_window_memory is not None
@@ -337,7 +240,6 @@ def create_llm_agent_wiring(
     system_prompt_builder = DefaultSystemPromptBuilder()
     game_tool_registry = DefaultGameToolRegistry()
 
-    # --- Memory persistence (episode / long-term) ---
     effective_memory_db_path = memory_db_path or (
         (os.environ.get(_ENV_LLM_MEMORY_DB_PATH) or "").strip() or None
     )
@@ -360,6 +262,7 @@ def create_llm_agent_wiring(
 
     working_memory_store = InMemoryWorkingMemoryStore()
     todo_store = InMemoryTodoStore()
+    handle_store = InMemoryHandleStore()
 
     def _state_provider(pid: PlayerId) -> str:
         dto = world_query_service.get_player_current_state(
@@ -377,12 +280,14 @@ def create_llm_agent_wiring(
         working_memory_store=working_memory_store,
         state_provider=_state_provider,
         recent_events_formatter=recent_events_formatter,
+        handle_store=handle_store,
     )
-    client = llm_client if llm_client is not None else _create_llm_client_from_env()
-    subagent_invoke_text = _create_subagent_invoke_text(client)
+    client = llm_client if llm_client is not None else create_llm_client_from_env()
+    subagent_invoke_text = create_subagent_invoke_text(client)
     subagent_runner = SubagentRunner(
         memory_query_executor=memory_query_executor,
         invoke_text=subagent_invoke_text,
+        handle_store=handle_store,
     )
 
     register_default_tools(
@@ -437,7 +342,6 @@ def create_llm_agent_wiring(
     )
     tool_argument_resolver = DefaultToolArgumentResolver()
 
-    # --- Reflection state ---
     if reflection_state_port is None:
         if effective_memory_db_path:
             from ai_rpg_world.infrastructure.llm.sqlite_reflection_state_port import (
@@ -492,6 +396,7 @@ def create_llm_agent_wiring(
         tool_argument_resolver=tool_argument_resolver,
         memory_extractor=memory_extractor,
         episode_memory_store=episode_memory_store,
+        handle_store=handle_store,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,
@@ -502,7 +407,6 @@ def create_llm_agent_wiring(
     )
     llm_turn_trigger = DefaultLlmTurnTrigger(turn_runner=turn_runner, max_turns=max_turns)
 
-    # --- Observation wiring ---
     observation_resolver = create_observation_recipient_resolver(
         player_status_repository=player_status_repository,
         physical_map_repository=physical_map_repository,
@@ -550,3 +454,6 @@ def create_llm_agent_wiring(
         llm_turn_trigger=llm_turn_trigger,
         reflection_runner=reflection_runner,
     )
+
+
+__all__ = ["create_llm_agent_wiring", "LlmAgentWiringResult"]
