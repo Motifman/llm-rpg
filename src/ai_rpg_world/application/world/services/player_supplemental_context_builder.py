@@ -208,8 +208,10 @@ class PlayerSupplementalContextBuilder:
             )
         return result
 
-    def build_guild_memberships(self, player_id: int) -> List[GuildMembershipSummaryDto]:
-        """所属ギルドのサマリ一覧（LLM readable）"""
+    def build_guild_memberships(
+        self, player_id: int, player_area_id: Optional[int] = None
+    ) -> List[GuildMembershipSummaryDto]:
+        """所属ギルドのサマリ一覧（LLM readable）。当該 LocationArea 内にいる場合のみ description を設定。"""
         if self._guild_repository is None:
             return []
         guilds = self._guild_repository.find_guilds_by_player_id(PlayerId(player_id))
@@ -217,11 +219,15 @@ class PlayerSupplementalContextBuilder:
         for g in guilds:
             membership = g.get_member(PlayerId(player_id))
             if membership is not None:
+                desc: Optional[str] = None
+                if player_area_id is not None and g.location_area_id.value == player_area_id:
+                    desc = g.description
                 result.append(
                     GuildMembershipSummaryDto(
                         guild_id=int(g.guild_id.value),
                         guild_name=g.name,
                         role=membership.role.value,
+                        description=desc,
                     )
                 )
         return result
@@ -260,6 +266,7 @@ class PlayerSupplementalContextBuilder:
                 shop_name=shop.name,
                 listing_count=len(listings_dto),
                 listings=listings_dto,
+                description=shop.description or None,
             )
         ]
 

@@ -13,6 +13,8 @@ from ai_rpg_world.application.llm.services.tool_definitions import (
     CONVERSATION_ADVANCE_DEFINITION,
     DESTROY_PLACEABLE_DEFINITION,
     HARVEST_START_DEFINITION,
+    INSPECT_ITEM_DEFINITION,
+    INSPECT_TARGET_DEFINITION,
     INTERACT_WORLD_OBJECT_DEFINITION,
     MOVE_TO_DESTINATION_DEFINITION,
     NO_OP_DEFINITION,
@@ -29,6 +31,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_CONVERSATION_ADVANCE,
     TOOL_NAME_DESTROY_PLACEABLE,
     TOOL_NAME_HARVEST_START,
+    TOOL_NAME_INSPECT_ITEM,
+    TOOL_NAME_INSPECT_TARGET,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
@@ -109,6 +113,18 @@ class TestToolDefinitions:
         assert "skill_label" in params.get("properties", {})
         assert "target_label" in params.get("properties", {})
 
+    def test_inspect_item_definition_has_expected_params(self):
+        assert INSPECT_ITEM_DEFINITION.name == TOOL_NAME_INSPECT_ITEM
+        params = INSPECT_ITEM_DEFINITION.parameters
+        assert "inventory_item_label" in params.get("properties", {})
+        assert "inventory_item_label" in params.get("required", [])
+
+    def test_inspect_target_definition_has_expected_params(self):
+        assert INSPECT_TARGET_DEFINITION.name == TOOL_NAME_INSPECT_TARGET
+        params = INSPECT_TARGET_DEFINITION.parameters
+        assert "target_label" in params.get("properties", {})
+        assert "target_label" in params.get("required", [])
+
 
 class TestRegisterDefaultTools:
     """register_default_tools の正常・例外"""
@@ -162,6 +178,20 @@ class TestRegisterDefaultTools:
         assert TOOL_NAME_CHEST_STORE in names
         assert TOOL_NAME_CHEST_TAKE in names
         assert TOOL_NAME_COMBAT_USE_SKILL in names
+
+    def test_register_default_tools_with_inspect_item_enabled_adds_inspect_item(self):
+        registry = DefaultGameToolRegistry()
+        register_default_tools(registry, inspect_item_enabled=True)
+        entries = registry.get_definitions_with_resolvers()
+        names = [e[0].name for e in entries]
+        assert TOOL_NAME_INSPECT_ITEM in names
+
+    def test_register_default_tools_with_inspect_target_enabled_adds_inspect_target(self):
+        registry = DefaultGameToolRegistry()
+        register_default_tools(registry, inspect_target_enabled=True)
+        entries = registry.get_definitions_with_resolvers()
+        names = [e[0].name for e in entries]
+        assert TOOL_NAME_INSPECT_TARGET in names
 
     def test_register_default_tools_registry_not_registry_raises_type_error(self):
         """registry が IGameToolRegistry でないとき TypeError"""

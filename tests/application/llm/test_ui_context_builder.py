@@ -16,7 +16,9 @@ from ai_rpg_world.application.world.contracts.dtos import (
     AttentionLevelOptionDto,
     ChestItemDto,
     ConversationChoiceDto,
+    GuildMembershipSummaryDto,
     InventoryItemDto,
+    NearbyShopSummaryDto,
     PlayerCurrentStateDto,
     UsableSkillDto,
     VisibleObjectDto,
@@ -286,3 +288,42 @@ class TestDefaultLlmUiContextBuilder:
 
         assert result.current_state_text == "現在地: 未配置"
         assert result.tool_runtime_context.targets == {}
+
+    def test_build_includes_guild_description_when_present(self):
+        """ギルドに description がある場合、所属ギルド行に含まれる"""
+        builder = DefaultLlmUiContextBuilder()
+        state = _make_state()
+        state.guild_memberships = [
+            GuildMembershipSummaryDto(
+                guild_id=1,
+                guild_name="冒険者ギルド",
+                role="リーダー",
+                description="一緒に冒険しましょう",
+            ),
+        ]
+
+        result = builder.build("現在地: 広場", state)
+
+        assert "所属ギルド:" in result.current_state_text
+        assert "G1: 冒険者ギルド" in result.current_state_text
+        assert "一緒に冒険しましょう" in result.current_state_text
+
+    def test_build_includes_shop_description_when_present(self):
+        """ショップに description がある場合、近隣ショップ行に含まれる"""
+        builder = DefaultLlmUiContextBuilder()
+        state = _make_state()
+        state.nearby_shops = [
+            NearbyShopSummaryDto(
+                shop_id=1,
+                shop_name="ポーション屋",
+                listing_count=0,
+                listings=[],
+                description="様々な薬を扱う店です",
+            ),
+        ]
+
+        result = builder.build("現在地: 広場", state)
+
+        assert "近隣ショップ:" in result.current_state_text
+        assert "SH1: ポーション屋" in result.current_state_text
+        assert "様々な薬を扱う店です" in result.current_state_text

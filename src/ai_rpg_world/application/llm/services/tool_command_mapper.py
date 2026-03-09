@@ -9,6 +9,10 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.guild.services.guild_command_service import GuildCommandService
     from ai_rpg_world.application.shop.services.shop_command_service import ShopCommandService
     from ai_rpg_world.application.trade.services.trade_command_service import TradeCommandService
+    from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+    from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
+    from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
+    from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
@@ -23,6 +27,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_GUILD_LEAVE,
     TOOL_NAME_GUILD_WITHDRAW_BANK,
     TOOL_NAME_HARVEST_START,
+    TOOL_NAME_INSPECT_ITEM,
+    TOOL_NAME_INSPECT_TARGET,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
@@ -77,6 +83,7 @@ from ai_rpg_world.application.world.services.movement_service import (
     MovementApplicationService,
 )
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 # Optional domain command services
 from ai_rpg_world.application.quest.contracts.commands import (
@@ -122,6 +129,10 @@ class ToolCommandMapper:
         guild_service: Optional[Any] = None,
         shop_service: Optional[Any] = None,
         trade_service: Optional[Any] = None,
+        item_repository: Optional["ItemRepository"] = None,
+        monster_repository: Optional["MonsterRepository"] = None,
+        physical_map_repository: Optional["PhysicalMapRepository"] = None,
+        player_status_repository: Optional["PlayerStatusRepository"] = None,
     ) -> None:
         move_to_destination = getattr(movement_service, "move_to_destination", None)
         if not callable(move_to_destination):
@@ -160,6 +171,10 @@ class ToolCommandMapper:
         self._guild_service = guild_service
         self._shop_service = shop_service
         self._trade_service = trade_service
+        self._item_repository = item_repository
+        self._monster_repository = monster_repository
+        self._physical_map_repository = physical_map_repository
+        self._player_status_repository = player_status_repository
         self._movement_service = movement_service
         self._speech_service = speech_service
         self._interaction_service = interaction_service
@@ -174,6 +189,8 @@ class ToolCommandMapper:
             TOOL_NAME_MOVE_TO_DESTINATION: self._execute_move_to_destination,
             TOOL_NAME_WHISPER: self._execute_whisper,
             TOOL_NAME_SAY: self._execute_say,
+            TOOL_NAME_INSPECT_ITEM: self._execute_inspect_item,
+            TOOL_NAME_INSPECT_TARGET: self._execute_inspect_target,
             TOOL_NAME_INTERACT_WORLD_OBJECT: self._execute_interact_world_object,
             TOOL_NAME_HARVEST_START: self._execute_harvest_start,
             TOOL_NAME_CHANGE_ATTENTION: self._execute_change_attention,
@@ -413,6 +430,113 @@ class ToolCommandMapper:
             error_code=error_code,
             remediation=get_remediation(error_code),
         )
+
+    def _execute_inspect_item(
+        self,
+        player_id: int,
+        args: Dict[str, Any],
+    ) -> LlmCommandResultDto:
+        if self._item_repository is None:
+            return LlmCommandResultDto(
+                success=False,
+                message="アイテム調査ツールは利用できません。",
+                error_code="UNKNOWN_TOOL",
+                remediation=get_remediation("UNKNOWN_TOOL"),
+            )
+        try:
+            from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+
+            item_instance_id_raw = args.get("item_instance_id")
+            if item_instance_id_raw is None:
+                return LlmCommandResultDto(
+                    success=False,
+                    message="item_instance_id が指定されていません。",
+                    error_code="INVALID_TARGET_LABEL",
+                    remediation=get_remediation("INVALID_TARGET_LABEL"),
+                )
+            item_id = ItemInstanceId.create(int(item_instance_id_raw))
+            item = self._item_repository.find_by_id(item_id)
+            if item is None:
+                return LlmCommandResultDto(
+                    success=False,
+                    message="指定されたアイテムが見つかりません。",
+                    error_code="ITEM_NOT_FOUND",
+                    remediation=get_remediation("ITEM_NOT_FOUND"),
+                )
+            description = item.item_spec.description
+            return LlmCommandResultDto(success=True, message=description)
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_inspect_target(
+        self,
+        player_id: int,
+        args: Dict[str, Any],
+    ) -> LlmCommandResultDto:
+        if (
+            self._monster_repository is None
+            or self._physical_map_repository is None
+            or self._player_status_repository is None
+        ):
+            return LlmCommandResultDto(
+                success=False,
+                message="対象調査ツールは利用できません。",
+                error_code="UNKNOWN_TOOL",
+                remediation=get_remediation("UNKNOWN_TOOL"),
+            )
+        try:
+            from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
+            from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+
+            target_id_raw = args.get("target_world_object_id")
+            if target_id_raw is None:
+                return LlmCommandResultDto(
+                    success=False,
+                    message="target_world_object_id が指定されていません。",
+                    error_code="INVALID_TARGET_LABEL",
+                    remediation=get_remediation("INVALID_TARGET_LABEL"),
+                )
+            world_object_id = WorldObjectId.create(int(target_id_raw))
+
+            status = self._player_status_repository.find_by_id(PlayerId(player_id))
+            if status is None or status.current_spot_id is None:
+                return LlmCommandResultDto(
+                    success=False,
+                    message="プレイヤーの位置を取得できません。",
+                    error_code="TARGET_NOT_FOUND",
+                    remediation=get_remediation("TARGET_NOT_FOUND"),
+                )
+            physical_map = self._physical_map_repository.find_by_spot_id(status.current_spot_id)
+            if physical_map is None:
+                return LlmCommandResultDto(
+                    success=False,
+                    message="マップが見つかりません。",
+                    error_code="TARGET_NOT_FOUND",
+                    remediation=get_remediation("TARGET_NOT_FOUND"),
+                )
+
+            monster = self._monster_repository.find_by_world_object_id(world_object_id)
+            if monster is not None:
+                return LlmCommandResultDto(
+                    success=True,
+                    message=monster.template.description,
+                )
+
+            try:
+                obj = physical_map.get_object(world_object_id)
+                desc = (obj.interaction_data or {}).get("description")
+                if desc is None:
+                    desc = ""
+                return LlmCommandResultDto(success=True, message=desc or "（説明なし）")
+            except ObjectNotFoundException:
+                return LlmCommandResultDto(
+                    success=False,
+                    message="指定された対象が見つかりません。",
+                    error_code="TARGET_NOT_FOUND",
+                    remediation=get_remediation("TARGET_NOT_FOUND"),
+                )
+        except Exception as e:
+            return self._exception_result(e)
 
     def _execute_interact_world_object(
         self,

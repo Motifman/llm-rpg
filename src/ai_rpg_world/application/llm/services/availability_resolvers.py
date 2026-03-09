@@ -133,6 +133,35 @@ class PlaceObjectAvailabilityResolver(IAvailabilityResolver):
         return any(item.is_placeable for item in context.inventory_items)
 
 
+class InspectItemAvailabilityResolver(IAvailabilityResolver):
+    """アイテム調査ツールは在庫アイテムが1件以上あるときに利用可能。"""
+
+    def is_available(
+        self,
+        context: Optional[PlayerCurrentStateDto],
+    ) -> bool:
+        if context is None:
+            return False
+        return bool(context.inventory_items)
+
+
+class InspectTargetAvailabilityResolver(IAvailabilityResolver):
+    """対象調査ツールは視界内に interact/harvest 可能な対象があるときに利用可能。"""
+
+    def is_available(
+        self,
+        context: Optional[PlayerCurrentStateDto],
+    ) -> bool:
+        if context is None:
+            return False
+        return any(
+            _has_visible_action(obj, "can_interact", "interact")
+            or _has_visible_action(obj, "can_harvest", "harvest")
+            for obj in _iter_actionable_objects(context)
+            if not obj.is_self
+        )
+
+
 class DestroyPlaceableAvailabilityResolver(IAvailabilityResolver):
     """破壊ツールは前方に設置物があるときに利用可能。"""
 

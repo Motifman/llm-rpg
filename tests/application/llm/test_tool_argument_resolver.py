@@ -28,6 +28,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_CONVERSATION_ADVANCE,
     TOOL_NAME_DESTROY_PLACEABLE,
     TOOL_NAME_HARVEST_START,
+    TOOL_NAME_INSPECT_ITEM,
+    TOOL_NAME_INSPECT_TARGET,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_PLACE_OBJECT,
@@ -222,6 +224,52 @@ class TestDefaultToolArgumentResolver:
         )
 
         assert result["inventory_slot_id"] == 2
+
+    def test_resolve_inspect_item_inventory_label(self):
+        resolver = DefaultToolArgumentResolver()
+
+        result = resolver.resolve(
+            TOOL_NAME_INSPECT_ITEM,
+            {"inventory_item_label": "I1"},
+            _make_context(),
+        )
+
+        assert result["item_instance_id"] == 400
+
+    def test_resolve_inspect_target_npc_label(self):
+        resolver = DefaultToolArgumentResolver()
+
+        result = resolver.resolve(
+            TOOL_NAME_INSPECT_TARGET,
+            {"target_label": "N1"},
+            _make_context(),
+        )
+
+        assert result["target_world_object_id"] == 200
+
+    def test_resolve_inspect_item_invalid_label_raises(self):
+        resolver = DefaultToolArgumentResolver()
+
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_INSPECT_ITEM,
+                {"inventory_item_label": "X99"},
+                _make_context(),
+            )
+
+        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
+
+    def test_resolve_inspect_target_invalid_label_raises(self):
+        resolver = DefaultToolArgumentResolver()
+
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_INSPECT_TARGET,
+                {"target_label": "X99"},
+                _make_context(),
+            )
+
+        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
 
     def test_resolve_destroy_placeable_returns_empty(self):
         resolver = DefaultToolArgumentResolver()

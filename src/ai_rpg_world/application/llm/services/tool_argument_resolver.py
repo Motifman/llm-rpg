@@ -35,6 +35,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_GUILD_LEAVE,
     TOOL_NAME_GUILD_WITHDRAW_BANK,
     TOOL_NAME_HARVEST_START,
+    TOOL_NAME_INSPECT_ITEM,
+    TOOL_NAME_INSPECT_TARGET,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
@@ -92,6 +94,10 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
                 "content": args.get("content", ""),
                 "channel": SpeechChannel.SAY,
             }
+        if tool_name == TOOL_NAME_INSPECT_ITEM:
+            return self._resolve_inspect_item(args, runtime_context)
+        if tool_name == TOOL_NAME_INSPECT_TARGET:
+            return self._resolve_inspect_target(args, runtime_context)
         if tool_name == TOOL_NAME_INTERACT_WORLD_OBJECT:
             return self._resolve_interact_world_object(args, runtime_context)
         if tool_name == TOOL_NAME_HARVEST_START:
@@ -330,6 +336,55 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
             "inventory_slot_id": target.inventory_slot_id,
             "target_display_name": target.display_name,
         }
+
+    def _resolve_inspect_item(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        label = args.get("inventory_item_label")
+        target = self._require_target_type(
+            label,
+            runtime_context,
+            "在庫アイテムラベル",
+            (InventoryToolRuntimeTargetDto,),
+        )
+        if target.item_instance_id is None:
+            raise ToolArgumentResolutionException(
+                f"アイテムとして解決できません: {label}",
+                "INVALID_TARGET_KIND",
+            )
+        return {"item_instance_id": target.item_instance_id}
+
+    def _resolve_inspect_target(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        label = args.get("target_label")
+        if not isinstance(label, str) or not label:
+            raise ToolArgumentResolutionException(
+                "対象ラベルが指定されていません。",
+                "INVALID_TARGET_LABEL",
+            )
+        target = self._require_target_type(
+            label,
+            runtime_context,
+            "対象ラベル",
+            (
+                MonsterToolRuntimeTargetDto,
+                NpcToolRuntimeTargetDto,
+                ChestToolRuntimeTargetDto,
+                ResourceToolRuntimeTargetDto,
+                WorldObjectToolRuntimeTargetDto,
+            ),
+        )
+        if target.world_object_id is None:
+            raise ToolArgumentResolutionException(
+                f"対象として解決できません: {label}",
+                "INVALID_TARGET_KIND",
+            )
+        return {"target_world_object_id": target.world_object_id}
 
     def _resolve_chest_store(
         self,

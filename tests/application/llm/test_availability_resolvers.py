@@ -8,6 +8,8 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
     CombatUseSkillAvailabilityResolver,
     ConversationAdvanceAvailabilityResolver,
     DestroyPlaceableAvailabilityResolver,
+    InspectItemAvailabilityResolver,
+    InspectTargetAvailabilityResolver,
     NoOpAvailabilityResolver,
     PlaceObjectAvailabilityResolver,
     SetDestinationAvailabilityResolver,
@@ -231,4 +233,67 @@ class TestExtendedAvailabilityResolvers:
         resolver = CombatUseSkillAvailabilityResolver()
         ctx = _minimal_current_state()
         ctx.usable_skills = [UsableSkillDto(10, 1, 100, "火球")]
+        assert resolver.is_available(ctx) is True
+
+    def test_inspect_item_not_available_when_context_none(self):
+        resolver = InspectItemAvailabilityResolver()
+        assert resolver.is_available(None) is False
+
+    def test_inspect_item_not_available_when_no_inventory(self):
+        resolver = InspectItemAvailabilityResolver()
+        ctx = _minimal_current_state()
+        ctx.inventory_items = []
+        assert resolver.is_available(ctx) is False
+
+    def test_inspect_item_available_when_has_inventory_items(self):
+        resolver = InspectItemAvailabilityResolver()
+        ctx = _minimal_current_state()
+        ctx.inventory_items = [InventoryItemDto(0, 1, "木箱", 1)]
+        assert resolver.is_available(ctx) is True
+
+    def test_inspect_target_not_available_when_context_none(self):
+        resolver = InspectTargetAvailabilityResolver()
+        assert resolver.is_available(None) is False
+
+    def test_inspect_target_not_available_when_no_actionable_objects(self):
+        resolver = InspectTargetAvailabilityResolver()
+        ctx = _minimal_current_state(visible_objects=[])
+        assert resolver.is_available(ctx) is False
+
+    def test_inspect_target_available_when_interactable_object_exists(self):
+        resolver = InspectTargetAvailabilityResolver()
+        ctx = _minimal_current_state(
+            visible_objects=[
+                VisibleObjectDto(
+                    object_id=2,
+                    object_type="CHEST",
+                    x=1,
+                    y=0,
+                    z=0,
+                    distance=1,
+                    object_kind="chest",
+                    can_interact=True,
+                    available_interactions=["interact"],
+                )
+            ]
+        )
+        assert resolver.is_available(ctx) is True
+
+    def test_inspect_target_available_when_harvestable_object_exists(self):
+        resolver = InspectTargetAvailabilityResolver()
+        ctx = _minimal_current_state(
+            visible_objects=[
+                VisibleObjectDto(
+                    object_id=3,
+                    object_type="RESOURCE",
+                    x=1,
+                    y=0,
+                    z=0,
+                    distance=1,
+                    object_kind="resource",
+                    can_harvest=True,
+                    available_interactions=["harvest"],
+                )
+            ]
+        )
         assert resolver.is_available(ctx) is True
