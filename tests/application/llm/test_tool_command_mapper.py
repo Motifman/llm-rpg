@@ -52,6 +52,11 @@ class TestToolCommandMapperNoOp:
         result = mapper.execute(1, TOOL_NAME_NO_OP, None)
         assert result.success is True
 
+    def test_execute_no_op_returns_was_no_op_true(self, mapper):
+        """no_op 実行時は was_no_op=True になる"""
+        result = mapper.execute(1, TOOL_NAME_NO_OP, {})
+        assert result.was_no_op is True
+
 
 class TestToolCommandMapperMoveToDestination:
     """move_to_destination ツールの実行（MovementApplicationService.move_to_destination を呼ぶ）"""

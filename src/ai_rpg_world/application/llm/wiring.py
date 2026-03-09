@@ -214,6 +214,7 @@ def create_llm_agent_wiring(
     action_result_store: Optional[IActionResultStore] = None,
     sliding_window_memory: Optional[ISlidingWindowMemory] = None,
     llm_player_resolver: Optional[ILLMPlayerResolver] = None,
+    max_turns: int = 5,
 ) -> "LlmAgentWiringResult":
     """
     LLM エージェント用の観測ハンドラ登録用 Registry と LlmTurnTrigger を組み立てて返す。
@@ -253,6 +254,7 @@ def create_llm_agent_wiring(
         action_result_store: テスト用注入。省略時は DefaultActionResultStore を作成。
         sliding_window_memory: テスト用注入。省略時は DefaultSlidingWindowMemory を作成。
         llm_player_resolver: テスト用注入。省略時は ProfileBasedLlmPlayerResolver を作成。
+        max_turns: 論理ターン内の最大 run_turn 回数。world_no_op またはこの回数に達するまで継続。省略時は 5。
 
     Returns:
         LlmAgentWiringResult。observation_registry, llm_turn_trigger, reflection_runner を持つ。
@@ -423,7 +425,7 @@ def create_llm_agent_wiring(
         action_result_store=action_result_store,
         orchestrator=orchestrator,
     )
-    llm_turn_trigger = DefaultLlmTurnTrigger(turn_runner=turn_runner)
+    llm_turn_trigger = DefaultLlmTurnTrigger(turn_runner=turn_runner, max_turns=max_turns)
 
     # --- Observation wiring ---
     observation_resolver = create_observation_recipient_resolver(

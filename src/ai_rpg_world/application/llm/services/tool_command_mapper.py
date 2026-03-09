@@ -185,7 +185,7 @@ class ToolCommandMapper:
         self._chest_service = chest_service
         self._skill_tool_service = skill_tool_service
         self._executor_map: Dict[str, Any] = {
-            TOOL_NAME_NO_OP: lambda pid, a: LlmCommandResultDto(success=True, message="何もしませんでした。"),
+            TOOL_NAME_NO_OP: lambda pid, a: LlmCommandResultDto(success=True, message="何もしませんでした。", was_no_op=True),
             TOOL_NAME_MOVE_TO_DESTINATION: self._execute_move_to_destination,
             TOOL_NAME_WHISPER: self._execute_whisper,
             TOOL_NAME_SAY: self._execute_say,

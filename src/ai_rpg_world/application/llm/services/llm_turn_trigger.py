@@ -19,23 +19,29 @@ class DefaultLlmTurnTrigger(ILlmTurnTrigger):
     プレイヤー単位で例外を隔離するため、1 人の run_turn 失敗でも他プレイヤーは実行される。
     """
 
-    def __init__(self, turn_runner: LlmAgentTurnRunner) -> None:
+    def __init__(self, turn_runner: LlmAgentTurnRunner, max_turns: int = 5) -> None:
         if not isinstance(turn_runner, LlmAgentTurnRunner):
             raise TypeError("turn_runner must be LlmAgentTurnRunner")
+        if not isinstance(max_turns, int) or max_turns < 1:
+            raise ValueError("max_turns must be a positive int")
         self._turn_runner = turn_runner
+        self._max_turns = max_turns
         self._pending: set[int] = set()
+        self._turn_counts: dict[int, int] = {}
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def schedule_turn(self, player_id: PlayerId) -> None:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
-        self._pending.add(player_id.value)
+        pid = player_id.value
+        self._pending.add(pid)
+        self._turn_counts[pid] = 0
 
     def run_scheduled_turns(self) -> None:
         """
         スケジュール済みの全プレイヤーについて run_turn を 1 回ずつ実行し、キューをクリアする。
-        1起動1ツール前提: 実行結果の should_reschedule が True の場合のみ、次 tick 用に _pending へ戻す。
-        同一 run_scheduled_turns 内の自己ループは作らず、次 tick 送りに固定する。
+        継続条件: world_no_op でなければ max_turns 未達まで次 tick で再実行。
+        should_reschedule が True のときは従来どおりエラー再試行として継続。
         プレイヤー単位で例外を隔離し、失敗したプレイヤーはログに記録するが他プレイヤーの実行は継続する。
         """
         to_run = list(self._pending)
@@ -43,8 +49,18 @@ class DefaultLlmTurnTrigger(ILlmTurnTrigger):
         for pid in to_run:
             try:
                 result = self._turn_runner.run_turn(PlayerId(pid))
-                if result.should_reschedule:
+                current_count = self._turn_counts.get(pid, 0)
+                new_count = current_count + 1
+
+                if result.was_no_op:
+                    self._turn_counts.pop(pid, None)
+                elif result.should_reschedule:
                     self._pending.add(pid)
+                elif new_count < self._max_turns:
+                    self._pending.add(pid)
+                    self._turn_counts[pid] = new_count
+                else:
+                    self._turn_counts.pop(pid, None)
             except Exception as e:
                 self._logger.warning(
                     "LLM turn failed for player %s: %s",
