@@ -262,6 +262,7 @@ class PlayerCurrentStateDto:
     # 注意レベル
     attention_level: AttentionLevel
     # 複数ティックの行動中か（経路設定済みの移動中など）。割り込み判定に利用。
+    current_location_description: Optional[str] = None
     is_busy: bool = False
     busy_until_tick: Optional[int] = None
     has_active_path: bool = False

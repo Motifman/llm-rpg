@@ -17,6 +17,7 @@ def _minimal_current_state_dto(
     spot_name="テストスポット",
     spot_description="説明",
     area_name="エリア1",
+    current_location_description=None,
     weather_type="clear",
     terrain_type="grass",
     has_visible_objects=False,
@@ -66,8 +67,9 @@ def _minimal_current_state_dto(
         x=0,
         y=0,
         z=0,
-        area_id=1,
+        area_id=1 if area_name else None,
         area_name=area_name,
+        current_location_description=current_location_description,
         current_player_count=0,
         current_player_ids=set(),
         connected_spot_ids=set(),
@@ -143,6 +145,47 @@ class TestDefaultCurrentStateFormatter:
         text = formatter.format(dto)
         assert "行動状態: 実行中" in text
         assert "42" in text
+
+    def test_format_includes_area_description_when_present(self, formatter):
+        """current_location_description あり: 出力にエリア説明が含まれる"""
+        dto = _minimal_current_state_dto(
+            area_name="町の広場",
+            current_location_description="賑やかな市場が並ぶ中央広場。",
+        )
+        text = formatter.format(dto)
+        assert "エリア: 町の広場" in text
+        assert "賑やかな市場が並ぶ中央広場。" in text
+
+    def test_format_area_without_description_returns_area_only(self, formatter):
+        """area_name あり・current_location_description なし: エリア名のみ表示"""
+        dto = _minimal_current_state_dto(
+            area_name="空き地",
+            current_location_description=None,
+        )
+        text = formatter.format(dto)
+        assert "エリア: 空き地" in text
+        lines = text.split("\n")
+        area_idx = next(i for i, ln in enumerate(lines) if ln.startswith("エリア:"))
+        next_line = lines[area_idx + 1] if area_idx + 1 < len(lines) else ""
+        assert not next_line.startswith("  "), "説明行が含まれてはいけない"
+
+    def test_format_without_area_name_omits_area_and_description(self, formatter):
+        """area_name なし: エリア行・説明行ともに出力されない"""
+        dto = _minimal_current_state_dto(area_name=None)
+        text = formatter.format(dto)
+        assert "エリア:" not in text
+
+    def test_format_area_description_long_truncated(self, formatter):
+        """current_location_description が200文字超: truncate される"""
+        dto = _minimal_current_state_dto(
+            area_name="長文の場所",
+            current_location_description="あ" * 250,
+        )
+        text = formatter.format(dto)
+        assert "エリア: 長文の場所" in text
+        assert "あ" * 200 in text
+        assert "…" in text
+        assert "あ" * 250 not in text
 
     def test_format_dto_none_raises_type_error(self, formatter):
         """dto が None のとき TypeError"""

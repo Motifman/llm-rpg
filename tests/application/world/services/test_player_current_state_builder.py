@@ -45,6 +45,9 @@ from ai_rpg_world.domain.world.enum.world_enum import (
     InteractionTypeEnum,
     ObjectTypeEnum,
 )
+from ai_rpg_world.domain.world.entity.location_area import LocationArea
+from ai_rpg_world.domain.world.value_object.area import PointArea
+from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
@@ -92,13 +95,22 @@ def _make_profile(player_id: int, name: str = "Alice") -> PlayerProfileAggregate
     )
 
 
-def _make_map(spot_id: int, objects: list[WorldObject]) -> PhysicalMapAggregate:
+def _make_map(
+    spot_id: int,
+    objects: list[WorldObject],
+    location_areas: list[LocationArea] | None = None,
+) -> PhysicalMapAggregate:
     tiles = {}
     for x in range(4):
         for y in range(4):
             coord = Coordinate(x, y, 0)
             tiles[coord] = Tile(coord, TerrainType.grass())
-    return PhysicalMapAggregate(spot_id=SpotId(spot_id), tiles=tiles, objects=objects)
+    return PhysicalMapAggregate(
+        spot_id=SpotId(spot_id),
+        tiles=tiles,
+        objects=objects,
+        location_areas=location_areas or [],
+    )
 
 
 class TestPlayerCurrentStateBuilder:
@@ -205,4 +217,76 @@ class TestPlayerCurrentStateBuilder:
         assert chest_obj.is_notable is True
         assert npc_obj.can_interact is False
         assert npc_obj.is_notable is True
+
+    def test_build_player_current_state_with_location_area_includes_description(
+        self, setup_builder
+    ):
+        """LocationArea 内にいる場合、current_location_description が設定される"""
+        builder, status_repo, profile_repo, phys_repo, spot_repo = setup_builder
+        profile_repo.save(_make_profile(1, "Alice"))
+        status = _make_status(1, 1, 0, 0)
+        status_repo.save(status)
+        actor = WorldObject(
+            object_id=WorldObjectId.create(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.PLAYER,
+            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
+        )
+        location_area = LocationArea(
+            location_id=LocationAreaId(1),
+            area=PointArea(Coordinate(0, 0, 0)),
+            name="町の広場",
+            description="賑やかな市場が並ぶ中央広場。",
+        )
+        physical_map = _make_map(1, [actor], location_areas=[location_area])
+        result = builder.build_player_current_state(
+            query=GetPlayerCurrentStateQuery(player_id=1),
+            player_status=status,
+            player_name="Alice",
+            spot=spot_repo.find_by_id(SpotId(1)),
+            physical_map=physical_map,
+            available_moves_result=PlayerMovementOptionsDto(
+                player_id=1,
+                player_name="Alice",
+                current_spot_id=1,
+                current_spot_name="Town",
+                available_moves=[],
+                total_available_moves=0,
+            ),
+        )
+        assert result.area_name == "町の広場"
+        assert result.current_location_description == "賑やかな市場が並ぶ中央広場。"
+
+    def test_build_player_current_state_without_location_area_has_none_description(
+        self, setup_builder
+    ):
+        """LocationArea がないマップでは current_location_description が None"""
+        builder, status_repo, profile_repo, phys_repo, spot_repo = setup_builder
+        profile_repo.save(_make_profile(1, "Alice"))
+        status = _make_status(1, 1, 0, 0)
+        status_repo.save(status)
+        actor = WorldObject(
+            object_id=WorldObjectId.create(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.PLAYER,
+            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
+        )
+        physical_map = _make_map(1, [actor])
+        result = builder.build_player_current_state(
+            query=GetPlayerCurrentStateQuery(player_id=1),
+            player_status=status,
+            player_name="Alice",
+            spot=spot_repo.find_by_id(SpotId(1)),
+            physical_map=physical_map,
+            available_moves_result=PlayerMovementOptionsDto(
+                player_id=1,
+                player_name="Alice",
+                current_spot_id=1,
+                current_spot_name="Town",
+                available_moves=[],
+                total_available_moves=0,
+            ),
+        )
+        assert result.area_name is None
+        assert result.current_location_description is None
 

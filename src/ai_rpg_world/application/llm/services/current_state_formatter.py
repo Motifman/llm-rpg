@@ -14,6 +14,8 @@ from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 class DefaultCurrentStateFormatter(ICurrentStateFormatter):
     """PlayerCurrentStateDto を要約テキストに変換する。詳細は UiContextBuilder に委譲。"""
 
+    _LOCATION_DESCRIPTION_TRUNCATE_LENGTH = 200
+
     def format(self, dto: PlayerCurrentStateDto) -> str:
         if not isinstance(dto, PlayerCurrentStateDto):
             raise TypeError("dto must be PlayerCurrentStateDto")
@@ -29,6 +31,11 @@ class DefaultCurrentStateFormatter(ICurrentStateFormatter):
 
         if dto.area_name:
             lines.append(f"エリア: {dto.area_name}")
+            if dto.current_location_description and dto.current_location_description.strip():
+                desc = dto.current_location_description.strip()
+                if len(desc) > self._LOCATION_DESCRIPTION_TRUNCATE_LENGTH:
+                    desc = desc[: self._LOCATION_DESCRIPTION_TRUNCATE_LENGTH] + "…"
+                lines.append(f"  {desc}")
         if dto.x is not None and dto.y is not None:
             lines.append(f"座標: (x={dto.x}, y={dto.y}, z={dto.z or 0})")
 
