@@ -6,6 +6,7 @@ from typing import List, Optional, TYPE_CHECKING
 
 from ai_rpg_world.application.world.contracts.dtos import (
     ActiveConversationDto,
+    AvailableLocationAreaDto,
     AttentionLevelOptionDto,
     ChestItemDto,
     ConversationChoiceDto,
@@ -250,6 +251,15 @@ class PlayerCurrentStateBuilder:
             else None
         )
 
+        available_location_areas = [
+            AvailableLocationAreaDto(
+                location_area_id=int(la.location_id),
+                name=la.name,
+            )
+            for la in physical_map.get_all_location_areas()
+            if la.is_active
+        ] or None
+
         # 境界: ツール/runtime context（LLM prompt 上のラベル解決・利用可否判定に利用）
         # - available_moves, visible_objects, actionable/notable
         # - inventory_items, chest_items, nearby_shops, available_trades
@@ -277,6 +287,7 @@ class PlayerCurrentStateBuilder:
             view_distance=distance,
             available_moves=available_moves,
             total_available_moves=total_available_moves,
+            available_location_areas=available_location_areas,
             attention_level=player_status.attention_level,
             is_busy=is_busy,
             busy_until_tick=busy_until_tick,

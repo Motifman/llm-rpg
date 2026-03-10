@@ -90,7 +90,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
 
         counters: Dict[str, int] = {
             "P": 0, "N": 0, "M": 0, "O": 0, "S": 0, "I": 0, "C": 0, "R": 0, "K": 0, "A": 0,
-            "Q": 0, "G": 0, "SH": 0, "L": 0, "T": 0,
+            "Q": 0, "G": 0, "SH": 0, "L": 0, "D": 0, "T": 0,
         }
         runtime_targets: Dict[str, ToolRuntimeTargetDto] = {}
         lines = [current_state_text.rstrip()]
@@ -213,6 +213,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
                 current_x=current_state.x,
                 current_y=current_state.y,
                 current_z=current_state.z,
+                current_spot_id=current_state.current_spot_id,
             ),
         )
 
@@ -344,27 +345,63 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
         counters: Dict[str, int],
         runtime_targets: Dict[str, ToolRuntimeTargetDto],
     ) -> list[str]:
-        if not current_state.available_moves:
+        has_moves = bool(current_state.available_moves)
+        has_locations = bool(current_state.available_location_areas)
+        has_objects = bool(current_state.actionable_objects)
+        if not has_moves and not has_locations and not has_objects:
             return []
 
         lines: list[str] = []
-        for move in current_state.available_moves:
-            counters["S"] += 1
-            label = f"S{counters['S']}"
-            status = "移動可能" if move.conditions_met else "条件未達"
-            extra = (
-                f"（{status}: {', '.join(move.failed_conditions)}）"
-                if move.failed_conditions
-                else f"（{status}）"
-            )
-            lines.append(f"- {label}: {move.spot_name}{extra}")
-            runtime_targets[label] = DestinationToolRuntimeTargetDto(
-                label=label,
-                kind="destination",
-                display_name=move.spot_name,
-                spot_id=move.spot_id,
-                destination_type="spot",
-            )
+        if current_state.available_moves:
+            for move in current_state.available_moves:
+                counters["S"] += 1
+                label = f"S{counters['S']}"
+                status = "移動可能" if move.conditions_met else "条件未達"
+                extra = (
+                    f"（{status}: {', '.join(move.failed_conditions)}）"
+                    if move.failed_conditions
+                    else f"（{status}）"
+                )
+                lines.append(f"- {label}: {move.spot_name}{extra}")
+                runtime_targets[label] = DestinationToolRuntimeTargetDto(
+                    label=label,
+                    kind="destination",
+                    display_name=move.spot_name,
+                    spot_id=move.spot_id,
+                    destination_type="spot",
+                )
+        if current_state.available_location_areas and current_state.current_spot_id is not None:
+            for loc in current_state.available_location_areas:
+                counters["L"] += 1
+                label = f"L{counters['L']}"
+                lines.append(f"- {label}: {loc.name}（同一スポット内ロケーション）")
+                runtime_targets[label] = DestinationToolRuntimeTargetDto(
+                    label=label,
+                    kind="destination",
+                    display_name=loc.name,
+                    spot_id=current_state.current_spot_id,
+                    location_area_id=loc.location_area_id,
+                    destination_type="location",
+                )
+        if current_state.actionable_objects and current_state.current_spot_id is not None:
+            for obj in current_state.actionable_objects:
+                if obj.is_self:
+                    continue
+                counters["D"] += 1
+                label = f"D{counters['D']}"
+                display_name = obj.display_name or obj.object_type
+                lines.append(f"- {label}: {display_name}（オブジェクトへ向かう）")
+                runtime_targets[label] = DestinationToolRuntimeTargetDto(
+                    label=label,
+                    kind="destination",
+                    display_name=display_name,
+                    spot_id=current_state.current_spot_id,
+                    world_object_id=obj.object_id,
+                    target_x=obj.x,
+                    target_y=obj.y,
+                    target_z=obj.z,
+                    destination_type="object",
+                )
         return lines
 
     def _build_inventory_lines(

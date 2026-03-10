@@ -15,6 +15,7 @@ from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.player.event.status_events import (
     PlayerDownedEvent,
     PlayerEvadedEvent,
@@ -60,9 +61,10 @@ class PlayerStatusAggregate(AggregateRoot):
         current_coordinate: Optional[Coordinate] = None,
         current_destination: Optional[Coordinate] = None,
         planned_path: List[Coordinate] = None,
-        goal_destination_type: Optional[Literal["spot", "location"]] = None,
+        goal_destination_type: Optional[Literal["spot", "location", "object"]] = None,
         goal_spot_id: Optional[SpotId] = None,
         goal_location_area_id: Optional[LocationAreaId] = None,
+        goal_world_object_id: Optional[WorldObjectId] = None,
         is_down: bool = False,
         active_effects: List[StatusEffect] = None,
         attention_level: Optional[AttentionLevel] = None,
@@ -84,6 +86,7 @@ class PlayerStatusAggregate(AggregateRoot):
         self._goal_destination_type = goal_destination_type
         self._goal_spot_id = goal_spot_id
         self._goal_location_area_id = goal_location_area_id
+        self._goal_world_object_id = goal_world_object_id
         self._is_down = is_down
         self._active_effects = active_effects or []
         self._attention_level = attention_level if attention_level is not None else AttentionLevel.FULL
@@ -173,8 +176,8 @@ class PlayerStatusAggregate(AggregateRoot):
         return self._planned_path.copy()
 
     @property
-    def goal_destination_type(self) -> Optional[Literal["spot", "location"]]:
-        """目的地の種別（spot=スポット到着で完了、location=ロケーション内到着で完了）"""
+    def goal_destination_type(self) -> Optional[Literal["spot", "location", "object"]]:
+        """目的地の種別（spot=スポット到着で完了、location=ロケーション内到着で完了、object=オブジェクト隣接で完了）"""
         return self._goal_destination_type
 
     @property
@@ -187,13 +190,19 @@ class PlayerStatusAggregate(AggregateRoot):
         """目標ロケーションエリアID（destination_type が location のときのみ）"""
         return self._goal_location_area_id
 
+    @property
+    def goal_world_object_id(self) -> Optional[WorldObjectId]:
+        """目標ワールドオブジェクトID（destination_type が object のときのみ）"""
+        return self._goal_world_object_id
+
     def set_destination(
         self,
         destination: Coordinate,
         path: List[Coordinate],
-        goal_destination_type: Optional[Literal["spot", "location"]] = None,
+        goal_destination_type: Optional[Literal["spot", "location", "object"]] = None,
         goal_spot_id: Optional[SpotId] = None,
         goal_location_area_id: Optional[LocationAreaId] = None,
+        goal_world_object_id: Optional[WorldObjectId] = None,
     ) -> None:
         """目的地と経路、および到着判定用の目標情報を設定する"""
         self._current_destination = destination
@@ -201,6 +210,7 @@ class PlayerStatusAggregate(AggregateRoot):
         self._goal_destination_type = goal_destination_type
         self._goal_spot_id = goal_spot_id
         self._goal_location_area_id = goal_location_area_id
+        self._goal_world_object_id = goal_world_object_id
 
     def clear_path(self) -> None:
         """経路と目標情報をクリアする"""
@@ -209,6 +219,7 @@ class PlayerStatusAggregate(AggregateRoot):
         self._goal_destination_type = None
         self._goal_spot_id = None
         self._goal_location_area_id = None
+        self._goal_world_object_id = None
 
     def advance_path(self) -> Optional[Coordinate]:
         """経路を1ステップ進める。次に進むべき座標を返し、経路から削除する。"""

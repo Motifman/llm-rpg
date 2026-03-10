@@ -290,3 +290,123 @@ class TestPlayerCurrentStateBuilder:
         assert result.area_name is None
         assert result.current_location_description is None
 
+    def test_build_player_current_state_includes_available_location_areas(
+        self, setup_builder
+    ):
+        """LocationArea があるマップでは available_location_areas が is_active なもののみ含まれる"""
+        builder, status_repo, profile_repo, phys_repo, spot_repo = setup_builder
+        profile_repo.save(_make_profile(1, "Alice"))
+        status = _make_status(1, 1, 0, 0)
+        status_repo.save(status)
+        actor = WorldObject(
+            object_id=WorldObjectId.create(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.PLAYER,
+            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
+        )
+        loc_active = LocationArea(
+            location_id=LocationAreaId(10),
+            area=PointArea(Coordinate(1, 1, 0)),
+            name="広場",
+            description="",
+            is_active=True,
+        )
+        loc_inactive = LocationArea(
+            location_id=LocationAreaId(20),
+            area=PointArea(Coordinate(2, 2, 0)),
+            name="非公開エリア",
+            description="",
+            is_active=False,
+        )
+        physical_map = _make_map(1, [actor], location_areas=[loc_active, loc_inactive])
+        result = builder.build_player_current_state(
+            query=GetPlayerCurrentStateQuery(player_id=1),
+            player_status=status,
+            player_name="Alice",
+            spot=spot_repo.find_by_id(SpotId(1)),
+            physical_map=physical_map,
+            available_moves_result=PlayerMovementOptionsDto(
+                player_id=1,
+                player_name="Alice",
+                current_spot_id=1,
+                current_spot_name="Town",
+                available_moves=[],
+                total_available_moves=0,
+            ),
+        )
+        assert result.available_location_areas is not None
+        assert len(result.available_location_areas) == 1
+        assert result.available_location_areas[0].location_area_id == 10
+        assert result.available_location_areas[0].name == "広場"
+
+    def test_build_player_current_state_available_location_areas_empty_when_none(
+        self, setup_builder
+    ):
+        """LocationArea がないマップでは available_location_areas が None"""
+        builder, status_repo, profile_repo, phys_repo, spot_repo = setup_builder
+        profile_repo.save(_make_profile(1, "Alice"))
+        status = _make_status(1, 1, 0, 0)
+        status_repo.save(status)
+        actor = WorldObject(
+            object_id=WorldObjectId.create(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.PLAYER,
+            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
+        )
+        physical_map = _make_map(1, [actor])
+        result = builder.build_player_current_state(
+            query=GetPlayerCurrentStateQuery(player_id=1),
+            player_status=status,
+            player_name="Alice",
+            spot=spot_repo.find_by_id(SpotId(1)),
+            physical_map=physical_map,
+            available_moves_result=PlayerMovementOptionsDto(
+                player_id=1,
+                player_name="Alice",
+                current_spot_id=1,
+                current_spot_name="Town",
+                available_moves=[],
+                total_available_moves=0,
+            ),
+        )
+        assert result.available_location_areas is None
+
+    def test_build_player_current_state_available_location_areas_empty_list_when_all_inactive(
+        self, setup_builder
+    ):
+        """全て is_active=False の LocationArea のとき available_location_areas は None"""
+        builder, status_repo, profile_repo, phys_repo, spot_repo = setup_builder
+        profile_repo.save(_make_profile(1, "Alice"))
+        status = _make_status(1, 1, 0, 0)
+        status_repo.save(status)
+        actor = WorldObject(
+            object_id=WorldObjectId.create(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.PLAYER,
+            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
+        )
+        loc_inactive = LocationArea(
+            location_id=LocationAreaId(10),
+            area=PointArea(Coordinate(1, 1, 0)),
+            name="非公開",
+            description="",
+            is_active=False,
+        )
+        physical_map = _make_map(1, [actor], location_areas=[loc_inactive])
+        result = builder.build_player_current_state(
+            query=GetPlayerCurrentStateQuery(player_id=1),
+            player_status=status,
+            player_name="Alice",
+            spot=spot_repo.find_by_id(SpotId(1)),
+            physical_map=physical_map,
+            available_moves_result=PlayerMovementOptionsDto(
+                player_id=1,
+                player_name="Alice",
+                current_spot_id=1,
+                current_spot_name="Town",
+                available_moves=[],
+                total_available_moves=0,
+            ),
+        )
+        assert result.available_location_areas is None
+

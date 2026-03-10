@@ -17,6 +17,7 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
 )
 from ai_rpg_world.application.world.contracts.dtos import (
     ActiveConversationDto,
+    AvailableLocationAreaDto,
     AvailableMoveDto,
     AttentionLevelOptionDto,
     ChestItemDto,
@@ -33,6 +34,7 @@ def _minimal_current_state(
     current_spot_id: int | None = 1,
     available_moves: list | None = None,
     total_available_moves: int | None = 0,
+    available_location_areas: list | None = None,
     visible_objects: list | None = None,
 ) -> PlayerCurrentStateDto:
     """テスト用の最小限の PlayerCurrentStateDto"""
@@ -58,6 +60,7 @@ def _minimal_current_state(
         view_distance=5,
         available_moves=available_moves,
         total_available_moves=total_available_moves,
+        available_location_areas=available_location_areas,
         attention_level=AttentionLevel.FULL,
     )
 
@@ -133,6 +136,62 @@ class TestSetDestinationAvailabilityResolver:
             available_moves=[move],
             total_available_moves=1,
         )
+        assert resolver.is_available(ctx) is True
+
+    def test_available_when_has_location_areas_only(self):
+        """available_moves がなく available_location_areas のみあるときも利用可能"""
+        resolver = SetDestinationAvailabilityResolver()
+        ctx = _minimal_current_state(
+            available_moves=[],
+            total_available_moves=0,
+            available_location_areas=[
+                AvailableLocationAreaDto(location_area_id=10, name="ギルド"),
+            ],
+        )
+        assert resolver.is_available(ctx) is True
+
+    def test_not_available_when_location_areas_empty(self):
+        """available_location_areas が空リストのとき利用不可"""
+        resolver = SetDestinationAvailabilityResolver()
+        ctx = _minimal_current_state(
+            available_moves=[],
+            total_available_moves=0,
+            available_location_areas=[],
+        )
+        assert resolver.is_available(ctx) is False
+
+    def test_not_available_when_location_areas_none(self):
+        """available_location_areas が None で moves もないとき利用不可"""
+        resolver = SetDestinationAvailabilityResolver()
+        ctx = _minimal_current_state(
+            available_moves=[],
+            total_available_moves=0,
+            available_location_areas=None,
+        )
+        assert resolver.is_available(ctx) is False
+
+    def test_available_when_has_actionable_objects_only(self):
+        """available_moves も available_location_areas もなく actionable_objects のみあるときも利用可能"""
+        resolver = SetDestinationAvailabilityResolver()
+        ctx = _minimal_current_state(
+            available_moves=[],
+            total_available_moves=0,
+            available_location_areas=None,
+            visible_objects=[],
+        )
+        ctx.actionable_objects = [
+            VisibleObjectDto(
+                object_id=200,
+                object_type="NPC",
+                x=0,
+                y=1,
+                z=0,
+                distance=1,
+                display_name="老人",
+                object_kind="npc",
+                available_interactions=["interact"],
+            ),
+        ]
         assert resolver.is_available(ctx) is True
 
 

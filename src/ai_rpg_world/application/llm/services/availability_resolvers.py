@@ -27,7 +27,7 @@ class NoOpAvailabilityResolver(IAvailabilityResolver):
 
 
 class SetDestinationAvailabilityResolver(IAvailabilityResolver):
-    """目的地設定ツールは、現在地があり利用可能な移動先が1件以上あるときに利用可能。"""
+    """目的地設定ツールは、現在地があり利用可能な移動先（スポット・ロケーション）が1件以上あるときに利用可能。"""
 
     def is_available(
         self,
@@ -39,9 +39,20 @@ class SetDestinationAvailabilityResolver(IAvailabilityResolver):
             return False
         if context.current_spot_id is None:
             return False
-        if context.available_moves is None or context.total_available_moves is None:
-            return False
-        return context.total_available_moves > 0
+        has_spot_moves = (
+            context.available_moves is not None
+            and context.total_available_moves is not None
+            and context.total_available_moves > 0
+        )
+        has_location_moves = (
+            context.available_location_areas is not None
+            and len(context.available_location_areas) > 0
+        )
+        has_object_moves = (
+            context.actionable_objects is not None
+            and len(context.actionable_objects) > 0
+        )
+        return has_spot_moves or has_location_moves or has_object_moves
 
 
 class WhisperAvailabilityResolver(IAvailabilityResolver):

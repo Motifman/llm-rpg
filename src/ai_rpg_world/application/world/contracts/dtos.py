@@ -103,6 +103,13 @@ class AvailableMoveDto:
 
 
 @dataclass
+class AvailableLocationAreaDto:
+    """同一スポット内の利用可能なロケーションエリアDTO（LLM 移動先候補用）"""
+    location_area_id: int
+    name: str
+
+
+@dataclass
 class PlayerMovementOptionsDto:
     """プレイヤーの移動オプションDTO"""
     player_id: int
@@ -263,6 +270,8 @@ class PlayerCurrentStateDto:
     total_available_moves: Optional[int]
     # 注意レベル
     attention_level: AttentionLevel
+    # 同一スポット内のロケーションエリア（オプション）
+    available_location_areas: Optional[List[AvailableLocationAreaDto]] = None
     # 複数ティックの行動中か（経路設定済みの移動中など）。割り込み判定に利用。
     current_location_description: Optional[str] = None
     is_busy: bool = False

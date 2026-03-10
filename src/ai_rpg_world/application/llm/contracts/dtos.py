@@ -327,6 +327,7 @@ class ToolRuntimeContextDto:
     current_x: Optional[int] = None
     current_y: Optional[int] = None
     current_z: Optional[int] = None
+    current_spot_id: Optional[int] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.targets, dict):
@@ -340,6 +341,7 @@ class ToolRuntimeContextDto:
             ("current_x", self.current_x),
             ("current_y", self.current_y),
             ("current_z", self.current_z),
+            ("current_spot_id", self.current_spot_id),
         ):
             if value is not None and not isinstance(value, int):
                 raise TypeError(f"{name} must be int or None")

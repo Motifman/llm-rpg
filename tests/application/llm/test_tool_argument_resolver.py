@@ -49,6 +49,25 @@ def _make_context() -> ToolRuntimeContextDto:
                 spot_id=2,
                 destination_type="spot",
             ),
+            "L1": DestinationToolRuntimeTargetDto(
+                label="L1",
+                kind="destination",
+                display_name="ギルドエリア",
+                spot_id=1,
+                location_area_id=10,
+                destination_type="location",
+            ),
+            "D1": DestinationToolRuntimeTargetDto(
+                label="D1",
+                kind="destination",
+                display_name="老人",
+                spot_id=1,
+                world_object_id=200,
+                target_x=0,
+                target_y=1,
+                target_z=0,
+                destination_type="object",
+            ),
             "P1": PlayerToolRuntimeTargetDto(
                 label="P1",
                 kind="player",
@@ -129,6 +148,34 @@ class TestDefaultToolArgumentResolver:
             "target_spot_id": 2,
             "target_location_area_id": None,
         }
+
+    def test_resolve_move_destination_location_label(self):
+        """destination_label が L1（ロケーション）のとき destination_type=location, target_location_area_id が解決される"""
+        resolver = DefaultToolArgumentResolver()
+
+        result = resolver.resolve(
+            TOOL_NAME_MOVE_TO_DESTINATION,
+            {"destination_label": "L1"},
+            _make_context(),
+        )
+
+        assert result["destination_type"] == "location"
+        assert result["target_spot_id"] == 1
+        assert result["target_location_area_id"] == 10
+
+    def test_resolve_move_destination_object_label(self):
+        """destination_label が D1（オブジェクト）のとき destination_type=object, target_world_object_id が解決される"""
+        resolver = DefaultToolArgumentResolver()
+
+        result = resolver.resolve(
+            TOOL_NAME_MOVE_TO_DESTINATION,
+            {"destination_label": "D1"},
+            _make_context(),
+        )
+
+        assert result["destination_type"] == "object"
+        assert result["target_spot_id"] == 1
+        assert result["target_world_object_id"] == 200
 
     def test_resolve_whisper_target_label(self):
         resolver = DefaultToolArgumentResolver()

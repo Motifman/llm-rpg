@@ -12,6 +12,7 @@ from ai_rpg_world.application.llm.services.ui_context_builder import (
 )
 from ai_rpg_world.application.world.contracts.dtos import (
     ActiveConversationDto,
+    AvailableLocationAreaDto,
     AvailableMoveDto,
     AttentionLevelOptionDto,
     ChestItemDto,
@@ -280,6 +281,107 @@ class TestDefaultLlmUiContextBuilder:
         assert "S1: 港町" in result.current_state_text
         assert result.tool_runtime_context.targets["S1"].spot_id == 2
         assert result.tool_runtime_context.targets["S1"].destination_type == "spot"
+
+    def test_build_adds_location_labels_when_available_location_areas_present(self):
+        """available_location_areas があるとき L1, L2 が移動先ラベルに含まれる"""
+        builder = DefaultLlmUiContextBuilder()
+        state = _make_state()
+        state.available_location_areas = [
+            AvailableLocationAreaDto(location_area_id=10, name="ギルドエリア"),
+            AvailableLocationAreaDto(location_area_id=20, name="市場"),
+        ]
+
+        result = builder.build("現在地: 広場", state)
+
+        assert "移動先ラベル:" in result.current_state_text
+        assert "L1: ギルドエリア（同一スポット内ロケーション）" in result.current_state_text
+        assert "L2: 市場（同一スポット内ロケーション）" in result.current_state_text
+        assert "S1: 港町" in result.current_state_text
+        assert "L1" in result.tool_runtime_context.targets
+        assert "L2" in result.tool_runtime_context.targets
+        target_l1 = result.tool_runtime_context.targets["L1"]
+        assert target_l1.destination_type == "location"
+        assert target_l1.location_area_id == 10
+        assert target_l1.spot_id == 1
+        assert target_l1.display_name == "ギルドエリア"
+
+    def test_build_adds_only_location_labels_when_no_available_moves(self):
+        """available_moves がなく available_location_areas のみあるときも移動先ラベルを出す"""
+        builder = DefaultLlmUiContextBuilder()
+        state = _make_state()
+        state.available_moves = []
+        state.total_available_moves = 0
+        state.available_location_areas = [
+            AvailableLocationAreaDto(location_area_id=10, name="広場中央"),
+        ]
+
+        result = builder.build("現在地: 広場", state)
+
+        assert "移動先ラベル:" in result.current_state_text
+        assert "L1: 広場中央（同一スポット内ロケーション）" in result.current_state_text
+        assert "L1" in result.tool_runtime_context.targets
+
+    def test_build_adds_object_destination_labels_when_actionable_objects_present(self):
+        """actionable_objects があるとき D1, D2 が移動先ラベルに含まれる（自分を除く）"""
+        builder = DefaultLlmUiContextBuilder()
+        state = _make_state()
+        state.actionable_objects = [
+            VisibleObjectDto(
+                object_id=200,
+                object_type="NPC",
+                x=0,
+                y=1,
+                z=0,
+                distance=1,
+                display_name="老人",
+                object_kind="npc",
+                available_interactions=["interact"],
+            ),
+            VisibleObjectDto(
+                object_id=300,
+                object_type="RESOURCE",
+                x=-1,
+                y=0,
+                z=0,
+                distance=1,
+                display_name="薬草",
+                object_kind="resource",
+                available_interactions=["harvest"],
+            ),
+        ]
+
+        result = builder.build("現在地: 広場", state)
+
+        assert "移動先ラベル:" in result.current_state_text
+        assert "D1: 老人（オブジェクトへ向かう）" in result.current_state_text
+        assert "D2: 薬草（オブジェクトへ向かう）" in result.current_state_text
+        target_d1 = result.tool_runtime_context.targets["D1"]
+        assert target_d1.destination_type == "object"
+        assert target_d1.world_object_id == 200
+        assert target_d1.spot_id == 1
+        assert target_d1.display_name == "老人"
+
+    def test_build_object_labels_exclude_self(self):
+        """actionable_objects に is_self なオブジェクトが含まれても D ラベルに含めない"""
+        builder = DefaultLlmUiContextBuilder()
+        state = _make_state()
+        state.actionable_objects = [
+            VisibleObjectDto(
+                object_id=1,
+                object_type="PLAYER",
+                x=0,
+                y=0,
+                z=0,
+                distance=0,
+                display_name="Alice",
+                object_kind="player",
+                is_self=True,
+            ),
+        ]
+
+        result = builder.build("現在地: 広場", state)
+
+        assert "D1" not in result.tool_runtime_context.targets
 
     def test_build_with_none_state_returns_empty_runtime_context(self):
         builder = DefaultLlmUiContextBuilder()

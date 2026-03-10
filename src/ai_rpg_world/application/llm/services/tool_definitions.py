@@ -94,7 +94,7 @@ MOVE_TO_DESTINATION_PARAMETERS = {
 
 MOVE_TO_DESTINATION_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_MOVE_TO_DESTINATION,
-    description="指定した目的地（スポットまたはロケーション）へ移動します。",
+    description="指定した目的地（スポット、ロケーション、または視界内オブジェクト）へ移動します。",
     parameters=MOVE_TO_DESTINATION_PARAMETERS,
 )
 

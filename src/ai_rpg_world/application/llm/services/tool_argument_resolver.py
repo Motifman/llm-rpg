@@ -161,16 +161,22 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
             invalid_label_code="INVALID_DESTINATION_LABEL",
             invalid_kind_code="INVALID_DESTINATION_KIND",
         )
-        if target.spot_id is None:
+        spot_id = target.spot_id
+        if spot_id is None and target.destination_type == "object":
+            spot_id = runtime_context.current_spot_id
+        if spot_id is None:
             raise ToolArgumentResolutionException(
                 f"移動先として使えないラベルです: {label}",
                 "INVALID_DESTINATION_KIND",
             )
-        return {
+        result: Dict[str, Any] = {
             "destination_type": target.destination_type or "spot",
-            "target_spot_id": target.spot_id,
+            "target_spot_id": spot_id,
             "target_location_area_id": target.location_area_id,
         }
+        if target.destination_type == "object" and target.world_object_id is not None:
+            result["target_world_object_id"] = target.world_object_id
+        return result
 
     def _resolve_whisper(
         self,
