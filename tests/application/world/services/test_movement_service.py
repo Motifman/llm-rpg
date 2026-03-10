@@ -14,6 +14,10 @@ from ai_rpg_world.application.world.contracts.commands import (
 from ai_rpg_world.application.world.contracts.queries import GetPlayerLocationQuery
 from ai_rpg_world.domain.world.entity.location_area import LocationArea
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
+from ai_rpg_world.domain.world.exception.map_exception import (
+    LocationAreaNotFoundException,
+    ObjectNotFoundException,
+)
 from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
     MovementCommandException,
     PlayerNotFoundException,
@@ -490,6 +494,151 @@ class TestMovementApplicationService:
         status_after = status_repo.find_by_id(PlayerId(player_id))
         assert status_after.planned_path == []
         assert status_after.goal_spot_id is None
+
+    def test_tick_movement_location_area_not_found_clears_path(self, setup_service):
+        """到着判定で LocationAreaNotFoundException のとき経路をクリアして「目標はもう存在しない」とみなす"""
+        service, _, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
+
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status = self._create_sample_status(player_id, spot_id, 0, 0)
+        status_repo.save(status)
+
+        location_area = LocationArea(
+            location_id=LocationAreaId(20),
+            name="Goal",
+            description="",
+            area=RectArea.from_coordinates(Coordinate(2, 0, 0), Coordinate(2, 0, 0)),
+        )
+        phys_map = self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)])
+        phys_map.add_location_area(location_area)
+        phys_repo.save(phys_map)
+        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
+
+        service.set_destination(
+            SetDestinationCommand(
+                player_id=player_id,
+                destination_type="location",
+                target_spot_id=spot_id,
+                target_location_area_id=20,
+            )
+        )
+        saved_before = status_repo.find_by_id(PlayerId(player_id))
+        assert len(saved_before.planned_path) > 0
+
+        # ロケーションエリアを削除したマップで上書き（到着判定で LocationAreaNotFoundException が発生する）
+        phys_map_no_location = self._create_sample_map(
+            spot_id, objects=[self._create_player_object(player_id, 0, 0)]
+        )
+        phys_repo.save(phys_map_no_location)
+
+        result = service.tick_movement(TickMovementCommand(player_id=player_id))
+
+        assert result.success is True
+        assert result.to_coordinate == {"x": 1, "y": 0, "z": 0}
+        saved_after = status_repo.find_by_id(PlayerId(player_id))
+        assert saved_after.planned_path == []
+        assert saved_after.goal_spot_id is None
+
+    def test_tick_movement_object_not_found_clears_path(self, setup_service):
+        """到着判定で ObjectNotFoundException のとき経路をクリアして「目標はもう存在しない」とみなす"""
+        service, _, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
+
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status = self._create_sample_status(player_id, spot_id, 0, 0)
+        status_repo.save(status)
+
+        chest_obj = WorldObject(
+            object_id=WorldObjectId(201),
+            coordinate=Coordinate(2, 0, 0),
+            object_type=ObjectTypeEnum.CHEST,
+            component=ChestComponent(is_open=False, item_ids=[]),
+        )
+        phys_map = self._create_sample_map(
+            spot_id,
+            objects=[
+                self._create_player_object(player_id, 0, 0),
+                chest_obj,
+            ],
+        )
+        phys_repo.save(phys_map)
+        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
+
+        service.set_destination(
+            SetDestinationCommand(
+                player_id=player_id,
+                destination_type="object",
+                target_spot_id=spot_id,
+                target_world_object_id=201,
+            )
+        )
+        saved_before = status_repo.find_by_id(PlayerId(player_id))
+        assert len(saved_before.planned_path) > 0
+
+        # オブジェクトを削除したマップで上書き（到着判定で ObjectNotFoundException が発生する）
+        phys_map_no_object = self._create_sample_map(
+            spot_id, objects=[self._create_player_object(player_id, 0, 0)]
+        )
+        phys_repo.save(phys_map_no_object)
+
+        result = service.tick_movement(TickMovementCommand(player_id=player_id))
+
+        assert result.success is True
+        assert result.to_coordinate == {"x": 1, "y": 0, "z": 0}
+        saved_after = status_repo.find_by_id(PlayerId(player_id))
+        assert saved_after.planned_path == []
+        assert saved_after.goal_world_object_id is None
+
+    def test_tick_movement_arrival_check_unexpected_exception_propagates(self, setup_service):
+        """到着判定で想定外の例外（LocationAreaNotFoundException/ObjectNotFoundException 以外）は伝播すること"""
+        service, _, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
+
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status = self._create_sample_status(player_id, spot_id, 0, 0)
+        status_repo.save(status)
+
+        location_area = LocationArea(
+            location_id=LocationAreaId(30),
+            name="Goal",
+            description="",
+            area=RectArea.from_coordinates(Coordinate(2, 0, 0), Coordinate(2, 0, 0)),
+        )
+        phys_map = self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)])
+        phys_map.add_location_area(location_area)
+        phys_repo.save(phys_map)
+        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
+
+        service.set_destination(
+            SetDestinationCommand(
+                player_id=player_id,
+                destination_type="location",
+                target_spot_id=spot_id,
+                target_location_area_id=30,
+            )
+        )
+
+        # get_location_area が RuntimeError を投げるようにパッチ
+        with patch.object(
+            phys_map,
+            "get_location_area",
+            side_effect=RuntimeError("unexpected in get_location_area"),
+        ):
+            # find_by_spot_id がこのパッチ済みマップを返すようにするには、
+            # リポジトリをパッチする必要がある
+            with patch.object(
+                phys_repo,
+                "find_by_spot_id",
+                return_value=phys_map,
+            ):
+                with pytest.raises(WorldSystemErrorException) as exc_info:
+                    service.tick_movement(TickMovementCommand(player_id=player_id))
+                assert exc_info.value.original_exception is not None
+                assert isinstance(exc_info.value.original_exception, RuntimeError)
 
     def test_set_destination_object_already_adjacent_returns_success(self, setup_service):
         """オブジェクトに既に隣接しているとき destination_type=object で「既に傍にいます」が返ること"""
