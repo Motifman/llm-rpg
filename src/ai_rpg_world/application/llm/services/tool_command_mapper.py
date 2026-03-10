@@ -288,6 +288,7 @@ class ToolCommandMapper:
             destination_type = args.get("destination_type")
             target_spot_id = args.get("target_spot_id")
             target_location_area_id = args.get("target_location_area_id")
+            target_world_object_id = args.get("target_world_object_id")
             target_spot_id_int = int(target_spot_id) if isinstance(target_spot_id, (int, float)) else 0
             target_location_area_id_opt: Optional[int] = None
             if destination_type == "location" and target_location_area_id is not None:
@@ -296,11 +297,19 @@ class ToolCommandMapper:
                     if isinstance(target_location_area_id, (int, float))
                     else None
                 )
+            target_world_object_id_opt: Optional[int] = None
+            if destination_type == "object" and target_world_object_id is not None:
+                target_world_object_id_opt = (
+                    int(target_world_object_id)
+                    if isinstance(target_world_object_id, (int, float))
+                    else None
+                )
             result: MoveResultDto = self._movement_service.move_to_destination(
                 player_id=player_id,
                 destination_type=destination_type,  # type: ignore[arg-type]
                 target_spot_id=target_spot_id_int,
                 target_location_area_id=target_location_area_id_opt,
+                target_world_object_id=target_world_object_id_opt,
             )
             return LlmCommandResultDto(
                 success=result.success,

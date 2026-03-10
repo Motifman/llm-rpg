@@ -53,7 +53,7 @@ from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, DirectionE
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
+from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent, ChestComponent
 from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
 from ai_rpg_world.domain.world.service.map_transition_service import MapTransitionService
 from ai_rpg_world.domain.world.service.global_pathfinding_service import GlobalPathfindingService
@@ -431,15 +431,127 @@ class TestMovementApplicationService:
         assert saved_status.current_destination == Coordinate(2, 0, 0)
         initial_path_len = len(saved_status.planned_path)
         assert initial_path_len > 0
-        
+
         # 1ステップ目
         res1 = service.tick_movement(TickMovementCommand(player_id=player_id))
         assert res1.success is True
         assert res1.to_coordinate == {"x": 1, "y": 0, "z": 0}
-        
+
         # 状態が更新されているか（パスが短くなっているか）
         status_after_step = status_repo.find_by_id(PlayerId(player_id))
         assert len(status_after_step.planned_path) < initial_path_len
+
+    def test_set_destination_object_paths_to_object_and_arrival_clears_path(self, setup_service):
+        """destination_type=object でオブジェクトへ経路設定し、隣接到着で経路がクリアされること"""
+        service, _, status_repo, profile_repo, phys_repo, spot_repo, _, time_provider, _ = setup_service
+
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status = self._create_sample_status(player_id, spot_id, 0, 0)
+        status_repo.save(status)
+
+        chest_obj = WorldObject(
+            object_id=WorldObjectId(200),
+            coordinate=Coordinate(2, 0, 0),
+            object_type=ObjectTypeEnum.CHEST,
+            component=ChestComponent(is_open=False, item_ids=[]),
+        )
+        phys_map = self._create_sample_map(
+            spot_id,
+            objects=[
+                self._create_player_object(player_id, 0, 0),
+                chest_obj,
+            ],
+        )
+        phys_repo.save(phys_map)
+        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
+
+        service.set_destination(
+            SetDestinationCommand(
+                player_id=player_id,
+                destination_type="object",
+                target_spot_id=spot_id,
+                target_world_object_id=200,
+            )
+        )
+
+        saved_status = status_repo.find_by_id(PlayerId(player_id))
+        chest_coord = Coordinate(2, 0, 0)
+        # current_destination はオブジェクト隣接の通行可能セル（オブジェクト座標は通行不可のため）
+        assert saved_status.current_destination.distance_to(chest_coord) == 1
+        assert saved_status.goal_world_object_id == WorldObjectId(200)
+        assert len(saved_status.planned_path) > 0
+
+        res1 = service.tick_movement(TickMovementCommand(player_id=player_id))
+        assert res1.success is True
+        assert res1.to_coordinate == {"x": 1, "y": 0, "z": 0}
+
+        status_after = status_repo.find_by_id(PlayerId(player_id))
+        assert status_after.planned_path == []
+        assert status_after.goal_spot_id is None
+
+    def test_set_destination_object_already_adjacent_returns_success(self, setup_service):
+        """オブジェクトに既に隣接しているとき destination_type=object で「既に傍にいます」が返ること"""
+        service, _, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
+
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status = self._create_sample_status(player_id, spot_id, 1, 0)
+        status_repo.save(status)
+
+        chest_obj = WorldObject(
+            object_id=WorldObjectId(200),
+            coordinate=Coordinate(2, 0, 0),
+            object_type=ObjectTypeEnum.CHEST,
+            component=ChestComponent(is_open=False, item_ids=[]),
+        )
+        phys_map = self._create_sample_map(
+            spot_id,
+            objects=[
+                self._create_player_object(player_id, 1, 0),
+                chest_obj,
+            ],
+        )
+        phys_repo.save(phys_map)
+        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
+
+        result = service.set_destination(
+            SetDestinationCommand(
+                player_id=player_id,
+                destination_type="object",
+                target_spot_id=spot_id,
+                target_world_object_id=200,
+            )
+        )
+
+        assert result.success is True
+        assert "既に目標オブジェクトの傍にいます" in result.message
+
+    def test_set_destination_object_not_found_raises(self, setup_service):
+        """オブジェクトがマップに存在しないとき MovementInvalidException"""
+        service, _, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
+
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status = self._create_sample_status(player_id, spot_id, 0, 0)
+        status_repo.save(status)
+
+        phys_map = self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)])
+        phys_repo.save(phys_map)
+        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
+
+        with pytest.raises(MovementInvalidException, match="Object 999 not found"):
+            service.set_destination(
+                SetDestinationCommand(
+                    player_id=player_id,
+                    destination_type="object",
+                    target_spot_id=spot_id,
+                    target_world_object_id=999,
+                )
+            )
 
     def test_cancel_movement_clears_path_and_returns_success(self, setup_service):
         """cancel_movement で経路がクリアされ、成功 DTO が返ること"""
@@ -1206,3 +1318,30 @@ class TestSetDestinationCommandValidation:
             target_location_area_id=10,
         )
         assert cmd.target_location_area_id == 10
+
+    def test_destination_type_object_requires_positive_target_world_object_id(self):
+        """destination_type が object のとき target_world_object_id が正の整数であること"""
+        with pytest.raises(ValueError, match="target_world_object_id must be positive"):
+            SetDestinationCommand(
+                player_id=1,
+                destination_type="object",
+                target_spot_id=1,
+                target_world_object_id=None,
+            )
+        with pytest.raises(ValueError, match="target_world_object_id must be positive"):
+            SetDestinationCommand(
+                player_id=1,
+                destination_type="object",
+                target_spot_id=1,
+                target_world_object_id=0,
+            )
+
+    def test_destination_type_object_with_valid_target_world_object_id(self):
+        """destination_type が object のとき target_world_object_id を指定できる"""
+        cmd = SetDestinationCommand(
+            player_id=1,
+            destination_type="object",
+            target_spot_id=1,
+            target_world_object_id=200,
+        )
+        assert cmd.target_world_object_id == 200

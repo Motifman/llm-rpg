@@ -17,19 +17,34 @@ class MoveTileCommand:
 
 @dataclass(frozen=True)
 class SetDestinationCommand:
-    """目的地設定コマンド（LLMエージェントまたは自動移動用）。座標は不要で、スポットまたはロケーションを指定する。"""
+    """目的地設定コマンド（LLMエージェントまたは自動移動用）。座標は不要で、スポット・ロケーション・オブジェクトを指定する。"""
     player_id: int
-    destination_type: Literal["spot", "location"]
+    destination_type: Literal["spot", "location", "object"]
     target_spot_id: int
     target_location_area_id: Optional[int] = None  # destination_type == "location" のとき必須
+    target_world_object_id: Optional[int] = None  # destination_type == "object" のとき必須
 
     def __post_init__(self):
         if self.player_id <= 0:
             raise ValueError("player_id must be greater than 0")
         if self.target_spot_id <= 0:
             raise ValueError("target_spot_id must be greater than 0")
-        if self.destination_type == "location" and (self.target_location_area_id is None or self.target_location_area_id <= 0):
-            raise ValueError("target_location_area_id must be positive when destination_type is 'location'")
+        if self.destination_type not in ("spot", "location", "object"):
+            raise ValueError(
+                f"destination_type must be 'spot', 'location', or 'object'. got: {self.destination_type!r}"
+            )
+        if self.destination_type == "location" and (
+            self.target_location_area_id is None or self.target_location_area_id <= 0
+        ):
+            raise ValueError(
+                "target_location_area_id must be positive when destination_type is 'location'"
+            )
+        if self.destination_type == "object" and (
+            self.target_world_object_id is None or self.target_world_object_id <= 0
+        ):
+            raise ValueError(
+                "target_world_object_id must be positive when destination_type is 'object'"
+            )
 
 
 @dataclass(frozen=True)
