@@ -22,7 +22,12 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_NO_OP,
     TOOL_NAME_PLACE_OBJECT,
     TOOL_NAME_SAY,
+    TOOL_NAME_SUBAGENT,
+    TOOL_NAME_TODO_ADD,
+    TOOL_NAME_TODO_COMPLETE,
+    TOOL_NAME_TODO_LIST,
     TOOL_NAME_WHISPER,
+    TOOL_NAME_WORKING_MEMORY_APPEND,
 )
 from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
@@ -750,3 +755,51 @@ class TestToolCommandMapperInspectTarget:
         )
         assert result.success is False
         assert result.error_code == "TARGET_NOT_FOUND"
+
+
+class TestToolCommandMapperOptionalToolsWhenNotConfigured:
+    """todo_store / working_memory_store / subagent_runner が None のときのツール実行"""
+
+    def test_todo_add_without_todo_store_returns_unknown_tool(self):
+        """todo_store が None のとき todo_add は UNKNOWN_TOOL"""
+        mapper = ToolCommandMapper(movement_service=MagicMock())
+        result = mapper.execute(1, TOOL_NAME_TODO_ADD, {"content": "タスク"})
+        assert result.success is False
+        assert result.error_code == "UNKNOWN_TOOL"
+        assert result.remediation is not None
+
+    def test_todo_list_without_todo_store_returns_unknown_tool(self):
+        """todo_store が None のとき todo_list は UNKNOWN_TOOL"""
+        mapper = ToolCommandMapper(movement_service=MagicMock())
+        result = mapper.execute(1, TOOL_NAME_TODO_LIST, {})
+        assert result.success is False
+        assert result.error_code == "UNKNOWN_TOOL"
+        assert result.remediation is not None
+
+    def test_todo_complete_without_todo_store_returns_unknown_tool(self):
+        """todo_store が None のとき todo_complete は UNKNOWN_TOOL"""
+        mapper = ToolCommandMapper(movement_service=MagicMock())
+        result = mapper.execute(1, TOOL_NAME_TODO_COMPLETE, {"todo_id": "todo-1"})
+        assert result.success is False
+        assert result.error_code == "UNKNOWN_TOOL"
+        assert result.remediation is not None
+
+    def test_working_memory_append_without_working_memory_store_returns_unknown_tool(self):
+        """working_memory_store が None のとき working_memory_append は UNKNOWN_TOOL"""
+        mapper = ToolCommandMapper(movement_service=MagicMock())
+        result = mapper.execute(1, TOOL_NAME_WORKING_MEMORY_APPEND, {"text": "メモ"})
+        assert result.success is False
+        assert result.error_code == "UNKNOWN_TOOL"
+        assert result.remediation is not None
+
+    def test_subagent_without_subagent_runner_returns_unknown_tool(self):
+        """subagent_runner が None のとき subagent は UNKNOWN_TOOL"""
+        mapper = ToolCommandMapper(movement_service=MagicMock())
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SUBAGENT,
+            {"query": "テストクエリ", "bindings": {}},
+        )
+        assert result.success is False
+        assert result.error_code == "UNKNOWN_TOOL"
+        assert result.remediation is not None

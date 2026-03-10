@@ -207,6 +207,8 @@ class PlayerCurrentStateBuilder:
             if physical_map.weather_state
             else WeatherState(WeatherTypeEnum.CLEAR, 0.0)
         )
+        # 座標がマップ範囲外（TileNotFoundException）の場合は地形タイプを None のままとする。
+        # 他フィールドは引き続き有効。LLM コンテキストでは部分的欠損は許容する。
         current_terrain_type = None
         try:
             tile = physical_map.get_tile(coord)

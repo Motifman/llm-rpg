@@ -1,8 +1,10 @@
 """PlayerCurrentStateBuilder のテスト。"""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
+
+from ai_rpg_world.domain.world.exception.map_exception import TileNotFoundException
 
 from ai_rpg_world.application.world.contracts.dtos import PlayerMovementOptionsDto
 from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
@@ -256,6 +258,45 @@ class TestPlayerCurrentStateBuilder:
         )
         assert result.area_name == "町の広場"
         assert result.current_location_description == "賑やかな市場が並ぶ中央広場。"
+
+    def test_build_player_current_state_tile_not_found_sets_terrain_type_none(
+        self, setup_builder
+    ):
+        """get_tile が TileNotFoundException のとき current_terrain_type は None"""
+        builder, status_repo, profile_repo, phys_repo, spot_repo = setup_builder
+        profile_repo.save(_make_profile(1, "Alice"))
+        status = _make_status(1, 1, 0, 0)
+        status_repo.save(status)
+        actor = WorldObject(
+            object_id=WorldObjectId.create(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.PLAYER,
+            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
+        )
+        physical_map = _make_map(1, [actor])
+        with patch.object(
+            physical_map,
+            "get_tile",
+            side_effect=TileNotFoundException("Tile not found"),
+        ):
+            result = builder.build_player_current_state(
+                query=GetPlayerCurrentStateQuery(player_id=1),
+                player_status=status,
+                player_name="Alice",
+                spot=spot_repo.find_by_id(SpotId(1)),
+                physical_map=physical_map,
+                available_moves_result=PlayerMovementOptionsDto(
+                    player_id=1,
+                    player_name="Alice",
+                    current_spot_id=1,
+                    current_spot_name="Town",
+                    available_moves=[],
+                    total_available_moves=0,
+                ),
+            )
+        assert result.current_terrain_type is None
+        assert result.player_name == "Alice"
+        assert result.current_spot_name == "Town"
 
     def test_build_player_current_state_without_location_area_has_none_description(
         self, setup_builder

@@ -28,8 +28,12 @@ from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffe
 from ai_rpg_world.domain.world.service.movement_config_service import MovementConfigService
 from ai_rpg_world.domain.world.event.map_events import GatewayTriggeredEvent
 from ai_rpg_world.domain.world.exception.map_exception import (
-    ObjectNotFoundException, TileNotFoundException, InvalidMovementException,
-    ActorBusyException as DomainActorBusyException, CoordinateValidationException,
+    LocationAreaNotFoundException,
+    ObjectNotFoundException,
+    TileNotFoundException,
+    InvalidMovementException,
+    ActorBusyException as DomainActorBusyException,
+    CoordinateValidationException,
 )
 from ai_rpg_world.domain.player.exception import PlayerDownedException
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
@@ -420,8 +424,15 @@ class MovementApplicationService:
                             if loc_area.contains(player_status.current_coordinate):
                                 player_status.clear_path()
                                 self._player_status_repository.save(player_status)
-                        except Exception:
-                            pass
+                        except LocationAreaNotFoundException:
+                            # 到着先ロケーションが消失した場合：経路をクリアして「目標はもう存在しない」とみなす
+                            area_id = player_status.goal_location_area_id
+                            player_status.clear_path()
+                            self._player_status_repository.save(player_status)
+                            self._logger.debug(
+                                "Goal location area %s not found, cleared path",
+                                area_id,
+                            )
                 elif player_status.goal_destination_type == "object" and player_status.goal_world_object_id:
                     physical_map = self._physical_map_repository.find_by_spot_id(player_status.current_spot_id)
                     if physical_map and player_status.current_coordinate:
@@ -430,8 +441,15 @@ class MovementApplicationService:
                             if player_status.current_coordinate.distance_to(target_obj.coordinate) <= 1:
                                 player_status.clear_path()
                                 self._player_status_repository.save(player_status)
-                        except Exception:
-                            pass
+                        except ObjectNotFoundException:
+                            # 到着先オブジェクトが消失した場合：経路をクリアして「目標はもう存在しない」とみなす
+                            obj_id = player_status.goal_world_object_id
+                            player_status.clear_path()
+                            self._player_status_repository.save(player_status)
+                            self._logger.debug(
+                                "Goal object %s not found, cleared path",
+                                obj_id,
+                            )
 
             return result
         except (MovementInvalidException, PathBlockedException, ActorBusyException, PlayerStaminaExhaustedException) as e:
