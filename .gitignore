@@ -38,6 +38,8 @@ ENV/
 *.swp
 *.swo
 *~
+# Emacs オートセーブ・バックアップ (#filename#)
+\#*\#
 
 # システムファイル
 .DS_Store
@@ -73,6 +75,9 @@ htmlcov/
 
 # cursor
 .cursor/
+
+# codex
+.codex/
 
 # plan
 plans/
