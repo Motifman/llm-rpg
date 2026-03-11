@@ -78,6 +78,9 @@ from ai_rpg_world.domain.monster.service.behavior_state_transition_service impor
     BehaviorStateTransitionService,
 )
 from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
+from ai_rpg_world.application.world.services.pursuit_continuation_service import (
+    PursuitContinuationService,
+)
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.monster.action_resolver import IMonsterActionResolver
@@ -115,6 +118,7 @@ class WorldSimulationApplicationService:
         llm_turn_trigger: Optional[ILlmTurnTrigger] = None,
         reflection_runner: Optional[IReflectionRunner] = None,
         movement_service: Optional[Any] = None,
+        pursuit_continuation_service: Optional[PursuitContinuationService] = None,
     ):
         self._time_provider = time_provider
         self._llm_turn_trigger = llm_turn_trigger
@@ -141,6 +145,7 @@ class WorldSimulationApplicationService:
         self._world_time_config_service = world_time_config_service or DefaultWorldTimeConfigService()
         self._monster_action_resolver_factory = monster_action_resolver_factory
         self._movement_service = movement_service
+        self._pursuit_continuation_service = pursuit_continuation_service
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def tick(self) -> WorldTick:
@@ -295,7 +300,12 @@ class WorldSimulationApplicationService:
             return
 
         for status in self._player_status_repository.find_all():
-            if status.goal_spot_id is None or status.current_spot_id is None:
+            has_active_pursuit = (
+                status.has_active_pursuit and status.pursuit_state is not None
+            )
+            if status.current_spot_id is None:
+                continue
+            if not has_active_pursuit and status.goal_spot_id is None:
                 continue
 
             physical_map = self._physical_map_repository.find_by_spot_id(status.current_spot_id)
@@ -308,6 +318,13 @@ class WorldSimulationApplicationService:
                 continue
 
             if actor.is_busy(current_tick):
+                continue
+
+            if has_active_pursuit and self._pursuit_continuation_service is not None:
+                continuation = self._pursuit_continuation_service.evaluate_tick(status)
+                if not continuation.should_advance_movement:
+                    continue
+            elif status.goal_spot_id is None:
                 continue
 
             tick_movement(int(status.player_id))
