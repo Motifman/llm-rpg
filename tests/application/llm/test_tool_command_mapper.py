@@ -303,13 +303,17 @@ class TestToolCommandMapperWhisper:
 
 class TestToolCommandMapperSay:
     @pytest.fixture
-    def mapper(self):
+    def speech_service(self):
+        return MagicMock()
+
+    @pytest.fixture
+    def mapper(self, speech_service):
         return ToolCommandMapper(
             movement_service=MagicMock(),
-            speech_service=MagicMock(),
+            speech_service=speech_service,
         )
 
-    def test_execute_say_success_returns_dto(self, mapper):
+    def test_execute_say_success_returns_dto(self, mapper, speech_service):
         result = mapper.execute(
             1,
             TOOL_NAME_SAY,
@@ -320,7 +324,7 @@ class TestToolCommandMapperSay:
         )
         assert result.success is True
         assert "発言" in result.message
-        mapper._speech_service.speak.assert_called_once()
+        speech_service.speak.assert_called_once()
 
 
 class TestToolCommandMapperInteract:
