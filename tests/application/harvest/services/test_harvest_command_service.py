@@ -1,7 +1,11 @@
 import pytest
 from unittest.mock import MagicMock
 from ai_rpg_world.application.harvest.services.harvest_command_service import HarvestCommandService
-from ai_rpg_world.application.harvest.contracts.commands import StartHarvestCommand, FinishHarvestCommand
+from ai_rpg_world.application.harvest.contracts.commands import (
+    CancelHarvestCommand,
+    StartHarvestCommand,
+    FinishHarvestCommand,
+)
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
@@ -438,6 +442,47 @@ class TestHarvestCommandService:
         # 取得を試みたアイテムは入っていない
         assert updated_inv.get_item_instance_id_by_slot(SlotId(0)) == ItemInstanceId(101)
 
+    def test_cancel_harvest_success(self, setup_service):
+        s = setup_service
+        service = s["service"]
+        spot_id = SpotId.create(1)
+        actor_id = WorldObjectId(1)
+        target_id = WorldObjectId(2)
+
+        from ai_rpg_world.domain.world.entity.tile import Tile
+        from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+        from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+
+        tiles = [Tile(Coordinate(0, 0, 0), TerrainType.grass()), Tile(Coordinate(1, 0, 0), TerrainType.grass())]
+        target_obj = WorldObject(
+            target_id,
+            Coordinate(1, 0, 0),
+            ObjectTypeEnum.RESOURCE,
+            component=HarvestableComponent(loot_table_id=1, harvest_duration=5),
+        )
+        actor_obj = WorldObject(
+            actor_id,
+            Coordinate(0, 0, 0),
+            ObjectTypeEnum.NPC,
+            component=ActorComponent(direction=DirectionEnum.EAST),
+        )
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles, objects=[actor_obj, target_obj])
+        s["physical_map_repo"].save(physical_map)
+        player_id = PlayerId(1)
+        s["status_repo"].save(PlayerStatusAggregate(player_id=player_id, stamina=Stamina.create(100, 100), base_stats=MagicMock(), stat_growth_factor=MagicMock(), exp_table=MagicMock(), growth=MagicMock(), gold=MagicMock(), hp=MagicMock(), mp=MagicMock()))
+        s["inventory_repo"].save(PlayerInventoryAggregate.create_new_inventory(player_id))
+
+        service.start_harvest(StartHarvestCommand(actor_id="1", target_id="2", spot_id="1", current_tick=100))
+
+        result = service.cancel_harvest(
+            CancelHarvestCommand(actor_id="1", target_id="2", spot_id="1", current_tick=101)
+        )
+
+        assert result.success is True
+        updated_map = s["physical_map_repo"].find_by_spot_id(spot_id)
+        assert updated_map.get_object(target_id).component.current_actor_id is None
+        assert updated_map.get_object(actor_id).busy_until is None
+
     def test_start_harvest_distance_too_far(self, setup_service):
         """ターゲットが遠すぎて採取を開始できないテスト"""
         s = setup_service
@@ -591,4 +636,3 @@ class TestHarvestCommandService:
         from ai_rpg_world.domain.world.exception.map_exception import SpotIdValidationException
         with pytest.raises(SpotIdValidationException, match="Invalid Spot ID format"):
             SpotId.create("invalid")
-

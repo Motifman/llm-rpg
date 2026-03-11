@@ -16,6 +16,7 @@ from ai_rpg_world.domain.player.repository.player_status_repository import Playe
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 from ai_rpg_world.application.harvest.contracts.commands import (
+    CancelHarvestCommand,
     StartHarvestCommand,
     FinishHarvestCommand
 )
@@ -27,11 +28,13 @@ from ai_rpg_world.application.harvest.exceptions.base_exception import (
 from ai_rpg_world.application.harvest.exceptions.command.harvest_command_exception import (
     HarvestCommandException,
     HarvestResourceNotFoundException,
-    HarvestActorNotFoundException
+    HarvestActorNotFoundException,
+    HarvestNotInProgressException,
 )
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.world.entity.world_object_component import HarvestableComponent
 from ai_rpg_world.domain.world.service.harvest_domain_service import HarvestDomainService
+from ai_rpg_world.domain.world.event.map_events import ResourceHarvestedEvent
 
 
 class HarvestCommandService:
@@ -150,87 +153,179 @@ class HarvestCommandService:
             }
         )
 
+    def finish_harvest_in_current_unit_of_work(
+        self,
+        command: FinishHarvestCommand,
+    ) -> HarvestCommandResultDto:
+        """既存 UnitOfWork 内で採集完了処理を行う内部向け API。"""
+        return self._execute_with_error_handling(
+            operation=lambda: self._finish_harvest_core(command),
+            context={
+                "action": "finish_harvest",
+                "actor_id": command.actor_id,
+                "target_id": command.target_id,
+                "spot_id": command.spot_id,
+            },
+        )
+
     def _finish_harvest_impl(self, command: FinishHarvestCommand) -> HarvestCommandResultDto:
         """採集完了の実装"""
+        with self._unit_of_work:
+            return self._finish_harvest_core(command)
+
+    def _finish_harvest_core(self, command: FinishHarvestCommand) -> HarvestCommandResultDto:
+        spot_id = SpotId.create(command.spot_id)
+        physical_map = self._physical_map_repository.find_by_spot_id(spot_id)
+        if not physical_map:
+            raise HarvestCommandException(f"Spot not found: {command.spot_id}")
+
+        actor_id = WorldObjectId.create(command.actor_id)
+        target_id = WorldObjectId.create(command.target_id)
+        current_tick = WorldTick(command.current_tick)
+
+        target_obj = physical_map.get_object(target_id)
+        if not isinstance(target_obj.component, HarvestableComponent):
+            raise HarvestResourceNotFoundException(command.target_id, command.spot_id)
+
+        if target_obj.component.current_actor_id != actor_id:
+            raise HarvestNotInProgressException(command.actor_id, command.target_id)
+        if not target_obj.component.is_harvest_complete(current_tick):
+            raise HarvestCommandException("採集はまだ完了していません")
+
+        loot_table_id = target_obj.component.loot_table_id
+        loot_table = self._loot_table_repository.find_by_id(loot_table_id)
+        if not loot_table:
+            raise HarvestCommandException(f"Loot table {loot_table_id} not found")
+
+        loot_result = loot_table.roll()
+        item_spec = None
+        new_item_id = None
+        obtained_items = []
+
+        if loot_result:
+            item_spec_read_model = self._item_spec_repository.find_by_id(loot_result.item_spec_id)
+            if not item_spec_read_model:
+                raise HarvestCommandException(f"Item spec {loot_result.item_spec_id} not found")
+
+            item_spec = item_spec_read_model.to_item_spec()
+            new_item_id = self._item_repository.generate_item_instance_id()
+            obtained_items.append(
+                {
+                    "item_spec_id": int(loot_result.item_spec_id),
+                    "quantity": loot_result.quantity,
+                }
+            )
+
+        actor_player_id = PlayerId.create(command.actor_id)
+        inventory = self._player_inventory_repository.find_by_id(actor_player_id)
+        status = self._player_status_repository.find_by_id(actor_player_id)
+
+        if not status or not inventory:
+            raise HarvestActorNotFoundException(command.actor_id)
+
+        physical_map.finish_resource_harvest(actor_id, target_id, current_tick)
+
+        reward_events, item_aggregate = self._harvest_domain_service.process_reward_with_item(
+            harvestable=target_obj.component,
+            loot_result=loot_result,
+            item_spec=item_spec,
+            new_item_id=new_item_id,
+            inventory=inventory,
+            status=status
+        )
+
+        if reward_events:
+            self._logger.debug(
+                "Harvest reward events generated: actor_id=%s target_id=%s count=%s",
+                command.actor_id,
+                command.target_id,
+                len(reward_events),
+            )
+
+        physical_map.add_event(
+            ResourceHarvestedEvent.create(
+                aggregate_id=target_id,
+                aggregate_type="WorldObject",
+                object_id=target_id,
+                actor_id=actor_id,
+                loot_table_id=loot_table_id,
+                obtained_items=obtained_items,
+            )
+        )
+
+        self._player_status_repository.save(status)
+        self._player_inventory_repository.save(inventory)
+        if item_aggregate:
+            self._item_repository.save(item_aggregate)
+
+        self._physical_map_repository.save(physical_map)
+
+        acquired_items = []
+        message = "採集を完了しました"
+        if loot_result and item_spec:
+            acquired_items.append({
+                "item_name": item_spec.name,
+                "quantity": loot_result.quantity
+            })
+        elif not loot_result:
+            message = "何も見つかりませんでした"
+
+        self._logger.info(
+            "Harvest finished: actor_id=%s, target_id=%s, acquired=%s",
+            command.actor_id,
+            command.target_id,
+            acquired_items,
+        )
+
+        return HarvestCommandResultDto(
+            success=True,
+            message=message,
+            data={"acquired_items": acquired_items}
+        )
+
+    def cancel_harvest(self, command: CancelHarvestCommand) -> HarvestCommandResultDto:
+        """採集アクションを中断する。"""
+        return self._execute_with_error_handling(
+            operation=lambda: self._cancel_harvest_impl(command),
+            context={
+                "action": "cancel_harvest",
+                "actor_id": command.actor_id,
+                "target_id": command.target_id,
+                "spot_id": command.spot_id,
+            },
+        )
+
+    def _cancel_harvest_impl(self, command: CancelHarvestCommand) -> HarvestCommandResultDto:
         with self._unit_of_work:
             spot_id = SpotId.create(command.spot_id)
             physical_map = self._physical_map_repository.find_by_spot_id(spot_id)
             if not physical_map:
                 raise HarvestCommandException(f"Spot not found: {command.spot_id}")
-            
+
             actor_id = WorldObjectId.create(command.actor_id)
             target_id = WorldObjectId.create(command.target_id)
-            current_tick = WorldTick(command.current_tick)
-            
-            # 採掘対象のコンポーネント
             target_obj = physical_map.get_object(target_id)
             if not isinstance(target_obj.component, HarvestableComponent):
                 raise HarvestResourceNotFoundException(command.target_id, command.spot_id)
-            
-            if not target_obj.component.is_harvest_complete(current_tick):
-                raise HarvestCommandException("採集はまだ完了していません")
-            
-            # 1. 物理マップ側の採集完了処理 (資源減少、ビジー解除など)
-            physical_map.finish_resource_harvest(actor_id, target_id, current_tick)
-            
-            # 2. 報酬データの準備
-            loot_table_id = target_obj.component.loot_table_id
-            loot_table = self._loot_table_repository.find_by_id(loot_table_id)
-            if not loot_table:
-                raise HarvestCommandException(f"Loot table {loot_table_id} not found")
-            
-            loot_result = loot_table.roll()
-            item_spec = None
-            new_item_id = None
-            
-            if loot_result:
-                item_spec_read_model = self._item_spec_repository.find_by_id(loot_result.item_spec_id)
-                if not item_spec_read_model:
-                    raise HarvestCommandException(f"Item spec {loot_result.item_spec_id} not found")
-                
-                item_spec = item_spec_read_model.to_item_spec()
-                new_item_id = self._item_repository.generate_item_instance_id()
+            if target_obj.component.current_actor_id != actor_id:
+                raise HarvestNotInProgressException(command.actor_id, command.target_id)
+            current_tick = WorldTick(command.current_tick)
+            if target_obj.component.is_harvest_complete(current_tick):
+                raise HarvestCommandException("採集はすでに完了しています")
 
-            # 3. アクターのインベントリとステータスの取得
-            actor_player_id = PlayerId.create(command.actor_id)
-            inventory = self._player_inventory_repository.find_by_id(actor_player_id)
-            status = self._player_status_repository.find_by_id(actor_player_id)
-            
-            if not status or not inventory:
-                raise HarvestActorNotFoundException(command.actor_id)
-            
-            # 4. ドメインサービスによる報酬処理とステータス更新
-            reward_events, item_aggregate = self._harvest_domain_service.process_reward_with_item(
-                harvestable=target_obj.component,
-                loot_result=loot_result,
-                item_spec=item_spec,
-                new_item_id=new_item_id,
-                inventory=inventory,
-                status=status
+            physical_map.cancel_resource_harvest(
+                actor_id,
+                target_id,
+                reason="player_cancelled",
             )
-            
-            # 5. 永続化
-            self._player_status_repository.save(status)
-            self._player_inventory_repository.save(inventory)
-            if item_aggregate:
-                self._item_repository.save(item_aggregate)
-
             self._physical_map_repository.save(physical_map)
-            
-            acquired_items = []
-            message = "採集を完了しました"
-            if loot_result and item_spec:
-                acquired_items.append({
-                    "item_name": item_spec.name,
-                    "quantity": loot_result.quantity
-                })
-            elif not loot_result:
-                message = "何も見つかりませんでした"
-            
-            self._logger.info(f"Harvest finished: actor_id={command.actor_id}, target_id={command.target_id}, acquired={acquired_items}")
-            
+            self._logger.info(
+                "Harvest cancelled: actor_id=%s, target_id=%s",
+                command.actor_id,
+                command.target_id,
+            )
             return HarvestCommandResultDto(
                 success=True,
-                message=message,
-                data={"acquired_items": acquired_items}
+                message="採集を中断しました",
+                data=None,
             )

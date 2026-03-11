@@ -9,6 +9,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_COMBAT_USE_SKILL,
     TOOL_NAME_CONVERSATION_ADVANCE,
     TOOL_NAME_DESTROY_PLACEABLE,
+    TOOL_NAME_HARVEST_CANCEL,
     TOOL_NAME_HARVEST_START,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_MOVE_TO_DESTINATION,
@@ -78,6 +79,10 @@ class TestToolNames:
     def test_harvest_start_has_harvest_prefix(self):
         assert TOOL_NAME_HARVEST_START.startswith(TOOL_NAME_PREFIX_HARVEST)
         assert TOOL_NAME_HARVEST_START == "harvest_start"
+
+    def test_harvest_cancel_has_harvest_prefix(self):
+        assert TOOL_NAME_HARVEST_CANCEL.startswith(TOOL_NAME_PREFIX_HARVEST)
+        assert TOOL_NAME_HARVEST_CANCEL == "harvest_cancel"
 
     def test_change_attention_has_world_prefix(self):
         assert TOOL_NAME_CHANGE_ATTENTION.startswith(TOOL_NAME_PREFIX_WORLD)

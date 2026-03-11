@@ -113,3 +113,63 @@ def test_start_harvest_by_target_turns_actor_and_forwards_command():
     assert command.target_id == "2"
     assert command.spot_id == "1"
     assert command.current_tick == 123
+
+
+def test_cancel_harvest_by_target_forwards_command():
+    data_store = InMemoryDataStore()
+
+    def create_uow():
+        return InMemoryUnitOfWork(unit_of_work_factory=create_uow, data_store=data_store)
+
+    unit_of_work, _ = InMemoryUnitOfWork.create_with_event_publisher(
+        unit_of_work_factory=create_uow,
+        data_store=data_store,
+    )
+    physical_map_repo = InMemoryPhysicalMapRepository(data_store, unit_of_work)
+    player_status_repo = InMemoryPlayerStatusRepository(data_store, unit_of_work)
+    player_status_repo.save(_create_status())
+    time_provider = InMemoryGameTimeProvider(initial_tick=123)
+
+    physical_map = PhysicalMapAggregate.create(
+        SpotId(1),
+        [Tile(Coordinate(x, y, 0), TerrainType.grass()) for x in range(3) for y in range(3)],
+    )
+    physical_map.add_object(
+        WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0, 0),
+            ObjectTypeEnum.PLAYER,
+            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
+        )
+    )
+    resource = WorldObject(
+        WorldObjectId(2),
+        Coordinate(1, 0, 0),
+        ObjectTypeEnum.RESOURCE,
+        component=HarvestableComponent(loot_table_id=1, harvest_duration=5, stamina_cost=1),
+    )
+    resource.component.start_harvest(WorldObjectId(1), time_provider.get_current_tick())
+    physical_map.add_object(resource)
+    physical_map_repo.save(physical_map)
+
+    harvest_command_service = MagicMock()
+    harvest_command_service.cancel_harvest.return_value = HarvestCommandResultDto(
+        success=True,
+        message="採集を中断しました",
+        data=None,
+    )
+    service = PlayerHarvestApplicationService(
+        harvest_command_service=harvest_command_service,
+        physical_map_repository=physical_map_repo,
+        player_status_repository=player_status_repo,
+        time_provider=time_provider,
+    )
+
+    result = service.cancel_harvest_by_target(player_id=1, target_world_object_id=2)
+
+    assert result.success is True
+    command = harvest_command_service.cancel_harvest.call_args[0][0]
+    assert command.actor_id == "1"
+    assert command.target_id == "2"
+    assert command.spot_id == "1"
+    assert command.current_tick == 123

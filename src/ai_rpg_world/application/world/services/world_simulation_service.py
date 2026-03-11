@@ -73,6 +73,7 @@ from ai_rpg_world.domain.combat.service.hit_box_collision_service import HitBoxC
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
+from ai_rpg_world.application.harvest.contracts.commands import FinishHarvestCommand
 from ai_rpg_world.application.world.aggro_store import AggroStore
 from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
 from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
@@ -125,6 +126,7 @@ class WorldSimulationApplicationService:
         reflection_runner: Optional[IReflectionRunner] = None,
         movement_service: Optional[Any] = None,
         pursuit_continuation_service: Optional[PursuitContinuationService] = None,
+        harvest_command_service: Optional[Any] = None,
     ):
         self._time_provider = time_provider
         self._llm_turn_trigger = llm_turn_trigger
@@ -152,6 +154,7 @@ class WorldSimulationApplicationService:
         self._monster_action_resolver_factory = monster_action_resolver_factory
         self._movement_service = movement_service
         self._pursuit_continuation_service = pursuit_continuation_service
+        self._harvest_command_service = harvest_command_service
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def tick(self) -> WorldTick:
@@ -184,6 +187,10 @@ class WorldSimulationApplicationService:
             # 3.1.5 プレイヤーの継続移動を進める
             if self._movement_service is not None:
                 self._advance_pending_player_movements(current_tick)
+                maps = self._physical_map_repository.find_all()
+
+            if self._harvest_command_service is not None:
+                self._complete_due_harvests(maps, current_tick)
                 maps = self._physical_map_repository.find_all()
 
             # 3.2 プレイヤーIDの収集
@@ -294,6 +301,55 @@ class WorldSimulationApplicationService:
         if self._reflection_runner is not None:
             self._reflection_runner.run_after_tick(current_tick)
         return current_tick
+
+    def _complete_due_harvests(
+        self,
+        maps: List[PhysicalMapAggregate],
+        current_tick: WorldTick,
+    ) -> None:
+        finish_harvest = getattr(
+            self._harvest_command_service,
+            "finish_harvest_in_current_unit_of_work",
+            None,
+        )
+        if not callable(finish_harvest):
+            return
+        for physical_map in maps:
+            for obj in physical_map.get_all_objects():
+                component = getattr(obj, "component", None)
+                if not isinstance(component, HarvestableComponent):
+                    continue
+                if component.current_actor_id is None or component.harvest_finish_tick is None:
+                    continue
+                if component.harvest_finish_tick > current_tick:
+                    continue
+                try:
+                    actor = physical_map.get_actor(component.current_actor_id)
+                except ObjectNotFoundException:
+                    self._logger.warning(
+                        "Skipping auto-complete harvest without actor: target_id=%s",
+                        obj.object_id,
+                    )
+                    continue
+                if actor.player_id is None:
+                    continue
+                try:
+                    finish_harvest(
+                        FinishHarvestCommand(
+                            actor_id=str(int(actor.player_id)),
+                            target_id=str(int(obj.object_id)),
+                            spot_id=str(int(physical_map.spot_id)),
+                            current_tick=current_tick.value,
+                        )
+                    )
+                except Exception as exc:
+                    self._logger.warning(
+                        "Auto harvest completion failed: spot_id=%s actor_id=%s target_id=%s error=%s",
+                        int(physical_map.spot_id),
+                        int(actor.player_id),
+                        int(obj.object_id),
+                        exc,
+                    )
 
     def _advance_pending_player_movements(self, current_tick: WorldTick) -> None:
         """経路を保持しているプレイヤーの継続移動を 1 ティック分進める。"""

@@ -18,6 +18,7 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
     GuildDisbandAvailabilityResolver,
     GuildLeaveAvailabilityResolver,
     GuildWithdrawBankAvailabilityResolver,
+    HarvestCancelAvailabilityResolver,
     HarvestStartAvailabilityResolver,
     InspectItemAvailabilityResolver,
     InspectTargetAvailabilityResolver,
@@ -67,6 +68,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_GUILD_DISBAND,
     TOOL_NAME_GUILD_LEAVE,
     TOOL_NAME_GUILD_WITHDRAW_BANK,
+    TOOL_NAME_HARVEST_CANCEL,
     TOOL_NAME_HARVEST_START,
     TOOL_NAME_INSPECT_ITEM,
     TOOL_NAME_INSPECT_TARGET,
@@ -192,6 +194,23 @@ HARVEST_START_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_HARVEST_START,
     description="視界内の資源に対して採集を開始します。",
     parameters=HARVEST_START_PARAMETERS,
+)
+
+HARVEST_CANCEL_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "target_label": {
+            "type": "string",
+            "description": "進行中の採集対象ラベル（例: H1）。",
+        },
+    },
+    "required": ["target_label"],
+}
+
+HARVEST_CANCEL_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_HARVEST_CANCEL,
+    description="進行中の採集を中断します。",
+    parameters=HARVEST_CANCEL_PARAMETERS,
 )
 
 CHANGE_ATTENTION_PARAMETERS = {
@@ -799,6 +818,7 @@ def register_default_tools(
         registry.register(INSPECT_TARGET_DEFINITION, InspectTargetAvailabilityResolver())
     if harvest_enabled:
         registry.register(HARVEST_START_DEFINITION, HarvestStartAvailabilityResolver())
+        registry.register(HARVEST_CANCEL_DEFINITION, HarvestCancelAvailabilityResolver())
     if attention_enabled:
         registry.register(CHANGE_ATTENTION_DEFINITION, ChangeAttentionAvailabilityResolver())
     if conversation_enabled:
