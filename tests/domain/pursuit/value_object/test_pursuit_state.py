@@ -79,3 +79,45 @@ class TestPursuitState:
             state.failure_reason
             == PursuitFailureReason.VISION_LOST_AT_LAST_KNOWN
         )
+
+    def test_requires_target_snapshot_or_last_known(self):
+        """現在情報か last-known のどちらかは必須であること"""
+        with pytest.raises(ValueError):
+            PursuitState(
+                actor_id=WorldObjectId(1),
+                target_id=WorldObjectId(2),
+            )
+
+    def test_rejects_mismatched_last_known_target(self):
+        """last-known の対象ID不一致を拒否すること"""
+        with pytest.raises(ValueError):
+            PursuitState(
+                actor_id=WorldObjectId(1),
+                target_id=WorldObjectId(2),
+                last_known=PursuitLastKnownState(
+                    target_id=WorldObjectId(3),
+                    spot_id=SpotId(5),
+                    coordinate=Coordinate(10, 4, 0),
+                ),
+            )
+
+    def test_pursuit_state_is_separate_from_static_movement_fields(self):
+        """追跡状態が static movement の destination/path を再利用しないこと"""
+        state = PursuitState(
+            actor_id=WorldObjectId(1),
+            target_id=WorldObjectId(2),
+            target_snapshot=PursuitTargetSnapshot(
+                target_id=WorldObjectId(2),
+                spot_id=SpotId(5),
+                coordinate=Coordinate(10, 4, 0),
+            ),
+            last_known=PursuitLastKnownState(
+                target_id=WorldObjectId(2),
+                spot_id=SpotId(5),
+                coordinate=Coordinate(10, 4, 0),
+            ),
+        )
+
+        assert not hasattr(state, "current_destination")
+        assert not hasattr(state, "planned_path")
+        assert not hasattr(state, "goal_spot_id")
