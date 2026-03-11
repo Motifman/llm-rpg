@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Set, Optional
+from typing import Dict, List, Set, Optional
 from datetime import datetime
 
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
@@ -57,6 +57,17 @@ class VisibleObjectDto:
     can_take_from_chest: bool = False
     is_notable: bool = False
     notable_reason: Optional[str] = None
+
+
+@dataclass
+class VisibleTileMapDto:
+    """視界範囲のタイルマップ（現在視界のみ、毎ターン更新）"""
+
+    center_x: int
+    center_y: int
+    view_distance: int
+    rows: List[str]
+    legend: Dict[str, str]
 
 
 @dataclass
@@ -295,3 +306,5 @@ class PlayerCurrentStateDto:
     guild_memberships: List["GuildMembershipSummaryDto"] = field(default_factory=list)
     nearby_shops: List["NearbyShopSummaryDto"] = field(default_factory=list)
     available_trades: List["AvailableTradeSummaryDto"] = field(default_factory=list)
+    # 視界タイルマップ（オプション、LLM 用）
+    visible_tile_map: Optional["VisibleTileMapDto"] = None

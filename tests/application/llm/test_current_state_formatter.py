@@ -5,6 +5,7 @@ import pytest
 from ai_rpg_world.application.world.contracts.dtos import (
     PlayerCurrentStateDto,
     VisibleObjectDto,
+    VisibleTileMapDto,
     AvailableMoveDto,
 )
 from ai_rpg_world.application.llm.services.current_state_formatter import (
@@ -196,3 +197,28 @@ class TestDefaultCurrentStateFormatter:
         """dto が PlayerCurrentStateDto でない場合 TypeError"""
         with pytest.raises(TypeError, match="dto must be PlayerCurrentStateDto"):
             formatter.format("not a dto")  # type: ignore[arg-type]
+
+    def test_format_without_visible_tile_map_omits_tile_map_section(self, formatter):
+        """visible_tile_map が None のときタイルマップ行が含まれない"""
+        dto = _minimal_current_state_dto()
+        assert dto.visible_tile_map is None
+        text = formatter.format(dto)
+        assert "視界タイルマップ" not in text
+
+    def test_format_with_visible_tile_map_includes_legend_and_grid(self, formatter):
+        """visible_tile_map ありのとき凡例とグリッドが出力に含まれる"""
+        tile_map = VisibleTileMapDto(
+            center_x=1,
+            center_y=1,
+            view_distance=1,
+            rows=["...", ".P.", "..."],
+            legend={".": "草", "P": "自分"},
+        )
+        dto = _minimal_current_state_dto()
+        dto.visible_tile_map = tile_map
+        text = formatter.format(dto)
+        assert "視界タイルマップ凡例" in text
+        assert "視界タイルマップ:" in text
+        assert "草" in text
+        assert "自分" in text
+        assert ".P." in text
