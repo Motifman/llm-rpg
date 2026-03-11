@@ -4,6 +4,7 @@ import pytest
 from unittest.mock import MagicMock
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
+from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.handlers.observation_event_handler import ObservationEventHandler
 from ai_rpg_world.application.observation.services.observation_context_buffer import (
     DefaultObservationContextBuffer,
@@ -36,6 +37,24 @@ from ai_rpg_world.domain.player.event.status_events import (
     PlayerGoldEarnedEvent,
     PlayerLocationChangedEvent,
 )
+from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import PursuitFailureReason
+from ai_rpg_world.domain.pursuit.event.pursuit_events import (
+    PursuitCancelledEvent,
+    PursuitFailedEvent,
+    PursuitUpdatedEvent,
+)
+from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
+    PursuitLastKnownState,
+)
+from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
+    PursuitTargetSnapshot,
+)
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.entity.tile import Tile
+from ai_rpg_world.domain.world.entity.world_object import WorldObject
+from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
+from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, ObjectTypeEnum
+from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
     InMemoryPlayerStatusRepository,
@@ -64,6 +83,38 @@ def _make_status(player_id: int, spot_id: int = 1) -> PlayerStatusAggregate:
         current_spot_id=SpotId(spot_id),
         current_coordinate=Coordinate(0, 0, 0),
     )
+
+
+def _make_pursuit_snapshot(target_id: int, spot_id: int = 1) -> PursuitTargetSnapshot:
+    return PursuitTargetSnapshot(
+        target_id=WorldObjectId.create(target_id),
+        spot_id=SpotId(spot_id),
+        coordinate=Coordinate(1, 0, 0),
+    )
+
+
+def _make_pursuit_last_known(target_id: int, spot_id: int = 1) -> PursuitLastKnownState:
+    return PursuitLastKnownState(
+        target_id=WorldObjectId.create(target_id),
+        spot_id=SpotId(spot_id),
+        coordinate=Coordinate(1, 0, 0),
+    )
+
+
+def _make_player_object(player_id: int, x: int = 0, y: int = 0) -> WorldObject:
+    return WorldObject(
+        object_id=WorldObjectId.create(player_id),
+        coordinate=Coordinate(x, y, 0),
+        object_type=ObjectTypeEnum.PLAYER,
+        component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(player_id)),
+    )
+
+
+def _make_simple_map(spot_id: int, objects: list[WorldObject]) -> PhysicalMapAggregate:
+    tiles = {Coordinate(0, 0, 0): Tile(Coordinate(0, 0, 0), TerrainType.grass())}
+    for obj in objects:
+        tiles.setdefault(obj.coordinate, Tile(obj.coordinate, TerrainType.grass()))
+    return PhysicalMapAggregate(spot_id=SpotId(spot_id), tiles=tiles, objects=objects)
 
 
 class TestObservationEventHandler:
@@ -441,6 +492,10 @@ class TestObservationEventHandlerLlmTurnScheduling:
         """プレイヤー 2 のみ LLM 制御とするリゾルバ"""
         return SetBasedLlmPlayerResolver({2})
 
+    @pytest.fixture
+    def llm_player_resolver_include_one_and_two(self):
+        return SetBasedLlmPlayerResolver({1, 2})
+
     def test_handle_when_llm_player_schedules_turn_only_on_schedules_turn(
         self,
         resolver,
@@ -515,7 +570,6 @@ class TestObservationEventHandlerLlmTurnScheduling:
         llm_player_resolver_include_one,
     ):
         """schedules_turn のみの観測では schedule_turn が呼ばれ cancel_movement は呼ばれない"""
-        from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
         mock_formatter = MagicMock()
         mock_formatter.format.return_value = ObservationOutput(
             prose="天気が変わった",
@@ -566,6 +620,115 @@ class TestObservationEventHandlerLlmTurnScheduling:
         handler.handle(event)
 
         assert len(buffer.get_observations(PlayerId(1))) == 1
+        turn_trigger.schedule_turn.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("event", "expected_type"),
+        [
+            (
+                PursuitFailedEvent.create(
+                    aggregate_id=WorldObjectId.create(1),
+                    aggregate_type="PlayerStatusAggregate",
+                    actor_id=WorldObjectId.create(1),
+                    target_id=WorldObjectId.create(2),
+                    failure_reason=PursuitFailureReason.TARGET_MISSING,
+                    target_snapshot=_make_pursuit_snapshot(2),
+                    last_known=_make_pursuit_last_known(2),
+                ),
+                "pursuit_failed",
+            ),
+            (
+                PursuitCancelledEvent.create(
+                    aggregate_id=WorldObjectId.create(1),
+                    aggregate_type="PlayerStatusAggregate",
+                    actor_id=WorldObjectId.create(1),
+                    target_id=WorldObjectId.create(2),
+                    target_snapshot=_make_pursuit_snapshot(2),
+                    last_known=_make_pursuit_last_known(2),
+                ),
+                "pursuit_cancelled",
+            ),
+        ],
+    )
+    def test_handle_pursuit_outcome_buffers_for_resolved_recipients_and_schedules_turn(
+        self,
+        event,
+        expected_type,
+        resolver,
+        formatter,
+        buffer,
+        unit_of_work_factory,
+        turn_trigger,
+        llm_player_resolver_include_one_and_two,
+        physical_map_repo,
+    ):
+        physical_map_repo.save(
+            _make_simple_map(1, [_make_player_object(1), _make_player_object(2, 1, 0)])
+        )
+        handler = ObservationEventHandler(
+            resolver=resolver,
+            formatter=formatter,
+            buffer=buffer,
+            unit_of_work_factory=unit_of_work_factory,
+            turn_trigger=turn_trigger,
+            llm_player_resolver=llm_player_resolver_include_one_and_two,
+        )
+
+        handler.handle(event)
+
+        actor_entries = buffer.get_observations(PlayerId(1))
+        target_entries = buffer.get_observations(PlayerId(2))
+        assert len(actor_entries) == 1
+        assert len(target_entries) == 1
+        assert actor_entries[0].output.structured["event_type"] == expected_type
+        assert target_entries[0].output.structured["event_type"] == expected_type
+        assert actor_entries[0].output.structured["pursuit_status_after_event"] == "ended"
+        assert actor_entries[0].output.schedules_turn is True
+        assert actor_entries[0].output.breaks_movement is False
+        turn_trigger.schedule_turn.assert_any_call(PlayerId(1))
+        turn_trigger.schedule_turn.assert_any_call(PlayerId(2))
+        assert turn_trigger.schedule_turn.call_count == 2
+
+    def test_handle_pursuit_updated_buffers_without_scheduling_turn(
+        self,
+        resolver,
+        formatter,
+        buffer,
+        unit_of_work_factory,
+        turn_trigger,
+        llm_player_resolver_include_one_and_two,
+        physical_map_repo,
+    ):
+        physical_map_repo.save(
+            _make_simple_map(1, [_make_player_object(1), _make_player_object(2, 1, 0)])
+        )
+        handler = ObservationEventHandler(
+            resolver=resolver,
+            formatter=formatter,
+            buffer=buffer,
+            unit_of_work_factory=unit_of_work_factory,
+            turn_trigger=turn_trigger,
+            llm_player_resolver=llm_player_resolver_include_one_and_two,
+        )
+        event = PursuitUpdatedEvent.create(
+            aggregate_id=WorldObjectId.create(1),
+            aggregate_type="PlayerStatusAggregate",
+            actor_id=WorldObjectId.create(1),
+            target_id=WorldObjectId.create(2),
+            target_snapshot=_make_pursuit_snapshot(2),
+            last_known=_make_pursuit_last_known(2),
+        )
+
+        handler.handle(event)
+
+        actor_entries = buffer.get_observations(PlayerId(1))
+        target_entries = buffer.get_observations(PlayerId(2))
+        assert len(actor_entries) == 1
+        assert len(target_entries) == 1
+        assert actor_entries[0].output.structured["event_type"] == "pursuit_updated"
+        assert actor_entries[0].output.structured["pursuit_status_after_event"] == "active"
+        assert actor_entries[0].output.schedules_turn is False
+        assert actor_entries[0].output.breaks_movement is False
         turn_trigger.schedule_turn.assert_not_called()
 
     def test_handle_when_turn_trigger_none_does_not_schedule(self, resolver, formatter, buffer, unit_of_work_factory, llm_player_resolver_include_one):
@@ -627,11 +790,13 @@ class TestObservationEventHandlerLlmTurnScheduling:
             turn_trigger=turn_trigger,
             llm_player_resolver=llm_player_resolver_include_one,
         )
-        event = PlayerGoldEarnedEvent.create(
+        event = PlayerLocationChangedEvent.create(
             aggregate_id=PlayerId(1),
             aggregate_type="PlayerStatusAggregate",
-            earned_amount=100,
-            total_gold=1100,
+            old_spot_id=SpotId(1),
+            new_spot_id=SpotId(2),
+            old_coordinate=Coordinate(0, 0, 0),
+            new_coordinate=Coordinate(1, 0, 0),
         )
         handler.handle(event)
 
