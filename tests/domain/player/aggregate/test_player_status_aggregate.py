@@ -728,6 +728,24 @@ class TestPlayerStatusAggregate:
         assert updated.target_snapshot == new_snapshot
         assert updated.last_known == new_last_known
 
+    def test_update_pursuit_is_noop_when_snapshot_and_last_known_are_unchanged(self):
+        """追跡継続が同じ snapshot/last_known を渡しても更新イベントを出さないこと"""
+        aggregate = create_test_status_aggregate()
+        snapshot = create_test_pursuit_snapshot()
+        aggregate.start_pursuit(snapshot)
+        aggregate.clear_events()
+
+        unchanged_last_known = create_test_last_known_state(coordinate=snapshot.coordinate)
+
+        assert (
+            aggregate.update_pursuit(
+                target_snapshot=snapshot,
+                last_known=unchanged_last_known,
+            )
+            is False
+        )
+        assert aggregate.get_events() == []
+
     def test_fail_pursuit_clears_only_pursuit_state_and_emits_failed_event(self):
         """追跡失敗は追跡だけを終了し、静的移動状態は維持すること"""
         aggregate = create_test_status_aggregate(current_spot_id=SpotId(1), current_coordinate=Coordinate(0, 0, 0))
