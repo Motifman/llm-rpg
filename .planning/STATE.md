@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-03-11T12:36:07Z"
-last_activity: 2026-03-11 — Phase 4 completed with pursuit observation delivery and LLM re-drive regression coverage
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-03-11T13:14:50.582Z"
+last_activity: 2026-03-11 — Phase 5 plan 05-01 completed with monster pursuit alignment across CHASE and SEARCH
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 11
-  completed_plans: 11
-  percent: 100
+  total_plans: 13
+  completed_plans: 12
+  percent: 92
 ---
 
 # Project State
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 ## Current Position
 
 Phase: 5 of 5 (Monster Pursuit Alignment)
-Plan: 0 of 2 in current phase
-Status: Ready to start
-Last activity: 2026-03-11 — Phase 4 completed with pursuit observation delivery and LLM re-drive regression coverage
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-03-11 — Phase 5 plan 05-01 completed with monster pursuit alignment across CHASE and SEARCH
 
-Progress: [██████████] 100%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
+- Total plans completed: 12
 - Average duration: 7 min
-- Total execution time: 81 min
+- Total execution time: 89 min
 
 **By Phase:**
 
@@ -47,11 +47,15 @@ Progress: [██████████] 100%
 | 02-player-pursuit-commands | 2 | 20 min | 10 min |
 | 03-pursuit-continuation-loop | 3 | 19 min | 6 min |
 | 04-observation-and-llm-delivery | 2 | 12 min | 6 min |
-| 05-monster-pursuit-alignment | 0 | - | - |
+| 05-monster-pursuit-alignment | 1 | 8 min | 8 min |
 
 **Recent Trend:**
-- Last 5 plans: 9 min, 6 min, 6 min, 1 min, 2 min
+- Last 5 plans: 6 min, 6 min, 1 min, 2 min, 8 min
 - Trend: Stable
+
+| Phase | Duration | Tasks | Files |
+|-------|----------|-------|-------|
+| Phase 05-monster-pursuit-alignment P01 | 8 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -87,6 +91,9 @@ Recent decisions affecting current work:
 - [Phase 04-observation-and-llm-delivery]: ObservationOutput typing already supports pursuit metadata, so no DTO expansion was needed.
 - [Phase 04-observation-and-llm-delivery]: Pursuit failed and cancelled observations schedule turns while keeping breaks_movement false to distinguish pursuit outcomes from movement interruption.
 - [Phase 04]: Phase completion is validated through the real observation handler and world tick flow rather than direct turn-trigger shortcuts.
+- [Phase 05-monster-pursuit-alignment]: Monster pursuit alignment reuses shared PursuitState vocabulary while preserving monster-local BehaviorStateEnum labels.
+- [Phase 05-monster-pursuit-alignment]: CHASE to SEARCH now retains target identity and last-known coordinates instead of clearing pursuit context on vision loss.
+- [Phase 05-monster-pursuit-alignment]: WorldSimulationApplicationService remains the only runtime seam for observation-to-pursuit monster state entry; integration proof lives in tests.
 
 ### Pending Todos
 
@@ -99,6 +106,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T12:36:07Z
-Stopped at: Completed 04-03-PLAN.md
+Last session: 2026-03-11T13:14:50.579Z
+Stopped at: Completed 05-01-PLAN.md
 Resume file: None
