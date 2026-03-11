@@ -10,27 +10,27 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 ## Current Position
 
 Phase: 1 of 5 (Pursuit Domain Vocabulary)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: Ready to execute next plan
-Last activity: 2026-03-11 — Plan 01-01 completed with neutral pursuit vocabulary and regression coverage
+Last activity: 2026-03-11 — Plan 01-02 completed with explicit pursuit lifecycle events and payload regression coverage
 
-Progress: [█░░░░░░░░░] 8%
+Progress: [██░░░░░░░░] 17%
 
 ## Performance Metrics
 
 **Velocity:**
 - Total plans completed: 1
-- Average duration: 8 min
-- Total execution time: 8 min
+- Average duration: 7 min
+- Total execution time: 14 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-pursuit-domain-vocabulary | 1 | 8 min | 8 min |
+| 01-pursuit-domain-vocabulary | 2 | 14 min | 7 min |
 
 **Recent Trend:**
-- Last 5 plans: 8 min
+- Last 5 plans: 8 min, 6 min
 - Trend: Stable
 
 ## Accumulated Context
@@ -46,6 +46,9 @@ Recent decisions affecting current work:
 - 01-01: Pursuit vocabulary lives under `domain/pursuit` and stays separate from player static movement fields
 - 01-01: `last_known` is modeled as an explicit value object reusable by later event payloads
 - 01-01: `cancelled` remains outside `PursuitFailureReason`
+- 01-02: Pursuit lifecycle events use neutral `actor_id` and `target_id` fields on `BaseDomainEvent[WorldObjectId, str]`
+- 01-02: `PursuitCancelledEvent` remains distinct from `PursuitFailedEvent` and carries no failure reason field
+- 01-02: All pursuit lifecycle events retain `last_known` context; started events also require a visible `target_snapshot`
 
 ### Pending Todos
 
@@ -56,9 +59,10 @@ None yet.
 - Pursuit state must not be collapsed into static movement path state
 - Busy-state timing and observation-driven movement interruption can conflict with pursuit continuation
 - Async event failure visibility is weak in the current UoW/event pipeline
+- Git commits for this plan were blocked by sandbox permissions on `.git/index.lock`
 
 ## Session Continuity
 
-Last session: 2026-03-11 17:41
-Stopped at: Plan 01-01 completed; Phase 1 is ready for plan 01-02
+Last session: 2026-03-11 17:46
+Stopped at: Plan 01-02 completed; Phase 1 is ready for plan 01-03
 Resume file: None
