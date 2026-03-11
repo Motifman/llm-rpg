@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-03-11T10:37:13.048Z"
-last_activity: 2026-03-11 — Phase 3 plan 02 completed with visible refresh, frozen last-known continuation, and structured failure coverage
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-03-11T10:49:08.947Z"
+last_activity: 2026-03-11 — Phase 3 plan 03 completed with regression coverage for world tick continuation, movement recovery, and command guardrails
 progress:
   total_phases: 5
-  completed_phases: 2
-  total_plans: 13
-  completed_plans: 7
-  percent: 54
+  completed_phases: 3
+  total_plans: 8
+  completed_plans: 8
+  percent: 100
 ---
 
 # Project State
@@ -21,23 +21,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** LLMエージェントが、静的な目的地指定だけでなく、動的に移動する主体に対しても一貫した状態遷移とイベント駆動で行動を継続できること
-**Current focus:** Phase 3: Pursuit Continuation Loop
+**Current focus:** Phase 4: Observation And LLM Delivery
 
 ## Current Position
 
-Phase: 3 of 5 (Pursuit Continuation Loop)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-03-11 — Phase 3 plan 02 completed with visible refresh, frozen last-known continuation, and structured failure coverage
+Phase: 4 of 5 (Observation And LLM Delivery)
+Plan: 0 of 3 in current phase
+Status: Ready to start
+Last activity: 2026-03-11 — Phase 3 plan 03 completed with regression coverage for world tick continuation, movement recovery, and command guardrails
 
-Progress: [█████░░░░░] 54%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
 - Total plans completed: 7
+- Total plans completed: 8
 - Average duration: 8 min
-- Total execution time: 58 min
+- Total execution time: 67 min
 
 **By Phase:**
 
@@ -45,10 +46,10 @@ Progress: [█████░░░░░] 54%
 |-------|-------|-------|----------|
 | 01-pursuit-domain-vocabulary | 3 | 28 min | 9 min |
 | 02-player-pursuit-commands | 2 | 20 min | 10 min |
-| 03-pursuit-continuation-loop | 2 | 10 min | 5 min |
+| 03-pursuit-continuation-loop | 3 | 19 min | 6 min |
 
 **Recent Trend:**
-- Last 5 plans: 14 min, 12 min, 8 min, 1 min, 9 min
+- Last 5 plans: 12 min, 8 min, 1 min, 9 min, 9 min
 - Trend: Stable
 
 ## Accumulated Context
@@ -78,6 +79,8 @@ Recent decisions affecting current work:
 - [Phase 03]: Active pursuit enters the continuation prepass even when no static movement path exists.
 - [Phase 03]: Authoritative target presence uses PhysicalMapRepository.find_spot_id_by_object_id so invisible targets are not misclassified as missing.
 - [Phase 03]: Pursuit continuation clears stored movement paths on failure but ends pursuit via fail_pursuit, not cancel_pursuit.
+- [Phase 03]: World-tick same-tick pursuit regressions stay at the continuation seam with a controlled movement mock.
+- [Phase 03]: Unchanged pursuit refreshes must remain event-free even when last_known is passed explicitly.
 
 ### Pending Todos
 
@@ -90,6 +93,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T10:37:13.045Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-03-11T10:49:08.944Z
+Stopped at: Completed 03-03-PLAN.md
 Resume file: None
