@@ -613,8 +613,14 @@ class TestComposePlayerPursuitRuntime:
         assert result.world_simulation_service._llm_turn_trigger is result.llm_turn_trigger
 
     def test_compose_player_pursuit_runtime_exposes_pursuit_tools_on_live_path(self):
+        from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_PURSUIT_CANCEL
+        from ai_rpg_world.application.world.contracts.dtos import PursuitCommandResultDto
+
         deps = _minimal_wiring_deps()
         pursuit_command_service = MagicMock()
+        pursuit_command_service.cancel_pursuit.return_value = PursuitCommandResultDto(
+            success=True, message="追跡を中断しました。", no_op=False
+        )
         pursuit_continuation_service = MagicMock()
 
         result = compose_player_pursuit_runtime(
@@ -624,7 +630,10 @@ class TestComposePlayerPursuitRuntime:
         )
 
         tool_mapper = result.llm_turn_trigger._turn_runner._orchestrator._tool_command_mapper
-        assert tool_mapper._pursuit_service is pursuit_command_service
+        pursuit_result = tool_mapper.execute(1, TOOL_NAME_PURSUIT_CANCEL, {})
+        assert pursuit_result.success is True
+        assert "追跡" in pursuit_result.message
+        pursuit_command_service.cancel_pursuit.assert_called_once()
 
     def test_from_compose_result_rechecks_pursuit_contract(self):
         deps = _minimal_wiring_deps()
