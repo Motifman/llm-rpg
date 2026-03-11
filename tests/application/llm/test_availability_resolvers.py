@@ -9,6 +9,10 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
     CombatUseSkillAvailabilityResolver,
     ConversationAdvanceAvailabilityResolver,
     DestroyPlaceableAvailabilityResolver,
+    GuildAddMemberAvailabilityResolver,
+    GuildChangeRoleAvailabilityResolver,
+    GuildCreateAvailabilityResolver,
+    GuildDisbandAvailabilityResolver,
     InspectItemAvailabilityResolver,
     InspectTargetAvailabilityResolver,
     NoOpAvailabilityResolver,
@@ -25,6 +29,7 @@ from ai_rpg_world.application.world.contracts.dtos import (
     AttentionLevelOptionDto,
     ChestItemDto,
     ConversationChoiceDto,
+    GuildMembershipSummaryDto,
     InventoryItemDto,
     PlayerCurrentStateDto,
     UsableSkillDto,
@@ -508,4 +513,48 @@ class TestExtendedAvailabilityResolvers:
                 )
             ]
         )
+        assert resolver.is_available(ctx) is True
+
+
+class TestGuildCreateAvailabilityResolver:
+    """GuildCreateAvailabilityResolver のテスト"""
+
+    def test_not_available_when_context_none(self):
+        resolver = GuildCreateAvailabilityResolver()
+        assert resolver.is_available(None) is False
+
+    def test_not_available_when_area_ids_empty(self):
+        resolver = GuildCreateAvailabilityResolver()
+        ctx = _minimal_current_state()
+        ctx.area_ids = []
+        assert resolver.is_available(ctx) is False
+
+    def test_not_available_when_already_in_guild(self):
+        resolver = GuildCreateAvailabilityResolver()
+        ctx = _minimal_current_state()
+        ctx.area_ids = [10]
+        ctx.guild_memberships = [GuildMembershipSummaryDto(1, "テスト", "leader")]
+        assert resolver.is_available(ctx) is False
+
+    def test_available_when_no_guild_and_has_area_ids(self):
+        resolver = GuildCreateAvailabilityResolver()
+        ctx = _minimal_current_state()
+        ctx.area_ids = [10]
+        ctx.guild_memberships = []
+        assert resolver.is_available(ctx) is True
+
+
+class TestGuildDisbandAvailabilityResolver:
+    """GuildDisbandAvailabilityResolver のテスト"""
+
+    def test_not_available_when_no_leader(self):
+        resolver = GuildDisbandAvailabilityResolver()
+        ctx = _minimal_current_state()
+        ctx.guild_memberships = [GuildMembershipSummaryDto(1, "テスト", "member")]
+        assert resolver.is_available(ctx) is False
+
+    def test_available_when_leader(self):
+        resolver = GuildDisbandAvailabilityResolver()
+        ctx = _minimal_current_state()
+        ctx.guild_memberships = [GuildMembershipSummaryDto(1, "テスト", "leader")]
         assert resolver.is_available(ctx) is True

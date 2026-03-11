@@ -12,7 +12,7 @@ class QuestCommandException(QuestApplicationException):
     def __init__(
         self,
         message: str,
-        error_code: str = None,
+        error_code: Optional[str] = None,
         user_id: Optional[int] = None,
         quest_id: Optional[int] = None,
         **context,
@@ -28,8 +28,17 @@ class QuestCommandException(QuestApplicationException):
 class QuestCreationException(QuestCommandException):
     """クエスト作成関連の例外"""
 
-    def __init__(self, message: str, user_id: Optional[int] = None):
-        super().__init__(message, "QUEST_CREATION_ERROR", user_id=user_id)
+    def __init__(
+        self,
+        message: str,
+        user_id: Optional[int] = None,
+        error_code: Optional[str] = None,
+    ):
+        super().__init__(
+            message,
+            error_code=error_code or "QUEST_CREATION_ERROR",
+            user_id=user_id,
+        )
 
 
 class QuestNotFoundForCommandException(QuestCommandException):

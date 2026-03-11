@@ -11,6 +11,7 @@ from ai_rpg_world.application.world.contracts.dtos import (
     AvailableTradeSummaryDto,
     ChestItemDto,
     ConversationChoiceDto,
+    GuildMemberSummaryDto,
     GuildMembershipSummaryDto,
     InventoryItemDto,
     NearbyShopSummaryDto,
@@ -18,10 +19,21 @@ from ai_rpg_world.application.world.contracts.dtos import (
     UsableSkillDto,
     VisibleObjectDto,
 )
+from ai_rpg_world.application.trade.exceptions import (
+    PersonalTradeQueryApplicationException,
+)
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
-from ai_rpg_world.domain.world.entity.world_object_component import PlaceableComponent
+from ai_rpg_world.domain.world.entity.world_object_component import (
+    ChestComponent,
+    PlaceableComponent,
+)
+from ai_rpg_world.domain.world.exception.map_exception import (
+    NotAnActorException,
+    ObjectNotFoundException,
+    WorldObjectIdValidationException,
+)
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 if TYPE_CHECKING:
@@ -30,6 +42,9 @@ if TYPE_CHECKING:
         ConversationCommandService,
     )
     from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
+    from ai_rpg_world.domain.player.repository.player_profile_repository import (
+        PlayerProfileRepository,
+    )
     from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
     from ai_rpg_world.domain.player.repository.player_inventory_repository import (
         PlayerInventoryRepository,
@@ -56,6 +71,7 @@ class PlayerSupplementalContextBuilder:
         guild_repository: Optional["GuildRepository"] = None,
         shop_repository: Optional["ShopRepository"] = None,
         personal_trade_query_service: Optional["PersonalTradeQueryService"] = None,
+        player_profile_repository: Optional["PlayerProfileRepository"] = None,
     ) -> None:
         self._player_inventory_repository = player_inventory_repository
         self._item_repository = item_repository
@@ -66,6 +82,7 @@ class PlayerSupplementalContextBuilder:
         self._guild_repository = guild_repository
         self._shop_repository = shop_repository
         self._personal_trade_query_service = personal_trade_query_service
+        self._player_profile_repository = player_profile_repository
 
     def build_inventory_items(self, player_id: PlayerId) -> List[InventoryItemDto]:
         if self._player_inventory_repository is None or self._item_repository is None:
@@ -106,10 +123,12 @@ class PlayerSupplementalContextBuilder:
                 continue
             try:
                 chest = physical_map.get_object(WorldObjectId.create(obj.object_id))
-            except Exception:
+            except (ObjectNotFoundException, WorldObjectIdValidationException):
                 continue
-            component = getattr(chest, "component", None)
-            item_ids = getattr(component, "item_ids", [])
+            component = chest.component
+            if not isinstance(component, ChestComponent):
+                continue
+            item_ids = component.item_ids
             for item_id in item_ids:
                 item = self._item_repository.find_by_id(item_id)
                 if item is None:
@@ -175,18 +194,26 @@ class PlayerSupplementalContextBuilder:
         return [int(g.guild_id.value) for g in guilds]
 
     def build_nearby_shop_ids(
-        self, spot_id: int, location_area_id: Optional[int]
+        self, spot_id: int, location_area_ids: Optional[List[int]] = None
     ) -> List[int]:
-        """現在地スポットのショップ ID 一覧を返す（scope_keys 用）。1ロケーション1ショップ。"""
-        if self._shop_repository is None or location_area_id is None:
+        """現在地スポットのショップ ID 一覧を返す（scope_keys 用）。複数ロケーション対応。"""
+        if self._shop_repository is None or not location_area_ids:
             return []
         from ai_rpg_world.domain.world.value_object.spot_id import SpotId
         from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 
-        shop = self._shop_repository.find_by_spot_and_location(
-            SpotId(spot_id), LocationAreaId(location_area_id)
-        )
-        return [int(shop.shop_id.value)] if shop else []
+        seen: set[int] = set()
+        result: List[int] = []
+        for area_id in location_area_ids:
+            shop = self._shop_repository.find_by_spot_and_location(
+                SpotId(spot_id), LocationAreaId(area_id)
+            )
+            if shop is not None:
+                sid = int(shop.shop_id.value)
+                if sid not in seen:
+                    seen.add(sid)
+                    result.append(sid)
+        return result
 
     def build_active_quests(self, player_id: int) -> List[ActiveQuestSummaryDto]:
         """受託中クエストのサマリ一覧（LLM readable）"""
@@ -209,66 +236,93 @@ class PlayerSupplementalContextBuilder:
         return result
 
     def build_guild_memberships(
-        self, player_id: int, player_area_id: Optional[int] = None
+        self, player_id: int, player_area_ids: Optional[List[int]] = None
     ) -> List[GuildMembershipSummaryDto]:
-        """所属ギルドのサマリ一覧（LLM readable）。当該 LocationArea 内にいる場合のみ description を設定。"""
+        """所属ギルドのサマリ一覧（LLM readable）。player_area_ids のいずれかがギルドの LocationArea と一致する場合 description を設定。"""
         if self._guild_repository is None:
             return []
+        from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole
+
         guilds = self._guild_repository.find_guilds_by_player_id(PlayerId(player_id))
         result: List[GuildMembershipSummaryDto] = []
         for g in guilds:
             membership = g.get_member(PlayerId(player_id))
             if membership is not None:
                 desc: Optional[str] = None
-                if player_area_id is not None and g.location_area_id.value == player_area_id:
+                if player_area_ids and g.location_area_id.value in player_area_ids:
                     desc = g.description
+                members_list: Optional[List[GuildMemberSummaryDto]] = None
+                if membership.role in (GuildRole.LEADER, GuildRole.OFFICER):
+                    members_list = []
+                    for pid, m in g.members.items():
+                        player_name_str = f"プレイヤー{int(pid)}"
+                        if self._player_profile_repository is not None:
+                            profile = self._player_profile_repository.find_by_id(pid)
+                            if profile is not None:
+                                player_name_str = profile.name.value
+                        members_list.append(
+                            GuildMemberSummaryDto(
+                                player_id=int(pid),
+                                player_name=player_name_str,
+                                role=m.role.value,
+                            )
+                        )
                 result.append(
                     GuildMembershipSummaryDto(
                         guild_id=int(g.guild_id.value),
                         guild_name=g.name,
                         role=membership.role.value,
                         description=desc,
+                        members=members_list,
                     )
                 )
         return result
 
     def build_nearby_shops(
-        self, spot_id: int, location_area_id: Optional[int]
+        self, spot_id: int, location_area_ids: Optional[List[int]] = None
     ) -> List[NearbyShopSummaryDto]:
-        """現在地のショップサマリ一覧（LLM readable）。出品一覧も含み listing_label 解決に使う。"""
-        if self._shop_repository is None or location_area_id is None:
+        """現在地のショップサマリ一覧（LLM readable）。複数ロケーション対応。出品一覧も含み listing_label 解決に使う。"""
+        if self._shop_repository is None or not location_area_ids:
             return []
         from ai_rpg_world.domain.world.value_object.spot_id import SpotId
         from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 
-        shop = self._shop_repository.find_by_spot_and_location(
-            SpotId(spot_id), LocationAreaId(location_area_id)
-        )
-        if shop is None:
-            return []
-        listings_dto: List[ShopListingSummaryDto] = []
-        for listing_id, listing in shop.listings.items():
-            item_name = "不明"
-            if self._item_repository is not None:
-                item = self._item_repository.find_by_id(listing.item_instance_id)
-                if item is not None:
-                    item_name = item.item_spec.name
-            listings_dto.append(
-                ShopListingSummaryDto(
-                    listing_id=listing_id.value,
-                    item_name=item_name,
-                    price_per_unit=listing.price_per_unit.value,
+        seen_shop_ids: set[int] = set()
+        result: List[NearbyShopSummaryDto] = []
+        for area_id in location_area_ids:
+            shop = self._shop_repository.find_by_spot_and_location(
+                SpotId(spot_id), LocationAreaId(area_id)
+            )
+            if shop is None:
+                continue
+            sid = int(shop.shop_id.value)
+            if sid in seen_shop_ids:
+                continue
+            seen_shop_ids.add(sid)
+            listings_dto: List[ShopListingSummaryDto] = []
+            for listing_id, listing in shop.listings.items():
+                item_name = "不明"
+                if self._item_repository is not None:
+                    item = self._item_repository.find_by_id(listing.item_instance_id)
+                    if item is not None:
+                        item_name = item.item_spec.name
+                listings_dto.append(
+                    ShopListingSummaryDto(
+                        listing_id=listing_id.value,
+                        item_name=item_name,
+                        price_per_unit=listing.price_per_unit.value,
+                    )
+                )
+            result.append(
+                NearbyShopSummaryDto(
+                    shop_id=sid,
+                    shop_name=shop.name,
+                    listing_count=len(listings_dto),
+                    listings=listings_dto,
+                    description=shop.description or None,
                 )
             )
-        return [
-            NearbyShopSummaryDto(
-                shop_id=int(shop.shop_id.value),
-                shop_name=shop.name,
-                listing_count=len(listings_dto),
-                listings=listings_dto,
-                description=shop.description or None,
-            )
-        ]
+        return result
 
     def build_available_trades(self, player_id: int, limit: int = 5) -> List[AvailableTradeSummaryDto]:
         """プレイヤー宛の取引サマリ一覧（LLM readable）"""
@@ -286,7 +340,7 @@ class PlayerSupplementalContextBuilder:
                 )
                 for listing in trade_list.listings
             ]
-        except Exception:
+        except PersonalTradeQueryApplicationException:
             return []
 
     def build_usable_skills(self, player_id: int) -> List[UsableSkillDto]:
@@ -336,11 +390,15 @@ class PlayerSupplementalContextBuilder:
     def can_destroy_placeable(self, physical_map, player_id: int) -> bool:
         try:
             actor = physical_map.get_actor(WorldObjectId.create(player_id))
-        except Exception:
+        except (
+            ObjectNotFoundException,
+            NotAnActorException,
+            WorldObjectIdValidationException,
+        ):
             return False
         front_coord = actor.coordinate.neighbor(actor.direction)
         for obj in physical_map.get_objects_at(front_coord):
-            component = getattr(obj, "component", None)
+            component = obj.component
             if isinstance(component, PlaceableComponent):
                 return True
         return False
