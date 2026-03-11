@@ -33,6 +33,7 @@ from ai_rpg_world.application.observation.services.recipient_strategies import (
     GuildRecipientStrategy,
     HarvestRecipientStrategy,
     MonsterRecipientStrategy,
+    PursuitRecipientStrategy,
     QuestRecipientStrategy,
     ShopRecipientStrategy,
     SkillRecipientStrategy,
@@ -108,6 +109,7 @@ def create_observation_recipient_resolver(
             guild_repository=guild_repository,
         ),
         HarvestRecipientStrategy(world_object_to_player_resolver=world_object_resolver),
+        PursuitRecipientStrategy(world_object_to_player_resolver=world_object_resolver),
         MonsterRecipientStrategy(
             player_status_repository=player_status_repository,
             physical_map_repository=physical_map_repository,
