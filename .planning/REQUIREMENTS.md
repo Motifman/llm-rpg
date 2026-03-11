@@ -7,11 +7,11 @@
 
 ### Pursuit Core
 
-- [ ] **PURS-01**: LLM 制御プレイヤーはプレイヤーまたはモンスターを追跡対象として指定できる
+- [x] **PURS-01**: LLM 制御プレイヤーはプレイヤーまたはモンスターを追跡対象として指定できる
 - [ ] **PURS-02**: モンスターは既存の行動文脈の中で追跡対象を保持し、追跡開始状態へ遷移できる
-- [ ] **PURS-03**: 追跡中の主体は、対象が見えている間、対象の最新既知位置に向けて既存の移動ルールで移動を継続できる
+- [x] **PURS-03**: 追跡中の主体は、対象が見えている間、対象の最新既知位置に向けて既存の移動ルールで移動を継続できる
 - [ ] **PURS-04**: 追跡対象が視界から外れた場合、主体は最後の既知位置まで追跡を継続できる
-- [ ] **PURS-05**: 主体は明示コマンドまたは明示状態変更によって追跡を中断できる
+- [x] **PURS-05**: 主体は明示コマンドまたは明示状態変更によって追跡を中断できる
 
 ### Pursuit Outcomes
 
@@ -21,7 +21,7 @@
 
 ### Runtime Integration
 
-- [ ] **RUNT-01**: プレイヤー追跡は既存の `MovementApplicationService` とワールド tick の流れに統合される
+- [x] **RUNT-01**: プレイヤー追跡は既存の `MovementApplicationService` とワールド tick の流れに統合される
 - [ ] **RUNT-02**: 追跡状態は静的な移動先/path 状態とは別に保持される
 - [ ] **RUNT-03**: 追跡中の移動中断と追跡中断は区別して扱われ、観測イベントで移動が止まっても追跡状態の扱いを明示できる
 
@@ -56,15 +56,15 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PURS-01 | Phase 2 | Pending |
+| PURS-01 | Phase 2 | Completed |
 | PURS-02 | Phase 5 | Pending |
-| PURS-03 | Phase 3 | Pending |
+| PURS-03 | Phase 3 | Complete |
 | PURS-04 | Phase 3 | Pending |
-| PURS-05 | Phase 2 | Pending |
+| PURS-05 | Phase 2 | Completed |
 | OUTC-01 | Phase 1 | Pending |
 | OUTC-02 | Phase 1 | Pending |
 | OUTC-03 | Phase 4 | Pending |
-| RUNT-01 | Phase 3 | Pending |
+| RUNT-01 | Phase 3 | Complete |
 | RUNT-02 | Phase 1 | Pending |
 | RUNT-03 | Phase 4 | Pending |
 | OBSV-01 | Phase 4 | Pending |
