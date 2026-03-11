@@ -8,6 +8,19 @@ from ai_rpg_world.application.observation.contracts.dtos import ObservationOutpu
 from ai_rpg_world.application.observation.services.observation_formatter import ObservationFormatter
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import PursuitFailureReason
+from ai_rpg_world.domain.pursuit.event.pursuit_events import (
+    PursuitCancelledEvent,
+    PursuitFailedEvent,
+    PursuitStartedEvent,
+    PursuitUpdatedEvent,
+)
+from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
+    PursuitLastKnownState,
+)
+from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
+    PursuitTargetSnapshot,
+)
 from ai_rpg_world.domain.world.event.map_events import (
     ItemStoredInChestEvent,
     ItemTakenFromChestEvent,
@@ -115,6 +128,23 @@ from ai_rpg_world.domain.world.event.harvest_events import (
     HarvestStartedEvent,
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
+
+
+def build_pursuit_snapshot(target_id_value: int = 2) -> PursuitTargetSnapshot:
+    return PursuitTargetSnapshot(
+        target_id=WorldObjectId(target_id_value),
+        spot_id=SpotId(20),
+        coordinate=Coordinate(5, 6, 0),
+    )
+
+
+def build_pursuit_last_known(target_id_value: int = 2) -> PursuitLastKnownState:
+    return PursuitLastKnownState(
+        target_id=WorldObjectId(target_id_value),
+        spot_id=SpotId(21),
+        coordinate=Coordinate(7, 8, 0),
+        observed_at_tick=WorldTick(42),
+    )
 
 
 class TestObservationFormatter:
@@ -296,6 +326,79 @@ class TestObservationFormatter:
         assert "入手" in out.prose
         assert out.schedules_turn is True
         assert out.breaks_movement is False
+
+    def test_format_pursuit_started_returns_basic_lifecycle_fields(self, formatter):
+        event = PursuitStartedEvent.create(
+            aggregate_id=WorldObjectId(1),
+            aggregate_type="PlayerStatusAggregate",
+            actor_id=WorldObjectId(1),
+            target_id=WorldObjectId(2),
+            target_snapshot=build_pursuit_snapshot(),
+            last_known=build_pursuit_last_known(),
+        )
+
+        out = formatter.format(event, PlayerId(1))
+
+        assert out is not None
+        assert "追跡を開始" in out.prose
+        assert out.structured["event_type"] == "pursuit_started"
+        assert out.structured["actor_id"] == 1
+        assert out.structured["target_id"] == 2
+        assert out.structured["pursuit_status_after_event"] == "active"
+
+    def test_format_pursuit_updated_returns_basic_lifecycle_fields(self, formatter):
+        event = PursuitUpdatedEvent.create(
+            aggregate_id=WorldObjectId(1),
+            aggregate_type="PlayerStatusAggregate",
+            actor_id=WorldObjectId(1),
+            target_id=WorldObjectId(2),
+            target_snapshot=build_pursuit_snapshot(),
+            last_known=build_pursuit_last_known(),
+        )
+
+        out = formatter.format(event, PlayerId(1))
+
+        assert out is not None
+        assert "追跡状況を更新" in out.prose
+        assert out.structured["event_type"] == "pursuit_updated"
+        assert out.structured["pursuit_status_after_event"] == "active"
+
+    def test_format_pursuit_failed_returns_basic_outcome_fields(self, formatter):
+        event = PursuitFailedEvent.create(
+            aggregate_id=WorldObjectId(1),
+            aggregate_type="PlayerStatusAggregate",
+            actor_id=WorldObjectId(1),
+            target_id=WorldObjectId(2),
+            failure_reason=PursuitFailureReason.PATH_UNREACHABLE,
+            target_snapshot=build_pursuit_snapshot(),
+            last_known=build_pursuit_last_known(),
+        )
+
+        out = formatter.format(event, PlayerId(1))
+
+        assert out is not None
+        assert "追跡に失敗" in out.prose
+        assert out.structured["event_type"] == "pursuit_failed"
+        assert out.structured["pursuit_status_after_event"] == "ended"
+        assert out.structured["interruption_scope"] == "pursuit"
+
+    def test_format_pursuit_cancelled_returns_basic_outcome_fields(self, formatter):
+        event = PursuitCancelledEvent.create(
+            aggregate_id=WorldObjectId(1),
+            aggregate_type="PlayerStatusAggregate",
+            actor_id=WorldObjectId(1),
+            target_id=WorldObjectId(2),
+            target_snapshot=build_pursuit_snapshot(),
+            last_known=build_pursuit_last_known(),
+        )
+
+        out = formatter.format(event, PlayerId(1))
+
+        assert out is not None
+        assert "追跡を中断" in out.prose
+        assert out.structured["event_type"] == "pursuit_cancelled"
+        assert out.structured["pursuit_status_after_event"] == "ended"
+        assert out.structured["interruption_scope"] == "pursuit"
 
     def test_format_player_level_up_returns_prose_and_structured(self, formatter):
         """PlayerLevelUpEvent: レベルアップ文と構造化"""
