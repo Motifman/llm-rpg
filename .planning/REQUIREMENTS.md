@@ -17,18 +17,18 @@
 
 - [ ] **OUTC-01**: 追跡は `cancelled`、`target_missing`、`path_unreachable`、`vision_lost_at_last_known` のような構造化された理由で終了できる
 - [ ] **OUTC-02**: 追跡の開始、更新、失敗、中断はドメインイベントとして発行される
-- [ ] **OUTC-03**: 追跡失敗イベントは LLM エージェントが次行動を判断できるだけの失敗理由を含む
+- [x] **OUTC-03**: 追跡失敗イベントは LLM エージェントが次行動を判断できるだけの失敗理由を含む
 
 ### Runtime Integration
 
 - [x] **RUNT-01**: プレイヤー追跡は既存の `MovementApplicationService` とワールド tick の流れに統合される
 - [ ] **RUNT-02**: 追跡状態は静的な移動先/path 状態とは別に保持される
-- [ ] **RUNT-03**: 追跡中の移動中断と追跡中断は区別して扱われ、観測イベントで移動が止まっても追跡状態の扱いを明示できる
+- [x] **RUNT-03**: 追跡中の移動中断と追跡中断は区別して扱われ、観測イベントで移動が止まっても追跡状態の扱いを明示できる
 
 ### Observation And LLM
 
-- [ ] **OBSV-01**: 追跡関連イベントは既存の observation パイプラインに接続される
-- [ ] **OBSV-02**: 追跡失敗または中断後に、必要な場合は既存のイベント駆動で LLM ターン再開につなげられる
+- [x] **OBSV-01**: 追跡関連イベントは既存の observation パイプラインに接続される
+- [x] **OBSV-02**: 追跡失敗または中断後に、必要な場合は既存のイベント駆動で LLM ターン再開につなげられる
 
 ## v2 Requirements
 
@@ -63,12 +63,12 @@
 | PURS-05 | Phase 2 | Completed |
 | OUTC-01 | Phase 1 | Pending |
 | OUTC-02 | Phase 1 | Pending |
-| OUTC-03 | Phase 4 | Pending |
+| OUTC-03 | Phase 4 | Complete |
 | RUNT-01 | Phase 3 | Complete |
 | RUNT-02 | Phase 1 | Pending |
-| RUNT-03 | Phase 4 | Pending |
-| OBSV-01 | Phase 4 | Pending |
-| OBSV-02 | Phase 4 | Pending |
+| RUNT-03 | Phase 4 | Complete |
+| OBSV-01 | Phase 4 | Complete |
+| OBSV-02 | Phase 4 | Complete |
 
 **Coverage:**
 - v1 requirements: 13 total
