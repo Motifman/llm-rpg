@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-03-11T10:49:08.947Z"
-last_activity: 2026-03-11 — Phase 3 plan 03 completed with regression coverage for world tick continuation, movement recovery, and command guardrails
+stopped_at: Completed 04-03-PLAN.md
+last_updated: "2026-03-11T12:36:07Z"
+last_activity: 2026-03-11 — Phase 4 completed with pursuit observation delivery and LLM re-drive regression coverage
 progress:
   total_phases: 5
-  completed_phases: 3
-  total_plans: 8
-  completed_plans: 8
+  completed_phases: 4
+  total_plans: 11
+  completed_plans: 11
   percent: 100
 ---
 
@@ -21,24 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** LLMエージェントが、静的な目的地指定だけでなく、動的に移動する主体に対しても一貫した状態遷移とイベント駆動で行動を継続できること
-**Current focus:** Phase 4: Observation And LLM Delivery
+**Current focus:** Phase 5: Monster Pursuit Alignment
 
 ## Current Position
 
-Phase: 4 of 5 (Observation And LLM Delivery)
-Plan: 0 of 3 in current phase
+Phase: 5 of 5 (Monster Pursuit Alignment)
+Plan: 0 of 2 in current phase
 Status: Ready to start
-Last activity: 2026-03-11 — Phase 3 plan 03 completed with regression coverage for world tick continuation, movement recovery, and command guardrails
+Last activity: 2026-03-11 — Phase 4 completed with pursuit observation delivery and LLM re-drive regression coverage
 
 Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
-- Total plans completed: 8
-- Average duration: 8 min
-- Total execution time: 67 min
+- Total plans completed: 10
+- Average duration: 7 min
+- Total execution time: 81 min
 
 **By Phase:**
 
@@ -47,9 +46,11 @@ Progress: [██████████] 100%
 | 01-pursuit-domain-vocabulary | 3 | 28 min | 9 min |
 | 02-player-pursuit-commands | 2 | 20 min | 10 min |
 | 03-pursuit-continuation-loop | 3 | 19 min | 6 min |
+| 04-observation-and-llm-delivery | 2 | 12 min | 6 min |
+| 05-monster-pursuit-alignment | 0 | - | - |
 
 **Recent Trend:**
-- Last 5 plans: 12 min, 8 min, 1 min, 9 min, 9 min
+- Last 5 plans: 9 min, 6 min, 6 min, 1 min, 2 min
 - Trend: Stable
 
 ## Accumulated Context
@@ -81,6 +82,11 @@ Recent decisions affecting current work:
 - [Phase 03]: Pursuit continuation clears stored movement paths on failure but ends pursuit via fail_pursuit, not cancel_pursuit.
 - [Phase 03]: World-tick same-tick pursuit regressions stay at the continuation seam with a controlled movement mock.
 - [Phase 03]: Unchanged pursuit refreshes must remain event-free even when last_known is passed explicitly.
+- [Phase 04]: Pursuit lifecycle events stay on the shared observation handler registry path instead of adding a parallel delivery mechanism.
+- [Phase 04]: Pursuit recipient resolution is deterministic: actor when resolvable, target only when it resolves to a player, never duplicate recipients.
+- [Phase 04-observation-and-llm-delivery]: ObservationOutput typing already supports pursuit metadata, so no DTO expansion was needed.
+- [Phase 04-observation-and-llm-delivery]: Pursuit failed and cancelled observations schedule turns while keeping breaks_movement false to distinguish pursuit outcomes from movement interruption.
+- [Phase 04]: Phase completion is validated through the real observation handler and world tick flow rather than direct turn-trigger shortcuts.
 
 ### Pending Todos
 
@@ -93,6 +99,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T10:49:08.944Z
-Stopped at: Completed 03-03-PLAN.md
+Last session: 2026-03-11T12:36:07Z
+Stopped at: Completed 04-03-PLAN.md
 Resume file: None
