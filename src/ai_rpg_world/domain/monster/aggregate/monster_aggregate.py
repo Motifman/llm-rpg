@@ -52,6 +52,12 @@ from ai_rpg_world.domain.pursuit.value_object.pursuit_state import PursuitState
 from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
     PursuitTargetSnapshot,
 )
+from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
+    PursuitFailureReason,
+)
+from ai_rpg_world.domain.pursuit.event.pursuit_events import (
+    PursuitFailedEvent,
+)
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.value_object.pack_id import PackId
@@ -798,6 +804,44 @@ class MonsterAggregate(AggregateRoot):
 
     def _clear_pursuit_state(self) -> None:
         self._pursuit_state = None
+
+    def fail_pursuit(
+        self,
+        reason: PursuitFailureReason,
+        *,
+        current_tick: Optional[WorldTick] = None,
+    ) -> None:
+        """共有 pursuit 語彙でモンスター追跡を失敗終了する。"""
+        if self._pursuit_state is None:
+            raise ValueError("Cannot fail pursuit when no active pursuit exists.")
+
+        current_state = self._pursuit_state
+        last_known = current_state.last_known
+        target_snapshot = current_state.target_snapshot
+        if last_known is None:
+            coordinate = self._behavior_last_known_position
+            if coordinate is None:
+                raise ValueError("Cannot fail pursuit without last-known state.")
+            last_known = self._build_pursuit_last_known(
+                target_id=current_state.target_id,
+                coordinate=coordinate,
+                observed_at_tick=current_tick,
+            )
+
+        self.add_event(
+            PursuitFailedEvent.create(
+                aggregate_id=self._world_object_id,
+                aggregate_type="MonsterAggregate",
+                actor_id=self._world_object_id,
+                target_id=current_state.target_id,
+                failure_reason=reason,
+                last_known=last_known,
+                target_snapshot=target_snapshot,
+            )
+        )
+        self._behavior_target_id = None
+        self._behavior_last_known_position = None
+        self._clear_pursuit_state()
 
     def apply_behavior_transition(
         self, result: StateTransitionResult, current_tick: WorldTick

@@ -6,7 +6,6 @@ PhysicalMapAggregate と PathfindingService, SkillSelectionPolicy を使って
 
 import logging
 import math
-import random
 from typing import Optional, Callable
 
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
@@ -250,21 +249,7 @@ class MonsterActionResolverImpl:
                 actor_coordinate,
                 monster.behavior_last_known_position,
             )
-        # 到達済み: ランダムに方向転換 or ランダム移動（状態更新は別途）
-        if random.random() < self._component.random_move_chance:
-            neighbors = []
-            for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
-                neighbor = Coordinate(
-                    actor_coordinate.x + dx,
-                    actor_coordinate.y + dy,
-                    actor_coordinate.z,
-                )
-                if self._map_aggregate.is_passable(
-                    neighbor, self._component.capability
-                ):
-                    neighbors.append(neighbor)
-            if neighbors:
-                return random.choice(neighbors)
+        # last-known 到達済みなら runtime 側で pursuit failure を確定させる。
         return None
 
     def _calculate_patrol_move(

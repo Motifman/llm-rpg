@@ -37,7 +37,10 @@ from ai_rpg_world.domain.monster.repository.monster_repository import (
 )
 from ai_rpg_world.domain.monster.repository.spawn_table_repository import SpawnTableRepository
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
-from ai_rpg_world.domain.monster.enum.monster_enum import MonsterStatusEnum
+from ai_rpg_world.domain.monster.enum.monster_enum import (
+    BehaviorStateEnum,
+    MonsterStatusEnum,
+)
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
 from ai_rpg_world.domain.monster.value_object.spawn_slot import SpawnSlot
 from ai_rpg_world.domain.item.repository.loot_table_repository import LootTableRepository
@@ -80,6 +83,9 @@ from ai_rpg_world.domain.monster.service.behavior_state_transition_service impor
 from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
 from ai_rpg_world.application.world.services.pursuit_continuation_service import (
     PursuitContinuationService,
+)
+from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
+    PursuitFailureReason,
 )
 
 if TYPE_CHECKING:
@@ -481,8 +487,32 @@ class WorldSimulationApplicationService:
         )
         monster.apply_behavior_transition(transition_result, current_tick)
         monster.apply_territory_return_if_needed(actor.coordinate)
+        failure_reason = self._resolve_monster_pursuit_failure_reason(
+            monster=monster,
+            physical_map=physical_map,
+            actor_coordinate=actor.coordinate,
+            observation=observation,
+        )
+        if failure_reason is not None:
+            monster.fail_pursuit(failure_reason, current_tick=current_tick)
+            self._monster_repository.save(monster)
+            self._unit_of_work.process_sync_events()
+            return
         resolver = self._monster_action_resolver_factory(physical_map, actor)
         action = resolver.resolve_action(monster, observation, actor.coordinate)
+        if self._should_fail_monster_search_at_last_known(
+            monster=monster,
+            actor_coordinate=actor.coordinate,
+            observation=observation,
+            action=action,
+        ):
+            monster.fail_pursuit(
+                PursuitFailureReason.VISION_LOST_AT_LAST_KNOWN,
+                current_tick=current_tick,
+            )
+            self._monster_repository.save(monster)
+            self._unit_of_work.process_sync_events()
+            return
         if (
             action.action_type == BehaviorActionType.MOVE
             and action.coordinate is not None
@@ -504,6 +534,55 @@ class WorldSimulationApplicationService:
             monster.record_interact(action.target_id, current_tick)
         self._monster_repository.save(monster)
         self._unit_of_work.process_sync_events()
+
+    def _resolve_monster_pursuit_failure_reason(
+        self,
+        monster: MonsterAggregate,
+        physical_map: PhysicalMapAggregate,
+        actor_coordinate: Coordinate,
+        observation: Any,
+    ) -> Optional[PursuitFailureReason]:
+        if not monster.has_active_pursuit:
+            return None
+        if monster.behavior_state not in (
+            BehaviorStateEnum.CHASE,
+            BehaviorStateEnum.SEARCH,
+        ):
+            return None
+        if observation.selected_target is not None:
+            return None
+
+        target_id = monster.behavior_target_id
+        if target_id is None:
+            return None
+
+        try:
+            physical_map.get_object(target_id)
+        except ObjectNotFoundException:
+            if monster.behavior_state == BehaviorStateEnum.SEARCH:
+                last_known = monster.behavior_last_known_position
+                if last_known is not None and actor_coordinate == last_known:
+                    return PursuitFailureReason.VISION_LOST_AT_LAST_KNOWN
+            return PursuitFailureReason.TARGET_MISSING
+        return None
+
+    def _should_fail_monster_search_at_last_known(
+        self,
+        monster: MonsterAggregate,
+        actor_coordinate: Coordinate,
+        observation: Any,
+        action: Any,
+    ) -> bool:
+        if monster.behavior_state != BehaviorStateEnum.SEARCH:
+            return False
+        if not monster.has_active_pursuit:
+            return False
+        if observation.selected_target is not None:
+            return False
+        last_known = monster.behavior_last_known_position
+        if last_known is None or actor_coordinate != last_known:
+            return False
+        return action.action_type != BehaviorActionType.MOVE
 
     def _find_monster_for_slot(self, slot: SpawnSlot, monsters: List[MonsterAggregate]) -> Optional[MonsterAggregate]:
         """スロットに割り当てられたモンスターを1体返す（get_respawn_coordinate と template_id で一致）。"""
