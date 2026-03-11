@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-03-11T15:06:30Z"
-last_activity: 2026-03-11 — Phase 7 plan 07-01 locked audit acceptance ownership and backfilled command-backed verification for Phases 3 and 5
+stopped_at: Completed 07-02-PLAN.md
+last_updated: "2026-03-11T15:15:27Z"
+last_activity: 2026-03-12 — Phase 7 plan 07-02 repaired Phase 4 validation, added Phase 4 verification, and fixed the OBSV-02 Phase 6 ownership note
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 19
-  completed_plans: 17
-  percent: 89
+  completed_plans: 18
+  percent: 95
 ---
 
 # Project State
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 ## Current Position
 
 Phase: 7 of 7 (Pursuit Audit Evidence Backfill)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: Completed
-Last activity: 2026-03-11 — Phase 7 plan 07-01 locked audit acceptance ownership and backfilled command-backed verification for Phases 3 and 5
+Last activity: 2026-03-12 — Phase 7 plan 07-02 repaired Phase 4 validation, added Phase 4 verification, and fixed the OBSV-02 Phase 6 ownership note
 
-Progress: [█████████░] 89%
+Progress: [█████████▌] 95%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 17
+- Total plans completed: 18
 - Average duration: 7 min
-- Total execution time: 124 min
+- Total execution time: 128 min
 
 **By Phase:**
 
@@ -49,10 +49,10 @@ Progress: [█████████░] 89%
 | 04-observation-and-llm-delivery | 2 | 12 min | 6 min |
 | 05-monster-pursuit-alignment | 2 | 18 min | 9 min |
 | 06-player-pursuit-runtime-assembly-closure | 3 | 23 min | 8 min |
-| 07-pursuit-audit-evidence-backfill | 1 | 6 min | 6 min |
+| 07-pursuit-audit-evidence-backfill | 2 | 10 min | 5 min |
 
 **Recent Trend:**
-- Last 5 plans: 10 min, 8 min, 9 min, 6 min, 6 min
+- Last 5 plans: 8 min, 9 min, 6 min, 6 min, 4 min
 - Trend: Stable with faster closeout work
 
 | Phase | Duration | Tasks | Files |
@@ -60,6 +60,7 @@ Progress: [█████████░] 89%
 | Phase 06-player-pursuit-runtime-assembly-closure P02 | 9 min | 3 tasks | 1 files |
 | Phase 06-player-pursuit-runtime-assembly-closure P03 | 6 min | 3 tasks | 2 files |
 | Phase 07-pursuit-audit-evidence-backfill P01 | 6 min | 4 tasks | 6 files |
+| Phase 07-pursuit-audit-evidence-backfill P02 | 4 min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -106,6 +107,7 @@ Recent decisions affecting current work:
 - [Phase 06-player-pursuit-runtime-assembly-closure]: Observation scheduling and turn draining proofs now go through `EventHandlerComposition` on the authoritative runtime path instead of direct registry-only setup.
 - [Phase 07-pursuit-audit-evidence-backfill]: Requirement ownership is fixed before verification backfill; `PURS-02` stays accepted in Phase 5 while `PURS-03`, `PURS-04`, and `RUNT-01` remain finally accepted in Phase 6.
 - [Phase 07-pursuit-audit-evidence-backfill]: Verification artifacts must be command-backed acceptance evidence instead of rewritten summaries.
+- [Phase 07-pursuit-audit-evidence-backfill]: Phase 4 is the final acceptance home for `OUTC-03`, `RUNT-03`, and `OBSV-01`, while `OBSV-02` remains a Phase 6 runtime-closure acceptance item.
 
 ### Pending Todos
 
@@ -119,5 +121,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-11T14:39:36Z
-Stopped at: Completed 07-01-PLAN.md
+Stopped at: Completed 07-02-PLAN.md
 Resume file: None
