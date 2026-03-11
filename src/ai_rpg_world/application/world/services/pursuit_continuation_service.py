@@ -180,7 +180,7 @@ class PursuitContinuationService:
                     failure_reason=PursuitFailureReason.PATH_UNREACHABLE,
                     pursuit_updated=pursuit_updated,
                 )
-            has_active_path = self._has_active_path(player_status, current_state)
+            has_active_path = self._has_active_path(player_status, current_state) or replan_succeeded
 
         return PursuitContinuationDecision(
             action=PursuitContinuationAction.CONTINUE_PURSUIT,
@@ -284,7 +284,7 @@ class PursuitContinuationService:
                     current_state=current_state,
                     failure_reason=PursuitFailureReason.PATH_UNREACHABLE,
                 )
-            has_active_path = self._has_active_path(player_status, current_state)
+            has_active_path = self._has_active_path(player_status, current_state) or replan_succeeded
 
         return PursuitContinuationDecision(
             action=PursuitContinuationAction.CONTINUE_PURSUIT,
