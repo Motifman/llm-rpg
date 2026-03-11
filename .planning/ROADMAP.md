@@ -7,7 +7,7 @@
 ## Phases
 
 - [x] **Phase 1: Pursuit Domain Vocabulary** - 追跡状態、終了理由、ライフサイクルイベントの基盤を定義する
-- [ ] **Phase 2: Player Pursuit Commands** - プレイヤーが追跡開始/中断できるアプリケーション入口を整える
+- [x] **Phase 2: Player Pursuit Commands** - プレイヤーが追跡開始/中断できるアプリケーション入口を整える (completed 2026-03-11)
 - [ ] **Phase 3: Pursuit Continuation Loop** - 最新既知位置に基づく継続追跡をワールド tick に統合する
 - [ ] **Phase 4: Observation And LLM Delivery** - 追跡結果を観測/LLM 再駆動パイプラインへ接続する
 - [ ] **Phase 5: Monster Pursuit Alignment** - モンスター側の追跡語彙と状態遷移を新しい基盤に整合させる
@@ -40,8 +40,8 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 02-01: プレイヤー追跡コマンドとバリデーションを追加する
-- [ ] 02-02: 中断コマンドと追跡状態クリアを実装する
+- [x] 02-01: プレイヤー追跡コマンドとバリデーションを追加する
+- [x] 02-02: 中断コマンドと追跡状態クリアを実装する
 
 ### Phase 3: Pursuit Continuation Loop
 **Goal**: 最新既知位置に基づく継続追跡を既存移動フローの中で成立させる
@@ -54,7 +54,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 03-01: tick 時の追跡継続/再計画ロジックを追加する
+- [x] 03-01: tick 時の追跡継続/再計画ロジックを追加する
 - [ ] 03-02: 最後の既知位置の更新と可視喪失ハンドリングを実装する
 - [ ] 03-03: 継続追跡の回帰テストを追加する
 
@@ -96,7 +96,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Pursuit Domain Vocabulary | 3/3 | Completed | 2026-03-11 |
-| 2. Player Pursuit Commands | 0/2 | Not started | - |
-| 3. Pursuit Continuation Loop | 0/3 | Not started | - |
+| 2. Player Pursuit Commands | 2/2 | Completed | 2026-03-11 |
+| 3. Pursuit Continuation Loop | 1/3 | In Progress | - |
 | 4. Observation And LLM Delivery | 0/3 | Not started | - |
 | 5. Monster Pursuit Alignment | 0/2 | Not started | - |
