@@ -85,7 +85,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 05-01: モンスター側の追跡状態/理由語彙を整合させる
+- [x] 05-01: モンスター側の追跡状態/理由語彙を整合させる
 - [ ] 05-02: モンスター追跡回帰テストを追加する
 
 ## Progress
@@ -99,4 +99,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Player Pursuit Commands | 2/2 | Completed | 2026-03-11 |
 | 3. Pursuit Continuation Loop | 3/3 | Complete   | 2026-03-11 |
 | 4. Observation And LLM Delivery | 3/3 | Completed | 2026-03-11 |
-| 5. Monster Pursuit Alignment | 0/2 | Not started | - |
+| 5. Monster Pursuit Alignment | 1/2 | In Progress | - |
