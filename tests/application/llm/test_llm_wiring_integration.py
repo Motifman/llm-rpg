@@ -717,6 +717,293 @@ class TestEventToEpisodeMemoryE2E:
         entries = episode_memory_store.get_recent(PlayerId(1), limit=10)
         assert len(entries) >= 1, "エピソード記憶に最低1件は保存されること（breaks_movement 観測）"
 
+    def test_pursuit_failed_event_is_scheduled_by_observation_handler_and_drained_by_world_tick(
+        self,
+    ):
+        from ai_rpg_world.application.llm.services.in_memory_episode_memory_store import (
+            InMemoryEpisodeMemoryStore,
+        )
+        from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+        from ai_rpg_world.application.llm.services.llm_player_resolver import (
+            SetBasedLlmPlayerResolver,
+        )
+        from ai_rpg_world.application.llm.services.sliding_window_memory import (
+            DefaultSlidingWindowMemory,
+        )
+        from ai_rpg_world.application.world.services.world_query_service import (
+            WorldQueryService,
+        )
+        from ai_rpg_world.application.world.services.world_simulation_service import (
+            WorldSimulationApplicationService,
+        )
+        from ai_rpg_world.domain.common.value_object import WorldTick
+        from ai_rpg_world.domain.combat.service.hit_box_collision_service import (
+            HitBoxCollisionDomainService,
+        )
+        from ai_rpg_world.domain.combat.service.hit_box_config_service import (
+            DefaultHitBoxConfigService,
+        )
+        from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
+        from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import (
+            MonsterSkillExecutionDomainService,
+        )
+        from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import (
+            PlayerProfileAggregate,
+        )
+        from ai_rpg_world.domain.player.enum.player_enum import ControlType
+        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+        from ai_rpg_world.domain.player.value_object.player_name import PlayerName
+        from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
+            PursuitFailureReason,
+        )
+        from ai_rpg_world.domain.pursuit.event.pursuit_events import PursuitFailedEvent
+        from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
+            PursuitLastKnownState,
+        )
+        from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
+            PursuitTargetSnapshot,
+        )
+        from ai_rpg_world.domain.skill.service.skill_execution_service import (
+            SkillExecutionDomainService,
+        )
+        from ai_rpg_world.domain.skill.service.skill_targeting_service import (
+            SkillTargetingDomainService,
+        )
+        from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import (
+            SkillToHitBoxDomainService,
+        )
+        from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import (
+            PhysicalMapAggregate,
+        )
+        from ai_rpg_world.domain.world.entity.tile import Tile
+        from ai_rpg_world.domain.world.entity.world_object import WorldObject
+        from ai_rpg_world.domain.world.entity.world_object_component import (
+            ActorComponent,
+        )
+        from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, ObjectTypeEnum
+        from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
+        from ai_rpg_world.domain.world.service.pathfinding_service import PathfindingService
+        from ai_rpg_world.domain.world.service.weather_config_service import (
+            DefaultWeatherConfigService,
+        )
+        from ai_rpg_world.domain.world.service.world_time_config_service import (
+            DefaultWorldTimeConfigService,
+        )
+        from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+        from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+        from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+        from ai_rpg_world.infrastructure.repository.in_memory_data_store import (
+            InMemoryDataStore,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_hit_box_repository import (
+            InMemoryHitBoxRepository,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import (
+            InMemoryMonsterAggregateRepository,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
+            InMemoryPhysicalMapRepository,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import (
+            InMemoryPlayerProfileRepository,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
+            InMemoryPlayerStatusRepository,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_spot_repository import (
+            InMemorySpotRepository,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_weather_zone_repository import (
+            InMemoryWeatherZoneRepository,
+        )
+        from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
+            InMemoryGameTimeProvider,
+        )
+        from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
+            InMemoryUnitOfWork,
+        )
+        from ai_rpg_world.infrastructure.world.pathfinding.astar_pathfinding_strategy import (
+            AStarPathfindingStrategy,
+        )
+        from ai_rpg_world.domain.world.entity.spot import Spot
+        from ai_rpg_world.application.world.services.caching_pathfinding_service import (
+            CachingPathfindingService,
+        )
+        from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
+        from ai_rpg_world.domain.world.service.skill_selection_policy import (
+            FirstInRangeSkillPolicy,
+        )
+        from ai_rpg_world.application.world.services.monster_action_resolver import (
+            create_monster_action_resolver_factory,
+        )
+
+        class _InMemorySkillLoadoutRepo:
+            def __init__(self):
+                self._data = {}
+
+            def save(self, loadout):
+                self._data[loadout.loadout_id] = loadout
+
+            def find_by_id(self, loadout_id):
+                return self._data.get(loadout_id)
+
+        data_store = InMemoryDataStore()
+        data_store.clear_all()
+        time_provider = InMemoryGameTimeProvider(initial_tick=10)
+
+        def create_uow():
+            return InMemoryUnitOfWork(
+                unit_of_work_factory=create_uow, data_store=data_store
+            )
+
+        uow, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(
+            unit_of_work_factory=create_uow,
+            data_store=data_store,
+        )
+
+        profile_repo = InMemoryPlayerProfileRepository(data_store, None)
+        profile_repo.save(
+            PlayerProfileAggregate.create(
+                PlayerId(1), PlayerName("Pursuer"), control_type=ControlType.LLM
+            )
+        )
+        profile_repo.save(
+            PlayerProfileAggregate.create(
+                PlayerId(2), PlayerName("Runner"), control_type=ControlType.HUMAN
+            )
+        )
+        spot_repo = InMemorySpotRepository(data_store, None)
+        spot_repo.save(Spot(SpotId(1), "SpotA", "A"))
+
+        player_status_repo = InMemoryPlayerStatusRepository(data_store, None)
+        physical_map_repo = InMemoryPhysicalMapRepository(data_store, None)
+        physical_map_repo.save(
+            PhysicalMapAggregate.create(
+                SpotId(1),
+                [Tile(Coordinate(x, y, 0), TerrainType.grass()) for x in range(3) for y in range(3)],
+                objects=[
+                    WorldObject(
+                        WorldObjectId(1),
+                        Coordinate(0, 0, 0),
+                        ObjectTypeEnum.PLAYER,
+                        component=ActorComponent(
+                            direction=DirectionEnum.EAST,
+                            player_id=PlayerId(1),
+                        ),
+                    ),
+                    WorldObject(
+                        WorldObjectId(2),
+                        Coordinate(1, 0, 0),
+                        ObjectTypeEnum.PLAYER,
+                        component=ActorComponent(
+                            direction=DirectionEnum.WEST,
+                            player_id=PlayerId(2),
+                        ),
+                    ),
+                ],
+            )
+        )
+
+        world_query = MagicMock(spec=WorldQueryService)
+        world_query.get_player_current_state = MagicMock(return_value=None)
+        movement = MagicMock(spec=MovementApplicationService)
+        movement.move_to_destination = MagicMock()
+        movement.cancel_movement = MagicMock()
+
+        episode_memory_store = InMemoryEpisodeMemoryStore()
+        sliding_window = DefaultSlidingWindowMemory(max_entries_per_player=1)
+        uow_factory = MagicMock(spec=UnitOfWorkFactory)
+        uow_factory.create.return_value = uow
+
+        wiring_result = create_llm_agent_wiring(
+            player_status_repository=player_status_repo,
+            physical_map_repository=physical_map_repo,
+            world_query_service=world_query,
+            movement_service=movement,
+            player_profile_repository=profile_repo,
+            unit_of_work_factory=uow_factory,
+            spot_repository=spot_repo,
+            episode_memory_store=episode_memory_store,
+            sliding_window_memory=sliding_window,
+            llm_player_resolver=SetBasedLlmPlayerResolver({1}),
+            llm_client=StubLlmClient(),
+            game_time_provider=time_provider,
+            world_time_config_service=DefaultWorldTimeConfigService(ticks_per_day=24),
+        )
+        registry = wiring_result.observation_registry
+        trigger = wiring_result.llm_turn_trigger
+        registry.register_handlers(event_publisher)
+
+        event = PursuitFailedEvent.create(
+            aggregate_id=WorldObjectId(1),
+            aggregate_type="PlayerStatusAggregate",
+            actor_id=WorldObjectId(1),
+            target_id=WorldObjectId(2),
+            failure_reason=PursuitFailureReason.TARGET_MISSING,
+            target_snapshot=PursuitTargetSnapshot(
+                target_id=WorldObjectId(2),
+                spot_id=SpotId(1),
+                coordinate=Coordinate(1, 0, 0),
+            ),
+            last_known=PursuitLastKnownState(
+                target_id=WorldObjectId(2),
+                spot_id=SpotId(1),
+                coordinate=Coordinate(1, 0, 0),
+                observed_at_tick=WorldTick(10),
+            ),
+        )
+
+        with patch.object(trigger, "schedule_turn", wraps=trigger.schedule_turn) as schedule_spy:
+            with uow:
+                uow.add_events([event])
+            schedule_spy.assert_called_once_with(PlayerId(1))
+
+        pathfinding_service = PathfindingService(AStarPathfindingStrategy())
+        caching_pathfinding = CachingPathfindingService(
+            pathfinding_service,
+            time_provider=time_provider,
+            ttl_ticks=5,
+        )
+        skill_execution_service = SkillExecutionDomainService(
+            SkillTargetingDomainService(),
+            SkillToHitBoxDomainService(),
+        )
+        service = WorldSimulationApplicationService(
+            time_provider=time_provider,
+            physical_map_repository=physical_map_repo,
+            weather_zone_repository=InMemoryWeatherZoneRepository(data_store, uow),
+            player_status_repository=player_status_repo,
+            hit_box_repository=InMemoryHitBoxRepository(data_store, uow),
+            behavior_service=BehaviorService(),
+            weather_config_service=DefaultWeatherConfigService(update_interval_ticks=1),
+            unit_of_work=uow,
+            monster_repository=InMemoryMonsterAggregateRepository(data_store, uow),
+            skill_loadout_repository=_InMemorySkillLoadoutRepo(),
+            monster_skill_execution_domain_service=MonsterSkillExecutionDomainService(
+                skill_execution_service
+            ),
+            hit_box_factory=HitBoxFactory(),
+            hit_box_config_service=DefaultHitBoxConfigService(substeps_per_tick=4),
+            hit_box_collision_service=HitBoxCollisionDomainService(),
+            world_time_config_service=DefaultWorldTimeConfigService(ticks_per_day=24),
+            monster_action_resolver_factory=create_monster_action_resolver_factory(
+                caching_pathfinding,
+                FirstInRangeSkillPolicy(),
+            ),
+            llm_turn_trigger=trigger,
+        )
+
+        with patch.object(
+            trigger, "run_scheduled_turns", wraps=trigger.run_scheduled_turns
+        ) as run_spy:
+            tick = service.tick()
+            assert tick == WorldTick(11)
+            run_spy.assert_called_once()
+
+        entries = episode_memory_store.get_recent(PlayerId(1), limit=10)
+        assert len(entries) >= 1
+
 
 # ---------------------------------------------------------------------------
 # E2E: domain event -> observation -> schedule_turn -> run_scheduled_turns -> tool execution -> world side effect
