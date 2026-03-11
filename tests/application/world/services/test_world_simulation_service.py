@@ -1235,6 +1235,169 @@ class TestWorldSimulationApplicationService:
             for event in pursuit_failed_events
         )
 
+    def test_tick_monster_search_reacquires_same_target_and_resumes_chase(
+        self, setup_service
+    ):
+        service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
+        service._behavior_service._hostility_service = ConfigurableHostilityService(
+            race_disposition_table={"goblin": {"human": Disposition.HOSTILE}}
+        )
+
+        spot_id = SpotId(1)
+        tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(6) for y in range(4)]
+        target_id = WorldObjectId(100)
+        player_id = PlayerId(100)
+        physical_map = PhysicalMapAggregate.create(
+            spot_id,
+            tiles,
+            objects=[
+                WorldObject(
+                    target_id,
+                    Coordinate(3, 0, 0),
+                    ObjectTypeEnum.PLAYER,
+                    component=ActorComponent(player_id=player_id, race="human"),
+                ),
+                WorldObject(
+                    WorldObjectId(1),
+                    Coordinate(1, 0, 0),
+                    ObjectTypeEnum.NPC,
+                    component=AutonomousBehaviorComponent(race="goblin", vision_range=5, fov_angle=360),
+                ),
+            ],
+        )
+        repository.save(physical_map)
+
+        template = MonsterTemplate(
+            template_id=MonsterTemplateId(1),
+            name="Goblin",
+            base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+            reward_info=RewardInfo(0, 0),
+            respawn_info=RespawnInfo(1, True),
+            race=Race.HUMAN,
+            faction=MonsterFactionEnum.ENEMY,
+            description="Goblin",
+            skill_ids=[],
+        )
+        loadout = SkillLoadoutAggregate.create(SkillLoadoutId(1), 1, 10, 10)
+        monster = MonsterAggregate.create(MonsterId(1), template, WorldObjectId(1), skill_loadout=loadout)
+        monster.spawn(Coordinate(1, 0, 0), spot_id, WorldTick(0))
+        monster._behavior_state = BehaviorStateEnum.SEARCH
+        monster._behavior_target_id = target_id
+        monster._behavior_last_known_position = Coordinate(2, 0, 0)
+        monster._pursuit_state = PursuitState(
+            actor_id=WorldObjectId(1),
+            target_id=target_id,
+            target_snapshot=PursuitTargetSnapshot(
+                target_id=target_id,
+                spot_id=spot_id,
+                coordinate=Coordinate(2, 0, 0),
+            ),
+            last_known=PursuitLastKnownState(
+                target_id=target_id,
+                spot_id=spot_id,
+                coordinate=Coordinate(2, 0, 0),
+                observed_at_tick=WorldTick(1),
+            ),
+        )
+        monster_repo.save(monster)
+        skill_loadout_repo.save(loadout)
+
+        service.tick()
+
+        saved_monster = monster_repo.find_by_world_object_id(WorldObjectId(1))
+        assert saved_monster is not None
+        assert saved_monster.behavior_state == BehaviorStateEnum.CHASE
+        assert saved_monster.behavior_target_id == target_id
+        assert saved_monster.pursuit_state is not None
+        assert saved_monster.pursuit_state.target_id == target_id
+        assert saved_monster.pursuit_state.target_snapshot is not None
+        assert saved_monster.pursuit_state.target_snapshot.coordinate == Coordinate(3, 0, 0)
+        assert saved_monster.pursuit_state.last_known is not None
+        assert saved_monster.pursuit_state.last_known.coordinate == Coordinate(3, 0, 0)
+
+    def test_tick_monster_missing_target_fails_with_target_missing_and_clears_state(
+        self, setup_service
+    ):
+        service, _, repository, _, _, _, _, event_publisher, monster_repo, skill_loadout_repo = setup_service
+
+        spot_id = SpotId(1)
+        tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(4)]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        physical_map.add_object(
+            WorldObject(
+                WorldObjectId(200),
+                Coordinate(4, 3, 0),
+                ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=PlayerId(200), race="human"),
+            )
+        )
+        actor_id = WorldObjectId(1)
+        actor_coordinate = Coordinate(0, 0, 0)
+        physical_map.add_object(
+            WorldObject(
+                actor_id,
+                actor_coordinate,
+                ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(race="goblin", vision_range=5, fov_angle=360),
+            )
+        )
+        repository.save(physical_map)
+
+        template = MonsterTemplate(
+            template_id=MonsterTemplateId(1),
+            name="Goblin",
+            base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+            reward_info=RewardInfo(0, 0),
+            respawn_info=RespawnInfo(1, True),
+            race=Race.HUMAN,
+            faction=MonsterFactionEnum.ENEMY,
+            description="Goblin",
+            skill_ids=[],
+        )
+        loadout = SkillLoadoutAggregate.create(SkillLoadoutId(1), actor_id.value, 10, 10)
+        monster = MonsterAggregate.create(MonsterId(1), template, actor_id, skill_loadout=loadout)
+        monster.spawn(actor_coordinate, spot_id, WorldTick(0))
+        target_id = WorldObjectId(999)
+        monster._behavior_state = BehaviorStateEnum.SEARCH
+        monster._behavior_target_id = target_id
+        monster._behavior_last_known_position = Coordinate(2, 0, 0)
+        monster._pursuit_state = PursuitState(
+            actor_id=actor_id,
+            target_id=target_id,
+            target_snapshot=PursuitTargetSnapshot(
+                target_id=target_id,
+                spot_id=spot_id,
+                coordinate=Coordinate(2, 0, 0),
+            ),
+            last_known=PursuitLastKnownState(
+                target_id=target_id,
+                spot_id=spot_id,
+                coordinate=Coordinate(2, 0, 0),
+                observed_at_tick=WorldTick(1),
+            ),
+        )
+        monster_repo.save(monster)
+        skill_loadout_repo.save(loadout)
+
+        service.tick()
+
+        saved_monster = monster_repo.find_by_world_object_id(actor_id)
+        assert saved_monster is not None
+        assert saved_monster.has_active_pursuit is False
+        assert saved_monster.behavior_target_id is None
+        assert saved_monster.behavior_last_known_position is None
+
+        pursuit_failed_events = [
+            event
+            for event in event_publisher.get_published_events()
+            if isinstance(event, PursuitFailedEvent)
+        ]
+        assert any(
+            event.actor_id == actor_id
+            and event.failure_reason == PursuitFailureReason.TARGET_MISSING
+            for event in pursuit_failed_events
+        )
+
     def test_busy_actor_is_skipped(self, setup_service):
         """Busy状態のアクターはシミュレーションでスキップされること"""
         service, _, repository, _, _, _, _, _, _, _ = setup_service
