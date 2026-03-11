@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from typing import Optional, List, Dict, Tuple, Callable, Any, Literal
 from datetime import datetime
 
@@ -34,6 +35,7 @@ from ai_rpg_world.domain.world.exception.map_exception import (
     InvalidMovementException,
     ActorBusyException as DomainActorBusyException,
     CoordinateValidationException,
+    InvalidPathRequestException,
 )
 from ai_rpg_world.domain.player.exception import PlayerDownedException
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
@@ -56,6 +58,15 @@ from ai_rpg_world.application.world.exceptions.command.movement_command_exceptio
     ActorBusyException,
     MapTransitionInvalidException
 )
+
+@dataclass(frozen=True)
+class MovementReplanResult:
+    """Narrow result for runtime path replanning without executing movement."""
+
+    success: bool
+    path_planned: bool
+    already_at_destination: bool
+    message: str
 
 
 class MovementApplicationService:
@@ -336,6 +347,100 @@ class MovementApplicationService:
                 self._time_provider.get_current_tick().value,
                 "目的地へ向かい始めました",
             )
+
+    def replan_path_to_coordinate_in_current_unit_of_work(
+        self,
+        player_id: int,
+        target_spot_id: int,
+        target_coordinate: Coordinate,
+    ) -> MovementReplanResult:
+        """Replan a stored path toward an exact coordinate without consuming a step."""
+        return self._execute_with_error_handling(
+            operation=lambda: self._replan_path_to_coordinate_core(
+                player_id=player_id,
+                target_spot_id=SpotId(target_spot_id),
+                target_coordinate=target_coordinate,
+            ),
+            context={
+                "action": "replan_path_to_coordinate",
+                "player_id": player_id,
+                "target_spot_id": target_spot_id,
+            },
+        )
+
+    def _replan_path_to_coordinate_core(
+        self,
+        player_id: int,
+        target_spot_id: SpotId,
+        target_coordinate: Coordinate,
+    ) -> MovementReplanResult:
+        player_id_vo = PlayerId(player_id)
+        player_status = self._player_status_repository.find_by_id(player_id_vo)
+        if not player_status:
+            raise PlayerNotFoundException(player_id)
+
+        current_spot_id = player_status.current_spot_id
+        current_coord = player_status.current_coordinate
+        if not current_spot_id or not current_coord:
+            raise MovementInvalidException("Player is not placed on any map", player_id)
+
+        if current_spot_id == target_spot_id and current_coord == target_coordinate:
+            player_status.clear_path()
+            self._player_status_repository.save(player_status)
+            return MovementReplanResult(
+                success=True,
+                path_planned=False,
+                already_at_destination=True,
+                message="既に追跡先座標にいます",
+            )
+
+        physical_map = self._physical_map_repository.find_by_spot_id(current_spot_id)
+        if not physical_map:
+            raise MapNotFoundException(int(current_spot_id))
+
+        actor_id = WorldObjectId.create(player_id)
+        try:
+            actor = physical_map.get_actor(actor_id)
+        except ObjectNotFoundException:
+            raise MovementInvalidException("Player object not found in map", player_id)
+
+        capability = actor.capability or MovementCapability.normal_walk()
+        try:
+            temp_goal, path = self._global_pathfinding_service.calculate_global_path(
+                current_spot_id=current_spot_id,
+                current_coord=current_coord,
+                target_spot_id=target_spot_id,
+                target_coord=target_coordinate,
+                physical_map=physical_map,
+                connected_spots_provider=self._connected_spots_provider,
+                world_object_id=actor_id,
+                capability=capability,
+            )
+        except InvalidPathRequestException:
+            temp_goal, path = None, None
+
+        if not path or temp_goal is None:
+            player_status.clear_path()
+            self._player_status_repository.save(player_status)
+            return MovementReplanResult(
+                success=False,
+                path_planned=False,
+                already_at_destination=False,
+                message="目的地への経路が見つかりません",
+            )
+
+        player_status.set_destination(
+            temp_goal,
+            path,
+            goal_spot_id=target_spot_id,
+        )
+        self._player_status_repository.save(player_status)
+        return MovementReplanResult(
+            success=True,
+            path_planned=True,
+            already_at_destination=False,
+            message="追跡用の経路を更新しました",
+        )
 
     def tick_movement(self, command: TickMovementCommand) -> MoveResultDto:
         """集約に保存されたパスに基づいて1ステップ進む"""
