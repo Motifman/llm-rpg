@@ -31,6 +31,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_COMBAT_USE_SKILL,
     TOOL_NAME_CONVERSATION_ADVANCE,
     TOOL_NAME_DESTROY_PLACEABLE,
+    TOOL_NAME_DROP_ITEM,
     TOOL_NAME_GUILD_DEPOSIT_BANK,
     TOOL_NAME_GUILD_LEAVE,
     TOOL_NAME_GUILD_WITHDRAW_BANK,
@@ -110,6 +111,8 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
             return self._resolve_place_object(args, runtime_context)
         if tool_name == TOOL_NAME_DESTROY_PLACEABLE:
             return {}
+        if tool_name == TOOL_NAME_DROP_ITEM:
+            return self._resolve_drop_item(args, runtime_context)
         if tool_name == TOOL_NAME_CHEST_STORE:
             return self._resolve_chest_store(args, runtime_context)
         if tool_name == TOOL_NAME_CHEST_TAKE:
@@ -341,6 +344,28 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         if target.inventory_slot_id is None or not target.is_placeable:
             raise ToolArgumentResolutionException(
                 f"設置に使えない在庫ラベルです: {label}",
+                "INVALID_TARGET_KIND",
+            )
+        return {
+            "inventory_slot_id": target.inventory_slot_id,
+            "target_display_name": target.display_name,
+        }
+
+    def _resolve_drop_item(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        label = args.get("inventory_item_label")
+        target = self._require_target_type(
+            label,
+            runtime_context,
+            "在庫アイテムラベル",
+            (InventoryToolRuntimeTargetDto,),
+        )
+        if target.inventory_slot_id is None:
+            raise ToolArgumentResolutionException(
+                f"捨てられない在庫ラベルです: {label}",
                 "INVALID_TARGET_KIND",
             )
         return {

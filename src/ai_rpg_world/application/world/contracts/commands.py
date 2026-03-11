@@ -152,6 +152,19 @@ class DestroyPlaceableCommand:
 
 
 @dataclass(frozen=True)
+class DropItemCommand:
+    """インベントリの指定スロットのアイテムを地面に落とすコマンド"""
+    player_id: int
+    inventory_slot_id: int
+
+    def __post_init__(self):
+        if self.player_id <= 0:
+            raise ValueError("player_id must be greater than 0")
+        if self.inventory_slot_id < 0:
+            raise ValueError("inventory_slot_id must be non-negative")
+
+
+@dataclass(frozen=True)
 class ChangeAttentionLevelCommand:
     """プレイヤーの注意レベル（観測フィルタ）を変更するコマンド"""
     player_id: int

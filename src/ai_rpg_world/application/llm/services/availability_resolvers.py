@@ -183,6 +183,16 @@ class DestroyPlaceableAvailabilityResolver(IAvailabilityResolver):
         return context is not None and context.can_destroy_placeable
 
 
+class DropItemAvailabilityResolver(IAvailabilityResolver):
+    """意図的ドロップツールは在庫アイテムがあるときに利用可能。"""
+
+    def is_available(
+        self,
+        context: Optional[PlayerCurrentStateDto],
+    ) -> bool:
+        return context is not None and bool(context.inventory_items)
+
+
 class ChestStoreAvailabilityResolver(IAvailabilityResolver):
     """チェスト収納は開いているチェストと在庫アイテムがあるときに利用可能。"""
 

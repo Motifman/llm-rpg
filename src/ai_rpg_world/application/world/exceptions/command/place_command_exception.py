@@ -66,3 +66,11 @@ class NoPlaceableInFrontException(PlaceCommandException):
     def __init__(self, player_id: int, spot_id: int):
         message = f"プレイヤー {player_id} の前方に破壊可能な設置物がありません"
         super().__init__(message, "NO_PLACEABLE_IN_FRONT", player_id=player_id, spot_id=spot_id)
+
+
+class ItemReservedForDropException(PlaceCommandException):
+    """ドロップ対象のアイテムが取引などで予約中の場合の例外"""
+
+    def __init__(self, player_id: int, slot_id: int):
+        message = f"プレイヤー {player_id} のスロット {slot_id} のアイテムは予約中で捨てられません"
+        super().__init__(message, "ITEM_RESERVED", player_id=player_id, slot_id=slot_id)

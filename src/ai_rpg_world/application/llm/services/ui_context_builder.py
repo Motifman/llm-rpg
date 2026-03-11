@@ -421,7 +421,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
                 f"- {label}: {item.display_name} x{item.quantity}"
                 + (f"（{', '.join(hints)}）" if hints else "")
             )
-            available = ("place_object",) if item.is_placeable else ()
+            available = ("place_object", "drop_item") if item.is_placeable else ("drop_item",)
             runtime_targets[label] = InventoryToolRuntimeTargetDto(
                 label=label,
                 kind="inventory_item",

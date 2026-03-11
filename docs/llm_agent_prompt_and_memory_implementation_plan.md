@@ -308,6 +308,12 @@
 2. **observation_registry** を `EventHandlerComposition(observation_registry=...)` に渡す。`register_for_profile(event_publisher, EventHandlerProfile.FULL)` 時に観測ハンドラが登録される。
 3. **llm_turn_trigger** を `WorldSimulationApplicationService(llm_turn_trigger=...)` に渡す。`tick()` の末尾で `run_scheduled_turns()` が呼ばれ、スケジュール済み LLM プレイヤーのターンが実行される。
 
+**オプション機能（意図的ドロップ world_drop_item）:**
+
+- LLM ツールを有効化: `create_llm_agent_wiring(..., drop_item_service=PlayerDropItemApplicationService(...))` を渡す。
+- ドロップしたアイテムをマップ上に配置: `EventHandlerComposition(intentional_drop_registry=IntentionalDropEventHandlerRegistry(...))` に渡す。
+  ハンドラは `ItemDroppedFromInventoryDropHandler(player_status_repository, physical_map_repository)` で作成し、`IntentionalDropEventHandlerRegistry` に渡す。
+
 上記を満たすことで、観測イベント発生 → schedule_turn → tick → run_scheduled_turns の一連の流れが動作する。契約の検証は `tests/application/llm/test_llm_wiring_integration.py` の統合テストで行う。
 
 ---
