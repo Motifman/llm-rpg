@@ -102,6 +102,10 @@ from ai_rpg_world.domain.monster.event.monster_events import (
     ActorStateChangedEvent,
 )
 from ai_rpg_world.domain.world.enum.world_enum import Disposition
+from ai_rpg_world.application.world.contracts.dtos import VisibleObjectDto
+from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
+    PursuitFailureReason,
+)
 from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
     PursuitTargetSnapshot,
 )
@@ -147,6 +151,39 @@ class TestWorldSimulationApplicationService:
                 player_id=PlayerId(player_id),
             ),
             busy_until=busy_until,
+        )
+
+    @staticmethod
+    def _current_state(
+        *,
+        visible_objects: list[VisibleObjectDto],
+        current_spot_id: int = 1,
+        has_active_path: bool = False,
+    ) -> SimpleNamespace:
+        return SimpleNamespace(
+            visible_objects=visible_objects,
+            has_active_path=has_active_path,
+            current_spot_id=current_spot_id,
+        )
+
+    @staticmethod
+    def _visible_target(
+        target_id: int,
+        *,
+        x: int,
+        y: int,
+        z: int = 0,
+        object_kind: str = "monster",
+    ) -> VisibleObjectDto:
+        return VisibleObjectDto(
+            object_id=target_id,
+            object_type="actor",
+            x=x,
+            y=y,
+            z=z,
+            distance=1,
+            display_name=f"target-{target_id}",
+            object_kind=object_kind,
         )
 
     @pytest.fixture
@@ -330,21 +367,106 @@ class TestWorldSimulationApplicationService:
                 coordinate=Coordinate(2, 0, 0),
             )
         )
+        movement_service = mock.Mock()
+        movement_service.replan_path_to_coordinate_in_current_unit_of_work.return_value = (
+            SimpleNamespace(success=True)
+        )
         world_query_service = mock.Mock()
-        world_query_service.get_player_current_state.return_value = SimpleNamespace(
+        world_query_service.get_player_current_state.return_value = self._current_state(
             visible_objects=[],
             has_active_path=False,
         )
-        continuation_service = PursuitContinuationService(world_query_service)
+        continuation_service = PursuitContinuationService(
+            world_query_service,
+            movement_service=movement_service,
+        )
 
         decision = continuation_service.evaluate_tick(status)
 
         assert decision.continuation_checked is True
-        assert decision.action == PursuitContinuationAction.WAITING_FOR_PATH
-        assert decision.should_advance_movement is False
+        assert decision.action == PursuitContinuationAction.CONTINUE_PURSUIT
+        assert decision.should_advance_movement is True
         assert decision.replan_required is True
+        assert decision.replan_attempted is True
         assert decision.target_world_object_id == 99
+        movement_service.replan_path_to_coordinate_in_current_unit_of_work.assert_called_once()
         world_query_service.get_player_current_state.assert_called_once()
+
+    def test_pursuit_continuation_refreshes_visible_target_only_when_coordinate_changes(
+        self,
+    ):
+        status = self._player_status()
+        status.start_pursuit(
+            PursuitTargetSnapshot(
+                target_id=WorldObjectId(99),
+                spot_id=SpotId(1),
+                coordinate=Coordinate(2, 0, 0),
+            )
+        )
+        world_query_service = mock.Mock()
+        world_query_service.get_player_current_state.side_effect = [
+            self._current_state(
+                visible_objects=[self._visible_target(99, x=2, y=0)],
+                has_active_path=True,
+            ),
+            self._current_state(
+                visible_objects=[self._visible_target(99, x=3, y=0)],
+                has_active_path=True,
+            ),
+        ]
+        movement_service = mock.Mock()
+        movement_service.replan_path_to_coordinate_in_current_unit_of_work.return_value = (
+            SimpleNamespace(success=True)
+        )
+        continuation_service = PursuitContinuationService(
+            world_query_service,
+            movement_service=movement_service,
+        )
+
+        first = continuation_service.evaluate_tick(status)
+        second = continuation_service.evaluate_tick(status)
+
+        assert first.pursuit_updated is False
+        assert first.replan_attempted is False
+        assert second.pursuit_updated is True
+        assert second.replan_attempted is True
+        assert status.pursuit_state is not None
+        assert status.pursuit_state.target_snapshot.coordinate == Coordinate(3, 0, 0)
+        assert status.pursuit_state.last_known.coordinate == Coordinate(3, 0, 0)
+
+    def test_pursuit_continuation_preserves_last_visible_snapshot_when_target_is_lost(
+        self,
+    ):
+        status = self._player_status()
+        status.start_pursuit(
+            PursuitTargetSnapshot(
+                target_id=WorldObjectId(55),
+                spot_id=SpotId(1),
+                coordinate=Coordinate(4, 1, 0),
+            )
+        )
+        movement_service = mock.Mock()
+        movement_service.replan_path_to_coordinate_in_current_unit_of_work.return_value = (
+            SimpleNamespace(success=True)
+        )
+        world_query_service = mock.Mock()
+        world_query_service.get_player_current_state.return_value = self._current_state(
+            visible_objects=[],
+            has_active_path=False,
+        )
+        continuation_service = PursuitContinuationService(
+            world_query_service,
+            movement_service=movement_service,
+        )
+
+        decision = continuation_service.evaluate_tick(status)
+
+        assert decision.action == PursuitContinuationAction.CONTINUE_PURSUIT
+        assert decision.has_visible_target is False
+        assert decision.replan_attempted is True
+        assert status.pursuit_state is not None
+        assert status.pursuit_state.target_snapshot.coordinate == Coordinate(4, 1, 0)
+        assert status.pursuit_state.last_known.coordinate == Coordinate(4, 1, 0)
 
     def test_tick_runs_pursuit_continuation_before_movement_execution(
         self, setup_service
@@ -382,6 +504,7 @@ class TestWorldSimulationApplicationService:
                 continuation_checked=True,
                 should_advance_movement=True,
                 replan_required=False,
+                replan_attempted=False,
                 has_visible_target=True,
                 has_active_path=True,
                 target_world_object_id=77,
@@ -491,22 +614,24 @@ class TestWorldSimulationApplicationService:
 
         continuation_service = mock.Mock(
             return_value=PursuitContinuationDecision(
-                action=PursuitContinuationAction.WAITING_FOR_PATH,
+                action=PursuitContinuationAction.CONTINUE_PURSUIT,
                 continuation_checked=True,
-                should_advance_movement=False,
+                should_advance_movement=True,
                 replan_required=True,
+                replan_attempted=True,
                 has_visible_target=False,
-                has_active_path=False,
+                has_active_path=True,
                 target_world_object_id=55,
             )
         )
         continuation_service.evaluate_tick.return_value = PursuitContinuationDecision(
-            action=PursuitContinuationAction.WAITING_FOR_PATH,
+            action=PursuitContinuationAction.CONTINUE_PURSUIT,
             continuation_checked=True,
-            should_advance_movement=False,
+            should_advance_movement=True,
             replan_required=True,
+            replan_attempted=True,
             has_visible_target=False,
-            has_active_path=False,
+            has_active_path=True,
             target_world_object_id=55,
         )
         movement_service = mock.Mock()
@@ -516,7 +641,48 @@ class TestWorldSimulationApplicationService:
         service.tick()
 
         continuation_service.evaluate_tick.assert_called_once()
-        movement_service.tick_movement_in_current_unit_of_work.assert_not_called()
+        movement_service.tick_movement_in_current_unit_of_work.assert_called_once_with(1)
+
+    def test_tick_stops_movement_when_pursuit_fails_with_structured_reason(
+        self, setup_service
+    ):
+        service, _, repository, _, player_status_repo, _, _, _, _, _ = setup_service
+        status = self._player_status()
+        status.start_pursuit(
+            PursuitTargetSnapshot(
+                target_id=WorldObjectId(55),
+                spot_id=SpotId(1),
+                coordinate=Coordinate(2, 0, 0),
+            )
+        )
+        player_status_repo.save(status)
+
+        physical_map = PhysicalMapAggregate.create(
+            SpotId(1),
+            [Tile(Coordinate(x, y, 0), TerrainType.grass()) for x in range(3) for y in range(3)],
+            objects=[self._player_actor()],
+        )
+        repository.save(physical_map)
+
+        service._pursuit_continuation_service = mock.Mock()
+        service._pursuit_continuation_service.evaluate_tick.return_value = (
+            PursuitContinuationDecision(
+                action=PursuitContinuationAction.PURSUIT_FAILED,
+                continuation_checked=True,
+                should_advance_movement=False,
+                replan_required=False,
+                replan_attempted=False,
+                has_visible_target=False,
+                has_active_path=False,
+                target_world_object_id=55,
+                failure_reason=PursuitFailureReason.TARGET_MISSING,
+            )
+        )
+        service._movement_service = mock.Mock()
+
+        service.tick()
+
+        service._movement_service.tick_movement_in_current_unit_of_work.assert_not_called()
 
     def test_tick_updates_autonomous_actors(self, setup_service):
         """tickによって自律行動アクター（モンスター）の行動が計画・実行されること（アクティブスポットのみ更新）"""
