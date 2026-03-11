@@ -55,7 +55,7 @@ Plans:
 
 Plans:
 - [x] 03-01: tick 時の追跡継続/再計画ロジックを追加する
-- [ ] 03-02: 最後の既知位置の更新と可視喪失ハンドリングを実装する
+- [x] 03-02: 最後の既知位置の更新と可視喪失ハンドリングを実装する
 - [ ] 03-03: 継続追跡の回帰テストを追加する
 
 ### Phase 4: Observation And LLM Delivery
@@ -97,6 +97,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Pursuit Domain Vocabulary | 3/3 | Completed | 2026-03-11 |
 | 2. Player Pursuit Commands | 2/2 | Completed | 2026-03-11 |
-| 3. Pursuit Continuation Loop | 1/3 | In Progress | - |
+| 3. Pursuit Continuation Loop | 2/3 | In Progress | - |
 | 4. Observation And LLM Delivery | 0/3 | Not started | - |
 | 5. Monster Pursuit Alignment | 0/2 | Not started | - |

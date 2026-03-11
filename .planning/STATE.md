@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-03-11T10:19:01.556Z"
-last_activity: 2026-03-11 — Phase 3 plan 01 completed with pursuit continuation tick routing and regression coverage
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-03-11T10:37:13.048Z"
+last_activity: 2026-03-11 — Phase 3 plan 02 completed with visible refresh, frozen last-known continuation, and structured failure coverage
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 13
-  completed_plans: 6
-  percent: 46
+  completed_plans: 7
+  percent: 54
 ---
 
 # Project State
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 ## Current Position
 
 Phase: 3 of 5 (Pursuit Continuation Loop)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-03-11 — Phase 3 plan 01 completed with pursuit continuation tick routing and regression coverage
+Last activity: 2026-03-11 — Phase 3 plan 02 completed with visible refresh, frozen last-known continuation, and structured failure coverage
 
-Progress: [█████░░░░░] 46%
+Progress: [█████░░░░░] 54%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
+- Total plans completed: 7
 - Average duration: 8 min
-- Total execution time: 49 min
+- Total execution time: 58 min
 
 **By Phase:**
 
@@ -45,10 +45,10 @@ Progress: [█████░░░░░] 46%
 |-------|-------|-------|----------|
 | 01-pursuit-domain-vocabulary | 3 | 28 min | 9 min |
 | 02-player-pursuit-commands | 2 | 20 min | 10 min |
-| 03-pursuit-continuation-loop | 1 | 1 min | 1 min |
+| 03-pursuit-continuation-loop | 2 | 10 min | 5 min |
 
 **Recent Trend:**
-- Last 5 plans: 6 min, 14 min, 12 min, 8 min, 1 min
+- Last 5 plans: 14 min, 12 min, 8 min, 1 min, 9 min
 - Trend: Stable
 
 ## Accumulated Context
@@ -76,6 +76,8 @@ Recent decisions affecting current work:
 - 02-02: LLM pursuit tools use label resolution at the UI layer and `world_object_id` at the application-service boundary
 - [Phase 03]: Pursuit continuation stays in a dedicated helper so world tick only loops, checks busy state, and delegates.
 - [Phase 03]: Active pursuit enters the continuation prepass even when no static movement path exists.
+- [Phase 03]: Authoritative target presence uses PhysicalMapRepository.find_spot_id_by_object_id so invisible targets are not misclassified as missing.
+- [Phase 03]: Pursuit continuation clears stored movement paths on failure but ends pursuit via fail_pursuit, not cancel_pursuit.
 
 ### Pending Todos
 
@@ -88,6 +90,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T10:19:01.553Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-03-11T10:37:13.045Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None
