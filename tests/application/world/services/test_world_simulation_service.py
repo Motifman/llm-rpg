@@ -1,7 +1,13 @@
 import pytest
 import unittest.mock as mock
+from types import SimpleNamespace
 from ai_rpg_world.application.world.services.world_simulation_service import WorldSimulationApplicationService
 from ai_rpg_world.application.world.services.caching_pathfinding_service import CachingPathfindingService
+from ai_rpg_world.application.world.services.pursuit_continuation_service import (
+    PursuitContinuationAction,
+    PursuitContinuationDecision,
+    PursuitContinuationService,
+)
 from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import InMemoryGameTimeProvider
 from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import InMemoryPhysicalMapRepository
 from ai_rpg_world.infrastructure.repository.in_memory_weather_zone_repository import InMemoryWeatherZoneRepository
@@ -96,6 +102,9 @@ from ai_rpg_world.domain.monster.event.monster_events import (
     ActorStateChangedEvent,
 )
 from ai_rpg_world.domain.world.enum.world_enum import Disposition
+from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
+    PursuitTargetSnapshot,
+)
 
 
 class _InMemorySkillLoadoutRepo:
@@ -111,6 +120,35 @@ class _InMemorySkillLoadoutRepo:
 
 
 class TestWorldSimulationApplicationService:
+    @staticmethod
+    def _player_status(player_id: int = 1) -> PlayerStatusAggregate:
+        return PlayerStatusAggregate(
+            player_id=PlayerId(player_id),
+            base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
+            stat_growth_factor=StatGrowthFactor(1.1, 1.1, 1.1, 1.1, 1.1, 0.01, 0.01),
+            exp_table=ExpTable(100, 1.5),
+            growth=Growth(1, 0, ExpTable(100, 1.5)),
+            gold=Gold(0),
+            hp=Hp.create(100, 100),
+            mp=Mp.create(30, 30),
+            stamina=Stamina.create(100, 100),
+            current_spot_id=SpotId(1),
+            current_coordinate=Coordinate(0, 0, 0),
+        )
+
+    @staticmethod
+    def _player_actor(player_id: int = 1, *, busy_until=None) -> WorldObject:
+        return WorldObject(
+            WorldObjectId(player_id),
+            Coordinate(0, 0, 0),
+            ObjectTypeEnum.PLAYER,
+            component=ActorComponent(
+                direction=DirectionEnum.EAST,
+                player_id=PlayerId(player_id),
+            ),
+            busy_until=busy_until,
+        )
+
     @pytest.fixture
     def setup_service(self):
         data_store = InMemoryDataStore()
@@ -258,18 +296,67 @@ class TestWorldSimulationApplicationService:
         self, setup_service
     ):
         service, _, repository, _, player_status_repo, _, _, _, _, _ = setup_service
-        status = PlayerStatusAggregate(
-            player_id=PlayerId(1),
-            base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
-            stat_growth_factor=StatGrowthFactor(1.1, 1.1, 1.1, 1.1, 1.1, 0.01, 0.01),
-            exp_table=ExpTable(100, 1.5),
-            growth=Growth(1, 0, ExpTable(100, 1.5)),
-            gold=Gold(0),
-            hp=Hp.create(100, 100),
-            mp=Mp.create(30, 30),
-            stamina=Stamina.create(100, 100),
-            current_spot_id=SpotId(1),
-            current_coordinate=Coordinate(0, 0, 0),
+        status = self._player_status()
+        status.set_destination(
+            Coordinate(1, 0, 0),
+            [Coordinate(0, 0, 0), Coordinate(1, 0, 0)],
+            goal_destination_type="spot",
+            goal_spot_id=SpotId(1),
+        )
+        player_status_repo.save(status)
+
+        physical_map = PhysicalMapAggregate.create(
+            SpotId(1),
+            [Tile(Coordinate(x, y, 0), TerrainType.grass()) for x in range(3) for y in range(3)],
+            objects=[self._player_actor()],
+        )
+        repository.save(physical_map)
+
+        movement_service = mock.MagicMock()
+        service._movement_service = movement_service
+
+        service.tick()
+
+        movement_service.tick_movement_in_current_unit_of_work.assert_called_once_with(1)
+
+    def test_pursuit_continuation_marks_pathless_pursuit_for_same_tick_continuation(
+        self,
+    ):
+        status = self._player_status()
+        status.start_pursuit(
+            PursuitTargetSnapshot(
+                target_id=WorldObjectId(99),
+                spot_id=SpotId(1),
+                coordinate=Coordinate(2, 0, 0),
+            )
+        )
+        world_query_service = mock.Mock()
+        world_query_service.get_player_current_state.return_value = SimpleNamespace(
+            visible_objects=[],
+            has_active_path=False,
+        )
+        continuation_service = PursuitContinuationService(world_query_service)
+
+        decision = continuation_service.evaluate_tick(status)
+
+        assert decision.continuation_checked is True
+        assert decision.action == PursuitContinuationAction.WAITING_FOR_PATH
+        assert decision.should_advance_movement is False
+        assert decision.replan_required is True
+        assert decision.target_world_object_id == 99
+        world_query_service.get_player_current_state.assert_called_once()
+
+    def test_tick_runs_pursuit_continuation_before_movement_execution(
+        self, setup_service
+    ):
+        service, _, repository, _, player_status_repo, _, _, _, _, _ = setup_service
+        status = self._player_status()
+        status.start_pursuit(
+            PursuitTargetSnapshot(
+                target_id=WorldObjectId(77),
+                spot_id=SpotId(1),
+                coordinate=Coordinate(2, 0, 0),
+            )
         )
         status.set_destination(
             Coordinate(1, 0, 0),
@@ -282,23 +369,154 @@ class TestWorldSimulationApplicationService:
         physical_map = PhysicalMapAggregate.create(
             SpotId(1),
             [Tile(Coordinate(x, y, 0), TerrainType.grass()) for x in range(3) for y in range(3)],
-            objects=[
-                WorldObject(
-                    WorldObjectId(1),
-                    Coordinate(0, 0, 0),
-                    ObjectTypeEnum.PLAYER,
-                    component=ActorComponent(direction=DirectionEnum.EAST, player_id=PlayerId(1)),
-                )
-            ],
+            objects=[self._player_actor()],
         )
         repository.save(physical_map)
 
-        movement_service = mock.MagicMock()
+        order: list[str] = []
+        continuation_service = mock.Mock()
+        continuation_service.evaluate_tick.side_effect = lambda _: (
+            order.append("continuation")
+            or PursuitContinuationDecision(
+                action=PursuitContinuationAction.CONTINUE_PURSUIT,
+                continuation_checked=True,
+                should_advance_movement=True,
+                replan_required=False,
+                has_visible_target=True,
+                has_active_path=True,
+                target_world_object_id=77,
+            )
+        )
+        movement_service = mock.Mock()
+        movement_service.tick_movement_in_current_unit_of_work.side_effect = (
+            lambda player_id: order.append(f"movement:{player_id}")
+        )
+        service._pursuit_continuation_service = continuation_service
         service._movement_service = movement_service
 
         service.tick()
 
+        assert order == ["continuation", "movement:1"]
+
+    def test_tick_keeps_plain_movement_behavior_when_no_active_pursuit(
+        self, setup_service
+    ):
+        service, _, repository, _, player_status_repo, _, _, _, _, _ = setup_service
+        status = self._player_status()
+        status.set_destination(
+            Coordinate(1, 0, 0),
+            [Coordinate(0, 0, 0), Coordinate(1, 0, 0)],
+            goal_destination_type="spot",
+            goal_spot_id=SpotId(1),
+        )
+        player_status_repo.save(status)
+
+        physical_map = PhysicalMapAggregate.create(
+            SpotId(1),
+            [Tile(Coordinate(x, y, 0), TerrainType.grass()) for x in range(3) for y in range(3)],
+            objects=[self._player_actor()],
+        )
+        repository.save(physical_map)
+
+        continuation_service = mock.Mock()
+        movement_service = mock.Mock()
+        service._pursuit_continuation_service = continuation_service
+        service._movement_service = movement_service
+
+        service.tick()
+
+        continuation_service.evaluate_tick.assert_not_called()
         movement_service.tick_movement_in_current_unit_of_work.assert_called_once_with(1)
+
+    def test_tick_skips_busy_pursuit_actor_without_continuation_or_movement(
+        self, setup_service
+    ):
+        service, _, repository, _, player_status_repo, _, _, _, _, _ = setup_service
+        status = self._player_status()
+        status.start_pursuit(
+            PursuitTargetSnapshot(
+                target_id=WorldObjectId(88),
+                spot_id=SpotId(1),
+                coordinate=Coordinate(2, 0, 0),
+            )
+        )
+        status.set_destination(
+            Coordinate(1, 0, 0),
+            [Coordinate(0, 0, 0), Coordinate(1, 0, 0)],
+            goal_destination_type="spot",
+            goal_spot_id=SpotId(1),
+        )
+        player_status_repo.save(status)
+
+        physical_map = PhysicalMapAggregate.create(
+            SpotId(1),
+            [Tile(Coordinate(x, y, 0), TerrainType.grass()) for x in range(3) for y in range(3)],
+            objects=[self._player_actor(busy_until=WorldTick(99))],
+        )
+        repository.save(physical_map)
+
+        continuation_service = mock.Mock()
+        movement_service = mock.Mock()
+        service._pursuit_continuation_service = continuation_service
+        service._movement_service = movement_service
+
+        service.tick()
+
+        updated_status = player_status_repo.find_by_id(PlayerId(1))
+        assert updated_status is not None
+        assert updated_status.has_active_pursuit is True
+        continuation_service.evaluate_tick.assert_not_called()
+        movement_service.tick_movement_in_current_unit_of_work.assert_not_called()
+
+    def test_tick_processes_pathless_pursuit_before_skipping_movement(
+        self, setup_service
+    ):
+        service, _, repository, _, player_status_repo, _, _, _, _, _ = setup_service
+        status = self._player_status()
+        status.start_pursuit(
+            PursuitTargetSnapshot(
+                target_id=WorldObjectId(55),
+                spot_id=SpotId(1),
+                coordinate=Coordinate(2, 0, 0),
+            )
+        )
+        player_status_repo.save(status)
+
+        physical_map = PhysicalMapAggregate.create(
+            SpotId(1),
+            [Tile(Coordinate(x, y, 0), TerrainType.grass()) for x in range(3) for y in range(3)],
+            objects=[self._player_actor()],
+        )
+        repository.save(physical_map)
+
+        continuation_service = mock.Mock(
+            return_value=PursuitContinuationDecision(
+                action=PursuitContinuationAction.WAITING_FOR_PATH,
+                continuation_checked=True,
+                should_advance_movement=False,
+                replan_required=True,
+                has_visible_target=False,
+                has_active_path=False,
+                target_world_object_id=55,
+            )
+        )
+        continuation_service.evaluate_tick.return_value = PursuitContinuationDecision(
+            action=PursuitContinuationAction.WAITING_FOR_PATH,
+            continuation_checked=True,
+            should_advance_movement=False,
+            replan_required=True,
+            has_visible_target=False,
+            has_active_path=False,
+            target_world_object_id=55,
+        )
+        movement_service = mock.Mock()
+        service._pursuit_continuation_service = continuation_service
+        service._movement_service = movement_service
+
+        service.tick()
+
+        continuation_service.evaluate_tick.assert_called_once()
+        movement_service.tick_movement_in_current_unit_of_work.assert_not_called()
 
     def test_tick_updates_autonomous_actors(self, setup_service):
         """tickによって自律行動アクター（モンスター）の行動が計画・実行されること（アクティブスポットのみ更新）"""
