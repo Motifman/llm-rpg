@@ -56,6 +56,7 @@ class GetPlayerCurrentStateQuery:
 
     player_id: int
     include_available_moves: bool = True
+    include_tile_map: bool = True
     view_distance: int = 5
 
     def __post_init__(self):

@@ -5,6 +5,7 @@ import pytest
 from ai_rpg_world.application.world.contracts.dtos import (
     PlayerCurrentStateDto,
     VisibleObjectDto,
+    VisibleTileMapDto,
     AvailableMoveDto,
 )
 from ai_rpg_world.application.llm.services.current_state_formatter import (
@@ -196,3 +197,112 @@ class TestDefaultCurrentStateFormatter:
         """dto が PlayerCurrentStateDto でない場合 TypeError"""
         with pytest.raises(TypeError, match="dto must be PlayerCurrentStateDto"):
             formatter.format("not a dto")  # type: ignore[arg-type]
+
+    def test_format_without_visible_tile_map_omits_tile_map_section(self, formatter):
+        """visible_tile_map が None のときタイルマップ行が含まれない"""
+        dto = _minimal_current_state_dto()
+        assert dto.visible_tile_map is None
+        text = formatter.format(dto)
+        assert "視界タイルマップ" not in text
+
+    def test_format_with_visible_tile_map_includes_legend_and_grid(self, formatter):
+        """visible_tile_map ありのとき凡例とグリッドが出力に含まれる"""
+        tile_map = VisibleTileMapDto(
+            center_x=1,
+            center_y=1,
+            view_distance=1,
+            rows=["...", ".P.", "..."],
+            legend={".": "草", "P": "自分"},
+        )
+        dto = _minimal_current_state_dto()
+        dto.visible_tile_map = tile_map
+        text = formatter.format(dto)
+        assert "視界タイルマップ凡例" in text
+        assert "視界タイルマップ:" in text
+        assert "草" in text
+        assert "自分" in text
+        assert ".P." in text
+
+    def test_format_current_spot_name_none_shows_unplaced(self, formatter):
+        """current_spot_name が None のとき「現在地: 未配置」"""
+        dto = _minimal_current_state_dto()
+        dto.current_spot_name = None
+        dto.current_spot_id = None
+        text = formatter.format(dto)
+        assert "現在地: 未配置" in text
+
+    def test_format_with_visible_tile_map_empty_legend(self, formatter):
+        """visible_tile_map の legend が空でも例外なく出力される"""
+        tile_map = VisibleTileMapDto(
+            center_x=1,
+            center_y=1,
+            view_distance=1,
+            rows=[".", ".", "."],
+            legend={},
+        )
+        dto = _minimal_current_state_dto()
+        dto.visible_tile_map = tile_map
+        text = formatter.format(dto)
+        assert "視界タイルマップ凡例" in text
+        assert "視界タイルマップ:" in text
+
+    def test_format_has_active_path_shows_movement_planned(self, formatter):
+        """has_active_path が True で busy でないとき「移動計画あり」"""
+        dto = _minimal_current_state_dto()
+        dto.is_busy = False
+        dto.has_active_path = True
+        text = formatter.format(dto)
+        assert "行動状態: 移動計画あり" in text
+
+    def test_format_notable_and_actionable_zero_when_empty(self, formatter):
+        """notable_objects と actionable_objects が空のとき 0件"""
+        dto = _minimal_current_state_dto(has_visible_objects=False)
+        dto.actionable_objects = []
+        dto.notable_objects = []
+        text = formatter.format(dto)
+        assert "注目対象: 0件" in text
+        assert "今すぐ行動可能な対象: 0件" in text
+
+    def test_format_includes_coordinates_when_present(self, formatter):
+        """x, y が設定されているとき座標が含まれる"""
+        dto = _minimal_current_state_dto()
+        dto.x = 3
+        dto.y = 4
+        dto.z = 0
+        text = formatter.format(dto)
+        assert "座標:" in text
+        assert "x=3" in text
+        assert "y=4" in text
+
+    def test_format_includes_connected_spots_when_present(self, formatter):
+        """connected_spot_names があるとき接続先が含まれる"""
+        dto = _minimal_current_state_dto()
+        dto.connected_spot_names = {"北の森", "東の町"}
+        text = formatter.format(dto)
+        assert "接続先スポット" in text
+        assert "北の森" in text
+        assert "東の町" in text
+
+    def test_format_includes_current_player_count_when_positive(self, formatter):
+        """current_player_count > 0 のとき同スポットのプレイヤー数が含まれる"""
+        dto = _minimal_current_state_dto()
+        dto.current_player_count = 3
+        text = formatter.format(dto)
+        assert "同スポットのプレイヤー: 3人" in text
+
+    def test_format_available_moves_partial_none_omits_section(self, formatter):
+        """available_moves と total_available_moves の片方のみ None のとき移動先件数は表示されない"""
+        dto = _minimal_current_state_dto()
+        dto.available_moves = []
+        dto.total_available_moves = None
+        text = formatter.format(dto)
+        assert "利用可能な移動先:" not in text
+
+    def test_format_includes_all_attention_levels(self, formatter):
+        """各注意レベルが正しく表示される"""
+        for level in AttentionLevel:
+            dto = _minimal_current_state_dto()
+            dto.attention_level = level
+            text = formatter.format(dto)
+            assert "注意レベル" in text
+            assert level.value in text
