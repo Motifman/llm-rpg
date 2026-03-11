@@ -3,6 +3,7 @@
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import (
+    ActiveHarvestToolRuntimeTargetDto,
     AttentionLevelToolRuntimeTargetDto,
     ChestItemToolRuntimeTargetDto,
     ChestToolRuntimeTargetDto,
@@ -38,6 +39,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_GUILD_CREATE,
     TOOL_NAME_GUILD_DEPOSIT_BANK,
     TOOL_NAME_GUILD_DISBAND,
+    TOOL_NAME_HARVEST_CANCEL,
     TOOL_NAME_HARVEST_START,
     TOOL_NAME_INSPECT_ITEM,
     TOOL_NAME_INSPECT_TARGET,
@@ -107,6 +109,12 @@ def _make_context() -> ToolRuntimeContextDto:
             "O1": ResourceToolRuntimeTargetDto(
                 label="O1",
                 kind="resource",
+                display_name="薬草",
+                world_object_id=300,
+            ),
+            "H1": ActiveHarvestToolRuntimeTargetDto(
+                label="H1",
+                kind="active_harvest",
                 display_name="薬草",
                 world_object_id=300,
             ),
@@ -303,6 +311,18 @@ class TestDefaultToolArgumentResolver:
         result = resolver.resolve(
             TOOL_NAME_HARVEST_START,
             {"target_label": "O1"},
+            _make_context(),
+        )
+
+        assert result["target_world_object_id"] == 300
+        assert result["target_display_name"] == "薬草"
+
+    def test_resolve_harvest_cancel_target_label(self):
+        resolver = DefaultToolArgumentResolver()
+
+        result = resolver.resolve(
+            TOOL_NAME_HARVEST_CANCEL,
+            {"target_label": "H1"},
             _make_context(),
         )
 

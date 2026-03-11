@@ -190,6 +190,15 @@ class ActiveConversationDto:
 
 
 @dataclass
+class ActiveHarvestDto:
+    """進行中採集の概要 DTO"""
+
+    target_world_object_id: int
+    target_display_name: str
+    finish_tick: int
+
+
+@dataclass
 class UsableSkillDto:
     """使用可能スキル 1 件の DTO"""
 
@@ -321,6 +330,7 @@ class PlayerCurrentStateDto:
     inventory_items: List[InventoryItemDto] = field(default_factory=list)
     chest_items: List[ChestItemDto] = field(default_factory=list)
     active_conversation: Optional[ActiveConversationDto] = None
+    active_harvest: Optional[ActiveHarvestDto] = None
     usable_skills: List[UsableSkillDto] = field(default_factory=list)
     attention_level_options: List[AttentionLevelOptionDto] = field(default_factory=list)
     can_destroy_placeable: bool = False
