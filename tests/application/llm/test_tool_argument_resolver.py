@@ -34,6 +34,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_PLACE_OBJECT,
+    TOOL_NAME_PURSUIT_CANCEL,
+    TOOL_NAME_PURSUIT_START,
     TOOL_NAME_SAY,
     TOOL_NAME_WHISPER,
 )
@@ -190,6 +192,49 @@ class TestDefaultToolArgumentResolver:
         assert result["target_player_id"] == 2
         assert result["content"] == "こんにちは"
         assert result["channel"] == SpeechChannel.WHISPER
+
+    def test_resolve_pursuit_start_player_label(self):
+        resolver = DefaultToolArgumentResolver()
+
+        result = resolver.resolve(
+            TOOL_NAME_PURSUIT_START,
+            {"target_label": "P1"},
+            _make_context(),
+        )
+
+        assert result["target_world_object_id"] == 100
+
+    def test_resolve_pursuit_start_monster_label(self):
+        resolver = DefaultToolArgumentResolver()
+
+        result = resolver.resolve(
+            TOOL_NAME_PURSUIT_START,
+            {"target_label": "M1"},
+            ToolRuntimeContextDto(
+                targets={
+                    **_make_context().targets,
+                    "M1": MonsterToolRuntimeTargetDto(
+                        label="M1",
+                        kind="monster",
+                        display_name="スライム",
+                        world_object_id=301,
+                    ),
+                }
+            ),
+        )
+
+        assert result["target_world_object_id"] == 301
+
+    def test_resolve_pursuit_cancel_returns_empty_args(self):
+        resolver = DefaultToolArgumentResolver()
+
+        result = resolver.resolve(
+            TOOL_NAME_PURSUIT_CANCEL,
+            {},
+            _make_context(),
+        )
+
+        assert result == {}
 
     def test_resolve_move_unknown_label_raises(self):
         resolver = DefaultToolArgumentResolver()

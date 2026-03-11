@@ -1,7 +1,11 @@
 """DropItemCommand の境界値・バリデーションテスト"""
 
 import pytest
-from ai_rpg_world.application.world.contracts.commands import DropItemCommand
+from ai_rpg_world.application.world.contracts.commands import (
+    CancelPursuitCommand,
+    DropItemCommand,
+    StartPursuitCommand,
+)
 
 
 class TestDropItemCommand:
@@ -64,3 +68,38 @@ class TestDropItemCommand:
                 cmd.player_id = 2
             with pytest.raises(AttributeError):
                 cmd.inventory_slot_id = 1
+
+
+class TestStartPursuitCommand:
+    def test_create_with_valid_ids(self):
+        cmd = StartPursuitCommand(player_id=1, target_world_object_id=200)
+        assert cmd.player_id == 1
+        assert cmd.target_world_object_id == 200
+
+    def test_player_id_zero_raises(self):
+        with pytest.raises(ValueError, match="player_id must be greater than 0"):
+            StartPursuitCommand(player_id=0, target_world_object_id=200)
+
+    def test_target_world_object_id_zero_raises(self):
+        with pytest.raises(ValueError, match="target_world_object_id must be greater than 0"):
+            StartPursuitCommand(player_id=1, target_world_object_id=0)
+
+    def test_command_is_frozen(self):
+        cmd = StartPursuitCommand(player_id=1, target_world_object_id=200)
+        with pytest.raises(AttributeError):
+            cmd.target_world_object_id = 201
+
+
+class TestCancelPursuitCommand:
+    def test_create_with_valid_player_id(self):
+        cmd = CancelPursuitCommand(player_id=1)
+        assert cmd.player_id == 1
+
+    def test_player_id_zero_raises(self):
+        with pytest.raises(ValueError, match="player_id must be greater than 0"):
+            CancelPursuitCommand(player_id=0)
+
+    def test_command_is_frozen(self):
+        cmd = CancelPursuitCommand(player_id=1)
+        with pytest.raises(AttributeError):
+            cmd.player_id = 2

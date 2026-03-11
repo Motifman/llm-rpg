@@ -55,6 +55,31 @@ class SetDestinationAvailabilityResolver(IAvailabilityResolver):
         return has_spot_moves or has_location_moves or has_object_moves
 
 
+class PursuitStartAvailabilityResolver(IAvailabilityResolver):
+    """追跡開始ツールは可視中のプレイヤーまたはモンスターがいて、かつ actor が busy でないときに利用可能。"""
+
+    def is_available(
+        self,
+        context: Optional[PlayerCurrentStateDto],
+    ) -> bool:
+        if context is None or context.is_busy:
+            return False
+        return any(
+            obj.object_kind in {"player", "monster"} and not obj.is_self
+            for obj in context.visible_objects
+        )
+
+
+class PursuitCancelAvailabilityResolver(IAvailabilityResolver):
+    """追跡中断ツールは現在状態が取得できていれば利用可能。"""
+
+    def is_available(
+        self,
+        context: Optional[PlayerCurrentStateDto],
+    ) -> bool:
+        return context is not None
+
+
 class WhisperAvailabilityResolver(IAvailabilityResolver):
     """囁きツールは、視界内に自分以外のプレイヤーがいるときに利用可能。"""
 

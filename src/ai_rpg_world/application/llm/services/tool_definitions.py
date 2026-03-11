@@ -19,6 +19,8 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
     InteractAvailabilityResolver,
     NoOpAvailabilityResolver,
     PlaceObjectAvailabilityResolver,
+    PursuitCancelAvailabilityResolver,
+    PursuitStartAvailabilityResolver,
     QuestAcceptAvailabilityResolver,
     QuestApproveAvailabilityResolver,
     QuestCancelAvailabilityResolver,
@@ -62,6 +64,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
     TOOL_NAME_PLACE_OBJECT,
+    TOOL_NAME_PURSUIT_CANCEL,
+    TOOL_NAME_PURSUIT_START,
     TOOL_NAME_QUEST_ACCEPT,
     TOOL_NAME_QUEST_APPROVE,
     TOOL_NAME_QUEST_CANCEL,
@@ -248,6 +252,29 @@ DROP_ITEM_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_DROP_ITEM,
     description="在庫アイテムを地面に捨てます。",
     parameters=DROP_ITEM_PARAMETERS,
+)
+
+PURSUIT_START_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "target_label": {
+            "type": "string",
+            "description": "現在の状況に表示されたプレイヤーまたはモンスターのラベル（例: P1, M1）。",
+        },
+    },
+    "required": ["target_label"],
+}
+
+PURSUIT_START_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_PURSUIT_START,
+    description="現在見えているプレイヤーまたはモンスターの追跡を開始します。",
+    parameters=PURSUIT_START_PARAMETERS,
+)
+
+PURSUIT_CANCEL_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_PURSUIT_CANCEL,
+    description="現在の追跡を中断します。",
+    parameters={"type": "object", "properties": {}, "required": []},
 )
 
 INSPECT_ITEM_PARAMETERS = {
@@ -614,6 +641,7 @@ def register_default_tools(
     place_enabled: bool = False,
     drop_enabled: bool = False,
     chest_enabled: bool = False,
+    pursuit_enabled: bool = False,
     combat_enabled: bool = False,
     quest_enabled: bool = False,
     guild_enabled: bool = False,
@@ -631,6 +659,9 @@ def register_default_tools(
         raise TypeError("registry must be IGameToolRegistry")
     registry.register(NO_OP_DEFINITION, NoOpAvailabilityResolver())
     registry.register(MOVE_TO_DESTINATION_DEFINITION, SetDestinationAvailabilityResolver())
+    if pursuit_enabled:
+        registry.register(PURSUIT_START_DEFINITION, PursuitStartAvailabilityResolver())
+        registry.register(PURSUIT_CANCEL_DEFINITION, PursuitCancelAvailabilityResolver())
     if speech_enabled:
         registry.register(WHISPER_DEFINITION, WhisperAvailabilityResolver())
         registry.register(SAY_DEFINITION, SayAvailabilityResolver())

@@ -19,6 +19,8 @@ from ai_rpg_world.application.llm.services.tool_definitions import (
     MOVE_TO_DESTINATION_DEFINITION,
     NO_OP_DEFINITION,
     PLACE_OBJECT_DEFINITION,
+    PURSUIT_CANCEL_DEFINITION,
+    PURSUIT_START_DEFINITION,
     SAY_DEFINITION,
     WHISPER_DEFINITION,
     register_default_tools,
@@ -37,6 +39,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
     TOOL_NAME_PLACE_OBJECT,
+    TOOL_NAME_PURSUIT_CANCEL,
+    TOOL_NAME_PURSUIT_START,
     TOOL_NAME_SAY,
     TOOL_NAME_WHISPER,
 )
@@ -125,6 +129,13 @@ class TestToolDefinitions:
         assert "target_label" in params.get("properties", {})
         assert "target_label" in params.get("required", [])
 
+    def test_pursuit_definitions_have_expected_params(self):
+        assert PURSUIT_START_DEFINITION.name == TOOL_NAME_PURSUIT_START
+        assert "target_label" in PURSUIT_START_DEFINITION.parameters.get("properties", {})
+        assert "target_label" in PURSUIT_START_DEFINITION.parameters.get("required", [])
+        assert PURSUIT_CANCEL_DEFINITION.name == TOOL_NAME_PURSUIT_CANCEL
+        assert PURSUIT_CANCEL_DEFINITION.parameters.get("required") == []
+
 
 class TestRegisterDefaultTools:
     """register_default_tools の正常・例外"""
@@ -159,6 +170,13 @@ class TestRegisterDefaultTools:
         entries = registry.get_definitions_with_resolvers()
         names = [e[0].name for e in entries]
         assert TOOL_NAME_HARVEST_START in names
+
+    def test_register_default_tools_with_pursuit_enabled_adds_pursuit_tools(self):
+        registry = DefaultGameToolRegistry()
+        register_default_tools(registry, pursuit_enabled=True)
+        names = [e[0].name for e in registry.get_definitions_with_resolvers()]
+        assert TOOL_NAME_PURSUIT_START in names
+        assert TOOL_NAME_PURSUIT_CANCEL in names
 
     def test_register_default_tools_with_all_extended_flags_adds_tools(self):
         registry = DefaultGameToolRegistry()

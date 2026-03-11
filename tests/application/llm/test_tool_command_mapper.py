@@ -22,6 +22,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
     TOOL_NAME_PLACE_OBJECT,
+    TOOL_NAME_PURSUIT_CANCEL,
+    TOOL_NAME_PURSUIT_START,
     TOOL_NAME_SAY,
     TOOL_NAME_SUBAGENT,
     TOOL_NAME_TODO_ADD,
@@ -32,9 +34,15 @@ from ai_rpg_world.application.llm.tool_constants import (
 )
 from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
-from ai_rpg_world.application.world.contracts.dtos import MoveResultDto
+from ai_rpg_world.application.world.contracts.dtos import (
+    MoveResultDto,
+    PursuitCommandResultDto,
+)
 from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
     MovementInvalidException,
+)
+from ai_rpg_world.application.world.exceptions.command.pursuit_command_exception import (
+    PursuitTargetNotVisibleException,
 )
 from ai_rpg_world.application.world.exceptions.command.place_command_exception import (
     NoItemInSlotException,
@@ -141,6 +149,74 @@ class TestToolCommandMapperMoveToDestination:
         assert result.success is False
         assert result.error_code == "UNKNOWN_TOOL"
         assert result.remediation is not None
+
+
+class TestToolCommandMapperPursuit:
+    @pytest.fixture
+    def movement_service(self):
+        return MagicMock()
+
+    @pytest.fixture
+    def pursuit_service(self):
+        service = MagicMock()
+        service.start_pursuit.return_value = PursuitCommandResultDto(
+            success=True,
+            message="Bobの追跡を開始しました。",
+            target_world_object_id=100,
+            target_display_name="Bob",
+        )
+        service.cancel_pursuit.return_value = PursuitCommandResultDto(
+            success=True,
+            message="追跡を中断しました。",
+        )
+        return service
+
+    @pytest.fixture
+    def mapper(self, movement_service, pursuit_service):
+        return ToolCommandMapper(
+            movement_service=movement_service,
+            pursuit_service=pursuit_service,
+        )
+
+    def test_execute_pursuit_start_success_returns_dto(self, mapper, pursuit_service):
+        result = mapper.execute(
+            1,
+            TOOL_NAME_PURSUIT_START,
+            {"target_world_object_id": 100},
+        )
+
+        assert result.success is True
+        assert "追跡" in result.message
+        pursuit_service.start_pursuit.assert_called_once()
+
+    def test_execute_pursuit_start_returns_failure_dto_on_app_exception(
+        self, mapper, pursuit_service
+    ):
+        pursuit_service.start_pursuit.side_effect = PursuitTargetNotVisibleException(1, 100)
+
+        result = mapper.execute(
+            1,
+            TOOL_NAME_PURSUIT_START,
+            {"target_world_object_id": 100},
+        )
+
+        assert result.success is False
+        assert result.error_code == "PURSUIT_TARGET_NOT_VISIBLE"
+
+    def test_execute_pursuit_cancel_success_returns_dto(self, mapper, pursuit_service):
+        result = mapper.execute(1, TOOL_NAME_PURSUIT_CANCEL, {})
+
+        assert result.success is True
+        assert "中断" in result.message
+        pursuit_service.cancel_pursuit.assert_called_once()
+
+    def test_execute_pursuit_without_service_returns_unknown_tool(self, movement_service):
+        mapper = ToolCommandMapper(movement_service=movement_service)
+
+        result = mapper.execute(1, TOOL_NAME_PURSUIT_CANCEL, {})
+
+        assert result.success is False
+        assert result.error_code == "UNKNOWN_TOOL"
 
 
 class TestToolCommandMapperValidation:

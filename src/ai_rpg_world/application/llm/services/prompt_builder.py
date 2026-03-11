@@ -58,6 +58,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         recent_observations_limit: int = DEFAULT_RECENT_OBSERVATIONS_LIMIT,
         recent_actions_limit: int = DEFAULT_RECENT_ACTIONS_LIMIT,
         default_action_instruction: str = DEFAULT_ACTION_INSTRUCTION,
+        tile_map_view_distance: int = 5,
     ) -> None:
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
@@ -93,6 +94,8 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise ValueError("recent_observations_limit must be 0 or greater")
         if recent_actions_limit < 0:
             raise ValueError("recent_actions_limit must be 0 or greater")
+        if tile_map_view_distance < 0:
+            raise ValueError("tile_map_view_distance must be 0 or greater")
         if not isinstance(default_action_instruction, str):
             raise TypeError("default_action_instruction must be str")
 
@@ -117,6 +120,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._recent_observations_limit = recent_observations_limit
         self._recent_actions_limit = recent_actions_limit
         self._default_action_instruction = default_action_instruction
+        self._tile_map_view_distance = tile_map_view_distance
 
     def build(
         self,
@@ -148,7 +152,10 @@ class DefaultPromptBuilder(IPromptBuilder):
 
         # 3. 現在状態取得（None の場合はプレースホルダ）
         current_state_dto = self._world_query_service.get_player_current_state(
-            GetPlayerCurrentStateQuery(player_id=player_id.value)
+            GetPlayerCurrentStateQuery(
+                player_id=player_id.value,
+                view_distance=self._tile_map_view_distance,
+            )
         )
         if current_state_dto is not None:
             base_current_state_text = self._current_state_formatter.format(current_state_dto)

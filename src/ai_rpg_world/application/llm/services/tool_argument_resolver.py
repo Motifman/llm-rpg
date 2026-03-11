@@ -42,6 +42,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
     TOOL_NAME_PLACE_OBJECT,
+    TOOL_NAME_PURSUIT_CANCEL,
+    TOOL_NAME_PURSUIT_START,
     TOOL_NAME_QUEST_ACCEPT,
     TOOL_NAME_QUEST_APPROVE,
     TOOL_NAME_QUEST_CANCEL,
@@ -88,6 +90,10 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
             return {}
         if tool_name == TOOL_NAME_MOVE_TO_DESTINATION:
             return self._resolve_move_to_destination(args, runtime_context)
+        if tool_name == TOOL_NAME_PURSUIT_START:
+            return self._resolve_pursuit_start(args, runtime_context)
+        if tool_name == TOOL_NAME_PURSUIT_CANCEL:
+            return {}
         if tool_name == TOOL_NAME_WHISPER:
             return self._resolve_whisper(args, runtime_context)
         if tool_name == TOOL_NAME_SAY:
@@ -207,6 +213,33 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
             "content": args.get("content", ""),
             "channel": SpeechChannel.WHISPER,
             "target_player_id": target.player_id,
+        }
+
+    def _resolve_pursuit_start(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        label = args.get("target_label")
+        if not isinstance(label, str) or not label:
+            raise ToolArgumentResolutionException(
+                "追跡対象ラベルが指定されていません。",
+                "INVALID_TARGET_LABEL",
+            )
+        target = self._require_target_type(
+            label,
+            runtime_context,
+            "追跡対象ラベル",
+            (PlayerToolRuntimeTargetDto, MonsterToolRuntimeTargetDto),
+        )
+        if target.world_object_id is None:
+            raise ToolArgumentResolutionException(
+                f"追跡対象として解決できません: {label}",
+                "INVALID_TARGET_KIND",
+            )
+        return {
+            "target_world_object_id": target.world_object_id,
+            "target_display_name": target.display_name,
         }
 
     def _resolve_interact_world_object(

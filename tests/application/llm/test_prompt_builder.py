@@ -1,5 +1,7 @@
 """DefaultPromptBuilder のテスト（正常・例外）"""
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from ai_rpg_world.application.llm.services.prompt_builder import (
@@ -538,3 +540,78 @@ class TestDefaultPromptBuilder:
                 available_tools_provider=tools_provider,
                 recent_actions_limit=-1,
             )
+
+    def test_init_tile_map_view_distance_negative_raises_value_error(
+        self, setup_prompt_builder
+    ):
+        """コンストラクタで tile_map_view_distance が負のとき ValueError"""
+        _, profile_repo, status_repo, phys_repo, spot_repo, buffer = setup_prompt_builder
+        sliding = DefaultSlidingWindowMemory()
+        action_store = DefaultActionResultStore()
+        formatter = DefaultCurrentStateFormatter()
+        recent_formatter = DefaultRecentEventsFormatter()
+        strategy = SectionBasedContextFormatStrategy()
+        system_builder = DefaultSystemPromptBuilder()
+        registry = DefaultGameToolRegistry()
+        register_default_tools(registry)
+        tools_provider = DefaultAvailableToolsProvider(registry)
+        connected = GatewayBasedConnectedSpotsProvider(phys_repo)
+        world_query = WorldQueryService(
+            player_status_repository=status_repo,
+            player_profile_repository=profile_repo,
+            physical_map_repository=phys_repo,
+            spot_repository=spot_repo,
+            connected_spots_provider=connected,
+        )
+        with pytest.raises(ValueError, match="tile_map_view_distance must be 0 or greater"):
+            DefaultPromptBuilder(
+                observation_buffer=buffer,
+                sliding_window_memory=sliding,
+                action_result_store=action_store,
+                world_query_service=world_query,
+                player_profile_repository=profile_repo,
+                current_state_formatter=formatter,
+                recent_events_formatter=recent_formatter,
+                context_format_strategy=strategy,
+                system_prompt_builder=system_builder,
+                available_tools_provider=tools_provider,
+                tile_map_view_distance=-1,
+            )
+
+    def test_build_passes_tile_map_view_distance_to_query(self, setup_prompt_builder):
+        """tile_map_view_distance を渡したとき get_player_current_state が view_distance 付きで呼ばれる"""
+        prompt_builder, profile_repo, *_ = setup_prompt_builder
+        profile_repo.save(self._create_profile(1, "Alice"))
+        world_query_mock = MagicMock(spec=WorldQueryService)
+        world_query_mock.get_player_current_state.return_value = None
+
+        buffer = DefaultObservationContextBuffer()
+        sliding = DefaultSlidingWindowMemory()
+        action_store = DefaultActionResultStore()
+        formatter = DefaultCurrentStateFormatter()
+        recent_formatter = DefaultRecentEventsFormatter()
+        strategy = SectionBasedContextFormatStrategy()
+        system_builder = DefaultSystemPromptBuilder()
+        registry = DefaultGameToolRegistry()
+        register_default_tools(registry)
+        tools_provider = DefaultAvailableToolsProvider(registry)
+
+        pb = DefaultPromptBuilder(
+            observation_buffer=buffer,
+            sliding_window_memory=sliding,
+            action_result_store=action_store,
+            world_query_service=world_query_mock,
+            player_profile_repository=profile_repo,
+            current_state_formatter=formatter,
+            recent_events_formatter=recent_formatter,
+            context_format_strategy=strategy,
+            system_prompt_builder=system_builder,
+            available_tools_provider=tools_provider,
+            tile_map_view_distance=8,
+        )
+        pb.build(PlayerId(1))
+
+        world_query_mock.get_player_current_state.assert_called_once()
+        call_args = world_query_mock.get_player_current_state.call_args[0][0]
+        assert isinstance(call_args, GetPlayerCurrentStateQuery)
+        assert call_args.view_distance == 8
