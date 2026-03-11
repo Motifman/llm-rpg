@@ -26,6 +26,7 @@ from ai_rpg_world.domain.monster.event.monster_events import (
     MonsterDecidedToInteractEvent,
     ActorStateChangedEvent,
     TargetSpottedEvent,
+    TargetLostEvent,
 )
 from ai_rpg_world.domain.monster.service.behavior_state_transition_service import (
     StateTransitionResult,
@@ -1375,6 +1376,36 @@ class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
             events = spawned_monster.get_events()
             assert any(isinstance(e, TargetSpottedEvent) for e in events)
             assert any(isinstance(e, ActorStateChangedEvent) for e in events)
+
+        def test_apply_behavior_transition_lost_target_moves_chase_to_search(self, spawned_monster):
+            """CHASE で対象を見失うと SEARCH に遷移し、既知座標イベントを残すこと"""
+            spawned_monster.clear_events()
+            spawned_monster._behavior_state = BehaviorStateEnum.CHASE
+            spawned_monster._behavior_target_id = WorldObjectId(321)
+            spawned_monster._behavior_last_known_position = Coordinate(7, 8, 0)
+
+            result = StateTransitionResult(
+                do_lose_target=True,
+                lost_target_id=WorldObjectId(321),
+                last_known_coordinate=Coordinate(7, 8, 0),
+            )
+
+            spawned_monster.apply_behavior_transition(result, WorldTick(10))
+
+            assert spawned_monster.behavior_state == BehaviorStateEnum.SEARCH
+            assert spawned_monster.behavior_target_id is None
+            assert spawned_monster.behavior_last_known_position is None
+
+            events = spawned_monster.get_events()
+            lost = next(e for e in events if isinstance(e, TargetLostEvent))
+            assert lost.target_id == WorldObjectId(321)
+            assert lost.last_known_coordinate == Coordinate(7, 8, 0)
+            assert any(
+                isinstance(e, ActorStateChangedEvent)
+                and e.old_state == BehaviorStateEnum.CHASE
+                and e.new_state == BehaviorStateEnum.SEARCH
+                for e in events
+            )
 
     class TestApplyTerritoryReturnIfNeeded:
         """apply_territory_return_if_needed のテスト"""
