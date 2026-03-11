@@ -232,6 +232,23 @@ class TestBehaviorStateTransitionServiceNormal:
         assert result.lost_target_id == WorldObjectId(1)
         assert result.last_known_coordinate is None
 
+    def test_compute_transition_search_preserves_existing_target_identity(
+        self, service, actor_id, actor_coordinate
+    ):
+        """lose_target 出力は SEARCH 継続に必要な target_id を保持すること"""
+        target_id = WorldObjectId(55)
+        snapshot = BehaviorStateSnapshot(
+            state=BehaviorStateEnum.SEARCH,
+            target_id=target_id,
+            last_known_target_position=Coordinate(9, 9, 0),
+        )
+        obs = _observation()
+
+        result = service.compute_transition(obs, snapshot, actor_id, actor_coordinate)
+
+        assert result.do_lose_target is True
+        assert result.lost_target_id == target_id
+
 
 class TestBehaviorStateTransitionServiceBoundary:
     """境界・優先順位のテスト"""

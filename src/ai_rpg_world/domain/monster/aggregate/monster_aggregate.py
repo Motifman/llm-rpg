@@ -536,6 +536,9 @@ class MonsterAggregate(AggregateRoot):
         self._status = MonsterStatusEnum.DEAD
         self._last_death_tick = current_tick
         spot_id_for_event = self._spot_id
+        self._behavior_target_id = None
+        self._behavior_last_known_position = None
+        self._clear_pursuit_state()
         self._coordinate = None  # 死亡時は座標をクリア（spot_id はリスポーン判定のため保持）
 
         respawn_tick = current_tick.value + self._template.respawn_info.respawn_interval_ticks
@@ -892,34 +895,38 @@ class MonsterAggregate(AggregateRoot):
             old_state = self._behavior_state
 
         if result.do_lose_target:
+            retained_target_id = result.lost_target_id or self._behavior_target_id
+            retained_last_known = (
+                result.last_known_coordinate or self._behavior_last_known_position
+            )
             if self._behavior_state in (
                 BehaviorStateEnum.CHASE,
                 BehaviorStateEnum.ENRAGE,
             ):
                 self._behavior_state = BehaviorStateEnum.SEARCH
-                if result.lost_target_id is not None and result.last_known_coordinate is not None:
+                if retained_target_id is not None and retained_last_known is not None:
                     self._preserve_pursuit_last_known(
-                        target_id=result.lost_target_id,
-                        coordinate=result.last_known_coordinate,
+                        target_id=retained_target_id,
+                        coordinate=retained_last_known,
                         observed_at_tick=current_tick,
                     )
             elif self._behavior_state == BehaviorStateEnum.FLEE:
                 self._behavior_state = BehaviorStateEnum.RETURN
                 self._clear_pursuit_state()
             if self._behavior_state == BehaviorStateEnum.SEARCH:
-                self._behavior_target_id = result.lost_target_id
-                self._behavior_last_known_position = result.last_known_coordinate
+                self._behavior_target_id = retained_target_id
+                self._behavior_last_known_position = retained_last_known
             else:
                 self._behavior_target_id = None
                 self._behavior_last_known_position = None
-            if result.last_known_coordinate is not None:
+            if retained_target_id is not None and retained_last_known is not None:
                 self.add_event(
                     TargetLostEvent.create(
                         aggregate_id=self._world_object_id,
                         aggregate_type="Actor",
                         actor_id=self._world_object_id,
-                        target_id=result.lost_target_id,
-                        last_known_coordinate=result.last_known_coordinate,
+                        target_id=retained_target_id,
+                        last_known_coordinate=retained_last_known,
                     )
                 )
             if old_state != self._behavior_state:
