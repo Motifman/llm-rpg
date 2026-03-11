@@ -343,3 +343,131 @@ class TestVisibleTileMapBuilder:
         row_center = result.rows[center_row_idx]
         # x=8 at index 13
         assert row_center[13] == "?"
+
+    def test_build_visible_tile_map_unknown_object_kind_falls_back_to_o(
+        self, builder: VisibleTileMapBuilder
+    ):
+        """object_kind が未登録のとき O で表示される"""
+        physical_map = _make_map_with_tiles(1, 5, 5)
+        visible_objects = [
+            VisibleObjectDto(
+                object_id=99,
+                object_type="CUSTOM",
+                x=2,
+                y=1,
+                z=0,
+                distance=1,
+                object_kind="unknown_type",
+                is_self=False,
+            )
+        ]
+        result = builder.build_visible_tile_map(
+            physical_map=physical_map,
+            origin=Coordinate(2, 2, 0),
+            view_distance=1,
+            visible_objects=visible_objects,
+            player_id=1,
+        )
+        assert result.rows[0][1] == "O"
+        assert "O" in result.legend
+
+    def test_build_visible_tile_map_object_kind_none_uses_object_fallback(
+        self, builder: VisibleTileMapBuilder
+    ):
+        """object_kind が None のとき object として O で表示される"""
+        physical_map = _make_map_with_tiles(1, 5, 5)
+        visible_objects = [
+            VisibleObjectDto(
+                object_id=99,
+                object_type="OBJECT",
+                x=2,
+                y=1,
+                z=0,
+                distance=1,
+                object_kind=None,
+                is_self=False,
+            )
+        ]
+        result = builder.build_visible_tile_map(
+            physical_map=physical_map,
+            origin=Coordinate(2, 2, 0),
+            view_distance=1,
+            visible_objects=visible_objects,
+            player_id=1,
+        )
+        assert result.rows[0][1] == "O"
+
+    def test_build_visible_tile_map_swamp_terrain_shows_at_mark(
+        self, builder: VisibleTileMapBuilder
+    ):
+        """湿地地形は @ で表示される"""
+        overrides = {(2, 2): TerrainType.swamp()}
+        physical_map = _make_map_with_tiles(1, 5, 5, terrain_overrides=overrides)
+        result = builder.build_visible_tile_map(
+            physical_map=physical_map,
+            origin=Coordinate(2, 2, 0),
+            view_distance=1,
+            visible_objects=[],
+            player_id=1,
+        )
+        assert result.rows[1][1] == "@"
+        assert "湿地" in result.legend.get("@", "")
+
+    def test_build_visible_tile_map_tile_not_found_returns_question_mark(
+        self, builder: VisibleTileMapBuilder
+    ):
+        """get_tile が TileNotFoundException のとき ? を返す"""
+        from ai_rpg_world.domain.world.exception.map_exception import TileNotFoundException
+
+        physical_map = _make_map_with_tiles(1, 5, 5)
+        with patch.object(
+            physical_map,
+            "get_tile",
+            side_effect=TileNotFoundException("Tile not found"),
+        ):
+            result = builder.build_visible_tile_map(
+                physical_map=physical_map,
+                origin=Coordinate(2, 2, 0),
+                view_distance=1,
+                visible_objects=[],
+                player_id=1,
+            )
+        # 全タイルで get_tile が呼ばれるため全て ?
+        assert all(c == "?" for row in result.rows for c in row)
+
+    def test_build_visible_tile_map_same_tile_multiple_objects_uses_highest_priority(
+        self, builder: VisibleTileMapBuilder
+    ):
+        """同一タイルに複数オブジェクトがあるとき優先度が高い方が表示される"""
+        physical_map = _make_map_with_tiles(1, 5, 5)
+        # 同じ座標にプレイヤー(P)とチェスト(C)。P > C の優先度
+        visible_objects = [
+            VisibleObjectDto(
+                object_id=1,
+                object_type="PLAYER",
+                x=2,
+                y=2,
+                z=0,
+                distance=0,
+                object_kind="player",
+                is_self=True,
+            ),
+            VisibleObjectDto(
+                object_id=100,
+                object_type="CHEST",
+                x=2,
+                y=2,
+                z=0,
+                distance=0,
+                object_kind="chest",
+                is_self=False,
+            ),
+        ]
+        result = builder.build_visible_tile_map(
+            physical_map=physical_map,
+            origin=Coordinate(2, 2, 0),
+            view_distance=1,
+            visible_objects=visible_objects,
+            player_id=1,
+        )
+        assert result.rows[1][1] == "P"  # プレイヤーが優先

@@ -523,3 +523,66 @@ class TestPlayerCurrentStateBuilder:
         )
         assert result.visible_tile_map is None
 
+    def test_build_player_current_state_raises_value_error_when_current_coordinate_is_none(
+        self, setup_builder
+    ):
+        """current_coordinate が None のとき ValueError が発生する"""
+        builder, status_repo, profile_repo, phys_repo, spot_repo = setup_builder
+        profile_repo.save(_make_profile(1, "Alice"))
+        status = _make_status(1, 1, 0, 0)
+        object.__setattr__(status, "_current_coordinate", None)
+        status_repo.save(status)
+        actor = WorldObject(
+            object_id=WorldObjectId.create(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.PLAYER,
+            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
+        )
+        physical_map = _make_map(1, [actor])
+
+        with pytest.raises(ValueError, match="player_status.current_coordinate must not be None"):
+            builder.build_player_current_state(
+                query=GetPlayerCurrentStateQuery(player_id=1),
+                player_status=status,
+                player_name="Alice",
+                spot=spot_repo.find_by_id(SpotId(1)),
+                physical_map=physical_map,
+                available_moves_result=PlayerMovementOptionsDto(
+                    player_id=1,
+                    player_name="Alice",
+                    current_spot_id=1,
+                    current_spot_name="Town",
+                    available_moves=[],
+                    total_available_moves=0,
+                ),
+            )
+
+    def test_build_player_current_state_when_actor_not_in_map_sets_is_busy_false(
+        self, setup_builder
+    ):
+        """物理マップにプレイヤーアクターが存在しないとき is_busy=False, busy_until_tick=None"""
+        builder, status_repo, profile_repo, phys_repo, spot_repo = setup_builder
+        profile_repo.save(_make_profile(1, "Alice"))
+        status = _make_status(1, 1, 0, 0)
+        status_repo.save(status)
+        # プレイヤーアクターなしのマップ（地形のみ）
+        physical_map = _make_map(1, [])
+        result = builder.build_player_current_state(
+            query=GetPlayerCurrentStateQuery(player_id=1),
+            player_status=status,
+            player_name="Alice",
+            spot=spot_repo.find_by_id(SpotId(1)),
+            physical_map=physical_map,
+            available_moves_result=PlayerMovementOptionsDto(
+                player_id=1,
+                player_name="Alice",
+                current_spot_id=1,
+                current_spot_name="Town",
+                available_moves=[],
+                total_available_moves=0,
+            ),
+        )
+        assert result.is_busy is False
+        assert result.busy_until_tick is None
+
+
