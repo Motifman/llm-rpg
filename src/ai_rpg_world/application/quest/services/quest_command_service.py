@@ -24,6 +24,9 @@ from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceI
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
+from ai_rpg_world.domain.world.repository.physical_map_repository import (
+    PhysicalMapRepository,
+)
 
 from ai_rpg_world.application.quest.contracts.commands import (
     IssueQuestCommand,
@@ -101,6 +104,7 @@ class QuestCommandService:
         player_inventory_repository: Optional[PlayerInventoryRepository] = None,
         item_repository: Optional[ItemRepository] = None,
         guild_repository: Optional[GuildRepository] = None,
+        physical_map_repository: Optional[PhysicalMapRepository] = None,
     ):
         self._quest_repository = quest_repository
         self._unit_of_work = unit_of_work
@@ -108,6 +112,7 @@ class QuestCommandService:
         self._player_inventory_repository = player_inventory_repository
         self._item_repository = item_repository
         self._guild_repository = guild_repository
+        self._physical_map_repository = physical_map_repository
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def _execute_with_error_handling(
@@ -134,6 +139,49 @@ class QuestCommandService:
                 f"{context.get('action', 'unknown')} failed: {str(e)}",
                 original_exception=e,
             ) from e
+
+    def _validate_issuer_at_guild_location(
+        self,
+        guild_id: int,
+        issuer_player_id: int,
+        issuer_status: Any,
+    ) -> None:
+        """ギルド依頼発行時、発行者がギルドのロケーションにいるかを検証する"""
+        if self._guild_repository is None or self._physical_map_repository is None:
+            raise QuestCreationException(
+                "ギルド依頼のロケーション検証に必要なリポジトリが設定されていません",
+                user_id=issuer_player_id,
+                error_code="QUEST_ISSUER_NOT_AT_GUILD_LOCATION",
+            )
+        guild = self._guild_repository.find_by_id(GuildId(guild_id))
+        if guild is None:
+            raise QuestCreationException(
+                f"ギルドが見つかりません: {guild_id}",
+                user_id=issuer_player_id,
+                error_code="QUEST_GUILD_NOT_FOUND",
+            )
+        spot_id = issuer_status.current_spot_id
+        coord = issuer_status.current_coordinate
+        if spot_id is None or coord is None:
+            raise QuestCreationException(
+                "発行者がワールド内の位置にいないため、ギルド依頼を発行できません",
+                user_id=issuer_player_id,
+                error_code="QUEST_ISSUER_NOT_AT_GUILD_LOCATION",
+            )
+        physical_map = self._physical_map_repository.find_by_spot_id(spot_id)
+        if physical_map is None:
+            raise QuestCreationException(
+                "発行者がいるマップが見つかりません",
+                user_id=issuer_player_id,
+                error_code="QUEST_ISSUER_NOT_AT_GUILD_LOCATION",
+            )
+        areas = physical_map.get_location_areas_at(coord)
+        if not any(la.location_id == guild.location_area_id for la in areas):
+            raise QuestCreationException(
+                "ギルド依頼はギルドのロケーションにいる場合のみ発行できます",
+                user_id=issuer_player_id,
+                error_code="QUEST_ISSUER_NOT_AT_GUILD_LOCATION",
+            )
 
     def issue_quest(self, command: IssueQuestCommand) -> QuestCommandResultDto:
         """クエストを発行する（システム発行またはプレイヤー発行）"""
@@ -197,6 +245,12 @@ class QuestCommandService:
                     raise QuestCreationException(
                         f"発行者が見つかりません: {command.issuer_player_id}",
                         user_id=command.issuer_player_id,
+                    )
+                if command.guild_id is not None:
+                    self._validate_issuer_at_guild_location(
+                        command.guild_id,
+                        command.issuer_player_id,
+                        issuer_status,
                     )
                 issuer_inventory = self._player_inventory_repository.find_by_id(issuer_player_id)
                 if issuer_inventory is None:

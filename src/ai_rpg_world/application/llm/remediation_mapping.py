@@ -40,6 +40,9 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "LLM_RATE_LIMIT": "リクエスト制限に達しました。しばらくしてから再度お試しください。",
     "LLM_AUTHENTICATION_ERROR": "API 認証に失敗しました。設定を確認してください。",
     "LLM_API_KEY_MISSING": "API キーが設定されていません。環境変数または設定を確認してください。",
+    "QUEST_ISSUER_NOT_AT_GUILD_LOCATION": "ギルド依頼はギルドのロケーションにいる場合のみ発行できます。ギルドがある場所へ移動してください。",
+    "QUEST_GUILD_NOT_FOUND": "指定したギルドが見つかりません。",
+    "INVALID_OBJECTIVES": "クエスト目標（objectives）の形式を確認してください。",
 }
 
 

@@ -17,6 +17,7 @@ from ai_rpg_world.application.world.contracts.dtos import (
     AttentionLevelOptionDto,
     ChestItemDto,
     ConversationChoiceDto,
+    GuildMemberSummaryDto,
     GuildMembershipSummaryDto,
     InventoryItemDto,
     NearbyShopSummaryDto,
@@ -429,3 +430,32 @@ class TestDefaultLlmUiContextBuilder:
         assert "近隣ショップ:" in result.current_state_text
         assert "SH1: ポーション屋" in result.current_state_text
         assert "様々な薬を扱う店です" in result.current_state_text
+
+    def test_build_includes_guild_member_labels_when_members_present(self):
+        """ギルドに members がある場合、GM1, GM2 等のラベルが表示される"""
+        builder = DefaultLlmUiContextBuilder()
+        state = _make_state()
+        state.guild_memberships = [
+            GuildMembershipSummaryDto(
+                guild_id=1,
+                guild_name="冒険者ギルド",
+                role="leader",
+                description="一緒に冒険しましょう",
+                members=[
+                    GuildMemberSummaryDto(player_id=1, player_name="Alice", role="leader"),
+                    GuildMemberSummaryDto(player_id=2, player_name="Bob", role="member"),
+                ],
+            ),
+        ]
+
+        result = builder.build("現在地: 広場", state)
+
+        assert "所属ギルド:" in result.current_state_text
+        assert "G1: 冒険者ギルド" in result.current_state_text
+        assert "GM1: Alice（leader）" in result.current_state_text
+        assert "GM2: Bob（member）" in result.current_state_text
+        assert "GM1" in result.tool_runtime_context.targets
+        assert "GM2" in result.tool_runtime_context.targets
+        gm1 = result.tool_runtime_context.targets["GM1"]
+        assert gm1.player_id == 1
+        assert gm1.display_name == "Alice"

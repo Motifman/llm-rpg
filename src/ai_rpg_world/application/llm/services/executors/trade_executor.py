@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, Optional
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     exception_result,
+    invalid_arg_result,
     unknown_tool,
 )
 from ai_rpg_world.application.llm.tool_constants import (
@@ -49,6 +50,9 @@ class TradeToolExecutor:
     ) -> LlmCommandResultDto:
         if self._trade_service is None:
             return unknown_tool("取引出品ツールはまだ利用できません。")
+        for key in ("item_instance_id", "slot_id", "requested_gold"):
+            if args.get(key) is None:
+                return invalid_arg_result(key)
         try:
             result = self._trade_service.offer_item(
                 OfferItemCommand(
@@ -69,6 +73,8 @@ class TradeToolExecutor:
     ) -> LlmCommandResultDto:
         if self._trade_service is None:
             return unknown_tool("取引受諾ツールはまだ利用できません。")
+        if args.get("trade_id") is None:
+            return invalid_arg_result("trade_id")
         try:
             result = self._trade_service.accept_trade(
                 AcceptTradeCommand(trade_id=int(args["trade_id"]), buyer_id=player_id)
@@ -82,6 +88,8 @@ class TradeToolExecutor:
     ) -> LlmCommandResultDto:
         if self._trade_service is None:
             return unknown_tool("取引キャンセルツールはまだ利用できません。")
+        if args.get("trade_id") is None:
+            return invalid_arg_result("trade_id")
         try:
             result = self._trade_service.cancel_trade(
                 CancelTradeCommand(trade_id=int(args["trade_id"]), player_id=player_id)

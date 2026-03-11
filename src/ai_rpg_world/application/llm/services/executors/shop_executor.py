@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, Optional
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     exception_result,
+    invalid_arg_result,
     unknown_tool,
 )
 from ai_rpg_world.application.llm.tool_constants import (
@@ -49,6 +50,10 @@ class ShopToolExecutor:
     ) -> LlmCommandResultDto:
         if self._shop_service is None:
             return unknown_tool("ショップ購入ツールはまだ利用できません。")
+        if args.get("shop_id") is None:
+            return invalid_arg_result("shop_id")
+        if args.get("listing_id") is None:
+            return invalid_arg_result("listing_id")
         try:
             result = self._shop_service.purchase_from_shop(
                 PurchaseFromShopCommand(
@@ -67,6 +72,9 @@ class ShopToolExecutor:
     ) -> LlmCommandResultDto:
         if self._shop_service is None:
             return unknown_tool("ショップ出品ツールはまだ利用できません。")
+        for key in ("shop_id", "slot_id", "price_per_unit"):
+            if args.get(key) is None:
+                return invalid_arg_result(key)
         try:
             result = self._shop_service.list_shop_item(
                 ListShopItemCommand(
@@ -85,6 +93,10 @@ class ShopToolExecutor:
     ) -> LlmCommandResultDto:
         if self._shop_service is None:
             return unknown_tool("ショップ取り下げツールはまだ利用できません。")
+        if args.get("shop_id") is None:
+            return invalid_arg_result("shop_id")
+        if args.get("listing_id") is None:
+            return invalid_arg_result("listing_id")
         try:
             result = self._shop_service.unlist_shop_item(
                 UnlistShopItemCommand(
