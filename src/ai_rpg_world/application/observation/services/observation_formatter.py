@@ -82,6 +82,12 @@ from ai_rpg_world.domain.monster.event.monster_events import (
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.pursuit.event.pursuit_events import (
+    PursuitCancelledEvent,
+    PursuitFailedEvent,
+    PursuitStartedEvent,
+    PursuitUpdatedEvent,
+)
 from ai_rpg_world.domain.quest.event.quest_event import (
     QuestAcceptedEvent,
     QuestApprovedEvent,
@@ -215,6 +221,8 @@ class ObservationFormatter(IObservationFormatter):
             output = formatter.format(event, recipient_player_id)
             if output is not None:
                 break
+        if output is None:
+            output = self._format_pursuit_event(event, recipient_player_id)
         return self._apply_attention_filter(output, attention_level)
 
     def _apply_attention_filter(
@@ -413,6 +421,21 @@ class ObservationFormatter(IObservationFormatter):
             return self._format_skill_evolution_accepted(event, recipient_player_id)
         if isinstance(event, SkillEvolutionRejectedEvent):
             return self._format_skill_evolution_rejected(event, recipient_player_id)
+        return None
+
+    def _format_pursuit_event(
+        self,
+        event: Any,
+        recipient_player_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        if isinstance(event, PursuitStartedEvent):
+            return self._format_pursuit_started(event, recipient_player_id)
+        if isinstance(event, PursuitUpdatedEvent):
+            return self._format_pursuit_updated(event, recipient_player_id)
+        if isinstance(event, PursuitFailedEvent):
+            return self._format_pursuit_failed(event, recipient_player_id)
+        if isinstance(event, PursuitCancelledEvent):
+            return self._format_pursuit_cancelled(event, recipient_player_id)
         return None
 
     def _format_world_event(
@@ -1229,6 +1252,90 @@ class ObservationFormatter(IObservationFormatter):
 
     def _format_behavior_stuck(self, event: BehaviorStuckEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
         return None
+
+    # --- Pursuit ---
+
+    def _base_pursuit_structured(
+        self,
+        *,
+        event_type: str,
+        actor_id: Any,
+        target_id: Any,
+        pursuit_status_after_event: str,
+        interruption_scope: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        actor_id_value = getattr(actor_id, "value", actor_id)
+        target_id_value = getattr(target_id, "value", target_id)
+        structured: Dict[str, Any] = {
+            "type": event_type,
+            "event_type": event_type,
+            "actor_id": actor_id_value,
+            "target_id": target_id_value,
+            "actor_world_object_id": actor_id_value,
+            "target_world_object_id": target_id_value,
+            "pursuit_status_after_event": pursuit_status_after_event,
+        }
+        if interruption_scope is not None:
+            structured["interruption_scope"] = interruption_scope
+        return structured
+
+    def _format_pursuit_started(
+        self,
+        event: PursuitStartedEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        prose = "対象の追跡を開始しました。"
+        structured = self._base_pursuit_structured(
+            event_type="pursuit_started",
+            actor_id=event.actor_id,
+            target_id=event.target_id,
+            pursuit_status_after_event="active",
+        )
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
+
+    def _format_pursuit_updated(
+        self,
+        event: PursuitUpdatedEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        prose = "対象の追跡状況を更新しました。"
+        structured = self._base_pursuit_structured(
+            event_type="pursuit_updated",
+            actor_id=event.actor_id,
+            target_id=event.target_id,
+            pursuit_status_after_event="active",
+        )
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
+
+    def _format_pursuit_failed(
+        self,
+        event: PursuitFailedEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        prose = "追跡に失敗しました。"
+        structured = self._base_pursuit_structured(
+            event_type="pursuit_failed",
+            actor_id=event.actor_id,
+            target_id=event.target_id,
+            pursuit_status_after_event="ended",
+            interruption_scope="pursuit",
+        )
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
+
+    def _format_pursuit_cancelled(
+        self,
+        event: PursuitCancelledEvent,
+        recipient_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        prose = "追跡を中断しました。"
+        structured = self._base_pursuit_structured(
+            event_type="pursuit_cancelled",
+            actor_id=event.actor_id,
+            target_id=event.target_id,
+            pursuit_status_after_event="ended",
+            interruption_scope="pursuit",
+        )
+        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
     # --- Combat (HitBox) ---
 
