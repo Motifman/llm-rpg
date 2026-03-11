@@ -56,25 +56,25 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PURS-01 | Phase TBD | Pending |
-| PURS-02 | Phase TBD | Pending |
-| PURS-03 | Phase TBD | Pending |
-| PURS-04 | Phase TBD | Pending |
-| PURS-05 | Phase TBD | Pending |
-| OUTC-01 | Phase TBD | Pending |
-| OUTC-02 | Phase TBD | Pending |
-| OUTC-03 | Phase TBD | Pending |
-| RUNT-01 | Phase TBD | Pending |
-| RUNT-02 | Phase TBD | Pending |
-| RUNT-03 | Phase TBD | Pending |
-| OBSV-01 | Phase TBD | Pending |
-| OBSV-02 | Phase TBD | Pending |
+| PURS-01 | Phase 2 | Pending |
+| PURS-02 | Phase 5 | Pending |
+| PURS-03 | Phase 3 | Pending |
+| PURS-04 | Phase 3 | Pending |
+| PURS-05 | Phase 2 | Pending |
+| OUTC-01 | Phase 1 | Pending |
+| OUTC-02 | Phase 1 | Pending |
+| OUTC-03 | Phase 4 | Pending |
+| RUNT-01 | Phase 3 | Pending |
+| RUNT-02 | Phase 1 | Pending |
+| RUNT-03 | Phase 4 | Pending |
+| OBSV-01 | Phase 4 | Pending |
+| OBSV-02 | Phase 4 | Pending |
 
 **Coverage:**
 - v1 requirements: 13 total
-- Mapped to phases: 0
-- Unmapped: 13 ⚠️
+- Mapped to phases: 13
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-11*
-*Last updated: 2026-03-11 after initial definition*
+*Last updated: 2026-03-11 after roadmap creation*
