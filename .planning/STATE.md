@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Completed 06-03-PLAN.md
-last_updated: "2026-03-11T14:54:00Z"
-last_activity: 2026-03-11 — Phase 6 completed with an authoritative player pursuit runtime bootstrap and green regression coverage
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-03-11T15:06:30Z"
+last_activity: 2026-03-11 — Phase 7 plan 07-01 locked audit acceptance ownership and backfilled command-backed verification for Phases 3 and 5
 progress:
   total_phases: 7
   completed_phases: 6
-  total_plans: 16
-  completed_plans: 16
-  percent: 86
+  total_plans: 19
+  completed_plans: 17
+  percent: 89
 ---
 
 # Project State
@@ -25,19 +25,19 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 
 ## Current Position
 
-Phase: 6 of 7 (Player Pursuit Runtime Assembly Closure)
-Plan: 3 of 3 in current phase
+Phase: 7 of 7 (Pursuit Audit Evidence Backfill)
+Plan: 1 of 3 in current phase
 Status: Completed
-Last activity: 2026-03-11 — Phase 6 completed with an authoritative player pursuit runtime bootstrap and green regression coverage
+Last activity: 2026-03-11 — Phase 7 plan 07-01 locked audit acceptance ownership and backfilled command-backed verification for Phases 3 and 5
 
-Progress: [████████░░] 86%
+Progress: [█████████░] 89%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 13
-- Average duration: 8 min
-- Total execution time: 99 min
+- Total plans completed: 17
+- Average duration: 7 min
+- Total execution time: 124 min
 
 **By Phase:**
 
@@ -49,16 +49,17 @@ Progress: [████████░░] 86%
 | 04-observation-and-llm-delivery | 2 | 12 min | 6 min |
 | 05-monster-pursuit-alignment | 2 | 18 min | 9 min |
 | 06-player-pursuit-runtime-assembly-closure | 3 | 23 min | 8 min |
+| 07-pursuit-audit-evidence-backfill | 1 | 6 min | 6 min |
 
 **Recent Trend:**
-- Last 5 plans: 8 min, 9 min, 6 min, 8 min, 10 min
-- Trend: Stable
+- Last 5 plans: 10 min, 8 min, 9 min, 6 min, 6 min
+- Trend: Stable with faster closeout work
 
 | Phase | Duration | Tasks | Files |
 |-------|----------|-------|-------|
-| Phase 06-player-pursuit-runtime-assembly-closure P01 | 8 min | 3 tasks | 3 files |
 | Phase 06-player-pursuit-runtime-assembly-closure P02 | 9 min | 3 tasks | 1 files |
 | Phase 06-player-pursuit-runtime-assembly-closure P03 | 6 min | 3 tasks | 2 files |
+| Phase 07-pursuit-audit-evidence-backfill P01 | 6 min | 4 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -103,6 +104,8 @@ Recent decisions affecting current work:
 - [Phase 06-player-pursuit-runtime-assembly-closure]: `compose_llm_runtime(...)` remains low-level; pursuit-capable live assembly now has its own authoritative bootstrap entrypoint.
 - [Phase 06-player-pursuit-runtime-assembly-closure]: Player pursuit runtime composition must include both `pursuit_command_service` and `pursuit_continuation_service` or fail fast.
 - [Phase 06-player-pursuit-runtime-assembly-closure]: Observation scheduling and turn draining proofs now go through `EventHandlerComposition` on the authoritative runtime path instead of direct registry-only setup.
+- [Phase 07-pursuit-audit-evidence-backfill]: Requirement ownership is fixed before verification backfill; `PURS-02` stays accepted in Phase 5 while `PURS-03`, `PURS-04`, and `RUNT-01` remain finally accepted in Phase 6.
+- [Phase 07-pursuit-audit-evidence-backfill]: Verification artifacts must be command-backed acceptance evidence instead of rewritten summaries.
 
 ### Pending Todos
 
@@ -116,5 +119,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-11T14:39:36Z
-Stopped at: Completed 06-03-PLAN.md
+Stopped at: Completed 07-01-PLAN.md
 Resume file: None
