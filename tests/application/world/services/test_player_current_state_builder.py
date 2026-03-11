@@ -585,4 +585,97 @@ class TestPlayerCurrentStateBuilder:
         assert result.is_busy is False
         assert result.busy_until_tick is None
 
+    def test_build_player_current_state_overlapping_location_areas_sets_area_ids(
+        self, setup_builder
+    ):
+        """同一座標が複数の LocationArea に含まれる場合、area_ids と area_names に複数設定される"""
+        builder, status_repo, profile_repo, phys_repo, spot_repo = setup_builder
+        profile_repo.save(_make_profile(1, "Alice"))
+        status = _make_status(1, 1, 0, 0)
+        status_repo.save(status)
+        actor = WorldObject(
+            object_id=WorldObjectId.create(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.PLAYER,
+            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
+        )
+        # 同一座標 (0,0) を含む2つの LocationArea（重なり）
+        loc1 = LocationArea(
+            location_id=LocationAreaId(10),
+            area=PointArea(Coordinate(0, 0, 0)),
+            name="広場",
+            description="",
+        )
+        loc2 = LocationArea(
+            location_id=LocationAreaId(20),
+            area=PointArea(Coordinate(0, 0, 0)),
+            name="市場",
+            description="",
+        )
+        physical_map = _make_map(1, [actor], location_areas=[loc1, loc2])
+        result = builder.build_player_current_state(
+            query=GetPlayerCurrentStateQuery(player_id=1),
+            player_status=status,
+            player_name="Alice",
+            spot=spot_repo.find_by_id(SpotId(1)),
+            physical_map=physical_map,
+            available_moves_result=PlayerMovementOptionsDto(
+                player_id=1,
+                player_name="Alice",
+                current_spot_id=1,
+                current_spot_name="Town",
+                available_moves=[],
+                total_available_moves=0,
+            ),
+        )
+        assert len(result.area_ids) == 2
+        assert 10 in result.area_ids
+        assert 20 in result.area_ids
+        assert len(result.area_names) == 2
+        assert "広場" in result.area_names
+        assert "市場" in result.area_names
+        assert result.area_id in (10, 20)
+        assert result.area_name in ("広場", "市場")
+
+    def test_build_player_current_state_single_location_area_sets_single_area_id(
+        self, setup_builder
+    ):
+        """単一の LocationArea の場合、area_ids が1件となる（従来動作の確認）"""
+        builder, status_repo, profile_repo, phys_repo, spot_repo = setup_builder
+        profile_repo.save(_make_profile(1, "Alice"))
+        status = _make_status(1, 1, 0, 0)
+        status_repo.save(status)
+        actor = WorldObject(
+            object_id=WorldObjectId.create(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.PLAYER,
+            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
+        )
+        loc = LocationArea(
+            location_id=LocationAreaId(10),
+            area=PointArea(Coordinate(0, 0, 0)),
+            name="広場",
+            description="",
+        )
+        physical_map = _make_map(1, [actor], location_areas=[loc])
+        result = builder.build_player_current_state(
+            query=GetPlayerCurrentStateQuery(player_id=1),
+            player_status=status,
+            player_name="Alice",
+            spot=spot_repo.find_by_id(SpotId(1)),
+            physical_map=physical_map,
+            available_moves_result=PlayerMovementOptionsDto(
+                player_id=1,
+                player_name="Alice",
+                current_spot_id=1,
+                current_spot_name="Town",
+                available_moves=[],
+                total_available_moves=0,
+            ),
+        )
+        assert result.area_ids == [10]
+        assert result.area_names == ["広場"]
+        assert result.area_id == 10
+        assert result.area_name == "広場"
+
 

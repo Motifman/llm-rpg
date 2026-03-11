@@ -90,7 +90,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
 
         counters: Dict[str, int] = {
             "P": 0, "N": 0, "M": 0, "O": 0, "S": 0, "I": 0, "C": 0, "R": 0, "K": 0, "A": 0,
-            "Q": 0, "G": 0, "SH": 0, "L": 0, "D": 0, "T": 0,
+            "Q": 0, "G": 0, "GM": 0, "SH": 0, "L": 0, "D": 0, "T": 0,
         }
         runtime_targets: Dict[str, ToolRuntimeTargetDto] = {}
         lines = [current_state_text.rstrip()]
@@ -214,6 +214,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
                 current_y=current_state.y,
                 current_z=current_state.z,
                 current_spot_id=current_state.current_spot_id,
+                current_area_ids=tuple(current_state.area_ids) if current_state.area_ids else None,
             ),
         )
 
@@ -570,6 +571,17 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
                 display_name=m.guild_name,
                 guild_id=m.guild_id,
             )
+            if m.members:
+                for mem in m.members:
+                    counters["GM"] += 1
+                    gm_label = f"GM{counters['GM']}"
+                    lines.append(f"  - {gm_label}: {mem.player_name}（{mem.role}）")
+                    targets[gm_label] = PlayerToolRuntimeTargetDto(
+                        label=gm_label,
+                        kind="player",
+                        display_name=mem.player_name,
+                        player_id=mem.player_id,
+                    )
         return lines, targets
 
     def _build_nearby_shop_lines(

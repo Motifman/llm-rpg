@@ -13,7 +13,8 @@ def _has_visible_action(obj, flag_name: str, legacy_name: str) -> bool:
 
 
 def _iter_actionable_objects(context: PlayerCurrentStateDto):
-    return context.actionable_objects or context.visible_objects
+    objs = context.actionable_objects or context.visible_objects
+    return objs if objs is not None else []
 
 
 class NoOpAvailabilityResolver(IAvailabilityResolver):
@@ -64,9 +65,10 @@ class PursuitStartAvailabilityResolver(IAvailabilityResolver):
     ) -> bool:
         if context is None or context.is_busy:
             return False
+        visible = context.visible_objects if context.visible_objects is not None else []
         return any(
             obj.object_kind in {"player", "monster"} and not obj.is_self
-            for obj in context.visible_objects
+            for obj in visible
         )
 
 
@@ -80,6 +82,16 @@ class PursuitCancelAvailabilityResolver(IAvailabilityResolver):
         return context is not None
 
 
+class CancelMovementAvailabilityResolver(IAvailabilityResolver):
+    """移動キャンセルツールは、経路設定中（has_active_path）のときのみ利用可能。"""
+
+    def is_available(
+        self,
+        context: Optional[PlayerCurrentStateDto],
+    ) -> bool:
+        return context is not None and context.has_active_path
+
+
 class WhisperAvailabilityResolver(IAvailabilityResolver):
     """囁きツールは、視界内に自分以外のプレイヤーがいるときに利用可能。"""
 
@@ -89,9 +101,10 @@ class WhisperAvailabilityResolver(IAvailabilityResolver):
     ) -> bool:
         if context is None:
             return False
+        visible = context.visible_objects if context.visible_objects is not None else []
         return any(
             obj.object_kind == "player" and not obj.is_self
-            for obj in context.visible_objects
+            for obj in visible
         )
 
 
@@ -166,7 +179,8 @@ class PlaceObjectAvailabilityResolver(IAvailabilityResolver):
     ) -> bool:
         if context is None:
             return False
-        return any(item.is_placeable for item in context.inventory_items)
+        items = context.inventory_items if context.inventory_items is not None else []
+        return any(item.is_placeable for item in items)
 
 
 class InspectItemAvailabilityResolver(IAvailabilityResolver):
@@ -274,6 +288,55 @@ class QuestApproveAvailabilityResolver(IAvailabilityResolver):
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
         return context is not None and bool(context.guild_memberships)
+
+
+class QuestIssueAvailabilityResolver(IAvailabilityResolver):
+    """クエスト発行はコンテキスト取得時に利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None
+
+
+class GuildCreateAvailabilityResolver(IAvailabilityResolver):
+    """ギルド作成はギルド未所属かつ current_spot_id と area_ids が存在するときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None or context.current_spot_id is None:
+            return False
+        if not context.area_ids:
+            return False
+        return not bool(context.guild_memberships)
+
+
+class GuildAddMemberAvailabilityResolver(IAvailabilityResolver):
+    """ギルド招待は guild_memberships があり、いずれかが leader または officer のときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None or not context.guild_memberships:
+            return False
+        return any(
+            m.role in ("leader", "officer") for m in context.guild_memberships
+        )
+
+
+class GuildChangeRoleAvailabilityResolver(IAvailabilityResolver):
+    """ギルド役職変更は guild_memberships があり、いずれかが leader または officer のときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None or not context.guild_memberships:
+            return False
+        return any(
+            m.role in ("leader", "officer") for m in context.guild_memberships
+        )
+
+
+class GuildDisbandAvailabilityResolver(IAvailabilityResolver):
+    """ギルド解散は guild_memberships のいずれかが leader のときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None or not context.guild_memberships:
+            return False
+        return any(m.role == "leader" for m in context.guild_memberships)
 
 
 class GuildLeaveAvailabilityResolver(IAvailabilityResolver):

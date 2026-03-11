@@ -10,11 +10,13 @@ from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.services.tool_executor_helpers import exception_result, unknown_tool
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_CANCEL_MOVEMENT,
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_PURSUIT_CANCEL,
     TOOL_NAME_PURSUIT_START,
 )
 from ai_rpg_world.application.world.contracts.commands import (
+    CancelMovementCommand,
     CancelPursuitCommand,
     StartPursuitCommand,
 )
@@ -43,6 +45,9 @@ class MovementToolExecutor:
         move_to_destination = getattr(movement_service, "move_to_destination", None)
         if not callable(move_to_destination):
             raise TypeError("movement_service must have a callable move_to_destination")
+        cancel_movement = getattr(movement_service, "cancel_movement", None)
+        if not callable(cancel_movement):
+            raise TypeError("movement_service must have a callable cancel_movement")
         if pursuit_service is not None and not callable(
             getattr(pursuit_service, "start_pursuit", None)
         ):
@@ -58,6 +63,7 @@ class MovementToolExecutor:
         """利用可能なツール名→ハンドラの辞書を返す。"""
         result: Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]] = {
             TOOL_NAME_MOVE_TO_DESTINATION: self._execute_move_to_destination,
+            TOOL_NAME_CANCEL_MOVEMENT: self._execute_cancel_movement,
         }
         if self._pursuit_service is not None:
             result[TOOL_NAME_PURSUIT_START] = self._execute_pursuit_start
@@ -95,6 +101,29 @@ class MovementToolExecutor:
                 target_spot_id=target_spot_id_int,
                 target_location_area_id=target_location_area_id_opt,
                 target_world_object_id=target_world_object_id_opt,
+            )
+            return LlmCommandResultDto(
+                success=result.success,
+                message=result.message if result.success else (result.error_message or result.message),
+            )
+        except Exception as e:
+            error_code = getattr(e, "error_code", "SYSTEM_ERROR")
+            return LlmCommandResultDto(
+                success=False,
+                message=str(e),
+                error_code=error_code,
+                remediation=get_remediation(error_code),
+            )
+
+    def _execute_cancel_movement(
+        self,
+        player_id: int,
+        args: Dict[str, Any],
+    ) -> LlmCommandResultDto:
+        del args
+        try:
+            result: MoveResultDto = self._movement_service.cancel_movement(
+                CancelMovementCommand(player_id=player_id)
             )
             return LlmCommandResultDto(
                 success=result.success,

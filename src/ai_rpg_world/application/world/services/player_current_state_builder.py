@@ -133,6 +133,7 @@ class PlayerCurrentStateBuilder:
             guild_repository=guild_repository,
             shop_repository=shop_repository,
             personal_trade_query_service=personal_trade_query_service,
+            player_profile_repository=player_profile_repository,
         )
 
     def build_visible_context(
@@ -187,14 +188,12 @@ class PlayerCurrentStateBuilder:
         if coord is None:
             raise ValueError("player_status.current_coordinate must not be None")
 
-        area_id = None
-        area_name = None
-        area_description = None
         areas = physical_map.get_location_areas_at(coord)
-        if areas:
-            area_id = int(areas[0].location_id)
-            area_name = areas[0].name
-            area_description = areas[0].description
+        area_ids = [int(la.location_id) for la in areas]
+        area_names = [la.name for la in areas]
+        area_id = area_ids[0] if area_ids else None
+        area_name = area_names[0] if area_names else None
+        area_description = areas[0].description if areas else None
 
         current_player_ids = {
             int(s.player_id)
@@ -295,6 +294,8 @@ class PlayerCurrentStateBuilder:
             x=coord.x,
             y=coord.y,
             z=coord.z,
+            area_ids=area_ids,
+            area_names=area_names,
             area_id=area_id,
             area_name=area_name,
             current_location_description=area_description,
@@ -323,14 +324,14 @@ class PlayerCurrentStateBuilder:
             active_quest_ids=self._supplemental_context_builder.build_active_quest_ids(query.player_id),
             guild_ids=self._supplemental_context_builder.build_guild_ids(query.player_id),
             nearby_shop_ids=self._supplemental_context_builder.build_nearby_shop_ids(
-                int(player_status.current_spot_id), area_id
+                int(player_status.current_spot_id), area_ids
             ),
             active_quests=self._supplemental_context_builder.build_active_quests(query.player_id),
             guild_memberships=self._supplemental_context_builder.build_guild_memberships(
-                query.player_id, area_id
+                query.player_id, area_ids
             ),
             nearby_shops=self._supplemental_context_builder.build_nearby_shops(
-                int(player_status.current_spot_id), area_id
+                int(player_status.current_spot_id), area_ids
             ),
             available_trades=self._supplemental_context_builder.build_available_trades(query.player_id),
             usable_skills=self._supplemental_context_builder.build_usable_skills(query.player_id),

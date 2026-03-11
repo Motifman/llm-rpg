@@ -3,6 +3,7 @@
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IGameToolRegistry
 from ai_rpg_world.application.llm.services.availability_resolvers import (
+    CancelMovementAvailabilityResolver,
     ChangeAttentionAvailabilityResolver,
     ChestStoreAvailabilityResolver,
     ChestTakeAvailabilityResolver,
@@ -10,7 +11,11 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
     ConversationAdvanceAvailabilityResolver,
     DestroyPlaceableAvailabilityResolver,
     DropItemAvailabilityResolver,
+    GuildAddMemberAvailabilityResolver,
+    GuildChangeRoleAvailabilityResolver,
+    GuildCreateAvailabilityResolver,
     GuildDepositBankAvailabilityResolver,
+    GuildDisbandAvailabilityResolver,
     GuildLeaveAvailabilityResolver,
     GuildWithdrawBankAvailabilityResolver,
     HarvestStartAvailabilityResolver,
@@ -24,6 +29,7 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
     QuestAcceptAvailabilityResolver,
     QuestApproveAvailabilityResolver,
     QuestCancelAvailabilityResolver,
+    QuestIssueAvailabilityResolver,
     SayAvailabilityResolver,
     SetDestinationAvailabilityResolver,
     ShopListItemAvailabilityResolver,
@@ -54,13 +60,18 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_CONVERSATION_ADVANCE,
     TOOL_NAME_DESTROY_PLACEABLE,
     TOOL_NAME_DROP_ITEM,
+    TOOL_NAME_GUILD_ADD_MEMBER,
+    TOOL_NAME_GUILD_CHANGE_ROLE,
+    TOOL_NAME_GUILD_CREATE,
     TOOL_NAME_GUILD_DEPOSIT_BANK,
+    TOOL_NAME_GUILD_DISBAND,
     TOOL_NAME_GUILD_LEAVE,
     TOOL_NAME_GUILD_WITHDRAW_BANK,
     TOOL_NAME_HARVEST_START,
     TOOL_NAME_INSPECT_ITEM,
     TOOL_NAME_INSPECT_TARGET,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
+    TOOL_NAME_CANCEL_MOVEMENT,
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
     TOOL_NAME_PLACE_OBJECT,
@@ -69,6 +80,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_QUEST_ACCEPT,
     TOOL_NAME_QUEST_APPROVE,
     TOOL_NAME_QUEST_CANCEL,
+    TOOL_NAME_QUEST_ISSUE,
     TOOL_NAME_SAY,
     TOOL_NAME_SHOP_LIST_ITEM,
     TOOL_NAME_SHOP_PURCHASE,
@@ -102,6 +114,12 @@ MOVE_TO_DESTINATION_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_MOVE_TO_DESTINATION,
     description="指定した目的地（スポット、ロケーション、または視界内オブジェクト）へ移動します。",
     parameters=MOVE_TO_DESTINATION_PARAMETERS,
+)
+
+CANCEL_MOVEMENT_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_CANCEL_MOVEMENT,
+    description="設定済みの経路をキャンセルし、移動を中断します。移動中のみ利用可能です。",
+    parameters={"type": "object", "properties": {}, "required": []},
 )
 
 WHISPER_PARAMETERS = {
@@ -413,6 +431,113 @@ QUEST_APPROVE_DEFINITION = ToolDefinitionDto(
     parameters=QUEST_APPROVE_PARAMETERS,
 )
 
+QUEST_ISSUE_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "objectives": {
+            "type": "array",
+            "description": "クエスト目標のリスト。各要素は object_type, target_id, required_count を持つオブジェクト。",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "objective_type": {
+                        "type": "string",
+                        "description": "kill_monster, talk_to_npc, reach_spot, obtain_item 等",
+                    },
+                    "target_id": {
+                        "type": "integer",
+                        "description": "目標の ID（モンスター種別、NPC ID、スポット ID 等）",
+                    },
+                    "required_count": {
+                        "type": "integer",
+                        "description": "必要数",
+                    },
+                },
+                "required": ["objective_type", "target_id", "required_count"],
+            },
+        },
+        "reward_gold": {"type": "integer", "description": "報酬ゴールド。", "default": 0},
+        "reward_items": {
+            "type": "array",
+            "description": "報酬アイテム。各要素は item_spec_id と quantity を持つオブジェクト。",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "item_spec_id": {"type": "integer"},
+                    "quantity": {"type": "integer"},
+                },
+                "required": ["item_spec_id", "quantity"],
+            },
+        },
+        "guild_label": {
+            "type": "string",
+            "description": "ギルド掲示の場合のギルドラベル（例: G1）。省略時は公開クエスト。ギルド依頼はギルドのロケーションにいる場合のみ発行可能。",
+        },
+    },
+    "required": ["objectives"],
+}
+QUEST_ISSUE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_QUEST_ISSUE,
+    description="クエストを発行します。報酬にゴールド・アイテムを指定可能。guild_label を指定するとギルド掲示（承認待ち）になります。ギルド依頼はギルドのロケーションにいる場合のみ発行可能。",
+    parameters=QUEST_ISSUE_PARAMETERS,
+)
+
+GUILD_CREATE_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "name": {"type": "string", "description": "ギルド名。"},
+        "description": {"type": "string", "description": "ギルドの説明。", "default": ""},
+    },
+    "required": ["name"],
+}
+GUILD_CREATE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_GUILD_CREATE,
+    description="現在地のロケーションにギルドを作成します。spot_id と location_area_id は現在地から自動取得されます。",
+    parameters=GUILD_CREATE_PARAMETERS,
+)
+
+GUILD_ADD_MEMBER_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "guild_label": {"type": "string", "description": "招待先ギルドラベル（例: G1）。"},
+        "target_player_label": {"type": "string", "description": "招待するプレイヤーラベル（例: P1）。"},
+    },
+    "required": ["guild_label", "target_player_label"],
+}
+GUILD_ADD_MEMBER_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_GUILD_ADD_MEMBER,
+    description="ギルドにプレイヤーを招待します（オフィサー以上）。",
+    parameters=GUILD_ADD_MEMBER_PARAMETERS,
+)
+
+GUILD_CHANGE_ROLE_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "guild_label": {"type": "string", "description": "対象ギルドラベル（例: G1）。"},
+        "target_member_label": {"type": "string", "description": "役職変更するメンバーラベル（例: GM1）。"},
+        "new_role": {"type": "string", "description": "新しい役職。leader / officer / member のいずれか。", "enum": ["leader", "officer", "member"]},
+    },
+    "required": ["guild_label", "target_member_label", "new_role"],
+}
+GUILD_CHANGE_ROLE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_GUILD_CHANGE_ROLE,
+    description="ギルドメンバーの役職を変更します（オフィサー以上）。",
+    parameters=GUILD_CHANGE_ROLE_PARAMETERS,
+)
+
+GUILD_DISBAND_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "guild_label": {"type": "string", "description": "解散するギルドラベル（例: G1）。"},
+    },
+    "required": ["guild_label"],
+}
+GUILD_DISBAND_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_GUILD_DISBAND,
+    description="ギルドを解散します（リーダーのみ）。",
+    parameters=GUILD_DISBAND_PARAMETERS,
+)
+
 GUILD_LEAVE_PARAMETERS = {
     "type": "object",
     "properties": {
@@ -659,6 +784,7 @@ def register_default_tools(
         raise TypeError("registry must be IGameToolRegistry")
     registry.register(NO_OP_DEFINITION, NoOpAvailabilityResolver())
     registry.register(MOVE_TO_DESTINATION_DEFINITION, SetDestinationAvailabilityResolver())
+    registry.register(CANCEL_MOVEMENT_DEFINITION, CancelMovementAvailabilityResolver())
     if pursuit_enabled:
         registry.register(PURSUIT_START_DEFINITION, PursuitStartAvailabilityResolver())
         registry.register(PURSUIT_CANCEL_DEFINITION, PursuitCancelAvailabilityResolver())
@@ -691,7 +817,12 @@ def register_default_tools(
         registry.register(QUEST_ACCEPT_DEFINITION, QuestAcceptAvailabilityResolver())
         registry.register(QUEST_CANCEL_DEFINITION, QuestCancelAvailabilityResolver())
         registry.register(QUEST_APPROVE_DEFINITION, QuestApproveAvailabilityResolver())
+        registry.register(QUEST_ISSUE_DEFINITION, QuestIssueAvailabilityResolver())
     if guild_enabled:
+        registry.register(GUILD_CREATE_DEFINITION, GuildCreateAvailabilityResolver())
+        registry.register(GUILD_ADD_MEMBER_DEFINITION, GuildAddMemberAvailabilityResolver())
+        registry.register(GUILD_CHANGE_ROLE_DEFINITION, GuildChangeRoleAvailabilityResolver())
+        registry.register(GUILD_DISBAND_DEFINITION, GuildDisbandAvailabilityResolver())
         registry.register(GUILD_LEAVE_DEFINITION, GuildLeaveAvailabilityResolver())
         registry.register(GUILD_DEPOSIT_BANK_DEFINITION, GuildDepositBankAvailabilityResolver())
         registry.register(GUILD_WITHDRAW_BANK_DEFINITION, GuildWithdrawBankAvailabilityResolver())
