@@ -627,6 +627,49 @@ class TestMovementApplicationService:
         assert saved_status.planned_path == []
         assert saved_status.goal_spot_id is None
 
+    def test_replan_path_to_coordinate_unreachable_keeps_pursuit_state_intact(
+        self, setup_service
+    ):
+        service, _, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
+
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status = self._create_sample_status(player_id, spot_id, 0, 0)
+        status.start_pursuit(self._create_pursuit_snapshot(target_id=250, x=2, y=0))
+        status.set_destination(
+            Coordinate(1, 0, 0),
+            [Coordinate(0, 0, 0), Coordinate(1, 0, 0)],
+            goal_spot_id=SpotId(spot_id),
+        )
+        status_repo.save(status)
+
+        wall_tiles = {
+            Coordinate(0, 0, 0): Tile(Coordinate(0, 0, 0), TerrainType.grass()),
+            Coordinate(1, 0, 0): Tile(Coordinate(1, 0, 0), TerrainType.wall()),
+            Coordinate(2, 0, 0): Tile(Coordinate(2, 0, 0), TerrainType.wall()),
+        }
+        phys_repo.save(
+            PhysicalMapAggregate(
+                spot_id=SpotId(spot_id),
+                tiles=wall_tiles,
+                objects=[self._create_player_object(player_id, 0, 0)],
+            )
+        )
+        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
+
+        result = service.replan_path_to_coordinate_in_current_unit_of_work(
+            player_id=player_id,
+            target_spot_id=spot_id,
+            target_coordinate=Coordinate(2, 0, 0),
+        )
+
+        assert result.success is False
+        saved_status = status_repo.find_by_id(PlayerId(player_id))
+        assert saved_status.planned_path == []
+        assert saved_status.pursuit_state is not None
+        assert saved_status.pursuit_state.target_id == WorldObjectId(250)
+
     def test_tick_movement_location_area_not_found_clears_path(self, setup_service):
         """到着判定で LocationAreaNotFoundException のとき経路をクリアして「目標はもう存在しない」とみなす"""
         service, _, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service

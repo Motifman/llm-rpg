@@ -468,6 +468,141 @@ class TestWorldSimulationApplicationService:
         assert status.pursuit_state.target_snapshot.coordinate == Coordinate(4, 1, 0)
         assert status.pursuit_state.last_known.coordinate == Coordinate(4, 1, 0)
 
+    def test_pursuit_continuation_invisible_target_does_not_become_target_missing(
+        self,
+    ):
+        status = self._player_status()
+        status.start_pursuit(
+            PursuitTargetSnapshot(
+                target_id=WorldObjectId(66),
+                spot_id=SpotId(1),
+                coordinate=Coordinate(4, 1, 0),
+            )
+        )
+        movement_service = mock.Mock()
+        movement_service.replan_path_to_coordinate_in_current_unit_of_work.return_value = (
+            SimpleNamespace(success=True)
+        )
+        world_query_service = mock.Mock()
+        world_query_service.get_player_current_state.return_value = self._current_state(
+            visible_objects=[],
+            has_active_path=False,
+        )
+        physical_map_repository = mock.Mock()
+        physical_map_repository.find_spot_id_by_object_id.return_value = SpotId(2)
+        continuation_service = PursuitContinuationService(
+            world_query_service,
+            movement_service=movement_service,
+            physical_map_repository=physical_map_repository,
+        )
+
+        decision = continuation_service.evaluate_tick(status)
+
+        assert decision.action == PursuitContinuationAction.CONTINUE_PURSUIT
+        assert decision.failure_reason is None
+        assert status.pursuit_state is not None
+
+    def test_pursuit_continuation_fails_with_target_missing_when_world_lookup_cannot_resolve_target(
+        self,
+    ):
+        status = self._player_status()
+        status.start_pursuit(
+            PursuitTargetSnapshot(
+                target_id=WorldObjectId(70),
+                spot_id=SpotId(1),
+                coordinate=Coordinate(4, 1, 0),
+            )
+        )
+        status.set_destination(
+            Coordinate(1, 0, 0),
+            [Coordinate(0, 0, 0), Coordinate(1, 0, 0)],
+            goal_spot_id=SpotId(1),
+        )
+        world_query_service = mock.Mock()
+        world_query_service.get_player_current_state.return_value = self._current_state(
+            visible_objects=[],
+            has_active_path=True,
+        )
+        physical_map_repository = mock.Mock()
+        physical_map_repository.find_spot_id_by_object_id.return_value = None
+        continuation_service = PursuitContinuationService(
+            world_query_service,
+            physical_map_repository=physical_map_repository,
+        )
+
+        decision = continuation_service.evaluate_tick(status)
+
+        assert decision.action == PursuitContinuationAction.PURSUIT_FAILED
+        assert decision.failure_reason == PursuitFailureReason.TARGET_MISSING
+        assert status.has_active_pursuit is False
+        assert status.planned_path == []
+
+    def test_pursuit_continuation_fails_with_vision_lost_at_last_known(
+        self,
+    ):
+        status = self._player_status()
+        status.start_pursuit(
+            PursuitTargetSnapshot(
+                target_id=WorldObjectId(71),
+                spot_id=SpotId(1),
+                coordinate=Coordinate(0, 0, 0),
+            )
+        )
+        world_query_service = mock.Mock()
+        world_query_service.get_player_current_state.return_value = self._current_state(
+            visible_objects=[],
+            has_active_path=False,
+        )
+        physical_map_repository = mock.Mock()
+        physical_map_repository.find_spot_id_by_object_id.return_value = SpotId(1)
+        continuation_service = PursuitContinuationService(
+            world_query_service,
+            physical_map_repository=physical_map_repository,
+        )
+
+        decision = continuation_service.evaluate_tick(status)
+
+        assert decision.action == PursuitContinuationAction.PURSUIT_FAILED
+        assert decision.failure_reason == (
+            PursuitFailureReason.VISION_LOST_AT_LAST_KNOWN
+        )
+        assert status.has_active_pursuit is False
+
+    def test_pursuit_continuation_fails_with_path_unreachable_for_invisible_target(
+        self,
+    ):
+        status = self._player_status()
+        status.start_pursuit(
+            PursuitTargetSnapshot(
+                target_id=WorldObjectId(72),
+                spot_id=SpotId(1),
+                coordinate=Coordinate(3, 0, 0),
+            )
+        )
+        movement_service = mock.Mock()
+        movement_service.replan_path_to_coordinate_in_current_unit_of_work.return_value = (
+            SimpleNamespace(success=False)
+        )
+        world_query_service = mock.Mock()
+        world_query_service.get_player_current_state.return_value = self._current_state(
+            visible_objects=[],
+            has_active_path=False,
+        )
+        physical_map_repository = mock.Mock()
+        physical_map_repository.find_spot_id_by_object_id.return_value = SpotId(1)
+        continuation_service = PursuitContinuationService(
+            world_query_service,
+            movement_service=movement_service,
+            physical_map_repository=physical_map_repository,
+        )
+
+        decision = continuation_service.evaluate_tick(status)
+
+        assert decision.action == PursuitContinuationAction.PURSUIT_FAILED
+        assert decision.failure_reason == PursuitFailureReason.PATH_UNREACHABLE
+        assert status.has_active_pursuit is False
+        assert status.planned_path == []
+
     def test_tick_runs_pursuit_continuation_before_movement_execution(
         self, setup_service
     ):
