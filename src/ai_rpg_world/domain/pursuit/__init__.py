@@ -1,3 +1,6 @@
+from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
+    PursuitFailureReason,
+)
 from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
     PursuitLastKnownState,
 )
@@ -7,6 +10,7 @@ from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
 )
 
 __all__ = [
+    "PursuitFailureReason",
     "PursuitLastKnownState",
     "PursuitState",
     "PursuitTargetSnapshot",

@@ -2,6 +2,9 @@
 
 import pytest
 
+from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
+    PursuitFailureReason,
+)
 from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
     PursuitLastKnownState,
 )
@@ -56,4 +59,23 @@ class TestPursuitState:
             target_id=WorldObjectId(2),
             spot_id=SpotId(5),
             coordinate=Coordinate(10, 4, 0),
+        )
+
+    def test_create_failed_state_with_structured_reason(self):
+        """失敗理由を構造化 enum で保持できること"""
+        state = PursuitState(
+            actor_id=WorldObjectId(1),
+            target_id=WorldObjectId(2),
+            last_known=PursuitLastKnownState(
+                target_id=WorldObjectId(2),
+                spot_id=SpotId(5),
+                coordinate=Coordinate(10, 4, 0),
+            ),
+            failure_reason=PursuitFailureReason.VISION_LOST_AT_LAST_KNOWN,
+        )
+
+        assert state.is_failed is True
+        assert (
+            state.failure_reason
+            == PursuitFailureReason.VISION_LOST_AT_LAST_KNOWN
         )
