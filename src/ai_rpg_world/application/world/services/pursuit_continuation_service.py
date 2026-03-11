@@ -28,6 +28,7 @@ from ai_rpg_world.domain.world.repository.physical_map_repository import (
 )
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class PursuitPathReplanner(Protocol):
@@ -158,6 +159,7 @@ class PursuitContinuationService:
                 target_coordinate=snapshot.coordinate,
             )
             if not replan_succeeded:
+                player_status.clear_path()
                 player_status.fail_pursuit(
                     PursuitFailureReason.PATH_UNREACHABLE,
                     last_known=last_known,
@@ -212,6 +214,7 @@ class PursuitContinuationService:
                 pursuit_state.target_id
             )
             if target_spot_id is None:
+                player_status.clear_path()
                 player_status.fail_pursuit(
                     PursuitFailureReason.TARGET_MISSING,
                     last_known=last_known,
@@ -232,6 +235,7 @@ class PursuitContinuationService:
                 )
 
         if self._is_at_last_known(player_status, last_known):
+            player_status.clear_path()
             player_status.fail_pursuit(
                 PursuitFailureReason.VISION_LOST_AT_LAST_KNOWN,
                 last_known=last_known,
@@ -261,6 +265,7 @@ class PursuitContinuationService:
                 target_coordinate=last_known.coordinate,
             )
             if not replan_succeeded:
+                player_status.clear_path()
                 player_status.fail_pursuit(
                     PursuitFailureReason.PATH_UNREACHABLE,
                     last_known=last_known,
@@ -316,7 +321,7 @@ class PursuitContinuationService:
         visible_target: VisibleObjectDto,
     ) -> PursuitTargetSnapshot:
         return PursuitTargetSnapshot(
-            target_id=player_status_target_id(target_world_object_id),
+            target_id=WorldObjectId.create(target_world_object_id),
             spot_id=spot_id,
             coordinate=Coordinate(
                 int(visible_target.x),
@@ -367,9 +372,3 @@ class PursuitContinuationService:
     def _save_player_status(self, player_status: PlayerStatusAggregate) -> None:
         if self._player_status_repository is not None:
             self._player_status_repository.save(player_status)
-
-
-def player_status_target_id(target_world_object_id: int):
-    from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-
-    return WorldObjectId.create(target_world_object_id)
