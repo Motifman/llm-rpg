@@ -5,32 +5,32 @@
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** LLMエージェントが、静的な目的地指定だけでなく、動的に移動する主体に対しても一貫した状態遷移とイベント駆動で行動を継続できること
-**Current focus:** Phase 1: Pursuit Domain Vocabulary
+**Current focus:** Phase 2: Player Pursuit Commands
 
 ## Current Position
 
-Phase: 1 of 5 (Pursuit Domain Vocabulary)
-Plan: 2 of 3 in current phase
-Status: Ready to execute next plan
-Last activity: 2026-03-11 — Plan 01-02 completed with explicit pursuit lifecycle events and payload regression coverage
+Phase: 2 of 5 (Player Pursuit Commands)
+Plan: 0 of 2 in current phase
+Status: Ready for planning
+Last activity: 2026-03-11 — Plan 01-03 completed with aggregate-owned pursuit state, movement separation regressions, and monster alignment strategy
 
-Progress: [██░░░░░░░░] 17%
+Progress: [███░░░░░░░] 30%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 7 min
-- Total execution time: 14 min
+- Total plans completed: 3
+- Average duration: 9 min
+- Total execution time: 28 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-pursuit-domain-vocabulary | 2 | 14 min | 7 min |
+| 01-pursuit-domain-vocabulary | 3 | 28 min | 9 min |
 
 **Recent Trend:**
-- Last 5 plans: 8 min, 6 min
+- Last 5 plans: 8 min, 6 min, 14 min
 - Trend: Stable
 
 ## Accumulated Context
@@ -49,6 +49,9 @@ Recent decisions affecting current work:
 - 01-02: Pursuit lifecycle events use neutral `actor_id` and `target_id` fields on `BaseDomainEvent[WorldObjectId, str]`
 - 01-02: `PursuitCancelledEvent` remains distinct from `PursuitFailedEvent` and carries no failure reason field
 - 01-02: All pursuit lifecycle events retain `last_known` context; started events also require a visible `target_snapshot`
+- 01-03: `PlayerStatusAggregate` now owns optional `pursuit_state` separately from `_current_destination`, `_planned_path`, and `goal_*`
+- 01-03: Pursuit lifecycle changes stay behind aggregate methods and do not implicitly clear when movement path state changes
+- 01-03: Monster `CHASE`/`SEARCH` state, `TargetSpottedEvent`, and `TargetLostEvent` are the Phase 5 alignment touchpoints for neutral pursuit vocabulary
 
 ### Pending Todos
 
@@ -56,13 +59,11 @@ None yet.
 
 ### Blockers/Concerns
 
-- Pursuit state must not be collapsed into static movement path state
 - Busy-state timing and observation-driven movement interruption can conflict with pursuit continuation
 - Async event failure visibility is weak in the current UoW/event pipeline
-- Git commits for this plan were blocked by sandbox permissions on `.git/index.lock`
 
 ## Session Continuity
 
-Last session: 2026-03-11 17:46
-Stopped at: Plan 01-02 completed; Phase 1 is ready for plan 01-03
+Last session: 2026-03-11 18:02
+Stopped at: Phase 1 completed; next step is planning Phase 2 plan 02-01
 Resume file: None
