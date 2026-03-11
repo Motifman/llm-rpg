@@ -90,13 +90,15 @@ class PlayerPursuitRuntimeResult:
         pursuit_command_service: Any,
         pursuit_continuation_service: Any,
     ) -> "PlayerPursuitRuntimeResult":
-        return cls(
+        result = cls(
             wiring_result=compose_result.wiring_result,
             event_handler_composition=compose_result.event_handler_composition,
             world_simulation_service=compose_result.world_simulation_service,
             pursuit_command_service=pursuit_command_service,
             pursuit_continuation_service=pursuit_continuation_service,
         )
+        result.assert_pursuit_enabled()
+        return result
 
 
 def compose_player_pursuit_runtime(

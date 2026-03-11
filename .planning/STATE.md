@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 07-03-PLAN.md
+stopped_at: Milestone archival preparation complete
 last_updated: "2026-03-11T15:23:16Z"
-last_activity: 2026-03-12 — Phase 7 plan 07-03 synchronized REQUIREMENTS traceability to the final verification-backed acceptance owners and closed the v1.0 planning ledger
+last_activity: 2026-03-12 — v1.0 milestone audit refreshed, archive files created, and planning docs collapsed for next milestone setup
 progress:
   total_phases: 7
   completed_phases: 7
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** LLMエージェントが、静的な目的地指定だけでなく、動的に移動する主体に対しても一貫した状態遷移とイベント駆動で行動を継続できること
-**Current focus:** Milestone complete: v1.0 pursuit planning and audit evidence closure
+**Current focus:** v1.0 archived and ready for commit/tag; next milestone not started
 
 ## Current Position
 
 Phase: 7 of 7 (Pursuit Audit Evidence Backfill)
-Plan: 3 of 3 in current phase
-Status: Completed
-Last activity: 2026-03-12 — Phase 7 plan 07-03 synchronized REQUIREMENTS traceability to the final verification-backed acceptance owners and closed the v1.0 planning ledger
+Plan: archived
+Status: Completed / Ready for next milestone
+Last activity: 2026-03-12 — v1.0 milestone audit refreshed, archive files created, and planning docs collapsed for next milestone setup
 
 Progress: [██████████] 100%
 
@@ -113,12 +113,13 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
 - Busy-state timing and observation-driven movement interruption can conflict with pursuit continuation
 - Async event failure visibility is weak in the current UoW/event pipeline
+- Phase 1 still lacks a Nyquist validation artifact
 
 ## Session Continuity
 
