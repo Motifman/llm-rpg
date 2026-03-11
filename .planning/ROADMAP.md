@@ -9,7 +9,7 @@
 - [x] **Phase 1: Pursuit Domain Vocabulary** - 追跡状態、終了理由、ライフサイクルイベントの基盤を定義する
 - [x] **Phase 2: Player Pursuit Commands** - プレイヤーが追跡開始/中断できるアプリケーション入口を整える (completed 2026-03-11)
 - [x] **Phase 3: Pursuit Continuation Loop** - 最新既知位置に基づく継続追跡をワールド tick に統合する (completed 2026-03-11)
-- [ ] **Phase 4: Observation And LLM Delivery** - 追跡結果を観測/LLM 再駆動パイプラインへ接続する
+- [x] **Phase 4: Observation And LLM Delivery** - 追跡結果を観測/LLM 再駆動パイプラインへ接続する (completed 2026-03-11)
 - [ ] **Phase 5: Monster Pursuit Alignment** - モンスター側の追跡語彙と状態遷移を新しい基盤に整合させる
 
 ## Phase Details
@@ -70,9 +70,9 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 04-01: pursuit イベントの recipient/formatter/registry wiring を追加する
-- [ ] 04-02: LLM 再駆動に必要な structured payload を整える
-- [ ] 04-03: interruption と outcome の統合テストを追加する
+- [x] 04-01: pursuit イベントの recipient/formatter/registry wiring を追加する
+- [x] 04-02: LLM 再駆動に必要な structured payload を整える
+- [x] 04-03: interruption と outcome の統合テストを追加する
 
 ### Phase 5: Monster Pursuit Alignment
 **Goal**: モンスター側の追跡表現を新しい追跡基盤と整合させる
@@ -98,5 +98,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Pursuit Domain Vocabulary | 3/3 | Completed | 2026-03-11 |
 | 2. Player Pursuit Commands | 2/2 | Completed | 2026-03-11 |
 | 3. Pursuit Continuation Loop | 3/3 | Complete   | 2026-03-11 |
-| 4. Observation And LLM Delivery | 0/3 | Not started | - |
+| 4. Observation And LLM Delivery | 3/3 | Completed | 2026-03-11 |
 | 5. Monster Pursuit Alignment | 0/2 | Not started | - |
