@@ -1085,6 +1085,68 @@ class TestWorldSimulationApplicationService:
             f"Expected TargetSpottedEvent or ActorStateChangedEvent in published events, got: {[type(e).__name__ for e in events]}"
         )
 
+    def test_tick_visible_monster_target_starts_aligned_pursuit_state(self, setup_service):
+        """通常の tick で可視ターゲットを見つけたモンスターが aligned pursuit state を保持すること"""
+        service, _, repository, _, _, _, _, _, monster_repo, skill_loadout_repo = setup_service
+        from ai_rpg_world.domain.world.service.hostility_service import ConfigurableHostilityService
+
+        service._behavior_service._hostility_service = ConfigurableHostilityService(
+            race_disposition_table={"goblin": {"human": Disposition.HOSTILE}}
+        )
+
+        spot_id = SpotId(1)
+        tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(5) for y in range(5)]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        player_id = PlayerId(100)
+        physical_map.add_object(
+            WorldObject(
+                WorldObjectId(100),
+                Coordinate(0, 0, 0),
+                ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=player_id, race="human"),
+            )
+        )
+        actor_id = WorldObjectId(1)
+        physical_map.add_object(
+            WorldObject(
+                actor_id,
+                Coordinate(1, 0, 0),
+                ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(race="goblin", vision_range=5, fov_angle=360),
+            )
+        )
+        repository.save(physical_map)
+
+        template = MonsterTemplate(
+            template_id=MonsterTemplateId(1),
+            name="Goblin",
+            base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+            reward_info=RewardInfo(0, 0),
+            respawn_info=RespawnInfo(1, True),
+            race=Race.HUMAN,
+            faction=MonsterFactionEnum.ENEMY,
+            description="Goblin",
+            skill_ids=[],
+        )
+        loadout = SkillLoadoutAggregate.create(SkillLoadoutId(1), actor_id.value, 10, 10)
+        monster = MonsterAggregate.create(MonsterId(1), template, actor_id, skill_loadout=loadout)
+        monster.spawn(Coordinate(1, 0, 0), spot_id, WorldTick(0))
+        monster_repo.save(monster)
+        skill_loadout_repo.save(loadout)
+
+        service.tick()
+
+        saved_monster = monster_repo.find_by_world_object_id(actor_id)
+        assert saved_monster is not None
+        assert saved_monster.behavior_state == BehaviorStateEnum.CHASE
+        assert saved_monster.has_active_pursuit is True
+        assert saved_monster.pursuit_state is not None
+        assert saved_monster.pursuit_state.target_id == WorldObjectId(100)
+        assert saved_monster.pursuit_state.target_snapshot is not None
+        assert saved_monster.pursuit_state.target_snapshot.coordinate == Coordinate(0, 0, 0)
+        assert saved_monster.pursuit_state.last_known is not None
+        assert saved_monster.pursuit_state.last_known.coordinate == Coordinate(0, 0, 0)
+
     def test_busy_actor_is_skipped(self, setup_service):
         """Busy状態のアクターはシミュレーションでスキップされること"""
         service, _, repository, _, _, _, _, _, _, _ = setup_service
