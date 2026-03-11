@@ -249,6 +249,25 @@ class TestBehaviorStateTransitionServiceNormal:
         assert result.do_lose_target is True
         assert result.lost_target_id == target_id
 
+    def test_compute_transition_search_reacquires_same_target_as_normal_spot_target(
+        self, service, actor_id, actor_coordinate
+    ):
+        """SEARCH 中に同じ対象が再度見えたら同じ target_id で spot_target に戻ること"""
+        target = _obj(77, 8, 5)
+        snapshot = BehaviorStateSnapshot(
+            state=BehaviorStateEnum.SEARCH,
+            target_id=target.object_id,
+            last_known_target_position=Coordinate(7, 5, 0),
+        )
+        obs = _observation(selected_target=target)
+
+        result = service.compute_transition(obs, snapshot, actor_id, actor_coordinate)
+
+        assert result.do_lose_target is False
+        assert result.spot_target_params is not None
+        assert result.spot_target_params.target_id == target.object_id
+        assert result.spot_target_params.coordinate == target.coordinate
+
 
 class TestBehaviorStateTransitionServiceBoundary:
     """境界・優先順位のテスト"""
