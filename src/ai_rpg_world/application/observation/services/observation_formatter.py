@@ -538,7 +538,13 @@ class ObservationFormatter(IObservationFormatter):
     ) -> Optional[ObservationOutput]:
         prose = "ロケーションを出ました。"
         structured = {"type": "location_exited"}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="self_only",
+            schedules_turn=True,
+            breaks_movement=False,
+        )
 
     def _format_player_location_changed(
         self, event: PlayerLocationChangedEvent, recipient_id: PlayerId
@@ -611,21 +617,39 @@ class ObservationFormatter(IObservationFormatter):
     ) -> Optional[ObservationOutput]:
         prose = f"レベルが上がりました（{event.old_level} → {event.new_level}）。"
         structured = {"type": "level_up", "old_level": event.old_level, "new_level": event.new_level}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="self_only",
+            schedules_turn=True,
+            breaks_movement=False,
+        )
 
     def _format_player_gold_earned(
         self, event: PlayerGoldEarnedEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
         prose = f"{event.earned_amount}ゴールドを獲得しました。"
         structured = {"type": "gold_earned", "amount": event.earned_amount}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="self_only",
+            schedules_turn=True,
+            breaks_movement=False,
+        )
 
     def _format_player_gold_paid(
         self, event: PlayerGoldPaidEvent, recipient_id: PlayerId
     ) -> Optional[ObservationOutput]:
         prose = f"{event.paid_amount}ゴールドを支払いました。"
         structured = {"type": "gold_paid", "amount": event.paid_amount}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="self_only",
+            schedules_turn=True,
+            breaks_movement=False,
+        )
 
     def _format_player_spoke(
         self, event: PlayerSpokeEvent, recipient_id: PlayerId
@@ -658,7 +682,13 @@ class ObservationFormatter(IObservationFormatter):
         item_name = self._item_instance_name(event.item_instance_id)
         prose = f"チェストから{item_name}を取得しました。"
         structured = {"type": "item_taken_from_chest", "item_name": item_name}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="self_only",
+            schedules_turn=True,
+            breaks_movement=False,
+        )
 
     def _format_item_stored_in_chest(
         self, event: ItemStoredInChestEvent, recipient_id: PlayerId
@@ -666,7 +696,13 @@ class ObservationFormatter(IObservationFormatter):
         item_name = self._item_instance_name(event.item_instance_id)
         prose = f"チェストに{item_name}を収納しました。"
         structured = {"type": "item_stored_in_chest", "item_name": item_name}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="self_only",
+            schedules_turn=True,
+            breaks_movement=False,
+        )
 
     def _format_resource_harvested(
         self, event: ResourceHarvestedEvent, recipient_id: PlayerId
@@ -1358,7 +1394,13 @@ class ObservationFormatter(IObservationFormatter):
         structured["last_known"] = self._serialize_last_known_state(event.last_known)
         structured["spot_id_value"] = getattr(event.last_known.spot_id, "value", event.last_known.spot_id)
         structured["target_snapshot"] = self._serialize_target_snapshot(event.target_snapshot)
-        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="self_only",
+            schedules_turn=True,
+            breaks_movement=False,
+        )
 
     def _format_pursuit_cancelled(
         self,
@@ -1376,7 +1418,13 @@ class ObservationFormatter(IObservationFormatter):
         structured["last_known"] = self._serialize_last_known_state(event.last_known)
         structured["spot_id_value"] = getattr(event.last_known.spot_id, "value", event.last_known.spot_id)
         structured["target_snapshot"] = self._serialize_target_snapshot(event.target_snapshot)
-        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="self_only",
+            schedules_turn=True,
+            breaks_movement=False,
+        )
 
     # --- Combat (HitBox) ---
 
