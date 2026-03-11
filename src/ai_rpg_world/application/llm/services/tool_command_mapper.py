@@ -29,6 +29,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_COMBAT_USE_SKILL,
     TOOL_NAME_CONVERSATION_ADVANCE,
     TOOL_NAME_DESTROY_PLACEABLE,
+    TOOL_NAME_DROP_ITEM,
     TOOL_NAME_GUILD_DEPOSIT_BANK,
     TOOL_NAME_GUILD_LEAVE,
     TOOL_NAME_GUILD_WITHDRAW_BANK,
@@ -85,6 +86,9 @@ from ai_rpg_world.application.world.services.player_chest_service import (
 from ai_rpg_world.application.world.services.player_place_object_service import (
     PlayerPlaceObjectApplicationService,
 )
+from ai_rpg_world.application.world.services.player_drop_item_service import (
+    PlayerDropItemApplicationService,
+)
 from ai_rpg_world.application.world.services.movement_service import (
     MovementApplicationService,
 )
@@ -138,6 +142,7 @@ class ToolCommandMapper:
         attention_service: Optional[AttentionLevelApplicationService] = None,
         conversation_service: Optional[ConversationCommandService] = None,
         place_object_service: Optional[PlayerPlaceObjectApplicationService] = None,
+        drop_item_service: Optional[PlayerDropItemApplicationService] = None,
         chest_service: Optional[PlayerChestApplicationService] = None,
         skill_tool_service: Optional[PlayerSkillToolApplicationService] = None,
         quest_service: Optional[Any] = None,
@@ -178,6 +183,10 @@ class ToolCommandMapper:
             getattr(place_object_service, "place_from_inventory_slot", None)
         ):
             raise TypeError("place_object_service must have a callable place_from_inventory_slot")
+        if drop_item_service is not None and not callable(
+            getattr(drop_item_service, "drop_from_slot", None)
+        ):
+            raise TypeError("drop_item_service must have a callable drop_from_slot")
         if chest_service is not None and not callable(
             getattr(chest_service, "store_item_by_target", None)
         ):
@@ -205,6 +214,7 @@ class ToolCommandMapper:
         self._attention_service = attention_service
         self._conversation_service = conversation_service
         self._place_object_service = place_object_service
+        self._drop_item_service = drop_item_service
         self._chest_service = chest_service
         self._skill_tool_service = skill_tool_service
         self._executor_map: Dict[str, Any] = {
@@ -220,6 +230,7 @@ class ToolCommandMapper:
             TOOL_NAME_CONVERSATION_ADVANCE: self._execute_conversation_advance,
             TOOL_NAME_PLACE_OBJECT: self._execute_place_object,
             TOOL_NAME_DESTROY_PLACEABLE: lambda pid, a: self._execute_destroy_placeable(pid),
+            TOOL_NAME_DROP_ITEM: self._execute_drop_item,
             TOOL_NAME_CHEST_STORE: self._execute_chest_store,
             TOOL_NAME_CHEST_TAKE: self._execute_chest_take,
             TOOL_NAME_COMBAT_USE_SKILL: self._execute_combat_use_skill,
@@ -376,6 +387,19 @@ class ToolCommandMapper:
         try:
             self._place_object_service.destroy_in_front(player_id=player_id)
             return LlmCommandResultDto(success=True, message="前方の設置物を破壊しました。")
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_drop_item(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        if self._drop_item_service is None:
+            return self._unknown_tool("ドロップツールはまだ利用できません。")
+        try:
+            self._drop_item_service.drop_from_slot(
+                player_id=player_id,
+                inventory_slot_id=int(args.get("inventory_slot_id")),
+            )
+            target_display_name = args.get("target_display_name") or "アイテム"
+            return LlmCommandResultDto(success=True, message=f"{target_display_name}を捨てました。")
         except Exception as e:
             return self._exception_result(e)
 

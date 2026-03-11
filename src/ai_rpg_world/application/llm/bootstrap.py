@@ -48,6 +48,11 @@ def compose_llm_runtime(
     外部ブートストラップは wiring_kwargs に create_llm_agent_wiring の引数（player_status_repository, physical_map_repository 等）
     を渡し、composition_builder / service_builder で自前の EventHandlerComposition / WorldSimulationApplicationService を生成する。
 
+    オプション機能の組み立て:
+    - 意図的ドロップ（world_drop_item）: drop_item_service を wiring_kwargs に渡す（PlayerDropItemApplicationService）。
+      EventHandlerComposition に intentional_drop_registry を渡すと、ドロップしたアイテムがマップ上に GROUND_ITEM として配置される。
+      （ItemDroppedFromInventoryDropHandler + IntentionalDropEventHandlerRegistry を player_status_repository / physical_map_repository で組み立てる。）
+
     memory_db_path または LLM_MEMORY_DB_PATH により、episode / long-term / reflection が SQLite に永続化される。
 
     Args:

@@ -23,6 +23,8 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "INTERACTION_INVALID": "相互作用できる距離や状態か確認し、別の対象を選んでください。",
     "INTERACTION_TARGET_NOT_FOUND": "対象オブジェクトがまだ見えているか確認してください。",
     "ITEM_NOT_FOUND": "指定されたアイテムがインベントリにないか、既に失われています。",
+    "NO_ITEM_IN_SLOT": "指定スロットにアイテムがありません。インベントリの状態を確認してください。",
+    "ITEM_RESERVED": "そのアイテムは取引中等で予約されています。取引を完了またはキャンセルしてください。",
     "TARGET_NOT_FOUND": "指定された対象が視界内にないか、既に去っています。",
     "UNKNOWN_TOOL": "利用可能なツール一覧から選択してください。",
     "MEMORY_QUERY_DSL_PARSE_ERROR": "DSL 式の形式を確認してください。例: episodic.take(10)",

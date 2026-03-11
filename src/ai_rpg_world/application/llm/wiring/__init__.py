@@ -11,6 +11,15 @@ EventHandlerComposition のインスタンス化）は**呼び出し元（外部
 1. create_llm_agent_wiring(...) を呼び、返り値 (observation_registry, llm_turn_trigger) を取得する。
 2. observation_registry を EventHandlerComposition の observation_registry 引数に渡す。
 3. llm_turn_trigger を WorldSimulationApplicationService の llm_turn_trigger 引数に渡す。
+
+【オプション: 意図的ドロップ（world_drop_item）】
+- LLM に world_drop_item ツールを有効化する: drop_item_service に PlayerDropItemApplicationService を渡す。
+  （DropItemApplicationService + PlayerDropItemApplicationService を PlayerInventoryRepository / PlayerStatusRepository /
+   UnitOfWork で組み立てて作成する。）
+- ドロップしたアイテムをマップ上に GROUND_ITEM として配置する: composition_builder 内で
+  ItemDroppedFromInventoryDropHandler と IntentionalDropEventHandlerRegistry を組み立て、
+  EventHandlerComposition の intentional_drop_registry 引数に渡す。
+  （inventory_overflow_registry と同様に、player_status_repository と physical_map_repository をハンドラに渡す。）
 """
 
 import os
@@ -171,6 +180,7 @@ def create_llm_agent_wiring(
     attention_service: Optional[Any] = None,
     conversation_service: Optional[Any] = None,
     place_object_service: Optional[Any] = None,
+    drop_item_service: Optional[Any] = None,
     chest_service: Optional[Any] = None,
     skill_tool_service: Optional[Any] = None,
     player_profile_repository: PlayerProfileRepository,
@@ -298,6 +308,7 @@ def create_llm_agent_wiring(
         attention_enabled=attention_service is not None,
         conversation_enabled=conversation_service is not None,
         place_enabled=place_object_service is not None,
+        drop_enabled=drop_item_service is not None,
         chest_enabled=chest_service is not None,
         combat_enabled=skill_tool_service is not None,
         quest_enabled=quest_command_service is not None,
@@ -325,6 +336,7 @@ def create_llm_agent_wiring(
         attention_service=attention_service,
         conversation_service=conversation_service,
         place_object_service=place_object_service,
+        drop_item_service=drop_item_service,
         chest_service=chest_service,
         skill_tool_service=skill_tool_service,
         quest_service=quest_command_service,

@@ -35,6 +35,7 @@ class EventHandlerComposition:
         shop_registry: Optional[EventHandlerRegistryProtocol] = None,
         conversation_registry: Optional[EventHandlerRegistryProtocol] = None,
         inventory_overflow_registry: Optional[EventHandlerRegistryProtocol] = None,
+        intentional_drop_registry: Optional[EventHandlerRegistryProtocol] = None,
         trade_registry: Optional[EventHandlerRegistryProtocol] = None,
         sns_registry: Optional[EventHandlerRegistryProtocol] = None,
         observation_registry: Optional[EventHandlerRegistryProtocol] = None,
@@ -47,6 +48,7 @@ class EventHandlerComposition:
         self._shop_registry = shop_registry
         self._conversation_registry = conversation_registry
         self._inventory_overflow_registry = inventory_overflow_registry
+        self._intentional_drop_registry = intentional_drop_registry
         self._trade_registry = trade_registry
         self._sns_registry = sns_registry
         self._observation_registry = observation_registry
@@ -97,6 +99,8 @@ class EventHandlerComposition:
             self._conversation_registry.register_handlers(event_publisher)
         if self._inventory_overflow_registry is not None:
             self._inventory_overflow_registry.register_handlers(event_publisher)
+        if self._intentional_drop_registry is not None:
+            self._intentional_drop_registry.register_handlers(event_publisher)
         if self._trade_registry is not None:
             self._trade_registry.register_handlers(event_publisher)
         if self._sns_registry is not None:

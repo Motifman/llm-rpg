@@ -124,3 +124,17 @@ class TestEventHandlerComposition:
         )
         composition.register_for_profile(event_publisher, EventHandlerProfile.FULL)
         observation_reg.register_handlers.assert_called_once_with(event_publisher)
+
+    def test_register_for_profile_full_invokes_intentional_drop_registry_when_provided(
+        self, event_publisher, mock_registry
+    ):
+        """FULL で intentional_drop_registry を渡すと register_handlers が呼ばれる"""
+        intentional_drop_reg = MagicMock()
+        intentional_drop_reg.register_handlers = MagicMock()
+        composition = EventHandlerComposition(
+            gateway_handler=MagicMock(),
+            map_interaction_registry=mock_registry,
+            intentional_drop_registry=intentional_drop_reg,
+        )
+        composition.register_for_profile(event_publisher, EventHandlerProfile.FULL)
+        intentional_drop_reg.register_handlers.assert_called_once_with(event_publisher)

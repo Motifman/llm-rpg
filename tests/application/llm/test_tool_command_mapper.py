@@ -14,6 +14,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_COMBAT_USE_SKILL,
     TOOL_NAME_CONVERSATION_ADVANCE,
     TOOL_NAME_DESTROY_PLACEABLE,
+    TOOL_NAME_DROP_ITEM,
     TOOL_NAME_HARVEST_START,
     TOOL_NAME_INSPECT_ITEM,
     TOOL_NAME_INSPECT_TARGET,
@@ -34,6 +35,10 @@ from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.application.world.contracts.dtos import MoveResultDto
 from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
     MovementInvalidException,
+)
+from ai_rpg_world.application.world.exceptions.command.place_command_exception import (
+    NoItemInSlotException,
+    ItemReservedForDropException,
 )
 
 
@@ -410,6 +415,70 @@ class TestToolCommandMapperExtendedTools:
         assert result.success is True
         assert "ゴブリン" in result.message
         mapper._skill_tool_service.use_skill.assert_called_once()
+
+
+class TestToolCommandMapperDropItem:
+    """world_drop_item ツールの実行テスト"""
+
+    def test_execute_drop_item_success_returns_dto(self):
+        drop_service = MagicMock()
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            drop_item_service=drop_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_DROP_ITEM,
+            {"inventory_slot_id": 0, "target_display_name": "ポーション"},
+        )
+        assert result.success is True
+        assert "捨て" in result.message
+        drop_service.drop_from_slot.assert_called_once_with(
+            player_id=1,
+            inventory_slot_id=0,
+        )
+
+    def test_execute_drop_item_no_item_in_slot_returns_failure_dto(self):
+        drop_service = MagicMock()
+        drop_service.drop_from_slot.side_effect = NoItemInSlotException(1, 0)
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            drop_item_service=drop_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_DROP_ITEM,
+            {"inventory_slot_id": 0},
+        )
+        assert result.success is False
+        assert result.error_code == "NO_ITEM_IN_SLOT"
+        assert result.remediation is not None
+
+    def test_execute_drop_item_reserved_returns_failure_dto(self):
+        drop_service = MagicMock()
+        drop_service.drop_from_slot.side_effect = ItemReservedForDropException(1, 0)
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            drop_item_service=drop_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_DROP_ITEM,
+            {"inventory_slot_id": 0},
+        )
+        assert result.success is False
+        assert result.error_code == "ITEM_RESERVED"
+        assert result.remediation is not None
+
+    def test_execute_drop_item_without_service_returns_unknown_tool(self):
+        mapper = ToolCommandMapper(movement_service=MagicMock())
+        result = mapper.execute(
+            1,
+            TOOL_NAME_DROP_ITEM,
+            {"inventory_slot_id": 0},
+        )
+        assert result.success is False
+        assert result.error_code == "UNKNOWN_TOOL"
 
 
 class TestToolCommandMapperInspectItem:

@@ -9,6 +9,7 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
     CombatUseSkillAvailabilityResolver,
     ConversationAdvanceAvailabilityResolver,
     DestroyPlaceableAvailabilityResolver,
+    DropItemAvailabilityResolver,
     GuildDepositBankAvailabilityResolver,
     GuildLeaveAvailabilityResolver,
     GuildWithdrawBankAvailabilityResolver,
@@ -50,6 +51,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_COMBAT_USE_SKILL,
     TOOL_NAME_CONVERSATION_ADVANCE,
     TOOL_NAME_DESTROY_PLACEABLE,
+    TOOL_NAME_DROP_ITEM,
     TOOL_NAME_GUILD_DEPOSIT_BANK,
     TOOL_NAME_GUILD_LEAVE,
     TOOL_NAME_GUILD_WITHDRAW_BANK,
@@ -229,6 +231,23 @@ DESTROY_PLACEABLE_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_DESTROY_PLACEABLE,
     description="プレイヤー前方の設置物を破壊して回収します。",
     parameters={"type": "object", "properties": {}, "required": []},
+)
+
+DROP_ITEM_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "inventory_item_label": {
+            "type": "string",
+            "description": "現在の状況に表示された在庫アイテムラベル（例: I1）。捨てるアイテムを指定します。",
+        },
+    },
+    "required": ["inventory_item_label"],
+}
+
+DROP_ITEM_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_DROP_ITEM,
+    description="在庫アイテムを地面に捨てます。",
+    parameters=DROP_ITEM_PARAMETERS,
 )
 
 INSPECT_ITEM_PARAMETERS = {
@@ -593,6 +612,7 @@ def register_default_tools(
     attention_enabled: bool = False,
     conversation_enabled: bool = False,
     place_enabled: bool = False,
+    drop_enabled: bool = False,
     chest_enabled: bool = False,
     combat_enabled: bool = False,
     quest_enabled: bool = False,
@@ -629,6 +649,8 @@ def register_default_tools(
     if place_enabled:
         registry.register(PLACE_OBJECT_DEFINITION, PlaceObjectAvailabilityResolver())
         registry.register(DESTROY_PLACEABLE_DEFINITION, DestroyPlaceableAvailabilityResolver())
+    if drop_enabled:
+        registry.register(DROP_ITEM_DEFINITION, DropItemAvailabilityResolver())
     if chest_enabled:
         registry.register(CHEST_STORE_DEFINITION, ChestStoreAvailabilityResolver())
         registry.register(CHEST_TAKE_DEFINITION, ChestTakeAvailabilityResolver())
