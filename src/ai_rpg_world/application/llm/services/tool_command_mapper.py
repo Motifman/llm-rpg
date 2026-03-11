@@ -25,6 +25,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_TODO_COMPLETE,
     TOOL_NAME_TODO_LIST,
     TOOL_NAME_WORKING_MEMORY_APPEND,
+    TOOL_NAME_CANCEL_MOVEMENT,
     TOOL_NAME_CHEST_TAKE,
     TOOL_NAME_COMBAT_USE_SKILL,
     TOOL_NAME_CONVERSATION_ADVANCE,
@@ -71,6 +72,7 @@ from ai_rpg_world.application.speech.services.player_speech_service import (
     PlayerSpeechApplicationService,
 )
 from ai_rpg_world.application.world.contracts.commands import (
+    CancelMovementCommand,
     CancelPursuitCommand,
     ChangeAttentionLevelCommand,
     InteractWorldObjectCommand,
@@ -236,6 +238,7 @@ class ToolCommandMapper:
         self._executor_map: Dict[str, Any] = {
             TOOL_NAME_NO_OP: lambda pid, a: LlmCommandResultDto(success=True, message="何もしませんでした。", was_no_op=True),
             TOOL_NAME_MOVE_TO_DESTINATION: self._execute_move_to_destination,
+            TOOL_NAME_CANCEL_MOVEMENT: self._execute_cancel_movement,
             TOOL_NAME_PURSUIT_START: self._execute_pursuit_start,
             TOOL_NAME_PURSUIT_CANCEL: self._execute_pursuit_cancel,
             TOOL_NAME_WHISPER: self._execute_whisper,
@@ -399,6 +402,29 @@ class ToolCommandMapper:
             )
         except Exception as e:
             return self._exception_result(e)
+
+    def _execute_cancel_movement(
+        self,
+        player_id: int,
+        args: Dict[str, Any],
+    ) -> LlmCommandResultDto:
+        del args
+        try:
+            result: MoveResultDto = self._movement_service.cancel_movement(
+                CancelMovementCommand(player_id=player_id)
+            )
+            return LlmCommandResultDto(
+                success=result.success,
+                message=result.message if result.success else (result.error_message or result.message),
+            )
+        except Exception as e:
+            error_code = getattr(e, "error_code", "SYSTEM_ERROR")
+            return LlmCommandResultDto(
+                success=False,
+                message=str(e),
+                error_code=error_code,
+                remediation=get_remediation(error_code),
+            )
 
     def _execute_change_attention(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._attention_service is None:
@@ -592,6 +618,14 @@ class ToolCommandMapper:
             message=str(e),
             error_code=error_code,
             remediation=get_remediation(error_code),
+        )
+
+    def _invalid_arg_result(self, field_name: str) -> LlmCommandResultDto:
+        return LlmCommandResultDto(
+            success=False,
+            message=f"{field_name} が指定されていません。",
+            error_code="INVALID_TARGET_LABEL",
+            remediation=get_remediation("INVALID_TARGET_LABEL"),
         )
 
     def _execute_inspect_item(
@@ -821,6 +855,8 @@ class ToolCommandMapper:
     def _execute_quest_accept(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._quest_service is None:
             return self._unknown_tool("クエスト受託ツールはまだ利用できません。")
+        if args.get("quest_id") is None:
+            return self._invalid_arg_result("quest_id")
         try:
             result = self._quest_service.accept_quest(
                 AcceptQuestCommand(quest_id=int(args["quest_id"]), player_id=player_id)
@@ -832,6 +868,8 @@ class ToolCommandMapper:
     def _execute_quest_cancel(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._quest_service is None:
             return self._unknown_tool("クエストキャンセルツールはまだ利用できません。")
+        if args.get("quest_id") is None:
+            return self._invalid_arg_result("quest_id")
         try:
             result = self._quest_service.cancel_quest(
                 CancelQuestCommand(quest_id=int(args["quest_id"]), player_id=player_id)
@@ -843,6 +881,8 @@ class ToolCommandMapper:
     def _execute_quest_approve(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._quest_service is None:
             return self._unknown_tool("クエスト承認ツールはまだ利用できません。")
+        if args.get("quest_id") is None:
+            return self._invalid_arg_result("quest_id")
         try:
             result = self._quest_service.approve_quest(
                 ApproveQuestCommand(quest_id=int(args["quest_id"]), approver_player_id=player_id)
@@ -854,6 +894,8 @@ class ToolCommandMapper:
     def _execute_guild_leave(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._guild_service is None:
             return self._unknown_tool("ギルド脱退ツールはまだ利用できません。")
+        if args.get("guild_id") is None:
+            return self._invalid_arg_result("guild_id")
         try:
             result = self._guild_service.leave_guild(
                 LeaveGuildCommand(guild_id=int(args["guild_id"]), player_id=player_id)
@@ -865,6 +907,8 @@ class ToolCommandMapper:
     def _execute_guild_deposit_bank(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._guild_service is None:
             return self._unknown_tool("ギルド金庫入金ツールはまだ利用できません。")
+        if args.get("guild_id") is None:
+            return self._invalid_arg_result("guild_id")
         try:
             result = self._guild_service.deposit_to_guild_bank(
                 DepositToGuildBankCommand(
@@ -880,6 +924,8 @@ class ToolCommandMapper:
     def _execute_guild_withdraw_bank(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._guild_service is None:
             return self._unknown_tool("ギルド金庫出金ツールはまだ利用できません。")
+        if args.get("guild_id") is None:
+            return self._invalid_arg_result("guild_id")
         try:
             result = self._guild_service.withdraw_from_guild_bank(
                 WithdrawFromGuildBankCommand(
@@ -895,6 +941,10 @@ class ToolCommandMapper:
     def _execute_shop_purchase(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._shop_service is None:
             return self._unknown_tool("ショップ購入ツールはまだ利用できません。")
+        if args.get("shop_id") is None:
+            return self._invalid_arg_result("shop_id")
+        if args.get("listing_id") is None:
+            return self._invalid_arg_result("listing_id")
         try:
             result = self._shop_service.purchase_from_shop(
                 PurchaseFromShopCommand(
@@ -911,6 +961,9 @@ class ToolCommandMapper:
     def _execute_shop_list_item(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._shop_service is None:
             return self._unknown_tool("ショップ出品ツールはまだ利用できません。")
+        for key in ("shop_id", "slot_id", "price_per_unit"):
+            if args.get(key) is None:
+                return self._invalid_arg_result(key)
         try:
             result = self._shop_service.list_shop_item(
                 ListShopItemCommand(
@@ -927,6 +980,10 @@ class ToolCommandMapper:
     def _execute_shop_unlist_item(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._shop_service is None:
             return self._unknown_tool("ショップ取り下げツールはまだ利用できません。")
+        if args.get("shop_id") is None:
+            return self._invalid_arg_result("shop_id")
+        if args.get("listing_id") is None:
+            return self._invalid_arg_result("listing_id")
         try:
             result = self._shop_service.unlist_shop_item(
                 UnlistShopItemCommand(
@@ -942,6 +999,9 @@ class ToolCommandMapper:
     def _execute_trade_offer(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._trade_service is None:
             return self._unknown_tool("取引出品ツールはまだ利用できません。")
+        for key in ("item_instance_id", "slot_id", "requested_gold"):
+            if args.get(key) is None:
+                return self._invalid_arg_result(key)
         try:
             result = self._trade_service.offer_item(
                 OfferItemCommand(
@@ -960,6 +1020,8 @@ class ToolCommandMapper:
     def _execute_trade_accept(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._trade_service is None:
             return self._unknown_tool("取引受諾ツールはまだ利用できません。")
+        if args.get("trade_id") is None:
+            return self._invalid_arg_result("trade_id")
         try:
             result = self._trade_service.accept_trade(
                 AcceptTradeCommand(trade_id=int(args["trade_id"]), buyer_id=player_id)
@@ -971,6 +1033,8 @@ class ToolCommandMapper:
     def _execute_trade_cancel(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._trade_service is None:
             return self._unknown_tool("取引キャンセルツールはまだ利用できません。")
+        if args.get("trade_id") is None:
+            return self._invalid_arg_result("trade_id")
         try:
             result = self._trade_service.cancel_trade(
                 CancelTradeCommand(trade_id=int(args["trade_id"]), player_id=player_id)

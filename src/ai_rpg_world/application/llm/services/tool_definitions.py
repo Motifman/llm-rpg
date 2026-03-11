@@ -3,6 +3,7 @@
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IGameToolRegistry
 from ai_rpg_world.application.llm.services.availability_resolvers import (
+    CancelMovementAvailabilityResolver,
     ChangeAttentionAvailabilityResolver,
     ChestStoreAvailabilityResolver,
     ChestTakeAvailabilityResolver,
@@ -61,6 +62,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_INSPECT_ITEM,
     TOOL_NAME_INSPECT_TARGET,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
+    TOOL_NAME_CANCEL_MOVEMENT,
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
     TOOL_NAME_PLACE_OBJECT,
@@ -102,6 +104,12 @@ MOVE_TO_DESTINATION_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_MOVE_TO_DESTINATION,
     description="指定した目的地（スポット、ロケーション、または視界内オブジェクト）へ移動します。",
     parameters=MOVE_TO_DESTINATION_PARAMETERS,
+)
+
+CANCEL_MOVEMENT_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_CANCEL_MOVEMENT,
+    description="設定済みの経路をキャンセルし、移動を中断します。移動中のみ利用可能です。",
+    parameters={"type": "object", "properties": {}, "required": []},
 )
 
 WHISPER_PARAMETERS = {
@@ -659,6 +667,7 @@ def register_default_tools(
         raise TypeError("registry must be IGameToolRegistry")
     registry.register(NO_OP_DEFINITION, NoOpAvailabilityResolver())
     registry.register(MOVE_TO_DESTINATION_DEFINITION, SetDestinationAvailabilityResolver())
+    registry.register(CANCEL_MOVEMENT_DEFINITION, CancelMovementAvailabilityResolver())
     if pursuit_enabled:
         registry.register(PURSUIT_START_DEFINITION, PursuitStartAvailabilityResolver())
         registry.register(PURSUIT_CANCEL_DEFINITION, PursuitCancelAvailabilityResolver())

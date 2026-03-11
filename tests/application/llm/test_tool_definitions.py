@@ -6,6 +6,7 @@ from ai_rpg_world.application.llm.services.game_tool_registry import (
     DefaultGameToolRegistry,
 )
 from ai_rpg_world.application.llm.services.tool_definitions import (
+    CANCEL_MOVEMENT_DEFINITION,
     CHANGE_ATTENTION_DEFINITION,
     CHEST_STORE_DEFINITION,
     CHEST_TAKE_DEFINITION,
@@ -26,6 +27,7 @@ from ai_rpg_world.application.llm.services.tool_definitions import (
     register_default_tools,
 )
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_CANCEL_MOVEMENT,
     TOOL_NAME_CHANGE_ATTENTION,
     TOOL_NAME_CHEST_STORE,
     TOOL_NAME_CHEST_TAKE,
@@ -136,6 +138,11 @@ class TestToolDefinitions:
         assert PURSUIT_CANCEL_DEFINITION.name == TOOL_NAME_PURSUIT_CANCEL
         assert PURSUIT_CANCEL_DEFINITION.parameters.get("required") == []
 
+    def test_cancel_movement_definition_has_expected_name_and_empty_params(self):
+        """CANCEL_MOVEMENT_DEFINITION は name=move_cancel, parameters は空"""
+        assert CANCEL_MOVEMENT_DEFINITION.name == TOOL_NAME_CANCEL_MOVEMENT
+        assert CANCEL_MOVEMENT_DEFINITION.parameters.get("required") == []
+
 
 class TestRegisterDefaultTools:
     """register_default_tools の正常・例外"""
@@ -148,6 +155,13 @@ class TestRegisterDefaultTools:
         names = [e[0].name for e in entries]
         assert TOOL_NAME_NO_OP in names
         assert TOOL_NAME_MOVE_TO_DESTINATION in names
+
+    def test_register_default_tools_adds_cancel_movement(self):
+        """登録後は cancel_movement が取得できる"""
+        registry = DefaultGameToolRegistry()
+        register_default_tools(registry)
+        names = [e[0].name for e in registry.get_definitions_with_resolvers()]
+        assert TOOL_NAME_CANCEL_MOVEMENT in names
 
     def test_register_default_tools_with_speech_enabled_adds_whisper(self):
         registry = DefaultGameToolRegistry()

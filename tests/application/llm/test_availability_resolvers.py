@@ -3,6 +3,7 @@
 import pytest
 
 from ai_rpg_world.application.llm.services.availability_resolvers import (
+    CancelMovementAvailabilityResolver,
     ChangeAttentionAvailabilityResolver,
     ChestStoreAvailabilityResolver,
     CombatUseSkillAvailabilityResolver,
@@ -12,6 +13,8 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
     InspectTargetAvailabilityResolver,
     NoOpAvailabilityResolver,
     PlaceObjectAvailabilityResolver,
+    PursuitCancelAvailabilityResolver,
+    PursuitStartAvailabilityResolver,
     SetDestinationAvailabilityResolver,
     WhisperAvailabilityResolver,
 )
@@ -115,6 +118,21 @@ class TestSetDestinationAvailabilityResolver:
         ctx.has_active_path = True
         assert resolver.is_available(ctx) is False
 
+    def test_not_available_when_is_busy(self):
+        """is_busy が True のとき利用不可"""
+        resolver = SetDestinationAvailabilityResolver()
+        move = AvailableMoveDto(
+            spot_id=2,
+            spot_name="Next",
+            road_id=1,
+            road_description="",
+            conditions_met=True,
+            failed_conditions=[],
+        )
+        ctx = _minimal_current_state(available_moves=[move], total_available_moves=1)
+        ctx.is_busy = True
+        assert resolver.is_available(ctx) is False
+
     def test_not_available_when_total_zero(self):
         """total_available_moves が 0 のとき利用不可"""
         resolver = SetDestinationAvailabilityResolver()
@@ -195,6 +213,29 @@ class TestSetDestinationAvailabilityResolver:
         assert resolver.is_available(ctx) is True
 
 
+class TestCancelMovementAvailabilityResolver:
+    """CancelMovementAvailabilityResolver の境界・正常"""
+
+    def test_not_available_when_context_none(self):
+        """context が None のとき利用不可"""
+        resolver = CancelMovementAvailabilityResolver()
+        assert resolver.is_available(None) is False
+
+    def test_not_available_when_has_active_path_false(self):
+        """has_active_path が False のとき利用不可"""
+        resolver = CancelMovementAvailabilityResolver()
+        ctx = _minimal_current_state()
+        ctx.has_active_path = False
+        assert resolver.is_available(ctx) is False
+
+    def test_available_when_has_active_path_true(self):
+        """has_active_path が True のとき利用可能"""
+        resolver = CancelMovementAvailabilityResolver()
+        ctx = _minimal_current_state()
+        ctx.has_active_path = True
+        assert resolver.is_available(ctx) is True
+
+
 class TestWhisperAvailabilityResolver:
     def test_not_available_when_context_none(self):
         resolver = WhisperAvailabilityResolver()
@@ -235,6 +276,118 @@ class TestWhisperAvailabilityResolver:
             ]
         )
         assert resolver.is_available(ctx) is True
+
+
+class TestPursuitStartAvailabilityResolver:
+    """PursuitStartAvailabilityResolver の境界・正常"""
+
+    def test_not_available_when_context_none(self):
+        resolver = PursuitStartAvailabilityResolver()
+        assert resolver.is_available(None) is False
+
+    def test_not_available_when_is_busy(self):
+        resolver = PursuitStartAvailabilityResolver()
+        ctx = _minimal_current_state(
+            visible_objects=[
+                VisibleObjectDto(
+                    object_id=2,
+                    object_type="PLAYER",
+                    x=1,
+                    y=0,
+                    z=0,
+                    distance=1,
+                    object_kind="player",
+                    is_self=False,
+                )
+            ]
+        )
+        ctx.is_busy = True
+        assert resolver.is_available(ctx) is False
+
+    def test_not_available_when_no_player_or_monster_visible(self):
+        resolver = PursuitStartAvailabilityResolver()
+        ctx = _minimal_current_state(
+            visible_objects=[
+                VisibleObjectDto(
+                    object_id=2,
+                    object_type="NPC",
+                    x=1,
+                    y=0,
+                    z=0,
+                    distance=1,
+                    object_kind="npc",
+                    is_self=False,
+                )
+            ]
+        )
+        assert resolver.is_available(ctx) is False
+
+    def test_available_when_player_visible(self):
+        resolver = PursuitStartAvailabilityResolver()
+        ctx = _minimal_current_state(
+            visible_objects=[
+                VisibleObjectDto(
+                    object_id=2,
+                    object_type="PLAYER",
+                    x=1,
+                    y=0,
+                    z=0,
+                    distance=1,
+                    object_kind="player",
+                    is_self=False,
+                )
+            ]
+        )
+        assert resolver.is_available(ctx) is True
+
+    def test_available_when_monster_visible(self):
+        resolver = PursuitStartAvailabilityResolver()
+        ctx = _minimal_current_state(
+            visible_objects=[
+                VisibleObjectDto(
+                    object_id=3,
+                    object_type="MONSTER",
+                    x=1,
+                    y=0,
+                    z=0,
+                    distance=1,
+                    object_kind="monster",
+                    is_self=False,
+                )
+            ]
+        )
+        assert resolver.is_available(ctx) is True
+
+    def test_not_available_when_visible_objects_none(self):
+        """visible_objects が None のとき TypeError を避けて False を返す"""
+        resolver = PursuitStartAvailabilityResolver()
+        ctx = _minimal_current_state()
+        ctx.visible_objects = None  # type: ignore[assignment]
+        assert resolver.is_available(ctx) is False
+
+
+class TestPursuitCancelAvailabilityResolver:
+    """PursuitCancelAvailabilityResolver の境界・正常"""
+
+    def test_not_available_when_context_none(self):
+        resolver = PursuitCancelAvailabilityResolver()
+        assert resolver.is_available(None) is False
+
+    def test_available_when_context_present(self):
+        resolver = PursuitCancelAvailabilityResolver()
+        ctx = _minimal_current_state()
+        assert resolver.is_available(ctx) is True
+
+
+class TestWhisperVisibilityNone:
+    """WhisperAvailabilityResolver の visible_objects=None 防御"""
+
+    def test_not_available_when_visible_objects_none(self):
+        """visible_objects が None のとき TypeError を避けて False を返す"""
+        resolver = WhisperAvailabilityResolver()
+        ctx = _minimal_current_state()
+        ctx.visible_objects = None  # type: ignore[assignment]
+        assert resolver.is_available(ctx) is False
 
 
 class TestExtendedAvailabilityResolvers:
