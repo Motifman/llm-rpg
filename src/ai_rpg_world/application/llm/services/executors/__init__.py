@@ -7,6 +7,7 @@ from ai_rpg_world.application.llm.services.executors.shop_executor import ShopTo
 from ai_rpg_world.application.llm.services.executors.speech_executor import SpeechToolExecutor
 from ai_rpg_world.application.llm.services.executors.todo_executor import TodoToolExecutor
 from ai_rpg_world.application.llm.services.executors.trade_executor import TradeToolExecutor
+from ai_rpg_world.application.llm.services.executors.world_executor import WorldToolExecutor
 
 __all__ = [
     "MemoryToolExecutor",
@@ -16,4 +17,5 @@ __all__ = [
     "SpeechToolExecutor",
     "TodoToolExecutor",
     "TradeToolExecutor",
+    "WorldToolExecutor",
 ]
