@@ -76,5 +76,5 @@
 |-------|------|------|
 | 1 | ✅ 実施済み | tool_executor_helpers 追加 |
 | 2 | ✅ 実施済み | TodoToolExecutor 抽出・統合 |
-| 3 | ✅ 一部実施 | 3a〜3f 実施済み（Memory, Speech, Quest, Shop, Trade, Movement）。3g World, 3h Guild は未着手。executors: memory_executor, movement_executor, quest_executor, shop_executor, speech_executor, trade_executor |
+| 3 | ✅ ほぼ実施 | 3a〜3g 実施済み（Memory, Speech, Quest, Shop, Trade, Movement, World）。3h Guild は未着手（他エージェント作業待ち）。executors: memory_executor, movement_executor, quest_executor, shop_executor, speech_executor, trade_executor, world_executor |
 | 4 | 未着手 | ファサード化 |

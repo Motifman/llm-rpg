@@ -500,39 +500,64 @@ class TestToolCommandMapperHarvest:
 
 class TestToolCommandMapperExtendedTools:
     @pytest.fixture
-    def mapper(self):
+    def attention_service(self):
+        return MagicMock()
+
+    @pytest.fixture
+    def conversation_service(self):
+        svc = MagicMock()
+        svc.advance_conversation.return_value = MagicMock(success=True, message="会話を進めました")
+        return svc
+
+    @pytest.fixture
+    def place_object_service(self):
+        return MagicMock()
+
+    @pytest.fixture
+    def chest_service(self):
+        return MagicMock()
+
+    @pytest.fixture
+    def skill_tool_service(self):
+        return MagicMock()
+
+    @pytest.fixture
+    def mapper(
+        self,
+        attention_service,
+        conversation_service,
+        place_object_service,
+        chest_service,
+        skill_tool_service,
+    ):
         return ToolCommandMapper(
             movement_service=MagicMock(),
-            attention_service=MagicMock(),
-            conversation_service=MagicMock(),
-            place_object_service=MagicMock(),
-            chest_service=MagicMock(),
-            skill_tool_service=MagicMock(),
+            attention_service=attention_service,
+            conversation_service=conversation_service,
+            place_object_service=place_object_service,
+            chest_service=chest_service,
+            skill_tool_service=skill_tool_service,
         )
 
-    def test_execute_change_attention_success(self, mapper):
+    def test_execute_change_attention_success(self, mapper, attention_service):
         result = mapper.execute(
             1,
             TOOL_NAME_CHANGE_ATTENTION,
             {"attention_level_value": "FULL"},
         )
         assert result.success is True
-        mapper._attention_service.change_attention_level.assert_called_once()
+        attention_service.change_attention_level.assert_called_once()
 
-    def test_execute_conversation_advance_success(self, mapper):
-        mapper._conversation_service.advance_conversation.return_value = MagicMock(
-            success=True,
-            message="会話を進めました",
-        )
+    def test_execute_conversation_advance_success(self, mapper, conversation_service):
         result = mapper.execute(
             1,
             TOOL_NAME_CONVERSATION_ADVANCE,
             {"npc_world_object_id": 200, "choice_index": 0},
         )
         assert result.success is True
-        mapper._conversation_service.advance_conversation.assert_called_once()
+        conversation_service.advance_conversation.assert_called_once()
 
-    def test_execute_place_object_success(self, mapper):
+    def test_execute_place_object_success(self, mapper, place_object_service):
         result = mapper.execute(
             1,
             TOOL_NAME_PLACE_OBJECT,
@@ -540,17 +565,17 @@ class TestToolCommandMapperExtendedTools:
         )
         assert result.success is True
         assert "木箱" in result.message
-        mapper._place_object_service.place_from_inventory_slot.assert_called_once_with(
+        place_object_service.place_from_inventory_slot.assert_called_once_with(
             player_id=1,
             inventory_slot_id=2,
         )
 
-    def test_execute_destroy_placeable_success(self, mapper):
+    def test_execute_destroy_placeable_success(self, mapper, place_object_service):
         result = mapper.execute(1, TOOL_NAME_DESTROY_PLACEABLE, {})
         assert result.success is True
-        mapper._place_object_service.destroy_in_front.assert_called_once_with(player_id=1)
+        place_object_service.destroy_in_front.assert_called_once_with(player_id=1)
 
-    def test_execute_chest_store_success(self, mapper):
+    def test_execute_chest_store_success(self, mapper, chest_service):
         result = mapper.execute(
             1,
             TOOL_NAME_CHEST_STORE,
@@ -562,9 +587,9 @@ class TestToolCommandMapperExtendedTools:
             },
         )
         assert result.success is True
-        mapper._chest_service.store_item_by_target.assert_called_once()
+        chest_service.store_item_by_target.assert_called_once()
 
-    def test_execute_chest_take_success(self, mapper):
+    def test_execute_chest_take_success(self, mapper, chest_service):
         result = mapper.execute(
             1,
             TOOL_NAME_CHEST_TAKE,
@@ -576,9 +601,9 @@ class TestToolCommandMapperExtendedTools:
             },
         )
         assert result.success is True
-        mapper._chest_service.take_item_by_target.assert_called_once()
+        chest_service.take_item_by_target.assert_called_once()
 
-    def test_execute_combat_use_skill_success(self, mapper):
+    def test_execute_combat_use_skill_success(self, mapper, skill_tool_service):
         result = mapper.execute(
             1,
             TOOL_NAME_COMBAT_USE_SKILL,
@@ -593,7 +618,7 @@ class TestToolCommandMapperExtendedTools:
         )
         assert result.success is True
         assert "ゴブリン" in result.message
-        mapper._skill_tool_service.use_skill.assert_called_once()
+        skill_tool_service.use_skill.assert_called_once()
 
 
 class TestToolCommandMapperDropItem:
