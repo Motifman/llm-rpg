@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: in_progress
-stopped_at: Completed 07-02-PLAN.md
-last_updated: "2026-03-11T15:15:27Z"
-last_activity: 2026-03-12 — Phase 7 plan 07-02 repaired Phase 4 validation, added Phase 4 verification, and fixed the OBSV-02 Phase 6 ownership note
+status: completed
+stopped_at: Completed 07-03-PLAN.md
+last_updated: "2026-03-11T15:23:16Z"
+last_activity: 2026-03-12 — Phase 7 plan 07-03 synchronized REQUIREMENTS traceability to the final verification-backed acceptance owners and closed the v1.0 planning ledger
 progress:
   total_phases: 7
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 19
-  completed_plans: 18
-  percent: 95
+  completed_plans: 19
+  percent: 100
 ---
 
 # Project State
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** LLMエージェントが、静的な目的地指定だけでなく、動的に移動する主体に対しても一貫した状態遷移とイベント駆動で行動を継続できること
-**Current focus:** Phase 7: Pursuit Audit Evidence Backfill
+**Current focus:** Milestone complete: v1.0 pursuit planning and audit evidence closure
 
 ## Current Position
 
 Phase: 7 of 7 (Pursuit Audit Evidence Backfill)
-Plan: 2 of 3 in current phase
+Plan: 3 of 3 in current phase
 Status: Completed
-Last activity: 2026-03-12 — Phase 7 plan 07-02 repaired Phase 4 validation, added Phase 4 verification, and fixed the OBSV-02 Phase 6 ownership note
+Last activity: 2026-03-12 — Phase 7 plan 07-03 synchronized REQUIREMENTS traceability to the final verification-backed acceptance owners and closed the v1.0 planning ledger
 
-Progress: [█████████▌] 95%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 18
+- Total plans completed: 19
 - Average duration: 7 min
-- Total execution time: 128 min
+- Total execution time: 132 min
 
 **By Phase:**
 
@@ -49,11 +49,11 @@ Progress: [█████████▌] 95%
 | 04-observation-and-llm-delivery | 2 | 12 min | 6 min |
 | 05-monster-pursuit-alignment | 2 | 18 min | 9 min |
 | 06-player-pursuit-runtime-assembly-closure | 3 | 23 min | 8 min |
-| 07-pursuit-audit-evidence-backfill | 2 | 10 min | 5 min |
+| 07-pursuit-audit-evidence-backfill | 3 | 14 min | 5 min |
 
 **Recent Trend:**
-- Last 5 plans: 8 min, 9 min, 6 min, 6 min, 4 min
-- Trend: Stable with faster closeout work
+- Last 5 plans: 9 min, 6 min, 6 min, 4 min, 4 min
+- Trend: Stable with faster documentation closeout work
 
 | Phase | Duration | Tasks | Files |
 |-------|----------|-------|-------|
@@ -61,6 +61,7 @@ Progress: [█████████▌] 95%
 | Phase 06-player-pursuit-runtime-assembly-closure P03 | 6 min | 3 tasks | 2 files |
 | Phase 07-pursuit-audit-evidence-backfill P01 | 6 min | 4 tasks | 6 files |
 | Phase 07-pursuit-audit-evidence-backfill P02 | 4 min | 3 tasks | 5 files |
+| Phase 07-pursuit-audit-evidence-backfill P03 | 4 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,7 @@ Recent decisions affecting current work:
 - [Phase 07-pursuit-audit-evidence-backfill]: Requirement ownership is fixed before verification backfill; `PURS-02` stays accepted in Phase 5 while `PURS-03`, `PURS-04`, and `RUNT-01` remain finally accepted in Phase 6.
 - [Phase 07-pursuit-audit-evidence-backfill]: Verification artifacts must be command-backed acceptance evidence instead of rewritten summaries.
 - [Phase 07-pursuit-audit-evidence-backfill]: Phase 4 is the final acceptance home for `OUTC-03`, `RUNT-03`, and `OBSV-01`, while `OBSV-02` remains a Phase 6 runtime-closure acceptance item.
+- [Phase 07-pursuit-audit-evidence-backfill]: `REQUIREMENTS.md` checklist state and traceability ownership must stay synchronized so the milestone ledger can be audited without cross-referencing temporary Phase 7 pending rows.
 
 ### Pending Todos
 
@@ -121,5 +123,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-11T14:39:36Z
-Stopped at: Completed 07-02-PLAN.md
+Stopped at: Completed 07-03-PLAN.md
 Resume file: None
