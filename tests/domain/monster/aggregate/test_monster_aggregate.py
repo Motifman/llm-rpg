@@ -1,4 +1,5 @@
 import pytest
+from dataclasses import replace
 from unittest.mock import patch
 
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -29,6 +30,7 @@ from ai_rpg_world.domain.monster.event.monster_events import (
     TargetLostEvent,
 )
 from ai_rpg_world.domain.monster.service.behavior_state_transition_service import (
+    SpotTargetParams,
     StateTransitionResult,
 )
 from ai_rpg_world.domain.monster.exception.monster_exceptions import (
@@ -53,6 +55,13 @@ from ai_rpg_world.domain.world.value_object.pack_id import PackId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum, EcologyTypeEnum
+from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
+    PursuitLastKnownState,
+)
+from ai_rpg_world.domain.pursuit.value_object.pursuit_state import PursuitState
+from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
+    PursuitTargetSnapshot,
+)
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.common.service.effective_stats_domain_service import compute_effective_stats
@@ -216,6 +225,154 @@ class TestMonsterAggregate:
             monster.apply_damage(100, WorldTick(100))
             monster.respawn(Coordinate(5, 5, 0), WorldTick(200), spot_id)
             assert monster.spawned_at_tick == WorldTick(200)
+
+    class TestPursuitAlignment:
+        def test_apply_behavior_transition_spot_target_starts_aligned_pursuit(
+            self, monster: MonsterAggregate, spot_id: SpotId
+        ):
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+
+            monster.apply_behavior_transition(
+                StateTransitionResult(
+                    spot_target_params=SpotTargetParams(
+                        target_id=WorldObjectId.create(2001),
+                        coordinate=Coordinate(2, 1, 0),
+                        effective_flee_threshold=0.0,
+                        allow_chase=True,
+                    )
+                ),
+                WorldTick(10),
+            )
+
+            assert monster.behavior_state == BehaviorStateEnum.CHASE
+            assert monster.has_active_pursuit is True
+            assert monster.pursuit_target_id == WorldObjectId.create(2001)
+            assert monster.pursuit_target_snapshot == PursuitTargetSnapshot(
+                target_id=WorldObjectId.create(2001),
+                spot_id=spot_id,
+                coordinate=Coordinate(2, 1, 0),
+            )
+            assert monster.pursuit_last_known == PursuitLastKnownState(
+                target_id=WorldObjectId.create(2001),
+                spot_id=spot_id,
+                coordinate=Coordinate(2, 1, 0),
+                observed_at_tick=WorldTick(10),
+            )
+
+        def test_apply_behavior_transition_lose_target_keeps_pursuit_for_search(
+            self, monster: MonsterAggregate, spot_id: SpotId
+        ):
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            target_id = WorldObjectId.create(2002)
+            seen_at = Coordinate(3, 0, 0)
+            monster.apply_behavior_transition(
+                StateTransitionResult(
+                    spot_target_params=SpotTargetParams(
+                        target_id=target_id,
+                        coordinate=seen_at,
+                        effective_flee_threshold=0.0,
+                        allow_chase=True,
+                    )
+                ),
+                WorldTick(5),
+            )
+
+            monster.apply_behavior_transition(
+                StateTransitionResult(
+                    do_lose_target=True,
+                    lost_target_id=target_id,
+                    last_known_coordinate=Coordinate(4, 0, 0),
+                ),
+                WorldTick(6),
+            )
+
+            assert monster.behavior_state == BehaviorStateEnum.SEARCH
+            assert monster.behavior_target_id == target_id
+            assert monster.behavior_last_known_position == Coordinate(4, 0, 0)
+            assert monster.pursuit_state is not None
+            assert monster.pursuit_state.target_snapshot == PursuitTargetSnapshot(
+                target_id=target_id,
+                spot_id=spot_id,
+                coordinate=seen_at,
+            )
+            assert monster.pursuit_state.last_known == PursuitLastKnownState(
+                target_id=target_id,
+                spot_id=spot_id,
+                coordinate=Coordinate(4, 0, 0),
+                observed_at_tick=WorldTick(6),
+            )
+
+        def test_record_attacked_by_starts_pursuit_when_monster_chases(
+            self, monster: MonsterAggregate, spot_id: SpotId
+        ):
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+
+            monster.record_attacked_by(
+                attacker_id=WorldObjectId.create(3001),
+                attacker_coordinate=Coordinate(1, 2, 0),
+                current_tick=WorldTick(7),
+            )
+
+            assert monster.behavior_state == BehaviorStateEnum.CHASE
+            assert monster.has_active_pursuit is True
+            assert monster.pursuit_target_id == WorldObjectId.create(3001)
+            assert monster.pursuit_last_known == PursuitLastKnownState(
+                target_id=WorldObjectId.create(3001),
+                spot_id=spot_id,
+                coordinate=Coordinate(1, 2, 0),
+                observed_at_tick=WorldTick(7),
+            )
+
+        def test_non_pursuit_exit_clears_aligned_pursuit_state(
+            self, monster: MonsterAggregate, spot_id: SpotId
+        ):
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            monster.apply_behavior_transition(
+                StateTransitionResult(
+                    spot_target_params=SpotTargetParams(
+                        target_id=WorldObjectId.create(2003),
+                        coordinate=Coordinate(2, 0, 0),
+                        effective_flee_threshold=0.0,
+                        allow_chase=True,
+                    )
+                ),
+                WorldTick(3),
+            )
+
+            monster.apply_behavior_transition(
+                StateTransitionResult(
+                    flee_from_threat_id=WorldObjectId.create(9001),
+                    flee_from_threat_coordinate=Coordinate(9, 9, 0),
+                ),
+                WorldTick(4),
+            )
+
+            assert monster.behavior_state == BehaviorStateEnum.FLEE
+            assert monster.pursuit_state is None
+            monster._template = replace(monster.template, territory_radius=1)
+            monster._behavior_state = BehaviorStateEnum.CHASE
+            monster._behavior_target_id = WorldObjectId.create(2003)
+            monster._behavior_last_known_position = Coordinate(2, 0, 0)
+            monster._pursuit_state = PursuitState(
+                actor_id=monster.world_object_id,
+                target_id=WorldObjectId.create(2003),
+                target_snapshot=PursuitTargetSnapshot(
+                    target_id=WorldObjectId.create(2003),
+                    spot_id=spot_id,
+                    coordinate=Coordinate(2, 0, 0),
+                ),
+                last_known=PursuitLastKnownState(
+                    target_id=WorldObjectId.create(2003),
+                    spot_id=spot_id,
+                    coordinate=Coordinate(2, 0, 0),
+                    observed_at_tick=WorldTick(3),
+                ),
+            )
+
+            monster.apply_territory_return_if_needed(Coordinate(999, 999, 0))
+
+            assert monster.behavior_state == BehaviorStateEnum.RETURN
+            assert monster.pursuit_state is None
 
     class TestApplyDamage:
         def test_apply_damage_success(self, monster: MonsterAggregate, spot_id: SpotId):
@@ -1393,8 +1550,12 @@ class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
             spawned_monster.apply_behavior_transition(result, WorldTick(10))
 
             assert spawned_monster.behavior_state == BehaviorStateEnum.SEARCH
-            assert spawned_monster.behavior_target_id is None
-            assert spawned_monster.behavior_last_known_position is None
+            assert spawned_monster.behavior_target_id == WorldObjectId(321)
+            assert spawned_monster.behavior_last_known_position == Coordinate(7, 8, 0)
+            assert spawned_monster.pursuit_state is not None
+            assert spawned_monster.pursuit_state.target_id == WorldObjectId(321)
+            assert spawned_monster.pursuit_state.last_known is not None
+            assert spawned_monster.pursuit_state.last_known.coordinate == Coordinate(7, 8, 0)
 
             events = spawned_monster.get_events()
             lost = next(e for e in events if isinstance(e, TargetLostEvent))

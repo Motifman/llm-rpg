@@ -45,6 +45,13 @@ from ai_rpg_world.domain.monster.event.monster_events import (
     TargetSpottedEvent,
     TargetLostEvent,
 )
+from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
+    PursuitLastKnownState,
+)
+from ai_rpg_world.domain.pursuit.value_object.pursuit_state import PursuitState
+from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
+    PursuitTargetSnapshot,
+)
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.value_object.pack_id import PackId
@@ -82,6 +89,7 @@ class MonsterAggregate(AggregateRoot):
         behavior_patrol_index: int = 0,
         behavior_search_timer: int = 0,
         behavior_failure_count: int = 0,
+        pursuit_state: Optional[PursuitState] = None,
         hunger: float = 0.0,
         starvation_timer: int = 0,
         behavior_last_known_feed: Optional[List[FeedMemoryEntry]] = None,
@@ -109,6 +117,7 @@ class MonsterAggregate(AggregateRoot):
         self._behavior_patrol_index = behavior_patrol_index
         self._behavior_search_timer = behavior_search_timer
         self._behavior_failure_count = behavior_failure_count
+        self._pursuit_state = pursuit_state
         self._hunger = max(0.0, min(1.0, hunger))
         self._starvation_timer = max(0, starvation_timer)
         self._behavior_last_known_feed: List[FeedMemoryEntry] = (
@@ -279,6 +288,32 @@ class MonsterAggregate(AggregateRoot):
         return self._behavior_failure_count
 
     @property
+    def pursuit_state(self) -> Optional[PursuitState]:
+        return self._pursuit_state
+
+    @property
+    def has_active_pursuit(self) -> bool:
+        return self._pursuit_state is not None
+
+    @property
+    def pursuit_target_id(self) -> Optional[WorldObjectId]:
+        if self._pursuit_state is None:
+            return None
+        return self._pursuit_state.target_id
+
+    @property
+    def pursuit_target_snapshot(self) -> Optional[PursuitTargetSnapshot]:
+        if self._pursuit_state is None:
+            return None
+        return self._pursuit_state.target_snapshot
+
+    @property
+    def pursuit_last_known(self) -> Optional[PursuitLastKnownState]:
+        if self._pursuit_state is None:
+            return None
+        return self._pursuit_state.last_known
+
+    @property
     def behavior_last_known_feed(self) -> List[FeedMemoryEntry]:
         """餌場の記憶（最大 MAX_FEED_MEMORIES 件、古い順）。適用時は距離が近い順に使う。"""
         return list(self._behavior_last_known_feed)
@@ -333,6 +368,7 @@ class MonsterAggregate(AggregateRoot):
         self._behavior_patrol_index = 0
         self._behavior_search_timer = 0
         self._behavior_failure_count = 0
+        self._pursuit_state = None
         self._hunger = max(0.0, min(1.0, initial_hunger))
         self._starvation_timer = 0
 
@@ -584,6 +620,7 @@ class MonsterAggregate(AggregateRoot):
             self._behavior_target_id = attacker_id
             self._behavior_last_known_position = attacker_coordinate
             self._behavior_state = BehaviorStateEnum.FLEE
+            self._clear_pursuit_state()
             return
         if (
             eco == EcologyTypeEnum.AMBUSH
@@ -594,6 +631,11 @@ class MonsterAggregate(AggregateRoot):
                 return
         self._behavior_target_id = attacker_id
         self._behavior_last_known_position = attacker_coordinate
+        self._sync_active_pursuit_state(
+            target_id=attacker_id,
+            coordinate=attacker_coordinate,
+            observed_at_tick=current_tick,
+        )
         hp_percentage = (
             self._hp.value / self._hp.max_hp if self._hp.max_hp > 0 else 1.0
         )
@@ -681,6 +723,79 @@ class MonsterAggregate(AggregateRoot):
                 f"Monster {self._monster_id} has no spot_id, cannot perform behavior"
             )
 
+    def _build_pursuit_target_snapshot(
+        self, target_id: WorldObjectId, coordinate: Coordinate
+    ) -> PursuitTargetSnapshot:
+        if self._spot_id is None:
+            raise MonsterNotSpawnedException(
+                f"Monster {self._monster_id} has no spot_id, cannot build pursuit snapshot"
+            )
+        return PursuitTargetSnapshot(
+            target_id=target_id,
+            spot_id=self._spot_id,
+            coordinate=coordinate,
+        )
+
+    def _build_pursuit_last_known(
+        self,
+        target_id: WorldObjectId,
+        coordinate: Coordinate,
+        observed_at_tick: Optional[WorldTick],
+    ) -> PursuitLastKnownState:
+        if self._spot_id is None:
+            raise MonsterNotSpawnedException(
+                f"Monster {self._monster_id} has no spot_id, cannot build pursuit last-known state"
+            )
+        return PursuitLastKnownState(
+            target_id=target_id,
+            spot_id=self._spot_id,
+            coordinate=coordinate,
+            observed_at_tick=observed_at_tick,
+        )
+
+    def _sync_active_pursuit_state(
+        self,
+        target_id: WorldObjectId,
+        coordinate: Coordinate,
+        observed_at_tick: Optional[WorldTick],
+    ) -> None:
+        snapshot = self._build_pursuit_target_snapshot(target_id, coordinate)
+        self._pursuit_state = PursuitState(
+            actor_id=self._world_object_id,
+            target_id=target_id,
+            target_snapshot=snapshot,
+            last_known=self._build_pursuit_last_known(
+                target_id=target_id,
+                coordinate=coordinate,
+                observed_at_tick=observed_at_tick,
+            ),
+        )
+
+    def _preserve_pursuit_last_known(
+        self,
+        target_id: WorldObjectId,
+        coordinate: Coordinate,
+        observed_at_tick: Optional[WorldTick],
+    ) -> None:
+        target_snapshot: Optional[PursuitTargetSnapshot] = None
+        if self._pursuit_state is not None:
+            target_snapshot = self._pursuit_state.target_snapshot
+        if target_snapshot is None:
+            target_snapshot = self._build_pursuit_target_snapshot(target_id, coordinate)
+        self._pursuit_state = PursuitState(
+            actor_id=self._world_object_id,
+            target_id=target_id,
+            target_snapshot=target_snapshot,
+            last_known=self._build_pursuit_last_known(
+                target_id=target_id,
+                coordinate=coordinate,
+                observed_at_tick=observed_at_tick,
+            ),
+        )
+
+    def _clear_pursuit_state(self) -> None:
+        self._pursuit_state = None
+
     def apply_behavior_transition(
         self, result: StateTransitionResult, current_tick: WorldTick
     ) -> None:
@@ -711,6 +826,7 @@ class MonsterAggregate(AggregateRoot):
             self._behavior_state = BehaviorStateEnum.FLEE
             self._behavior_target_id = result.flee_from_threat_id
             self._behavior_last_known_position = result.flee_from_threat_coordinate
+            self._clear_pursuit_state()
             self.add_event(
                 TargetSpottedEvent.create(
                     aggregate_id=self._world_object_id,
@@ -746,8 +862,14 @@ class MonsterAggregate(AggregateRoot):
             )
             if hp_percentage <= effective_flee:
                 self._behavior_state = BehaviorStateEnum.FLEE
+                self._clear_pursuit_state()
             elif allow_chase and self._behavior_state != BehaviorStateEnum.ENRAGE:
                 self._behavior_state = BehaviorStateEnum.CHASE
+                self._sync_active_pursuit_state(
+                    target_id=params.target_id,
+                    coordinate=params.coordinate,
+                    observed_at_tick=current_tick,
+                )
             self.add_event(
                 TargetSpottedEvent.create(
                     aggregate_id=self._world_object_id,
@@ -775,10 +897,21 @@ class MonsterAggregate(AggregateRoot):
                 BehaviorStateEnum.ENRAGE,
             ):
                 self._behavior_state = BehaviorStateEnum.SEARCH
+                if result.lost_target_id is not None and result.last_known_coordinate is not None:
+                    self._preserve_pursuit_last_known(
+                        target_id=result.lost_target_id,
+                        coordinate=result.last_known_coordinate,
+                        observed_at_tick=current_tick,
+                    )
             elif self._behavior_state == BehaviorStateEnum.FLEE:
                 self._behavior_state = BehaviorStateEnum.RETURN
-            self._behavior_target_id = None
-            self._behavior_last_known_position = None
+                self._clear_pursuit_state()
+            if self._behavior_state == BehaviorStateEnum.SEARCH:
+                self._behavior_target_id = result.lost_target_id
+                self._behavior_last_known_position = result.last_known_coordinate
+            else:
+                self._behavior_target_id = None
+                self._behavior_last_known_position = None
             if result.last_known_coordinate is not None:
                 self.add_event(
                     TargetLostEvent.create(
@@ -823,6 +956,9 @@ class MonsterAggregate(AggregateRoot):
             ):
                 old_state = self._behavior_state
                 self._behavior_state = BehaviorStateEnum.RETURN
+                self._behavior_target_id = None
+                self._behavior_last_known_position = None
+                self._clear_pursuit_state()
                 self.add_event(
                     ActorStateChangedEvent.create(
                         aggregate_id=self._world_object_id,
