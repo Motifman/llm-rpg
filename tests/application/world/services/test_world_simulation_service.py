@@ -921,6 +921,9 @@ class TestWorldSimulationApplicationService:
         assert saved_after_first_tick.pursuit_state.last_known.coordinate == Coordinate(1, 0, 0)
         pursuit_events.extend(saved_after_first_tick.get_events())
         saved_after_first_tick.clear_events()
+        assert not any(
+            getattr(event, "failure_reason", None) is not None for event in pursuit_events
+        )
 
         service.tick()
 
