@@ -27,6 +27,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_COMBAT_USE_SKILL,
     TOOL_NAME_CONVERSATION_ADVANCE,
     TOOL_NAME_DESTROY_PLACEABLE,
+    TOOL_NAME_DROP_ITEM,
     TOOL_NAME_HARVEST_START,
     TOOL_NAME_INSPECT_ITEM,
     TOOL_NAME_INSPECT_TARGET,
@@ -327,6 +328,82 @@ class TestDefaultToolArgumentResolver:
         )
 
         assert result["inventory_slot_id"] == 2
+
+    def test_resolve_drop_item_inventory_label(self):
+        """inventory_item_label が I1（在庫アイテム）のとき inventory_slot_id, target_display_name が解決される"""
+        resolver = DefaultToolArgumentResolver()
+
+        result = resolver.resolve(
+            TOOL_NAME_DROP_ITEM,
+            {"inventory_item_label": "I1"},
+            _make_context(),
+        )
+
+        assert result["inventory_slot_id"] == 2
+        assert result["target_display_name"] == "木箱"
+
+    def test_resolve_drop_item_invalid_label_raises(self):
+        """存在しない在庫ラベルのとき ToolArgumentResolutionException"""
+        resolver = DefaultToolArgumentResolver()
+
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_DROP_ITEM,
+                {"inventory_item_label": "X99"},
+                _make_context(),
+            )
+
+        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
+
+    def test_resolve_drop_item_empty_label_raises(self):
+        """inventory_item_label が空文字のとき INVALID_TARGET_LABEL"""
+        resolver = DefaultToolArgumentResolver()
+
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_DROP_ITEM,
+                {"inventory_item_label": ""},
+                _make_context(),
+            )
+
+        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
+        assert "指定されていません" in str(exc_info.value)
+
+    def test_resolve_drop_item_none_label_raises(self):
+        """inventory_item_label が None（args に含まれない）のとき INVALID_TARGET_LABEL"""
+        resolver = DefaultToolArgumentResolver()
+
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_DROP_ITEM,
+                {},
+                _make_context(),
+            )
+
+        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
+
+    def test_resolve_drop_item_inventory_slot_none_raises(self):
+        """inventory_slot_id が None の在庫ラベルは捨てられないため INVALID_TARGET_KIND"""
+        resolver = DefaultToolArgumentResolver()
+        ctx = _make_context()
+        ctx.targets["I_NO_SLOT"] = InventoryToolRuntimeTargetDto(
+            label="I_NO_SLOT",
+            kind="inventory_item",
+            display_name="特殊アイテム",
+            item_instance_id=401,
+            inventory_slot_id=None,
+            is_placeable=False,
+            available_interactions=(),
+        )
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_DROP_ITEM,
+                {"inventory_item_label": "I_NO_SLOT"},
+                ctx,
+            )
+
+        assert exc_info.value.error_code == "INVALID_TARGET_KIND"
+        assert "捨てられない" in str(exc_info.value)
 
     def test_resolve_inspect_item_inventory_label(self):
         resolver = DefaultToolArgumentResolver()

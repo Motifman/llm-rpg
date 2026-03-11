@@ -25,6 +25,7 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "ITEM_NOT_FOUND": "指定されたアイテムがインベントリにないか、既に失われています。",
     "NO_ITEM_IN_SLOT": "指定スロットにアイテムがありません。インベントリの状態を確認してください。",
     "ITEM_RESERVED": "そのアイテムは取引中等で予約されています。取引を完了またはキャンセルしてください。",
+    "PLACEMENT_SPOT_NOT_FOUND": "プレイヤーの現在地が取得できません。マップ上にいるか確認してください。",
     "TARGET_NOT_FOUND": "指定された対象が視界内にないか、既に去っています。",
     "UNKNOWN_TOOL": "利用可能なツール一覧から選択してください。",
     "MEMORY_QUERY_DSL_PARSE_ERROR": "DSL 式の形式を確認してください。例: episodic.take(10)",

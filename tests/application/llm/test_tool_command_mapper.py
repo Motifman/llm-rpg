@@ -39,6 +39,7 @@ from ai_rpg_world.application.world.exceptions.command.movement_command_exceptio
 from ai_rpg_world.application.world.exceptions.command.place_command_exception import (
     NoItemInSlotException,
     ItemReservedForDropException,
+    PlacementSpotNotFoundException,
 )
 
 
@@ -470,6 +471,23 @@ class TestToolCommandMapperDropItem:
         assert result.error_code == "ITEM_RESERVED"
         assert result.remediation is not None
 
+    def test_execute_drop_item_placement_spot_not_found_returns_failure_dto(self):
+        """PlacementSpotNotFoundException のとき success=False, error_code=PLACEMENT_SPOT_NOT_FOUND"""
+        drop_service = MagicMock()
+        drop_service.drop_from_slot.side_effect = PlacementSpotNotFoundException(1, 0)
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            drop_item_service=drop_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_DROP_ITEM,
+            {"inventory_slot_id": 0},
+        )
+        assert result.success is False
+        assert result.error_code == "PLACEMENT_SPOT_NOT_FOUND"
+        assert result.remediation is not None
+
     def test_execute_drop_item_without_service_returns_unknown_tool(self):
         mapper = ToolCommandMapper(movement_service=MagicMock())
         result = mapper.execute(
@@ -479,6 +497,55 @@ class TestToolCommandMapperDropItem:
         )
         assert result.success is False
         assert result.error_code == "UNKNOWN_TOOL"
+
+    def test_execute_drop_item_inventory_slot_id_none_returns_invalid_target_label(self):
+        """inventory_slot_id が None のとき success=False, error_code=INVALID_TARGET_LABEL"""
+        drop_service = MagicMock()
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            drop_item_service=drop_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_DROP_ITEM,
+            {},
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        assert "inventory_slot_id" in result.message
+        drop_service.drop_from_slot.assert_not_called()
+
+    def test_execute_drop_item_inventory_slot_id_invalid_type_returns_invalid_target_label(self):
+        """inventory_slot_id が不正な型のとき success=False, error_code=INVALID_TARGET_LABEL"""
+        drop_service = MagicMock()
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            drop_item_service=drop_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_DROP_ITEM,
+            {"inventory_slot_id": "abc"},
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        drop_service.drop_from_slot.assert_not_called()
+
+    def test_execute_drop_item_inventory_slot_id_negative_returns_invalid_target_label(self):
+        """inventory_slot_id が負のとき success=False, error_code=INVALID_TARGET_LABEL"""
+        drop_service = MagicMock()
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            drop_item_service=drop_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_DROP_ITEM,
+            {"inventory_slot_id": -1},
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        drop_service.drop_from_slot.assert_not_called()
 
 
 class TestToolCommandMapperInspectItem:
