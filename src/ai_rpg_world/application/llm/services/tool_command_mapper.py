@@ -16,14 +16,18 @@ if TYPE_CHECKING:
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
+from ai_rpg_world.application.llm.services.tool_executor_helpers import (
+    exception_result,
+    unknown_tool,
+)
+from ai_rpg_world.application.llm.services.executors.todo_executor import (
+    TodoToolExecutor,
+)
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_CHANGE_ATTENTION,
     TOOL_NAME_CHEST_STORE,
     TOOL_NAME_MEMORY_QUERY,
     TOOL_NAME_SUBAGENT,
-    TOOL_NAME_TODO_ADD,
-    TOOL_NAME_TODO_COMPLETE,
-    TOOL_NAME_TODO_LIST,
     TOOL_NAME_WORKING_MEMORY_APPEND,
     TOOL_NAME_CHEST_TAKE,
     TOOL_NAME_COMBAT_USE_SKILL,
@@ -269,10 +273,8 @@ class ToolCommandMapper:
             self._executor_map[TOOL_NAME_MEMORY_QUERY] = self._execute_memory_query
         if subagent_runner is not None:
             self._executor_map[TOOL_NAME_SUBAGENT] = self._execute_subagent
-        if todo_store is not None:
-            self._executor_map[TOOL_NAME_TODO_ADD] = self._execute_todo_add
-            self._executor_map[TOOL_NAME_TODO_LIST] = self._execute_todo_list
-            self._executor_map[TOOL_NAME_TODO_COMPLETE] = self._execute_todo_complete
+        todo_executor = TodoToolExecutor(todo_store)
+        self._executor_map.update(todo_executor.get_handlers())
         if working_memory_store is not None:
             self._executor_map[TOOL_NAME_WORKING_MEMORY_APPEND] = (
                 self._execute_working_memory_append
@@ -359,7 +361,7 @@ class ToolCommandMapper:
         args: Dict[str, Any],
     ) -> LlmCommandResultDto:
         if self._pursuit_service is None:
-            return self._unknown_tool("追跡開始ツールはまだ利用できません。")
+            return unknown_tool("追跡開始ツールはまだ利用できません。")
         try:
             target_world_object_id = args.get("target_world_object_id")
             result: PursuitCommandResultDto = self._pursuit_service.start_pursuit(
@@ -378,7 +380,7 @@ class ToolCommandMapper:
                 was_no_op=result.no_op,
             )
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_pursuit_cancel(
         self,
@@ -387,7 +389,7 @@ class ToolCommandMapper:
     ) -> LlmCommandResultDto:
         del args
         if self._pursuit_service is None:
-            return self._unknown_tool("追跡中断ツールはまだ利用できません。")
+            return unknown_tool("追跡中断ツールはまだ利用できません。")
         try:
             result: PursuitCommandResultDto = self._pursuit_service.cancel_pursuit(
                 CancelPursuitCommand(player_id=player_id)
@@ -398,11 +400,11 @@ class ToolCommandMapper:
                 was_no_op=result.no_op,
             )
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_change_attention(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._attention_service is None:
-            return self._unknown_tool("注意レベル変更ツールはまだ利用できません。")
+            return unknown_tool("注意レベル変更ツールはまだ利用できません。")
         try:
             value = args.get("attention_level_value")
             self._attention_service.change_attention_level(
@@ -413,11 +415,11 @@ class ToolCommandMapper:
             )
             return LlmCommandResultDto(success=True, message="注意レベルを変更しました。")
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_conversation_advance(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._conversation_service is None:
-            return self._unknown_tool("会話進行ツールはまだ利用できません。")
+            return unknown_tool("会話進行ツールはまだ利用できません。")
         try:
             result: AdvanceConversationResultDto = self._conversation_service.advance_conversation(
                 AdvanceConversationCommand(
@@ -431,11 +433,11 @@ class ToolCommandMapper:
                 message=result.message or "会話を進めました。",
             )
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
     
     def _execute_place_object(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._place_object_service is None:
-            return self._unknown_tool("設置ツールはまだ利用できません。")
+            return unknown_tool("設置ツールはまだ利用できません。")
         try:
             self._place_object_service.place_from_inventory_slot(
                 player_id=player_id,
@@ -444,20 +446,20 @@ class ToolCommandMapper:
             target_display_name = args.get("target_display_name") or "アイテム"
             return LlmCommandResultDto(success=True, message=f"{target_display_name}を設置しました。")
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_destroy_placeable(self, player_id: int) -> LlmCommandResultDto:
         if self._place_object_service is None:
-            return self._unknown_tool("破壊ツールはまだ利用できません。")
+            return unknown_tool("破壊ツールはまだ利用できません。")
         try:
             self._place_object_service.destroy_in_front(player_id=player_id)
             return LlmCommandResultDto(success=True, message="前方の設置物を破壊しました。")
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_drop_item(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._drop_item_service is None:
-            return self._unknown_tool("ドロップツールはまだ利用できません。")
+            return unknown_tool("ドロップツールはまだ利用できません。")
         inventory_slot_id_raw = args.get("inventory_slot_id")
         if inventory_slot_id_raw is None:
             return LlmCommandResultDto(
@@ -496,11 +498,11 @@ class ToolCommandMapper:
             target_display_name = args.get("target_display_name") or "アイテム"
             return LlmCommandResultDto(success=True, message=f"{target_display_name}を捨てました。")
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_chest_store(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._chest_service is None:
-            return self._unknown_tool("チェスト収納ツールはまだ利用できません。")
+            return unknown_tool("チェスト収納ツールはまだ利用できません。")
         try:
             self._chest_service.store_item_by_target(
                 player_id=player_id,
@@ -512,11 +514,11 @@ class ToolCommandMapper:
                 message=f"{args.get('item_display_name', 'アイテム')}を{args.get('chest_display_name', '宝箱')}に収納しました。",
             )
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_chest_take(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._chest_service is None:
-            return self._unknown_tool("チェスト取得ツールはまだ利用できません。")
+            return unknown_tool("チェスト取得ツールはまだ利用できません。")
         try:
             self._chest_service.take_item_by_target(
                 player_id=player_id,
@@ -528,11 +530,11 @@ class ToolCommandMapper:
                 message=f"{args.get('chest_display_name', '宝箱')}から{args.get('item_display_name', 'アイテム')}を取り出しました。",
             )
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_combat_use_skill(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._skill_tool_service is None:
-            return self._unknown_tool("戦闘スキルツールはまだ利用できません。")
+            return unknown_tool("戦闘スキルツールはまだ利用できません。")
         try:
             self._skill_tool_service.use_skill(
                 player_id=player_id,
@@ -547,7 +549,7 @@ class ToolCommandMapper:
                 message = f"{target_display_name}に向けて{args.get('skill_display_name', 'スキル')}を使用しました。"
             return LlmCommandResultDto(success=True, message=message)
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_say(
         self,
@@ -575,24 +577,7 @@ class ToolCommandMapper:
                 message="発言しました。",
             )
         except Exception as e:
-            return self._exception_result(e)
-
-    def _unknown_tool(self, message: str) -> LlmCommandResultDto:
-        return LlmCommandResultDto(
-            success=False,
-            message=message,
-            error_code="UNKNOWN_TOOL",
-            remediation=get_remediation("UNKNOWN_TOOL"),
-        )
-
-    def _exception_result(self, e: Exception) -> LlmCommandResultDto:
-        error_code = getattr(e, "error_code", "SYSTEM_ERROR")
-        return LlmCommandResultDto(
-            success=False,
-            message=str(e),
-            error_code=error_code,
-            remediation=get_remediation(error_code),
-        )
+            return exception_result(e)
 
     def _execute_inspect_item(
         self,
@@ -649,7 +634,7 @@ class ToolCommandMapper:
             description = item.item_spec.description
             return LlmCommandResultDto(success=True, message=description)
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_inspect_target(
         self,
@@ -741,7 +726,7 @@ class ToolCommandMapper:
                     remediation=get_remediation("TARGET_NOT_FOUND"),
                 )
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_interact_world_object(
         self,
@@ -820,51 +805,51 @@ class ToolCommandMapper:
 
     def _execute_quest_accept(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._quest_service is None:
-            return self._unknown_tool("クエスト受託ツールはまだ利用できません。")
+            return unknown_tool("クエスト受託ツールはまだ利用できません。")
         try:
             result = self._quest_service.accept_quest(
                 AcceptQuestCommand(quest_id=int(args["quest_id"]), player_id=player_id)
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_quest_cancel(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._quest_service is None:
-            return self._unknown_tool("クエストキャンセルツールはまだ利用できません。")
+            return unknown_tool("クエストキャンセルツールはまだ利用できません。")
         try:
             result = self._quest_service.cancel_quest(
                 CancelQuestCommand(quest_id=int(args["quest_id"]), player_id=player_id)
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_quest_approve(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._quest_service is None:
-            return self._unknown_tool("クエスト承認ツールはまだ利用できません。")
+            return unknown_tool("クエスト承認ツールはまだ利用できません。")
         try:
             result = self._quest_service.approve_quest(
                 ApproveQuestCommand(quest_id=int(args["quest_id"]), approver_player_id=player_id)
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_guild_leave(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._guild_service is None:
-            return self._unknown_tool("ギルド脱退ツールはまだ利用できません。")
+            return unknown_tool("ギルド脱退ツールはまだ利用できません。")
         try:
             result = self._guild_service.leave_guild(
                 LeaveGuildCommand(guild_id=int(args["guild_id"]), player_id=player_id)
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_guild_deposit_bank(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._guild_service is None:
-            return self._unknown_tool("ギルド金庫入金ツールはまだ利用できません。")
+            return unknown_tool("ギルド金庫入金ツールはまだ利用できません。")
         try:
             result = self._guild_service.deposit_to_guild_bank(
                 DepositToGuildBankCommand(
@@ -875,11 +860,11 @@ class ToolCommandMapper:
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_guild_withdraw_bank(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._guild_service is None:
-            return self._unknown_tool("ギルド金庫出金ツールはまだ利用できません。")
+            return unknown_tool("ギルド金庫出金ツールはまだ利用できません。")
         try:
             result = self._guild_service.withdraw_from_guild_bank(
                 WithdrawFromGuildBankCommand(
@@ -890,11 +875,11 @@ class ToolCommandMapper:
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_shop_purchase(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._shop_service is None:
-            return self._unknown_tool("ショップ購入ツールはまだ利用できません。")
+            return unknown_tool("ショップ購入ツールはまだ利用できません。")
         try:
             result = self._shop_service.purchase_from_shop(
                 PurchaseFromShopCommand(
@@ -906,11 +891,11 @@ class ToolCommandMapper:
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_shop_list_item(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._shop_service is None:
-            return self._unknown_tool("ショップ出品ツールはまだ利用できません。")
+            return unknown_tool("ショップ出品ツールはまだ利用できません。")
         try:
             result = self._shop_service.list_shop_item(
                 ListShopItemCommand(
@@ -922,11 +907,11 @@ class ToolCommandMapper:
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_shop_unlist_item(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._shop_service is None:
-            return self._unknown_tool("ショップ取り下げツールはまだ利用できません。")
+            return unknown_tool("ショップ取り下げツールはまだ利用できません。")
         try:
             result = self._shop_service.unlist_shop_item(
                 UnlistShopItemCommand(
@@ -937,11 +922,11 @@ class ToolCommandMapper:
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_trade_offer(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._trade_service is None:
-            return self._unknown_tool("取引出品ツールはまだ利用できません。")
+            return unknown_tool("取引出品ツールはまだ利用できません。")
         try:
             result = self._trade_service.offer_item(
                 OfferItemCommand(
@@ -955,35 +940,35 @@ class ToolCommandMapper:
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_trade_accept(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._trade_service is None:
-            return self._unknown_tool("取引受諾ツールはまだ利用できません。")
+            return unknown_tool("取引受諾ツールはまだ利用できません。")
         try:
             result = self._trade_service.accept_trade(
                 AcceptTradeCommand(trade_id=int(args["trade_id"]), buyer_id=player_id)
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_trade_cancel(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._trade_service is None:
-            return self._unknown_tool("取引キャンセルツールはまだ利用できません。")
+            return unknown_tool("取引キャンセルツールはまだ利用できません。")
         try:
             result = self._trade_service.cancel_trade(
                 CancelTradeCommand(trade_id=int(args["trade_id"]), player_id=player_id)
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_memory_query(
         self, player_id: int, args: Dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._memory_query_executor is None:
-            return self._unknown_tool("memory_query ツールはまだ利用できません。")
+            return unknown_tool("memory_query ツールはまだ利用できません。")
         try:
             expr = args.get("expr", "").strip()
             if not expr:
@@ -1008,15 +993,15 @@ class ToolCommandMapper:
                 msg = result.get("result") or result.get("count") or "（0件）"
             return LlmCommandResultDto(success=True, message=str(msg))
         except (DslParseException, DslEvaluationException, InvalidOutputModeException) as e:
-            return self._exception_result(e)
+            return exception_result(e)
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_subagent(
         self, player_id: int, args: Dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._subagent_runner is None:
-            return self._unknown_tool("subagent ツールはまだ利用できません。")
+            return unknown_tool("subagent ツールはまだ利用できません。")
         try:
             bindings = args.get("bindings") or {}
             if not isinstance(bindings, dict):
@@ -1037,87 +1022,13 @@ class ToolCommandMapper:
                 msg = msg + "\n（注: " + dto.truncation_note + "）"
             return LlmCommandResultDto(success=True, message=msg)
         except Exception as e:
-            return self._exception_result(e)
-
-    def _execute_todo_add(
-        self, player_id: int, args: Dict[str, Any]
-    ) -> LlmCommandResultDto:
-        if self._todo_store is None:
-            return self._unknown_tool("TODO ツールはまだ利用できません。")
-        try:
-            content = (args.get("content") or "").strip()
-            if not content:
-                return LlmCommandResultDto(
-                    success=False,
-                    message="content が指定されていません。",
-                    error_code="TODO_ERROR",
-                    remediation="TODO の内容を指定してください。",
-                )
-            todo_id = self._todo_store.add(PlayerId(player_id), content)
-            return LlmCommandResultDto(
-                success=True,
-                message=f"TODO を追加しました（ID: {todo_id}）。",
-            )
-        except Exception as e:
-            return self._exception_result(e)
-
-    def _execute_todo_list(
-        self, player_id: int, args: Dict[str, Any]
-    ) -> LlmCommandResultDto:
-        if self._todo_store is None:
-            return self._unknown_tool("TODO ツールはまだ利用できません。")
-        try:
-            entries = self._todo_store.list_uncompleted(PlayerId(player_id))
-            if not entries:
-                return LlmCommandResultDto(
-                    success=True,
-                    message="未完了の TODO はありません。",
-                )
-            lines = [
-                f"- [{e.id}] {e.content} (追加: {e.added_at.strftime('%Y-%m-%d %H:%M')})"
-                for e in entries
-            ]
-            return LlmCommandResultDto(
-                success=True,
-                message="未完了の TODO:\n" + "\n".join(lines),
-            )
-        except Exception as e:
-            return self._exception_result(e)
-
-    def _execute_todo_complete(
-        self, player_id: int, args: Dict[str, Any]
-    ) -> LlmCommandResultDto:
-        if self._todo_store is None:
-            return self._unknown_tool("TODO ツールはまだ利用できません。")
-        try:
-            todo_id = (args.get("todo_id") or "").strip()
-            if not todo_id:
-                return LlmCommandResultDto(
-                    success=False,
-                    message="todo_id が指定されていません。",
-                    error_code="TODO_ERROR",
-                    remediation="完了する TODO の ID を指定してください。",
-                )
-            ok = self._todo_store.complete(PlayerId(player_id), todo_id)
-            if ok:
-                return LlmCommandResultDto(
-                    success=True,
-                    message=f"TODO {todo_id} を完了にしました。",
-                )
-            return LlmCommandResultDto(
-                success=False,
-                message=f"TODO {todo_id} が見つかりません。",
-                error_code="TODO_ERROR",
-                remediation="正しい todo_id を指定してください。todo_list で一覧を確認できます。",
-            )
-        except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_working_memory_append(
         self, player_id: int, args: Dict[str, Any]
     ) -> LlmCommandResultDto:
         if self._working_memory_store is None:
-            return self._unknown_tool("作業メモツールはまだ利用できません。")
+            return unknown_tool("作業メモツールはまだ利用できません。")
         try:
             text = (args.get("text") or "").strip()
             if not text:
@@ -1133,7 +1044,7 @@ class ToolCommandMapper:
                 message="作業メモに追加しました。",
             )
         except Exception as e:
-            return self._exception_result(e)
+            return exception_result(e)
 
     def _execute_whisper(
         self,
