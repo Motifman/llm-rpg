@@ -752,6 +752,59 @@ class TestObservationRecipientResolverExtendedEvents:
         )
         assert [p.value for p in resolver.resolve(event)] == [1]
 
+    @pytest.mark.parametrize(
+        "event",
+        [
+            PursuitUpdatedEvent.create(
+                aggregate_id=WorldObjectId.create(1),
+                aggregate_type="PlayerStatusAggregate",
+                actor_id=WorldObjectId.create(1),
+                target_id=WorldObjectId.create(999),
+                last_known=_make_pursuit_last_known(999),
+                target_snapshot=_make_pursuit_target_snapshot(999),
+            ),
+            PursuitFailedEvent.create(
+                aggregate_id=WorldObjectId.create(1),
+                aggregate_type="PlayerStatusAggregate",
+                actor_id=WorldObjectId.create(1),
+                target_id=WorldObjectId.create(999),
+                failure_reason=PursuitFailureReason.TARGET_MISSING,
+                last_known=_make_pursuit_last_known(999),
+                target_snapshot=_make_pursuit_target_snapshot(999),
+            ),
+            PursuitCancelledEvent.create(
+                aggregate_id=WorldObjectId.create(1),
+                aggregate_type="PlayerStatusAggregate",
+                actor_id=WorldObjectId.create(1),
+                target_id=WorldObjectId.create(999),
+                last_known=_make_pursuit_last_known(999),
+                target_snapshot=_make_pursuit_target_snapshot(999),
+            ),
+        ],
+    )
+    def test_pursuit_events_keep_visibility_actor_only_when_target_is_not_player(self, event):
+        data_store = InMemoryDataStore()
+        physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
+        physical_map_repo.save(
+            _make_minimal_map(
+                1,
+                [
+                    _create_player_object(1),
+                    WorldObject(
+                        object_id=WorldObjectId.create(999),
+                        coordinate=Coordinate(1, 0, 0),
+                        object_type=ObjectTypeEnum.NPC,
+                        component=ActorComponent(direction=DirectionEnum.SOUTH),
+                    ),
+                ],
+            )
+        )
+        resolver = create_observation_recipient_resolver(
+            player_status_repository=MagicMock(),
+            physical_map_repository=physical_map_repo,
+        )
+        assert [p.value for p in resolver.resolve(event)] == [1]
+
     def test_public_quest_resolution_propagates_status_repository_error(self):
         status_repo = MagicMock()
         status_repo.find_all.side_effect = RuntimeError("find_all failed")

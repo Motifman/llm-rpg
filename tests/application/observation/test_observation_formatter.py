@@ -302,6 +302,35 @@ class TestObservationFormatter:
         assert "戦闘不能" in out.prose
         assert out.breaks_movement is True
 
+    def test_format_movement_interruption_stays_distinct_from_pursuit_lifecycle_end(self, formatter):
+        movement_event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+        )
+        pursuit_event = PursuitFailedEvent.create(
+            aggregate_id=WorldObjectId(1),
+            aggregate_type="PlayerStatusAggregate",
+            actor_id=WorldObjectId(1),
+            target_id=WorldObjectId(2),
+            failure_reason=PursuitFailureReason.TARGET_MISSING,
+            target_snapshot=build_pursuit_snapshot(),
+            last_known=build_pursuit_last_known(),
+        )
+
+        movement_out = formatter.format(movement_event, PlayerId(1))
+        pursuit_out = formatter.format(pursuit_event, PlayerId(1))
+
+        assert movement_out is not None
+        assert pursuit_out is not None
+        assert movement_out.breaks_movement is True
+        assert movement_out.structured["type"] == "player_downed"
+        assert "pursuit_status_after_event" not in movement_out.structured
+        assert movement_out.structured.get("interruption_scope") is None
+        assert pursuit_out.breaks_movement is False
+        assert pursuit_out.structured["event_type"] == "pursuit_failed"
+        assert pursuit_out.structured["pursuit_status_after_event"] == "ended"
+        assert pursuit_out.structured["interruption_scope"] == "pursuit"
+
     def test_format_player_downed_with_killer_includes_killer_name_or_fallback(self, formatter):
         """PlayerDownedEvent killer_player_id があると「倒された」になる（ID非露出）"""
         event = PlayerDownedEvent.create(
