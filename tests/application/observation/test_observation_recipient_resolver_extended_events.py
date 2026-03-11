@@ -38,6 +38,21 @@ from ai_rpg_world.domain.player.value_object.growth import Growth
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
+    PursuitFailureReason,
+)
+from ai_rpg_world.domain.pursuit.event.pursuit_events import (
+    PursuitCancelledEvent,
+    PursuitFailedEvent,
+    PursuitStartedEvent,
+    PursuitUpdatedEvent,
+)
+from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
+    PursuitLastKnownState,
+)
+from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
+    PursuitTargetSnapshot,
+)
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.quest.aggregate.quest_aggregate import QuestAggregate
@@ -147,6 +162,24 @@ def _make_objective() -> QuestObjective:
         objective_type=QuestObjectiveType.REACH_SPOT,
         target_id=1,
         required_count=1,
+    )
+
+
+def _make_pursuit_last_known(target_id: int, spot_id: int = 1) -> PursuitLastKnownState:
+    return PursuitLastKnownState(
+        target_id=WorldObjectId.create(target_id),
+        spot_id=SpotId(spot_id),
+        coordinate=Coordinate(1, 0, 0),
+    )
+
+
+def _make_pursuit_target_snapshot(
+    target_id: int, spot_id: int = 1
+) -> PursuitTargetSnapshot:
+    return PursuitTargetSnapshot(
+        target_id=WorldObjectId.create(target_id),
+        spot_id=SpotId(spot_id),
+        coordinate=Coordinate(1, 0, 0),
     )
 
 
@@ -620,6 +653,105 @@ class TestObservationRecipientResolverExtendedEvents:
         )
         assert resolver.resolve(event) == []
 
+    def test_pursuit_started_delivers_actor_only_when_target_is_not_player(self):
+        data_store = InMemoryDataStore()
+        physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
+        physical_map_repo.save(
+            _make_minimal_map(
+                1,
+                [
+                    _create_player_object(1),
+                    WorldObject(
+                        object_id=WorldObjectId.create(999),
+                        coordinate=Coordinate(1, 0, 0),
+                        object_type=ObjectTypeEnum.NPC,
+                        component=ActorComponent(direction=DirectionEnum.SOUTH),
+                    ),
+                ],
+            )
+        )
+        resolver = create_observation_recipient_resolver(
+            player_status_repository=MagicMock(),
+            physical_map_repository=physical_map_repo,
+        )
+        event = PursuitStartedEvent.create(
+            aggregate_id=WorldObjectId.create(1),
+            aggregate_type="PlayerStatusAggregate",
+            actor_id=WorldObjectId.create(1),
+            target_id=WorldObjectId.create(999),
+            target_snapshot=_make_pursuit_target_snapshot(999),
+            last_known=_make_pursuit_last_known(999),
+        )
+        assert [p.value for p in resolver.resolve(event)] == [1]
+
+    @pytest.mark.parametrize(
+        "event",
+        [
+            PursuitStartedEvent.create(
+                aggregate_id=WorldObjectId.create(1),
+                aggregate_type="PlayerStatusAggregate",
+                actor_id=WorldObjectId.create(1),
+                target_id=WorldObjectId.create(2),
+                target_snapshot=_make_pursuit_target_snapshot(2),
+                last_known=_make_pursuit_last_known(2),
+            ),
+            PursuitUpdatedEvent.create(
+                aggregate_id=WorldObjectId.create(1),
+                aggregate_type="PlayerStatusAggregate",
+                actor_id=WorldObjectId.create(1),
+                target_id=WorldObjectId.create(2),
+                last_known=_make_pursuit_last_known(2),
+                target_snapshot=_make_pursuit_target_snapshot(2),
+            ),
+            PursuitFailedEvent.create(
+                aggregate_id=WorldObjectId.create(1),
+                aggregate_type="PlayerStatusAggregate",
+                actor_id=WorldObjectId.create(1),
+                target_id=WorldObjectId.create(2),
+                failure_reason=PursuitFailureReason.TARGET_MISSING,
+                last_known=_make_pursuit_last_known(2),
+                target_snapshot=_make_pursuit_target_snapshot(2),
+            ),
+            PursuitCancelledEvent.create(
+                aggregate_id=WorldObjectId.create(1),
+                aggregate_type="PlayerStatusAggregate",
+                actor_id=WorldObjectId.create(1),
+                target_id=WorldObjectId.create(2),
+                last_known=_make_pursuit_last_known(2),
+                target_snapshot=_make_pursuit_target_snapshot(2),
+            ),
+        ],
+    )
+    def test_pursuit_lifecycle_events_deliver_actor_and_target_players(self, event):
+        data_store = InMemoryDataStore()
+        physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
+        physical_map_repo.save(
+            _make_minimal_map(1, [_create_player_object(1), _create_player_object(2, 1, 0)])
+        )
+        resolver = create_observation_recipient_resolver(
+            player_status_repository=MagicMock(),
+            physical_map_repository=physical_map_repo,
+        )
+        assert {p.value for p in resolver.resolve(event)} == {1, 2}
+
+    def test_pursuit_updated_deduplicates_when_actor_and_target_are_same_player(self):
+        data_store = InMemoryDataStore()
+        physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
+        physical_map_repo.save(_make_minimal_map(1, [_create_player_object(1)]))
+        resolver = create_observation_recipient_resolver(
+            player_status_repository=MagicMock(),
+            physical_map_repository=physical_map_repo,
+        )
+        event = PursuitUpdatedEvent.create(
+            aggregate_id=WorldObjectId.create(1),
+            aggregate_type="PlayerStatusAggregate",
+            actor_id=WorldObjectId.create(1),
+            target_id=WorldObjectId.create(1),
+            last_known=_make_pursuit_last_known(1),
+            target_snapshot=_make_pursuit_target_snapshot(1),
+        )
+        assert [p.value for p in resolver.resolve(event)] == [1]
+
     def test_public_quest_resolution_propagates_status_repository_error(self):
         status_repo = MagicMock()
         status_repo.find_all.side_effect = RuntimeError("find_all failed")
@@ -711,4 +843,3 @@ class TestObservationRecipientResolverExtendedEvents:
         )
         with pytest.raises(RuntimeError, match="loadout lookup failed"):
             resolver.resolve(event)
-
