@@ -13,6 +13,10 @@ from unittest.mock import MagicMock, patch
 
 from ai_rpg_world.application.llm.bootstrap import compose_llm_runtime, ComposeLlmRuntimeResult
 from ai_rpg_world.application.llm.wiring import create_llm_agent_wiring
+from ai_rpg_world.presentation.player_pursuit_runtime import (
+    PlayerPursuitRuntimeResult,
+    compose_player_pursuit_runtime,
+)
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
     IObservationFormatter,
@@ -542,6 +546,87 @@ class TestComposeLlmRuntimeBootstrapSeam:
         assert result.world_simulation_service._llm_turn_trigger is result.llm_turn_trigger
 
 
+class TestComposePlayerPursuitRuntime:
+    """player pursuit runtime の authoritative bootstrap 契約"""
+
+    def test_compose_player_pursuit_runtime_requires_both_pursuit_services(self):
+        deps = _minimal_wiring_deps()
+
+        with pytest.raises(TypeError, match="pursuit_command_service must not be None"):
+            compose_player_pursuit_runtime(
+                pursuit_command_service=None,
+                pursuit_continuation_service=MagicMock(),
+                **deps,
+            )
+
+        with pytest.raises(
+            TypeError, match="pursuit_continuation_service must not be None"
+        ):
+            compose_player_pursuit_runtime(
+                pursuit_command_service=MagicMock(),
+                pursuit_continuation_service=None,
+                **deps,
+            )
+
+    def test_compose_player_pursuit_runtime_builds_composition_and_service(self):
+        deps = _minimal_wiring_deps()
+        pursuit_command_service = MagicMock()
+        pursuit_continuation_service = MagicMock()
+        compositions = []
+        services = []
+
+        def comp_builder(registry):
+            comp = EventHandlerComposition(
+                gateway_handler=MagicMock(),
+                observation_registry=registry,
+            )
+            compositions.append(comp)
+            return comp
+
+        def svc_builder(continuation_service, trigger, reflection_runner):
+            svc = MagicMock()
+            svc._pursuit_continuation_service = continuation_service
+            svc._llm_turn_trigger = trigger
+            svc._reflection_runner = reflection_runner
+            services.append(svc)
+            return svc
+
+        result = compose_player_pursuit_runtime(
+            pursuit_command_service=pursuit_command_service,
+            pursuit_continuation_service=pursuit_continuation_service,
+            composition_builder=comp_builder,
+            service_builder=svc_builder,
+            **deps,
+        )
+
+        assert isinstance(result, PlayerPursuitRuntimeResult)
+        assert result.pursuit_command_service is pursuit_command_service
+        assert result.pursuit_continuation_service is pursuit_continuation_service
+        assert result.pursuit_enabled is True
+        assert result.event_handler_composition is compositions[0]
+        assert result.event_handler_composition._observation_registry is result.observation_registry
+        assert result.world_simulation_service is services[0]
+        assert (
+            result.world_simulation_service._pursuit_continuation_service
+            is pursuit_continuation_service
+        )
+        assert result.world_simulation_service._llm_turn_trigger is result.llm_turn_trigger
+
+    def test_compose_player_pursuit_runtime_exposes_pursuit_tools_on_live_path(self):
+        deps = _minimal_wiring_deps()
+        pursuit_command_service = MagicMock()
+        pursuit_continuation_service = MagicMock()
+
+        result = compose_player_pursuit_runtime(
+            pursuit_command_service=pursuit_command_service,
+            pursuit_continuation_service=pursuit_continuation_service,
+            **deps,
+        )
+
+        tool_mapper = result.llm_turn_trigger._turn_runner._orchestrator._tool_command_mapper
+        assert tool_mapper._pursuit_service is pursuit_command_service
+
+
 # ---------------------------------------------------------------------------
 # SQLite memory restore guarantee
 # ---------------------------------------------------------------------------
@@ -916,25 +1001,6 @@ class TestEventToEpisodeMemoryE2E:
         uow_factory = MagicMock(spec=UnitOfWorkFactory)
         uow_factory.create.return_value = uow
 
-        wiring_result = create_llm_agent_wiring(
-            player_status_repository=player_status_repo,
-            physical_map_repository=physical_map_repo,
-            world_query_service=world_query,
-            movement_service=movement,
-            player_profile_repository=profile_repo,
-            unit_of_work_factory=uow_factory,
-            spot_repository=spot_repo,
-            episode_memory_store=episode_memory_store,
-            sliding_window_memory=sliding_window,
-            llm_player_resolver=SetBasedLlmPlayerResolver({1}),
-            llm_client=StubLlmClient(),
-            game_time_provider=time_provider,
-            world_time_config_service=DefaultWorldTimeConfigService(ticks_per_day=24),
-        )
-        registry = wiring_result.observation_registry
-        trigger = wiring_result.llm_turn_trigger
-        registry.register_handlers(event_publisher)
-
         event = PursuitFailedEvent.create(
             aggregate_id=WorldObjectId(1),
             aggregate_type="PlayerStatusAggregate",
@@ -954,11 +1020,6 @@ class TestEventToEpisodeMemoryE2E:
             ),
         )
 
-        with patch.object(trigger, "schedule_turn", wraps=trigger.schedule_turn) as schedule_spy:
-            with uow:
-                uow.add_events([event])
-            schedule_spy.assert_called_once_with(PlayerId(1))
-
         pathfinding_service = PathfindingService(AStarPathfindingStrategy())
         caching_pathfinding = CachingPathfindingService(
             pathfinding_service,
@@ -969,30 +1030,72 @@ class TestEventToEpisodeMemoryE2E:
             SkillTargetingDomainService(),
             SkillToHitBoxDomainService(),
         )
-        service = WorldSimulationApplicationService(
-            time_provider=time_provider,
-            physical_map_repository=physical_map_repo,
-            weather_zone_repository=InMemoryWeatherZoneRepository(data_store, uow),
+        pursuit_continuation_service = MagicMock()
+        pursuit_command_service = MagicMock()
+
+        def comp_builder(registry):
+            return EventHandlerComposition(observation_registry=registry)
+
+        def svc_builder(continuation_service, trigger, reflection_runner):
+            return WorldSimulationApplicationService(
+                time_provider=time_provider,
+                physical_map_repository=physical_map_repo,
+                weather_zone_repository=InMemoryWeatherZoneRepository(data_store, uow),
+                player_status_repository=player_status_repo,
+                hit_box_repository=InMemoryHitBoxRepository(data_store, uow),
+                behavior_service=BehaviorService(),
+                weather_config_service=DefaultWeatherConfigService(update_interval_ticks=1),
+                unit_of_work=uow,
+                monster_repository=InMemoryMonsterAggregateRepository(data_store, uow),
+                skill_loadout_repository=_InMemorySkillLoadoutRepo(),
+                monster_skill_execution_domain_service=MonsterSkillExecutionDomainService(
+                    skill_execution_service
+                ),
+                hit_box_factory=HitBoxFactory(),
+                hit_box_config_service=DefaultHitBoxConfigService(substeps_per_tick=4),
+                hit_box_collision_service=HitBoxCollisionDomainService(),
+                world_time_config_service=DefaultWorldTimeConfigService(ticks_per_day=24),
+                monster_action_resolver_factory=create_monster_action_resolver_factory(
+                    caching_pathfinding,
+                    FirstInRangeSkillPolicy(),
+                ),
+                llm_turn_trigger=trigger,
+                reflection_runner=reflection_runner,
+                movement_service=movement,
+                pursuit_continuation_service=continuation_service,
+            )
+
+        runtime = compose_player_pursuit_runtime(
+            pursuit_command_service=pursuit_command_service,
+            pursuit_continuation_service=pursuit_continuation_service,
+            composition_builder=comp_builder,
+            service_builder=svc_builder,
             player_status_repository=player_status_repo,
-            hit_box_repository=InMemoryHitBoxRepository(data_store, uow),
-            behavior_service=BehaviorService(),
-            weather_config_service=DefaultWeatherConfigService(update_interval_ticks=1),
-            unit_of_work=uow,
-            monster_repository=InMemoryMonsterAggregateRepository(data_store, uow),
-            skill_loadout_repository=_InMemorySkillLoadoutRepo(),
-            monster_skill_execution_domain_service=MonsterSkillExecutionDomainService(
-                skill_execution_service
-            ),
-            hit_box_factory=HitBoxFactory(),
-            hit_box_config_service=DefaultHitBoxConfigService(substeps_per_tick=4),
-            hit_box_collision_service=HitBoxCollisionDomainService(),
+            physical_map_repository=physical_map_repo,
+            world_query_service=world_query,
+            movement_service=movement,
+            player_profile_repository=profile_repo,
+            unit_of_work_factory=uow_factory,
+            spot_repository=spot_repo,
+            episode_memory_store=episode_memory_store,
+            sliding_window_memory=sliding_window,
+            llm_player_resolver=SetBasedLlmPlayerResolver({1}),
+            llm_client=StubLlmClient(),
+            game_time_provider=time_provider,
             world_time_config_service=DefaultWorldTimeConfigService(ticks_per_day=24),
-            monster_action_resolver_factory=create_monster_action_resolver_factory(
-                caching_pathfinding,
-                FirstInRangeSkillPolicy(),
-            ),
-            llm_turn_trigger=trigger,
         )
+        runtime.event_handler_composition.register_for_profile(
+            event_publisher, EventHandlerProfile.FULL
+        )
+        trigger = runtime.llm_turn_trigger
+        service = runtime.world_simulation_service
+        assert service is not None
+        assert service._pursuit_continuation_service is pursuit_continuation_service
+
+        with patch.object(trigger, "schedule_turn", wraps=trigger.schedule_turn) as schedule_spy:
+            with uow:
+                uow.add_events([event])
+            schedule_spy.assert_called_once_with(PlayerId(1))
 
         with patch.object(
             trigger, "run_scheduled_turns", wraps=trigger.run_scheduled_turns
@@ -1663,12 +1766,27 @@ class TestEventToWorldSideEffectE2E:
             }
         )
 
-        wiring_result = create_llm_agent_wiring(
+        pursuit_continuation_service = MagicMock()
+
+        def comp_builder(registry):
+            return EventHandlerComposition(observation_registry=registry)
+
+        def svc_builder(continuation_service, trigger, reflection_runner):
+            svc = MagicMock()
+            svc._pursuit_continuation_service = continuation_service
+            svc._llm_turn_trigger = trigger
+            svc._reflection_runner = reflection_runner
+            return svc
+
+        runtime = compose_player_pursuit_runtime(
+            pursuit_command_service=pursuit_service,
+            pursuit_continuation_service=pursuit_continuation_service,
+            composition_builder=comp_builder,
+            service_builder=svc_builder,
             player_status_repository=player_status_repo,
             physical_map_repository=physical_map_repo,
             world_query_service=world_query,
             movement_service=movement_service,
-            pursuit_command_service=pursuit_service,
             player_profile_repository=profile_repo,
             unit_of_work_factory=uow_factory,
             spot_repository=spot_repo,
@@ -1677,10 +1795,10 @@ class TestEventToWorldSideEffectE2E:
             llm_player_resolver=SetBasedLlmPlayerResolver({1}),
             llm_client=stub_client,
         )
-        registry = wiring_result.observation_registry
-        trigger = wiring_result.llm_turn_trigger
-
-        registry.register_handlers(event_publisher)
+        runtime.event_handler_composition.register_for_profile(
+            event_publisher, EventHandlerProfile.FULL
+        )
+        trigger = runtime.llm_turn_trigger
 
         event = PlayerDownedEvent.create(
             aggregate_id=PlayerId(1),
@@ -1693,3 +1811,4 @@ class TestEventToWorldSideEffectE2E:
         trigger.run_scheduled_turns()
 
         pursuit_service.start_pursuit.assert_called_once()
+        assert runtime.world_simulation_service._pursuit_continuation_service is pursuit_continuation_service
