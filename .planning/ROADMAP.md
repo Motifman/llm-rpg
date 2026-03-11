@@ -26,7 +26,7 @@
 
 Plans:
 - [x] 01-01: 追跡状態と失敗理由のドメイン型を定義する
-- [ ] 01-02: 追跡ライフサイクルイベントを定義する
+- [x] 01-02: 追跡ライフサイクルイベントを定義する
 - [ ] 01-03: プレイヤー/モンスターの既存状態モデルへの組み込み方針を整える
 
 ### Phase 2: Player Pursuit Commands
@@ -95,7 +95,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Pursuit Domain Vocabulary | 1/3 | In progress | - |
+| 1. Pursuit Domain Vocabulary | 2/3 | In progress | - |
 | 2. Player Pursuit Commands | 0/2 | Not started | - |
 | 3. Pursuit Continuation Loop | 0/3 | Not started | - |
 | 4. Observation And LLM Delivery | 0/3 | Not started | - |
