@@ -302,6 +302,40 @@ class TestMonsterAggregate:
                 observed_at_tick=WorldTick(6),
             )
 
+        def test_apply_behavior_transition_lose_target_reuses_existing_last_known_when_result_omits_it(
+            self, monster: MonsterAggregate, spot_id: SpotId
+        ):
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            target_id = WorldObjectId.create(2010)
+            last_seen = Coordinate(6, 2, 0)
+            monster.apply_behavior_transition(
+                StateTransitionResult(
+                    spot_target_params=SpotTargetParams(
+                        target_id=target_id,
+                        coordinate=last_seen,
+                        effective_flee_threshold=0.0,
+                        allow_chase=True,
+                    )
+                ),
+                WorldTick(5),
+            )
+
+            monster.apply_behavior_transition(
+                StateTransitionResult(
+                    do_lose_target=True,
+                    lost_target_id=target_id,
+                    last_known_coordinate=None,
+                ),
+                WorldTick(6),
+            )
+
+            assert monster.behavior_state == BehaviorStateEnum.SEARCH
+            assert monster.behavior_target_id == target_id
+            assert monster.behavior_last_known_position == last_seen
+            assert monster.pursuit_state is not None
+            assert monster.pursuit_state.last_known is not None
+            assert monster.pursuit_state.last_known.coordinate == last_seen
+
         def test_record_attacked_by_starts_pursuit_when_monster_chases(
             self, monster: MonsterAggregate, spot_id: SpotId
         ):
