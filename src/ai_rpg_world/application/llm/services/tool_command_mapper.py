@@ -31,7 +31,11 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_CONVERSATION_ADVANCE,
     TOOL_NAME_DESTROY_PLACEABLE,
     TOOL_NAME_DROP_ITEM,
+    TOOL_NAME_GUILD_ADD_MEMBER,
+    TOOL_NAME_GUILD_CHANGE_ROLE,
+    TOOL_NAME_GUILD_CREATE,
     TOOL_NAME_GUILD_DEPOSIT_BANK,
+    TOOL_NAME_GUILD_DISBAND,
     TOOL_NAME_GUILD_LEAVE,
     TOOL_NAME_GUILD_WITHDRAW_BANK,
     TOOL_NAME_HARVEST_START,
@@ -46,6 +50,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_QUEST_ACCEPT,
     TOOL_NAME_QUEST_APPROVE,
     TOOL_NAME_QUEST_CANCEL,
+    TOOL_NAME_QUEST_ISSUE,
     TOOL_NAME_SAY,
     TOOL_NAME_SHOP_LIST_ITEM,
     TOOL_NAME_SHOP_PURCHASE,
@@ -117,9 +122,14 @@ from ai_rpg_world.application.quest.contracts.commands import (
     AcceptQuestCommand,
     ApproveQuestCommand,
     CancelQuestCommand,
+    IssueQuestCommand,
 )
 from ai_rpg_world.application.guild.contracts.commands import (
+    AddGuildMemberCommand,
+    ChangeGuildRoleCommand,
+    CreateGuildCommand,
     DepositToGuildBankCommand,
+    DisbandGuildCommand,
     LeaveGuildCommand,
     WithdrawFromGuildBankCommand,
 )
@@ -258,6 +268,11 @@ class ToolCommandMapper:
             TOOL_NAME_QUEST_ACCEPT: self._execute_quest_accept,
             TOOL_NAME_QUEST_CANCEL: self._execute_quest_cancel,
             TOOL_NAME_QUEST_APPROVE: self._execute_quest_approve,
+            TOOL_NAME_QUEST_ISSUE: self._execute_quest_issue,
+            TOOL_NAME_GUILD_CREATE: self._execute_guild_create,
+            TOOL_NAME_GUILD_ADD_MEMBER: self._execute_guild_add_member,
+            TOOL_NAME_GUILD_CHANGE_ROLE: self._execute_guild_change_role,
+            TOOL_NAME_GUILD_DISBAND: self._execute_guild_disband,
             TOOL_NAME_GUILD_LEAVE: self._execute_guild_leave,
             TOOL_NAME_GUILD_DEPOSIT_BANK: self._execute_guild_deposit_bank,
             TOOL_NAME_GUILD_WITHDRAW_BANK: self._execute_guild_withdraw_bank,
@@ -886,6 +901,100 @@ class ToolCommandMapper:
         try:
             result = self._quest_service.approve_quest(
                 ApproveQuestCommand(quest_id=int(args["quest_id"]), approver_player_id=player_id)
+            )
+            return LlmCommandResultDto(success=result.success, message=result.message)
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_quest_issue(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        if self._quest_service is None:
+            return self._unknown_tool("クエスト発行ツールはまだ利用できません。")
+        if args.get("objectives") is None or not args["objectives"]:
+            return self._invalid_arg_result("objectives")
+        try:
+            command = IssueQuestCommand(
+                objectives=list(args["objectives"]),
+                reward_gold=int(args.get("reward_gold", 0)),
+                reward_exp=int(args.get("reward_exp", 0)),
+                reward_items=args.get("reward_items"),
+                issuer_player_id=player_id,
+                guild_id=args.get("guild_id"),
+            )
+            result = self._quest_service.issue_quest(command)
+            return LlmCommandResultDto(success=result.success, message=result.message)
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_guild_create(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        if self._guild_service is None:
+            return self._unknown_tool("ギルド作成ツールはまだ利用できません。")
+        if args.get("spot_id") is None or args.get("location_area_id") is None:
+            return self._invalid_arg_result("spot_id/location_area_id")
+        if args.get("name") is None:
+            return self._invalid_arg_result("name")
+        try:
+            result = self._guild_service.create_guild(
+                CreateGuildCommand(
+                    spot_id=int(args["spot_id"]),
+                    location_area_id=int(args["location_area_id"]),
+                    name=str(args["name"]),
+                    description=str(args.get("description", "")),
+                    creator_player_id=player_id,
+                )
+            )
+            return LlmCommandResultDto(success=result.success, message=result.message)
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_guild_add_member(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        if self._guild_service is None:
+            return self._unknown_tool("ギルド招待ツールはまだ利用できません。")
+        if args.get("guild_id") is None:
+            return self._invalid_arg_result("guild_id")
+        if args.get("new_member_player_id") is None:
+            return self._invalid_arg_result("new_member_player_id")
+        try:
+            result = self._guild_service.add_member(
+                AddGuildMemberCommand(
+                    guild_id=int(args["guild_id"]),
+                    inviter_player_id=player_id,
+                    new_member_player_id=int(args["new_member_player_id"]),
+                )
+            )
+            return LlmCommandResultDto(success=result.success, message=result.message)
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_guild_change_role(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        if self._guild_service is None:
+            return self._unknown_tool("ギルド役職変更ツールはまだ利用できません。")
+        if args.get("guild_id") is None:
+            return self._invalid_arg_result("guild_id")
+        if args.get("target_player_id") is None:
+            return self._invalid_arg_result("target_player_id")
+        if args.get("new_role") is None:
+            return self._invalid_arg_result("new_role")
+        try:
+            result = self._guild_service.change_role(
+                ChangeGuildRoleCommand(
+                    guild_id=int(args["guild_id"]),
+                    changer_player_id=player_id,
+                    target_player_id=int(args["target_player_id"]),
+                    new_role=str(args["new_role"]),
+                )
+            )
+            return LlmCommandResultDto(success=result.success, message=result.message)
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_guild_disband(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        if self._guild_service is None:
+            return self._unknown_tool("ギルド解散ツールはまだ利用できません。")
+        if args.get("guild_id") is None:
+            return self._invalid_arg_result("guild_id")
+        try:
+            result = self._guild_service.disband_guild(
+                DisbandGuildCommand(guild_id=int(args["guild_id"]), player_id=player_id)
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:

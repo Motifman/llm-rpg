@@ -33,7 +33,11 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_CONVERSATION_ADVANCE,
     TOOL_NAME_DESTROY_PLACEABLE,
     TOOL_NAME_DROP_ITEM,
+    TOOL_NAME_GUILD_ADD_MEMBER,
+    TOOL_NAME_GUILD_CHANGE_ROLE,
+    TOOL_NAME_GUILD_CREATE,
     TOOL_NAME_GUILD_DEPOSIT_BANK,
+    TOOL_NAME_GUILD_DISBAND,
     TOOL_NAME_GUILD_LEAVE,
     TOOL_NAME_GUILD_WITHDRAW_BANK,
     TOOL_NAME_HARVEST_START,
@@ -48,6 +52,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_QUEST_ACCEPT,
     TOOL_NAME_QUEST_APPROVE,
     TOOL_NAME_QUEST_CANCEL,
+    TOOL_NAME_QUEST_ISSUE,
     TOOL_NAME_SAY,
     TOOL_NAME_SHOP_LIST_ITEM,
     TOOL_NAME_SHOP_PURCHASE,
@@ -134,6 +139,16 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
             return self._resolve_quest_label(args, runtime_context, "quest_id")
         if tool_name == TOOL_NAME_QUEST_APPROVE:
             return self._resolve_quest_label(args, runtime_context, "quest_id")
+        if tool_name == TOOL_NAME_QUEST_ISSUE:
+            return self._resolve_quest_issue(args, runtime_context)
+        if tool_name == TOOL_NAME_GUILD_CREATE:
+            return self._resolve_guild_create(args, runtime_context)
+        if tool_name == TOOL_NAME_GUILD_ADD_MEMBER:
+            return self._resolve_guild_add_member(args, runtime_context)
+        if tool_name == TOOL_NAME_GUILD_CHANGE_ROLE:
+            return self._resolve_guild_change_role(args, runtime_context)
+        if tool_name == TOOL_NAME_GUILD_DISBAND:
+            return self._resolve_guild_label(args, runtime_context)
         if tool_name == TOOL_NAME_GUILD_LEAVE:
             return self._resolve_guild_label(args, runtime_context)
         if tool_name == TOOL_NAME_GUILD_DEPOSIT_BANK:
@@ -667,6 +682,155 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
                 "INVALID_TARGET_KIND",
             )
         return {"quest_id": target.quest_id}
+
+    def _resolve_quest_issue(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        raw_objectives = args.get("objectives")
+        if not isinstance(raw_objectives, (list, tuple)) or len(raw_objectives) == 0:
+            raise ToolArgumentResolutionException(
+                "クエスト目標（objectives）が1件以上必要です。",
+                "INVALID_OBJECTIVES",
+            )
+        objectives: list = []
+        for i, obj in enumerate(raw_objectives):
+            if not isinstance(obj, dict):
+                raise ToolArgumentResolutionException(
+                    f"目標{i + 1}が不正な形式です。",
+                    "INVALID_OBJECTIVES",
+                )
+            ot = obj.get("objective_type")
+            tid = obj.get("target_id")
+            rc = obj.get("required_count")
+            if not isinstance(ot, str) or ot.strip() == "":
+                raise ToolArgumentResolutionException(
+                    f"目標{i + 1}の objective_type が不正です。",
+                    "INVALID_OBJECTIVES",
+                )
+            tid_val = self._safe_int(tid, f"objectives[{i}].target_id", min_val=0)
+            rc_val = self._safe_int(rc, f"objectives[{i}].required_count", min_val=1)
+            objectives.append((ot.strip(), tid_val, rc_val))
+        reward_gold = self._safe_int(args.get("reward_gold", 0), "reward_gold", min_val=0)
+        reward_items = None
+        raw_items = args.get("reward_items")
+        if isinstance(raw_items, (list, tuple)) and len(raw_items) > 0:
+            reward_items = []
+            for j, item in enumerate(raw_items):
+                if isinstance(item, dict):
+                    spec_id = self._safe_int(
+                        item.get("item_spec_id"), f"reward_items[{j}].item_spec_id", min_val=1
+                    )
+                    qty = self._safe_int(
+                        item.get("quantity"), f"reward_items[{j}].quantity", min_val=1
+                    )
+                    reward_items.append((spec_id, qty))
+        result: Dict[str, Any] = {
+            "objectives": objectives,
+            "reward_gold": reward_gold,
+            "reward_exp": 0,
+            "reward_items": reward_items,
+        }
+        guild_label = args.get("guild_label")
+        if isinstance(guild_label, str) and guild_label.strip():
+            base = self._resolve_guild_label(
+                {"guild_label": guild_label.strip()}, runtime_context
+            )
+            result["guild_id"] = base["guild_id"]
+        else:
+            result["guild_id"] = None
+        return result
+
+    def _resolve_guild_create(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        spot_id = runtime_context.current_spot_id
+        area_ids = runtime_context.current_area_ids
+        if spot_id is None:
+            raise ToolArgumentResolutionException(
+                "現在地スポットが取得できていません。",
+                "MISSING_CURRENT_SPOT",
+            )
+        if not area_ids:
+            raise ToolArgumentResolutionException(
+                "現在地がロケーションエリアに含まれていません。ギルドはロケーション内で作成してください。",
+                "MISSING_CURRENT_AREA",
+            )
+        name = args.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise ToolArgumentResolutionException(
+                "ギルド名が指定されていません。",
+                "MISSING_GUILD_NAME",
+            )
+        location_area_id = area_ids[0]
+        return {
+            "spot_id": spot_id,
+            "location_area_id": location_area_id,
+            "name": name.strip(),
+            "description": (args.get("description") or "").strip(),
+        }
+
+    def _resolve_guild_add_member(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        base = self._resolve_guild_label(args, runtime_context)
+        label = args.get("target_player_label")
+        if not isinstance(label, str) or not label:
+            raise ToolArgumentResolutionException(
+                "招待するプレイヤーラベルが指定されていません。",
+                "INVALID_TARGET_LABEL",
+            )
+        target = self._require_target_type(
+            label,
+            runtime_context,
+            "プレイヤーラベル",
+            (PlayerToolRuntimeTargetDto,),
+        )
+        if target.player_id is None:
+            raise ToolArgumentResolutionException(
+                f"プレイヤーとして解決できません: {label}",
+                "INVALID_TARGET_KIND",
+            )
+        base["new_member_player_id"] = target.player_id
+        return base
+
+    def _resolve_guild_change_role(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        base = self._resolve_guild_label(args, runtime_context)
+        label = args.get("target_member_label")
+        if not isinstance(label, str) or not label:
+            raise ToolArgumentResolutionException(
+                "役職変更するメンバーラベルが指定されていません。",
+                "INVALID_TARGET_LABEL",
+            )
+        target = self._require_target_type(
+            label,
+            runtime_context,
+            "メンバーラベル",
+            (PlayerToolRuntimeTargetDto,),
+        )
+        if target.player_id is None:
+            raise ToolArgumentResolutionException(
+                f"メンバーとして解決できません: {label}",
+                "INVALID_TARGET_KIND",
+            )
+        new_role = args.get("new_role")
+        if new_role not in ("leader", "officer", "member"):
+            raise ToolArgumentResolutionException(
+                f"無効な役職です: {new_role}。leader / officer / member のいずれかを指定してください。",
+                "INVALID_ROLE",
+            )
+        base["target_player_id"] = target.player_id
+        base["new_role"] = new_role
+        return base
 
     def _resolve_guild_label(
         self,

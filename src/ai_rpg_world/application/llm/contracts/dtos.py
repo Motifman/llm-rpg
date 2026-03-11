@@ -328,6 +328,7 @@ class ToolRuntimeContextDto:
     current_y: Optional[int] = None
     current_z: Optional[int] = None
     current_spot_id: Optional[int] = None
+    current_area_ids: Optional[Tuple[int, ...]] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.targets, dict):
@@ -345,6 +346,12 @@ class ToolRuntimeContextDto:
         ):
             if value is not None and not isinstance(value, int):
                 raise TypeError(f"{name} must be int or None")
+        if self.current_area_ids is not None and not isinstance(self.current_area_ids, tuple):
+            raise TypeError("current_area_ids must be tuple or None")
+        if self.current_area_ids is not None:
+            for x in self.current_area_ids:
+                if not isinstance(x, int):
+                    raise TypeError("current_area_ids must contain only int")
 
     @classmethod
     def empty(cls) -> "ToolRuntimeContextDto":

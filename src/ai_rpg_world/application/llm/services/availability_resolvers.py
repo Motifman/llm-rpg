@@ -290,6 +290,55 @@ class QuestApproveAvailabilityResolver(IAvailabilityResolver):
         return context is not None and bool(context.guild_memberships)
 
 
+class QuestIssueAvailabilityResolver(IAvailabilityResolver):
+    """クエスト発行はコンテキスト取得時に利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None
+
+
+class GuildCreateAvailabilityResolver(IAvailabilityResolver):
+    """ギルド作成はギルド未所属かつ current_spot_id と area_ids が存在するときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None or context.current_spot_id is None:
+            return False
+        if not context.area_ids:
+            return False
+        return not bool(context.guild_memberships)
+
+
+class GuildAddMemberAvailabilityResolver(IAvailabilityResolver):
+    """ギルド招待は guild_memberships があり、いずれかが leader または officer のときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None or not context.guild_memberships:
+            return False
+        return any(
+            m.role in ("leader", "officer") for m in context.guild_memberships
+        )
+
+
+class GuildChangeRoleAvailabilityResolver(IAvailabilityResolver):
+    """ギルド役職変更は guild_memberships があり、いずれかが leader または officer のときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None or not context.guild_memberships:
+            return False
+        return any(
+            m.role in ("leader", "officer") for m in context.guild_memberships
+        )
+
+
+class GuildDisbandAvailabilityResolver(IAvailabilityResolver):
+    """ギルド解散は guild_memberships のいずれかが leader のときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None or not context.guild_memberships:
+            return False
+        return any(m.role == "leader" for m in context.guild_memberships)
+
+
 class GuildLeaveAvailabilityResolver(IAvailabilityResolver):
     """ギルド脱退は所属ギルドがあるときに利用可能。"""
 

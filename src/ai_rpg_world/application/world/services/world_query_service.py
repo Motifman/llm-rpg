@@ -171,14 +171,14 @@ class WorldQueryService:
         spot_name = spot.name
         spot_desc = spot.description
 
-        area_id = None
-        area_name = None
+        areas = []
         physical_map = self._physical_map_repository.find_by_spot_id(spot_id)
         if physical_map:
             areas = physical_map.get_location_areas_at(coord)
-            if areas:
-                area_id = int(areas[0].location_id)
-                area_name = areas[0].name
+        area_ids = [int(la.location_id) for la in areas]
+        area_names = [la.name for la in areas]
+        area_id = area_ids[0] if area_ids else None
+        area_name = area_names[0] if area_names else None
 
         return PlayerLocationDto(
             player_id=query.player_id,
@@ -189,6 +189,8 @@ class WorldQueryService:
             x=coord.x,
             y=coord.y,
             z=coord.z,
+            area_ids=area_ids,
+            area_names=area_names,
             area_id=area_id,
             area_name=area_name,
         )
@@ -221,14 +223,14 @@ class WorldQueryService:
         if not spot:
             raise MapNotFoundException(int(spot_id))
 
-        area_id = None
-        area_name = None
+        areas = []
         physical_map = self._physical_map_repository.find_by_spot_id(spot_id)
         if physical_map:
             areas = physical_map.get_location_areas_at(coord)
-            if areas:
-                area_id = int(areas[0].location_id)
-                area_name = areas[0].name
+        area_ids = [int(la.location_id) for la in areas]
+        area_names = [la.name for la in areas]
+        area_id = area_ids[0] if area_ids else None
+        area_name = area_names[0] if area_names else None
 
         current_player_ids: set = set()
         all_statuses = self._player_status_repository.find_all()
@@ -255,6 +257,8 @@ class WorldQueryService:
             current_player_ids=current_player_ids,
             connected_spot_ids=connected_spot_ids,
             connected_spot_names=connected_spot_names,
+            area_ids=area_ids,
+            area_names=area_names,
         )
 
     def get_visible_context(

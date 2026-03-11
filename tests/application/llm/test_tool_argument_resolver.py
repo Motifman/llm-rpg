@@ -33,7 +33,11 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_CONVERSATION_ADVANCE,
     TOOL_NAME_DESTROY_PLACEABLE,
     TOOL_NAME_DROP_ITEM,
+    TOOL_NAME_GUILD_ADD_MEMBER,
+    TOOL_NAME_GUILD_CHANGE_ROLE,
+    TOOL_NAME_GUILD_CREATE,
     TOOL_NAME_GUILD_DEPOSIT_BANK,
+    TOOL_NAME_GUILD_DISBAND,
     TOOL_NAME_HARVEST_START,
     TOOL_NAME_INSPECT_ITEM,
     TOOL_NAME_INSPECT_TARGET,
@@ -43,6 +47,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_PLACE_OBJECT,
     TOOL_NAME_PURSUIT_CANCEL,
     TOOL_NAME_PURSUIT_START,
+    TOOL_NAME_QUEST_ISSUE,
     TOOL_NAME_SAY,
     TOOL_NAME_SHOP_LIST_ITEM,
     TOOL_NAME_TRADE_OFFER,
@@ -801,3 +806,115 @@ class TestDefaultToolArgumentResolverSafeInt:
             )
         assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
         assert "整数" in str(exc_info.value)
+
+
+class TestToolArgumentResolverGuildCreate:
+    """guild_create の resolve テスト"""
+
+    def test_resolve_guild_create_success(self):
+        resolver = DefaultToolArgumentResolver()
+        ctx = ToolRuntimeContextDto(
+            targets={},
+            current_spot_id=1,
+            current_area_ids=(10, 20),
+        )
+        result = resolver.resolve(
+            TOOL_NAME_GUILD_CREATE,
+            {"name": "冒険者ギルド", "description": "一緒に冒険"},
+            ctx,
+        )
+        assert result["spot_id"] == 1
+        assert result["location_area_id"] == 10
+        assert result["name"] == "冒険者ギルド"
+        assert result["description"] == "一緒に冒険"
+
+    def test_resolve_guild_create_missing_area_ids_raises(self):
+        resolver = DefaultToolArgumentResolver()
+        ctx = ToolRuntimeContextDto(targets={}, current_spot_id=1, current_area_ids=None)
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_GUILD_CREATE,
+                {"name": "テスト"},
+                ctx,
+            )
+        assert exc_info.value.error_code == "MISSING_CURRENT_AREA"
+
+
+class TestToolArgumentResolverGuildDisband:
+    """guild_disband の resolve テスト"""
+
+    def test_resolve_guild_disband_success(self):
+        resolver = DefaultToolArgumentResolver()
+        ctx = _make_shop_guild_trade_context()
+        result = resolver.resolve(TOOL_NAME_GUILD_DISBAND, {"guild_label": "G1"}, ctx)
+        assert result["guild_id"] == 1
+
+
+class TestToolArgumentResolverQuestIssue:
+    """quest_issue の resolve テスト"""
+
+    def test_resolve_quest_issue_success_public(self):
+        """公開クエスト（guild_label なし）の解決"""
+        resolver = DefaultToolArgumentResolver()
+        ctx = ToolRuntimeContextDto(targets={})
+        result = resolver.resolve(
+            TOOL_NAME_QUEST_ISSUE,
+            {
+                "objectives": [
+                    {"objective_type": "kill_monster", "target_id": 101, "required_count": 2},
+                ],
+                "reward_gold": 50,
+            },
+            ctx,
+        )
+        assert result["objectives"] == [("kill_monster", 101, 2)]
+        assert result["reward_gold"] == 50
+        assert result["reward_exp"] == 0
+        assert result["reward_items"] is None
+        assert result["guild_id"] is None
+
+    def test_resolve_quest_issue_with_guild_label(self):
+        """ギルド掲示クエストの解決"""
+        resolver = DefaultToolArgumentResolver()
+        ctx = _make_shop_guild_trade_context()
+        result = resolver.resolve(
+            TOOL_NAME_QUEST_ISSUE,
+            {
+                "objectives": [
+                    {"objective_type": "talk_to_npc", "target_id": 5, "required_count": 1},
+                ],
+                "guild_label": "G1",
+            },
+            ctx,
+        )
+        assert result["objectives"] == [("talk_to_npc", 5, 1)]
+        assert result["guild_id"] == 1
+
+    def test_resolve_quest_issue_empty_objectives_raises(self):
+        """objectives が空のとき INVALID_OBJECTIVES"""
+        resolver = DefaultToolArgumentResolver()
+        ctx = ToolRuntimeContextDto(targets={})
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_QUEST_ISSUE,
+                {"objectives": []},
+                ctx,
+            )
+        assert exc_info.value.error_code == "INVALID_OBJECTIVES"
+
+    def test_resolve_quest_issue_with_reward_items(self):
+        """報酬アイテム付きの解決"""
+        resolver = DefaultToolArgumentResolver()
+        ctx = ToolRuntimeContextDto(targets={})
+        result = resolver.resolve(
+            TOOL_NAME_QUEST_ISSUE,
+            {
+                "objectives": [
+                    {"objective_type": "obtain_item", "target_id": 201, "required_count": 1},
+                ],
+                "reward_items": [{"item_spec_id": 301, "quantity": 2}],
+            },
+            ctx,
+        )
+        assert result["objectives"] == [("obtain_item", 201, 1)]
+        assert result["reward_items"] == [(301, 2)]

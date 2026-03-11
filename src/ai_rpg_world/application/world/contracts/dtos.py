@@ -16,8 +16,10 @@ class PlayerLocationDto:
     x: int
     y: int
     z: int
-    area_id: Optional[int]
-    area_name: Optional[str]
+    area_ids: List[int] = field(default_factory=list)
+    area_names: List[str] = field(default_factory=list)
+    area_id: Optional[int] = None
+    area_name: Optional[str] = None
 
 
 @dataclass
@@ -32,6 +34,8 @@ class SpotInfoDto:
     current_player_ids: Set[int]
     connected_spot_ids: Set[int]
     connected_spot_names: Set[str]
+    area_ids: List[int] = field(default_factory=list)
+    area_names: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -218,6 +222,15 @@ class ActiveQuestSummaryDto:
 
 
 @dataclass
+class GuildMemberSummaryDto:
+    """ギルドメンバー1件のサマリ（guild_change_role の target 解決用）"""
+
+    player_id: int
+    player_name: str
+    role: str
+
+
+@dataclass
 class GuildMembershipSummaryDto:
     """ギルド所属のサマリ（LLM current context 用）"""
 
@@ -225,6 +238,7 @@ class GuildMembershipSummaryDto:
     guild_name: str
     role: str
     description: Optional[str] = None
+    members: Optional[List["GuildMemberSummaryDto"]] = None
 
 
 @dataclass
@@ -272,8 +286,6 @@ class PlayerCurrentStateDto:
     x: Optional[int]
     y: Optional[int]
     z: Optional[int]
-    area_id: Optional[int]
-    area_name: Optional[str]
     # スポット周辺（同スポット他プレイヤー・接続先）
     current_player_count: int
     current_player_ids: Set[int]
@@ -292,6 +304,12 @@ class PlayerCurrentStateDto:
     total_available_moves: Optional[int]
     # 注意レベル
     attention_level: AttentionLevel
+    # プレイヤー座標が属する全ロケーション（重なり対応。一次データ）
+    area_ids: List[int] = field(default_factory=list)
+    area_names: List[str] = field(default_factory=list)
+    # 後方互換: area_ids[0], area_names[0] の導出値。area_ids が空でないとき使用。
+    area_id: Optional[int] = None
+    area_name: Optional[str] = None
     # 同一スポット内のロケーションエリア（オプション）
     available_location_areas: Optional[List[AvailableLocationAreaDto]] = None
     # 複数ティックの行動中か（経路設定済みの移動中など）。割り込み判定に利用。
