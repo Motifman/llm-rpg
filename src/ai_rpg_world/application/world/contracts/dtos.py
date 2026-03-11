@@ -102,6 +102,17 @@ class MoveResultDto:
     error_message: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class PursuitCommandResultDto:
+    """追跡開始/中断コマンドの結果 DTO。"""
+
+    success: bool
+    message: str
+    target_world_object_id: Optional[int] = None
+    target_display_name: Optional[str] = None
+    no_op: bool = False
+
+
 @dataclass
 class AvailableMoveDto:
     """利用可能な移動先DTO"""

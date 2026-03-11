@@ -148,6 +148,8 @@ from ai_rpg_world.infrastructure.events.observation_event_handler_registry impor
 
 
 _ENV_LLM_MEMORY_DB_PATH = "LLM_MEMORY_DB_PATH"
+_ENV_LLM_VIEW_DISTANCE = "LLM_VIEW_DISTANCE"
+_DEFAULT_LLM_VIEW_DISTANCE = 5
 
 
 class LlmAgentWiringResult:
@@ -174,6 +176,7 @@ def create_llm_agent_wiring(
     physical_map_repository: PhysicalMapRepository,
     world_query_service: Any,
     movement_service: Any,
+    pursuit_command_service: Optional[Any] = None,
     speech_service: Optional[Any] = None,
     interaction_service: Optional[Any] = None,
     harvest_service: Optional[Any] = None,
@@ -214,6 +217,7 @@ def create_llm_agent_wiring(
     sliding_window_memory: Optional[ISlidingWindowMemory] = None,
     llm_player_resolver: Optional[ILLMPlayerResolver] = None,
     max_turns: int = 5,
+    llm_view_distance: Optional[int] = None,
 ) -> "LlmAgentWiringResult":
     """
     LLM エージェント用の観測ハンドラ登録用 Registry と LlmTurnTrigger を組み立てて返す。
@@ -253,6 +257,19 @@ def create_llm_agent_wiring(
     effective_memory_db_path = memory_db_path or (
         (os.environ.get(_ENV_LLM_MEMORY_DB_PATH) or "").strip() or None
     )
+    if llm_view_distance is not None:
+        effective_view_distance = llm_view_distance
+    else:
+        raw = (os.environ.get(_ENV_LLM_VIEW_DISTANCE) or "").strip()
+        if raw:
+            try:
+                effective_view_distance = int(raw)
+                if effective_view_distance < 0:
+                    effective_view_distance = _DEFAULT_LLM_VIEW_DISTANCE
+            except ValueError:
+                effective_view_distance = _DEFAULT_LLM_VIEW_DISTANCE
+        else:
+            effective_view_distance = _DEFAULT_LLM_VIEW_DISTANCE
     if episode_memory_store is None:
         if effective_memory_db_path:
             from ai_rpg_world.infrastructure.llm.sqlite_episode_memory_store import (
@@ -276,7 +293,10 @@ def create_llm_agent_wiring(
 
     def _state_provider(pid: PlayerId) -> str:
         dto = world_query_service.get_player_current_state(
-            GetPlayerCurrentStateQuery(player_id=pid.value)
+            GetPlayerCurrentStateQuery(
+                player_id=pid.value,
+                view_distance=effective_view_distance,
+            )
         )
         if dto is None:
             return "（情報なし）"
@@ -310,6 +330,7 @@ def create_llm_agent_wiring(
         place_enabled=place_object_service is not None,
         drop_enabled=drop_item_service is not None,
         chest_enabled=chest_service is not None,
+        pursuit_enabled=pursuit_command_service is not None,
         combat_enabled=skill_tool_service is not None,
         quest_enabled=quest_command_service is not None,
         guild_enabled=guild_command_service is not None,
@@ -330,6 +351,7 @@ def create_llm_agent_wiring(
 
     tool_command_mapper = ToolCommandMapper(
         movement_service=movement_service,
+        pursuit_service=pursuit_command_service,
         speech_service=speech_service,
         interaction_service=interaction_service,
         harvest_service=harvest_service,
@@ -399,6 +421,7 @@ def create_llm_agent_wiring(
         available_tools_provider=available_tools_provider,
         ui_context_builder=ui_context_builder,
         predictive_memory_retriever=predictive_retriever,
+        tile_map_view_distance=effective_view_distance,
     )
     orchestrator = LlmAgentOrchestrator(
         prompt_builder=prompt_builder,

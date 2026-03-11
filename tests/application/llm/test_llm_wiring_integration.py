@@ -1239,3 +1239,170 @@ class TestEventToWorldSideEffectE2E:
         assert call_kw["destination_type"] == "object"
         assert call_kw["target_spot_id"] == 1
         assert call_kw["target_world_object_id"] == 200
+
+    def test_pursuit_tool_invokes_pursuit_command_service(self):
+        from ai_rpg_world.application.llm.services.in_memory_episode_memory_store import (
+            InMemoryEpisodeMemoryStore,
+        )
+        from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+        from ai_rpg_world.application.llm.services.llm_player_resolver import (
+            SetBasedLlmPlayerResolver,
+        )
+        from ai_rpg_world.application.llm.services.sliding_window_memory import (
+            DefaultSlidingWindowMemory,
+        )
+        from ai_rpg_world.application.world.contracts.dtos import (
+            PlayerCurrentStateDto,
+            VisibleObjectDto,
+        )
+        from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import (
+            PlayerProfileAggregate,
+        )
+        from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel, ControlType
+        from ai_rpg_world.domain.player.event.status_events import PlayerDownedEvent
+        from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+        from ai_rpg_world.domain.player.value_object.player_name import PlayerName
+        from ai_rpg_world.domain.world.entity.spot import Spot
+        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+        from ai_rpg_world.infrastructure.repository.in_memory_data_store import (
+            InMemoryDataStore,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
+            InMemoryPhysicalMapRepository,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import (
+            InMemoryPlayerProfileRepository,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
+            InMemoryPlayerStatusRepository,
+        )
+        from ai_rpg_world.infrastructure.repository.in_memory_spot_repository import (
+            InMemorySpotRepository,
+        )
+        from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_PURSUIT_START
+
+        data_store = InMemoryDataStore()
+        data_store.clear_all()
+
+        def create_uow():
+            return InMemoryUnitOfWork(
+                unit_of_work_factory=create_uow, data_store=data_store
+            )
+
+        uow, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(
+            unit_of_work_factory=create_uow,
+            data_store=data_store,
+        )
+
+        profile_repo = InMemoryPlayerProfileRepository(data_store, None)
+        spot_repo = InMemorySpotRepository(data_store, None)
+        profile = PlayerProfileAggregate.create(
+            PlayerId(1), PlayerName("E2EPlayer"), control_type=ControlType.LLM
+        )
+        profile_repo.save(profile)
+        spot_repo.save(Spot(SpotId(1), "SpotA", "A"))
+
+        player_status_repo = InMemoryPlayerStatusRepository(data_store, None)
+        physical_map_repo = InMemoryPhysicalMapRepository(data_store, None)
+
+        movement_service = MagicMock(spec=MovementApplicationService)
+        movement_service.move_to_destination = MagicMock()
+        movement_service.cancel_movement = MagicMock()
+        pursuit_service = MagicMock()
+        pursuit_service.start_pursuit = MagicMock(
+            return_value=MagicMock(success=True, message="追跡を開始しました。", no_op=False)
+        )
+        pursuit_service.cancel_pursuit = MagicMock()
+
+        current_state = PlayerCurrentStateDto(
+            player_id=1,
+            player_name="E2EPlayer",
+            current_spot_id=1,
+            current_spot_name="SpotA",
+            current_spot_description="A",
+            x=0,
+            y=0,
+            z=0,
+            area_id=1,
+            area_name="Area1",
+            current_player_count=1,
+            current_player_ids={1, 2},
+            connected_spot_ids=set(),
+            connected_spot_names=set(),
+            weather_type="clear",
+            weather_intensity=0.5,
+            current_terrain_type="grass",
+            visible_objects=[
+                VisibleObjectDto(
+                    object_id=100,
+                    object_type="player",
+                    x=1,
+                    y=0,
+                    z=0,
+                    distance=1,
+                    display_name="Bob",
+                    object_kind="player",
+                    player_id_value=2,
+                )
+            ],
+            view_distance=5,
+            available_moves=[],
+            total_available_moves=0,
+            attention_level=AttentionLevel.FULL,
+            is_busy=False,
+            inventory_items=[],
+            chest_items=[],
+            usable_skills=[],
+            nearby_shops=[],
+            available_trades=[],
+            active_quests=[],
+            guild_memberships=[],
+            notable_objects=[],
+            actionable_objects=[],
+        )
+        world_query = MagicMock(spec=WorldQueryService)
+        world_query.get_player_current_state = MagicMock(return_value=current_state)
+
+        episode_memory_store = InMemoryEpisodeMemoryStore()
+        sliding_window = DefaultSlidingWindowMemory(max_entries_per_player=1)
+
+        uow_factory = MagicMock(spec=UnitOfWorkFactory)
+        uow_factory.create.return_value = uow
+
+        stub_client = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_PURSUIT_START,
+                "arguments": json.dumps({"target_label": "P1"}),
+            }
+        )
+
+        wiring_result = create_llm_agent_wiring(
+            player_status_repository=player_status_repo,
+            physical_map_repository=physical_map_repo,
+            world_query_service=world_query,
+            movement_service=movement_service,
+            pursuit_command_service=pursuit_service,
+            player_profile_repository=profile_repo,
+            unit_of_work_factory=uow_factory,
+            spot_repository=spot_repo,
+            episode_memory_store=episode_memory_store,
+            sliding_window_memory=sliding_window,
+            llm_player_resolver=SetBasedLlmPlayerResolver({1}),
+            llm_client=stub_client,
+        )
+        registry = wiring_result.observation_registry
+        trigger = wiring_result.llm_turn_trigger
+
+        registry.register_handlers(event_publisher)
+
+        event = PlayerDownedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+        )
+
+        with uow:
+            uow.add_events([event])
+
+        trigger.run_scheduled_turns()
+
+        pursuit_service.start_pursuit.assert_called_once()

@@ -40,6 +40,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
     TOOL_NAME_PLACE_OBJECT,
+    TOOL_NAME_PURSUIT_CANCEL,
+    TOOL_NAME_PURSUIT_START,
     TOOL_NAME_QUEST_ACCEPT,
     TOOL_NAME_QUEST_APPROVE,
     TOOL_NAME_QUEST_CANCEL,
@@ -69,11 +71,15 @@ from ai_rpg_world.application.speech.services.player_speech_service import (
     PlayerSpeechApplicationService,
 )
 from ai_rpg_world.application.world.contracts.commands import (
+    CancelPursuitCommand,
     ChangeAttentionLevelCommand,
     InteractWorldObjectCommand,
+    StartPursuitCommand,
 )
-from ai_rpg_world.application.world.contracts.dtos import MoveResultDto
-from ai_rpg_world.application.world.contracts.commands import InteractWorldObjectCommand
+from ai_rpg_world.application.world.contracts.dtos import (
+    MoveResultDto,
+    PursuitCommandResultDto,
+)
 from ai_rpg_world.application.world.services.attention_level_service import (
     AttentionLevelApplicationService,
 )
@@ -136,6 +142,7 @@ class ToolCommandMapper:
     def __init__(
         self,
         movement_service: MovementApplicationService,
+        pursuit_service: Optional[Any] = None,
         speech_service: Optional[PlayerSpeechApplicationService] = None,
         interaction_service: Optional[InteractionCommandService] = None,
         harvest_service: Optional[PlayerHarvestApplicationService] = None,
@@ -161,6 +168,14 @@ class ToolCommandMapper:
         move_to_destination = getattr(movement_service, "move_to_destination", None)
         if not callable(move_to_destination):
             raise TypeError("movement_service must have a callable move_to_destination")
+        if pursuit_service is not None and not callable(
+            getattr(pursuit_service, "start_pursuit", None)
+        ):
+            raise TypeError("pursuit_service must have a callable start_pursuit")
+        if pursuit_service is not None and not callable(
+            getattr(pursuit_service, "cancel_pursuit", None)
+        ):
+            raise TypeError("pursuit_service must have a callable cancel_pursuit")
         if speech_service is not None and not callable(getattr(speech_service, "speak", None)):
             raise TypeError("speech_service must have a callable speak")
         if interaction_service is not None and not callable(
@@ -208,6 +223,7 @@ class ToolCommandMapper:
         self._physical_map_repository = physical_map_repository
         self._player_status_repository = player_status_repository
         self._movement_service = movement_service
+        self._pursuit_service = pursuit_service
         self._speech_service = speech_service
         self._interaction_service = interaction_service
         self._harvest_service = harvest_service
@@ -220,6 +236,8 @@ class ToolCommandMapper:
         self._executor_map: Dict[str, Any] = {
             TOOL_NAME_NO_OP: lambda pid, a: LlmCommandResultDto(success=True, message="何もしませんでした。", was_no_op=True),
             TOOL_NAME_MOVE_TO_DESTINATION: self._execute_move_to_destination,
+            TOOL_NAME_PURSUIT_START: self._execute_pursuit_start,
+            TOOL_NAME_PURSUIT_CANCEL: self._execute_pursuit_cancel,
             TOOL_NAME_WHISPER: self._execute_whisper,
             TOOL_NAME_SAY: self._execute_say,
             TOOL_NAME_INSPECT_ITEM: self._execute_inspect_item,
@@ -334,6 +352,53 @@ class ToolCommandMapper:
                 error_code=error_code,
                 remediation=get_remediation(error_code),
             )
+
+    def _execute_pursuit_start(
+        self,
+        player_id: int,
+        args: Dict[str, Any],
+    ) -> LlmCommandResultDto:
+        if self._pursuit_service is None:
+            return self._unknown_tool("追跡開始ツールはまだ利用できません。")
+        try:
+            target_world_object_id = args.get("target_world_object_id")
+            result: PursuitCommandResultDto = self._pursuit_service.start_pursuit(
+                StartPursuitCommand(
+                    player_id=player_id,
+                    target_world_object_id=(
+                        int(target_world_object_id)
+                        if isinstance(target_world_object_id, (int, float))
+                        else 0
+                    ),
+                )
+            )
+            return LlmCommandResultDto(
+                success=result.success,
+                message=result.message,
+                was_no_op=result.no_op,
+            )
+        except Exception as e:
+            return self._exception_result(e)
+
+    def _execute_pursuit_cancel(
+        self,
+        player_id: int,
+        args: Dict[str, Any],
+    ) -> LlmCommandResultDto:
+        del args
+        if self._pursuit_service is None:
+            return self._unknown_tool("追跡中断ツールはまだ利用できません。")
+        try:
+            result: PursuitCommandResultDto = self._pursuit_service.cancel_pursuit(
+                CancelPursuitCommand(player_id=player_id)
+            )
+            return LlmCommandResultDto(
+                success=result.success,
+                message=result.message,
+                was_no_op=result.no_op,
+            )
+        except Exception as e:
+            return self._exception_result(e)
 
     def _execute_change_attention(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._attention_service is None:

@@ -68,6 +68,31 @@ class CancelMovementCommand:
 
 
 @dataclass(frozen=True)
+class StartPursuitCommand:
+    """追跡開始コマンド。可視対象の world_object_id を指定する。"""
+
+    player_id: int
+    target_world_object_id: int
+
+    def __post_init__(self):
+        if self.player_id <= 0:
+            raise ValueError("player_id must be greater than 0")
+        if self.target_world_object_id <= 0:
+            raise ValueError("target_world_object_id must be greater than 0")
+
+
+@dataclass(frozen=True)
+class CancelPursuitCommand:
+    """現在の active pursuit を中断するコマンド。対象引数は持たない。"""
+
+    player_id: int
+
+    def __post_init__(self):
+        if self.player_id <= 0:
+            raise ValueError("player_id must be greater than 0")
+
+
+@dataclass(frozen=True)
 class GetSpotInfoCommand:
     """スポット情報取得コマンド"""
     spot_id: int
