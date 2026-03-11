@@ -30,7 +30,12 @@ from ai_rpg_world.application.world.services.player_supplemental_context_builder
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
-from ai_rpg_world.domain.world.exception.map_exception import TileNotFoundException
+from ai_rpg_world.domain.world.exception.map_exception import (
+    NotAnActorException,
+    ObjectNotFoundException,
+    TileNotFoundException,
+    WorldObjectIdValidationException,
+)
 from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
 from ai_rpg_world.domain.world.repository.transition_policy_repository import (
     ITransitionPolicyRepository,
@@ -353,9 +358,14 @@ class PlayerCurrentStateBuilder:
         )
 
     def _get_player_actor(self, physical_map, player_id: PlayerId):
+        """プレイヤーアクターを取得。存在しない・不正な場合は None を返す。"""
         try:
             from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
             return physical_map.get_actor(WorldObjectId.create(int(player_id)))
-        except Exception:
+        except (
+            ObjectNotFoundException,
+            NotAnActorException,
+            WorldObjectIdValidationException,
+        ):
             return None
