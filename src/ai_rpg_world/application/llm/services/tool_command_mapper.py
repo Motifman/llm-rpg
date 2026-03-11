@@ -393,10 +393,40 @@ class ToolCommandMapper:
     def _execute_drop_item(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         if self._drop_item_service is None:
             return self._unknown_tool("ドロップツールはまだ利用できません。")
+        inventory_slot_id_raw = args.get("inventory_slot_id")
+        if inventory_slot_id_raw is None:
+            return LlmCommandResultDto(
+                success=False,
+                message="inventory_slot_id が指定されていません。",
+                error_code="INVALID_TARGET_LABEL",
+                remediation=get_remediation("INVALID_TARGET_LABEL"),
+            )
+        try:
+            slot_id_int = (
+                int(inventory_slot_id_raw)
+                if isinstance(inventory_slot_id_raw, (int, float, str))
+                else None
+            )
+        except (ValueError, TypeError):
+            slot_id_int = None
+        if slot_id_int is None:
+            return LlmCommandResultDto(
+                success=False,
+                message="inventory_slot_id は 0 以上の整数で指定してください。",
+                error_code="INVALID_TARGET_LABEL",
+                remediation=get_remediation("INVALID_TARGET_LABEL"),
+            )
+        if slot_id_int < 0:
+            return LlmCommandResultDto(
+                success=False,
+                message="inventory_slot_id は 0 以上の整数で指定してください。",
+                error_code="INVALID_TARGET_LABEL",
+                remediation=get_remediation("INVALID_TARGET_LABEL"),
+            )
         try:
             self._drop_item_service.drop_from_slot(
                 player_id=player_id,
-                inventory_slot_id=int(args.get("inventory_slot_id")),
+                inventory_slot_id=slot_id_int,
             )
             target_display_name = args.get("target_display_name") or "アイテム"
             return LlmCommandResultDto(success=True, message=f"{target_display_name}を捨てました。")
