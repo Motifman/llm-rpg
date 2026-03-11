@@ -21,6 +21,9 @@ from ai_rpg_world.application.observation.services.recipient_strategies.monster_
 from ai_rpg_world.application.observation.services.recipient_strategies.quest_recipient_strategy import (
     QuestRecipientStrategy,
 )
+from ai_rpg_world.application.observation.services.recipient_strategies.pursuit_recipient_strategy import (
+    PursuitRecipientStrategy,
+)
 from ai_rpg_world.application.observation.services.recipient_strategies.shop_recipient_strategy import (
     ShopRecipientStrategy,
 )
@@ -38,6 +41,7 @@ __all__ = [
     "DefaultRecipientStrategy",
     "ConversationRecipientStrategy",
     "QuestRecipientStrategy",
+    "PursuitRecipientStrategy",
     "ShopRecipientStrategy",
     "TradeRecipientStrategy",
     "GuildRecipientStrategy",
