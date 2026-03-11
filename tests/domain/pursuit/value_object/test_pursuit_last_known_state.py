@@ -48,3 +48,14 @@ class TestPursuitLastKnownState:
 
         with pytest.raises(AttributeError):
             state.coordinate = Coordinate(1, 1, 0)  # type: ignore[misc]
+
+    def test_last_known_state_does_not_reuse_static_movement_fields(self):
+        """最後の既知状態は static movement 用フィールドを持たないこと"""
+        state = PursuitLastKnownState(
+            target_id=WorldObjectId(20),
+            spot_id=SpotId(3),
+            coordinate=Coordinate(7, 8, 0),
+        )
+
+        assert not hasattr(state, "current_destination")
+        assert not hasattr(state, "planned_path")

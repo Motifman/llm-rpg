@@ -35,3 +35,14 @@ class TestPursuitTargetSnapshot:
 
         with pytest.raises(AttributeError):
             snapshot.target_id = WorldObjectId(11)  # type: ignore[misc]
+
+    def test_snapshot_keeps_target_metadata_explicit(self):
+        """対象メタデータを座標とスポットで明示保持すること"""
+        snapshot = PursuitTargetSnapshot(
+            target_id=WorldObjectId(10),
+            spot_id=SpotId(2),
+            coordinate=Coordinate(4, 5, 0),
+        )
+
+        assert snapshot.spot_id == SpotId(2)
+        assert snapshot.coordinate == Coordinate(4, 5, 0)
