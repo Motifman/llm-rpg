@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-03-11T13:27:16.731Z"
-last_activity: 2026-03-11 — Phase 5 plan 05-02 completed with explicit monster pursuit failure and cleanup alignment
+status: in_progress
+stopped_at: Completed 06-03-PLAN.md
+last_updated: "2026-03-11T14:54:00Z"
+last_activity: 2026-03-11 — Phase 6 completed with an authoritative player pursuit runtime bootstrap and green regression coverage
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 13
-  completed_plans: 13
-  percent: 100
+  total_phases: 7
+  completed_phases: 6
+  total_plans: 16
+  completed_plans: 16
+  percent: 86
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** LLMエージェントが、静的な目的地指定だけでなく、動的に移動する主体に対しても一貫した状態遷移とイベント駆動で行動を継続できること
-**Current focus:** Phase 5: Monster Pursuit Alignment
+**Current focus:** Phase 7: Pursuit Audit Evidence Backfill
 
 ## Current Position
 
-Phase: 5 of 5 (Monster Pursuit Alignment)
-Plan: 2 of 2 in current phase
+Phase: 6 of 7 (Player Pursuit Runtime Assembly Closure)
+Plan: 3 of 3 in current phase
 Status: Completed
-Last activity: 2026-03-11 — Phase 5 plan 05-02 completed with explicit monster pursuit failure and cleanup alignment
+Last activity: 2026-03-11 — Phase 6 completed with an authoritative player pursuit runtime bootstrap and green regression coverage
 
-Progress: [██████████] 100%
+Progress: [████████░░] 86%
 
 ## Performance Metrics
 
@@ -48,15 +48,17 @@ Progress: [██████████] 100%
 | 03-pursuit-continuation-loop | 3 | 19 min | 6 min |
 | 04-observation-and-llm-delivery | 2 | 12 min | 6 min |
 | 05-monster-pursuit-alignment | 2 | 18 min | 9 min |
+| 06-player-pursuit-runtime-assembly-closure | 3 | 23 min | 8 min |
 
 **Recent Trend:**
-- Last 5 plans: 6 min, 1 min, 2 min, 8 min, 10 min
+- Last 5 plans: 8 min, 9 min, 6 min, 8 min, 10 min
 - Trend: Stable
 
 | Phase | Duration | Tasks | Files |
 |-------|----------|-------|-------|
-| Phase 05-monster-pursuit-alignment P01 | 8 min | 3 tasks | 4 files |
-| Phase 05-monster-pursuit-alignment P02 | 10 min | 3 tasks | 6 files |
+| Phase 06-player-pursuit-runtime-assembly-closure P01 | 8 min | 3 tasks | 3 files |
+| Phase 06-player-pursuit-runtime-assembly-closure P02 | 9 min | 3 tasks | 1 files |
+| Phase 06-player-pursuit-runtime-assembly-closure P03 | 6 min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -98,6 +100,9 @@ Recent decisions affecting current work:
 - [Phase 05-monster-pursuit-alignment]: Monster SEARCH now fails with vision_lost_at_last_known after exhausting frozen last-known instead of wandering.
 - [Phase 05-monster-pursuit-alignment]: Monster target lookup resolves target_missing unless the actor is already at last-known, preserving distinct failure semantics.
 - [Phase 05-monster-pursuit-alignment]: SEARCH reacquiring the same visible target resumes the same pursuit context inside the existing world simulation seam.
+- [Phase 06-player-pursuit-runtime-assembly-closure]: `compose_llm_runtime(...)` remains low-level; pursuit-capable live assembly now has its own authoritative bootstrap entrypoint.
+- [Phase 06-player-pursuit-runtime-assembly-closure]: Player pursuit runtime composition must include both `pursuit_command_service` and `pursuit_continuation_service` or fail fast.
+- [Phase 06-player-pursuit-runtime-assembly-closure]: Observation scheduling and turn draining proofs now go through `EventHandlerComposition` on the authoritative runtime path instead of direct registry-only setup.
 
 ### Pending Todos
 
@@ -110,6 +115,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-11T13:14:50.579Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-03-11T14:39:36Z
+Stopped at: Completed 06-03-PLAN.md
 Resume file: None

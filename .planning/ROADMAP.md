@@ -102,9 +102,9 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 06-01: live runtime で pursuit command/continuation services を組み立てる
-- [ ] 06-02: player pursuit の start -> tick continuation -> observation resumption を接続する
-- [ ] 06-03: 非テスト bootstrap を通る回帰テストを追加する
+- [x] 06-01: live runtime で pursuit command/continuation services を組み立てる
+- [x] 06-02: player pursuit の start -> tick continuation -> observation resumption を接続する
+- [x] 06-03: 非テスト bootstrap を通る回帰テストを追加する
 
 ### Phase 7: Pursuit Audit Evidence Backfill
 **Goal**: 監査を阻害している verification/validation 成果物と要件トレースの欠落を解消する
@@ -134,5 +134,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. Pursuit Continuation Loop | 3/3 | Complete   | 2026-03-11 |
 | 4. Observation And LLM Delivery | 3/3 | Completed | 2026-03-11 |
 | 5. Monster Pursuit Alignment | 2/2 | Completed | 2026-03-11 |
-| 6. Player Pursuit Runtime Assembly Closure | 0/3 | Pending | - |
+| 6. Player Pursuit Runtime Assembly Closure | 3/3 | Completed | 2026-03-11 |
 | 7. Pursuit Audit Evidence Backfill | 0/3 | Pending | - |
