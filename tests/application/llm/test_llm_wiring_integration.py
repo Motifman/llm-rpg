@@ -626,6 +626,61 @@ class TestComposePlayerPursuitRuntime:
         tool_mapper = result.llm_turn_trigger._turn_runner._orchestrator._tool_command_mapper
         assert tool_mapper._pursuit_service is pursuit_command_service
 
+    def test_from_compose_result_rechecks_pursuit_contract(self):
+        deps = _minimal_wiring_deps()
+        pursuit_command_service = MagicMock()
+        pursuit_continuation_service = MagicMock()
+
+        def comp_builder(registry):
+            return EventHandlerComposition(
+                gateway_handler=MagicMock(),
+                observation_registry=registry,
+            )
+
+        def svc_builder(_trigger, _reflection_runner):
+            svc = MagicMock()
+            svc._pursuit_continuation_service = pursuit_continuation_service
+            return svc
+
+        compose_result = compose_llm_runtime(
+            composition_builder=comp_builder,
+            service_builder=svc_builder,
+            **deps,
+        )
+
+        result = PlayerPursuitRuntimeResult.from_compose_result(
+            compose_result,
+            pursuit_command_service=pursuit_command_service,
+            pursuit_continuation_service=pursuit_continuation_service,
+        )
+
+        assert result.pursuit_enabled is True
+        assert result.world_simulation_service is compose_result.world_simulation_service
+
+    def test_from_compose_result_rejects_half_wired_world_simulation_service(self):
+        deps = _minimal_wiring_deps()
+
+        class HalfWiredWorldSimulationService:
+            pass
+
+        def svc_builder(_trigger, _reflection_runner):
+            return HalfWiredWorldSimulationService()
+
+        compose_result = compose_llm_runtime(
+            service_builder=svc_builder,
+            **deps,
+        )
+
+        with pytest.raises(
+            ValueError,
+            match="world_simulation_service must carry pursuit_continuation_service",
+        ):
+            PlayerPursuitRuntimeResult.from_compose_result(
+                compose_result,
+                pursuit_command_service=MagicMock(),
+                pursuit_continuation_service=MagicMock(),
+            )
+
 
 # ---------------------------------------------------------------------------
 # SQLite memory restore guarantee
