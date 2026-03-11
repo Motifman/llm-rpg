@@ -778,6 +778,164 @@ class TestWorldSimulationApplicationService:
         continuation_service.evaluate_tick.assert_called_once()
         movement_service.tick_movement_in_current_unit_of_work.assert_called_once_with(1)
 
+    def test_tick_visible_pursuit_refreshes_target_and_moves_in_same_tick(
+        self, setup_service
+    ):
+        service, _, repository, _, player_status_repo, _, _, _, _, _ = setup_service
+        status = self._player_status()
+        status.start_pursuit(
+            PursuitTargetSnapshot(
+                target_id=WorldObjectId(91),
+                spot_id=SpotId(1),
+                coordinate=Coordinate(1, 0, 0),
+            )
+        )
+        player_status_repo.save(status)
+
+        physical_map = PhysicalMapAggregate.create(
+            SpotId(1),
+            [Tile(Coordinate(x, y, 0), TerrainType.grass()) for x in range(4) for y in range(2)],
+            objects=[
+                self._player_actor(),
+                WorldObject(
+                    WorldObjectId(91),
+                    Coordinate(2, 0, 0),
+                    ObjectTypeEnum.NPC,
+                    is_blocking=False,
+                ),
+            ],
+        )
+        repository.save(physical_map)
+
+        world_query_service = mock.Mock()
+        world_query_service.get_player_current_state.return_value = self._current_state(
+            visible_objects=[self._visible_target(91, x=2, y=0)],
+            has_active_path=False,
+        )
+        movement_service = mock.Mock()
+        movement_service.replan_path_to_coordinate_in_current_unit_of_work.return_value = (
+            SimpleNamespace(success=True)
+        )
+
+        def advance_one_step(player_id: int) -> None:
+            updated_status = player_status_repo.find_by_id(PlayerId(player_id))
+            assert updated_status is not None
+            updated_status.update_location(SpotId(1), Coordinate(1, 0, 0))
+            player_status_repo.save(updated_status)
+            latest_map = repository.find_by_spot_id(SpotId(1))
+            assert latest_map is not None
+            latest_map.get_actor(WorldObjectId(player_id)).move_to(Coordinate(1, 0, 0))
+            repository.save(latest_map)
+
+        movement_service.tick_movement_in_current_unit_of_work.side_effect = advance_one_step
+        service._movement_service = movement_service
+        service._pursuit_continuation_service = PursuitContinuationService(
+            world_query_service,
+            movement_service=movement_service,
+            physical_map_repository=repository,
+        )
+
+        service.tick()
+
+        saved_status = player_status_repo.find_by_id(PlayerId(1))
+        updated_map = repository.find_by_spot_id(SpotId(1))
+        assert saved_status is not None
+        assert saved_status.pursuit_state is not None
+        assert saved_status.current_coordinate == Coordinate(1, 0, 0)
+        assert saved_status.pursuit_state.target_snapshot.coordinate == Coordinate(2, 0, 0)
+        assert saved_status.pursuit_state.last_known.coordinate == Coordinate(2, 0, 0)
+        assert updated_map is not None
+        assert updated_map.get_actor(WorldObjectId(1)).coordinate == Coordinate(1, 0, 0)
+
+    def test_tick_lost_visibility_moves_to_frozen_last_known_then_fails_after_arrival(
+        self, setup_service
+    ):
+        service, _, repository, _, player_status_repo, _, _, _, _, _ = setup_service
+        status = self._player_status()
+        status.start_pursuit(
+            PursuitTargetSnapshot(
+                target_id=WorldObjectId(92),
+                spot_id=SpotId(1),
+                coordinate=Coordinate(1, 0, 0),
+            )
+        )
+        player_status_repo.save(status)
+
+        pursuit_events: list[object] = []
+
+        player_map = PhysicalMapAggregate.create(
+            SpotId(1),
+            [Tile(Coordinate(x, y, 0), TerrainType.grass()) for x in range(3) for y in range(2)],
+            objects=[self._player_actor()],
+        )
+        target_map = PhysicalMapAggregate.create(
+            SpotId(2),
+            [Tile(Coordinate(x, y, 0), TerrainType.grass()) for x in range(3) for y in range(2)],
+            objects=[
+                WorldObject(
+                    WorldObjectId(92),
+                    Coordinate(2, 0, 0),
+                    ObjectTypeEnum.NPC,
+                    is_blocking=False,
+                )
+            ],
+        )
+        repository.save(player_map)
+        repository.save(target_map)
+
+        world_query_service = mock.Mock()
+        world_query_service.get_player_current_state.return_value = self._current_state(
+            visible_objects=[],
+            has_active_path=False,
+        )
+        movement_service = mock.Mock()
+        movement_service.replan_path_to_coordinate_in_current_unit_of_work.return_value = (
+            SimpleNamespace(success=True)
+        )
+
+        def advance_one_step(player_id: int) -> None:
+            updated_status = player_status_repo.find_by_id(PlayerId(player_id))
+            assert updated_status is not None
+            updated_status.update_location(SpotId(1), Coordinate(1, 0, 0))
+            player_status_repo.save(updated_status)
+            latest_map = repository.find_by_spot_id(SpotId(1))
+            assert latest_map is not None
+            latest_map.get_actor(WorldObjectId(player_id)).move_to(Coordinate(1, 0, 0))
+            repository.save(latest_map)
+
+        movement_service.tick_movement_in_current_unit_of_work.side_effect = advance_one_step
+        service._movement_service = movement_service
+        service._pursuit_continuation_service = PursuitContinuationService(
+            world_query_service,
+            movement_service=movement_service,
+            physical_map_repository=repository,
+        )
+
+        service.tick()
+
+        saved_after_first_tick = player_status_repo.find_by_id(PlayerId(1))
+        assert saved_after_first_tick is not None
+        assert saved_after_first_tick.has_active_pursuit is True
+        assert saved_after_first_tick.current_coordinate == Coordinate(1, 0, 0)
+        assert saved_after_first_tick.pursuit_state is not None
+        assert saved_after_first_tick.pursuit_state.last_known.coordinate == Coordinate(1, 0, 0)
+        pursuit_events.extend(saved_after_first_tick.get_events())
+        saved_after_first_tick.clear_events()
+
+        service.tick()
+
+        saved_after_second_tick = player_status_repo.find_by_id(PlayerId(1))
+        assert saved_after_second_tick is not None
+        assert saved_after_second_tick.has_active_pursuit is False
+        assert saved_after_second_tick.current_coordinate == Coordinate(1, 0, 0)
+        pursuit_events.extend(saved_after_second_tick.get_events())
+        movement_service.tick_movement_in_current_unit_of_work.assert_called_once_with(1)
+        assert any(
+            getattr(event, "failure_reason", None)
+            == PursuitFailureReason.VISION_LOST_AT_LAST_KNOWN
+            for event in pursuit_events
+        )
+
     def test_tick_stops_movement_when_pursuit_fails_with_structured_reason(
         self, setup_service
     ):
