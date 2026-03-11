@@ -11,6 +11,8 @@
 - [x] **Phase 3: Pursuit Continuation Loop** - 最新既知位置に基づく継続追跡をワールド tick に統合する (completed 2026-03-11)
 - [x] **Phase 4: Observation And LLM Delivery** - 追跡結果を観測/LLM 再駆動パイプラインへ接続する (completed 2026-03-11)
 - [x] **Phase 5: Monster Pursuit Alignment** - モンスター側の追跡語彙と状態遷移を新しい基盤に整合させる (completed 2026-03-11)
+- [ ] **Phase 6: Player Pursuit Runtime Assembly Closure** - プレイヤー追跡の開始から継続・再開までを非テスト実行経路に組み込む
+- [ ] **Phase 7: Pursuit Audit Evidence Backfill** - 監査を止めている検証成果物とトレーサビリティの欠落を解消する
 
 ## Phase Details
 
@@ -88,10 +90,42 @@ Plans:
 - [x] 05-01: モンスター側の追跡状態/理由語彙を整合させる
 - [x] 05-02: モンスター追跡回帰テストを追加する
 
+### Phase 6: Player Pursuit Runtime Assembly Closure
+**Goal**: プレイヤー追跡の live runtime 配線を完成させ、追跡開始から継続・観測再開までを実行経路上で成立させる
+**Depends on**: Phase 5
+**Requirements**: PURS-03, PURS-04, PURS-05, RUNT-01, OBSV-02
+**Gap Closure**: Closes audit gaps from v1.0 milestone audit
+**Success Criteria** (what must be TRUE):
+1. 非テストの composition path で `pursuit_command_service` と `pursuit_continuation_service` がともに配線される
+2. プレイヤーの追跡開始が aggregate state 更新と world tick 継続へ接続される
+3. 追跡失敗/中断が observation パイプライン経由で LLM turn resumption に届く
+**Plans**: TBD
+
+Plans:
+- [ ] 06-01: live runtime で pursuit command/continuation services を組み立てる
+- [ ] 06-02: player pursuit の start -> tick continuation -> observation resumption を接続する
+- [ ] 06-03: 非テスト bootstrap を通る回帰テストを追加する
+
+### Phase 7: Pursuit Audit Evidence Backfill
+**Goal**: 監査を阻害している verification/validation 成果物と要件トレースの欠落を解消する
+**Depends on**: Phase 6
+**Requirements**: PURS-02, OUTC-03, RUNT-03, OBSV-01
+**Gap Closure**: Closes audit gaps from v1.0 milestone audit
+**Success Criteria** (what must be TRUE):
+1. Phase 3, 4, 5 に現在コードベースに対応した `VERIFICATION.md` が存在する
+2. Phase 4 の `VALIDATION.md` が Nyquist compliant な状態に更新される
+3. `REQUIREMENTS.md` のトレーサビリティが監査後の受け入れ状態と一致する
+**Plans**: TBD
+
+Plans:
+- [ ] 07-01: Phase 3 と Phase 5 の verification evidence を再構築する
+- [ ] 07-02: Phase 4 の verification/validation artifacts を完了させる
+- [ ] 07-03: requirements traceability を監査結果に合わせて同期する
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -100,3 +134,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 3. Pursuit Continuation Loop | 3/3 | Complete   | 2026-03-11 |
 | 4. Observation And LLM Delivery | 3/3 | Completed | 2026-03-11 |
 | 5. Monster Pursuit Alignment | 2/2 | Completed | 2026-03-11 |
+| 6. Player Pursuit Runtime Assembly Closure | 0/3 | Pending | - |
+| 7. Pursuit Audit Evidence Backfill | 0/3 | Pending | - |
