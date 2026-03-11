@@ -41,6 +41,20 @@ from ai_rpg_world.domain.player.exception import (
 )
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import PursuitFailureReason
+from ai_rpg_world.domain.pursuit.event.pursuit_events import (
+    PursuitCancelledEvent,
+    PursuitFailedEvent,
+    PursuitStartedEvent,
+    PursuitUpdatedEvent,
+)
+from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
+    PursuitLastKnownState,
+)
+from ai_rpg_world.domain.pursuit.value_object.pursuit_state import PursuitState
+from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
+    PursuitTargetSnapshot,
+)
 
 
 class PlayerStatusAggregate(AggregateRoot):
@@ -68,6 +82,7 @@ class PlayerStatusAggregate(AggregateRoot):
         is_down: bool = False,
         active_effects: List[StatusEffect] = None,
         attention_level: Optional[AttentionLevel] = None,
+        pursuit_state: Optional[PursuitState] = None,
     ):
         super().__init__()
         self._player_id = player_id
@@ -90,6 +105,7 @@ class PlayerStatusAggregate(AggregateRoot):
         self._is_down = is_down
         self._active_effects = active_effects or []
         self._attention_level = attention_level if attention_level is not None else AttentionLevel.FULL
+        self._pursuit_state = pursuit_state
 
     @property
     def attention_level(self) -> AttentionLevel:
@@ -195,6 +211,21 @@ class PlayerStatusAggregate(AggregateRoot):
         """目標ワールドオブジェクトID（destination_type が object のときのみ）"""
         return self._goal_world_object_id
 
+    @property
+    def pursuit_state(self) -> Optional[PursuitState]:
+        """静的移動と独立した追跡状態。"""
+        return self._pursuit_state
+
+    @property
+    def has_active_pursuit(self) -> bool:
+        """追跡中かどうか。"""
+        return self._pursuit_state is not None
+
+    @property
+    def actor_world_object_id(self) -> WorldObjectId:
+        """追跡イベントで使うプレイヤーのアクターID。"""
+        return WorldObjectId.create(int(self._player_id))
+
     def set_destination(
         self,
         destination: Coordinate,
@@ -220,6 +251,142 @@ class PlayerStatusAggregate(AggregateRoot):
         self._goal_spot_id = None
         self._goal_location_area_id = None
         self._goal_world_object_id = None
+
+    def start_pursuit(
+        self,
+        target_snapshot: PursuitTargetSnapshot,
+        last_known: Optional[PursuitLastKnownState] = None,
+    ) -> PursuitState:
+        """追跡を開始し、開始イベントを発行する。"""
+        target_id = target_snapshot.target_id
+        if self._pursuit_state is not None and self._pursuit_state.target_id != target_id:
+            raise ValueError("Switching pursuit targets requires ending the current pursuit first.")
+
+        resolved_last_known = self._coerce_last_known(target_id, target_snapshot, last_known)
+        pursuit_state = PursuitState(
+            actor_id=self.actor_world_object_id,
+            target_id=target_id,
+            target_snapshot=target_snapshot,
+            last_known=resolved_last_known,
+        )
+        self._pursuit_state = pursuit_state
+        self.add_event(
+            PursuitStartedEvent.create(
+                aggregate_id=self.actor_world_object_id,
+                aggregate_type="PlayerStatusAggregate",
+                actor_id=self.actor_world_object_id,
+                target_id=target_id,
+                target_snapshot=target_snapshot,
+                last_known=resolved_last_known,
+            )
+        )
+        return pursuit_state
+
+    def update_pursuit(
+        self,
+        target_snapshot: Optional[PursuitTargetSnapshot] = None,
+        last_known: Optional[PursuitLastKnownState] = None,
+    ) -> bool:
+        """意味のある変化があるときだけ追跡状態を更新する。"""
+        if self._pursuit_state is None:
+            raise ValueError("Cannot update pursuit when no active pursuit exists.")
+
+        current_state = self._pursuit_state
+        target_id = current_state.target_id
+        if target_snapshot is not None and target_snapshot.target_id != target_id:
+            raise ValueError("Cannot update pursuit with a different target_id.")
+
+        next_snapshot = target_snapshot if target_snapshot is not None else current_state.target_snapshot
+        next_last_known = self._coerce_last_known(target_id, next_snapshot, last_known or current_state.last_known)
+        next_state = PursuitState(
+            actor_id=current_state.actor_id,
+            target_id=target_id,
+            target_snapshot=next_snapshot,
+            last_known=next_last_known,
+        )
+        if next_state == current_state:
+            return False
+
+        self._pursuit_state = next_state
+        self.add_event(
+            PursuitUpdatedEvent.create(
+                aggregate_id=self.actor_world_object_id,
+                aggregate_type="PlayerStatusAggregate",
+                actor_id=self.actor_world_object_id,
+                target_id=target_id,
+                target_snapshot=next_snapshot,
+                last_known=next_last_known,
+            )
+        )
+        return True
+
+    def fail_pursuit(
+        self,
+        reason: PursuitFailureReason,
+        last_known: Optional[PursuitLastKnownState] = None,
+        target_snapshot: Optional[PursuitTargetSnapshot] = None,
+    ) -> None:
+        """追跡を失敗で終了し、失敗イベントを発行する。"""
+        if self._pursuit_state is None:
+            raise ValueError("Cannot fail pursuit when no active pursuit exists.")
+
+        current_state = self._pursuit_state
+        next_snapshot = target_snapshot if target_snapshot is not None else current_state.target_snapshot
+        next_last_known = self._coerce_last_known(current_state.target_id, next_snapshot, last_known or current_state.last_known)
+        self.add_event(
+            PursuitFailedEvent.create(
+                aggregate_id=self.actor_world_object_id,
+                aggregate_type="PlayerStatusAggregate",
+                actor_id=self.actor_world_object_id,
+                target_id=current_state.target_id,
+                failure_reason=reason,
+                last_known=next_last_known,
+                target_snapshot=next_snapshot,
+            )
+        )
+        self._pursuit_state = None
+
+    def cancel_pursuit(
+        self,
+        last_known: Optional[PursuitLastKnownState] = None,
+        target_snapshot: Optional[PursuitTargetSnapshot] = None,
+    ) -> None:
+        """追跡を明示的に中断し、中断イベントを発行する。"""
+        if self._pursuit_state is None:
+            raise ValueError("Cannot cancel pursuit when no active pursuit exists.")
+
+        current_state = self._pursuit_state
+        next_snapshot = target_snapshot if target_snapshot is not None else current_state.target_snapshot
+        next_last_known = self._coerce_last_known(current_state.target_id, next_snapshot, last_known or current_state.last_known)
+        self.add_event(
+            PursuitCancelledEvent.create(
+                aggregate_id=self.actor_world_object_id,
+                aggregate_type="PlayerStatusAggregate",
+                actor_id=self.actor_world_object_id,
+                target_id=current_state.target_id,
+                last_known=next_last_known,
+                target_snapshot=next_snapshot,
+            )
+        )
+        self._pursuit_state = None
+
+    def _coerce_last_known(
+        self,
+        target_id: WorldObjectId,
+        target_snapshot: Optional[PursuitTargetSnapshot],
+        last_known: Optional[PursuitLastKnownState],
+    ) -> PursuitLastKnownState:
+        if last_known is not None:
+            if last_known.target_id != target_id:
+                raise ValueError("last_known target_id must match the pursuit target.")
+            return last_known
+        if target_snapshot is None:
+            raise ValueError("Pursuit requires target_snapshot or last_known state.")
+        return PursuitLastKnownState(
+            target_id=target_snapshot.target_id,
+            spot_id=target_snapshot.spot_id,
+            coordinate=target_snapshot.coordinate,
+        )
 
     def advance_path(self) -> Optional[Coordinate]:
         """経路を1ステップ進める。次に進むべき座標を返し、経路から削除する。"""
