@@ -670,6 +670,44 @@ class TestMovementApplicationService:
         assert saved_status.pursuit_state is not None
         assert saved_status.pursuit_state.target_id == WorldObjectId(250)
 
+    def test_replan_path_to_coordinate_recovers_after_pursuit_path_was_cleared(
+        self, setup_service
+    ):
+        service, _, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
+
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status = self._create_sample_status(player_id, spot_id, 0, 0)
+        status.start_pursuit(self._create_pursuit_snapshot(target_id=251, x=3, y=0))
+        status.clear_path()
+        status_repo.save(status)
+        phys_repo.save(
+            self._create_sample_map(
+                spot_id,
+                width=4,
+                height=2,
+                objects=[self._create_player_object(player_id, 0, 0)],
+            )
+        )
+        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
+
+        result = service.replan_path_to_coordinate_in_current_unit_of_work(
+            player_id=player_id,
+            target_spot_id=spot_id,
+            target_coordinate=Coordinate(3, 0, 0),
+        )
+
+        saved_status = status_repo.find_by_id(PlayerId(player_id))
+        assert result.success is True
+        assert result.path_planned is True
+        assert result.already_at_destination is False
+        assert saved_status is not None
+        assert saved_status.goal_spot_id == SpotId(spot_id)
+        assert saved_status.planned_path[-1] == Coordinate(3, 0, 0)
+        assert saved_status.pursuit_state is not None
+        assert saved_status.pursuit_state.target_id == WorldObjectId(251)
+
     def test_tick_movement_location_area_not_found_clears_path(self, setup_service):
         """到着判定で LocationAreaNotFoundException のとき経路をクリアして「目標はもう存在しない」とみなす"""
         service, _, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
