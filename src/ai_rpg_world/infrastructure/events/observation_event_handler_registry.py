@@ -58,6 +58,12 @@ from ai_rpg_world.domain.player.event.inventory_events import (
     ItemUnequippedEvent,
     InventorySlotOverflowEvent,
 )
+from ai_rpg_world.domain.pursuit.event.pursuit_events import (
+    PursuitCancelledEvent,
+    PursuitFailedEvent,
+    PursuitStartedEvent,
+    PursuitUpdatedEvent,
+)
 from ai_rpg_world.domain.quest.event.quest_event import (
     QuestAcceptedEvent,
     QuestApprovedEvent,
@@ -167,6 +173,11 @@ _OBSERVED_EVENT_TYPES = (
     ItemEquippedEvent,
     ItemUnequippedEvent,
     InventorySlotOverflowEvent,
+    # --- 追跡 ---
+    PursuitStartedEvent,
+    PursuitUpdatedEvent,
+    PursuitFailedEvent,
+    PursuitCancelledEvent,
 )
 
 
