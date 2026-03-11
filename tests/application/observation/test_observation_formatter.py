@@ -400,6 +400,66 @@ class TestObservationFormatter:
         assert out.structured["pursuit_status_after_event"] == "ended"
         assert out.structured["interruption_scope"] == "pursuit"
 
+    def test_format_pursuit_failed_includes_failure_reason_and_last_known_metadata(self, formatter):
+        event = PursuitFailedEvent.create(
+            aggregate_id=WorldObjectId(1),
+            aggregate_type="PlayerStatusAggregate",
+            actor_id=WorldObjectId(1),
+            target_id=WorldObjectId(2),
+            failure_reason=PursuitFailureReason.VISION_LOST_AT_LAST_KNOWN,
+            target_snapshot=build_pursuit_snapshot(),
+            last_known=build_pursuit_last_known(),
+        )
+
+        out = formatter.format(event, PlayerId(1))
+
+        assert out is not None
+        assert out.structured["failure_reason"] == "vision_lost_at_last_known"
+        assert out.structured["interruption_scope"] == "pursuit"
+        assert out.structured["pursuit_status_after_event"] == "ended"
+        assert out.structured["spot_id_value"] == 21
+        assert out.structured["last_known"] == {
+            "target_id": 2,
+            "spot_id_value": 21,
+            "coordinate": {"x": 7, "y": 8, "z": 0},
+            "observed_at_tick": 42,
+        }
+
+    def test_format_pursuit_failed_omits_snapshot_metadata_when_missing(self, formatter):
+        event = PursuitFailedEvent.create(
+            aggregate_id=WorldObjectId(1),
+            aggregate_type="PlayerStatusAggregate",
+            actor_id=WorldObjectId(1),
+            target_id=WorldObjectId(2),
+            failure_reason=PursuitFailureReason.TARGET_MISSING,
+            target_snapshot=None,
+            last_known=build_pursuit_last_known(),
+        )
+
+        out = formatter.format(event, PlayerId(1))
+
+        assert out is not None
+        assert out.structured["target_snapshot"] is None
+
+    def test_format_pursuit_started_includes_target_snapshot_metadata(self, formatter):
+        event = PursuitStartedEvent.create(
+            aggregate_id=WorldObjectId(1),
+            aggregate_type="PlayerStatusAggregate",
+            actor_id=WorldObjectId(1),
+            target_id=WorldObjectId(2),
+            target_snapshot=build_pursuit_snapshot(),
+            last_known=build_pursuit_last_known(),
+        )
+
+        out = formatter.format(event, PlayerId(1))
+
+        assert out is not None
+        assert out.structured["target_snapshot"] == {
+            "target_id": 2,
+            "spot_id_value": 20,
+            "coordinate": {"x": 5, "y": 6, "z": 0},
+        }
+
     def test_format_player_level_up_returns_prose_and_structured(self, formatter):
         """PlayerLevelUpEvent: レベルアップ文と構造化"""
         event = PlayerLevelUpEvent.create(
