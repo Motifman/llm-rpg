@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: in_progress
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-03-11T13:14:50.582Z"
-last_activity: 2026-03-11 — Phase 5 plan 05-01 completed with monster pursuit alignment across CHASE and SEARCH
+status: completed
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-03-11T13:27:16.731Z"
+last_activity: 2026-03-11 — Phase 5 plan 05-02 completed with explicit monster pursuit failure and cleanup alignment
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 13
-  completed_plans: 12
-  percent: 92
+  completed_plans: 13
+  percent: 100
 ---
 
 # Project State
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 ## Current Position
 
 Phase: 5 of 5 (Monster Pursuit Alignment)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-03-11 — Phase 5 plan 05-01 completed with monster pursuit alignment across CHASE and SEARCH
+Plan: 2 of 2 in current phase
+Status: Completed
+Last activity: 2026-03-11 — Phase 5 plan 05-02 completed with explicit monster pursuit failure and cleanup alignment
 
-Progress: [█████████░] 92%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12
-- Average duration: 7 min
-- Total execution time: 89 min
+- Total plans completed: 13
+- Average duration: 8 min
+- Total execution time: 99 min
 
 **By Phase:**
 
@@ -47,15 +47,16 @@ Progress: [█████████░] 92%
 | 02-player-pursuit-commands | 2 | 20 min | 10 min |
 | 03-pursuit-continuation-loop | 3 | 19 min | 6 min |
 | 04-observation-and-llm-delivery | 2 | 12 min | 6 min |
-| 05-monster-pursuit-alignment | 1 | 8 min | 8 min |
+| 05-monster-pursuit-alignment | 2 | 18 min | 9 min |
 
 **Recent Trend:**
-- Last 5 plans: 6 min, 6 min, 1 min, 2 min, 8 min
+- Last 5 plans: 6 min, 1 min, 2 min, 8 min, 10 min
 - Trend: Stable
 
 | Phase | Duration | Tasks | Files |
 |-------|----------|-------|-------|
 | Phase 05-monster-pursuit-alignment P01 | 8 min | 3 tasks | 4 files |
+| Phase 05-monster-pursuit-alignment P02 | 10 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -94,6 +95,9 @@ Recent decisions affecting current work:
 - [Phase 05-monster-pursuit-alignment]: Monster pursuit alignment reuses shared PursuitState vocabulary while preserving monster-local BehaviorStateEnum labels.
 - [Phase 05-monster-pursuit-alignment]: CHASE to SEARCH now retains target identity and last-known coordinates instead of clearing pursuit context on vision loss.
 - [Phase 05-monster-pursuit-alignment]: WorldSimulationApplicationService remains the only runtime seam for observation-to-pursuit monster state entry; integration proof lives in tests.
+- [Phase 05-monster-pursuit-alignment]: Monster SEARCH now fails with vision_lost_at_last_known after exhausting frozen last-known instead of wandering.
+- [Phase 05-monster-pursuit-alignment]: Monster target lookup resolves target_missing unless the actor is already at last-known, preserving distinct failure semantics.
+- [Phase 05-monster-pursuit-alignment]: SEARCH reacquiring the same visible target resumes the same pursuit context inside the existing world simulation seam.
 
 ### Pending Todos
 
@@ -107,5 +111,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-11T13:14:50.579Z
-Stopped at: Completed 05-01-PLAN.md
+Stopped at: Completed 05-02-PLAN.md
 Resume file: None

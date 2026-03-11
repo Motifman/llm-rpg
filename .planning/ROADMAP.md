@@ -10,7 +10,7 @@
 - [x] **Phase 2: Player Pursuit Commands** - プレイヤーが追跡開始/中断できるアプリケーション入口を整える (completed 2026-03-11)
 - [x] **Phase 3: Pursuit Continuation Loop** - 最新既知位置に基づく継続追跡をワールド tick に統合する (completed 2026-03-11)
 - [x] **Phase 4: Observation And LLM Delivery** - 追跡結果を観測/LLM 再駆動パイプラインへ接続する (completed 2026-03-11)
-- [ ] **Phase 5: Monster Pursuit Alignment** - モンスター側の追跡語彙と状態遷移を新しい基盤に整合させる
+- [x] **Phase 5: Monster Pursuit Alignment** - モンスター側の追跡語彙と状態遷移を新しい基盤に整合させる (completed 2026-03-11)
 
 ## Phase Details
 
@@ -86,7 +86,7 @@ Plans:
 
 Plans:
 - [x] 05-01: モンスター側の追跡状態/理由語彙を整合させる
-- [ ] 05-02: モンスター追跡回帰テストを追加する
+- [x] 05-02: モンスター追跡回帰テストを追加する
 
 ## Progress
 
@@ -99,4 +99,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Player Pursuit Commands | 2/2 | Completed | 2026-03-11 |
 | 3. Pursuit Continuation Loop | 3/3 | Complete   | 2026-03-11 |
 | 4. Observation And LLM Delivery | 3/3 | Completed | 2026-03-11 |
-| 5. Monster Pursuit Alignment | 1/2 | In Progress | - |
+| 5. Monster Pursuit Alignment | 2/2 | Completed | 2026-03-11 |
