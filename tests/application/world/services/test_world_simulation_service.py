@@ -106,6 +106,11 @@ from ai_rpg_world.application.world.contracts.dtos import VisibleObjectDto
 from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
     PursuitFailureReason,
 )
+from ai_rpg_world.domain.pursuit.event.pursuit_events import PursuitFailedEvent
+from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
+    PursuitLastKnownState,
+)
+from ai_rpg_world.domain.pursuit.value_object.pursuit_state import PursuitState
 from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
     PursuitTargetSnapshot,
 )
@@ -1146,6 +1151,89 @@ class TestWorldSimulationApplicationService:
         assert saved_monster.pursuit_state.target_snapshot.coordinate == Coordinate(0, 0, 0)
         assert saved_monster.pursuit_state.last_known is not None
         assert saved_monster.pursuit_state.last_known.coordinate == Coordinate(0, 0, 0)
+
+    def test_tick_monster_search_at_last_known_fails_with_shared_reason(
+        self, setup_service
+    ):
+        service, _, repository, _, _, _, _, event_publisher, monster_repo, skill_loadout_repo = setup_service
+
+        spot_id = SpotId(1)
+        tiles = [Tile(Coordinate(x, y), TerrainType.grass()) for x in range(4) for y in range(4)]
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles)
+        physical_map.add_object(
+            WorldObject(
+                WorldObjectId(200),
+                Coordinate(3, 3, 0),
+                ObjectTypeEnum.PLAYER,
+                component=ActorComponent(player_id=PlayerId(200), race="human"),
+            )
+        )
+        actor_id = WorldObjectId(1)
+        actor_coordinate = Coordinate(1, 0, 0)
+        physical_map.add_object(
+            WorldObject(
+                actor_id,
+                actor_coordinate,
+                ObjectTypeEnum.NPC,
+                component=AutonomousBehaviorComponent(race="goblin", vision_range=5, fov_angle=360),
+            )
+        )
+        repository.save(physical_map)
+
+        template = MonsterTemplate(
+            template_id=MonsterTemplateId(1),
+            name="Goblin",
+            base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+            reward_info=RewardInfo(0, 0),
+            respawn_info=RespawnInfo(1, True),
+            race=Race.HUMAN,
+            faction=MonsterFactionEnum.ENEMY,
+            description="Goblin",
+            skill_ids=[],
+        )
+        loadout = SkillLoadoutAggregate.create(SkillLoadoutId(1), actor_id.value, 10, 10)
+        monster = MonsterAggregate.create(MonsterId(1), template, actor_id, skill_loadout=loadout)
+        monster.spawn(actor_coordinate, spot_id, WorldTick(0))
+        target_id = WorldObjectId(100)
+        monster._behavior_state = BehaviorStateEnum.SEARCH
+        monster._behavior_target_id = target_id
+        monster._behavior_last_known_position = actor_coordinate
+        monster._pursuit_state = PursuitState(
+            actor_id=actor_id,
+            target_id=target_id,
+            target_snapshot=PursuitTargetSnapshot(
+                target_id=target_id,
+                spot_id=spot_id,
+                coordinate=Coordinate(2, 0, 0),
+            ),
+            last_known=PursuitLastKnownState(
+                target_id=target_id,
+                spot_id=spot_id,
+                coordinate=actor_coordinate,
+                observed_at_tick=WorldTick(1),
+            ),
+        )
+        monster_repo.save(monster)
+        skill_loadout_repo.save(loadout)
+
+        service.tick()
+
+        saved_monster = monster_repo.find_by_world_object_id(actor_id)
+        assert saved_monster is not None
+        assert saved_monster.has_active_pursuit is False
+        assert saved_monster.behavior_target_id is None
+        assert saved_monster.behavior_last_known_position is None
+
+        pursuit_failed_events = [
+            event
+            for event in event_publisher.get_published_events()
+            if isinstance(event, PursuitFailedEvent)
+        ]
+        assert any(
+            event.actor_id == actor_id
+            and event.failure_reason == PursuitFailureReason.VISION_LOST_AT_LAST_KNOWN
+            for event in pursuit_failed_events
+        )
 
     def test_busy_actor_is_skipped(self, setup_service):
         """Busy状態のアクターはシミュレーションでスキップされること"""
