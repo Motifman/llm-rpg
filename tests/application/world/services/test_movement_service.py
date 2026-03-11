@@ -63,6 +63,7 @@ from ai_rpg_world.domain.world.service.map_transition_service import MapTransiti
 from ai_rpg_world.domain.world.service.global_pathfinding_service import GlobalPathfindingService
 from ai_rpg_world.domain.world.service.movement_config_service import DefaultMovementConfigService
 from ai_rpg_world.domain.player.event.status_events import PlayerLocationChangedEvent, PlayerStaminaConsumedEvent
+from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import PursuitTargetSnapshot
 from ai_rpg_world.domain.world.event.map_events import WorldObjectMovedEvent, GatewayTriggeredEvent
 from ai_rpg_world.application.world.handlers.gateway_handler import GatewayTriggeredEventHandler
 from ai_rpg_world.infrastructure.events import EventHandlerComposition, EventHandlerProfile
@@ -223,6 +224,13 @@ class TestMovementApplicationService:
                 direction=DirectionEnum.SOUTH,
                 player_id=PlayerId(player_id),
             ),
+        )
+
+    def _create_pursuit_snapshot(self, target_id: int = 200, spot_id: int = 1, x: int = 2, y: int = 0):
+        return PursuitTargetSnapshot(
+            target_id=WorldObjectId.create(target_id),
+            spot_id=SpotId(spot_id),
+            coordinate=Coordinate(x, y, 0),
         )
 
     def test_move_tile_success_and_dto_completeness(self, setup_service):
@@ -494,6 +502,55 @@ class TestMovementApplicationService:
         status_after = status_repo.find_by_id(PlayerId(player_id))
         assert status_after.planned_path == []
         assert status_after.goal_spot_id is None
+
+    def test_tick_movement_clears_static_path_without_erasing_pursuit_state(self, setup_service):
+        """静的移動の到着処理で経路が消えても追跡状態は残ること"""
+        service, _, status_repo, profile_repo, phys_repo, spot_repo, _, _, _ = setup_service
+
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status = self._create_sample_status(player_id, spot_id, 0, 0)
+        status.start_pursuit(self._create_pursuit_snapshot())
+        status_repo.save(status)
+
+        chest_obj = WorldObject(
+            object_id=WorldObjectId(200),
+            coordinate=Coordinate(2, 0, 0),
+            object_type=ObjectTypeEnum.CHEST,
+            component=ChestComponent(is_open=False, item_ids=[]),
+        )
+        phys_map = self._create_sample_map(
+            spot_id,
+            objects=[
+                self._create_player_object(player_id, 0, 0),
+                chest_obj,
+            ],
+        )
+        phys_repo.save(phys_map)
+        self._register_spots(spot_repo, [{"id": spot_id, "name": "Spot 1"}])
+
+        service.set_destination(
+            SetDestinationCommand(
+                player_id=player_id,
+                destination_type="object",
+                target_spot_id=spot_id,
+                target_world_object_id=200,
+            )
+        )
+
+        saved_before = status_repo.find_by_id(PlayerId(player_id))
+        assert saved_before.pursuit_state is not None
+        assert len(saved_before.planned_path) > 0
+
+        result = service.tick_movement(TickMovementCommand(player_id=player_id))
+
+        assert result.success is True
+        saved_after = status_repo.find_by_id(PlayerId(player_id))
+        assert saved_after.planned_path == []
+        assert saved_after.current_destination is None
+        assert saved_after.pursuit_state is not None
+        assert saved_after.pursuit_state.target_id == WorldObjectId(200)
 
     def test_tick_movement_location_area_not_found_clears_path(self, setup_service):
         """到着判定で LocationAreaNotFoundException のとき経路をクリアして「目標はもう存在しない」とみなす"""
