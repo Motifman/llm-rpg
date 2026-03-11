@@ -28,3 +28,13 @@ def exception_result(e: Exception) -> LlmCommandResultDto:
         error_code=error_code,
         remediation=get_remediation(error_code),
     )
+
+
+def invalid_arg_result(field_name: str) -> LlmCommandResultDto:
+    """必須引数未指定時の失敗結果を返す。"""
+    return LlmCommandResultDto(
+        success=False,
+        message=f"{field_name} が指定されていません。",
+        error_code="INVALID_TARGET_LABEL",
+        remediation=get_remediation("INVALID_TARGET_LABEL"),
+    )
