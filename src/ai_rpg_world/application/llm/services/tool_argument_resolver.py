@@ -27,6 +27,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import IToolArgumentResol
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_CHANGE_ATTENTION,
     TOOL_NAME_CHEST_STORE,
+    TOOL_NAME_CANCEL_MOVEMENT,
     TOOL_NAME_CHEST_TAKE,
     TOOL_NAME_COMBAT_USE_SKILL,
     TOOL_NAME_CONVERSATION_ADVANCE,
@@ -93,6 +94,8 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         if tool_name == TOOL_NAME_PURSUIT_START:
             return self._resolve_pursuit_start(args, runtime_context)
         if tool_name == TOOL_NAME_PURSUIT_CANCEL:
+            return {}
+        if tool_name == TOOL_NAME_CANCEL_MOVEMENT:
             return {}
         if tool_name == TOOL_NAME_WHISPER:
             return self._resolve_whisper(args, runtime_context)
@@ -613,6 +616,38 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
             )
         return target
 
+    def _safe_int(
+        self,
+        value: Any,
+        field_name: str,
+        *,
+        min_val: Optional[int] = None,
+    ) -> int:
+        """整数に変換し、失敗時は ToolArgumentResolutionException を投げる。"""
+        try:
+            if value is None:
+                raise ToolArgumentResolutionException(
+                    f"{field_name} が指定されていません。",
+                    "INVALID_TARGET_LABEL",
+                )
+            result = int(value) if isinstance(value, (int, float, str)) else None
+        except (ValueError, TypeError):
+            raise ToolArgumentResolutionException(
+                f"{field_name} は整数で指定してください。",
+                "INVALID_TARGET_LABEL",
+            ) from None
+        if result is None:
+            raise ToolArgumentResolutionException(
+                f"{field_name} は整数で指定してください。",
+                "INVALID_TARGET_LABEL",
+            )
+        if min_val is not None and result < min_val:
+            raise ToolArgumentResolutionException(
+                f"{field_name} は {min_val} 以上で指定してください。",
+                "INVALID_TARGET_LABEL",
+            )
+        return result
+
     def _resolve_quest_label(
         self,
         args: Dict[str, Any],
@@ -655,7 +690,7 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         if include_amount:
             amount = args.get("amount")
             if amount is not None:
-                result["amount"] = int(amount)
+                result["amount"] = self._safe_int(amount, "amount", min_val=0)
         return result
 
     def _resolve_shop_purchase(
@@ -693,17 +728,18 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
                     "INVALID_TARGET_KIND",
                 )
             shop_id = shop_target.shop_id
-            listing_id = int(listing_id_raw)
+            listing_id = self._safe_int(listing_id_raw, "listing_id", min_val=1)
         else:
             raise ToolArgumentResolutionException(
                 "listing_label または listing_id を指定してください。",
                 "INVALID_TARGET_LABEL",
             )
-        quantity = args.get("quantity", 1)
+        quantity_raw = args.get("quantity", 1)
+        quantity = self._safe_int(quantity_raw, "quantity", min_val=1)
         return {
             "shop_id": shop_id,
             "listing_id": listing_id,
-            "quantity": int(quantity),
+            "quantity": quantity,
         }
 
     def _resolve_shop_list_item(
@@ -741,10 +777,11 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
                 "price_per_unit が指定されていません。",
                 "INVALID_TARGET_LABEL",
             )
+        price_int = self._safe_int(price, "price_per_unit", min_val=0)
         return {
             "shop_id": shop_target.shop_id,
             "slot_id": item_target.inventory_slot_id,
-            "price_per_unit": int(price),
+            "price_per_unit": price_int,
         }
 
     def _resolve_shop_unlist_item(
@@ -783,7 +820,8 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
                     f"ショップとして解決できません: {shop_label}",
                     "INVALID_TARGET_KIND",
                 )
-            return {"shop_id": shop_target.shop_id, "listing_id": int(listing_id_raw)}
+            listing_id = self._safe_int(listing_id_raw, "listing_id", min_val=1)
+            return {"shop_id": shop_target.shop_id, "listing_id": listing_id}
         else:
             raise ToolArgumentResolutionException(
                 "listing_label または listing_id を指定してください。",
@@ -813,6 +851,7 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
                 "requested_gold が指定されていません。",
                 "INVALID_TARGET_LABEL",
             )
+        requested_gold_int = self._safe_int(requested_gold, "requested_gold", min_val=0)
         slot_id = item_target.inventory_slot_id
         if slot_id is None:
             raise ToolArgumentResolutionException(
@@ -822,7 +861,7 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         result: Dict[str, Any] = {
             "item_instance_id": item_target.item_instance_id,
             "slot_id": slot_id,
-            "requested_gold": int(requested_gold),
+            "requested_gold": requested_gold_int,
         }
         target_player_label = args.get("target_player_label")
         target_player_id = args.get("target_player_id")
@@ -836,7 +875,9 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
             if player_target.player_id is not None:
                 result["target_player_id"] = player_target.player_id
         elif target_player_id is not None:
-            result["target_player_id"] = int(target_player_id)
+            result["target_player_id"] = self._safe_int(
+                target_player_id, "target_player_id", min_val=1
+            )
         return result
 
     def _resolve_trade_label(

@@ -8,13 +8,17 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ChestToolRuntimeTargetDto,
     ConversationChoiceToolRuntimeTargetDto,
     DestinationToolRuntimeTargetDto,
+    GuildToolRuntimeTargetDto,
     InventoryToolRuntimeTargetDto,
     MonsterToolRuntimeTargetDto,
     NpcToolRuntimeTargetDto,
     PlayerToolRuntimeTargetDto,
     ResourceToolRuntimeTargetDto,
+    ShopListingToolRuntimeTargetDto,
+    ShopToolRuntimeTargetDto,
     SkillToolRuntimeTargetDto,
     ToolRuntimeContextDto,
+    TradeToolRuntimeTargetDto,
 )
 from ai_rpg_world.application.llm.services.tool_argument_resolver import (
     DefaultToolArgumentResolver,
@@ -22,21 +26,26 @@ from ai_rpg_world.application.llm.services.tool_argument_resolver import (
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_CHANGE_ATTENTION,
+    TOOL_NAME_CANCEL_MOVEMENT,
     TOOL_NAME_CHEST_STORE,
     TOOL_NAME_CHEST_TAKE,
     TOOL_NAME_COMBAT_USE_SKILL,
     TOOL_NAME_CONVERSATION_ADVANCE,
     TOOL_NAME_DESTROY_PLACEABLE,
     TOOL_NAME_DROP_ITEM,
+    TOOL_NAME_GUILD_DEPOSIT_BANK,
     TOOL_NAME_HARVEST_START,
     TOOL_NAME_INSPECT_ITEM,
     TOOL_NAME_INSPECT_TARGET,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_MOVE_TO_DESTINATION,
+    TOOL_NAME_NO_OP,
     TOOL_NAME_PLACE_OBJECT,
     TOOL_NAME_PURSUIT_CANCEL,
     TOOL_NAME_PURSUIT_START,
     TOOL_NAME_SAY,
+    TOOL_NAME_SHOP_LIST_ITEM,
+    TOOL_NAME_TRADE_OFFER,
     TOOL_NAME_WHISPER,
 )
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
@@ -230,6 +239,17 @@ class TestDefaultToolArgumentResolver:
 
         result = resolver.resolve(
             TOOL_NAME_PURSUIT_CANCEL,
+            {},
+            _make_context(),
+        )
+
+        assert result == {}
+
+    def test_resolve_cancel_movement_returns_empty_args(self):
+        resolver = DefaultToolArgumentResolver()
+
+        result = resolver.resolve(
+            TOOL_NAME_CANCEL_MOVEMENT,
             {},
             _make_context(),
         )
@@ -659,3 +679,125 @@ class TestDefaultToolArgumentResolver:
                 {"inventory_item_label": "I2"},
                 ctx,
             )
+
+
+class TestDefaultToolArgumentResolverInputValidation:
+    """resolve() の入力バリデーション（TypeError）"""
+
+    def test_resolve_tool_name_not_str_raises_type_error(self):
+        resolver = DefaultToolArgumentResolver()
+        with pytest.raises(TypeError, match="tool_name must be str"):
+            resolver.resolve(123, {}, _make_context())  # type: ignore[arg-type]
+
+    def test_resolve_arguments_not_dict_raises_type_error(self):
+        resolver = DefaultToolArgumentResolver()
+        with pytest.raises(TypeError, match="arguments must be dict or None"):
+            resolver.resolve(
+                TOOL_NAME_NO_OP,
+                "invalid",  # type: ignore[arg-type]
+                _make_context(),
+            )
+
+    def test_resolve_runtime_context_invalid_raises_type_error(self):
+        resolver = DefaultToolArgumentResolver()
+        with pytest.raises(TypeError, match="runtime_context must be ToolRuntimeContextDto"):
+            resolver.resolve(
+                TOOL_NAME_NO_OP,
+                {},
+                None,  # type: ignore[arg-type]
+            )
+
+
+class TestDefaultToolArgumentResolverConversationAdvance:
+    """conversation_advance の例外ケース"""
+
+    def test_resolve_conversation_advance_target_label_none_raises(self):
+        resolver = DefaultToolArgumentResolver()
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_CONVERSATION_ADVANCE,
+                {},
+                _make_context(),
+            )
+        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
+        assert "会話対象ラベル" in str(exc_info.value)
+
+
+def _make_shop_guild_trade_context() -> ToolRuntimeContextDto:
+    """ショップ・ギルド・取引テスト用の拡張コンテキスト"""
+    base = _make_context()
+    extra = {
+        "G1": GuildToolRuntimeTargetDto(
+            label="G1",
+            kind="guild",
+            display_name="冒険者ギルド",
+            guild_id=1,
+        ),
+        "SH1": ShopToolRuntimeTargetDto(
+            label="SH1",
+            kind="shop",
+            display_name="港町ショップ",
+            shop_id=10,
+        ),
+        "SL1": ShopListingToolRuntimeTargetDto(
+            label="SL1",
+            kind="shop_listing",
+            display_name="木箱 100G",
+            shop_id=10,
+            listing_id=5,
+        ),
+        "T1": TradeToolRuntimeTargetDto(
+            label="T1",
+            kind="trade",
+            display_name="取引 #1",
+            trade_id=100,
+        ),
+    }
+    return ToolRuntimeContextDto(targets={**base.targets, **extra})
+
+
+class TestDefaultToolArgumentResolverSafeInt:
+    """_safe_int 経由の数値変換（不正値で ToolArgumentResolutionException）"""
+
+    def test_resolve_shop_list_item_price_invalid_raises(self):
+        resolver = DefaultToolArgumentResolver()
+        ctx = _make_shop_guild_trade_context()
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_SHOP_LIST_ITEM,
+                {
+                    "shop_label": "SH1",
+                    "inventory_item_label": "I1",
+                    "price_per_unit": "not_a_number",
+                },
+                ctx,
+            )
+        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
+        assert "整数" in str(exc_info.value)
+
+    def test_resolve_trade_offer_requested_gold_invalid_raises(self):
+        resolver = DefaultToolArgumentResolver()
+        ctx = _make_shop_guild_trade_context()
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_TRADE_OFFER,
+                {
+                    "inventory_item_label": "I1",
+                    "requested_gold": "abc",
+                },
+                ctx,
+            )
+        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
+        assert "整数" in str(exc_info.value)
+
+    def test_resolve_guild_label_amount_invalid_raises(self):
+        resolver = DefaultToolArgumentResolver()
+        ctx = _make_shop_guild_trade_context()
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_GUILD_DEPOSIT_BANK,
+                {"guild_label": "G1", "amount": "invalid"},
+                ctx,
+            )
+        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
+        assert "整数" in str(exc_info.value)

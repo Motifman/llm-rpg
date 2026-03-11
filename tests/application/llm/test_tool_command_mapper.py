@@ -8,6 +8,7 @@ import pytest
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.tool_command_mapper import ToolCommandMapper
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_CANCEL_MOVEMENT,
     TOOL_NAME_CHANGE_ATTENTION,
     TOOL_NAME_CHEST_STORE,
     TOOL_NAME_CHEST_TAKE,
@@ -15,6 +16,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_CONVERSATION_ADVANCE,
     TOOL_NAME_DESTROY_PLACEABLE,
     TOOL_NAME_DROP_ITEM,
+    TOOL_NAME_GUILD_LEAVE,
     TOOL_NAME_HARVEST_START,
     TOOL_NAME_INSPECT_ITEM,
     TOOL_NAME_INSPECT_TARGET,
@@ -24,8 +26,13 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_PLACE_OBJECT,
     TOOL_NAME_PURSUIT_CANCEL,
     TOOL_NAME_PURSUIT_START,
+    TOOL_NAME_QUEST_ACCEPT,
     TOOL_NAME_SAY,
+    TOOL_NAME_SHOP_PURCHASE,
     TOOL_NAME_SUBAGENT,
+    TOOL_NAME_TRADE_ACCEPT,
+    TOOL_NAME_TRADE_CANCEL,
+    TOOL_NAME_TRADE_OFFER,
     TOOL_NAME_TODO_ADD,
     TOOL_NAME_TODO_COMPLETE,
     TOOL_NAME_TODO_LIST,
@@ -40,6 +47,7 @@ from ai_rpg_world.application.world.contracts.dtos import (
 )
 from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
     MovementInvalidException,
+    PlayerNotFoundException,
 )
 from ai_rpg_world.application.world.exceptions.command.pursuit_command_exception import (
     PursuitTargetNotVisibleException,
@@ -217,6 +225,91 @@ class TestToolCommandMapperPursuit:
 
         assert result.success is False
         assert result.error_code == "UNKNOWN_TOOL"
+
+
+class TestToolCommandMapperCancelMovement:
+    """cancel_movement ツールの実行"""
+
+    @pytest.fixture
+    def movement_service(self):
+        return MagicMock()
+
+    @pytest.fixture
+    def mapper(self, movement_service):
+        return ToolCommandMapper(movement_service=movement_service)
+
+    def test_execute_cancel_movement_success_returns_dto(self, mapper, movement_service):
+        """cancel_movement 成功時は MoveResultDto.message を message に"""
+        movement_service.cancel_movement.return_value = MoveResultDto(
+            success=True,
+            player_id=1,
+            player_name="P",
+            from_spot_id=1,
+            from_spot_name="A",
+            to_spot_id=1,
+            to_spot_name="A",
+            from_coordinate={},
+            to_coordinate={},
+            moved_at=datetime.now(),
+            busy_until_tick=0,
+            message="移動を中断しました",
+        )
+        result = mapper.execute(1, TOOL_NAME_CANCEL_MOVEMENT, {})
+        assert result.success is True
+        assert "中断" in result.message
+        movement_service.cancel_movement.assert_called_once()
+        call_arg = movement_service.cancel_movement.call_args[0][0]
+        assert call_arg.player_id == 1
+
+    def test_execute_cancel_movement_player_not_found_returns_failure_dto(
+        self, mapper, movement_service
+    ):
+        """PlayerNotFoundException のとき失敗 DTO（error_code=PLAYER_NOT_FOUND）"""
+        movement_service.cancel_movement.side_effect = PlayerNotFoundException(999)
+        result = mapper.execute(1, TOOL_NAME_CANCEL_MOVEMENT, {})
+        assert result.success is False
+        assert result.error_code == "PLAYER_NOT_FOUND"
+        assert result.remediation is not None
+
+    def test_execute_cancel_movement_failure_dto_returns_failure(self, mapper, movement_service):
+        """サービスが success=False の DTO を返したとき失敗として扱う"""
+        movement_service.cancel_movement.return_value = MoveResultDto(
+            success=False,
+            player_id=1,
+            player_name="P",
+            from_spot_id=1,
+            from_spot_name="A",
+            to_spot_id=1,
+            to_spot_name="A",
+            from_coordinate={},
+            to_coordinate={},
+            moved_at=datetime.now(),
+            busy_until_tick=0,
+            message="",
+            error_message="現在地が不明です",
+        )
+        result = mapper.execute(1, TOOL_NAME_CANCEL_MOVEMENT, {})
+        assert result.success is False
+        assert "現在地が不明" in result.message
+
+    def test_execute_cancel_movement_with_none_arguments_succeeds(self, mapper, movement_service):
+        """arguments が None のときも成功する"""
+        movement_service.cancel_movement.return_value = MoveResultDto(
+            success=True,
+            player_id=1,
+            player_name="P",
+            from_spot_id=1,
+            from_spot_name="A",
+            to_spot_id=1,
+            to_spot_name="A",
+            from_coordinate={},
+            to_coordinate={},
+            moved_at=datetime.now(),
+            busy_until_tick=0,
+            message="中断しました",
+        )
+        result = mapper.execute(1, TOOL_NAME_CANCEL_MOVEMENT, None)
+        assert result.success is True
 
 
 class TestToolCommandMapperValidation:
@@ -1015,3 +1108,102 @@ class TestToolCommandMapperOptionalToolsWhenNotConfigured:
         assert result.success is False
         assert result.error_code == "UNKNOWN_TOOL"
         assert result.remediation is not None
+
+
+class TestToolCommandMapperRequiredArgsValidation:
+    """quest / guild / shop / trade の必須引数欠如時の検証"""
+
+    def test_quest_accept_missing_quest_id_returns_invalid_target_label(self):
+        quest_service = MagicMock()
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            quest_service=quest_service,
+        )
+        result = mapper.execute(1, TOOL_NAME_QUEST_ACCEPT, {})
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        assert "quest_id" in result.message
+        quest_service.accept_quest.assert_not_called()
+
+    def test_guild_leave_missing_guild_id_returns_invalid_target_label(self):
+        guild_service = MagicMock()
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            guild_service=guild_service,
+        )
+        result = mapper.execute(1, TOOL_NAME_GUILD_LEAVE, {})
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        assert "guild_id" in result.message
+        guild_service.leave_guild.assert_not_called()
+
+    def test_shop_purchase_missing_shop_id_returns_invalid_target_label(self):
+        shop_service = MagicMock()
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            shop_service=shop_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SHOP_PURCHASE,
+            {"listing_id": 5, "quantity": 1},
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        assert "shop_id" in result.message
+        shop_service.purchase_from_shop.assert_not_called()
+
+    def test_shop_purchase_missing_listing_id_returns_invalid_target_label(self):
+        shop_service = MagicMock()
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            shop_service=shop_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SHOP_PURCHASE,
+            {"shop_id": 10, "quantity": 1},
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        assert "listing_id" in result.message
+        shop_service.purchase_from_shop.assert_not_called()
+
+    def test_trade_offer_missing_item_instance_id_returns_invalid_target_label(self):
+        trade_service = MagicMock()
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            trade_service=trade_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_TRADE_OFFER,
+            {"slot_id": 0, "requested_gold": 100},
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        trade_service.offer_item.assert_not_called()
+
+    def test_trade_accept_missing_trade_id_returns_invalid_target_label(self):
+        trade_service = MagicMock()
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            trade_service=trade_service,
+        )
+        result = mapper.execute(1, TOOL_NAME_TRADE_ACCEPT, {})
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        assert "trade_id" in result.message
+        trade_service.accept_trade.assert_not_called()
+
+    def test_trade_cancel_missing_trade_id_returns_invalid_target_label(self):
+        trade_service = MagicMock()
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            trade_service=trade_service,
+        )
+        result = mapper.execute(1, TOOL_NAME_TRADE_CANCEL, {})
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        assert "trade_id" in result.message
+        trade_service.cancel_trade.assert_not_called()
