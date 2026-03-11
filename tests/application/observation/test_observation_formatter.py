@@ -460,6 +460,39 @@ class TestObservationFormatter:
             "coordinate": {"x": 5, "y": 6, "z": 0},
         }
 
+    def test_format_pursuit_failed_schedules_turn_without_breaking_movement(self, formatter):
+        event = PursuitFailedEvent.create(
+            aggregate_id=WorldObjectId(1),
+            aggregate_type="PlayerStatusAggregate",
+            actor_id=WorldObjectId(1),
+            target_id=WorldObjectId(2),
+            failure_reason=PursuitFailureReason.PATH_UNREACHABLE,
+            target_snapshot=build_pursuit_snapshot(),
+            last_known=build_pursuit_last_known(),
+        )
+
+        out = formatter.format(event, PlayerId(1))
+
+        assert out is not None
+        assert out.schedules_turn is True
+        assert out.breaks_movement is False
+
+    def test_format_pursuit_cancelled_schedules_turn_without_breaking_movement(self, formatter):
+        event = PursuitCancelledEvent.create(
+            aggregate_id=WorldObjectId(1),
+            aggregate_type="PlayerStatusAggregate",
+            actor_id=WorldObjectId(1),
+            target_id=WorldObjectId(2),
+            target_snapshot=build_pursuit_snapshot(),
+            last_known=build_pursuit_last_known(),
+        )
+
+        out = formatter.format(event, PlayerId(1))
+
+        assert out is not None
+        assert out.schedules_turn is True
+        assert out.breaks_movement is False
+
     def test_format_player_level_up_returns_prose_and_structured(self, formatter):
         """PlayerLevelUpEvent: レベルアップ文と構造化"""
         event = PlayerLevelUpEvent.create(
