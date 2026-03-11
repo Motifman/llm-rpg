@@ -21,13 +21,21 @@ from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentSta
 from ai_rpg_world.application.world.services.visible_object_read_model_builder import (
     VisibleObjectReadModelBuilder,
 )
+from ai_rpg_world.application.world.services.visible_tile_map_builder import (
+    VisibleTileMapBuilder,
+)
 from ai_rpg_world.application.world.services.player_supplemental_context_builder import (
     PlayerSupplementalContextBuilder,
 )
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
-from ai_rpg_world.domain.world.exception.map_exception import TileNotFoundException
+from ai_rpg_world.domain.world.exception.map_exception import (
+    NotAnActorException,
+    ObjectNotFoundException,
+    TileNotFoundException,
+    WorldObjectIdValidationException,
+)
 from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
 from ai_rpg_world.domain.world.repository.transition_policy_repository import (
     ITransitionPolicyRepository,
@@ -114,6 +122,7 @@ class PlayerCurrentStateBuilder:
             player_profile_repository=player_profile_repository,
             monster_repository=monster_repository,
         )
+        self._visible_tile_map_builder = VisibleTileMapBuilder()
         self._supplemental_context_builder = PlayerSupplementalContextBuilder(
             player_inventory_repository=player_inventory_repository,
             item_repository=item_repository,
@@ -262,6 +271,17 @@ class PlayerCurrentStateBuilder:
             if la.is_active
         ] or None
 
+        # 視界タイルマップ（include_tile_map=True のときのみ）
+        visible_tile_map = None
+        if query.include_tile_map:
+            visible_tile_map = self._visible_tile_map_builder.build_visible_tile_map(
+                physical_map=physical_map,
+                origin=coord,
+                view_distance=distance,
+                visible_objects=visible_objects,
+                player_id=int(player_id),
+            )
+
         # 境界: ツール/runtime context（LLM prompt 上のラベル解決・利用可否判定に利用）
         # - available_moves, visible_objects, actionable/notable
         # - inventory_items, chest_items, nearby_shops, available_trades
@@ -287,6 +307,7 @@ class PlayerCurrentStateBuilder:
             current_terrain_type=current_terrain_type,
             visible_objects=visible_objects,
             view_distance=distance,
+            visible_tile_map=visible_tile_map,
             available_moves=available_moves,
             total_available_moves=total_available_moves,
             available_location_areas=available_location_areas,
@@ -337,9 +358,14 @@ class PlayerCurrentStateBuilder:
         )
 
     def _get_player_actor(self, physical_map, player_id: PlayerId):
+        """プレイヤーアクターを取得。存在しない・不正な場合は None を返す。"""
         try:
             from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
             return physical_map.get_actor(WorldObjectId.create(int(player_id)))
-        except Exception:
+        except (
+            ObjectNotFoundException,
+            NotAnActorException,
+            WorldObjectIdValidationException,
+        ):
             return None

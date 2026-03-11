@@ -55,6 +55,16 @@ class DefaultCurrentStateFormatter(ICurrentStateFormatter):
 
         lines.append(f"視界距離: {dto.view_distance}")
 
+        # 視界タイルマップ（オプション）
+        if dto.visible_tile_map is not None:
+            legend_parts = [
+                f"{char}={label}" for char, label in sorted(dto.visible_tile_map.legend.items())
+            ]
+            lines.append("視界タイルマップ凡例: " + " ".join(legend_parts))
+            lines.append("視界タイルマップ:")
+            for row in dto.visible_tile_map.rows:
+                lines.append(f"  {row}")
+
         # 高レベルな注目点（件数のみ。詳細は UiContextBuilder）
         notable_n = len(dto.notable_objects) if dto.notable_objects else 0
         actionable_n = len(dto.actionable_objects) if dto.actionable_objects else 0
