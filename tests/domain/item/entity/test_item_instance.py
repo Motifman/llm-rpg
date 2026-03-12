@@ -82,16 +82,27 @@ class TestItemInstance:
 
 
     def test_use_basic_item(self, sample_item_instance):
-        """基本アイテムの使用テスト"""
+        """基本アイテムの使用テスト（数量1の消費で0になる）"""
         success = sample_item_instance.use()
         assert success is True
-        assert sample_item_instance.quantity == 1  # スタック不可なので減らない
+        assert sample_item_instance.quantity == 0  # 消費により数量が0になる
 
     def test_use_item_with_durability(self, item_instance_with_durability):
         """耐久度付きアイテムの使用テスト"""
         success = item_instance_with_durability.use()
         assert success is True
         assert item_instance_with_durability.durability.current == 49  # 耐久度が減っている
+
+    def test_use_item_quantity_zero_returns_false(self, sample_item_spec):
+        """数量0のアイテムは使用できない（Falseを返す）"""
+        item = ItemInstance(
+            item_instance_id=ItemInstanceId(7),
+            item_spec=sample_item_spec,
+            quantity=0,
+        )
+        success = item.use()
+        assert success is False
+        assert item.quantity == 0
 
     def test_use_broken_item(self):
         """破損したアイテムの使用テスト"""

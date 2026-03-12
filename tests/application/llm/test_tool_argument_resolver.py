@@ -795,6 +795,7 @@ class TestDefaultToolArgumentResolver:
         assert exc_info.value.error_code == "INVALID_TARGET_KIND"
 
     def test_resolve_place_object_non_placeable_label_raises(self):
+        """inventory_item_label が設置不可（is_placeable=False）のとき INVALID_TARGET_KIND"""
         resolver = DefaultToolArgumentResolver()
         ctx = _make_context()
         ctx.targets["I2"] = InventoryToolRuntimeTargetDto(
@@ -804,12 +805,14 @@ class TestDefaultToolArgumentResolver:
             item_instance_id=401,
             inventory_slot_id=3,
         )
-        with pytest.raises(ToolArgumentResolutionException):
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
             resolver.resolve(
                 TOOL_NAME_PLACE_OBJECT,
                 {"inventory_item_label": "I2"},
                 ctx,
             )
+        assert exc_info.value.error_code == "INVALID_TARGET_KIND"
+        assert "使えない在庫ラベル" in str(exc_info.value)
 
 
 class TestDefaultToolArgumentResolverInputValidation:
@@ -1044,3 +1047,274 @@ class TestToolArgumentResolverQuestIssue:
         )
         assert result["objectives"] == [("obtain_item", 201, 1)]
         assert result["reward_items"] == [(301, 2)]
+
+
+def _make_resolver_with_repos():
+    """target_name 解決用のリポジトリ付き Resolver を構築"""
+    from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
+    from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
+    from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
+    from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
+    from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
+    from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
+    from ai_rpg_world.domain.player.enum.player_enum import Race
+    from ai_rpg_world.domain.world.entity.spot import Spot
+    from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+    from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
+    from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
+    from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+    from ai_rpg_world.domain.player.value_object.player_name import PlayerName
+    from ai_rpg_world.infrastructure.repository.in_memory_monster_template_repository import (
+        InMemoryMonsterTemplateRepository,
+    )
+    from ai_rpg_world.infrastructure.repository.in_memory_spot_repository import InMemorySpotRepository
+    from ai_rpg_world.infrastructure.repository.in_memory_item_spec_repository import InMemoryItemSpecRepository
+    from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import (
+        InMemoryPlayerProfileRepository,
+    )
+    from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+
+    monster_repo = InMemoryMonsterTemplateRepository()
+    monster_repo.save(
+        MonsterTemplate(
+            template_id=MonsterTemplateId(10),
+            name="ゴブリン",
+            base_stats=BaseStats(100, 50, 10, 10, 10, 0.05, 0.05),
+            reward_info=RewardInfo(0, 0),
+            respawn_info=RespawnInfo(1, True),
+            race=Race.BEAST,
+            faction=MonsterFactionEnum.ENEMY,
+            description="ゴブリン",
+            skill_ids=[],
+        )
+    )
+
+    data_store = InMemoryDataStore()
+    data_store.clear_all()
+    spot_repo = InMemorySpotRepository(data_store=data_store)
+    spot_repo.save(Spot(SpotId(20), "北の森", "暗い森", SpotCategoryEnum.OTHER))
+
+    item_repo = InMemoryItemSpecRepository()  # 鉄の剣 (id=1) がサンプルで入っている
+
+    profile_repo = InMemoryPlayerProfileRepository(data_store=data_store)
+    profile_repo.save(
+        PlayerProfileAggregate.create(
+            player_id=PlayerId(30),
+            name=PlayerName("Alice"),
+        )
+    )
+
+    return DefaultToolArgumentResolver(
+        monster_template_repository=monster_repo,
+        spot_repository=spot_repo,
+        item_spec_repository=item_repo,
+        player_profile_repository=profile_repo,
+    )
+
+
+class TestToolArgumentResolverQuestIssueTargetName:
+    """quest_issue の target_name 解決テスト"""
+
+    def test_resolve_quest_issue_target_name_kill_monster(self):
+        """target_name で kill_monster（モンスター名→template_id）"""
+        resolver = _make_resolver_with_repos()
+        ctx = ToolRuntimeContextDto(targets={})
+        result = resolver.resolve(
+            TOOL_NAME_QUEST_ISSUE,
+            {
+                "objectives": [
+                    {"objective_type": "kill_monster", "target_name": "ゴブリン", "required_count": 3},
+                ],
+                "reward_gold": 0,
+            },
+            ctx,
+        )
+        assert result["objectives"] == [("kill_monster", 10, 3)]
+
+    def test_resolve_quest_issue_target_name_obtain_item(self):
+        """target_name で obtain_item（アイテム名→item_spec_id）"""
+        resolver = _make_resolver_with_repos()
+        ctx = ToolRuntimeContextDto(targets={})
+        result = resolver.resolve(
+            TOOL_NAME_QUEST_ISSUE,
+            {
+                "objectives": [
+                    {"objective_type": "obtain_item", "target_name": "鉄の剣", "required_count": 1},
+                ],
+                "reward_gold": 0,
+            },
+            ctx,
+        )
+        assert result["objectives"] == [("obtain_item", 1, 1)]
+
+    def test_resolve_quest_issue_target_name_reach_spot(self):
+        """target_name で reach_spot（スポット名→spot_id）"""
+        resolver = _make_resolver_with_repos()
+        ctx = ToolRuntimeContextDto(targets={})
+        result = resolver.resolve(
+            TOOL_NAME_QUEST_ISSUE,
+            {
+                "objectives": [
+                    {"objective_type": "reach_spot", "target_name": "北の森", "required_count": 1},
+                ],
+                "reward_gold": 0,
+            },
+            ctx,
+        )
+        assert result["objectives"] == [("reach_spot", 20, 1)]
+
+    def test_resolve_quest_issue_target_name_kill_player(self):
+        """target_name で kill_player（プレイヤー名→player_id）"""
+        resolver = _make_resolver_with_repos()
+        ctx = ToolRuntimeContextDto(targets={})
+        result = resolver.resolve(
+            TOOL_NAME_QUEST_ISSUE,
+            {
+                "objectives": [
+                    {"objective_type": "kill_player", "target_name": "Alice", "required_count": 1},
+                ],
+                "reward_gold": 0,
+            },
+            ctx,
+        )
+        assert result["objectives"] == [("kill_player", 30, 1)]
+
+    def test_resolve_quest_issue_target_name_with_guild_label(self):
+        """target_name と guild_label の組み合わせ"""
+        resolver = _make_resolver_with_repos()
+        ctx = _make_shop_guild_trade_context()
+        result = resolver.resolve(
+            TOOL_NAME_QUEST_ISSUE,
+            {
+                "objectives": [
+                    {"objective_type": "kill_monster", "target_name": "ゴブリン", "required_count": 2},
+                ],
+                "guild_label": "G1",
+            },
+            ctx,
+        )
+        assert result["objectives"] == [("kill_monster", 10, 2)]
+        assert result["guild_id"] == 1
+
+    def test_resolve_quest_issue_target_name_monster_not_found(self):
+        """target_name が存在しないモンスター名 → MONSTER_TEMPLATE_NOT_FOUND"""
+        resolver = _make_resolver_with_repos()
+        ctx = ToolRuntimeContextDto(targets={})
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_QUEST_ISSUE,
+                {
+                    "objectives": [
+                        {"objective_type": "kill_monster", "target_name": "ドラゴン", "required_count": 1},
+                    ],
+                    "reward_gold": 0,
+                },
+                ctx,
+            )
+        assert exc_info.value.error_code == "MONSTER_TEMPLATE_NOT_FOUND"
+
+    def test_resolve_quest_issue_target_name_spot_not_found(self):
+        """target_name が存在しないスポット名 → SPOT_NOT_FOUND"""
+        resolver = _make_resolver_with_repos()
+        ctx = ToolRuntimeContextDto(targets={})
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_QUEST_ISSUE,
+                {
+                    "objectives": [
+                        {"objective_type": "reach_spot", "target_name": "存在しない場所", "required_count": 1},
+                    ],
+                    "reward_gold": 0,
+                },
+                ctx,
+            )
+        assert exc_info.value.error_code == "SPOT_NOT_FOUND"
+
+    def test_resolve_quest_issue_target_name_item_not_found(self):
+        """target_name が存在しないアイテム名 → ITEM_SPEC_NOT_FOUND"""
+        resolver = _make_resolver_with_repos()
+        ctx = ToolRuntimeContextDto(targets={})
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_QUEST_ISSUE,
+                {
+                    "objectives": [
+                        {"objective_type": "obtain_item", "target_name": "存在しないアイテム", "required_count": 1},
+                    ],
+                    "reward_gold": 0,
+                },
+                ctx,
+            )
+        assert exc_info.value.error_code == "ITEM_SPEC_NOT_FOUND"
+
+    def test_resolve_quest_issue_target_name_player_not_found(self):
+        """target_name が存在しないプレイヤー名 → PLAYER_PROFILE_NOT_FOUND"""
+        resolver = _make_resolver_with_repos()
+        ctx = ToolRuntimeContextDto(targets={})
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_QUEST_ISSUE,
+                {
+                    "objectives": [
+                        {"objective_type": "kill_player", "target_name": "存在しない人", "required_count": 1},
+                    ],
+                    "reward_gold": 0,
+                },
+                ctx,
+            )
+        assert exc_info.value.error_code == "PLAYER_PROFILE_NOT_FOUND"
+
+    def test_resolve_quest_issue_target_name_resolver_not_configured(self):
+        """リポジトリ None のときに target_name を指定 → RESOLVER_NOT_CONFIGURED"""
+        resolver = DefaultToolArgumentResolver()
+        ctx = ToolRuntimeContextDto(targets={})
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_QUEST_ISSUE,
+                {
+                    "objectives": [
+                        {"objective_type": "kill_monster", "target_name": "ゴブリン", "required_count": 1},
+                    ],
+                    "reward_gold": 0,
+                },
+                ctx,
+            )
+        assert exc_info.value.error_code == "RESOLVER_NOT_CONFIGURED"
+
+    def test_resolve_quest_issue_target_name_and_target_id_target_name_priority(self):
+        """target_name と target_id の両方がある場合、target_name を優先"""
+        resolver = _make_resolver_with_repos()
+        ctx = ToolRuntimeContextDto(targets={})
+        result = resolver.resolve(
+            TOOL_NAME_QUEST_ISSUE,
+            {
+                "objectives": [
+                    {
+                        "objective_type": "kill_monster",
+                        "target_name": "ゴブリン",
+                        "target_id": 999,
+                        "required_count": 1,
+                    },
+                ],
+                "reward_gold": 0,
+            },
+            ctx,
+        )
+        assert result["objectives"] == [("kill_monster", 10, 1)]
+
+    def test_resolve_quest_issue_target_name_and_target_id_neither_raises(self):
+        """target_name も target_id もない → INVALID_OBJECTIVES"""
+        resolver = _make_resolver_with_repos()
+        ctx = ToolRuntimeContextDto(targets={})
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_QUEST_ISSUE,
+                {
+                    "objectives": [
+                        {"objective_type": "kill_monster", "required_count": 1},
+                    ],
+                    "reward_gold": 0,
+                },
+                ctx,
+            )
+        assert exc_info.value.error_code == "INVALID_OBJECTIVES"

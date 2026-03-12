@@ -1,6 +1,9 @@
 """LLM の UI 向けラベル引数を canonical args に解決する。"""
 
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
+
+from ai_rpg_world.domain.player.exception.player_exceptions import PlayerNameValidationException
+from ai_rpg_world.domain.player.value_object.player_name import PlayerName
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActiveHarvestToolRuntimeTargetDto,
@@ -51,6 +54,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_INSPECT_TARGET,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_MOVE_TO_DESTINATION,
+    TOOL_NAME_MOVE_ONE_STEP,
     TOOL_NAME_NO_OP,
     TOOL_NAME_PLACE_OBJECT,
     TOOL_NAME_PURSUIT_CANCEL,
@@ -75,6 +79,16 @@ from ai_rpg_world.application.llm.tool_constants import (
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.world.value_object.facing import Facing
 
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
+    from ai_rpg_world.domain.monster.repository.monster_repository import MonsterTemplateRepository
+    from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
+    from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
+
+_ALLOWED_QUEST_OBJECTIVE_TYPES = frozenset({
+    "kill_monster", "obtain_item", "reach_spot", "kill_player",
+})
+
 
 class ToolArgumentResolutionException(Exception):
     """UI ラベル引数を解決できないときの例外。"""
@@ -86,6 +100,19 @@ class ToolArgumentResolutionException(Exception):
 
 class DefaultToolArgumentResolver(IToolArgumentResolver):
     """ツール名ごとに UI ラベルを既存アプリケーション層の引数へ解決する。"""
+
+    def __init__(
+        self,
+        *,
+        monster_template_repository: Optional["MonsterTemplateRepository"] = None,
+        spot_repository: Optional["SpotRepository"] = None,
+        item_spec_repository: Optional["ItemSpecRepository"] = None,
+        player_profile_repository: Optional["PlayerProfileRepository"] = None,
+    ) -> None:
+        self._monster_template_repository = monster_template_repository
+        self._spot_repository = spot_repository
+        self._item_spec_repository = item_spec_repository
+        self._player_profile_repository = player_profile_repository
 
     def resolve(
         self,
@@ -106,6 +133,8 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
             return {}
         if tool_name == TOOL_NAME_MOVE_TO_DESTINATION:
             return self._resolve_move_to_destination(args, runtime_context)
+        if tool_name == TOOL_NAME_MOVE_ONE_STEP:
+            return self._resolve_move_one_step(args)
         if tool_name == TOOL_NAME_PURSUIT_START:
             return self._resolve_pursuit_start(args, runtime_context)
         if tool_name == TOOL_NAME_PURSUIT_CANCEL:
@@ -224,6 +253,35 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         if target.destination_type == "object" and target.world_object_id is not None:
             result["target_world_object_id"] = target.world_object_id
         return result
+
+    def _resolve_move_one_step(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """direction_label（北, 東 等）を DirectionEnum に解決する。"""
+        from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+
+        label = args.get("direction_label")
+        if not isinstance(label, str) or not label.strip():
+            raise ToolArgumentResolutionException(
+                "方向が指定されていません。北, 北東, 東, 南東, 南, 南西, 西, 北西 のいずれかを指定してください。",
+                "INVALID_DIRECTION_LABEL",
+            )
+        label = label.strip()
+        _LABEL_TO_DIRECTION = {
+            "北": DirectionEnum.NORTH,
+            "北東": DirectionEnum.NORTHEAST,
+            "東": DirectionEnum.EAST,
+            "南東": DirectionEnum.SOUTHEAST,
+            "南": DirectionEnum.SOUTH,
+            "南西": DirectionEnum.SOUTHWEST,
+            "西": DirectionEnum.WEST,
+            "北西": DirectionEnum.NORTHWEST,
+        }
+        direction = _LABEL_TO_DIRECTION.get(label)
+        if direction is None:
+            raise ToolArgumentResolutionException(
+                f"無効な方向です: {label}。北, 北東, 東, 南東, 南, 南西, 西, 北西 のいずれかを指定してください。",
+                "INVALID_DIRECTION_LABEL",
+            )
+        return {"direction": direction}
 
     def _resolve_whisper(
         self,
@@ -837,15 +895,97 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
                 )
             ot = obj.get("objective_type")
             tid = obj.get("target_id")
+            target_name = obj.get("target_name")
             rc = obj.get("required_count")
             if not isinstance(ot, str) or ot.strip() == "":
                 raise ToolArgumentResolutionException(
                     f"目標{i + 1}の objective_type が不正です。",
                     "INVALID_OBJECTIVES",
                 )
-            tid_val = self._safe_int(tid, f"objectives[{i}].target_id", min_val=0)
+            ot_stripped = ot.strip()
+            tid_val: Optional[int] = None
+            has_target_name = isinstance(target_name, str) and bool(target_name.strip())
+            if has_target_name and ot_stripped not in _ALLOWED_QUEST_OBJECTIVE_TYPES and tid is None:
+                raise ToolArgumentResolutionException(
+                    "プレイヤー発行可能な目標は kill_monster, obtain_item, reach_spot, kill_player です。",
+                    "INVALID_OBJECTIVE_TYPE",
+                )
+            if has_target_name and ot_stripped in _ALLOWED_QUEST_OBJECTIVE_TYPES:
+                name = target_name.strip()
+                if ot_stripped == "kill_monster":
+                    if self._monster_template_repository is None:
+                        raise ToolArgumentResolutionException(
+                            "target_name による解決はモンスターリポジトリが設定されていないため利用できません。target_id を指定してください。",
+                            "RESOLVER_NOT_CONFIGURED",
+                        )
+                    template = self._monster_template_repository.find_by_name(name)
+                    if template is None:
+                        raise ToolArgumentResolutionException(
+                            "指定したモンスター名が見つかりません。名前を確認してください。",
+                            "MONSTER_TEMPLATE_NOT_FOUND",
+                        )
+                    tid_val = template.template_id.value
+                elif ot_stripped == "reach_spot":
+                    if self._spot_repository is None:
+                        raise ToolArgumentResolutionException(
+                            "target_name による解決はスポットリポジトリが設定されていないため利用できません。target_id を指定してください。",
+                            "RESOLVER_NOT_CONFIGURED",
+                        )
+                    spot = self._spot_repository.find_by_name(name)
+                    if spot is None:
+                        raise ToolArgumentResolutionException(
+                            "指定したスポット名が見つかりません。名前を確認してください。",
+                            "SPOT_NOT_FOUND",
+                        )
+                    tid_val = spot.spot_id.value
+                elif ot_stripped == "obtain_item":
+                    if self._item_spec_repository is None:
+                        raise ToolArgumentResolutionException(
+                            "target_name による解決はアイテムリポジトリが設定されていないため利用できません。target_id を指定してください。",
+                            "RESOLVER_NOT_CONFIGURED",
+                        )
+                    item_spec = self._item_spec_repository.find_by_name(name)
+                    if item_spec is None:
+                        raise ToolArgumentResolutionException(
+                            "指定したアイテム名が見つかりません。名前を確認してください。",
+                            "ITEM_SPEC_NOT_FOUND",
+                        )
+                    tid_val = item_spec.item_spec_id.value
+                elif ot_stripped == "kill_player":
+                    if self._player_profile_repository is None:
+                        raise ToolArgumentResolutionException(
+                            "target_name による解決はプレイヤーリポジトリが設定されていないため利用できません。target_id を指定してください。",
+                            "RESOLVER_NOT_CONFIGURED",
+                        )
+                    try:
+                        player_name = PlayerName(name)
+                    except PlayerNameValidationException:
+                        raise ToolArgumentResolutionException(
+                            "指定したプレイヤー名が見つかりません。名前を確認してください。",
+                            "PLAYER_PROFILE_NOT_FOUND",
+                        ) from None
+                    profile = self._player_profile_repository.find_by_name(player_name)
+                    if profile is None:
+                        raise ToolArgumentResolutionException(
+                            "指定したプレイヤー名が見つかりません。名前を確認してください。",
+                            "PLAYER_PROFILE_NOT_FOUND",
+                        )
+                    tid_val = profile.player_id.value
+            if tid_val is None and isinstance(target_name, str) and target_name.strip():
+                if ot_stripped not in _ALLOWED_QUEST_OBJECTIVE_TYPES and tid is None:
+                    raise ToolArgumentResolutionException(
+                        "プレイヤー発行可能な目標は kill_monster, obtain_item, reach_spot, kill_player です。",
+                        "INVALID_OBJECTIVE_TYPE",
+                    )
+            if tid_val is None and tid is not None:
+                tid_val = self._safe_int(tid, f"objectives[{i}].target_id", min_val=0)
+            if tid_val is None:
+                raise ToolArgumentResolutionException(
+                    f"目標{i + 1}には target_name または target_id を指定してください。",
+                    "INVALID_OBJECTIVES",
+                )
             rc_val = self._safe_int(rc, f"objectives[{i}].required_count", min_val=1)
-            objectives.append((ot.strip(), tid_val, rc_val))
+            objectives.append((ot_stripped, tid_val, rc_val))
         reward_gold = self._safe_int(args.get("reward_gold", 0), "reward_gold", min_val=0)
         reward_items = None
         raw_items = args.get("reward_items")

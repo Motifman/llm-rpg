@@ -92,6 +92,18 @@ class CancelMovementAvailabilityResolver(IAvailabilityResolver):
         return context is not None and context.has_active_path
 
 
+class MoveOneStepAvailabilityResolver(IAvailabilityResolver):
+    """1歩移動ツールは、マップ上にいて行動可能なときに利用可能。"""
+
+    def is_available(
+        self,
+        context: Optional[PlayerCurrentStateDto],
+    ) -> bool:
+        if context is None or context.is_busy:
+            return False
+        return context.current_spot_id is not None
+
+
 class WhisperAvailabilityResolver(IAvailabilityResolver):
     """囁きツールは、視界内に自分以外のプレイヤーがいるときに利用可能。"""
 
@@ -440,6 +452,17 @@ class TradeCancelAvailabilityResolver(IAvailabilityResolver):
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
         return context is not None and bool(context.available_trades)
+
+
+class SnsToolAvailabilityResolver(IAvailabilityResolver):
+    """
+    SNS 全ツール共通の利用可否リゾルバ。
+    投稿・リプライ・いいね・フォロー・サブスクライブ・ブロック等、
+    いずれも現在状態が取得できているときに利用可能。
+    """
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None
 
 
 class MemoryQueryAvailabilityResolver(IAvailabilityResolver):

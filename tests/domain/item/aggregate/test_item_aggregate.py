@@ -518,14 +518,14 @@ class TestItemAggregate:
         assert len(aggregate.get_events()) == 1
 
     def test_multiple_uses_accumulate_events(self, sample_item_spec_no_durability):
-        """複数回の使用でイベントが蓄積されるテスト"""
+        """複数回の使用でイベントが蓄積されるテスト（数量2で2回使用）"""
         aggregate = ItemAggregate.create(
             item_instance_id=ItemInstanceId(29),
             item_spec=sample_item_spec_no_durability,
-            quantity=1
+            quantity=2,
         )
 
-        # 複数回使用
+        # 複数回使用（数量2なので2回使用可能）
         aggregate.use()
         aggregate.use()
 

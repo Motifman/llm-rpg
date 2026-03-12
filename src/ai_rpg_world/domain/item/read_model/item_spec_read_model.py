@@ -1,8 +1,11 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.item.value_object.item_effect import ItemEffect
 
 
 @dataclass
@@ -25,6 +28,7 @@ class ItemSpecReadModel:
     equipment_type: Optional[EquipmentType] = None
     is_placeable: bool = False
     placeable_object_type: Optional[str] = None
+    consume_effect: Optional["ItemEffect"] = None
 
     @classmethod
     def create_from_item_spec(
@@ -39,6 +43,7 @@ class ItemSpecReadModel:
         equipment_type: Optional[EquipmentType] = None,
         is_placeable: bool = False,
         placeable_object_type: Optional[str] = None,
+        consume_effect: Optional["ItemEffect"] = None,
     ) -> "ItemSpecReadModel":
         """ItemSpecからReadModelを作成"""
         return cls(
@@ -52,6 +57,7 @@ class ItemSpecReadModel:
             equipment_type=equipment_type,
             is_placeable=is_placeable,
             placeable_object_type=placeable_object_type,
+            consume_effect=consume_effect,
         )
 
     @property
@@ -83,4 +89,5 @@ class ItemSpecReadModel:
             equipment_type=self.equipment_type,
             is_placeable=self.is_placeable,
             placeable_object_type=self.placeable_object_type,
+            consume_effect=self.consume_effect,
         )
