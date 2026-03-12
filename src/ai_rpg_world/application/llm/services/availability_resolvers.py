@@ -92,6 +92,18 @@ class CancelMovementAvailabilityResolver(IAvailabilityResolver):
         return context is not None and context.has_active_path
 
 
+class MoveOneStepAvailabilityResolver(IAvailabilityResolver):
+    """1歩移動ツールは、マップ上にいて行動可能なときに利用可能。"""
+
+    def is_available(
+        self,
+        context: Optional[PlayerCurrentStateDto],
+    ) -> bool:
+        if context is None or context.is_busy:
+            return False
+        return context.current_spot_id is not None
+
+
 class WhisperAvailabilityResolver(IAvailabilityResolver):
     """囁きツールは、視界内に自分以外のプレイヤーがいるときに利用可能。"""
 
