@@ -64,6 +64,11 @@ class CannotCancelTradeWithOtherPlayerException(TradeDomainException, BusinessRu
     error_code = "TRADE.CANNOT_CANCEL_OTHER"
 
 
+class CannotDeclineTradeException(TradeDomainException, BusinessRuleException):
+    """取引を断れない例外（直接取引の宛先以外、または出品者本人）"""
+    error_code = "TRADE.CANNOT_DECLINE"
+
+
 class InsufficientItemsException(TradeDomainException, BusinessRuleException):
     """アイテム不足例外"""
     error_code = "TRADE.INSUFFICIENT_ITEMS"

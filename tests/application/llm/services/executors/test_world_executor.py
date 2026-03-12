@@ -19,6 +19,9 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_INSPECT_TARGET,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_PLACE_OBJECT,
+    TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
+    TOOL_NAME_SKILL_EQUIP,
+    TOOL_NAME_SKILL_REJECT_PROPOSAL,
 )
 
 
@@ -62,9 +65,9 @@ class TestWorldToolExecutorGetHandlers:
     """get_handlers() の振る舞い"""
 
     def test_with_services_returns_twelve_handlers(self, executor_with_world_services):
-        """必要なサービスがあるとき 12 ツールのハンドラを返す"""
+        """必要なサービスがあるとき 16 ツールのハンドラを返す"""
         handlers = executor_with_world_services.get_handlers()
-        assert len(handlers) == 13
+        assert len(handlers) == 16
         assert TOOL_NAME_INSPECT_ITEM in handlers
         assert TOOL_NAME_INSPECT_TARGET in handlers
         assert TOOL_NAME_INTERACT_WORLD_OBJECT in handlers
@@ -78,6 +81,9 @@ class TestWorldToolExecutorGetHandlers:
         assert TOOL_NAME_CHEST_STORE in handlers
         assert TOOL_NAME_CHEST_TAKE in handlers
         assert TOOL_NAME_COMBAT_USE_SKILL in handlers
+        assert TOOL_NAME_SKILL_EQUIP in handlers
+        assert TOOL_NAME_SKILL_ACCEPT_PROPOSAL in handlers
+        assert TOOL_NAME_SKILL_REJECT_PROPOSAL in handlers
 
 
 class TestWorldToolExecutorValidation:
@@ -106,7 +112,7 @@ class TestWorldToolExecutorValidation:
         """全サービスが None のときは検証を通過"""
         executor = WorldToolExecutor()
         handlers = executor.get_handlers()
-        assert len(handlers) == 13  # 各ハンドラは実行時に None チェック
+        assert len(handlers) == 16  # 各ハンドラは実行時に None チェック
 
 
 class TestWorldToolExecutorInteract:

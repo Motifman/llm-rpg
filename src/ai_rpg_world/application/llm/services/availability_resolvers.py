@@ -454,6 +454,13 @@ class TradeCancelAvailabilityResolver(IAvailabilityResolver):
         return context is not None and bool(context.available_trades)
 
 
+class TradeDeclineAvailabilityResolver(IAvailabilityResolver):
+    """取引拒否は自分宛ての直接取引があるときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None and bool(context.available_trades)
+
+
 class SnsToolAvailabilityResolver(IAvailabilityResolver):
     """
     SNS 全ツール共通の利用可否リゾルバ。
