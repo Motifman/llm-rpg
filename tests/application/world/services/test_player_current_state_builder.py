@@ -43,6 +43,7 @@ from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import (
     ActorComponent,
     ChestComponent,
+    HarvestableComponent,
     InteractableComponent,
 )
 from ai_rpg_world.domain.world.enum.world_enum import (
@@ -222,6 +223,47 @@ class TestPlayerCurrentStateBuilder:
         assert chest_obj.is_notable is True
         assert npc_obj.can_interact is False
         assert npc_obj.is_notable is True
+
+    def test_build_player_current_state_includes_active_harvest(self, setup_builder):
+        builder, status_repo, profile_repo, phys_repo, spot_repo = setup_builder
+        profile_repo.save(_make_profile(1, "Alice"))
+        status = _make_status(1, 1, 0, 0)
+        status_repo.save(status)
+        actor = WorldObject(
+            object_id=WorldObjectId.create(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.PLAYER,
+            component=ActorComponent(direction=DirectionEnum.EAST, player_id=PlayerId(1)),
+        )
+        actor.set_busy(InMemoryGameTimeProvider(initial_tick=10).get_current_tick().add_duration(5))
+        resource = WorldObject(
+            object_id=WorldObjectId(200),
+            coordinate=Coordinate(1, 0, 0),
+            object_type=ObjectTypeEnum.RESOURCE,
+            component=HarvestableComponent(loot_table_id=1, harvest_duration=5, stamina_cost=1),
+        )
+        resource.component.start_harvest(WorldObjectId(1), InMemoryGameTimeProvider(initial_tick=10).get_current_tick())
+        physical_map = _make_map(1, [actor, resource])
+        result = builder.build_player_current_state(
+            query=GetPlayerCurrentStateQuery(player_id=1),
+            player_status=status,
+            player_name="Alice",
+            spot=spot_repo.find_by_id(SpotId(1)),
+            physical_map=physical_map,
+            available_moves_result=PlayerMovementOptionsDto(
+                player_id=1,
+                player_name="Alice",
+                current_spot_id=1,
+                current_spot_name="Town",
+                available_moves=[],
+                total_available_moves=0,
+            ),
+        )
+
+        assert result.active_harvest is not None
+        assert result.active_harvest.target_world_object_id == 200
+        assert result.active_harvest.target_display_name
+        assert result.active_harvest.finish_tick == 15
 
     def test_build_player_current_state_with_location_area_includes_description(
         self, setup_builder
@@ -677,5 +719,4 @@ class TestPlayerCurrentStateBuilder:
         assert result.area_names == ["広場"]
         assert result.area_id == 10
         assert result.area_name == "広場"
-
 

@@ -19,6 +19,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_COMBAT_USE_SKILL,
     TOOL_NAME_CONVERSATION_ADVANCE,
     TOOL_NAME_DESTROY_PLACEABLE,
+    TOOL_NAME_HARVEST_CANCEL,
     TOOL_NAME_HARVEST_START,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_MOVE_TO_DESTINATION,
@@ -30,6 +31,7 @@ from ai_rpg_world.application.llm.services.tool_definitions import (
     register_default_tools,
 )
 from ai_rpg_world.application.world.contracts.dtos import (
+    ActiveHarvestDto,
     ActiveConversationDto,
     AvailableMoveDto,
     AttentionLevelOptionDto,
@@ -149,6 +151,18 @@ class TestDefaultAvailableToolsProvider:
         names = [t["function"]["name"] for t in tools if t.get("type") == "function"]
         assert TOOL_NAME_INTERACT_WORLD_OBJECT in names
         assert TOOL_NAME_HARVEST_START in names
+
+    def test_get_available_tools_with_active_harvest_hides_start_and_shows_cancel(self, provider):
+        ctx = _context_with_moves(0, is_busy=True)
+        ctx.active_harvest = ActiveHarvestDto(
+            target_world_object_id=11,
+            target_display_name="薬草",
+            finish_tick=15,
+        )
+        tools = provider.get_available_tools(ctx)
+        names = [t["function"]["name"] for t in tools if t.get("type") == "function"]
+        assert TOOL_NAME_HARVEST_START not in names
+        assert TOOL_NAME_HARVEST_CANCEL in names
 
     def test_get_available_tools_with_extended_context_adds_extended_tools(self, provider):
         visible_objects = [

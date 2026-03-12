@@ -13,6 +13,7 @@ from ai_rpg_world.application.llm.services.tool_definitions import (
     COMBAT_USE_SKILL_DEFINITION,
     CONVERSATION_ADVANCE_DEFINITION,
     DESTROY_PLACEABLE_DEFINITION,
+    HARVEST_CANCEL_DEFINITION,
     HARVEST_START_DEFINITION,
     INSPECT_ITEM_DEFINITION,
     INSPECT_TARGET_DEFINITION,
@@ -34,6 +35,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_COMBAT_USE_SKILL,
     TOOL_NAME_CONVERSATION_ADVANCE,
     TOOL_NAME_DESTROY_PLACEABLE,
+    TOOL_NAME_HARVEST_CANCEL,
     TOOL_NAME_HARVEST_START,
     TOOL_NAME_INSPECT_ITEM,
     TOOL_NAME_INSPECT_TARGET,
@@ -88,6 +90,12 @@ class TestToolDefinitions:
     def test_harvest_start_definition_has_expected_name_and_params(self):
         assert HARVEST_START_DEFINITION.name == TOOL_NAME_HARVEST_START
         params = HARVEST_START_DEFINITION.parameters
+        assert "target_label" in params.get("properties", {})
+        assert "target_label" in params.get("required", [])
+
+    def test_harvest_cancel_definition_has_expected_name_and_params(self):
+        assert HARVEST_CANCEL_DEFINITION.name == TOOL_NAME_HARVEST_CANCEL
+        params = HARVEST_CANCEL_DEFINITION.parameters
         assert "target_label" in params.get("properties", {})
         assert "target_label" in params.get("required", [])
 
@@ -178,12 +186,13 @@ class TestRegisterDefaultTools:
         names = [e[0].name for e in entries]
         assert TOOL_NAME_INTERACT_WORLD_OBJECT in names
 
-    def test_register_default_tools_with_harvest_enabled_adds_harvest_start(self):
+    def test_register_default_tools_with_harvest_enabled_adds_harvest_tools(self):
         registry = DefaultGameToolRegistry()
         register_default_tools(registry, harvest_enabled=True)
         entries = registry.get_definitions_with_resolvers()
         names = [e[0].name for e in entries]
         assert TOOL_NAME_HARVEST_START in names
+        assert TOOL_NAME_HARVEST_CANCEL in names
 
     def test_register_default_tools_with_pursuit_enabled_adds_pursuit_tools(self):
         registry = DefaultGameToolRegistry()

@@ -32,6 +32,7 @@ from ai_rpg_world.domain.world.value_object.weather_zone_name import WeatherZone
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
@@ -72,6 +73,19 @@ from ai_rpg_world.domain.skill.service.skill_execution_service import SkillExecu
 from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
 from ai_rpg_world.domain.skill.service.skill_targeting_service import SkillTargetingDomainService
 from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent, ActorComponent
+from ai_rpg_world.application.harvest.services.harvest_command_service import HarvestCommandService
+from ai_rpg_world.domain.world.entity.world_object_component import HarvestableComponent
+from ai_rpg_world.infrastructure.repository.in_memory_item_repository import InMemoryItemRepository
+from ai_rpg_world.infrastructure.repository.in_memory_loot_table_repository import InMemoryLootTableRepository
+from ai_rpg_world.infrastructure.repository.in_memory_item_spec_repository import InMemoryItemSpecRepository
+from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import InMemoryPlayerInventoryRepository
+from ai_rpg_world.domain.world.service.harvest_domain_service import HarvestDomainService
+from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import LootEntry, LootTableAggregate
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
+from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
+from ai_rpg_world.domain.world.event.map_events import ResourceHarvestedEvent
 from ai_rpg_world.domain.monster.value_object.monster_skill_info import MonsterSkillInfo
 from ai_rpg_world.domain.world.value_object.behavior_context import (
     SkillSelectionContext,
@@ -298,6 +312,64 @@ class TestWorldSimulationApplicationService:
         service.tick()
 
         assert time_provider.get_current_tick() == WorldTick(11)
+
+    def test_tick_auto_completes_due_player_harvest(self, setup_service):
+        service, time_provider, repository, _, player_status_repo, _, uow, event_publisher, _, _ = setup_service
+        data_store = repository._data_store
+        loot_table_repo = InMemoryLootTableRepository()
+        item_repo = InMemoryItemRepository(data_store, uow)
+        item_spec_repo = InMemoryItemSpecRepository()
+        inventory_repo = InMemoryPlayerInventoryRepository(data_store, uow)
+        service._harvest_command_service = HarvestCommandService(
+            repository,
+            loot_table_repo,
+            item_repo,
+            item_spec_repo,
+            inventory_repo,
+            player_status_repo,
+            HarvestDomainService(),
+            uow,
+        )
+
+        player_status_repo.save(self._player_status(1))
+        inventory_repo.save(PlayerInventoryAggregate.create_new_inventory(PlayerId(1)))
+        item_spec_repo.save(
+            ItemSpecReadModel(
+                item_spec_id=ItemSpecId(9),
+                name="鉄鉱石",
+                item_type=ItemType.MATERIAL,
+                rarity=Rarity.COMMON,
+                description="鉄の素材",
+                max_stack_size=MaxStackSize(64),
+            )
+        )
+        loot_table_repo.save(LootTableAggregate.create(1, [LootEntry(ItemSpecId(9), weight=100)]))
+
+        actor = self._player_actor(1, busy_until=WorldTick(11))
+        resource = WorldObject(
+            WorldObjectId(200),
+            Coordinate(1, 0, 0),
+            ObjectTypeEnum.RESOURCE,
+            component=HarvestableComponent(loot_table_id=1, harvest_duration=1, stamina_cost=1),
+        )
+        resource.component.start_harvest(WorldObjectId(1), WorldTick(10))
+        physical_map = PhysicalMapAggregate.create(
+            SpotId(1),
+            [
+                Tile(Coordinate(0, 0, 0), TerrainType.grass()),
+                Tile(Coordinate(1, 0, 0), TerrainType.grass()),
+            ],
+            objects=[actor, resource],
+        )
+        repository.save(physical_map)
+
+        service.tick()
+
+        updated_map = repository.find_by_spot_id(SpotId(1))
+        assert updated_map.get_object(WorldObjectId(200)).component.current_actor_id is None
+        assert updated_map.get_object(WorldObjectId(1)).busy_until is None
+        events = event_publisher.get_published_events()
+        assert any(isinstance(event, ResourceHarvestedEvent) for event in events)
 
     def test_tick_calls_llm_turn_trigger_run_scheduled_turns_when_provided(self, setup_service):
         """llm_turn_trigger を渡しているとき、tick の末尾で run_scheduled_turns が 1 回呼ばれる"""
