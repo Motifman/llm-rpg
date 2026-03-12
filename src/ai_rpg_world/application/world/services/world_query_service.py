@@ -57,7 +57,10 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
     from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
     from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
-    from ai_rpg_world.domain.skill.repository.skill_repository import SkillLoadoutRepository
+    from ai_rpg_world.domain.skill.repository.skill_repository import (
+        SkillDeckProgressRepository,
+        SkillLoadoutRepository,
+    )
     from ai_rpg_world.application.trade.services.personal_trade_query_service import (
         PersonalTradeQueryService,
     )
@@ -80,7 +83,9 @@ class WorldQueryService:
         item_repository: Optional["ItemRepository"] = None,
         conversation_command_service: Optional["ConversationCommandService"] = None,
         skill_loadout_repository: Optional["SkillLoadoutRepository"] = None,
+        skill_deck_progress_repository: Optional["SkillDeckProgressRepository"] = None,
         game_time_provider: Optional["GameTimeProvider"] = None,
+        world_time_config_service: Optional[Any] = None,
         quest_repository: Optional["QuestRepository"] = None,
         guild_repository: Optional["GuildRepository"] = None,
         shop_repository: Optional["ShopRepository"] = None,
@@ -100,6 +105,7 @@ class WorldQueryService:
         self._conversation_command_service = conversation_command_service
         self._skill_loadout_repository = skill_loadout_repository
         self._game_time_provider = game_time_provider
+        self._world_time_config_service = world_time_config_service
         self._player_current_state_builder = (
             player_current_state_builder
             or PlayerCurrentStateBuilder(
@@ -114,7 +120,9 @@ class WorldQueryService:
                 item_repository=item_repository,
                 conversation_command_service=conversation_command_service,
                 skill_loadout_repository=skill_loadout_repository,
+                skill_deck_progress_repository=skill_deck_progress_repository,
                 game_time_provider=game_time_provider,
+                world_time_config_service=world_time_config_service,
                 quest_repository=quest_repository,
                 guild_repository=guild_repository,
                 shop_repository=shop_repository,

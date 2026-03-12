@@ -5,18 +5,23 @@ from datetime import datetime
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
+    AwakenedActionToolRuntimeTargetDto,
     EpisodeMemoryEntry,
     is_reschedulable_error_code,
     LlmUiContextDto,
     LlmCommandResultDto,
     LongTermFactEntry,
     MemoryLawEntry,
+    SkillEquipCandidateToolRuntimeTargetDto,
+    SkillEquipSlotToolRuntimeTargetDto,
+    SkillProposalToolRuntimeTargetDto,
     should_reschedule_for_next_tick,
     SystemPromptPlayerInfoDto,
     ToolDefinitionDto,
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
 )
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
 
 
 class TestSystemPromptPlayerInfoDto:
@@ -590,4 +595,56 @@ class TestMemoryLawEntry:
                 target="t",
                 strength=1.0,
                 player_id=None,  # type: ignore[arg-type]
+            )
+
+
+class TestSkillRuntimeTargetDtos:
+    def test_skill_specific_runtime_targets_keep_typed_payloads(self):
+        candidate = SkillEquipCandidateToolRuntimeTargetDto(
+            label="EK1",
+            kind="skill_equip_candidate",
+            display_name="火球",
+            skill_loadout_id=10,
+            skill_id=101,
+        )
+        slot = SkillEquipSlotToolRuntimeTargetDto(
+            label="ES1",
+            kind="skill_equip_slot",
+            display_name="通常スロット 1",
+            skill_loadout_id=10,
+            deck_tier=DeckTier.NORMAL,
+            skill_slot_index=0,
+        )
+        proposal = SkillProposalToolRuntimeTargetDto(
+            label="SP1",
+            kind="skill_proposal",
+            display_name="新しい攻撃手段",
+            progress_id=20,
+            proposal_id=3,
+            target_slot_index=0,
+            target_slot_display_name="通常スロット 1",
+        )
+        awakened = AwakenedActionToolRuntimeTargetDto(
+            label="AW1",
+            kind="awakened_action",
+            display_name="覚醒モードを発動",
+            skill_loadout_id=10,
+        )
+
+        assert candidate.skill_id == 101
+        assert slot.deck_tier == DeckTier.NORMAL
+        assert slot.skill_slot_index == 0
+        assert proposal.progress_id == 20
+        assert proposal.proposal_id == 3
+        assert proposal.target_slot_index == 0
+        assert proposal.target_slot_display_name == "通常スロット 1"
+        assert awakened.skill_loadout_id == 10
+
+    def test_tool_runtime_target_rejects_invalid_skill_phase_types(self):
+        with pytest.raises(TypeError, match="deck_tier must be DeckTier or None"):
+            ToolRuntimeTargetDto(
+                label="ES1",
+                kind="skill_equip_slot",
+                display_name="通常スロット 1",
+                deck_tier="normal",  # type: ignore[arg-type]
             )

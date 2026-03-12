@@ -4,7 +4,13 @@ from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.durability import Durability
-from ai_rpg_world.domain.item.value_object.recipe_id import RecipeId
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+
+@dataclass(frozen=True)
+class ConsumableUsedEvent(BaseDomainEvent[PlayerId, "PlayerStatusAggregate"]):
+    """消費可能アイテム使用イベント（効果適用用）。アプリ層で発行。aggregate_id が player_id。"""
+    item_spec_id: ItemSpecId
 
 
 @dataclass(frozen=True)

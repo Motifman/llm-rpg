@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, FrozenSet
+from typing import Optional, FrozenSet, TYPE_CHECKING
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.item.value_object.item_effect import ItemEffect
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
 from ai_rpg_world.domain.item.exception import ItemSpecValidationException
@@ -29,6 +32,7 @@ class ItemSpec:
     equipment_type: Optional[EquipmentType] = None
     is_placeable: bool = False
     placeable_object_type: Optional[str] = None
+    consume_effect: Optional["ItemEffect"] = None
 
     def __post_init__(self):
         """バリデーションは__post_init__で実行"""
@@ -63,6 +67,16 @@ class ItemSpec:
                 raise ItemSpecValidationException(
                     "Item spec: non-placeable items must not have placeable_object_type set"
                 )
+        # consume_effect は CONSUMABLE タイプの場合のみ設定可能
+        if self.consume_effect is not None:
+            if self.item_type != ItemType.CONSUMABLE:
+                raise ItemSpecValidationException(
+                    f"Item spec: consume_effect can only be set for CONSUMABLE items, got item_type={self.item_type}"
+                )
+        else:
+            if self.item_type == ItemType.CONSUMABLE:
+                # CONSUMABLE でも consume_effect が None は許容（効果なしの消費アイテム）
+                pass
 
     def can_create_durability(self) -> bool:
         """耐久度を作成可能かどうか"""
