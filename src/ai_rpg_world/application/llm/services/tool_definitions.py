@@ -5,6 +5,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import IGameToolRegistry
 from ai_rpg_world.application.llm.services.availability_resolvers import (
     CancelMovementAvailabilityResolver,
     ChangeAttentionAvailabilityResolver,
+    MoveOneStepAvailabilityResolver,
     ChestStoreAvailabilityResolver,
     ChestTakeAvailabilityResolver,
     CombatUseSkillAvailabilityResolver,
@@ -74,6 +75,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_INSPECT_TARGET,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_CANCEL_MOVEMENT,
+    TOOL_NAME_MOVE_ONE_STEP,
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
     TOOL_NAME_PLACE_OBJECT,
@@ -122,6 +124,23 @@ CANCEL_MOVEMENT_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_CANCEL_MOVEMENT,
     description="設定済みの経路をキャンセルし、移動を中断します。移動中のみ利用可能です。",
     parameters={"type": "object", "properties": {}, "required": []},
+)
+
+MOVE_ONE_STEP_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "direction_label": {
+            "type": "string",
+            "description": "隣接タイルへ移動する方向。北, 北東, 東, 南東, 南, 南西, 西, 北西 のいずれか。",
+        },
+    },
+    "required": ["direction_label"],
+}
+
+MOVE_ONE_STEP_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_MOVE_ONE_STEP,
+    description="指定した方向へ隣接タイルに1歩だけ移動します。最も細かい粒度の移動です。",
+    parameters=MOVE_ONE_STEP_PARAMETERS,
 )
 
 WHISPER_PARAMETERS = {
@@ -807,6 +826,7 @@ def register_default_tools(
         raise TypeError("registry must be IGameToolRegistry")
     registry.register(NO_OP_DEFINITION, NoOpAvailabilityResolver())
     registry.register(MOVE_TO_DESTINATION_DEFINITION, SetDestinationAvailabilityResolver())
+    registry.register(MOVE_ONE_STEP_DEFINITION, MoveOneStepAvailabilityResolver())
     registry.register(CANCEL_MOVEMENT_DEFINITION, CancelMovementAvailabilityResolver())
     if pursuit_enabled:
         registry.register(PURSUIT_START_DEFINITION, PursuitStartAvailabilityResolver())

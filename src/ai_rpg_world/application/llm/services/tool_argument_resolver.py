@@ -50,6 +50,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_INSPECT_TARGET,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_MOVE_TO_DESTINATION,
+    TOOL_NAME_MOVE_ONE_STEP,
     TOOL_NAME_NO_OP,
     TOOL_NAME_PLACE_OBJECT,
     TOOL_NAME_PURSUIT_CANCEL,
@@ -124,6 +125,8 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
             return {}
         if tool_name == TOOL_NAME_MOVE_TO_DESTINATION:
             return self._resolve_move_to_destination(args, runtime_context)
+        if tool_name == TOOL_NAME_MOVE_ONE_STEP:
+            return self._resolve_move_one_step(args)
         if tool_name == TOOL_NAME_PURSUIT_START:
             return self._resolve_pursuit_start(args, runtime_context)
         if tool_name == TOOL_NAME_PURSUIT_CANCEL:
@@ -234,6 +237,35 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         if target.destination_type == "object" and target.world_object_id is not None:
             result["target_world_object_id"] = target.world_object_id
         return result
+
+    def _resolve_move_one_step(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """direction_label（北, 東 等）を DirectionEnum に解決する。"""
+        from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+
+        label = args.get("direction_label")
+        if not isinstance(label, str) or not label.strip():
+            raise ToolArgumentResolutionException(
+                "方向が指定されていません。北, 北東, 東, 南東, 南, 南西, 西, 北西 のいずれかを指定してください。",
+                "INVALID_DIRECTION_LABEL",
+            )
+        label = label.strip()
+        _LABEL_TO_DIRECTION = {
+            "北": DirectionEnum.NORTH,
+            "北東": DirectionEnum.NORTHEAST,
+            "東": DirectionEnum.EAST,
+            "南東": DirectionEnum.SOUTHEAST,
+            "南": DirectionEnum.SOUTH,
+            "南西": DirectionEnum.SOUTHWEST,
+            "西": DirectionEnum.WEST,
+            "北西": DirectionEnum.NORTHWEST,
+        }
+        direction = _LABEL_TO_DIRECTION.get(label)
+        if direction is None:
+            raise ToolArgumentResolutionException(
+                f"無効な方向です: {label}。北, 北東, 東, 南東, 南, 南西, 西, 北西 のいずれかを指定してください。",
+                "INVALID_DIRECTION_LABEL",
+            )
+        return {"direction": direction}
 
     def _resolve_whisper(
         self,
