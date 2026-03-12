@@ -16,6 +16,7 @@ FALLBACK_MONSTER_LABEL = "何かのモンスター"
 FALLBACK_SKILL_LABEL = "何かのスキル"
 FALLBACK_SHOP_LABEL = "どこかのショップ"
 FALLBACK_GUILD_LABEL = "どこかのギルド"
+FALLBACK_SNS_USER_LABEL = "誰か"
 
 
 class ObservationNameResolver:
@@ -31,8 +32,10 @@ class ObservationNameResolver:
         guild_repository: Optional[Any] = None,
         monster_repository: Optional[Any] = None,
         skill_spec_repository: Optional[Any] = None,
+        sns_user_repository: Optional[Any] = None,
     ) -> None:
         self._spot_repository = spot_repository
+        self._sns_user_repository = sns_user_repository
         self._player_profile_repository = player_profile_repository
         self._item_spec_repository = item_spec_repository
         self._item_repository = item_repository
@@ -120,3 +123,18 @@ class ObservationNameResolver:
         if spec is None:
             return FALLBACK_SKILL_LABEL
         return spec.name or FALLBACK_SKILL_LABEL
+
+    def sns_user_display_name(self, user_id: Any) -> str:
+        """SNS ユーザーの表示名を解決する。"""
+        if self._sns_user_repository is None:
+            return FALLBACK_SNS_USER_LABEL
+        try:
+            from ai_rpg_world.domain.sns.value_object.user_id import UserId
+            uid = UserId(user_id) if not isinstance(user_id, UserId) else user_id
+        except Exception:
+            return FALLBACK_SNS_USER_LABEL
+        user = self._sns_user_repository.find_by_id(uid)
+        if user is None:
+            return FALLBACK_SNS_USER_LABEL
+        info = user.get_user_profile_info()
+        return info.get("display_name", FALLBACK_SNS_USER_LABEL)
