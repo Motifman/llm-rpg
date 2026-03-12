@@ -54,12 +54,6 @@ from ai_rpg_world.application.llm.services.current_state_formatter import (
 from ai_rpg_world.application.llm.services.game_tool_registry import (
     DefaultGameToolRegistry,
 )
-from ai_rpg_world.application.llm.services.in_memory_episode_memory_store import (
-    InMemoryEpisodeMemoryStore,
-)
-from ai_rpg_world.application.llm.services.in_memory_long_term_memory_store import (
-    InMemoryLongTermMemoryStore,
-)
 from ai_rpg_world.application.llm.services.in_memory_todo_store import (
     InMemoryTodoStore,
 )
@@ -145,9 +139,12 @@ from ai_rpg_world.domain.world.repository.physical_map_repository import (
 from ai_rpg_world.infrastructure.events.observation_event_handler_registry import (
     ObservationEventHandlerRegistry,
 )
+from ai_rpg_world.infrastructure.llm._memory_store_factory import (
+    create_episode_memory_store,
+    create_long_term_memory_store,
+    create_reflection_state_port,
+)
 
-
-_ENV_LLM_MEMORY_DB_PATH = "LLM_MEMORY_DB_PATH"
 _ENV_LLM_VIEW_DISTANCE = "LLM_VIEW_DISTANCE"
 _DEFAULT_LLM_VIEW_DISTANCE = 5
 
@@ -259,9 +256,6 @@ def create_llm_agent_wiring(
     system_prompt_builder = DefaultSystemPromptBuilder()
     game_tool_registry = DefaultGameToolRegistry()
 
-    effective_memory_db_path = memory_db_path or (
-        (os.environ.get(_ENV_LLM_MEMORY_DB_PATH) or "").strip() or None
-    )
     if llm_view_distance is not None:
         effective_view_distance = llm_view_distance
     else:
@@ -276,21 +270,9 @@ def create_llm_agent_wiring(
         else:
             effective_view_distance = _DEFAULT_LLM_VIEW_DISTANCE
     if episode_memory_store is None:
-        if effective_memory_db_path:
-            from ai_rpg_world.infrastructure.llm.sqlite_episode_memory_store import (
-                SqliteEpisodeMemoryStore,
-            )
-            episode_memory_store = SqliteEpisodeMemoryStore(effective_memory_db_path)
-        else:
-            episode_memory_store = InMemoryEpisodeMemoryStore()
+        episode_memory_store = create_episode_memory_store(memory_db_path=memory_db_path)
     if long_term_memory_store is None:
-        if effective_memory_db_path:
-            from ai_rpg_world.infrastructure.llm.sqlite_long_term_memory_store import (
-                SqliteLongTermMemoryStore,
-            )
-            long_term_memory_store = SqliteLongTermMemoryStore(effective_memory_db_path)
-        else:
-            long_term_memory_store = InMemoryLongTermMemoryStore()
+        long_term_memory_store = create_long_term_memory_store(memory_db_path=memory_db_path)
 
     working_memory_store = InMemoryWorkingMemoryStore()
     todo_store = InMemoryTodoStore()
@@ -395,13 +377,7 @@ def create_llm_agent_wiring(
     )
 
     if reflection_state_port is None:
-        if effective_memory_db_path:
-            from ai_rpg_world.infrastructure.llm.sqlite_reflection_state_port import (
-                SqliteReflectionStatePort,
-            )
-            reflection_state_port = SqliteReflectionStatePort(effective_memory_db_path)
-        else:
-            reflection_state_port = None
+        reflection_state_port = create_reflection_state_port(memory_db_path=memory_db_path)
     memory_extractor = RuleBasedMemoryExtractor()
     if llm_player_resolver is None:
         llm_player_resolver = ProfileBasedLlmPlayerResolver(
