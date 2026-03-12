@@ -3,6 +3,7 @@
 from typing import Any, Dict, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
+    ActiveHarvestToolRuntimeTargetDto,
     AttentionLevelToolRuntimeTargetDto,
     ChestItemToolRuntimeTargetDto,
     ChestToolRuntimeTargetDto,
@@ -40,6 +41,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_GUILD_DISBAND,
     TOOL_NAME_GUILD_LEAVE,
     TOOL_NAME_GUILD_WITHDRAW_BANK,
+    TOOL_NAME_HARVEST_CANCEL,
     TOOL_NAME_HARVEST_START,
     TOOL_NAME_INSPECT_ITEM,
     TOOL_NAME_INSPECT_TARGET,
@@ -117,6 +119,8 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
             return self._resolve_interact_world_object(args, runtime_context)
         if tool_name == TOOL_NAME_HARVEST_START:
             return self._resolve_harvest_start(args, runtime_context)
+        if tool_name == TOOL_NAME_HARVEST_CANCEL:
+            return self._resolve_harvest_cancel(args, runtime_context)
         if tool_name == TOOL_NAME_CHANGE_ATTENTION:
             return self._resolve_change_attention(args, runtime_context)
         if tool_name == TOOL_NAME_CONVERSATION_ADVANCE:
@@ -311,6 +315,33 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         if target.world_object_id is None:
             raise ToolArgumentResolutionException(
                 f"採集に使えないラベルです: {label}",
+                "INVALID_TARGET_KIND",
+            )
+        return {
+            "target_world_object_id": target.world_object_id,
+            "target_display_name": target.display_name,
+        }
+
+    def _resolve_harvest_cancel(
+        self,
+        args: Dict[str, Any],
+        runtime_context: ToolRuntimeContextDto,
+    ) -> Dict[str, Any]:
+        label = args.get("target_label")
+        if not isinstance(label, str) or not label:
+            raise ToolArgumentResolutionException(
+                "採集中断対象ラベルが指定されていません。",
+                "INVALID_TARGET_LABEL",
+            )
+        target = self._require_target_type(
+            label,
+            runtime_context,
+            "採集中断対象ラベル",
+            (ActiveHarvestToolRuntimeTargetDto, ResourceToolRuntimeTargetDto),
+        )
+        if target.world_object_id is None:
+            raise ToolArgumentResolutionException(
+                f"採集中断に使えないラベルです: {label}",
                 "INVALID_TARGET_KIND",
             )
         return {

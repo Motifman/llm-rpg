@@ -582,6 +582,10 @@ class HarvestableComponent(WorldObjectComponent):
     def current_actor_id(self) -> Optional[WorldObjectId]:
         return self._current_actor_id
 
+    @property
+    def harvest_finish_tick(self) -> Optional[WorldTick]:
+        return self._harvest_finish_tick
+
     def get_available_quantity(self, current_tick: WorldTick) -> int:
         """現在の利用可能な資源量を計算して返す（Lazy Recovery）"""
         if self._current_quantity >= self._max_quantity:

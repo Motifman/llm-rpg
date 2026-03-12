@@ -253,6 +253,11 @@ class ResourceToolRuntimeTargetDto(VisibleToolRuntimeTargetDto):
 
 
 @dataclass(frozen=True)
+class ActiveHarvestToolRuntimeTargetDto(ResourceToolRuntimeTargetDto):
+    """進行中採集対象用の runtime target。"""
+
+
+@dataclass(frozen=True)
 class WorldObjectToolRuntimeTargetDto(VisibleToolRuntimeTargetDto):
     """一般的な相互作用対象用の runtime target。"""
 

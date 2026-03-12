@@ -4,7 +4,10 @@ import logging
 from typing import Callable, Any
 
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
-from ai_rpg_world.application.harvest.contracts.commands import StartHarvestCommand
+from ai_rpg_world.application.harvest.contracts.commands import (
+    CancelHarvestCommand,
+    StartHarvestCommand,
+)
 from ai_rpg_world.application.harvest.contracts.dtos import HarvestCommandResultDto
 from ai_rpg_world.application.harvest.exceptions.base_exception import (
     HarvestApplicationException,
@@ -13,6 +16,7 @@ from ai_rpg_world.application.harvest.exceptions.base_exception import (
 from ai_rpg_world.application.harvest.exceptions.command.harvest_command_exception import (
     HarvestActorNotFoundException,
     HarvestCommandException,
+    HarvestNotInProgressException,
     HarvestResourceNotFoundException,
 )
 from ai_rpg_world.application.harvest.services.harvest_command_service import HarvestCommandService
@@ -114,6 +118,63 @@ class PlayerHarvestApplicationService:
 
         return self._harvest_command_service.start_harvest(
             StartHarvestCommand(
+                actor_id=str(player_id),
+                target_id=str(target_world_object_id),
+                spot_id=str(int(status.current_spot_id)),
+                current_tick=self._time_provider.get_current_tick().value,
+            )
+        )
+
+    def cancel_harvest_by_target(
+        self,
+        *,
+        player_id: int,
+        target_world_object_id: int,
+    ) -> HarvestCommandResultDto:
+        """対象資源に対する進行中採集を中断する。"""
+        return self._execute_with_error_handling(
+            operation=lambda: self._cancel_harvest_by_target_impl(
+                player_id=player_id,
+                target_world_object_id=target_world_object_id,
+            ),
+            context={
+                "action": "cancel_harvest_by_target",
+                "player_id": player_id,
+                "target_world_object_id": target_world_object_id,
+            },
+        )
+
+    def _cancel_harvest_by_target_impl(
+        self,
+        *,
+        player_id: int,
+        target_world_object_id: int,
+    ) -> HarvestCommandResultDto:
+        player_id_vo = PlayerId.create(player_id)
+        status = self._player_status_repository.find_by_id(player_id_vo)
+        if not status or not status.current_spot_id:
+            raise HarvestActorNotFoundException(player_id)
+
+        physical_map = self._physical_map_repository.find_by_spot_id(status.current_spot_id)
+        if physical_map is None:
+            raise HarvestCommandException(f"Spot not found: {int(status.current_spot_id)}")
+
+        actor_id = WorldObjectId.create(player_id)
+        target_id = WorldObjectId.create(target_world_object_id)
+        try:
+            physical_map.get_actor(actor_id)
+        except ObjectNotFoundException:
+            raise HarvestActorNotFoundException(player_id)
+        try:
+            target = physical_map.get_object(target_id)
+        except ObjectNotFoundException:
+            raise HarvestResourceNotFoundException(target_world_object_id, int(status.current_spot_id))
+
+        if getattr(target.component, "current_actor_id", None) != actor_id:
+            raise HarvestNotInProgressException(str(player_id), str(target_world_object_id))
+
+        return self._harvest_command_service.cancel_harvest(
+            CancelHarvestCommand(
                 actor_id=str(player_id),
                 target_id=str(target_world_object_id),
                 spot_id=str(int(status.current_spot_id)),
