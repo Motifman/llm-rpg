@@ -52,8 +52,8 @@
 | 3d | Shop | purchase, list_item, unlist_item | shop_service |
 | 3e | Trade | offer, accept, cancel | trade_service |
 | 3f | Movement | to_destination, pursuit_start, pursuit_cancel | movement_service, pursuit_service |
-| 3g | World | inspect_item, inspect_target, interact, place, destroy, drop, chest, change_attention | 複数サービス・リポジトリ |
-| 3h | Guild | leave, deposit_bank, withdraw_bank | guild_service ← **最後** |
+| 3g | World | inspect_item, inspect_target, interact, place, destroy, drop, chest, change_attention, conversation, combat | 複数サービス・リポジトリ |
+| 3h | Guild | create, add_member, change_role, disband, leave, deposit_bank, withdraw_bank | guild_service ← **最後** |
 
 ---
 

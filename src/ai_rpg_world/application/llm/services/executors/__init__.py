@@ -1,5 +1,6 @@
 """ツール実行のサブマッパー。振る舞い別に分割された executor 群。"""
 
+from ai_rpg_world.application.llm.services.executors.guild_executor import GuildToolExecutor
 from ai_rpg_world.application.llm.services.executors.memory_executor import MemoryToolExecutor
 from ai_rpg_world.application.llm.services.executors.movement_executor import MovementToolExecutor
 from ai_rpg_world.application.llm.services.executors.quest_executor import QuestToolExecutor
