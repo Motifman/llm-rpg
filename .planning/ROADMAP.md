@@ -55,6 +55,12 @@ Plans:
 **Goal**: 覚醒モード発動を LLM tool として公開し、runtime path で安全性と観測結果を確認する
 **Depends on**: Phase 9
 **Requirements**: `SKAW-01`, `SKAW-02`, `SKAW-03`, `SKRT-02`
+**Status:** Planned
+**Plans:** 3 plans
+Plans:
+- [ ] `10-01-PLAN.md` — awakened activation の facade defaults と world executor 実行経路を接続する
+- [ ] `10-02-PLAN.md` — hidden-first な awakened visibility を resource 条件まで拡張する
+- [ ] `10-03-PLAN.md` — default wiring と runtime path 回帰で awakened tool の統合を証明する
 **Success criteria:**
 1. `skill_activate_awakened_mode` が内部パラメータを LLM に要求せず発動できる
 2. リソース不足・既に覚醒中・loadout 不整合などの条件では tool が非表示または失敗理由付きで拒否される
@@ -63,8 +69,8 @@ Plans:
 
 ## Next Step
 
-- `$gsd-discuss-phase 9` — skill equip / proposal execution の context を固める
-- `$gsd-plan-phase 9` — Phase 9 の実装計画を作る
+- `$gsd-execute-phase 9` — Phase 9 の plan 群を依存順に実装する
+- `$gsd-execute-phase 10` — Phase 9 完了後に awakened tooling と runtime proof を実装する
 
 ---
-*Last updated: 2026-03-12 after creating milestone v1.1 roadmap*
+*Last updated: 2026-03-13 after planning Phase 10*
