@@ -1,67 +1,36 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: completed
-stopped_at: Milestone archival preparation complete
-last_updated: "2026-03-11T15:23:16Z"
-last_activity: 2026-03-12 — v1.0 milestone audit refreshed, archive files created, and planning docs collapsed for next milestone setup
+milestone: v1.1
+milestone_name: LLM Skill Tooling
+status: in_progress
+stopped_at: Phase 8 completed; Phase 9 not started
+last_updated: "2026-03-12T00:30:00Z"
+last_activity: 2026-03-12 — Phase 8 completed with skill runtime context, label contracts, and tool exposure rules
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 19
-  completed_plans: 19
-  percent: 100
+  total_phases: 3
+  completed_phases: 1
+  total_plans: 4
+  completed_plans: 4
+  percent: 33
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-11)
+See: .planning/PROJECT.md (updated 2026-03-12)
 
-**Core value:** LLMエージェントが、静的な目的地指定だけでなく、動的に移動する主体に対しても一貫した状態遷移とイベント駆動で行動を継続できること
-**Current focus:** v1.0 archived and ready for commit/tag; next milestone not started
+**Core value:** LLMエージェントが、ワールド状態とイベント駆動の文脈を踏まえて、自律的に次の行動を安全に選べること
+**Current focus:** v1.1 LLM Skill Tooling — Phase 9 planning
 
 ## Current Position
 
-Phase: 7 of 7 (Pursuit Audit Evidence Backfill)
-Plan: archived
-Status: Completed / Ready for next milestone
-Last activity: 2026-03-12 — v1.0 milestone audit refreshed, archive files created, and planning docs collapsed for next milestone setup
+Phase: 8 of 10 (Skill Runtime Context And Tool Contracts)
+Plan: complete
+Status: Phase 8 complete; ready for Phase 9 discussion / planning
+Last activity: 2026-03-12 — Phase 8 completed with skill runtime labels, argument resolution, and tool availability
 
-Progress: [██████████] 100%
-
-## Performance Metrics
-
-**Velocity:**
-- Total plans completed: 19
-- Average duration: 7 min
-- Total execution time: 132 min
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 01-pursuit-domain-vocabulary | 3 | 28 min | 9 min |
-| 02-player-pursuit-commands | 2 | 20 min | 10 min |
-| 03-pursuit-continuation-loop | 3 | 19 min | 6 min |
-| 04-observation-and-llm-delivery | 2 | 12 min | 6 min |
-| 05-monster-pursuit-alignment | 2 | 18 min | 9 min |
-| 06-player-pursuit-runtime-assembly-closure | 3 | 23 min | 8 min |
-| 07-pursuit-audit-evidence-backfill | 3 | 14 min | 5 min |
-
-**Recent Trend:**
-- Last 5 plans: 9 min, 6 min, 6 min, 4 min, 4 min
-- Trend: Stable with faster documentation closeout work
-
-| Phase | Duration | Tasks | Files |
-|-------|----------|-------|-------|
-| Phase 06-player-pursuit-runtime-assembly-closure P02 | 9 min | 3 tasks | 1 files |
-| Phase 06-player-pursuit-runtime-assembly-closure P03 | 6 min | 3 tasks | 2 files |
-| Phase 07-pursuit-audit-evidence-backfill P01 | 6 min | 4 tasks | 6 files |
-| Phase 07-pursuit-audit-evidence-backfill P02 | 4 min | 3 tasks | 5 files |
-| Phase 07-pursuit-audit-evidence-backfill P03 | 4 min | 3 tasks | 4 files |
+Progress: [###.......] 33%
 
 ## Accumulated Context
 
@@ -70,46 +39,11 @@ Progress: [██████████] 100%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- Initialization: v1 completed when pursuit state and events work correctly, not when guaranteed capture exists
-- Initialization: v1 target scope is players and monsters only
-- Initialization: pursuit failures must carry structured reasons for LLM replanning
-- 01-01: Pursuit vocabulary lives under `domain/pursuit` and stays separate from player static movement fields
-- 01-01: `last_known` is modeled as an explicit value object reusable by later event payloads
-- 01-01: `cancelled` remains outside `PursuitFailureReason`
-- 01-02: Pursuit lifecycle events use neutral `actor_id` and `target_id` fields on `BaseDomainEvent[WorldObjectId, str]`
-- 01-02: `PursuitCancelledEvent` remains distinct from `PursuitFailedEvent` and carries no failure reason field
-- 01-02: All pursuit lifecycle events retain `last_known` context; started events also require a visible `target_snapshot`
-- 01-03: `PlayerStatusAggregate` now owns optional `pursuit_state` separately from `_current_destination`, `_planned_path`, and `goal_*`
-- 01-03: Pursuit lifecycle changes stay behind aggregate methods and do not implicitly clear when movement path state changes
-- 01-03: Monster `CHASE`/`SEARCH` state, `TargetSpottedEvent`, and `TargetLostEvent` are the Phase 5 alignment touchpoints for neutral pursuit vocabulary
-- 02-01: pursuit start validation resolves current visible targets from `WorldQueryService.get_player_current_state(...)`
-- 02-01: same-target refresh and target switching are service-owned semantics around aggregate lifecycle methods
-- 02-02: explicit pursuit cancel remains separate from `cancel_movement` and is safe to call as a success no-op
-- 02-02: LLM pursuit tools use label resolution at the UI layer and `world_object_id` at the application-service boundary
-- [Phase 03]: Pursuit continuation stays in a dedicated helper so world tick only loops, checks busy state, and delegates.
-- [Phase 03]: Active pursuit enters the continuation prepass even when no static movement path exists.
-- [Phase 03]: Authoritative target presence uses PhysicalMapRepository.find_spot_id_by_object_id so invisible targets are not misclassified as missing.
-- [Phase 03]: Pursuit continuation clears stored movement paths on failure but ends pursuit via fail_pursuit, not cancel_pursuit.
-- [Phase 03]: World-tick same-tick pursuit regressions stay at the continuation seam with a controlled movement mock.
-- [Phase 03]: Unchanged pursuit refreshes must remain event-free even when last_known is passed explicitly.
-- [Phase 04]: Pursuit lifecycle events stay on the shared observation handler registry path instead of adding a parallel delivery mechanism.
-- [Phase 04]: Pursuit recipient resolution is deterministic: actor when resolvable, target only when it resolves to a player, never duplicate recipients.
-- [Phase 04-observation-and-llm-delivery]: ObservationOutput typing already supports pursuit metadata, so no DTO expansion was needed.
-- [Phase 04-observation-and-llm-delivery]: Pursuit failed and cancelled observations schedule turns while keeping breaks_movement false to distinguish pursuit outcomes from movement interruption.
-- [Phase 04]: Phase completion is validated through the real observation handler and world tick flow rather than direct turn-trigger shortcuts.
-- [Phase 05-monster-pursuit-alignment]: Monster pursuit alignment reuses shared PursuitState vocabulary while preserving monster-local BehaviorStateEnum labels.
-- [Phase 05-monster-pursuit-alignment]: CHASE to SEARCH now retains target identity and last-known coordinates instead of clearing pursuit context on vision loss.
-- [Phase 05-monster-pursuit-alignment]: WorldSimulationApplicationService remains the only runtime seam for observation-to-pursuit monster state entry; integration proof lives in tests.
-- [Phase 05-monster-pursuit-alignment]: Monster SEARCH now fails with vision_lost_at_last_known after exhausting frozen last-known instead of wandering.
-- [Phase 05-monster-pursuit-alignment]: Monster target lookup resolves target_missing unless the actor is already at last-known, preserving distinct failure semantics.
-- [Phase 05-monster-pursuit-alignment]: SEARCH reacquiring the same visible target resumes the same pursuit context inside the existing world simulation seam.
-- [Phase 06-player-pursuit-runtime-assembly-closure]: `compose_llm_runtime(...)` remains low-level; pursuit-capable live assembly now has its own authoritative bootstrap entrypoint.
-- [Phase 06-player-pursuit-runtime-assembly-closure]: Player pursuit runtime composition must include both `pursuit_command_service` and `pursuit_continuation_service` or fail fast.
-- [Phase 06-player-pursuit-runtime-assembly-closure]: Observation scheduling and turn draining proofs now go through `EventHandlerComposition` on the authoritative runtime path instead of direct registry-only setup.
-- [Phase 07-pursuit-audit-evidence-backfill]: Requirement ownership is fixed before verification backfill; `PURS-02` stays accepted in Phase 5 while `PURS-03`, `PURS-04`, and `RUNT-01` remain finally accepted in Phase 6.
-- [Phase 07-pursuit-audit-evidence-backfill]: Verification artifacts must be command-backed acceptance evidence instead of rewritten summaries.
-- [Phase 07-pursuit-audit-evidence-backfill]: Phase 4 is the final acceptance home for `OUTC-03`, `RUNT-03`, and `OBSV-01`, while `OBSV-02` remains a Phase 6 runtime-closure acceptance item.
-- [Phase 07-pursuit-audit-evidence-backfill]: `REQUIREMENTS.md` checklist state and traceability ownership must stay synchronized so the milestone ledger can be audited without cross-referencing temporary Phase 7 pending rows.
+- v1.0 shipped pursuit foundation and closed the previous milestone
+- v1.1 focuses on skill tooling instead of further pursuit expansion
+- skill tools should resolve human-readable labels into canonical ids
+- awakened mode tooling should let the LLM decide whether to activate, while server-side defaults determine costs and duration
+- availability and runtime context must prevent invalid proposal/loadout/awakened actions from being offered casually
 
 ### Pending Todos
 
@@ -117,12 +51,12 @@ None.
 
 ### Blockers/Concerns
 
-- Busy-state timing and observation-driven movement interruption can conflict with pursuit continuation
-- Async event failure visibility is weak in the current UoW/event pipeline
-- Phase 1 still lacks a Nyquist validation artifact
+- Phase 9 still needs executor-side implementations for skill_equip and proposal accept/reject
+- awakened mode still needs execution-path defaults and runtime proof in Phase 10
+- async event failure visibility remains weak in the current UoW/event pipeline
 
 ## Session Continuity
 
-Last session: 2026-03-11T14:39:36Z
-Stopped at: Completed 07-03-PLAN.md
+Last session: 2026-03-12
+Stopped at: Phase 8 complete
 Resume file: None

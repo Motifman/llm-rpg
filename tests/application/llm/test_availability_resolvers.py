@@ -20,6 +20,10 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
     PursuitCancelAvailabilityResolver,
     PursuitStartAvailabilityResolver,
     SetDestinationAvailabilityResolver,
+    SkillAcceptProposalAvailabilityResolver,
+    SkillActivateAwakenedModeAvailabilityResolver,
+    SkillEquipAvailabilityResolver,
+    SkillRejectProposalAvailabilityResolver,
     WhisperAvailabilityResolver,
 )
 from ai_rpg_world.application.world.contracts.dtos import (
@@ -27,15 +31,20 @@ from ai_rpg_world.application.world.contracts.dtos import (
     AvailableLocationAreaDto,
     AvailableMoveDto,
     AttentionLevelOptionDto,
+    AwakenedActionDto,
     ChestItemDto,
     ConversationChoiceDto,
+    EquipableSkillCandidateDto,
     GuildMembershipSummaryDto,
     InventoryItemDto,
+    PendingSkillProposalDto,
     PlayerCurrentStateDto,
+    SkillEquipSlotDto,
     UsableSkillDto,
     VisibleObjectDto,
 )
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillProposalType
 
 
 def _minimal_current_state(
@@ -557,4 +566,57 @@ class TestGuildDisbandAvailabilityResolver:
         resolver = GuildDisbandAvailabilityResolver()
         ctx = _minimal_current_state()
         ctx.guild_memberships = [GuildMembershipSummaryDto(1, "テスト", "leader")]
+        assert resolver.is_available(ctx) is True
+
+
+class TestSkillAvailabilityResolvers:
+    def test_skill_equip_available_when_candidates_and_slots_exist(self):
+        resolver = SkillEquipAvailabilityResolver()
+        ctx = _minimal_current_state()
+        ctx.equipable_skill_candidates = [
+            EquipableSkillCandidateDto(10, 1001, "火球", DeckTier.NORMAL)
+        ]
+        ctx.skill_equip_slots = [
+            SkillEquipSlotDto(10, DeckTier.NORMAL, 0, "通常スロット 1")
+        ]
+
+        assert resolver.is_available(ctx) is True
+
+    def test_skill_equip_not_available_when_missing_slots(self):
+        resolver = SkillEquipAvailabilityResolver()
+        ctx = _minimal_current_state()
+        ctx.equipable_skill_candidates = [
+            EquipableSkillCandidateDto(10, 1001, "火球", DeckTier.NORMAL)
+        ]
+        ctx.skill_equip_slots = []
+
+        assert resolver.is_available(ctx) is False
+
+    def test_skill_proposal_resolvers_follow_pending_proposals_presence(self):
+        accept_resolver = SkillAcceptProposalAvailabilityResolver()
+        reject_resolver = SkillRejectProposalAvailabilityResolver()
+        ctx = _minimal_current_state()
+        ctx.pending_skill_proposals = [
+            PendingSkillProposalDto(
+                progress_id=20,
+                proposal_id=1,
+                offered_skill_id=3001,
+                display_name="3001: 新しい攻撃手段",
+                proposal_type=SkillProposalType.ADD,
+                deck_tier=DeckTier.NORMAL,
+            )
+        ]
+
+        assert accept_resolver.is_available(ctx) is True
+        assert reject_resolver.is_available(ctx) is True
+
+    def test_awakened_mode_availability_requires_action_label(self):
+        resolver = SkillActivateAwakenedModeAvailabilityResolver()
+        ctx = _minimal_current_state()
+        assert resolver.is_available(ctx) is False
+
+        ctx.awakened_action = AwakenedActionDto(
+            skill_loadout_id=10,
+            display_name="覚醒モードを発動",
+        )
         assert resolver.is_available(ctx) is True

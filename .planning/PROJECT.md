@@ -2,56 +2,73 @@
 
 ## What This Is
 
-LLMエージェントがプレイヤーとして行動するテキストRPGワールド管理システムです。v1.0 では、既存の移動・観測・イベント駆動基盤を保ったまま、動いている主体を対象にした pursuit 機能をプレイヤー/モンスター両方で扱えるようにしました。
+LLMエージェントがプレイヤーとして行動するテキストRPGワールド管理システムです。v1.0 では pursuit 基盤を完成させ、v1.1 ではその上にスキル管理と戦闘判断を進めるための LLM ツール群を拡張します。
 
 ## Core Value
 
-LLMエージェントが、静的な目的地指定だけでなく、動的に移動する主体に対しても一貫した状態遷移とイベント駆動で行動を継続できること。
+LLMエージェントが、ワールド状態とイベント駆動の文脈を踏まえて、自律的に次の行動を安全に選べること。
 
-## Current State
+## Requirements
 
-- **Shipped milestone:** v1.0 (`2026-03-12`)
-- **Delivered scope:** pursuit domain vocabulary, player pursuit commands, continuation loop, observation/LLM delivery, monster pursuit alignment, live runtime assembly, audit evidence closure
-- **Planning state:** v1.0 archived, next milestone not started
-- **Audit state:** `.planning/v1.0-MILESTONE-AUDIT.md` updated and ready for milestone closeout
-- **Known follow-up debt:** Phase 1 Nyquist validation artifact is still missing; busy-state timing and async event failure visibility remain future hardening topics
+### Validated
 
-## Next Milestone Goals
+- ✓ pursuit domain vocabulary, continuation, observation delivery, live runtime closure — v1.0
 
-- `ADVP-01`: `follow` / `chase` の振る舞い差分を詳細化する
-- `ADVP-02`: pursuit pause/resume や自動再開ポリシーを扱えるようにする
-- `ADVP-03`: last-known 以降の探索・再捕捉ロジックを拡張する
-- `GRUP-01`: 複数主体の隊列追従や間隔制御に広げる
-- `GRUP-02`: 味方追従と敵追跡の切替条件を整理する
+### Active
+
+- [ ] LLM がスキル装備・進化提案の意思決定・覚醒発動をツール経由で行える
+- [ ] skill 系ツールがラベル解決と availability 判定により安全に提供される
+- [ ] 覚醒モード発動は LLM が「発動するか」を決め、コストや持続時間はサーバ側設定で確定する
+
+### Out of Scope
+
+- pursuit の follow/chase 差分拡張 — v1.1 は skill tooling に集中するため
+- 隊列追従や複数主体制御 — skill 系ツールの導線を先に固めるため
+- 覚醒モードの細かい数値調整を LLM に委ねる設計 — 実行時の安全性と一貫性を優先するため
+
+## Current Milestone: v1.1 LLM Skill Tooling
+
+**Goal:** LLM が skill loadout・進化提案・覚醒モードを既存 runtime 文脈の中で安全に操作できるようにする。
+
+**Target features:**
+- `skill_equip` で習得済みスキルを loadout slot に装備できる
+- `skill_accept_proposal` / `skill_reject_proposal` で進化提案の意思決定を行える
+- `skill_activate_awakened_mode` で覚醒発動を判断できる
+- skill 系ツール用の runtime targets / argument resolution / availability を整える
+
+## Context
+
+- v1.0 で pursuit foundation は完了し、LLM runtime wiring・observation delivery・verification artifact まで閉じている
+- `SkillCommandService` には `equip_player_skill(...)`、`accept_skill_proposal(...)`、`reject_skill_proposal(...)`、`activate_player_awakened_mode(...)` が既に存在する
+- 既存 LLM ツール基盤は `tool_definitions.py`、`tool_argument_resolver.py`、`world_executor.py`、`ui_context_builder.py` でカテゴリ別に拡張する構造になっている
+- 現状は `combat_use_skill` だけが skill 系ツールとして露出しており、proposal や loadout slot を表す runtime target は未整備
+- 覚醒モード command は内部実行パラメータを受け取れるが、v1.1 では LLM に発動判断のみを委ね、数値はサーバ側で決める
 
 ## Constraints
 
-- **Tech stack**: 既存の Python レイヤード/DDD 風構成を維持する
-- **Architecture**: ドメインイベント駆動を維持する
-- **Scope**: 次マイルストーンは v1 pursuit を壊さず拡張する
-- **Behavior**: 新機能も構造化イベントと LLM 再駆動の整合を守る
-- **Quality**: 新しい追跡拡張は live runtime path と verification artifact まで含めて閉じる
+- **Tech stack**: 既存の Python レイヤード/DDD 風構成を維持する — skill 系ユースケースも既存 service / repository / event の流れに乗せる
+- **Architecture**: ドメインイベント駆動を維持する — tool 実行結果は既存 observation pipeline に接続する
+- **Safety**: LLM には生の内部パラメータを極力渡さない — label 解決とサーバ側デフォルトで誤操作を減らす
+- **Scope**: v1.1 は skill tooling に集中する — pursuit 拡張や隊列制御は後続へ送る
+- **Quality**: runtime path と verification artifact まで含めて閉じる — tool 定義だけで終わらせない
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| 追跡状態は静的移動状態から分離する | pursuit と destination/path を混同しないため | ✓ Good |
-| `cancelled` は failure reason ではなく独立イベントとして扱う | LLM が中断と失敗を区別できるようにするため | ✓ Good |
-| プレイヤー pursuit の live runtime は専用 composition entrypoint で閉じる | optional wiring のままでは監査を通らないため | ✓ Good |
-| `OBSV-02` の最終受け入れは runtime closure まで待つ | observation wiring 単体では E2E が閉じないため | ✓ Good |
-| v1 の完了条件は「追跡状態とイベントが正しく回ること」 | guaranteed capture は初期要件に向かないため | ✓ Good |
+| pursuit 基盤は v1.0 でいったん閉じる | 次の価値は skill 意思決定の自動化にあるため | ✓ Good |
+| skill ツールは人間向けラベルから canonical id へ解決する | LLM に raw id や slot index の判断を強制しないため | ✓ Good |
+| 覚醒モードは LLM が発動判断のみを行う | コストや持続時間はゲームルールとして一貫させるため | ✓ Good |
+| proposal / loadout / awakened availability は runtime context で明示する | 無効な skill 操作を prompt で避けるだけにしないため | ✓ Good |
 
 ## Archived Context
 
 <details>
-<summary>Pre-v1.0 charter</summary>
+<summary>v1.0 summary</summary>
 
-既存コードベースは `src/ai_rpg_world` 以下で `domain`、`application`、`infrastructure` に分かれたレイヤード構成です。ユースケースはアプリケーションサービスとイベントハンドラで組まれ、永続化やイベント配送はインフラ層の in-memory 実装や LLM 関連アダプタで支えられています。LLM エージェントはドメインイベントに駆動される前提で動いているため、追跡機能も単なる移動コマンド追加ではなく、追跡状態、失敗理由、停止イベント、再起動入力まで含めたイベント駆動設計として整える必要があります。
-
-現状は大雑把なスポット、ロケーション、オブジェクトへの移動はある一方で、移動する主体を継続的に追う専用機能はありません。視界内での扱いは既にあるため、v1 ではそれを足がかりに「見えている間は追う」「見失ったら最後の既知位置で止まる」「失敗理由を理由付きで通知する」という形を目標にします。
+v1.0 では、プレイヤー/モンスター両方が共有できる pursuit vocabulary、プレイヤー追跡開始/中断、world tick での継続追跡、observation/LLM delivery、monster alignment、live runtime assembly、audit evidence backfill までを 7 phases / 19 plans で完了した。
 
 </details>
 
 ---
-*Last updated: 2026-03-12 after v1.0 milestone archival prep*
+*Last updated: 2026-03-12 after starting milestone v1.1 LLM Skill Tooling*

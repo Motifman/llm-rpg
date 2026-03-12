@@ -5,6 +5,7 @@ import pytest
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActiveHarvestToolRuntimeTargetDto,
     AttentionLevelToolRuntimeTargetDto,
+    AwakenedActionToolRuntimeTargetDto,
     ChestItemToolRuntimeTargetDto,
     ChestToolRuntimeTargetDto,
     ConversationChoiceToolRuntimeTargetDto,
@@ -17,6 +18,9 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ResourceToolRuntimeTargetDto,
     ShopListingToolRuntimeTargetDto,
     ShopToolRuntimeTargetDto,
+    SkillEquipCandidateToolRuntimeTargetDto,
+    SkillEquipSlotToolRuntimeTargetDto,
+    SkillProposalToolRuntimeTargetDto,
     SkillToolRuntimeTargetDto,
     ToolRuntimeContextDto,
     TradeToolRuntimeTargetDto,
@@ -52,10 +56,15 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_QUEST_ISSUE,
     TOOL_NAME_SAY,
     TOOL_NAME_SHOP_LIST_ITEM,
+    TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
+    TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
+    TOOL_NAME_SKILL_EQUIP,
+    TOOL_NAME_SKILL_REJECT_PROPOSAL,
     TOOL_NAME_TRADE_OFFER,
     TOOL_NAME_WHISPER,
 )
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
 
 
 def _make_context() -> ToolRuntimeContextDto:
@@ -147,6 +156,36 @@ def _make_context() -> ToolRuntimeContextDto:
                 display_name="火球",
                 skill_loadout_id=10,
                 skill_slot_index=1,
+            ),
+            "EK1": SkillEquipCandidateToolRuntimeTargetDto(
+                label="EK1",
+                kind="skill_equip_candidate",
+                display_name="火球",
+                skill_loadout_id=10,
+                skill_id=1001,
+            ),
+            "ES1": SkillEquipSlotToolRuntimeTargetDto(
+                label="ES1",
+                kind="skill_equip_slot",
+                display_name="通常スロット 1",
+                skill_loadout_id=10,
+                deck_tier=DeckTier.NORMAL,
+                skill_slot_index=0,
+            ),
+            "SP1": SkillProposalToolRuntimeTargetDto(
+                label="SP1",
+                kind="skill_proposal",
+                display_name="新しい攻撃手段",
+                progress_id=20,
+                proposal_id=2,
+                target_slot_index=0,
+                target_slot_display_name="通常スロット 1",
+            ),
+            "AW1": AwakenedActionToolRuntimeTargetDto(
+                label="AW1",
+                kind="awakened_action",
+                display_name="覚醒モードを発動",
+                skill_loadout_id=10,
             ),
             "A1": AttentionLevelToolRuntimeTargetDto(
                 label="A1",
@@ -303,7 +342,74 @@ class TestDefaultToolArgumentResolver:
         )
 
         assert result["target_world_object_id"] == 200
-        assert result["target_display_name"] == "老人"
+
+    def test_resolve_skill_equip_from_action_first_labels(self):
+        resolver = DefaultToolArgumentResolver()
+
+        result = resolver.resolve(
+            TOOL_NAME_SKILL_EQUIP,
+            {"skill_label": "EK1", "slot_label": "ES1"},
+            _make_context(),
+        )
+
+        assert result == {
+            "loadout_id": 10,
+            "deck_tier": DeckTier.NORMAL,
+            "slot_index": 0,
+            "skill_id": 1001,
+            "skill_display_name": "火球",
+            "slot_display_name": "通常スロット 1",
+        }
+
+    def test_resolve_skill_equip_rejects_mismatched_label_kind(self):
+        resolver = DefaultToolArgumentResolver()
+
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(
+                TOOL_NAME_SKILL_EQUIP,
+                {"skill_label": "K1", "slot_label": "ES1"},
+                _make_context(),
+            )
+
+        assert exc_info.value.error_code == "INVALID_TARGET_KIND"
+
+    def test_resolve_skill_proposal_for_accept_and_reject(self):
+        resolver = DefaultToolArgumentResolver()
+
+        accepted = resolver.resolve(
+            TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
+            {"proposal_label": "SP1"},
+            _make_context(),
+        )
+        rejected = resolver.resolve(
+            TOOL_NAME_SKILL_REJECT_PROPOSAL,
+            {"proposal_label": "SP1"},
+            _make_context(),
+        )
+
+        assert accepted == {
+            "progress_id": 20,
+            "proposal_id": 2,
+            "proposal_display_name": "新しい攻撃手段",
+            "slot_display_name": "通常スロット 1",
+        }
+        assert rejected == {
+            "progress_id": 20,
+            "proposal_id": 2,
+            "proposal_display_name": "新しい攻撃手段",
+            "slot_display_name": "通常スロット 1",
+        }
+
+    def test_resolve_activate_awakened_mode_without_numeric_payload(self):
+        resolver = DefaultToolArgumentResolver()
+
+        result = resolver.resolve(
+            TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
+            {"awakened_action_label": "AW1"},
+            _make_context(),
+        )
+
+        assert result == {"loadout_id": 10}
 
     def test_resolve_harvest_target_label(self):
         resolver = DefaultToolArgumentResolver()

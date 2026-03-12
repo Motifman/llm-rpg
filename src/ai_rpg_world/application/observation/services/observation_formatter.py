@@ -21,6 +21,9 @@ from ai_rpg_world.application.observation.services.formatters.shop_formatter imp
 from ai_rpg_world.application.observation.services.formatters.trade_formatter import (
     TradeObservationFormatter,
 )
+from ai_rpg_world.application.observation.services.formatters.sns_formatter import (
+    SnsObservationFormatter,
+)
 from ai_rpg_world.application.observation.services.formatters.guild_formatter import (
     GuildObservationFormatter,
 )
@@ -109,6 +112,13 @@ from ai_rpg_world.domain.trade.event.trade_event import (
     TradeDeclinedEvent,
     TradeOfferedEvent,
 )
+from ai_rpg_world.domain.sns.event import (
+    SnsContentLikedEvent,
+    SnsPostCreatedEvent,
+    SnsReplyCreatedEvent,
+    SnsUserFollowedEvent,
+    SnsUserSubscribedEvent,
+)
 from ai_rpg_world.domain.skill.event.skill_events import (
     AwakenedModeActivatedEvent,
     AwakenedModeExpiredEvent,
@@ -158,6 +168,7 @@ from ai_rpg_world.domain.world.event.harvest_events import (
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 if TYPE_CHECKING:
+    from ai_rpg_world.domain.sns.repository.sns_user_repository import UserRepository
     from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
     from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
     from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
@@ -184,6 +195,7 @@ class ObservationFormatter(IObservationFormatter):
         guild_repository: Optional["GuildRepository"] = None,
         monster_repository: Optional["MonsterRepository"] = None,
         skill_spec_repository: Optional["SkillSpecRepository"] = None,
+        sns_user_repository: Optional["UserRepository"] = None,
     ) -> None:
         self._name_resolver = ObservationNameResolver(
             spot_repository=spot_repository,
@@ -194,6 +206,7 @@ class ObservationFormatter(IObservationFormatter):
             guild_repository=guild_repository,
             monster_repository=monster_repository,
             skill_spec_repository=skill_spec_repository,
+            sns_user_repository=sns_user_repository,
         )
         self._item_repository = item_repository  # _format_item_added_to_inventory で使用
         self._formatters = [
@@ -201,6 +214,7 @@ class ObservationFormatter(IObservationFormatter):
             QuestObservationFormatter(self),
             ShopObservationFormatter(self),
             TradeObservationFormatter(self),
+            SnsObservationFormatter(self),
             GuildObservationFormatter(self),
             HarvestObservationFormatter(self),
             MonsterObservationFormatter(self),
@@ -303,6 +317,23 @@ class ObservationFormatter(IObservationFormatter):
             return self._format_trade_cancelled(event, recipient_player_id)
         if isinstance(event, TradeDeclinedEvent):
             return self._format_trade_declined(event, recipient_player_id)
+        return None
+
+    def _format_sns_event(
+        self,
+        event: Any,
+        recipient_player_id: PlayerId,
+    ) -> Optional[ObservationOutput]:
+        if isinstance(event, SnsPostCreatedEvent):
+            return self._format_sns_post_created(event, recipient_player_id)
+        if isinstance(event, SnsReplyCreatedEvent):
+            return self._format_sns_reply_created(event, recipient_player_id)
+        if isinstance(event, SnsContentLikedEvent):
+            return self._format_sns_content_liked(event, recipient_player_id)
+        if isinstance(event, SnsUserFollowedEvent):
+            return self._format_sns_user_followed(event, recipient_player_id)
+        if isinstance(event, SnsUserSubscribedEvent):
+            return self._format_sns_user_subscribed(event, recipient_player_id)
         return None
 
     def _format_guild_event(
@@ -1152,6 +1183,117 @@ class ObservationFormatter(IObservationFormatter):
             structured=structured,
             observation_category="self_only",
             schedules_turn=True,
+        )
+
+    # --- SNS ---
+
+    def _sns_user_name(self, user_id: Any) -> str:
+        return self._name_resolver.sns_user_display_name(user_id)
+
+    def _format_sns_post_created(
+        self, event: "SnsPostCreatedEvent", recipient_id: PlayerId
+    ) -> Optional[ObservationOutput]:
+        author_name = self._sns_user_name(event.author_user_id)
+        content_preview = event.content.content[:50] + ("..." if len(event.content.content) > 50 else "")
+        post_id_value = getattr(event.post_id, "value", event.post_id)
+        prose = f"{author_name}が投稿しました: {content_preview}"
+        structured = {
+            "type": "sns_post_created",
+            "post_id_value": post_id_value,
+            "author_name": author_name,
+            "content_preview": content_preview,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="social",
+            schedules_turn=True,
+            breaks_movement=False,
+        )
+
+    def _format_sns_reply_created(
+        self, event: "SnsReplyCreatedEvent", recipient_id: PlayerId
+    ) -> Optional[ObservationOutput]:
+        author_name = self._sns_user_name(event.author_user_id)
+        content_preview = event.content.content[:50] + ("..." if len(event.content.content) > 50 else "")
+        reply_id_value = getattr(event.reply_id, "value", event.reply_id)
+        parent_post_id_value = getattr(event.parent_post_id, "value", event.parent_post_id) if event.parent_post_id else None
+        parent_reply_id_value = getattr(event.parent_reply_id, "value", event.parent_reply_id) if event.parent_reply_id else None
+        prose = f"{author_name}がリプライしました: {content_preview}"
+        structured = {
+            "type": "sns_reply_created",
+            "reply_id_value": reply_id_value,
+            "parent_post_id_value": parent_post_id_value,
+            "parent_reply_id_value": parent_reply_id_value,
+            "author_name": author_name,
+            "content_preview": content_preview,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="social",
+            schedules_turn=True,
+            breaks_movement=False,
+        )
+
+    def _format_sns_content_liked(
+        self, event: "SnsContentLikedEvent", recipient_id: PlayerId
+    ) -> Optional[ObservationOutput]:
+        liker_name = self._sns_user_name(event.user_id)
+        author_name = self._sns_user_name(event.content_author_id)
+        target_id_value = getattr(event.target_id, "value", event.target_id)
+        prose = f"{liker_name}が{author_name}の{event.content_type}にいいねしました。"
+        structured = {
+            "type": "sns_content_liked",
+            "target_id_value": target_id_value,
+            "liker_name": liker_name,
+            "content_author_name": author_name,
+            "content_type": event.content_type,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="social",
+            schedules_turn=True,
+            breaks_movement=False,
+        )
+
+    def _format_sns_user_followed(
+        self, event: "SnsUserFollowedEvent", recipient_id: PlayerId
+    ) -> Optional[ObservationOutput]:
+        follower_name = self._sns_user_name(event.follower_user_id)
+        followee_name = self._sns_user_name(event.followee_user_id)
+        prose = f"{follower_name}が{followee_name}をフォローしました。"
+        structured = {
+            "type": "sns_user_followed",
+            "follower_name": follower_name,
+            "followee_name": followee_name,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="social",
+            schedules_turn=True,
+            breaks_movement=False,
+        )
+
+    def _format_sns_user_subscribed(
+        self, event: "SnsUserSubscribedEvent", recipient_id: PlayerId
+    ) -> Optional[ObservationOutput]:
+        subscriber_name = self._sns_user_name(event.subscriber_user_id)
+        subscribed_name = self._sns_user_name(event.subscribed_user_id)
+        prose = f"{subscriber_name}が{subscribed_name}をサブスクライブしました。"
+        structured = {
+            "type": "sns_user_subscribed",
+            "subscriber_name": subscriber_name,
+            "subscribed_name": subscribed_name,
+        }
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="social",
+            schedules_turn=True,
+            breaks_movement=False,
         )
 
     def _format_shop_closed(self, event: ShopClosedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:

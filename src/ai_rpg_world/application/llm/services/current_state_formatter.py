@@ -48,6 +48,10 @@ class DefaultCurrentStateFormatter(ICurrentStateFormatter):
             names = sorted(dto.connected_spot_names)
             lines.append(f"接続先スポット: {', '.join(names)}")
 
+        # ゲーム内現在時刻
+        if dto.current_game_time_label:
+            lines.append(f"現在時刻: {dto.current_game_time_label}")
+
         # 天気・地形
         lines.append(f"天気: {dto.weather_type} (強度: {dto.weather_intensity})")
         if dto.current_terrain_type:

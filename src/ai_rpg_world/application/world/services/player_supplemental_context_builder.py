@@ -6,16 +6,20 @@ from typing import List, Optional, TYPE_CHECKING
 
 from ai_rpg_world.application.world.contracts.dtos import (
     ActiveConversationDto,
+    AwakenedActionDto,
     ActiveQuestSummaryDto,
     AttentionLevelOptionDto,
     AvailableTradeSummaryDto,
     ChestItemDto,
     ConversationChoiceDto,
+    EquipableSkillCandidateDto,
     GuildMemberSummaryDto,
     GuildMembershipSummaryDto,
     InventoryItemDto,
     NearbyShopSummaryDto,
+    PendingSkillProposalDto,
     ShopListingSummaryDto,
+    SkillEquipSlotDto,
     UsableSkillDto,
     VisibleObjectDto,
 )
@@ -51,7 +55,10 @@ if TYPE_CHECKING:
     )
     from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
     from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
-    from ai_rpg_world.domain.skill.repository.skill_repository import SkillLoadoutRepository
+    from ai_rpg_world.domain.skill.repository.skill_repository import (
+        SkillDeckProgressRepository,
+        SkillLoadoutRepository,
+    )
     from ai_rpg_world.application.trade.services.personal_trade_query_service import (
         PersonalTradeQueryService,
     )
@@ -66,6 +73,7 @@ class PlayerSupplementalContextBuilder:
         item_repository: Optional["ItemRepository"] = None,
         conversation_command_service: Optional["ConversationCommandService"] = None,
         skill_loadout_repository: Optional["SkillLoadoutRepository"] = None,
+        skill_deck_progress_repository: Optional["SkillDeckProgressRepository"] = None,
         game_time_provider: Optional["GameTimeProvider"] = None,
         quest_repository: Optional["QuestRepository"] = None,
         guild_repository: Optional["GuildRepository"] = None,
@@ -77,6 +85,7 @@ class PlayerSupplementalContextBuilder:
         self._item_repository = item_repository
         self._conversation_command_service = conversation_command_service
         self._skill_loadout_repository = skill_loadout_repository
+        self._skill_deck_progress_repository = skill_deck_progress_repository
         self._game_time_provider = game_time_provider
         self._quest_repository = quest_repository
         self._guild_repository = guild_repository
@@ -349,7 +358,7 @@ class PlayerSupplementalContextBuilder:
         loadout = self._skill_loadout_repository.find_by_owner_id(player_id)
         if loadout is None:
             return []
-        current_tick = self._game_time_provider.get_current_tick().value
+        current_tick = self._get_current_tick_value()
         deck = loadout.get_current_deck(current_tick)
         skills: List[UsableSkillDto] = []
         for slot_index, skill in enumerate(deck.slots):
@@ -367,6 +376,111 @@ class PlayerSupplementalContextBuilder:
                 )
             )
         return skills
+
+    def build_equipable_skill_candidates(
+        self, player_id: int
+    ) -> List[EquipableSkillCandidateDto]:
+        if self._skill_loadout_repository is None:
+            return []
+        loadout = self._skill_loadout_repository.find_by_owner_id(player_id)
+        if loadout is None:
+            return []
+
+        candidates: List[EquipableSkillCandidateDto] = []
+        seen_skill_ids: set[int] = set()
+        for deck in (loadout.normal_deck, loadout.awakened_deck):
+            for skill in deck.slots:
+                if skill is None or skill.skill_id.value in seen_skill_ids:
+                    continue
+                seen_skill_ids.add(skill.skill_id.value)
+                candidates.append(
+                    EquipableSkillCandidateDto(
+                        skill_loadout_id=loadout.loadout_id.value,
+                        skill_id=skill.skill_id.value,
+                        display_name=skill.name,
+                        source_deck_tier=deck.deck_tier,
+                    )
+                )
+        return candidates
+
+    def build_skill_equip_slots(self, player_id: int) -> List[SkillEquipSlotDto]:
+        if self._skill_loadout_repository is None:
+            return []
+        loadout = self._skill_loadout_repository.find_by_owner_id(player_id)
+        if loadout is None:
+            return []
+
+        slots: List[SkillEquipSlotDto] = []
+        for deck in (loadout.normal_deck, loadout.awakened_deck):
+            for slot_index, skill in enumerate(deck.slots):
+                deck_label = "通常" if deck.deck_tier.value == "normal" else "覚醒"
+                slots.append(
+                    SkillEquipSlotDto(
+                        skill_loadout_id=loadout.loadout_id.value,
+                        deck_tier=deck.deck_tier,
+                        slot_index=slot_index,
+                        display_name=f"{deck_label}スロット {slot_index + 1}",
+                        equipped_skill_id=(
+                            skill.skill_id.value if skill is not None else None
+                        ),
+                        equipped_skill_name=skill.name if skill is not None else None,
+                    )
+                )
+        return slots
+
+    def build_pending_skill_proposals(
+        self, player_id: int
+    ) -> List[PendingSkillProposalDto]:
+        if self._skill_deck_progress_repository is None:
+            return []
+        progress = self._skill_deck_progress_repository.find_by_owner_id(player_id)
+        if progress is None:
+            return []
+
+        proposals: List[PendingSkillProposalDto] = []
+        for proposal in progress.pending_proposals:
+            proposals.append(
+                PendingSkillProposalDto(
+                    progress_id=progress.progress_id.value,
+                    proposal_id=proposal.proposal_id,
+                    offered_skill_id=proposal.offered_skill_id.value,
+                    display_name=f"{proposal.offered_skill_id.value}: {proposal.reason or proposal.proposal_type.value}",
+                    proposal_type=proposal.proposal_type,
+                    deck_tier=proposal.deck_tier,
+                    target_slot_index=proposal.target_slot_index,
+                    reason=proposal.reason,
+                )
+            )
+        return proposals
+
+    def build_awakened_action(self, player_id: int) -> Optional[AwakenedActionDto]:
+        if self._skill_loadout_repository is None or self._game_time_provider is None:
+            return None
+        loadout = self._skill_loadout_repository.find_by_owner_id(player_id)
+        if loadout is None:
+            return None
+        current_tick = self._get_current_tick_value()
+        awaken_state = getattr(loadout, "awaken_state", None)
+        is_active = getattr(awaken_state, "is_active", False)
+        active_until_tick = getattr(awaken_state, "active_until_tick", 0)
+        if (
+            isinstance(is_active, bool)
+            and is_active
+            and isinstance(active_until_tick, int)
+            and current_tick < active_until_tick
+        ):
+            return None
+        return AwakenedActionDto(
+            skill_loadout_id=loadout.loadout_id.value,
+            display_name="覚醒モードを発動",
+        )
+
+    def _get_current_tick_value(self) -> int:
+        if self._game_time_provider is None:
+            return 0
+        tick = self._game_time_provider.get_current_tick()
+        value = getattr(tick, "value", tick)
+        return value if isinstance(value, int) else 0
 
     def build_attention_level_options(self) -> List[AttentionLevelOptionDto]:
         return [

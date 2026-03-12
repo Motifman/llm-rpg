@@ -62,6 +62,9 @@ from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
 from ai_rpg_world.application.world.services.gateway_based_connected_spots_provider import (
     GatewayBasedConnectedSpotsProvider,
 )
+from ai_rpg_world.domain.world.service.world_time_config_service import (
+    DefaultWorldTimeConfigService,
+)
 
 
 class TestWorldQueryService:
@@ -802,6 +805,56 @@ class TestWorldQueryService:
 
         assert result is not None
         assert result.attention_level == AttentionLevel.IGNORE
+
+    def test_get_player_current_state_includes_game_time_label_when_providers_set(self):
+        """game_time_provider と world_time_config_service が設定されているとき current_game_time_label が含まれること"""
+        data_store = InMemoryDataStore()
+        data_store.clear_all()
+        status_repo = InMemoryPlayerStatusRepository(data_store)
+        profile_repo = InMemoryPlayerProfileRepository(data_store)
+        phys_repo = InMemoryPhysicalMapRepository(data_store)
+        spot_repo = InMemorySpotRepository(data_store)
+        spot_repo.save(Spot(SpotId(1), "Default Spot", ""))
+        connected_spots_provider = GatewayBasedConnectedSpotsProvider(phys_repo)
+        time_provider = InMemoryGameTimeProvider(initial_tick=100)
+        world_time_config = DefaultWorldTimeConfigService(ticks_per_day=96, days_per_month=30, months_per_year=12)
+
+        service = WorldQueryService(
+            player_status_repository=status_repo,
+            player_profile_repository=profile_repo,
+            physical_map_repository=phys_repo,
+            spot_repository=spot_repo,
+            connected_spots_provider=connected_spots_provider,
+            game_time_provider=time_provider,
+            world_time_config_service=world_time_config,
+        )
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+
+        result = service.get_player_current_state(GetPlayerCurrentStateQuery(player_id=player_id))
+
+        assert result is not None
+        assert result.current_game_time_label is not None
+        assert "年" in result.current_game_time_label
+        assert "月" in result.current_game_time_label
+        assert "日" in result.current_game_time_label
+
+    def test_get_player_current_state_omits_game_time_label_when_providers_not_set(self, setup_service):
+        """game_time_provider と world_time_config_service が未設定のとき current_game_time_label が None であること"""
+        service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 0, 0))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id)]))
+
+        result = service.get_player_current_state(GetPlayerCurrentStateQuery(player_id=player_id))
+
+        assert result is not None
+        assert result.current_game_time_label is None
 
     def test_get_player_current_state_include_available_moves_false_omits_moves(self, setup_service):
         """include_available_moves=False のとき available_moves が None であること"""

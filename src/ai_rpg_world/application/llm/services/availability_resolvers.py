@@ -291,6 +291,36 @@ class CombatUseSkillAvailabilityResolver(IAvailabilityResolver):
         return context is not None and bool(context.usable_skills)
 
 
+class SkillEquipAvailabilityResolver(IAvailabilityResolver):
+    """スキル装備は候補スキルと装備先スロットの両方があるときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None:
+            return False
+        return bool(context.equipable_skill_candidates) and bool(context.skill_equip_slots)
+
+
+class SkillAcceptProposalAvailabilityResolver(IAvailabilityResolver):
+    """スキル提案受諾は pending proposal があるときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None and bool(context.pending_skill_proposals)
+
+
+class SkillRejectProposalAvailabilityResolver(IAvailabilityResolver):
+    """スキル提案却下は pending proposal があるときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None and bool(context.pending_skill_proposals)
+
+
+class SkillActivateAwakenedModeAvailabilityResolver(IAvailabilityResolver):
+    """覚醒モード発動は action label があるときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None and context.awakened_action is not None
+
+
 class QuestAcceptAvailabilityResolver(IAvailabilityResolver):
     """クエスト受託はコンテキスト取得時に利用可能（受託可能なクエストは別途表示）。"""
 
@@ -429,6 +459,17 @@ class TradeDeclineAvailabilityResolver(IAvailabilityResolver):
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
         return context is not None and bool(context.available_trades)
+
+
+class SnsToolAvailabilityResolver(IAvailabilityResolver):
+    """
+    SNS 全ツール共通の利用可否リゾルバ。
+    投稿・リプライ・いいね・フォロー・サブスクライブ・ブロック等、
+    いずれも現在状態が取得できているときに利用可能。
+    """
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None
 
 
 class MemoryQueryAvailabilityResolver(IAvailabilityResolver):

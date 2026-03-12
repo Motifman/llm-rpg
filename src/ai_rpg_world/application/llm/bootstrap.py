@@ -56,6 +56,9 @@ def compose_llm_runtime(
     - 意図的ドロップ（world_drop_item）: drop_item_service を wiring_kwargs に渡す（PlayerDropItemApplicationService）。
       EventHandlerComposition に intentional_drop_registry を渡すと、ドロップしたアイテムがマップ上に GROUND_ITEM として配置される。
       （ItemDroppedFromInventoryDropHandler + IntentionalDropEventHandlerRegistry を player_status_repository / physical_map_repository で組み立てる。）
+    - 消費アイテム効果（use_item）: use_item_service を wiring_kwargs に渡す。
+      EventHandlerComposition に consumable_effect_registry を渡すと、HP/MP回復等の消費効果が適用される。
+      （ConsumableEffectHandler + ConsumableEffectEventHandlerRegistry を item_spec_repository / player_status_repository で組み立てる。）
 
     memory_db_path または LLM_MEMORY_DB_PATH により、episode / long-term / reflection が SQLite に永続化される。
 

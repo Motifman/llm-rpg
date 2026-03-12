@@ -39,10 +39,15 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
     ShopUnlistItemAvailabilityResolver,
     MemoryQueryAvailabilityResolver,
     SubagentAvailabilityResolver,
+    SkillAcceptProposalAvailabilityResolver,
+    SkillActivateAwakenedModeAvailabilityResolver,
+    SkillEquipAvailabilityResolver,
+    SkillRejectProposalAvailabilityResolver,
     TradeAcceptAvailabilityResolver,
     TradeCancelAvailabilityResolver,
     TradeDeclineAvailabilityResolver,
     TradeOfferAvailabilityResolver,
+    SnsToolAvailabilityResolver,
     TodoAddAvailabilityResolver,
     TodoCompleteAvailabilityResolver,
     TodoListAvailabilityResolver,
@@ -90,10 +95,24 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SHOP_LIST_ITEM,
     TOOL_NAME_SHOP_PURCHASE,
     TOOL_NAME_SHOP_UNLIST_ITEM,
+    TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
+    TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
+    TOOL_NAME_SKILL_EQUIP,
+    TOOL_NAME_SKILL_REJECT_PROPOSAL,
     TOOL_NAME_TRADE_ACCEPT,
     TOOL_NAME_TRADE_CANCEL,
     TOOL_NAME_TRADE_DECLINE,
     TOOL_NAME_TRADE_OFFER,
+    TOOL_NAME_SNS_CREATE_POST,
+    TOOL_NAME_SNS_CREATE_REPLY,
+    TOOL_NAME_SNS_LIKE_POST,
+    TOOL_NAME_SNS_LIKE_REPLY,
+    TOOL_NAME_SNS_FOLLOW,
+    TOOL_NAME_SNS_UNFOLLOW,
+    TOOL_NAME_SNS_SUBSCRIBE,
+    TOOL_NAME_SNS_UNSUBSCRIBE,
+    TOOL_NAME_SNS_BLOCK,
+    TOOL_NAME_SNS_UNBLOCK,
     TOOL_NAME_WHISPER,
 )
 
@@ -432,6 +451,78 @@ COMBAT_USE_SKILL_DEFINITION = ToolDefinitionDto(
     parameters=COMBAT_USE_SKILL_PARAMETERS,
 )
 
+SKILL_EQUIP_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "skill_label": {
+            "type": "string",
+            "description": "装備候補スキルラベル（例: EK1）。",
+        },
+        "slot_label": {
+            "type": "string",
+            "description": "装備先スロットラベル（例: ES1）。",
+        },
+    },
+    "required": ["skill_label", "slot_label"],
+}
+
+SKILL_EQUIP_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SKILL_EQUIP,
+    description="装備候補スキルを指定したスロットへ装備します。",
+    parameters=SKILL_EQUIP_PARAMETERS,
+)
+
+SKILL_ACCEPT_PROPOSAL_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "proposal_label": {
+            "type": "string",
+            "description": "受諾するスキル提案ラベル（例: SP1）。",
+        },
+    },
+    "required": ["proposal_label"],
+}
+
+SKILL_ACCEPT_PROPOSAL_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
+    description="保留中のスキル進化提案を受諾します。",
+    parameters=SKILL_ACCEPT_PROPOSAL_PARAMETERS,
+)
+
+SKILL_REJECT_PROPOSAL_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "proposal_label": {
+            "type": "string",
+            "description": "却下するスキル提案ラベル（例: SP1）。",
+        },
+    },
+    "required": ["proposal_label"],
+}
+
+SKILL_REJECT_PROPOSAL_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SKILL_REJECT_PROPOSAL,
+    description="保留中のスキル進化提案を却下します。",
+    parameters=SKILL_REJECT_PROPOSAL_PARAMETERS,
+)
+
+SKILL_ACTIVATE_AWAKENED_MODE_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "awakened_action_label": {
+            "type": "string",
+            "description": "覚醒モード発動ラベル（例: AW1）。",
+        },
+    },
+    "required": ["awakened_action_label"],
+}
+
+SKILL_ACTIVATE_AWAKENED_MODE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
+    description="覚醒モードを発動します。継続時間や消費コストはサーバ側設定に従います。",
+    parameters=SKILL_ACTIVATE_AWAKENED_MODE_PARAMETERS,
+)
+
 QUEST_ACCEPT_PARAMETERS = {
     "type": "object",
     "properties": {
@@ -724,6 +815,141 @@ TRADE_DECLINE_DEFINITION = ToolDefinitionDto(
     parameters=TRADE_DECLINE_PARAMETERS,
 )
 
+# --- SNS ---
+SNS_CREATE_POST_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "content": {"type": "string", "description": "投稿する内容（280文字以内）。"},
+        "visibility": {"type": "string", "description": "公開範囲。public, followers_only, private のいずれか。省略時または不明な値の場合は public（公開）として扱います。"},
+    },
+    "required": ["content"],
+}
+SNS_CREATE_POST_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_CREATE_POST,
+    description="SNSに新しい投稿を作成します。",
+    parameters=SNS_CREATE_POST_PARAMETERS,
+)
+
+SNS_CREATE_REPLY_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "content": {"type": "string", "description": "リプライする内容。"},
+        "parent_post_id": {"type": "integer", "description": "親ポストのID。parent_reply_id とどちらか必須。"},
+        "parent_reply_id": {"type": "integer", "description": "親リプライのID。parent_post_id とどちらか必須。"},
+        "visibility": {"type": "string", "description": "公開範囲。public, followers_only, private のいずれか。省略時または不明な値の場合は public（公開）として扱います。"},
+    },
+    "required": ["content"],
+}
+SNS_CREATE_REPLY_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_CREATE_REPLY,
+    description="ポストまたはリプライに返信します。parent_post_id または parent_reply_id のどちらかを指定してください。",
+    parameters=SNS_CREATE_REPLY_PARAMETERS,
+)
+
+SNS_LIKE_POST_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "post_id": {"type": "integer", "description": "いいねするポストのID。"},
+    },
+    "required": ["post_id"],
+}
+SNS_LIKE_POST_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_LIKE_POST,
+    description="ポストにいいねします。",
+    parameters=SNS_LIKE_POST_PARAMETERS,
+)
+
+SNS_LIKE_REPLY_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "reply_id": {"type": "integer", "description": "いいねするリプライのID。"},
+    },
+    "required": ["reply_id"],
+}
+SNS_LIKE_REPLY_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_LIKE_REPLY,
+    description="リプライにいいねします。",
+    parameters=SNS_LIKE_REPLY_PARAMETERS,
+)
+
+SNS_FOLLOW_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "target_user_id": {"type": "integer", "description": "フォローするユーザーのID。"},
+    },
+    "required": ["target_user_id"],
+}
+SNS_FOLLOW_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_FOLLOW,
+    description="指定したユーザーをフォローします。",
+    parameters=SNS_FOLLOW_PARAMETERS,
+)
+
+SNS_UNFOLLOW_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "target_user_id": {"type": "integer", "description": "フォロー解除するユーザーのID。"},
+    },
+    "required": ["target_user_id"],
+}
+SNS_UNFOLLOW_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_UNFOLLOW,
+    description="指定したユーザーのフォローを解除します。",
+    parameters=SNS_UNFOLLOW_PARAMETERS,
+)
+
+SNS_SUBSCRIBE_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "target_user_id": {"type": "integer", "description": "サブスクライブするユーザーのID。"},
+    },
+    "required": ["target_user_id"],
+}
+SNS_SUBSCRIBE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_SUBSCRIBE,
+    description="指定したユーザーをサブスクライブします。",
+    parameters=SNS_SUBSCRIBE_PARAMETERS,
+)
+
+SNS_UNSUBSCRIBE_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "target_user_id": {"type": "integer", "description": "サブスクライブ解除するユーザーのID。"},
+    },
+    "required": ["target_user_id"],
+}
+SNS_UNSUBSCRIBE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_UNSUBSCRIBE,
+    description="指定したユーザーのサブスクライブを解除します。",
+    parameters=SNS_UNSUBSCRIBE_PARAMETERS,
+)
+
+SNS_BLOCK_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "target_user_id": {"type": "integer", "description": "ブロックするユーザーのID。"},
+    },
+    "required": ["target_user_id"],
+}
+SNS_BLOCK_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_BLOCK,
+    description="指定したユーザーをブロックします。",
+    parameters=SNS_BLOCK_PARAMETERS,
+)
+
+SNS_UNBLOCK_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "target_user_id": {"type": "integer", "description": "ブロック解除するユーザーのID。"},
+    },
+    "required": ["target_user_id"],
+}
+SNS_UNBLOCK_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_UNBLOCK,
+    description="指定したユーザーのブロックを解除します。",
+    parameters=SNS_UNBLOCK_PARAMETERS,
+)
+
 # --- メモリ・TODO・作業メモ ---
 MEMORY_QUERY_PARAMETERS = {
     "type": "object",
@@ -829,6 +1055,7 @@ def register_default_tools(
     guild_enabled: bool = False,
     shop_enabled: bool = False,
     trade_enabled: bool = False,
+    sns_enabled: bool = False,
     inspect_item_enabled: bool = False,
     inspect_target_enabled: bool = False,
     memory_query_enabled: bool = False,
@@ -872,6 +1099,19 @@ def register_default_tools(
         registry.register(CHEST_TAKE_DEFINITION, ChestTakeAvailabilityResolver())
     if combat_enabled:
         registry.register(COMBAT_USE_SKILL_DEFINITION, CombatUseSkillAvailabilityResolver())
+        registry.register(SKILL_EQUIP_DEFINITION, SkillEquipAvailabilityResolver())
+        registry.register(
+            SKILL_ACCEPT_PROPOSAL_DEFINITION,
+            SkillAcceptProposalAvailabilityResolver(),
+        )
+        registry.register(
+            SKILL_REJECT_PROPOSAL_DEFINITION,
+            SkillRejectProposalAvailabilityResolver(),
+        )
+        registry.register(
+            SKILL_ACTIVATE_AWAKENED_MODE_DEFINITION,
+            SkillActivateAwakenedModeAvailabilityResolver(),
+        )
     if quest_enabled:
         registry.register(QUEST_ACCEPT_DEFINITION, QuestAcceptAvailabilityResolver())
         registry.register(QUEST_CANCEL_DEFINITION, QuestCancelAvailabilityResolver())
@@ -894,6 +1134,18 @@ def register_default_tools(
         registry.register(TRADE_ACCEPT_DEFINITION, TradeAcceptAvailabilityResolver())
         registry.register(TRADE_CANCEL_DEFINITION, TradeCancelAvailabilityResolver())
         registry.register(TRADE_DECLINE_DEFINITION, TradeDeclineAvailabilityResolver())
+    if sns_enabled:
+        sns_resolver = SnsToolAvailabilityResolver()
+        registry.register(SNS_CREATE_POST_DEFINITION, sns_resolver)
+        registry.register(SNS_CREATE_REPLY_DEFINITION, sns_resolver)
+        registry.register(SNS_LIKE_POST_DEFINITION, sns_resolver)
+        registry.register(SNS_LIKE_REPLY_DEFINITION, sns_resolver)
+        registry.register(SNS_FOLLOW_DEFINITION, sns_resolver)
+        registry.register(SNS_UNFOLLOW_DEFINITION, sns_resolver)
+        registry.register(SNS_SUBSCRIBE_DEFINITION, sns_resolver)
+        registry.register(SNS_UNSUBSCRIBE_DEFINITION, sns_resolver)
+        registry.register(SNS_BLOCK_DEFINITION, sns_resolver)
+        registry.register(SNS_UNBLOCK_DEFINITION, sns_resolver)
     if memory_query_enabled:
         registry.register(MEMORY_QUERY_DEFINITION, MemoryQueryAvailabilityResolver())
     if subagent_enabled:

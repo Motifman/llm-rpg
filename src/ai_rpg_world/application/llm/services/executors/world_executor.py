@@ -26,6 +26,9 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_INSPECT_TARGET,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_PLACE_OBJECT,
+    TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
+    TOOL_NAME_SKILL_EQUIP,
+    TOOL_NAME_SKILL_REJECT_PROPOSAL,
 )
 from ai_rpg_world.application.conversation.contracts.commands import AdvanceConversationCommand
 from ai_rpg_world.application.conversation.contracts.dtos import AdvanceConversationResultDto
@@ -140,6 +143,18 @@ class WorldToolExecutor:
             getattr(skill_tool_service, "use_skill", None)
         ):
             raise TypeError("skill_tool_service must have a callable use_skill")
+        if skill_tool_service is not None and not callable(
+            getattr(skill_tool_service, "equip_skill", None)
+        ):
+            raise TypeError("skill_tool_service must have a callable equip_skill")
+        if skill_tool_service is not None and not callable(
+            getattr(skill_tool_service, "accept_skill_proposal", None)
+        ):
+            raise TypeError("skill_tool_service must have a callable accept_skill_proposal")
+        if skill_tool_service is not None and not callable(
+            getattr(skill_tool_service, "reject_skill_proposal", None)
+        ):
+            raise TypeError("skill_tool_service must have a callable reject_skill_proposal")
 
     def get_handlers(
         self,
@@ -159,6 +174,9 @@ class WorldToolExecutor:
         result[TOOL_NAME_CHEST_STORE] = self._execute_chest_store
         result[TOOL_NAME_CHEST_TAKE] = self._execute_chest_take
         result[TOOL_NAME_COMBAT_USE_SKILL] = self._execute_combat_use_skill
+        result[TOOL_NAME_SKILL_EQUIP] = self._execute_skill_equip
+        result[TOOL_NAME_SKILL_ACCEPT_PROPOSAL] = self._execute_skill_accept_proposal
+        result[TOOL_NAME_SKILL_REJECT_PROPOSAL] = self._execute_skill_reject_proposal
         return result
 
     def _execute_change_attention(
@@ -321,6 +339,63 @@ class WorldToolExecutor:
             if isinstance(target_display_name, str) and target_display_name:
                 message = f"{target_display_name}に向けて{args.get('skill_display_name', 'スキル')}を使用しました。"
             return LlmCommandResultDto(success=True, message=message)
+        except Exception as e:
+            return exception_result(e)
+
+    def _execute_skill_equip(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        if self._skill_tool_service is None:
+            return unknown_tool("スキル装備ツールはまだ利用できません。")
+        try:
+            self._skill_tool_service.equip_skill(
+                player_id=player_id,
+                loadout_id=int(args.get("loadout_id")),
+                deck_tier=args.get("deck_tier"),
+                slot_index=int(args.get("slot_index")),
+                skill_id=int(args.get("skill_id")),
+            )
+            skill_display_name = args.get("skill_display_name", "スキル")
+            slot_display_name = args.get("slot_display_name", "スロット")
+            return LlmCommandResultDto(
+                success=True,
+                message=f"{skill_display_name}を{slot_display_name}に装備しました。",
+            )
+        except Exception as e:
+            return exception_result(e)
+
+    def _execute_skill_accept_proposal(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> LlmCommandResultDto:
+        if self._skill_tool_service is None:
+            return unknown_tool("スキル提案受諾ツールはまだ利用できません。")
+        try:
+            self._skill_tool_service.accept_skill_proposal(
+                progress_id=int(args.get("progress_id")),
+                proposal_id=int(args.get("proposal_id")),
+            )
+            proposal_display_name = args.get("proposal_display_name", "提案")
+            slot_display_name = args.get("slot_display_name", "スロット")
+            return LlmCommandResultDto(
+                success=True,
+                message=f"{proposal_display_name}を受諾し、{slot_display_name}に装備しました。",
+            )
+        except Exception as e:
+            return exception_result(e)
+
+    def _execute_skill_reject_proposal(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> LlmCommandResultDto:
+        if self._skill_tool_service is None:
+            return unknown_tool("スキル提案却下ツールはまだ利用できません。")
+        try:
+            self._skill_tool_service.reject_skill_proposal(
+                progress_id=int(args.get("progress_id")),
+                proposal_id=int(args.get("proposal_id")),
+            )
+            proposal_display_name = args.get("proposal_display_name", "提案")
+            return LlmCommandResultDto(
+                success=True,
+                message=f"{proposal_display_name}を却下しました。",
+            )
         except Exception as e:
             return exception_result(e)
 
