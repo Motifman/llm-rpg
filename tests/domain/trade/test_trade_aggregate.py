@@ -10,11 +10,13 @@ from ai_rpg_world.domain.trade.exception.trade_exception import (
     CannotAcceptOwnTradeException,
     CannotAcceptTradeWithOtherPlayerException,
     CannotCancelTradeWithOtherPlayerException,
+    CannotDeclineTradeException,
 )
 from ai_rpg_world.domain.trade.event.trade_event import (
     TradeOfferedEvent,
     TradeAcceptedEvent,
     TradeCancelledEvent,
+    TradeDeclinedEvent,
 )
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
@@ -476,6 +478,84 @@ class TestTradeAggregate:
             # When & Then
             with pytest.raises(InvalidTradeStatusException):
                 cancelled_trade.cancel_by(seller_id)
+
+    class TestDecline:
+        """decline_by（取引拒否）のテスト"""
+
+        def test_decline_by_target_player_succeeds(
+            self, active_direct_trade: TradeAggregate, buyer_id: PlayerId
+        ):
+            """直接取引の宛先が断るとステータスがCANCELLEDになる"""
+            # When
+            active_direct_trade.decline_by(buyer_id)
+
+            # Then
+            assert active_direct_trade.status == TradeStatus.CANCELLED
+            assert not active_direct_trade.is_active()
+
+        def test_decline_by_seller_raises_exception(
+            self, active_direct_trade: TradeAggregate, seller_id: PlayerId
+        ):
+            """出品者が断ろうとするとCannotDeclineTradeExceptionが発生する"""
+            # When & Then
+            with pytest.raises(CannotDeclineTradeException):
+                active_direct_trade.decline_by(seller_id)
+
+        def test_decline_by_other_player_raises_exception(
+            self, active_direct_trade: TradeAggregate, other_player_id: PlayerId
+        ):
+            """直接取引の宛先以外が断ろうとするとCannotDeclineTradeExceptionが発生する"""
+            # When & Then
+            with pytest.raises(CannotDeclineTradeException):
+                active_direct_trade.decline_by(other_player_id)
+
+        def test_decline_global_trade_raises_exception(
+            self, active_global_trade: TradeAggregate, buyer_id: PlayerId
+        ):
+            """グローバル取引を断ろうとするとCannotDeclineTradeExceptionが発生する"""
+            # When & Then
+            with pytest.raises(CannotDeclineTradeException):
+                active_global_trade.decline_by(buyer_id)
+
+        def test_decline_completed_trade_raises_exception(
+            self, completed_trade: TradeAggregate, buyer_id: PlayerId
+        ):
+            """完了済み取引を断ろうとするとInvalidTradeStatusExceptionが発生する"""
+            # When & Then
+            with pytest.raises(InvalidTradeStatusException):
+                completed_trade.decline_by(buyer_id)
+
+        def test_decline_adds_trade_declined_event(
+            self, active_direct_trade: TradeAggregate, buyer_id: PlayerId
+        ):
+            """取引拒否時にTradeDeclinedEventが発行される"""
+            # When
+            active_direct_trade.decline_by(buyer_id)
+
+            # Then
+            events = active_direct_trade.get_events()
+            assert len(events) == 1
+            assert isinstance(events[0], TradeDeclinedEvent)
+            assert events[0].aggregate_id == active_direct_trade.trade_id
+            assert events[0].aggregate_type == "TradeAggregate"
+            assert events[0].decliner_id == buyer_id
+
+        def test_trade_declined_event_contains_all_fields(
+            self, active_direct_trade: TradeAggregate, buyer_id: PlayerId
+        ):
+            """TradeDeclinedEventが全てのフィールドを含む"""
+            # When
+            active_direct_trade.decline_by(buyer_id)
+
+            # Then
+            events = active_direct_trade.get_events()
+            event = events[0]
+            assert isinstance(event, TradeDeclinedEvent)
+            assert event.aggregate_id == active_direct_trade.trade_id
+            assert event.aggregate_type == "TradeAggregate"
+            assert event.decliner_id == buyer_id
+            assert hasattr(event, "occurred_at")
+            assert hasattr(event, "event_id")
 
     class TestDomainEvents:
         """ドメインイベント関連のテスト"""

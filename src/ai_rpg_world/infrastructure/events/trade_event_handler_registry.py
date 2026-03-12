@@ -3,7 +3,8 @@ from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.trade.event.trade_event import (
     TradeOfferedEvent,
     TradeAcceptedEvent,
-    TradeCancelledEvent
+    TradeCancelledEvent,
+    TradeDeclinedEvent,
 )
 from ai_rpg_world.application.trade.handlers.trade_event_handler import TradeEventHandler
 
@@ -31,6 +32,10 @@ class TradeEventHandlerRegistry:
         event_publisher.register_handler(
             TradeCancelledEvent,
             self._create_event_handler(self._trade_event_handler.handle_trade_cancelled)
+        )
+        event_publisher.register_handler(
+            TradeDeclinedEvent,
+            self._create_event_handler(self._trade_event_handler.handle_trade_declined)
         )
 
     def _create_event_handler(self, handler_method) -> "EventHandler":

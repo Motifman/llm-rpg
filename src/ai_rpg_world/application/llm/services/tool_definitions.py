@@ -41,6 +41,7 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
     SubagentAvailabilityResolver,
     TradeAcceptAvailabilityResolver,
     TradeCancelAvailabilityResolver,
+    TradeDeclineAvailabilityResolver,
     TradeOfferAvailabilityResolver,
     TodoAddAvailabilityResolver,
     TodoCompleteAvailabilityResolver,
@@ -91,6 +92,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SHOP_UNLIST_ITEM,
     TOOL_NAME_TRADE_ACCEPT,
     TOOL_NAME_TRADE_CANCEL,
+    TOOL_NAME_TRADE_DECLINE,
     TOOL_NAME_TRADE_OFFER,
     TOOL_NAME_WHISPER,
 )
@@ -709,6 +711,19 @@ TRADE_CANCEL_DEFINITION = ToolDefinitionDto(
     parameters=TRADE_CANCEL_PARAMETERS,
 )
 
+TRADE_DECLINE_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "trade_label": {"type": "string", "description": "断る取引ラベル（例: T1）。直接取引の宛先のみ使用可能。"},
+    },
+    "required": ["trade_label"],
+}
+TRADE_DECLINE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_TRADE_DECLINE,
+    description="自分宛ての取引提案を断ります。直接取引の宛先のみ実行可能。",
+    parameters=TRADE_DECLINE_PARAMETERS,
+)
+
 # --- メモリ・TODO・作業メモ ---
 MEMORY_QUERY_PARAMETERS = {
     "type": "object",
@@ -878,6 +893,7 @@ def register_default_tools(
         registry.register(TRADE_OFFER_DEFINITION, TradeOfferAvailabilityResolver())
         registry.register(TRADE_ACCEPT_DEFINITION, TradeAcceptAvailabilityResolver())
         registry.register(TRADE_CANCEL_DEFINITION, TradeCancelAvailabilityResolver())
+        registry.register(TRADE_DECLINE_DEFINITION, TradeDeclineAvailabilityResolver())
     if memory_query_enabled:
         registry.register(MEMORY_QUERY_DEFINITION, MemoryQueryAvailabilityResolver())
     if subagent_enabled:

@@ -17,7 +17,8 @@ from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceI
 from ai_rpg_world.application.trade.contracts.commands import (
     OfferItemCommand,
     AcceptTradeCommand,
-    CancelTradeCommand
+    CancelTradeCommand,
+    DeclineTradeCommand,
 )
 from ai_rpg_world.application.trade.contracts.dtos import TradeCommandResultDto
 from ai_rpg_world.application.trade.exceptions.base_exception import TradeApplicationException, TradeSystemErrorException
@@ -253,5 +254,52 @@ class TradeCommandService:
             return TradeCommandResultDto(
                 success=True,
                 message="取引をキャンセルしました",
+                data={"trade_id": command.trade_id}
+            )
+
+    def decline_trade(self, command: DeclineTradeCommand) -> TradeCommandResultDto:
+        """取引を断る"""
+        return self._execute_with_error_handling(
+            operation=lambda: self._decline_trade_impl(command),
+            context={
+                "action": "decline_trade",
+                "user_id": command.decliner_id,
+                "trade_id": command.trade_id
+            }
+        )
+
+    def _decline_trade_impl(self, command: DeclineTradeCommand) -> TradeCommandResultDto:
+        """取引拒否の実装"""
+        with self._unit_of_work:
+            trade_id = TradeId(command.trade_id)
+            decliner_id = PlayerId(command.decliner_id)
+
+            trade = self._trade_repository.find_by_id(trade_id)
+            if trade is None:
+                raise TradeNotFoundForCommandException(command.trade_id, "decline_trade")
+
+            # ドメインで検証（直接取引の宛先のみ decline 可能）
+            trade.decline_by(decliner_id)
+
+            # 出品者のインベントリを取得（予約解除のため）
+            inventory = self._player_inventory_repository.find_by_id(trade.seller_id)
+            if inventory is None:
+                raise TradeCommandException(
+                    f"Seller inventory not found: {trade.seller_id.value}",
+                    trade_id=command.trade_id
+                )
+
+            # アイテムの予約を解除
+            inventory.unreserve_item(trade.offered_item_id)
+
+            # 保存
+            self._trade_repository.save(trade)
+            self._player_inventory_repository.save(inventory)
+
+            self._logger.info(f"Trade declined: trade_id={command.trade_id}, decliner_id={command.decliner_id}")
+
+            return TradeCommandResultDto(
+                success=True,
+                message="取引を断りました",
                 data={"trade_id": command.trade_id}
             )

@@ -82,6 +82,7 @@ from ai_rpg_world.domain.shop.event.shop_event import (
 from ai_rpg_world.domain.trade.event.trade_event import (
     TradeAcceptedEvent,
     TradeCancelledEvent,
+    TradeDeclinedEvent,
     TradeOfferedEvent,
 )
 from ai_rpg_world.domain.skill.event.skill_events import (
@@ -120,6 +121,7 @@ _OBSERVED_EVENT_TYPES = (
     TradeOfferedEvent,
     TradeAcceptedEvent,
     TradeCancelledEvent,
+    TradeDeclinedEvent,
     # --- ギルド ---
     GuildCreatedEvent,
     GuildMemberJoinedEvent,

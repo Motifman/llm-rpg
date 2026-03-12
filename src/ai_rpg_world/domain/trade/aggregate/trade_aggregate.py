@@ -8,11 +8,13 @@ from ai_rpg_world.domain.trade.exception.trade_exception import (
     CannotAcceptOwnTradeException,
     CannotAcceptTradeWithOtherPlayerException,
     CannotCancelTradeWithOtherPlayerException,
+    CannotDeclineTradeException,
 )
 from ai_rpg_world.domain.trade.event.trade_event import (
     TradeOfferedEvent,
     TradeAcceptedEvent,
     TradeCancelledEvent,
+    TradeDeclinedEvent,
 )
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -136,5 +138,31 @@ class TradeAggregate(AggregateRoot):
         event = TradeCancelledEvent.create(
             aggregate_id=self.trade_id,
             aggregate_type="TradeAggregate",
+        )
+        self.add_event(event)
+
+    def decline_by(self, decliner_id: PlayerId) -> None:
+        """取引を断る（直接取引の宛先のみ実行可能）"""
+        if self.status != TradeStatus.ACTIVE:
+            raise InvalidTradeStatusException(f"Trade is already completed or cancelled: {self.status}")
+        if self.seller_id == decliner_id:
+            raise CannotDeclineTradeException(
+                f"Cannot decline own trade: seller {self.seller_id}, decliner {decliner_id}"
+            )
+        if not self.is_direct_trade():
+            raise CannotDeclineTradeException(
+                f"Only direct trades can be declined: trade_scope={self.trade_scope}"
+            )
+        if self.trade_scope.target_player_id != decliner_id:
+            raise CannotDeclineTradeException(
+                f"Only the target player can decline: target={self.trade_scope.target_player_id}, decliner={decliner_id}"
+            )
+        self.status = TradeStatus.CANCELLED
+
+        # ドメインイベント発行
+        event = TradeDeclinedEvent.create(
+            aggregate_id=self.trade_id,
+            aggregate_type="TradeAggregate",
+            decliner_id=decliner_id,
         )
         self.add_event(event)

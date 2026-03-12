@@ -9,6 +9,7 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.event.trade_event import (
     TradeAcceptedEvent,
     TradeCancelledEvent,
+    TradeDeclinedEvent,
     TradeOfferedEvent,
 )
 from ai_rpg_world.domain.trade.enum.trade_enum import TradeType
@@ -25,7 +26,7 @@ class TradeRecipientStrategy(IRecipientResolutionStrategy):
     def supports(self, event: Any) -> bool:
         return isinstance(
             event,
-            (TradeOfferedEvent, TradeAcceptedEvent, TradeCancelledEvent),
+            (TradeOfferedEvent, TradeAcceptedEvent, TradeCancelledEvent, TradeDeclinedEvent),
         )
 
     def resolve(self, event: Any) -> List[PlayerId]:
@@ -63,6 +64,17 @@ class TradeRecipientStrategy(IRecipientResolutionStrategy):
                 and trade.trade_scope.target_player_id.value != trade.seller_id.value
             ):
                 result.append(trade.trade_scope.target_player_id)
+            return result
+
+        if isinstance(event, TradeDeclinedEvent):
+            if self._trade_repository is None:
+                return []
+            trade = self._trade_repository.find_by_id(event.aggregate_id)
+            if trade is None:
+                return []
+            result = [event.decliner_id]
+            if trade.seller_id.value != event.decliner_id.value:
+                result.append(trade.seller_id)
             return result
 
         return []
