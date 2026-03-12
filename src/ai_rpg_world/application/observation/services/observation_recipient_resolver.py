@@ -38,6 +38,7 @@ from ai_rpg_world.application.observation.services.recipient_strategies import (
     ShopRecipientStrategy,
     SkillRecipientStrategy,
     SpeechRecipientStrategy,
+    SnsRecipientStrategy,
     TradeRecipientStrategy,
 )
 
@@ -86,6 +87,7 @@ def create_observation_recipient_resolver(
     hit_box_repository: Optional[HitBoxRepository] = None,
     skill_loadout_repository: Optional[SkillLoadoutRepository] = None,
     skill_deck_progress_repository: Optional[SkillDeckProgressRepository] = None,
+    sns_user_repository: Optional[Any] = None,
 ) -> IObservationRecipientResolver:
     """
     既存と同様の振る舞いになる Resolver を組み立てる。
@@ -104,6 +106,7 @@ def create_observation_recipient_resolver(
             shop_repository=shop_repository,
         ),
         TradeRecipientStrategy(trade_repository=trade_repository),
+        SnsRecipientStrategy(sns_user_repository=sns_user_repository),
         GuildRecipientStrategy(
             player_status_repository=player_status_repository,
             guild_repository=guild_repository,
