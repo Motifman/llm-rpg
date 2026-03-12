@@ -164,6 +164,7 @@ def _make_state() -> PlayerCurrentStateDto:
                 display_name="3001: 新しい攻撃手段",
                 proposal_type=SkillProposalType.ADD,
                 deck_tier=DeckTier.NORMAL,
+                target_slot_index=0,
                 reason="新しい攻撃手段",
             ),
         ],
@@ -298,6 +299,7 @@ class TestDefaultLlmUiContextBuilder:
         assert "EK1: 火球" in result.current_state_text
         assert "スキル装備先:" in result.current_state_text
         assert "ES1: 通常スロット 1" in result.current_state_text
+        assert "SP1: 3001: 新しい攻撃手段（add, 通常デッキ, 通常スロット 1, 新しい攻撃手段）" in result.current_state_text
         assert "保留中のスキル提案:" in result.current_state_text
         assert "SP1: 3001: 新しい攻撃手段" in result.current_state_text
         assert "覚醒モード:" in result.current_state_text
@@ -314,6 +316,8 @@ class TestDefaultLlmUiContextBuilder:
         assert isinstance(result.tool_runtime_context.targets["EK1"], SkillEquipCandidateToolRuntimeTargetDto)
         assert isinstance(result.tool_runtime_context.targets["ES1"], SkillEquipSlotToolRuntimeTargetDto)
         assert isinstance(result.tool_runtime_context.targets["SP1"], SkillProposalToolRuntimeTargetDto)
+        assert result.tool_runtime_context.targets["SP1"].target_slot_index == 0
+        assert result.tool_runtime_context.targets["SP1"].target_slot_display_name == "通常スロット 1"
         assert isinstance(result.tool_runtime_context.targets["AW1"], AwakenedActionToolRuntimeTargetDto)
         assert result.tool_runtime_context.targets["A1"].attention_level_value == "FULL"
 

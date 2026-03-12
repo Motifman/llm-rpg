@@ -621,6 +621,8 @@ class TestSkillRuntimeTargetDtos:
             display_name="新しい攻撃手段",
             progress_id=20,
             proposal_id=3,
+            target_slot_index=0,
+            target_slot_display_name="通常スロット 1",
         )
         awakened = AwakenedActionToolRuntimeTargetDto(
             label="AW1",
@@ -634,6 +636,8 @@ class TestSkillRuntimeTargetDtos:
         assert slot.skill_slot_index == 0
         assert proposal.progress_id == 20
         assert proposal.proposal_id == 3
+        assert proposal.target_slot_index == 0
+        assert proposal.target_slot_display_name == "通常スロット 1"
         assert awakened.skill_loadout_id == 10
 
     def test_tool_runtime_target_rejects_invalid_skill_phase_types(self):

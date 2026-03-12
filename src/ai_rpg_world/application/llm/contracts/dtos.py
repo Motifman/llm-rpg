@@ -151,6 +151,8 @@ class ToolRuntimeTargetDto:
     deck_tier: Optional[DeckTier] = None
     progress_id: Optional[int] = None
     proposal_id: Optional[int] = None
+    target_slot_index: Optional[int] = None
+    target_slot_display_name: Optional[str] = None
     attention_level_value: Optional[str] = None
     quest_id: Optional[int] = None
     guild_id: Optional[int] = None
@@ -215,6 +217,12 @@ class ToolRuntimeTargetDto:
             raise TypeError("progress_id must be int or None")
         if self.proposal_id is not None and not isinstance(self.proposal_id, int):
             raise TypeError("proposal_id must be int or None")
+        if self.target_slot_index is not None and not isinstance(self.target_slot_index, int):
+            raise TypeError("target_slot_index must be int or None")
+        if self.target_slot_display_name is not None and not isinstance(
+            self.target_slot_display_name, str
+        ):
+            raise TypeError("target_slot_display_name must be str or None")
         if self.attention_level_value is not None and not isinstance(
             self.attention_level_value, str
         ):

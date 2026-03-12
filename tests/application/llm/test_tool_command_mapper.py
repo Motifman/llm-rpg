@@ -34,6 +34,9 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_QUEST_ACCEPT,
     TOOL_NAME_QUEST_ISSUE,
     TOOL_NAME_SAY,
+    TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
+    TOOL_NAME_SKILL_EQUIP,
+    TOOL_NAME_SKILL_REJECT_PROPOSAL,
     TOOL_NAME_SHOP_PURCHASE,
     TOOL_NAME_SUBAGENT,
     TOOL_NAME_TRADE_ACCEPT,
@@ -51,6 +54,7 @@ from ai_rpg_world.application.world.contracts.dtos import (
     MoveResultDto,
     PursuitCommandResultDto,
 )
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
 from ai_rpg_world.application.world.exceptions.command.movement_command_exception import (
     MovementInvalidException,
     PlayerNotFoundException,
@@ -655,6 +659,67 @@ class TestToolCommandMapperExtendedTools:
         assert result.success is True
         assert "ゴブリン" in result.message
         skill_tool_service.use_skill.assert_called_once()
+
+    def test_execute_skill_equip_success(self, mapper, skill_tool_service):
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SKILL_EQUIP,
+            {
+                "loadout_id": 10,
+                "deck_tier": DeckTier.NORMAL,
+                "slot_index": 0,
+                "skill_id": 1001,
+                "skill_display_name": "火球",
+                "slot_display_name": "通常スロット 1",
+            },
+        )
+
+        assert result.success is True
+        assert result.message == "火球を通常スロット 1に装備しました。"
+        skill_tool_service.equip_skill.assert_called_once_with(
+            player_id=1,
+            loadout_id=10,
+            deck_tier=DeckTier.NORMAL,
+            slot_index=0,
+            skill_id=1001,
+        )
+
+    def test_execute_skill_accept_proposal_success(self, mapper, skill_tool_service):
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
+            {
+                "progress_id": 20,
+                "proposal_id": 2,
+                "proposal_display_name": "新しい攻撃手段",
+                "slot_display_name": "通常スロット 1",
+            },
+        )
+
+        assert result.success is True
+        assert result.message == "新しい攻撃手段を受諾し、通常スロット 1に装備しました。"
+        skill_tool_service.accept_skill_proposal.assert_called_once_with(
+            progress_id=20,
+            proposal_id=2,
+        )
+
+    def test_execute_skill_reject_proposal_success(self, mapper, skill_tool_service):
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SKILL_REJECT_PROPOSAL,
+            {
+                "progress_id": 20,
+                "proposal_id": 3,
+                "proposal_display_name": "新しい攻撃手段",
+            },
+        )
+
+        assert result.success is True
+        assert result.message == "新しい攻撃手段を却下しました。"
+        skill_tool_service.reject_skill_proposal.assert_called_once_with(
+            progress_id=20,
+            proposal_id=3,
+        )
 
 
 class TestToolCommandMapperDropItem:

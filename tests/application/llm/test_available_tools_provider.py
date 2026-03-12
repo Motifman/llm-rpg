@@ -248,6 +248,42 @@ class TestDefaultAvailableToolsProvider:
         assert TOOL_NAME_SKILL_REJECT_PROPOSAL not in names
         assert TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE not in names
 
+    def test_get_available_tools_exposes_proposal_decisions_without_equip_labels(self, provider):
+        ctx = _context_with_moves(0)
+        ctx.pending_skill_proposals = [
+            PendingSkillProposalDto(
+                progress_id=20,
+                proposal_id=1,
+                offered_skill_id=300,
+                display_name="300: 新しい攻撃手段",
+                proposal_type=SkillProposalType.ADD,
+                deck_tier=DeckTier.NORMAL,
+            )
+        ]
+
+        tools = provider.get_available_tools(ctx)
+        names = [t["function"]["name"] for t in tools if t.get("type") == "function"]
+
+        assert TOOL_NAME_SKILL_ACCEPT_PROPOSAL in names
+        assert TOOL_NAME_SKILL_REJECT_PROPOSAL in names
+        assert TOOL_NAME_SKILL_EQUIP not in names
+
+    def test_get_available_tools_exposes_equip_without_proposals(self, provider):
+        ctx = _context_with_moves(0)
+        ctx.equipable_skill_candidates = [
+            EquipableSkillCandidateDto(10, 100, "火球", DeckTier.NORMAL)
+        ]
+        ctx.skill_equip_slots = [
+            SkillEquipSlotDto(10, DeckTier.NORMAL, 0, "通常スロット 1")
+        ]
+
+        tools = provider.get_available_tools(ctx)
+        names = [t["function"]["name"] for t in tools if t.get("type") == "function"]
+
+        assert TOOL_NAME_SKILL_EQUIP in names
+        assert TOOL_NAME_SKILL_ACCEPT_PROPOSAL not in names
+        assert TOOL_NAME_SKILL_REJECT_PROPOSAL not in names
+
     def test_tool_format_openai_compatible(self, provider):
         """返却形式が OpenAI の function ツール形式である"""
         tools = provider.get_available_tools(None)
