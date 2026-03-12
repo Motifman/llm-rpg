@@ -12,6 +12,7 @@ from typing import Dict, Optional
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActiveHarvestToolRuntimeTargetDto,
     AttentionLevelToolRuntimeTargetDto,
+    AwakenedActionToolRuntimeTargetDto,
     ChestToolRuntimeTargetDto,
     ChestItemToolRuntimeTargetDto,
     ConversationChoiceToolRuntimeTargetDto,
@@ -26,6 +27,9 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ResourceToolRuntimeTargetDto,
     ShopListingToolRuntimeTargetDto,
     ShopToolRuntimeTargetDto,
+    SkillEquipCandidateToolRuntimeTargetDto,
+    SkillEquipSlotToolRuntimeTargetDto,
+    SkillProposalToolRuntimeTargetDto,
     SkillToolRuntimeTargetDto,
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
@@ -37,14 +41,18 @@ from ai_rpg_world.application.llm.contracts.interfaces import ILlmUiContextBuild
 from ai_rpg_world.application.world.contracts.dtos import (
     ActiveQuestSummaryDto,
     AttentionLevelOptionDto,
+    AwakenedActionDto,
     AvailableTradeSummaryDto,
     ChestItemDto,
     ConversationChoiceDto,
+    EquipableSkillCandidateDto,
     GuildMembershipSummaryDto,
     InventoryItemDto,
     NearbyShopSummaryDto,
+    PendingSkillProposalDto,
     PlayerCurrentStateDto,
     ShopListingSummaryDto,
+    SkillEquipSlotDto,
     UsableSkillDto,
     VisibleObjectDto,
 )
@@ -92,6 +100,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
         counters: Dict[str, int] = {
             "P": 0, "N": 0, "M": 0, "O": 0, "S": 0, "I": 0, "C": 0, "R": 0, "K": 0, "A": 0,
             "Q": 0, "G": 0, "GM": 0, "SH": 0, "L": 0, "D": 0, "T": 0, "H": 0,
+            "EK": 0, "ES": 0, "SP": 0, "AW": 0,
         }
         runtime_targets: Dict[str, ToolRuntimeTargetDto] = {}
         lines = [current_state_text.rstrip()]
@@ -170,6 +179,46 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             lines.append("")
             lines.append("使用可能スキル:")
             lines.extend(skill_lines)
+
+        equip_candidate_lines = self._build_skill_equip_candidate_lines(
+            current_state.equipable_skill_candidates,
+            counters,
+            runtime_targets,
+        )
+        if equip_candidate_lines:
+            lines.append("")
+            lines.append("装備候補スキル:")
+            lines.extend(equip_candidate_lines)
+
+        equip_slot_lines = self._build_skill_equip_slot_lines(
+            current_state.skill_equip_slots,
+            counters,
+            runtime_targets,
+        )
+        if equip_slot_lines:
+            lines.append("")
+            lines.append("スキル装備先:")
+            lines.extend(equip_slot_lines)
+
+        proposal_lines = self._build_skill_proposal_lines(
+            current_state.pending_skill_proposals,
+            counters,
+            runtime_targets,
+        )
+        if proposal_lines:
+            lines.append("")
+            lines.append("保留中のスキル提案:")
+            lines.extend(proposal_lines)
+
+        awakened_action_lines = self._build_awakened_action_lines(
+            current_state.awakened_action,
+            counters,
+            runtime_targets,
+        )
+        if awakened_action_lines:
+            lines.append("")
+            lines.append("覚醒モード:")
+            lines.extend(awakened_action_lines)
 
         attention_lines = self._build_attention_lines(current_state.attention_level_options, counters, runtime_targets)
         if attention_lines:
@@ -561,6 +610,102 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
                 attention_level_value=option.value,
             )
         return lines
+
+    def _build_skill_equip_candidate_lines(
+        self,
+        candidates: list[EquipableSkillCandidateDto],
+        counters: Dict[str, int],
+        runtime_targets: Dict[str, ToolRuntimeTargetDto],
+    ) -> list[str]:
+        lines: list[str] = []
+        for candidate in candidates:
+            counters["EK"] += 1
+            label = f"EK{counters['EK']}"
+            tier = "通常" if candidate.source_deck_tier.value == "normal" else "覚醒"
+            lines.append(f"- {label}: {candidate.display_name}（由来: {tier}デッキ）")
+            runtime_targets[label] = SkillEquipCandidateToolRuntimeTargetDto(
+                label=label,
+                kind="skill_equip_candidate",
+                display_name=candidate.display_name,
+                skill_loadout_id=candidate.skill_loadout_id,
+                skill_id=candidate.skill_id,
+            )
+        return lines
+
+    def _build_skill_equip_slot_lines(
+        self,
+        slots: list[SkillEquipSlotDto],
+        counters: Dict[str, int],
+        runtime_targets: Dict[str, ToolRuntimeTargetDto],
+    ) -> list[str]:
+        lines: list[str] = []
+        for slot in slots:
+            counters["ES"] += 1
+            label = f"ES{counters['ES']}"
+            equipped = (
+                f"（装備中: {slot.equipped_skill_name}）"
+                if slot.equipped_skill_name
+                else "（空き）"
+            )
+            lines.append(f"- {label}: {slot.display_name}{equipped}")
+            runtime_targets[label] = SkillEquipSlotToolRuntimeTargetDto(
+                label=label,
+                kind="skill_equip_slot",
+                display_name=slot.display_name,
+                skill_loadout_id=slot.skill_loadout_id,
+                deck_tier=slot.deck_tier,
+                skill_slot_index=slot.slot_index,
+                skill_id=slot.equipped_skill_id,
+            )
+        return lines
+
+    def _build_skill_proposal_lines(
+        self,
+        proposals: list[PendingSkillProposalDto],
+        counters: Dict[str, int],
+        runtime_targets: Dict[str, ToolRuntimeTargetDto],
+    ) -> list[str]:
+        lines: list[str] = []
+        for proposal in proposals:
+            counters["SP"] += 1
+            label = f"SP{counters['SP']}"
+            tier = "通常" if proposal.deck_tier.value == "normal" else "覚醒"
+            detail_parts = [proposal.proposal_type.value, f"{tier}デッキ"]
+            if proposal.target_slot_index is not None:
+                detail_parts.append(f"slot {proposal.target_slot_index + 1}")
+            if proposal.reason:
+                detail_parts.append(proposal.reason)
+            lines.append(
+                f"- {label}: {proposal.display_name}（{', '.join(detail_parts)}）"
+            )
+            runtime_targets[label] = SkillProposalToolRuntimeTargetDto(
+                label=label,
+                kind="skill_proposal",
+                display_name=proposal.display_name,
+                progress_id=proposal.progress_id,
+                proposal_id=proposal.proposal_id,
+                skill_id=proposal.offered_skill_id,
+                deck_tier=proposal.deck_tier,
+            )
+        return lines
+
+    def _build_awakened_action_lines(
+        self,
+        awakened_action: AwakenedActionDto | None,
+        counters: Dict[str, int],
+        runtime_targets: Dict[str, ToolRuntimeTargetDto],
+    ) -> list[str]:
+        if awakened_action is None:
+            return []
+        counters["AW"] += 1
+        label = f"AW{counters['AW']}"
+        runtime_targets[label] = AwakenedActionToolRuntimeTargetDto(
+            label=label,
+            kind="awakened_action",
+            display_name=awakened_action.display_name,
+            skill_loadout_id=awakened_action.skill_loadout_id,
+        )
+        return [f"- {label}: {awakened_action.display_name}"]
 
     def _build_active_quest_lines(
         self,

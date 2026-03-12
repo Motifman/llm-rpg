@@ -3,6 +3,7 @@ from typing import Dict, List, Set, Optional
 from datetime import datetime
 
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillProposalType
 
 
 @dataclass
@@ -212,6 +213,50 @@ class UsableSkillDto:
 
 
 @dataclass
+class EquipableSkillCandidateDto:
+    """装備候補スキル 1 件の DTO"""
+
+    skill_loadout_id: int
+    skill_id: int
+    display_name: str
+    source_deck_tier: DeckTier
+
+
+@dataclass
+class SkillEquipSlotDto:
+    """装備先スロット 1 件の DTO"""
+
+    skill_loadout_id: int
+    deck_tier: DeckTier
+    slot_index: int
+    display_name: str
+    equipped_skill_id: Optional[int] = None
+    equipped_skill_name: Optional[str] = None
+
+
+@dataclass
+class PendingSkillProposalDto:
+    """保留中スキル提案 1 件の DTO"""
+
+    progress_id: int
+    proposal_id: int
+    offered_skill_id: int
+    display_name: str
+    proposal_type: SkillProposalType
+    deck_tier: DeckTier
+    target_slot_index: Optional[int] = None
+    reason: str = ""
+
+
+@dataclass
+class AwakenedActionDto:
+    """覚醒モード発動候補 DTO"""
+
+    skill_loadout_id: int
+    display_name: str
+
+
+@dataclass
 class AttentionLevelOptionDto:
     """選択可能な注意レベル DTO"""
 
@@ -332,6 +377,10 @@ class PlayerCurrentStateDto:
     active_conversation: Optional[ActiveConversationDto] = None
     active_harvest: Optional[ActiveHarvestDto] = None
     usable_skills: List[UsableSkillDto] = field(default_factory=list)
+    equipable_skill_candidates: List[EquipableSkillCandidateDto] = field(default_factory=list)
+    skill_equip_slots: List[SkillEquipSlotDto] = field(default_factory=list)
+    pending_skill_proposals: List[PendingSkillProposalDto] = field(default_factory=list)
+    awakened_action: Optional[AwakenedActionDto] = None
     attention_level_options: List[AttentionLevelOptionDto] = field(default_factory=list)
     can_destroy_placeable: bool = False
     actionable_objects: List[VisibleObjectDto] = field(default_factory=list)

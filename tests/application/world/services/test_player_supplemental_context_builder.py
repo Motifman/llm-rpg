@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from ai_rpg_world.domain.combat.value_object.hit_box_shape import HitBoxShape
 from ai_rpg_world.application.trade.exceptions import PersonalTradeQueryApplicationException
 from ai_rpg_world.application.world.contracts.dtos import (
     GuildMemberSummaryDto,
@@ -17,9 +18,29 @@ from ai_rpg_world.domain.guild.enum.guild_enum import GuildRole
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.guild.value_object.guild_membership import GuildMembership
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.enum.player_enum import Element
 from ai_rpg_world.domain.shop.aggregate.shop_aggregate import ShopAggregate
 from ai_rpg_world.domain.shop.value_object.shop_id import ShopId
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.skill.aggregate.skill_deck_progress_aggregate import (
+    SkillDeckProgressAggregate,
+)
+from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import (
+    SkillLoadoutAggregate,
+)
+from ai_rpg_world.domain.skill.enum.skill_enum import (
+    DeckTier,
+    SkillHitPatternType,
+    SkillProposalType,
+)
+from ai_rpg_world.domain.skill.value_object.skill_deck_progress_id import (
+    SkillDeckProgressId,
+)
+from ai_rpg_world.domain.skill.value_object.skill_hit_pattern import SkillHitPattern
+from ai_rpg_world.domain.skill.value_object.skill_id import SkillId
+from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
+from ai_rpg_world.domain.skill.value_object.skill_proposal import SkillProposal
+from ai_rpg_world.domain.skill.value_object.skill_spec import SkillSpec
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import ChestComponent
 from ai_rpg_world.domain.world.exception.map_exception import (
@@ -72,6 +93,23 @@ def _make_shop(shop_id: int, spot_id: int, location_area_id: int, name: str, des
         name=name,
         description=description,
         listings={},
+    )
+
+
+def _make_skill(skill_id: int, name: str, *, awakened_only: bool = False) -> SkillSpec:
+    return SkillSpec(
+        skill_id=SkillId(skill_id),
+        name=name,
+        element=Element.NEUTRAL,
+        deck_cost=1,
+        cast_lock_ticks=1,
+        cooldown_ticks=3,
+        power_multiplier=1.0,
+        hit_pattern=SkillHitPattern.single_pulse(
+            pattern_type=SkillHitPatternType.MELEE,
+            shape=HitBoxShape.single_cell(),
+        ),
+        is_awakened_deck_only=awakened_only,
     )
 
 
@@ -460,3 +498,88 @@ class TestPlayerSupplementalContextBuilderCanDestroyPlaceable:
         builder = PlayerSupplementalContextBuilder()
         with pytest.raises(RuntimeError, match="unexpected"):
             builder.can_destroy_placeable(physical_map, player_id=1)
+
+
+class TestPlayerSupplementalContextBuilderSkillDecisionModels:
+    def test_build_skill_decision_models_from_loadout_and_progress(self):
+        loadout = SkillLoadoutAggregate.create(
+            loadout_id=SkillLoadoutId(10),
+            owner_id=1,
+            normal_capacity=10,
+            awakened_capacity=10,
+        )
+        loadout.equip_skill(DeckTier.NORMAL, 0, _make_skill(101, "火球"))
+        loadout.equip_skill(DeckTier.AWAKENED, 1, _make_skill(201, "閃光刃", awakened_only=True))
+
+        progress = SkillDeckProgressAggregate(
+            progress_id=SkillDeckProgressId(20),
+            owner_id=1,
+            pending_proposals=[
+                SkillProposal(
+                    proposal_id=1,
+                    proposal_type=SkillProposalType.ADD,
+                    offered_skill_id=SkillId(301),
+                    deck_tier=DeckTier.NORMAL,
+                    reason="新しい攻撃手段",
+                )
+            ],
+        )
+
+        loadout_repo = MagicMock()
+        loadout_repo.find_by_owner_id.return_value = loadout
+        progress_repo = MagicMock()
+        progress_repo.find_by_owner_id.return_value = progress
+        game_time_provider = MagicMock()
+        game_time_provider.get_current_tick.return_value = MagicMock(value=12)
+
+        builder = PlayerSupplementalContextBuilder(
+            skill_loadout_repository=loadout_repo,
+            skill_deck_progress_repository=progress_repo,
+            game_time_provider=game_time_provider,
+        )
+
+        candidates = builder.build_equipable_skill_candidates(player_id=1)
+        slots = builder.build_skill_equip_slots(player_id=1)
+        proposals = builder.build_pending_skill_proposals(player_id=1)
+        awakened_action = builder.build_awakened_action(player_id=1)
+
+        assert [(c.skill_id, c.source_deck_tier) for c in candidates] == [
+            (101, DeckTier.NORMAL),
+            (201, DeckTier.AWAKENED),
+        ]
+        assert len(slots) == 10
+        assert slots[0].display_name == "通常スロット 1"
+        assert slots[0].equipped_skill_id == 101
+        assert slots[6].display_name == "覚醒スロット 2"
+        assert slots[6].equipped_skill_name == "閃光刃"
+        assert len(proposals) == 1
+        assert proposals[0].progress_id == 20
+        assert proposals[0].proposal_id == 1
+        assert proposals[0].offered_skill_id == 301
+        assert proposals[0].proposal_type == SkillProposalType.ADD
+        assert awakened_action is not None
+        assert awakened_action.skill_loadout_id == 10
+
+    def test_build_awakened_action_returns_none_while_active(self):
+        loadout = SkillLoadoutAggregate.create(
+            loadout_id=SkillLoadoutId(10),
+            owner_id=1,
+            normal_capacity=10,
+            awakened_capacity=10,
+        )
+        loadout.activate_awakened_mode(
+            current_tick=10,
+            duration_ticks=5,
+            cooldown_reduction_rate=0.3,
+        )
+        loadout_repo = MagicMock()
+        loadout_repo.find_by_owner_id.return_value = loadout
+        game_time_provider = MagicMock()
+        game_time_provider.get_current_tick.return_value = MagicMock(value=12)
+
+        builder = PlayerSupplementalContextBuilder(
+            skill_loadout_repository=loadout_repo,
+            game_time_provider=game_time_provider,
+        )
+
+        assert builder.build_awakened_action(player_id=1) is None
