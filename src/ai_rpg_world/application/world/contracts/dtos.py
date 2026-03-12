@@ -347,3 +347,5 @@ class PlayerCurrentStateDto:
     available_trades: List["AvailableTradeSummaryDto"] = field(default_factory=list)
     # 視界タイルマップ（オプション、LLM 用）
     visible_tile_map: Optional["VisibleTileMapDto"] = None
+    # ゲーム内現在時刻（game_time_provider と world_time_config が設定されているときのみ）
+    current_game_time_label: Optional[str] = None

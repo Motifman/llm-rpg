@@ -74,6 +74,9 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_repository import (
 from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
     InMemoryGameTimeProvider,
 )
+from ai_rpg_world.domain.world.service.world_time_config_service import (
+    DefaultWorldTimeConfigService,
+)
 
 
 def _make_status(player_id: int, spot_id: int = 1, x: int = 0, y: int = 0) -> PlayerStatusAggregate:
@@ -719,4 +722,241 @@ class TestPlayerCurrentStateBuilder:
         assert result.area_names == ["広場"]
         assert result.area_id == 10
         assert result.area_name == "広場"
+
+    def test_build_player_current_state_includes_game_time_label_when_both_providers_set(
+        self,
+    ):
+        """game_time_provider と world_time_config_service が両方設定されているとき current_game_time_label が設定される"""
+        data_store = InMemoryDataStore()
+        status_repo = InMemoryPlayerStatusRepository(data_store)
+        profile_repo = InMemoryPlayerProfileRepository(data_store)
+        phys_repo = InMemoryPhysicalMapRepository(data_store)
+        spot_repo = InMemorySpotRepository(data_store)
+        spot_repo.save(Spot(SpotId(1), "Town", "A town"))
+        # ticks_per_day=96 で 10 ティック = 10/96 日 ≈ 2.5 時間
+        time_provider = InMemoryGameTimeProvider(initial_tick=10)
+        world_time_config = DefaultWorldTimeConfigService(
+            ticks_per_day=96,
+            days_per_month=30,
+            months_per_year=12,
+        )
+        builder = PlayerCurrentStateBuilder(
+            player_status_repository=status_repo,
+            player_profile_repository=profile_repo,
+            spot_repository=spot_repo,
+            connected_spots_provider=GatewayBasedConnectedSpotsProvider(phys_repo),
+            game_time_provider=time_provider,
+            world_time_config_service=world_time_config,
+        )
+        profile_repo.save(_make_profile(1, "Alice"))
+        status = _make_status(1, 1, 0, 0)
+        status_repo.save(status)
+        actor = WorldObject(
+            object_id=WorldObjectId.create(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.PLAYER,
+            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
+        )
+        physical_map = _make_map(1, [actor])
+        result = builder.build_player_current_state(
+            query=GetPlayerCurrentStateQuery(player_id=1),
+            player_status=status,
+            player_name="Alice",
+            spot=spot_repo.find_by_id(SpotId(1)),
+            physical_map=physical_map,
+            available_moves_result=None,
+        )
+        assert result.current_game_time_label is not None
+        # GameDateTime の format_for_display 形式（例: 1年1月1日 02:30:00）
+        assert "年" in result.current_game_time_label
+        assert "月" in result.current_game_time_label
+        assert "日" in result.current_game_time_label
+        assert ":" in result.current_game_time_label
+
+    def test_build_player_current_state_omits_game_time_label_when_game_time_provider_none(
+        self,
+    ):
+        """game_time_provider が None のとき current_game_time_label は None"""
+        data_store = InMemoryDataStore()
+        status_repo = InMemoryPlayerStatusRepository(data_store)
+        profile_repo = InMemoryPlayerProfileRepository(data_store)
+        phys_repo = InMemoryPhysicalMapRepository(data_store)
+        spot_repo = InMemorySpotRepository(data_store)
+        spot_repo.save(Spot(SpotId(1), "Town", "A town"))
+        world_time_config = DefaultWorldTimeConfigService(ticks_per_day=96)
+        builder = PlayerCurrentStateBuilder(
+            player_status_repository=status_repo,
+            player_profile_repository=profile_repo,
+            spot_repository=spot_repo,
+            connected_spots_provider=GatewayBasedConnectedSpotsProvider(phys_repo),
+            game_time_provider=None,  # None
+            world_time_config_service=world_time_config,
+        )
+        profile_repo.save(_make_profile(1, "Alice"))
+        status = _make_status(1, 1, 0, 0)
+        status_repo.save(status)
+        actor = WorldObject(
+            object_id=WorldObjectId.create(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.PLAYER,
+            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
+        )
+        physical_map = _make_map(1, [actor])
+        result = builder.build_player_current_state(
+            query=GetPlayerCurrentStateQuery(player_id=1),
+            player_status=status,
+            player_name="Alice",
+            spot=spot_repo.find_by_id(SpotId(1)),
+            physical_map=physical_map,
+            available_moves_result=None,
+        )
+        assert result.current_game_time_label is None
+
+    def test_build_player_current_state_omits_game_time_label_when_world_time_config_none(
+        self, setup_builder
+    ):
+        """world_time_config_service が None のとき current_game_time_label は None"""
+        builder, status_repo, profile_repo, phys_repo, spot_repo = setup_builder
+        # setup_builder の builder は game_time_provider のみ渡している（world_time_config なし）
+        profile_repo.save(_make_profile(1, "Alice"))
+        status = _make_status(1, 1, 0, 0)
+        status_repo.save(status)
+        actor = WorldObject(
+            object_id=WorldObjectId.create(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.PLAYER,
+            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
+        )
+        physical_map = _make_map(1, [actor])
+        result = builder.build_player_current_state(
+            query=GetPlayerCurrentStateQuery(player_id=1),
+            player_status=status,
+            player_name="Alice",
+            spot=spot_repo.find_by_id(SpotId(1)),
+            physical_map=physical_map,
+            available_moves_result=None,
+        )
+        assert result.current_game_time_label is None
+
+    def test_build_player_current_state_includes_game_time_label_when_both_providers_set(
+        self,
+    ):
+        """game_time_provider と world_time_config_service が両方設定されているとき current_game_time_label が設定される"""
+        data_store = InMemoryDataStore()
+        status_repo = InMemoryPlayerStatusRepository(data_store)
+        profile_repo = InMemoryPlayerProfileRepository(data_store)
+        phys_repo = InMemoryPhysicalMapRepository(data_store)
+        spot_repo = InMemorySpotRepository(data_store)
+        spot_repo.save(Spot(SpotId(1), "Town", "A town"))
+        builder = PlayerCurrentStateBuilder(
+            player_status_repository=status_repo,
+            player_profile_repository=profile_repo,
+            spot_repository=spot_repo,
+            connected_spots_provider=GatewayBasedConnectedSpotsProvider(phys_repo),
+            game_time_provider=InMemoryGameTimeProvider(initial_tick=3600),
+            world_time_config_service=DefaultWorldTimeConfigService(
+                ticks_per_day=86400,
+                days_per_month=30,
+                months_per_year=12,
+            ),
+        )
+        profile_repo.save(_make_profile(1, "Alice"))
+        status = _make_status(1, 1, 0, 0)
+        status_repo.save(status)
+        actor = WorldObject(
+            object_id=WorldObjectId.create(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.PLAYER,
+            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
+        )
+        physical_map = _make_map(1, [actor])
+        result = builder.build_player_current_state(
+            query=GetPlayerCurrentStateQuery(player_id=1),
+            player_status=status,
+            player_name="Alice",
+            spot=spot_repo.find_by_id(SpotId(1)),
+            physical_map=physical_map,
+            available_moves_result=None,
+        )
+        assert result.current_game_time_label is not None
+        assert "年" in result.current_game_time_label
+        assert "月" in result.current_game_time_label
+        assert "日" in result.current_game_time_label
+        assert ":" in result.current_game_time_label
+
+    def test_build_player_current_state_omits_game_time_label_when_game_time_provider_none(
+        self,
+    ):
+        """game_time_provider が None のとき current_game_time_label は None"""
+        data_store = InMemoryDataStore()
+        status_repo = InMemoryPlayerStatusRepository(data_store)
+        profile_repo = InMemoryPlayerProfileRepository(data_store)
+        phys_repo = InMemoryPhysicalMapRepository(data_store)
+        spot_repo = InMemorySpotRepository(data_store)
+        spot_repo.save(Spot(SpotId(1), "Town", "A town"))
+        builder = PlayerCurrentStateBuilder(
+            player_status_repository=status_repo,
+            player_profile_repository=profile_repo,
+            spot_repository=spot_repo,
+            connected_spots_provider=GatewayBasedConnectedSpotsProvider(phys_repo),
+            game_time_provider=None,
+            world_time_config_service=DefaultWorldTimeConfigService(ticks_per_day=86400),
+        )
+        profile_repo.save(_make_profile(1, "Alice"))
+        status = _make_status(1, 1, 0, 0)
+        status_repo.save(status)
+        actor = WorldObject(
+            object_id=WorldObjectId.create(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.PLAYER,
+            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
+        )
+        physical_map = _make_map(1, [actor])
+        result = builder.build_player_current_state(
+            query=GetPlayerCurrentStateQuery(player_id=1),
+            player_status=status,
+            player_name="Alice",
+            spot=spot_repo.find_by_id(SpotId(1)),
+            physical_map=physical_map,
+            available_moves_result=None,
+        )
+        assert result.current_game_time_label is None
+
+    def test_build_player_current_state_omits_game_time_label_when_world_time_config_none(
+        self,
+    ):
+        """world_time_config_service が None のとき current_game_time_label は None"""
+        data_store = InMemoryDataStore()
+        status_repo = InMemoryPlayerStatusRepository(data_store)
+        profile_repo = InMemoryPlayerProfileRepository(data_store)
+        phys_repo = InMemoryPhysicalMapRepository(data_store)
+        spot_repo = InMemorySpotRepository(data_store)
+        spot_repo.save(Spot(SpotId(1), "Town", "A town"))
+        builder = PlayerCurrentStateBuilder(
+            player_status_repository=status_repo,
+            player_profile_repository=profile_repo,
+            spot_repository=spot_repo,
+            connected_spots_provider=GatewayBasedConnectedSpotsProvider(phys_repo),
+            game_time_provider=InMemoryGameTimeProvider(initial_tick=0),
+            world_time_config_service=None,
+        )
+        profile_repo.save(_make_profile(1, "Alice"))
+        status = _make_status(1, 1, 0, 0)
+        status_repo.save(status)
+        actor = WorldObject(
+            object_id=WorldObjectId.create(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.PLAYER,
+            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
+        )
+        physical_map = _make_map(1, [actor])
+        result = builder.build_player_current_state(
+            query=GetPlayerCurrentStateQuery(player_id=1),
+            player_status=status,
+            player_name="Alice",
+            spot=spot_repo.find_by_id(SpotId(1)),
+            physical_map=physical_map,
+            available_moves_result=None,
+        )
+        assert result.current_game_time_label is None
 

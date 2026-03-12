@@ -24,6 +24,7 @@ def _minimal_current_state_dto(
     terrain_type="grass",
     has_visible_objects=False,
     has_available_moves=False,
+    current_game_time_label=None,
 ):
     """テスト用の最小限の PlayerCurrentStateDto を組み立てる"""
     visible = []
@@ -86,6 +87,7 @@ def _minimal_current_state_dto(
         attention_level=AttentionLevel.FULL,
         actionable_objects=actionable,
         notable_objects=notable,
+        current_game_time_label=current_game_time_label,
     )
 
 
@@ -318,3 +320,23 @@ class TestDefaultCurrentStateFormatter:
             text = formatter.format(dto)
             assert "注意レベル" in text
             assert level.value in text
+
+    def test_format_includes_current_game_time_when_present(self, formatter):
+        """current_game_time_label が設定されているとき現在時刻が含まれる"""
+        dto = _minimal_current_state_dto(
+            current_game_time_label="2年3月4日 12:30:45",
+        )
+        text = formatter.format(dto)
+        assert "現在時刻: 2年3月4日 12:30:45" in text
+
+    def test_format_omits_current_game_time_when_none(self, formatter):
+        """current_game_time_label が None のとき現在時刻行が含まれない"""
+        dto = _minimal_current_state_dto(current_game_time_label=None)
+        text = formatter.format(dto)
+        assert "現在時刻:" not in text
+
+    def test_format_omits_current_game_time_when_empty_string(self, formatter):
+        """current_game_time_label が空文字のとき現在時刻行が含まれない（falsy 扱い）"""
+        dto = _minimal_current_state_dto(current_game_time_label="")
+        text = formatter.format(dto)
+        assert "現在時刻:" not in text
