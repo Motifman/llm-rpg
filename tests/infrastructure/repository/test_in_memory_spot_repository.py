@@ -108,6 +108,34 @@ class TestInMemorySpotRepository:
         assert repo.find_by_id(SpotId(1)) is None
         assert repo.find_all() == []
 
+    def test_find_by_name_returns_spot_when_exists(self, repo):
+        """find_by_name で存在するスポットを名前で取得できる"""
+        repo.save(Spot(SpotId(1), "北の森", "冒険の森"))
+        found = repo.find_by_name("北の森")
+        assert found is not None
+        assert found.spot_id == SpotId(1)
+        assert found.name == "北の森"
+        assert found.description == "冒険の森"
+
+    def test_find_by_name_returns_none_when_not_exists(self, repo):
+        """find_by_name で存在しない名前は None"""
+        repo.save(Spot(SpotId(1), "Town", ""))
+        assert repo.find_by_name("存在しないスポット") is None
+
+    def test_find_by_name_empty_repo_returns_none(self, repo):
+        """空のリポジトリで find_by_name は None"""
+        assert repo.find_by_name("何でも") is None
+
+    def test_find_by_name_none_input_returns_none(self, repo):
+        """None を渡すと find_by_name は None を返す（型チェック前の防御）"""
+        repo.save(Spot(SpotId(1), "Town", ""))
+        assert repo.find_by_name(None) is None
+
+    def test_find_by_name_whitespace_only_returns_none(self, repo):
+        """空白のみの名前で find_by_name は None"""
+        repo.save(Spot(SpotId(1), "Town", ""))
+        assert repo.find_by_name("   ") is None
+
 
 class TestInMemorySpotRepositorySpotValidation:
     """Spot エンティティのバリデーション（リポジトリ経由で save するケース）"""

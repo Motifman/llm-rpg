@@ -43,6 +43,16 @@ DEFAULT_REMEDIATION_BY_ERROR_CODE: Dict[str, str] = {
     "QUEST_ISSUER_NOT_AT_GUILD_LOCATION": "ギルド依頼はギルドのロケーションにいる場合のみ発行できます。ギルドがある場所へ移動してください。",
     "QUEST_GUILD_NOT_FOUND": "指定したギルドが見つかりません。",
     "INVALID_OBJECTIVES": "クエスト目標（objectives）の形式を確認してください。",
+    "INVALID_OBJECTIVE_TYPE": "プレイヤー発行可能な目標は kill_monster, obtain_item, reach_spot, kill_player です。",
+    "MONSTER_TEMPLATE_NOT_FOUND": "指定したモンスター名が見つかりません。名前を確認してください。",
+    "SPOT_NOT_FOUND": "指定したスポット名が見つかりません。名前を確認してください。",
+    "ITEM_SPEC_NOT_FOUND": "指定したアイテム名が見つかりません。名前を確認してください。",
+    "PLAYER_PROFILE_NOT_FOUND": "指定したプレイヤー名が見つかりません。名前を確認してください。",
+    "RESOLVER_NOT_CONFIGURED": "target_name による解決にはリポジトリ設定が必要です。target_id を指定してください。",
+    "MISSING_CURRENT_SPOT": "現在地スポットが取得できていません。マップ上にいるか確認してください。",
+    "MISSING_CURRENT_AREA": "現在地がロケーションエリアに含まれていません。ギルドはロケーション内で作成してください。",
+    "MISSING_GUILD_NAME": "ギルド名を指定してください。",
+    "INVALID_ROLE": "役職は leader / officer / member のいずれかを指定してください。",
 }
 
 

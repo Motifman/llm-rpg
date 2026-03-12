@@ -455,24 +455,28 @@ QUEST_ISSUE_PARAMETERS = {
     "properties": {
         "objectives": {
             "type": "array",
-            "description": "クエスト目標のリスト。各要素は object_type, target_id, required_count を持つオブジェクト。",
+            "description": "クエスト目標のリスト。target_name または target_id のいずれかを指定。target_name はモンスター名・スポット名・アイテム名・プレイヤー名で検索。",
             "items": {
                 "type": "object",
                 "properties": {
                     "objective_type": {
                         "type": "string",
-                        "description": "kill_monster, talk_to_npc, reach_spot, obtain_item 等",
+                        "description": "kill_monster, obtain_item, reach_spot, kill_player（名前解決対応）。talk_to_npc 等は target_id で指定。",
+                    },
+                    "target_name": {
+                        "type": "string",
+                        "description": "目標の名前（ゴブリン、北の森、鉄の剣、プレイヤー名 等）。target_id の代わりに指定可能。",
                     },
                     "target_id": {
                         "type": "integer",
-                        "description": "目標の ID（モンスター種別、NPC ID、スポット ID 等）",
+                        "description": "目標の ID（モンスター種別、NPC ID、スポット ID 等）。target_name の代わりに指定可能。",
                     },
                     "required_count": {
                         "type": "integer",
                         "description": "必要数",
                     },
                 },
-                "required": ["objective_type", "target_id", "required_count"],
+                "required": ["objective_type", "required_count"],
             },
         },
         "reward_gold": {"type": "integer", "description": "報酬ゴールド。", "default": 0},

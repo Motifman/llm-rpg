@@ -192,6 +192,7 @@ def create_llm_agent_wiring(
     observation_formatter: Optional[IObservationFormatter] = None,
     spot_repository: Optional[Any] = None,
     item_spec_repository: Optional[Any] = None,
+    monster_template_repository: Optional[Any] = None,
     item_repository: Optional[Any] = None,
     quest_repository: Optional[Any] = None,
     shop_repository: Optional[Any] = None,
@@ -374,7 +375,12 @@ def create_llm_agent_wiring(
         todo_store=todo_store,
         working_memory_store=working_memory_store,
     )
-    tool_argument_resolver = DefaultToolArgumentResolver()
+    tool_argument_resolver = DefaultToolArgumentResolver(
+        monster_template_repository=monster_template_repository,
+        spot_repository=spot_repository,
+        item_spec_repository=item_spec_repository,
+        player_profile_repository=player_profile_repository,
+    )
 
     if reflection_state_port is None:
         if effective_memory_db_path:
