@@ -1,72 +1,84 @@
+"""アイテム効果の値オブジェクト。
+
+消費可能アイテムが持つ効果の「データ」のみを定義する。
+効果の適用（PlayerStatusAggregate への反映）はアプリケーション層の
+ConsumableEffectHandler が担当し、ドメイン間の依存を避ける。
+"""
+
 from abc import ABC, abstractmethod
-from typing import List, TYPE_CHECKING, Union
-from ai_rpg_world.domain.common.value_object import Exp
-from ai_rpg_world.domain.player.value_object.gold import Gold
+from dataclasses import dataclass
+
 from ai_rpg_world.domain.item.exception import ItemEffectValidationException
 
-if TYPE_CHECKING:
-    from ai_rpg_world.domain.player.player import Player
+
+def _validate_non_negative(value: int, name: str) -> None:
+    if value < 0:
+        raise ItemEffectValidationException(f"{name}: amount must be >= 0, got {value}")
 
 
 class ItemEffect(ABC):
-    """アイテムの効果"""
+    """アイテム効果の基底。値オブジェクトとしてデータのみを保持する。"""
+
     @abstractmethod
-    def apply(self, player: 'Player'):
-        pass
+    def __repr__(self) -> str:
+        ...
 
 
+@dataclass(frozen=True)
 class HealEffect(ItemEffect):
-    """回復効果"""
-    def __init__(self, amount: int):
-        if amount < 0:
-            raise ItemEffectValidationException(f"Heal effect: amount must be >= 0, got {amount}")
-        self.amount = amount
+    """HP回復効果のデータ"""
 
-    def apply(self, player: 'Player'):
-        player.heal(self.amount)
+    amount: int
+
+    def __post_init__(self) -> None:
+        _validate_non_negative(self.amount, "Heal effect")
 
 
+@dataclass(frozen=True)
 class RecoverMpEffect(ItemEffect):
-    """MP回復効果"""
-    def __init__(self, amount: int):
-        if amount < 0:
-            raise ItemEffectValidationException(f"Recover MP effect: amount must be >= 0, got {amount}")
-        self.amount = amount
+    """MP回復効果のデータ"""
 
-    def apply(self, player: 'Player'):
-        player.recover_mp(self.amount)
+    amount: int
+
+    def __post_init__(self) -> None:
+        _validate_non_negative(self.amount, "Recover MP effect")
 
 
+@dataclass(frozen=True)
 class GoldEffect(ItemEffect):
-    """所持金増加効果"""
-    def __init__(self, amount: int):
-        if amount < 0:
-            raise ItemEffectValidationException(f"Gold effect: amount must be >= 0, got {amount}")
-        self.gold = Gold(amount)
+    """所持金増加効果のデータ。amount はアプリケーション層で earn_gold に渡される。"""
 
-    def apply(self, player: 'Player'):
-        player.receive_gold(self.gold)
+    amount: int
+
+    def __post_init__(self) -> None:
+        _validate_non_negative(self.amount, "Gold effect")
 
 
+@dataclass(frozen=True)
 class ExpEffect(ItemEffect):
-    """経験値増加効果"""
-    def __init__(self, amount: int):
-        if amount < 0:
-            raise ItemEffectValidationException(f"Exp effect: amount must be >= 0, got {amount}")
-        self.amount = amount
+    """経験値増加効果のデータ"""
 
-    def apply(self, player: 'Player'):
-        # 経験値増加効果を適用
-        exp = Exp(self.amount)
-        player.receive_exp(exp)
+    amount: int
+
+    def __post_init__(self) -> None:
+        _validate_non_negative(self.amount, "Exp effect")
 
 
+@dataclass(frozen=True)
 class CompositeItemEffect(ItemEffect):
-    """複合効果"""
-    def __init__(self, effects: List[ItemEffect]):
-        self.effects = effects
+    """複数効果をまとめたデータ"""
 
-    def apply(self, player: 'Player'):
-        for effect in self.effects:
-            effect.apply(player)
+    effects: tuple[ItemEffect, ...]
 
+    def __post_init__(self) -> None:
+        if self.effects is None:
+            raise ItemEffectValidationException(
+                "CompositeItemEffect: effects must not be None"
+            )
+        if not isinstance(self.effects, tuple):
+            object.__setattr__(self, "effects", tuple(self.effects))
+        for i, sub in enumerate(self.effects):
+            if not isinstance(sub, ItemEffect):
+                raise ItemEffectValidationException(
+                    f"CompositeItemEffect: effects[{i}] must be ItemEffect, got {type(sub).__name__}"
+                )

@@ -104,12 +104,11 @@ class ItemInstance:
                 return True
 
         # 数量を減らす（1以上の場合）
-        if self._quantity > 1:
+        if self._quantity >= 1:
             self._quantity -= 1
             return True
 
-        # 数量が1で耐久度がない場合、または耐久度が正常に使用された場合
-        return True
+        return False  # 数量が0の場合は使用不可
 
     def can_stack_with(self, other: 'ItemInstance') -> bool:
         """他のアイテムインスタンスとスタック可能かどうか
@@ -199,8 +198,7 @@ class ItemInstance:
 
         if quantity > self._item_spec.max_stack_size.value:
             raise StackSizeExceededException(
-                current_quantity=quantity,
-                max_stack_size=self._item_spec.max_stack_size.value
+                f"Stack size exceeded: current {quantity}, max {self._item_spec.max_stack_size.value}"
             )
 
         self._quantity = quantity

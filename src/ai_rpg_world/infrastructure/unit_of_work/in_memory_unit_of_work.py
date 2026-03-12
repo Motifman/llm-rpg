@@ -127,28 +127,18 @@ class InMemoryUnitOfWork(UnitOfWork):
         if not self._pending_events:
             return
 
+        # イベントパブリッシャーがない場合は処理をスキップ（テスト等で event_publisher=None のとき）
+        if self._event_publisher is None:
+            return
+
         # 別トランザクションを開始
         separate_uow = self._unit_of_work_factory()
         try:
             with separate_uow:
-                # メインのイベントパブリッシャーを使用してイベントを発行
-                if self._event_publisher is not None:
-                    # 保留中のイベントを別トランザクションのパブリッシャーに渡す
-                    separate_uow._event_publisher = self._event_publisher
-                    separate_uow._event_publisher._pending_events.extend(self._pending_events)
-                    separate_uow._event_publisher.publish_pending_events()
-                else:
-                    # イベントパブリッシャーがない場合でも、メインのイベントパブリッシャーのハンドラーを使用
-                    for event in self._pending_events:
-                        event_type = type(event)
-                        # 非同期ハンドラーを使用
-                        handlers = self._event_publisher._async_handlers.get(event_type, [])
-                        for handler in handlers:
-                            try:
-                                handler.handle(event)
-                            except Exception as e:
-                                # イベント処理の失敗はメインのビジネスロジックに影響を与えない
-                                print(f"Error handling event {event_type} in separate transaction: {e}")
+                # 保留中のイベントを別トランザクションのパブリッシャーに渡す
+                separate_uow._event_publisher = self._event_publisher
+                separate_uow._event_publisher._pending_events.extend(self._pending_events)
+                separate_uow._event_publisher.publish_pending_events()
 
         except Exception as e:
             # イベント処理全体の失敗はログに記録するが、メインのコミットを失敗させない

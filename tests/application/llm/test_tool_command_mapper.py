@@ -59,9 +59,11 @@ from ai_rpg_world.application.world.exceptions.command.pursuit_command_exception
     PursuitTargetNotVisibleException,
 )
 from ai_rpg_world.application.world.exceptions.command.place_command_exception import (
-    NoItemInSlotException,
-    ItemReservedForDropException,
     PlacementSpotNotFoundException,
+)
+from ai_rpg_world.application.world.exceptions.command.drop_command_exception import (
+    NoItemInSlotForDropException,
+    ItemReservedForDropException,
 )
 
 
@@ -680,7 +682,7 @@ class TestToolCommandMapperDropItem:
 
     def test_execute_drop_item_no_item_in_slot_returns_failure_dto(self):
         drop_service = MagicMock()
-        drop_service.drop_from_slot.side_effect = NoItemInSlotException(1, 0)
+        drop_service.drop_from_slot.side_effect = NoItemInSlotForDropException(1, 0)
         mapper = ToolCommandMapper(
             movement_service=MagicMock(),
             drop_item_service=drop_service,
