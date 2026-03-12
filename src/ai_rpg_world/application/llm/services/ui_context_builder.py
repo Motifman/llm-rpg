@@ -55,6 +55,7 @@ _VISIBLE_LABEL_PREFIX = {
     "npc": "N",
     "monster": "M",
     "destination": "S",
+    "ground_item": "GI",  # タイルマップの I に対応。落ちているアイテムを識別しやすくする
 }
 
 _VISIBLE_KIND_LABEL = {
@@ -91,7 +92,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
 
         counters: Dict[str, int] = {
             "P": 0, "N": 0, "M": 0, "O": 0, "S": 0, "I": 0, "C": 0, "R": 0, "K": 0, "A": 0,
-            "Q": 0, "G": 0, "GM": 0, "SH": 0, "L": 0, "D": 0, "T": 0, "H": 0,
+            "Q": 0, "G": 0, "GI": 0, "GM": 0, "SH": 0, "L": 0, "D": 0, "T": 0, "H": 0,
         }
         runtime_targets: Dict[str, ToolRuntimeTargetDto] = {}
         lines = [current_state_text.rstrip()]
