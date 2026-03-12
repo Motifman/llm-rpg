@@ -2,6 +2,7 @@ import pytest
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
+from ai_rpg_world.domain.item.value_object.item_effect import HealEffect
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
 from ai_rpg_world.domain.item.exception import ItemSpecValidationException
 
@@ -197,6 +198,39 @@ class TestItemSpec:
         assert spec.equipment_type is None
         assert not spec.is_equipment()
         assert spec.get_equipment_type() is None
+
+    def test_create_consumable_item_with_consume_effect(self):
+        """消費アイテムに consume_effect を設定できる"""
+        template_id = ItemSpecId(110)
+        max_stack = MaxStackSize(64)
+        spec = ItemSpec(
+            item_spec_id=template_id,
+            name="Health Potion",
+            item_type=ItemType.CONSUMABLE,
+            rarity=Rarity.COMMON,
+            description="Restores health",
+            max_stack_size=max_stack,
+            consume_effect=HealEffect(amount=50),
+        )
+        assert spec.consume_effect is not None
+        assert spec.consume_effect.amount == 50
+
+    def test_invalid_consume_effect_for_non_consumable_raises(self):
+        """CONSUMABLE 以外のアイテムに consume_effect を設定すると ItemSpecValidationException"""
+        template_id = ItemSpecId(111)
+        max_stack = MaxStackSize(64)
+        with pytest.raises(ItemSpecValidationException) as exc_info:
+            ItemSpec(
+                item_spec_id=template_id,
+                name="Material with effect",
+                item_type=ItemType.MATERIAL,
+                rarity=Rarity.COMMON,
+                description="Invalid",
+                max_stack_size=max_stack,
+                consume_effect=HealEffect(amount=50),
+            )
+        assert "consume_effect" in str(exc_info.value)
+        assert "CONSUMABLE" in str(exc_info.value)
 
     def test_create_equipment_items_different_types(self):
         """異なる装備タイプのアイテム作成テスト"""

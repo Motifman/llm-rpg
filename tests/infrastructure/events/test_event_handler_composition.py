@@ -138,3 +138,17 @@ class TestEventHandlerComposition:
         )
         composition.register_for_profile(event_publisher, EventHandlerProfile.FULL)
         intentional_drop_reg.register_handlers.assert_called_once_with(event_publisher)
+
+    def test_register_for_profile_full_invokes_consumable_effect_registry_when_provided(
+        self, event_publisher, mock_registry
+    ):
+        """FULL で consumable_effect_registry を渡すと register_handlers が呼ばれる"""
+        consumable_effect_reg = MagicMock()
+        consumable_effect_reg.register_handlers = MagicMock()
+        composition = EventHandlerComposition(
+            gateway_handler=MagicMock(),
+            map_interaction_registry=mock_registry,
+            consumable_effect_registry=consumable_effect_reg,
+        )
+        composition.register_for_profile(event_publisher, EventHandlerProfile.FULL)
+        consumable_effect_reg.register_handlers.assert_called_once_with(event_publisher)
