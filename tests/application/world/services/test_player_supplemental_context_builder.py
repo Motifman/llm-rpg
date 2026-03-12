@@ -19,6 +19,7 @@ from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.guild.value_object.guild_membership import GuildMembership
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.enum.player_enum import Element
+from ai_rpg_world.domain.player.exception import InsufficientMpException
 from ai_rpg_world.domain.shop.aggregate.shop_aggregate import ShopAggregate
 from ai_rpg_world.domain.shop.value_object.shop_id import ShopId
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -579,6 +580,32 @@ class TestPlayerSupplementalContextBuilderSkillDecisionModels:
 
         builder = PlayerSupplementalContextBuilder(
             skill_loadout_repository=loadout_repo,
+            game_time_provider=game_time_provider,
+        )
+
+        assert builder.build_awakened_action(player_id=1) is None
+
+    def test_build_awakened_action_returns_none_when_resources_are_insufficient(self):
+        loadout = SkillLoadoutAggregate.create(
+            loadout_id=SkillLoadoutId(10),
+            owner_id=1,
+            normal_capacity=10,
+            awakened_capacity=10,
+        )
+        loadout_repo = MagicMock()
+        loadout_repo.find_by_owner_id.return_value = loadout
+        player_status_repo = MagicMock()
+        status = MagicMock()
+        status.validate_resource_consumption.side_effect = InsufficientMpException(
+            "MPが不足しています。"
+        )
+        player_status_repo.find_by_id.return_value = status
+        game_time_provider = MagicMock()
+        game_time_provider.get_current_tick.return_value = MagicMock(value=12)
+
+        builder = PlayerSupplementalContextBuilder(
+            skill_loadout_repository=loadout_repo,
+            player_status_repository=player_status_repo,
             game_time_provider=game_time_provider,
         )
 

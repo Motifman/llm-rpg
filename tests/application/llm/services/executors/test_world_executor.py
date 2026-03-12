@@ -19,6 +19,10 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_INSPECT_TARGET,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_PLACE_OBJECT,
+    TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
+)
+from ai_rpg_world.application.skill.exceptions.command.skill_command_exception import (
+    SkillCommandException,
 )
 
 
@@ -58,6 +62,16 @@ def executor_without_services():
     return WorldToolExecutor()
 
 
+@pytest.fixture
+def skill_tool_service():
+    return MagicMock()
+
+
+@pytest.fixture
+def executor_with_skill_tool_service(skill_tool_service):
+    return WorldToolExecutor(skill_tool_service=skill_tool_service)
+
+
 class TestWorldToolExecutorGetHandlers:
     """get_handlers() の振る舞い"""
 
@@ -78,6 +92,10 @@ class TestWorldToolExecutorGetHandlers:
         assert TOOL_NAME_CHEST_STORE in handlers
         assert TOOL_NAME_CHEST_TAKE in handlers
         assert TOOL_NAME_COMBAT_USE_SKILL in handlers
+
+    def test_with_skill_service_includes_awakened_handler(self, executor_with_skill_tool_service):
+        handlers = executor_with_skill_tool_service.get_handlers()
+        assert TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE in handlers
 
 
 class TestWorldToolExecutorValidation:
@@ -106,7 +124,13 @@ class TestWorldToolExecutorValidation:
         """全サービスが None のときは検証を通過"""
         executor = WorldToolExecutor()
         handlers = executor.get_handlers()
-        assert len(handlers) == 13  # 各ハンドラは実行時に None チェック
+        assert len(handlers) == 17  # 各ハンドラは実行時に None チェック
+
+    def test_skill_tool_service_without_activate_awakened_mode_raises_type_error(self):
+        svc = MagicMock()
+        del svc.activate_awakened_mode
+        with pytest.raises(TypeError, match="activate_awakened_mode"):
+            WorldToolExecutor(skill_tool_service=svc)
 
 
 class TestWorldToolExecutorInteract:
@@ -173,3 +197,48 @@ class TestWorldToolExecutorIntegrationWithMapper:
             1, {"target_world_object_id": 100, "target_display_name": "箱"}
         )
         assert result.success is True
+
+
+class TestWorldToolExecutorAwakened:
+    def test_awakened_success_returns_short_message(
+        self,
+        executor_with_skill_tool_service,
+        skill_tool_service,
+    ):
+        result = executor_with_skill_tool_service._execute_skill_activate_awakened_mode(
+            1,
+            {"loadout_id": 10},
+        )
+
+        assert result.success is True
+        assert result.message == "覚醒モードを発動しました。"
+        skill_tool_service.activate_awakened_mode.assert_called_once_with(
+            player_id=1,
+            loadout_id=10,
+        )
+
+    def test_awakened_without_service_returns_unknown_tool(self, executor_without_services):
+        result = executor_without_services._execute_skill_activate_awakened_mode(
+            1,
+            {"loadout_id": 10},
+        )
+
+        assert result.success is False
+        assert result.error_code == "UNKNOWN_TOOL"
+
+    def test_awakened_failure_uses_exception_result(
+        self,
+        executor_with_skill_tool_service,
+        skill_tool_service,
+    ):
+        skill_tool_service.activate_awakened_mode.side_effect = SkillCommandException(
+            "awakened mode is already active"
+        )
+
+        result = executor_with_skill_tool_service._execute_skill_activate_awakened_mode(
+            1,
+            {"loadout_id": 10},
+        )
+
+        assert result.success is False
+        assert "already active" in result.message

@@ -248,6 +248,21 @@ class TestDefaultAvailableToolsProvider:
         assert TOOL_NAME_SKILL_REJECT_PROPOSAL not in names
         assert TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE not in names
 
+    def test_get_available_tools_hides_awakened_tool_when_action_missing(self, provider):
+        ctx = _context_with_moves(0)
+        ctx.equipable_skill_candidates = [
+            EquipableSkillCandidateDto(10, 100, "火球", DeckTier.NORMAL)
+        ]
+        ctx.skill_equip_slots = [
+            SkillEquipSlotDto(10, DeckTier.NORMAL, 0, "通常スロット 1")
+        ]
+        ctx.awakened_action = None
+
+        tools = provider.get_available_tools(ctx)
+        names = [t["function"]["name"] for t in tools if t.get("type") == "function"]
+
+        assert TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE not in names
+
     def test_get_available_tools_exposes_proposal_decisions_without_equip_labels(self, provider):
         ctx = _context_with_moves(0)
         ctx.pending_skill_proposals = [
