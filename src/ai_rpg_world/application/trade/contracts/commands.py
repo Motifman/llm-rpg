@@ -26,3 +26,10 @@ class CancelTradeCommand:
     """取引キャンセルコマンド"""
     trade_id: int
     player_id: int
+
+
+@dataclass(frozen=True)
+class DeclineTradeCommand:
+    """取引拒否コマンド"""
+    trade_id: int
+    decliner_id: int

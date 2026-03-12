@@ -424,6 +424,13 @@ class TradeCancelAvailabilityResolver(IAvailabilityResolver):
         return context is not None and bool(context.available_trades)
 
 
+class TradeDeclineAvailabilityResolver(IAvailabilityResolver):
+    """取引拒否は自分宛ての直接取引があるときに利用可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None and bool(context.available_trades)
+
+
 class MemoryQueryAvailabilityResolver(IAvailabilityResolver):
     """memory_query は現在状態が取得できているときに利用可能。"""
 

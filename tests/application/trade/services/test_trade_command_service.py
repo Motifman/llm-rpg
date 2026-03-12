@@ -3,7 +3,12 @@ from datetime import datetime
 from unittest.mock import patch
 
 from ai_rpg_world.application.trade.services.trade_command_service import TradeCommandService
-from ai_rpg_world.application.trade.contracts.commands import OfferItemCommand, AcceptTradeCommand, CancelTradeCommand
+from ai_rpg_world.application.trade.contracts.commands import (
+    OfferItemCommand,
+    AcceptTradeCommand,
+    CancelTradeCommand,
+    DeclineTradeCommand,
+)
 from ai_rpg_world.application.trade.contracts.dtos import TradeCommandResultDto
 from ai_rpg_world.application.trade.exceptions.command.trade_command_exception import (
     TradeCommandException,
@@ -445,3 +450,237 @@ class TestTradeCommandService:
         with pytest.raises(TradeCommandException) as excinfo:
             service.cancel_trade(command)
         assert "Trade is already completed or cancelled" in str(excinfo.value)
+
+    def test_decline_trade_success(self, setup_service):
+        """直接取引の宛先が断ると成功し、アイテム予約が解除される"""
+        service, trade_repo, inv_repo, status_repo, uow, _ = setup_service
+
+        seller_id = 1
+        target_id = 2  # 直接取引の宛先
+        item_id = ItemInstanceId(100)
+
+        seller_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
+        seller_inv.acquire_item(item_id)
+        seller_inv.reserve_item(SlotId(0))
+        inv_repo.save(seller_inv)
+
+        trade_id = trade_repo.generate_trade_id()
+        trade = TradeAggregate.create_new_trade(
+            trade_id=trade_id,
+            seller_id=PlayerId(seller_id),
+            offered_item_id=item_id,
+            requested_gold=TradeRequestedGold.of(500),
+            created_at=datetime.now(),
+            trade_scope=TradeScope.direct_trade(PlayerId(target_id)),
+        )
+        trade_repo.save(trade)
+
+        command = DeclineTradeCommand(trade_id=trade_id.value, decliner_id=target_id)
+        result = service.decline_trade(command)
+
+        assert result.success is True
+
+        trade = trade_repo.find_by_id(trade_id)
+        assert trade.status == TradeStatus.CANCELLED
+
+        inventory = inv_repo.find_by_id(PlayerId(seller_id))
+        assert inventory.is_item_reserved(item_id) is False
+        assert inventory.get_item_instance_id_by_slot(SlotId(0)) == item_id
+
+    def test_decline_trade_not_found(self, setup_service):
+        """存在しない取引を断ろうとするとTradeNotFoundForCommandExceptionが発生する"""
+        service, _, _, _, _, _ = setup_service
+
+        command = DeclineTradeCommand(trade_id=999, decliner_id=2)
+        with pytest.raises(TradeNotFoundForCommandException):
+            service.decline_trade(command)
+
+    def test_decline_trade_seller_cannot_decline(self, setup_service):
+        """出品者が断ろうとするとTradeAccessDeniedExceptionまたはTradeCommandExceptionが発生する"""
+        service, trade_repo, inv_repo, _, uow, _ = setup_service
+
+        seller_id = 1
+        target_id = 2
+        item_id = ItemInstanceId(100)
+
+        seller_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
+        seller_inv.acquire_item(item_id)
+        seller_inv.reserve_item(SlotId(0))
+        inv_repo.save(seller_inv)
+
+        trade_id = trade_repo.generate_trade_id()
+        trade = TradeAggregate.create_new_trade(
+            trade_id=trade_id,
+            seller_id=PlayerId(seller_id),
+            offered_item_id=item_id,
+            requested_gold=TradeRequestedGold.of(500),
+            created_at=datetime.now(),
+            trade_scope=TradeScope.direct_trade(PlayerId(target_id)),
+        )
+        trade_repo.save(trade)
+
+        command = DeclineTradeCommand(trade_id=trade_id.value, decliner_id=seller_id)
+        with pytest.raises((TradeAccessDeniedException, TradeCommandException)):
+            service.decline_trade(command)
+
+    def test_decline_trade_global_raises(self, setup_service):
+        """グローバル取引を断ろうとするとTradeCommandExceptionが発生する"""
+        service, trade_repo, inv_repo, _, uow, _ = setup_service
+
+        seller_id = 1
+        other_id = 2
+        item_id = ItemInstanceId(100)
+
+        seller_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
+        seller_inv.acquire_item(item_id)
+        seller_inv.reserve_item(SlotId(0))
+        inv_repo.save(seller_inv)
+
+        trade_id = trade_repo.generate_trade_id()
+        trade = TradeAggregate.create_new_trade(
+            trade_id=trade_id,
+            seller_id=PlayerId(seller_id),
+            offered_item_id=item_id,
+            requested_gold=TradeRequestedGold.of(500),
+            created_at=datetime.now(),
+            trade_scope=TradeScope.global_trade(),
+        )
+        trade_repo.save(trade)
+
+        command = DeclineTradeCommand(trade_id=trade_id.value, decliner_id=other_id)
+        with pytest.raises(TradeCommandException):
+            service.decline_trade(command)
+
+    def test_decline_trade_success(self, setup_service):
+        """直接取引の宛先が断ると成功する"""
+        service, trade_repo, inv_repo, status_repo, uow, _ = setup_service
+
+        seller_id = 1
+        target_id = 2
+        item_id = ItemInstanceId(100)
+
+        # 出品者インベントリ（アイテム予約済み）
+        seller_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
+        seller_inv.acquire_item(item_id)
+        seller_inv.reserve_item(SlotId(0))
+        inv_repo.save(seller_inv)
+
+        # 直接取引（target_id 宛て）
+        trade_id = trade_repo.generate_trade_id()
+        trade = TradeAggregate.create_new_trade(
+            trade_id=trade_id,
+            seller_id=PlayerId(seller_id),
+            offered_item_id=item_id,
+            requested_gold=TradeRequestedGold.of(500),
+            created_at=datetime.now(),
+            trade_scope=TradeScope.direct_trade(PlayerId(target_id)),
+        )
+        trade_repo.save(trade)
+
+        command = DeclineTradeCommand(trade_id=trade_id.value, decliner_id=target_id)
+        result = service.decline_trade(command)
+
+        assert result.success is True
+
+        trade = trade_repo.find_by_id(trade_id)
+        assert trade.status == TradeStatus.CANCELLED
+
+        # アイテムの予約解除を確認
+        inventory = inv_repo.find_by_id(PlayerId(seller_id))
+        assert inventory.is_item_reserved(item_id) is False
+        assert inventory.get_item_instance_id_by_slot(SlotId(0)) == item_id
+
+    def test_decline_trade_not_found(self, setup_service):
+        """存在しない取引を断ろうとするとTradeNotFoundForCommandException"""
+        service, _, _, _, _, _ = setup_service
+        command = DeclineTradeCommand(trade_id=999, decliner_id=2)
+        with pytest.raises(TradeNotFoundForCommandException):
+            service.decline_trade(command)
+
+    def test_decline_trade_seller_cannot_decline(self, setup_service):
+        """出品者は自分の取引を断れない"""
+        service, trade_repo, inv_repo, status_repo, uow, _ = setup_service
+
+        seller_id = 1
+        target_id = 2
+        item_id = ItemInstanceId(100)
+
+        seller_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
+        seller_inv.acquire_item(item_id)
+        seller_inv.reserve_item(SlotId(0))
+        inv_repo.save(seller_inv)
+
+        trade_id = trade_repo.generate_trade_id()
+        trade = TradeAggregate.create_new_trade(
+            trade_id=trade_id,
+            seller_id=PlayerId(seller_id),
+            offered_item_id=item_id,
+            requested_gold=TradeRequestedGold.of(500),
+            created_at=datetime.now(),
+            trade_scope=TradeScope.direct_trade(PlayerId(target_id)),
+        )
+        trade_repo.save(trade)
+
+        command = DeclineTradeCommand(trade_id=trade_id.value, decliner_id=seller_id)
+        with pytest.raises(TradeCommandException) as excinfo:
+            service.decline_trade(command)
+        assert "Cannot decline" in str(excinfo.value) or "断れ" in str(excinfo.value)
+
+    def test_decline_trade_non_target_cannot_decline(self, setup_service):
+        """直接取引の宛先以外は断れない"""
+        service, trade_repo, inv_repo, status_repo, uow, _ = setup_service
+
+        seller_id = 1
+        target_id = 2
+        other_id = 3
+        item_id = ItemInstanceId(100)
+
+        seller_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
+        seller_inv.acquire_item(item_id)
+        seller_inv.reserve_item(SlotId(0))
+        inv_repo.save(seller_inv)
+
+        trade_id = trade_repo.generate_trade_id()
+        trade = TradeAggregate.create_new_trade(
+            trade_id=trade_id,
+            seller_id=PlayerId(seller_id),
+            offered_item_id=item_id,
+            requested_gold=TradeRequestedGold.of(500),
+            created_at=datetime.now(),
+            trade_scope=TradeScope.direct_trade(PlayerId(target_id)),
+        )
+        trade_repo.save(trade)
+
+        command = DeclineTradeCommand(trade_id=trade_id.value, decliner_id=other_id)
+        with pytest.raises(TradeCommandException) as excinfo:
+            service.decline_trade(command)
+        assert "Cannot decline" in str(excinfo.value) or "Only" in str(excinfo.value)
+
+    def test_decline_trade_global_raises(self, setup_service):
+        """グローバル取引は断れない"""
+        service, trade_repo, inv_repo, status_repo, uow, _ = setup_service
+
+        seller_id = 1
+        buyer_id = 2
+        item_id = ItemInstanceId(100)
+
+        seller_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
+        seller_inv.acquire_item(item_id)
+        seller_inv.reserve_item(SlotId(0))
+        inv_repo.save(seller_inv)
+
+        trade_id = trade_repo.generate_trade_id()
+        trade = TradeAggregate.create_new_trade(
+            trade_id=trade_id,
+            seller_id=PlayerId(seller_id),
+            offered_item_id=item_id,
+            requested_gold=TradeRequestedGold.of(500),
+            created_at=datetime.now(),
+            trade_scope=TradeScope.global_trade(),
+        )
+        trade_repo.save(trade)
+
+        command = DeclineTradeCommand(trade_id=trade_id.value, decliner_id=buyer_id)
+        with pytest.raises(TradeCommandException) as excinfo:
+            service.decline_trade(command)
+        assert "Only direct" in str(excinfo.value) or "direct" in str(excinfo.value).lower()
