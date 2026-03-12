@@ -3,6 +3,12 @@
 import pytest
 from unittest.mock import MagicMock
 
+from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
+from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
+    TOOL_NAME_SKILL_EQUIP,
+    TOOL_NAME_SKILL_REJECT_PROPOSAL,
+)
 from ai_rpg_world.application.llm.contracts.interfaces import ILlmTurnTrigger
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.wiring import create_llm_agent_wiring
@@ -16,6 +22,15 @@ from ai_rpg_world.application.world.services.world_query_service import (
 from ai_rpg_world.application.world.services.movement_service import (
     MovementApplicationService,
 )
+from ai_rpg_world.application.world.contracts.dtos import (
+    EquipableSkillCandidateDto,
+    PendingSkillProposalDto,
+    PlayerCurrentStateDto,
+    SkillEquipSlotDto,
+    UsableSkillDto,
+)
+from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillProposalType
 from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
 from ai_rpg_world.domain.player.repository.player_profile_repository import (
     PlayerProfileRepository,
@@ -50,6 +65,60 @@ def _minimal_wiring_deps():
         "player_profile_repository": MagicMock(spec=PlayerProfileRepository),
         "unit_of_work_factory": uow_factory,
     }
+
+
+def _skill_capable_service():
+    service = MagicMock()
+    service.use_skill = MagicMock()
+    service.equip_skill = MagicMock()
+    service.accept_skill_proposal = MagicMock()
+    service.reject_skill_proposal = MagicMock()
+    return service
+
+
+def _skill_management_state() -> PlayerCurrentStateDto:
+    return PlayerCurrentStateDto(
+        player_id=1,
+        player_name="P",
+        current_spot_id=1,
+        current_spot_name="A",
+        current_spot_description="",
+        x=0,
+        y=0,
+        z=0,
+        area_id=None,
+        area_name=None,
+        current_player_count=0,
+        current_player_ids=set(),
+        connected_spot_ids=set(),
+        connected_spot_names=set(),
+        weather_type="clear",
+        weather_intensity=0.0,
+        current_terrain_type=None,
+        visible_objects=[],
+        view_distance=5,
+        available_moves=[],
+        total_available_moves=0,
+        attention_level=AttentionLevel.FULL,
+        usable_skills=[UsableSkillDto(10, 1, 1001, "火球")],
+        equipable_skill_candidates=[
+            EquipableSkillCandidateDto(10, 1001, "火球", DeckTier.NORMAL)
+        ],
+        skill_equip_slots=[
+            SkillEquipSlotDto(10, DeckTier.NORMAL, 0, "通常スロット 1")
+        ],
+        pending_skill_proposals=[
+            PendingSkillProposalDto(
+                progress_id=20,
+                proposal_id=2,
+                offered_skill_id=3001,
+                display_name="新しい攻撃手段",
+                proposal_type=SkillProposalType.ADD,
+                deck_tier=DeckTier.NORMAL,
+                target_slot_index=0,
+            )
+        ],
+    )
 
 
 class TestCreateLlmAgentWiringReturnValues:
@@ -250,6 +319,103 @@ class TestCreateLlmAgentWiringMemoryPersistence:
         trigger = result.llm_turn_trigger
         episode_store = trigger._turn_runner._orchestrator._episode_memory_store
         assert isinstance(episode_store, SqliteEpisodeMemoryStore)
+
+
+class TestCreateLlmAgentWiringSkillTools:
+    def test_skill_tool_service_enables_full_phase9_tool_family(self):
+        deps = _minimal_wiring_deps()
+        deps["skill_tool_service"] = _skill_capable_service()
+
+        result = create_llm_agent_wiring(**deps)
+        orchestrator = result.llm_turn_trigger._turn_runner._orchestrator
+        provider = orchestrator._prompt_builder._available_tools_provider
+
+        tools = provider.get_available_tools(_skill_management_state())
+        names = [t["function"]["name"] for t in tools if t.get("type") == "function"]
+
+        assert TOOL_NAME_SKILL_EQUIP in names
+        assert TOOL_NAME_SKILL_ACCEPT_PROPOSAL in names
+        assert TOOL_NAME_SKILL_REJECT_PROPOSAL in names
+
+    def test_skill_tool_service_without_phase9_methods_raises_type_error(self):
+        deps = _minimal_wiring_deps()
+        class _IncompleteSkillToolService:
+            def use_skill(self, **kwargs):
+                return None
+
+        incomplete_service = _IncompleteSkillToolService()
+        deps["skill_tool_service"] = incomplete_service
+
+        with pytest.raises(TypeError, match="equip_skill"):
+            create_llm_agent_wiring(**deps)
+
+    def test_skill_tools_flow_from_ui_labels_to_mapper_execution(self):
+        deps = _minimal_wiring_deps()
+        skill_tool_service = _skill_capable_service()
+        deps["skill_tool_service"] = skill_tool_service
+
+        result = create_llm_agent_wiring(**deps)
+        orchestrator = result.llm_turn_trigger._turn_runner._orchestrator
+        prompt_builder = orchestrator._prompt_builder
+        ui_context = prompt_builder._ui_context_builder.build(
+            "state",
+            _skill_management_state(),
+        )
+        assert isinstance(ui_context.tool_runtime_context, ToolRuntimeContextDto)
+
+        equip_args = orchestrator._tool_argument_resolver.resolve(
+            TOOL_NAME_SKILL_EQUIP,
+            {"skill_label": "EK1", "slot_label": "ES1"},
+            ui_context.tool_runtime_context,
+        )
+        accept_args = orchestrator._tool_argument_resolver.resolve(
+            TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
+            {"proposal_label": "SP1"},
+            ui_context.tool_runtime_context,
+        )
+        reject_args = orchestrator._tool_argument_resolver.resolve(
+            TOOL_NAME_SKILL_REJECT_PROPOSAL,
+            {"proposal_label": "SP1"},
+            ui_context.tool_runtime_context,
+        )
+
+        equip_result = orchestrator._tool_command_mapper.execute(
+            1,
+            TOOL_NAME_SKILL_EQUIP,
+            equip_args,
+        )
+        accept_result = orchestrator._tool_command_mapper.execute(
+            1,
+            TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
+            accept_args,
+        )
+        reject_result = orchestrator._tool_command_mapper.execute(
+            1,
+            TOOL_NAME_SKILL_REJECT_PROPOSAL,
+            reject_args,
+        )
+
+        assert equip_result.success is True
+        assert equip_result.message == "火球を通常スロット 1に装備しました。"
+        assert accept_result.success is True
+        assert accept_result.message == "新しい攻撃手段を受諾し、通常スロット 1に装備しました。"
+        assert reject_result.success is True
+        assert reject_result.message == "新しい攻撃手段を却下しました。"
+        skill_tool_service.equip_skill.assert_called_once_with(
+            player_id=1,
+            loadout_id=10,
+            deck_tier=DeckTier.NORMAL,
+            slot_index=0,
+            skill_id=1001,
+        )
+        skill_tool_service.accept_skill_proposal.assert_called_once_with(
+            progress_id=20,
+            proposal_id=2,
+        )
+        skill_tool_service.reject_skill_proposal.assert_called_once_with(
+            progress_id=20,
+            proposal_id=2,
+        )
 
     def test_memory_db_path_env_var_uses_sqlite_store_when_arg_not_passed(
         self, tmp_path, monkeypatch

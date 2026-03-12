@@ -75,6 +75,7 @@ if TYPE_CHECKING:
         PersonalTradeQueryService,
     )
     from ai_rpg_world.domain.skill.repository.skill_repository import (
+        SkillDeckProgressRepository,
         SkillLoadoutRepository,
     )
     from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import (
@@ -103,6 +104,7 @@ class PlayerCurrentStateBuilder:
         item_repository: Optional["ItemRepository"] = None,
         conversation_command_service: Optional["ConversationCommandService"] = None,
         skill_loadout_repository: Optional["SkillLoadoutRepository"] = None,
+        skill_deck_progress_repository: Optional["SkillDeckProgressRepository"] = None,
         game_time_provider: Optional["GameTimeProvider"] = None,
         world_time_config_service: Optional["WorldTimeConfigService"] = None,
         quest_repository: Optional["QuestRepository"] = None,
@@ -136,6 +138,7 @@ class PlayerCurrentStateBuilder:
             item_repository=item_repository,
             conversation_command_service=conversation_command_service,
             skill_loadout_repository=skill_loadout_repository,
+            skill_deck_progress_repository=skill_deck_progress_repository,
             game_time_provider=game_time_provider,
             quest_repository=quest_repository,
             guild_repository=guild_repository,
@@ -368,6 +371,18 @@ class PlayerCurrentStateBuilder:
             ),
             available_trades=self._supplemental_context_builder.build_available_trades(query.player_id),
             usable_skills=self._supplemental_context_builder.build_usable_skills(query.player_id),
+            equipable_skill_candidates=self._supplemental_context_builder.build_equipable_skill_candidates(
+                query.player_id
+            ),
+            skill_equip_slots=self._supplemental_context_builder.build_skill_equip_slots(
+                query.player_id
+            ),
+            pending_skill_proposals=self._supplemental_context_builder.build_pending_skill_proposals(
+                query.player_id
+            ),
+            awakened_action=self._supplemental_context_builder.build_awakened_action(
+                query.player_id
+            ),
             attention_level_options=self._supplemental_context_builder.build_attention_level_options(),
             can_destroy_placeable=self._supplemental_context_builder.can_destroy_placeable(
                 physical_map, query.player_id
