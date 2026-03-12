@@ -178,6 +178,8 @@ def _make_context() -> ToolRuntimeContextDto:
                 display_name="新しい攻撃手段",
                 progress_id=20,
                 proposal_id=2,
+                target_slot_index=0,
+                target_slot_display_name="通常スロット 1",
             ),
             "AW1": AwakenedActionToolRuntimeTargetDto(
                 label="AW1",
@@ -355,6 +357,8 @@ class TestDefaultToolArgumentResolver:
             "deck_tier": DeckTier.NORMAL,
             "slot_index": 0,
             "skill_id": 1001,
+            "skill_display_name": "火球",
+            "slot_display_name": "通常スロット 1",
         }
 
     def test_resolve_skill_equip_rejects_mismatched_label_kind(self):
@@ -383,8 +387,18 @@ class TestDefaultToolArgumentResolver:
             _make_context(),
         )
 
-        assert accepted == {"progress_id": 20, "proposal_id": 2}
-        assert rejected == {"progress_id": 20, "proposal_id": 2}
+        assert accepted == {
+            "progress_id": 20,
+            "proposal_id": 2,
+            "proposal_display_name": "新しい攻撃手段",
+            "slot_display_name": "通常スロット 1",
+        }
+        assert rejected == {
+            "progress_id": 20,
+            "proposal_id": 2,
+            "proposal_display_name": "新しい攻撃手段",
+            "slot_display_name": "通常スロット 1",
+        }
 
     def test_resolve_activate_awakened_mode_without_numeric_payload(self):
         resolver = DefaultToolArgumentResolver()

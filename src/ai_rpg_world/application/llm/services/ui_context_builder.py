@@ -56,6 +56,7 @@ from ai_rpg_world.application.world.contracts.dtos import (
     UsableSkillDto,
     VisibleObjectDto,
 )
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
 
 
 _VISIBLE_LABEL_PREFIX = {
@@ -671,8 +672,13 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             label = f"SP{counters['SP']}"
             tier = "通常" if proposal.deck_tier.value == "normal" else "覚醒"
             detail_parts = [proposal.proposal_type.value, f"{tier}デッキ"]
+            target_slot_display_name = None
             if proposal.target_slot_index is not None:
-                detail_parts.append(f"slot {proposal.target_slot_index + 1}")
+                target_slot_display_name = self._format_skill_slot_display_name(
+                    proposal.deck_tier,
+                    proposal.target_slot_index,
+                )
+                detail_parts.append(target_slot_display_name)
             if proposal.reason:
                 detail_parts.append(proposal.reason)
             lines.append(
@@ -686,8 +692,14 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
                 proposal_id=proposal.proposal_id,
                 skill_id=proposal.offered_skill_id,
                 deck_tier=proposal.deck_tier,
+                target_slot_index=proposal.target_slot_index,
+                target_slot_display_name=target_slot_display_name,
             )
         return lines
+
+    def _format_skill_slot_display_name(self, deck_tier: DeckTier, slot_index: int) -> str:
+        tier = "通常" if deck_tier == DeckTier.NORMAL else "覚醒"
+        return f"{tier}スロット {slot_index + 1}"
 
     def _build_awakened_action_lines(
         self,

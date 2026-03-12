@@ -674,6 +674,8 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
             "deck_tier": slot.deck_tier,
             "slot_index": slot.skill_slot_index,
             "skill_id": skill.skill_id,
+            "skill_display_name": skill.display_name,
+            "slot_display_name": slot.display_name,
         }
 
     def _resolve_skill_proposal(
@@ -696,6 +698,8 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         return {
             "progress_id": proposal.progress_id,
             "proposal_id": proposal.proposal_id,
+            "proposal_display_name": proposal.display_name,
+            "slot_display_name": proposal.target_slot_display_name,
         }
 
     def _resolve_activate_awakened_mode(
