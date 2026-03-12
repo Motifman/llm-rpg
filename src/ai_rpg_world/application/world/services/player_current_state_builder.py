@@ -82,6 +82,9 @@ if TYPE_CHECKING:
     )
     from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
     from ai_rpg_world.domain.world.entity.spot import Spot
+    from ai_rpg_world.domain.world.service.world_time_config_service import (
+        WorldTimeConfigService,
+    )
 
 
 class PlayerCurrentStateBuilder:
@@ -101,6 +104,7 @@ class PlayerCurrentStateBuilder:
         conversation_command_service: Optional["ConversationCommandService"] = None,
         skill_loadout_repository: Optional["SkillLoadoutRepository"] = None,
         game_time_provider: Optional["GameTimeProvider"] = None,
+        world_time_config_service: Optional["WorldTimeConfigService"] = None,
         quest_repository: Optional["QuestRepository"] = None,
         guild_repository: Optional["GuildRepository"] = None,
         shop_repository: Optional["ShopRepository"] = None,
@@ -118,6 +122,7 @@ class PlayerCurrentStateBuilder:
         self._conversation_command_service = conversation_command_service
         self._skill_loadout_repository = skill_loadout_repository
         self._game_time_provider = game_time_provider
+        self._world_time_config_service = world_time_config_service
         self._guild_repository = guild_repository
         self._shop_repository = shop_repository
         self._personal_trade_query_service = personal_trade_query_service
@@ -289,6 +294,24 @@ class PlayerCurrentStateBuilder:
                 player_id=int(player_id),
             )
 
+        # ゲーム内現在時刻ラベル（game_time_provider と world_time_config が揃っているときのみ）
+        current_game_time_label = None
+        if (
+            self._game_time_provider is not None
+            and self._world_time_config_service is not None
+        ):
+            from ai_rpg_world.domain.world.value_object.game_date_time import (
+                game_date_time_from_tick,
+            )
+            tick = self._game_time_provider.get_current_tick().value
+            game_dt = game_date_time_from_tick(
+                tick,
+                self._world_time_config_service.get_ticks_per_day(),
+                self._world_time_config_service.get_days_per_month(),
+                self._world_time_config_service.get_months_per_year(),
+            )
+            current_game_time_label = game_dt.format_for_display()
+
         # 境界: ツール/runtime context（LLM prompt 上のラベル解決・利用可否判定に利用）
         # - available_moves, visible_objects, actionable/notable
         # - inventory_items, chest_items, nearby_shops, available_trades
@@ -313,6 +336,7 @@ class PlayerCurrentStateBuilder:
             connected_spot_names=connected_spot_names,
             weather_type=weather_state.weather_type.value,
             weather_intensity=weather_state.intensity,
+            current_game_time_label=current_game_time_label,
             current_terrain_type=current_terrain_type,
             visible_objects=visible_objects,
             view_distance=distance,
