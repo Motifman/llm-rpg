@@ -3,6 +3,7 @@
 import pytest
 
 from ai_rpg_world.application.world.contracts.dtos import (
+    ActiveHarvestDto,
     PlayerCurrentStateDto,
     VisibleObjectDto,
     VisibleTileMapDto,
@@ -145,6 +146,17 @@ class TestDefaultCurrentStateFormatter:
         dto.busy_until_tick = 42
         text = formatter.format(dto)
         assert "行動状態: 実行中" in text
+        assert "42" in text
+
+    def test_format_includes_active_harvest_when_present(self, formatter):
+        dto = _minimal_current_state_dto()
+        dto.active_harvest = ActiveHarvestDto(
+            target_world_object_id=10,
+            target_display_name="薬草",
+            finish_tick=42,
+        )
+        text = formatter.format(dto)
+        assert "採集中: 薬草" in text
         assert "42" in text
 
     def test_format_includes_area_description_when_present(self, formatter):

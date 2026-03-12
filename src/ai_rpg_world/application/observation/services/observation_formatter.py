@@ -730,7 +730,12 @@ class ObservationFormatter(IObservationFormatter):
             item_desc = "、".join(parts)
             prose = f"採集し、{item_desc}入手しました。"
             structured = {"type": "resource_harvested", "items": event.obtained_items}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="self_only",
+            schedules_turn=True,
+        )
 
     def _format_spot_weather_changed(
         self, event: SpotWeatherChangedEvent, recipient_id: PlayerId

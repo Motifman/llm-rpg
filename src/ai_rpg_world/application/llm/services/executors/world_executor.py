@@ -20,6 +20,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_CONVERSATION_ADVANCE,
     TOOL_NAME_DESTROY_PLACEABLE,
     TOOL_NAME_DROP_ITEM,
+    TOOL_NAME_HARVEST_CANCEL,
     TOOL_NAME_HARVEST_START,
     TOOL_NAME_INSPECT_ITEM,
     TOOL_NAME_INSPECT_TARGET,
@@ -66,6 +67,16 @@ class WorldToolExecutor:
         physical_map_repository: Optional["PhysicalMapRepository"] = None,
         player_status_repository: Optional["PlayerStatusRepository"] = None,
     ) -> None:
+        self._validate_world_services(
+            interaction_service=interaction_service,
+            harvest_service=harvest_service,
+            attention_service=attention_service,
+            conversation_service=conversation_service,
+            place_object_service=place_object_service,
+            drop_item_service=drop_item_service,
+            chest_service=chest_service,
+            skill_tool_service=skill_tool_service,
+        )
         self._interaction_service = interaction_service
         self._harvest_service = harvest_service
         self._attention_service = attention_service
@@ -79,6 +90,57 @@ class WorldToolExecutor:
         self._physical_map_repository = physical_map_repository
         self._player_status_repository = player_status_repository
 
+    def _validate_world_services(
+        self,
+        *,
+        interaction_service: Optional[Any],
+        harvest_service: Optional[Any],
+        attention_service: Optional[Any],
+        conversation_service: Optional[Any],
+        place_object_service: Optional[Any],
+        drop_item_service: Optional[Any],
+        chest_service: Optional[Any],
+        skill_tool_service: Optional[Any],
+    ) -> None:
+        """渡されたサービスが None でないとき、必要な callable が存在することを検証する。"""
+        if interaction_service is not None and not callable(
+            getattr(interaction_service, "interact_world_object", None)
+        ):
+            raise TypeError("interaction_service must have a callable interact_world_object")
+        if harvest_service is not None:
+            if not callable(getattr(harvest_service, "start_harvest_by_target", None)):
+                raise TypeError("harvest_service must have a callable start_harvest_by_target")
+            if not callable(getattr(harvest_service, "cancel_harvest_by_target", None)):
+                raise TypeError("harvest_service must have a callable cancel_harvest_by_target")
+        if attention_service is not None and not callable(
+            getattr(attention_service, "change_attention_level", None)
+        ):
+            raise TypeError("attention_service must have a callable change_attention_level")
+        if conversation_service is not None and not callable(
+            getattr(conversation_service, "advance_conversation", None)
+        ):
+            raise TypeError("conversation_service must have a callable advance_conversation")
+        if place_object_service is not None and not callable(
+            getattr(place_object_service, "place_from_inventory_slot", None)
+        ):
+            raise TypeError("place_object_service must have a callable place_from_inventory_slot")
+        if drop_item_service is not None and not callable(
+            getattr(drop_item_service, "drop_from_slot", None)
+        ):
+            raise TypeError("drop_item_service must have a callable drop_from_slot")
+        if chest_service is not None and not callable(
+            getattr(chest_service, "store_item_by_target", None)
+        ):
+            raise TypeError("chest_service must have a callable store_item_by_target")
+        if chest_service is not None and not callable(
+            getattr(chest_service, "take_item_by_target", None)
+        ):
+            raise TypeError("chest_service must have a callable take_item_by_target")
+        if skill_tool_service is not None and not callable(
+            getattr(skill_tool_service, "use_skill", None)
+        ):
+            raise TypeError("skill_tool_service must have a callable use_skill")
+
     def get_handlers(
         self,
     ) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
@@ -88,6 +150,7 @@ class WorldToolExecutor:
         result[TOOL_NAME_INSPECT_TARGET] = self._execute_inspect_target
         result[TOOL_NAME_INTERACT_WORLD_OBJECT] = self._execute_interact_world_object
         result[TOOL_NAME_HARVEST_START] = self._execute_harvest_start
+        result[TOOL_NAME_HARVEST_CANCEL] = self._execute_harvest_cancel
         result[TOOL_NAME_CHANGE_ATTENTION] = self._execute_change_attention
         result[TOOL_NAME_CONVERSATION_ADVANCE] = self._execute_conversation_advance
         result[TOOL_NAME_PLACE_OBJECT] = self._execute_place_object
@@ -475,6 +538,41 @@ class WorldToolExecutor:
         try:
             target_world_object_id = args.get("target_world_object_id")
             result: HarvestCommandResultDto = self._harvest_service.start_harvest_by_target(
+                player_id=player_id,
+                target_world_object_id=(
+                    int(target_world_object_id)
+                    if isinstance(target_world_object_id, (int, float))
+                    else 0
+                ),
+            )
+            return LlmCommandResultDto(
+                success=result.success,
+                message=result.message,
+            )
+        except Exception as e:
+            error_code = getattr(e, "error_code", "SYSTEM_ERROR")
+            return LlmCommandResultDto(
+                success=False,
+                message=str(e),
+                error_code=error_code,
+                remediation=get_remediation(error_code),
+            )
+
+    def _execute_harvest_cancel(
+        self,
+        player_id: int,
+        args: Dict[str, Any],
+    ) -> LlmCommandResultDto:
+        if self._harvest_service is None:
+            return LlmCommandResultDto(
+                success=False,
+                message="採集中断ツールはまだ利用できません。",
+                error_code="UNKNOWN_TOOL",
+                remediation=get_remediation("UNKNOWN_TOOL"),
+            )
+        try:
+            target_world_object_id = args.get("target_world_object_id")
+            result: HarvestCommandResultDto = self._harvest_service.cancel_harvest_by_target(
                 player_id=player_id,
                 target_world_object_id=(
                     int(target_world_object_id)

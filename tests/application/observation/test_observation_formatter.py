@@ -1028,6 +1028,7 @@ class TestObservationFormatter:
         assert out is not None
         assert "採集" in out.prose
         assert out.structured.get("type") == "resource_harvested"
+        assert out.schedules_turn is True
 
     def test_format_resource_harvested_with_items_uses_fallback_without_repo(self, formatter):
         """ResourceHarvestedEvent: item_spec_repository なしのとき「何かのアイテム」で表示"""

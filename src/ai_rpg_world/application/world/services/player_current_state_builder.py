@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import List, Optional, TYPE_CHECKING
 
 from ai_rpg_world.application.world.contracts.dtos import (
+    ActiveHarvestDto,
     ActiveConversationDto,
     AvailableLocationAreaDto,
     AttentionLevelOptionDto,
@@ -36,12 +37,14 @@ from ai_rpg_world.domain.world.exception.map_exception import (
     TileNotFoundException,
     WorldObjectIdValidationException,
 )
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
 from ai_rpg_world.domain.world.repository.transition_policy_repository import (
     ITransitionPolicyRepository,
 )
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
+from ai_rpg_world.domain.world.entity.world_object_component import HarvestableComponent
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
@@ -251,6 +254,11 @@ class PlayerCurrentStateBuilder:
         )
         is_busy = busy_until_tick is not None and busy_until_tick > current_tick_value
         has_active_path = bool(player_status.planned_path)
+        active_harvest = self._build_active_harvest(
+            physical_map=physical_map,
+            player_id=player_id,
+            visible_objects=visible_objects,
+        )
 
         available_moves = (
             available_moves_result.available_moves if available_moves_result else None
@@ -321,6 +329,7 @@ class PlayerCurrentStateBuilder:
             active_conversation=self._supplemental_context_builder.build_active_conversation(
                 query.player_id, visible_objects
             ),
+            active_harvest=active_harvest,
             active_quest_ids=self._supplemental_context_builder.build_active_quest_ids(query.player_id),
             guild_ids=self._supplemental_context_builder.build_guild_ids(query.player_id),
             nearby_shop_ids=self._supplemental_context_builder.build_nearby_shop_ids(
@@ -357,6 +366,30 @@ class PlayerCurrentStateBuilder:
             distance=distance,
             player_id=player_id,
         )
+
+    def _build_active_harvest(
+        self,
+        *,
+        physical_map: "PhysicalMapAggregate",
+        player_id: PlayerId,
+        visible_objects: List[VisibleObjectDto],
+    ) -> Optional[ActiveHarvestDto]:
+        actor_object_id = WorldObjectId.create(int(player_id))
+        visible_names = {obj.object_id: (obj.display_name or obj.object_type) for obj in visible_objects}
+        for obj in physical_map.get_all_objects():
+            if not isinstance(obj.component, HarvestableComponent):
+                continue
+            if obj.component.current_actor_id != actor_object_id:
+                continue
+            finish_tick = obj.component.harvest_finish_tick
+            if finish_tick is None:
+                continue
+            return ActiveHarvestDto(
+                target_world_object_id=int(obj.object_id),
+                target_display_name=visible_names.get(obj.object_id.value, obj.object_type.value),
+                finish_tick=finish_tick.value,
+            )
+        return None
 
     def _get_player_actor(self, physical_map, player_id: PlayerId):
         """プレイヤーアクターを取得。存在しない・不正な場合は None を返す。"""

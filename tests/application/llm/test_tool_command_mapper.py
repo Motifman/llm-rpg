@@ -21,6 +21,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_GUILD_CREATE,
     TOOL_NAME_GUILD_DISBAND,
     TOOL_NAME_GUILD_LEAVE,
+    TOOL_NAME_HARVEST_CANCEL,
     TOOL_NAME_HARVEST_START,
     TOOL_NAME_INSPECT_ITEM,
     TOOL_NAME_INSPECT_TARGET,
@@ -349,6 +350,24 @@ class TestToolCommandMapperValidation:
         with pytest.raises(TypeError, match="move_to_destination"):
             ToolCommandMapper(movement_service=object())  # type: ignore[arg-type]
 
+    def test_init_interaction_service_no_interact_world_object_raises_type_error(self):
+        """interaction_service に interact_world_object が無いとき（object() 渡し）TypeError"""
+        with pytest.raises(TypeError, match="interaction_service must have a callable interact_world_object"):
+            ToolCommandMapper(
+                movement_service=MagicMock(),
+                interaction_service=object(),
+            )
+
+    def test_init_harvest_service_no_cancel_harvest_raises_type_error(self):
+        """harvest_service に cancel_harvest_by_target が無いとき TypeError"""
+        svc = MagicMock()
+        del svc.cancel_harvest_by_target
+        with pytest.raises(TypeError, match="cancel_harvest_by_target"):
+            ToolCommandMapper(
+                movement_service=MagicMock(),
+                harvest_service=svc,
+            )
+
 
 class TestToolCommandMapperWhisper:
     @pytest.fixture
@@ -483,6 +502,23 @@ class TestToolCommandMapperHarvest:
         assert result.success is True
         assert result.message == "採集を開始しました"
         harvest_service.start_harvest_by_target.assert_called_once_with(
+            player_id=1,
+            target_world_object_id=300,
+        )
+
+    def test_execute_harvest_cancel_success_returns_dto(self, mapper, harvest_service):
+        harvest_service.cancel_harvest_by_target.return_value = MagicMock(
+            success=True,
+            message="採集を中断しました",
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_HARVEST_CANCEL,
+            {"target_world_object_id": 300},
+        )
+        assert result.success is True
+        assert result.message == "採集を中断しました"
+        harvest_service.cancel_harvest_by_target.assert_called_once_with(
             player_id=1,
             target_world_object_id=300,
         )

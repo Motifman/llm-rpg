@@ -42,3 +42,16 @@ class HarvestActorNotFoundException(HarvestCommandException):
     def __init__(self, actor_id: str):
         message = f"アクターが見つかりません: {actor_id}"
         super().__init__(message, "HARVEST_ACTOR_NOT_FOUND", actor_id=actor_id)
+
+
+class HarvestNotInProgressException(HarvestCommandException):
+    """採集中でない対象を中断しようとした場合の例外"""
+
+    def __init__(self, actor_id: str, target_id: str):
+        message = f"アクター {actor_id} は対象 {target_id} を採集中ではありません"
+        super().__init__(
+            message,
+            "HARVEST_NOT_IN_PROGRESS",
+            actor_id=actor_id,
+            target_id=target_id,
+        )

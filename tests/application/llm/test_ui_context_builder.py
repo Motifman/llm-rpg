@@ -1,6 +1,7 @@
 """DefaultLlmUiContextBuilder のテスト。"""
 
 from ai_rpg_world.application.llm.contracts.dtos import (
+    ActiveHarvestToolRuntimeTargetDto,
     InventoryToolRuntimeTargetDto,
     NpcToolRuntimeTargetDto,
     PlayerToolRuntimeTargetDto,
@@ -11,6 +12,7 @@ from ai_rpg_world.application.llm.services.ui_context_builder import (
     DefaultLlmUiContextBuilder,
 )
 from ai_rpg_world.application.world.contracts.dtos import (
+    ActiveHarvestDto,
     ActiveConversationDto,
     AvailableLocationAreaDto,
     AvailableMoveDto,
@@ -271,6 +273,22 @@ class TestDefaultLlmUiContextBuilder:
         assert result.tool_runtime_context.targets["R1"].conversation_choice_index == 0
         assert result.tool_runtime_context.targets["K1"].skill_slot_index == 1
         assert result.tool_runtime_context.targets["A1"].attention_level_value == "FULL"
+
+    def test_build_adds_active_harvest_label(self):
+        builder = DefaultLlmUiContextBuilder()
+        state = _make_state()
+        state.active_harvest = ActiveHarvestDto(
+            target_world_object_id=300,
+            target_display_name="薬草",
+            finish_tick=15,
+        )
+
+        result = builder.build("現在地: 広場", state)
+
+        assert "進行中採集:" in result.current_state_text
+        assert "H1: 薬草" in result.current_state_text
+        assert isinstance(result.tool_runtime_context.targets["H1"], ActiveHarvestToolRuntimeTargetDto)
+        assert result.tool_runtime_context.targets["H1"].world_object_id == 300
 
     def test_build_adds_move_labels(self):
         builder = DefaultLlmUiContextBuilder()
