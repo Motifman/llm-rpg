@@ -442,6 +442,111 @@ class TestHarvestCommandService:
         # 取得を試みたアイテムは入っていない
         assert updated_inv.get_item_instance_id_by_slot(SlotId(0)) == ItemInstanceId(101)
 
+    def test_finish_harvest_invalid_spot(self, setup_service):
+        """存在しないスポットを指定した finish のテスト"""
+        s = setup_service
+        service = s["service"]
+
+        from ai_rpg_world.application.harvest.exceptions.command.harvest_command_exception import HarvestCommandException
+        with pytest.raises(HarvestCommandException, match="Spot not found"):
+            service.finish_harvest(
+                FinishHarvestCommand(actor_id="1", target_id="2", spot_id="999", current_tick=105)
+            )
+
+    def test_finish_harvest_target_not_harvestable(self, setup_service):
+        """採集不可オブジェクトへの finish のテスト"""
+        s = setup_service
+        service = s["service"]
+
+        spot_id = SpotId.create(1)
+        from ai_rpg_world.domain.world.entity.tile import Tile
+        from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+        tiles = [Tile(Coordinate(0, 0, 0), TerrainType.grass())]
+        target_obj = WorldObject(WorldObjectId(2), Coordinate(0, 0, 0), ObjectTypeEnum.SIGN)
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles, objects=[target_obj])
+        s["physical_map_repo"].save(physical_map)
+
+        from ai_rpg_world.application.harvest.exceptions.command.harvest_command_exception import HarvestResourceNotFoundException
+        with pytest.raises(HarvestResourceNotFoundException):
+            service.finish_harvest(
+                FinishHarvestCommand(actor_id="1", target_id="2", spot_id="1", current_tick=105)
+            )
+
+    def test_finish_harvest_not_in_progress_other_actor(self, setup_service):
+        """他のプレイヤーが採集中のリソースに対して finish を試みて失敗するテスト"""
+        s = setup_service
+        service = s["service"]
+
+        from ai_rpg_world.domain.world.entity.tile import Tile
+        from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+        from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+        spot_id = SpotId.create(1)
+        actor1_id = WorldObjectId(1)
+        actor2_id = WorldObjectId(3)
+        target_id = WorldObjectId(2)
+        tiles = [
+            Tile(Coordinate(0, 0, 0), TerrainType.grass()),
+            Tile(Coordinate(1, 0, 0), TerrainType.grass()),
+            Tile(Coordinate(1, 1, 0), TerrainType.grass()),
+        ]
+        harvestable = HarvestableComponent(loot_table_id=1, harvest_duration=5)
+        target_obj = WorldObject(target_id, Coordinate(1, 0, 0), ObjectTypeEnum.RESOURCE, component=harvestable)
+        actor1_obj = WorldObject(actor1_id, Coordinate(0, 0, 0), ObjectTypeEnum.NPC, component=ActorComponent(direction=DirectionEnum.EAST))
+        actor2_obj = WorldObject(actor2_id, Coordinate(1, 1, 0), ObjectTypeEnum.NPC, component=ActorComponent(direction=DirectionEnum.NORTH))
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles, objects=[actor1_obj, target_obj, actor2_obj])
+        s["physical_map_repo"].save(physical_map)
+
+        player_id_1 = PlayerId(1)
+        player_id_2 = PlayerId(3)
+        s["status_repo"].save(PlayerStatusAggregate(player_id=player_id_1, stamina=Stamina.create(100, 100), base_stats=MagicMock(), stat_growth_factor=MagicMock(), exp_table=MagicMock(), growth=MagicMock(), gold=MagicMock(), hp=MagicMock(), mp=MagicMock()))
+        s["inventory_repo"].save(PlayerInventoryAggregate.create_new_inventory(player_id_1))
+        s["status_repo"].save(PlayerStatusAggregate(player_id=player_id_2, stamina=Stamina.create(100, 100), base_stats=MagicMock(), stat_growth_factor=MagicMock(), exp_table=MagicMock(), growth=MagicMock(), gold=MagicMock(), hp=MagicMock(), mp=MagicMock()))
+        s["inventory_repo"].save(PlayerInventoryAggregate.create_new_inventory(player_id_2))
+
+        loot_table = LootTableAggregate.create(1, [LootEntry(ItemSpecId(9), weight=100)])
+        s["loot_table_repo"].save(loot_table)
+        from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
+        s["item_spec_repo"].save(ItemSpecReadModel(item_spec_id=ItemSpecId(9), name="鉄鉱石", item_type=ItemType.MATERIAL, rarity=Rarity.COMMON, description="鉄の素材", max_stack_size=MaxStackSize(64)))
+
+        service.start_harvest(StartHarvestCommand(actor_id="1", target_id="2", spot_id="1", current_tick=100))
+
+        from ai_rpg_world.application.harvest.exceptions.command.harvest_command_exception import HarvestNotInProgressException
+        with pytest.raises(HarvestNotInProgressException):
+            service.finish_harvest(
+                FinishHarvestCommand(actor_id="3", target_id="2", spot_id="1", current_tick=105)
+            )
+
+    def test_finish_harvest_actor_not_found(self, setup_service):
+        """プレイヤー状態が存在しない場合の finish のテスト"""
+        s = setup_service
+        service = s["service"]
+
+        from ai_rpg_world.domain.world.entity.tile import Tile
+        from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+        from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
+        from ai_rpg_world.domain.common.value_object import WorldTick
+        spot_id = SpotId.create(1)
+        actor_id = WorldObjectId(99)
+        target_id = WorldObjectId(2)
+        tiles = [Tile(Coordinate(0, 0, 0), TerrainType.grass()), Tile(Coordinate(1, 0, 0), TerrainType.grass())]
+        harvestable = HarvestableComponent(loot_table_id=1, harvest_duration=5)
+        target_obj = WorldObject(target_id, Coordinate(1, 0, 0), ObjectTypeEnum.RESOURCE, component=harvestable)
+        actor_obj = WorldObject(actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.NPC, component=ActorComponent(direction=DirectionEnum.EAST))
+        physical_map = PhysicalMapAggregate.create(spot_id, tiles, objects=[actor_obj, target_obj])
+        target_obj.component.start_harvest(actor_id, WorldTick(100))
+        s["physical_map_repo"].save(physical_map)
+
+        loot_table = LootTableAggregate.create(1, [LootEntry(ItemSpecId(9), weight=100)])
+        s["loot_table_repo"].save(loot_table)
+        from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
+        s["item_spec_repo"].save(ItemSpecReadModel(item_spec_id=ItemSpecId(9), name="鉄鉱石", item_type=ItemType.MATERIAL, rarity=Rarity.COMMON, description="鉄の素材", max_stack_size=MaxStackSize(64)))
+
+        from ai_rpg_world.application.harvest.exceptions.command.harvest_command_exception import HarvestActorNotFoundException
+        with pytest.raises(HarvestActorNotFoundException):
+            service.finish_harvest(
+                FinishHarvestCommand(actor_id="99", target_id="2", spot_id="1", current_tick=105)
+            )
+
     def test_cancel_harvest_success(self, setup_service):
         s = setup_service
         service = s["service"]
