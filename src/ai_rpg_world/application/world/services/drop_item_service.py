@@ -21,11 +21,11 @@ from ai_rpg_world.domain.common.exception import DomainException
 
 from ai_rpg_world.application.world.contracts.commands import DropItemCommand
 from ai_rpg_world.application.world.exceptions.base_exception import WorldApplicationException, WorldSystemErrorException
-from ai_rpg_world.application.world.exceptions.command.place_command_exception import (
-    PlaceCommandException,
-    NoItemInSlotException,
+from ai_rpg_world.application.world.exceptions.command.drop_command_exception import (
+    DropCommandException,
+    NoItemInSlotForDropException,
     ItemReservedForDropException,
-    PlacementSpotNotFoundException,
+    DropPlayerOrInventoryNotFoundException,
 )
 
 
@@ -53,7 +53,7 @@ class DropItemApplicationService:
         except WorldApplicationException:
             raise
         except ItemNotInSlotException:
-            raise NoItemInSlotException(
+            raise NoItemInSlotForDropException(
                 context.get("player_id", 0),
                 context.get("slot_id", 0),
             )
@@ -63,7 +63,7 @@ class DropItemApplicationService:
                 context.get("slot_id", 0),
             )
         except DomainException as e:
-            raise PlaceCommandException(str(e), **context)
+            raise DropCommandException(str(e), error_code="DOMAIN_ERROR", **context)
         except Exception as e:
             self._logger.error(
                 "Unexpected error in %s: %s",
@@ -94,11 +94,11 @@ class DropItemApplicationService:
 
             player_status = self._player_status_repository.find_by_id(player_id)
             if not player_status or not player_status.current_spot_id or player_status.current_coordinate is None:
-                raise PlacementSpotNotFoundException(command.player_id, 0)
+                raise DropPlayerOrInventoryNotFoundException(command.player_id)
 
             inventory = self._player_inventory_repository.find_by_id(player_id)
             if not inventory:
-                raise PlacementSpotNotFoundException(command.player_id, 0)
+                raise DropPlayerOrInventoryNotFoundException(command.player_id)
 
             self._unit_of_work.register_aggregate(inventory)
 

@@ -5,6 +5,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import IGameToolRegistry
 from ai_rpg_world.application.llm.services.availability_resolvers import (
     CancelMovementAvailabilityResolver,
     ChangeAttentionAvailabilityResolver,
+    MoveOneStepAvailabilityResolver,
     ChestStoreAvailabilityResolver,
     ChestTakeAvailabilityResolver,
     CombatUseSkillAvailabilityResolver,
@@ -45,6 +46,7 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
     TradeAcceptAvailabilityResolver,
     TradeCancelAvailabilityResolver,
     TradeOfferAvailabilityResolver,
+    SnsToolAvailabilityResolver,
     TodoAddAvailabilityResolver,
     TodoCompleteAvailabilityResolver,
     TodoListAvailabilityResolver,
@@ -78,6 +80,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_INSPECT_TARGET,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_CANCEL_MOVEMENT,
+    TOOL_NAME_MOVE_ONE_STEP,
     TOOL_NAME_MOVE_TO_DESTINATION,
     TOOL_NAME_NO_OP,
     TOOL_NAME_PLACE_OBJECT,
@@ -98,6 +101,16 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_TRADE_ACCEPT,
     TOOL_NAME_TRADE_CANCEL,
     TOOL_NAME_TRADE_OFFER,
+    TOOL_NAME_SNS_CREATE_POST,
+    TOOL_NAME_SNS_CREATE_REPLY,
+    TOOL_NAME_SNS_LIKE_POST,
+    TOOL_NAME_SNS_LIKE_REPLY,
+    TOOL_NAME_SNS_FOLLOW,
+    TOOL_NAME_SNS_UNFOLLOW,
+    TOOL_NAME_SNS_SUBSCRIBE,
+    TOOL_NAME_SNS_UNSUBSCRIBE,
+    TOOL_NAME_SNS_BLOCK,
+    TOOL_NAME_SNS_UNBLOCK,
     TOOL_NAME_WHISPER,
 )
 
@@ -130,6 +143,23 @@ CANCEL_MOVEMENT_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_CANCEL_MOVEMENT,
     description="設定済みの経路をキャンセルし、移動を中断します。移動中のみ利用可能です。",
     parameters={"type": "object", "properties": {}, "required": []},
+)
+
+MOVE_ONE_STEP_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "direction_label": {
+            "type": "string",
+            "description": "隣接タイルへ移動する方向。北, 北東, 東, 南東, 南, 南西, 西, 北西 のいずれか。",
+        },
+    },
+    "required": ["direction_label"],
+}
+
+MOVE_ONE_STEP_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_MOVE_ONE_STEP,
+    description="指定した方向へ隣接タイルに1歩だけ移動します。最も細かい粒度の移動です。",
+    parameters=MOVE_ONE_STEP_PARAMETERS,
 )
 
 WHISPER_PARAMETERS = {
@@ -535,24 +565,28 @@ QUEST_ISSUE_PARAMETERS = {
     "properties": {
         "objectives": {
             "type": "array",
-            "description": "クエスト目標のリスト。各要素は object_type, target_id, required_count を持つオブジェクト。",
+            "description": "クエスト目標のリスト。target_name または target_id のいずれかを指定。target_name はモンスター名・スポット名・アイテム名・プレイヤー名で検索。",
             "items": {
                 "type": "object",
                 "properties": {
                     "objective_type": {
                         "type": "string",
-                        "description": "kill_monster, talk_to_npc, reach_spot, obtain_item 等",
+                        "description": "kill_monster, obtain_item, reach_spot, kill_player（名前解決対応）。talk_to_npc 等は target_id で指定。",
+                    },
+                    "target_name": {
+                        "type": "string",
+                        "description": "目標の名前（ゴブリン、北の森、鉄の剣、プレイヤー名 等）。target_id の代わりに指定可能。",
                     },
                     "target_id": {
                         "type": "integer",
-                        "description": "目標の ID（モンスター種別、NPC ID、スポット ID 等）",
+                        "description": "目標の ID（モンスター種別、NPC ID、スポット ID 等）。target_name の代わりに指定可能。",
                     },
                     "required_count": {
                         "type": "integer",
                         "description": "必要数",
                     },
                 },
-                "required": ["objective_type", "target_id", "required_count"],
+                "required": ["objective_type", "required_count"],
             },
         },
         "reward_gold": {"type": "integer", "description": "報酬ゴールド。", "default": 0},
@@ -766,6 +800,141 @@ TRADE_CANCEL_DEFINITION = ToolDefinitionDto(
     parameters=TRADE_CANCEL_PARAMETERS,
 )
 
+# --- SNS ---
+SNS_CREATE_POST_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "content": {"type": "string", "description": "投稿する内容（280文字以内）。"},
+        "visibility": {"type": "string", "description": "公開範囲。public, followers_only, private のいずれか。省略時または不明な値の場合は public（公開）として扱います。"},
+    },
+    "required": ["content"],
+}
+SNS_CREATE_POST_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_CREATE_POST,
+    description="SNSに新しい投稿を作成します。",
+    parameters=SNS_CREATE_POST_PARAMETERS,
+)
+
+SNS_CREATE_REPLY_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "content": {"type": "string", "description": "リプライする内容。"},
+        "parent_post_id": {"type": "integer", "description": "親ポストのID。parent_reply_id とどちらか必須。"},
+        "parent_reply_id": {"type": "integer", "description": "親リプライのID。parent_post_id とどちらか必須。"},
+        "visibility": {"type": "string", "description": "公開範囲。public, followers_only, private のいずれか。省略時または不明な値の場合は public（公開）として扱います。"},
+    },
+    "required": ["content"],
+}
+SNS_CREATE_REPLY_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_CREATE_REPLY,
+    description="ポストまたはリプライに返信します。parent_post_id または parent_reply_id のどちらかを指定してください。",
+    parameters=SNS_CREATE_REPLY_PARAMETERS,
+)
+
+SNS_LIKE_POST_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "post_id": {"type": "integer", "description": "いいねするポストのID。"},
+    },
+    "required": ["post_id"],
+}
+SNS_LIKE_POST_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_LIKE_POST,
+    description="ポストにいいねします。",
+    parameters=SNS_LIKE_POST_PARAMETERS,
+)
+
+SNS_LIKE_REPLY_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "reply_id": {"type": "integer", "description": "いいねするリプライのID。"},
+    },
+    "required": ["reply_id"],
+}
+SNS_LIKE_REPLY_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_LIKE_REPLY,
+    description="リプライにいいねします。",
+    parameters=SNS_LIKE_REPLY_PARAMETERS,
+)
+
+SNS_FOLLOW_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "target_user_id": {"type": "integer", "description": "フォローするユーザーのID。"},
+    },
+    "required": ["target_user_id"],
+}
+SNS_FOLLOW_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_FOLLOW,
+    description="指定したユーザーをフォローします。",
+    parameters=SNS_FOLLOW_PARAMETERS,
+)
+
+SNS_UNFOLLOW_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "target_user_id": {"type": "integer", "description": "フォロー解除するユーザーのID。"},
+    },
+    "required": ["target_user_id"],
+}
+SNS_UNFOLLOW_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_UNFOLLOW,
+    description="指定したユーザーのフォローを解除します。",
+    parameters=SNS_UNFOLLOW_PARAMETERS,
+)
+
+SNS_SUBSCRIBE_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "target_user_id": {"type": "integer", "description": "サブスクライブするユーザーのID。"},
+    },
+    "required": ["target_user_id"],
+}
+SNS_SUBSCRIBE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_SUBSCRIBE,
+    description="指定したユーザーをサブスクライブします。",
+    parameters=SNS_SUBSCRIBE_PARAMETERS,
+)
+
+SNS_UNSUBSCRIBE_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "target_user_id": {"type": "integer", "description": "サブスクライブ解除するユーザーのID。"},
+    },
+    "required": ["target_user_id"],
+}
+SNS_UNSUBSCRIBE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_UNSUBSCRIBE,
+    description="指定したユーザーのサブスクライブを解除します。",
+    parameters=SNS_UNSUBSCRIBE_PARAMETERS,
+)
+
+SNS_BLOCK_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "target_user_id": {"type": "integer", "description": "ブロックするユーザーのID。"},
+    },
+    "required": ["target_user_id"],
+}
+SNS_BLOCK_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_BLOCK,
+    description="指定したユーザーをブロックします。",
+    parameters=SNS_BLOCK_PARAMETERS,
+)
+
+SNS_UNBLOCK_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "target_user_id": {"type": "integer", "description": "ブロック解除するユーザーのID。"},
+    },
+    "required": ["target_user_id"],
+}
+SNS_UNBLOCK_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_UNBLOCK,
+    description="指定したユーザーのブロックを解除します。",
+    parameters=SNS_UNBLOCK_PARAMETERS,
+)
+
 # --- メモリ・TODO・作業メモ ---
 MEMORY_QUERY_PARAMETERS = {
     "type": "object",
@@ -871,6 +1040,7 @@ def register_default_tools(
     guild_enabled: bool = False,
     shop_enabled: bool = False,
     trade_enabled: bool = False,
+    sns_enabled: bool = False,
     inspect_item_enabled: bool = False,
     inspect_target_enabled: bool = False,
     memory_query_enabled: bool = False,
@@ -883,6 +1053,7 @@ def register_default_tools(
         raise TypeError("registry must be IGameToolRegistry")
     registry.register(NO_OP_DEFINITION, NoOpAvailabilityResolver())
     registry.register(MOVE_TO_DESTINATION_DEFINITION, SetDestinationAvailabilityResolver())
+    registry.register(MOVE_ONE_STEP_DEFINITION, MoveOneStepAvailabilityResolver())
     registry.register(CANCEL_MOVEMENT_DEFINITION, CancelMovementAvailabilityResolver())
     if pursuit_enabled:
         registry.register(PURSUIT_START_DEFINITION, PursuitStartAvailabilityResolver())
@@ -947,6 +1118,18 @@ def register_default_tools(
         registry.register(TRADE_OFFER_DEFINITION, TradeOfferAvailabilityResolver())
         registry.register(TRADE_ACCEPT_DEFINITION, TradeAcceptAvailabilityResolver())
         registry.register(TRADE_CANCEL_DEFINITION, TradeCancelAvailabilityResolver())
+    if sns_enabled:
+        sns_resolver = SnsToolAvailabilityResolver()
+        registry.register(SNS_CREATE_POST_DEFINITION, sns_resolver)
+        registry.register(SNS_CREATE_REPLY_DEFINITION, sns_resolver)
+        registry.register(SNS_LIKE_POST_DEFINITION, sns_resolver)
+        registry.register(SNS_LIKE_REPLY_DEFINITION, sns_resolver)
+        registry.register(SNS_FOLLOW_DEFINITION, sns_resolver)
+        registry.register(SNS_UNFOLLOW_DEFINITION, sns_resolver)
+        registry.register(SNS_SUBSCRIBE_DEFINITION, sns_resolver)
+        registry.register(SNS_UNSUBSCRIBE_DEFINITION, sns_resolver)
+        registry.register(SNS_BLOCK_DEFINITION, sns_resolver)
+        registry.register(SNS_UNBLOCK_DEFINITION, sns_resolver)
     if memory_query_enabled:
         registry.register(MEMORY_QUERY_DEFINITION, MemoryQueryAvailabilityResolver())
     if subagent_enabled:

@@ -38,6 +38,16 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SKILL_EQUIP,
     TOOL_NAME_SKILL_REJECT_PROPOSAL,
     TOOL_NAME_SHOP_PURCHASE,
+    TOOL_NAME_SNS_BLOCK,
+    TOOL_NAME_SNS_CREATE_POST,
+    TOOL_NAME_SNS_CREATE_REPLY,
+    TOOL_NAME_SNS_FOLLOW,
+    TOOL_NAME_SNS_LIKE_POST,
+    TOOL_NAME_SNS_LIKE_REPLY,
+    TOOL_NAME_SNS_SUBSCRIBE,
+    TOOL_NAME_SNS_UNBLOCK,
+    TOOL_NAME_SNS_UNFOLLOW,
+    TOOL_NAME_SNS_UNSUBSCRIBE,
     TOOL_NAME_SUBAGENT,
     TOOL_NAME_TRADE_ACCEPT,
     TOOL_NAME_TRADE_CANCEL,
@@ -63,9 +73,11 @@ from ai_rpg_world.application.world.exceptions.command.pursuit_command_exception
     PursuitTargetNotVisibleException,
 )
 from ai_rpg_world.application.world.exceptions.command.place_command_exception import (
-    NoItemInSlotException,
-    ItemReservedForDropException,
     PlacementSpotNotFoundException,
+)
+from ai_rpg_world.application.world.exceptions.command.drop_command_exception import (
+    NoItemInSlotForDropException,
+    ItemReservedForDropException,
 )
 
 
@@ -745,7 +757,7 @@ class TestToolCommandMapperDropItem:
 
     def test_execute_drop_item_no_item_in_slot_returns_failure_dto(self):
         drop_service = MagicMock()
-        drop_service.drop_from_slot.side_effect = NoItemInSlotException(1, 0)
+        drop_service.drop_from_slot.side_effect = NoItemInSlotForDropException(1, 0)
         mapper = ToolCommandMapper(
             movement_service=MagicMock(),
             drop_item_service=drop_service,
@@ -1513,3 +1525,349 @@ class TestToolCommandMapperRequiredArgsValidation:
         assert result.error_code == "INVALID_TARGET_LABEL"
         assert "trade_id" in result.message
         trade_service.cancel_trade.assert_not_called()
+
+
+class TestToolCommandMapperSns:
+    """SNS ツール（create_post, create_reply, like_post, like_reply, follow, block 等）の実行"""
+
+    def test_sns_create_post_success(self):
+        post_service = MagicMock()
+        post_service.create_post.return_value = MagicMock(success=True, message="投稿しました。")
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            post_service=post_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SNS_CREATE_POST,
+            {"content": "Hello world", "visibility": "public"},
+        )
+        assert result.success is True
+        assert "投稿" in result.message
+        post_service.create_post.assert_called_once()
+
+    def test_sns_create_post_missing_content_returns_invalid_arg(self):
+        post_service = MagicMock()
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            post_service=post_service,
+        )
+        result = mapper.execute(1, TOOL_NAME_SNS_CREATE_POST, {})
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        assert "content" in result.message
+        post_service.create_post.assert_not_called()
+
+    def test_sns_create_post_empty_content_returns_invalid_arg(self):
+        post_service = MagicMock()
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            post_service=post_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SNS_CREATE_POST,
+            {"content": "   "},
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        assert "content" in result.message
+        post_service.create_post.assert_not_called()
+
+    def test_sns_create_post_invalid_visibility_defaults_to_public_with_hint(self):
+        post_service = MagicMock()
+        post_service.create_post.return_value = MagicMock(success=True, message="投稿しました。")
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            post_service=post_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SNS_CREATE_POST,
+            {"content": "test", "visibility": "unknown_value"},
+        )
+        assert result.success is True
+        assert "public として扱いました" in result.message
+        call_args = post_service.create_post.call_args[0][0]
+        assert call_args.visibility.value == "public"
+
+    def test_sns_create_post_omitted_visibility_no_hint(self):
+        post_service = MagicMock()
+        post_service.create_post.return_value = MagicMock(success=True, message="投稿しました。")
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            post_service=post_service,
+        )
+        result = mapper.execute(1, TOOL_NAME_SNS_CREATE_POST, {"content": "test"})
+        assert result.success is True
+        assert "public として扱いました" not in result.message
+
+    def test_sns_create_post_service_exception_returns_exception_result(self):
+        post_service = MagicMock()
+        post_service.create_post.side_effect = ValueError("投稿に失敗しました")
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            post_service=post_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SNS_CREATE_POST,
+            {"content": "test"},
+        )
+        assert result.success is False
+        assert result.error_code is not None
+        assert "投稿に失敗" in (result.message or "")
+
+    def test_sns_create_reply_success(self):
+        reply_service = MagicMock()
+        reply_service.create_reply.return_value = MagicMock(success=True, message="リプライしました。")
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            reply_service=reply_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SNS_CREATE_REPLY,
+            {"content": "返信です", "parent_post_id": 10},
+        )
+        assert result.success is True
+        reply_service.create_reply.assert_called_once()
+
+    def test_sns_create_reply_missing_parent_returns_invalid_arg(self):
+        reply_service = MagicMock()
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            reply_service=reply_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SNS_CREATE_REPLY,
+            {"content": "返信"},
+        )
+        assert result.success is False
+        assert "parent_post_id" in result.message or "parent_reply_id" in result.message
+        reply_service.create_reply.assert_not_called()
+
+    def test_sns_like_post_success(self):
+        post_service = MagicMock()
+        post_service.like_post.return_value = MagicMock(success=True, message="いいねしました。")
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            post_service=post_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SNS_LIKE_POST,
+            {"post_id": 5},
+        )
+        assert result.success is True
+        post_service.like_post.assert_called_once()
+
+    def test_sns_like_post_missing_post_id_returns_invalid_arg(self):
+        post_service = MagicMock()
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            post_service=post_service,
+        )
+        result = mapper.execute(1, TOOL_NAME_SNS_LIKE_POST, {})
+        assert result.success is False
+        assert "post_id" in result.message
+        post_service.like_post.assert_not_called()
+
+    def test_sns_like_reply_success(self):
+        reply_service = MagicMock()
+        reply_service.like_reply.return_value = MagicMock(success=True, message="いいねしました。")
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            reply_service=reply_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SNS_LIKE_REPLY,
+            {"reply_id": 3},
+        )
+        assert result.success is True
+        reply_service.like_reply.assert_called_once()
+
+    def test_sns_like_reply_missing_reply_id_returns_invalid_arg(self):
+        reply_service = MagicMock()
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            reply_service=reply_service,
+        )
+        result = mapper.execute(1, TOOL_NAME_SNS_LIKE_REPLY, {})
+        assert result.success is False
+        assert "reply_id" in result.message
+        reply_service.like_reply.assert_not_called()
+
+    def test_sns_follow_success(self):
+        user_command_service = MagicMock()
+        user_command_service.follow_user.return_value = MagicMock(
+            success=True, message="フォローしました。"
+        )
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            user_command_service=user_command_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SNS_FOLLOW,
+            {"target_user_id": 2},
+        )
+        assert result.success is True
+        user_command_service.follow_user.assert_called_once()
+
+    def test_sns_follow_missing_target_user_id_returns_invalid_arg(self):
+        user_command_service = MagicMock()
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            user_command_service=user_command_service,
+        )
+        result = mapper.execute(1, TOOL_NAME_SNS_FOLLOW, {})
+        assert result.success is False
+        assert "target_user_id" in result.message
+        user_command_service.follow_user.assert_not_called()
+
+    def test_sns_unfollow_success(self):
+        user_command_service = MagicMock()
+        user_command_service.unfollow_user.return_value = MagicMock(
+            success=True, message="フォロー解除しました。"
+        )
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            user_command_service=user_command_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SNS_UNFOLLOW,
+            {"target_user_id": 2},
+        )
+        assert result.success is True
+        user_command_service.unfollow_user.assert_called_once()
+
+    def test_sns_subscribe_success(self):
+        user_command_service = MagicMock()
+        user_command_service.subscribe_user.return_value = MagicMock(
+            success=True, message="サブスクライブしました。"
+        )
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            user_command_service=user_command_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SNS_SUBSCRIBE,
+            {"target_user_id": 2},
+        )
+        assert result.success is True
+        user_command_service.subscribe_user.assert_called_once()
+
+    def test_sns_unsubscribe_success(self):
+        user_command_service = MagicMock()
+        user_command_service.unsubscribe_user.return_value = MagicMock(
+            success=True, message="サブスクライブ解除しました。"
+        )
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            user_command_service=user_command_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SNS_UNSUBSCRIBE,
+            {"target_user_id": 2},
+        )
+        assert result.success is True
+        user_command_service.unsubscribe_user.assert_called_once()
+
+    def test_sns_block_success(self):
+        user_command_service = MagicMock()
+        user_command_service.block_user.return_value = MagicMock(
+            success=True, message="ブロックしました。"
+        )
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            user_command_service=user_command_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SNS_BLOCK,
+            {"target_user_id": 2},
+        )
+        assert result.success is True
+        user_command_service.block_user.assert_called_once()
+
+    def test_sns_unblock_success(self):
+        user_command_service = MagicMock()
+        user_command_service.unblock_user.return_value = MagicMock(
+            success=True, message="ブロック解除しました。"
+        )
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            user_command_service=user_command_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SNS_UNBLOCK,
+            {"target_user_id": 2},
+        )
+        assert result.success is True
+        user_command_service.unblock_user.assert_called_once()
+
+    def test_sns_create_post_no_post_service_returns_unknown_tool(self):
+        """post_service が None のとき、該当ツールはハンドラに登録されず未知ツール扱いになる"""
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            post_service=None,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SNS_CREATE_POST,
+            {"content": "test"},
+        )
+        assert result.success is False
+        assert result.error_code == "UNKNOWN_TOOL"
+
+    def test_sns_like_post_no_post_service_returns_unknown_tool(self):
+        """post_service が None のとき、該当ツールはハンドラに登録されず未知ツール扱いになる"""
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            post_service=None,
+        )
+        result = mapper.execute(1, TOOL_NAME_SNS_LIKE_POST, {"post_id": 1})
+        assert result.success is False
+        assert result.error_code == "UNKNOWN_TOOL"
+
+    def test_sns_follow_no_user_command_service_returns_unknown_tool(self):
+        """user_command_service が None のとき、該当ツールはハンドラに登録されず未知ツール扱いになる"""
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            user_command_service=None,
+        )
+        result = mapper.execute(1, TOOL_NAME_SNS_FOLLOW, {"target_user_id": 2})
+        assert result.success is False
+        assert result.error_code == "UNKNOWN_TOOL"
+
+    def test_sns_block_no_user_command_service_returns_unknown_tool(self):
+        """user_command_service が None のとき、該当ツールはハンドラに登録されず未知ツール扱いになる"""
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            user_command_service=None,
+        )
+        result = mapper.execute(1, TOOL_NAME_SNS_BLOCK, {"target_user_id": 2})
+        assert result.success is False
+        assert result.error_code == "UNKNOWN_TOOL"
+
+    def test_sns_follow_service_exception_returns_exception_result(self):
+        user_command_service = MagicMock()
+        user_command_service.follow_user.side_effect = RuntimeError("すでにフォロー済みです")
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            user_command_service=user_command_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SNS_FOLLOW,
+            {"target_user_id": 2},
+        )
+        assert result.success is False
+        assert result.error_code is not None

@@ -3,10 +3,10 @@
 import pytest
 from ai_rpg_world.application.world.services.drop_item_service import DropItemApplicationService
 from ai_rpg_world.application.world.contracts.commands import DropItemCommand
-from ai_rpg_world.application.world.exceptions.command.place_command_exception import (
-    NoItemInSlotException,
+from ai_rpg_world.application.world.exceptions.command.drop_command_exception import (
+    NoItemInSlotForDropException,
     ItemReservedForDropException,
-    PlacementSpotNotFoundException,
+    DropPlayerOrInventoryNotFoundException,
 )
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
@@ -115,13 +115,13 @@ class TestDropItemApplicationService:
         assert inv.get_item_instance_id_by_slot(SlotId(0)) is None
 
     def test_drop_item_no_item_in_slot_raises(self, service, repos, player_with_item):
-        """空スロットの場合は NoItemInSlotException"""
+        """空スロットの場合は NoItemInSlotForDropException"""
         inv_repo, status_repo, player_id_val = player_with_item
         inv = inv_repo.find_by_id(PlayerId(player_id_val))
         inv.drop_item(SlotId(0))
         inv_repo.save(inv)
 
-        with pytest.raises(NoItemInSlotException):
+        with pytest.raises(NoItemInSlotForDropException):
             service.drop_item(DropItemCommand(player_id=player_id_val, inventory_slot_id=0))
 
     def test_drop_item_reserved_item_raises(self, service, repos, player_with_item):
@@ -135,7 +135,7 @@ class TestDropItemApplicationService:
             service.drop_item(DropItemCommand(player_id=player_id_val, inventory_slot_id=0))
 
     def test_drop_item_no_player_position_raises(self, service, repos, player_with_item):
-        """プレイヤー位置がない場合は PlacementSpotNotFoundException"""
+        """プレイヤー位置がない場合は DropPlayerOrInventoryNotFoundException"""
         inv_repo, status_repo, player_id_val = player_with_item
         exp_table = ExpTable(100, 1.5)
         status_no_pos = PlayerStatusAggregate(
@@ -153,14 +153,14 @@ class TestDropItemApplicationService:
         )
         status_repo.save(status_no_pos)
 
-        with pytest.raises(PlacementSpotNotFoundException):
+        with pytest.raises(DropPlayerOrInventoryNotFoundException):
             service.drop_item(DropItemCommand(player_id=player_id_val, inventory_slot_id=0))
 
     def test_drop_item_player_not_found_raises(self, service, repos):
-        """存在しないプレイヤー（status なし）の場合は PlacementSpotNotFoundException"""
+        """存在しないプレイヤー（status なし）の場合は DropPlayerOrInventoryNotFoundException"""
         inv_repo, status_repo, _ = repos
 
-        with pytest.raises(PlacementSpotNotFoundException):
+        with pytest.raises(DropPlayerOrInventoryNotFoundException):
             service.drop_item(DropItemCommand(player_id=999, inventory_slot_id=0))
 
 
@@ -240,6 +240,6 @@ class TestPlayerDropItemApplicationService:
         assert inv.get_item_instance_id_by_slot(SlotId(0)) is None
 
     def test_drop_from_slot_no_status_raises(self, facade, repos):
-        """プレイヤー status がない場合は PlacementSpotNotFoundException"""
-        with pytest.raises(PlacementSpotNotFoundException):
+        """プレイヤー status がない場合は DropPlayerOrInventoryNotFoundException"""
+        with pytest.raises(DropPlayerOrInventoryNotFoundException):
             facade.drop_from_slot(player_id=999, inventory_slot_id=0)

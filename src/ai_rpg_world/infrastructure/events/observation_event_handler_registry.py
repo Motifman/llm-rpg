@@ -84,6 +84,13 @@ from ai_rpg_world.domain.trade.event.trade_event import (
     TradeCancelledEvent,
     TradeOfferedEvent,
 )
+from ai_rpg_world.domain.sns.event import (
+    SnsContentLikedEvent,
+    SnsPostCreatedEvent,
+    SnsReplyCreatedEvent,
+    SnsUserFollowedEvent,
+    SnsUserSubscribedEvent,
+)
 from ai_rpg_world.domain.skill.event.skill_events import (
     AwakenedModeActivatedEvent,
     AwakenedModeExpiredEvent,
@@ -120,6 +127,12 @@ _OBSERVED_EVENT_TYPES = (
     TradeOfferedEvent,
     TradeAcceptedEvent,
     TradeCancelledEvent,
+    # --- SNS ---
+    SnsPostCreatedEvent,
+    SnsReplyCreatedEvent,
+    SnsContentLikedEvent,
+    SnsUserFollowedEvent,
+    SnsUserSubscribedEvent,
     # --- ギルド ---
     GuildCreatedEvent,
     GuildMemberJoinedEvent,

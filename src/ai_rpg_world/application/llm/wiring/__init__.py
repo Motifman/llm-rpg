@@ -192,6 +192,7 @@ def create_llm_agent_wiring(
     observation_formatter: Optional[IObservationFormatter] = None,
     spot_repository: Optional[Any] = None,
     item_spec_repository: Optional[Any] = None,
+    monster_template_repository: Optional[Any] = None,
     item_repository: Optional[Any] = None,
     quest_repository: Optional[Any] = None,
     shop_repository: Optional[Any] = None,
@@ -202,10 +203,14 @@ def create_llm_agent_wiring(
     skill_loadout_repository: Optional[Any] = None,
     skill_deck_progress_repository: Optional[Any] = None,
     skill_spec_repository: Optional[Any] = None,
+    sns_user_repository: Optional[Any] = None,
     quest_command_service: Optional[Any] = None,
     guild_command_service: Optional[Any] = None,
     shop_command_service: Optional[Any] = None,
     trade_command_service: Optional[Any] = None,
+    post_service: Optional[Any] = None,
+    reply_service: Optional[Any] = None,
+    user_command_service: Optional[Any] = None,
     llm_client: Optional[ILLMClient] = None,
     game_time_provider: Optional[Any] = None,
     world_time_config_service: Optional[Any] = None,
@@ -336,6 +341,11 @@ def create_llm_agent_wiring(
         guild_enabled=guild_command_service is not None,
         shop_enabled=shop_command_service is not None,
         trade_enabled=trade_command_service is not None,
+        sns_enabled=(
+            post_service is not None
+            or reply_service is not None
+            or user_command_service is not None
+        ),
         inspect_item_enabled=item_repository is not None,
         inspect_target_enabled=(
             monster_repository is not None
@@ -365,6 +375,9 @@ def create_llm_agent_wiring(
         guild_service=guild_command_service,
         shop_service=shop_command_service,
         trade_service=trade_command_service,
+        post_service=post_service,
+        reply_service=reply_service,
+        user_command_service=user_command_service,
         item_repository=item_repository,
         monster_repository=monster_repository,
         physical_map_repository=physical_map_repository,
@@ -374,7 +387,12 @@ def create_llm_agent_wiring(
         todo_store=todo_store,
         working_memory_store=working_memory_store,
     )
-    tool_argument_resolver = DefaultToolArgumentResolver()
+    tool_argument_resolver = DefaultToolArgumentResolver(
+        monster_template_repository=monster_template_repository,
+        spot_repository=spot_repository,
+        item_spec_repository=item_spec_repository,
+        player_profile_repository=player_profile_repository,
+    )
 
     if reflection_state_port is None:
         if effective_memory_db_path:
@@ -453,6 +471,7 @@ def create_llm_agent_wiring(
         hit_box_repository=hit_box_repository,
         skill_loadout_repository=skill_loadout_repository,
         skill_deck_progress_repository=skill_deck_progress_repository,
+        sns_user_repository=sns_user_repository,
     )
     formatter = observation_formatter
     if formatter is None:
@@ -468,6 +487,7 @@ def create_llm_agent_wiring(
             guild_repository=guild_repository,
             monster_repository=monster_repository,
             skill_spec_repository=skill_spec_repository,
+            sns_user_repository=sns_user_repository,
         )
     observation_handler = ObservationEventHandler(
         resolver=observation_resolver,

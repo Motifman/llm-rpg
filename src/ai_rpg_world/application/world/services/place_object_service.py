@@ -87,7 +87,7 @@ class PlaceObjectApplicationService:
         except WorldApplicationException:
             raise
         except DomainException as e:
-            raise PlaceCommandException(str(e), **context)
+            raise PlaceCommandException(str(e), error_code="DOMAIN_ERROR", **context)
         except Exception as e:
             self._logger.error(
                 "Unexpected error in %s: %s",
@@ -98,7 +98,7 @@ class PlaceObjectApplicationService:
             raise WorldSystemErrorException(
                 f"{context.get('action', 'unknown')} failed: {str(e)}",
                 original_exception=e,
-            )
+            ) from e
 
     def place_object(self, command: PlaceObjectCommand) -> None:
         """指定スロットのアイテムをプレイヤー前方に設置する"""

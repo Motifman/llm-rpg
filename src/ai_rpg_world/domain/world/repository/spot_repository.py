@@ -34,3 +34,8 @@ class SpotRepository(Repository["Spot", SpotId], ABC):
     def find_all(self) -> List["Spot"]:
         """全てのスポットを取得"""
         pass
+
+    @abstractmethod
+    def find_by_name(self, name: str) -> Optional["Spot"]:
+        """名前でスポットを検索"""
+        pass
