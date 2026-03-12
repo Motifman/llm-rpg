@@ -838,107 +838,40 @@ class TestPlayerCurrentStateBuilder:
         )
         assert result.current_game_time_label is None
 
-    def test_build_player_current_state_includes_game_time_label_when_both_providers_set(
+    def test_build_player_current_state_raises_value_error_when_world_time_config_returns_invalid_ticks(
         self,
     ):
-        """game_time_provider と world_time_config_service が両方設定されているとき current_game_time_label が設定される"""
-        data_store = InMemoryDataStore()
-        status_repo = InMemoryPlayerStatusRepository(data_store)
-        profile_repo = InMemoryPlayerProfileRepository(data_store)
-        phys_repo = InMemoryPhysicalMapRepository(data_store)
-        spot_repo = InMemorySpotRepository(data_store)
-        spot_repo.save(Spot(SpotId(1), "Town", "A town"))
-        builder = PlayerCurrentStateBuilder(
-            player_status_repository=status_repo,
-            player_profile_repository=profile_repo,
-            spot_repository=spot_repo,
-            connected_spots_provider=GatewayBasedConnectedSpotsProvider(phys_repo),
-            game_time_provider=InMemoryGameTimeProvider(initial_tick=3600),
-            world_time_config_service=DefaultWorldTimeConfigService(
-                ticks_per_day=86400,
-                days_per_month=30,
-                months_per_year=12,
-            ),
+        """world_time_config_service が ticks_per_day=0 を返すとき ValueError が伝播する"""
+        from ai_rpg_world.domain.world.service.world_time_config_service import (
+            WorldTimeConfigService,
         )
-        profile_repo.save(_make_profile(1, "Alice"))
-        status = _make_status(1, 1, 0, 0)
-        status_repo.save(status)
-        actor = WorldObject(
-            object_id=WorldObjectId.create(1),
-            coordinate=Coordinate(0, 0, 0),
-            object_type=ObjectTypeEnum.PLAYER,
-            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
-        )
-        physical_map = _make_map(1, [actor])
-        result = builder.build_player_current_state(
-            query=GetPlayerCurrentStateQuery(player_id=1),
-            player_status=status,
-            player_name="Alice",
-            spot=spot_repo.find_by_id(SpotId(1)),
-            physical_map=physical_map,
-            available_moves_result=None,
-        )
-        assert result.current_game_time_label is not None
-        assert "年" in result.current_game_time_label
-        assert "月" in result.current_game_time_label
-        assert "日" in result.current_game_time_label
-        assert ":" in result.current_game_time_label
 
-    def test_build_player_current_state_omits_game_time_label_when_game_time_provider_none(
-        self,
-    ):
-        """game_time_provider が None のとき current_game_time_label は None"""
-        data_store = InMemoryDataStore()
-        status_repo = InMemoryPlayerStatusRepository(data_store)
-        profile_repo = InMemoryPlayerProfileRepository(data_store)
-        phys_repo = InMemoryPhysicalMapRepository(data_store)
-        spot_repo = InMemorySpotRepository(data_store)
-        spot_repo.save(Spot(SpotId(1), "Town", "A town"))
-        builder = PlayerCurrentStateBuilder(
-            player_status_repository=status_repo,
-            player_profile_repository=profile_repo,
-            spot_repository=spot_repo,
-            connected_spots_provider=GatewayBasedConnectedSpotsProvider(phys_repo),
-            game_time_provider=None,
-            world_time_config_service=DefaultWorldTimeConfigService(ticks_per_day=86400),
-        )
-        profile_repo.save(_make_profile(1, "Alice"))
-        status = _make_status(1, 1, 0, 0)
-        status_repo.save(status)
-        actor = WorldObject(
-            object_id=WorldObjectId.create(1),
-            coordinate=Coordinate(0, 0, 0),
-            object_type=ObjectTypeEnum.PLAYER,
-            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
-        )
-        physical_map = _make_map(1, [actor])
-        result = builder.build_player_current_state(
-            query=GetPlayerCurrentStateQuery(player_id=1),
-            player_status=status,
-            player_name="Alice",
-            spot=spot_repo.find_by_id(SpotId(1)),
-            physical_map=physical_map,
-            available_moves_result=None,
-        )
-        assert result.current_game_time_label is None
+        class InvalidTicksWorldTimeConfig(WorldTimeConfigService):
+            """get_ticks_per_day が 0 を返す不正な設定（game_date_time_from_tick が ValueError を投げる）"""
 
-    def test_build_player_current_state_omits_game_time_label_when_world_time_config_none(
-        self,
-    ):
-        """world_time_config_service が None のとき current_game_time_label は None"""
+            def get_ticks_per_day(self) -> int:
+                return 0
+
+            def get_days_per_month(self) -> int:
+                return 30
+
+            def get_months_per_year(self) -> int:
+                return 12
+
         data_store = InMemoryDataStore()
         status_repo = InMemoryPlayerStatusRepository(data_store)
         profile_repo = InMemoryPlayerProfileRepository(data_store)
         phys_repo = InMemoryPhysicalMapRepository(data_store)
         spot_repo = InMemorySpotRepository(data_store)
         spot_repo.save(Spot(SpotId(1), "Town", "A town"))
+        invalid_config = InvalidTicksWorldTimeConfig()
         builder = PlayerCurrentStateBuilder(
             player_status_repository=status_repo,
             player_profile_repository=profile_repo,
             spot_repository=spot_repo,
             connected_spots_provider=GatewayBasedConnectedSpotsProvider(phys_repo),
-            game_time_provider=InMemoryGameTimeProvider(initial_tick=0),
-            world_time_config_service=None,
+            game_time_provider=InMemoryGameTimeProvider(initial_tick=10),
+            world_time_config_service=invalid_config,
         )
         profile_repo.save(_make_profile(1, "Alice"))
         status = _make_status(1, 1, 0, 0)
@@ -950,13 +883,14 @@ class TestPlayerCurrentStateBuilder:
             component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
         )
         physical_map = _make_map(1, [actor])
-        result = builder.build_player_current_state(
-            query=GetPlayerCurrentStateQuery(player_id=1),
-            player_status=status,
-            player_name="Alice",
-            spot=spot_repo.find_by_id(SpotId(1)),
-            physical_map=physical_map,
-            available_moves_result=None,
-        )
-        assert result.current_game_time_label is None
+
+        with pytest.raises(ValueError, match="ticks_per_day must be positive"):
+            builder.build_player_current_state(
+                query=GetPlayerCurrentStateQuery(player_id=1),
+                player_status=status,
+                player_name="Alice",
+                spot=spot_repo.find_by_id(SpotId(1)),
+                physical_map=physical_map,
+                available_moves_result=None,
+            )
 
