@@ -3,7 +3,7 @@ phase: 10
 slug: awakened-mode-tooling-and-runtime-proof
 status: approved
 nyquist_compliant: true
-wave_0_complete: false
+wave_0_complete: true
 created: 2026-03-13
 ---
 
@@ -38,26 +38,26 @@ created: 2026-03-13
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 10-01-01 | 01 | 1 | SKAW-01, SKAW-02 | unit | `uv run pytest tests/application/skill/services/test_player_skill_tool_service.py -x -k "awakened"` | ❌ W0 | ⬜ pending |
-| 10-01-02 | 01 | 1 | SKAW-01 | unit | `uv run pytest tests/application/llm/services/executors/test_world_executor.py -x -k "awakened"` | ⚠️ partial | ⬜ pending |
-| 10-02-01 | 02 | 2 | SKAW-03, SKAW-02 | unit | `uv run pytest tests/application/world/services/test_player_supplemental_context_builder.py -x -k "awakened"` | ⚠️ partial | ⬜ pending |
-| 10-02-02 | 02 | 2 | SKAW-03 | integration | `uv run pytest tests/application/llm/test_available_tools_provider.py -x -k "awakened or skill"` | ✅ | ⬜ pending |
-| 10-03-01 | 03 | 3 | SKAW-01, SKRT-02 | integration | `uv run pytest tests/application/llm/test_tool_command_mapper.py -x -k "awakened"` | ⚠️ partial | ⬜ pending |
-| 10-03-02 | 03 | 3 | SKRT-02, SKAW-01 | integration | `uv run pytest tests/application/llm/test_llm_wiring.py -x -k "awakened or skill"` | ⚠️ partial | ⬜ pending |
-| 10-03-03 | 03 | 3 | SKRT-02, SKAW-03 | integration | `uv run pytest tests/application/llm/test_available_tools_provider.py tests/application/llm/test_tool_command_mapper.py tests/application/llm/test_llm_wiring.py -x -k "awakened or skill"` | ✅ after 10-02 | ⬜ pending |
-| 10-03-04 | 03 | 3 | SKRT-02 | unit | `uv run pytest tests/application/observation/test_observation_formatter.py -x -k "awakened"` | ✅ | ⬜ pending |
+| 10-01-01 | 01 | 1 | SKAW-01, SKAW-02 | unit | `uv run pytest tests/application/skill/services/test_player_skill_tool_service.py -x -k "awakened"` | ✅ | ✅ green |
+| 10-01-02 | 01 | 1 | SKAW-01 | unit | `uv run pytest tests/application/llm/services/executors/test_world_executor.py -x -k "awakened"` | ✅ | ✅ green |
+| 10-02-01 | 02 | 2 | SKAW-03, SKAW-02 | unit | `uv run pytest tests/application/world/services/test_player_supplemental_context_builder.py -x -k "awakened"` | ✅ | ✅ green |
+| 10-02-02 | 02 | 2 | SKAW-03 | integration | `uv run pytest tests/application/llm/test_available_tools_provider.py -x -k "awakened or skill"` | ✅ | ✅ green |
+| 10-03-01 | 03 | 3 | SKAW-01, SKRT-02 | integration | `uv run pytest tests/application/llm/test_tool_command_mapper.py -x -k "awakened"` | ✅ | ✅ green |
+| 10-03-02 | 03 | 3 | SKRT-02, SKAW-01 | integration | `uv run pytest tests/application/llm/test_llm_wiring.py -x -k "awakened or skill"` | ✅ | ✅ green |
+| 10-03-03 | 03 | 3 | SKRT-02, SKAW-03 | integration | `uv run pytest tests/application/llm/test_available_tools_provider.py tests/application/llm/test_tool_command_mapper.py tests/application/llm/test_llm_wiring.py -x -k "awakened or skill"` | ✅ | ✅ green |
+| 10-03-04 | 03 | 3 | SKRT-02 | unit | `uv run pytest tests/application/observation/test_observation_formatter.py -x -k "awakened"` | ✅ | ✅ green |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky/partial*
+*Status: ✅ green · ❌ red · ⚠️ flaky/partial*
 
 ---
 
 ## Wave 0 Requirements
 
-- [ ] `10-01-PLAN.md` — `tests/application/skill/services/test_player_skill_tool_service.py` に awakened facade defaults の検証を追加
-- [ ] `10-01-PLAN.md` — `tests/application/llm/services/executors/test_world_executor.py` に awakened handler の成功/失敗検証を追加
-- [ ] `10-02-PLAN.md` — `tests/application/world/services/test_player_supplemental_context_builder.py` に resource insufficiency hidden の検証を追加
-- [ ] `10-03-PLAN.md` — `tests/application/llm/test_tool_command_mapper.py` に awakened mapper 実行回帰を追加
-- [ ] `10-03-PLAN.md` — `tests/application/llm/test_llm_wiring.py` に awakened skill family 共存回帰を追加
+- [x] `10-01-PLAN.md` — `tests/application/skill/services/test_player_skill_tool_service.py` に awakened facade defaults の検証を追加
+- [x] `10-01-PLAN.md` — `tests/application/llm/services/executors/test_world_executor.py` に awakened handler の成功/失敗検証を追加
+- [x] `10-02-PLAN.md` — `tests/application/world/services/test_player_supplemental_context_builder.py` に resource insufficiency hidden の検証を追加
+- [x] `10-03-PLAN.md` — `tests/application/llm/test_tool_command_mapper.py` に awakened mapper 実行回帰を追加
+- [x] `10-03-PLAN.md` — `tests/application/llm/test_llm_wiring.py` に awakened skill family 共存回帰を追加
 
 ---
 
