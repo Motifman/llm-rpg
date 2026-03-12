@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: LLM Skill Tooling
 status: in_progress
-stopped_at: Phase 8 completed; Phase 9 not started
-last_updated: "2026-03-12T00:30:00Z"
-last_activity: 2026-03-12 — Phase 8 completed with skill runtime context, label contracts, and tool exposure rules
+stopped_at: Phase 10 planned; Phase 9 execution not started
+last_updated: "2026-03-13T00:00:00Z"
+last_activity: 2026-03-13 — Phase 10 planning completed with awakened tooling research and execution plans
 progress:
   total_phases: 3
   completed_phases: 1
-  total_plans: 4
+  total_plans: 7
   completed_plans: 4
   percent: 33
 ---
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** LLMエージェントが、ワールド状態とイベント駆動の文脈を踏まえて、自律的に次の行動を安全に選べること
-**Current focus:** v1.1 LLM Skill Tooling — Phase 9 planning
+**Current focus:** v1.1 LLM Skill Tooling — Phase 9/10 plans ready, awaiting execution
 
 ## Current Position
 
-Phase: 8 of 10 (Skill Runtime Context And Tool Contracts)
-Plan: complete
-Status: Phase 8 complete; ready for Phase 9 discussion / planning
-Last activity: 2026-03-12 — Phase 8 completed with skill runtime labels, argument resolution, and tool availability
+Phase: 10 of 10 (Awakened Mode Tooling And Runtime Proof)
+Plan: planning complete
+Status: Phases 9 and 10 are planned; execution should start from Phase 9 because Phase 10 depends on it
+Last activity: 2026-03-13 — Phase 10 research and plans were added for awakened tooling/runtime proof
 
 Progress: [###.......] 33%
 
@@ -57,6 +57,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-12
-Stopped at: Phase 8 complete
+Last session: 2026-03-13
+Stopped at: Phase 10 planning complete
 Resume file: None
