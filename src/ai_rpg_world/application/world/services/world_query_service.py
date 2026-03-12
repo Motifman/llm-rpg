@@ -57,7 +57,10 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
     from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
     from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
-    from ai_rpg_world.domain.skill.repository.skill_repository import SkillLoadoutRepository
+    from ai_rpg_world.domain.skill.repository.skill_repository import (
+        SkillDeckProgressRepository,
+        SkillLoadoutRepository,
+    )
     from ai_rpg_world.application.trade.services.personal_trade_query_service import (
         PersonalTradeQueryService,
     )
@@ -80,6 +83,7 @@ class WorldQueryService:
         item_repository: Optional["ItemRepository"] = None,
         conversation_command_service: Optional["ConversationCommandService"] = None,
         skill_loadout_repository: Optional["SkillLoadoutRepository"] = None,
+        skill_deck_progress_repository: Optional["SkillDeckProgressRepository"] = None,
         game_time_provider: Optional["GameTimeProvider"] = None,
         quest_repository: Optional["QuestRepository"] = None,
         guild_repository: Optional["GuildRepository"] = None,
@@ -114,6 +118,7 @@ class WorldQueryService:
                 item_repository=item_repository,
                 conversation_command_service=conversation_command_service,
                 skill_loadout_repository=skill_loadout_repository,
+                skill_deck_progress_repository=skill_deck_progress_repository,
                 game_time_provider=game_time_provider,
                 quest_repository=quest_repository,
                 guild_repository=guild_repository,

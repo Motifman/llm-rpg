@@ -26,6 +26,10 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_NO_OP,
     TOOL_NAME_PLACE_OBJECT,
     TOOL_NAME_SAY,
+    TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
+    TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
+    TOOL_NAME_SKILL_EQUIP,
+    TOOL_NAME_SKILL_REJECT_PROPOSAL,
 )
 from ai_rpg_world.application.llm.services.tool_definitions import (
     register_default_tools,
@@ -35,14 +39,19 @@ from ai_rpg_world.application.world.contracts.dtos import (
     ActiveConversationDto,
     AvailableMoveDto,
     AttentionLevelOptionDto,
+    AwakenedActionDto,
     ChestItemDto,
     ConversationChoiceDto,
+    EquipableSkillCandidateDto,
     InventoryItemDto,
+    PendingSkillProposalDto,
     PlayerCurrentStateDto,
+    SkillEquipSlotDto,
     UsableSkillDto,
     VisibleObjectDto,
 )
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillProposalType
 
 
 def _context_with_moves(total: int, *, is_busy: bool = False, visible_objects=None):
@@ -192,6 +201,23 @@ class TestDefaultAvailableToolsProvider:
             is_terminal=False,
         )
         ctx.usable_skills = [UsableSkillDto(10, 1, 100, "火球")]
+        ctx.equipable_skill_candidates = [
+            EquipableSkillCandidateDto(10, 100, "火球", DeckTier.NORMAL)
+        ]
+        ctx.skill_equip_slots = [
+            SkillEquipSlotDto(10, DeckTier.NORMAL, 0, "通常スロット 1")
+        ]
+        ctx.pending_skill_proposals = [
+            PendingSkillProposalDto(
+                progress_id=20,
+                proposal_id=1,
+                offered_skill_id=300,
+                display_name="300: 新しい攻撃手段",
+                proposal_type=SkillProposalType.ADD,
+                deck_tier=DeckTier.NORMAL,
+            )
+        ]
+        ctx.awakened_action = AwakenedActionDto(10, "覚醒モードを発動")
         ctx.attention_level_options = [
             AttentionLevelOptionDto("FULL", "フル", "すべて受け取る"),
         ]
@@ -204,6 +230,23 @@ class TestDefaultAvailableToolsProvider:
         assert TOOL_NAME_DESTROY_PLACEABLE in names
         assert TOOL_NAME_CHEST_STORE in names
         assert TOOL_NAME_COMBAT_USE_SKILL in names
+        assert TOOL_NAME_SKILL_EQUIP in names
+        assert TOOL_NAME_SKILL_ACCEPT_PROPOSAL in names
+        assert TOOL_NAME_SKILL_REJECT_PROPOSAL in names
+        assert TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE in names
+
+    def test_get_available_tools_hides_skill_management_tools_without_matching_labels(self, provider):
+        ctx = _context_with_moves(0)
+        ctx.usable_skills = [UsableSkillDto(10, 1, 100, "火球")]
+
+        tools = provider.get_available_tools(ctx)
+        names = [t["function"]["name"] for t in tools if t.get("type") == "function"]
+
+        assert TOOL_NAME_COMBAT_USE_SKILL in names
+        assert TOOL_NAME_SKILL_EQUIP not in names
+        assert TOOL_NAME_SKILL_ACCEPT_PROPOSAL not in names
+        assert TOOL_NAME_SKILL_REJECT_PROPOSAL not in names
+        assert TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE not in names
 
     def test_tool_format_openai_compatible(self, provider):
         """返却形式が OpenAI の function ツール形式である"""

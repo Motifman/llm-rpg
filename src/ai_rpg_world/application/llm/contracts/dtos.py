@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
+
 
 # 再スケジュール対象とする error_code（1起動1ツール前提で次tickで再試行する）
 # LLM_AUTHENTICATION_ERROR は恒久障害のため除外
@@ -145,6 +147,10 @@ class ToolRuntimeTargetDto:
     conversation_choice_index: Optional[int] = None
     skill_loadout_id: Optional[int] = None
     skill_slot_index: Optional[int] = None
+    skill_id: Optional[int] = None
+    deck_tier: Optional[DeckTier] = None
+    progress_id: Optional[int] = None
+    proposal_id: Optional[int] = None
     attention_level_value: Optional[str] = None
     quest_id: Optional[int] = None
     guild_id: Optional[int] = None
@@ -201,6 +207,14 @@ class ToolRuntimeTargetDto:
             raise TypeError("skill_loadout_id must be int or None")
         if self.skill_slot_index is not None and not isinstance(self.skill_slot_index, int):
             raise TypeError("skill_slot_index must be int or None")
+        if self.skill_id is not None and not isinstance(self.skill_id, int):
+            raise TypeError("skill_id must be int or None")
+        if self.deck_tier is not None and not isinstance(self.deck_tier, DeckTier):
+            raise TypeError("deck_tier must be DeckTier or None")
+        if self.progress_id is not None and not isinstance(self.progress_id, int):
+            raise TypeError("progress_id must be int or None")
+        if self.proposal_id is not None and not isinstance(self.proposal_id, int):
+            raise TypeError("proposal_id must be int or None")
         if self.attention_level_value is not None and not isinstance(
             self.attention_level_value, str
         ):
@@ -292,6 +306,26 @@ class ConversationChoiceToolRuntimeTargetDto(ToolRuntimeTargetDto):
 @dataclass(frozen=True)
 class SkillToolRuntimeTargetDto(ToolRuntimeTargetDto):
     """スキル用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class SkillEquipCandidateToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """装備候補スキル用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class SkillEquipSlotToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """装備先スロット用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class SkillProposalToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """スキル提案用の runtime target。"""
+
+
+@dataclass(frozen=True)
+class AwakenedActionToolRuntimeTargetDto(ToolRuntimeTargetDto):
+    """覚醒モード発動用の runtime target。"""
 
 
 @dataclass(frozen=True)

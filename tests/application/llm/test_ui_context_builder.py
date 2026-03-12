@@ -2,10 +2,14 @@
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActiveHarvestToolRuntimeTargetDto,
+    AwakenedActionToolRuntimeTargetDto,
     InventoryToolRuntimeTargetDto,
     NpcToolRuntimeTargetDto,
     PlayerToolRuntimeTargetDto,
     ResourceToolRuntimeTargetDto,
+    SkillEquipCandidateToolRuntimeTargetDto,
+    SkillEquipSlotToolRuntimeTargetDto,
+    SkillProposalToolRuntimeTargetDto,
     ToolRuntimeContextDto,
 )
 from ai_rpg_world.application.llm.services.ui_context_builder import (
@@ -17,17 +21,22 @@ from ai_rpg_world.application.world.contracts.dtos import (
     AvailableLocationAreaDto,
     AvailableMoveDto,
     AttentionLevelOptionDto,
+    AwakenedActionDto,
     ChestItemDto,
     ConversationChoiceDto,
+    EquipableSkillCandidateDto,
     GuildMemberSummaryDto,
     GuildMembershipSummaryDto,
     InventoryItemDto,
     NearbyShopSummaryDto,
+    PendingSkillProposalDto,
     PlayerCurrentStateDto,
+    SkillEquipSlotDto,
     UsableSkillDto,
     VisibleObjectDto,
 )
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillProposalType
 
 
 def _make_state() -> PlayerCurrentStateDto:
@@ -140,6 +149,28 @@ def _make_state() -> PlayerCurrentStateDto:
         usable_skills=[
             UsableSkillDto(10, 1, 1001, "火球", mp_cost=5),
         ],
+        equipable_skill_candidates=[
+            EquipableSkillCandidateDto(10, 1001, "火球", DeckTier.NORMAL),
+        ],
+        skill_equip_slots=[
+            SkillEquipSlotDto(10, DeckTier.NORMAL, 0, "通常スロット 1", 1001, "火球"),
+            SkillEquipSlotDto(10, DeckTier.AWAKENED, 1, "覚醒スロット 2"),
+        ],
+        pending_skill_proposals=[
+            PendingSkillProposalDto(
+                progress_id=20,
+                proposal_id=1,
+                offered_skill_id=3001,
+                display_name="3001: 新しい攻撃手段",
+                proposal_type=SkillProposalType.ADD,
+                deck_tier=DeckTier.NORMAL,
+                reason="新しい攻撃手段",
+            ),
+        ],
+        awakened_action=AwakenedActionDto(
+            skill_loadout_id=10,
+            display_name="覚醒モードを発動",
+        ),
         attention_level_options=[
             AttentionLevelOptionDto("FULL", "フル", "すべての観測を受け取ります。"),
         ],
@@ -263,6 +294,14 @@ class TestDefaultLlmUiContextBuilder:
         assert "R1: はい" in result.current_state_text
         assert "使用可能スキル:" in result.current_state_text
         assert "K1: 火球" in result.current_state_text
+        assert "装備候補スキル:" in result.current_state_text
+        assert "EK1: 火球" in result.current_state_text
+        assert "スキル装備先:" in result.current_state_text
+        assert "ES1: 通常スロット 1" in result.current_state_text
+        assert "保留中のスキル提案:" in result.current_state_text
+        assert "SP1: 3001: 新しい攻撃手段" in result.current_state_text
+        assert "覚醒モード:" in result.current_state_text
+        assert "AW1: 覚醒モードを発動" in result.current_state_text
         assert "注意レベル変更:" in result.current_state_text
         assert "A1: フル" in result.current_state_text
         assert result.tool_runtime_context.current_x == 0
@@ -272,6 +311,10 @@ class TestDefaultLlmUiContextBuilder:
         assert result.tool_runtime_context.targets["C1"].chest_world_object_id == 200
         assert result.tool_runtime_context.targets["R1"].conversation_choice_index == 0
         assert result.tool_runtime_context.targets["K1"].skill_slot_index == 1
+        assert isinstance(result.tool_runtime_context.targets["EK1"], SkillEquipCandidateToolRuntimeTargetDto)
+        assert isinstance(result.tool_runtime_context.targets["ES1"], SkillEquipSlotToolRuntimeTargetDto)
+        assert isinstance(result.tool_runtime_context.targets["SP1"], SkillProposalToolRuntimeTargetDto)
+        assert isinstance(result.tool_runtime_context.targets["AW1"], AwakenedActionToolRuntimeTargetDto)
         assert result.tool_runtime_context.targets["A1"].attention_level_value == "FULL"
 
     def test_build_adds_active_harvest_label(self):

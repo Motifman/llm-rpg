@@ -24,6 +24,10 @@ from ai_rpg_world.application.llm.services.tool_definitions import (
     PURSUIT_CANCEL_DEFINITION,
     PURSUIT_START_DEFINITION,
     SAY_DEFINITION,
+    SKILL_ACCEPT_PROPOSAL_DEFINITION,
+    SKILL_ACTIVATE_AWAKENED_MODE_DEFINITION,
+    SKILL_EQUIP_DEFINITION,
+    SKILL_REJECT_PROPOSAL_DEFINITION,
     WHISPER_DEFINITION,
     register_default_tools,
 )
@@ -46,6 +50,10 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_PURSUIT_CANCEL,
     TOOL_NAME_PURSUIT_START,
     TOOL_NAME_SAY,
+    TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
+    TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
+    TOOL_NAME_SKILL_EQUIP,
+    TOOL_NAME_SKILL_REJECT_PROPOSAL,
     TOOL_NAME_WHISPER,
 )
 
@@ -126,6 +134,17 @@ class TestToolDefinitions:
         params = COMBAT_USE_SKILL_DEFINITION.parameters
         assert "skill_label" in params.get("properties", {})
         assert "target_label" in params.get("properties", {})
+
+    def test_skill_management_definitions_have_label_params(self):
+        assert SKILL_EQUIP_DEFINITION.name == TOOL_NAME_SKILL_EQUIP
+        assert "skill_label" in SKILL_EQUIP_DEFINITION.parameters.get("properties", {})
+        assert "slot_label" in SKILL_EQUIP_DEFINITION.parameters.get("properties", {})
+        assert SKILL_ACCEPT_PROPOSAL_DEFINITION.name == TOOL_NAME_SKILL_ACCEPT_PROPOSAL
+        assert "proposal_label" in SKILL_ACCEPT_PROPOSAL_DEFINITION.parameters.get("properties", {})
+        assert SKILL_REJECT_PROPOSAL_DEFINITION.name == TOOL_NAME_SKILL_REJECT_PROPOSAL
+        assert "proposal_label" in SKILL_REJECT_PROPOSAL_DEFINITION.parameters.get("properties", {})
+        assert SKILL_ACTIVATE_AWAKENED_MODE_DEFINITION.name == TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE
+        assert "awakened_action_label" in SKILL_ACTIVATE_AWAKENED_MODE_DEFINITION.parameters.get("properties", {})
 
     def test_inspect_item_definition_has_expected_params(self):
         assert INSPECT_ITEM_DEFINITION.name == TOOL_NAME_INSPECT_ITEM
@@ -219,6 +238,10 @@ class TestRegisterDefaultTools:
         assert TOOL_NAME_CHEST_STORE in names
         assert TOOL_NAME_CHEST_TAKE in names
         assert TOOL_NAME_COMBAT_USE_SKILL in names
+        assert TOOL_NAME_SKILL_EQUIP in names
+        assert TOOL_NAME_SKILL_ACCEPT_PROPOSAL in names
+        assert TOOL_NAME_SKILL_REJECT_PROPOSAL in names
+        assert TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE in names
 
     def test_register_default_tools_with_inspect_item_enabled_adds_inspect_item(self):
         registry = DefaultGameToolRegistry()
