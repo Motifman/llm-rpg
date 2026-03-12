@@ -88,4 +88,11 @@ class DefaultCurrentStateFormatter(ICurrentStateFormatter):
         elif dto.has_active_path:
             lines.append("行動状態: 移動計画あり")
 
+        if dto.active_harvest is not None:
+            lines.append(
+                "採集中: "
+                f"{dto.active_harvest.target_display_name}"
+                f" (finish_tick={dto.active_harvest.finish_tick})"
+            )
+
         return "\n".join(lines)

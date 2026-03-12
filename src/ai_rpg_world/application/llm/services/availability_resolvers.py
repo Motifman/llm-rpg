@@ -141,13 +141,23 @@ class HarvestStartAvailabilityResolver(IAvailabilityResolver):
         self,
         context: Optional[PlayerCurrentStateDto],
     ) -> bool:
-        if context is None:
+        if context is None or context.is_busy or context.active_harvest is not None:
             return False
         return any(
             _has_visible_action(obj, "can_harvest", "harvest")
             for obj in _iter_actionable_objects(context)
             if not obj.is_self
         )
+
+
+class HarvestCancelAvailabilityResolver(IAvailabilityResolver):
+    """採集中断ツールは進行中採集があるときのみ利用可能。"""
+
+    def is_available(
+        self,
+        context: Optional[PlayerCurrentStateDto],
+    ) -> bool:
+        return context is not None and context.active_harvest is not None
 
 
 class ChangeAttentionAvailabilityResolver(IAvailabilityResolver):

@@ -15,3 +15,12 @@ class FinishHarvestCommand:
     target_id: str
     spot_id: str
     current_tick: int
+
+
+@dataclass(frozen=True)
+class CancelHarvestCommand:
+    """採集中断コマンド"""
+    actor_id: str
+    target_id: str
+    spot_id: str
+    current_tick: int

@@ -57,6 +57,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_GUILD_DISBAND,
     TOOL_NAME_GUILD_LEAVE,
     TOOL_NAME_GUILD_WITHDRAW_BANK,
+    TOOL_NAME_HARVEST_CANCEL,
     TOOL_NAME_HARVEST_START,
     TOOL_NAME_INSPECT_ITEM,
     TOOL_NAME_INSPECT_TARGET,
@@ -173,6 +174,10 @@ class ToolCommandMapper:
             getattr(harvest_service, "start_harvest_by_target", None)
         ):
             raise TypeError("harvest_service must have a callable start_harvest_by_target")
+        if harvest_service is not None and not callable(
+            getattr(harvest_service, "cancel_harvest_by_target", None)
+        ):
+            raise TypeError("harvest_service must have a callable cancel_harvest_by_target")
         if attention_service is not None and not callable(
             getattr(attention_service, "change_attention_level", None)
         ):
@@ -216,6 +221,7 @@ class ToolCommandMapper:
             TOOL_NAME_INSPECT_TARGET: self._execute_inspect_target,
             TOOL_NAME_INTERACT_WORLD_OBJECT: self._execute_interact_world_object,
             TOOL_NAME_HARVEST_START: self._execute_harvest_start,
+            TOOL_NAME_HARVEST_CANCEL: self._execute_harvest_cancel,
             TOOL_NAME_CHANGE_ATTENTION: self._execute_change_attention,
             TOOL_NAME_CONVERSATION_ADVANCE: self._execute_conversation_advance,
             TOOL_NAME_PLACE_OBJECT: self._execute_place_object,
@@ -637,6 +643,41 @@ class ToolCommandMapper:
         try:
             target_world_object_id = args.get("target_world_object_id")
             result: HarvestCommandResultDto = self._harvest_service.start_harvest_by_target(
+                player_id=player_id,
+                target_world_object_id=(
+                    int(target_world_object_id)
+                    if isinstance(target_world_object_id, (int, float))
+                    else 0
+                ),
+            )
+            return LlmCommandResultDto(
+                success=result.success,
+                message=result.message,
+            )
+        except Exception as e:
+            error_code = getattr(e, "error_code", "SYSTEM_ERROR")
+            return LlmCommandResultDto(
+                success=False,
+                message=str(e),
+                error_code=error_code,
+                remediation=get_remediation(error_code),
+            )
+
+    def _execute_harvest_cancel(
+        self,
+        player_id: int,
+        args: Dict[str, Any],
+    ) -> LlmCommandResultDto:
+        if self._harvest_service is None:
+            return LlmCommandResultDto(
+                success=False,
+                message="採集中断ツールはまだ利用できません。",
+                error_code="UNKNOWN_TOOL",
+                remediation=get_remediation("UNKNOWN_TOOL"),
+            )
+        try:
+            target_world_object_id = args.get("target_world_object_id")
+            result: HarvestCommandResultDto = self._harvest_service.cancel_harvest_by_target(
                 player_id=player_id,
                 target_world_object_id=(
                     int(target_world_object_id)
