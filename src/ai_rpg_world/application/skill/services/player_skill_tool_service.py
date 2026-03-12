@@ -3,13 +3,19 @@
 from typing import Optional
 
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
-from ai_rpg_world.application.skill.contracts.commands import UsePlayerSkillCommand
+from ai_rpg_world.application.skill.contracts.commands import (
+    AcceptSkillProposalCommand,
+    EquipPlayerSkillCommand,
+    RejectSkillProposalCommand,
+    UsePlayerSkillCommand,
+)
 from ai_rpg_world.application.skill.exceptions.command.skill_command_exception import (
     SkillCommandException,
 )
 from ai_rpg_world.application.skill.services.skill_command_service import SkillCommandService
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
 
 
 class PlayerSkillToolApplicationService:
@@ -46,5 +52,50 @@ class PlayerSkillToolApplicationService:
                 spot_id=str(int(status.current_spot_id)),
                 target_direction=target_direction,
                 auto_aim=auto_aim,
+            )
+        )
+
+    def equip_skill(
+        self,
+        *,
+        player_id: int,
+        loadout_id: int,
+        deck_tier: DeckTier,
+        slot_index: int,
+        skill_id: int,
+    ) -> None:
+        self._skill_command_service.equip_player_skill(
+            EquipPlayerSkillCommand(
+                player_id=player_id,
+                loadout_id=loadout_id,
+                deck_tier=deck_tier,
+                slot_index=slot_index,
+                skill_id=skill_id,
+            )
+        )
+
+    def accept_skill_proposal(
+        self,
+        *,
+        progress_id: int,
+        proposal_id: int,
+    ) -> None:
+        self._skill_command_service.accept_skill_proposal(
+            AcceptSkillProposalCommand(
+                progress_id=progress_id,
+                proposal_id=proposal_id,
+            )
+        )
+
+    def reject_skill_proposal(
+        self,
+        *,
+        progress_id: int,
+        proposal_id: int,
+    ) -> None:
+        self._skill_command_service.reject_skill_proposal(
+            RejectSkillProposalCommand(
+                progress_id=progress_id,
+                proposal_id=proposal_id,
             )
         )

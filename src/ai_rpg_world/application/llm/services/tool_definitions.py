@@ -39,6 +39,10 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
     ShopUnlistItemAvailabilityResolver,
     MemoryQueryAvailabilityResolver,
     SubagentAvailabilityResolver,
+    SkillAcceptProposalAvailabilityResolver,
+    SkillActivateAwakenedModeAvailabilityResolver,
+    SkillEquipAvailabilityResolver,
+    SkillRejectProposalAvailabilityResolver,
     TradeAcceptAvailabilityResolver,
     TradeCancelAvailabilityResolver,
     TradeOfferAvailabilityResolver,
@@ -90,6 +94,10 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SHOP_LIST_ITEM,
     TOOL_NAME_SHOP_PURCHASE,
     TOOL_NAME_SHOP_UNLIST_ITEM,
+    TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
+    TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
+    TOOL_NAME_SKILL_EQUIP,
+    TOOL_NAME_SKILL_REJECT_PROPOSAL,
     TOOL_NAME_TRADE_ACCEPT,
     TOOL_NAME_TRADE_CANCEL,
     TOOL_NAME_TRADE_OFFER,
@@ -439,6 +447,78 @@ COMBAT_USE_SKILL_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_COMBAT_USE_SKILL,
     description="使用可能スキルを選んで発動します。対象があればその方向へ向き直ります。",
     parameters=COMBAT_USE_SKILL_PARAMETERS,
+)
+
+SKILL_EQUIP_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "skill_label": {
+            "type": "string",
+            "description": "装備候補スキルラベル（例: EK1）。",
+        },
+        "slot_label": {
+            "type": "string",
+            "description": "装備先スロットラベル（例: ES1）。",
+        },
+    },
+    "required": ["skill_label", "slot_label"],
+}
+
+SKILL_EQUIP_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SKILL_EQUIP,
+    description="装備候補スキルを指定したスロットへ装備します。",
+    parameters=SKILL_EQUIP_PARAMETERS,
+)
+
+SKILL_ACCEPT_PROPOSAL_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "proposal_label": {
+            "type": "string",
+            "description": "受諾するスキル提案ラベル（例: SP1）。",
+        },
+    },
+    "required": ["proposal_label"],
+}
+
+SKILL_ACCEPT_PROPOSAL_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
+    description="保留中のスキル進化提案を受諾します。",
+    parameters=SKILL_ACCEPT_PROPOSAL_PARAMETERS,
+)
+
+SKILL_REJECT_PROPOSAL_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "proposal_label": {
+            "type": "string",
+            "description": "却下するスキル提案ラベル（例: SP1）。",
+        },
+    },
+    "required": ["proposal_label"],
+}
+
+SKILL_REJECT_PROPOSAL_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SKILL_REJECT_PROPOSAL,
+    description="保留中のスキル進化提案を却下します。",
+    parameters=SKILL_REJECT_PROPOSAL_PARAMETERS,
+)
+
+SKILL_ACTIVATE_AWAKENED_MODE_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "awakened_action_label": {
+            "type": "string",
+            "description": "覚醒モード発動ラベル（例: AW1）。",
+        },
+    },
+    "required": ["awakened_action_label"],
+}
+
+SKILL_ACTIVATE_AWAKENED_MODE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
+    description="覚醒モードを発動します。継続時間や消費コストはサーバ側設定に従います。",
+    parameters=SKILL_ACTIVATE_AWAKENED_MODE_PARAMETERS,
 )
 
 QUEST_ACCEPT_PARAMETERS = {
@@ -1004,6 +1084,19 @@ def register_default_tools(
         registry.register(CHEST_TAKE_DEFINITION, ChestTakeAvailabilityResolver())
     if combat_enabled:
         registry.register(COMBAT_USE_SKILL_DEFINITION, CombatUseSkillAvailabilityResolver())
+        registry.register(SKILL_EQUIP_DEFINITION, SkillEquipAvailabilityResolver())
+        registry.register(
+            SKILL_ACCEPT_PROPOSAL_DEFINITION,
+            SkillAcceptProposalAvailabilityResolver(),
+        )
+        registry.register(
+            SKILL_REJECT_PROPOSAL_DEFINITION,
+            SkillRejectProposalAvailabilityResolver(),
+        )
+        registry.register(
+            SKILL_ACTIVATE_AWAKENED_MODE_DEFINITION,
+            SkillActivateAwakenedModeAvailabilityResolver(),
+        )
     if quest_enabled:
         registry.register(QUEST_ACCEPT_DEFINITION, QuestAcceptAvailabilityResolver())
         registry.register(QUEST_CANCEL_DEFINITION, QuestCancelAvailabilityResolver())

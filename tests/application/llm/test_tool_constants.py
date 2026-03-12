@@ -19,11 +19,16 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_PREFIX_CONVERSATION,
     TOOL_NAME_PREFIX_HARVEST,
     TOOL_NAME_PREFIX_MOVE,
+    TOOL_NAME_PREFIX_SKILL,
     TOOL_NAME_PREFIX_SPEECH,
     TOOL_NAME_PREFIX_WORLD,
     TOOL_NAME_NO_OP,
     TOOL_NAME_PLACE_OBJECT,
     TOOL_NAME_SAY,
+    TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
+    TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
+    TOOL_NAME_SKILL_EQUIP,
+    TOOL_NAME_SKILL_REJECT_PROPOSAL,
     TOOL_NAME_WHISPER,
 )
 
@@ -39,6 +44,7 @@ class TestToolNamePrefixes:
         assert TOOL_NAME_PREFIX_HARVEST in TOOL_NAME_PREFIXES
         assert TOOL_NAME_PREFIX_CONVERSATION in TOOL_NAME_PREFIXES
         assert TOOL_NAME_PREFIX_COMBAT in TOOL_NAME_PREFIXES
+        assert TOOL_NAME_PREFIX_SKILL in TOOL_NAME_PREFIXES
 
     def test_prefix_descriptions_length_matches_prefixes(self):
         """プレフィックス説明の数がプレフィックス数と一致する"""
@@ -100,3 +106,9 @@ class TestToolNames:
 
     def test_combat_use_skill_has_combat_prefix(self):
         assert TOOL_NAME_COMBAT_USE_SKILL.startswith(TOOL_NAME_PREFIX_COMBAT)
+
+    def test_skill_management_tools_have_skill_prefix(self):
+        assert TOOL_NAME_SKILL_EQUIP.startswith(TOOL_NAME_PREFIX_SKILL)
+        assert TOOL_NAME_SKILL_ACCEPT_PROPOSAL.startswith(TOOL_NAME_PREFIX_SKILL)
+        assert TOOL_NAME_SKILL_REJECT_PROPOSAL.startswith(TOOL_NAME_PREFIX_SKILL)
+        assert TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE.startswith(TOOL_NAME_PREFIX_SKILL)
