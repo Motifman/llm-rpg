@@ -37,4 +37,8 @@ class MonsterRepository(Repository[MonsterAggregate, MonsterId]):
 
 class MonsterTemplateRepository(Repository[MonsterTemplate, MonsterTemplateId]):
     """モンスターテンプレートのリポジトリインターフェース"""
-    pass
+
+    @abstractmethod
+    def find_by_name(self, name: str) -> Optional[MonsterTemplate]:
+        """名前でモンスターテンプレートを検索"""
+        pass

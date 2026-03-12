@@ -46,3 +46,13 @@ class InMemorySpotRepository(SpotRepository, InMemoryRepositoryBase):
 
     def find_all(self) -> List[Spot]:
         return [self._clone(s) for s in self._spot_dict.values()]
+
+    def find_by_name(self, name: str) -> Optional[Spot]:
+        """名前でスポットを検索。find_all をループして name でマッチする最初のものを返す。"""
+        if not name or not isinstance(name, str):
+            return None
+        key = name.strip()
+        for spot in self._spot_dict.values():
+            if spot.name == key:
+                return self._clone(spot)
+        return None
