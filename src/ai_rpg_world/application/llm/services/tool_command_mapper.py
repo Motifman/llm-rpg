@@ -37,6 +37,9 @@ from ai_rpg_world.application.llm.services.executors.todo_executor import (
 from ai_rpg_world.application.llm.services.executors.trade_executor import (
     TradeToolExecutor,
 )
+from ai_rpg_world.application.llm.services.executors.sns_executor import (
+    SnsToolExecutor,
+)
 from ai_rpg_world.application.llm.services.executors.world_executor import (
     WorldToolExecutor,
 )
@@ -79,6 +82,9 @@ class ToolCommandMapper:
         guild_service: Optional[Any] = None,
         shop_service: Optional[Any] = None,
         trade_service: Optional[Any] = None,
+        post_service: Optional[Any] = None,
+        reply_service: Optional[Any] = None,
+        user_command_service: Optional[Any] = None,
         item_repository: Optional["ItemRepository"] = None,
         monster_repository: Optional["MonsterRepository"] = None,
         physical_map_repository: Optional["PhysicalMapRepository"] = None,
@@ -127,6 +133,12 @@ class ToolCommandMapper:
         self._executor_map.update(shop_executor.get_handlers())
         trade_executor = TradeToolExecutor(trade_service=trade_service)
         self._executor_map.update(trade_executor.get_handlers())
+        sns_executor = SnsToolExecutor(
+            post_service=post_service,
+            reply_service=reply_service,
+            user_command_service=user_command_service,
+        )
+        self._executor_map.update(sns_executor.get_handlers())
         world_executor = WorldToolExecutor(
             interaction_service=interaction_service,
             harvest_service=harvest_service,
