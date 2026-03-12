@@ -38,6 +38,12 @@ Plans:
 **Goal**: LLM が装備変更と進化提案の受諾/却下を行えるようにする
 **Depends on**: Phase 8
 **Requirements**: `SKTL-01`, `SKPR-01`, `SKPR-02`
+**Status:** Planned
+**Plans:** 3 plans
+Plans:
+- [ ] `09-01-PLAN.md` — skill equip / proposal decision の facade と world executor 実行経路を接続する
+- [ ] `09-02-PLAN.md` — proposal target の slot-aware display 情報と Phase 9 成功文面を確定する
+- [ ] `09-03-PLAN.md` — mapper / wiring / runtime path 回帰で Phase 9 ツール群の統合を証明する
 **Success criteria:**
 1. LLM が `skill_equip` で候補スキルを指定 slot に装備できる
 2. LLM が pending proposal を受諾でき、必要な loadout 反映まで完了する
