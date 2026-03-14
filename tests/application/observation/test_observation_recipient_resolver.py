@@ -11,6 +11,9 @@ from ai_rpg_world.application.observation.services.observation_recipient_resolve
 from ai_rpg_world.application.observation.services.world_object_to_player_resolver import (
     WorldObjectToPlayerResolver,
 )
+from ai_rpg_world.application.observation.services.player_audience_query_service import (
+    PlayerAudienceQueryService,
+)
 from ai_rpg_world.application.observation.services.recipient_strategies import (
     DefaultRecipientStrategy,
 )
@@ -389,15 +392,15 @@ class TestObservationRecipientResolver:
 
     # --- 例外ケース（リポジトリが例外を投げた場合は伝播）---
 
-    def test_resolve_when_player_status_find_all_raises_propagates(
+    def test_resolve_when_player_audience_query_raises_propagates(
         self, physical_map_repo, data_store
     ):
-        """PlayerStatusRepository.find_all が例外を投げた場合、その例外が伝播する"""
-        status_repo = MagicMock()
-        status_repo.find_all.side_effect = RuntimeError("find_all failed")
+        """PlayerAudienceQuery.players_at_spot が例外を投げた場合、その例外が伝播する"""
+        audience_query = MagicMock()
+        audience_query.players_at_spot.side_effect = RuntimeError("find_all failed")
         world_object_resolver = WorldObjectToPlayerResolver(physical_map_repo)
         default_strategy = DefaultRecipientStrategy(
-            player_status_repository=status_repo,
+            player_audience_query=audience_query,
             world_object_to_player_resolver=world_object_resolver,
         )
         resolver = ObservationRecipientResolver(strategies=[default_strategy])
@@ -433,8 +436,11 @@ class TestDefaultRecipientStrategy:
 
     @pytest.fixture
     def strategy(self, status_repo, world_object_resolver):
-        return DefaultRecipientStrategy(
+        audience_query = PlayerAudienceQueryService(
             player_status_repository=status_repo,
+        )
+        return DefaultRecipientStrategy(
+            player_audience_query=audience_query,
             world_object_to_player_resolver=world_object_resolver,
         )
 

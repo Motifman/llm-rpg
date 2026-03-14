@@ -23,6 +23,9 @@ from ai_rpg_world.domain.skill.repository.skill_repository import (
 from ai_rpg_world.domain.world.repository.physical_map_repository import (
     PhysicalMapRepository,
 )
+from ai_rpg_world.application.observation.services.player_audience_query_service import (
+    PlayerAudienceQueryService,
+)
 from ai_rpg_world.application.observation.services.world_object_to_player_resolver import (
     WorldObjectToPlayerResolver,
 )
@@ -94,27 +97,30 @@ def create_observation_recipient_resolver(
     デフォルト戦略と WorldObjectToPlayerResolver を用いる。
     """
     world_object_resolver = WorldObjectToPlayerResolver(physical_map_repository)
+    player_audience_query = PlayerAudienceQueryService(
+        player_status_repository=player_status_repository,
+    )
     strategies: List[IRecipientResolutionStrategy] = [
         ConversationRecipientStrategy(),
         QuestRecipientStrategy(
-            player_status_repository=player_status_repository,
+            player_audience_query=player_audience_query,
             quest_repository=quest_repository,
             guild_repository=guild_repository,
         ),
         ShopRecipientStrategy(
-            player_status_repository=player_status_repository,
+            player_audience_query=player_audience_query,
             shop_repository=shop_repository,
         ),
         TradeRecipientStrategy(trade_repository=trade_repository),
         SnsRecipientStrategy(sns_user_repository=sns_user_repository),
         GuildRecipientStrategy(
-            player_status_repository=player_status_repository,
+            player_audience_query=player_audience_query,
             guild_repository=guild_repository,
         ),
         HarvestRecipientStrategy(world_object_to_player_resolver=world_object_resolver),
         PursuitRecipientStrategy(world_object_to_player_resolver=world_object_resolver),
         MonsterRecipientStrategy(
-            player_status_repository=player_status_repository,
+            player_audience_query=player_audience_query,
             physical_map_repository=physical_map_repository,
             world_object_to_player_resolver=world_object_resolver,
             monster_repository=monster_repository,
@@ -129,7 +135,7 @@ def create_observation_recipient_resolver(
         ),
         SpeechRecipientStrategy(player_status_repository=player_status_repository),
         DefaultRecipientStrategy(
-            player_status_repository=player_status_repository,
+            player_audience_query=player_audience_query,
             world_object_to_player_resolver=world_object_resolver,
         ),
     ]

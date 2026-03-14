@@ -3,6 +3,7 @@
 from typing import Any, List, Optional
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
+    IPlayerAudienceQueryPort,
     IRecipientResolutionStrategy,
     IWorldObjectToPlayerResolver,
 )
@@ -25,9 +26,6 @@ from ai_rpg_world.domain.monster.event.monster_events import (
     TargetSpottedEvent,
 )
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
-from ai_rpg_world.domain.player.repository.player_status_repository import (
-    PlayerStatusRepository,
-)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.repository.physical_map_repository import (
     PhysicalMapRepository,
@@ -40,12 +38,12 @@ class MonsterRecipientStrategy(IRecipientResolutionStrategy):
 
     def __init__(
         self,
-        player_status_repository: PlayerStatusRepository,
+        player_audience_query: IPlayerAudienceQueryPort,
         physical_map_repository: PhysicalMapRepository,
         world_object_to_player_resolver: IWorldObjectToPlayerResolver,
         monster_repository: Optional[MonsterRepository] = None,
     ) -> None:
-        self._player_status_repository = player_status_repository
+        self._player_audience_query = player_audience_query
         self._physical_map_repository = physical_map_repository
         self._world_object_to_player_resolver = world_object_to_player_resolver
         self._monster_repository = monster_repository
@@ -79,7 +77,7 @@ class MonsterRecipientStrategy(IRecipientResolutionStrategy):
         def add_all_at_spot(spot_id: Optional[SpotId]) -> None:
             if spot_id is None:
                 return
-            for pid in self._players_at_spot(spot_id):
+            for pid in self._player_audience_query.players_at_spot(spot_id):
                 recipients.append(pid)
 
         if isinstance(event, (MonsterSpawnedEvent, MonsterRespawnedEvent)):
@@ -124,14 +122,6 @@ class MonsterRecipientStrategy(IRecipientResolutionStrategy):
 
         # MonsterCreated は通知しない/配信先なし（レジストリ登録しても Resolver が空にできるが、ここでは空）
         return []
-
-    def _players_at_spot(self, spot_id: SpotId) -> List[PlayerId]:
-        all_statuses = self._player_status_repository.find_all()
-        return [
-            s.player_id
-            for s in all_statuses
-            if s.current_spot_id is not None and s.current_spot_id.value == spot_id.value
-        ]
 
     def _spot_id_from_world_object(self, object_id) -> Optional[SpotId]:
         return self._physical_map_repository.find_spot_id_by_object_id(object_id)
