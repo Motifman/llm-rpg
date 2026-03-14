@@ -6,7 +6,7 @@
 
 ## Phases
 
-- [ ] **Phase 11: Tick Facade Extraction** - `WorldSimulationService` を薄い facade に寄せ、主要な tick stage の委譲境界と順序契約を固定する
+- [x] **Phase 11: Tick Facade Extraction** - `WorldSimulationService` を薄い facade に寄せ、主要な tick stage の委譲境界と順序契約を固定する
 - [ ] **Phase 12: Monster Policy Separation** - monster lifecycle / behavior と飢餓移住ルールを読みやすい協調オブジェクトへ分離する
 - [ ] **Phase 13: Simulation Regression Harness** - 分割後の world simulation を順序保証と小さな回帰テストの両面から守る
 
@@ -14,8 +14,8 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 11. Tick Facade Extraction | 0/0 | Not started | - |
-| 12. Monster Policy Separation | 0/0 | Not started | - |
+| 11. Tick Facade Extraction | 2/2 | Complete | 2026-03-14 |
+| 12. Monster Policy Separation | 0/2 | Planned | - |
 | 13. Simulation Regression Harness | 0/0 | Not started | - |
 
 ## Phase Details
@@ -44,7 +44,11 @@ Plans:
 2. monster lifecycle と monster behavior の業務ルールが、小さな協調オブジェクトを通して実行され、`WorldSimulationService` 本体から直接追わなくてよい
 3. monster 関連の責務境界がコード上で判別でき、どのオブジェクトが spawn / respawn / hunger / behavior を扱うか利用者が読み取れる
 4. 既存の monster tick 挙動が facade 経由で継続し、分割によって world simulation の外部契約が変わらない
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 12-01-PLAN.md - pure hunger migration policy と monster behavior coordinator/rule を先に抽出する
+- [ ] 12-02-PLAN.md - lifecycle survival 境界と hunger migration apply orchestration を facade 契約維持のまま整理する
 
 ### Phase 13: Simulation Regression Harness
 **Goal**: world simulation の責務分割後も、順序保証と主要副作用を継続的に検証できる回帰テスト基盤を持つ
@@ -72,7 +76,7 @@ Plans:
 
 ## Next Step
 
-- `$gsd-plan-phase 11` - tick facade と順序契約の分離計画を作成する
+- `$gsd-execute-phase 12` - monster policy separation を wave 順で実装する
 
 ---
 *Last updated: 2026-03-14 for milestone v1.2 World Simulation Service Refactoring*
