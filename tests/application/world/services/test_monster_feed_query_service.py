@@ -186,3 +186,382 @@ class TestMonsterFeedQueryService:
         assert near_feed in result.visible_feed
         assert far_feed in result.visible_feed
         assert result.selected_feed_target == near_feed
+
+    def test_spot_has_feed_for_monster_returns_false_when_loot_table_repository_is_none(self):
+        """loot_table_repository が None のとき spot_has_feed_for_monster は False を返す"""
+        service = MonsterFeedQueryService(loot_table_repository=None)
+        physical_map = _map_with_tiles()
+        physical_map.add_object(
+            WorldObject(
+                object_id=WorldObjectId(100),
+                coordinate=Coordinate(1, 1, 0),
+                object_type=ObjectTypeEnum.RESOURCE,
+                is_blocking=False,
+                component=HarvestableComponent(
+                    loot_table_id=LootTableId.create(1),
+                    max_quantity=2,
+                    initial_quantity=2,
+                ),
+            )
+        )
+
+        assert service.spot_has_feed_for_monster(
+            physical_map,
+            _monster(_template_with_feed_preference()),
+            WorldTick(0),
+        ) is False
+
+    def test_build_foraging_result_returns_empty_when_loot_table_repository_is_none(self):
+        """loot_table_repository が None のとき build_foraging_result は空の結果を返す"""
+        service = MonsterFeedQueryService(loot_table_repository=None)
+        physical_map = _map_with_tiles()
+        actor = WorldObject(
+            object_id=WorldObjectId(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(vision_range=5),
+        )
+        physical_map.add_object(actor)
+        physical_map.add_object(
+            WorldObject(
+                object_id=WorldObjectId(100),
+                coordinate=Coordinate(1, 0, 0),
+                object_type=ObjectTypeEnum.RESOURCE,
+                is_blocking=False,
+                component=HarvestableComponent(
+                    loot_table_id=LootTableId.create(1),
+                    max_quantity=2,
+                    initial_quantity=2,
+                ),
+            )
+        )
+        monster = _monster(_template_with_feed_preference())
+
+        result = service.build_foraging_result(actor, physical_map, monster, WorldTick(0))
+
+        assert result.visible_feed == []
+        assert result.selected_feed_target is None
+
+    def test_build_foraging_result_skips_object_not_found_in_memory_loop(self):
+        """memory ループで ObjectNotFoundException が発生した場合、そのエントリをスキップする"""
+        from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
+
+        loot_table = LootTableAggregate(
+            LootTableId.create(1),
+            [LootEntry(ItemSpecId(1), 1)],
+            name="Grass",
+        )
+        service = MonsterFeedQueryService(
+            InMemoryLootTableRepository(initial_data={LootTableId.create(1): loot_table})
+        )
+        physical_map = _map_with_tiles()
+        actor = WorldObject(
+            object_id=WorldObjectId(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(vision_range=5),
+        )
+        physical_map.add_object(actor)
+        feed_obj = WorldObject(
+            object_id=WorldObjectId(100),
+            coordinate=Coordinate(1, 0, 0),
+            object_type=ObjectTypeEnum.RESOURCE,
+            is_blocking=False,
+            component=HarvestableComponent(
+                loot_table_id=LootTableId.create(1),
+                max_quantity=2,
+                initial_quantity=2,
+            ),
+        )
+        physical_map.add_object(feed_obj)
+        monster = _monster(_template_with_feed_preference())
+        monster.remember_feed(WorldObjectId(999), Coordinate(5, 5, 0))
+
+        result = service.build_foraging_result(actor, physical_map, monster, WorldTick(0))
+
+        assert result.visible_feed == [feed_obj]
+        assert result.selected_feed_target == feed_obj
+
+    def test_spot_has_feed_for_monster_returns_false_when_loot_table_repository_is_none(self):
+        """loot_table_repository が None のとき spot_has_feed_for_monster は False を返す"""
+        service = MonsterFeedQueryService(loot_table_repository=None)
+        physical_map = _map_with_tiles()
+
+        assert service.spot_has_feed_for_monster(
+            physical_map,
+            _monster(_template_with_feed_preference()),
+            WorldTick(0),
+        ) is False
+
+    def test_build_foraging_result_returns_empty_when_loot_table_repository_is_none(self):
+        """loot_table_repository が None のとき build_foraging_result は空の結果を返す"""
+        service = MonsterFeedQueryService(loot_table_repository=None)
+        physical_map = _map_with_tiles()
+        actor = WorldObject(
+            object_id=WorldObjectId(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(vision_range=5),
+        )
+        physical_map.add_object(actor)
+        physical_map.add_object(
+            WorldObject(
+                object_id=WorldObjectId(100),
+                coordinate=Coordinate(1, 0, 0),
+                object_type=ObjectTypeEnum.RESOURCE,
+                is_blocking=False,
+                component=HarvestableComponent(
+                    loot_table_id=LootTableId.create(1),
+                    max_quantity=2,
+                    initial_quantity=2,
+                ),
+            )
+        )
+        monster = _monster(_template_with_feed_preference())
+
+        result = service.build_foraging_result(actor, physical_map, monster, WorldTick(0))
+
+        assert result.visible_feed == []
+        assert result.selected_feed_target is None
+
+    def test_build_foraging_result_skips_object_not_found_in_memory_loop(self):
+        """memory ループで ObjectNotFoundException が発生した場合そのエントリをスキップして続行する"""
+        from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
+
+        loot_table = LootTableAggregate(
+            LootTableId.create(1),
+            [LootEntry(ItemSpecId(1), 1)],
+            name="Grass",
+        )
+        service = MonsterFeedQueryService(
+            InMemoryLootTableRepository(initial_data={LootTableId.create(1): loot_table})
+        )
+        physical_map = _map_with_tiles()
+        valid_feed = WorldObject(
+            object_id=WorldObjectId(100),
+            coordinate=Coordinate(1, 1, 0),
+            object_type=ObjectTypeEnum.RESOURCE,
+            is_blocking=False,
+            component=HarvestableComponent(
+                loot_table_id=LootTableId.create(1),
+                max_quantity=2,
+                initial_quantity=2,
+            ),
+        )
+        physical_map.add_object(valid_feed)
+        monster = _monster(_template_with_feed_preference())
+        monster.remember_feed(
+            WorldObjectId(999),
+            Coordinate(0, 0, 0),
+        )
+        actor = WorldObject(
+            object_id=WorldObjectId(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(vision_range=5),
+        )
+        physical_map.add_object(actor)
+
+        result = service.build_foraging_result(actor, physical_map, monster, WorldTick(0))
+
+        assert len(result.visible_feed) == 1
+        assert result.visible_feed[0] == valid_feed
+
+    def test_spot_has_feed_for_monster_returns_false_when_loot_table_repository_is_none(
+        self,
+    ):
+        """loot_table_repository が None のとき spot_has_feed_for_monster は False を返す"""
+        service = MonsterFeedQueryService(loot_table_repository=None)
+        physical_map = _map_with_tiles()
+
+        assert (
+            service.spot_has_feed_for_monster(
+                physical_map,
+                _monster(_template_with_feed_preference()),
+                WorldTick(0),
+            )
+            is False
+        )
+
+    def test_build_foraging_result_returns_empty_when_loot_table_repository_is_none(
+        self,
+    ):
+        """loot_table_repository が None のとき build_foraging_result は空の結果を返す"""
+        service = MonsterFeedQueryService(loot_table_repository=None)
+        physical_map = _map_with_tiles()
+        actor = WorldObject(
+            object_id=WorldObjectId(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(vision_range=5),
+        )
+        physical_map.add_object(actor)
+
+        result = service.build_foraging_result(
+            actor, physical_map, _monster(_template_with_feed_preference()), WorldTick(0)
+        )
+
+        assert result.visible_feed == []
+        assert result.selected_feed_target is None
+
+    def test_build_foraging_result_skips_object_not_found_in_memory_loop(self):
+        """memory ループで ObjectNotFoundException が発生した場合スキップして次へ進む"""
+        from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
+
+        loot_table = LootTableAggregate(
+            LootTableId.create(1),
+            [LootEntry(ItemSpecId(1), 1)],
+            name="Grass",
+        )
+        service = MonsterFeedQueryService(
+            InMemoryLootTableRepository(initial_data={LootTableId.create(1): loot_table})
+        )
+        physical_map = _map_with_tiles()
+        actor = WorldObject(
+            object_id=WorldObjectId(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(vision_range=5),
+        )
+        physical_map.add_object(actor)
+        monster = _monster(_template_with_feed_preference())
+        monster.behavior_last_known_feed = [
+            type("FeedMemory", (), {"object_id": WorldObjectId(999), "coordinate": Coordinate(2, 2, 0)})()
+        ]
+        physical_map.get_object = lambda obj_id: (_ for _ in ()).throw(
+            ObjectNotFoundException(obj_id)
+        )
+
+        result = service.build_foraging_result(
+            actor, physical_map, monster, WorldTick(0)
+        )
+
+        assert result.selected_feed_target is None
+
+    def test_spot_has_feed_for_monster_returns_false_when_loot_table_repository_is_none(self):
+        """loot_table_repository が None の場合、spot_has_feed_for_monster は False を返す"""
+        service = MonsterFeedQueryService(loot_table_repository=None)
+        physical_map = _map_with_tiles()
+
+        assert service.spot_has_feed_for_monster(
+            physical_map,
+            _monster(_template_with_feed_preference()),
+            WorldTick(0),
+        ) is False
+
+    def test_build_foraging_result_returns_empty_when_loot_table_repository_is_none(self):
+        """loot_table_repository が None の場合、build_foraging_result は空の結果を返す"""
+        service = MonsterFeedQueryService(loot_table_repository=None)
+        physical_map = _map_with_tiles()
+        actor = WorldObject(
+            object_id=WorldObjectId(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(vision_range=5),
+        )
+        physical_map.add_object(actor)
+
+        result = service.build_foraging_result(
+            actor, physical_map, _monster(_template_with_feed_preference()), WorldTick(0)
+        )
+
+        assert result.visible_feed == []
+        assert result.selected_feed_target is None
+
+    def test_build_foraging_result_skips_object_not_found_in_memory_loop(self):
+        """memory ループで ObjectNotFoundException が発生した場合、そのエントリはスキップされ次へ進む"""
+        from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
+
+        loot_table = LootTableAggregate(
+            LootTableId.create(1),
+            [LootEntry(ItemSpecId(1), 1)],
+            name="Grass",
+        )
+        service = MonsterFeedQueryService(
+            InMemoryLootTableRepository(initial_data={LootTableId.create(1): loot_table})
+        )
+        physical_map = _map_with_tiles()
+        actor = WorldObject(
+            object_id=WorldObjectId(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(vision_range=5),
+        )
+        physical_map.add_object(actor)
+        monster = _monster(_template_with_feed_preference())
+        monster.remember_feed(WorldObjectId(999), Coordinate(5, 5, 0))
+
+        with mock.patch.object(
+            physical_map, "get_object", side_effect=ObjectNotFoundException(WorldObjectId(999))
+        ):
+            result = service.build_foraging_result(actor, physical_map, monster, WorldTick(0))
+
+        assert result.selected_feed_target is None
+
+    def test_spot_has_feed_for_monster_returns_false_when_loot_table_repository_is_none(self):
+        service = MonsterFeedQueryService(loot_table_repository=None)
+        physical_map = _map_with_tiles()
+
+        assert service.spot_has_feed_for_monster(
+            physical_map,
+            _monster(_template_with_feed_preference()),
+            WorldTick(0),
+        ) is False
+
+    def test_build_foraging_result_returns_empty_when_loot_table_repository_is_none(self):
+        service = MonsterFeedQueryService(loot_table_repository=None)
+        physical_map = _map_with_tiles()
+        actor = WorldObject(
+            object_id=WorldObjectId(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(vision_range=5),
+        )
+        physical_map.add_object(actor)
+
+        result = service.build_foraging_result(
+            actor, physical_map, _monster(_template_with_feed_preference()), WorldTick(0)
+        )
+
+        assert result.visible_feed == []
+        assert result.selected_feed_target is None
+
+    def test_build_foraging_result_skips_object_not_found_in_memory_loop(self):
+        """memory ループで ObjectNotFoundException が発生した場合、そのエントリをスキップして続行する"""
+        from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
+
+        loot_table = LootTableAggregate(
+            LootTableId.create(1),
+            [LootEntry(ItemSpecId(1), 1)],
+            name="Grass",
+        )
+        service = MonsterFeedQueryService(
+            InMemoryLootTableRepository(initial_data={LootTableId.create(1): loot_table})
+        )
+        physical_map = _map_with_tiles()
+        actor = WorldObject(
+            object_id=WorldObjectId(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(vision_range=5),
+        )
+        physical_map.add_object(actor)
+        feed_obj = WorldObject(
+            object_id=WorldObjectId(100),
+            coordinate=Coordinate(1, 0, 0),
+            object_type=ObjectTypeEnum.RESOURCE,
+            is_blocking=False,
+            component=HarvestableComponent(
+                loot_table_id=LootTableId.create(1),
+                max_quantity=2,
+                initial_quantity=2,
+            ),
+        )
+        physical_map.add_object(feed_obj)
+        monster = _monster(_template_with_feed_preference())
+        monster.remember_feed(WorldObjectId(999), Coordinate(5, 5, 0))
+
+        result = service.build_foraging_result(actor, physical_map, monster, WorldTick(0))
+
+        assert result.visible_feed == [feed_obj]
+        assert result.selected_feed_target == feed_obj

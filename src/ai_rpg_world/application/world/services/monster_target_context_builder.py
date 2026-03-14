@@ -1,5 +1,3 @@
-from typing import Optional
-
 from typing import Callable, Optional
 
 from ai_rpg_world.application.world.aggro_store import AggroStore

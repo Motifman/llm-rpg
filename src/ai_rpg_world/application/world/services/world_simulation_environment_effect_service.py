@@ -1,6 +1,7 @@
 import logging
 from typing import Dict
 
+from ai_rpg_world.application.common.exceptions import SystemErrorException
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
@@ -76,3 +77,7 @@ class WorldSimulationEnvironmentEffectService:
                 str(exc),
                 exc_info=True,
             )
+            raise SystemErrorException(
+                f"Error applying environmental effects in bulk: {str(exc)}",
+                original_exception=exc,
+            ) from exc
