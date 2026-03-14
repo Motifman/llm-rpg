@@ -1,5 +1,8 @@
 from typing import Any, Callable, Optional
 
+from ai_rpg_world.application.world.services.monster_behavior_context_builder import (
+    MonsterBehaviorContextBuilder,
+)
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
@@ -21,6 +24,9 @@ from ai_rpg_world.application.world.services.monster_foraging_rule import (
 from ai_rpg_world.application.world.services.monster_pursuit_failure_rule import (
     MonsterPursuitFailureRule,
 )
+from ai_rpg_world.application.world.services.monster_target_context_builder import (
+    MonsterTargetContextBuilder,
+)
 
 
 class MonsterBehaviorCoordinator:
@@ -35,24 +41,22 @@ class MonsterBehaviorCoordinator:
         foraging_rule: MonsterForagingRule,
         pursuit_failure_rule: MonsterPursuitFailureRule,
         unit_of_work: UnitOfWork,
-        build_skill_context: Callable[
-            [WorldObject, PhysicalMapAggregate, WorldTick], Optional[Any]
-        ],
-        build_target_context: Callable[
-            [WorldObject, PhysicalMapAggregate, WorldTick], Optional[Any]
-        ],
-        build_growth_context: Callable[[WorldObject, WorldTick], Optional[Any]],
+        behavior_context_builder: MonsterBehaviorContextBuilder,
+        target_context_builder: MonsterTargetContextBuilder,
+        action_resolver_factory_getter: Optional[
+            Callable[[], Callable[[PhysicalMapAggregate, WorldObject], Any]]
+        ] = None,
     ) -> None:
         self._monster_repository = monster_repository
         self._behavior_service = behavior_service
         self._transition_service = transition_service
         self._action_resolver_factory = action_resolver_factory
+        self._action_resolver_factory_getter = action_resolver_factory_getter
         self._foraging_rule = foraging_rule
         self._pursuit_failure_rule = pursuit_failure_rule
         self._unit_of_work = unit_of_work
-        self._build_skill_context = build_skill_context
-        self._build_target_context = build_target_context
-        self._build_growth_context = build_growth_context
+        self._behavior_context_builder = behavior_context_builder
+        self._target_context_builder = target_context_builder
 
     def process_actor_behavior(
         self,
@@ -64,9 +68,19 @@ class MonsterBehaviorCoordinator:
         if monster is None:
             return
 
-        skill_context = self._build_skill_context(actor, physical_map, current_tick)
-        target_context = self._build_target_context(actor, physical_map, current_tick)
-        growth_context = self._build_growth_context(actor, current_tick)
+        skill_context = self._behavior_context_builder.build_skill_context(
+            actor,
+            current_tick,
+        )
+        target_context = self._target_context_builder.build_target_context(
+            actor,
+            physical_map,
+            current_tick,
+        )
+        growth_context = self._behavior_context_builder.build_growth_context(
+            actor,
+            current_tick,
+        )
         foraging = self._foraging_rule.evaluate(
             actor,
             physical_map,
@@ -104,7 +118,12 @@ class MonsterBehaviorCoordinator:
             self._fail_and_save(monster, failure_reason, current_tick)
             return
 
-        resolver = self._action_resolver_factory(physical_map, actor)
+        action_resolver_factory = (
+            self._action_resolver_factory_getter()
+            if self._action_resolver_factory_getter is not None
+            else self._action_resolver_factory
+        )
+        resolver = action_resolver_factory(physical_map, actor)
         action = resolver.resolve_action(monster, observation, actor.coordinate)
         failure_reason = self._pursuit_failure_rule.evaluate_post_action(
             monster=monster,

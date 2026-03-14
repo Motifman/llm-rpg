@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List
+from typing import Callable, Dict, List
 
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -21,9 +21,11 @@ class WorldSimulationEnvironmentStageService:
         weather_zone_repository: WeatherZoneRepository,
         weather_config_service: WeatherConfigService,
         logger: logging.Logger,
+        weather_config_service_getter: Callable[[], WeatherConfigService] | None = None,
     ) -> None:
         self._weather_zone_repository = weather_zone_repository
         self._weather_config_service = weather_config_service
+        self._weather_config_service_getter = weather_config_service_getter
         self._logger = logger
 
     def run(
@@ -39,7 +41,12 @@ class WorldSimulationEnvironmentStageService:
         self, current_tick: WorldTick
     ) -> Dict[SpotId, WeatherState]:
         latest_weather: Dict[SpotId, WeatherState] = {}
-        interval = self._weather_config_service.get_update_interval_ticks()
+        weather_config_service = (
+            self._weather_config_service_getter()
+            if self._weather_config_service_getter is not None
+            else self._weather_config_service
+        )
+        interval = weather_config_service.get_update_interval_ticks()
 
         try:
             zones = self._weather_zone_repository.find_all()
