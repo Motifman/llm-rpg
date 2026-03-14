@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
+    TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
     TOOL_NAME_SKILL_EQUIP,
     TOOL_NAME_SKILL_REJECT_PROPOSAL,
 )
@@ -23,6 +24,7 @@ from ai_rpg_world.application.world.services.movement_service import (
     MovementApplicationService,
 )
 from ai_rpg_world.application.world.contracts.dtos import (
+    AwakenedActionDto,
     EquipableSkillCandidateDto,
     PendingSkillProposalDto,
     PlayerCurrentStateDto,
@@ -73,6 +75,7 @@ def _skill_capable_service():
     service.equip_skill = MagicMock()
     service.accept_skill_proposal = MagicMock()
     service.reject_skill_proposal = MagicMock()
+    service.activate_awakened_mode = MagicMock()
     return service
 
 
@@ -118,6 +121,7 @@ def _skill_management_state() -> PlayerCurrentStateDto:
                 target_slot_index=0,
             )
         ],
+        awakened_action=AwakenedActionDto(10, "覚醒モードを発動"),
     )
 
 
@@ -336,17 +340,24 @@ class TestCreateLlmAgentWiringSkillTools:
         assert TOOL_NAME_SKILL_EQUIP in names
         assert TOOL_NAME_SKILL_ACCEPT_PROPOSAL in names
         assert TOOL_NAME_SKILL_REJECT_PROPOSAL in names
+        assert TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE in names
 
     def test_skill_tool_service_without_phase9_methods_raises_type_error(self):
         deps = _minimal_wiring_deps()
         class _IncompleteSkillToolService:
             def use_skill(self, **kwargs):
                 return None
+            def equip_skill(self, **kwargs):
+                return None
+            def accept_skill_proposal(self, **kwargs):
+                return None
+            def reject_skill_proposal(self, **kwargs):
+                return None
 
         incomplete_service = _IncompleteSkillToolService()
         deps["skill_tool_service"] = incomplete_service
 
-        with pytest.raises(TypeError, match="equip_skill"):
+        with pytest.raises(TypeError, match="activate_awakened_mode"):
             create_llm_agent_wiring(**deps)
 
     def test_skill_tools_flow_from_ui_labels_to_mapper_execution(self):
@@ -378,6 +389,11 @@ class TestCreateLlmAgentWiringSkillTools:
             {"proposal_label": "SP1"},
             ui_context.tool_runtime_context,
         )
+        awakened_args = orchestrator._tool_argument_resolver.resolve(
+            TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
+            {"awakened_action_label": "AW1"},
+            ui_context.tool_runtime_context,
+        )
 
         equip_result = orchestrator._tool_command_mapper.execute(
             1,
@@ -394,6 +410,11 @@ class TestCreateLlmAgentWiringSkillTools:
             TOOL_NAME_SKILL_REJECT_PROPOSAL,
             reject_args,
         )
+        awakened_result = orchestrator._tool_command_mapper.execute(
+            1,
+            TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
+            awakened_args,
+        )
 
         assert equip_result.success is True
         assert equip_result.message == "火球を通常スロット 1に装備しました。"
@@ -401,6 +422,8 @@ class TestCreateLlmAgentWiringSkillTools:
         assert accept_result.message == "新しい攻撃手段を受諾し、通常スロット 1に装備しました。"
         assert reject_result.success is True
         assert reject_result.message == "新しい攻撃手段を却下しました。"
+        assert awakened_result.success is True
+        assert awakened_result.message == "覚醒モードを発動しました。"
         skill_tool_service.equip_skill.assert_called_once_with(
             player_id=1,
             loadout_id=10,
@@ -415,6 +438,10 @@ class TestCreateLlmAgentWiringSkillTools:
         skill_tool_service.reject_skill_proposal.assert_called_once_with(
             progress_id=20,
             proposal_id=2,
+        )
+        skill_tool_service.activate_awakened_mode.assert_called_once_with(
+            player_id=1,
+            loadout_id=10,
         )
 
     def test_memory_db_path_env_var_uses_sqlite_store_when_arg_not_passed(

@@ -145,6 +145,7 @@ class PlayerCurrentStateBuilder:
             shop_repository=shop_repository,
             personal_trade_query_service=personal_trade_query_service,
             player_profile_repository=player_profile_repository,
+            player_status_repository=player_status_repository,
         )
 
     def build_visible_context(
