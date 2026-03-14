@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: World Simulation Service Refactoring
 status: in_progress
-stopped_at: phase 12 executed; next step is discussing Phase 13
-last_updated: "2026-03-14T23:30:00+09:00"
-last_activity: 2026-03-14 — completed Phase 12 monster policy separation and prepared for Phase 13
+stopped_at: phase 13 executed locally; roadmap file still has separate uncommitted edits
+last_updated: "2026-03-14T23:59:00+09:00"
+last_activity: 2026-03-14 — executed Phase 13 simulation regression harness plans and verified new regression slices
 progress:
   total_phases: 3
-  completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
-  percent: 67
+  completed_phases: 3
+  total_plans: 6
+  completed_plans: 6
+  percent: 100
 ---
 
 # Project State
@@ -21,15 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-14)
 
 **Core value:** LLMエージェントが、ワールド状態とイベント駆動の文脈を踏まえて、自律的に次の行動を安全に選べること
-**Current focus:** v1.2 World Simulation Service Refactoring — Phase 12 complete, Phase 13 context gathering next
+**Current focus:** v1.2 World Simulation Service Refactoring — Phase 13 executed and verified locally
 
 ## Current Position
 
 Phase: 13 - Simulation Regression Harness
-Plan: -
-Status: Phase 12 complete; ready to discuss and plan Phase 13
-Last activity: 2026-03-14 — executed 12-01 / 12-02 and committed monster policy separation
-Progress: [######----] 67%
+Plan: 13-01 / 13-02 complete
+Status: Phase 13 executed; planning summaries and verification slices recorded
+Last activity: 2026-03-14 — added contract-oriented integration regressions and direct stage regression tests for world simulation
+Progress: [##########] 100%
 
 ## Accumulated Context
 
@@ -50,18 +50,18 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Discuss and plan Phase 13 for simulation regression harness
 - Keep milestone work isolated from the parallel `ToolArgumentResolver` refactor
+- Update roadmap completion state after reconciling the separate uncommitted `ROADMAP.md` edits
 
 ### Blockers/Concerns
 
 - phase-level `VERIFICATION.md` artifacts were not produced for v1.1, so archive decisions rely on SUMMARY / VALIDATION / UAT plus audit evidence
 - async event failure visibility remains weak in the current UoW/event pipeline
 - phase-level `VERIFICATION.md` artifacts are still missing for the active milestone, so completion evidence depends on summaries / validation / targeted test slices
-- simulation regression coverage is broader than before but still concentrated in a few large files, which is the main target for Phase 13
+- `ROADMAP.md` currently has separate in-progress edits in the worktree, so milestone completion bookkeeping was not auto-reconciled in this turn
 
 ## Session Continuity
 
 Last session: 2026-03-14
-Stopped at: Phase 12 execution complete; next step is `$gsd-discuss-phase 13`
+Stopped at: Phase 13 execution complete; next likely step is milestone audit/completion bookkeeping
 Resume file: None
