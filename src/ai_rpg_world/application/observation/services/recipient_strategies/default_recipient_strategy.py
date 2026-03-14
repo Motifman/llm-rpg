@@ -135,7 +135,7 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
     ) -> None:
         if event.player_id_value is not None:
             add(PlayerId(event.player_id_value))
-        for pid in self._players_at_spot(event.spot_id):
+        for pid in self._player_audience_query.players_at_spot(event.spot_id):
             add(pid)
 
     def _resolve_location_exited(self, event: LocationExitedEvent, add) -> None:
