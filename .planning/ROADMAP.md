@@ -1,21 +1,24 @@
 # Roadmap: AI RPG World
 
-## Overview
+## Current Status
 
-現在のロードマップは完了済みマイルストーンの要約のみを保持し、詳細はアーカイブへ置きます。次の作業は新しいマイルストーンの定義です。
+現在、active milestone はありません。直近では `v1.2 World Simulation Service Refactoring` を shipped としてアーカイブし、次の milestone 定義待ちです。
 
-## Archived Milestones
+## Shipped Milestones
 
-- [x] **v1.0: Pursuit Foundation** - shipped 2026-03-12, 7 phases / 19 plans / 58 tasks, archive: `.planning/milestones/v1.0-ROADMAP.md`
-- [x] **v1.1: LLM Skill Tooling** - shipped 2026-03-13, 3 phases / 10 plans / 28 validation tasks, archive: `.planning/milestones/v1.1-ROADMAP.md`
-
-## Current Milestone
-
-No active milestone. Start the next one with `$gsd-new-milestone`.
+- [v1.0 Pursuit Foundation](/Users/minagawa/.codex/worktrees/910f/ai_rpg_world/.planning/milestones/v1.0-ROADMAP.md)
+- [v1.1 LLM Skill Tooling](/Users/minagawa/.codex/worktrees/910f/ai_rpg_world/.planning/milestones/v1.1-ROADMAP.md)
+- [v1.2 World Simulation Service Refactoring](/Users/minagawa/.codex/worktrees/910f/ai_rpg_world/.planning/milestones/v1.2-ROADMAP.md)
 
 ## Next Step
 
-- `$gsd-new-milestone` — 次のマイルストーンのゴール、要件、ロードマップを作成する
+- `$gsd-new-milestone` - 次の milestone の要件定義と roadmap 作成を開始する
+
+## Candidate Themes
+
+- `MOVE-01` - `MovementService` の詳細分割
+- `TARG-01` - `ToolArgumentResolver` の tool family ごとの分割
+- `MAP-01` - `PhysicalMapAggregate` の trigger / interaction / harvest 責務整理
 
 ---
-*Last updated: 2026-03-13 after archiving milestone v1.1*
+*Last updated: 2026-03-14 after archiving milestone v1.2*

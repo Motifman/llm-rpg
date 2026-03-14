@@ -1,5 +1,7 @@
 """飢餓時のスポット転移（移住）と「スポットに餌があるか」判定のテスト。"""
 
+import unittest.mock as mock
+
 import pytest
 from ai_rpg_world.application.world.services.world_simulation_service import (
     WorldSimulationApplicationService,
@@ -485,3 +487,48 @@ class TestProcessHungerMigrationForSpot:
         assert after.coordinate == Coordinate(2, 2, 0)
         map1_after = map_repo.find_by_spot_id(spot1_id)
         assert map1_after.get_object(WorldObjectId(1000)) is not None
+
+    def test_uses_hunger_migration_policy_selection_before_applying_transition(
+        self,
+        data_store,
+        spot1_id,
+        map_repo,
+        monster_repo,
+        connected_spots_provider,
+        map1_with_gateway,
+        map2,
+        migrant_monster_on_map1,
+    ):
+        uow = InMemoryUnitOfWork(
+            unit_of_work_factory=lambda: None,
+            data_store=data_store,
+        )
+        service = WorldSimulationApplicationService(
+            time_provider=None,
+            physical_map_repository=map_repo,
+            weather_zone_repository=None,
+            player_status_repository=None,
+            hit_box_repository=None,
+            behavior_service=None,
+            weather_config_service=None,
+            unit_of_work=uow,
+            monster_repository=monster_repo,
+            skill_loadout_repository=None,
+            monster_skill_execution_domain_service=None,
+            hit_box_factory=None,
+            monster_action_resolver_factory=None,
+            loot_table_repository=InMemoryLootTableRepository(),
+            connected_spots_provider=connected_spots_provider,
+            map_transition_service=MapTransitionService(),
+        )
+        policy = mock.Mock(wraps=service._hunger_migration_policy)
+        service._hunger_migration_policy = policy
+        service._monster_lifecycle_survival_coordinator._hunger_migration_policy = policy
+        physical_map = map_repo.find_by_spot_id(spot1_id)
+
+        with uow:
+            service._process_hunger_migration_for_spot(
+                physical_map, WorldTick(1), {spot1_id}
+            )
+
+        policy.select_migrant.assert_called_once()
