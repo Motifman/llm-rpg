@@ -65,7 +65,7 @@ from ai_rpg_world.application.llm.services.tool_command_mapper import (
 from ai_rpg_world.application.llm.services.tool_argument_resolver import (
     DefaultToolArgumentResolver,
 )
-from ai_rpg_world.application.llm.services.tool_definitions import (
+from ai_rpg_world.application.llm.services.tool_catalog import (
     register_default_tools,
 )
 from ai_rpg_world.application.llm.services.ui_context_builder import (

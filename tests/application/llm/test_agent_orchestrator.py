@@ -24,9 +24,7 @@ from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.memory_extractor import (
     RuleBasedMemoryExtractor,
 )
-from ai_rpg_world.application.llm.services.tool_command_mapper import (
-    ToolCommandMapper,
-)
+from tests.application.llm.conftest import _create_tool_command_mapper
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_NO_OP
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -71,7 +69,7 @@ class TestLlmAgentOrchestratorRunTurn:
 
     @pytest.fixture
     def mapper(self):
-        return ToolCommandMapper(movement_service=MagicMock())
+        return _create_tool_command_mapper(movement_service=MagicMock())
 
     @pytest.fixture
     def orchestrator(self, prompt_builder, action_result_store, mapper):
@@ -202,7 +200,7 @@ class TestLlmAgentOrchestratorInit:
             LlmAgentOrchestrator(
                 prompt_builder=None,  # type: ignore[arg-type]
                 llm_client=StubLlmClient(),
-                tool_command_mapper=ToolCommandMapper(movement_service=MagicMock()),
+                tool_command_mapper=_create_tool_command_mapper(movement_service=MagicMock()),
                 action_result_store=DefaultActionResultStore(),
             )
 
@@ -212,7 +210,7 @@ class TestLlmAgentOrchestratorInit:
             LlmAgentOrchestrator(
                 prompt_builder=_StubPromptBuilder(return_value={"messages": [], "tools": [], "tool_choice": "required"}),
                 llm_client=None,  # type: ignore[arg-type]
-                tool_command_mapper=ToolCommandMapper(movement_service=MagicMock()),
+                tool_command_mapper=_create_tool_command_mapper(movement_service=MagicMock()),
                 action_result_store=DefaultActionResultStore(),
             )
 
@@ -222,7 +220,7 @@ class TestLlmAgentOrchestratorInit:
             LlmAgentOrchestrator(
                 prompt_builder=_StubPromptBuilder(return_value={"messages": [], "tools": [], "tool_choice": "required"}),
                 llm_client=StubLlmClient(),
-                tool_command_mapper=ToolCommandMapper(movement_service=MagicMock()),
+                tool_command_mapper=_create_tool_command_mapper(movement_service=MagicMock()),
                 action_result_store=DefaultActionResultStore(),
                 memory_extractor=RuleBasedMemoryExtractor(),
                 episode_memory_store=None,
@@ -234,7 +232,7 @@ class TestLlmAgentOrchestratorInit:
             LlmAgentOrchestrator(
                 prompt_builder=_StubPromptBuilder(return_value={"messages": [], "tools": [], "tool_choice": "required"}),
                 llm_client=StubLlmClient(),
-                tool_command_mapper=ToolCommandMapper(movement_service=MagicMock()),
+                tool_command_mapper=_create_tool_command_mapper(movement_service=MagicMock()),
                 action_result_store=DefaultActionResultStore(),
                 memory_extractor=None,
                 episode_memory_store=InMemoryEpisodeMemoryStore(),
@@ -285,7 +283,7 @@ class TestLlmAgentOrchestratorMemoryIntegration:
 
     @pytest.fixture
     def mapper(self):
-        return ToolCommandMapper(movement_service=MagicMock())
+        return _create_tool_command_mapper(movement_service=MagicMock())
 
     def test_run_turn_with_memory_stores_episodes(
         self, episode_store, prompt_builder_with_overflow, action_result_store, mapper
