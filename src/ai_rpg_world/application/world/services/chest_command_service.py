@@ -9,6 +9,7 @@ PhysicalMapAggregate に情報を注入してイベントを発行し、
 import logging
 from typing import Callable, Any
 
+from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -44,10 +45,12 @@ class ChestCommandService:
         self,
         physical_map_repository: PhysicalMapRepository,
         player_inventory_repository: PlayerInventoryRepository,
+        time_provider: GameTimeProvider,
         unit_of_work: UnitOfWork,
     ):
         self._physical_map_repository = physical_map_repository
         self._player_inventory_repository = player_inventory_repository
+        self._time_provider = time_provider
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -116,6 +119,7 @@ class ChestCommandService:
                 target_chest_id=WorldObjectId.create(command.chest_world_object_id),
                 item_instance_id=item_instance_id,
                 player_id_value=command.player_id,
+                current_tick=self._time_provider.get_current_tick(),
             )
             self._physical_map_repository.save(physical_map)
 
@@ -159,6 +163,7 @@ class ChestCommandService:
                     target_chest_id=WorldObjectId.create(command.chest_world_object_id),
                     item_instance_id=item_instance_id,
                     player_id_value=command.player_id,
+                    current_tick=self._time_provider.get_current_tick(),
                 )
             except DomainItemNotInChestException:
                 raise ItemNotInChestCommandException(

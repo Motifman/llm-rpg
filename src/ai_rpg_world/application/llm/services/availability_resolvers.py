@@ -255,13 +255,15 @@ class DropItemAvailabilityResolver(IAvailabilityResolver):
 
 
 class ChestStoreAvailabilityResolver(IAvailabilityResolver):
-    """チェスト収納は開いているチェストと在庫アイテムがあるときに利用可能。"""
+    """チェスト収納は開いているチェストと在庫アイテムがあり、かつ actor がビジーでないときに利用可能。"""
 
     def is_available(
         self,
         context: Optional[PlayerCurrentStateDto],
     ) -> bool:
         if context is None:
+            return False
+        if context.is_busy:
             return False
         has_open_chest = any(
             _has_visible_action(obj, "can_store_in_chest", "store_in_chest")
@@ -272,13 +274,17 @@ class ChestStoreAvailabilityResolver(IAvailabilityResolver):
 
 
 class ChestTakeAvailabilityResolver(IAvailabilityResolver):
-    """チェスト取得は取り出せるチェスト中身があるときに利用可能。"""
+    """チェスト取得は取り出せるチェスト中身があり、かつ actor がビジーでないときに利用可能。"""
 
     def is_available(
         self,
         context: Optional[PlayerCurrentStateDto],
     ) -> bool:
-        return context is not None and bool(context.chest_items)
+        if context is None:
+            return False
+        if context.is_busy:
+            return False
+        return bool(context.chest_items)
 
 
 class CombatUseSkillAvailabilityResolver(IAvailabilityResolver):

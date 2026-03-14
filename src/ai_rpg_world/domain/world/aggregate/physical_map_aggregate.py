@@ -32,6 +32,10 @@ from ai_rpg_world.domain.world.enum.world_enum import (
     SpotTraitEnum,
 )
 from ai_rpg_world.domain.world.service.map_geometry_service import MapGeometryService
+from ai_rpg_world.domain.world.service.map_trigger_engine import MapTriggerEngine
+from ai_rpg_world.domain.world.service.map_interaction_policy import MapInteractionPolicy
+from ai_rpg_world.domain.world.service.chest_interaction_policy import ChestInteractionPolicy
+from ai_rpg_world.domain.world.service.harvest_session_domain_service import HarvestSessionDomainService
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
 from ai_rpg_world.domain.world.event.map_events import (
@@ -85,7 +89,6 @@ from ai_rpg_world.domain.world.exception.map_exception import (
     InvalidAreaTraitException,
 )
 from ai_rpg_world.domain.world.exception.harvest_exception import (
-    NotHarvestableException,
     ResourceExhaustedException,
     HarvestInProgressException,
     HarvestNotStartedException
@@ -414,128 +417,17 @@ class PhysicalMapAggregate(AggregateRoot):
         ))
 
         # エリアトリガーの判定
-        self._check_area_triggers(object_id, old_coordinate, new_coordinate, current_tick)
+        for ev in MapTriggerEngine.compute_area_trigger_events(
+            object_id, old_coordinate, new_coordinate,
+            self._area_triggers, self._location_areas, self._gateways,
+            self._objects, self._spot_id, current_tick,
+        ):
+            self.add_event(ev)
         # 同一マスのオブジェクトの「踏んだら発火」トリガー判定
-        self._check_object_triggers_on_step(object_id, new_coordinate)
-
-    def _check_object_triggers_on_step(self, actor_id: WorldObjectId, new_coordinate: Coordinate):
-        """指定座標にあるオブジェクトの get_trigger_on_step を発火させる"""
-        if new_coordinate not in self._object_positions:
-            return
-        for obj_id in self._object_positions[new_coordinate]:
-            if obj_id == actor_id:
-                continue
-            obj = self._objects[obj_id]
-            if not obj.component:
-                continue
-            trigger = obj.component.get_trigger_on_step()
-            if trigger is not None:
-                self.add_event(ObjectTriggeredEvent.create(
-                    aggregate_id=obj_id,
-                    aggregate_type="WorldObject",
-                    object_id=obj_id,
-                    spot_id=self._spot_id,
-                    actor_id=actor_id,
-                    trigger_type=trigger.get_trigger_type(),
-                ))
-
-    def _check_area_triggers(
-        self,
-        object_id: WorldObjectId,
-        old_coordinate: Optional[Coordinate],
-        new_coordinate: Coordinate,
-        current_tick: Optional[WorldTick] = None,
-    ):
-        """進入・退出・滞在判定"""
-        # 1. AreaTriggerの判定
-        for trigger in self._area_triggers.values():
-            was_in = trigger.contains(old_coordinate) if old_coordinate else False
-            is_in = trigger.contains(new_coordinate)
-
-            if not was_in and is_in:
-                # Entering
-                self.add_event(AreaEnteredEvent.create(
-                    aggregate_id=trigger.trigger_id,
-                    aggregate_type="AreaTrigger",
-                    trigger_id=trigger.trigger_id,
-                    spot_id=self._spot_id,
-                    object_id=object_id
-                ))
-                # 進入時にもトリガーを発火させる（仕様により調整可能）
-                self._activate_area_trigger(trigger, object_id)
-            elif was_in and not is_in:
-                # Exiting
-                self.add_event(AreaExitedEvent.create(
-                    aggregate_id=trigger.trigger_id,
-                    aggregate_type="AreaTrigger",
-                    trigger_id=trigger.trigger_id,
-                    spot_id=self._spot_id,
-                    object_id=object_id
-                ))
-            elif was_in and is_in:
-                # Staying (継続的な効果など)
-                self._activate_area_trigger(trigger, object_id)
-
-        # 2. LocationAreaの判定
-        for loc in self._location_areas.values():
-            was_in = loc.contains(old_coordinate) if old_coordinate else False
-            is_in = loc.contains(new_coordinate)
-
-            if not was_in and is_in:
-                # Entering a location area - send detailed info
-                obj = self._objects.get(object_id)
-                player_id_value = obj.player_id.value if (obj and obj.player_id) else None
-                self.add_event(LocationEnteredEvent.create(
-                    aggregate_id=loc.location_id,
-                    aggregate_type="LocationArea",
-                    location_id=loc.location_id,
-                    spot_id=self._spot_id,
-                    object_id=object_id,
-                    name=loc.name,
-                    description=loc.description,
-                    player_id_value=player_id_value,
-                ))
-            elif was_in and not is_in:
-                # Exiting a location area
-                self.add_event(LocationExitedEvent.create(
-                    aggregate_id=loc.location_id,
-                    aggregate_type="LocationArea",
-                    location_id=loc.location_id,
-                    spot_id=self._spot_id,
-                    object_id=object_id
-                ))
-
-        # 3. Gatewayの判定
-        for gateway in self._gateways.values():
-            was_in = gateway.contains(old_coordinate) if old_coordinate else False
-            is_in = gateway.contains(new_coordinate)
-
-            if not was_in and is_in:
-                # Entering a gateway area triggers the transition
-                obj = self._objects.get(object_id)
-                player_id_value = obj.player_id.value if (obj and obj.player_id) else None
-                self.add_event(GatewayTriggeredEvent.create(
-                    aggregate_id=gateway.gateway_id,
-                    aggregate_type="Gateway",
-                    gateway_id=gateway.gateway_id,
-                    spot_id=self._spot_id,
-                    object_id=object_id,
-                    target_spot_id=gateway.target_spot_id,
-                    landing_coordinate=gateway.landing_coordinate,
-                    player_id_value=player_id_value,
-                    occurred_tick=current_tick,
-                ))
-
-    def _activate_area_trigger(self, trigger: AreaTrigger, object_id: WorldObjectId):
-        """エリアトリガーを発火させる"""
-        self.add_event(AreaTriggeredEvent.create(
-            aggregate_id=trigger.trigger_id,
-            aggregate_type="AreaTrigger",
-            trigger_id=trigger.trigger_id,
-            spot_id=self._spot_id,
-            object_id=object_id,
-            trigger_type=trigger.trigger.get_trigger_type()
-        ))
+        for ev in MapTriggerEngine.compute_object_trigger_events(
+            object_id, new_coordinate, self._objects, self._object_positions, self._spot_id,
+        ):
+            self.add_event(ev)
 
     def change_tile_terrain(self, coordinate: Coordinate, new_terrain_type: TerrainType):
         """タイルの地形を変更する"""
@@ -592,7 +484,12 @@ class PhysicalMapAggregate(AggregateRoot):
         ))
 
         # エリアトリガーの判定
-        self._check_area_triggers(obj.object_id, None, obj.coordinate)
+        for ev in MapTriggerEngine.compute_area_trigger_events(
+            obj.object_id, None, obj.coordinate,
+            self._area_triggers, self._location_areas, self._gateways,
+            self._objects, self._spot_id, None,
+        ):
+            self.add_event(ev)
 
     def get_objects_in_range(self, center: Coordinate, distance: int) -> List[WorldObject]:
         """指定された座標から一定範囲内のオブジェクトを取得する（マンハッタン距離）"""
@@ -795,32 +692,15 @@ class PhysicalMapAggregate(AggregateRoot):
         actor = self.get_actor(actor_id)
         target = self.get_object(target_id)
 
-        # 0. ビジー状態のチェック
-        if actor.is_busy(current_tick):
-            raise ActorBusyException(f"Actor {actor_id} is busy until {actor.busy_until}")
+        MapInteractionPolicy.validate_can_interact(actor, target, current_tick)
 
-        # 1. 距離チェック（隣接または同じマス）
-        distance = actor.coordinate.chebyshev_distance_to(target.coordinate)
-        if distance > 1:
-            raise InteractionOutOfRangeException(f"Target {target_id} is too far from actor {actor_id}")
-
-        # 2. 向きチェック（ターゲットが隣接している場合、その方向を向いている必要がある）
-        if distance == 1:
-            expected_direction = actor.coordinate.direction_to(target.coordinate)
-            if actor.direction != expected_direction:
-                raise NotFacingTargetException(f"Actor {actor_id} is not facing target {target_id}")
-
-        # 3. インタラクション可能性チェック
-        interaction_type = target.interaction_type
-        if not interaction_type:
-            raise NotInteractableException(f"Target {target_id} is not interactable")
-
-        # 4. 効果をターゲットのコンポーネントに委譲（例外時はイベント・ビジーは行わない）
+        # 効果をターゲットのコンポーネントに委譲（例外時はイベント・ビジーは行わない）
         target.component.apply_interaction_from(
             actor_id, target_id, self, current_tick
         )
 
-        # 5. インタラクション成功イベントを発行
+        # インタラクション成功イベントを発行
+        interaction_type = target.interaction_type
         self.add_event(WorldObjectInteractedEvent.create(
             aggregate_id=target_id,
             aggregate_type="WorldObject",
@@ -830,7 +710,7 @@ class PhysicalMapAggregate(AggregateRoot):
             data=target.interaction_data
         ))
 
-        # 6. アクターをビジー状態にする
+        # アクターをビジー状態にする
         duration = target.interaction_duration
         actor.set_busy(current_tick.add_duration(duration))
 
@@ -840,23 +720,14 @@ class PhysicalMapAggregate(AggregateRoot):
         target_chest_id: WorldObjectId,
         item_instance_id: ItemInstanceId,
         player_id_value: int,
+        current_tick: WorldTick,
     ) -> None:
         """チェストにアイテムを収納する。アプリケーションサービスから呼ばれ、プレイヤー所持検証は呼び出し側で行う。"""
         actor = self.get_actor(actor_id)
         chest_obj = self.get_object(target_chest_id)
 
-        if not isinstance(chest_obj.component, ChestComponent):
-            raise NotAChestException(f"Object {target_chest_id} is not a chest")
-
+        ChestInteractionPolicy.validate_can_access_chest(actor, chest_obj, current_tick)
         chest = chest_obj.component
-        if not chest.is_open:
-            raise ChestClosedException(f"Chest {target_chest_id} is closed")
-
-        distance = actor.coordinate.chebyshev_distance_to(chest_obj.coordinate)
-        if distance > 1:
-            raise InteractionOutOfRangeException(
-                f"Chest {target_chest_id} is too far from actor {actor_id}"
-            )
 
         chest.add_item(item_instance_id)
         self.add_event(ItemStoredInChestEvent.create(
@@ -875,23 +746,14 @@ class PhysicalMapAggregate(AggregateRoot):
         target_chest_id: WorldObjectId,
         item_instance_id: ItemInstanceId,
         player_id_value: int,
+        current_tick: WorldTick,
     ) -> None:
         """チェストからアイテムを取得する。アプリケーションサービスから呼ばれる。"""
         actor = self.get_actor(actor_id)
         chest_obj = self.get_object(target_chest_id)
 
-        if not isinstance(chest_obj.component, ChestComponent):
-            raise NotAChestException(f"Object {target_chest_id} is not a chest")
-
+        ChestInteractionPolicy.validate_can_access_chest(actor, chest_obj, current_tick)
         chest = chest_obj.component
-        if not chest.is_open:
-            raise ChestClosedException(f"Chest {target_chest_id} is closed")
-
-        distance = actor.coordinate.chebyshev_distance_to(chest_obj.coordinate)
-        if distance > 1:
-            raise InteractionOutOfRangeException(
-                f"Chest {target_chest_id} is too far from actor {actor_id}"
-            )
 
         if not chest.remove_item(item_instance_id):
             raise ItemNotInChestException(
@@ -912,95 +774,32 @@ class PhysicalMapAggregate(AggregateRoot):
         """資源の採取を開始する"""
         actor = self.get_actor(actor_id)
         target = self.get_object(target_id)
-
-        # 0. ビジー状態のチェック
-        if actor.is_busy(current_tick):
-            raise ActorBusyException(f"Actor {actor_id} is busy until {actor.busy_until}")
-
-        # 1. 距離と向きのチェック
-        distance = actor.coordinate.chebyshev_distance_to(target.coordinate)
-        if distance > 1:
-            raise InteractionOutOfRangeException(f"Target {target_id} is too far from actor {actor_id}")
-        if distance == 1:
-            expected_direction = actor.coordinate.direction_to(target.coordinate)
-            if actor.direction != expected_direction:
-                raise NotFacingTargetException(f"Actor {actor_id} is not facing target {target_id}")
-
-        # 2. HarvestableComponentのチェック
-        if not isinstance(target.component, HarvestableComponent):
-            raise NotHarvestableException(f"Object {target_id} is not harvestable")
-
-        # 3. コンポーネントの採取開始（状態更新と終了時間の取得）
-        finish_tick = target.component.start_harvest(actor_id, current_tick)
-
-        # 4. アクターをビジー状態にする
-        actor.set_busy(finish_tick)
-
-        # 5. イベント発行
-        self.add_event(HarvestStartedEvent.create(
-            aggregate_id=target_id,
-            aggregate_type="WorldObject",
-            actor_id=actor_id,
-            target_id=target_id,
-            finish_tick=finish_tick
-        ))
+        event = HarvestSessionDomainService.start_harvest(actor, target, current_tick)
+        self.add_event(event)
 
     def finish_resource_harvest(self, actor_id: WorldObjectId, target_id: WorldObjectId, current_tick: WorldTick):
         """資源の採取を完了させる"""
         actor = self.get_actor(actor_id)
         target = self.get_object(target_id)
-
-        if not isinstance(target.component, HarvestableComponent):
-            raise NotHarvestableException(f"Object {target_id} is not harvestable")
-
-        # コンポーネントの採取完了処理
-        loot_table_id = target.component.loot_table_id
-        success = target.component.finish_harvest(actor_id, current_tick)
-
-        if success:
-            # アクターのビジー状態を解除（念のため、現在のティックに合わせる）
-            actor.clear_busy()
-
-            # イベント発行
-            self.add_event(HarvestCompletedEvent.create(
-                aggregate_id=target_id,
-                aggregate_type="WorldObject",
-                actor_id=actor_id,
-                target_id=target_id,
-                loot_table_id=loot_table_id
-            ))
+        event = HarvestSessionDomainService.finish_harvest(actor, target, current_tick)
+        if event:
+            self.add_event(event)
 
     def cancel_resource_harvest(self, actor_id: WorldObjectId, target_id: WorldObjectId, reason: str = "cancelled"):
         """資源の採取を中断する"""
         actor = self.get_actor(actor_id)
         target = self.get_object(target_id)
-
-        if not isinstance(target.component, HarvestableComponent):
-            raise NotHarvestableException(f"Object {target_id} is not harvestable")
-
-        # コンポーネントの採取中断処理
-        target.component.cancel_harvest(actor_id)
-
-        # アクターのビジー状態を解除
-        actor.clear_busy()
-
-        # イベント発行
-        self.add_event(HarvestCancelledEvent.create(
-            aggregate_id=target_id,
-            aggregate_type="WorldObject",
-            actor_id=actor_id,
-            target_id=target_id,
-            reason=reason
-        ))
+        event = HarvestSessionDomainService.cancel_harvest(actor, target, reason)
+        self.add_event(event)
 
     def check_and_activate_trigger(self, coordinate: Coordinate, object_id: Optional[WorldObjectId] = None) -> Optional[MapTrigger]:
         """
         指定された座標のトリガーをチェックし、存在すればイベントを発行してトリガーを返す。
         エリアトリガーシステムに統合されたため、指定座標を含む最初のアクティブなトリガーを返す。
         """
-        for trigger in self._area_triggers.values():
-            if trigger.contains(coordinate):
-                if object_id:
-                    self._activate_area_trigger(trigger, object_id)
-                return trigger.trigger
-        return None
+        map_trigger, events = MapTriggerEngine.compute_trigger_activation_at_coordinate(
+            coordinate, object_id, self._area_triggers, self._spot_id,
+        )
+        for ev in events:
+            self.add_event(ev)
+        return map_trigger

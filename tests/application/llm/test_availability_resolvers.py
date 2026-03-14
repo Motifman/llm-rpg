@@ -6,6 +6,7 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
     CancelMovementAvailabilityResolver,
     ChangeAttentionAvailabilityResolver,
     ChestStoreAvailabilityResolver,
+    ChestTakeAvailabilityResolver,
     CombatUseSkillAvailabilityResolver,
     ConversationAdvanceAvailabilityResolver,
     DestroyPlaceableAvailabilityResolver,
@@ -454,6 +455,36 @@ class TestExtendedAvailabilityResolvers:
         )
         ctx.inventory_items = [InventoryItemDto(0, 1, "木箱", 1)]
         assert resolver.is_available(ctx) is True
+
+    def test_chest_store_not_available_when_busy(self):
+        """is_busy のときチェスト収納は利用不可"""
+        resolver = ChestStoreAvailabilityResolver()
+        ctx = _minimal_current_state(
+            visible_objects=[
+                VisibleObjectDto(
+                    object_id=2,
+                    object_type="CHEST",
+                    x=1,
+                    y=0,
+                    z=0,
+                    distance=1,
+                    object_kind="chest",
+                    can_store_in_chest=True,
+                    available_interactions=["store_in_chest"],
+                )
+            ]
+        )
+        ctx.inventory_items = [InventoryItemDto(0, 1, "木箱", 1)]
+        ctx.is_busy = True
+        assert resolver.is_available(ctx) is False
+
+    def test_chest_take_not_available_when_busy(self):
+        """is_busy のときチェスト取得は利用不可"""
+        resolver = ChestTakeAvailabilityResolver()
+        ctx = _minimal_current_state()
+        ctx.chest_items = [ChestItemDto(2, "宝箱", 100, "木箱", 1)]
+        ctx.is_busy = True
+        assert resolver.is_available(ctx) is False
 
     def test_combat_use_skill_available_when_usable_skill_exists(self):
         resolver = CombatUseSkillAvailabilityResolver()
