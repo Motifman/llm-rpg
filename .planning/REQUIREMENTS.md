@@ -7,18 +7,18 @@
 
 ### Tick Orchestration
 
-- [ ] **WSIM-01**: `WorldSimulationService` は tick 全体の facade として残り、環境処理、継続移動、採取完了、モンスター lifecycle、モンスター behavior、HitBox 更新を専用の stage service に委譲できる
-- [ ] **WSIM-02**: tick の実行順序と副作用は既存挙動と両立し、world progression・observation・LLM / reflection scheduling の回帰を起こさない
+- [x] **WSIM-01**: `WorldSimulationService` は tick 全体の facade として残り、環境処理、継続移動、採取完了、モンスター lifecycle、モンスター behavior、HitBox 更新を専用の stage service に委譲できる
+- [x] **WSIM-02**: tick の実行順序と副作用は既存挙動と両立し、world progression・observation・LLM / reflection scheduling の回帰を起こさない
 
 ### Domain Policy Extraction
 
-- [ ] **WSPOL-01**: 飢餓移住の「1 tick に 1 体、最も飢餓が高い個体を移住させる」判定を repository 非依存の policy として抽出できる
-- [ ] **WSPOL-02**: モンスター lifecycle / behavior 周辺の業務ルールは、`WorldSimulationService` 本体から読める責務境界を持つ小さな協調オブジェクトへ移せる
+- [x] **WSPOL-01**: 飢餓移住の「1 tick に 1 体、最も飢餓が高い個体を移住させる」判定を repository 非依存の policy として抽出できる
+- [x] **WSPOL-02**: モンスター lifecycle / behavior 周辺の業務ルールは、`WorldSimulationService` 本体から読める責務境界を持つ小さな協調オブジェクトへ移せる
 
 ### Regression Harness
 
-- [ ] **WSTEST-01**: `WorldSimulationService` の既存統合テストは責務分割後も主要な tick 順序と副作用を検証し続けられる
-- [ ] **WSTEST-02**: 分離した stage service / policy 単位で、巨大 fixture に依存しすぎない回帰テストを追加できる
+- [x] **WSTEST-01**: `WorldSimulationService` の既存統合テストは責務分割後も主要な tick 順序と副作用を検証し続けられる
+- [x] **WSTEST-02**: 分離した stage service / policy 単位で、巨大 fixture に依存しすぎない回帰テストを追加できる
 
 ## vNext Requirements
 
@@ -41,12 +41,12 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| WSIM-01 | Phase 11 | Pending |
-| WSIM-02 | Phase 11 | Pending |
-| WSPOL-01 | Phase 12 | Pending |
-| WSPOL-02 | Phase 12 | Pending |
-| WSTEST-01 | Phase 13 | Pending |
-| WSTEST-02 | Phase 13 | Pending |
+| WSIM-01 | Phase 11 | Satisfied |
+| WSIM-02 | Phase 11 | Satisfied |
+| WSPOL-01 | Phase 12 | Satisfied |
+| WSPOL-02 | Phase 12 | Satisfied |
+| WSTEST-01 | Phase 13 | Satisfied |
+| WSTEST-02 | Phase 13 | Satisfied |
 
 **Coverage:**
 - v1.2 requirements: 6 total
@@ -55,4 +55,4 @@
 
 ---
 *Requirements defined: 2026-03-14*
-*Last updated: 2026-03-14 after mapping v1.2 requirements to Phases 11-13*
+*Last updated: 2026-03-14 after v1.2 milestone audit*

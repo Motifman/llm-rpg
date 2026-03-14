@@ -8,7 +8,7 @@
 
 - [x] **Phase 11: Tick Facade Extraction** - `WorldSimulationService` を薄い facade に寄せ、主要な tick stage の委譲境界と順序契約を固定する
 - [x] **Phase 12: Monster Policy Separation** - monster lifecycle / behavior と飢餓移住ルールを読みやすい協調オブジェクトへ分離する
-- [ ] **Phase 13: Simulation Regression Harness** - 分割後の world simulation を順序保証と小さな回帰テストの両面から守る
+- [x] **Phase 13: Simulation Regression Harness** - 分割後の world simulation を順序保証と小さな回帰テストの両面から守る
 
 ## Progress
 
@@ -16,7 +16,7 @@
 |-------|----------------|--------|-----------|
 | 11. Tick Facade Extraction | 2/2 | Complete | 2026-03-14 |
 | 12. Monster Policy Separation | 2/2 | Complete | 2026-03-14 |
-| 13. Simulation Regression Harness | 0/2 | Planned | - |
+| 13. Simulation Regression Harness | 2/2 | Complete | 2026-03-14 |
 
 ## Phase Details
 
@@ -62,8 +62,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 13-01-PLAN.md - facade regression を契約別 integration harness に切り分け、builder/helper を薄く整える
-- [ ] 13-02-PLAN.md - movement / monster lifecycle / monster behavior stage の guard regression を専用テストで追加する
+- [x] 13-01-PLAN.md - facade regression を契約別 integration harness に切り分け、builder/helper を薄く整える
+- [x] 13-02-PLAN.md - movement / monster lifecycle / monster behavior stage の guard regression を専用テストで追加する
 
 ## Coverage
 
@@ -80,7 +80,7 @@ Plans:
 
 ## Next Step
 
-- `$gsd-execute-phase 13` - simulation regression harness の plans を順に実行する
+- `$gsd-complete-milestone 1.2` - milestone audit を踏まえて v1.2 をアーカイブする
 
 ---
-*Last updated: 2026-03-14 for milestone v1.2 World Simulation Service Refactoring*
+*Last updated: 2026-03-14 after Phase 13 completion and milestone audit*
