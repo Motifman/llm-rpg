@@ -11,7 +11,7 @@ from ai_rpg_world.application.llm.services.agent_orchestrator import LlmAgentOrc
 from ai_rpg_world.application.llm.services.llm_agent_turn_runner import LlmAgentTurnRunner
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.llm_turn_trigger import DefaultLlmTurnTrigger
-from ai_rpg_world.application.llm.services.tool_command_mapper import ToolCommandMapper
+from tests.application.llm.conftest import _create_tool_command_mapper
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_NO_OP
 from ai_rpg_world.application.llm.contracts.interfaces import IPromptBuilder
 from ai_rpg_world.application.observation.services.observation_context_buffer import (
@@ -38,7 +38,7 @@ def _make_runner():
     orchestrator = LlmAgentOrchestrator(
         prompt_builder=prompt_builder,
         llm_client=llm_client,
-        tool_command_mapper=ToolCommandMapper(movement_service=MagicMock()),
+        tool_command_mapper=_create_tool_command_mapper(movement_service=MagicMock()),
         action_result_store=action_result_store,
     )
     return LlmAgentTurnRunner(
@@ -137,7 +137,7 @@ class TestDefaultLlmTurnTriggerScheduleAndRun:
         orchestrator = LlmAgentOrchestrator(
             prompt_builder=_StubPromptBuilder(),
             llm_client=llm_client,
-            tool_command_mapper=ToolCommandMapper(movement_service=MagicMock()),
+            tool_command_mapper=_create_tool_command_mapper(movement_service=MagicMock()),
             action_result_store=action_result_store,
         )
         runner = LlmAgentTurnRunner(

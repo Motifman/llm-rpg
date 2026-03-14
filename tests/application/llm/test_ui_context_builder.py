@@ -349,7 +349,7 @@ class TestDefaultLlmUiContextBuilder:
         assert result.tool_runtime_context.targets["S1"].destination_type == "spot"
 
     def test_build_adds_location_labels_when_available_location_areas_present(self):
-        """available_location_areas があるとき L1, L2 が移動先ラベルに含まれる"""
+        """available_location_areas があるとき LA1, LA2 が移動先ラベルに含まれる"""
         builder = DefaultLlmUiContextBuilder()
         state = _make_state()
         state.available_location_areas = [
@@ -360,12 +360,12 @@ class TestDefaultLlmUiContextBuilder:
         result = builder.build("現在地: 広場", state)
 
         assert "移動先ラベル:" in result.current_state_text
-        assert "L1: ギルドエリア（同一スポット内ロケーション）" in result.current_state_text
-        assert "L2: 市場（同一スポット内ロケーション）" in result.current_state_text
+        assert "LA1: ギルドエリア（同一スポット内ロケーション）" in result.current_state_text
+        assert "LA2: 市場（同一スポット内ロケーション）" in result.current_state_text
         assert "S1: 港町" in result.current_state_text
-        assert "L1" in result.tool_runtime_context.targets
-        assert "L2" in result.tool_runtime_context.targets
-        target_l1 = result.tool_runtime_context.targets["L1"]
+        assert "LA1" in result.tool_runtime_context.targets
+        assert "LA2" in result.tool_runtime_context.targets
+        target_l1 = result.tool_runtime_context.targets["LA1"]
         assert target_l1.destination_type == "location"
         assert target_l1.location_area_id == 10
         assert target_l1.spot_id == 1
@@ -384,8 +384,8 @@ class TestDefaultLlmUiContextBuilder:
         result = builder.build("現在地: 広場", state)
 
         assert "移動先ラベル:" in result.current_state_text
-        assert "L1: 広場中央（同一スポット内ロケーション）" in result.current_state_text
-        assert "L1" in result.tool_runtime_context.targets
+        assert "LA1: 広場中央（同一スポット内ロケーション）" in result.current_state_text
+        assert "LA1" in result.tool_runtime_context.targets
 
     def test_build_adds_object_destination_labels_when_actionable_objects_present(self):
         """actionable_objects があるとき D1, D2 が移動先ラベルに含まれる（自分を除く）"""
@@ -456,6 +456,27 @@ class TestDefaultLlmUiContextBuilder:
 
         assert result.current_state_text == "現在地: 未配置"
         assert result.tool_runtime_context.targets == {}
+
+    def test_build_raises_when_current_state_text_is_not_str(self):
+        """current_state_text が str でないとき TypeError"""
+        import pytest
+
+        builder = DefaultLlmUiContextBuilder()
+        state = _make_state()
+
+        with pytest.raises(TypeError) as exc_info:
+            builder.build(123, state)  # type: ignore[arg-type]
+        assert "current_state_text must be str" in str(exc_info.value)
+
+    def test_build_raises_when_current_state_is_not_dto_nor_none(self):
+        """current_state が PlayerCurrentStateDto でも None でもないとき TypeError"""
+        import pytest
+
+        builder = DefaultLlmUiContextBuilder()
+
+        with pytest.raises(TypeError) as exc_info:
+            builder.build("テキスト", "invalid")  # type: ignore[arg-type]
+        assert "current_state must be PlayerCurrentStateDto or None" in str(exc_info.value)
 
     def test_build_includes_guild_description_when_present(self):
         """ギルドに description がある場合、所属ギルド行に含まれる"""

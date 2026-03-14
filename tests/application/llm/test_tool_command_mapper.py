@@ -1,12 +1,15 @@
 """ToolCommandMapper のテスト（正常・例外・失敗時 remediation）"""
 
 from datetime import datetime
+from typing import Any, Optional
 from unittest.mock import MagicMock
 
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.tool_command_mapper import ToolCommandMapper
+
+from tests.application.llm.conftest import _create_tool_command_mapper
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_CANCEL_MOVEMENT,
     TOOL_NAME_CHANGE_ATTENTION,
@@ -92,7 +95,7 @@ class TestToolCommandMapperNoOp:
     @pytest.fixture
     def mapper(self):
         movement = MagicMock()
-        return ToolCommandMapper(movement_service=movement)
+        return _create_tool_command_mapper(movement_service=movement)
 
     def test_execute_no_op_returns_success(self, mapper):
         """no_op 実行で success=True, message が返る"""
@@ -121,7 +124,7 @@ class TestToolCommandMapperMoveToDestination:
 
     @pytest.fixture
     def mapper(self, movement_service):
-        return ToolCommandMapper(movement_service=movement_service)
+        return _create_tool_command_mapper(movement_service=movement_service)
 
     def test_execute_move_to_destination_success_returns_dto(self, mapper, movement_service):
         """move_to_destination 成功時は MoveResultDto.message を message に"""
@@ -208,7 +211,7 @@ class TestToolCommandMapperPursuit:
 
     @pytest.fixture
     def mapper(self, movement_service, pursuit_service):
-        return ToolCommandMapper(
+        return _create_tool_command_mapper(
             movement_service=movement_service,
             pursuit_service=pursuit_service,
         )
@@ -246,7 +249,7 @@ class TestToolCommandMapperPursuit:
         pursuit_service.cancel_pursuit.assert_called_once()
 
     def test_execute_pursuit_without_service_returns_unknown_tool(self, movement_service):
-        mapper = ToolCommandMapper(movement_service=movement_service)
+        mapper = _create_tool_command_mapper(movement_service=movement_service)
 
         result = mapper.execute(1, TOOL_NAME_PURSUIT_CANCEL, {})
 
@@ -263,7 +266,7 @@ class TestToolCommandMapperCancelMovement:
 
     @pytest.fixture
     def mapper(self, movement_service):
-        return ToolCommandMapper(movement_service=movement_service)
+        return _create_tool_command_mapper(movement_service=movement_service)
 
     def test_execute_cancel_movement_success_returns_dto(self, mapper, movement_service):
         """cancel_movement 成功時は MoveResultDto.message を message に"""
@@ -344,7 +347,7 @@ class TestToolCommandMapperValidation:
 
     @pytest.fixture
     def mapper(self):
-        return ToolCommandMapper(movement_service=MagicMock())
+        return _create_tool_command_mapper(movement_service=MagicMock())
 
     def test_execute_player_id_not_int_raises_type_error(self, mapper):
         """player_id が int でないとき TypeError"""
@@ -369,12 +372,12 @@ class TestToolCommandMapperValidation:
     def test_init_movement_service_no_move_to_destination_raises_type_error(self):
         """movement_service に move_to_destination が無いとき TypeError"""
         with pytest.raises(TypeError, match="move_to_destination"):
-            ToolCommandMapper(movement_service=object())  # type: ignore[arg-type]
+            _create_tool_command_mapper(movement_service=object())  # type: ignore[arg-type]
 
     def test_init_interaction_service_no_interact_world_object_raises_type_error(self):
         """interaction_service に interact_world_object が無いとき（object() 渡し）TypeError"""
         with pytest.raises(TypeError, match="interaction_service must have a callable interact_world_object"):
-            ToolCommandMapper(
+            _create_tool_command_mapper(
                 movement_service=MagicMock(),
                 interaction_service=object(),
             )
@@ -384,10 +387,20 @@ class TestToolCommandMapperValidation:
         svc = MagicMock()
         del svc.cancel_harvest_by_target
         with pytest.raises(TypeError, match="cancel_harvest_by_target"):
-            ToolCommandMapper(
+            _create_tool_command_mapper(
                 movement_service=MagicMock(),
                 harvest_service=svc,
             )
+
+    def test_init_handler_map_none_raises_type_error(self):
+        """ToolCommandMapper に handler_map=None を渡したとき TypeError"""
+        with pytest.raises(TypeError, match="handler_map must not be None"):
+            ToolCommandMapper(handler_map=None)  # type: ignore[arg-type]
+
+    def test_init_handler_map_not_dict_raises_type_error(self):
+        """ToolCommandMapper に handler_map が dict でないとき TypeError"""
+        with pytest.raises(TypeError, match="handler_map must be dict"):
+            ToolCommandMapper(handler_map=123)  # type: ignore[arg-type]
 
 
 class TestToolCommandMapperWhisper:
@@ -401,7 +414,7 @@ class TestToolCommandMapperWhisper:
 
     @pytest.fixture
     def mapper(self, movement_service, speech_service):
-        return ToolCommandMapper(
+        return _create_tool_command_mapper(
             movement_service=movement_service,
             speech_service=speech_service,
         )
@@ -425,7 +438,7 @@ class TestToolCommandMapperWhisper:
         assert command.target_player_id == 2
 
     def test_execute_whisper_without_speech_service_returns_failure(self, movement_service):
-        mapper = ToolCommandMapper(movement_service=movement_service)
+        mapper = _create_tool_command_mapper(movement_service=movement_service)
         result = mapper.execute(
             1,
             TOOL_NAME_WHISPER,
@@ -446,7 +459,7 @@ class TestToolCommandMapperSay:
 
     @pytest.fixture
     def mapper(self, speech_service):
-        return ToolCommandMapper(
+        return _create_tool_command_mapper(
             movement_service=MagicMock(),
             speech_service=speech_service,
         )
@@ -472,7 +485,7 @@ class TestToolCommandMapperInteract:
 
     @pytest.fixture
     def mapper(self, interaction_service):
-        return ToolCommandMapper(
+        return _create_tool_command_mapper(
             movement_service=MagicMock(),
             interaction_service=interaction_service,
         )
@@ -488,7 +501,7 @@ class TestToolCommandMapperInteract:
         interaction_service.interact_world_object.assert_called_once()
 
     def test_execute_interact_without_service_returns_failure(self):
-        mapper = ToolCommandMapper(movement_service=MagicMock())
+        mapper = _create_tool_command_mapper(movement_service=MagicMock())
         result = mapper.execute(
             1,
             TOOL_NAME_INTERACT_WORLD_OBJECT,
@@ -505,7 +518,7 @@ class TestToolCommandMapperHarvest:
 
     @pytest.fixture
     def mapper(self, harvest_service):
-        return ToolCommandMapper(
+        return _create_tool_command_mapper(
             movement_service=MagicMock(),
             harvest_service=harvest_service,
         )
@@ -545,7 +558,7 @@ class TestToolCommandMapperHarvest:
         )
 
     def test_execute_harvest_without_service_returns_failure(self):
-        mapper = ToolCommandMapper(movement_service=MagicMock())
+        mapper = _create_tool_command_mapper(movement_service=MagicMock())
         result = mapper.execute(
             1,
             TOOL_NAME_HARVEST_START,
@@ -587,7 +600,7 @@ class TestToolCommandMapperExtendedTools:
         chest_service,
         skill_tool_service,
     ):
-        return ToolCommandMapper(
+        return _create_tool_command_mapper(
             movement_service=MagicMock(),
             attention_service=attention_service,
             conversation_service=conversation_service,
@@ -772,7 +785,7 @@ class TestToolCommandMapperDropItem:
 
     def test_execute_drop_item_success_returns_dto(self):
         drop_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             drop_item_service=drop_service,
         )
@@ -791,7 +804,7 @@ class TestToolCommandMapperDropItem:
     def test_execute_drop_item_no_item_in_slot_returns_failure_dto(self):
         drop_service = MagicMock()
         drop_service.drop_from_slot.side_effect = NoItemInSlotForDropException(1, 0)
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             drop_item_service=drop_service,
         )
@@ -807,7 +820,7 @@ class TestToolCommandMapperDropItem:
     def test_execute_drop_item_reserved_returns_failure_dto(self):
         drop_service = MagicMock()
         drop_service.drop_from_slot.side_effect = ItemReservedForDropException(1, 0)
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             drop_item_service=drop_service,
         )
@@ -824,7 +837,7 @@ class TestToolCommandMapperDropItem:
         """PlacementSpotNotFoundException のとき success=False, error_code=PLACEMENT_SPOT_NOT_FOUND"""
         drop_service = MagicMock()
         drop_service.drop_from_slot.side_effect = PlacementSpotNotFoundException(1, 0)
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             drop_item_service=drop_service,
         )
@@ -838,7 +851,7 @@ class TestToolCommandMapperDropItem:
         assert result.remediation is not None
 
     def test_execute_drop_item_without_service_returns_unknown_tool(self):
-        mapper = ToolCommandMapper(movement_service=MagicMock())
+        mapper = _create_tool_command_mapper(movement_service=MagicMock())
         result = mapper.execute(
             1,
             TOOL_NAME_DROP_ITEM,
@@ -850,7 +863,7 @@ class TestToolCommandMapperDropItem:
     def test_execute_drop_item_inventory_slot_id_none_returns_invalid_target_label(self):
         """inventory_slot_id が None のとき success=False, error_code=INVALID_TARGET_LABEL"""
         drop_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             drop_item_service=drop_service,
         )
@@ -867,7 +880,7 @@ class TestToolCommandMapperDropItem:
     def test_execute_drop_item_inventory_slot_id_invalid_type_returns_invalid_target_label(self):
         """inventory_slot_id が不正な型のとき success=False, error_code=INVALID_TARGET_LABEL"""
         drop_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             drop_item_service=drop_service,
         )
@@ -883,7 +896,7 @@ class TestToolCommandMapperDropItem:
     def test_execute_drop_item_inventory_slot_id_negative_returns_invalid_target_label(self):
         """inventory_slot_id が負のとき success=False, error_code=INVALID_TARGET_LABEL"""
         drop_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             drop_item_service=drop_service,
         )
@@ -910,7 +923,7 @@ class TestToolCommandMapperInspectItem:
 
     @pytest.fixture
     def mapper(self, item_repository):
-        return ToolCommandMapper(
+        return _create_tool_command_mapper(
             movement_service=MagicMock(),
             item_repository=item_repository,
         )
@@ -929,7 +942,7 @@ class TestToolCommandMapperInspectItem:
     def test_execute_inspect_item_not_found_returns_failure(self, item_repository):
         """アイテムが存在しないとき success=False, error_code=ITEM_NOT_FOUND"""
         item_repository.find_by_id.return_value = None
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             item_repository=item_repository,
         )
@@ -944,7 +957,7 @@ class TestToolCommandMapperInspectItem:
 
     def test_execute_inspect_item_without_repo_returns_failure(self):
         """item_repository が None のとき success=False"""
-        mapper = ToolCommandMapper(movement_service=MagicMock())
+        mapper = _create_tool_command_mapper(movement_service=MagicMock())
         result = mapper.execute(
             1,
             TOOL_NAME_INSPECT_ITEM,
@@ -957,7 +970,7 @@ class TestToolCommandMapperInspectItem:
         self, item_repository
     ):
         """item_instance_id が省略（None）のとき success=False, error_code=INVALID_TARGET_LABEL"""
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             item_repository=item_repository,
         )
@@ -975,7 +988,7 @@ class TestToolCommandMapperInspectItem:
         self, item_repository
     ):
         """item_instance_id が不正な型（文字列 "abc"）のとき success=False, error_code=INVALID_TARGET_LABEL"""
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             item_repository=item_repository,
         )
@@ -993,7 +1006,7 @@ class TestToolCommandMapperInspectItem:
         self, item_repository
     ):
         """item_instance_id が 0 のとき success=False, error_code=INVALID_TARGET_LABEL"""
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             item_repository=item_repository,
         )
@@ -1010,7 +1023,7 @@ class TestToolCommandMapperInspectItem:
         self, item_repository
     ):
         """item_instance_id が負のとき success=False, error_code=INVALID_TARGET_LABEL"""
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             item_repository=item_repository,
         )
@@ -1057,7 +1070,7 @@ class TestToolCommandMapperInspectTarget:
 
     @pytest.fixture
     def mapper(self, monster_repository, player_status_repository, physical_map_repository):
-        return ToolCommandMapper(
+        return _create_tool_command_mapper(
             movement_service=MagicMock(),
             monster_repository=monster_repository,
             physical_map_repository=physical_map_repository,
@@ -1088,7 +1101,7 @@ class TestToolCommandMapperInspectTarget:
 
     def test_execute_inspect_target_without_repos_returns_failure(self):
         """必要な repository が None のとき success=False"""
-        mapper = ToolCommandMapper(movement_service=MagicMock())
+        mapper = _create_tool_command_mapper(movement_service=MagicMock())
         result = mapper.execute(
             1,
             TOOL_NAME_INSPECT_TARGET,
@@ -1101,7 +1114,7 @@ class TestToolCommandMapperInspectTarget:
         self, monster_repository, player_status_repository, physical_map_repository
     ):
         """target_world_object_id が省略（None）のとき success=False, error_code=INVALID_TARGET_LABEL"""
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             monster_repository=monster_repository,
             physical_map_repository=physical_map_repository,
@@ -1121,7 +1134,7 @@ class TestToolCommandMapperInspectTarget:
         self, monster_repository, player_status_repository, physical_map_repository
     ):
         """target_world_object_id が不正な型（文字列 "xyz"）のとき success=False, error_code=INVALID_TARGET_LABEL"""
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             monster_repository=monster_repository,
             physical_map_repository=physical_map_repository,
@@ -1141,7 +1154,7 @@ class TestToolCommandMapperInspectTarget:
         self, monster_repository, player_status_repository, physical_map_repository
     ):
         """target_world_object_id が 0 のとき success=False, error_code=INVALID_TARGET_LABEL"""
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             monster_repository=monster_repository,
             physical_map_repository=physical_map_repository,
@@ -1166,7 +1179,7 @@ class TestToolCommandMapperInspectTarget:
         physical_map = MagicMock()
         physical_map.get_object.side_effect = ObjectNotFoundException("not found")
         physical_map_repository.find_by_spot_id.return_value = physical_map
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             monster_repository=monster_repository,
             physical_map_repository=physical_map_repository,
@@ -1186,7 +1199,7 @@ class TestToolCommandMapperInspectTarget:
     ):
         """player_status が None のとき success=False, error_code=TARGET_NOT_FOUND"""
         player_status_repository.find_by_id.return_value = None
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             monster_repository=monster_repository,
             physical_map_repository=physical_map_repository,
@@ -1208,7 +1221,7 @@ class TestToolCommandMapperInspectTarget:
         status = MagicMock()
         status.current_spot_id = None
         player_status_repository.find_by_id.return_value = status
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             monster_repository=monster_repository,
             physical_map_repository=physical_map_repository,
@@ -1227,7 +1240,7 @@ class TestToolCommandMapperInspectTarget:
     ):
         """physical_map_repository.find_by_spot_id が None のとき success=False, error_code=TARGET_NOT_FOUND"""
         physical_map_repository.find_by_spot_id.return_value = None
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             monster_repository=monster_repository,
             physical_map_repository=physical_map_repository,
@@ -1247,7 +1260,7 @@ class TestToolCommandMapperOptionalToolsWhenNotConfigured:
 
     def test_todo_add_without_todo_store_returns_unknown_tool(self):
         """todo_store が None のとき todo_add は UNKNOWN_TOOL"""
-        mapper = ToolCommandMapper(movement_service=MagicMock())
+        mapper = _create_tool_command_mapper(movement_service=MagicMock())
         result = mapper.execute(1, TOOL_NAME_TODO_ADD, {"content": "タスク"})
         assert result.success is False
         assert result.error_code == "UNKNOWN_TOOL"
@@ -1255,7 +1268,7 @@ class TestToolCommandMapperOptionalToolsWhenNotConfigured:
 
     def test_todo_list_without_todo_store_returns_unknown_tool(self):
         """todo_store が None のとき todo_list は UNKNOWN_TOOL"""
-        mapper = ToolCommandMapper(movement_service=MagicMock())
+        mapper = _create_tool_command_mapper(movement_service=MagicMock())
         result = mapper.execute(1, TOOL_NAME_TODO_LIST, {})
         assert result.success is False
         assert result.error_code == "UNKNOWN_TOOL"
@@ -1263,7 +1276,7 @@ class TestToolCommandMapperOptionalToolsWhenNotConfigured:
 
     def test_todo_complete_without_todo_store_returns_unknown_tool(self):
         """todo_store が None のとき todo_complete は UNKNOWN_TOOL"""
-        mapper = ToolCommandMapper(movement_service=MagicMock())
+        mapper = _create_tool_command_mapper(movement_service=MagicMock())
         result = mapper.execute(1, TOOL_NAME_TODO_COMPLETE, {"todo_id": "todo-1"})
         assert result.success is False
         assert result.error_code == "UNKNOWN_TOOL"
@@ -1271,7 +1284,7 @@ class TestToolCommandMapperOptionalToolsWhenNotConfigured:
 
     def test_working_memory_append_without_working_memory_store_returns_unknown_tool(self):
         """working_memory_store が None のとき working_memory_append は UNKNOWN_TOOL"""
-        mapper = ToolCommandMapper(movement_service=MagicMock())
+        mapper = _create_tool_command_mapper(movement_service=MagicMock())
         result = mapper.execute(1, TOOL_NAME_WORKING_MEMORY_APPEND, {"text": "メモ"})
         assert result.success is False
         assert result.error_code == "UNKNOWN_TOOL"
@@ -1279,7 +1292,7 @@ class TestToolCommandMapperOptionalToolsWhenNotConfigured:
 
     def test_subagent_without_subagent_runner_returns_unknown_tool(self):
         """subagent_runner が None のとき subagent は UNKNOWN_TOOL"""
-        mapper = ToolCommandMapper(movement_service=MagicMock())
+        mapper = _create_tool_command_mapper(movement_service=MagicMock())
         result = mapper.execute(
             1,
             TOOL_NAME_SUBAGENT,
@@ -1296,7 +1309,7 @@ class TestToolCommandMapperGuildCreate:
     def test_execute_guild_create_success_returns_dto(self):
         guild_service = MagicMock()
         guild_service.create_guild.return_value = MagicMock(success=True, message="ギルドを作成しました。")
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             guild_service=guild_service,
         )
@@ -1315,7 +1328,7 @@ class TestToolCommandMapperGuildCreate:
         assert cmd.creator_player_id == 1
 
     def test_execute_guild_create_without_service_returns_unknown_tool(self):
-        mapper = ToolCommandMapper(movement_service=MagicMock())
+        mapper = _create_tool_command_mapper(movement_service=MagicMock())
         result = mapper.execute(
             1,
             TOOL_NAME_GUILD_CREATE,
@@ -1331,7 +1344,7 @@ class TestToolCommandMapperGuildAddMember:
     def test_execute_guild_add_member_success_returns_dto(self):
         guild_service = MagicMock()
         guild_service.add_member.return_value = MagicMock(success=True, message="招待しました。")
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             guild_service=guild_service,
         )
@@ -1354,7 +1367,7 @@ class TestToolCommandMapperGuildDisband:
     def test_execute_guild_disband_success_returns_dto(self):
         guild_service = MagicMock()
         guild_service.disband_guild.return_value = MagicMock(success=True, message="ギルドを解散しました。")
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             guild_service=guild_service,
         )
@@ -1374,7 +1387,7 @@ class TestToolCommandMapperQuestIssue:
         quest_service.issue_quest.return_value = MagicMock(
             success=True, message="クエストを発行しました。"
         )
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             quest_service=quest_service,
         )
@@ -1399,7 +1412,7 @@ class TestToolCommandMapperQuestIssue:
         assert cmd.guild_id is None
 
     def test_execute_quest_issue_without_service_returns_unknown_tool(self):
-        mapper = ToolCommandMapper(movement_service=MagicMock())
+        mapper = _create_tool_command_mapper(movement_service=MagicMock())
         result = mapper.execute(
             1,
             TOOL_NAME_QUEST_ISSUE,
@@ -1414,7 +1427,7 @@ class TestToolCommandMapperRequiredArgsValidation:
 
     def test_quest_accept_missing_quest_id_returns_invalid_target_label(self):
         quest_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             quest_service=quest_service,
         )
@@ -1426,7 +1439,7 @@ class TestToolCommandMapperRequiredArgsValidation:
 
     def test_quest_issue_missing_objectives_returns_invalid_arg(self):
         quest_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             quest_service=quest_service,
         )
@@ -1437,7 +1450,7 @@ class TestToolCommandMapperRequiredArgsValidation:
 
     def test_guild_leave_missing_guild_id_returns_invalid_target_label(self):
         guild_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             guild_service=guild_service,
         )
@@ -1449,7 +1462,7 @@ class TestToolCommandMapperRequiredArgsValidation:
 
     def test_shop_purchase_missing_shop_id_returns_invalid_target_label(self):
         shop_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             shop_service=shop_service,
         )
@@ -1465,7 +1478,7 @@ class TestToolCommandMapperRequiredArgsValidation:
 
     def test_shop_purchase_missing_listing_id_returns_invalid_target_label(self):
         shop_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             shop_service=shop_service,
         )
@@ -1481,7 +1494,7 @@ class TestToolCommandMapperRequiredArgsValidation:
 
     def test_trade_offer_missing_item_instance_id_returns_invalid_target_label(self):
         trade_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             trade_service=trade_service,
         )
@@ -1496,7 +1509,7 @@ class TestToolCommandMapperRequiredArgsValidation:
 
     def test_trade_accept_missing_trade_id_returns_invalid_target_label(self):
         trade_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             trade_service=trade_service,
         )
@@ -1508,7 +1521,7 @@ class TestToolCommandMapperRequiredArgsValidation:
 
     def test_guild_create_missing_spot_id_returns_invalid_target_label(self):
         guild_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             guild_service=guild_service,
         )
@@ -1523,7 +1536,7 @@ class TestToolCommandMapperRequiredArgsValidation:
 
     def test_guild_add_member_missing_guild_id_returns_invalid_target_label(self):
         guild_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             guild_service=guild_service,
         )
@@ -1538,7 +1551,7 @@ class TestToolCommandMapperRequiredArgsValidation:
 
     def test_guild_disband_missing_guild_id_returns_invalid_target_label(self):
         guild_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             guild_service=guild_service,
         )
@@ -1549,7 +1562,7 @@ class TestToolCommandMapperRequiredArgsValidation:
 
     def test_trade_cancel_missing_trade_id_returns_invalid_target_label(self):
         trade_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             trade_service=trade_service,
         )
@@ -1561,7 +1574,7 @@ class TestToolCommandMapperRequiredArgsValidation:
 
     def test_trade_decline_missing_trade_id_returns_invalid_target_label(self):
         trade_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             trade_service=trade_service,
         )
@@ -1578,7 +1591,7 @@ class TestToolCommandMapperSns:
     def test_sns_create_post_success(self):
         post_service = MagicMock()
         post_service.create_post.return_value = MagicMock(success=True, message="投稿しました。")
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             post_service=post_service,
         )
@@ -1593,7 +1606,7 @@ class TestToolCommandMapperSns:
 
     def test_sns_create_post_missing_content_returns_invalid_arg(self):
         post_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             post_service=post_service,
         )
@@ -1605,7 +1618,7 @@ class TestToolCommandMapperSns:
 
     def test_sns_create_post_empty_content_returns_invalid_arg(self):
         post_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             post_service=post_service,
         )
@@ -1622,7 +1635,7 @@ class TestToolCommandMapperSns:
     def test_sns_create_post_invalid_visibility_defaults_to_public_with_hint(self):
         post_service = MagicMock()
         post_service.create_post.return_value = MagicMock(success=True, message="投稿しました。")
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             post_service=post_service,
         )
@@ -1639,7 +1652,7 @@ class TestToolCommandMapperSns:
     def test_sns_create_post_omitted_visibility_no_hint(self):
         post_service = MagicMock()
         post_service.create_post.return_value = MagicMock(success=True, message="投稿しました。")
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             post_service=post_service,
         )
@@ -1650,7 +1663,7 @@ class TestToolCommandMapperSns:
     def test_sns_create_post_service_exception_returns_exception_result(self):
         post_service = MagicMock()
         post_service.create_post.side_effect = ValueError("投稿に失敗しました")
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             post_service=post_service,
         )
@@ -1666,7 +1679,7 @@ class TestToolCommandMapperSns:
     def test_sns_create_reply_success(self):
         reply_service = MagicMock()
         reply_service.create_reply.return_value = MagicMock(success=True, message="リプライしました。")
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             reply_service=reply_service,
         )
@@ -1680,7 +1693,7 @@ class TestToolCommandMapperSns:
 
     def test_sns_create_reply_missing_parent_returns_invalid_arg(self):
         reply_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             reply_service=reply_service,
         )
@@ -1696,7 +1709,7 @@ class TestToolCommandMapperSns:
     def test_sns_like_post_success(self):
         post_service = MagicMock()
         post_service.like_post.return_value = MagicMock(success=True, message="いいねしました。")
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             post_service=post_service,
         )
@@ -1710,7 +1723,7 @@ class TestToolCommandMapperSns:
 
     def test_sns_like_post_missing_post_id_returns_invalid_arg(self):
         post_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             post_service=post_service,
         )
@@ -1722,7 +1735,7 @@ class TestToolCommandMapperSns:
     def test_sns_like_reply_success(self):
         reply_service = MagicMock()
         reply_service.like_reply.return_value = MagicMock(success=True, message="いいねしました。")
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             reply_service=reply_service,
         )
@@ -1736,7 +1749,7 @@ class TestToolCommandMapperSns:
 
     def test_sns_like_reply_missing_reply_id_returns_invalid_arg(self):
         reply_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             reply_service=reply_service,
         )
@@ -1750,7 +1763,7 @@ class TestToolCommandMapperSns:
         user_command_service.follow_user.return_value = MagicMock(
             success=True, message="フォローしました。"
         )
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             user_command_service=user_command_service,
         )
@@ -1764,7 +1777,7 @@ class TestToolCommandMapperSns:
 
     def test_sns_follow_missing_target_user_id_returns_invalid_arg(self):
         user_command_service = MagicMock()
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             user_command_service=user_command_service,
         )
@@ -1778,7 +1791,7 @@ class TestToolCommandMapperSns:
         user_command_service.unfollow_user.return_value = MagicMock(
             success=True, message="フォロー解除しました。"
         )
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             user_command_service=user_command_service,
         )
@@ -1795,7 +1808,7 @@ class TestToolCommandMapperSns:
         user_command_service.subscribe_user.return_value = MagicMock(
             success=True, message="サブスクライブしました。"
         )
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             user_command_service=user_command_service,
         )
@@ -1812,7 +1825,7 @@ class TestToolCommandMapperSns:
         user_command_service.unsubscribe_user.return_value = MagicMock(
             success=True, message="サブスクライブ解除しました。"
         )
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             user_command_service=user_command_service,
         )
@@ -1829,7 +1842,7 @@ class TestToolCommandMapperSns:
         user_command_service.block_user.return_value = MagicMock(
             success=True, message="ブロックしました。"
         )
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             user_command_service=user_command_service,
         )
@@ -1846,7 +1859,7 @@ class TestToolCommandMapperSns:
         user_command_service.unblock_user.return_value = MagicMock(
             success=True, message="ブロック解除しました。"
         )
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             user_command_service=user_command_service,
         )
@@ -1860,7 +1873,7 @@ class TestToolCommandMapperSns:
 
     def test_sns_create_post_no_post_service_returns_unknown_tool(self):
         """post_service が None のとき、該当ツールはハンドラに登録されず未知ツール扱いになる"""
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             post_service=None,
         )
@@ -1874,7 +1887,7 @@ class TestToolCommandMapperSns:
 
     def test_sns_like_post_no_post_service_returns_unknown_tool(self):
         """post_service が None のとき、該当ツールはハンドラに登録されず未知ツール扱いになる"""
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             post_service=None,
         )
@@ -1884,7 +1897,7 @@ class TestToolCommandMapperSns:
 
     def test_sns_follow_no_user_command_service_returns_unknown_tool(self):
         """user_command_service が None のとき、該当ツールはハンドラに登録されず未知ツール扱いになる"""
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             user_command_service=None,
         )
@@ -1894,7 +1907,7 @@ class TestToolCommandMapperSns:
 
     def test_sns_block_no_user_command_service_returns_unknown_tool(self):
         """user_command_service が None のとき、該当ツールはハンドラに登録されず未知ツール扱いになる"""
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             user_command_service=None,
         )
@@ -1905,7 +1918,7 @@ class TestToolCommandMapperSns:
     def test_sns_follow_service_exception_returns_exception_result(self):
         user_command_service = MagicMock()
         user_command_service.follow_user.side_effect = RuntimeError("すでにフォロー済みです")
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=MagicMock(),
             user_command_service=user_command_service,
         )

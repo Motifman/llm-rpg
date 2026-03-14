@@ -1354,12 +1354,13 @@ class TestEventToWorldSideEffectE2E:
         assert call_kw["target_spot_id"] == 2
         assert call_kw["destination_type"] == "spot"
 
-    def test_move_to_destination_with_l1_label_invokes_movement_service_with_location_params(
+    def test_move_to_destination_with_la1_label_invokes_movement_service_with_location_params(
         self,
     ):
         """
-        L1 ラベル指定で move_to_destination が destination_type=location, target_location_area_id
+        LA1 ラベル指定で move_to_destination が destination_type=location, target_location_area_id
         付きで呼ばれること（スポット内ロケーション移動の E2E）。
+        ロケーションエリアは prefix LA を使用（ショップ出品 L と分離）。
         """
         from ai_rpg_world.application.llm.services.in_memory_episode_memory_store import (
             InMemoryEpisodeMemoryStore,
@@ -1480,7 +1481,7 @@ class TestEventToWorldSideEffectE2E:
         stub_client = StubLlmClient(
             tool_call_to_return={
                 "name": TOOL_NAME_MOVE_TO_DESTINATION,
-                "arguments": json.dumps({"destination_label": "L1"}),
+                "arguments": json.dumps({"destination_label": "LA1"}),
             }
         )
 
