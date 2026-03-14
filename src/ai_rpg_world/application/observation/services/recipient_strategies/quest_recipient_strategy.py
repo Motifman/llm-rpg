@@ -59,7 +59,7 @@ class QuestRecipientStrategy(IRecipientResolutionStrategy):
 
         if isinstance(event, QuestPendingApprovalEvent):
             # ギルド掲示: ギルドメンバーに通知（取得できない場合は scope 解決へフォールバック）
-            if event.scope is not None and hasattr(event.scope, "is_guild") and event.scope.is_guild():
+            if event.scope is not None and event.scope.is_guild():
                 member_ids = self._guild_member_ids(event.guild_id)
                 if member_ids:
                     return member_ids
