@@ -3,8 +3,9 @@ InMemoryUnitOfWork - インメモリ実装のUnit of Work
 実際のデータベーストランザクションは存在しないが、論理的なトランザクション境界を提供します。
 """
 from typing import List, Callable, Any, Tuple, TYPE_CHECKING, Optional, Dict
+
+from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
-from ai_rpg_world.domain.common.domain_event import DomainEvent
 
 if TYPE_CHECKING:
     from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
@@ -20,7 +21,7 @@ class InMemoryUnitOfWork(UnitOfWork):
     def __init__(self, event_publisher=None, unit_of_work_factory=None, data_store=None):
         self._in_transaction = False
         self._pending_operations: List[Callable[[], None]] = []
-        self._pending_events: List[DomainEvent] = []
+        self._pending_events: List[BaseDomainEvent[Any, Any]] = []
         self._registered_aggregates: set = set()
         self._pending_aggregates: Dict[Tuple[str, Any], Any] = {}  # (repo_key, entity_id) -> 未反映の集約
         self._processed_sync_count = 0
@@ -183,7 +184,7 @@ class InMemoryUnitOfWork(UnitOfWork):
             raise RuntimeError("No transaction in progress")
         self._pending_operations.append(operation)
 
-    def add_events(self, events: List[DomainEvent]) -> None:
+    def add_events(self, events: List[BaseDomainEvent[Any, Any]]) -> None:
         """保留中のイベントを追加"""
         if not self._in_transaction:
             raise RuntimeError("No transaction in progress")
@@ -209,7 +210,7 @@ class InMemoryUnitOfWork(UnitOfWork):
                     self._pending_events.extend(events)
                     aggregate.clear_events()
 
-    def get_pending_events(self) -> List[DomainEvent]:
+    def get_pending_events(self) -> List[BaseDomainEvent[Any, Any]]:
         """保留中のイベントを取得（テスト用）"""
         return self._pending_events.copy()
 

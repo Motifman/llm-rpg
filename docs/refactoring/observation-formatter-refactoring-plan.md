@@ -11,7 +11,7 @@
 |----------|------|------|
 | **Phase 1** | 共通基盤（ObservationFormatterContext、IObservationSubFormatter 明確化） | ✅ 完了 |
 | **Phase 2** | 小規模 formatter のロジック移行（Conversation, Harvest, Combat） | ✅ 完了 |
-| **Phase 3** | 中規模 formatter のロジック移行（Trade, Shop, Sns, Quest, Guild） | 未着手 |
+| **Phase 3** | 中規模 formatter のロジック移行（Trade, Shop, Sns, Quest, Guild） | ✅ 完了 |
 | **Phase 4** | 大規模 formatter のロジック移行（World, Player, Skill, Monster） | 未着手 |
 | **Phase 5** | Pursuit formatter 追加、オーケストレータ整理、親ファイル縮小 | 未着手 |
 
@@ -21,8 +21,8 @@
 
 ### 2.1 構成
 
-- **対象**: `src/ai_rpg_world/application/observation/services/observation_formatter.py` 約 1,683 行
-- **sub-formatter**: 12 個（formatters/ 配下）が `return self._parent._format_*_event(...)` で委譲しているだけ
+- **対象**: `src/ai_rpg_world/application/observation/services/observation_formatter.py`
+- **sub-formatter**: 12 個（formatters/ 配下）。Phase 3 完了により Trade, Shop, Sns, Quest, Guild は parent 非依存で自前実装
 - **Pursuit**: 12 formatter のリストに含まれず、format() 末尾でフォールバックとして `_format_pursuit_event` を直接呼び出し
 
 ### 2.2 formatter 別イベント数
@@ -91,6 +91,16 @@
 **対象**: Trade（4）, Shop（5）, Sns（5）, Quest（6）, Guild（7）
 
 **作業**: Phase 2 と同様のパターンで、各 sub-formatter にロジックを移動。
+
+### 5.1 完了した成果物（2025-03）
+
+- `trade_formatter.py`: parent 廃止、4 イベントを自前実装（`event.aggregate_id.value` を直接使用）
+- `shop_formatter.py`: 同上、5 イベント
+- `sns_formatter.py`: 同上、5 イベント
+- `quest_formatter.py`: 同上、6 イベント（`_quest_reward_summary` 含む）
+- `guild_formatter.py`: 同上、7 イベント（GuildCreated, GuildMemberJoined, GuildMemberLeft, GuildRoleChanged, GuildBankDeposited, GuildBankWithdrawn, GuildDisbanded）
+- 親 `observation_formatter.py` から Guild 関連の `_format_guild_event` / `_format_guild_*` / `_guild_name` を削除
+- `test_guild_formatter.py`: Guild formatter の単体テスト（正常系・異常系・受信者非依存）
 
 ---
 
