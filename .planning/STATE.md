@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: World Simulation Service Refactoring
 status: in_progress
-stopped_at: phase 12 context gathered; next step is planning Phase 12
-last_updated: "2026-03-14T21:55:00+09:00"
-last_activity: 2026-03-14 — gathered Phase 12 monster policy separation context after completing Phase 11
+stopped_at: phase 12 executed; next step is discussing Phase 13
+last_updated: "2026-03-14T23:30:00+09:00"
+last_activity: 2026-03-14 — completed Phase 12 monster policy separation and prepared for Phase 13
 progress:
   total_phases: 3
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 33
+  completed_phases: 2
+  total_plans: 4
+  completed_plans: 4
+  percent: 67
 ---
 
 # Project State
@@ -21,16 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-14)
 
 **Core value:** LLMエージェントが、ワールド状態とイベント駆動の文脈を踏まえて、自律的に次の行動を安全に選べること
-**Current focus:** v1.2 World Simulation Service Refactoring — Phase 12 context gathered, planning next
+**Current focus:** v1.2 World Simulation Service Refactoring — Phase 12 complete, Phase 13 context gathering next
 
 ## Current Position
 
-Phase: 12 - Monster Policy Separation
+Phase: 13 - Simulation Regression Harness
 Plan: -
-Status: Phase 12 context gathered; ready to plan
-Last activity: 2026-03-14 — created 12-CONTEXT.md for monster policy separation
-
-Progress: [###-------] 33%
+Status: Phase 12 complete; ready to discuss and plan Phase 13
+Last activity: 2026-03-14 — executed 12-01 / 12-02 and committed monster policy separation
+Progress: [######----] 67%
 
 ## Accumulated Context
 
@@ -47,21 +46,22 @@ Recent decisions affecting current work:
 - v1.2 roadmap starts at Phase 11 because Phases 1-10 are already used by completed milestones
 - v1.2 scope is limited to `WorldSimulationService`; the parallel `ToolArgumentResolver` refactor remains out of scope
 - Phase 11 extracted six explicit tick stage collaborators while keeping facade order and post-tick wiring contracts intact
+- Phase 12 separated pure hunger migration selection, monster behavior coordination, and lifecycle survival progression without changing facade order
 
 ### Pending Todos
 
-- Plan Phase 12 for monster policy separation
+- Discuss and plan Phase 13 for simulation regression harness
 - Keep milestone work isolated from the parallel `ToolArgumentResolver` refactor
 
 ### Blockers/Concerns
 
 - phase-level `VERIFICATION.md` artifacts were not produced for v1.1, so archive decisions rely on SUMMARY / VALIDATION / UAT plus audit evidence
 - async event failure visibility remains weak in the current UoW/event pipeline
-- monster lifecycle / behavior stage internals still depend on callback-wrapped legacy helpers and need clearer policy boundaries
-- tick order guarantees and wiring contracts remain fragile, so Phase 12 must preserve them while separating monster rules
+- phase-level `VERIFICATION.md` artifacts are still missing for the active milestone, so completion evidence depends on summaries / validation / targeted test slices
+- simulation regression coverage is broader than before but still concentrated in a few large files, which is the main target for Phase 13
 
 ## Session Continuity
 
 Last session: 2026-03-14
-Stopped at: Phase 12 context gathered; next step is `$gsd-plan-phase 12`
+Stopped at: Phase 12 execution complete; next step is `$gsd-discuss-phase 13`
 Resume file: None

@@ -7,7 +7,7 @@
 ## Phases
 
 - [x] **Phase 11: Tick Facade Extraction** - `WorldSimulationService` を薄い facade に寄せ、主要な tick stage の委譲境界と順序契約を固定する
-- [ ] **Phase 12: Monster Policy Separation** - monster lifecycle / behavior と飢餓移住ルールを読みやすい協調オブジェクトへ分離する
+- [x] **Phase 12: Monster Policy Separation** - monster lifecycle / behavior と飢餓移住ルールを読みやすい協調オブジェクトへ分離する
 - [ ] **Phase 13: Simulation Regression Harness** - 分割後の world simulation を順序保証と小さな回帰テストの両面から守る
 
 ## Progress
@@ -15,7 +15,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 11. Tick Facade Extraction | 2/2 | Complete | 2026-03-14 |
-| 12. Monster Policy Separation | 0/2 | Planned | - |
+| 12. Monster Policy Separation | 2/2 | Complete | 2026-03-14 |
 | 13. Simulation Regression Harness | 0/0 | Not started | - |
 
 ## Phase Details
@@ -76,7 +76,7 @@ Plans:
 
 ## Next Step
 
-- `$gsd-execute-phase 12` - monster policy separation を wave 順で実装する
+- `$gsd-discuss-phase 13` - simulation regression harness の文脈を固める
 
 ---
 *Last updated: 2026-03-14 for milestone v1.2 World Simulation Service Refactoring*
