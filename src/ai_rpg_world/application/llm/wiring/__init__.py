@@ -139,7 +139,7 @@ from ai_rpg_world.application.world.contracts.queries import (
     GetPlayerCurrentStateQuery,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.application.llm.services.tool_definitions import (
+from ai_rpg_world.application.llm.services.tool_catalog import (
     register_default_tools,
 )
 from ai_rpg_world.application.llm.services.ui_context_builder import (

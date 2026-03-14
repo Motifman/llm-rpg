@@ -31,7 +31,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SKILL_EQUIP,
     TOOL_NAME_SKILL_REJECT_PROPOSAL,
 )
-from ai_rpg_world.application.llm.services.tool_definitions import (
+from ai_rpg_world.application.llm.services.tool_catalog import (
     register_default_tools,
 )
 from ai_rpg_world.application.world.contracts.dtos import (

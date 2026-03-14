@@ -1,16 +1,37 @@
-"""tool_definitions（register_default_tools, 定義定数）のテスト"""
+"""tool_catalog（register_default_tools, 定義定数）のテスト"""
 
 import pytest
 
 from ai_rpg_world.application.llm.services.game_tool_registry import (
     DefaultGameToolRegistry,
 )
-from ai_rpg_world.application.llm.services.tool_definitions import (
+from ai_rpg_world.application.llm.services.tool_catalog import (
+    register_default_tools,
+)
+from ai_rpg_world.application.llm.services.tool_catalog.combat import (
+    COMBAT_USE_SKILL_DEFINITION,
+    SKILL_ACCEPT_PROPOSAL_DEFINITION,
+    SKILL_ACTIVATE_AWAKENED_MODE_DEFINITION,
+    SKILL_EQUIP_DEFINITION,
+    SKILL_REJECT_PROPOSAL_DEFINITION,
+)
+from ai_rpg_world.application.llm.services.tool_catalog.movement import (
     CANCEL_MOVEMENT_DEFINITION,
+    MOVE_TO_DESTINATION_DEFINITION,
+    NO_OP_DEFINITION,
+)
+from ai_rpg_world.application.llm.services.tool_catalog.pursuit import (
+    PURSUIT_CANCEL_DEFINITION,
+    PURSUIT_START_DEFINITION,
+)
+from ai_rpg_world.application.llm.services.tool_catalog.speech import (
+    SAY_DEFINITION,
+    WHISPER_DEFINITION,
+)
+from ai_rpg_world.application.llm.services.tool_catalog.world import (
     CHANGE_ATTENTION_DEFINITION,
     CHEST_STORE_DEFINITION,
     CHEST_TAKE_DEFINITION,
-    COMBAT_USE_SKILL_DEFINITION,
     CONVERSATION_ADVANCE_DEFINITION,
     DESTROY_PLACEABLE_DEFINITION,
     HARVEST_CANCEL_DEFINITION,
@@ -18,18 +39,7 @@ from ai_rpg_world.application.llm.services.tool_definitions import (
     INSPECT_ITEM_DEFINITION,
     INSPECT_TARGET_DEFINITION,
     INTERACT_WORLD_OBJECT_DEFINITION,
-    MOVE_TO_DESTINATION_DEFINITION,
-    NO_OP_DEFINITION,
     PLACE_OBJECT_DEFINITION,
-    PURSUIT_CANCEL_DEFINITION,
-    PURSUIT_START_DEFINITION,
-    SAY_DEFINITION,
-    SKILL_ACCEPT_PROPOSAL_DEFINITION,
-    SKILL_ACTIVATE_AWAKENED_MODE_DEFINITION,
-    SKILL_EQUIP_DEFINITION,
-    SKILL_REJECT_PROPOSAL_DEFINITION,
-    WHISPER_DEFINITION,
-    register_default_tools,
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_CANCEL_MOVEMENT,
