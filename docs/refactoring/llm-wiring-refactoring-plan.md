@@ -15,7 +15,7 @@
 | **Phase 2** | composition root の factory 関数分割 | ✅ 完了 |
 | **Phase 3** | ToolCommandMapper の handler map を wiring へ移行 | ✅ 完了 |
 | **Phase 4** | ToolArgumentResolver のツール別分割 | ✅ 完了 |
-| **Phase 5** | ToolDefinitions のカテゴリ別分割 | 🔲 未着手（ロードマップ 3.7） |
+| **Phase 5** | ToolDefinitions のカテゴリ別分割 | ✅ 完了 |
 | **Phase 6** | UiContextBuilder のラベル生成と描画分離 | 🔲 未着手（ロードマップ 3.8） |
 
 ---
@@ -82,13 +82,27 @@
 
 ---
 
-### 3.4 Phase 5: ToolDefinitions のカテゴリ別分割
+### 3.4 完了済み: Phase 5（ToolDefinitions のカテゴリ別分割）
 
-**親ロードマップ**: 3.7
-
-**目的**: `tool_definitions.py` を `tool_catalog/movement.py`, `world.py`, `social.py`, `memory.py` 等に分割。
-
-**wiring との関係**: `register_default_tools()` の呼び出し箇所は wiring。分割後は「spec 群を集めて登録」の形になり、呼び出し側の変更は軽微な想定。
+- **実施日**: 2026-03-14
+- **親ロードマップ**: 3.7
+- **目的**: `tool_definitions.py` をカテゴリ別 `tool_catalog/` パッケージに分割。
+- **成果物**:
+  - `tool_catalog/movement.py` - no_op, move_to_destination, move_one_step, cancel_movement
+  - `tool_catalog/pursuit.py` - pursuit_start, pursuit_cancel
+  - `tool_catalog/speech.py` - whisper, say
+  - `tool_catalog/world.py` - interact, harvest, inspect, attention, conversation, place, drop, chest（flag 別に条件登録）
+  - `tool_catalog/combat.py` - combat_use_skill, skill_equip, skill_accept/reject_proposal, skill_activate_awakened
+  - `tool_catalog/quest.py` - quest_accept, cancel, approve, issue
+  - `tool_catalog/guild.py` - guild_* 7種
+  - `tool_catalog/shop.py` - shop_purchase, shop_list_item, shop_unlist_item
+  - `tool_catalog/trade.py` - trade_offer, accept, cancel, decline
+  - `tool_catalog/sns.py` - sns_* 10種（SnsToolAvailabilityResolver 共有）
+  - `tool_catalog/memory.py` - memory_query, subagent, todo_add, todo_list, todo_complete, working_memory_append
+  - `tool_catalog/__init__.py` - `register_default_tools()` を実装し、各 get_*_specs() を集約
+- **削除**: `tool_definitions.py`（後方互換なし、参照元を tool_catalog に変更）
+- **更新**: `services/__init__.py`, `wiring/__init__.py`, `test_tool_definitions.py`, `test_available_tools_provider.py`, `test_prompt_builder.py`, `scripts/demo_llm_*.py`
+- **テスト**: `tests/application/llm/test_tool_definitions.py` - 定義内容・register_default_tools の正常・例外ケースを検証。pytest tests/application/llm/ で 977 件 PASSED
 
 ---
 

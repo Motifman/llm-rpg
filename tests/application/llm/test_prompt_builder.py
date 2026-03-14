@@ -41,7 +41,7 @@ from ai_rpg_world.application.llm.services.predictive_memory_retriever import (
 from ai_rpg_world.application.llm.services.system_prompt_builder import (
     DefaultSystemPromptBuilder,
 )
-from ai_rpg_world.application.llm.services.tool_definitions import (
+from ai_rpg_world.application.llm.services.tool_catalog import (
     register_default_tools,
 )
 from ai_rpg_world.application.llm.exceptions import PlayerProfileNotFoundForPromptException
