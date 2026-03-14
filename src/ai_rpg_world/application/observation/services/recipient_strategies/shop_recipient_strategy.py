@@ -3,10 +3,8 @@
 from typing import Any, List, Optional
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
+    IPlayerAudienceQueryPort,
     IRecipientResolutionStrategy,
-)
-from ai_rpg_world.domain.player.repository.player_status_repository import (
-    PlayerStatusRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.shop.event.shop_event import (
@@ -25,10 +23,10 @@ class ShopRecipientStrategy(IRecipientResolutionStrategy):
 
     def __init__(
         self,
-        player_status_repository: PlayerStatusRepository,
+        player_audience_query: IPlayerAudienceQueryPort,
         shop_repository: Optional[ShopRepository] = None,
     ) -> None:
-        self._player_status_repository = player_status_repository
+        self._player_audience_query = player_audience_query
         self._shop_repository = shop_repository
 
     def supports(self, event: Any) -> bool:
@@ -46,7 +44,7 @@ class ShopRecipientStrategy(IRecipientResolutionStrategy):
     def resolve(self, event: Any) -> List[PlayerId]:
         if isinstance(event, ShopCreatedEvent):
             # オーナー本人 + そのスポットにいるプレイヤー
-            return [event.owner_id] + self._players_at_spot(event.spot_id)
+            return [event.owner_id] + self._player_audience_query.players_at_spot(event.spot_id)
 
         if isinstance(event, ShopItemPurchasedEvent):
             # 購入者 + 売り手（listed_by）
@@ -64,17 +62,9 @@ class ShopRecipientStrategy(IRecipientResolutionStrategy):
                 if isinstance(event, ShopClosedEvent):
                     return [event.closed_by]
                 return []
-            return self._players_at_spot(spot_id)
+            return self._player_audience_query.players_at_spot(spot_id)
 
         return []
-
-    def _players_at_spot(self, spot_id: SpotId) -> List[PlayerId]:
-        all_statuses = self._player_status_repository.find_all()
-        return [
-            s.player_id
-            for s in all_statuses
-            if s.current_spot_id is not None and s.current_spot_id.value == spot_id.value
-        ]
 
     def _spot_id_from_shop(self, shop_id) -> Optional[SpotId]:
         if self._shop_repository is None:
