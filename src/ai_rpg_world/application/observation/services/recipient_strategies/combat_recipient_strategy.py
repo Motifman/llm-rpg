@@ -6,6 +6,9 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
     IWorldObjectToPlayerResolver,
 )
+from ai_rpg_world.application.observation.services.observed_event_registry import (
+    ObservedEventRegistry,
+)
 from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxCreatedEvent,
     HitBoxDeactivatedEvent,
@@ -21,25 +24,20 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 class CombatRecipientStrategy(IRecipientResolutionStrategy):
     """HitBox 系イベントを、関係者プレイヤー（owner/target）へ配信する。"""
 
+    _STRATEGY_KEY = "combat"
+
     def __init__(
         self,
+        observed_event_registry: ObservedEventRegistry,
         world_object_to_player_resolver: IWorldObjectToPlayerResolver,
         hit_box_repository: Optional[HitBoxRepository] = None,
     ) -> None:
+        self._registry = observed_event_registry
         self._world_object_to_player_resolver = world_object_to_player_resolver
         self._hit_box_repository = hit_box_repository
 
     def supports(self, event: Any) -> bool:
-        return isinstance(
-            event,
-            (
-                HitBoxCreatedEvent,
-                HitBoxMovedEvent,
-                HitBoxHitRecordedEvent,
-                HitBoxDeactivatedEvent,
-                HitBoxObstacleCollidedEvent,
-            ),
-        )
+        return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
     def resolve(self, event: Any) -> List[PlayerId]:
         recipients: List[PlayerId] = []

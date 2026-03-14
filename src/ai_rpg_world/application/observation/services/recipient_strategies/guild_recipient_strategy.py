@@ -6,6 +6,9 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
     IPlayerAudienceQueryPort,
     IRecipientResolutionStrategy,
 )
+from ai_rpg_world.application.observation.services.observed_event_registry import (
+    ObservedEventRegistry,
+)
 from ai_rpg_world.domain.guild.event.guild_event import (
     GuildBankDepositedEvent,
     GuildBankWithdrawnEvent,
@@ -22,27 +25,20 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 class GuildRecipientStrategy(IRecipientResolutionStrategy):
     """ギルドイベントの配信先を解決する。"""
 
+    _STRATEGY_KEY = "guild"
+
     def __init__(
         self,
+        observed_event_registry: ObservedEventRegistry,
         player_audience_query: IPlayerAudienceQueryPort,
         guild_repository: Optional[GuildRepository] = None,
     ) -> None:
+        self._registry = observed_event_registry
         self._player_audience_query = player_audience_query
         self._guild_repository = guild_repository
 
     def supports(self, event: Any) -> bool:
-        return isinstance(
-            event,
-            (
-                GuildCreatedEvent,
-                GuildMemberJoinedEvent,
-                GuildMemberLeftEvent,
-                GuildRoleChangedEvent,
-                GuildBankDepositedEvent,
-                GuildBankWithdrawnEvent,
-                GuildDisbandedEvent,
-            ),
-        )
+        return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
     def resolve(self, event: Any) -> List[PlayerId]:
         if isinstance(event, GuildCreatedEvent):
