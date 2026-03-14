@@ -85,6 +85,22 @@ from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
 from ai_rpg_world.application.world.services.pursuit_continuation_service import (
     PursuitContinuationService,
 )
+from ai_rpg_world.application.world.services.hunger_migration_policy import (
+    HungerMigrationCandidate,
+    HungerMigrationPolicy,
+)
+from ai_rpg_world.application.world.services.monster_behavior_coordinator import (
+    MonsterBehaviorCoordinator,
+)
+from ai_rpg_world.application.world.services.monster_foraging_rule import (
+    MonsterForagingRule,
+)
+from ai_rpg_world.application.world.services.monster_lifecycle_survival_coordinator import (
+    MonsterLifecycleSurvivalCoordinator,
+)
+from ai_rpg_world.application.world.services.monster_pursuit_failure_rule import (
+    MonsterPursuitFailureRule,
+)
 from ai_rpg_world.application.world.services.world_simulation_environment_stage_service import (
     WorldSimulationEnvironmentStageService,
 )
@@ -174,6 +190,36 @@ class WorldSimulationApplicationService:
         self._pursuit_continuation_service = pursuit_continuation_service
         self._harvest_command_service = harvest_command_service
         self._logger = logging.getLogger(self.__class__.__name__)
+        self._hunger_migration_policy = HungerMigrationPolicy()
+        self._monster_foraging_rule = MonsterForagingRule(self._loot_table_repository)
+        self._monster_pursuit_failure_rule = MonsterPursuitFailureRule()
+        self._monster_lifecycle_survival_coordinator = (
+            MonsterLifecycleSurvivalCoordinator(
+                monster_repository=self._monster_repository,
+                physical_map_repository=self._physical_map_repository,
+                connected_spots_provider_getter=lambda: self._connected_spots_provider,
+                map_transition_service_getter=lambda: self._map_transition_service,
+                hunger_migration_policy=self._hunger_migration_policy,
+                spot_has_feed_for_monster=self._spot_has_feed_for_monster,
+                unit_of_work=self._unit_of_work,
+                logger=self._logger,
+            )
+        )
+        self._monster_behavior_coordinator = MonsterBehaviorCoordinator(
+            monster_repository=self._monster_repository,
+            behavior_service=self._behavior_service,
+            transition_service=BehaviorStateTransitionService(),
+            action_resolver_factory=lambda physical_map, actor: self._monster_action_resolver_factory(
+                physical_map,
+                actor,
+            ),
+            foraging_rule=self._monster_foraging_rule,
+            pursuit_failure_rule=self._monster_pursuit_failure_rule,
+            unit_of_work=self._unit_of_work,
+            build_skill_context=self._build_skill_context_for_actor,
+            build_target_context=self._build_target_context_for_actor,
+            build_growth_context=self._build_growth_context_for_actor,
+        )
         self._environment_stage = WorldSimulationEnvironmentStageService(
             weather_zone_repository=self._weather_zone_repository,
             weather_config_service=self._weather_config_service,
@@ -202,15 +248,13 @@ class WorldSimulationApplicationService:
             ),
             process_spawn_and_respawn_by_slots=self._process_spawn_and_respawn_by_slots,
             process_respawn_legacy=self._process_respawn_legacy,
-            process_hunger_migration_for_spot=self._process_hunger_migration_for_spot,
+            survival_coordinator=self._monster_lifecycle_survival_coordinator,
         )
         self._monster_behavior_stage = WorldSimulationMonsterBehaviorStageService(
-            monster_repository=self._monster_repository,
             world_time_config_service=self._world_time_config_service,
-            unit_of_work=self._unit_of_work,
             logger=self._logger,
             actors_sorted_by_distance_to_players=self._actors_sorted_by_distance_to_players,
-            process_single_actor_behavior=self._process_single_actor_behavior,
+            behavior_coordinator=self._monster_behavior_coordinator,
         )
         self._hit_box_stage = WorldSimulationHitBoxStageService(
             physical_map_repository=self._physical_map_repository,
@@ -258,8 +302,17 @@ class WorldSimulationApplicationService:
             # アクティブなスポット（プレイヤーが1人以上いるスポット）のみ行動更新・HitBox・save を行う
             active_spot_ids: Set[SpotId] = {pm.spot_id for pm in player_map_map.values()}
 
-            self._monster_lifecycle_stage.run(maps, active_spot_ids, current_tick)
-            self._monster_behavior_stage.run(maps, active_spot_ids, current_tick)
+            blocked_actor_ids = self._monster_lifecycle_stage.run(
+                maps,
+                active_spot_ids,
+                current_tick,
+            )
+            self._monster_behavior_stage.run(
+                maps,
+                active_spot_ids,
+                current_tick,
+                skipped_actor_ids=blocked_actor_ids,
+            )
             self._hit_box_stage.run(maps, active_spot_ids, current_tick)
 
         self._run_post_tick_hooks(current_tick)
@@ -798,57 +851,12 @@ class WorldSimulationApplicationService:
         このスポットで飢餓かつ餌なしのモンスターのうち飢餓が最も高い 1 体を、
         接続スポットへランダムに移住させる。1 スポットあたり 1 tick に 1 体まで。
         """
-        monsters_on_spot = self._monster_repository.find_by_spot_id(physical_map.spot_id)
-        # 飢餓 ≥ 閾値かつ嗜好ありかつスポットに餌がない候補
-        candidates: List[MonsterAggregate] = []
-        for monster in monsters_on_spot:
-            if monster.coordinate is None:
-                continue
-            if monster.hunger < monster.template.forage_threshold:
-                continue
-            if not monster.template.preferred_feed_item_spec_ids:
-                continue
-            if self._spot_has_feed_for_monster(physical_map, monster, current_tick):
-                continue
-            candidates.append(monster)
-        if not candidates:
+        if physical_map.spot_id not in active_spot_ids:
             return
-        # 飢餓が最も高い 1 体
-        migrant = max(candidates, key=lambda m: m.hunger)
-        connected = self._connected_spots_provider.get_connected_spots(
-            physical_map.spot_id
+        self._monster_lifecycle_survival_coordinator.apply_hunger_migration_for_spot(
+            physical_map,
+            current_tick,
         )
-        if not connected:
-            return
-        to_spot_id = random.choice(connected)
-        gateways = physical_map.get_all_gateways()
-        target_gateway = next(
-            (g for g in gateways if g.target_spot_id == to_spot_id),
-            None,
-        )
-        if target_gateway is None:
-            return
-        to_map = self._physical_map_repository.find_by_spot_id(to_spot_id)
-        if to_map is None:
-            return
-        try:
-            self._map_transition_service.transition_object(
-                physical_map,
-                to_map,
-                migrant.world_object_id,
-                target_gateway.landing_coordinate,
-            )
-            migrant.update_map_placement(to_spot_id, target_gateway.landing_coordinate)
-            self._physical_map_repository.save(physical_map)
-            self._physical_map_repository.save(to_map)
-            self._monster_repository.save(migrant)
-            self._unit_of_work.process_sync_events()
-        except DomainException as e:
-            self._logger.warning(
-                "Hunger migration skipped for monster %s: %s",
-                migrant.monster_id,
-                str(e),
-            )
 
     def _build_target_context_for_actor(
         self,

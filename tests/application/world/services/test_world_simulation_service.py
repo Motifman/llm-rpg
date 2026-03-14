@@ -733,6 +733,27 @@ class TestWorldSimulationApplicationService:
 
         assert order == ["continuation", "movement:1"]
 
+    def test_tick_runs_monster_lifecycle_before_behavior_stage(self, setup_service):
+        service, _, _, _, _, _, _, _, _, _ = setup_service
+        order: list[str] = []
+
+        service._monster_lifecycle_stage = mock.Mock()
+        service._monster_lifecycle_stage.run.side_effect = (
+            lambda maps, active_spot_ids, current_tick: order.append("lifecycle") or set()
+        )
+        service._monster_behavior_stage = mock.Mock()
+        service._monster_behavior_stage.run.side_effect = (
+            lambda maps, active_spot_ids, current_tick, skipped_actor_ids=None: order.append("behavior")
+        )
+        service._hit_box_stage = mock.Mock()
+        service._hit_box_stage.run.side_effect = (
+            lambda maps, active_spot_ids, current_tick: order.append("hitbox")
+        )
+
+        service.tick()
+
+        assert order == ["lifecycle", "behavior", "hitbox"]
+
     def test_tick_keeps_plain_movement_behavior_when_no_active_pursuit(
         self, setup_service
     ):
