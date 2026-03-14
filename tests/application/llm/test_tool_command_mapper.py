@@ -35,6 +35,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_QUEST_ISSUE,
     TOOL_NAME_SAY,
     TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
+    TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
     TOOL_NAME_SKILL_EQUIP,
     TOOL_NAME_SKILL_REJECT_PROPOSAL,
     TOOL_NAME_SHOP_PURCHASE,
@@ -79,6 +80,9 @@ from ai_rpg_world.application.world.exceptions.command.place_command_exception i
 from ai_rpg_world.application.world.exceptions.command.drop_command_exception import (
     NoItemInSlotForDropException,
     ItemReservedForDropException,
+)
+from ai_rpg_world.application.skill.exceptions.command.skill_command_exception import (
+    SkillCommandException,
 )
 
 
@@ -733,6 +737,34 @@ class TestToolCommandMapperExtendedTools:
             progress_id=20,
             proposal_id=3,
         )
+
+    def test_execute_skill_activate_awakened_mode_success(self, mapper, skill_tool_service):
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
+            {"loadout_id": 10},
+        )
+
+        assert result.success is True
+        assert result.message == "覚醒モードを発動しました。"
+        skill_tool_service.activate_awakened_mode.assert_called_once_with(
+            player_id=1,
+            loadout_id=10,
+        )
+
+    def test_execute_skill_activate_awakened_mode_failure(self, mapper, skill_tool_service):
+        skill_tool_service.activate_awakened_mode.side_effect = SkillCommandException(
+            "awakened mode is already active"
+        )
+
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
+            {"loadout_id": 10},
+        )
+
+        assert result.success is False
+        assert "already active" in result.message
 
 
 class TestToolCommandMapperDropItem:
