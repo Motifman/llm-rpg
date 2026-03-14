@@ -5,12 +5,16 @@ from typing import Optional
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.application.skill.contracts.commands import (
     AcceptSkillProposalCommand,
+    ActivatePlayerAwakenedModeCommand,
     EquipPlayerSkillCommand,
     RejectSkillProposalCommand,
     UsePlayerSkillCommand,
 )
 from ai_rpg_world.application.skill.exceptions.command.skill_command_exception import (
     SkillCommandException,
+)
+from ai_rpg_world.application.skill.services.awakened_mode_defaults import (
+    DEFAULT_AWAKENED_MODE_ACTIVATION,
 )
 from ai_rpg_world.application.skill.services.skill_command_service import SkillCommandService
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
@@ -97,5 +101,24 @@ class PlayerSkillToolApplicationService:
             RejectSkillProposalCommand(
                 progress_id=progress_id,
                 proposal_id=proposal_id,
+            )
+        )
+
+    def activate_awakened_mode(
+        self,
+        *,
+        player_id: int,
+        loadout_id: int,
+    ) -> None:
+        self._skill_command_service.activate_player_awakened_mode(
+            ActivatePlayerAwakenedModeCommand(
+                player_id=player_id,
+                loadout_id=loadout_id,
+                current_tick=self._time_provider.get_current_tick().value,
+                duration_ticks=DEFAULT_AWAKENED_MODE_ACTIVATION.duration_ticks,
+                cooldown_reduction_rate=DEFAULT_AWAKENED_MODE_ACTIVATION.cooldown_reduction_rate,
+                mp_cost=DEFAULT_AWAKENED_MODE_ACTIVATION.mp_cost,
+                stamina_cost=DEFAULT_AWAKENED_MODE_ACTIVATION.stamina_cost,
+                hp_cost=DEFAULT_AWAKENED_MODE_ACTIVATION.hp_cost,
             )
         )

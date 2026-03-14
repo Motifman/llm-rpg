@@ -26,6 +26,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_INSPECT_TARGET,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_PLACE_OBJECT,
+    TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
     TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
     TOOL_NAME_SKILL_EQUIP,
     TOOL_NAME_SKILL_REJECT_PROPOSAL,
@@ -155,6 +156,10 @@ class WorldToolExecutor:
             getattr(skill_tool_service, "reject_skill_proposal", None)
         ):
             raise TypeError("skill_tool_service must have a callable reject_skill_proposal")
+        if skill_tool_service is not None and not callable(
+            getattr(skill_tool_service, "activate_awakened_mode", None)
+        ):
+            raise TypeError("skill_tool_service must have a callable activate_awakened_mode")
 
     def get_handlers(
         self,
@@ -177,6 +182,7 @@ class WorldToolExecutor:
         result[TOOL_NAME_SKILL_EQUIP] = self._execute_skill_equip
         result[TOOL_NAME_SKILL_ACCEPT_PROPOSAL] = self._execute_skill_accept_proposal
         result[TOOL_NAME_SKILL_REJECT_PROPOSAL] = self._execute_skill_reject_proposal
+        result[TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE] = self._execute_skill_activate_awakened_mode
         return result
 
     def _execute_change_attention(
@@ -396,6 +402,20 @@ class WorldToolExecutor:
                 success=True,
                 message=f"{proposal_display_name}を却下しました。",
             )
+        except Exception as e:
+            return exception_result(e)
+
+    def _execute_skill_activate_awakened_mode(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> LlmCommandResultDto:
+        if self._skill_tool_service is None:
+            return unknown_tool("覚醒モード発動ツールはまだ利用できません。")
+        try:
+            self._skill_tool_service.activate_awakened_mode(
+                player_id=player_id,
+                loadout_id=int(args.get("loadout_id")),
+            )
+            return LlmCommandResultDto(success=True, message="覚醒モードを発動しました。")
         except Exception as e:
             return exception_result(e)
 

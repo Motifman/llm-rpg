@@ -123,3 +123,20 @@ class TestPlayerSkillToolApplicationService:
         command = skill_command_service.reject_skill_proposal.call_args.args[0]
         assert command.progress_id == 20
         assert command.proposal_id == 4
+
+    def test_activate_awakened_mode_delegates_with_server_side_defaults(
+        self,
+        service,
+        skill_command_service,
+    ):
+        service.activate_awakened_mode(player_id=1, loadout_id=10)
+
+        command = skill_command_service.activate_player_awakened_mode.call_args.args[0]
+        assert command.player_id == 1
+        assert command.loadout_id == 10
+        assert command.current_tick == 123
+        assert command.duration_ticks == 50
+        assert command.cooldown_reduction_rate == 0.5
+        assert command.mp_cost == 20
+        assert command.stamina_cost == 30
+        assert command.hp_cost == 0

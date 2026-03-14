@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import List, Optional, TYPE_CHECKING
 
+from ai_rpg_world.application.skill.services.awakened_mode_defaults import (
+    DEFAULT_AWAKENED_MODE_ACTIVATION,
+)
 from ai_rpg_world.application.world.contracts.dtos import (
     ActiveConversationDto,
     AwakenedActionDto,
@@ -25,6 +28,12 @@ from ai_rpg_world.application.world.contracts.dtos import (
 )
 from ai_rpg_world.application.trade.exceptions import (
     PersonalTradeQueryApplicationException,
+)
+from ai_rpg_world.domain.player.exception import (
+    InsufficientHpException,
+    InsufficientMpException,
+    InsufficientStaminaException,
+    PlayerDownedException,
 )
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -48,6 +57,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
     from ai_rpg_world.domain.player.repository.player_profile_repository import (
         PlayerProfileRepository,
+    )
+    from ai_rpg_world.domain.player.repository.player_status_repository import (
+        PlayerStatusRepository,
     )
     from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
     from ai_rpg_world.domain.player.repository.player_inventory_repository import (
@@ -80,6 +92,7 @@ class PlayerSupplementalContextBuilder:
         shop_repository: Optional["ShopRepository"] = None,
         personal_trade_query_service: Optional["PersonalTradeQueryService"] = None,
         player_profile_repository: Optional["PlayerProfileRepository"] = None,
+        player_status_repository: Optional["PlayerStatusRepository"] = None,
     ) -> None:
         self._player_inventory_repository = player_inventory_repository
         self._item_repository = item_repository
@@ -92,6 +105,7 @@ class PlayerSupplementalContextBuilder:
         self._shop_repository = shop_repository
         self._personal_trade_query_service = personal_trade_query_service
         self._player_profile_repository = player_profile_repository
+        self._player_status_repository = player_status_repository
 
     def build_inventory_items(self, player_id: PlayerId) -> List[InventoryItemDto]:
         if self._player_inventory_repository is None or self._item_repository is None:
@@ -470,10 +484,33 @@ class PlayerSupplementalContextBuilder:
             and current_tick < active_until_tick
         ):
             return None
+        if not self._can_afford_awakened_mode(player_id):
+            return None
         return AwakenedActionDto(
             skill_loadout_id=loadout.loadout_id.value,
             display_name="覚醒モードを発動",
         )
+
+    def _can_afford_awakened_mode(self, player_id: int) -> bool:
+        if self._player_status_repository is None:
+            return True
+        status = self._player_status_repository.find_by_id(PlayerId.create(player_id))
+        if status is None:
+            return False
+        try:
+            status.validate_resource_consumption(
+                mp_cost=DEFAULT_AWAKENED_MODE_ACTIVATION.mp_cost,
+                stamina_cost=DEFAULT_AWAKENED_MODE_ACTIVATION.stamina_cost,
+                hp_cost=DEFAULT_AWAKENED_MODE_ACTIVATION.hp_cost,
+            )
+        except (
+            InsufficientMpException,
+            InsufficientStaminaException,
+            InsufficientHpException,
+            PlayerDownedException,
+        ):
+            return False
+        return True
 
     def _get_current_tick_value(self) -> int:
         if self._game_time_provider is None:
