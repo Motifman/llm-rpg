@@ -109,6 +109,7 @@ from ai_rpg_world.domain.shop.event.shop_event import (
 from ai_rpg_world.domain.trade.event.trade_event import (
     TradeAcceptedEvent,
     TradeCancelledEvent,
+    TradeDeclinedEvent,
     TradeOfferedEvent,
 )
 from ai_rpg_world.domain.sns.event import (
@@ -314,6 +315,8 @@ class ObservationFormatter(IObservationFormatter):
             return self._format_trade_accepted(event, recipient_player_id)
         if isinstance(event, TradeCancelledEvent):
             return self._format_trade_cancelled(event, recipient_player_id)
+        if isinstance(event, TradeDeclinedEvent):
+            return self._format_trade_declined(event, recipient_player_id)
         return None
 
     def _format_sns_event(
@@ -1147,6 +1150,34 @@ class ObservationFormatter(IObservationFormatter):
         trade_id = getattr(event.aggregate_id, "value", event.aggregate_id)
         prose = "取引がキャンセルされました。"
         structured = {"type": "trade_cancelled", "trade_id_value": trade_id}
+        return ObservationOutput(
+            prose=prose,
+            structured=structured,
+            observation_category="self_only",
+            schedules_turn=True,
+        )
+
+    def _format_trade_declined(
+        self, event: TradeDeclinedEvent, recipient_id: PlayerId
+    ) -> Optional[ObservationOutput]:
+        trade_id = getattr(event.aggregate_id, "value", event.aggregate_id)
+        is_decliner = event.decliner_id.value == recipient_id.value
+        if is_decliner:
+            prose = "取引を断りました。"
+            structured = {
+                "type": "trade_declined",
+                "role": "decliner",
+                "trade_id_value": trade_id,
+            }
+        else:
+            decliner_name = self._player_name(event.decliner_id)
+            prose = f"{decliner_name}が取引を断りました。"
+            structured = {
+                "type": "trade_declined",
+                "role": "seller",
+                "trade_id_value": trade_id,
+                "decliner_player_id": event.decliner_id.value,
+            }
         return ObservationOutput(
             prose=prose,
             structured=structured,

@@ -19,7 +19,10 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_INSPECT_TARGET,
     TOOL_NAME_INTERACT_WORLD_OBJECT,
     TOOL_NAME_PLACE_OBJECT,
+    TOOL_NAME_SKILL_ACCEPT_PROPOSAL,
     TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
+    TOOL_NAME_SKILL_EQUIP,
+    TOOL_NAME_SKILL_REJECT_PROPOSAL,
 )
 from ai_rpg_world.application.skill.exceptions.command.skill_command_exception import (
     SkillCommandException,
@@ -76,9 +79,9 @@ class TestWorldToolExecutorGetHandlers:
     """get_handlers() の振る舞い"""
 
     def test_with_services_returns_twelve_handlers(self, executor_with_world_services):
-        """必要なサービスがあるとき 12 ツールのハンドラを返す"""
+        """必要なサービスがあるとき 17 ツールのハンドラを返す"""
         handlers = executor_with_world_services.get_handlers()
-        assert len(handlers) == 13
+        assert len(handlers) == 17
         assert TOOL_NAME_INSPECT_ITEM in handlers
         assert TOOL_NAME_INSPECT_TARGET in handlers
         assert TOOL_NAME_INTERACT_WORLD_OBJECT in handlers
@@ -92,6 +95,10 @@ class TestWorldToolExecutorGetHandlers:
         assert TOOL_NAME_CHEST_STORE in handlers
         assert TOOL_NAME_CHEST_TAKE in handlers
         assert TOOL_NAME_COMBAT_USE_SKILL in handlers
+        assert TOOL_NAME_SKILL_EQUIP in handlers
+        assert TOOL_NAME_SKILL_ACCEPT_PROPOSAL in handlers
+        assert TOOL_NAME_SKILL_REJECT_PROPOSAL in handlers
+        assert TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE in handlers
 
     def test_with_skill_service_includes_awakened_handler(self, executor_with_skill_tool_service):
         handlers = executor_with_skill_tool_service.get_handlers()

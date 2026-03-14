@@ -6,7 +6,8 @@ from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
 from ai_rpg_world.domain.trade.event.trade_event import (
     TradeOfferedEvent,
     TradeAcceptedEvent,
-    TradeCancelledEvent
+    TradeCancelledEvent,
+    TradeDeclinedEvent,
 )
 from ai_rpg_world.domain.trade.read_model.trade_read_model import TradeReadModel
 from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
@@ -159,5 +160,26 @@ class TradeEventHandler:
 
         self._execute_in_separate_transaction(operation, {
             "handler": "handle_trade_cancelled",
+            "trade_id": event.aggregate_id.value
+        })
+
+    def handle_trade_declined(self, event: TradeDeclinedEvent) -> None:
+        """取引拒否イベントのハンドリング"""
+        def operation():
+            # 既存のReadModelを取得
+            read_model = self._trade_read_model_repository.find_by_id(event.aggregate_id)
+            if not read_model:
+                self._logger.warning(f"ReadModel not found for trade: {event.aggregate_id.value}")
+                return
+
+            # 状態更新（キャンセルと同様に CANCELLED）
+            read_model.status = TradeStatus.CANCELLED.name
+
+            # 保存
+            self._trade_read_model_repository.save(read_model)
+            self._logger.info(f"ReadModel updated for trade declined: {event.aggregate_id.value}")
+
+        self._execute_in_separate_transaction(operation, {
+            "handler": "handle_trade_declined",
             "trade_id": event.aggregate_id.value
         })
