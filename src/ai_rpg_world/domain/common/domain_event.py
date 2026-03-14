@@ -32,7 +32,7 @@ class BaseDomainEvent(Generic[AggregateId, AggregateType]):
 
     @classmethod
     def create(cls, aggregate_id: AggregateId, aggregate_type: AggregateType, **kwargs: Any) -> 'BaseDomainEvent[AggregateId, AggregateType]':
-        event_id = int(uuid.uuid4())
+        event_id = uuid.uuid4().int
         occurred_at = datetime.now()
         return cls(event_id, occurred_at, aggregate_id, aggregate_type, **kwargs)
 

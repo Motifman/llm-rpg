@@ -2,7 +2,10 @@
 
 from typing import Any, Optional, TYPE_CHECKING
 
+from ai_rpg_world.domain.item.exception.item_exception import ItemInstanceIdValidationException
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.sns.exception import UserIdValidationException
+from ai_rpg_world.domain.world.exception.map_exception import WorldObjectIdValidationException
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 if TYPE_CHECKING:
@@ -64,7 +67,7 @@ class ObservationNameResolver:
         try:
             from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
             spec_id = ItemSpecId(item_spec_id_value)
-        except Exception:
+        except (ItemInstanceIdValidationException, TypeError):
             return FALLBACK_ITEM_LABEL
         spec = self._item_spec_repository.find_by_id(spec_id)
         if spec is not None:
@@ -85,7 +88,7 @@ class ObservationNameResolver:
         try:
             from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
             npc_object_id = WorldObjectId(npc_id_value)
-        except Exception:
+        except (WorldObjectIdValidationException, TypeError):
             return FALLBACK_NPC_LABEL
         npc = self._monster_repository.find_by_world_object_id(npc_object_id)
         if npc is None:
@@ -131,7 +134,7 @@ class ObservationNameResolver:
         try:
             from ai_rpg_world.domain.sns.value_object.user_id import UserId
             uid = UserId(user_id) if not isinstance(user_id, UserId) else user_id
-        except Exception:
+        except (UserIdValidationException, TypeError):
             return FALLBACK_SNS_USER_LABEL
         user = self._sns_user_repository.find_by_id(uid)
         if user is None:

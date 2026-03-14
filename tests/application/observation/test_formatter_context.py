@@ -177,4 +177,4 @@ class TestObservationFormatterContextIntegration:
         ctx = formatter._context
         assert isinstance(ctx, ObservationFormatterContext)
         assert ctx.name_resolver is formatter._name_resolver
-        assert ctx.item_repository is formatter._item_repository
+        assert ctx.item_repository is None
