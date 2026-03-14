@@ -29,7 +29,11 @@
 2. tick の実行順序が既存挙動と同じ契約で維持され、world progression の流れが分割前と同じ順番で進む
 3. observation と LLM / reflection scheduling を含む副作用の発火タイミングが既存 runtime path と両立する
 4. stage service の wiring 契約が明示され、並行進行中の `ToolArgumentResolver` 分割に依存せず world simulation だけで閉じて差し替えられる
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 11-01-PLAN.md - facade の前半 stage composition を導入し、environment / movement / harvest を安全に委譲する
+- [ ] 11-02-PLAN.md - active spot 以降の stage と post-tick wiring を抽出し、6-stage facade を完成させる
 
 ### Phase 12: Monster Policy Separation
 **Goal**: monster lifecycle / behavior 周辺の業務ルールが、`WorldSimulationService` 本体から独立した policy / 協調オブジェクトとして読める
