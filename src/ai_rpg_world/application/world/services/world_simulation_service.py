@@ -85,6 +85,24 @@ from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
 from ai_rpg_world.application.world.services.pursuit_continuation_service import (
     PursuitContinuationService,
 )
+from ai_rpg_world.application.world.services.world_simulation_environment_stage_service import (
+    WorldSimulationEnvironmentStageService,
+)
+from ai_rpg_world.application.world.services.world_simulation_harvest_stage_service import (
+    WorldSimulationHarvestStageService,
+)
+from ai_rpg_world.application.world.services.world_simulation_hit_box_stage_service import (
+    WorldSimulationHitBoxStageService,
+)
+from ai_rpg_world.application.world.services.world_simulation_movement_stage_service import (
+    WorldSimulationMovementStageService,
+)
+from ai_rpg_world.application.world.services.world_simulation_monster_behavior_stage_service import (
+    WorldSimulationMonsterBehaviorStageService,
+)
+from ai_rpg_world.application.world.services.world_simulation_monster_lifecycle_stage_service import (
+    WorldSimulationMonsterLifecycleStageService,
+)
 from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
     PursuitFailureReason,
 )
@@ -156,6 +174,48 @@ class WorldSimulationApplicationService:
         self._pursuit_continuation_service = pursuit_continuation_service
         self._harvest_command_service = harvest_command_service
         self._logger = logging.getLogger(self.__class__.__name__)
+        self._environment_stage = WorldSimulationEnvironmentStageService(
+            weather_zone_repository=self._weather_zone_repository,
+            weather_config_service=self._weather_config_service,
+            logger=self._logger,
+        )
+        self._movement_stage = WorldSimulationMovementStageService(
+            player_status_repository=self._player_status_repository,
+            physical_map_repository=self._physical_map_repository,
+            movement_service_getter=lambda: self._movement_service,
+            pursuit_continuation_service_getter=lambda: self._pursuit_continuation_service,
+        )
+        self._harvest_stage = WorldSimulationHarvestStageService(
+            harvest_command_service_getter=lambda: self._harvest_command_service,
+            logger=self._logger,
+        )
+        self._monster_lifecycle_stage = WorldSimulationMonsterLifecycleStageService(
+            world_time_config_service=self._world_time_config_service,
+            has_spawn_slot_support=lambda: (
+                self._spawn_table_repository is not None
+                and self._monster_template_repository is not None
+            ),
+            has_hunger_migration_support=lambda: (
+                self._connected_spots_provider is not None
+                and self._map_transition_service is not None
+                and self._loot_table_repository is not None
+            ),
+            process_spawn_and_respawn_by_slots=self._process_spawn_and_respawn_by_slots,
+            process_respawn_legacy=self._process_respawn_legacy,
+            process_hunger_migration_for_spot=self._process_hunger_migration_for_spot,
+        )
+        self._monster_behavior_stage = WorldSimulationMonsterBehaviorStageService(
+            monster_repository=self._monster_repository,
+            world_time_config_service=self._world_time_config_service,
+            unit_of_work=self._unit_of_work,
+            logger=self._logger,
+            actors_sorted_by_distance_to_players=self._actors_sorted_by_distance_to_players,
+            process_single_actor_behavior=self._process_single_actor_behavior,
+        )
+        self._hit_box_stage = WorldSimulationHitBoxStageService(
+            physical_map_repository=self._physical_map_repository,
+            update_hit_boxes=self._update_hit_boxes,
+        )
 
     def tick(self) -> WorldTick:
         """1ティック進め、世界の全ての要素を更新する"""
@@ -170,27 +230,19 @@ class WorldSimulationApplicationService:
             current_tick = self._time_provider.advance_tick()
             
             # 2. 天候の更新（長周期）
-            # deferされたsaveの影響でリポジトリから取得しても更新前の場合があるため、
-            # 最新の状態を辞書で保持して同期に利用する
-            latest_weather = self._update_weather_if_needed(current_tick)
-            
-            # 3. マップを順番に処理
             maps = self._physical_map_repository.find_all()
-            
+            self._environment_stage.run(current_tick, maps)
+
             # プレイヤーIDと所属マップの対応を保持（環境効果の一括適用のため）
             player_map_map: Dict[PlayerId, PhysicalMapAggregate] = {}
-            
-            for physical_map in maps:
-                # 3.1 天候の同期
-                self._sync_weather_to_map(physical_map, latest_weather)
 
             # 3.1.5 プレイヤーの継続移動を進める
             if self._movement_service is not None:
-                self._advance_pending_player_movements(current_tick)
+                self._movement_stage.run(current_tick)
                 maps = self._physical_map_repository.find_all()
 
             if self._harvest_command_service is not None:
-                self._complete_due_harvests(maps, current_tick)
+                self._harvest_stage.run(maps, current_tick)
                 maps = self._physical_map_repository.find_all()
 
             # 3.2 プレイヤーIDの収集
@@ -206,101 +258,18 @@ class WorldSimulationApplicationService:
             # アクティブなスポット（プレイヤーが1人以上いるスポット）のみ行動更新・HitBox・save を行う
             active_spot_ids: Set[SpotId] = {pm.spot_id for pm in player_map_map.values()}
 
-            # 3.5 スポーン・リスポーン判定（スロットベース or 従来のDEAD走査）
-            ticks_per_day = self._world_time_config_service.get_ticks_per_day()
-            time_of_day = time_of_day_from_tick(current_tick.value, ticks_per_day)
-            if self._spawn_table_repository and self._monster_template_repository:
-                self._process_spawn_and_respawn_by_slots(
-                    active_spot_ids=active_spot_ids,
-                    current_tick=current_tick,
-                    time_of_day=time_of_day,
-                )
-            else:
-                self._process_respawn_legacy(active_spot_ids, current_tick, time_of_day)
+            self._monster_lifecycle_stage.run(maps, active_spot_ids, current_tick)
+            self._monster_behavior_stage.run(maps, active_spot_ids, current_tick)
+            self._hit_box_stage.run(maps, active_spot_ids, current_tick)
 
-            # 3.6 飢餓時のスポット転移（移住）：飢餓 ≥ 閾値かつ現在スポットに餌がなければ接続スポットへ 1 体のみ移住
-            if (
-                self._connected_spots_provider is not None
-                and self._map_transition_service is not None
-                and self._loot_table_repository is not None
-            ):
-                for physical_map in maps:
-                    if physical_map.spot_id not in active_spot_ids:
-                        continue
-                    self._process_hunger_migration_for_spot(
-                        physical_map, current_tick, active_spot_ids
-                    )
+        self._run_post_tick_hooks(current_tick)
+        return current_tick
 
-            # 4. 各マップのアクターの行動更新（アクティブなスポットのみ；同一スポット内でプレイヤーとの距離が近い順に処理）
-            for physical_map in maps:
-                if physical_map.spot_id not in active_spot_ids:
-                    continue
-                for actor in self._actors_sorted_by_distance_to_players(physical_map):
-                    # Busy状態のアクターはスキップ
-                    if actor.is_busy(current_tick):
-                        continue
-                    # 活動時間帯でない自律アクターは行動しない（WAIT 相当）
-                    if isinstance(actor.component, AutonomousBehaviorComponent):
-                        ticks_per_day = self._world_time_config_service.get_ticks_per_day()
-                        time_of_day = time_of_day_from_tick(current_tick.value, ticks_per_day)
-                        if not is_active_at_time(actor.component.active_time, time_of_day):
-                            continue
-                        # Phase 6: 飢餓ティックと飢餓死判定（Monster 集約の飢餓状態を参照）
-                        monster = self._monster_repository.find_by_world_object_id(actor.object_id)
-                        if monster and monster.tick_hunger(current_tick):
-                            try:
-                                monster.starve(current_tick)
-                                self._monster_repository.save(monster)
-                                self._unit_of_work.process_sync_events()
-                            except DomainException as e:
-                                self._logger.warning(
-                                    "Starvation skipped for actor %s: %s",
-                                    actor.object_id,
-                                    str(e),
-                                )
-                            continue
-                        # 寿命判定（経過ティック ≥ max_age_ticks で NATURAL 死亡）
-                        monster = self._monster_repository.find_by_world_object_id(actor.object_id)
-                        if monster and monster.die_from_old_age(current_tick):
-                            try:
-                                self._monster_repository.save(monster)
-                                self._unit_of_work.process_sync_events()
-                            except DomainException as e:
-                                self._logger.warning(
-                                    "Old-age death skipped for actor %s: %s",
-                                    actor.object_id,
-                                    str(e),
-                                )
-                            continue
-                    try:
-                        self._process_single_actor_behavior(actor, physical_map, current_tick)
-                    except DomainException as e:
-                        # ドメインルール違反（移動不可など）は警告ログにとどめる
-                        self._logger.warning(
-                            f"Behavior skipped for actor {actor.object_id} due to domain rule: {str(e)}"
-                        )
-                    except ApplicationException:
-                        raise
-                    except Exception as e:
-                        # その他予期せぬエラー
-                        self._logger.error(
-                            f"Failed to update actor {actor.object_id} in map {physical_map.spot_id}: {str(e)}",
-                            exc_info=True
-                        )
-
-                # 4.5 HitBoxの更新（移動・衝突判定）
-                # 同期イベントハンドラがマップを更新している可能性があるため、最新のマップを再取得してから HitBox 更新・保存する
-                latest_map = self._physical_map_repository.find_by_spot_id(physical_map.spot_id)
-                if latest_map is not None:
-                    physical_map = latest_map
-                self._update_hit_boxes(physical_map, current_tick)
-                self._physical_map_repository.save(physical_map)
-
+    def _run_post_tick_hooks(self, current_tick: WorldTick) -> None:
         if self._llm_turn_trigger is not None:
             self._llm_turn_trigger.run_scheduled_turns()
         if self._reflection_runner is not None:
             self._reflection_runner.run_after_tick(current_tick)
-        return current_tick
 
     def _complete_due_harvests(
         self,
