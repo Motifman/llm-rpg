@@ -4,6 +4,7 @@ from typing import List, Dict
 from unittest.mock import patch
 
 from ai_rpg_world.application.world.services.movement_service import MovementApplicationService
+from ai_rpg_world.application.world.services.set_destination_service import SetDestinationService
 from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
 from ai_rpg_world.application.world.contracts.commands import (
     CancelMovementCommand,
@@ -127,7 +128,14 @@ class TestMovementApplicationService:
         composition = EventHandlerComposition(gateway_handler=gateway_handler)
         composition.register_for_profile(event_publisher, EventHandlerProfile.MOVEMENT_ONLY)
 
+        set_destination_service = SetDestinationService(
+            player_status_repository=player_status_repo,
+            physical_map_repository=physical_map_repo,
+            connected_spots_provider=connected_spots_provider,
+            global_pathfinding_service=global_pathfinding_service,
+        )
         service = MovementApplicationService(
+            set_destination_service=set_destination_service,
             player_status_repository=player_status_repo,
             player_profile_repository=player_profile_repo,
             physical_map_repository=physical_map_repo,
@@ -157,7 +165,14 @@ class TestMovementApplicationService:
         service, world_query_service, status_repo, profile_repo, phys_repo, spot_repo, uow, time_provider, event_publisher = setup_service
         policy_repo = InMemoryTransitionPolicyRepository()
         evaluator = TransitionConditionEvaluator()
+        set_destination_service = SetDestinationService(
+            player_status_repository=status_repo,
+            physical_map_repository=phys_repo,
+            connected_spots_provider=service._connected_spots_provider,
+            global_pathfinding_service=service._global_pathfinding_service,
+        )
         service_with_policy = MovementApplicationService(
+            set_destination_service=set_destination_service,
             player_status_repository=status_repo,
             player_profile_repository=profile_repo,
             physical_map_repository=phys_repo,
