@@ -18,6 +18,7 @@ from ai_rpg_world.domain.world.value_object.movement_capability import MovementC
 from ai_rpg_world.domain.world.service.global_pathfinding_service import GlobalPathfindingService
 from ai_rpg_world.domain.world.service.passable_adjacent_finder import PassableAdjacentFinder
 from ai_rpg_world.domain.world.exception.map_exception import (
+    LocationAreaNotFoundException,
     ObjectNotFoundException,
     InvalidPathRequestException,
     PathNotFoundException,
@@ -120,7 +121,7 @@ class SetDestinationService:
             location_area_id = LocationAreaId(command.target_location_area_id)
             try:
                 location_area = target_physical_map.get_location_area(location_area_id)
-            except Exception:
+            except LocationAreaNotFoundException:
                 raise MovementInvalidException(
                     f"Location area {command.target_location_area_id} not found in spot {command.target_spot_id}",
                     command.player_id,
@@ -295,7 +296,7 @@ class SetDestinationService:
                 world_object_id=actor_id,
                 capability=capability,
             )
-        except InvalidPathRequestException:
+        except (InvalidPathRequestException, PathNotFoundException):
             temp_goal, path = None, None
 
         if not path or temp_goal is None:
