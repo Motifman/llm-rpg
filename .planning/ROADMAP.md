@@ -16,7 +16,7 @@
 |-------|----------------|--------|-----------|
 | 11. Tick Facade Extraction | 2/2 | Complete | 2026-03-14 |
 | 12. Monster Policy Separation | 2/2 | Complete | 2026-03-14 |
-| 13. Simulation Regression Harness | 0/0 | Not started | - |
+| 13. Simulation Regression Harness | 0/2 | Planned | - |
 
 ## Phase Details
 
@@ -59,7 +59,11 @@ Plans:
 2. stage service / policy ごとの回帰テストを、巨大 fixture への過度な依存なしに追加できる
 3. tick 順序保証と wiring 契約に関する退行点が、統合テストと小さな単位テストの両方で検知できる
 4. 今後の world simulation 分割作業で、どこを壊したかを phase 完了時点で追跡できるテスト境界が揃う
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 13-01-PLAN.md - facade regression を契約別 integration harness に切り分け、builder/helper を薄く整える
+- [ ] 13-02-PLAN.md - movement / monster lifecycle / monster behavior stage の guard regression を専用テストで追加する
 
 ## Coverage
 
@@ -76,7 +80,7 @@ Plans:
 
 ## Next Step
 
-- `$gsd-discuss-phase 13` - simulation regression harness の文脈を固める
+- `$gsd-execute-phase 13` - simulation regression harness の plans を順に実行する
 
 ---
 *Last updated: 2026-03-14 for milestone v1.2 World Simulation Service Refactoring*
