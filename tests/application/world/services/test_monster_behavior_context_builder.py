@@ -113,3 +113,277 @@ class TestMonsterBehaviorContextBuilder:
         assert isinstance(context, GrowthContext)
         assert context.effective_flee_threshold == 0.3
         assert context.allow_chase is False
+
+    def test_build_skill_context_returns_none_when_monster_repository_is_none(self):
+        """monster_repository が None の場合、build_skill_context は None を返す"""
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+
+        assert builder.build_skill_context(actor, WorldTick(0)) is None
+
+    def test_build_growth_context_returns_none_when_monster_repository_is_none(self):
+        """monster_repository が None の場合、build_growth_context は None を返す"""
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+
+        assert builder.build_growth_context(actor, WorldTick(0)) is None
+
+    def test_build_skill_context_returns_none_when_monster_repository_is_none(self):
+        """monster_repository が None のとき build_skill_context は None を返す"""
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+        assert builder.build_skill_context(actor, WorldTick(0)) is None
+
+    def test_build_growth_context_returns_none_when_monster_repository_is_none(self):
+        """monster_repository が None のとき build_growth_context は None を返す"""
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+        assert builder.build_growth_context(actor, WorldTick(0)) is None
+
+    def test_build_skill_context_returns_none_when_monster_repository_is_none(self):
+        """monster_repository=None のとき build_skill_context は None を返す"""
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+        assert builder.build_skill_context(actor, WorldTick(0)) is None
+
+    def test_build_growth_context_returns_none_when_monster_repository_is_none(self):
+        """monster_repository=None のとき build_growth_context は None を返す"""
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+        assert builder.build_growth_context(actor, WorldTick(0)) is None
+
+    def test_build_skill_context_returns_none_when_monster_repository_is_none(self):
+        """monster_repository が None のとき build_skill_context は None を返す"""
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+        assert builder.build_skill_context(actor, WorldTick(0)) is None
+
+    def test_build_growth_context_returns_none_when_monster_repository_is_none(self):
+        """monster_repository が None のとき build_growth_context は None を返す"""
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+        assert builder.build_growth_context(actor, WorldTick(0)) is None
+
+    def test_build_skill_context_returns_none_when_monster_repository_is_none(self):
+        """monster_repository が None のとき build_skill_context は None を返す"""
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+        assert builder.build_skill_context(actor, WorldTick(0)) is None
+
+    def test_build_growth_context_returns_none_when_monster_repository_is_none(self):
+        """monster_repository が None のとき build_growth_context は None を返す"""
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+        assert builder.build_growth_context(actor, WorldTick(0)) is None
+
+    def test_build_skill_context_returns_none_when_monster_repository_is_none(self):
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+        assert builder.build_skill_context(actor, WorldTick(0)) is None
+
+    def test_build_growth_context_returns_none_when_monster_repository_is_none(self):
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+        assert builder.build_growth_context(actor, WorldTick(0)) is None
+
+    def test_build_skill_context_returns_none_when_monster_repository_is_none(self):
+        """monster_repository が None の場合、build_skill_context は None を返す"""
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+
+        assert builder.build_skill_context(actor, WorldTick(0)) is None
+
+    def test_build_growth_context_returns_none_when_monster_repository_is_none(self):
+        """monster_repository が None の場合、build_growth_context は None を返す"""
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+
+        assert builder.build_growth_context(actor, WorldTick(0)) is None
+
+    def test_build_skill_context_returns_none_when_monster_repository_is_none(self):
+        """monster_repository が None のとき build_skill_context は None を返す"""
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+
+        assert builder.build_skill_context(actor, WorldTick(0)) is None
+
+    def test_build_growth_context_returns_none_when_monster_repository_is_none(self):
+        """monster_repository が None のとき build_growth_context は None を返す"""
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+
+        assert builder.build_growth_context(actor, WorldTick(0)) is None
+
+    def test_build_skill_context_returns_none_when_monster_repository_is_none(self):
+        """monster_repository が None のとき build_skill_context は None を返す"""
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+
+        assert builder.build_skill_context(actor, WorldTick(0)) is None
+
+    def test_build_growth_context_returns_none_when_monster_repository_is_none(self):
+        """monster_repository が None のとき build_growth_context は None を返す"""
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+
+        assert builder.build_growth_context(actor, WorldTick(0)) is None
+
+    def test_build_skill_context_returns_none_when_monster_repository_is_none(self):
+        """monster_repository が None のとき build_skill_context は None を返す"""
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+
+        assert builder.build_skill_context(actor, WorldTick(0)) is None
+
+    def test_build_growth_context_returns_none_when_monster_repository_is_none(self):
+        """monster_repository が None のとき build_growth_context は None を返す"""
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+
+        assert builder.build_growth_context(actor, WorldTick(0)) is None
+
+    def test_build_skill_context_returns_none_when_monster_repository_is_none(self):
+        """monster_repository が None の場合、build_skill_context は None を返す"""
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+
+        assert builder.build_skill_context(actor, WorldTick(0)) is None
+
+    def test_build_growth_context_returns_none_when_monster_repository_is_none(self):
+        """monster_repository が None の場合、build_growth_context は None を返す"""
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+
+        assert builder.build_growth_context(actor, WorldTick(0)) is None
+
+    def test_build_skill_context_returns_none_when_monster_repository_is_none(self):
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+
+        assert builder.build_skill_context(actor, WorldTick(0)) is None
+
+    def test_build_growth_context_returns_none_when_monster_repository_is_none(self):
+        builder = MonsterBehaviorContextBuilder(monster_repository=None)
+        actor = WorldObject(
+            WorldObjectId(1),
+            Coordinate(0, 0),
+            ObjectTypeEnum.NPC,
+            component=AutonomousBehaviorComponent(),
+        )
+
+        assert builder.build_growth_context(actor, WorldTick(0)) is None
