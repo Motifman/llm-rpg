@@ -19,7 +19,7 @@ from ai_rpg_world.application.llm.services.memory_query_executor import (
     MemoryQueryExecutor,
 )
 from ai_rpg_world.application.llm.services.subagent_runner import SubagentRunner
-from ai_rpg_world.application.llm.services.tool_command_mapper import ToolCommandMapper
+from tests.application.llm.conftest import _create_tool_command_mapper
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_QUERY,
     TOOL_NAME_SUBAGENT,
@@ -97,7 +97,7 @@ def mapper(
     todo_store,
     working_memory_store,
 ):
-    return ToolCommandMapper(
+    return _create_tool_command_mapper(
         movement_service=movement_service,
         memory_query_executor=memory_query_executor,
         subagent_runner=subagent_runner,
@@ -132,7 +132,7 @@ class TestMemoryQueryTool:
 
     def test_execute_memory_query_without_executor_returns_unknown_tool(self, movement_service):
         """memory_query_executor なしのとき unknown tool"""
-        mapper = ToolCommandMapper(movement_service=movement_service)
+        mapper = _create_tool_command_mapper(movement_service=movement_service)
         result = mapper.execute(
             1,
             TOOL_NAME_MEMORY_QUERY,
@@ -280,7 +280,7 @@ class TestMemoryQueryExceptionPropagation:
         mock_executor.execute.side_effect = DslParseException(
             "Unsupported DSL form", expr="invalid"
         )
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=movement_service,
             memory_query_executor=mock_executor,
         )
@@ -303,7 +303,7 @@ class TestMemoryQueryExceptionPropagation:
             "output_mode must be one of text, count, preview",
             output_mode="invalid",
         )
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=movement_service,
             memory_query_executor=mock_executor,
         )
@@ -335,7 +335,7 @@ class TestSubagentExceptionPropagation:
             memory_query_executor=memory_query_executor,
             invoke_text=failing_invoke,
         )
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=movement_service,
             memory_query_executor=memory_query_executor,
             subagent_runner=runner,
@@ -364,7 +364,7 @@ class TestTodoExceptionPropagation:
         """todo_store.add が TypeError を投げたとき _exception_result でラップ"""
         store = MagicMock()
         store.add.side_effect = TypeError("player_id must be PlayerId")
-        mapper = ToolCommandMapper(
+        mapper = _create_tool_command_mapper(
             movement_service=movement_service,
             memory_query_executor=memory_query_executor,
             subagent_runner=subagent_runner,
