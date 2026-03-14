@@ -1336,8 +1336,9 @@ class TestPhysicalMapAggregate:
             aggregate.clear_events()
             item_id = ItemInstanceId.create(100)
             player_id_value = 999
+            current_tick = WorldTick(10)
 
-            aggregate.store_item_in_chest(actor_id, chest_id, item_id, player_id_value)
+            aggregate.store_item_in_chest(actor_id, chest_id, item_id, player_id_value, current_tick)
 
             assert chest.component.has_item(item_id) is True
             events = aggregate.get_events()
@@ -1363,7 +1364,9 @@ class TestPhysicalMapAggregate:
             item_id = ItemInstanceId.create(100)
 
             with pytest.raises(ChestClosedException):
-                aggregate.store_item_in_chest(actor_id, chest_id, item_id, 1)
+                aggregate.store_item_in_chest(
+                    actor_id, chest_id, item_id, 1, WorldTick(10)
+                )
 
         def test_store_item_in_chest_raises_when_not_chest(self, aggregate):
             actor_id = WorldObjectId(1)
@@ -1381,7 +1384,9 @@ class TestPhysicalMapAggregate:
             item_id = ItemInstanceId.create(100)
 
             with pytest.raises(NotAChestException):
-                aggregate.store_item_in_chest(actor_id, target_id, item_id, 1)
+                aggregate.store_item_in_chest(
+                    actor_id, target_id, item_id, 1, WorldTick(10)
+                )
 
         def test_store_item_in_chest_raises_when_too_far(self, aggregate):
             actor_id = WorldObjectId(1)
@@ -1399,7 +1404,31 @@ class TestPhysicalMapAggregate:
             item_id = ItemInstanceId.create(100)
 
             with pytest.raises(InteractionOutOfRangeException):
-                aggregate.store_item_in_chest(actor_id, chest_id, item_id, 1)
+                aggregate.store_item_in_chest(
+                    actor_id, chest_id, item_id, 1, WorldTick(10)
+                )
+
+        def test_store_item_in_chest_raises_when_busy(self, aggregate):
+            """アクターがビジー状態のときは ActorBusyException を投げること"""
+            actor_id = WorldObjectId(1)
+            chest_id = WorldObjectId(2)
+            actor = WorldObject(
+                actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(direction=DirectionEnum.SOUTH),
+                busy_until=WorldTick(20),
+            )
+            chest = WorldObject(
+                chest_id, Coordinate(0, 1, 0), ObjectTypeEnum.CHEST,
+                component=ChestComponent(is_open=True),
+            )
+            aggregate.add_object(actor)
+            aggregate.add_object(chest)
+            item_id = ItemInstanceId.create(100)
+
+            with pytest.raises(ActorBusyException):
+                aggregate.store_item_in_chest(
+                    actor_id, chest_id, item_id, 1, WorldTick(15)
+                )
 
         def test_take_item_from_chest_success(self, aggregate):
             actor_id = WorldObjectId(1)
@@ -1417,8 +1446,11 @@ class TestPhysicalMapAggregate:
             aggregate.add_object(chest)
             aggregate.clear_events()
             player_id_value = 1
+            current_tick = WorldTick(10)
 
-            aggregate.take_item_from_chest(actor_id, chest_id, item_id, player_id_value)
+            aggregate.take_item_from_chest(
+                actor_id, chest_id, item_id, player_id_value, current_tick
+            )
 
             assert chest.component.has_item(item_id) is False
             events = aggregate.get_events()
@@ -1443,7 +1475,9 @@ class TestPhysicalMapAggregate:
             item_id = ItemInstanceId.create(999)
 
             with pytest.raises(ItemNotInChestException):
-                aggregate.take_item_from_chest(actor_id, chest_id, item_id, 1)
+                aggregate.take_item_from_chest(
+                    actor_id, chest_id, item_id, 1, WorldTick(10)
+                )
 
         def test_take_item_from_chest_raises_when_closed(self, aggregate):
             actor_id = WorldObjectId(1)
@@ -1461,4 +1495,50 @@ class TestPhysicalMapAggregate:
             aggregate.add_object(chest)
 
             with pytest.raises(ChestClosedException):
-                aggregate.take_item_from_chest(actor_id, chest_id, item_id, 1)
+                aggregate.take_item_from_chest(
+                    actor_id, chest_id, item_id, 1, WorldTick(10)
+                )
+
+        def test_take_item_from_chest_raises_when_busy(self, aggregate):
+            """アクターがビジー状態のときは ActorBusyException を投げること"""
+            actor_id = WorldObjectId(1)
+            chest_id = WorldObjectId(2)
+            item_id = ItemInstanceId.create(50)
+            actor = WorldObject(
+                actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(direction=DirectionEnum.SOUTH),
+                busy_until=WorldTick(20),
+            )
+            chest = WorldObject(
+                chest_id, Coordinate(0, 1, 0), ObjectTypeEnum.CHEST,
+                component=ChestComponent(is_open=True, item_ids=[item_id]),
+            )
+            aggregate.add_object(actor)
+            aggregate.add_object(chest)
+
+            with pytest.raises(ActorBusyException):
+                aggregate.take_item_from_chest(
+                    actor_id, chest_id, item_id, 1, WorldTick(15)
+                )
+
+        def test_take_item_from_chest_raises_when_busy(self, aggregate):
+            """アクターがビジー状態のときは ActorBusyException を投げること"""
+            actor_id = WorldObjectId(1)
+            chest_id = WorldObjectId(2)
+            item_id = ItemInstanceId.create(50)
+            actor = WorldObject(
+                actor_id, Coordinate(0, 0, 0), ObjectTypeEnum.PLAYER,
+                component=ActorComponent(direction=DirectionEnum.SOUTH),
+                busy_until=WorldTick(20),
+            )
+            chest = WorldObject(
+                chest_id, Coordinate(0, 1, 0), ObjectTypeEnum.CHEST,
+                component=ChestComponent(is_open=True, item_ids=[item_id]),
+            )
+            aggregate.add_object(actor)
+            aggregate.add_object(chest)
+
+            with pytest.raises(ActorBusyException):
+                aggregate.take_item_from_chest(
+                    actor_id, chest_id, item_id, 1, WorldTick(15)
+                )
