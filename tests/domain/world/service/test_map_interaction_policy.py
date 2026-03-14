@@ -9,7 +9,10 @@ from ai_rpg_world.domain.world.entity.world_object_component import (
     ActorComponent,
     InteractableComponent,
     ChestComponent,
+    PlaceableComponent,
+    StaticPlaceableInnerComponent,
 )
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, DirectionEnum
 from ai_rpg_world.domain.world.exception.map_exception import (
     ActorBusyException,
@@ -241,3 +244,28 @@ class TestValidateCanInteract:
 
             # When & Then
             MapInteractionPolicy.validate_can_interact(actor, target, current_tick)
+
+        def test_raises_when_component_has_no_interaction_type(self, current_tick):
+            # Given: コンポーネントはあるが interaction_type が None（PlaceableComponent + StaticPlaceableInnerComponent）
+            actor = WorldObject(
+                WorldObjectId(1),
+                Coordinate(0, 0, 0),
+                ObjectTypeEnum.PLAYER,
+                component=ActorComponent(direction=DirectionEnum.SOUTH),
+            )
+            target = WorldObject(
+                WorldObjectId(2),
+                Coordinate(0, 1, 0),
+                ObjectTypeEnum.SIGN,
+                component=PlaceableComponent(
+                    ItemSpecId(1),
+                    StaticPlaceableInnerComponent(),
+                ),
+            )
+
+            # When & Then: interaction_type が None のため NotInteractableException
+            with pytest.raises(NotInteractableException) as exc_info:
+                MapInteractionPolicy.validate_can_interact(actor, target, current_tick)
+            assert "interactable" in str(exc_info.value).lower() or "not" in str(
+                exc_info.value
+            ).lower()

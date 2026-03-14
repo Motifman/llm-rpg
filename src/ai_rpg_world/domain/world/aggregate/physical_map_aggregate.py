@@ -35,7 +35,7 @@ from ai_rpg_world.domain.world.service.map_geometry_service import MapGeometrySe
 from ai_rpg_world.domain.world.service.map_trigger_engine import MapTriggerEngine
 from ai_rpg_world.domain.world.service.map_interaction_policy import MapInteractionPolicy
 from ai_rpg_world.domain.world.service.chest_interaction_policy import ChestInteractionPolicy
-from ai_rpg_world.domain.world.service.harvest_session_policy import HarvestSessionPolicy
+from ai_rpg_world.domain.world.service.harvest_session_domain_service import HarvestSessionDomainService
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
 from ai_rpg_world.domain.world.event.map_events import (
@@ -89,7 +89,6 @@ from ai_rpg_world.domain.world.exception.map_exception import (
     InvalidAreaTraitException,
 )
 from ai_rpg_world.domain.world.exception.harvest_exception import (
-    NotHarvestableException,
     ResourceExhaustedException,
     HarvestInProgressException,
     HarvestNotStartedException
@@ -775,71 +774,23 @@ class PhysicalMapAggregate(AggregateRoot):
         """資源の採取を開始する"""
         actor = self.get_actor(actor_id)
         target = self.get_object(target_id)
-
-        HarvestSessionPolicy.validate_can_start_harvest(actor, target, current_tick)
-
-        # コンポーネントの採取開始（状態更新と終了時間の取得）
-        finish_tick = target.component.start_harvest(actor_id, current_tick)
-
-        # 4. アクターをビジー状態にする
-        actor.set_busy(finish_tick)
-
-        # 5. イベント発行
-        self.add_event(HarvestStartedEvent.create(
-            aggregate_id=target_id,
-            aggregate_type="WorldObject",
-            actor_id=actor_id,
-            target_id=target_id,
-            finish_tick=finish_tick
-        ))
+        event = HarvestSessionDomainService.start_harvest(actor, target, current_tick)
+        self.add_event(event)
 
     def finish_resource_harvest(self, actor_id: WorldObjectId, target_id: WorldObjectId, current_tick: WorldTick):
         """資源の採取を完了させる"""
         actor = self.get_actor(actor_id)
         target = self.get_object(target_id)
-
-        if not isinstance(target.component, HarvestableComponent):
-            raise NotHarvestableException(f"Object {target_id} is not harvestable")
-
-        # コンポーネントの採取完了処理
-        loot_table_id = target.component.loot_table_id
-        success = target.component.finish_harvest(actor_id, current_tick)
-
-        if success:
-            # アクターのビジー状態を解除（念のため、現在のティックに合わせる）
-            actor.clear_busy()
-
-            # イベント発行
-            self.add_event(HarvestCompletedEvent.create(
-                aggregate_id=target_id,
-                aggregate_type="WorldObject",
-                actor_id=actor_id,
-                target_id=target_id,
-                loot_table_id=loot_table_id
-            ))
+        event = HarvestSessionDomainService.finish_harvest(actor, target, current_tick)
+        if event:
+            self.add_event(event)
 
     def cancel_resource_harvest(self, actor_id: WorldObjectId, target_id: WorldObjectId, reason: str = "cancelled"):
         """資源の採取を中断する"""
         actor = self.get_actor(actor_id)
         target = self.get_object(target_id)
-
-        if not isinstance(target.component, HarvestableComponent):
-            raise NotHarvestableException(f"Object {target_id} is not harvestable")
-
-        # コンポーネントの採取中断処理
-        target.component.cancel_harvest(actor_id)
-
-        # アクターのビジー状態を解除
-        actor.clear_busy()
-
-        # イベント発行
-        self.add_event(HarvestCancelledEvent.create(
-            aggregate_id=target_id,
-            aggregate_type="WorldObject",
-            actor_id=actor_id,
-            target_id=target_id,
-            reason=reason
-        ))
+        event = HarvestSessionDomainService.cancel_harvest(actor, target, reason)
+        self.add_event(event)
 
     def check_and_activate_trigger(self, coordinate: Coordinate, object_id: Optional[WorldObjectId] = None) -> Optional[MapTrigger]:
         """

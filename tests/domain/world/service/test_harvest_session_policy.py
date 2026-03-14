@@ -304,3 +304,69 @@ class TestValidateCanStartHarvest:
             assert "harvestable" in str(exc_info.value).lower() or "not" in str(
                 exc_info.value
             ).lower()
+
+
+class TestValidateIsHarvestable:
+    """validate_is_harvestable のテスト（finish/cancel 用共通検証）"""
+
+    class TestSuccessCases:
+        def test_harvestable_component_passes(self):
+            # Given: HarvestableComponent を持つ target
+            target = WorldObject(
+                WorldObjectId(200),
+                Coordinate(1, 0, 0),
+                ObjectTypeEnum.RESOURCE,
+                component=HarvestableComponent(loot_table_id=1),
+            )
+
+            # When & Then: 例外なしで通過
+            HarvestSessionPolicy.validate_is_harvestable(target)
+
+        def test_harvestable_with_all_params_passes(self):
+            # Given: 全パラメータ指定の HarvestableComponent
+            target = WorldObject(
+                WorldObjectId(200),
+                Coordinate(1, 0, 0),
+                ObjectTypeEnum.RESOURCE,
+                component=HarvestableComponent(
+                    loot_table_id=1,
+                    max_quantity=5,
+                    harvest_duration=10,
+                ),
+            )
+
+            # When & Then
+            HarvestSessionPolicy.validate_is_harvestable(target)
+
+    class TestExceptionCases:
+        def test_raises_when_component_none(self):
+            # Given: component が None
+            target = WorldObject(
+                WorldObjectId(200),
+                Coordinate(1, 0, 0),
+                ObjectTypeEnum.RESOURCE,
+                component=None,
+            )
+
+            # When & Then
+            with pytest.raises(NotHarvestableException) as exc_info:
+                HarvestSessionPolicy.validate_is_harvestable(target)
+            assert "harvestable" in str(exc_info.value).lower() or "not" in str(
+                exc_info.value
+            ).lower()
+
+        def test_raises_when_component_not_harvestable(self):
+            # Given: ActorComponent などの HarvestableComponent でないコンポーネント
+            target = WorldObject(
+                WorldObjectId(200),
+                Coordinate(1, 0, 0),
+                ObjectTypeEnum.PLAYER,
+                component=ActorComponent(direction=DirectionEnum.EAST),
+            )
+
+            # When & Then
+            with pytest.raises(NotHarvestableException) as exc_info:
+                HarvestSessionPolicy.validate_is_harvestable(target)
+            assert "harvestable" in str(exc_info.value).lower() or "not" in str(
+                exc_info.value
+            ).lower()
