@@ -1155,6 +1155,8 @@ class TestEventToEpisodeMemoryE2E:
         service = runtime.world_simulation_service
         assert service is not None
         assert service._pursuit_continuation_service is pursuit_continuation_service
+        assert service._monster_feed_query_service is not None
+        assert service._environment_effect_service is not None
 
         with patch.object(trigger, "schedule_turn", wraps=trigger.schedule_turn) as schedule_spy:
             with uow:
