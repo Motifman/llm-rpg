@@ -14,7 +14,7 @@
 | **Phase 1** | メモリストア選択の composition root 外だし | ✅ 完了 |
 | **Phase 2** | composition root の factory 関数分割 | ✅ 完了 |
 | **Phase 3** | ToolCommandMapper の handler map を wiring へ移行 | ✅ 完了 |
-| **Phase 4** | ToolArgumentResolver のツール別分割 | 🔲 未着手（ロードマップ 2.1） |
+| **Phase 4** | ToolArgumentResolver のツール別分割 | ✅ 完了 |
 | **Phase 5** | ToolDefinitions のカテゴリ別分割 | 🔲 未着手（ロードマップ 3.7） |
 | **Phase 6** | UiContextBuilder のラベル生成と描画分離 | 🔲 未着手（ロードマップ 3.8） |
 
@@ -64,13 +64,21 @@
 
 ---
 
-### 3.3 Phase 4: ToolArgumentResolver のツール別分割
+### 3.3 完了済み: Phase 4（ToolArgumentResolver のツール別分割）
 
-**親ロードマップ**: 2.1
-
-**目的**: `DefaultToolArgumentResolver` を movement / world / combat / quest 等の小さな resolver に分割し、`DefaultToolArgumentResolver` は tool_name → resolver の委譲に留める。
-
-**wiring との関係**: wiring は `DefaultToolArgumentResolver` をそのまま利用。分割後もインターフェースが変わらなければ wiring 変更は不要。
+- **実施日**: 2026-03-14
+- **親ロードマップ**: 2.1
+- **目的**: `DefaultToolArgumentResolver` を movement / world / combat / quest / guild_shop_trade の小さな resolver に分割し、`DefaultToolArgumentResolver` は tool_name → resolver の委譲に留める。
+- **成果物**:
+  - `_resolver_helpers.py` - `require_target`, `require_target_type`, `safe_int`, `resolve_direction_from_context` を純関数として提供。`ToolArgumentResolutionException` を定義
+  - `quest_objective_target_resolver.py` - クエスト目標の target_name → target_id 解決を担当
+  - `_argument_resolvers/` パッケージ - MovementArgumentResolver, WorldArgumentResolver, CombatSkillArgumentResolver, QuestArgumentResolver, GuildShopTradeArgumentResolver
+  - `DefaultToolArgumentResolver` は各サブリゾルバを順に試し、最初に返された結果を使用
+- **テスト**:
+  - `tests/application/llm/test_tool_argument_resolver.py` - 71 件（統合テスト、既存パターン維持）
+  - `tests/application/llm/services/test_resolver_helpers.py` - 26 件（正常・例外ケース網羅）
+  - `tests/application/llm/services/test_quest_objective_target_resolver.py` - 17 件（正常・例外ケース網羅）
+- **wiring との関係**: wiring は `DefaultToolArgumentResolver` をそのまま利用。インターフェース変更なしのため wiring 変更不要。
 
 ---
 
