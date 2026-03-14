@@ -4,6 +4,7 @@ from typing import List, Dict
 from unittest.mock import patch
 
 from ai_rpg_world.application.world.services.movement_service import MovementApplicationService
+from ai_rpg_world.application.world.services.movement_step_executor import MovementStepExecutor
 from ai_rpg_world.application.world.services.set_destination_service import SetDestinationService
 from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
 from ai_rpg_world.application.world.contracts.commands import (
@@ -134,8 +135,18 @@ class TestMovementApplicationService:
             connected_spots_provider=connected_spots_provider,
             global_pathfinding_service=global_pathfinding_service,
         )
+        movement_step_executor = MovementStepExecutor(
+            player_status_repository=player_status_repo,
+            player_profile_repository=player_profile_repo,
+            physical_map_repository=physical_map_repo,
+            spot_repository=spot_repo,
+            movement_config_service=movement_config_service,
+            time_provider=time_provider,
+            unit_of_work=unit_of_work,
+        )
         service = MovementApplicationService(
             set_destination_service=set_destination_service,
+            movement_step_executor=movement_step_executor,
             player_status_repository=player_status_repo,
             player_profile_repository=player_profile_repo,
             physical_map_repository=physical_map_repo,
@@ -144,7 +155,7 @@ class TestMovementApplicationService:
             global_pathfinding_service=global_pathfinding_service,
             movement_config_service=movement_config_service,
             time_provider=time_provider,
-            unit_of_work=unit_of_work
+            unit_of_work=unit_of_work,
         )
         world_query_service = WorldQueryService(
             player_status_repository=player_status_repo,
@@ -171,8 +182,20 @@ class TestMovementApplicationService:
             connected_spots_provider=service._connected_spots_provider,
             global_pathfinding_service=service._global_pathfinding_service,
         )
+        movement_step_executor = MovementStepExecutor(
+            player_status_repository=status_repo,
+            player_profile_repository=profile_repo,
+            physical_map_repository=phys_repo,
+            spot_repository=spot_repo,
+            movement_config_service=service._movement_config_service,
+            time_provider=time_provider,
+            unit_of_work=uow,
+            transition_policy_repository=policy_repo,
+            transition_condition_evaluator=evaluator,
+        )
         service_with_policy = MovementApplicationService(
             set_destination_service=set_destination_service,
+            movement_step_executor=movement_step_executor,
             player_status_repository=status_repo,
             player_profile_repository=profile_repo,
             physical_map_repository=phys_repo,
@@ -182,8 +205,6 @@ class TestMovementApplicationService:
             movement_config_service=service._movement_config_service,
             time_provider=time_provider,
             unit_of_work=uow,
-            transition_policy_repository=policy_repo,
-            transition_condition_evaluator=evaluator,
         )
         return service_with_policy, status_repo, profile_repo, phys_repo, spot_repo, policy_repo, uow, time_provider, event_publisher
 
@@ -1626,7 +1647,8 @@ class TestMovementApplicationService:
         """天候によって移動時のスタミナ消費が変化すること"""
         service, world_query_service, status_repo, profile_repo, phys_repo, spot_repo, uow, _, event_publisher = setup_service
 
-        service._movement_config_service = DefaultMovementConfigService(base_stamina_cost=10.0)
+        custom_config = DefaultMovementConfigService(base_stamina_cost=10.0)
+        service._movement_step_executor._movement_config_service = custom_config
 
         player_id = 1
         spot_id = 1
