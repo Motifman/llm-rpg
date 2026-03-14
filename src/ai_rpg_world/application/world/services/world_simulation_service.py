@@ -1,5 +1,4 @@
 import logging
-import random
 from typing import List, Callable, Any, Dict, Optional, Set, TYPE_CHECKING
 
 from ai_rpg_world.application.llm.contracts.interfaces import (
@@ -12,115 +11,42 @@ from ai_rpg_world.domain.world.repository.physical_map_repository import Physica
 from ai_rpg_world.domain.world.repository.weather_zone_repository import WeatherZoneRepository
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.combat.repository.hit_box_repository import HitBoxRepository
-from ai_rpg_world.domain.combat.aggregate.hit_box_aggregate import HitBoxAggregate
-from ai_rpg_world.domain.combat.event.combat_events import (
-    HitBoxHitRecordedEvent,
-    HitBoxMovedEvent,
-    HitBoxObstacleCollidedEvent,
-)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
-from ai_rpg_world.domain.world.entity.world_object_component import AutonomousBehaviorComponent
-from ai_rpg_world.domain.world.value_object.behavior_context import (
-    SkillSelectionContext,
-    TargetSelectionContext,
-    GrowthContext,
-)
 from ai_rpg_world.domain.monster.repository.monster_repository import (
     MonsterRepository,
     MonsterTemplateRepository,
 )
 from ai_rpg_world.domain.monster.repository.spawn_table_repository import SpawnTableRepository
-from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
-from ai_rpg_world.domain.monster.enum.monster_enum import (
-    BehaviorStateEnum,
-    MonsterStatusEnum,
-)
-from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
-from ai_rpg_world.domain.monster.value_object.spawn_slot import SpawnSlot
 from ai_rpg_world.domain.item.repository.loot_table_repository import LootTableRepository
-from ai_rpg_world.domain.world.entity.world_object_component import HarvestableComponent
-from ai_rpg_world.domain.world.service.feed_eligibility_service import is_feed_for_monster
 from ai_rpg_world.domain.skill.repository.skill_repository import SkillLoadoutRepository
-from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
-from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import MonsterSkillExecutionDomainService
 from ai_rpg_world.domain.combat.service.hit_box_factory import HitBoxFactory
-from ai_rpg_world.domain.world.service.weather_simulation_service import WeatherSimulationService
-from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
 from ai_rpg_world.domain.world.service.weather_config_service import WeatherConfigService
 from ai_rpg_world.domain.world.service.world_time_config_service import (
     WorldTimeConfigService,
-    DefaultWorldTimeConfigService,
 )
-from ai_rpg_world.domain.world.value_object.time_of_day import (
-    TimeOfDay,
-    time_of_day_from_tick,
-    is_active_at_time,
-)
-from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.combat.service.hit_box_config_service import (
-    DefaultHitBoxConfigService,
     HitBoxConfigService,
 )
 from ai_rpg_world.domain.combat.service.hit_box_collision_service import HitBoxCollisionDomainService
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
-from ai_rpg_world.application.harvest.contracts.commands import FinishHarvestCommand
 from ai_rpg_world.application.world.aggro_store import AggroStore
-from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
 from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
 from ai_rpg_world.domain.world.service.map_transition_service import MapTransitionService
-from ai_rpg_world.domain.monster.service.behavior_state_transition_service import (
-    BehaviorStateTransitionService,
-)
-from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
 from ai_rpg_world.application.world.services.pursuit_continuation_service import (
     PursuitContinuationService,
 )
-from ai_rpg_world.application.world.services.hunger_migration_policy import (
-    HungerMigrationCandidate,
-    HungerMigrationPolicy,
-)
-from ai_rpg_world.application.world.services.monster_behavior_coordinator import (
-    MonsterBehaviorCoordinator,
-)
-from ai_rpg_world.application.world.services.monster_foraging_rule import (
-    MonsterForagingRule,
-)
-from ai_rpg_world.application.world.services.monster_lifecycle_survival_coordinator import (
-    MonsterLifecycleSurvivalCoordinator,
-)
-from ai_rpg_world.application.world.services.monster_pursuit_failure_rule import (
-    MonsterPursuitFailureRule,
-)
-from ai_rpg_world.application.world.services.world_simulation_environment_stage_service import (
-    WorldSimulationEnvironmentStageService,
-)
-from ai_rpg_world.application.world.services.world_simulation_harvest_stage_service import (
-    WorldSimulationHarvestStageService,
-)
-from ai_rpg_world.application.world.services.world_simulation_hit_box_stage_service import (
-    WorldSimulationHitBoxStageService,
-)
-from ai_rpg_world.application.world.services.world_simulation_movement_stage_service import (
-    WorldSimulationMovementStageService,
-)
-from ai_rpg_world.application.world.services.world_simulation_monster_behavior_stage_service import (
-    WorldSimulationMonsterBehaviorStageService,
-)
-from ai_rpg_world.application.world.services.world_simulation_monster_lifecycle_stage_service import (
-    WorldSimulationMonsterLifecycleStageService,
-)
-from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
-    PursuitFailureReason,
+from ai_rpg_world.application.world.services.world_simulation_collaborator_factory import (
+    WorldSimulationCollaboratorFactory,
+    WorldSimulationDefaultDependencies,
 )
 
 if TYPE_CHECKING:
@@ -180,85 +106,83 @@ class WorldSimulationApplicationService:
         self._monster_template_repository = monster_template_repository
         self._monster_skill_execution_domain_service = monster_skill_execution_domain_service
         self._hit_box_factory = hit_box_factory
-        self._hit_box_config_service = hit_box_config_service or DefaultHitBoxConfigService()
-        self._hit_box_collision_service = hit_box_collision_service or HitBoxCollisionDomainService()
         self._unit_of_work = unit_of_work
         self._aggro_store = aggro_store
-        self._world_time_config_service = world_time_config_service or DefaultWorldTimeConfigService()
         self._monster_action_resolver_factory = monster_action_resolver_factory
         self._movement_service = movement_service
         self._pursuit_continuation_service = pursuit_continuation_service
         self._harvest_command_service = harvest_command_service
         self._logger = logging.getLogger(self.__class__.__name__)
-        self._hunger_migration_policy = HungerMigrationPolicy()
-        self._monster_foraging_rule = MonsterForagingRule(self._loot_table_repository)
-        self._monster_pursuit_failure_rule = MonsterPursuitFailureRule()
-        self._monster_lifecycle_survival_coordinator = (
-            MonsterLifecycleSurvivalCoordinator(
-                monster_repository=self._monster_repository,
-                physical_map_repository=self._physical_map_repository,
-                connected_spots_provider_getter=lambda: self._connected_spots_provider,
-                map_transition_service_getter=lambda: self._map_transition_service,
-                hunger_migration_policy=self._hunger_migration_policy,
-                spot_has_feed_for_monster=self._spot_has_feed_for_monster,
-                unit_of_work=self._unit_of_work,
-                logger=self._logger,
-            )
+        defaults = WorldSimulationDefaultDependencies.resolve(
+            hit_box_config_service=hit_box_config_service,
+            hit_box_collision_service=hit_box_collision_service,
+            world_time_config_service=world_time_config_service,
         )
-        self._monster_behavior_coordinator = MonsterBehaviorCoordinator(
-            monster_repository=self._monster_repository,
-            behavior_service=self._behavior_service,
-            transition_service=BehaviorStateTransitionService(),
-            action_resolver_factory=lambda physical_map, actor: self._monster_action_resolver_factory(
-                physical_map,
-                actor,
-            ),
-            foraging_rule=self._monster_foraging_rule,
-            pursuit_failure_rule=self._monster_pursuit_failure_rule,
-            unit_of_work=self._unit_of_work,
-            build_skill_context=self._build_skill_context_for_actor,
-            build_target_context=self._build_target_context_for_actor,
-            build_growth_context=self._build_growth_context_for_actor,
-        )
-        self._environment_stage = WorldSimulationEnvironmentStageService(
+        self._hit_box_config_service = defaults.hit_box_config_service
+        self._hit_box_collision_service = defaults.hit_box_collision_service
+        self._world_time_config_service = defaults.world_time_config_service
+
+        collaborators = WorldSimulationCollaboratorFactory(
+            physical_map_repository=self._physical_map_repository,
             weather_zone_repository=self._weather_zone_repository,
-            weather_config_service=self._weather_config_service,
-            logger=self._logger,
-        )
-        self._movement_stage = WorldSimulationMovementStageService(
             player_status_repository=self._player_status_repository,
-            physical_map_repository=self._physical_map_repository,
-            movement_service_getter=lambda: self._movement_service,
-            pursuit_continuation_service_getter=lambda: self._pursuit_continuation_service,
-        )
-        self._harvest_stage = WorldSimulationHarvestStageService(
-            harvest_command_service_getter=lambda: self._harvest_command_service,
+            hit_box_repository=self._hit_box_repository,
+            behavior_service=self._behavior_service,
+            weather_config_service=self._weather_config_service,
+            unit_of_work=self._unit_of_work,
+            monster_repository=self._monster_repository,
+            skill_loadout_repository=self._skill_loadout_repository,
+            monster_action_resolver_factory=self._monster_action_resolver_factory,
+            monster_action_resolver_factory_getter=lambda: self._monster_action_resolver_factory,
+            defaults=defaults,
             logger=self._logger,
-        )
-        self._monster_lifecycle_stage = WorldSimulationMonsterLifecycleStageService(
-            world_time_config_service=self._world_time_config_service,
-            has_spawn_slot_support=lambda: (
-                self._spawn_table_repository is not None
-                and self._monster_template_repository is not None
-            ),
-            has_hunger_migration_support=lambda: (
-                self._connected_spots_provider is not None
-                and self._map_transition_service is not None
-                and self._loot_table_repository is not None
-            ),
-            process_spawn_and_respawn_by_slots=self._process_spawn_and_respawn_by_slots,
-            process_respawn_legacy=self._process_respawn_legacy,
-            survival_coordinator=self._monster_lifecycle_survival_coordinator,
-        )
-        self._monster_behavior_stage = WorldSimulationMonsterBehaviorStageService(
-            world_time_config_service=self._world_time_config_service,
-            logger=self._logger,
+            aggro_store=self._aggro_store,
+            aggro_store_getter=lambda: self._aggro_store,
+            spawn_table_repository=self._spawn_table_repository,
+            monster_template_repository=self._monster_template_repository,
+            loot_table_repository=self._loot_table_repository,
+            connected_spots_provider=self._connected_spots_provider,
+            map_transition_service=self._map_transition_service,
+            movement_service=self._movement_service,
+            pursuit_continuation_service=self._pursuit_continuation_service,
+            harvest_command_service=self._harvest_command_service,
             actors_sorted_by_distance_to_players=self._actors_sorted_by_distance_to_players,
-            behavior_coordinator=self._monster_behavior_coordinator,
+        ).build()
+
+        self._hunger_migration_policy = collaborators.hunger_migration_policy
+        self._monster_feed_query_service = collaborators.monster_feed_query_service
+        self._monster_behavior_context_builder = collaborators.monster_behavior_context_builder
+        self._monster_target_context_builder = collaborators.monster_target_context_builder
+        self._monster_foraging_rule = collaborators.monster_foraging_rule
+        self._monster_pursuit_failure_rule = collaborators.monster_pursuit_failure_rule
+        self._monster_spawn_slot_service = collaborators.monster_spawn_slot_service
+        self._environment_effect_service = collaborators.environment_effect_service
+        self._hit_box_updater = collaborators.hit_box_updater
+        self._monster_lifecycle_survival_coordinator = (
+            collaborators.monster_lifecycle_survival_coordinator
         )
-        self._hit_box_stage = WorldSimulationHitBoxStageService(
-            physical_map_repository=self._physical_map_repository,
-            update_hit_boxes=self._update_hit_boxes,
+        self._monster_behavior_coordinator = collaborators.monster_behavior_coordinator
+        self._environment_stage = collaborators.environment_stage
+        self._movement_stage = collaborators.movement_stage
+        self._harvest_stage = collaborators.harvest_stage
+        self._monster_lifecycle_stage = collaborators.monster_lifecycle_stage
+        self._monster_behavior_stage = collaborators.monster_behavior_stage
+        self._hit_box_stage = collaborators.hit_box_stage
+        self._environment_stage._weather_config_service_getter = (
+            lambda: self._weather_config_service
+        )
+        self._movement_stage._movement_service_getter = lambda: self._movement_service
+        self._movement_stage._pursuit_continuation_service_getter = (
+            lambda: self._pursuit_continuation_service
+        )
+        self._harvest_stage._harvest_command_service_getter = (
+            lambda: self._harvest_command_service
+        )
+        self._hit_box_updater._hit_box_config_service_getter = (
+            lambda: self._hit_box_config_service
+        )
+        self._hit_box_updater._hit_box_collision_service_getter = (
+            lambda: self._hit_box_collision_service
         )
 
     def tick(self) -> WorldTick:
@@ -297,7 +221,7 @@ class WorldSimulationApplicationService:
 
             # 3.3 環境効果の一括適用
             if player_map_map:
-                self._apply_environmental_effects_bulk(player_map_map)
+                self._environment_effect_service.apply_bulk(player_map_map)
 
             # アクティブなスポット（プレイヤーが1人以上いるスポット）のみ行動更新・HitBox・save を行う
             active_spot_ids: Set[SpotId] = {pm.spot_id for pm in player_map_map.values()}
@@ -324,368 +248,6 @@ class WorldSimulationApplicationService:
         if self._reflection_runner is not None:
             self._reflection_runner.run_after_tick(current_tick)
 
-    def _complete_due_harvests(
-        self,
-        maps: List[PhysicalMapAggregate],
-        current_tick: WorldTick,
-    ) -> None:
-        finish_harvest = getattr(
-            self._harvest_command_service,
-            "finish_harvest_in_current_unit_of_work",
-            None,
-        )
-        if not callable(finish_harvest):
-            return
-        for physical_map in maps:
-            for obj in physical_map.get_all_objects():
-                component = getattr(obj, "component", None)
-                if not isinstance(component, HarvestableComponent):
-                    continue
-                if component.current_actor_id is None or component.harvest_finish_tick is None:
-                    continue
-                if component.harvest_finish_tick > current_tick:
-                    continue
-                try:
-                    actor = physical_map.get_actor(component.current_actor_id)
-                except ObjectNotFoundException:
-                    self._logger.warning(
-                        "Skipping auto-complete harvest without actor: target_id=%s",
-                        obj.object_id,
-                    )
-                    continue
-                if actor.player_id is None:
-                    continue
-                try:
-                    finish_harvest(
-                        FinishHarvestCommand(
-                            actor_id=str(int(actor.player_id)),
-                            target_id=str(int(obj.object_id)),
-                            spot_id=str(int(physical_map.spot_id)),
-                            current_tick=current_tick.value,
-                        )
-                    )
-                except Exception as exc:
-                    self._logger.warning(
-                        "Auto harvest completion failed: spot_id=%s actor_id=%s target_id=%s error=%s",
-                        int(physical_map.spot_id),
-                        int(actor.player_id),
-                        int(obj.object_id),
-                        exc,
-                    )
-
-    def _advance_pending_player_movements(self, current_tick: WorldTick) -> None:
-        """経路を保持しているプレイヤーの継続移動を 1 ティック分進める。"""
-        tick_movement = getattr(
-            self._movement_service,
-            "tick_movement_in_current_unit_of_work",
-            None,
-        )
-        if not callable(tick_movement):
-            return
-
-        for status in self._player_status_repository.find_all():
-            has_active_pursuit = (
-                status.has_active_pursuit and status.pursuit_state is not None
-            )
-            if status.current_spot_id is None:
-                continue
-            if not has_active_pursuit and status.goal_spot_id is None:
-                continue
-
-            physical_map = self._physical_map_repository.find_by_spot_id(status.current_spot_id)
-            if physical_map is None:
-                continue
-
-            try:
-                actor = physical_map.get_actor(WorldObjectId.create(int(status.player_id)))
-            except ObjectNotFoundException:
-                continue
-
-            if actor.is_busy(current_tick):
-                continue
-
-            if has_active_pursuit and self._pursuit_continuation_service is not None:
-                continuation = self._pursuit_continuation_service.evaluate_tick(status)
-                if not continuation.should_advance_movement:
-                    continue
-            elif status.goal_spot_id is None:
-                continue
-
-            tick_movement(int(status.player_id))
-
-    def _process_spawn_and_respawn_by_slots(
-        self,
-        active_spot_ids: Set[SpotId],
-        current_tick: WorldTick,
-        time_of_day: TimeOfDay,
-    ) -> None:
-        """スロット単位でスポーン・リスポーンを処理。条件を満たしたスロットに spawn または respawn する。"""
-        for spot_id in active_spot_ids:
-            table = self._spawn_table_repository.find_by_spot_id(spot_id)
-            if not table:
-                continue
-            physical_map = self._physical_map_repository.find_by_spot_id(spot_id)
-            weather_type = (
-                physical_map.weather_state.weather_type
-                if physical_map and physical_map.weather_state
-                else None
-            )
-            area_traits = physical_map.area_traits if physical_map else None
-            monsters_for_spot = self._monster_repository.find_by_spot_id(spot_id)
-            for slot in table.slots:
-                if slot.condition is not None and not slot.condition.is_satisfied(
-                    time_of_day, weather_type=weather_type, area_traits=area_traits
-                ):
-                    continue
-                monster_for_slot = self._find_monster_for_slot(
-                    slot, monsters_for_spot
-                )
-                count_alive = self._count_alive_for_slot(slot, monsters_for_spot)
-                if count_alive >= slot.max_concurrent:
-                    continue
-                if monster_for_slot is not None:
-                    if (
-                        monster_for_slot.status == MonsterStatusEnum.DEAD
-                        and monster_for_slot.should_respawn(current_tick)
-                    ):
-                        try:
-                            monster_for_slot.respawn(
-                                slot.coordinate, current_tick, slot.spot_id
-                            )
-                            self._monster_repository.save(monster_for_slot)
-                            self._unit_of_work.process_sync_events()
-                        except DomainException as e:
-                            self._logger.warning(
-                                "Respawn skipped for slot %s %s: %s",
-                                slot.spot_id,
-                                slot.coordinate,
-                                str(e),
-                            )
-                else:
-                    template = self._monster_template_repository.find_by_id(
-                        slot.template_id
-                    )
-                    if not template:
-                        continue
-                    try:
-                        monster_id = self._monster_repository.generate_monster_id()
-                        world_object_id = (
-                            self._monster_repository.generate_world_object_id_for_npc()
-                        )
-                        loadout = SkillLoadoutAggregate.create(
-                            SkillLoadoutId(world_object_id.value),
-                            world_object_id.value,
-                            10,
-                            10,
-                        )
-                        monster = MonsterAggregate.create(
-                            monster_id,
-                            template,
-                            world_object_id,
-                            skill_loadout=loadout,
-                        )
-                        monster.spawn(
-                            slot.coordinate, slot.spot_id, current_tick
-                        )
-                        self._monster_repository.save(monster)
-                        self._skill_loadout_repository.save(loadout)
-                        self._unit_of_work.process_sync_events()
-                    except DomainException as e:
-                        self._logger.warning(
-                            "Spawn skipped for slot %s %s: %s",
-                            slot.spot_id,
-                            slot.coordinate,
-                            str(e),
-                        )
-
-    def _process_respawn_legacy(
-        self,
-        active_spot_ids: Set[SpotId],
-        current_tick: WorldTick,
-        time_of_day: TimeOfDay,
-    ) -> None:
-        """従来方式: DEAD のモンスターを走査し、リスポーン条件を満たせばリスポーンする。"""
-        for monster in self._monster_repository.find_all():
-            if monster.status != MonsterStatusEnum.DEAD:
-                continue
-            if monster.spot_id is None or monster.spot_id not in active_spot_ids:
-                continue
-            if not monster.should_respawn(current_tick):
-                continue
-            condition = monster.template.respawn_info.condition
-            if condition is not None and not condition.is_satisfied_at(time_of_day):
-                continue
-            respawn_coord = monster.get_respawn_coordinate()
-            if respawn_coord is None:
-                continue
-            try:
-                monster.respawn(respawn_coord, current_tick, monster.spot_id)
-                self._monster_repository.save(monster)
-            except DomainException as e:
-                self._logger.warning(
-                    "Respawn skipped for monster %s: %s",
-                    monster.monster_id,
-                    str(e),
-                )
-
-    def _process_single_actor_behavior(
-        self,
-        actor: WorldObject,
-        physical_map: PhysicalMapAggregate,
-        current_tick: WorldTick,
-    ) -> None:
-        """自律行動アクター1体分の観測・状態遷移・アクション解決・記録・保存を行う。"""
-        skill_context = self._build_skill_context_for_actor(actor, physical_map, current_tick)
-        target_context = self._build_target_context_for_actor(actor, physical_map, current_tick)
-        growth_context = self._build_growth_context_for_actor(actor, current_tick)
-
-        monster = self._monster_repository.find_by_world_object_id(actor.object_id)
-        if not monster:
-            return
-        visible_feed, selected_feed_target = self._build_feed_observation(
-            actor, physical_map, monster, current_tick
-        )
-        observation = self._behavior_service.build_observation(
-            actor.object_id,
-            physical_map,
-            target_context=target_context,
-            skill_context=skill_context,
-            growth_context=growth_context,
-            pack_rally_coordinate=None,
-            current_tick=current_tick,
-            visible_feed=visible_feed,
-            selected_feed_target=selected_feed_target,
-        )
-        snapshot = monster.to_behavior_state_snapshot(actor.coordinate, current_tick)
-        transition_result = BehaviorStateTransitionService().compute_transition(
-            observation=observation,
-            snapshot=snapshot,
-            actor_id=monster.world_object_id,
-            actor_coordinate=actor.coordinate,
-        )
-        monster.apply_behavior_transition(transition_result, current_tick)
-        monster.apply_territory_return_if_needed(actor.coordinate)
-        failure_reason = self._resolve_monster_pursuit_failure_reason(
-            monster=monster,
-            physical_map=physical_map,
-            actor_coordinate=actor.coordinate,
-            observation=observation,
-        )
-        if failure_reason is not None:
-            monster.fail_pursuit(failure_reason, current_tick=current_tick)
-            self._monster_repository.save(monster)
-            self._unit_of_work.process_sync_events()
-            return
-        resolver = self._monster_action_resolver_factory(physical_map, actor)
-        action = resolver.resolve_action(monster, observation, actor.coordinate)
-        if self._should_fail_monster_search_at_last_known(
-            monster=monster,
-            actor_coordinate=actor.coordinate,
-            observation=observation,
-            action=action,
-        ):
-            monster.fail_pursuit(
-                PursuitFailureReason.VISION_LOST_AT_LAST_KNOWN,
-                current_tick=current_tick,
-            )
-            self._monster_repository.save(monster)
-            self._unit_of_work.process_sync_events()
-            return
-        if (
-            action.action_type == BehaviorActionType.MOVE
-            and action.coordinate is not None
-        ):
-            monster.record_move(action.coordinate, current_tick)
-        elif (
-            action.action_type == BehaviorActionType.USE_SKILL
-            and action.skill_slot_index is not None
-        ):
-            monster.record_use_skill(
-                action.skill_slot_index,
-                monster.behavior_target_id,
-                current_tick,
-            )
-        elif (
-            action.action_type == BehaviorActionType.INTERACT
-            and action.target_id is not None
-        ):
-            monster.record_interact(action.target_id, current_tick)
-        self._monster_repository.save(monster)
-        self._unit_of_work.process_sync_events()
-
-    def _resolve_monster_pursuit_failure_reason(
-        self,
-        monster: MonsterAggregate,
-        physical_map: PhysicalMapAggregate,
-        actor_coordinate: Coordinate,
-        observation: Any,
-    ) -> Optional[PursuitFailureReason]:
-        if not monster.has_active_pursuit:
-            return None
-        if monster.behavior_state not in (
-            BehaviorStateEnum.CHASE,
-            BehaviorStateEnum.SEARCH,
-        ):
-            return None
-        if observation.selected_target is not None:
-            return None
-
-        target_id = monster.behavior_target_id
-        if target_id is None:
-            return None
-
-        try:
-            physical_map.get_object(target_id)
-        except ObjectNotFoundException:
-            if monster.behavior_state == BehaviorStateEnum.SEARCH:
-                last_known = monster.behavior_last_known_position
-                if last_known is not None and actor_coordinate == last_known:
-                    return PursuitFailureReason.VISION_LOST_AT_LAST_KNOWN
-            return PursuitFailureReason.TARGET_MISSING
-        return None
-
-    def _should_fail_monster_search_at_last_known(
-        self,
-        monster: MonsterAggregate,
-        actor_coordinate: Coordinate,
-        observation: Any,
-        action: Any,
-    ) -> bool:
-        if monster.behavior_state != BehaviorStateEnum.SEARCH:
-            return False
-        if not monster.has_active_pursuit:
-            return False
-        if observation.selected_target is not None:
-            return False
-        last_known = monster.behavior_last_known_position
-        if last_known is None or actor_coordinate != last_known:
-            return False
-        return action.action_type != BehaviorActionType.MOVE
-
-    def _find_monster_for_slot(self, slot: SpawnSlot, monsters: List[MonsterAggregate]) -> Optional[MonsterAggregate]:
-        """スロットに割り当てられたモンスターを1体返す（get_respawn_coordinate と template_id で一致）。"""
-        for m in monsters:
-            respawn_coord = m.get_respawn_coordinate()
-            if (
-                respawn_coord is not None
-                and m.spot_id == slot.spot_id
-                and respawn_coord == slot.coordinate
-                and m.template.template_id == slot.template_id
-            ):
-                return m
-        return None
-
-    def _count_alive_for_slot(self, slot: SpawnSlot, monsters: List[MonsterAggregate]) -> int:
-        """スロットに対応する ALIVE モンスター数を返す。"""
-        return sum(
-            1
-            for m in monsters
-            if m.status == MonsterStatusEnum.ALIVE
-            and m.spot_id == slot.spot_id
-            and m.get_respawn_coordinate() == slot.coordinate
-            and m.template.template_id == slot.template_id
-        )
-
     def _actors_sorted_by_distance_to_players(
         self, physical_map: PhysicalMapAggregate
     ) -> List[WorldObject]:
@@ -706,202 +268,6 @@ class WorldSimulationApplicationService:
             key=lambda a: min(
                 a.coordinate.distance_to(p) for p in player_coords
             ),
-        )
-
-    def _build_skill_context_for_actor(
-        self,
-        actor: WorldObject,
-        physical_map: PhysicalMapAggregate,
-        current_tick: WorldTick,
-    ) -> Optional[SkillSelectionContext]:
-        """
-        自律行動のモンスターについて、使用可能スロットから SkillSelectionContext を組み立てる。
-        モンスターでない、または取得失敗時は None を返す。
-        """
-        if not isinstance(actor.component, AutonomousBehaviorComponent):
-            return None
-        monster = self._monster_repository.find_by_world_object_id(actor.object_id)
-        if not monster:
-            return None
-        loadout = monster.skill_loadout
-        component = actor.component
-        usable_slot_indices: set = set()
-        for skill_info in component.available_skills:
-            if loadout.can_use_skill(skill_info.slot_index, current_tick.value):
-                usable_slot_indices.add(skill_info.slot_index)
-        return SkillSelectionContext(usable_slot_indices=usable_slot_indices)
-
-    def _build_growth_context_for_actor(
-        self,
-        actor: WorldObject,
-        current_tick: WorldTick,
-    ) -> Optional[GrowthContext]:
-        """
-        自律行動のモンスターについて、成長段階に応じた GrowthContext を組み立てる。
-        growth_stages が無い場合は None（従来どおりコンポーネントの flee_threshold と CHASE 許可）。
-        """
-        if not isinstance(actor.component, AutonomousBehaviorComponent):
-            return None
-        monster = self._monster_repository.find_by_world_object_id(actor.object_id)
-        if not monster or not monster.template.growth_stages:
-            return None
-        return GrowthContext(
-            effective_flee_threshold=monster.get_effective_flee_threshold(current_tick),
-            allow_chase=monster.get_allow_chase(current_tick),
-        )
-
-    def _build_feed_observation(
-        self,
-        actor: WorldObject,
-        physical_map: PhysicalMapAggregate,
-        monster: MonsterAggregate,
-        current_tick: WorldTick,
-    ):
-        """視界内の餌オブジェクトと、飢餓時の選択餌ターゲットを組み立てる。
-        視界内に餌があればそれを選択し餌場記憶を更新。なければ記憶を距離が近い順に参照し、
-        有効な餌があればそれを選択する。
-        """
-        visible_feed: List[WorldObject] = []
-        selected_feed_target: Optional[WorldObject] = None
-        if self._loot_table_repository is None or not monster.template.preferred_feed_item_spec_ids:
-            return visible_feed, selected_feed_target
-        component = actor.component
-        if not isinstance(component, AutonomousBehaviorComponent):
-            return visible_feed, selected_feed_target
-        preferred = monster.template.preferred_feed_item_spec_ids
-        nearby = physical_map.get_objects_in_range(actor.coordinate, component.vision_range)
-        for obj in nearby:
-            if obj.object_id == actor.object_id:
-                continue
-            if not isinstance(obj.component, HarvestableComponent):
-                continue
-            harvestable = obj.component
-            if harvestable.get_available_quantity(current_tick) <= 0:
-                continue
-            loot_table = self._loot_table_repository.find_by_id(harvestable.loot_table_id)
-            if not loot_table or not is_feed_for_monster(loot_table.entries, preferred):
-                continue
-            if not physical_map.is_visible(actor.coordinate, obj.coordinate):
-                continue
-            visible_feed.append(obj)
-        if visible_feed and monster.hunger >= monster.template.forage_threshold:
-            selected_feed_target = min(
-                visible_feed,
-                key=lambda o: actor.coordinate.distance_to(o.coordinate),
-            )
-            monster.remember_feed(
-                selected_feed_target.object_id,
-                selected_feed_target.coordinate,
-            )
-        if selected_feed_target is None and monster.hunger >= monster.template.forage_threshold:
-            # 視界内に餌がなければ記憶を距離が近い順に参照
-            memories = sorted(
-                monster.behavior_last_known_feed,
-                key=lambda e: actor.coordinate.distance_to(e.coordinate),
-            )
-            for entry in memories:
-                try:
-                    obj = physical_map.get_object(entry.object_id)
-                except ObjectNotFoundException:
-                    continue
-                if not isinstance(obj.component, HarvestableComponent):
-                    continue
-                harvestable = obj.component
-                if harvestable.get_available_quantity(current_tick) <= 0:
-                    continue
-                loot_table = self._loot_table_repository.find_by_id(harvestable.loot_table_id)
-                if not loot_table or not is_feed_for_monster(loot_table.entries, preferred):
-                    continue
-                selected_feed_target = obj
-                break
-        return visible_feed, selected_feed_target
-
-    def _spot_has_feed_for_monster(
-        self,
-        physical_map: PhysicalMapAggregate,
-        monster: MonsterAggregate,
-        current_tick: WorldTick,
-    ) -> bool:
-        """
-        スポット内に、このモンスターの嗜好に合いかつ残量 > 0 の Harvestable が
-        1 つ以上あるか。ドメインはリポジトリに依存しないためアプリ層で判定する。
-        """
-        preferred = monster.template.preferred_feed_item_spec_ids
-        if not preferred:
-            return False
-        for obj in physical_map.get_all_objects():
-            if not isinstance(obj.component, HarvestableComponent):
-                continue
-            harvestable = obj.component
-            if harvestable.get_available_quantity(current_tick) <= 0:
-                continue
-            loot_table = self._loot_table_repository.find_by_id(harvestable.loot_table_id)
-            if not loot_table or not is_feed_for_monster(loot_table.entries, preferred):
-                continue
-            return True
-        return False
-
-    def _process_hunger_migration_for_spot(
-        self,
-        physical_map: PhysicalMapAggregate,
-        current_tick: WorldTick,
-        active_spot_ids: Set[SpotId],
-    ) -> None:
-        """
-        このスポットで飢餓かつ餌なしのモンスターのうち飢餓が最も高い 1 体を、
-        接続スポットへランダムに移住させる。1 スポットあたり 1 tick に 1 体まで。
-        """
-        if physical_map.spot_id not in active_spot_ids:
-            return
-        self._monster_lifecycle_survival_coordinator.apply_hunger_migration_for_spot(
-            physical_map,
-            current_tick,
-        )
-
-    def _build_target_context_for_actor(
-        self,
-        actor: WorldObject,
-        physical_map: PhysicalMapAggregate,
-        current_tick: WorldTick,
-    ) -> Optional[TargetSelectionContext]:
-        """
-        自律行動のモンスターについて、ヘイト等から TargetSelectionContext を組み立てる。
-        フォロワーの場合は pack_leader_target_id にリーダーの behavior_target_id を設定する。
-        AggroMemoryPolicy があれば last_seen_tick からの経過で忘却したエントリは除外する。
-        """
-        if not isinstance(actor.component, AutonomousBehaviorComponent):
-            return None
-        component = actor.component
-        pack_leader_target_id: Optional[WorldObjectId] = None
-        if component.pack_id is not None and not component.is_pack_leader:
-            pack_actors = physical_map.get_actors_in_pack(component.pack_id)
-            leader_obj = next(
-                (a for a in pack_actors if a.component.is_pack_leader),
-                None,
-            )
-            if leader_obj is not None:
-                leader_monster = self._monster_repository.find_by_world_object_id(
-                    leader_obj.object_id
-                )
-                if leader_monster is not None and leader_monster.behavior_target_id is not None:
-                    pack_leader_target_id = leader_monster.behavior_target_id
-
-        if self._aggro_store is None and pack_leader_target_id is None:
-            return None
-        threat_by_id: Dict[WorldObjectId, int] = {}
-        if self._aggro_store is not None:
-            policy = component.aggro_memory_policy
-            threat_by_id = self._aggro_store.get_threat_by_attacker(
-                physical_map.spot_id,
-                actor.object_id,
-                current_tick=current_tick.value,
-                memory_policy=policy,
-            ) or {}
-        if not threat_by_id and pack_leader_target_id is None:
-            return None
-        return TargetSelectionContext(
-            threat_by_id=threat_by_id,
-            pack_leader_target_id=pack_leader_target_id,
         )
 
     def _execute_monster_skill_in_tick(
@@ -953,177 +319,6 @@ class WorldSimulationApplicationService:
             self._hit_box_repository.save_all(hit_boxes)
         self._monster_repository.save(monster)
         self._skill_loadout_repository.save(loadout)
-
-    def _update_weather_if_needed(self, current_tick: WorldTick) -> Dict[SpotId, WeatherState]:
-        """必要に応じて天候を更新する（設定された間隔ごと）
-        
-        Returns:
-            Dict[SpotId, WeatherState]: 更新されたスポットIDと天候状態のマップ
-        """
-        latest_weather = {}
-        interval = self._weather_config_service.get_update_interval_ticks()
-        
-        try:
-            zones = self._weather_zone_repository.find_all()
-            if not zones:
-                self._logger.debug("No weather zones found")
-                return latest_weather
-
-            for zone in zones:
-                if current_tick.value % interval == 0:
-                    try:
-                        new_state = WeatherSimulationService.simulate_next_weather(zone.current_state)
-                        zone.change_weather(new_state)
-                        self._weather_zone_repository.save(zone)
-                        self._logger.info(f"Weather updated in zone {zone.zone_id} to {new_state.weather_type}")
-                    except DomainException as e:
-                        self._logger.error(f"Weather transition rule violation in zone {zone.zone_id}: {str(e)}")
-                    except Exception as e:
-                        self._logger.error(f"Unexpected error updating weather for zone {zone.zone_id}: {str(e)}", exc_info=True)
-                
-                # 最新の状態をスポットごとに保持
-                for spot_id in zone.spot_ids:
-                    latest_weather[spot_id] = zone.current_state
-        except Exception as e:
-            self._logger.error(f"Failed to retrieve weather zones: {str(e)}")
-                
-        return latest_weather
-
-    def _sync_weather_to_map(self, physical_map: PhysicalMapAggregate, latest_weather: Dict[SpotId, WeatherState]) -> None:
-        """天候ゾーンの状態を物理マップに同期する"""
-        # まずは今回更新された（または保持されている）最新状態を確認
-        if physical_map.spot_id in latest_weather:
-            physical_map.set_weather(latest_weather[physical_map.spot_id])
-            return
-
-        # 辞書にない場合はリポジトリから取得
-        try:
-            zone = self._weather_zone_repository.find_by_spot_id(physical_map.spot_id)
-            if zone:
-                physical_map.set_weather(zone.current_state)
-            else:
-                # ゾーンが見つからない場合はデフォルト（晴れ）
-                physical_map.set_weather(WeatherState.clear())
-        except DomainException as e:
-            self._logger.error(f"Domain error syncing weather to map {physical_map.spot_id}: {str(e)}")
-            physical_map.set_weather(WeatherState.clear())
-        except Exception as e:
-            self._logger.error(f"Unexpected error syncing weather to map {physical_map.spot_id}: {str(e)}", exc_info=True)
-            # エラー時もデフォルトに設定
-            physical_map.set_weather(WeatherState.clear())
-
-    def _apply_environmental_effects_bulk(self, player_map_map: Dict[PlayerId, PhysicalMapAggregate]) -> None:
-        """アクター（プレイヤー）に対して環境効果（スタミナ減少など）を一括適用する"""
-        player_ids = list(player_map_map.keys())
-        try:
-            player_statuses = self._player_status_repository.find_by_ids(player_ids)
-            status_map = {s.player_id: s for s in player_statuses}
-            
-            updated_statuses = []
-            
-            for player_id, physical_map in player_map_map.items():
-                player_status = status_map.get(player_id)
-                if not player_status:
-                    self._logger.warning(f"Player status not found for player {player_id}")
-                    continue
-                
-                if not player_status.can_act():
-                    continue
-
-                # スタミナ減少量の計算
-                drain = WeatherEffectService.calculate_environmental_stamina_drain(
-                    physical_map.weather_state,
-                    physical_map.environment_type
-                )
-
-                if drain > 0:
-                    if player_status.stamina.value > 0:
-                        actual_drain = min(player_status.stamina.value, drain)
-                        try:
-                            player_status.consume_stamina(actual_drain)
-                            updated_statuses.append(player_status)
-                        except DomainException as e:
-                            # スタミナ不足などはここで処理（実際にはminで防いでいるが、念のため）
-                            self._logger.warning(f"Could not apply environmental effect to player {player_id}: {str(e)}")
-                        except Exception as e:
-                            self._logger.error(f"Unexpected error consuming stamina for player {player_id}: {str(e)}", exc_info=True)
-            
-            if updated_statuses:
-                # 一括保存
-                self._player_status_repository.save_all(updated_statuses)
-                    
-        except Exception as e:
-            self._logger.error(f"Error applying environmental effects in bulk: {str(e)}", exc_info=True)
-
-    def _update_hit_boxes(self, physical_map: PhysicalMapAggregate, current_tick: WorldTick) -> None:
-        """
-        指定マップ上のHitBoxを更新し、衝突判定を行う。
-        - 移動・寿命更新は HitBoxAggregate.on_tick に委譲
-        - 障害物・オブジェクト衝突判定はアプリケーション層で調停
-        """
-        try:
-            hit_boxes = self._hit_box_repository.find_active_by_spot_id(physical_map.spot_id)
-        except Exception as e:
-            self._logger.error(
-                f"Failed to load hit boxes for map {physical_map.spot_id}: {str(e)}",
-                exc_info=True,
-            )
-            return
-
-        total_substeps_executed = 0
-        total_collision_checks = 0
-        guard_trigger_count = 0
-
-        for hit_box in hit_boxes:
-            try:
-                substeps_per_tick = self._hit_box_config_service.get_substeps_for_hit_box(hit_box)
-                max_collision_checks = self._hit_box_config_service.get_max_collision_checks_per_tick()
-                collision_checks_for_hit_box = 0
-                guard_triggered = False
-                step_ratio = 1.0 / substeps_per_tick
-                for _ in range(substeps_per_tick):
-                    if not hit_box.is_active:
-                        break
-                    
-                    # 有効化タイミングに達していない場合はスキップ（移動も判定も行わない）
-                    if not hit_box.is_activated(current_tick):
-                        break
-
-                    total_substeps_executed += 1
-                    hit_box.on_tick(current_tick, step_ratio=step_ratio)
-
-                    if hit_box.is_active:
-                        used_checks, guard_triggered = self._hit_box_collision_service.resolve_collisions(
-                            physical_map,
-                            hit_box,
-                            max_collision_checks=max_collision_checks - collision_checks_for_hit_box,
-                        )
-                        collision_checks_for_hit_box += used_checks
-                        if guard_triggered:
-                            guard_trigger_count += 1
-                            self._logger.warning(
-                                f"Collision check guard triggered for hit box {hit_box.hit_box_id} "
-                                f"in map {physical_map.spot_id}. limit={max_collision_checks}"
-                            )
-                            break
-
-                self._hit_box_repository.save(hit_box)
-                total_collision_checks += collision_checks_for_hit_box
-            except DomainException as e:
-                self._logger.warning(
-                    f"HitBox update skipped for {hit_box.hit_box_id} due to domain rule: {str(e)}"
-                )
-            except Exception as e:
-                self._logger.error(
-                    f"Failed to update hit box {hit_box.hit_box_id} in map {physical_map.spot_id}: {str(e)}",
-                    exc_info=True,
-                )
-
-        self._logger.debug(
-            f"HitBox update stats map={physical_map.spot_id} hit_boxes={len(hit_boxes)} "
-            f"substeps={total_substeps_executed} collision_checks={total_collision_checks} "
-            f"guard_triggers={guard_trigger_count}"
-        )
 
     def _execute_with_error_handling(self, operation: Callable[[], Any], context: dict) -> Any:
         try:
