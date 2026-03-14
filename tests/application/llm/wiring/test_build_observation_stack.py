@@ -84,7 +84,7 @@ class TestBuildObservationStackReturnType:
         deps = _minimal_observation_stack_deps(trigger)
         deps["observation_formatter"] = custom_formatter
         result = _build_observation_stack(**deps)
-        assert result._handler._formatter is custom_formatter
+        assert result._handler._pipeline._formatter is custom_formatter
 
     def test_accepts_optional_observation_buffer(self):
         """buffer を渡した場合はそれが handler に渡される"""
@@ -95,7 +95,7 @@ class TestBuildObservationStackReturnType:
         deps = _minimal_observation_stack_deps(trigger)
         deps["buffer"] = custom_buffer
         result = _build_observation_stack(**deps)
-        assert result._handler._buffer is custom_buffer
+        assert result._handler._appender._buffer is custom_buffer
 
 
 def _minimal_wiring_deps():

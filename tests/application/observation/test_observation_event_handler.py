@@ -6,8 +6,19 @@ from unittest.mock import MagicMock
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.handlers.observation_event_handler import ObservationEventHandler
+from ai_rpg_world.application.observation.services.movement_interruption_service import (
+    MovementInterruptionService,
+)
+from ai_rpg_world.application.observation.services.observation_appender import ObservationAppender
 from ai_rpg_world.application.observation.services.observation_context_buffer import (
     DefaultObservationContextBuffer,
+)
+from ai_rpg_world.application.observation.services.observation_pipeline import ObservationPipeline
+from ai_rpg_world.application.observation.services.observation_timestamp_resolver import (
+    ObservationTimestampResolver,
+)
+from ai_rpg_world.application.observation.services.observation_turn_scheduler import (
+    ObservationTurnScheduler,
 )
 from ai_rpg_world.application.observation.services.observation_formatter import ObservationFormatter
 from ai_rpg_world.application.observation.services.observation_recipient_resolver import (
@@ -117,6 +128,48 @@ def _make_simple_map(spot_id: int, objects: list[WorldObject]) -> PhysicalMapAgg
     return PhysicalMapAggregate(spot_id=SpotId(spot_id), tiles=tiles, objects=objects)
 
 
+def _create_handler(
+    *,
+    resolver,
+    formatter,
+    buffer,
+    unit_of_work_factory,
+    player_status_repository=None,
+    turn_trigger=None,
+    llm_player_resolver=None,
+    movement_service=None,
+    game_time_provider=None,
+    world_time_config=None,
+):
+    """観測ハンドラを構築するヘルパー。5 サービスを内部で組み立てる。"""
+    pipeline = ObservationPipeline(
+        resolver=resolver,
+        formatter=formatter,
+        player_status_repository=player_status_repository,
+    )
+    appender = ObservationAppender(buffer=buffer)
+    timestamp_resolver = ObservationTimestampResolver(
+        game_time_provider=game_time_provider,
+        world_time_config=world_time_config,
+    )
+    movement_interruption = MovementInterruptionService(
+        movement_service=movement_service,
+        llm_player_resolver=llm_player_resolver,
+    )
+    turn_scheduler = ObservationTurnScheduler(
+        turn_trigger=turn_trigger,
+        llm_player_resolver=llm_player_resolver,
+    )
+    return ObservationEventHandler(
+        pipeline=pipeline,
+        appender=appender,
+        timestamp_resolver=timestamp_resolver,
+        movement_interruption=movement_interruption,
+        turn_scheduler=turn_scheduler,
+        unit_of_work_factory=unit_of_work_factory,
+    )
+
+
 class TestObservationEventHandler:
     @pytest.fixture
     def data_store(self):
@@ -157,12 +210,13 @@ class TestObservationEventHandler:
         return ObservationFormatter()
 
     @pytest.fixture
-    def handler(self, resolver, formatter, buffer, unit_of_work_factory):
-        return ObservationEventHandler(
+    def handler(self, resolver, formatter, buffer, unit_of_work_factory, status_repo):
+        return _create_handler(
             resolver=resolver,
             formatter=formatter,
             buffer=buffer,
             unit_of_work_factory=unit_of_work_factory,
+            player_status_repository=status_repo,
         )
 
     def test_handle_player_location_changed_appends_observation_to_buffer(
@@ -209,7 +263,7 @@ class TestObservationEventHandler:
             days_per_month=30,
             months_per_year=12,
         )
-        handler = ObservationEventHandler(
+        handler = _create_handler(
             resolver=resolver,
             formatter=formatter,
             buffer=buffer,
@@ -234,7 +288,7 @@ class TestObservationEventHandler:
         self, resolver, formatter, buffer, unit_of_work_factory
     ):
         """game_time_provider のみで world_time_config が無いときは game_time_label は None"""
-        handler = ObservationEventHandler(
+        handler = _create_handler(
             resolver=resolver,
             formatter=formatter,
             buffer=buffer,
@@ -257,7 +311,7 @@ class TestObservationEventHandler:
         self, resolver, formatter, buffer, unit_of_work_factory
     ):
         """world_time_config のみで game_time_provider が無いときは game_time_label は None"""
-        handler = ObservationEventHandler(
+        handler = _create_handler(
             resolver=resolver,
             formatter=formatter,
             buffer=buffer,
@@ -309,7 +363,7 @@ class TestObservationEventHandler:
                 )
         broken_resolver = MagicMock()
         broken_resolver.resolve.side_effect = RuntimeError("repo error")
-        handler = ObservationEventHandler(
+        handler = _create_handler(
             resolver=broken_resolver,
             formatter=formatter,
             buffer=buffer,
@@ -337,7 +391,7 @@ class TestObservationEventHandler:
                 )
         broken_formatter = MagicMock()
         broken_formatter.format.side_effect = RuntimeError("format error")
-        handler = ObservationEventHandler(
+        handler = _create_handler(
             resolver=resolver,
             formatter=broken_formatter,
             buffer=buffer,
@@ -365,7 +419,7 @@ class TestObservationEventHandler:
                 )
         broken_buffer = MagicMock()
         broken_buffer.append.side_effect = RuntimeError("buffer write error")
-        handler = ObservationEventHandler(
+        handler = _create_handler(
             resolver=resolver,
             formatter=formatter,
             buffer=broken_buffer,
@@ -393,7 +447,7 @@ class TestObservationEventHandler:
                 )
         broken_resolver = MagicMock()
         broken_resolver.resolve.side_effect = DomainException("domain validation failed")
-        handler = ObservationEventHandler(
+        handler = _create_handler(
             resolver=broken_resolver,
             formatter=formatter,
             buffer=buffer,
@@ -421,7 +475,7 @@ class TestObservationEventHandler:
                 )
         broken_formatter = MagicMock()
         broken_formatter.format.side_effect = ApplicationException("app validation failed")
-        handler = ObservationEventHandler(
+        handler = _create_handler(
             resolver=resolver,
             formatter=broken_formatter,
             buffer=buffer,
@@ -506,7 +560,7 @@ class TestObservationEventHandlerLlmTurnScheduling:
         llm_player_resolver_include_one,
     ):
         """schedules_turn=True の観測（PlayerDowned は schedules_turn も breaks_movement も true）で schedule_turn が呼ばれる"""
-        handler = ObservationEventHandler(
+        handler = _create_handler(
             resolver=resolver,
             formatter=formatter,
             buffer=buffer,
@@ -544,7 +598,7 @@ class TestObservationEventHandlerLlmTurnScheduling:
         mock_resolver = MagicMock()
         mock_resolver.resolve.return_value = [PlayerId(1)]
         movement_service = MagicMock()
-        handler = ObservationEventHandler(
+        handler = _create_handler(
             resolver=mock_resolver,
             formatter=mock_formatter,
             buffer=buffer,
@@ -580,7 +634,7 @@ class TestObservationEventHandlerLlmTurnScheduling:
         mock_resolver = MagicMock()
         mock_resolver.resolve.return_value = [PlayerId(1)]
         movement_service = MagicMock()
-        handler = ObservationEventHandler(
+        handler = _create_handler(
             resolver=mock_resolver,
             formatter=mock_formatter,
             buffer=buffer,
@@ -605,7 +659,7 @@ class TestObservationEventHandlerLlmTurnScheduling:
         llm_player_resolver_include_two_only,
     ):
         """割り込み観測でも LLM プレイヤーでなければ schedule_turn は呼ばれない"""
-        handler = ObservationEventHandler(
+        handler = _create_handler(
             resolver=resolver,
             formatter=formatter,
             buffer=buffer,
@@ -665,7 +719,7 @@ class TestObservationEventHandlerLlmTurnScheduling:
         physical_map_repo.save(
             _make_simple_map(1, [_make_player_object(1), _make_player_object(2, 1, 0)])
         )
-        handler = ObservationEventHandler(
+        handler = _create_handler(
             resolver=resolver,
             formatter=formatter,
             buffer=buffer,
@@ -702,7 +756,7 @@ class TestObservationEventHandlerLlmTurnScheduling:
         physical_map_repo.save(
             _make_simple_map(1, [_make_player_object(1), _make_player_object(2, 1, 0)])
         )
-        handler = ObservationEventHandler(
+        handler = _create_handler(
             resolver=resolver,
             formatter=formatter,
             buffer=buffer,
@@ -733,7 +787,7 @@ class TestObservationEventHandlerLlmTurnScheduling:
 
     def test_handle_when_turn_trigger_none_does_not_schedule(self, resolver, formatter, buffer, unit_of_work_factory, llm_player_resolver_include_one):
         """turn_trigger が None のとき schedule_turn は呼ばれない（通常の観測のみ）"""
-        handler = ObservationEventHandler(
+        handler = _create_handler(
             resolver=resolver,
             formatter=formatter,
             buffer=buffer,
@@ -753,7 +807,7 @@ class TestObservationEventHandlerLlmTurnScheduling:
 
     def test_handle_when_llm_player_resolver_none_does_not_schedule(self, resolver, formatter, buffer, unit_of_work_factory, turn_trigger):
         """llm_player_resolver が None のとき schedule_turn は呼ばれない"""
-        handler = ObservationEventHandler(
+        handler = _create_handler(
             resolver=resolver,
             formatter=formatter,
             buffer=buffer,
@@ -782,7 +836,7 @@ class TestObservationEventHandlerLlmTurnScheduling:
         llm_player_resolver_include_one,
     ):
         """LLM プレイヤーでも schedules_turn/breaks_movement=False の観測では schedule_turn しない"""
-        handler = ObservationEventHandler(
+        handler = _create_handler(
             resolver=resolver,
             formatter=formatter,
             buffer=buffer,
@@ -814,7 +868,7 @@ class TestObservationEventHandlerLlmTurnScheduling:
         """割り込み観測で schedule_turn が例外を投げた場合、SystemErrorException でラップされて伝播する"""
         turn_trigger = MagicMock()
         turn_trigger.schedule_turn.side_effect = RuntimeError("schedule_turn failed")
-        handler = ObservationEventHandler(
+        handler = _create_handler(
             resolver=resolver,
             formatter=formatter,
             buffer=buffer,
