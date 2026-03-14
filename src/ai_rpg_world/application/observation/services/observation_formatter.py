@@ -48,17 +48,6 @@ from ai_rpg_world.application.observation.services.formatters.world_formatter im
 from ai_rpg_world.application.observation.services.formatters.player_formatter import (
     PlayerObservationFormatter,
 )
-from ai_rpg_world.domain.combat.event.combat_events import (
-    HitBoxCreatedEvent,
-    HitBoxDeactivatedEvent,
-    HitBoxHitRecordedEvent,
-    HitBoxMovedEvent,
-    HitBoxObstacleCollidedEvent,
-)
-from ai_rpg_world.domain.conversation.event.conversation_event import (
-    ConversationEndedEvent,
-    ConversationStartedEvent,
-)
 from ai_rpg_world.domain.guild.event.guild_event import (
     GuildBankDepositedEvent,
     GuildBankWithdrawnEvent,
@@ -163,11 +152,6 @@ from ai_rpg_world.domain.player.event.inventory_events import (
     ItemUnequippedEvent,
     InventorySlotOverflowEvent,
 )
-from ai_rpg_world.domain.world.event.harvest_events import (
-    HarvestCancelledEvent,
-    HarvestCompletedEvent,
-    HarvestStartedEvent,
-)
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 if TYPE_CHECKING:
@@ -217,15 +201,15 @@ class ObservationFormatter(IObservationFormatter):
             item_repository=item_repository,
         )
         self._formatters = [
-            ConversationObservationFormatter(self._context, self),
+            ConversationObservationFormatter(self._context),
             QuestObservationFormatter(self._context, self),
             ShopObservationFormatter(self._context, self),
             TradeObservationFormatter(self._context, self),
             SnsObservationFormatter(self._context, self),
             GuildObservationFormatter(self._context, self),
-            HarvestObservationFormatter(self._context, self),
+            HarvestObservationFormatter(self._context),
             MonsterObservationFormatter(self._context, self),
-            CombatObservationFormatter(self._context, self),
+            CombatObservationFormatter(self._context),
             SkillObservationFormatter(self._context, self),
             WorldObservationFormatter(self._context, self),
             PlayerObservationFormatter(self._context, self),
@@ -263,17 +247,6 @@ class ObservationFormatter(IObservationFormatter):
             if output.observation_category != "self_only":
                 return None
         return output
-
-    def _format_conversation_event(
-        self,
-        event: Any,
-        recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
-        if isinstance(event, ConversationStartedEvent):
-            return self._format_conversation_started(event, recipient_player_id)
-        if isinstance(event, ConversationEndedEvent):
-            return self._format_conversation_ended(event, recipient_player_id)
-        return None
 
     def _format_quest_event(
         self,
@@ -364,19 +337,6 @@ class ObservationFormatter(IObservationFormatter):
             return self._format_guild_disbanded(event, recipient_player_id)
         return None
 
-    def _format_harvest_event(
-        self,
-        event: Any,
-        recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
-        if isinstance(event, HarvestStartedEvent):
-            return self._format_harvest_started(event, recipient_player_id)
-        if isinstance(event, HarvestCancelledEvent):
-            return self._format_harvest_cancelled(event, recipient_player_id)
-        if isinstance(event, HarvestCompletedEvent):
-            return self._format_harvest_completed(event, recipient_player_id)
-        return None
-
     def _format_monster_event(
         self,
         event: Any,
@@ -414,23 +374,6 @@ class ObservationFormatter(IObservationFormatter):
             return self._format_target_lost(event, recipient_player_id)
         if isinstance(event, BehaviorStuckEvent):
             return self._format_behavior_stuck(event, recipient_player_id)
-        return None
-
-    def _format_combat_event(
-        self,
-        event: Any,
-        recipient_player_id: PlayerId,
-    ) -> Optional[ObservationOutput]:
-        if isinstance(event, HitBoxCreatedEvent):
-            return self._format_hit_box_created(event, recipient_player_id)
-        if isinstance(event, HitBoxMovedEvent):
-            return self._format_hit_box_moved(event, recipient_player_id)
-        if isinstance(event, HitBoxHitRecordedEvent):
-            return self._format_hit_box_hit_recorded(event, recipient_player_id)
-        if isinstance(event, HitBoxDeactivatedEvent):
-            return self._format_hit_box_deactivated(event, recipient_player_id)
-        if isinstance(event, HitBoxObstacleCollidedEvent):
-            return self._format_hit_box_obstacle_collided(event, recipient_player_id)
         return None
 
     def _format_skill_event(
@@ -898,66 +841,6 @@ class ObservationFormatter(IObservationFormatter):
         structured = {"type": "inventory_overflow", "item_name": item_name}
         return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
 
-    # --- 会話 ---
-
-    def _npc_name(self, npc_id_value: int) -> str:
-        return self._name_resolver.npc_name(npc_id_value)
-
-    def _format_conversation_started(
-        self, event: ConversationStartedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
-        npc_name = self._npc_name(event.npc_id_value)
-        prose = f"{npc_name}と会話を始めました。"
-        structured = {
-            "type": "conversation_started",
-            "npc_name": npc_name,
-            "world_object_id": event.npc_id_value,
-            "npc_id_value": event.npc_id_value,
-            "dialogue_tree_id_value": event.dialogue_tree_id_value,
-            "entry_node_id_value": event.entry_node_id_value,
-        }
-        return ObservationOutput(
-            prose=prose,
-            structured=structured,
-            observation_category="self_only",
-            schedules_turn=True,
-            breaks_movement=True,
-        )
-
-    def _format_conversation_ended(
-        self, event: ConversationEndedEvent, recipient_id: PlayerId
-    ) -> Optional[ObservationOutput]:
-        npc_name = self._npc_name(event.npc_id_value)
-        parts: list[str] = [f"{npc_name}との会話を終えました。"]
-        if event.outcome:
-            parts.append(str(event.outcome))
-        if event.rewards_claimed_gold:
-            parts.append(f"{event.rewards_claimed_gold}ゴールドを獲得しました。")
-        if event.rewards_claimed_items:
-            item_parts: list[str] = []
-            for spec_id_value, qty in event.rewards_claimed_items:
-                name = self._item_spec_name(spec_id_value)
-                item_parts.append(f"{name}を{qty}個")
-            if item_parts:
-                parts.append("報酬: " + "、".join(item_parts))
-        if event.quest_unlocked_ids:
-            parts.append(f"新しいクエストが{len(event.quest_unlocked_ids)}件解放されました。")
-        prose = " ".join(parts)
-        structured = {
-            "type": "conversation_ended",
-            "npc_name": npc_name,
-            "world_object_id": event.npc_id_value,
-            "npc_id_value": event.npc_id_value,
-            "end_node_id_value": event.end_node_id_value,
-            "outcome": event.outcome,
-            "rewards_claimed_gold": event.rewards_claimed_gold,
-            "rewards_claimed_items": list(event.rewards_claimed_items),
-            "quest_unlocked_count": len(event.quest_unlocked_ids),
-            "quest_unlocked_ids": list(event.quest_unlocked_ids),
-            "quest_completed_quest_ids": list(event.quest_completed_quest_ids),
-        }
-        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
-
     # --- クエスト ---
 
     def _quest_reward_summary(self, reward: Any) -> str:
@@ -1371,23 +1254,6 @@ class ObservationFormatter(IObservationFormatter):
             schedules_turn=True,
         )
 
-    # --- Harvest ---
-
-    def _format_harvest_started(self, event: HarvestStartedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
-        prose = "採集を開始しました。"
-        structured = {"type": "harvest_started", "finish_tick": int(getattr(event.finish_tick, "value", event.finish_tick))}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
-
-    def _format_harvest_cancelled(self, event: HarvestCancelledEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
-        prose = f"採集を中断しました（理由: {event.reason}）。"
-        structured = {"type": "harvest_cancelled", "reason": event.reason}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
-
-    def _format_harvest_completed(self, event: HarvestCompletedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
-        prose = "採集が完了しました。"
-        structured = {"type": "harvest_completed"}
-        return ObservationOutput(prose=prose, structured=structured, observation_category="self_only")
-
     # --- Monster ---
 
     def _monster_name_by_monster_id(self, monster_id: Any) -> str:
@@ -1610,33 +1476,6 @@ class ObservationFormatter(IObservationFormatter):
             schedules_turn=True,
             breaks_movement=False,
         )
-
-    # --- Combat (HitBox) ---
-
-    def _format_hit_box_created(self, event: HitBoxCreatedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
-        return None
-
-    def _format_hit_box_moved(self, event: HitBoxMovedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
-        return None
-
-    def _format_hit_box_hit_recorded(self, event: HitBoxHitRecordedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
-        prose = "攻撃が命中しました。"
-        owner_id = getattr(event.owner_id, "value", event.owner_id) if event.owner_id else None
-        target_id = getattr(event.target_id, "value", event.target_id) if event.target_id else None
-        structured = {"type": "hitbox_hit", "owner_world_object_id": owner_id, "target_world_object_id": target_id}
-        return ObservationOutput(
-            prose=prose,
-            structured=structured,
-            observation_category="self_only",
-            schedules_turn=True,
-            breaks_movement=True,
-        )
-
-    def _format_hit_box_deactivated(self, event: HitBoxDeactivatedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
-        return None
-
-    def _format_hit_box_obstacle_collided(self, event: HitBoxObstacleCollidedEvent, recipient_id: PlayerId) -> Optional[ObservationOutput]:
-        return None
 
     # --- Skill ---
 
