@@ -8,6 +8,9 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationRecipientResolver,
 )
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+from ai_rpg_world.domain.player.repository.player_status_repository import (
+    PlayerStatusRepository,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -21,7 +24,7 @@ class ObservationPipeline:
         self,
         resolver: IObservationRecipientResolver,
         formatter: IObservationFormatter,
-        player_status_repository: Optional[Any] = None,
+        player_status_repository: Optional[PlayerStatusRepository] = None,
     ) -> None:
         self._resolver = resolver
         self._formatter = formatter

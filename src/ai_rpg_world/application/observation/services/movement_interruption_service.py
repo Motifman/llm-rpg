@@ -5,11 +5,12 @@ LLM 制御プレイヤーのみ対象。movement_service の cancel_movement を
 """
 
 import logging
-from typing import Any, Optional
+from typing import Optional
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.llm.contracts.interfaces import ILLMPlayerResolver
 from ai_rpg_world.application.world.contracts.commands import CancelMovementCommand
+from ai_rpg_world.application.world.contracts.interfaces import ICancelMovementPort
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -22,7 +23,7 @@ class MovementInterruptionService:
 
     def __init__(
         self,
-        movement_service: Optional[Any] = None,
+        movement_service: Optional[ICancelMovementPort] = None,
         llm_player_resolver: Optional[ILLMPlayerResolver] = None,
         logger: Optional[logging.Logger] = None,
     ) -> None:
@@ -38,9 +39,7 @@ class MovementInterruptionService:
         """
         if not output.breaks_movement:
             return
-        if self._movement_service is None or not callable(
-            getattr(self._movement_service, "cancel_movement", None)
-        ):
+        if self._movement_service is None:
             return
         if self._llm_player_resolver is None or not self._llm_player_resolver.is_llm_controlled(
             player_id

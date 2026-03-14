@@ -3,6 +3,11 @@
 from datetime import datetime
 from typing import Any, Optional
 
+from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
+from ai_rpg_world.domain.world.service.world_time_config_service import (
+    WorldTimeConfigService,
+)
+
 
 class ObservationTimestampResolver:
     """
@@ -12,8 +17,8 @@ class ObservationTimestampResolver:
 
     def __init__(
         self,
-        game_time_provider: Optional[Any] = None,
-        world_time_config: Optional[Any] = None,
+        game_time_provider: Optional[GameTimeProvider] = None,
+        world_time_config: Optional[WorldTimeConfigService] = None,
     ) -> None:
         self._game_time_provider = game_time_provider
         self._world_time_config = world_time_config

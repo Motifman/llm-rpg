@@ -105,26 +105,6 @@ class TestMovementInterruptionServiceBoundary:
 
         movement_service.cancel_movement.assert_not_called()
 
-    def test_does_not_call_when_movement_service_lacks_cancel_movement(self):
-        """movement_service に cancel_movement メソッドが無いとき呼ばれない"""
-        movement_service = MagicMock(spec=[])  # メソッドなし
-        llm_resolver = MagicMock()
-        llm_resolver.is_llm_controlled.return_value = True
-        service = MovementInterruptionService(
-            movement_service=movement_service,
-            llm_player_resolver=llm_resolver,
-        )
-        output = _output(breaks_movement=True)
-
-        service.maybe_cancel(PlayerId(1), output)
-
-        assert not hasattr(movement_service, "cancel_movement") or not callable(
-            getattr(movement_service, "cancel_movement", None)
-        )
-        # movement_service が cancel_movement を持たない場合、サービスは
-        # callable(getattr(...)) で False になり early return する
-        # MagicMock(spec=[]) は cancel_movement を持たない
-
     def test_does_not_raise_when_both_none(self):
         """両方 None でも例外にならない"""
         service = MovementInterruptionService(
