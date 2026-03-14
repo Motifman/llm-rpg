@@ -3,6 +3,9 @@
 import pytest
 from unittest.mock import MagicMock
 
+from ai_rpg_world.application.observation.services.observed_event_registry import (
+    ObservedEventRegistry,
+)
 from ai_rpg_world.application.observation.services.player_audience_query_service import (
     PlayerAudienceQueryService,
 )
@@ -66,7 +69,10 @@ class TestQuestRecipientStrategyNormal:
 
     @pytest.fixture
     def strategy(self, audience_query):
-        return QuestRecipientStrategy(player_audience_query=audience_query)
+        return QuestRecipientStrategy(
+            observed_event_registry=ObservedEventRegistry(),
+            player_audience_query=audience_query,
+        )
 
     def test_quest_accepted_returns_acceptor(self, strategy):
         """QuestAcceptedEvent: acceptor_player_id が配信先"""
@@ -175,6 +181,7 @@ class TestQuestRecipientStrategyNormal:
         guild.add_member(PlayerId(1), PlayerId(2))
         guild_repo.save(guild)
         strategy = QuestRecipientStrategy(
+            observed_event_registry=ObservedEventRegistry(),
             player_audience_query=audience_query,
             guild_repository=guild_repo,
         )
@@ -207,7 +214,10 @@ class TestQuestRecipientStrategyExceptions:
 
     def test_resolve_by_scope_returns_empty_when_scope_none(self, audience_query):
         """_resolve_by_scope(None): 空リストを返す（防御的）"""
-        strategy = QuestRecipientStrategy(player_audience_query=audience_query)
+        strategy = QuestRecipientStrategy(
+            observed_event_registry=ObservedEventRegistry(),
+            player_audience_query=audience_query,
+        )
         result = strategy._resolve_by_scope(None)
         assert result == []
 
@@ -215,6 +225,7 @@ class TestQuestRecipientStrategyExceptions:
         """guild_id=0 のとき GuildId 検証で失敗し空リストを返す"""
         guild_repo = MagicMock()
         strategy = QuestRecipientStrategy(
+            observed_event_registry=ObservedEventRegistry(),
             player_audience_query=audience_query,
             guild_repository=guild_repo,
         )
@@ -233,6 +244,7 @@ class TestQuestRecipientStrategyExceptions:
         """guild_id=-1 のとき GuildId 検証で失敗し空リストを返す"""
         guild_repo = MagicMock()
         strategy = QuestRecipientStrategy(
+            observed_event_registry=ObservedEventRegistry(),
             player_audience_query=audience_query,
             guild_repository=guild_repo,
         )
@@ -250,6 +262,7 @@ class TestQuestRecipientStrategyExceptions:
     def test_quest_approved_returns_empty_when_quest_repository_none(self, audience_query):
         """quest_repository が None のとき QuestApprovedEvent は空リスト"""
         strategy = QuestRecipientStrategy(
+            observed_event_registry=ObservedEventRegistry(),
             player_audience_query=audience_query,
             quest_repository=None,
         )
@@ -266,6 +279,7 @@ class TestQuestRecipientStrategyExceptions:
         quest_repo = MagicMock()
         quest_repo.find_by_id.return_value = None
         strategy = QuestRecipientStrategy(
+            observed_event_registry=ObservedEventRegistry(),
             player_audience_query=audience_query,
             quest_repository=quest_repo,
         )
@@ -286,6 +300,7 @@ class TestQuestRecipientStrategyExceptions:
         quest.scope = None
         quest_repo.find_by_id.return_value = quest
         strategy = QuestRecipientStrategy(
+            observed_event_registry=ObservedEventRegistry(),
             player_audience_query=audience_query,
             quest_repository=quest_repo,
         )
@@ -304,7 +319,10 @@ class TestQuestRecipientStrategySupports:
 
     @pytest.fixture
     def strategy(self):
-        return QuestRecipientStrategy(player_audience_query=MagicMock())
+        return QuestRecipientStrategy(
+            observed_event_registry=ObservedEventRegistry(),
+            player_audience_query=MagicMock(),
+        )
 
     def test_supports_quest_accepted_event(self, strategy):
         """QuestAcceptedEvent を supports"""

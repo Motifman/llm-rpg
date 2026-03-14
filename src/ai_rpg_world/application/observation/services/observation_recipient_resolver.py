@@ -26,6 +26,9 @@ from ai_rpg_world.domain.skill.repository.skill_repository import (
 from ai_rpg_world.domain.world.repository.physical_map_repository import (
     PhysicalMapRepository,
 )
+from ai_rpg_world.application.observation.services.observed_event_registry import (
+    ObservedEventRegistry,
+)
 from ai_rpg_world.application.observation.services.player_audience_query_service import (
     PlayerAudienceQueryService,
 )
@@ -99,45 +102,70 @@ def create_observation_recipient_resolver(
     既存と同様の振る舞いになる Resolver を組み立てる。
     デフォルト戦略と WorldObjectToPlayerResolver を用いる。
     """
+    observed_event_registry = ObservedEventRegistry()
     world_object_resolver = WorldObjectToPlayerResolver(physical_map_repository)
     player_audience_query = PlayerAudienceQueryService(
         player_status_repository=player_status_repository,
     )
     strategies: List[IRecipientResolutionStrategy] = [
-        ConversationRecipientStrategy(),
+        ConversationRecipientStrategy(
+            observed_event_registry=observed_event_registry,
+        ),
         QuestRecipientStrategy(
+            observed_event_registry=observed_event_registry,
             player_audience_query=player_audience_query,
             quest_repository=quest_repository,
             guild_repository=guild_repository,
         ),
         ShopRecipientStrategy(
+            observed_event_registry=observed_event_registry,
             player_audience_query=player_audience_query,
             shop_repository=shop_repository,
         ),
-        TradeRecipientStrategy(trade_repository=trade_repository),
-        SnsRecipientStrategy(sns_user_repository=sns_user_repository),
+        TradeRecipientStrategy(
+            observed_event_registry=observed_event_registry,
+            trade_repository=trade_repository,
+        ),
+        SnsRecipientStrategy(
+            observed_event_registry=observed_event_registry,
+            sns_user_repository=sns_user_repository,
+        ),
         GuildRecipientStrategy(
+            observed_event_registry=observed_event_registry,
             player_audience_query=player_audience_query,
             guild_repository=guild_repository,
         ),
-        HarvestRecipientStrategy(world_object_to_player_resolver=world_object_resolver),
-        PursuitRecipientStrategy(world_object_to_player_resolver=world_object_resolver),
+        HarvestRecipientStrategy(
+            observed_event_registry=observed_event_registry,
+            world_object_to_player_resolver=world_object_resolver,
+        ),
+        PursuitRecipientStrategy(
+            observed_event_registry=observed_event_registry,
+            world_object_to_player_resolver=world_object_resolver,
+        ),
         MonsterRecipientStrategy(
+            observed_event_registry=observed_event_registry,
             player_audience_query=player_audience_query,
             physical_map_repository=physical_map_repository,
             world_object_to_player_resolver=world_object_resolver,
             monster_repository=monster_repository,
         ),
         CombatRecipientStrategy(
+            observed_event_registry=observed_event_registry,
             world_object_to_player_resolver=world_object_resolver,
             hit_box_repository=hit_box_repository,
         ),
         SkillRecipientStrategy(
+            observed_event_registry=observed_event_registry,
             skill_loadout_repository=skill_loadout_repository,
             skill_deck_progress_repository=skill_deck_progress_repository,
         ),
-        SpeechRecipientStrategy(player_status_repository=player_status_repository),
+        SpeechRecipientStrategy(
+            observed_event_registry=observed_event_registry,
+            player_status_repository=player_status_repository,
+        ),
         DefaultRecipientStrategy(
+            observed_event_registry=observed_event_registry,
             player_audience_query=player_audience_query,
             world_object_to_player_resolver=world_object_resolver,
         ),

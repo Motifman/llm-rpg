@@ -7,6 +7,9 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
     IWorldObjectToPlayerResolver,
 )
+from ai_rpg_world.application.observation.services.observed_event_registry import (
+    ObservedEventRegistry,
+)
 from ai_rpg_world.domain.monster.event.monster_events import (
     ActorStateChangedEvent,
     BehaviorStuckEvent,
@@ -36,40 +39,24 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 class MonsterRecipientStrategy(IRecipientResolutionStrategy):
     """モンスターイベントの配信先を解決する。基本は「同一スポットのプレイヤー」＋必要なら攻撃者本人。"""
 
+    _STRATEGY_KEY = "monster"
+
     def __init__(
         self,
+        observed_event_registry: ObservedEventRegistry,
         player_audience_query: IPlayerAudienceQueryPort,
         physical_map_repository: PhysicalMapRepository,
         world_object_to_player_resolver: IWorldObjectToPlayerResolver,
         monster_repository: Optional[MonsterRepository] = None,
     ) -> None:
+        self._registry = observed_event_registry
         self._player_audience_query = player_audience_query
         self._physical_map_repository = physical_map_repository
         self._world_object_to_player_resolver = world_object_to_player_resolver
         self._monster_repository = monster_repository
 
     def supports(self, event: Any) -> bool:
-        return isinstance(
-            event,
-            (
-                MonsterCreatedEvent,
-                MonsterSpawnedEvent,
-                MonsterDamagedEvent,
-                MonsterDiedEvent,
-                MonsterRespawnedEvent,
-                MonsterEvadedEvent,
-                MonsterHealedEvent,
-                MonsterMpRecoveredEvent,
-                MonsterDecidedToMoveEvent,
-                MonsterDecidedToUseSkillEvent,
-                MonsterDecidedToInteractEvent,
-                MonsterFedEvent,
-                ActorStateChangedEvent,
-                TargetSpottedEvent,
-                TargetLostEvent,
-                BehaviorStuckEvent,
-            ),
-        )
+        return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
     def resolve(self, event: Any) -> List[PlayerId]:
         recipients: List[PlayerId] = []

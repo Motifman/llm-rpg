@@ -5,6 +5,9 @@ from typing import Any, List, Optional
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
 )
+from ai_rpg_world.application.observation.services.observed_event_registry import (
+    ObservedEventRegistry,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.event.trade_event import (
     TradeAcceptedEvent,
@@ -20,14 +23,18 @@ from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 class TradeRecipientStrategy(IRecipientResolutionStrategy):
     """取引イベントの配信先を解決する。"""
 
-    def __init__(self, trade_repository: Optional[TradeRepository] = None) -> None:
+    _STRATEGY_KEY = "trade"
+
+    def __init__(
+        self,
+        observed_event_registry: ObservedEventRegistry,
+        trade_repository: Optional[TradeRepository] = None,
+    ) -> None:
+        self._registry = observed_event_registry
         self._trade_repository = trade_repository
 
     def supports(self, event: Any) -> bool:
-        return isinstance(
-            event,
-            (TradeOfferedEvent, TradeAcceptedEvent, TradeCancelledEvent, TradeDeclinedEvent),
-        )
+        return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
     def resolve(self, event: Any) -> List[PlayerId]:
         if isinstance(event, TradeOfferedEvent):
