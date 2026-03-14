@@ -12,7 +12,7 @@
 | **Phase 1** | 共通基盤（ObservationFormatterContext、IObservationSubFormatter 明確化） | ✅ 完了 |
 | **Phase 2** | 小規模 formatter のロジック移行（Conversation, Harvest, Combat） | ✅ 完了 |
 | **Phase 3** | 中規模 formatter のロジック移行（Trade, Shop, Sns, Quest, Guild） | ✅ 完了 |
-| **Phase 4** | 大規模 formatter のロジック移行（World, Player, Skill, Monster） | 未着手 |
+| **Phase 4** | 大規模 formatter のロジック移行（World, Player, Skill, Monster） | ✅ 完了 |
 | **Phase 5** | Pursuit formatter 追加、オーケストレータ整理、親ファイル縮小 | 未着手 |
 
 ---
@@ -113,6 +113,15 @@
 - **Player**: `_format_item_added_to_inventory` で `context.item_repository` を参照
 - **World**: `_LOCATION_DESCRIPTION_TRUNCATE_LENGTH` は World formatter 内に定数として定義
 - **Monster**: 15 イベント分を一括で移行
+
+### 6.1 完了した成果物（2025-03）
+
+- `skill_formatter.py`: parent 廃止、12 イベントを自前実装
+- `monster_formatter.py`: parent 廃止、15 イベントを自前実装
+- `world_formatter.py`: parent 廃止、7 イベント + `_interaction_type_to_prose` を自前実装
+- `player_formatter.py`: parent 廃止、12 イベントを自前実装（`context.item_repository` で quantity 取得）
+- 親 `observation_formatter.py` から Monster / World / Player 関連の `_format_*` メソッドとヘルパーを削除し、Pursuit 関連のみ残して縮小
+- `test_skill_formatter.py`, `test_monster_formatter.py`, `test_world_formatter.py`, `test_player_formatter.py`: 各 formatter の単体テスト（正常系・異常系）
 
 ---
 
