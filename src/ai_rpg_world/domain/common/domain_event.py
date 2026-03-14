@@ -1,30 +1,9 @@
-from abc import ABC
 from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Protocol, TypeVar, Generic, Any, Optional
 import uuid
 
 from ai_rpg_world.domain.common.value_object import WorldTick
-
-# 既存のDomainEvent（変更なし）
-@dataclass(frozen=True)
-class DomainEvent(ABC):
-    """ドメインイベントの基底クラス"""
-    event_id: int
-    occurred_at: datetime
-    aggregate_id: int
-    aggregate_type: str
-    event_version: int = 1
-
-    @classmethod
-    def create(cls, aggregate_id: int, aggregate_type: str, **kwargs):
-        return cls(
-            event_id=int(uuid.uuid4()),
-            occurred_at=datetime.now(),
-            aggregate_id=aggregate_id,
-            aggregate_type=aggregate_type,
-            **kwargs
-        )
 
 # 集約IDの型変数
 AggregateId = TypeVar('AggregateId')
@@ -56,3 +35,7 @@ class BaseDomainEvent(Generic[AggregateId, AggregateType]):
         event_id = int(uuid.uuid4())
         occurred_at = datetime.now()
         return cls(event_id, occurred_at, aggregate_id, aggregate_type, **kwargs)
+
+
+# 後方互換のため BaseDomainEvent[Any, Any] の型エイリアスを提供
+DomainEvent = BaseDomainEvent[Any, Any]
