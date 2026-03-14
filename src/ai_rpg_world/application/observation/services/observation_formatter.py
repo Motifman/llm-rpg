@@ -4,6 +4,9 @@ from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.contracts.interfaces import IObservationFormatter
+from ai_rpg_world.application.observation.services.formatters._formatter_context import (
+    ObservationFormatterContext,
+)
 from ai_rpg_world.application.observation.services.formatters.name_resolver import (
     ObservationNameResolver,
     FALLBACK_ITEM_LABEL,
@@ -209,19 +212,23 @@ class ObservationFormatter(IObservationFormatter):
             sns_user_repository=sns_user_repository,
         )
         self._item_repository = item_repository  # _format_item_added_to_inventory で使用
+        self._context = ObservationFormatterContext(
+            name_resolver=self._name_resolver,
+            item_repository=item_repository,
+        )
         self._formatters = [
-            ConversationObservationFormatter(self),
-            QuestObservationFormatter(self),
-            ShopObservationFormatter(self),
-            TradeObservationFormatter(self),
-            SnsObservationFormatter(self),
-            GuildObservationFormatter(self),
-            HarvestObservationFormatter(self),
-            MonsterObservationFormatter(self),
-            CombatObservationFormatter(self),
-            SkillObservationFormatter(self),
-            WorldObservationFormatter(self),
-            PlayerObservationFormatter(self),
+            ConversationObservationFormatter(self._context, self),
+            QuestObservationFormatter(self._context, self),
+            ShopObservationFormatter(self._context, self),
+            TradeObservationFormatter(self._context, self),
+            SnsObservationFormatter(self._context, self),
+            GuildObservationFormatter(self._context, self),
+            HarvestObservationFormatter(self._context, self),
+            MonsterObservationFormatter(self._context, self),
+            CombatObservationFormatter(self._context, self),
+            SkillObservationFormatter(self._context, self),
+            WorldObservationFormatter(self._context, self),
+            PlayerObservationFormatter(self._context, self),
         ]
 
     def format(

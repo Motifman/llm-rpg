@@ -9,7 +9,7 @@
 
 | フェーズ | 内容 | 状態 |
 |----------|------|------|
-| **Phase 1** | 共通基盤（ObservationFormatterContext、IObservationSubFormatter 明確化） | 未着手 |
+| **Phase 1** | 共通基盤（ObservationFormatterContext、IObservationSubFormatter 明確化） | ✅ 完了 |
 | **Phase 2** | 小規模 formatter のロジック移行（Conversation, Harvest, Combat） | 未着手 |
 | **Phase 3** | 中規模 formatter のロジック移行（Trade, Shop, Sns, Quest, Guild） | 未着手 |
 | **Phase 4** | 大規模 formatter のロジック移行（World, Player, Skill, Monster） | 未着手 |

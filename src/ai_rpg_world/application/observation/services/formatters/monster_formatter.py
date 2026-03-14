@@ -3,6 +3,9 @@
 from typing import TYPE_CHECKING, Any, Optional
 
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
+from ai_rpg_world.application.observation.services.formatters._formatter_context import (
+    ObservationFormatterContext,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 if TYPE_CHECKING:
@@ -12,7 +15,12 @@ if TYPE_CHECKING:
 class MonsterObservationFormatter:
     """MonsterSpawnedEvent / MonsterDamagedEvent / MonsterDiedEvent 等を処理する。"""
 
-    def __init__(self, parent: "ObservationFormatter") -> None:
+    def __init__(
+        self,
+        context: ObservationFormatterContext,
+        parent: "ObservationFormatter",
+    ) -> None:
+        self._context = context
         self._parent = parent
 
     def format(
