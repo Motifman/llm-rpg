@@ -33,6 +33,8 @@ from ai_rpg_world.domain.world.enum.world_enum import (
 )
 from ai_rpg_world.domain.world.service.map_geometry_service import MapGeometryService
 from ai_rpg_world.domain.world.service.map_trigger_engine import MapTriggerEngine
+from ai_rpg_world.domain.world.service.map_interaction_policy import MapInteractionPolicy
+from ai_rpg_world.domain.world.service.chest_interaction_policy import ChestInteractionPolicy
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
 from ai_rpg_world.domain.world.event.map_events import (
@@ -690,32 +692,15 @@ class PhysicalMapAggregate(AggregateRoot):
         actor = self.get_actor(actor_id)
         target = self.get_object(target_id)
 
-        # 0. ビジー状態のチェック
-        if actor.is_busy(current_tick):
-            raise ActorBusyException(f"Actor {actor_id} is busy until {actor.busy_until}")
+        MapInteractionPolicy.validate_can_interact(actor, target, current_tick)
 
-        # 1. 距離チェック（隣接または同じマス）
-        distance = actor.coordinate.chebyshev_distance_to(target.coordinate)
-        if distance > 1:
-            raise InteractionOutOfRangeException(f"Target {target_id} is too far from actor {actor_id}")
-
-        # 2. 向きチェック（ターゲットが隣接している場合、その方向を向いている必要がある）
-        if distance == 1:
-            expected_direction = actor.coordinate.direction_to(target.coordinate)
-            if actor.direction != expected_direction:
-                raise NotFacingTargetException(f"Actor {actor_id} is not facing target {target_id}")
-
-        # 3. インタラクション可能性チェック
-        interaction_type = target.interaction_type
-        if not interaction_type:
-            raise NotInteractableException(f"Target {target_id} is not interactable")
-
-        # 4. 効果をターゲットのコンポーネントに委譲（例外時はイベント・ビジーは行わない）
+        # 効果をターゲットのコンポーネントに委譲（例外時はイベント・ビジーは行わない）
         target.component.apply_interaction_from(
             actor_id, target_id, self, current_tick
         )
 
-        # 5. インタラクション成功イベントを発行
+        # インタラクション成功イベントを発行
+        interaction_type = target.interaction_type
         self.add_event(WorldObjectInteractedEvent.create(
             aggregate_id=target_id,
             aggregate_type="WorldObject",
@@ -725,7 +710,7 @@ class PhysicalMapAggregate(AggregateRoot):
             data=target.interaction_data
         ))
 
-        # 6. アクターをビジー状態にする
+        # アクターをビジー状態にする
         duration = target.interaction_duration
         actor.set_busy(current_tick.add_duration(duration))
 
@@ -735,23 +720,14 @@ class PhysicalMapAggregate(AggregateRoot):
         target_chest_id: WorldObjectId,
         item_instance_id: ItemInstanceId,
         player_id_value: int,
+        current_tick: WorldTick,
     ) -> None:
         """チェストにアイテムを収納する。アプリケーションサービスから呼ばれ、プレイヤー所持検証は呼び出し側で行う。"""
         actor = self.get_actor(actor_id)
         chest_obj = self.get_object(target_chest_id)
 
-        if not isinstance(chest_obj.component, ChestComponent):
-            raise NotAChestException(f"Object {target_chest_id} is not a chest")
-
+        ChestInteractionPolicy.validate_can_access_chest(actor, chest_obj, current_tick)
         chest = chest_obj.component
-        if not chest.is_open:
-            raise ChestClosedException(f"Chest {target_chest_id} is closed")
-
-        distance = actor.coordinate.chebyshev_distance_to(chest_obj.coordinate)
-        if distance > 1:
-            raise InteractionOutOfRangeException(
-                f"Chest {target_chest_id} is too far from actor {actor_id}"
-            )
 
         chest.add_item(item_instance_id)
         self.add_event(ItemStoredInChestEvent.create(
@@ -770,23 +746,14 @@ class PhysicalMapAggregate(AggregateRoot):
         target_chest_id: WorldObjectId,
         item_instance_id: ItemInstanceId,
         player_id_value: int,
+        current_tick: WorldTick,
     ) -> None:
         """チェストからアイテムを取得する。アプリケーションサービスから呼ばれる。"""
         actor = self.get_actor(actor_id)
         chest_obj = self.get_object(target_chest_id)
 
-        if not isinstance(chest_obj.component, ChestComponent):
-            raise NotAChestException(f"Object {target_chest_id} is not a chest")
-
+        ChestInteractionPolicy.validate_can_access_chest(actor, chest_obj, current_tick)
         chest = chest_obj.component
-        if not chest.is_open:
-            raise ChestClosedException(f"Chest {target_chest_id} is closed")
-
-        distance = actor.coordinate.chebyshev_distance_to(chest_obj.coordinate)
-        if distance > 1:
-            raise InteractionOutOfRangeException(
-                f"Chest {target_chest_id} is too far from actor {actor_id}"
-            )
 
         if not chest.remove_item(item_instance_id):
             raise ItemNotInChestException(

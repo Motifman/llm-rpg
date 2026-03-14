@@ -46,6 +46,7 @@ from ai_rpg_world.application.world.handlers.item_stored_in_chest_handler import
 from ai_rpg_world.application.world.handlers.item_taken_from_chest_handler import ItemTakenFromChestHandler
 from ai_rpg_world.infrastructure.events.map_interaction_event_handler_registry import MapInteractionEventHandlerRegistry
 from ai_rpg_world.domain.world.exception.map_exception import MapDomainException
+from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import InMemoryGameTimeProvider
 from unittest.mock import patch
 
 
@@ -88,9 +89,11 @@ class TestChestCommandService:
     @pytest.fixture
     def service(self, unit_of_work):
         uow, map_repo, inventory_repo = unit_of_work
+        time_provider = InMemoryGameTimeProvider(initial_tick=10)
         return ChestCommandService(
             physical_map_repository=map_repo,
             player_inventory_repository=inventory_repo,
+            time_provider=time_provider,
             unit_of_work=uow,
         )
 

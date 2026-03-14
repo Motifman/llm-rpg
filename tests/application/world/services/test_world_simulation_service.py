@@ -1759,9 +1759,11 @@ class TestWorldSimulationApplicationService:
         """天候更新が設定されたインターバルに従うこと（ロジック検証）"""
         service, time_provider, map_repo, zone_repo, _, _, _, _, _, _ = setup_service
         
-        # インターバルを5に設定
+        # インターバルを5に設定（environment_stage も同じ config を参照する必要あり）
         from ai_rpg_world.domain.world.service.weather_config_service import DefaultWeatherConfigService
-        service._weather_config_service = DefaultWeatherConfigService(update_interval_ticks=5)
+        weather_config = DefaultWeatherConfigService(update_interval_ticks=5)
+        service._weather_config_service = weather_config
+        service._environment_stage._weather_config_service = weather_config
         
         spot_id = SpotId(1)
         zone_id = WeatherZoneId(1)
