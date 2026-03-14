@@ -58,3 +58,15 @@ class HarvestSessionPolicy:
             raise NotHarvestableException(
                 f"Object {target.object_id} is not harvestable"
             )
+
+    @staticmethod
+    def validate_is_harvestable(target: WorldObject) -> None:
+        """
+        finish_resource_harvest / cancel_resource_harvest の事前条件を検証する。
+        target が HarvestableComponent を持つことを検証する。
+        失敗時は NotHarvestableException を投げる。
+        """
+        if not isinstance(target.component, HarvestableComponent):
+            raise NotHarvestableException(
+                f"Object {target.object_id} is not harvestable"
+            )

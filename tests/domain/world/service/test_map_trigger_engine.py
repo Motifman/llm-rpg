@@ -231,6 +231,42 @@ class TestComputeAreaTriggerEvents:
             # Then
             assert len(events) == 0
 
+        def test_overlapping_area_triggers_emit_events_for_both(self, spot_id):
+            # Given: 同一座標を含む2つの AreaTrigger（重複エリア）
+            t1 = AreaTrigger(
+                AreaTriggerId(1),
+                PointArea(Coordinate(1, 1, 0)),
+                DamageTrigger(10),
+                "zone1",
+            )
+            t2 = AreaTrigger(
+                AreaTriggerId(2),
+                PointArea(Coordinate(1, 1, 0)),
+                WarpTrigger(SpotId(2), Coordinate(0, 0, 0)),
+                "zone2",
+            )
+            area_triggers = {t1.trigger_id: t1, t2.trigger_id: t2}
+
+            # When: 外から (1,1,0) へ進入（両方のエリアに同時進入）
+            events = MapTriggerEngine.compute_area_trigger_events(
+                object_id=WorldObjectId(1),
+                old_coordinate=Coordinate(0, 0, 0),
+                new_coordinate=Coordinate(1, 1, 0),
+                area_triggers=area_triggers,
+                location_areas={},
+                gateways={},
+                objects={},
+                spot_id=spot_id,
+            )
+
+            # Then: 両方のエリアで AreaEnteredEvent と AreaTriggeredEvent が発行される
+            entered = [e for e in events if isinstance(e, AreaEnteredEvent)]
+            triggered = [e for e in events if isinstance(e, AreaTriggeredEvent)]
+            assert len(entered) == 2
+            assert len(triggered) == 2
+            trigger_ids = {e.trigger_id for e in entered}
+            assert trigger_ids == {AreaTriggerId(1), AreaTriggerId(2)}
+
     class TestLocationArea:
         def test_entering_location_emits_entered_with_details(self, spot_id, location_area, actor_object):
             # Given
