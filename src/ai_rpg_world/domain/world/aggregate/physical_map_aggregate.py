@@ -32,6 +32,7 @@ from ai_rpg_world.domain.world.enum.world_enum import (
     SpotTraitEnum,
 )
 from ai_rpg_world.domain.world.service.map_geometry_service import MapGeometryService
+from ai_rpg_world.domain.world.service.map_trigger_engine import MapTriggerEngine
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
 from ai_rpg_world.domain.world.event.map_events import (
@@ -414,128 +415,17 @@ class PhysicalMapAggregate(AggregateRoot):
         ))
 
         # エリアトリガーの判定
-        self._check_area_triggers(object_id, old_coordinate, new_coordinate, current_tick)
+        for ev in MapTriggerEngine.compute_area_trigger_events(
+            object_id, old_coordinate, new_coordinate,
+            self._area_triggers, self._location_areas, self._gateways,
+            self._objects, self._spot_id, current_tick,
+        ):
+            self.add_event(ev)
         # 同一マスのオブジェクトの「踏んだら発火」トリガー判定
-        self._check_object_triggers_on_step(object_id, new_coordinate)
-
-    def _check_object_triggers_on_step(self, actor_id: WorldObjectId, new_coordinate: Coordinate):
-        """指定座標にあるオブジェクトの get_trigger_on_step を発火させる"""
-        if new_coordinate not in self._object_positions:
-            return
-        for obj_id in self._object_positions[new_coordinate]:
-            if obj_id == actor_id:
-                continue
-            obj = self._objects[obj_id]
-            if not obj.component:
-                continue
-            trigger = obj.component.get_trigger_on_step()
-            if trigger is not None:
-                self.add_event(ObjectTriggeredEvent.create(
-                    aggregate_id=obj_id,
-                    aggregate_type="WorldObject",
-                    object_id=obj_id,
-                    spot_id=self._spot_id,
-                    actor_id=actor_id,
-                    trigger_type=trigger.get_trigger_type(),
-                ))
-
-    def _check_area_triggers(
-        self,
-        object_id: WorldObjectId,
-        old_coordinate: Optional[Coordinate],
-        new_coordinate: Coordinate,
-        current_tick: Optional[WorldTick] = None,
-    ):
-        """進入・退出・滞在判定"""
-        # 1. AreaTriggerの判定
-        for trigger in self._area_triggers.values():
-            was_in = trigger.contains(old_coordinate) if old_coordinate else False
-            is_in = trigger.contains(new_coordinate)
-
-            if not was_in and is_in:
-                # Entering
-                self.add_event(AreaEnteredEvent.create(
-                    aggregate_id=trigger.trigger_id,
-                    aggregate_type="AreaTrigger",
-                    trigger_id=trigger.trigger_id,
-                    spot_id=self._spot_id,
-                    object_id=object_id
-                ))
-                # 進入時にもトリガーを発火させる（仕様により調整可能）
-                self._activate_area_trigger(trigger, object_id)
-            elif was_in and not is_in:
-                # Exiting
-                self.add_event(AreaExitedEvent.create(
-                    aggregate_id=trigger.trigger_id,
-                    aggregate_type="AreaTrigger",
-                    trigger_id=trigger.trigger_id,
-                    spot_id=self._spot_id,
-                    object_id=object_id
-                ))
-            elif was_in and is_in:
-                # Staying (継続的な効果など)
-                self._activate_area_trigger(trigger, object_id)
-
-        # 2. LocationAreaの判定
-        for loc in self._location_areas.values():
-            was_in = loc.contains(old_coordinate) if old_coordinate else False
-            is_in = loc.contains(new_coordinate)
-
-            if not was_in and is_in:
-                # Entering a location area - send detailed info
-                obj = self._objects.get(object_id)
-                player_id_value = obj.player_id.value if (obj and obj.player_id) else None
-                self.add_event(LocationEnteredEvent.create(
-                    aggregate_id=loc.location_id,
-                    aggregate_type="LocationArea",
-                    location_id=loc.location_id,
-                    spot_id=self._spot_id,
-                    object_id=object_id,
-                    name=loc.name,
-                    description=loc.description,
-                    player_id_value=player_id_value,
-                ))
-            elif was_in and not is_in:
-                # Exiting a location area
-                self.add_event(LocationExitedEvent.create(
-                    aggregate_id=loc.location_id,
-                    aggregate_type="LocationArea",
-                    location_id=loc.location_id,
-                    spot_id=self._spot_id,
-                    object_id=object_id
-                ))
-
-        # 3. Gatewayの判定
-        for gateway in self._gateways.values():
-            was_in = gateway.contains(old_coordinate) if old_coordinate else False
-            is_in = gateway.contains(new_coordinate)
-
-            if not was_in and is_in:
-                # Entering a gateway area triggers the transition
-                obj = self._objects.get(object_id)
-                player_id_value = obj.player_id.value if (obj and obj.player_id) else None
-                self.add_event(GatewayTriggeredEvent.create(
-                    aggregate_id=gateway.gateway_id,
-                    aggregate_type="Gateway",
-                    gateway_id=gateway.gateway_id,
-                    spot_id=self._spot_id,
-                    object_id=object_id,
-                    target_spot_id=gateway.target_spot_id,
-                    landing_coordinate=gateway.landing_coordinate,
-                    player_id_value=player_id_value,
-                    occurred_tick=current_tick,
-                ))
-
-    def _activate_area_trigger(self, trigger: AreaTrigger, object_id: WorldObjectId):
-        """エリアトリガーを発火させる"""
-        self.add_event(AreaTriggeredEvent.create(
-            aggregate_id=trigger.trigger_id,
-            aggregate_type="AreaTrigger",
-            trigger_id=trigger.trigger_id,
-            spot_id=self._spot_id,
-            object_id=object_id,
-            trigger_type=trigger.trigger.get_trigger_type()
-        ))
+        for ev in MapTriggerEngine.compute_object_trigger_events(
+            object_id, new_coordinate, self._objects, self._object_positions, self._spot_id,
+        ):
+            self.add_event(ev)
 
     def change_tile_terrain(self, coordinate: Coordinate, new_terrain_type: TerrainType):
         """タイルの地形を変更する"""
@@ -592,7 +482,12 @@ class PhysicalMapAggregate(AggregateRoot):
         ))
 
         # エリアトリガーの判定
-        self._check_area_triggers(obj.object_id, None, obj.coordinate)
+        for ev in MapTriggerEngine.compute_area_trigger_events(
+            obj.object_id, None, obj.coordinate,
+            self._area_triggers, self._location_areas, self._gateways,
+            self._objects, self._spot_id, None,
+        ):
+            self.add_event(ev)
 
     def get_objects_in_range(self, center: Coordinate, distance: int) -> List[WorldObject]:
         """指定された座標から一定範囲内のオブジェクトを取得する（マンハッタン距離）"""
@@ -998,9 +893,9 @@ class PhysicalMapAggregate(AggregateRoot):
         指定された座標のトリガーをチェックし、存在すればイベントを発行してトリガーを返す。
         エリアトリガーシステムに統合されたため、指定座標を含む最初のアクティブなトリガーを返す。
         """
-        for trigger in self._area_triggers.values():
-            if trigger.contains(coordinate):
-                if object_id:
-                    self._activate_area_trigger(trigger, object_id)
-                return trigger.trigger
-        return None
+        map_trigger, events = MapTriggerEngine.compute_trigger_activation_at_coordinate(
+            coordinate, object_id, self._area_triggers, self._spot_id,
+        )
+        for ev in events:
+            self.add_event(ev)
+        return map_trigger
