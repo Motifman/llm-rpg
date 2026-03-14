@@ -30,6 +30,11 @@ from ai_rpg_world.domain.world.service.movement_config_service import MovementCo
 from ai_rpg_world.domain.world.service.passable_adjacent_finder import PassableAdjacentFinder
 from ai_rpg_world.domain.world.service.arrival_policy import ArrivalPolicy, ArrivalCheckResult
 from ai_rpg_world.application.world.services.move_result_assembler import MoveResultAssembler
+from ai_rpg_world.application.world.services.set_destination_service import (
+    SetDestinationService,
+    SetDestinationResult,
+    ReplanPathCalculationResult,
+)
 from ai_rpg_world.domain.world.event.map_events import GatewayTriggeredEvent
 from ai_rpg_world.domain.world.exception.map_exception import (
     ObjectNotFoundException,
@@ -76,6 +81,7 @@ class MovementApplicationService:
     
     def __init__(
         self,
+        set_destination_service: SetDestinationService,
         player_status_repository: PlayerStatusRepository,
         player_profile_repository: PlayerProfileRepository,
         physical_map_repository: PhysicalMapRepository,
@@ -88,6 +94,7 @@ class MovementApplicationService:
         transition_policy_repository: Optional[ITransitionPolicyRepository] = None,
         transition_condition_evaluator: Optional[TransitionConditionEvaluator] = None,
     ):
+        self._set_destination_service = set_destination_service
         self._player_status_repository = player_status_repository
         self._player_profile_repository = player_profile_repository
         self._physical_map_repository = physical_map_repository
@@ -205,153 +212,47 @@ class MovementApplicationService:
         )
 
     def _set_destination_impl(self, command: SetDestinationCommand) -> MoveResultDto:
-        player_id = PlayerId(command.player_id)
-        target_spot_id = SpotId(command.target_spot_id)
-
         with self._unit_of_work:
-            player_status = self._player_status_repository.find_by_id(player_id)
-            if not player_status:
-                raise PlayerNotFoundException(command.player_id)
+            result = self._set_destination_service.resolve_and_calculate_path(command)
 
+            player_status = self._player_status_repository.find_by_id(PlayerId(command.player_id))
             current_spot_id = player_status.current_spot_id
             current_coord = player_status.current_coordinate
+            current_tick = self._time_provider.get_current_tick().value
 
-            if not current_spot_id or not current_coord:
-                raise MovementInvalidException("Player is not placed on any map", command.player_id)
-
-            # 目標座標の決定（destination_type に応じて）
-            location_area = None
-            goal_world_object_id_val = None
-            if command.destination_type == "location":
-                target_physical_map = self._physical_map_repository.find_by_spot_id(target_spot_id)
-                if not target_physical_map:
-                    raise MapNotFoundException(int(target_spot_id))
-                location_area_id = LocationAreaId(command.target_location_area_id)
-                try:
-                    location_area = target_physical_map.get_location_area(location_area_id)
-                except Exception:
-                    raise MovementInvalidException(
-                        f"Location area {command.target_location_area_id} not found in spot {command.target_spot_id}",
-                        command.player_id,
-                    )
-                target_coord = location_area.get_reference_coordinate()
-            elif command.destination_type == "object":
-                # object: 同一スポット内のオブジェクトへ。経路計算は隣接する通行可能セルをゴールにする
-                physical_map_for_obj = self._physical_map_repository.find_by_spot_id(current_spot_id)
-                if not physical_map_for_obj:
-                    raise MapNotFoundException(int(current_spot_id))
-                obj_id = WorldObjectId.create(command.target_world_object_id)
-                try:
-                    target_obj = physical_map_for_obj.get_object(obj_id)
-                except ObjectNotFoundException:
-                    raise MovementInvalidException(
-                        f"Object {command.target_world_object_id} not found in spot {int(current_spot_id)}",
-                        command.player_id,
-                    )
-                obj_coord = target_obj.coordinate
-                goal_world_object_id_val = obj_id
-                # 既にオブジェクトに隣接している場合は経路不要
-                if current_coord.distance_to(obj_coord) <= 1:
+            if result.success:
+                if result.already_at_destination:
                     return self._move_result_assembler.create_success(
                         player_status,
                         current_spot_id,
                         current_coord,
                         current_coord,
-                        self._time_provider.get_current_tick().value,
-                        "既に目標オブジェクトの傍にいます",
+                        current_tick,
+                        result.message,
                     )
-                # target_coord は後で actor/capability 取得後に隣接通行可能セルで上書きする（ここでは仮の値）
-                target_coord = obj_coord
-            else:
-                # spot のときは経路計算で別スポットなら target_coord は未使用。同スポットなら既に到着。
-                target_coord = current_coord  # 同スポット判定用のダミー
-
-            # 既に目的地にいる場合は経路を設定しない
-            if current_spot_id == target_spot_id:
-                if command.destination_type == "spot":
+                if result.path_found and result.temp_goal is not None and result.path is not None:
+                    player_status.set_destination(
+                        result.temp_goal,
+                        result.path,
+                        goal_destination_type=result.goal_destination_type,
+                        goal_spot_id=result.goal_spot_id,
+                        goal_location_area_id=result.goal_location_area_id,
+                        goal_world_object_id=result.goal_world_object_id,
+                    )
+                    self._player_status_repository.save(player_status)
                     return self._move_result_assembler.create_success(
                         player_status,
                         current_spot_id,
                         current_coord,
                         current_coord,
-                        self._time_provider.get_current_tick().value,
-                        "既に目的地のスポットにいます",
-                    )
-                # location: 既に同スポットにいるので、ロケーション内にいるか確認（location_area は上で取得済み）
-                if location_area is not None and location_area.contains(current_coord):
-                    return self._move_result_assembler.create_success(
-                        player_status,
-                        current_spot_id,
-                        current_coord,
-                        current_coord,
-                        self._time_provider.get_current_tick().value,
-                        "既に目的地のロケーションにいます",
-                    )
-                # 同スポットだがロケーション内にいない場合は target_coord は既に設定済みで経路計算へ
-
-            physical_map = self._physical_map_repository.find_by_spot_id(current_spot_id)
-            if not physical_map:
-                raise MapNotFoundException(int(current_spot_id))
-
-            world_object_id = WorldObjectId.create(int(player_id))
-            try:
-                actor = physical_map.get_actor(world_object_id)
-            except ObjectNotFoundException:
-                raise MovementInvalidException("Player object not found in map", command.player_id)
-
-            capability = actor.capability or MovementCapability.normal_walk()
-
-            # object 型: オブジェクト座標は通行不可のため、隣接する通行可能セルを経路ゴールにする
-            if command.destination_type == "object" and goal_world_object_id_val is not None:
-                target_coord = PassableAdjacentFinder.find_one(
-                    physical_map=physical_map,
-                    object_coord=target_coord,
-                    capability=capability,
-                    exclude_object_id=goal_world_object_id_val,
-                )
-                if target_coord is None:
-                    return self._move_result_assembler.create_failure(
-                        command.player_id,
-                        "目標オブジェクトの周りに通行可能な場所がありません",
-                        player_status,
+                        current_tick,
+                        result.message,
                     )
 
-            temp_goal, path = self._global_pathfinding_service.calculate_global_path(
-                current_spot_id=current_spot_id,
-                current_coord=current_coord,
-                target_spot_id=target_spot_id,
-                target_coord=target_coord,
-                physical_map=physical_map,
-                connected_spots_provider=self._connected_spots_provider,
-                world_object_id=world_object_id,
-                capability=capability,
-            )
-
-            if not path or temp_goal is None:
-                return self._move_result_assembler.create_failure(command.player_id, "目的地への経路が見つかりません", player_status)
-
-            goal_location_area_id = (
-                LocationAreaId(command.target_location_area_id)
-                if command.destination_type == "location" and command.target_location_area_id
-                else None
-            )
-            player_status.set_destination(
-                temp_goal,
-                path,
-                goal_destination_type=command.destination_type,
-                goal_spot_id=target_spot_id,
-                goal_location_area_id=goal_location_area_id,
-                goal_world_object_id=goal_world_object_id_val,
-            )
-            self._player_status_repository.save(player_status)
-
-            return self._move_result_assembler.create_success(
+            return self._move_result_assembler.create_failure(
+                command.player_id,
+                result.message,
                 player_status,
-                current_spot_id,
-                current_coord,
-                current_coord,
-                self._time_provider.get_current_tick().value,
-                "目的地へ向かい始めました",
             )
 
     def replan_path_to_coordinate_in_current_unit_of_work(
@@ -380,72 +281,39 @@ class MovementApplicationService:
         target_spot_id: SpotId,
         target_coordinate: Coordinate,
     ) -> MovementReplanResult:
-        player_id_vo = PlayerId(player_id)
-        player_status = self._player_status_repository.find_by_id(player_id_vo)
+        result = self._set_destination_service.calculate_path_to_coordinate(
+            player_id=player_id,
+            target_spot_id=target_spot_id,
+            target_coordinate=target_coordinate,
+        )
+
+        player_status = self._player_status_repository.find_by_id(PlayerId(player_id))
         if not player_status:
             raise PlayerNotFoundException(player_id)
 
-        current_spot_id = player_status.current_spot_id
-        current_coord = player_status.current_coordinate
-        if not current_spot_id or not current_coord:
-            raise MovementInvalidException("Player is not placed on any map", player_id)
-
-        if current_spot_id == target_spot_id and current_coord == target_coordinate:
+        if result.already_at_destination or (not result.success and not result.path_planned):
             player_status.clear_path()
             self._player_status_repository.save(player_status)
             return MovementReplanResult(
-                success=True,
-                path_planned=False,
-                already_at_destination=True,
-                message="既に追跡先座標にいます",
+                success=result.success,
+                path_planned=result.path_planned,
+                already_at_destination=result.already_at_destination,
+                message=result.message,
             )
 
-        physical_map = self._physical_map_repository.find_by_spot_id(current_spot_id)
-        if not physical_map:
-            raise MapNotFoundException(int(current_spot_id))
-
-        actor_id = WorldObjectId.create(player_id)
-        try:
-            actor = physical_map.get_actor(actor_id)
-        except ObjectNotFoundException:
-            raise MovementInvalidException("Player object not found in map", player_id)
-
-        capability = actor.capability or MovementCapability.normal_walk()
-        try:
-            temp_goal, path = self._global_pathfinding_service.calculate_global_path(
-                current_spot_id=current_spot_id,
-                current_coord=current_coord,
-                target_spot_id=target_spot_id,
-                target_coord=target_coordinate,
-                physical_map=physical_map,
-                connected_spots_provider=self._connected_spots_provider,
-                world_object_id=actor_id,
-                capability=capability,
+        if result.path_planned and result.temp_goal is not None and result.path is not None and result.goal_spot_id is not None:
+            player_status.set_destination(
+                result.temp_goal,
+                result.path,
+                goal_spot_id=result.goal_spot_id,
             )
-        except InvalidPathRequestException:
-            temp_goal, path = None, None
-
-        if not path or temp_goal is None:
-            player_status.clear_path()
             self._player_status_repository.save(player_status)
-            return MovementReplanResult(
-                success=False,
-                path_planned=False,
-                already_at_destination=False,
-                message="目的地への経路が見つかりません",
-            )
 
-        player_status.set_destination(
-            temp_goal,
-            path,
-            goal_spot_id=target_spot_id,
-        )
-        self._player_status_repository.save(player_status)
         return MovementReplanResult(
-            success=True,
-            path_planned=True,
-            already_at_destination=False,
-            message="追跡用の経路を更新しました",
+            success=result.success,
+            path_planned=result.path_planned,
+            already_at_destination=result.already_at_destination,
+            message=result.message,
         )
 
     def tick_movement(self, command: TickMovementCommand) -> MoveResultDto:
