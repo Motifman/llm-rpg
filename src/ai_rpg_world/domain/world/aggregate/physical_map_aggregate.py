@@ -35,6 +35,7 @@ from ai_rpg_world.domain.world.service.map_geometry_service import MapGeometrySe
 from ai_rpg_world.domain.world.service.map_trigger_engine import MapTriggerEngine
 from ai_rpg_world.domain.world.service.map_interaction_policy import MapInteractionPolicy
 from ai_rpg_world.domain.world.service.chest_interaction_policy import ChestInteractionPolicy
+from ai_rpg_world.domain.world.service.harvest_session_policy import HarvestSessionPolicy
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.service.weather_effect_service import WeatherEffectService
 from ai_rpg_world.domain.world.event.map_events import (
@@ -775,24 +776,9 @@ class PhysicalMapAggregate(AggregateRoot):
         actor = self.get_actor(actor_id)
         target = self.get_object(target_id)
 
-        # 0. ビジー状態のチェック
-        if actor.is_busy(current_tick):
-            raise ActorBusyException(f"Actor {actor_id} is busy until {actor.busy_until}")
+        HarvestSessionPolicy.validate_can_start_harvest(actor, target, current_tick)
 
-        # 1. 距離と向きのチェック
-        distance = actor.coordinate.chebyshev_distance_to(target.coordinate)
-        if distance > 1:
-            raise InteractionOutOfRangeException(f"Target {target_id} is too far from actor {actor_id}")
-        if distance == 1:
-            expected_direction = actor.coordinate.direction_to(target.coordinate)
-            if actor.direction != expected_direction:
-                raise NotFacingTargetException(f"Actor {actor_id} is not facing target {target_id}")
-
-        # 2. HarvestableComponentのチェック
-        if not isinstance(target.component, HarvestableComponent):
-            raise NotHarvestableException(f"Object {target_id} is not harvestable")
-
-        # 3. コンポーネントの採取開始（状態更新と終了時間の取得）
+        # コンポーネントの採取開始（状態更新と終了時間の取得）
         finish_tick = target.component.start_harvest(actor_id, current_tick)
 
         # 4. アクターをビジー状態にする
