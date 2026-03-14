@@ -13,7 +13,7 @@
 | **Phase 2** | 小規模 formatter のロジック移行（Conversation, Harvest, Combat） | ✅ 完了 |
 | **Phase 3** | 中規模 formatter のロジック移行（Trade, Shop, Sns, Quest, Guild） | ✅ 完了 |
 | **Phase 4** | 大規模 formatter のロジック移行（World, Player, Skill, Monster） | ✅ 完了 |
-| **Phase 5** | Pursuit formatter 追加、オーケストレータ整理、親ファイル縮小 | 未着手 |
+| **Phase 5** | Pursuit formatter 追加、オーケストレータ整理、親ファイル縮小 | ✅ 完了 |
 
 ---
 
@@ -139,6 +139,13 @@
 - `_apply_attention_filter` は親に残す
 - 親からすべての `_format_*` メソッドと関連 import を削除
 - `observation_formatter.py` を 100 行程度に縮小
+
+### 7.3 完了した成果物（2025-03）
+
+- `pursuit_formatter.py`: 新規作成、4 イベント（PursuitStarted, PursuitUpdated, PursuitFailed, PursuitCancelled）を自前実装
+- formatter リストに `PursuitObservationFormatter` を末尾に追加
+- 親 `observation_formatter.py` から Pursuit 関連の `_format_*` メソッドとヘルパー・import を削除し、約 150 行に縮小
+- `test_pursuit_formatter.py`: Pursuit formatter の単体テスト（正常系・異常系・受信者非依存・シリアライズ境界）
 
 ---
 

@@ -42,6 +42,9 @@ from ai_rpg_world.application.observation.services.formatters.world_formatter im
 from ai_rpg_world.application.observation.services.formatters.player_formatter import (
     PlayerObservationFormatter,
 )
+from ai_rpg_world.application.observation.services.formatters.pursuit_formatter import (
+    PursuitObservationFormatter,
+)
 
 __all__ = [
     "ObservationFormatterContext",
@@ -58,4 +61,5 @@ __all__ = [
     "SkillObservationFormatter",
     "WorldObservationFormatter",
     "PlayerObservationFormatter",
+    "PursuitObservationFormatter",
 ]
