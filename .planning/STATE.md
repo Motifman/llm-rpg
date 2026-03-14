@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: World Simulation Service Refactoring
-status: in_progress
-stopped_at: phase 13 executed locally; roadmap file still has separate uncommitted edits
-last_updated: "2026-03-14T23:59:00+09:00"
-last_activity: 2026-03-14 — executed Phase 13 simulation regression harness plans and verified new regression slices
+status: ready_for_completion
+stopped_at: milestone v1.2 audit passed; pending archive/completion command
+last_updated: "2026-03-14T23:59:59+09:00"
+last_activity: 2026-03-14 — synchronized planning artifacts after Phase 13 completion and recorded a passed v1.2 milestone audit
 progress:
   total_phases: 3
   completed_phases: 3
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-14)
 
 **Core value:** LLMエージェントが、ワールド状態とイベント駆動の文脈を踏まえて、自律的に次の行動を安全に選べること
-**Current focus:** v1.2 World Simulation Service Refactoring — Phase 13 executed and verified locally
+**Current focus:** v1.2 World Simulation Service Refactoring — milestone audit passed and bookkeeping synchronized
 
 ## Current Position
 
 Phase: 13 - Simulation Regression Harness
 Plan: 13-01 / 13-02 complete
-Status: Phase 13 executed; planning summaries and verification slices recorded
+Status: All phases complete; milestone audit recorded and ready for archival
 Last activity: 2026-03-14 — added contract-oriented integration regressions and direct stage regression tests for world simulation
 Progress: [##########] 100%
 
@@ -51,17 +51,16 @@ Recent decisions affecting current work:
 ### Pending Todos
 
 - Keep milestone work isolated from the parallel `ToolArgumentResolver` refactor
-- Update roadmap completion state after reconciling the separate uncommitted `ROADMAP.md` edits
+- Run milestone archival/completion now that roadmap and requirements reflect the audit result
 
 ### Blockers/Concerns
 
 - phase-level `VERIFICATION.md` artifacts were not produced for v1.1, so archive decisions rely on SUMMARY / VALIDATION / UAT plus audit evidence
 - async event failure visibility remains weak in the current UoW/event pipeline
-- phase-level `VERIFICATION.md` artifacts are still missing for the active milestone, so completion evidence depends on summaries / validation / targeted test slices
-- `ROADMAP.md` currently has separate in-progress edits in the worktree, so milestone completion bookkeeping was not auto-reconciled in this turn
+- phase-level `VERIFICATION.md` artifacts are still missing for the active milestone, so completion evidence depends on summaries / validation / targeted test slices and the milestone audit record
 
 ## Session Continuity
 
 Last session: 2026-03-14
-Stopped at: Phase 13 execution complete; next likely step is milestone audit/completion bookkeeping
+Stopped at: v1.2 audit passed and artifacts synchronized; next step is `$gsd-complete-milestone 1.2`
 Resume file: None
