@@ -28,7 +28,7 @@ MOVE_TO_DESTINATION_PARAMETERS = {
     "properties": {
         "destination_label": {
             "type": "string",
-            "description": "現在の状況に表示された移動先ラベル（例: S1）。",
+            "description": "現在の状況に表示された移動先ラベル（例: S1 スポット, LA1 ロケーション, D1 オブジェクト）。",
         },
     },
     "required": ["destination_label"],

@@ -16,7 +16,7 @@
 | **Phase 3** | ToolCommandMapper の handler map を wiring へ移行 | ✅ 完了 |
 | **Phase 4** | ToolArgumentResolver のツール別分割 | ✅ 完了 |
 | **Phase 5** | ToolDefinitions のカテゴリ別分割 | ✅ 完了 |
-| **Phase 6** | UiContextBuilder のラベル生成と描画分離 | 🔲 未着手（ロードマップ 3.8） |
+| **Phase 6** | UiContextBuilder のラベル生成と描画分離 | ✅ 完了（2026-03-14） |
 
 ---
 
@@ -106,13 +106,21 @@
 
 ---
 
-### 3.5 Phase 6: UiContextBuilder のラベル生成と描画分離
+### 3.5 完了済み: Phase 6（UiContextBuilder のラベル生成と描画分離）
 
-**親ロードマップ**: 3.8
-
-**目的**: `LabelAllocator`, `RuntimeTargetCollector`, `SectionRenderer` に責務を分離。
-
-**wiring との関係**: wiring は `DefaultLlmUiContextBuilder` を PromptBuilder 経由で利用。インターフェースが維持されれば wiring の変更は不要。
+- **実施日**: 2026-03-14
+- **親ロードマップ**: 3.8
+- **目的**: `LabelAllocator`, `RuntimeTargetCollector` に責務を分離し、ロケーションとショップ出品の prefix を分離。
+- **成果物**:
+  - `_label_allocator.py` - `LabelAllocator`, `SectionBuildResult`, `DEFAULT_LABEL_PREFIXES`
+  - `_runtime_target_collector.py` - `RuntimeTargetCollector`
+  - `DefaultLlmUiContextBuilder` を `LabelAllocator` と `RuntimeTargetCollector` でリファクタリング
+  - ロケーション（同一スポット内エリア）の prefix を `L` から `LA` に変更（ショップ出品 `L` と衝突解消）
+- **テスト**:
+  - `test_label_allocator.py` - SectionBuildResult / LabelAllocator の正常・例外ケース
+  - `test_runtime_target_collector.py` - RuntimeTargetCollector の正常・例外ケース
+  - `test_ui_context_builder.py` - 入力検証（TypeError）テストを追加
+- **wiring との関係**: `ILlmUiContextBuilder` インターフェースは維持のため wiring 変更不要。`system_prompt_builder` と `movement` ツールの説明を LA 対応に更新。
 
 ---
 
