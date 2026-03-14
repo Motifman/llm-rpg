@@ -324,6 +324,70 @@ class TestObservationRecipientResolver:
         ids = resolver.resolve(event)
         assert ids == []
 
+    def test_resolve_location_entered_returns_player_id_and_players_at_spot(
+        self, resolver, status_repo
+    ):
+        """LocationEnteredEvent: player_id_value と同一スポットのプレイヤーが配信先"""
+        status_repo.save(_make_status(1, spot_id=5))
+        status_repo.save(_make_status(2, spot_id=5))
+        status_repo.save(_make_status(3, spot_id=5))
+        event = LocationEnteredEvent.create(
+            aggregate_id=LocationAreaId(1),
+            aggregate_type="LocationArea",
+            location_id=LocationAreaId(1),
+            spot_id=SpotId(5),
+            object_id=WorldObjectId.create(1),
+            name="町の広場",
+            description="賑やかな中央広場。",
+            player_id_value=1,
+        )
+        ids = resolver.resolve(event)
+        assert len(ids) == 3
+        assert {p.value for p in ids} == {1, 2, 3}
+
+    def test_resolve_location_entered_without_player_id_value_returns_only_players_at_spot(
+        self, resolver, status_repo
+    ):
+        """LocationEnteredEvent: player_id_value が None のとき、同一スポットのプレイヤーのみ"""
+        status_repo.save(_make_status(2, spot_id=7))
+        status_repo.save(_make_status(3, spot_id=7))
+        event = LocationEnteredEvent.create(
+            aggregate_id=LocationAreaId(2),
+            aggregate_type="LocationArea",
+            location_id=LocationAreaId(2),
+            spot_id=SpotId(7),
+            object_id=WorldObjectId(999),
+            name="洞窟",
+            description="薄暗い洞窟。",
+            player_id_value=None,
+        )
+        ids = resolver.resolve(event)
+        assert len(ids) == 2
+        assert {p.value for p in ids} == {2, 3}
+
+    def test_resolve_location_entered_deduplicates_when_player_in_both_sources(
+        self, resolver, status_repo
+    ):
+        """LocationEnteredEvent: 本人が同一スポットにもいる場合、重複なく1回のみ"""
+        status_repo.save(_make_status(1, spot_id=10))
+        status_repo.save(_make_status(2, spot_id=10))
+        event = LocationEnteredEvent.create(
+            aggregate_id=LocationAreaId(1),
+            aggregate_type="LocationArea",
+            location_id=LocationAreaId(1),
+            spot_id=SpotId(10),
+            object_id=WorldObjectId.create(1),
+            name="宿屋",
+            description="",
+            player_id_value=1,
+        )
+        ids = resolver.resolve(event)
+        values = [p.value for p in ids]
+        assert 1 in values
+        assert 2 in values
+        assert values.count(1) == 1
+        assert len(ids) == 2
+
     def test_resolve_location_exited_returns_player_when_object_is_player_on_map(
         self, resolver, physical_map_repo
     ):

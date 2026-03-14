@@ -1,6 +1,9 @@
 """観測配信先をイベントから解決する実装（戦略パターン）"""
 
-from typing import Any, List, Optional, Sequence, Set
+from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Set
+
+if TYPE_CHECKING:
+    from ai_rpg_world.domain.sns.repository.sns_user_repository import UserRepository
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationRecipientResolver,
@@ -90,7 +93,7 @@ def create_observation_recipient_resolver(
     hit_box_repository: Optional[HitBoxRepository] = None,
     skill_loadout_repository: Optional[SkillLoadoutRepository] = None,
     skill_deck_progress_repository: Optional[SkillDeckProgressRepository] = None,
-    sns_user_repository: Optional[Any] = None,
+    sns_user_repository: Optional["UserRepository"] = None,
 ) -> IObservationRecipientResolver:
     """
     既存と同様の振る舞いになる Resolver を組み立てる。

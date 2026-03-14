@@ -6,6 +6,9 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
     IPlayerAudienceQueryPort,
     IRecipientResolutionStrategy,
 )
+from ai_rpg_world.domain.guild.exception.guild_exception import (
+    GuildIdValidationException,
+)
 from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -86,7 +89,10 @@ class QuestRecipientStrategy(IRecipientResolutionStrategy):
 
         return []
 
-    def _resolve_by_scope(self, scope: QuestScope) -> List[PlayerId]:
+    def _resolve_by_scope(self, scope: Optional[QuestScope]) -> List[PlayerId]:
+        """scope が None の場合は空リストを返す（防御的コーディング）。"""
+        if scope is None:
+            return []
         if scope.is_direct() and scope.target_player_id is not None:
             return [scope.target_player_id]
         if scope.is_guild():
@@ -99,7 +105,7 @@ class QuestRecipientStrategy(IRecipientResolutionStrategy):
             return []
         try:
             guild_id = GuildId(guild_id_value)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, GuildIdValidationException):
             return []
         guild = self._guild_repository.find_by_id(guild_id)
         if guild is None:
