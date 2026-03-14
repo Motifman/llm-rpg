@@ -483,7 +483,7 @@ class TestBootstrapContractReturnValues:
         deps = _minimal_wiring_deps()
         deps["observation_formatter"] = custom_formatter
         registry, _ = create_llm_agent_wiring(**deps)
-        assert registry._handler._formatter is custom_formatter
+        assert registry._handler._pipeline._formatter is custom_formatter
 
     def test_optional_observation_buffer_injected_into_handler(self):
         """observation_buffer を渡した場合、返された registry のハンドラがそのバッファを保持する（正常）"""
@@ -491,7 +491,7 @@ class TestBootstrapContractReturnValues:
         deps = _minimal_wiring_deps()
         deps["observation_buffer"] = custom_buffer
         registry, _ = create_llm_agent_wiring(**deps)
-        assert registry._handler._buffer is custom_buffer
+        assert registry._handler._appender._buffer is custom_buffer
 
 
 # ---------------------------------------------------------------------------
