@@ -5,6 +5,9 @@ from typing import Any, List, Set
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
 )
+from ai_rpg_world.application.observation.services.observed_event_registry import (
+    ObservedEventRegistry,
+)
 from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.repository.player_status_repository import (
@@ -27,18 +30,22 @@ class SpeechRecipientStrategy(IRecipientResolutionStrategy):
     SHOUT: 同一スポットかつ発言者から SHOUT_RANGE 以内
     """
 
+    _STRATEGY_KEY = "speech"
+
     def __init__(
         self,
+        observed_event_registry: ObservedEventRegistry,
         player_status_repository: PlayerStatusRepository,
         say_range: int = DEFAULT_SAY_RANGE,
         shout_range: int = DEFAULT_SHOUT_RANGE,
     ) -> None:
+        self._registry = observed_event_registry
         self._player_status_repository = player_status_repository
         self._say_range = say_range
         self._shout_range = shout_range
 
     def supports(self, event: Any) -> bool:
-        return isinstance(event, PlayerSpokeEvent)
+        return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
     def resolve(self, event: Any) -> List[PlayerId]:
         if not isinstance(event, PlayerSpokeEvent):

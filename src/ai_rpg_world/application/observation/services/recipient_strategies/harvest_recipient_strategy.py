@@ -6,6 +6,9 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
     IWorldObjectToPlayerResolver,
 )
+from ai_rpg_world.application.observation.services.observed_event_registry import (
+    ObservedEventRegistry,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.event.harvest_events import (
     HarvestCancelledEvent,
@@ -17,13 +20,18 @@ from ai_rpg_world.domain.world.event.harvest_events import (
 class HarvestRecipientStrategy(IRecipientResolutionStrategy):
     """Harvest イベントの配信先（actor のプレイヤー本人）を返す。"""
 
-    def __init__(self, world_object_to_player_resolver: IWorldObjectToPlayerResolver) -> None:
+    _STRATEGY_KEY = "harvest"
+
+    def __init__(
+        self,
+        observed_event_registry: ObservedEventRegistry,
+        world_object_to_player_resolver: IWorldObjectToPlayerResolver,
+    ) -> None:
+        self._registry = observed_event_registry
         self._world_object_to_player_resolver = world_object_to_player_resolver
 
     def supports(self, event: Any) -> bool:
-        return isinstance(
-            event, (HarvestStartedEvent, HarvestCancelledEvent, HarvestCompletedEvent)
-        )
+        return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
     def resolve(self, event: Any) -> List[PlayerId]:
         if not isinstance(
