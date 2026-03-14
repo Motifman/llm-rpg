@@ -26,3 +26,9 @@ class TradeAcceptedEvent(BaseDomainEvent[TradeId, "TradeAggregate"]):
 @dataclass(frozen=True)
 class TradeCancelledEvent(BaseDomainEvent[TradeId, "TradeAggregate"]):
     """取引キャンセルイベント"""
+
+
+@dataclass(frozen=True)
+class TradeDeclinedEvent(BaseDomainEvent[TradeId, "TradeAggregate"]):
+    """取引拒否イベント"""
+    decliner_id: PlayerId

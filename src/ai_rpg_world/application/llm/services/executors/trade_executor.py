@@ -15,11 +15,13 @@ from ai_rpg_world.application.llm.services.tool_executor_helpers import (
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_TRADE_ACCEPT,
     TOOL_NAME_TRADE_CANCEL,
+    TOOL_NAME_TRADE_DECLINE,
     TOOL_NAME_TRADE_OFFER,
 )
 from ai_rpg_world.application.trade.contracts.commands import (
     AcceptTradeCommand,
     CancelTradeCommand,
+    DeclineTradeCommand,
     OfferItemCommand,
 )
 
@@ -43,6 +45,7 @@ class TradeToolExecutor:
             TOOL_NAME_TRADE_OFFER: self._execute_trade_offer,
             TOOL_NAME_TRADE_ACCEPT: self._execute_trade_accept,
             TOOL_NAME_TRADE_CANCEL: self._execute_trade_cancel,
+            TOOL_NAME_TRADE_DECLINE: self._execute_trade_decline,
         }
 
     def _execute_trade_offer(
@@ -93,6 +96,21 @@ class TradeToolExecutor:
         try:
             result = self._trade_service.cancel_trade(
                 CancelTradeCommand(trade_id=int(args["trade_id"]), player_id=player_id)
+            )
+            return LlmCommandResultDto(success=result.success, message=result.message)
+        except Exception as e:
+            return exception_result(e)
+
+    def _execute_trade_decline(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> LlmCommandResultDto:
+        if self._trade_service is None:
+            return unknown_tool("取引拒否ツールはまだ利用できません。")
+        if args.get("trade_id") is None:
+            return invalid_arg_result("trade_id")
+        try:
+            result = self._trade_service.decline_trade(
+                DeclineTradeCommand(trade_id=int(args["trade_id"]), decliner_id=player_id)
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:

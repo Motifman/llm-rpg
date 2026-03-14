@@ -3,7 +3,12 @@ from datetime import datetime
 from unittest.mock import Mock
 
 from ai_rpg_world.application.trade.handlers.trade_event_handler import TradeEventHandler
-from ai_rpg_world.domain.trade.event.trade_event import TradeOfferedEvent, TradeAcceptedEvent, TradeCancelledEvent
+from ai_rpg_world.domain.trade.event.trade_event import (
+    TradeOfferedEvent,
+    TradeAcceptedEvent,
+    TradeCancelledEvent,
+    TradeDeclinedEvent,
+)
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
 from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
@@ -121,5 +126,25 @@ class TestTradeEventHandler:
         handler.handle_trade_cancelled(event)
 
         # Verify ReadModel update
+        read_model = read_model_repo.find_by_id(TradeId(1))
+        assert read_model.status == "CANCELLED"
+
+    def test_handle_trade_declined(self, setup_handler):
+        handler, read_model_repo, trade_repo, profile_repo, item_instance_repo = setup_handler
+
+        # Setup existing ReadModel
+        read_model = Mock(trade_id=1, status="ACTIVE")
+        read_model_repo.save(read_model)
+
+        decliner_id = PlayerId(2)
+        event = TradeDeclinedEvent.create(
+            aggregate_id=TradeId(1),
+            aggregate_type="TradeAggregate",
+            decliner_id=decliner_id,
+        )
+
+        handler.handle_trade_declined(event)
+
+        # Verify ReadModel update (same as cancelled: status = CANCELLED)
         read_model = read_model_repo.find_by_id(TradeId(1))
         assert read_model.status == "CANCELLED"

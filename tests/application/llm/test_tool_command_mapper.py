@@ -52,6 +52,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SUBAGENT,
     TOOL_NAME_TRADE_ACCEPT,
     TOOL_NAME_TRADE_CANCEL,
+    TOOL_NAME_TRADE_DECLINE,
     TOOL_NAME_TRADE_OFFER,
     TOOL_NAME_TODO_ADD,
     TOOL_NAME_TODO_COMPLETE,
@@ -1557,6 +1558,18 @@ class TestToolCommandMapperRequiredArgsValidation:
         assert result.error_code == "INVALID_TARGET_LABEL"
         assert "trade_id" in result.message
         trade_service.cancel_trade.assert_not_called()
+
+    def test_trade_decline_missing_trade_id_returns_invalid_target_label(self):
+        trade_service = MagicMock()
+        mapper = ToolCommandMapper(
+            movement_service=MagicMock(),
+            trade_service=trade_service,
+        )
+        result = mapper.execute(1, TOOL_NAME_TRADE_DECLINE, {})
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        assert "trade_id" in result.message
+        trade_service.decline_trade.assert_not_called()
 
 
 class TestToolCommandMapperSns:

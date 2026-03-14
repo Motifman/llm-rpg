@@ -73,6 +73,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SKILL_REJECT_PROPOSAL,
     TOOL_NAME_TRADE_ACCEPT,
     TOOL_NAME_TRADE_CANCEL,
+    TOOL_NAME_TRADE_DECLINE,
     TOOL_NAME_TRADE_OFFER,
     TOOL_NAME_WHISPER,
 )
@@ -215,6 +216,8 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
         if tool_name == TOOL_NAME_TRADE_ACCEPT:
             return self._resolve_trade_label(args, runtime_context)
         if tool_name == TOOL_NAME_TRADE_CANCEL:
+            return self._resolve_trade_label(args, runtime_context)
+        if tool_name == TOOL_NAME_TRADE_DECLINE:
             return self._resolve_trade_label(args, runtime_context)
         return dict(args)
 

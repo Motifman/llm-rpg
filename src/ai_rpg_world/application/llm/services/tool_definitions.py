@@ -45,6 +45,7 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
     SkillRejectProposalAvailabilityResolver,
     TradeAcceptAvailabilityResolver,
     TradeCancelAvailabilityResolver,
+    TradeDeclineAvailabilityResolver,
     TradeOfferAvailabilityResolver,
     SnsToolAvailabilityResolver,
     TodoAddAvailabilityResolver,
@@ -100,6 +101,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SKILL_REJECT_PROPOSAL,
     TOOL_NAME_TRADE_ACCEPT,
     TOOL_NAME_TRADE_CANCEL,
+    TOOL_NAME_TRADE_DECLINE,
     TOOL_NAME_TRADE_OFFER,
     TOOL_NAME_SNS_CREATE_POST,
     TOOL_NAME_SNS_CREATE_REPLY,
@@ -800,6 +802,19 @@ TRADE_CANCEL_DEFINITION = ToolDefinitionDto(
     parameters=TRADE_CANCEL_PARAMETERS,
 )
 
+TRADE_DECLINE_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "trade_label": {"type": "string", "description": "断る取引ラベル（例: T1）。直接取引の宛先のみ使用可能。"},
+    },
+    "required": ["trade_label"],
+}
+TRADE_DECLINE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_TRADE_DECLINE,
+    description="自分宛ての取引提案を断ります。直接取引の宛先のみ実行可能。",
+    parameters=TRADE_DECLINE_PARAMETERS,
+)
+
 # --- SNS ---
 SNS_CREATE_POST_PARAMETERS = {
     "type": "object",
@@ -1118,6 +1133,7 @@ def register_default_tools(
         registry.register(TRADE_OFFER_DEFINITION, TradeOfferAvailabilityResolver())
         registry.register(TRADE_ACCEPT_DEFINITION, TradeAcceptAvailabilityResolver())
         registry.register(TRADE_CANCEL_DEFINITION, TradeCancelAvailabilityResolver())
+        registry.register(TRADE_DECLINE_DEFINITION, TradeDeclineAvailabilityResolver())
     if sns_enabled:
         sns_resolver = SnsToolAvailabilityResolver()
         registry.register(SNS_CREATE_POST_DEFINITION, sns_resolver)
