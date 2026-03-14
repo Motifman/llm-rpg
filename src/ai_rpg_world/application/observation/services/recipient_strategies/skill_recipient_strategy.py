@@ -5,6 +5,9 @@ from typing import Any, List, Optional
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
 )
+from ai_rpg_world.application.observation.services.observed_event_registry import (
+    ObservedEventRegistry,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.skill.event.skill_events import (
     AwakenedModeActivatedEvent,
@@ -29,32 +32,20 @@ from ai_rpg_world.domain.skill.repository.skill_repository import (
 class SkillRecipientStrategy(IRecipientResolutionStrategy):
     """スキルイベントの配信先（所有者プレイヤー）を返す。"""
 
+    _STRATEGY_KEY = "skill"
+
     def __init__(
         self,
+        observed_event_registry: ObservedEventRegistry,
         skill_loadout_repository: Optional[SkillLoadoutRepository] = None,
         skill_deck_progress_repository: Optional[SkillDeckProgressRepository] = None,
     ) -> None:
+        self._registry = observed_event_registry
         self._skill_loadout_repository = skill_loadout_repository
         self._skill_deck_progress_repository = skill_deck_progress_repository
 
     def supports(self, event: Any) -> bool:
-        return isinstance(
-            event,
-            (
-                SkillEquippedEvent,
-                SkillUnequippedEvent,
-                SkillUsedEvent,
-                SkillCooldownStartedEvent,
-                AwakenedModeActivatedEvent,
-                AwakenedModeExpiredEvent,
-                SkillLoadoutCapacityChangedEvent,
-                SkillDeckExpGainedEvent,
-                SkillDeckLeveledUpEvent,
-                SkillProposalGeneratedEvent,
-                SkillEvolutionAcceptedEvent,
-                SkillEvolutionRejectedEvent,
-            ),
-        )
+        return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
     def resolve(self, event: Any) -> List[PlayerId]:
         owner_id: Optional[int] = None

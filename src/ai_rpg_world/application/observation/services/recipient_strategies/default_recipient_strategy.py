@@ -7,6 +7,9 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
     IWorldObjectToPlayerResolver,
 )
+from ai_rpg_world.application.observation.services.observed_event_registry import (
+    ObservedEventRegistry,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.event.map_events import (
     LocationEnteredEvent,
@@ -41,36 +44,21 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
     Gateway / マップ / プレイヤー状態 / インベントリ系を一括で扱う。
     """
 
+    _STRATEGY_KEY = "default"
+
     def __init__(
         self,
+        observed_event_registry: ObservedEventRegistry,
         player_audience_query: IPlayerAudienceQueryPort,
         world_object_to_player_resolver: IWorldObjectToPlayerResolver,
     ) -> None:
+        self._registry = observed_event_registry
         self._player_audience_query = player_audience_query
         self._world_object_to_player_resolver = world_object_to_player_resolver
 
     def supports(self, event: Any) -> bool:
         """観測対象として定義されているイベント型なら True。"""
-        return (
-            isinstance(event, LocationEnteredEvent)
-            or isinstance(event, LocationExitedEvent)
-            or isinstance(event, PlayerLocationChangedEvent)
-            or isinstance(event, PlayerDownedEvent)
-            or isinstance(event, PlayerRevivedEvent)
-            or isinstance(event, PlayerLevelUpEvent)
-            or isinstance(event, PlayerGoldEarnedEvent)
-            or isinstance(event, PlayerGoldPaidEvent)
-            or isinstance(event, ItemTakenFromChestEvent)
-            or isinstance(event, ItemStoredInChestEvent)
-            or isinstance(event, ResourceHarvestedEvent)
-            or isinstance(event, SpotWeatherChangedEvent)
-            or isinstance(event, WorldObjectInteractedEvent)
-            or isinstance(event, ItemAddedToInventoryEvent)
-            or isinstance(event, ItemDroppedFromInventoryEvent)
-            or isinstance(event, ItemEquippedEvent)
-            or isinstance(event, ItemUnequippedEvent)
-            or isinstance(event, InventorySlotOverflowEvent)
-        )
+        return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
     def resolve(self, event: Any) -> List[PlayerId]:
         """配信先プレイヤーIDのリストを返す（重複あり。Resolver が重複除去する）。"""

@@ -6,6 +6,9 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
     IPlayerAudienceQueryPort,
     IRecipientResolutionStrategy,
 )
+from ai_rpg_world.application.observation.services.observed_event_registry import (
+    ObservedEventRegistry,
+)
 from ai_rpg_world.domain.guild.exception.guild_exception import (
     GuildIdValidationException,
 )
@@ -27,28 +30,22 @@ from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
 class QuestRecipientStrategy(IRecipientResolutionStrategy):
     """クエストイベントの配信先を解決する。"""
 
+    _STRATEGY_KEY = "quest"
+
     def __init__(
         self,
+        observed_event_registry: ObservedEventRegistry,
         player_audience_query: IPlayerAudienceQueryPort,
         quest_repository: Optional[QuestRepository] = None,
         guild_repository: Optional[GuildRepository] = None,
     ) -> None:
+        self._registry = observed_event_registry
         self._player_audience_query = player_audience_query
         self._quest_repository = quest_repository
         self._guild_repository = guild_repository
 
     def supports(self, event: Any) -> bool:
-        return isinstance(
-            event,
-            (
-                QuestIssuedEvent,
-                QuestAcceptedEvent,
-                QuestCompletedEvent,
-                QuestPendingApprovalEvent,
-                QuestApprovedEvent,
-                QuestCancelledEvent,
-            ),
-        )
+        return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
     def resolve(self, event: Any) -> List[PlayerId]:
         if isinstance(event, QuestAcceptedEvent):

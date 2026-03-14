@@ -14,6 +14,9 @@ from ai_rpg_world.application.observation.services.world_object_to_player_resolv
 from ai_rpg_world.application.observation.services.player_audience_query_service import (
     PlayerAudienceQueryService,
 )
+from ai_rpg_world.application.observation.services.observed_event_registry import (
+    ObservedEventRegistry,
+)
 from ai_rpg_world.application.observation.services.recipient_strategies import (
     DefaultRecipientStrategy,
 )
@@ -463,7 +466,9 @@ class TestObservationRecipientResolver:
         audience_query = MagicMock()
         audience_query.players_at_spot.side_effect = RuntimeError("find_all failed")
         world_object_resolver = WorldObjectToPlayerResolver(physical_map_repo)
+        registry = ObservedEventRegistry()
         default_strategy = DefaultRecipientStrategy(
+            observed_event_registry=registry,
             player_audience_query=audience_query,
             world_object_to_player_resolver=world_object_resolver,
         )
@@ -503,7 +508,9 @@ class TestDefaultRecipientStrategy:
         audience_query = PlayerAudienceQueryService(
             player_status_repository=status_repo,
         )
+        registry = ObservedEventRegistry()
         return DefaultRecipientStrategy(
+            observed_event_registry=registry,
             player_audience_query=audience_query,
             world_object_to_player_resolver=world_object_resolver,
         )

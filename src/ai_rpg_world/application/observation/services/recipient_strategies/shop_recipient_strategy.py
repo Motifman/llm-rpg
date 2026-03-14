@@ -6,6 +6,9 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
     IPlayerAudienceQueryPort,
     IRecipientResolutionStrategy,
 )
+from ai_rpg_world.application.observation.services.observed_event_registry import (
+    ObservedEventRegistry,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.shop.event.shop_event import (
     ShopClosedEvent,
@@ -21,25 +24,20 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 class ShopRecipientStrategy(IRecipientResolutionStrategy):
     """ショップイベントの配信先を解決する。"""
 
+    _STRATEGY_KEY = "shop"
+
     def __init__(
         self,
+        observed_event_registry: ObservedEventRegistry,
         player_audience_query: IPlayerAudienceQueryPort,
         shop_repository: Optional[ShopRepository] = None,
     ) -> None:
+        self._registry = observed_event_registry
         self._player_audience_query = player_audience_query
         self._shop_repository = shop_repository
 
     def supports(self, event: Any) -> bool:
-        return isinstance(
-            event,
-            (
-                ShopCreatedEvent,
-                ShopItemListedEvent,
-                ShopItemUnlistedEvent,
-                ShopItemPurchasedEvent,
-                ShopClosedEvent,
-            ),
-        )
+        return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
     def resolve(self, event: Any) -> List[PlayerId]:
         if isinstance(event, ShopCreatedEvent):

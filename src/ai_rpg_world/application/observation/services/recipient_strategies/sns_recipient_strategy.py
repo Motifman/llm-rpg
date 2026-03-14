@@ -5,6 +5,9 @@ from typing import TYPE_CHECKING, Any, List, Optional
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
 )
+from ai_rpg_world.application.observation.services.observed_event_registry import (
+    ObservedEventRegistry,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.sns.event import (
     SnsContentLikedEvent,
@@ -27,20 +30,18 @@ class SnsRecipientStrategy(IRecipientResolutionStrategy):
     イベントに直接含まれる著者・親コンテンツ作成者・コンテンツ著者のみを配信先に含める。
     """
 
-    def __init__(self, sns_user_repository: Optional["UserRepository"] = None) -> None:
+    _STRATEGY_KEY = "sns"
+
+    def __init__(
+        self,
+        observed_event_registry: ObservedEventRegistry,
+        sns_user_repository: Optional["UserRepository"] = None,
+    ) -> None:
+        self._registry = observed_event_registry
         self._sns_user_repository = sns_user_repository
 
     def supports(self, event: Any) -> bool:
-        return isinstance(
-            event,
-            (
-                SnsPostCreatedEvent,
-                SnsReplyCreatedEvent,
-                SnsContentLikedEvent,
-                SnsUserFollowedEvent,
-                SnsUserSubscribedEvent,
-            ),
-        )
+        return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
     def _to_player_id(self, user_id: UserId) -> PlayerId:
         """UserId を PlayerId に変換（1:1 対応）。"""

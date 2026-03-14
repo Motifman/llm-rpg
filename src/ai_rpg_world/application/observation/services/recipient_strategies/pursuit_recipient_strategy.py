@@ -6,6 +6,9 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
     IRecipientResolutionStrategy,
     IWorldObjectToPlayerResolver,
 )
+from ai_rpg_world.application.observation.services.observed_event_registry import (
+    ObservedEventRegistry,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.pursuit.event.pursuit_events import (
     PursuitCancelledEvent,
@@ -19,21 +22,18 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 class PursuitRecipientStrategy(IRecipientResolutionStrategy):
     """Pursuit 系イベントを actor/target に対応するプレイヤーへ配信する。"""
 
+    _STRATEGY_KEY = "pursuit"
+
     def __init__(
-        self, world_object_to_player_resolver: IWorldObjectToPlayerResolver
+        self,
+        observed_event_registry: ObservedEventRegistry,
+        world_object_to_player_resolver: IWorldObjectToPlayerResolver,
     ) -> None:
+        self._registry = observed_event_registry
         self._world_object_to_player_resolver = world_object_to_player_resolver
 
     def supports(self, event: Any) -> bool:
-        return isinstance(
-            event,
-            (
-                PursuitStartedEvent,
-                PursuitUpdatedEvent,
-                PursuitFailedEvent,
-                PursuitCancelledEvent,
-            ),
-        )
+        return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
 
     def resolve(self, event: Any) -> List[PlayerId]:
         if not self.supports(event):
