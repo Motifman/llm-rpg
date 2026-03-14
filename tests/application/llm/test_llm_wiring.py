@@ -175,7 +175,7 @@ class TestCreateLlmAgentWiringReturnValues:
         deps = _minimal_wiring_deps()
         deps["observation_buffer"] = custom_buffer
         registry, _ = create_llm_agent_wiring(**deps)
-        assert registry._handler._buffer is custom_buffer
+        assert registry._handler._appender._buffer is custom_buffer
 
     def test_accepts_optional_observation_formatter(self):
         """observation_formatter を渡した場合、そのフォーマッタがハンドラに渡される"""
@@ -183,7 +183,7 @@ class TestCreateLlmAgentWiringReturnValues:
         deps = _minimal_wiring_deps()
         deps["observation_formatter"] = custom_formatter
         registry, _ = create_llm_agent_wiring(**deps)
-        assert registry._handler._formatter is custom_formatter
+        assert registry._handler._pipeline._formatter is custom_formatter
 
     def test_when_world_time_config_provided_reflection_runner_is_created(self):
         """world_time_config_service を渡した場合 reflection_runner が作成される"""

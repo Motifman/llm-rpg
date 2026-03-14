@@ -152,11 +152,26 @@ from ai_rpg_world.application.observation.contracts.interfaces import (
 from ai_rpg_world.application.observation.handlers.observation_event_handler import (
     ObservationEventHandler,
 )
+from ai_rpg_world.application.observation.services.movement_interruption_service import (
+    MovementInterruptionService,
+)
+from ai_rpg_world.application.observation.services.observation_appender import (
+    ObservationAppender,
+)
 from ai_rpg_world.application.observation.services.observation_context_buffer import (
     DefaultObservationContextBuffer,
 )
+from ai_rpg_world.application.observation.services.observation_pipeline import (
+    ObservationPipeline,
+)
 from ai_rpg_world.application.observation.services.observation_recipient_resolver import (
     create_observation_recipient_resolver,
+)
+from ai_rpg_world.application.observation.services.observation_timestamp_resolver import (
+    ObservationTimestampResolver,
+)
+from ai_rpg_world.application.observation.services.observation_turn_scheduler import (
+    ObservationTurnScheduler,
 )
 from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
 from ai_rpg_world.domain.world.service.world_time_config_service import (
@@ -524,17 +539,31 @@ def _build_observation_stack(
             skill_spec_repository=skill_spec_repository,
             sns_user_repository=sns_user_repository,
         )
-    observation_handler = ObservationEventHandler(
+    pipeline = ObservationPipeline(
         resolver=observation_resolver,
         formatter=formatter,
-        buffer=buffer,
-        unit_of_work_factory=unit_of_work_factory,
         player_status_repository=player_status_repository,
-        turn_trigger=llm_turn_trigger,
-        llm_player_resolver=llm_player_resolver,
-        movement_service=movement_service,
+    )
+    appender = ObservationAppender(buffer=buffer)
+    timestamp_resolver = ObservationTimestampResolver(
         game_time_provider=game_time_provider,
         world_time_config=world_time_config_service,
+    )
+    movement_interruption = MovementInterruptionService(
+        movement_service=movement_service,
+        llm_player_resolver=llm_player_resolver,
+    )
+    turn_scheduler = ObservationTurnScheduler(
+        turn_trigger=llm_turn_trigger,
+        llm_player_resolver=llm_player_resolver,
+    )
+    observation_handler = ObservationEventHandler(
+        pipeline=pipeline,
+        appender=appender,
+        timestamp_resolver=timestamp_resolver,
+        movement_interruption=movement_interruption,
+        turn_scheduler=turn_scheduler,
+        unit_of_work_factory=unit_of_work_factory,
     )
     return ObservationEventHandlerRegistry(
         observation_handler=observation_handler,
