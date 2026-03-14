@@ -3,13 +3,11 @@
 from typing import Any, List, Optional
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
+    IPlayerAudienceQueryPort,
     IRecipientResolutionStrategy,
 )
 from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
-from ai_rpg_world.domain.player.repository.player_status_repository import (
-    PlayerStatusRepository,
-)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.quest.event.quest_event import (
     QuestAcceptedEvent,
@@ -28,11 +26,11 @@ class QuestRecipientStrategy(IRecipientResolutionStrategy):
 
     def __init__(
         self,
-        player_status_repository: PlayerStatusRepository,
+        player_audience_query: IPlayerAudienceQueryPort,
         quest_repository: Optional[QuestRepository] = None,
         guild_repository: Optional[GuildRepository] = None,
     ) -> None:
-        self._player_status_repository = player_status_repository
+        self._player_audience_query = player_audience_query
         self._quest_repository = quest_repository
         self._guild_repository = guild_repository
 
@@ -93,12 +91,7 @@ class QuestRecipientStrategy(IRecipientResolutionStrategy):
             return [scope.target_player_id]
         if scope.is_guild():
             return self._guild_member_ids(scope.guild_id)
-        return self._all_known_player_ids()
-
-    def _all_known_player_ids(self) -> List[PlayerId]:
-        """公開クエストは現在ワールドに存在する全プレイヤーへ配信する。"""
-        all_statuses = self._player_status_repository.find_all()
-        return [s.player_id for s in all_statuses]
+        return self._player_audience_query.all_known_players()
 
     def _guild_member_ids(self, guild_id_value: Optional[int]) -> List[PlayerId]:
         """int で保持される guild_id を GuildId に変換してギルドメンバーを返す。"""

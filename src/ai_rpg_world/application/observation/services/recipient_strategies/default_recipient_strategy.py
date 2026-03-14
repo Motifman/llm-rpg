@@ -3,11 +3,9 @@
 from typing import Any, List, Set
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
+    IPlayerAudienceQueryPort,
     IRecipientResolutionStrategy,
     IWorldObjectToPlayerResolver,
-)
-from ai_rpg_world.domain.player.repository.player_status_repository import (
-    PlayerStatusRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.event.map_events import (
@@ -45,10 +43,10 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
 
     def __init__(
         self,
-        player_status_repository: PlayerStatusRepository,
+        player_audience_query: IPlayerAudienceQueryPort,
         world_object_to_player_resolver: IWorldObjectToPlayerResolver,
     ) -> None:
-        self._player_status_repository = player_status_repository
+        self._player_audience_query = player_audience_query
         self._world_object_to_player_resolver = world_object_to_player_resolver
 
     def supports(self, event: Any) -> bool:
@@ -132,15 +130,6 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
 
         return result
 
-    def _players_at_spot(self, spot_id: SpotId) -> List[PlayerId]:
-        all_statuses = self._player_status_repository.find_all()
-        return [
-            s.player_id
-            for s in all_statuses
-            if s.current_spot_id is not None
-            and s.current_spot_id.value == spot_id.value
-        ]
-
     def _resolve_location_entered(
         self, event: LocationEnteredEvent, add
     ) -> None:
@@ -160,7 +149,7 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
         self, event: PlayerLocationChangedEvent, add
     ) -> None:
         add(event.aggregate_id)
-        for pid in self._players_at_spot(event.new_spot_id):
+        for pid in self._player_audience_query.players_at_spot(event.new_spot_id):
             add(pid)
 
     def _resolve_player_downed(self, event: PlayerDownedEvent, add) -> None:
@@ -173,11 +162,11 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
         self, event: ItemStoredInChestEvent, add
     ) -> None:
         add(PlayerId(event.player_id_value))
-        for pid in self._players_at_spot(event.spot_id):
+        for pid in self._player_audience_query.players_at_spot(event.spot_id):
             add(pid)
 
     def _resolve_spot_weather_changed(
         self, event: SpotWeatherChangedEvent, add
     ) -> None:
-        for pid in self._players_at_spot(event.spot_id):
+        for pid in self._player_audience_query.players_at_spot(event.spot_id):
             add(pid)
