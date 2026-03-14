@@ -4,6 +4,12 @@ import unittest.mock as mock
 from ai_rpg_world.application.world.services.monster_behavior_coordinator import (
     MonsterBehaviorCoordinator,
 )
+from ai_rpg_world.application.world.services.monster_behavior_context_builder import (
+    MonsterBehaviorContextBuilder,
+)
+from ai_rpg_world.application.world.services.monster_target_context_builder import (
+    MonsterTargetContextBuilder,
+)
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
 from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
@@ -16,6 +22,25 @@ from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 class TestMonsterBehaviorCoordinator:
+    @staticmethod
+    def _behavior_context_builder(skill_context, growth_context):
+        builder = mock.create_autospec(MonsterBehaviorContextBuilder, instance=True)
+        builder.build_skill_context.return_value = skill_context
+        builder.build_growth_context.return_value = growth_context
+        return builder
+
+    @staticmethod
+    def _target_context_builder(target_context):
+        builder = mock.create_autospec(MonsterTargetContextBuilder, instance=True)
+        builder.build_target_context.return_value = target_context
+        return builder
+
+    @staticmethod
+    def _foraging_rule(result):
+        rule = mock.Mock()
+        rule.evaluate.return_value = result
+        return rule
+
     def test_runs_foraging_observation_transition_failure_resolver_record_in_order(self):
         order: list[str] = []
         monster = mock.Mock()
@@ -71,9 +96,13 @@ class TestMonsterBehaviorCoordinator:
             foraging_rule=foraging_rule,
             pursuit_failure_rule=failure_rule,
             unit_of_work=unit_of_work,
-            build_skill_context=lambda *args, **kwargs: mock.sentinel.skill,
-            build_target_context=lambda *args, **kwargs: mock.sentinel.target_context,
-            build_growth_context=lambda *args, **kwargs: mock.sentinel.growth,
+            behavior_context_builder=self._behavior_context_builder(
+                mock.sentinel.skill,
+                mock.sentinel.growth,
+            ),
+            target_context_builder=self._target_context_builder(
+                mock.sentinel.target_context
+            ),
         )
 
         coordinator.process_actor_behavior(actor, physical_map, WorldTick(10))
@@ -116,12 +145,13 @@ class TestMonsterBehaviorCoordinator:
             behavior_service=behavior_service,
             transition_service=transition_service,
             action_resolver_factory=mock.Mock(return_value=resolver),
-            foraging_rule=mock.Mock(return_value=None),
+            foraging_rule=self._foraging_rule(
+                SimpleNamespace(visible_feed=[], selected_feed_target=None)
+            ),
             pursuit_failure_rule=failure_rule,
             unit_of_work=unit_of_work,
-            build_skill_context=lambda *args, **kwargs: None,
-            build_target_context=lambda *args, **kwargs: None,
-            build_growth_context=lambda *args, **kwargs: None,
+            behavior_context_builder=self._behavior_context_builder(None, None),
+            target_context_builder=self._target_context_builder(None),
         )
         actor = SimpleNamespace(object_id=WorldObjectId(1), coordinate=Coordinate(0, 0, 0))
 
@@ -159,12 +189,13 @@ class TestMonsterBehaviorCoordinator:
             behavior_service=behavior_service,
             transition_service=transition_service,
             action_resolver_factory=mock.Mock(return_value=resolver),
-            foraging_rule=mock.Mock(return_value=SimpleNamespace(visible_feed=[], selected_feed_target=None)),
+            foraging_rule=self._foraging_rule(
+                SimpleNamespace(visible_feed=[], selected_feed_target=None)
+            ),
             pursuit_failure_rule=failure_rule,
             unit_of_work=unit_of_work,
-            build_skill_context=lambda *args, **kwargs: None,
-            build_target_context=lambda *args, **kwargs: None,
-            build_growth_context=lambda *args, **kwargs: None,
+            behavior_context_builder=self._behavior_context_builder(None, None),
+            target_context_builder=self._target_context_builder(None),
         )
         actor = SimpleNamespace(object_id=WorldObjectId(1), coordinate=Coordinate(0, 0, 0))
 
@@ -202,15 +233,16 @@ class TestMonsterBehaviorCoordinator:
                 behavior_service=behavior_service,
                 transition_service=transition_service,
                 action_resolver_factory=mock.Mock(return_value=resolver),
-                foraging_rule=mock.Mock(return_value=SimpleNamespace(visible_feed=[], selected_feed_target=None)),
+                foraging_rule=self._foraging_rule(
+                    SimpleNamespace(visible_feed=[], selected_feed_target=None)
+                ),
                 pursuit_failure_rule=mock.Mock(
                     evaluate_pre_action=mock.Mock(return_value=None),
                     evaluate_post_action=mock.Mock(return_value=None),
                 ),
                 unit_of_work=mock.Mock(),
-                build_skill_context=lambda *args, **kwargs: None,
-                build_target_context=lambda *args, **kwargs: None,
-                build_growth_context=lambda *args, **kwargs: None,
+                behavior_context_builder=self._behavior_context_builder(None, None),
+                target_context_builder=self._target_context_builder(None),
             )
             actor = SimpleNamespace(object_id=WorldObjectId(1), coordinate=Coordinate(0, 0, 0))
 

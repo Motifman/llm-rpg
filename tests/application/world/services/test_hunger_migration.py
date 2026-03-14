@@ -1,64 +1,64 @@
-"""飢餓時のスポット転移（移住）と「スポットに餌があるか」判定のテスト。"""
+"""飢餓時のスポット転移（移住）のテスト。"""
 
 import unittest.mock as mock
 
 import pytest
-from ai_rpg_world.application.world.services.world_simulation_service import (
-    WorldSimulationApplicationService,
+from ai_rpg_world.application.world.services.monster_feed_query_service import (
+    MonsterFeedQueryService,
 )
-from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
-from ai_rpg_world.domain.world.entity.tile import Tile
-from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.entity.world_object_component import (
-    HarvestableComponent,
-    AutonomousBehaviorComponent,
+from ai_rpg_world.application.world.services.monster_lifecycle_survival_coordinator import (
+    MonsterLifecycleSurvivalCoordinator,
 )
-from ai_rpg_world.domain.world.entity.spot import Spot
-from ai_rpg_world.domain.world.entity.gateway import Gateway
-from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
-from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
-from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
-from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
-from ai_rpg_world.domain.world.value_object.area import PointArea
-from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum, SpotCategoryEnum
 from ai_rpg_world.domain.common.exception import DomainException
-from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
+from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import LootEntry, LootTableAggregate
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
+from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
-from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
-from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
+from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.player.enum.player_enum import Race
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
-from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import LootTableAggregate, LootEntry
-from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
-from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
+from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
+from ai_rpg_world.domain.world.entity.gateway import Gateway
+from ai_rpg_world.domain.world.entity.tile import Tile
+from ai_rpg_world.domain.world.entity.world_object import WorldObject
+from ai_rpg_world.domain.world.entity.world_object_component import (
+    AutonomousBehaviorComponent,
+)
+from ai_rpg_world.domain.world.enum.world_enum import ObjectTypeEnum
+from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
 from ai_rpg_world.domain.world.service.map_transition_service import MapTransitionService
-from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
-    InMemoryPhysicalMapRepository,
+from ai_rpg_world.domain.world.value_object.area import PointArea
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
+from ai_rpg_world.infrastructure.repository.in_memory_loot_table_repository import (
+    InMemoryLootTableRepository,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import (
     InMemoryMonsterAggregateRepository,
 )
-from ai_rpg_world.infrastructure.repository.in_memory_loot_table_repository import (
-    InMemoryLootTableRepository,
+from ai_rpg_world.infrastructure.repository.in_memory_physical_map_repository import (
+    InMemoryPhysicalMapRepository,
 )
-from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.application.world.services.gateway_based_connected_spots_provider import (
-    GatewayBasedConnectedSpotsProvider,
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
+    InMemoryUnitOfWork,
 )
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 
 
 def _template_with_feed_preference(
     forage_threshold: float = 0.5,
-    preferred_feed_item_spec_ids: set = None,
+    preferred_feed_item_spec_ids: set | None = None,
 ) -> MonsterTemplate:
     preferred = preferred_feed_item_spec_ids or {ItemSpecId(1)}
     return MonsterTemplate(
@@ -79,8 +79,12 @@ def _template_with_feed_preference(
     )
 
 
-class TestSpotHasFeedForMonster:
-    """_spot_has_feed_for_monster の正常・境界・例外ケース"""
+class TestApplyHungerMigrationForSpot:
+    @pytest.fixture
+    def data_store(self):
+        ds = InMemoryDataStore()
+        ds.clear_all()
+        return ds
 
     @pytest.fixture
     def loot_table_repo(self):
@@ -89,175 +93,7 @@ class TestSpotHasFeedForMonster:
             [LootEntry(ItemSpecId(1), 1)],
             name="Grass",
         )
-        repo = InMemoryLootTableRepository(
-            initial_data={LootTableId.create(1): lt}
-        )
-        return repo
-
-    @pytest.fixture
-    def service_minimal(self, loot_table_repo):
-        """_spot_has_feed_for_monster 用の最小サービス（他は None でよい）"""
-        return WorldSimulationApplicationService(
-            time_provider=None,
-            physical_map_repository=InMemoryPhysicalMapRepository(),
-            weather_zone_repository=None,
-            player_status_repository=None,
-            hit_box_repository=None,
-            behavior_service=None,
-            weather_config_service=None,
-            unit_of_work=None,
-            monster_repository=None,
-            skill_loadout_repository=None,
-            monster_skill_execution_domain_service=None,
-            hit_box_factory=None,
-            monster_action_resolver_factory=None,
-            loot_table_repository=loot_table_repo,
-        )
-
-    def test_returns_true_when_spot_has_feed(
-        self, service_minimal, loot_table_repo
-    ):
-        """正常: スポットに嗜好に合う餌が1つ以上あれば True"""
-        tiles = [
-            Tile(Coordinate(x, y, 0), TerrainType.grass())
-            for x in range(3) for y in range(3)
-        ]
-        pmap = PhysicalMapAggregate.create(SpotId(1), tiles)
-        harvestable = WorldObject(
-            object_id=WorldObjectId(100),
-            coordinate=Coordinate(1, 1, 0),
-            object_type=ObjectTypeEnum.RESOURCE,
-            is_blocking=False,
-            component=HarvestableComponent(
-                loot_table_id=LootTableId.create(1),
-                max_quantity=2,
-                initial_quantity=2,
-            ),
-        )
-        pmap.add_object(harvestable)
-        template = _template_with_feed_preference(forage_threshold=0.5)
-        loadout = SkillLoadoutAggregate.create(
-            SkillLoadoutId(1), owner_id=1, normal_capacity=5, awakened_capacity=5
-        )
-        monster = MonsterAggregate.create(
-            MonsterId(1),
-            template,
-            WorldObjectId(1),
-            skill_loadout=loadout,
-        )
-        monster.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0), initial_hunger=0.8)
-        result = service_minimal._spot_has_feed_for_monster(
-            pmap, monster, WorldTick(0)
-        )
-        assert result is True
-
-    def test_returns_false_when_no_harvestable(self, service_minimal):
-        """スポットに Harvestable がなければ False"""
-        tiles = [
-            Tile(Coordinate(x, y, 0), TerrainType.grass())
-            for x in range(3) for y in range(3)
-        ]
-        pmap = PhysicalMapAggregate.create(SpotId(1), tiles)
-        template = _template_with_feed_preference()
-        loadout = SkillLoadoutAggregate.create(
-            SkillLoadoutId(1), owner_id=1, normal_capacity=5, awakened_capacity=5
-        )
-        monster = MonsterAggregate.create(
-            MonsterId(1),
-            template,
-            WorldObjectId(1),
-            skill_loadout=loadout,
-        )
-        monster.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0), initial_hunger=0.8)
-        result = service_minimal._spot_has_feed_for_monster(
-            pmap, monster, WorldTick(0)
-        )
-        assert result is False
-
-    def test_returns_false_when_preferred_empty(self, service_minimal, loot_table_repo):
-        """嗜好（preferred_feed_item_spec_ids）が空なら False"""
-        tiles = [
-            Tile(Coordinate(x, y, 0), TerrainType.grass())
-            for x in range(3) for y in range(3)
-        ]
-        pmap = PhysicalMapAggregate.create(SpotId(1), tiles)
-        harvestable = WorldObject(
-            object_id=WorldObjectId(100),
-            coordinate=Coordinate(1, 1, 0),
-            object_type=ObjectTypeEnum.RESOURCE,
-            is_blocking=False,
-            component=HarvestableComponent(
-                loot_table_id=LootTableId.create(1),
-                max_quantity=2,
-                initial_quantity=2,
-            ),
-        )
-        pmap.add_object(harvestable)
-        # 嗜好が LootTable の item_spec_id と一致しない（餌とみなされない）
-        template = _template_with_feed_preference(
-            forage_threshold=0.5,
-            preferred_feed_item_spec_ids={ItemSpecId(999)},
-        )
-        loadout = SkillLoadoutAggregate.create(
-            SkillLoadoutId(1), owner_id=1, normal_capacity=5, awakened_capacity=5
-        )
-        monster = MonsterAggregate.create(
-            MonsterId(1),
-            template,
-            WorldObjectId(1),
-            skill_loadout=loadout,
-        )
-        monster.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0), initial_hunger=0.8)
-        result = service_minimal._spot_has_feed_for_monster(
-            pmap, monster, WorldTick(0)
-        )
-        assert result is False
-
-    def test_returns_false_when_quantity_zero(self, service_minimal, loot_table_repo):
-        """残量 0 の Harvestable だけなら False"""
-        tiles = [
-            Tile(Coordinate(x, y, 0), TerrainType.grass())
-            for x in range(3) for y in range(3)
-        ]
-        pmap = PhysicalMapAggregate.create(SpotId(1), tiles)
-        harvestable = WorldObject(
-            object_id=WorldObjectId(100),
-            coordinate=Coordinate(1, 1, 0),
-            object_type=ObjectTypeEnum.RESOURCE,
-            is_blocking=False,
-            component=HarvestableComponent(
-                loot_table_id=LootTableId.create(1),
-                max_quantity=2,
-                initial_quantity=0,
-            ),
-        )
-        pmap.add_object(harvestable)
-        template = _template_with_feed_preference()
-        loadout = SkillLoadoutAggregate.create(
-            SkillLoadoutId(1), owner_id=1, normal_capacity=5, awakened_capacity=5
-        )
-        monster = MonsterAggregate.create(
-            MonsterId(1),
-            template,
-            WorldObjectId(1),
-            skill_loadout=loadout,
-        )
-        monster.spawn(Coordinate(0, 0, 0), SpotId(1), WorldTick(0), initial_hunger=0.8)
-        result = service_minimal._spot_has_feed_for_monster(
-            pmap, monster, WorldTick(0)
-        )
-        assert result is False
-
-
-class TestProcessHungerMigrationForSpot:
-    """_process_hunger_migration_for_spot の正常・スキップケース"""
-
-    @pytest.fixture
-    def data_store(self):
-        ds = InMemoryDataStore()
-        if hasattr(ds, "clear_all"):
-            ds.clear_all()
-        return ds
+        return InMemoryLootTableRepository(initial_data={LootTableId.create(1): lt})
 
     @pytest.fixture
     def spot1_id(self):
@@ -276,15 +112,11 @@ class TestProcessHungerMigrationForSpot:
         return InMemoryMonsterAggregateRepository(data_store=data_store)
 
     @pytest.fixture
-    def connected_spots_provider(self, map_repo):
-        """ゲートウェイから接続を導出するプロバイダ（map1_with_gateway, map2 登録後に使用）"""
-        return GatewayBasedConnectedSpotsProvider(map_repo)
-
-    @pytest.fixture
     def map1_with_gateway(self, spot1_id, spot2_id, map_repo):
         tiles = [
             Tile(Coordinate(x, y, 0), TerrainType.grass())
-            for x in range(5) for y in range(5)
+            for x in range(5)
+            for y in range(5)
         ]
         pmap = PhysicalMapAggregate.create(spot1_id, tiles)
         gw = Gateway(
@@ -302,7 +134,8 @@ class TestProcessHungerMigrationForSpot:
     def map2(self, spot2_id, map_repo):
         tiles = [
             Tile(Coordinate(x, y, 0), TerrainType.grass())
-            for x in range(5) for y in range(5)
+            for x in range(5)
+            for y in range(5)
         ]
         pmap = PhysicalMapAggregate.create(spot2_id, tiles)
         map_repo.save(pmap)
@@ -310,11 +143,18 @@ class TestProcessHungerMigrationForSpot:
 
     @pytest.fixture
     def migrant_monster_on_map1(
-        self, spot1_id, monster_repo, map_repo, map1_with_gateway
+        self,
+        spot1_id,
+        monster_repo,
+        map_repo,
+        map1_with_gateway,
     ):
         template = _template_with_feed_preference(forage_threshold=0.5)
         loadout = SkillLoadoutAggregate.create(
-            SkillLoadoutId(1), owner_id=1000, normal_capacity=5, awakened_capacity=5
+            SkillLoadoutId(1),
+            owner_id=1000,
+            normal_capacity=5,
+            awakened_capacity=5,
         )
         monster = MonsterAggregate.create(
             MonsterId(1),
@@ -322,9 +162,7 @@ class TestProcessHungerMigrationForSpot:
             WorldObjectId(1000),
             skill_loadout=loadout,
         )
-        monster.spawn(
-            Coordinate(2, 2, 0), spot1_id, WorldTick(0), initial_hunger=0.95
-        )
+        monster.spawn(Coordinate(2, 2, 0), spot1_id, WorldTick(0), initial_hunger=0.95)
         monster_repo.save(monster)
         actor = WorldObject(
             object_id=WorldObjectId(1000),
@@ -337,6 +175,32 @@ class TestProcessHungerMigrationForSpot:
         map_repo.save(map1_with_gateway)
         return monster
 
+    def _build_coordinator(
+        self,
+        *,
+        data_store,
+        map_repo,
+        monster_repo,
+        loot_table_repo,
+        connected_spots_provider,
+        map_transition_service,
+    ) -> MonsterLifecycleSurvivalCoordinator:
+        uow = InMemoryUnitOfWork(unit_of_work_factory=lambda: None, data_store=data_store)
+        feed_query_service = MonsterFeedQueryService(loot_table_repo)
+        return MonsterLifecycleSurvivalCoordinator(
+            monster_repository=monster_repo,
+            physical_map_repository=map_repo,
+            connected_spots_provider_getter=lambda: connected_spots_provider,
+            map_transition_service_getter=lambda: map_transition_service,
+            hunger_migration_policy=mock.Mock(wraps=__import__(
+                "ai_rpg_world.application.world.services.hunger_migration_policy",
+                fromlist=["HungerMigrationPolicy"],
+            ).HungerMigrationPolicy()),
+            spot_has_feed_for_monster=feed_query_service.spot_has_feed_for_monster,
+            unit_of_work=uow,
+            logger=mock.Mock(),
+        )
+
     def test_migrates_highest_hunger_monster_when_spot_has_no_feed(
         self,
         data_store,
@@ -344,40 +208,29 @@ class TestProcessHungerMigrationForSpot:
         spot2_id,
         map_repo,
         monster_repo,
-        connected_spots_provider,
+        loot_table_repo,
         map1_with_gateway,
         map2,
         migrant_monster_on_map1,
     ):
-        """正常: スポットに餌がなく接続スポットがあれば飢餓が最も高い1体が移住する"""
-        uow = InMemoryUnitOfWork(
-            unit_of_work_factory=lambda: None,
+        coordinator = self._build_coordinator(
             data_store=data_store,
-        )
-        service = WorldSimulationApplicationService(
-            time_provider=None,
-            physical_map_repository=map_repo,
-            weather_zone_repository=None,
-            player_status_repository=None,
-            hit_box_repository=None,
-            behavior_service=None,
-            weather_config_service=None,
-            unit_of_work=uow,
-            monster_repository=monster_repo,
-            skill_loadout_repository=None,
-            monster_skill_execution_domain_service=None,
-            hit_box_factory=None,
-            monster_action_resolver_factory=None,
-            loot_table_repository=InMemoryLootTableRepository(),
-            connected_spots_provider=connected_spots_provider,
+            map_repo=map_repo,
+            monster_repo=monster_repo,
+            loot_table_repo=loot_table_repo,
+            connected_spots_provider=mock.Mock(
+                get_connected_spots=mock.Mock(return_value=[spot2_id])
+            ),
             map_transition_service=MapTransitionService(),
         )
+
         physical_map = map_repo.find_by_spot_id(spot1_id)
-        assert physical_map is not None
-        with uow:
-            service._process_hunger_migration_for_spot(
-                physical_map, WorldTick(1), {spot1_id}
-            )
+        migrated_actor_id = coordinator.apply_hunger_migration_for_spot(
+            physical_map,
+            WorldTick(1),
+        )
+
+        assert migrated_actor_id == WorldObjectId(1000)
         after = monster_repo.find_by_world_object_id(WorldObjectId(1000))
         assert after is not None
         assert after.spot_id == spot2_id
@@ -394,43 +247,28 @@ class TestProcessHungerMigrationForSpot:
         spot1_id,
         map_repo,
         monster_repo,
+        loot_table_repo,
         map1_with_gateway,
         migrant_monster_on_map1,
     ):
-        """接続スポットが0なら移住しない（接続プロバイダが空リストを返す場合）"""
-        from ai_rpg_world.domain.world.repository.connected_spots_provider import IConnectedSpotsProvider
-
-        class EmptyConnectedSpotsProvider(IConnectedSpotsProvider):
-            def get_connected_spots(self, spot_id):
-                return []
-
-        uow = InMemoryUnitOfWork(
-            unit_of_work_factory=lambda: None,
+        coordinator = self._build_coordinator(
             data_store=data_store,
-        )
-        service = WorldSimulationApplicationService(
-            time_provider=None,
-            physical_map_repository=map_repo,
-            weather_zone_repository=None,
-            player_status_repository=None,
-            hit_box_repository=None,
-            behavior_service=None,
-            weather_config_service=None,
-            unit_of_work=uow,
-            monster_repository=monster_repo,
-            skill_loadout_repository=None,
-            monster_skill_execution_domain_service=None,
-            hit_box_factory=None,
-            monster_action_resolver_factory=None,
-            loot_table_repository=InMemoryLootTableRepository(),
-            connected_spots_provider=EmptyConnectedSpotsProvider(),
+            map_repo=map_repo,
+            monster_repo=monster_repo,
+            loot_table_repo=loot_table_repo,
+            connected_spots_provider=mock.Mock(
+                get_connected_spots=mock.Mock(return_value=[])
+            ),
             map_transition_service=MapTransitionService(),
         )
+
         physical_map = map_repo.find_by_spot_id(spot1_id)
-        with uow:
-            service._process_hunger_migration_for_spot(
-                physical_map, WorldTick(1), {spot1_id}
-            )
+        migrated_actor_id = coordinator.apply_hunger_migration_for_spot(
+            physical_map,
+            WorldTick(1),
+        )
+
+        assert migrated_actor_id is None
         after = monster_repo.find_by_world_object_id(WorldObjectId(1000))
         assert after is not None
         assert after.spot_id == spot1_id
@@ -440,53 +278,39 @@ class TestProcessHungerMigrationForSpot:
         self,
         data_store,
         spot1_id,
-        spot2_id,
         map_repo,
         monster_repo,
-        connected_spots_provider,
+        loot_table_repo,
         map1_with_gateway,
         map2,
         migrant_monster_on_map1,
     ):
-        """transition_object が DomainException を投げた場合は移住をスキップし、モンスターは元のスポットに残る"""
         class FailingMapTransitionService(MapTransitionService):
             def transition_object(self, from_map, to_map, object_id, landing_coordinate):
                 raise DomainException("Transition blocked for test")
 
-        uow = InMemoryUnitOfWork(
-            unit_of_work_factory=lambda: None,
+        coordinator = self._build_coordinator(
             data_store=data_store,
-        )
-        service = WorldSimulationApplicationService(
-            time_provider=None,
-            physical_map_repository=map_repo,
-            weather_zone_repository=None,
-            player_status_repository=None,
-            hit_box_repository=None,
-            behavior_service=None,
-            weather_config_service=None,
-            unit_of_work=uow,
-            monster_repository=monster_repo,
-            skill_loadout_repository=None,
-            monster_skill_execution_domain_service=None,
-            hit_box_factory=None,
-            monster_action_resolver_factory=None,
-            loot_table_repository=InMemoryLootTableRepository(),
-            connected_spots_provider=connected_spots_provider,
+            map_repo=map_repo,
+            monster_repo=monster_repo,
+            loot_table_repo=loot_table_repo,
+            connected_spots_provider=mock.Mock(
+                get_connected_spots=mock.Mock(return_value=[SpotId(2)])
+            ),
             map_transition_service=FailingMapTransitionService(),
         )
+
         physical_map = map_repo.find_by_spot_id(spot1_id)
-        assert physical_map is not None
-        with uow:
-            service._process_hunger_migration_for_spot(
-                physical_map, WorldTick(1), {spot1_id}
-            )
+        migrated_actor_id = coordinator.apply_hunger_migration_for_spot(
+            physical_map,
+            WorldTick(1),
+        )
+
+        assert migrated_actor_id is None
         after = monster_repo.find_by_world_object_id(WorldObjectId(1000))
         assert after is not None
         assert after.spot_id == spot1_id
         assert after.coordinate == Coordinate(2, 2, 0)
-        map1_after = map_repo.find_by_spot_id(spot1_id)
-        assert map1_after.get_object(WorldObjectId(1000)) is not None
 
     def test_uses_hunger_migration_policy_selection_before_applying_transition(
         self,
@@ -494,41 +318,23 @@ class TestProcessHungerMigrationForSpot:
         spot1_id,
         map_repo,
         monster_repo,
-        connected_spots_provider,
+        loot_table_repo,
         map1_with_gateway,
         map2,
         migrant_monster_on_map1,
     ):
-        uow = InMemoryUnitOfWork(
-            unit_of_work_factory=lambda: None,
+        coordinator = self._build_coordinator(
             data_store=data_store,
-        )
-        service = WorldSimulationApplicationService(
-            time_provider=None,
-            physical_map_repository=map_repo,
-            weather_zone_repository=None,
-            player_status_repository=None,
-            hit_box_repository=None,
-            behavior_service=None,
-            weather_config_service=None,
-            unit_of_work=uow,
-            monster_repository=monster_repo,
-            skill_loadout_repository=None,
-            monster_skill_execution_domain_service=None,
-            hit_box_factory=None,
-            monster_action_resolver_factory=None,
-            loot_table_repository=InMemoryLootTableRepository(),
-            connected_spots_provider=connected_spots_provider,
+            map_repo=map_repo,
+            monster_repo=monster_repo,
+            loot_table_repo=loot_table_repo,
+            connected_spots_provider=mock.Mock(
+                get_connected_spots=mock.Mock(return_value=[SpotId(2)])
+            ),
             map_transition_service=MapTransitionService(),
         )
-        policy = mock.Mock(wraps=service._hunger_migration_policy)
-        service._hunger_migration_policy = policy
-        service._monster_lifecycle_survival_coordinator._hunger_migration_policy = policy
+
         physical_map = map_repo.find_by_spot_id(spot1_id)
+        coordinator.apply_hunger_migration_for_spot(physical_map, WorldTick(1))
 
-        with uow:
-            service._process_hunger_migration_for_spot(
-                physical_map, WorldTick(1), {spot1_id}
-            )
-
-        policy.select_migrant.assert_called_once()
+        coordinator._hunger_migration_policy.select_migrant.assert_called_once()
