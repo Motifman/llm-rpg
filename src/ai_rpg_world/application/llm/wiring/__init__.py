@@ -135,6 +135,8 @@ from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_NO_OP
 from ai_rpg_world.application.llm.services.tool_argument_resolver import (
     DefaultToolArgumentResolver,
 )
+from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
+from ai_rpg_world.application.world.contracts.interfaces import ICancelMovementPort
 from ai_rpg_world.application.world.contracts.queries import (
     GetPlayerCurrentStateQuery,
 )
@@ -497,9 +499,9 @@ def _build_observation_stack(
     unit_of_work_factory: UnitOfWorkFactory,
     llm_turn_trigger: ILlmTurnTrigger,
     llm_player_resolver: ILLMPlayerResolver,
-    movement_service: Any,
-    game_time_provider: Optional[Any],
-    world_time_config_service: Optional[Any],
+    movement_service: Optional[ICancelMovementPort],
+    game_time_provider: Optional[GameTimeProvider],
+    world_time_config_service: Optional[WorldTimeConfigService],
     observation_formatter: Optional[IObservationFormatter],
     spot_repository: Optional[Any],
     item_spec_repository: Optional[Any],
