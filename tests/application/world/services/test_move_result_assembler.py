@@ -32,7 +32,12 @@ def _create_minimal_player_status(
     spot_id: int = 1,
     x: int = 0,
     y: int = 0,
+    navigation_state: PlayerNavigationState | None = None,
 ):
+    nav = navigation_state or PlayerNavigationState.from_parts(
+        current_spot_id=SpotId(spot_id),
+        current_coordinate=Coordinate(x, y, 0),
+    )
     exp_table = ExpTable(100, 1.5)
     return PlayerStatusAggregate(
         player_id=PlayerId(player_id),
@@ -44,10 +49,7 @@ def _create_minimal_player_status(
         hp=Hp.create(100, 100),
         mp=Mp.create(50, 50),
         stamina=Stamina.create(100, 100),
-        navigation_state=PlayerNavigationState.from_parts(
-            current_spot_id=SpotId(spot_id),
-            current_coordinate=Coordinate(x, y, 0),
-        ),
+        navigation_state=nav,
     )
 
 
@@ -175,10 +177,8 @@ class TestCreateSuccess:
                 Spot(SpotId(1), "Village", "") if int(sid) == 1 else None
             )
             assembler = MoveResultAssembler(profile_repo, spot_repo)
-            status = _create_minimal_player_status(1, 1)
-            status._navigation_state = PlayerNavigationState.from_parts(
-                current_spot_id=SpotId(2),
-                current_coordinate=Coordinate(0, 0, 0),
+            status = _create_minimal_player_status(
+                1, 2, 0, 0
             )
 
             with pytest.raises(MapNotFoundException):
@@ -288,10 +288,12 @@ class TestCreateFailure:
             spot_repo = MagicMock()
             spot_repo.find_by_id.return_value = Spot(SpotId(1), "A", "")
             assembler = MoveResultAssembler(profile_repo, spot_repo)
-            status = _create_minimal_player_status(1, 1)
-            status._navigation_state = PlayerNavigationState.from_parts(
-                current_spot_id=SpotId(1),
-                current_coordinate=None,
+            status = _create_minimal_player_status(
+                1, 1,
+                navigation_state=PlayerNavigationState.from_parts(
+                    current_spot_id=SpotId(1),
+                    current_coordinate=None,
+                ),
             )
 
             result = assembler.create_failure(1, "座標不明", player_status=status)

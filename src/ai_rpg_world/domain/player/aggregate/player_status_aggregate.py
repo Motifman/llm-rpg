@@ -1,4 +1,4 @@
-from typing import Optional, List, Literal, Union, Union
+from typing import Optional, List, Literal
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -81,7 +81,7 @@ class PlayerStatusAggregate(AggregateRoot):
         is_down: bool = False,
         active_effects: List[StatusEffect] = None,
         attention_level: Optional[AttentionLevel] = None,
-        pursuit_state: Optional[Union[PlayerPursuitState, PursuitState]] = None,
+        pursuit_state: Optional[PlayerPursuitState] = None,
     ):
         super().__init__()
         self._player_id = player_id
@@ -99,12 +99,9 @@ class PlayerStatusAggregate(AggregateRoot):
         self._is_down = is_down
         self._active_effects = active_effects or []
         self._attention_level = attention_level if attention_level is not None else AttentionLevel.FULL
-        if pursuit_state is None:
-            self._pursuit_state = PlayerPursuitState.empty()
-        elif isinstance(pursuit_state, PlayerPursuitState):
-            self._pursuit_state = pursuit_state
-        else:
-            self._pursuit_state = PlayerPursuitState.from_parts(pursuit=pursuit_state)
+        self._pursuit_state = (
+            pursuit_state if pursuit_state is not None else PlayerPursuitState.empty()
+        )
 
     @property
     def attention_level(self) -> AttentionLevel:

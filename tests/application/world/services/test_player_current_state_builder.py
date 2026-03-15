@@ -85,7 +85,17 @@ from ai_rpg_world.domain.world.service.world_time_config_service import (
 )
 
 
-def _make_status(player_id: int, spot_id: int = 1, x: int = 0, y: int = 0) -> PlayerStatusAggregate:
+def _make_status(
+    player_id: int,
+    spot_id: int = 1,
+    x: int = 0,
+    y: int = 0,
+    navigation_state: PlayerNavigationState | None = None,
+) -> PlayerStatusAggregate:
+    nav = navigation_state or PlayerNavigationState.from_parts(
+        current_spot_id=SpotId(spot_id),
+        current_coordinate=Coordinate(x, y, 0),
+    )
     exp_table = ExpTable(100, 1.5)
     return PlayerStatusAggregate(
         player_id=PlayerId(player_id),
@@ -97,10 +107,7 @@ def _make_status(player_id: int, spot_id: int = 1, x: int = 0, y: int = 0) -> Pl
         hp=Hp.create(100, 100),
         mp=Mp.create(50, 50),
         stamina=Stamina.create(100, 100),
-        navigation_state=PlayerNavigationState.from_parts(
-            current_spot_id=SpotId(spot_id),
-            current_coordinate=Coordinate(x, y, 0),
-        ),
+        navigation_state=nav,
     )
 
 
@@ -566,16 +573,10 @@ class TestPlayerCurrentStateBuilder:
         """current_coordinate が None のとき ValueError が発生する"""
         builder, status_repo, profile_repo, phys_repo, spot_repo = setup_builder
         profile_repo.save(_make_profile(1, "Alice"))
-        status = _make_status(1, 1, 0, 0)
-        from ai_rpg_world.domain.player.value_object.player_navigation_state import (
-            PlayerNavigationState,
-        )
-        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-
-        object.__setattr__(
-            status,
-            "_navigation_state",
-            PlayerNavigationState.from_parts(
+        status = _make_status(
+            1,
+            1,
+            navigation_state=PlayerNavigationState.from_parts(
                 current_spot_id=SpotId(1),
                 current_coordinate=None,
             ),

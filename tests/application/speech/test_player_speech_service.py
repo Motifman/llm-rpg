@@ -33,9 +33,14 @@ def _make_status(
     player_id: int,
     spot_id: int = 1,
     coord: Coordinate = None,
+    navigation_state: PlayerNavigationState | None = None,
 ) -> PlayerStatusAggregate:
     if coord is None:
         coord = Coordinate(0, 0, 0)
+    nav = navigation_state or PlayerNavigationState.from_parts(
+        current_spot_id=SpotId(spot_id),
+        current_coordinate=coord,
+    )
     exp_table = ExpTable(100, 1.5)
     return PlayerStatusAggregate(
         player_id=PlayerId(player_id),
@@ -47,10 +52,7 @@ def _make_status(
         hp=Hp.create(100, 100),
         mp=Mp.create(50, 50),
         stamina=Stamina.create(100, 100),
-        navigation_state=PlayerNavigationState.from_parts(
-            current_spot_id=SpotId(spot_id),
-            current_coordinate=coord,
-        ),
+        navigation_state=nav,
     )
 
 
@@ -127,8 +129,7 @@ class TestPlayerSpeechApplicationService:
 
     def test_speak_location_not_set_raises(self):
         """現在地未設定のプレイヤーで発言すると PlayerLocationNotSetException"""
-        status = _make_status(1, spot_id=1)
-        status._navigation_state = PlayerNavigationState.empty()
+        status = _make_status(1, spot_id=1, navigation_state=PlayerNavigationState.empty())
         repo = MagicMock()
         repo.find_by_id.return_value = status
         pub = MagicMock()
