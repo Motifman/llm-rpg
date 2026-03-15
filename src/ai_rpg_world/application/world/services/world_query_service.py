@@ -1,7 +1,7 @@
 """ワールドクエリサービス（読み取り専用の位置情報等）"""
 
 import logging
-from typing import Optional, Callable, Any, TYPE_CHECKING
+from typing import Optional, Callable, Any, List, TYPE_CHECKING
 
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
@@ -40,6 +40,13 @@ from ai_rpg_world.application.world.exceptions.command.movement_command_exceptio
 )
 from ai_rpg_world.application.world.services.player_current_state_builder import (
     PlayerCurrentStateBuilder,
+)
+from ai_rpg_world.application.world.services.player_location_query_service import (
+    PlayerLocationQueryService,
+)
+from ai_rpg_world.application.common.interfaces import IPlayerAudienceQueryPort
+from ai_rpg_world.application.observation.services.player_audience_query_service import (
+    PlayerAudienceQueryService,
 )
 
 if TYPE_CHECKING:
@@ -91,7 +98,22 @@ class WorldQueryService:
         shop_repository: Optional["ShopRepository"] = None,
         personal_trade_query_service: Optional["PersonalTradeQueryService"] = None,
         player_current_state_builder: Optional[PlayerCurrentStateBuilder] = None,
+        player_location_query_service: Optional[PlayerLocationQueryService] = None,
+        player_audience_query: Optional[IPlayerAudienceQueryPort] = None,
     ):
+        self._player_location_query_service = (
+            player_location_query_service
+            or PlayerLocationQueryService(
+                player_status_repository=player_status_repository,
+                player_profile_repository=player_profile_repository,
+                physical_map_repository=physical_map_repository,
+                spot_repository=spot_repository,
+            )
+        )
+        self._player_audience_query: IPlayerAudienceQueryPort = (
+            player_audience_query
+            or PlayerAudienceQueryService(player_status_repository=player_status_repository)
+        )
         self._player_status_repository = player_status_repository
         self._player_profile_repository = player_profile_repository
         self._physical_map_repository = physical_map_repository
@@ -127,6 +149,7 @@ class WorldQueryService:
                 guild_repository=guild_repository,
                 shop_repository=shop_repository,
                 personal_trade_query_service=personal_trade_query_service,
+                player_audience_query=self._player_audience_query,
             )
         )
         self._logger = logging.getLogger(self.__class__.__name__)
@@ -160,48 +183,7 @@ class WorldQueryService:
 
     def _get_player_location_impl(self, query: GetPlayerLocationQuery) -> Optional[PlayerLocationDto]:
         """プレイヤーの現在位置を取得する実装。未配置時は None を返す。"""
-        player_id = PlayerId(query.player_id)
-        player_status = self._player_status_repository.find_by_id(player_id)
-        if not player_status or not player_status.current_spot_id or not player_status.current_coordinate:
-            return None
-
-        spot_id = player_status.current_spot_id
-        coord = player_status.current_coordinate
-
-        profile = self._player_profile_repository.find_by_id(player_id)
-        if not profile:
-            raise PlayerNotFoundException(query.player_id)
-        player_name = profile.name.value
-
-        spot = self._spot_repository.find_by_id(spot_id)
-        if not spot:
-            raise MapNotFoundException(int(spot_id))
-        spot_name = spot.name
-        spot_desc = spot.description
-
-        areas = []
-        physical_map = self._physical_map_repository.find_by_spot_id(spot_id)
-        if physical_map:
-            areas = physical_map.get_location_areas_at(coord)
-        area_ids = [int(la.location_id) for la in areas]
-        area_names = [la.name for la in areas]
-        area_id = area_ids[0] if area_ids else None
-        area_name = area_names[0] if area_names else None
-
-        return PlayerLocationDto(
-            player_id=query.player_id,
-            player_name=player_name,
-            current_spot_id=int(spot_id),
-            current_spot_name=spot_name,
-            current_spot_description=spot_desc,
-            x=coord.x,
-            y=coord.y,
-            z=coord.z,
-            area_ids=area_ids,
-            area_names=area_names,
-            area_id=area_id,
-            area_name=area_name,
-        )
+        return self._player_location_query_service.get_player_location(query)
 
     def get_spot_context_for_player(
         self, query: GetSpotContextForPlayerQuery
@@ -240,11 +222,8 @@ class WorldQueryService:
         area_id = area_ids[0] if area_ids else None
         area_name = area_names[0] if area_names else None
 
-        current_player_ids: set = set()
-        all_statuses = self._player_status_repository.find_all()
-        for s in all_statuses:
-            if s.current_spot_id == spot_id:
-                current_player_ids.add(int(s.player_id))
+        player_ids_at_spot = self._player_audience_query.players_at_spot(spot_id)
+        current_player_ids = {int(p.value) for p in player_ids_at_spot}
         current_player_count = len(current_player_ids)
 
         connected_spot_ids: set = set()

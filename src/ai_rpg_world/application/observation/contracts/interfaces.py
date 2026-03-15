@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, List, Optional
 
+from ai_rpg_world.application.common.interfaces import IPlayerAudienceQueryPort
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
     ObservationOutput,
@@ -12,19 +13,14 @@ from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
-
-class IPlayerAudienceQueryPort(ABC):
-    """観測配信先としての「プレイヤー群」を取得するポート"""
-
-    @abstractmethod
-    def players_at_spot(self, spot_id: SpotId) -> List[PlayerId]:
-        """指定スポットにいる全プレイヤーIDを返す。"""
-        pass
-
-    @abstractmethod
-    def all_known_players(self) -> List[PlayerId]:
-        """ワールドに存在する全プレイヤーIDを返す（公開配信用）。"""
-        pass
+__all__ = [
+    "IPlayerAudienceQueryPort",
+    "IWorldObjectToPlayerResolver",
+    "IRecipientResolutionStrategy",
+    "IObservationRecipientResolver",
+    "IObservationFormatter",
+    "IObservationContextBuffer",
+]
 
 
 class IWorldObjectToPlayerResolver(ABC):
