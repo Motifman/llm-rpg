@@ -33,7 +33,9 @@ from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum, Eco
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.value_object.behavior_state_snapshot import BehaviorStateSnapshot
+from ai_rpg_world.domain.monster.value_object.feed_memory import FeedMemory, MAX_FEED_MEMORIES
 from ai_rpg_world.domain.monster.value_object.feed_memory_entry import FeedMemoryEntry
+from ai_rpg_world.domain.monster.value_object.monster_behavior_state import MonsterBehaviorState
 from ai_rpg_world.domain.combat.value_object.status_effect import StatusEffect
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
@@ -70,10 +72,6 @@ from ai_rpg_world.domain.pursuit.event.pursuit_events import (
 if TYPE_CHECKING:
     from ai_rpg_world.domain.world.value_object.pack_id import PackId
     from ai_rpg_world.domain.world.value_object.behavior_observation import BehaviorObservation
-
-
-# 餌場記憶の最大件数（LRU で古いものを追い出す）
-MAX_FEED_MEMORIES = 3
 
 
 class MonsterAggregate(AggregateRoot):
@@ -119,16 +117,19 @@ class MonsterAggregate(AggregateRoot):
         self._pack_id = pack_id
         self._is_pack_leader = is_pack_leader
         self._initial_spawn_coordinate = initial_spawn_coordinate
-        self._behavior_state = behavior_state
-        self._behavior_target_id = behavior_target_id
-        self._behavior_last_known_position = behavior_last_known_position
-        self._behavior_initial_position = behavior_initial_position
-        self._behavior_patrol_index = behavior_patrol_index
-        self._behavior_search_timer = behavior_search_timer
-        self._behavior_failure_count = behavior_failure_count
-        self._behavior_last_known_feed: List[FeedMemoryEntry] = (
-            list(behavior_last_known_feed) if behavior_last_known_feed is not None else []
+        self._behavior_state = MonsterBehaviorState.from_legacy(
+            state=behavior_state,
+            target_id=behavior_target_id,
+            last_known_position=behavior_last_known_position,
+            initial_position=behavior_initial_position,
+            patrol_index=behavior_patrol_index,
+            search_timer=behavior_search_timer,
+            failure_count=behavior_failure_count,
         )
+        _feed_entries = list(behavior_last_known_feed) if behavior_last_known_feed else []
+        if len(_feed_entries) > 3:
+            _feed_entries = _feed_entries[-3:]
+        self._feed_memory = FeedMemory(_entries=tuple(_feed_entries))
         self._behavior_state_machine = MonsterBehaviorStateMachine()
 
         # lifecycle_state と pursuit_state を構築（後方互換のため legacy パラメータから）
@@ -301,31 +302,31 @@ class MonsterAggregate(AggregateRoot):
 
     @property
     def behavior_state(self) -> BehaviorStateEnum:
-        return self._behavior_state
+        return self._behavior_state.state
 
     @property
     def behavior_target_id(self) -> Optional[WorldObjectId]:
-        return self._behavior_target_id
+        return self._behavior_state.target_id
 
     @property
     def behavior_last_known_position(self) -> Optional[Coordinate]:
-        return self._behavior_last_known_position
+        return self._behavior_state.last_known_position
 
     @property
     def behavior_initial_position(self) -> Optional[Coordinate]:
-        return self._behavior_initial_position
+        return self._behavior_state.initial_position
 
     @property
     def behavior_patrol_index(self) -> int:
-        return self._behavior_patrol_index
+        return self._behavior_state.patrol_index
 
     @property
     def behavior_search_timer(self) -> int:
-        return self._behavior_search_timer
+        return self._behavior_state.search_timer
 
     @property
     def behavior_failure_count(self) -> int:
-        return self._behavior_failure_count
+        return self._behavior_state.failure_count
 
     @property
     def pursuit_state(self) -> Optional[PursuitState]:
@@ -354,7 +355,7 @@ class MonsterAggregate(AggregateRoot):
     @property
     def behavior_last_known_feed(self) -> List[FeedMemoryEntry]:
         """餌場の記憶（最大 MAX_FEED_MEMORIES 件、古い順）。適用時は距離が近い順に使う。"""
-        return list(self._behavior_last_known_feed)
+        return list(self._feed_memory.entries)
 
     def remember_feed(self, object_id: WorldObjectId, coordinate: Coordinate) -> None:
         """
@@ -363,21 +364,11 @@ class MonsterAggregate(AggregateRoot):
         """
         if self._lifecycle_state.status != MonsterStatusEnum.ALIVE:
             return
-        entry = FeedMemoryEntry(object_id=object_id, coordinate=coordinate)
-        # 同じ object_id を除いたリストにし、末尾に追加
-        new_list = [e for e in self._behavior_last_known_feed if e.object_id != object_id]
-        new_list.append(entry)
-        if len(new_list) > MAX_FEED_MEMORIES:
-            new_list = new_list[-MAX_FEED_MEMORIES:]
-        self._behavior_last_known_feed = new_list
+        self._feed_memory = self._feed_memory.remember(object_id, coordinate)
 
     def advance_patrol_index(self, patrol_points_count: int) -> None:
         """パトロール点に到達したときにインデックスを進める。patrol_points_count は点の数。"""
-        if patrol_points_count <= 0:
-            return
-        self._behavior_patrol_index = (
-            self._behavior_patrol_index + 1
-        ) % patrol_points_count
+        self._behavior_state = self._behavior_state.advance_patrol_index(patrol_points_count)
 
     def _initialize_status(
         self,
@@ -402,14 +393,8 @@ class MonsterAggregate(AggregateRoot):
             spawned_at_tick=current_tick,
             initial_hunger=initial_hunger,
         )
-        self._behavior_initial_position = coordinate
-        self._behavior_state = BehaviorStateEnum.IDLE
-        self._behavior_target_id = None
-        self._behavior_last_known_position = None
-        self._behavior_last_known_feed = []
-        self._behavior_patrol_index = 0
-        self._behavior_search_timer = 0
-        self._behavior_failure_count = 0
+        self._behavior_state = self._behavior_state.with_spawn_reset(coordinate)
+        self._feed_memory = self._feed_memory.cleared()
         self._pursuit_state = self._pursuit_state.cleared()
 
     @property
@@ -574,8 +559,7 @@ class MonsterAggregate(AggregateRoot):
 
         self._lifecycle_state = self._lifecycle_state.with_death(current_tick)
         spot_id_for_event = self._spot_id
-        self._behavior_target_id = None
-        self._behavior_last_known_position = None
+        self._behavior_state = self._behavior_state.with_target_cleared()
         self._clear_pursuit_state()
         self._coordinate = None  # 死亡時は座標をクリア（spot_id はリスポーン判定のため保持）
 
@@ -665,15 +649,13 @@ class MonsterAggregate(AggregateRoot):
             ),
             effective_flee_threshold=self.get_effective_flee_threshold(current_tick),
             allow_chase=self.get_allow_chase(current_tick),
-            current_behavior_state=self._behavior_state,
-            behavior_initial_position=self._behavior_initial_position,
+            current_behavior_state=self._behavior_state.state,
+            behavior_initial_position=self._behavior_state.initial_position,
             ambush_chase_range=self._template.ambush_chase_range,
         )
         if transition.no_transition:
             return
-        self._behavior_state = transition.new_state
-        self._behavior_target_id = transition.new_target_id
-        self._behavior_last_known_position = transition.new_last_known_position
+        self._behavior_state = self._behavior_state.with_attacked(transition)
         if transition.clear_pursuit:
             self._clear_pursuit_state()
         elif transition.sync_pursuit:
@@ -737,9 +719,9 @@ class MonsterAggregate(AggregateRoot):
         )
         flee_threshold = self.get_effective_flee_threshold(current_tick)
         return BehaviorStateSnapshot(
-            state=self._behavior_state,
-            target_id=self._behavior_target_id,
-            last_known_target_position=self._behavior_last_known_position,
+            state=self._behavior_state.state,
+            target_id=self._behavior_state.target_id,
+            last_known_target_position=self._behavior_state.last_known_position,
             hp_percentage=hp_percentage,
             phase_thresholds=phase_thresholds,
             flee_threshold=flee_threshold,
@@ -887,7 +869,7 @@ class MonsterAggregate(AggregateRoot):
         last_known = current_state.last_known
         target_snapshot = current_state.target_snapshot
         if last_known is None:
-            coordinate = self._behavior_last_known_position
+            coordinate = self._behavior_state.last_known_position
             if coordinate is None:
                 raise ValueError("Cannot fail pursuit without last-known state.")
             last_known = self._build_pursuit_last_known(
@@ -907,8 +889,7 @@ class MonsterAggregate(AggregateRoot):
                 target_snapshot=target_snapshot,
             )
         )
-        self._behavior_target_id = None
-        self._behavior_last_known_position = None
+        self._behavior_state = self._behavior_state.with_target_cleared()
         self._clear_pursuit_state()
 
     def apply_behavior_transition(
@@ -924,16 +905,14 @@ class MonsterAggregate(AggregateRoot):
         )
         output = self._behavior_state_machine.apply_transition(
             result=result,
-            current_state=self._behavior_state,
-            current_target_id=self._behavior_target_id,
-            current_last_known_position=self._behavior_last_known_position,
+            current_state=self._behavior_state.state,
+            current_target_id=self._behavior_state.target_id,
+            current_last_known_position=self._behavior_state.last_known_position,
             hp_percentage=hp_percentage,
             effective_flee_threshold=self.get_effective_flee_threshold(current_tick),
             allow_chase=self.get_allow_chase(current_tick),
         )
-        self._behavior_state = output.final_state
-        self._behavior_target_id = output.final_target_id
-        self._behavior_last_known_position = output.final_last_known_position
+        self._behavior_state = self._behavior_state.with_transition(output)
         if output.clear_pursuit:
             self._clear_pursuit_state()
         if output.sync_pursuit is not None:
@@ -961,15 +940,13 @@ class MonsterAggregate(AggregateRoot):
         self._ensure_can_perform_behavior()
         if not self._behavior_state_machine.should_return_to_territory(
             actor_coordinate=actor_coordinate,
-            behavior_initial_position=self._behavior_initial_position,
+            behavior_initial_position=self._behavior_state.initial_position,
             territory_radius=self._template.territory_radius,
-            current_state=self._behavior_state,
+            current_state=self._behavior_state.state,
         ):
             return
-        old_state = self._behavior_state
-        self._behavior_state = BehaviorStateEnum.RETURN
-        self._behavior_target_id = None
-        self._behavior_last_known_position = None
+        old_state = self._behavior_state.state
+        self._behavior_state = self._behavior_state.with_territory_return()
         self._clear_pursuit_state()
         self.add_event(
             ActorStateChangedEvent.create(
