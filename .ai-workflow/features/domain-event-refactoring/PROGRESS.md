@@ -10,10 +10,10 @@ branch: codex/domain-event-refactoring
 
 # Current State
 
-- Active phase: Phase 3（Phase 2 完了済み）
-- Last completed phase: Phase 2
-- Next recommended action: Phase 3 着手。MonsterLifecycleSurvivalCoordinator の process_sync_events を 1 スポット処理の終わりに 1 回へ変更
-- Handoff summary: Phase 2 で separate_uow 廃止・例外握りつぶし廃止を完了。非同期イベント処理は各ハンドラが自前 UoW で管理、例外は logger.exception で記録し再送出
+- Active phase: Phase 4（Phase 3 完了済み）
+- Last completed phase: Phase 3
+- Next recommended action: Phase 4 着手。イベント収集を add_events 経由 1 本に統一。InMemoryRepositoryBase の save で add_events、InMemoryUnitOfWork から _collect_events_from_aggregates と register_aggregate を削除
+- Handoff summary: Phase 3 で MonsterLifecycleSurvivalCoordinator の process_sync_events を 1 スポット処理の終わりに 1 回へ変更。他サービス（MonsterBehaviorCoordinator, MovementStepExecutor, MonsterSpawnSlotService）は意味的単位で 1 回のまま維持を確認
 
 # Phase Journal
 
@@ -47,7 +47,7 @@ branch: codex/domain-event-refactoring
 
 - Started: 2026-03-16
 - Completed: 2026-03-16
-- Commit: （Phase 2 コミット予定）
+- Commit: ea91af9
 - Tests: 全 5895 テスト通過（5 skipped）。test_async_event_processing_failure_re_raises_exception で例外再送出を検証
 - Findings: separate_uow の with ブロックを削除し、_event_publisher._pending_events.extend と publish_pending_events を直接呼ぶ形に変更。print 握りつぶしを logger.exception + raise に置換。unit_of_work_factory は _process_events_in_separate_transaction で未使用になったが API 互換のため __init__ に残置
 - Plan updates: なし
@@ -55,3 +55,16 @@ branch: codex/domain-event-refactoring
 - Scope delta: なし
 - Handoff summary: Phase 3 は MonsterLifecycleSurvivalCoordinator の process_sync_events を 1 スポット終わりに 1 回へ変更
 - Next-phase impact: unit_of_work_factory は将来オプショナル化可能（Phase 4/5 で検討）
+
+## Phase 3
+
+- Started: 2026-03-16
+- Completed: 2026-03-16
+- Commit: (pending)
+- Tests: 全 5896 テスト通過（5 skipped）。test_monster_lifecycle_survival_coordinator, test_hunger_migration, test_monster_behavior_coordinator 含む
+- Findings: process_survival_for_spot のループ内（starve/die 各モンスターごと）と apply_hunger_migration_for_spot 内の process_sync_events を削除し、1 スポット処理の終わりに 1 回だけ呼ぶ形に変更。MonsterBehaviorCoordinator, MovementStepExecutor, MonsterSpawnSlotService は「意味的単位で 1 回」のまま維持を確認
+- Plan updates: なし
+- Goal check: MonsterLifecycleSurvivalCoordinator が 1 スポット処理の終わりに 1 回だけ process_sync_events を呼ぶ形に統一。他呼び出し箇所は意味的単位で 1 回を維持。全テスト通過を達成
+- Scope delta: なし
+- Handoff summary: Phase 4 はイベント収集を add_events 経由 1 本に統一。InMemoryRepositoryBase save で add_events、UoW から _collect_events_from_aggregates と register_aggregate 削除
+- Next-phase impact: Phase 4 で Repository と UoW の変更が中心
