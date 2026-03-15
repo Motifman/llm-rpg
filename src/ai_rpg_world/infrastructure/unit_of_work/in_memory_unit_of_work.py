@@ -2,6 +2,7 @@
 InMemoryUnitOfWork - インメモリ実装のUnit of Work
 実際のデータベーストランザクションは存在しないが、論理的なトランザクション境界を提供します。
 """
+import logging
 from typing import List, Callable, Any, Tuple, TYPE_CHECKING, Optional, Dict
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
@@ -9,6 +10,8 @@ from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 
 if TYPE_CHECKING:
     from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
+
+logger = logging.getLogger(__name__)
 
 
 class InMemoryUnitOfWork(UnitOfWork):
@@ -124,7 +127,11 @@ class InMemoryUnitOfWork(UnitOfWork):
                 self._event_publisher.publish_sync_events(events_to_process)
 
     def _process_events_in_separate_transaction(self) -> None:
-        """保留中のイベントを別トランザクションで処理（非同期ハンドラ）"""
+        """保留中のイベントを別トランザクションで処理（非同期ハンドラ）
+
+        非同期ハンドラは各ハンドラが自分で UoW を管理するため、
+        外側の UoW は廃止し、publish_pending_events を直接呼ぶ。
+        """
         if not self._pending_events:
             return
 
@@ -132,18 +139,12 @@ class InMemoryUnitOfWork(UnitOfWork):
         if self._event_publisher is None:
             return
 
-        # 別トランザクションを開始
-        separate_uow = self._unit_of_work_factory()
         try:
-            with separate_uow:
-                # 保留中のイベントを別トランザクションのパブリッシャーに渡す
-                separate_uow._event_publisher = self._event_publisher
-                separate_uow._event_publisher._pending_events.extend(self._pending_events)
-                separate_uow._event_publisher.publish_pending_events()
-
+            self._event_publisher._pending_events.extend(self._pending_events)
+            self._event_publisher.publish_pending_events()
         except Exception as e:
-            # イベント処理全体の失敗はログに記録するが、メインのコミットを失敗させない
-            print(f"Failed to process events in separate transaction: {e}")
+            logger.exception("Failed to process async events in separate transaction: %s", e)
+            raise
 
     def rollback(self) -> None:
         """ロールバック - 保留中の操作を破棄し、状態を復元"""
