@@ -40,6 +40,12 @@ from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoa
 from ai_rpg_world.domain.monster.service.behavior_state_transition_service import (
     StateTransitionResult,
 )
+from ai_rpg_world.domain.monster.service.monster_behavior_state_machine import (
+    MonsterBehaviorStateMachine,
+    AttackedTransitionResult,
+    TransitionApplicationOutput,
+    EventSpec,
+)
 from ai_rpg_world.domain.monster.event.monster_events import (
     ActorStateChangedEvent,
     TargetSpottedEvent,
@@ -129,6 +135,7 @@ class MonsterAggregate(AggregateRoot):
         self._behavior_last_known_feed: List[FeedMemoryEntry] = (
             list(behavior_last_known_feed) if behavior_last_known_feed is not None else []
         )
+        self._behavior_state_machine = MonsterBehaviorStateMachine()
 
     @classmethod
     def create(
@@ -622,38 +629,33 @@ class MonsterAggregate(AggregateRoot):
             raise MonsterAlreadyDeadException(f"Monster {self._monster_id} is not alive")
         if self._coordinate is None:
             raise MonsterNotSpawnedException(f"Monster {self._monster_id} is not spawned yet")
-        eco = self._template.ecology_type
-        if eco == EcologyTypeEnum.PATROL_ONLY:
+
+        transition = self._behavior_state_machine.compute_attacked_transition(
+            attacker_id=attacker_id,
+            attacker_coordinate=attacker_coordinate,
+            ecology_type=self._template.ecology_type,
+            hp_percentage=(
+                self._hp.value / self._hp.max_hp if self._hp.max_hp > 0 else 1.0
+            ),
+            effective_flee_threshold=self.get_effective_flee_threshold(current_tick),
+            allow_chase=self.get_allow_chase(current_tick),
+            current_behavior_state=self._behavior_state,
+            behavior_initial_position=self._behavior_initial_position,
+            ambush_chase_range=self._template.ambush_chase_range,
+        )
+        if transition.no_transition:
             return
-        if eco == EcologyTypeEnum.FLEE_ONLY:
-            self._behavior_target_id = attacker_id
-            self._behavior_last_known_position = attacker_coordinate
-            self._behavior_state = BehaviorStateEnum.FLEE
+        self._behavior_state = transition.new_state
+        self._behavior_target_id = transition.new_target_id
+        self._behavior_last_known_position = transition.new_last_known_position
+        if transition.clear_pursuit:
             self._clear_pursuit_state()
-            return
-        if (
-            eco == EcologyTypeEnum.AMBUSH
-            and self._behavior_initial_position is not None
-            and self._template.ambush_chase_range is not None
-        ):
-            if self._behavior_initial_position.distance_to(attacker_coordinate) > self._template.ambush_chase_range:
-                return
-        self._behavior_target_id = attacker_id
-        self._behavior_last_known_position = attacker_coordinate
-        self._sync_active_pursuit_state(
-            target_id=attacker_id,
-            coordinate=attacker_coordinate,
-            observed_at_tick=current_tick,
-        )
-        hp_percentage = (
-            self._hp.value / self._hp.max_hp if self._hp.max_hp > 0 else 1.0
-        )
-        flee_th = self.get_effective_flee_threshold(current_tick)
-        allow_chase = self.get_allow_chase(current_tick)
-        if hp_percentage <= flee_th:
-            self._behavior_state = BehaviorStateEnum.FLEE
-        elif allow_chase and self._behavior_state != BehaviorStateEnum.ENRAGE:
-            self._behavior_state = BehaviorStateEnum.CHASE
+        elif transition.sync_pursuit:
+            self._sync_active_pursuit_state(
+                target_id=attacker_id,
+                coordinate=attacker_coordinate,
+                observed_at_tick=current_tick,
+            )
 
     def die_from_old_age(self, current_tick: WorldTick) -> bool:
         """
@@ -805,6 +807,39 @@ class MonsterAggregate(AggregateRoot):
     def _clear_pursuit_state(self) -> None:
         self._pursuit_state = None
 
+    def _emit_behavior_event(self, ev_spec: "EventSpec") -> None:
+        """EventSpec に従ってイベントを発行する。"""
+        if ev_spec.kind == "target_spotted":
+            self.add_event(
+                TargetSpottedEvent.create(
+                    aggregate_id=self._world_object_id,
+                    aggregate_type="Actor",
+                    actor_id=self._world_object_id,
+                    target_id=ev_spec.target_id,
+                    coordinate=ev_spec.coordinate,
+                )
+            )
+        elif ev_spec.kind == "target_lost":
+            self.add_event(
+                TargetLostEvent.create(
+                    aggregate_id=self._world_object_id,
+                    aggregate_type="Actor",
+                    actor_id=self._world_object_id,
+                    target_id=ev_spec.target_id,
+                    last_known_coordinate=ev_spec.last_known_coordinate,
+                )
+            )
+        elif ev_spec.kind == "actor_state_changed":
+            self.add_event(
+                ActorStateChangedEvent.create(
+                    aggregate_id=self._world_object_id,
+                    aggregate_type="Actor",
+                    actor_id=self._world_object_id,
+                    old_state=ev_spec.old_state,
+                    new_state=ev_spec.new_state,
+                )
+            )
+
     def fail_pursuit(
         self,
         reason: PursuitFailureReason,
@@ -851,138 +886,39 @@ class MonsterAggregate(AggregateRoot):
         アプリ層で BehaviorStateTransitionService.compute_transition の結果を渡す。
         """
         self._ensure_can_perform_behavior()
-        old_state = self._behavior_state
         hp_percentage = (
             self._hp.value / self._hp.max_hp if self._hp.max_hp > 0 else 1.0
         )
-
-        if result.apply_enrage:
-            self._behavior_state = BehaviorStateEnum.ENRAGE
-            self.add_event(
-                ActorStateChangedEvent.create(
-                    aggregate_id=self._world_object_id,
-                    aggregate_type="Actor",
-                    actor_id=self._world_object_id,
-                    old_state=old_state,
-                    new_state=BehaviorStateEnum.ENRAGE,
-                )
-            )
-            old_state = BehaviorStateEnum.ENRAGE
-
-        if result.flee_from_threat_id is not None and result.flee_from_threat_coordinate is not None:
-            self._behavior_state = BehaviorStateEnum.FLEE
-            self._behavior_target_id = result.flee_from_threat_id
-            self._behavior_last_known_position = result.flee_from_threat_coordinate
+        output = self._behavior_state_machine.apply_transition(
+            result=result,
+            current_state=self._behavior_state,
+            current_target_id=self._behavior_target_id,
+            current_last_known_position=self._behavior_last_known_position,
+            hp_percentage=hp_percentage,
+            effective_flee_threshold=self.get_effective_flee_threshold(current_tick),
+            allow_chase=self.get_allow_chase(current_tick),
+        )
+        self._behavior_state = output.final_state
+        self._behavior_target_id = output.final_target_id
+        self._behavior_last_known_position = output.final_last_known_position
+        if output.clear_pursuit:
             self._clear_pursuit_state()
-            self.add_event(
-                TargetSpottedEvent.create(
-                    aggregate_id=self._world_object_id,
-                    aggregate_type="Actor",
-                    actor_id=self._world_object_id,
-                    target_id=result.flee_from_threat_id,
-                    coordinate=result.flee_from_threat_coordinate,
-                )
+        if output.sync_pursuit is not None:
+            tid, coord = output.sync_pursuit
+            self._sync_active_pursuit_state(
+                target_id=tid,
+                coordinate=coord,
+                observed_at_tick=current_tick,
             )
-            if not result.apply_enrage:
-                self.add_event(
-                    ActorStateChangedEvent.create(
-                        aggregate_id=self._world_object_id,
-                        aggregate_type="Actor",
-                        actor_id=self._world_object_id,
-                        old_state=old_state,
-                        new_state=BehaviorStateEnum.FLEE,
-                    )
-                )
-            old_state = BehaviorStateEnum.FLEE
-
-        if result.spot_target_params is not None:
-            params = result.spot_target_params
-            self._behavior_target_id = params.target_id
-            self._behavior_last_known_position = params.coordinate
-            effective_flee = (
-                params.effective_flee_threshold
-                if params.effective_flee_threshold is not None
-                else self.get_effective_flee_threshold(current_tick)
+        if output.preserve_pursuit_last_known is not None:
+            tid, coord = output.preserve_pursuit_last_known
+            self._preserve_pursuit_last_known(
+                target_id=tid,
+                coordinate=coord,
+                observed_at_tick=current_tick,
             )
-            allow_chase = (
-                params.allow_chase if params.allow_chase is not None else True
-            )
-            if hp_percentage <= effective_flee:
-                self._behavior_state = BehaviorStateEnum.FLEE
-                self._clear_pursuit_state()
-            elif allow_chase and self._behavior_state != BehaviorStateEnum.ENRAGE:
-                self._behavior_state = BehaviorStateEnum.CHASE
-                self._sync_active_pursuit_state(
-                    target_id=params.target_id,
-                    coordinate=params.coordinate,
-                    observed_at_tick=current_tick,
-                )
-            self.add_event(
-                TargetSpottedEvent.create(
-                    aggregate_id=self._world_object_id,
-                    aggregate_type="Actor",
-                    actor_id=self._world_object_id,
-                    target_id=params.target_id,
-                    coordinate=params.coordinate,
-                )
-            )
-            if old_state != self._behavior_state:
-                self.add_event(
-                    ActorStateChangedEvent.create(
-                        aggregate_id=self._world_object_id,
-                        aggregate_type="Actor",
-                        actor_id=self._world_object_id,
-                        old_state=old_state,
-                        new_state=self._behavior_state,
-                    )
-                )
-            old_state = self._behavior_state
-
-        if result.do_lose_target:
-            retained_target_id = result.lost_target_id or self._behavior_target_id
-            retained_last_known = (
-                result.last_known_coordinate or self._behavior_last_known_position
-            )
-            if self._behavior_state in (
-                BehaviorStateEnum.CHASE,
-                BehaviorStateEnum.ENRAGE,
-            ):
-                self._behavior_state = BehaviorStateEnum.SEARCH
-                if retained_target_id is not None and retained_last_known is not None:
-                    self._preserve_pursuit_last_known(
-                        target_id=retained_target_id,
-                        coordinate=retained_last_known,
-                        observed_at_tick=current_tick,
-                    )
-            elif self._behavior_state == BehaviorStateEnum.FLEE:
-                self._behavior_state = BehaviorStateEnum.RETURN
-                self._clear_pursuit_state()
-            if self._behavior_state == BehaviorStateEnum.SEARCH:
-                self._behavior_target_id = retained_target_id
-                self._behavior_last_known_position = retained_last_known
-            else:
-                self._behavior_target_id = None
-                self._behavior_last_known_position = None
-            if retained_target_id is not None and retained_last_known is not None:
-                self.add_event(
-                    TargetLostEvent.create(
-                        aggregate_id=self._world_object_id,
-                        aggregate_type="Actor",
-                        actor_id=self._world_object_id,
-                        target_id=retained_target_id,
-                        last_known_coordinate=retained_last_known,
-                    )
-                )
-            if old_state != self._behavior_state:
-                self.add_event(
-                    ActorStateChangedEvent.create(
-                        aggregate_id=self._world_object_id,
-                        aggregate_type="Actor",
-                        actor_id=self._world_object_id,
-                        old_state=old_state,
-                        new_state=self._behavior_state,
-                    )
-                )
+        for ev_spec in output.events:
+            self._emit_behavior_event(ev_spec)
 
     def apply_territory_return_if_needed(self, actor_coordinate: Coordinate) -> None:
         """
@@ -990,35 +926,27 @@ class MonsterAggregate(AggregateRoot):
         アプリ層で apply_behavior_transition の後に呼ぶ。
         """
         self._ensure_can_perform_behavior()
-        territory_radius = self._template.territory_radius
-        if (
-            territory_radius is not None
-            and self._behavior_initial_position is not None
-            and self._behavior_state in (
-                BehaviorStateEnum.CHASE,
-                BehaviorStateEnum.ENRAGE,
-            )
+        if not self._behavior_state_machine.should_return_to_territory(
+            actor_coordinate=actor_coordinate,
+            behavior_initial_position=self._behavior_initial_position,
+            territory_radius=self._template.territory_radius,
+            current_state=self._behavior_state,
         ):
-            if (
-                actor_coordinate.euclidean_distance_to(
-                    self._behavior_initial_position
-                )
-                > float(territory_radius)
-            ):
-                old_state = self._behavior_state
-                self._behavior_state = BehaviorStateEnum.RETURN
-                self._behavior_target_id = None
-                self._behavior_last_known_position = None
-                self._clear_pursuit_state()
-                self.add_event(
-                    ActorStateChangedEvent.create(
-                        aggregate_id=self._world_object_id,
-                        aggregate_type="Actor",
-                        actor_id=self._world_object_id,
-                        old_state=old_state,
-                        new_state=BehaviorStateEnum.RETURN,
-                    )
-                )
+            return
+        old_state = self._behavior_state
+        self._behavior_state = BehaviorStateEnum.RETURN
+        self._behavior_target_id = None
+        self._behavior_last_known_position = None
+        self._clear_pursuit_state()
+        self.add_event(
+            ActorStateChangedEvent.create(
+                aggregate_id=self._world_object_id,
+                aggregate_type="Actor",
+                actor_id=self._world_object_id,
+                old_state=old_state,
+                new_state=BehaviorStateEnum.RETURN,
+            )
+        )
 
     def record_move(
         self, coordinate: Coordinate, current_tick: WorldTick
