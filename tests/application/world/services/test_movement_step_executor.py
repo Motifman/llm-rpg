@@ -111,7 +111,12 @@ class TestMovementStepExecutor:
         x: int = 0,
         y: int = 0,
         stamina_val: int = 100,
+        navigation_state: PlayerNavigationState | None = None,
     ) -> PlayerStatusAggregate:
+        nav = navigation_state or PlayerNavigationState.from_parts(
+            current_spot_id=SpotId(spot_id),
+            current_coordinate=Coordinate(x, y, 0),
+        )
         exp_table = ExpTable(100, 1.5)
         return PlayerStatusAggregate(
             player_id=PlayerId(player_id),
@@ -123,10 +128,7 @@ class TestMovementStepExecutor:
             hp=Hp.create(100, 100),
             mp=Mp.create(50, 50),
             stamina=Stamina.create(stamina_val, stamina_val),
-            navigation_state=PlayerNavigationState.from_parts(
-                current_spot_id=SpotId(spot_id),
-                current_coordinate=Coordinate(x, y, 0),
-            ),
+            navigation_state=nav,
         )
 
     def _create_sample_profile(self, player_id: int, name: str = "TestPlayer"):
@@ -416,8 +418,9 @@ class TestMovementStepExecutor:
         player_id = 1
 
         profile_repo.save(self._create_sample_profile(player_id))
-        status = self._create_sample_status(1, 1, 0, 0)
-        status._navigation_state = PlayerNavigationState.empty()
+        status = self._create_sample_status(
+            1, 1, 0, 0, navigation_state=PlayerNavigationState.empty()
+        )
         status_repo.save(status)
 
         with uow:
