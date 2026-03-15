@@ -9,6 +9,7 @@ from ai_rpg_world.application.conversation.contracts.dtos import (
     ConversationNodeDto,
     ConversationSessionDto,
 )
+from ai_rpg_world.application.world.world_query_wiring import create_world_query_service
 from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
 from ai_rpg_world.application.world.contracts.queries import (
     GetPlayerLocationQuery,
@@ -80,7 +81,7 @@ class TestWorldQueryService:
         spot_repo.save(Spot(SpotId(1), "Default Spot", ""))
         connected_spots_provider = GatewayBasedConnectedSpotsProvider(phys_repo)
 
-        service = WorldQueryService(
+        service = create_world_query_service(
             player_status_repository=status_repo,
             player_profile_repository=profile_repo,
             physical_map_repository=phys_repo,

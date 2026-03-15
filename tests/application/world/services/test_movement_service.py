@@ -6,7 +6,7 @@ from unittest.mock import patch
 from ai_rpg_world.application.world.services.movement_service import MovementApplicationService
 from ai_rpg_world.application.world.services.movement_step_executor import MovementStepExecutor
 from ai_rpg_world.application.world.services.set_destination_service import SetDestinationService
-from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
+from ai_rpg_world.application.world.world_query_wiring import create_world_query_service
 from ai_rpg_world.application.world.contracts.commands import (
     CancelMovementCommand,
     MoveTileCommand,
@@ -157,7 +157,7 @@ class TestMovementApplicationService:
             time_provider=time_provider,
             unit_of_work=unit_of_work,
         )
-        world_query_service = WorldQueryService(
+        world_query_service = create_world_query_service(
             player_status_repository=player_status_repo,
             player_profile_repository=player_profile_repo,
             physical_map_repository=physical_map_repo,
