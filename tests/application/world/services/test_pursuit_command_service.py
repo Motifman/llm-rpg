@@ -19,7 +19,7 @@ from ai_rpg_world.application.world.services.gateway_based_connected_spots_provi
 from ai_rpg_world.application.world.services.pursuit_command_service import (
     PursuitCommandService,
 )
-from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
+from ai_rpg_world.application.world.world_query_wiring import create_world_query_service
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import (
     PlayerProfileAggregate,
@@ -164,7 +164,7 @@ class TestPursuitCommandService:
         spot_repo = InMemorySpotRepository(data_store, unit_of_work)
         spot_repo.save(Spot(SpotId(1), "Town", "A town"))
         time_provider = InMemoryGameTimeProvider(initial_tick=100)
-        world_query_service = WorldQueryService(
+        world_query_service = create_world_query_service(
             player_status_repository=status_repo,
             player_profile_repository=profile_repo,
             physical_map_repository=phys_repo,

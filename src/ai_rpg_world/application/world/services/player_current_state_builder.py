@@ -14,7 +14,6 @@ from ai_rpg_world.application.world.contracts.dtos import (
     PlayerCurrentStateDto,
     PlayerMovementOptionsDto,
     UsableSkillDto,
-    VisibleContextDto,
     VisibleObjectDto,
     InventoryItemDto,
 )
@@ -25,8 +24,8 @@ from ai_rpg_world.application.world.services.visible_object_read_model_builder i
 from ai_rpg_world.application.world.services.visible_tile_map_builder import (
     VisibleTileMapBuilder,
 )
-from ai_rpg_world.application.world.services.player_supplemental_context_builder import (
-    PlayerSupplementalContextBuilder,
+from ai_rpg_world.application.world.services.player_runtime_context_builder import (
+    PlayerRuntimeContextBuilder,
 )
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -45,6 +44,8 @@ from ai_rpg_world.domain.world.repository.transition_policy_repository import (
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.entity.world_object_component import HarvestableComponent
+
+from ai_rpg_world.application.common.interfaces import IPlayerAudienceQueryPort
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
@@ -89,7 +90,7 @@ if TYPE_CHECKING:
 
 
 class PlayerCurrentStateBuilder:
-    """PlayerCurrentStateDto と VisibleContextDto の組み立てを担う。"""
+    """PlayerCurrentStateDto の組み立てを担う（視界オブジェクトは build_visible_objects で構築）。"""
 
     def __init__(
         self,
@@ -111,7 +112,12 @@ class PlayerCurrentStateBuilder:
         guild_repository: Optional["GuildRepository"] = None,
         shop_repository: Optional["ShopRepository"] = None,
         personal_trade_query_service: Optional["PersonalTradeQueryService"] = None,
+        player_audience_query: Optional[IPlayerAudienceQueryPort] = None,
     ) -> None:
+        if player_audience_query is None:
+            raise ValueError(
+                "player_audience_query is required; find_all() fallback does not scale"
+            )
         self._player_status_repository = player_status_repository
         self._player_profile_repository = player_profile_repository
         self._spot_repository = spot_repository
@@ -128,12 +134,13 @@ class PlayerCurrentStateBuilder:
         self._guild_repository = guild_repository
         self._shop_repository = shop_repository
         self._personal_trade_query_service = personal_trade_query_service
+        self._player_audience_query = player_audience_query
         self._visible_object_builder = VisibleObjectReadModelBuilder(
             player_profile_repository=player_profile_repository,
             monster_repository=monster_repository,
         )
         self._visible_tile_map_builder = VisibleTileMapBuilder()
-        self._supplemental_context_builder = PlayerSupplementalContextBuilder(
+        self._runtime_context_builder = PlayerRuntimeContextBuilder(
             player_inventory_repository=player_inventory_repository,
             item_repository=item_repository,
             conversation_command_service=conversation_command_service,
@@ -146,35 +153,6 @@ class PlayerCurrentStateBuilder:
             personal_trade_query_service=personal_trade_query_service,
             player_profile_repository=player_profile_repository,
             player_status_repository=player_status_repository,
-        )
-
-    def build_visible_context(
-        self,
-        *,
-        player_id: int,
-        player_name: str,
-        spot: "Spot",
-        physical_map: "PhysicalMapAggregate",
-        origin: Coordinate,
-        view_distance: int,
-    ) -> VisibleContextDto:
-        player_id_vo = PlayerId(player_id)
-        visible_objects = self.build_visible_objects(
-            physical_map=physical_map,
-            origin=origin,
-            distance=view_distance,
-            player_id=player_id_vo,
-        )
-        return VisibleContextDto(
-            player_id=player_id,
-            player_name=player_name,
-            spot_id=int(spot.spot_id),
-            spot_name=spot.name,
-            center_x=origin.x,
-            center_y=origin.y,
-            center_z=origin.z,
-            view_distance=view_distance,
-            visible_objects=visible_objects,
         )
 
     def build_player_current_state(
@@ -207,11 +185,10 @@ class PlayerCurrentStateBuilder:
         area_name = area_names[0] if area_names else None
         area_description = areas[0].description if areas else None
 
-        current_player_ids = {
-            int(s.player_id)
-            for s in self._player_status_repository.find_all()
-            if s.current_spot_id == player_status.current_spot_id
-        }
+        player_ids_at_spot = self._player_audience_query.players_at_spot(
+            player_status.current_spot_id
+        )
+        current_player_ids = {int(p.value) for p in player_ids_at_spot}
         connected_spot_ids = set()
         connected_spot_names = set()
         for conn_id in self._connected_spots_provider.get_connected_spots(
@@ -227,14 +204,15 @@ class PlayerCurrentStateBuilder:
             if physical_map.weather_state
             else WeatherState(WeatherTypeEnum.CLEAR, 0.0)
         )
-        # 座標がマップ範囲外（TileNotFoundException）の場合は地形タイプを None のままとする。
-        # 他フィールドは引き続き有効。LLM コンテキストでは部分的欠損は許容する。
-        current_terrain_type = None
+        # ドメインルール: プレイヤー座標は常にマップ内であるべき。範囲外はデータ不整合。
         try:
             tile = physical_map.get_tile(coord)
             current_terrain_type = tile.terrain_type.type.value
-        except TileNotFoundException:
-            pass
+        except TileNotFoundException as e:
+            raise ValueError(
+                f"Player coordinate {coord} is outside map bounds for spot "
+                f"{player_status.current_spot_id}"
+            ) from e
 
         distance = max(0, query.view_distance)
         visible_objects = self.build_visible_objects(
@@ -352,40 +330,40 @@ class PlayerCurrentStateBuilder:
             is_busy=is_busy,
             busy_until_tick=busy_until_tick,
             has_active_path=has_active_path,
-            inventory_items=self._supplemental_context_builder.build_inventory_items(player_id),
-            chest_items=self._supplemental_context_builder.build_chest_items(physical_map, visible_objects),
-            active_conversation=self._supplemental_context_builder.build_active_conversation(
+            inventory_items=self._runtime_context_builder.build_inventory_items(player_id),
+            chest_items=self._runtime_context_builder.build_chest_items(physical_map, visible_objects),
+            active_conversation=self._runtime_context_builder.build_active_conversation(
                 query.player_id, visible_objects
             ),
             active_harvest=active_harvest,
-            active_quest_ids=self._supplemental_context_builder.build_active_quest_ids(query.player_id),
-            guild_ids=self._supplemental_context_builder.build_guild_ids(query.player_id),
-            nearby_shop_ids=self._supplemental_context_builder.build_nearby_shop_ids(
+            active_quest_ids=self._runtime_context_builder.build_active_quest_ids(query.player_id),
+            guild_ids=self._runtime_context_builder.build_guild_ids(query.player_id),
+            nearby_shop_ids=self._runtime_context_builder.build_nearby_shop_ids(
                 int(player_status.current_spot_id), area_ids
             ),
-            active_quests=self._supplemental_context_builder.build_active_quests(query.player_id),
-            guild_memberships=self._supplemental_context_builder.build_guild_memberships(
+            active_quests=self._runtime_context_builder.build_active_quests(query.player_id),
+            guild_memberships=self._runtime_context_builder.build_guild_memberships(
                 query.player_id, area_ids
             ),
-            nearby_shops=self._supplemental_context_builder.build_nearby_shops(
+            nearby_shops=self._runtime_context_builder.build_nearby_shops(
                 int(player_status.current_spot_id), area_ids
             ),
-            available_trades=self._supplemental_context_builder.build_available_trades(query.player_id),
-            usable_skills=self._supplemental_context_builder.build_usable_skills(query.player_id),
-            equipable_skill_candidates=self._supplemental_context_builder.build_equipable_skill_candidates(
+            available_trades=self._runtime_context_builder.build_available_trades(query.player_id),
+            usable_skills=self._runtime_context_builder.build_usable_skills(query.player_id),
+            equipable_skill_candidates=self._runtime_context_builder.build_equipable_skill_candidates(
                 query.player_id
             ),
-            skill_equip_slots=self._supplemental_context_builder.build_skill_equip_slots(
+            skill_equip_slots=self._runtime_context_builder.build_skill_equip_slots(
                 query.player_id
             ),
-            pending_skill_proposals=self._supplemental_context_builder.build_pending_skill_proposals(
+            pending_skill_proposals=self._runtime_context_builder.build_pending_skill_proposals(
                 query.player_id
             ),
-            awakened_action=self._supplemental_context_builder.build_awakened_action(
+            awakened_action=self._runtime_context_builder.build_awakened_action(
                 query.player_id
             ),
-            attention_level_options=self._supplemental_context_builder.build_attention_level_options(),
-            can_destroy_placeable=self._supplemental_context_builder.can_destroy_placeable(
+            attention_level_options=self._runtime_context_builder.build_attention_level_options(),
+            can_destroy_placeable=self._runtime_context_builder.can_destroy_placeable(
                 physical_map, query.player_id
             ),
             actionable_objects=actionable_objects,
