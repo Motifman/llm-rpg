@@ -188,10 +188,25 @@ class MonsterLifecycleState:
     ) -> Tuple["MonsterLifecycleState", bool]:
         """
         1 tick 分の飢餓を適用し、(新しい状態, 飢餓死すべきか) を返す。
-        飢餓無効（starvation_ticks <= 0 または hunger_increase_per_tick <= 0）の場合は
-        現状のまま、False を返す。
+
+        引数バリデーション:
+        - starvation_ticks < 0, hunger_increase_per_tick < 0,
+          hunger_starvation_threshold が [0, 1] 外: 例外を送出する（設定ミスを早期発見）。
+        - starvation_ticks == 0 または hunger_increase_per_tick == 0: 飢餓無効として (self, False) を返す。
         """
-        if starvation_ticks <= 0 or hunger_increase_per_tick <= 0:
+        if starvation_ticks < 0:
+            raise MonsterStatsValidationException(
+                f"starvation_ticks cannot be negative: {starvation_ticks}"
+            )
+        if hunger_increase_per_tick < 0:
+            raise MonsterStatsValidationException(
+                f"hunger_increase_per_tick cannot be negative: {hunger_increase_per_tick}"
+            )
+        if not (0.0 <= hunger_starvation_threshold <= 1.0):
+            raise MonsterStatsValidationException(
+                f"hunger_starvation_threshold must be between 0.0 and 1.0: {hunger_starvation_threshold}"
+            )
+        if starvation_ticks == 0 or hunger_increase_per_tick == 0:
             return (self, False)
 
         new_hunger = min(1.0, self.hunger + hunger_increase_per_tick)

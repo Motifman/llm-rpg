@@ -24,7 +24,8 @@ from ai_rpg_world.domain.monster.exception.monster_exceptions import (
     MonsterAlreadySpawnedException,
     MonsterNotDeadException,
     MonsterNotSpawnedException,
-    MonsterRespawnIntervalNotMetException
+    MonsterPursuitException,
+    MonsterRespawnIntervalNotMetException,
 )
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
@@ -586,7 +587,11 @@ class MonsterAggregate(AggregateRoot):
         killer_world_object_id: Optional[WorldObjectId] = None,
         cause: Optional[DeathCauseEnum] = None,
     ) -> None:
-        """死亡する（内部用）"""
+        """
+        死亡する（内部用）。
+        cause が None になるのは、killer_player_id も attacker_id もない場合
+        （例: 環境ダメージ等で原因が特定できないケース）。
+        """
         if self._lifecycle_state.status == MonsterStatusEnum.DEAD:
             return
 
@@ -896,7 +901,9 @@ class MonsterAggregate(AggregateRoot):
     ) -> None:
         """共有 pursuit 語彙でモンスター追跡を失敗終了する。"""
         if not self.has_active_pursuit:
-            raise ValueError("Cannot fail pursuit when no active pursuit exists.")
+            raise MonsterPursuitException(
+                "Cannot fail pursuit when no active pursuit exists."
+            )
 
         current_state = self._pursuit_state
         last_known = current_state.last_known
@@ -904,7 +911,9 @@ class MonsterAggregate(AggregateRoot):
         if last_known is None:
             coordinate = self._behavior_state.last_known_position
             if coordinate is None:
-                raise ValueError("Cannot fail pursuit without last-known state.")
+                raise MonsterPursuitException(
+                    "Cannot fail pursuit without last-known state."
+                )
             last_known = self._build_pursuit_last_known(
                 target_id=current_state.target_id,
                 coordinate=coordinate,

@@ -6,6 +6,9 @@ FeedMemory のテスト
 
 import pytest
 
+from ai_rpg_world.domain.monster.exception.monster_exceptions import (
+    MonsterStatsValidationException,
+)
 from ai_rpg_world.domain.monster.value_object.feed_memory import FeedMemory, MAX_FEED_MEMORIES
 from ai_rpg_world.domain.monster.value_object.feed_memory_entry import FeedMemoryEntry
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
@@ -145,7 +148,7 @@ class TestFeedMemoryValidation:
             FeedMemoryEntry(WorldObjectId(6000 + i), Coordinate(i, i, 0))
             for i in range(MAX_FEED_MEMORIES + 1)
         )
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(MonsterStatsValidationException) as exc_info:
             FeedMemory(_entries=entries)
         assert str(MAX_FEED_MEMORIES) in str(exc_info.value)
 

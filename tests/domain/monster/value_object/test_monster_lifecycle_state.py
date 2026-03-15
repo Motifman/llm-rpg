@@ -383,7 +383,7 @@ class TestMonsterLifecycleStateTickHunger:
         assert should_starve is True
 
     def test_disabled_starvation_returns_unchanged(self, alive_state: MonsterLifecycleState):
-        """starvation_ticks <= 0 のとき変化なし"""
+        """starvation_ticks == 0 のとき変化なし（飢餓無効）"""
         new_state, should_starve = alive_state.tick_hunger(
             hunger_increase_per_tick=0.1,
             hunger_starvation_threshold=1.0,
@@ -392,8 +392,48 @@ class TestMonsterLifecycleStateTickHunger:
         assert new_state is alive_state
         assert should_starve is False
 
+    def test_rejects_negative_starvation_ticks(self, alive_state: MonsterLifecycleState):
+        """starvation_ticks < 0 で例外"""
+        with pytest.raises(MonsterStatsValidationException) as exc_info:
+            alive_state.tick_hunger(
+                hunger_increase_per_tick=0.1,
+                hunger_starvation_threshold=1.0,
+                starvation_ticks=-1,
+            )
+        assert "starvation_ticks" in str(exc_info.value).lower()
+
+    def test_rejects_negative_hunger_increase(self, alive_state: MonsterLifecycleState):
+        """hunger_increase_per_tick < 0 で例外"""
+        with pytest.raises(MonsterStatsValidationException) as exc_info:
+            alive_state.tick_hunger(
+                hunger_increase_per_tick=-0.1,
+                hunger_starvation_threshold=1.0,
+                starvation_ticks=5,
+            )
+        assert "hunger_increase_per_tick" in str(exc_info.value).lower()
+
+    def test_rejects_threshold_below_zero(self, alive_state: MonsterLifecycleState):
+        """hunger_starvation_threshold < 0 で例外"""
+        with pytest.raises(MonsterStatsValidationException) as exc_info:
+            alive_state.tick_hunger(
+                hunger_increase_per_tick=0.1,
+                hunger_starvation_threshold=-0.1,
+                starvation_ticks=5,
+            )
+        assert "hunger_starvation_threshold" in str(exc_info.value).lower()
+
+    def test_rejects_threshold_above_one(self, alive_state: MonsterLifecycleState):
+        """hunger_starvation_threshold > 1.0 で例外"""
+        with pytest.raises(MonsterStatsValidationException) as exc_info:
+            alive_state.tick_hunger(
+                hunger_increase_per_tick=0.1,
+                hunger_starvation_threshold=1.5,
+                starvation_ticks=5,
+            )
+        assert "hunger_starvation_threshold" in str(exc_info.value).lower()
+
     def test_zero_hunger_increase_returns_unchanged(self, alive_state: MonsterLifecycleState):
-        """hunger_increase_per_tick <= 0 のとき変化なし"""
+        """hunger_increase_per_tick == 0 のとき変化なし（飢餓無効）"""
         new_state, should_starve = alive_state.tick_hunger(
             hunger_increase_per_tick=0.0,
             hunger_starvation_threshold=1.0,
