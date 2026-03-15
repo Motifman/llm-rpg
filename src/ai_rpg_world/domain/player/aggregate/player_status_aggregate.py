@@ -1,4 +1,4 @@
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Union, Union
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -58,6 +58,9 @@ from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
 from ai_rpg_world.domain.player.value_object.player_navigation_state import (
     PlayerNavigationState,
 )
+from ai_rpg_world.domain.player.value_object.player_pursuit_state import (
+    PlayerPursuitState,
+)
 
 
 class PlayerStatusAggregate(AggregateRoot):
@@ -78,7 +81,7 @@ class PlayerStatusAggregate(AggregateRoot):
         is_down: bool = False,
         active_effects: List[StatusEffect] = None,
         attention_level: Optional[AttentionLevel] = None,
-        pursuit_state: Optional[PursuitState] = None,
+        pursuit_state: Optional[Union[PlayerPursuitState, PursuitState]] = None,
     ):
         super().__init__()
         self._player_id = player_id
@@ -96,7 +99,12 @@ class PlayerStatusAggregate(AggregateRoot):
         self._is_down = is_down
         self._active_effects = active_effects or []
         self._attention_level = attention_level if attention_level is not None else AttentionLevel.FULL
-        self._pursuit_state = pursuit_state
+        if pursuit_state is None:
+            self._pursuit_state = PlayerPursuitState.empty()
+        elif isinstance(pursuit_state, PlayerPursuitState):
+            self._pursuit_state = pursuit_state
+        else:
+            self._pursuit_state = PlayerPursuitState.from_parts(pursuit=pursuit_state)
 
     @property
     def attention_level(self) -> AttentionLevel:
@@ -205,12 +213,12 @@ class PlayerStatusAggregate(AggregateRoot):
     @property
     def pursuit_state(self) -> Optional[PursuitState]:
         """静的移動と独立した追跡状態。"""
-        return self._pursuit_state
+        return self._pursuit_state.pursuit
 
     @property
     def has_active_pursuit(self) -> bool:
         """追跡中かどうか。"""
-        return self._pursuit_state is not None
+        return self._pursuit_state.has_active_pursuit
 
     @property
     def actor_world_object_id(self) -> WorldObjectId:
@@ -247,17 +255,16 @@ class PlayerStatusAggregate(AggregateRoot):
     ) -> PursuitState:
         """追跡を開始し、開始イベントを発行する。"""
         target_id = target_snapshot.target_id
-        if self._pursuit_state is not None and self._pursuit_state.target_id != target_id:
+        if self._pursuit_state.has_active_pursuit and self._pursuit_state.target_id != target_id:
             raise ValueError("Switching pursuit targets requires ending the current pursuit first.")
 
         resolved_last_known = self._coerce_last_known(target_id, target_snapshot, last_known)
-        pursuit_state = PursuitState(
+        self._pursuit_state = self._pursuit_state.with_started(
             actor_id=self.actor_world_object_id,
             target_id=target_id,
             target_snapshot=target_snapshot,
             last_known=resolved_last_known,
         )
-        self._pursuit_state = pursuit_state
         self.add_event(
             PursuitStartedEvent.create(
                 aggregate_id=self.actor_world_object_id,
@@ -268,7 +275,7 @@ class PlayerStatusAggregate(AggregateRoot):
                 last_known=resolved_last_known,
             )
         )
-        return pursuit_state
+        return self._pursuit_state.pursuit
 
     def update_pursuit(
         self,
@@ -276,7 +283,7 @@ class PlayerStatusAggregate(AggregateRoot):
         last_known: Optional[PursuitLastKnownState] = None,
     ) -> bool:
         """意味のある変化があるときだけ追跡状態を更新する。"""
-        if self._pursuit_state is None:
+        if not self._pursuit_state.has_active_pursuit:
             raise ValueError("Cannot update pursuit when no active pursuit exists.")
 
         current_state = self._pursuit_state
@@ -284,12 +291,13 @@ class PlayerStatusAggregate(AggregateRoot):
         if target_snapshot is not None and target_snapshot.target_id != target_id:
             raise ValueError("Cannot update pursuit with a different target_id.")
 
-        next_snapshot = target_snapshot if target_snapshot is not None else current_state.target_snapshot
-        next_last_known = self._coerce_last_known(target_id, next_snapshot, last_known or current_state.last_known)
-        next_state = PursuitState(
-            actor_id=current_state.actor_id,
-            target_id=target_id,
-            target_snapshot=next_snapshot,
+        next_last_known = self._coerce_last_known(
+            target_id,
+            target_snapshot if target_snapshot is not None else current_state.target_snapshot,
+            last_known or current_state.last_known,
+        )
+        next_state = self._pursuit_state.with_updated(
+            target_snapshot=target_snapshot,
             last_known=next_last_known,
         )
         if next_state == current_state:
@@ -302,7 +310,7 @@ class PlayerStatusAggregate(AggregateRoot):
                 aggregate_type="PlayerStatusAggregate",
                 actor_id=self.actor_world_object_id,
                 target_id=target_id,
-                target_snapshot=next_snapshot,
+                target_snapshot=next_state.target_snapshot,
                 last_known=next_last_known,
             )
         )
@@ -315,12 +323,14 @@ class PlayerStatusAggregate(AggregateRoot):
         target_snapshot: Optional[PursuitTargetSnapshot] = None,
     ) -> None:
         """追跡を失敗で終了し、失敗イベントを発行する。"""
-        if self._pursuit_state is None:
+        if not self._pursuit_state.has_active_pursuit:
             raise ValueError("Cannot fail pursuit when no active pursuit exists.")
 
         current_state = self._pursuit_state
         next_snapshot = target_snapshot if target_snapshot is not None else current_state.target_snapshot
-        next_last_known = self._coerce_last_known(current_state.target_id, next_snapshot, last_known or current_state.last_known)
+        next_last_known = self._coerce_last_known(
+            current_state.target_id, next_snapshot, last_known or current_state.last_known
+        )
         self.add_event(
             PursuitFailedEvent.create(
                 aggregate_id=self.actor_world_object_id,
@@ -332,7 +342,7 @@ class PlayerStatusAggregate(AggregateRoot):
                 target_snapshot=next_snapshot,
             )
         )
-        self._pursuit_state = None
+        self._pursuit_state = self._pursuit_state.cleared()
 
     def cancel_pursuit(
         self,
@@ -340,12 +350,14 @@ class PlayerStatusAggregate(AggregateRoot):
         target_snapshot: Optional[PursuitTargetSnapshot] = None,
     ) -> None:
         """追跡を明示的に中断し、中断イベントを発行する。"""
-        if self._pursuit_state is None:
+        if not self._pursuit_state.has_active_pursuit:
             raise ValueError("Cannot cancel pursuit when no active pursuit exists.")
 
         current_state = self._pursuit_state
         next_snapshot = target_snapshot if target_snapshot is not None else current_state.target_snapshot
-        next_last_known = self._coerce_last_known(current_state.target_id, next_snapshot, last_known or current_state.last_known)
+        next_last_known = self._coerce_last_known(
+            current_state.target_id, next_snapshot, last_known or current_state.last_known
+        )
         self.add_event(
             PursuitCancelledEvent.create(
                 aggregate_id=self.actor_world_object_id,
@@ -356,7 +368,7 @@ class PlayerStatusAggregate(AggregateRoot):
                 target_snapshot=next_snapshot,
             )
         )
-        self._pursuit_state = None
+        self._pursuit_state = self._pursuit_state.cleared()
 
     def _coerce_last_known(
         self,
