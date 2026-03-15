@@ -5,6 +5,7 @@ from ai_rpg_world.application.harvest.services.player_harvest_service import (
     PlayerHarvestApplicationService,
 )
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
 from ai_rpg_world.domain.player.value_object.gold import Gold
@@ -48,8 +49,10 @@ def _create_status() -> PlayerStatusAggregate:
         hp=Hp.create(100, 100),
         mp=Mp.create(30, 30),
         stamina=Stamina.create(100, 100),
-        current_spot_id=SpotId(1),
-        current_coordinate=Coordinate(0, 0, 0),
+        navigation_state=PlayerNavigationState.from_parts(
+            current_spot_id=SpotId(1),
+            current_coordinate=Coordinate(0, 0, 0),
+        ),
     )
 
 

@@ -21,6 +21,9 @@ from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service 
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
 )
+from ai_rpg_world.domain.player.value_object.player_navigation_state import (
+    PlayerNavigationState,
+)
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
 from ai_rpg_world.domain.player.value_object.gold import Gold
@@ -258,8 +261,10 @@ def create_player_status(
         hp=Hp.create(100, 100),
         mp=Mp.create(30, 30),
         stamina=Stamina.create(100, 100),
-        current_spot_id=SpotId(current_spot_id),
-        current_coordinate=Coordinate(0, 0, 0),
+        navigation_state=PlayerNavigationState.from_parts(
+            current_spot_id=SpotId(current_spot_id),
+            current_coordinate=Coordinate(0, 0, 0),
+        ),
     )
 
 

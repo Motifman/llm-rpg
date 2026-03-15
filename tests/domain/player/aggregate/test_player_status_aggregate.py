@@ -48,6 +48,9 @@ from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.player.value_object.player_navigation_state import (
+    PlayerNavigationState,
+)
 from ai_rpg_world.domain.combat.service.combat_logic_service import CombatLogicService
 
 
@@ -130,6 +133,15 @@ def create_test_status_aggregate(
 
     exp_table = create_test_exp_table()
 
+    navigation_state = (
+        PlayerNavigationState.from_parts(
+            current_spot_id=current_spot_id,
+            current_coordinate=current_coordinate,
+        )
+        if current_spot_id is not None or current_coordinate is not None
+        else None
+    )
+
     return PlayerStatusAggregate(
         player_id=PlayerId(player_id),
         base_stats=base_stats,
@@ -141,8 +153,7 @@ def create_test_status_aggregate(
         mp=Mp.create(mp, base_stats.max_mp),
         stamina=Stamina.create(stamina, stamina),  # max_stamina = stamina
         is_down=is_down,
-        current_spot_id=current_spot_id,
-        current_coordinate=current_coordinate,
+        navigation_state=navigation_state,
     )
 
 

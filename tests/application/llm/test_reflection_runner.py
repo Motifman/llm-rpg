@@ -22,6 +22,9 @@ from ai_rpg_world.application.llm.services.reflection_service import (
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_navigation_state import (
+    PlayerNavigationState,
+)
 from ai_rpg_world.domain.world.service.world_time_config_service import (
     DefaultWorldTimeConfigService,
 )
@@ -161,8 +164,10 @@ class TestDefaultReflectionRunner:
             hp=Hp.create(10, 10),
             mp=Mp.create(10, 10),
             stamina=Stamina.create(10, 10),
-            current_spot_id=SpotId(1),
-            current_coordinate=Coordinate(0, 0, 0),
+            navigation_state=PlayerNavigationState.from_parts(
+                current_spot_id=SpotId(1),
+                current_coordinate=Coordinate(0, 0, 0),
+            ),
         )
         data_store = InMemoryDataStore()
         data_store.clear_all()
@@ -304,8 +309,10 @@ class TestDefaultReflectionRunner:
             hp=Hp.create(10, 10),
             mp=Mp.create(10, 10),
             stamina=Stamina.create(10, 10),
-            current_spot_id=SpotId(1),
-            current_coordinate=Coordinate(0, 0, 0),
+            navigation_state=PlayerNavigationState.from_parts(
+                current_spot_id=SpotId(1),
+                current_coordinate=Coordinate(0, 0, 0),
+            ),
         )
         data_store = InMemoryDataStore()
         data_store.clear_all()
@@ -393,8 +400,10 @@ class TestDefaultReflectionRunner:
             hp=Hp.create(10, 10),
             mp=Mp.create(10, 10),
             stamina=Stamina.create(10, 10),
-            current_spot_id=SpotId(1),
-            current_coordinate=Coordinate(0, 0, 0),
+            navigation_state=PlayerNavigationState.from_parts(
+                current_spot_id=SpotId(1),
+                current_coordinate=Coordinate(0, 0, 0),
+            ),
         )
         data_store = InMemoryDataStore()
         data_store.clear_all()
@@ -500,8 +509,10 @@ class TestDefaultReflectionRunner:
             hp=Hp.create(10, 10),
             mp=Mp.create(10, 10),
             stamina=Stamina.create(10, 10),
-            current_spot_id=SpotId(1),
-            current_coordinate=Coordinate(0, 0, 0),
+            navigation_state=PlayerNavigationState.from_parts(
+                current_spot_id=SpotId(1),
+                current_coordinate=Coordinate(0, 0, 0),
+            ),
         )
         data_store = InMemoryDataStore()
         data_store.clear_all()

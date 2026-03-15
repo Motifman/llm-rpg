@@ -8,6 +8,7 @@ from ai_rpg_world.application.world.services.interaction_command_service import 
     InteractionCommandService,
 )
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
 from ai_rpg_world.domain.player.value_object.gold import Gold
@@ -41,6 +42,10 @@ from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMe
 
 def _create_status(player_id: int, spot_id: int, coord: Coordinate) -> PlayerStatusAggregate:
     exp_table = ExpTable(100, 1.5)
+    nav = PlayerNavigationState.from_parts(
+        current_spot_id=SpotId(spot_id),
+        current_coordinate=coord,
+    )
     return PlayerStatusAggregate(
         player_id=PlayerId(player_id),
         base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
@@ -51,8 +56,7 @@ def _create_status(player_id: int, spot_id: int, coord: Coordinate) -> PlayerSta
         hp=Hp.create(100, 100),
         mp=Mp.create(30, 30),
         stamina=Stamina.create(100, 100),
-        current_spot_id=SpotId(spot_id),
-        current_coordinate=coord,
+        navigation_state=nav,
     )
 
 

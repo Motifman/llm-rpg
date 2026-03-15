@@ -16,6 +16,7 @@ from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
@@ -91,6 +92,10 @@ class TestDropItemApplicationService:
         inv.acquire_item(item_instance_id)
         inv_repo.save(inv)
         exp_table = ExpTable(100, 1.5)
+        nav = PlayerNavigationState.from_parts(
+            current_spot_id=SpotId(1),
+            current_coordinate=Coordinate(2, 2, 0),
+        )
         status = PlayerStatusAggregate(
             player_id=PlayerId(player_id_val),
             base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
@@ -101,8 +106,7 @@ class TestDropItemApplicationService:
             hp=Hp.create(100, 100),
             mp=Mp.create(50, 50),
             stamina=Stamina.create(100, 100),
-            current_spot_id=SpotId(1),
-            current_coordinate=Coordinate(2, 2, 0),
+            navigation_state=nav,
         )
         status_repo.save(status)
         return inv_repo, status_repo, player_id_val
@@ -148,8 +152,7 @@ class TestDropItemApplicationService:
             hp=Hp.create(100, 100),
             mp=Mp.create(50, 50),
             stamina=Stamina.create(100, 100),
-            current_spot_id=None,
-            current_coordinate=None,
+            navigation_state=PlayerNavigationState.empty(),
         )
         status_repo.save(status_no_pos)
 
@@ -216,6 +219,10 @@ class TestPlayerDropItemApplicationService:
         inv.acquire_item(item_instance_id)
         inv_repo.save(inv)
         exp_table = ExpTable(100, 1.5)
+        nav = PlayerNavigationState.from_parts(
+            current_spot_id=SpotId(1),
+            current_coordinate=Coordinate(2, 2, 0),
+        )
         status = PlayerStatusAggregate(
             player_id=PlayerId(player_id_val),
             base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
@@ -226,8 +233,7 @@ class TestPlayerDropItemApplicationService:
             hp=Hp.create(100, 100),
             mp=Mp.create(50, 50),
             stamina=Stamina.create(100, 100),
-            current_spot_id=SpotId(1),
-            current_coordinate=Coordinate(2, 2, 0),
+            navigation_state=nav,
         )
         status_repo.save(status)
         return inv_repo, player_id_val

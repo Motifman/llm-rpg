@@ -13,6 +13,9 @@ from ai_rpg_world.application.observation.services.recipient_strategies.quest_re
     QuestRecipientStrategy,
 )
 from ai_rpg_world.domain.guild.aggregate.guild_aggregate import GuildAggregate
+from ai_rpg_world.domain.player.value_object.player_navigation_state import (
+    PlayerNavigationState,
+)
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.guild.value_object.guild_membership import GuildMembership
 from ai_rpg_world.domain.player.repository.player_status_repository import (
@@ -124,8 +127,10 @@ class TestQuestRecipientStrategyNormal:
                 hp=Hp.create(100, 100),
                 mp=Mp.create(50, 50),
                 stamina=Stamina.create(100, 100),
-                current_spot_id=SpotId(1),
-                current_coordinate=Coordinate(0, 0, 0),
+                navigation_state=PlayerNavigationState.from_parts(
+                    current_spot_id=SpotId(1),
+                    current_coordinate=Coordinate(0, 0, 0),
+                ),
             )
         )
         status_repo.save(
@@ -139,8 +144,10 @@ class TestQuestRecipientStrategyNormal:
                 hp=Hp.create(100, 100),
                 mp=Mp.create(50, 50),
                 stamina=Stamina.create(100, 100),
-                current_spot_id=SpotId(1),
-                current_coordinate=Coordinate(0, 0, 0),
+                navigation_state=PlayerNavigationState.from_parts(
+                    current_spot_id=SpotId(1),
+                    current_coordinate=Coordinate(0, 0, 0),
+                ),
             )
         )
         event = QuestIssuedEvent.create(
