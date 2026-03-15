@@ -3,11 +3,11 @@ from dataclasses import replace
 from unittest.mock import patch
 
 from ai_rpg_world.domain.common.value_object import WorldTick
-from ai_rpg_world.domain.monster.aggregate.monster_aggregate import (
-    MonsterAggregate,
-    MAX_FEED_MEMORIES,
-)
+from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
+from ai_rpg_world.domain.monster.value_object.feed_memory import MAX_FEED_MEMORIES
 from ai_rpg_world.domain.monster.value_object.feed_memory_entry import FeedMemoryEntry
+from ai_rpg_world.domain.monster.value_object.monster_behavior_state import MonsterBehaviorState
+from ai_rpg_world.domain.monster.value_object.monster_pursuit_state import MonsterPursuitState
 from ai_rpg_world.domain.monster.enum.monster_enum import (
     DeathCauseEnum,
     MonsterFactionEnum,
@@ -472,10 +472,14 @@ class TestMonsterAggregate:
             assert monster.behavior_state == BehaviorStateEnum.FLEE
             assert monster.pursuit_state is None
             monster._template = replace(monster.template, territory_radius=1)
-            monster._behavior_state = BehaviorStateEnum.CHASE
-            monster._behavior_target_id = WorldObjectId.create(2003)
-            monster._behavior_last_known_position = Coordinate(2, 0, 0)
-            monster._pursuit_state = PursuitState(
+            monster._behavior_state = MonsterBehaviorState.from_legacy(
+                state=BehaviorStateEnum.CHASE,
+                target_id=WorldObjectId.create(2003),
+                last_known_position=Coordinate(2, 0, 0),
+                initial_position=Coordinate(0, 0, 0),
+            )
+            monster._pursuit_state = MonsterPursuitState(
+                pursuit=PursuitState(
                 actor_id=monster.world_object_id,
                 target_id=WorldObjectId.create(2003),
                 target_snapshot=PursuitTargetSnapshot(
@@ -488,6 +492,7 @@ class TestMonsterAggregate:
                     spot_id=spot_id,
                     coordinate=Coordinate(2, 0, 0),
                     observed_at_tick=WorldTick(3),
+                ),
                 ),
             )
 
@@ -1659,9 +1664,12 @@ class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
         def test_apply_behavior_transition_lost_target_moves_chase_to_search(self, spawned_monster):
             """CHASE で対象を見失うと SEARCH に遷移し、既知座標イベントを残すこと"""
             spawned_monster.clear_events()
-            spawned_monster._behavior_state = BehaviorStateEnum.CHASE
-            spawned_monster._behavior_target_id = WorldObjectId(321)
-            spawned_monster._behavior_last_known_position = Coordinate(7, 8, 0)
+            spawned_monster._behavior_state = MonsterBehaviorState.from_legacy(
+                state=BehaviorStateEnum.CHASE,
+                target_id=WorldObjectId(321),
+                last_known_position=Coordinate(7, 8, 0),
+                initial_position=spawned_monster.behavior_initial_position,
+            )
 
             result = StateTransitionResult(
                 do_lose_target=True,
@@ -1715,7 +1723,12 @@ class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
                 skill_loadout=skill_loadout,
             )
             agg.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            agg._behavior_state = BehaviorStateEnum.CHASE
+            agg._behavior_state = MonsterBehaviorState.from_legacy(
+                state=BehaviorStateEnum.CHASE,
+                target_id=None,
+                last_known_position=None,
+                initial_position=Coordinate(0, 0, 0),
+            )
             agg.clear_events()
             # 座標 (10, 0, 0) は初期位置 (0,0,0) から距離 10 > territory_radius 5
             agg.apply_territory_return_if_needed(Coordinate(10, 0, 0))
@@ -1749,7 +1762,12 @@ class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
                 skill_loadout=skill_loadout,
             )
             agg.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            agg._behavior_state = BehaviorStateEnum.CHASE
+            agg._behavior_state = MonsterBehaviorState.from_legacy(
+                state=BehaviorStateEnum.CHASE,
+                target_id=None,
+                last_known_position=None,
+                initial_position=Coordinate(0, 0, 0),
+            )
             agg.clear_events()
             agg.apply_territory_return_if_needed(Coordinate(2, 0, 0))
             assert agg.behavior_state == BehaviorStateEnum.CHASE
