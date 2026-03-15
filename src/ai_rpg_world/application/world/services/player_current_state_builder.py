@@ -14,7 +14,6 @@ from ai_rpg_world.application.world.contracts.dtos import (
     PlayerCurrentStateDto,
     PlayerMovementOptionsDto,
     UsableSkillDto,
-    VisibleContextDto,
     VisibleObjectDto,
     InventoryItemDto,
 )
@@ -91,7 +90,7 @@ if TYPE_CHECKING:
 
 
 class PlayerCurrentStateBuilder:
-    """PlayerCurrentStateDto と VisibleContextDto の組み立てを担う。"""
+    """PlayerCurrentStateDto の組み立てを担う（視界オブジェクトは build_visible_objects で構築）。"""
 
     def __init__(
         self,
@@ -150,35 +149,6 @@ class PlayerCurrentStateBuilder:
             personal_trade_query_service=personal_trade_query_service,
             player_profile_repository=player_profile_repository,
             player_status_repository=player_status_repository,
-        )
-
-    def build_visible_context(
-        self,
-        *,
-        player_id: int,
-        player_name: str,
-        spot: "Spot",
-        physical_map: "PhysicalMapAggregate",
-        origin: Coordinate,
-        view_distance: int,
-    ) -> VisibleContextDto:
-        player_id_vo = PlayerId(player_id)
-        visible_objects = self.build_visible_objects(
-            physical_map=physical_map,
-            origin=origin,
-            distance=view_distance,
-            player_id=player_id_vo,
-        )
-        return VisibleContextDto(
-            player_id=player_id,
-            player_name=player_name,
-            spot_id=int(spot.spot_id),
-            spot_name=spot.name,
-            center_x=origin.x,
-            center_y=origin.y,
-            center_z=origin.z,
-            view_distance=view_distance,
-            visible_objects=visible_objects,
         )
 
     def build_player_current_state(

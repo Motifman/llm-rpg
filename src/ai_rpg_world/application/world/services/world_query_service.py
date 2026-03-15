@@ -46,6 +46,9 @@ from ai_rpg_world.application.world.services.spot_context_query_service import (
 from ai_rpg_world.application.world.services.available_moves_query_service import (
     AvailableMovesQueryService,
 )
+from ai_rpg_world.application.world.services.visible_context_query_service import (
+    VisibleContextQueryService,
+)
 from ai_rpg_world.application.common.interfaces import IPlayerAudienceQueryPort
 from ai_rpg_world.application.observation.services.player_audience_query_service import (
     PlayerAudienceQueryService,
@@ -104,6 +107,7 @@ class WorldQueryService:
         player_audience_query: Optional[IPlayerAudienceQueryPort] = None,
         spot_context_query_service: Optional[SpotContextQueryService] = None,
         available_moves_query_service: Optional[AvailableMovesQueryService] = None,
+        visible_context_query_service: Optional[VisibleContextQueryService] = None,
     ):
         self._player_location_query_service = (
             player_location_query_service
@@ -139,6 +143,16 @@ class WorldQueryService:
                 connected_spots_provider=connected_spots_provider,
                 transition_policy_repository=transition_policy_repository,
                 transition_condition_evaluator=transition_condition_evaluator,
+            )
+        )
+        self._visible_context_query_service = (
+            visible_context_query_service
+            or VisibleContextQueryService(
+                player_status_repository=player_status_repository,
+                player_profile_repository=player_profile_repository,
+                physical_map_repository=physical_map_repository,
+                spot_repository=spot_repository,
+                monster_repository=monster_repository,
             )
         )
         self._player_status_repository = player_status_repository
@@ -239,34 +253,8 @@ class WorldQueryService:
     def _get_visible_context_impl(
         self, query: GetVisibleContextQuery
     ) -> Optional[VisibleContextDto]:
-        player_id = PlayerId(query.player_id)
-        player_status = self._player_status_repository.find_by_id(player_id)
-        if not player_status or not player_status.current_spot_id or not player_status.current_coordinate:
-            return None
-
-        profile = self._player_profile_repository.find_by_id(player_id)
-        if not profile:
-            raise PlayerNotFoundException(query.player_id)
-
-        spot_id = player_status.current_spot_id
-        coord = player_status.current_coordinate
-        physical_map = self._physical_map_repository.find_by_spot_id(spot_id)
-        if not physical_map:
-            raise MapNotFoundException(int(spot_id))
-
-        spot = self._spot_repository.find_by_id(spot_id)
-        if not spot:
-            raise MapNotFoundException(int(spot_id))
-
-        distance = max(0, query.distance)
-        return self._player_current_state_builder.build_visible_context(
-            player_id=query.player_id,
-            player_name=profile.name.value,
-            spot=spot,
-            physical_map=physical_map,
-            origin=coord,
-            view_distance=distance,
-        )
+        """視界取得の実装。VisibleContextQueryService に委譲。"""
+        return self._visible_context_query_service.get_visible_context(query)
 
     def get_available_moves(
         self, query: GetAvailableMovesQuery

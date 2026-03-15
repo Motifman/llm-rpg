@@ -141,32 +141,6 @@ class TestPlayerCurrentStateBuilder:
         )
         return builder, status_repo, profile_repo, phys_repo, spot_repo
 
-    def test_build_visible_context_filters_by_los(self, setup_builder):
-        builder, status_repo, profile_repo, phys_repo, spot_repo = setup_builder
-        player = WorldObject(
-            object_id=WorldObjectId.create(1),
-            coordinate=Coordinate(0, 0, 0),
-            object_type=ObjectTypeEnum.PLAYER,
-            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
-        )
-        hidden = WorldObject(
-            object_id=WorldObjectId.create(2),
-            coordinate=Coordinate(2, 0, 0),
-            object_type=ObjectTypeEnum.PLAYER,
-            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(2)),
-        )
-        wall_map = _make_map(1, [player, hidden])
-        wall_map.change_tile_terrain(Coordinate(1, 0, 0), TerrainType.wall())
-        result = builder.build_visible_context(
-            player_id=1,
-            player_name="Alice",
-            spot=spot_repo.find_by_id(SpotId(1)),
-            physical_map=wall_map,
-            origin=Coordinate(0, 0, 0),
-            view_distance=3,
-        )
-        assert [obj.player_id_value for obj in result.visible_objects if obj.player_id_value] == [1]
-
     def test_build_player_current_state_populates_runtime_relevant_flags(self, setup_builder):
         builder, status_repo, profile_repo, phys_repo, spot_repo = setup_builder
         profile_repo.save(_make_profile(1, "Alice"))
