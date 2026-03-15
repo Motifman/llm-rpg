@@ -18,6 +18,13 @@ State the original goal in one concise paragraph.
 - Observable outcome 2
 - Required test coverage expectations
 
+# Alignment Loop
+
+- Initial phase proposal:
+- User-confirmed success definition:
+- User-confirmed phase ordering:
+- Cost or scope tradeoffs discussed:
+
 # Code Context
 
 - Existing modules to extend
