@@ -114,6 +114,10 @@ class PlayerCurrentStateBuilder:
         personal_trade_query_service: Optional["PersonalTradeQueryService"] = None,
         player_audience_query: Optional[IPlayerAudienceQueryPort] = None,
     ) -> None:
+        if player_audience_query is None:
+            raise ValueError(
+                "player_audience_query is required; find_all() fallback does not scale"
+            )
         self._player_status_repository = player_status_repository
         self._player_profile_repository = player_profile_repository
         self._spot_repository = spot_repository
@@ -181,17 +185,10 @@ class PlayerCurrentStateBuilder:
         area_name = area_names[0] if area_names else None
         area_description = areas[0].description if areas else None
 
-        if self._player_audience_query is not None:
-            player_ids_at_spot = self._player_audience_query.players_at_spot(
-                player_status.current_spot_id
-            )
-            current_player_ids = {int(p.value) for p in player_ids_at_spot}
-        else:
-            current_player_ids = {
-                int(s.player_id)
-                for s in self._player_status_repository.find_all()
-                if s.current_spot_id == player_status.current_spot_id
-            }
+        player_ids_at_spot = self._player_audience_query.players_at_spot(
+            player_status.current_spot_id
+        )
+        current_player_ids = {int(p.value) for p in player_ids_at_spot}
         connected_spot_ids = set()
         connected_spot_names = set()
         for conn_id in self._connected_spots_provider.get_connected_spots(
@@ -207,14 +204,15 @@ class PlayerCurrentStateBuilder:
             if physical_map.weather_state
             else WeatherState(WeatherTypeEnum.CLEAR, 0.0)
         )
-        # 座標がマップ範囲外（TileNotFoundException）の場合は地形タイプを None のままとする。
-        # 他フィールドは引き続き有効。LLM コンテキストでは部分的欠損は許容する。
-        current_terrain_type = None
+        # ドメインルール: プレイヤー座標は常にマップ内であるべき。範囲外はデータ不整合。
         try:
             tile = physical_map.get_tile(coord)
             current_terrain_type = tile.terrain_type.type.value
-        except TileNotFoundException:
-            pass
+        except TileNotFoundException as e:
+            raise ValueError(
+                f"Player coordinate {coord} is outside map bounds for spot "
+                f"{player_status.current_spot_id}"
+            ) from e
 
         distance = max(0, query.view_distance)
         visible_objects = self.build_visible_objects(

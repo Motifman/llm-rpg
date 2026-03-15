@@ -99,7 +99,11 @@ class AvailableMovesQueryService:
         available_moves: List[AvailableMoveDto] = []
         for to_spot_id in connected_ids:
             to_spot = self._spot_repository.find_by_id(to_spot_id)
-            spot_name = to_spot.name if to_spot else str(to_spot_id)
+            if not to_spot:
+                raise MapNotFoundException(
+                    int(to_spot_id),
+                )
+            spot_name = to_spot.name
             conditions_met = True
             failed_conditions: List[str] = []
 

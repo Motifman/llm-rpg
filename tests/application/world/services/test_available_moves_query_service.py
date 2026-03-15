@@ -623,6 +623,43 @@ class TestAvailableMovesQueryServiceExceptions:
         with pytest.raises(RuntimeError, match="find_by_id failed"):
             service.get_available_moves(GetAvailableMovesQuery(player_id=1))
 
+    def test_raises_map_not_found_when_connected_spot_does_not_exist(
+        self, service, status_repo, profile_repo, phys_repo, spot_repo
+    ):
+        """接続先スポットが spot_repository に存在しない場合、MapNotFoundException を送出すること（データ不整合）"""
+        from ai_rpg_world.domain.world.entity.gateway import Gateway
+        from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
+        from ai_rpg_world.domain.world.value_object.area import RectArea
+
+        spot_repo.save(Spot(SpotId(1), "Here", ""))
+        # spot_id=2 は spot_repo に保存しない（ゲートウェイは spot 2 を指す）
+        gateway = Gateway(
+            GatewayId(1),
+            "Gate",
+            RectArea(min_x=5, max_x=6, min_y=5, max_y=6, min_z=0, max_z=0),
+            SpotId(2),
+            Coordinate(0, 0, 0),
+        )
+        tiles = {}
+        for x in range(10):
+            for y in range(10):
+                coord = Coordinate(x, y, 0)
+                tiles[coord] = Tile(coord, TerrainType.grass())
+        map1 = PhysicalMapAggregate(
+            spot_id=SpotId(1),
+            tiles=tiles,
+            objects=[_make_player_object(1, 0, 0)],
+            gateways=[gateway],
+        )
+        phys_repo.save(map1)
+        profile_repo.save(_make_profile(1))
+        status_repo.save(_make_status(1, 1, 0, 0))
+
+        with pytest.raises(MapNotFoundException) as exc_info:
+            service.get_available_moves(GetAvailableMovesQuery(player_id=1))
+
+        assert exc_info.value.context.get("spot_id") == 2
+
 
 class TestGetAvailableMovesQueryValidation:
     """GetAvailableMovesQuery のバリデーション"""
