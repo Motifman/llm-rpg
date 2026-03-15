@@ -48,6 +48,7 @@ from ai_rpg_world.application.llm.exceptions import PlayerProfileNotFoundForProm
 from ai_rpg_world.application.observation.services.observation_context_buffer import (
     DefaultObservationContextBuffer,
 )
+from ai_rpg_world.application.world.world_query_wiring import create_world_query_service
 from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
 from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -114,7 +115,7 @@ class TestDefaultPromptBuilder:
         spot_repo = InMemorySpotRepository(data_store)
         spot_repo.save(Spot(SpotId(1), "Default", ""))
         connected = GatewayBasedConnectedSpotsProvider(phys_repo)
-        world_query = WorldQueryService(
+        world_query = create_world_query_service(
             player_status_repository=status_repo,
             player_profile_repository=profile_repo,
             physical_map_repository=phys_repo,
