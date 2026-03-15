@@ -69,7 +69,7 @@ class MonsterBehaviorState:
         )
 
     @classmethod
-    def from_legacy(
+    def from_parts(
         cls,
         state: BehaviorStateEnum,
         target_id: Optional[WorldObjectId],
@@ -79,7 +79,7 @@ class MonsterBehaviorState:
         search_timer: int = 0,
         failure_count: int = 0,
     ) -> "MonsterBehaviorState":
-        """後方互換用：既存の個別フィールドから構築する。"""
+        """個別フィールドから値を組み立てて構築する（永続化層・テスト用）。"""
         return cls(
             state=state,
             target_id=target_id,

@@ -41,15 +41,15 @@ class TestMonsterBehaviorStateCreateIdle:
         assert state.initial_position == coord
 
 
-class TestMonsterBehaviorStateFromLegacy:
-    """from_legacy のテスト"""
+class TestMonsterBehaviorStateFromParts:
+    """from_parts のテスト"""
 
     def test_builds_from_individual_fields(self):
         """個別フィールドから構築"""
         target_id = WorldObjectId(1001)
         last_known = Coordinate(5, 6, 0)
         initial = Coordinate(1, 2, 0)
-        state = MonsterBehaviorState.from_legacy(
+        state = MonsterBehaviorState.from_parts(
             state=BehaviorStateEnum.CHASE,
             target_id=target_id,
             last_known_position=last_known,
@@ -68,7 +68,7 @@ class TestMonsterBehaviorStateFromLegacy:
 
     def test_clamps_negative_values_to_zero(self):
         """負の値は 0 にクランプ"""
-        state = MonsterBehaviorState.from_legacy(
+        state = MonsterBehaviorState.from_parts(
             state=BehaviorStateEnum.IDLE,
             target_id=None,
             last_known_position=None,
@@ -133,7 +133,7 @@ class TestMonsterBehaviorStateWithAttacked:
 
     @pytest.fixture
     def base_state(self) -> MonsterBehaviorState:
-        return MonsterBehaviorState.from_legacy(
+        return MonsterBehaviorState.from_parts(
             state=BehaviorStateEnum.IDLE,
             target_id=None,
             last_known_position=None,
@@ -170,7 +170,7 @@ class TestMonsterBehaviorStateWithTransition:
 
     @pytest.fixture
     def base_state(self) -> MonsterBehaviorState:
-        return MonsterBehaviorState.from_legacy(
+        return MonsterBehaviorState.from_parts(
             state=BehaviorStateEnum.CHASE,
             target_id=WorldObjectId(3001),
             last_known_position=Coordinate(1, 1, 0),
@@ -212,7 +212,7 @@ class TestMonsterBehaviorStateWithTerritoryReturn:
 
     @pytest.fixture
     def chase_state(self) -> MonsterBehaviorState:
-        return MonsterBehaviorState.from_legacy(
+        return MonsterBehaviorState.from_parts(
             state=BehaviorStateEnum.CHASE,
             target_id=WorldObjectId(4001),
             last_known_position=Coordinate(5, 5, 0),
@@ -235,7 +235,7 @@ class TestMonsterBehaviorStateWithSpawnReset:
 
     def test_resets_to_idle_with_initial_position(self):
         """IDLE にリセットし initial_position を設定"""
-        state = MonsterBehaviorState.from_legacy(
+        state = MonsterBehaviorState.from_parts(
             state=BehaviorStateEnum.SEARCH,
             target_id=WorldObjectId(5001),
             last_known_position=Coordinate(1, 1, 0),
@@ -258,7 +258,7 @@ class TestMonsterBehaviorStateWithTargetCleared:
 
     def test_clears_target_keeps_state(self):
         """target と last_known をクリア、state は維持"""
-        state = MonsterBehaviorState.from_legacy(
+        state = MonsterBehaviorState.from_parts(
             state=BehaviorStateEnum.SEARCH,
             target_id=WorldObjectId(6001),
             last_known_position=Coordinate(3, 4, 0),
@@ -277,7 +277,7 @@ class TestMonsterBehaviorStateAdvancePatrolIndex:
 
     def test_advances_index(self):
         """パトロールインデックスが進む"""
-        state = MonsterBehaviorState.from_legacy(
+        state = MonsterBehaviorState.from_parts(
             state=BehaviorStateEnum.IDLE,
             target_id=None,
             last_known_position=None,
@@ -290,7 +290,7 @@ class TestMonsterBehaviorStateAdvancePatrolIndex:
 
     def test_wraps_around_at_count(self):
         """patrol_points_count でラップする"""
-        state = MonsterBehaviorState.from_legacy(
+        state = MonsterBehaviorState.from_parts(
             state=BehaviorStateEnum.IDLE,
             target_id=None,
             last_known_position=None,
@@ -308,7 +308,7 @@ class TestMonsterBehaviorStateAdvancePatrolIndex:
 
     def test_negative_count_returns_self(self):
         """patrol_points_count が負のとき self を返す"""
-        state = MonsterBehaviorState.from_legacy(
+        state = MonsterBehaviorState.from_parts(
             state=BehaviorStateEnum.IDLE,
             target_id=None,
             last_known_position=None,

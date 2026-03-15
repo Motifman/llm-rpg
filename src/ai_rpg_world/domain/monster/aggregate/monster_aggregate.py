@@ -94,17 +94,11 @@ class MonsterAggregate(AggregateRoot):
         is_pack_leader: bool = False,
         initial_spawn_coordinate: Optional[Coordinate] = None,
         spawned_at_tick: Optional[WorldTick] = None,
-        behavior_state: BehaviorStateEnum = BehaviorStateEnum.IDLE,
-        behavior_target_id: Optional[WorldObjectId] = None,
-        behavior_last_known_position: Optional[Coordinate] = None,
-        behavior_initial_position: Optional[Coordinate] = None,
-        behavior_patrol_index: int = 0,
-        behavior_search_timer: int = 0,
-        behavior_failure_count: int = 0,
-        pursuit_state: Optional[PursuitState] = None,
+        behavior_state: Optional[MonsterBehaviorState] = None,
+        feed_memory: Optional[FeedMemory] = None,
+        pursuit_state: Optional[MonsterPursuitState] = None,
         hunger: float = 0.0,
         starvation_timer: int = 0,
-        behavior_last_known_feed: Optional[List[FeedMemoryEntry]] = None,
     ):
         super().__init__()
         self._monster_id = monster_id
@@ -117,22 +111,12 @@ class MonsterAggregate(AggregateRoot):
         self._pack_id = pack_id
         self._is_pack_leader = is_pack_leader
         self._initial_spawn_coordinate = initial_spawn_coordinate
-        self._behavior_state = MonsterBehaviorState.from_legacy(
-            state=behavior_state,
-            target_id=behavior_target_id,
-            last_known_position=behavior_last_known_position,
-            initial_position=behavior_initial_position,
-            patrol_index=behavior_patrol_index,
-            search_timer=behavior_search_timer,
-            failure_count=behavior_failure_count,
+        self._behavior_state = (
+            behavior_state if behavior_state is not None else MonsterBehaviorState.create_idle()
         )
-        _feed_entries = list(behavior_last_known_feed) if behavior_last_known_feed else []
-        if len(_feed_entries) > 3:
-            _feed_entries = _feed_entries[-3:]
-        self._feed_memory = FeedMemory(_entries=tuple(_feed_entries))
+        self._feed_memory = feed_memory if feed_memory is not None else FeedMemory.empty()
         self._behavior_state_machine = MonsterBehaviorStateMachine()
 
-        # lifecycle_state と pursuit_state を構築（後方互換のため legacy パラメータから）
         if status == MonsterStatusEnum.DEAD and spawned_at_tick is None:
             self._lifecycle_state = MonsterLifecycleState.create_for_unspawned(
                 max_hp=template.base_stats.max_hp,
@@ -153,9 +137,7 @@ class MonsterAggregate(AggregateRoot):
                 starvation_timer=_starvation_timer,
             )
         self._pursuit_state = (
-            MonsterPursuitState(pursuit=pursuit_state)
-            if pursuit_state is not None
-            else MonsterPursuitState()
+            pursuit_state if pursuit_state is not None else MonsterPursuitState()
         )
 
     @classmethod
@@ -181,6 +163,57 @@ class MonsterAggregate(AggregateRoot):
             template_id=template.template_id.value
         ))
         return monster
+
+    @classmethod
+    def reconstitute(
+        cls,
+        monster_id: MonsterId,
+        template: MonsterTemplate,
+        world_object_id: WorldObjectId,
+        skill_loadout: SkillLoadoutAggregate,
+        coordinate: Coordinate,
+        spot_id: SpotId,
+        current_tick: WorldTick,
+        *,
+        behavior_state: Optional[MonsterBehaviorState] = None,
+        feed_memory: Optional[FeedMemory] = None,
+        pursuit_state: Optional[MonsterPursuitState] = None,
+        pack_id: Optional["PackId"] = None,
+        is_pack_leader: bool = False,
+        initial_hunger: float = 0.0,
+        **kwargs,
+    ) -> "MonsterAggregate":
+        """
+        スポーン済みの状態でモンスターを再構成する（永続化層・テスト用）。
+        create() + spawn() と同等の初期状態を構築し、任意で behavior_state / feed_memory / pursuit_state を指定可能。
+        """
+        base = template.base_stats
+        lifecycle = MonsterLifecycleState.create_for_spawned(
+            max_hp=base.max_hp,
+            max_mp=base.max_mp,
+            spawned_at_tick=current_tick,
+            initial_hunger=initial_hunger,
+        )
+        return cls(
+            monster_id=monster_id,
+            template=template,
+            world_object_id=world_object_id,
+            skill_loadout=skill_loadout,
+            hp=lifecycle.hp,
+            mp=lifecycle.mp,
+            status=MonsterStatusEnum.ALIVE,
+            coordinate=coordinate,
+            spot_id=spot_id,
+            pack_id=pack_id,
+            is_pack_leader=is_pack_leader,
+            initial_spawn_coordinate=coordinate,
+            spawned_at_tick=current_tick,
+            behavior_state=behavior_state or MonsterBehaviorState.create_idle(coordinate),
+            feed_memory=feed_memory or FeedMemory.empty(),
+            pursuit_state=pursuit_state or MonsterPursuitState(),
+            hunger=initial_hunger,
+            **kwargs,
+        )
 
     @property
     def monster_id(self) -> MonsterId:

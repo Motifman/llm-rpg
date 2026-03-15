@@ -6,6 +6,8 @@ from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import LootEntry, L
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
+from ai_rpg_world.domain.monster.value_object.feed_memory import FeedMemory
+from ai_rpg_world.domain.monster.value_object.feed_memory_entry import FeedMemoryEntry
 from ai_rpg_world.domain.monster.enum.monster_enum import MonsterFactionEnum
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
@@ -424,10 +426,24 @@ class TestMonsterFeedQueryService:
             component=AutonomousBehaviorComponent(vision_range=5),
         )
         physical_map.add_object(actor)
-        monster = _monster(_template_with_feed_preference())
-        monster.behavior_last_known_feed = [
-            type("FeedMemory", (), {"object_id": WorldObjectId(999), "coordinate": Coordinate(2, 2, 0)})()
-        ]
+        template = _template_with_feed_preference()
+        loadout = SkillLoadoutAggregate.create(
+            SkillLoadoutId(1), owner_id=1, normal_capacity=5, awakened_capacity=5
+        )
+        feed_memory = FeedMemory(
+            _entries=(FeedMemoryEntry(WorldObjectId(999), Coordinate(2, 2, 0)),)
+        )
+        monster = MonsterAggregate.reconstitute(
+            monster_id=MonsterId(1),
+            template=template,
+            world_object_id=WorldObjectId(1),
+            skill_loadout=loadout,
+            coordinate=Coordinate(0, 0, 0),
+            spot_id=SpotId(1),
+            current_tick=WorldTick(0),
+            feed_memory=feed_memory,
+            initial_hunger=0.8,
+        )
         physical_map.get_object = lambda obj_id: (_ for _ in ()).throw(
             ObjectNotFoundException(obj_id)
         )
