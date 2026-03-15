@@ -167,7 +167,7 @@ Sync/Async の使い分けを明確化し、トランザクション境界を DD
 
 - **Shop/Trade/SNS**: `register_handler` に `is_synchronous` を渡していない。EventPublisher の default は False → 実質 async
 - **InMemoryRepositoryBase 継承**: 全 19 Repository が継承。Phase 4 の add_events 置き換え対象は網羅可能
-- **conversation_event_handler sync**: ConversationStartHandler は ConversationCommandService に委譲。同一 tx で map 状態と会話開始の一貫性を保つため sync と推測（要 Phase 1 で確認）
+- **conversation_event_handler sync**: ConversationStartHandler は ConversationCommandService に委譲。同一 tx で map 状態（WorldObjectInteractedEvent）と会話開始の一貫性を保つため sync と確認済み（Phase 1 でコード確認）
 - **MonsterLifecycleSurvivalCoordinator**: process_sync_events がループ内（starve/die 各モンスターごと）と hunger migration 後に 3 箇所。Phase 3 で 1 スポット終わりに 1 回へ変更予定
 - **_process_events_in_separate_transaction**: `print()` で例外握りつぶしあり。Phase 2 で logger.exception + raise へ変更
 
