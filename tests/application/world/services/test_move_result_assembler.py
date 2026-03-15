@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 from ai_rpg_world.application.world.services.move_result_assembler import MoveResultAssembler
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
@@ -43,8 +44,10 @@ def _create_minimal_player_status(
         hp=Hp.create(100, 100),
         mp=Mp.create(50, 50),
         stamina=Stamina.create(100, 100),
-        current_spot_id=SpotId(spot_id),
-        current_coordinate=Coordinate(x, y, 0),
+        navigation_state=PlayerNavigationState.from_parts(
+            current_spot_id=SpotId(spot_id),
+            current_coordinate=Coordinate(x, y, 0),
+        ),
     )
 
 
@@ -173,7 +176,10 @@ class TestCreateSuccess:
             )
             assembler = MoveResultAssembler(profile_repo, spot_repo)
             status = _create_minimal_player_status(1, 1)
-            status._current_spot_id = SpotId(2)
+            status._navigation_state = PlayerNavigationState.from_parts(
+                current_spot_id=SpotId(2),
+                current_coordinate=Coordinate(0, 0, 0),
+            )
 
             with pytest.raises(MapNotFoundException):
                 assembler.create_success(
@@ -283,7 +289,10 @@ class TestCreateFailure:
             spot_repo.find_by_id.return_value = Spot(SpotId(1), "A", "")
             assembler = MoveResultAssembler(profile_repo, spot_repo)
             status = _create_minimal_player_status(1, 1)
-            status._current_coordinate = None
+            status._navigation_state = PlayerNavigationState.from_parts(
+                current_spot_id=SpotId(1),
+                current_coordinate=None,
+            )
 
             result = assembler.create_failure(1, "座標不明", player_status=status)
 

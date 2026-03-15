@@ -28,6 +28,7 @@ from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecRea
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
@@ -74,8 +75,10 @@ def _create_player_status(
         hp=Hp.create(hp_current, hp_max),
         mp=Mp.create(mp_current, mp_max),
         stamina=Stamina.create(100, 100),
-        current_spot_id=SpotId(1),
-        current_coordinate=Coordinate(0, 0, 0),
+        navigation_state=PlayerNavigationState.from_parts(
+            current_spot_id=SpotId(1),
+            current_coordinate=Coordinate(0, 0, 0),
+        ),
     )
 
 

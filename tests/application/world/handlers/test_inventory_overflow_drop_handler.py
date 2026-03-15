@@ -5,6 +5,7 @@ from ai_rpg_world.application.world.handlers.inventory_overflow_drop_handler imp
 from ai_rpg_world.domain.player.event.inventory_events import InventorySlotOverflowEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
@@ -60,6 +61,10 @@ class TestInventoryOverflowDropHandler:
         pmap = _create_map(1)
         map_repo.save(pmap)
         exp_table = ExpTable(100, 1.5)
+        nav = PlayerNavigationState.from_parts(
+            current_spot_id=spot_id,
+            current_coordinate=coord,
+        )
         status = PlayerStatusAggregate(
             player_id=PlayerId(1),
             base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
@@ -70,8 +75,7 @@ class TestInventoryOverflowDropHandler:
             hp=Hp.create(100, 100),
             mp=Mp.create(50, 50),
             stamina=Stamina.create(100, 100),
-            current_spot_id=spot_id,
-            current_coordinate=coord,
+            navigation_state=nav,
         )
         status_repo.save(status)
         return map_repo, status_repo, PlayerId(1), coord

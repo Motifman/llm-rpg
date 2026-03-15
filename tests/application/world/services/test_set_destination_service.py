@@ -24,6 +24,8 @@ from ai_rpg_world.application.world.exceptions.command.movement_command_exceptio
     MovementInvalidException,
 )
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
@@ -115,8 +117,10 @@ class TestSetDestinationService:
             hp=Hp.create(100, 100),
             mp=Mp.create(50, 50),
             stamina=Stamina.create(100, 100),
-            current_spot_id=SpotId(spot_id),
-            current_coordinate=Coordinate(x, y, 0),
+            navigation_state=PlayerNavigationState.from_parts(
+                current_spot_id=SpotId(spot_id),
+                current_coordinate=Coordinate(x, y, 0),
+            ),
         )
 
     def _register_spots(self, spot_repo, spots_data: List[Dict]):
@@ -469,8 +473,7 @@ class TestSetDestinationService:
 
         self._register_spots(spot_repo, [{"id": 1, "name": "Spot 1"}])
         status = self._create_sample_status(player_id)
-        status._current_spot_id = None
-        status._current_coordinate = None
+        status._navigation_state = PlayerNavigationState.empty()
         status_repo.save(status)
 
         with uow:
@@ -1187,8 +1190,7 @@ class TestSetDestinationService:
 
         self._register_spots(spot_repo, [{"id": 1, "name": "Spot 1"}])
         status = self._create_sample_status(player_id)
-        status._current_spot_id = None
-        status._current_coordinate = None
+        status._navigation_state = PlayerNavigationState.empty()
         status_repo.save(status)
 
         with uow:

@@ -46,6 +46,7 @@ from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
     PlayerInventoryAggregate,
 )
@@ -133,8 +134,10 @@ def _create_player_status_at_location(
         hp=Hp.create(100, 100),
         mp=Mp.create(100, 100),
         stamina=Stamina.create(100, 100),
-        current_spot_id=SpotId.create(spot_id),
-        current_coordinate=coord,
+        navigation_state=PlayerNavigationState.from_parts(
+            current_spot_id=SpotId.create(spot_id),
+            current_coordinate=coord,
+        ),
     )
 
 

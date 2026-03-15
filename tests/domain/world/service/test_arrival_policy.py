@@ -3,6 +3,9 @@
 import pytest
 from ai_rpg_world.domain.world.service.arrival_policy import ArrivalPolicy, ArrivalCheckResult
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.player_navigation_state import (
+    PlayerNavigationState,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
@@ -37,6 +40,14 @@ def _create_minimal_player_status(
     goal_world_object_id: WorldObjectId = None,
 ) -> PlayerStatusAggregate:
     exp_table = ExpTable(100, 1.5)
+    nav = PlayerNavigationState.from_parts(
+        current_spot_id=current_spot_id,
+        current_coordinate=current_coordinate,
+        goal_destination_type=goal_destination_type,
+        goal_spot_id=goal_spot_id,
+        goal_location_area_id=goal_location_area_id,
+        goal_world_object_id=goal_world_object_id,
+    )
     return PlayerStatusAggregate(
         player_id=PlayerId(player_id),
         base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
@@ -47,12 +58,7 @@ def _create_minimal_player_status(
         hp=Hp.create(100, 100),
         mp=Mp.create(50, 50),
         stamina=Stamina.create(100, 100),
-        current_spot_id=current_spot_id,
-        current_coordinate=current_coordinate,
-        goal_destination_type=goal_destination_type,
-        goal_spot_id=goal_spot_id,
-        goal_location_area_id=goal_location_area_id,
-        goal_world_object_id=goal_world_object_id,
+        navigation_state=nav,
     )
 
 

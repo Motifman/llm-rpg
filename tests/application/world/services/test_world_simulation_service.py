@@ -32,6 +32,7 @@ from ai_rpg_world.domain.world.value_object.weather_zone_name import WeatherZone
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
@@ -159,8 +160,10 @@ class TestWorldSimulationApplicationService:
             hp=Hp.create(100, 100),
             mp=Mp.create(30, 30),
             stamina=Stamina.create(100, 100),
-            current_spot_id=SpotId(1),
-            current_coordinate=Coordinate(0, 0, 0),
+            navigation_state=PlayerNavigationState.from_parts(
+                current_spot_id=SpotId(1),
+                current_coordinate=Coordinate(0, 0, 0),
+            ),
         )
 
     @staticmethod
@@ -2448,8 +2451,10 @@ class TestWorldSimulationApplicationService:
             hp=Hp.create(100, 100),
             mp=Mp.create(50, 50),
             stamina=Stamina.create(stamina_val, 100),
-            current_spot_id=spot_id,
-            current_coordinate=coord
+            navigation_state=PlayerNavigationState.from_parts(
+                current_spot_id=spot_id,
+                current_coordinate=coord,
+            ),
         )
 
     class TestSkillContextAndTargetContext:
