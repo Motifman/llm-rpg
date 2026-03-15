@@ -59,6 +59,9 @@ from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import (
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
 )
+from ai_rpg_world.domain.player.value_object.player_navigation_state import (
+    PlayerNavigationState,
+)
 from ai_rpg_world.domain.player.enum.player_enum import Role
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
@@ -197,8 +200,10 @@ class TestDefaultPromptBuilder:
                 hp=Hp.create(10, 10),
                 mp=Mp.create(10, 10),
                 stamina=Stamina.create(10, 10),
-                current_spot_id=SpotId(1),
-                current_coordinate=Coordinate(0, 0, 0),
+                navigation_state=PlayerNavigationState.from_parts(
+                    current_spot_id=SpotId(1),
+                    current_coordinate=Coordinate(0, 0, 0),
+                ),
             )
         )
         status_repo.save(
@@ -212,8 +217,10 @@ class TestDefaultPromptBuilder:
                 hp=Hp.create(10, 10),
                 mp=Mp.create(10, 10),
                 stamina=Stamina.create(10, 10),
-                current_spot_id=SpotId(1),
-                current_coordinate=Coordinate(1, 0, 0),
+                navigation_state=PlayerNavigationState.from_parts(
+                    current_spot_id=SpotId(1),
+                    current_coordinate=Coordinate(1, 0, 0),
+                ),
             )
         )
         tiles = {
@@ -277,8 +284,10 @@ class TestDefaultPromptBuilder:
                     hp=Hp.create(10, 10),
                     mp=Mp.create(10, 10),
                     stamina=Stamina.create(10, 10),
-                    current_spot_id=SpotId(1),
-                    current_coordinate=coord,
+                    navigation_state=PlayerNavigationState.from_parts(
+                        current_spot_id=SpotId(1),
+                        current_coordinate=coord,
+                    ),
                 )
             )
         tiles = {

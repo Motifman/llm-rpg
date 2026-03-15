@@ -23,11 +23,16 @@ from ai_rpg_world.domain.player.event.status_events import (
     PlayerGoldPaidEvent,
 )
 from ai_rpg_world.domain.player.exception import (
+    CannotSwitchPursuitTargetException,
     InsufficientMpException,
     InsufficientStaminaException,
     InsufficientHpException,
     InsufficientGoldException,
+    NoActivePursuitException,
     PlayerDownedException,
+    PlayerNotDownedException,
+    PursuitLastKnownMismatchException,
+    PursuitTargetMismatchException,
     SpeechValidationException,
 )
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
@@ -48,6 +53,9 @@ from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.player.value_object.player_navigation_state import (
+    PlayerNavigationState,
+)
 from ai_rpg_world.domain.combat.service.combat_logic_service import CombatLogicService
 
 
@@ -130,6 +138,15 @@ def create_test_status_aggregate(
 
     exp_table = create_test_exp_table()
 
+    navigation_state = (
+        PlayerNavigationState.from_parts(
+            current_spot_id=current_spot_id,
+            current_coordinate=current_coordinate,
+        )
+        if current_spot_id is not None or current_coordinate is not None
+        else None
+    )
+
     return PlayerStatusAggregate(
         player_id=PlayerId(player_id),
         base_stats=base_stats,
@@ -141,8 +158,7 @@ def create_test_status_aggregate(
         mp=Mp.create(mp, base_stats.max_mp),
         stamina=Stamina.create(stamina, stamina),  # max_stamina = stamina
         is_down=is_down,
-        current_spot_id=current_spot_id,
-        current_coordinate=current_coordinate,
+        navigation_state=navigation_state,
     )
 
 
@@ -489,8 +505,8 @@ class TestPlayerStatusAggregate:
     def test_heal_stamina(self):
         """スタミナを回復すること"""
         aggregate = create_test_status_aggregate()
-        # スタミナを50/100に設定
-        aggregate._stamina = Stamina.create(50, 100)
+        aggregate.consume_stamina(50)  # 50/100 に減らす
+        aggregate.clear_events()
 
         aggregate.heal_stamina(25)
 
@@ -506,8 +522,8 @@ class TestPlayerStatusAggregate:
     def test_heal_stamina_over_max(self):
         """スタミナ回復が最大値を超える場合、最大値になること"""
         aggregate = create_test_status_aggregate()
-        # スタミナを90/100に設定
-        aggregate._stamina = Stamina.create(90, 100)
+        aggregate.consume_stamina(10)  # 90/100 に減らす
+        aggregate.clear_events()
 
         aggregate.heal_stamina(20)  # 110になるが、最大値は100
 
@@ -567,10 +583,10 @@ class TestPlayerStatusAggregate:
         assert isinstance(aggregate.get_events()[0], PlayerHpHealedEvent)
 
     def test_revive_not_down(self):
-        """戦闘不能状態でない場合、例外が発生すること"""
+        """戦闘不能状態でない場合、PlayerNotDownedException が発生すること"""
         aggregate = create_test_status_aggregate(is_down=False)
 
-        with pytest.raises(ValueError, match="プレイヤーは戦闘不能状態ではありません"):
+        with pytest.raises(PlayerNotDownedException, match="プレイヤーは戦闘不能状態ではありません"):
             aggregate.revive(hp_recovery_rate=0.5)
 
     def test_earn_gold(self):
@@ -796,6 +812,85 @@ class TestPlayerStatusAggregate:
         events = aggregate.get_events()
         cancelled = next(e for e in events if isinstance(e, PursuitCancelledEvent))
         assert cancelled.target_id == WorldObjectId.create(99)
+
+    class TestPursuitExceptions:
+        """追跡関連の例外ケース"""
+
+        def test_update_pursuit_when_no_active_pursuit_raises_no_active_pursuit_exception(self):
+            """追跡中でないときに update_pursuit を呼ぶと NoActivePursuitException"""
+            aggregate = create_test_status_aggregate()
+            snapshot = create_test_pursuit_snapshot()
+            last_known = create_test_last_known_state()
+
+            with pytest.raises(NoActivePursuitException, match="追跡中でない"):
+                aggregate.update_pursuit(target_snapshot=snapshot, last_known=last_known)
+
+            assert aggregate.has_active_pursuit is False
+
+        def test_fail_pursuit_when_no_active_pursuit_raises_no_active_pursuit_exception(self):
+            """追跡中でないときに fail_pursuit を呼ぶと NoActivePursuitException"""
+            aggregate = create_test_status_aggregate()
+
+            with pytest.raises(NoActivePursuitException, match="追跡中でない"):
+                aggregate.fail_pursuit(PursuitFailureReason.PATH_UNREACHABLE)
+
+        def test_cancel_pursuit_when_no_active_pursuit_raises_no_active_pursuit_exception(self):
+            """追跡中でないときに cancel_pursuit を呼ぶと NoActivePursuitException"""
+            aggregate = create_test_status_aggregate()
+
+            with pytest.raises(NoActivePursuitException, match="追跡中でない"):
+                aggregate.cancel_pursuit()
+
+        def test_start_pursuit_with_different_target_while_active_raises_cannot_switch(self):
+            """追跡中に別の対象へ start_pursuit すると CannotSwitchPursuitTargetException"""
+            aggregate = create_test_status_aggregate()
+            snapshot1 = create_test_pursuit_snapshot(target_id=99)
+            aggregate.start_pursuit(snapshot1)
+
+            snapshot2 = create_test_pursuit_snapshot(target_id=88)  # 別の対象
+
+            with pytest.raises(
+                CannotSwitchPursuitTargetException,
+                match="切り替え.*先に.*終了",
+            ):
+                aggregate.start_pursuit(snapshot2)
+
+            assert aggregate.pursuit_state is not None
+            assert aggregate.pursuit_state.target_id == WorldObjectId.create(99)
+
+        def test_update_pursuit_with_different_target_snapshot_raises_pursuit_target_mismatch(self):
+            """update_pursuit に現行対象と異なる target_id の snapshot を渡すと PursuitTargetMismatchException"""
+            aggregate = create_test_status_aggregate()
+            snapshot1 = create_test_pursuit_snapshot(target_id=99)
+            aggregate.start_pursuit(snapshot1)
+            last_known = create_test_last_known_state(target_id=99)
+
+            wrong_snapshot = create_test_pursuit_snapshot(target_id=88)
+
+            with pytest.raises(
+                PursuitTargetMismatchException,
+                match="target_id.*一致",
+            ):
+                aggregate.update_pursuit(target_snapshot=wrong_snapshot, last_known=last_known)
+
+        def test_start_pursuit_with_last_known_target_id_mismatch_raises_pursuit_last_known_mismatch(
+            self,
+        ):
+            """start_pursuit で last_known の target_id が snapshot と一致しないと PursuitLastKnownMismatchException"""
+            aggregate = create_test_status_aggregate()
+            snapshot = create_test_pursuit_snapshot(target_id=99)
+            wrong_last_known = PursuitLastKnownState(
+                target_id=WorldObjectId.create(88),
+                spot_id=SpotId(1),
+                coordinate=Coordinate(0, 0, 0),
+                observed_at_tick=None,
+            )
+
+            with pytest.raises(
+                PursuitLastKnownMismatchException,
+                match="target_id.*一致",
+            ):
+                aggregate.start_pursuit(snapshot, last_known=wrong_last_known)
 
     def test_consume_resources_zero_costs(self):
         """ゼロコストでの消費が正常に終了すること"""

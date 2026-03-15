@@ -34,6 +34,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_spot_repository import (
 )
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_name import PlayerName
@@ -74,8 +75,10 @@ class TestCreateWorldQueryService:
             hp=Hp.create(100, 100),
             mp=Mp.create(50, 50),
             stamina=Stamina.create(100, 100),
-            current_spot_id=SpotId(1),
-            current_coordinate=Coordinate(0, 0, 0),
+            navigation_state=PlayerNavigationState.from_parts(
+                current_spot_id=SpotId(1),
+                current_coordinate=Coordinate(0, 0, 0),
+            ),
         )
         status_repo.save(status)
         profile_repo.save(

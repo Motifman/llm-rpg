@@ -5,6 +5,7 @@ from typing import List, Dict, Optional
 
 from ai_rpg_world.application.world.services.movement_step_executor import MovementStepExecutor
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
@@ -110,7 +111,12 @@ class TestMovementStepExecutor:
         x: int = 0,
         y: int = 0,
         stamina_val: int = 100,
+        navigation_state: PlayerNavigationState | None = None,
     ) -> PlayerStatusAggregate:
+        nav = navigation_state or PlayerNavigationState.from_parts(
+            current_spot_id=SpotId(spot_id),
+            current_coordinate=Coordinate(x, y, 0),
+        )
         exp_table = ExpTable(100, 1.5)
         return PlayerStatusAggregate(
             player_id=PlayerId(player_id),
@@ -122,8 +128,7 @@ class TestMovementStepExecutor:
             hp=Hp.create(100, 100),
             mp=Mp.create(50, 50),
             stamina=Stamina.create(stamina_val, stamina_val),
-            current_spot_id=SpotId(spot_id),
-            current_coordinate=Coordinate(x, y, 0),
+            navigation_state=nav,
         )
 
     def _create_sample_profile(self, player_id: int, name: str = "TestPlayer"):
@@ -413,8 +418,9 @@ class TestMovementStepExecutor:
         player_id = 1
 
         profile_repo.save(self._create_sample_profile(player_id))
-        status = self._create_sample_status(1, 1, 0, 0)
-        status._current_spot_id = None
+        status = self._create_sample_status(
+            1, 1, 0, 0, navigation_state=PlayerNavigationState.empty()
+        )
         status_repo.save(status)
 
         with uow:

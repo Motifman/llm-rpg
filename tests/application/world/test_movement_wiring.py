@@ -38,6 +38,9 @@ from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
     InMemoryGameTimeProvider,
 )
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.player_navigation_state import (
+    PlayerNavigationState,
+)
 from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_name import PlayerName
@@ -80,6 +83,10 @@ class TestCreateMovementApplicationService:
 
         spot_repo.save(Spot(SpotId(1), "S1", ""))
         exp_table = ExpTable(100, 1.5)
+        nav = PlayerNavigationState.from_parts(
+            current_spot_id=SpotId(1),
+            current_coordinate=Coordinate(0, 0, 0),
+        )
         status = PlayerStatusAggregate(
             player_id=PlayerId(1),
             base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
@@ -90,8 +97,7 @@ class TestCreateMovementApplicationService:
             hp=Hp.create(100, 100),
             mp=Mp.create(50, 50),
             stamina=Stamina.create(100, 100),
-            current_spot_id=SpotId(1),
-            current_coordinate=Coordinate(0, 0, 0),
+            navigation_state=nav,
         )
         player_status_repo.save(status)
         player_profile_repo.save(
