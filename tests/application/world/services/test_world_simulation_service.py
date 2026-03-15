@@ -54,6 +54,8 @@ from ai_rpg_world.domain.world.value_object.behavior_action import BehaviorActio
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
+from ai_rpg_world.domain.monster.value_object.monster_behavior_state import MonsterBehaviorState
+from ai_rpg_world.domain.monster.value_object.monster_pursuit_state import MonsterPursuitState
 from ai_rpg_world.domain.monster.service.monster_skill_execution_domain_service import MonsterSkillExecutionDomainService
 from ai_rpg_world.infrastructure.repository.in_memory_monster_aggregate_repository import InMemoryMonsterAggregateRepository
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
@@ -128,6 +130,8 @@ from ai_rpg_world.domain.pursuit.value_object.pursuit_state import PursuitState
 from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
     PursuitTargetSnapshot,
 )
+from ai_rpg_world.domain.monster.value_object.monster_behavior_state import MonsterBehaviorState
+from ai_rpg_world.domain.monster.value_object.monster_pursuit_state import MonsterPursuitState
 
 
 class _InMemorySkillLoadoutRepo:
@@ -1285,26 +1289,40 @@ class TestWorldSimulationApplicationService:
             skill_ids=[],
         )
         loadout = SkillLoadoutAggregate.create(SkillLoadoutId(1), actor_id.value, 10, 10)
-        monster = MonsterAggregate.create(MonsterId(1), template, actor_id, skill_loadout=loadout)
-        monster.spawn(actor_coordinate, spot_id, WorldTick(0))
         target_id = WorldObjectId(100)
-        monster._behavior_state = BehaviorStateEnum.SEARCH
-        monster._behavior_target_id = target_id
-        monster._behavior_last_known_position = actor_coordinate
-        monster._pursuit_state = PursuitState(
-            actor_id=actor_id,
+        search_state = MonsterBehaviorState.from_parts(
+            state=BehaviorStateEnum.SEARCH,
             target_id=target_id,
-            target_snapshot=PursuitTargetSnapshot(
+            last_known_position=actor_coordinate,
+            initial_position=actor_coordinate,
+        )
+        search_pursuit = MonsterPursuitState(
+            pursuit=PursuitState(
+                actor_id=actor_id,
                 target_id=target_id,
-                spot_id=spot_id,
-                coordinate=Coordinate(2, 0, 0),
+                target_snapshot=PursuitTargetSnapshot(
+                    target_id=target_id,
+                    spot_id=spot_id,
+                    coordinate=Coordinate(2, 0, 0),
+                ),
+                last_known=PursuitLastKnownState(
+                    target_id=target_id,
+                    spot_id=spot_id,
+                    coordinate=actor_coordinate,
+                    observed_at_tick=WorldTick(1),
+                ),
             ),
-            last_known=PursuitLastKnownState(
-                target_id=target_id,
-                spot_id=spot_id,
-                coordinate=actor_coordinate,
-                observed_at_tick=WorldTick(1),
-            ),
+        )
+        monster = MonsterAggregate.reconstitute(
+            monster_id=MonsterId(1),
+            template=template,
+            world_object_id=actor_id,
+            skill_loadout=loadout,
+            coordinate=actor_coordinate,
+            spot_id=spot_id,
+            current_tick=WorldTick(0),
+            behavior_state=search_state,
+            pursuit_state=search_pursuit,
         )
         monster_repo.save(monster)
         skill_loadout_repo.save(loadout)
@@ -1372,25 +1390,39 @@ class TestWorldSimulationApplicationService:
             skill_ids=[],
         )
         loadout = SkillLoadoutAggregate.create(SkillLoadoutId(1), 1, 10, 10)
-        monster = MonsterAggregate.create(MonsterId(1), template, WorldObjectId(1), skill_loadout=loadout)
-        monster.spawn(Coordinate(1, 0, 0), spot_id, WorldTick(0))
-        monster._behavior_state = BehaviorStateEnum.SEARCH
-        monster._behavior_target_id = target_id
-        monster._behavior_last_known_position = Coordinate(2, 0, 0)
-        monster._pursuit_state = PursuitState(
-            actor_id=WorldObjectId(1),
+        search_state = MonsterBehaviorState.from_parts(
+            state=BehaviorStateEnum.SEARCH,
             target_id=target_id,
-            target_snapshot=PursuitTargetSnapshot(
+            last_known_position=Coordinate(2, 0, 0),
+            initial_position=Coordinate(1, 0, 0),
+        )
+        search_pursuit = MonsterPursuitState(
+            pursuit=PursuitState(
+                actor_id=WorldObjectId(1),
                 target_id=target_id,
-                spot_id=spot_id,
-                coordinate=Coordinate(2, 0, 0),
+                target_snapshot=PursuitTargetSnapshot(
+                    target_id=target_id,
+                    spot_id=spot_id,
+                    coordinate=Coordinate(2, 0, 0),
+                ),
+                last_known=PursuitLastKnownState(
+                    target_id=target_id,
+                    spot_id=spot_id,
+                    coordinate=Coordinate(2, 0, 0),
+                    observed_at_tick=WorldTick(1),
+                ),
             ),
-            last_known=PursuitLastKnownState(
-                target_id=target_id,
-                spot_id=spot_id,
-                coordinate=Coordinate(2, 0, 0),
-                observed_at_tick=WorldTick(1),
-            ),
+        )
+        monster = MonsterAggregate.reconstitute(
+            monster_id=MonsterId(1),
+            template=template,
+            world_object_id=WorldObjectId(1),
+            skill_loadout=loadout,
+            coordinate=Coordinate(1, 0, 0),
+            spot_id=spot_id,
+            current_tick=WorldTick(0),
+            behavior_state=search_state,
+            pursuit_state=search_pursuit,
         )
         monster_repo.save(monster)
         skill_loadout_repo.save(loadout)
@@ -1448,26 +1480,40 @@ class TestWorldSimulationApplicationService:
             skill_ids=[],
         )
         loadout = SkillLoadoutAggregate.create(SkillLoadoutId(1), actor_id.value, 10, 10)
-        monster = MonsterAggregate.create(MonsterId(1), template, actor_id, skill_loadout=loadout)
-        monster.spawn(actor_coordinate, spot_id, WorldTick(0))
         target_id = WorldObjectId(999)
-        monster._behavior_state = BehaviorStateEnum.SEARCH
-        monster._behavior_target_id = target_id
-        monster._behavior_last_known_position = Coordinate(2, 0, 0)
-        monster._pursuit_state = PursuitState(
-            actor_id=actor_id,
+        search_state = MonsterBehaviorState.from_parts(
+            state=BehaviorStateEnum.SEARCH,
             target_id=target_id,
-            target_snapshot=PursuitTargetSnapshot(
+            last_known_position=Coordinate(2, 0, 0),
+            initial_position=actor_coordinate,
+        )
+        search_pursuit = MonsterPursuitState(
+            pursuit=PursuitState(
+                actor_id=actor_id,
                 target_id=target_id,
-                spot_id=spot_id,
-                coordinate=Coordinate(2, 0, 0),
+                target_snapshot=PursuitTargetSnapshot(
+                    target_id=target_id,
+                    spot_id=spot_id,
+                    coordinate=Coordinate(2, 0, 0),
+                ),
+                last_known=PursuitLastKnownState(
+                    target_id=target_id,
+                    spot_id=spot_id,
+                    coordinate=Coordinate(2, 0, 0),
+                    observed_at_tick=WorldTick(1),
+                ),
             ),
-            last_known=PursuitLastKnownState(
-                target_id=target_id,
-                spot_id=spot_id,
-                coordinate=Coordinate(2, 0, 0),
-                observed_at_tick=WorldTick(1),
-            ),
+        )
+        monster = MonsterAggregate.reconstitute(
+            monster_id=MonsterId(1),
+            template=template,
+            world_object_id=actor_id,
+            skill_loadout=loadout,
+            coordinate=actor_coordinate,
+            spot_id=spot_id,
+            current_tick=WorldTick(0),
+            behavior_state=search_state,
+            pursuit_state=search_pursuit,
         )
         monster_repo.save(monster)
         skill_loadout_repo.save(loadout)
