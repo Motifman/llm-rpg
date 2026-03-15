@@ -13,7 +13,7 @@ class WorldSimulationHarvestStageService:
 
     def __init__(
         self,
-        harvest_command_service_getter: Callable[[], Optional[Any]],
+        harvest_command_service_getter: Callable[[], Optional["HarvestCommandService"]],
         logger: logging.Logger,
     ) -> None:
         self._harvest_command_service_getter = harvest_command_service_getter

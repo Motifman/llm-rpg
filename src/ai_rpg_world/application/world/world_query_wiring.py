@@ -4,7 +4,9 @@ create_llm_agent_wiring 等に world_query_service を渡す際、本モジュ�
 構築すると、依存関係が明示的になる。
 """
 
-from typing import Optional, Any
+from __future__ import annotations
+
+from typing import Optional, TYPE_CHECKING
 
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
@@ -21,6 +23,30 @@ from ai_rpg_world.application.world.services.transition_condition_evaluator impo
     TransitionConditionEvaluator,
 )
 
+if TYPE_CHECKING:
+    from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
+    from ai_rpg_world.application.conversation.services.conversation_command_service import (
+        ConversationCommandService,
+    )
+    from ai_rpg_world.application.trade.services.personal_trade_query_service import (
+        PersonalTradeQueryService,
+    )
+    from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
+    from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+    from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
+    from ai_rpg_world.domain.player.repository.player_inventory_repository import (
+        PlayerInventoryRepository,
+    )
+    from ai_rpg_world.domain.quest.repository.quest_repository import QuestRepository
+    from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
+    from ai_rpg_world.domain.skill.repository.skill_repository import (
+        SkillDeckProgressRepository,
+        SkillLoadoutRepository,
+    )
+    from ai_rpg_world.domain.world.service.world_time_config_service import (
+        WorldTimeConfigService,
+    )
+
 
 def create_world_query_service(
     *,
@@ -29,20 +55,20 @@ def create_world_query_service(
     physical_map_repository: PhysicalMapRepository,
     spot_repository: SpotRepository,
     connected_spots_provider: IConnectedSpotsProvider,
-    monster_repository: Optional[Any] = None,
+    monster_repository: Optional["MonsterRepository"] = None,
     transition_policy_repository: Optional[ITransitionPolicyRepository] = None,
     transition_condition_evaluator: Optional[TransitionConditionEvaluator] = None,
-    player_inventory_repository: Optional[Any] = None,
-    item_repository: Optional[Any] = None,
-    conversation_command_service: Optional[Any] = None,
-    skill_loadout_repository: Optional[Any] = None,
-    skill_deck_progress_repository: Optional[Any] = None,
-    game_time_provider: Optional[Any] = None,
-    world_time_config_service: Optional[Any] = None,
-    quest_repository: Optional[Any] = None,
-    guild_repository: Optional[Any] = None,
-    shop_repository: Optional[Any] = None,
-    personal_trade_query_service: Optional[Any] = None,
+    player_inventory_repository: Optional["PlayerInventoryRepository"] = None,
+    item_repository: Optional["ItemRepository"] = None,
+    conversation_command_service: Optional["ConversationCommandService"] = None,
+    skill_loadout_repository: Optional["SkillLoadoutRepository"] = None,
+    skill_deck_progress_repository: Optional["SkillDeckProgressRepository"] = None,
+    game_time_provider: Optional["GameTimeProvider"] = None,
+    world_time_config_service: Optional["WorldTimeConfigService"] = None,
+    quest_repository: Optional["QuestRepository"] = None,
+    guild_repository: Optional["GuildRepository"] = None,
+    shop_repository: Optional["ShopRepository"] = None,
+    personal_trade_query_service: Optional["PersonalTradeQueryService"] = None,
     player_audience_query: Optional[IPlayerAudienceQueryPort] = None,
 ) -> WorldQueryService:
     """
