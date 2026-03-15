@@ -1,6 +1,17 @@
-from typing import Any, Callable, Optional
+from typing import Callable, Optional, TYPE_CHECKING
 
 from ai_rpg_world.domain.common.value_object import WorldTick
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.harvest.services.harvest_command_service import (
+        HarvestCommandService,
+    )
+    from ai_rpg_world.application.world.services.movement_service import (
+        MovementApplicationService,
+    )
+    from ai_rpg_world.application.world.services.pursuit_continuation_service import (
+        PursuitContinuationService,
+    )
 from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
@@ -18,8 +29,8 @@ class WorldSimulationMovementStageService:
         self,
         player_status_repository: PlayerStatusRepository,
         physical_map_repository: PhysicalMapRepository,
-        movement_service_getter: Callable[[], Optional[Any]],
-        pursuit_continuation_service_getter: Callable[[], Optional[Any]],
+        movement_service_getter: Callable[[], Optional["MovementApplicationService"]],
+        pursuit_continuation_service_getter: Callable[[], Optional["PursuitContinuationService"]],
     ) -> None:
         self._player_status_repository = player_status_repository
         self._physical_map_repository = physical_map_repository

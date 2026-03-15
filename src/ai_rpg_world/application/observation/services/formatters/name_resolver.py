@@ -9,7 +9,17 @@ from ai_rpg_world.domain.world.exception.map_exception import WorldObjectIdValid
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 if TYPE_CHECKING:
-    pass
+    from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
+    from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+    from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
+    from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
+    from ai_rpg_world.domain.player.repository.player_profile_repository import (
+        PlayerProfileRepository,
+    )
+    from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
+    from ai_rpg_world.domain.skill.repository.skill_repository import SkillSpecRepository
+    from ai_rpg_world.domain.sns.repository.sns_user_repository import UserRepository
+    from ai_rpg_world.domain.world.repository.spot_repository import SpotRepository
 
 FALLBACK_SPOT_LABEL = "不明なスポット"
 FALLBACK_PLAYER_LABEL = "不明なプレイヤー"
@@ -27,15 +37,15 @@ class ObservationNameResolver:
 
     def __init__(
         self,
-        spot_repository: Optional[Any] = None,
-        player_profile_repository: Optional[Any] = None,
-        item_spec_repository: Optional[Any] = None,
-        item_repository: Optional[Any] = None,
-        shop_repository: Optional[Any] = None,
-        guild_repository: Optional[Any] = None,
-        monster_repository: Optional[Any] = None,
-        skill_spec_repository: Optional[Any] = None,
-        sns_user_repository: Optional[Any] = None,
+        spot_repository: Optional["SpotRepository"] = None,
+        player_profile_repository: Optional["PlayerProfileRepository"] = None,
+        item_spec_repository: Optional["ItemSpecRepository"] = None,
+        item_repository: Optional["ItemRepository"] = None,
+        shop_repository: Optional["ShopRepository"] = None,
+        guild_repository: Optional["GuildRepository"] = None,
+        monster_repository: Optional["MonsterRepository"] = None,
+        skill_spec_repository: Optional["SkillSpecRepository"] = None,
+        sns_user_repository: Optional["UserRepository"] = None,
     ) -> None:
         self._spot_repository = spot_repository
         self._sns_user_repository = sns_user_repository

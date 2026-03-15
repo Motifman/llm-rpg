@@ -73,6 +73,9 @@ if TYPE_CHECKING:
         SkillDeckProgressRepository,
         SkillLoadoutRepository,
     )
+    from ai_rpg_world.domain.world.service.world_time_config_service import (
+        WorldTimeConfigService,
+    )
     from ai_rpg_world.application.trade.services.personal_trade_query_service import (
         PersonalTradeQueryService,
     )
@@ -97,7 +100,7 @@ class WorldQueryService:
         skill_loadout_repository: Optional["SkillLoadoutRepository"] = None,
         skill_deck_progress_repository: Optional["SkillDeckProgressRepository"] = None,
         game_time_provider: Optional["GameTimeProvider"] = None,
-        world_time_config_service: Optional[Any] = None,
+        world_time_config_service: Optional["WorldTimeConfigService"] = None,
         quest_repository: Optional["QuestRepository"] = None,
         guild_repository: Optional["GuildRepository"] = None,
         shop_repository: Optional["ShopRepository"] = None,
