@@ -35,6 +35,7 @@ from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecRea
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
@@ -124,6 +125,10 @@ class TestPlaceObjectApplicationService:
         pmap.add_object(actor)
         map_repo.save(pmap)
         exp_table = ExpTable(100, 1.5)
+        nav = PlayerNavigationState.from_parts(
+            current_spot_id=spot_id,
+            current_coordinate=Coordinate(1, 1, 0),
+        )
         status = PlayerStatusAggregate(
             player_id=PlayerId(player_id_val),
             base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
@@ -134,8 +139,7 @@ class TestPlaceObjectApplicationService:
             hp=Hp.create(100, 100),
             mp=Mp.create(50, 50),
             stamina=Stamina.create(100, 100),
-            current_spot_id=spot_id,
-            current_coordinate=Coordinate(1, 1, 0),
+            navigation_state=nav,
         )
         status_repo.save(status)
         return pmap, actor_id, player_id_val
@@ -191,6 +195,10 @@ class TestPlaceObjectApplicationService:
         inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(player_id_val))
         inv_repo.save(inv)
         exp_table = ExpTable(100, 1.5)
+        nav = PlayerNavigationState.from_parts(
+            current_spot_id=SpotId(1),
+            current_coordinate=Coordinate(1, 1, 0),
+        )
         status = PlayerStatusAggregate(
             player_id=PlayerId(player_id_val),
             base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
@@ -201,8 +209,7 @@ class TestPlaceObjectApplicationService:
             hp=Hp.create(100, 100),
             mp=Mp.create(50, 50),
             stamina=Stamina.create(100, 100),
-            current_spot_id=SpotId(1),
-            current_coordinate=Coordinate(1, 1, 0),
+            navigation_state=nav,
         )
         status_repo.save(status)
 

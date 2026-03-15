@@ -26,6 +26,7 @@ from ai_rpg_world.application.world.exceptions.command.movement_command_exceptio
 from ai_rpg_world.application.world.exceptions.base_exception import WorldSystemErrorException
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.player_name import PlayerName
@@ -90,7 +91,18 @@ class TestWorldQueryService:
         )
         return service, status_repo, profile_repo, phys_repo, spot_repo
 
-    def _create_sample_status(self, player_id: int, spot_id: int = 1, x: int = 0, y: int = 0):
+    def _create_sample_status(
+        self,
+        player_id: int,
+        spot_id: int = 1,
+        x: int = 0,
+        y: int = 0,
+        navigation_state: PlayerNavigationState | None = None,
+    ):
+        nav = navigation_state or PlayerNavigationState.from_parts(
+            current_spot_id=SpotId(spot_id),
+            current_coordinate=Coordinate(x, y, 0),
+        )
         exp_table = ExpTable(100, 1.5)
         return PlayerStatusAggregate(
             player_id=PlayerId(player_id),
@@ -102,8 +114,7 @@ class TestWorldQueryService:
             hp=Hp.create(100, 100),
             mp=Mp.create(50, 50),
             stamina=Stamina.create(100, 100),
-            current_spot_id=SpotId(spot_id),
-            current_coordinate=Coordinate(x, y, 0),
+            navigation_state=nav,
         )
 
     def _create_sample_profile(self, player_id: int, name: str = "TestPlayer"):
@@ -159,9 +170,9 @@ class TestWorldQueryService:
         service, status_repo, profile_repo, _, spot_repo = setup_service
         player_id = 1
         profile_repo.save(self._create_sample_profile(player_id))
-        status = self._create_sample_status(player_id)
-        status._current_spot_id = None
-        status._current_coordinate = None
+        status = self._create_sample_status(
+            player_id, navigation_state=PlayerNavigationState.empty()
+        )
         status_repo.save(status)
 
         result = service.get_player_location(GetPlayerLocationQuery(player_id=player_id))
@@ -264,9 +275,9 @@ class TestWorldQueryService:
         service, status_repo, profile_repo, _, spot_repo = setup_service
         player_id = 1
         profile_repo.save(self._create_sample_profile(player_id))
-        status = self._create_sample_status(player_id)
-        status._current_spot_id = None
-        status._current_coordinate = None
+        status = self._create_sample_status(
+            player_id, navigation_state=PlayerNavigationState.empty()
+        )
         status_repo.save(status)
 
         result = service.get_spot_context_for_player(GetSpotContextForPlayerQuery(player_id=player_id))
@@ -485,9 +496,9 @@ class TestWorldQueryService:
         service, status_repo, profile_repo, _, spot_repo = setup_service
         player_id = 1
         profile_repo.save(self._create_sample_profile(player_id))
-        status = self._create_sample_status(player_id)
-        status._current_spot_id = None
-        status._current_coordinate = None
+        status = self._create_sample_status(
+            player_id, navigation_state=PlayerNavigationState.empty()
+        )
         status_repo.save(status)
 
         result = service.get_visible_context(GetVisibleContextQuery(player_id=player_id))
@@ -598,9 +609,9 @@ class TestWorldQueryService:
         service, status_repo, profile_repo, _, spot_repo = setup_service
         player_id = 1
         profile_repo.save(self._create_sample_profile(player_id))
-        status = self._create_sample_status(player_id)
-        status._current_spot_id = None
-        status._current_coordinate = None
+        status = self._create_sample_status(
+            player_id, navigation_state=PlayerNavigationState.empty()
+        )
         status_repo.save(status)
 
         result = service.get_available_moves(GetAvailableMovesQuery(player_id=player_id))
@@ -774,9 +785,9 @@ class TestWorldQueryService:
         service, status_repo, profile_repo, _, spot_repo = setup_service
         player_id = 1
         profile_repo.save(self._create_sample_profile(player_id))
-        status = self._create_sample_status(player_id)
-        status._current_spot_id = None
-        status._current_coordinate = None
+        status = self._create_sample_status(
+            player_id, navigation_state=PlayerNavigationState.empty()
+        )
         status_repo.save(status)
 
         result = service.get_player_current_state(GetPlayerCurrentStateQuery(player_id=player_id))

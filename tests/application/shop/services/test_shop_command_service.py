@@ -33,6 +33,7 @@ from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalM
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.player.value_object.gold import Gold
@@ -84,8 +85,10 @@ def _create_player_status(player_id: int, gold: int = 1000, spot_id: int = None,
         hp=Hp.create(100, 100),
         mp=Mp.create(50, 50),
         stamina=Stamina.create(100, 100),
-        current_spot_id=SpotId(spot_id) if spot_id is not None else None,
-        current_coordinate=coord,
+        navigation_state=PlayerNavigationState.from_parts(
+            current_spot_id=SpotId(spot_id) if spot_id is not None else None,
+            current_coordinate=coord,
+        ),
     )
 
 

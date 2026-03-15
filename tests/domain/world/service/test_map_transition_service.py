@@ -1,6 +1,7 @@
 import pytest
 from ai_rpg_world.domain.world.service.map_transition_service import MapTransitionService
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
@@ -27,6 +28,17 @@ class TestMapTransitionService:
 
     def _create_sample_status(self, player_id: int, spot_id: int, x: int, y: int):
         exp_table = ExpTable(100, 1.5)
+        base_nav = PlayerNavigationState.from_parts(
+            current_spot_id=SpotId(spot_id),
+            current_coordinate=Coordinate(x, y, 0),
+        )
+        path = [Coordinate(x, y, 0), Coordinate(x + 1, y, 0)]
+        nav = base_nav.with_destination_set(
+            destination=path[-1],
+            path=path,
+            goal_destination_type="spot",
+            goal_spot_id=SpotId(spot_id),
+        )
         return PlayerStatusAggregate(
             player_id=PlayerId(player_id),
             base_stats=BaseStats(10, 10, 10, 10, 10, 0.05, 0.05),
@@ -37,9 +49,7 @@ class TestMapTransitionService:
             hp=Hp.create(100, 100),
             mp=Mp.create(50, 50),
             stamina=Stamina.create(100, 100),
-            current_spot_id=SpotId(spot_id),
-            current_coordinate=Coordinate(x, y, 0),
-            planned_path=[Coordinate(x, y, 0), Coordinate(x+1, y, 0)] # Dummy path
+            navigation_state=nav,
         )
 
     def _create_simple_map(self, spot_id: int):

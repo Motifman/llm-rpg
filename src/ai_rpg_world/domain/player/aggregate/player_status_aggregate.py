@@ -32,11 +32,17 @@ from ai_rpg_world.domain.player.event.status_events import (
 )
 from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.exception import (
+    CannotSwitchPursuitTargetException,
     InsufficientMpException,
     InsufficientStaminaException,
     InsufficientHpException,
     InsufficientGoldException,
+    NoActivePursuitException,
     PlayerDownedException,
+    PlayerNotDownedException,
+    PursuitLastKnownMismatchException,
+    PursuitStateRequiredException,
+    PursuitTargetMismatchException,
     SpeechValidationException,
 )
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
@@ -55,6 +61,12 @@ from ai_rpg_world.domain.pursuit.value_object.pursuit_state import PursuitState
 from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
     PursuitTargetSnapshot,
 )
+from ai_rpg_world.domain.player.value_object.player_navigation_state import (
+    PlayerNavigationState,
+)
+from ai_rpg_world.domain.player.value_object.player_pursuit_state import (
+    PlayerPursuitState,
+)
 
 
 class PlayerStatusAggregate(AggregateRoot):
@@ -71,18 +83,11 @@ class PlayerStatusAggregate(AggregateRoot):
         hp: Hp,
         mp: Mp,
         stamina: Stamina,
-        current_spot_id: Optional[SpotId] = None,
-        current_coordinate: Optional[Coordinate] = None,
-        current_destination: Optional[Coordinate] = None,
-        planned_path: List[Coordinate] = None,
-        goal_destination_type: Optional[Literal["spot", "location", "object"]] = None,
-        goal_spot_id: Optional[SpotId] = None,
-        goal_location_area_id: Optional[LocationAreaId] = None,
-        goal_world_object_id: Optional[WorldObjectId] = None,
+        navigation_state: Optional[PlayerNavigationState] = None,
         is_down: bool = False,
         active_effects: List[StatusEffect] = None,
         attention_level: Optional[AttentionLevel] = None,
-        pursuit_state: Optional[PursuitState] = None,
+        pursuit_state: Optional[PlayerPursuitState] = None,
     ):
         super().__init__()
         self._player_id = player_id
@@ -94,18 +99,15 @@ class PlayerStatusAggregate(AggregateRoot):
         self._hp = hp
         self._mp = mp
         self._stamina = stamina
-        self._current_spot_id = current_spot_id
-        self._current_coordinate = current_coordinate
-        self._current_destination = current_destination
-        self._planned_path = planned_path or []
-        self._goal_destination_type = goal_destination_type
-        self._goal_spot_id = goal_spot_id
-        self._goal_location_area_id = goal_location_area_id
-        self._goal_world_object_id = goal_world_object_id
+        self._navigation_state = (
+            navigation_state if navigation_state is not None else PlayerNavigationState.empty()
+        )
         self._is_down = is_down
         self._active_effects = active_effects or []
         self._attention_level = attention_level if attention_level is not None else AttentionLevel.FULL
-        self._pursuit_state = pursuit_state
+        self._pursuit_state = (
+            pursuit_state if pursuit_state is not None else PlayerPursuitState.empty()
+        )
 
     @property
     def attention_level(self) -> AttentionLevel:
@@ -174,52 +176,52 @@ class PlayerStatusAggregate(AggregateRoot):
     @property
     def current_spot_id(self) -> Optional[SpotId]:
         """現在のスポットID"""
-        return self._current_spot_id
+        return self._navigation_state.current_spot_id
 
     @property
     def current_coordinate(self) -> Optional[Coordinate]:
         """現在の座標"""
-        return self._current_coordinate
+        return self._navigation_state.current_coordinate
 
     @property
     def current_destination(self) -> Optional[Coordinate]:
         """現在の目的地座標（同じスポット内）"""
-        return self._current_destination
+        return self._navigation_state.current_destination
 
     @property
     def planned_path(self) -> List[Coordinate]:
         """計画された経路"""
-        return self._planned_path.copy()
+        return self._navigation_state.planned_path_as_list()
 
     @property
     def goal_destination_type(self) -> Optional[Literal["spot", "location", "object"]]:
         """目的地の種別（spot=スポット到着で完了、location=ロケーション内到着で完了、object=オブジェクト隣接で完了）"""
-        return self._goal_destination_type
+        return self._navigation_state.goal_destination_type
 
     @property
     def goal_spot_id(self) -> Optional[SpotId]:
         """目標スポットID"""
-        return self._goal_spot_id
+        return self._navigation_state.goal_spot_id
 
     @property
     def goal_location_area_id(self) -> Optional[LocationAreaId]:
         """目標ロケーションエリアID（destination_type が location のときのみ）"""
-        return self._goal_location_area_id
+        return self._navigation_state.goal_location_area_id
 
     @property
     def goal_world_object_id(self) -> Optional[WorldObjectId]:
         """目標ワールドオブジェクトID（destination_type が object のときのみ）"""
-        return self._goal_world_object_id
+        return self._navigation_state.goal_world_object_id
 
     @property
     def pursuit_state(self) -> Optional[PursuitState]:
         """静的移動と独立した追跡状態。"""
-        return self._pursuit_state
+        return self._pursuit_state.pursuit
 
     @property
     def has_active_pursuit(self) -> bool:
         """追跡中かどうか。"""
-        return self._pursuit_state is not None
+        return self._pursuit_state.has_active_pursuit
 
     @property
     def actor_world_object_id(self) -> WorldObjectId:
@@ -236,21 +238,18 @@ class PlayerStatusAggregate(AggregateRoot):
         goal_world_object_id: Optional[WorldObjectId] = None,
     ) -> None:
         """目的地と経路、および到着判定用の目標情報を設定する"""
-        self._current_destination = destination
-        self._planned_path = path
-        self._goal_destination_type = goal_destination_type
-        self._goal_spot_id = goal_spot_id
-        self._goal_location_area_id = goal_location_area_id
-        self._goal_world_object_id = goal_world_object_id
+        self._navigation_state = self._navigation_state.with_destination_set(
+            destination=destination,
+            path=path,
+            goal_destination_type=goal_destination_type,
+            goal_spot_id=goal_spot_id,
+            goal_location_area_id=goal_location_area_id,
+            goal_world_object_id=goal_world_object_id,
+        )
 
     def clear_path(self) -> None:
         """経路と目標情報をクリアする"""
-        self._planned_path = []
-        self._current_destination = None
-        self._goal_destination_type = None
-        self._goal_spot_id = None
-        self._goal_location_area_id = None
-        self._goal_world_object_id = None
+        self._navigation_state = self._navigation_state.cleared()
 
     def start_pursuit(
         self,
@@ -259,17 +258,18 @@ class PlayerStatusAggregate(AggregateRoot):
     ) -> PursuitState:
         """追跡を開始し、開始イベントを発行する。"""
         target_id = target_snapshot.target_id
-        if self._pursuit_state is not None and self._pursuit_state.target_id != target_id:
-            raise ValueError("Switching pursuit targets requires ending the current pursuit first.")
+        if self._pursuit_state.has_active_pursuit and self._pursuit_state.target_id != target_id:
+            raise CannotSwitchPursuitTargetException(
+                "追跡対象を切り替えるには、先に現在の追跡を終了してください。",
+            )
 
         resolved_last_known = self._coerce_last_known(target_id, target_snapshot, last_known)
-        pursuit_state = PursuitState(
+        self._pursuit_state = self._pursuit_state.with_started(
             actor_id=self.actor_world_object_id,
             target_id=target_id,
             target_snapshot=target_snapshot,
             last_known=resolved_last_known,
         )
-        self._pursuit_state = pursuit_state
         self.add_event(
             PursuitStartedEvent.create(
                 aggregate_id=self.actor_world_object_id,
@@ -280,7 +280,7 @@ class PlayerStatusAggregate(AggregateRoot):
                 last_known=resolved_last_known,
             )
         )
-        return pursuit_state
+        return self._pursuit_state.pursuit
 
     def update_pursuit(
         self,
@@ -288,20 +288,25 @@ class PlayerStatusAggregate(AggregateRoot):
         last_known: Optional[PursuitLastKnownState] = None,
     ) -> bool:
         """意味のある変化があるときだけ追跡状態を更新する。"""
-        if self._pursuit_state is None:
-            raise ValueError("Cannot update pursuit when no active pursuit exists.")
+        if not self._pursuit_state.has_active_pursuit:
+            raise NoActivePursuitException(
+                "追跡中でない状態では追跡の更新はできません。",
+            )
 
         current_state = self._pursuit_state
         target_id = current_state.target_id
         if target_snapshot is not None and target_snapshot.target_id != target_id:
-            raise ValueError("Cannot update pursuit with a different target_id.")
+            raise PursuitTargetMismatchException(
+                "追跡更新時の target_snapshot の target_id が現行の追跡対象と一致しません。",
+            )
 
-        next_snapshot = target_snapshot if target_snapshot is not None else current_state.target_snapshot
-        next_last_known = self._coerce_last_known(target_id, next_snapshot, last_known or current_state.last_known)
-        next_state = PursuitState(
-            actor_id=current_state.actor_id,
-            target_id=target_id,
-            target_snapshot=next_snapshot,
+        next_last_known = self._coerce_last_known(
+            target_id,
+            target_snapshot if target_snapshot is not None else current_state.target_snapshot,
+            last_known or current_state.last_known,
+        )
+        next_state = self._pursuit_state.with_updated(
+            target_snapshot=target_snapshot,
             last_known=next_last_known,
         )
         if next_state == current_state:
@@ -314,7 +319,7 @@ class PlayerStatusAggregate(AggregateRoot):
                 aggregate_type="PlayerStatusAggregate",
                 actor_id=self.actor_world_object_id,
                 target_id=target_id,
-                target_snapshot=next_snapshot,
+                target_snapshot=next_state.target_snapshot,
                 last_known=next_last_known,
             )
         )
@@ -327,12 +332,16 @@ class PlayerStatusAggregate(AggregateRoot):
         target_snapshot: Optional[PursuitTargetSnapshot] = None,
     ) -> None:
         """追跡を失敗で終了し、失敗イベントを発行する。"""
-        if self._pursuit_state is None:
-            raise ValueError("Cannot fail pursuit when no active pursuit exists.")
+        if not self._pursuit_state.has_active_pursuit:
+            raise NoActivePursuitException(
+                "追跡中でない状態では追跡の失敗処理はできません。",
+            )
 
         current_state = self._pursuit_state
         next_snapshot = target_snapshot if target_snapshot is not None else current_state.target_snapshot
-        next_last_known = self._coerce_last_known(current_state.target_id, next_snapshot, last_known or current_state.last_known)
+        next_last_known = self._coerce_last_known(
+            current_state.target_id, next_snapshot, last_known or current_state.last_known
+        )
         self.add_event(
             PursuitFailedEvent.create(
                 aggregate_id=self.actor_world_object_id,
@@ -344,7 +353,7 @@ class PlayerStatusAggregate(AggregateRoot):
                 target_snapshot=next_snapshot,
             )
         )
-        self._pursuit_state = None
+        self._pursuit_state = self._pursuit_state.cleared()
 
     def cancel_pursuit(
         self,
@@ -352,12 +361,16 @@ class PlayerStatusAggregate(AggregateRoot):
         target_snapshot: Optional[PursuitTargetSnapshot] = None,
     ) -> None:
         """追跡を明示的に中断し、中断イベントを発行する。"""
-        if self._pursuit_state is None:
-            raise ValueError("Cannot cancel pursuit when no active pursuit exists.")
+        if not self._pursuit_state.has_active_pursuit:
+            raise NoActivePursuitException(
+                "追跡中でない状態では追跡の中断はできません。",
+            )
 
         current_state = self._pursuit_state
         next_snapshot = target_snapshot if target_snapshot is not None else current_state.target_snapshot
-        next_last_known = self._coerce_last_known(current_state.target_id, next_snapshot, last_known or current_state.last_known)
+        next_last_known = self._coerce_last_known(
+            current_state.target_id, next_snapshot, last_known or current_state.last_known
+        )
         self.add_event(
             PursuitCancelledEvent.create(
                 aggregate_id=self.actor_world_object_id,
@@ -368,7 +381,7 @@ class PlayerStatusAggregate(AggregateRoot):
                 target_snapshot=next_snapshot,
             )
         )
-        self._pursuit_state = None
+        self._pursuit_state = self._pursuit_state.cleared()
 
     def _coerce_last_known(
         self,
@@ -378,10 +391,14 @@ class PlayerStatusAggregate(AggregateRoot):
     ) -> PursuitLastKnownState:
         if last_known is not None:
             if last_known.target_id != target_id:
-                raise ValueError("last_known target_id must match the pursuit target.")
+                raise PursuitLastKnownMismatchException(
+                    "last_known の target_id は追跡対象と一致している必要があります。",
+                )
             return last_known
         if target_snapshot is None:
-            raise ValueError("Pursuit requires target_snapshot or last_known state.")
+            raise PursuitStateRequiredException(
+                "追跡には target_snapshot または last_known のいずれかを指定してください。",
+            )
         return PursuitLastKnownState(
             target_id=target_snapshot.target_id,
             spot_id=target_snapshot.spot_id,
@@ -390,18 +407,8 @@ class PlayerStatusAggregate(AggregateRoot):
 
     def advance_path(self) -> Optional[Coordinate]:
         """経路を1ステップ進める。次に進むべき座標を返し、経路から削除する。"""
-        if not self._planned_path:
-            return None
-        
-        # [0] は現在地のはずなので、[1] を返す
-        if len(self._planned_path) < 2:
-            self.clear_path()
-            return None
-            
-        next_coord = self._planned_path.pop(1)
-        if len(self._planned_path) <= 1:
-            self.clear_path()
-            
+        next_coord, new_state = self._navigation_state.advance_step()
+        self._navigation_state = new_state
         return next_coord
 
     def update_location(
@@ -411,13 +418,15 @@ class PlayerStatusAggregate(AggregateRoot):
         current_tick: Optional[WorldTick] = None,
     ) -> None:
         """現在地を更新する"""
-        if self._current_spot_id == spot_id and self._current_coordinate == coordinate:
+        if self._navigation_state.current_spot_id == spot_id and self._navigation_state.current_coordinate == coordinate:
             return
 
-        old_spot_id = self._current_spot_id
-        old_coordinate = self._current_coordinate
-        self._current_spot_id = spot_id
-        self._current_coordinate = coordinate
+        old_spot_id = self._navigation_state.current_spot_id
+        old_coordinate = self._navigation_state.current_coordinate
+        self._navigation_state = self._navigation_state.with_location_updated(
+            spot_id=spot_id,
+            coordinate=coordinate,
+        )
 
         self.add_event(PlayerLocationChangedEvent.create(
             aggregate_id=self._player_id,
@@ -737,7 +746,9 @@ class PlayerStatusAggregate(AggregateRoot):
             ValueError: 既にダウン状態でない場合
         """
         if not self._is_down:
-            raise ValueError("プレイヤーは戦闘不能状態ではありません")
+            raise PlayerNotDownedException(
+                "プレイヤーは戦闘不能状態ではありません。",
+            )
 
         # HPを渡された率に応じて回復
         recovery_hp = int(self._base_stats.max_hp * hp_recovery_rate)

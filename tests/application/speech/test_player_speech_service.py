@@ -13,6 +13,7 @@ from ai_rpg_world.application.speech.exceptions import (
     PlayerLocationNotSetException,
 )
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -32,9 +33,14 @@ def _make_status(
     player_id: int,
     spot_id: int = 1,
     coord: Coordinate = None,
+    navigation_state: PlayerNavigationState | None = None,
 ) -> PlayerStatusAggregate:
     if coord is None:
         coord = Coordinate(0, 0, 0)
+    nav = navigation_state or PlayerNavigationState.from_parts(
+        current_spot_id=SpotId(spot_id),
+        current_coordinate=coord,
+    )
     exp_table = ExpTable(100, 1.5)
     return PlayerStatusAggregate(
         player_id=PlayerId(player_id),
@@ -46,8 +52,7 @@ def _make_status(
         hp=Hp.create(100, 100),
         mp=Mp.create(50, 50),
         stamina=Stamina.create(100, 100),
-        current_spot_id=SpotId(spot_id),
-        current_coordinate=coord,
+        navigation_state=nav,
     )
 
 
@@ -124,9 +129,7 @@ class TestPlayerSpeechApplicationService:
 
     def test_speak_location_not_set_raises(self):
         """現在地未設定のプレイヤーで発言すると PlayerLocationNotSetException"""
-        status = _make_status(1, spot_id=1)
-        status._current_spot_id = None
-        status._current_coordinate = None
+        status = _make_status(1, spot_id=1, navigation_state=PlayerNavigationState.empty())
         repo = MagicMock()
         repo.find_by_id.return_value = status
         pub = MagicMock()

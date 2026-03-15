@@ -22,6 +22,7 @@ from ai_rpg_world.application.observation.services.recipient_strategies import (
 )
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.value_object.player_navigation_state import PlayerNavigationState
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
@@ -114,8 +115,10 @@ def _make_status(player_id: int, spot_id: int = 1) -> PlayerStatusAggregate:
         hp=Hp.create(100, 100),
         mp=Mp.create(50, 50),
         stamina=Stamina.create(100, 100),
-        current_spot_id=SpotId(spot_id),
-        current_coordinate=Coordinate(0, 0, 0),
+        navigation_state=PlayerNavigationState.from_parts(
+            current_spot_id=SpotId(spot_id),
+            current_coordinate=Coordinate(0, 0, 0),
+        ),
     )
 
 
