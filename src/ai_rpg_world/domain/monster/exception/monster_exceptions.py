@@ -73,3 +73,8 @@ class MonsterInsufficientMpException(MonsterDomainException, BusinessRuleExcepti
 class MonsterTemplateValidationException(MonsterDomainException, ValidationException):
     """モンスターテンプレートバリデーション例外"""
     error_code = "MONSTER.TEMPLATE_VALIDATION"
+
+
+class MonsterPursuitException(MonsterDomainException, StateException):
+    """モンスター追跡状態に関する例外（fail_pursuit の前提条件違反など）"""
+    error_code = "MONSTER.PURSUIT_STATE"
