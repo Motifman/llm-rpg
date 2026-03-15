@@ -237,6 +237,25 @@ class TestPlayerLocationQueryServiceBoundary:
 
         assert result is None
 
+    def test_returns_dto_with_empty_areas_when_physical_map_missing(
+        self, service, status_repo, profile_repo, spot_repo
+    ):
+        """PhysicalMap が存在しない場合、area_ids/area_names が空リスト、area_id/area_name が None になること"""
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(_make_profile(player_id))
+        status_repo.save(_make_status(player_id, spot_id, 0, 0))
+        spot_repo.save(Spot(SpotId(spot_id), "Spot", ""))
+        # phys_repo にマップを保存しない（spot のみ）
+
+        result = service.get_player_location(GetPlayerLocationQuery(player_id=player_id))
+
+        assert result is not None
+        assert result.area_ids == []
+        assert result.area_names == []
+        assert result.area_id is None
+        assert result.area_name is None
+
 
 class TestPlayerLocationQueryServiceExceptions:
     """例外ケース"""

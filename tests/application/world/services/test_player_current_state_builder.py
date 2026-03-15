@@ -14,6 +14,9 @@ from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentSta
 from ai_rpg_world.application.world.services.gateway_based_connected_spots_provider import (
     GatewayBasedConnectedSpotsProvider,
 )
+from ai_rpg_world.application.observation.services.player_audience_query_service import (
+    PlayerAudienceQueryService,
+)
 from ai_rpg_world.application.world.services.player_current_state_builder import (
     PlayerCurrentStateBuilder,
 )
@@ -138,8 +141,20 @@ class TestPlayerCurrentStateBuilder:
             spot_repository=spot_repo,
             connected_spots_provider=GatewayBasedConnectedSpotsProvider(phys_repo),
             game_time_provider=InMemoryGameTimeProvider(initial_tick=10),
+            player_audience_query=PlayerAudienceQueryService(status_repo),
         )
         return builder, status_repo, profile_repo, phys_repo, spot_repo
+
+    def test_raises_value_error_when_player_audience_query_is_none(self):
+        """player_audience_query が None の場合、コンストラクタで ValueError が発生すること"""
+        with pytest.raises(ValueError, match="player_audience_query is required"):
+            PlayerCurrentStateBuilder(
+                player_status_repository=MagicMock(),
+                player_profile_repository=MagicMock(),
+                spot_repository=MagicMock(),
+                connected_spots_provider=MagicMock(),
+                player_audience_query=None,
+            )
 
     def test_build_player_current_state_populates_runtime_relevant_flags(self, setup_builder):
         builder, status_repo, profile_repo, phys_repo, spot_repo = setup_builder
@@ -281,10 +296,10 @@ class TestPlayerCurrentStateBuilder:
         assert result.area_name == "町の広場"
         assert result.current_location_description == "賑やかな市場が並ぶ中央広場。"
 
-    def test_build_player_current_state_tile_not_found_sets_terrain_type_none(
+    def test_build_player_current_state_tile_not_found_raises_value_error(
         self, setup_builder
     ):
-        """get_tile が TileNotFoundException のとき current_terrain_type は None"""
+        """get_tile が TileNotFoundException のとき ValueError を送出する（ドメインルール: プレイヤー座標は常にマップ内）"""
         builder, status_repo, profile_repo, phys_repo, spot_repo = setup_builder
         profile_repo.save(_make_profile(1, "Alice"))
         status = _make_status(1, 1, 0, 0)
@@ -301,24 +316,22 @@ class TestPlayerCurrentStateBuilder:
             "get_tile",
             side_effect=TileNotFoundException("Tile not found"),
         ):
-            result = builder.build_player_current_state(
-                query=GetPlayerCurrentStateQuery(player_id=1),
-                player_status=status,
-                player_name="Alice",
-                spot=spot_repo.find_by_id(SpotId(1)),
-                physical_map=physical_map,
-                available_moves_result=PlayerMovementOptionsDto(
-                    player_id=1,
+            with pytest.raises(ValueError, match="outside map bounds"):
+                builder.build_player_current_state(
+                    query=GetPlayerCurrentStateQuery(player_id=1),
+                    player_status=status,
                     player_name="Alice",
-                    current_spot_id=1,
-                    current_spot_name="Town",
-                    available_moves=[],
-                    total_available_moves=0,
-                ),
-            )
-        assert result.current_terrain_type is None
-        assert result.player_name == "Alice"
-        assert result.current_spot_name == "Town"
+                    spot=spot_repo.find_by_id(SpotId(1)),
+                    physical_map=physical_map,
+                    available_moves_result=PlayerMovementOptionsDto(
+                        player_id=1,
+                        player_name="Alice",
+                        current_spot_id=1,
+                        current_spot_name="Town",
+                        available_moves=[],
+                        total_available_moves=0,
+                    ),
+                )
 
     def test_build_player_current_state_without_location_area_has_none_description(
         self, setup_builder
@@ -721,6 +734,7 @@ class TestPlayerCurrentStateBuilder:
             connected_spots_provider=GatewayBasedConnectedSpotsProvider(phys_repo),
             game_time_provider=time_provider,
             world_time_config_service=world_time_config,
+            player_audience_query=PlayerAudienceQueryService(status_repo),
         )
         profile_repo.save(_make_profile(1, "Alice"))
         status = _make_status(1, 1, 0, 0)
@@ -765,6 +779,7 @@ class TestPlayerCurrentStateBuilder:
             connected_spots_provider=GatewayBasedConnectedSpotsProvider(phys_repo),
             game_time_provider=None,  # None
             world_time_config_service=world_time_config,
+            player_audience_query=PlayerAudienceQueryService(status_repo),
         )
         profile_repo.save(_make_profile(1, "Alice"))
         status = _make_status(1, 1, 0, 0)
@@ -846,6 +861,7 @@ class TestPlayerCurrentStateBuilder:
             connected_spots_provider=GatewayBasedConnectedSpotsProvider(phys_repo),
             game_time_provider=InMemoryGameTimeProvider(initial_tick=10),
             world_time_config_service=invalid_config,
+            player_audience_query=PlayerAudienceQueryService(status_repo),
         )
         profile_repo.save(_make_profile(1, "Alice"))
         status = _make_status(1, 1, 0, 0)
