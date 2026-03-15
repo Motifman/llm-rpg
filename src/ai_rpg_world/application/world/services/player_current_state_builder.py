@@ -46,6 +46,8 @@ from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.entity.world_object_component import HarvestableComponent
 
+from ai_rpg_world.application.common.interfaces import IPlayerAudienceQueryPort
+
 if TYPE_CHECKING:
     from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
     from ai_rpg_world.application.conversation.services.conversation_command_service import (
@@ -111,6 +113,7 @@ class PlayerCurrentStateBuilder:
         guild_repository: Optional["GuildRepository"] = None,
         shop_repository: Optional["ShopRepository"] = None,
         personal_trade_query_service: Optional["PersonalTradeQueryService"] = None,
+        player_audience_query: Optional[IPlayerAudienceQueryPort] = None,
     ) -> None:
         self._player_status_repository = player_status_repository
         self._player_profile_repository = player_profile_repository
@@ -128,6 +131,7 @@ class PlayerCurrentStateBuilder:
         self._guild_repository = guild_repository
         self._shop_repository = shop_repository
         self._personal_trade_query_service = personal_trade_query_service
+        self._player_audience_query = player_audience_query
         self._visible_object_builder = VisibleObjectReadModelBuilder(
             player_profile_repository=player_profile_repository,
             monster_repository=monster_repository,
@@ -207,11 +211,17 @@ class PlayerCurrentStateBuilder:
         area_name = area_names[0] if area_names else None
         area_description = areas[0].description if areas else None
 
-        current_player_ids = {
-            int(s.player_id)
-            for s in self._player_status_repository.find_all()
-            if s.current_spot_id == player_status.current_spot_id
-        }
+        if self._player_audience_query is not None:
+            player_ids_at_spot = self._player_audience_query.players_at_spot(
+                player_status.current_spot_id
+            )
+            current_player_ids = {int(p.value) for p in player_ids_at_spot}
+        else:
+            current_player_ids = {
+                int(s.player_id)
+                for s in self._player_status_repository.find_all()
+                if s.current_spot_id == player_status.current_spot_id
+            }
         connected_spot_ids = set()
         connected_spot_names = set()
         for conn_id in self._connected_spots_provider.get_connected_spots(
