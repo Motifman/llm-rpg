@@ -471,31 +471,41 @@ class TestMonsterAggregate:
 
             assert monster.behavior_state == BehaviorStateEnum.FLEE
             assert monster.pursuit_state is None
-            monster._template = replace(monster.template, territory_radius=1)
-            monster._behavior_state = MonsterBehaviorState.from_legacy(
+            template_with_territory = replace(monster.template, territory_radius=1)
+            chase_state = MonsterBehaviorState.from_parts(
                 state=BehaviorStateEnum.CHASE,
                 target_id=WorldObjectId.create(2003),
                 last_known_position=Coordinate(2, 0, 0),
                 initial_position=Coordinate(0, 0, 0),
             )
-            monster._pursuit_state = MonsterPursuitState(
+            chase_pursuit = MonsterPursuitState(
                 pursuit=PursuitState(
-                actor_id=monster.world_object_id,
-                target_id=WorldObjectId.create(2003),
-                target_snapshot=PursuitTargetSnapshot(
+                    actor_id=monster.world_object_id,
                     target_id=WorldObjectId.create(2003),
-                    spot_id=spot_id,
-                    coordinate=Coordinate(2, 0, 0),
-                ),
-                last_known=PursuitLastKnownState(
-                    target_id=WorldObjectId.create(2003),
-                    spot_id=spot_id,
-                    coordinate=Coordinate(2, 0, 0),
-                    observed_at_tick=WorldTick(3),
-                ),
+                    target_snapshot=PursuitTargetSnapshot(
+                        target_id=WorldObjectId.create(2003),
+                        spot_id=spot_id,
+                        coordinate=Coordinate(2, 0, 0),
+                    ),
+                    last_known=PursuitLastKnownState(
+                        target_id=WorldObjectId.create(2003),
+                        spot_id=spot_id,
+                        coordinate=Coordinate(2, 0, 0),
+                        observed_at_tick=WorldTick(3),
+                    ),
                 ),
             )
-
+            monster = MonsterAggregate.reconstitute(
+                monster_id=monster.monster_id,
+                template=template_with_territory,
+                world_object_id=monster.world_object_id,
+                skill_loadout=monster.skill_loadout,
+                coordinate=Coordinate(0, 0, 0),
+                spot_id=spot_id,
+                current_tick=WorldTick(3),
+                behavior_state=chase_state,
+                pursuit_state=chase_pursuit,
+            )
             monster.apply_territory_return_if_needed(Coordinate(999, 999, 0))
 
             assert monster.behavior_state == BehaviorStateEnum.RETURN
@@ -1661,15 +1671,37 @@ class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
             assert any(isinstance(e, TargetSpottedEvent) for e in events)
             assert any(isinstance(e, ActorStateChangedEvent) for e in events)
 
-        def test_apply_behavior_transition_lost_target_moves_chase_to_search(self, spawned_monster):
+        def test_apply_behavior_transition_lost_target_moves_chase_to_search(
+            self, base_stats, reward_info, respawn_info, skill_loadout, spot_id
+        ):
             """CHASE で対象を見失うと SEARCH に遷移し、既知座標イベントを残すこと"""
-            spawned_monster.clear_events()
-            spawned_monster._behavior_state = MonsterBehaviorState.from_legacy(
+            template = MonsterTemplate(
+                template_id=MonsterTemplateId.create(1),
+                name="Slime",
+                base_stats=base_stats,
+                reward_info=reward_info,
+                respawn_info=respawn_info,
+                race=Race.BEAST,
+                faction=MonsterFactionEnum.ENEMY,
+                description="A weak blue slime.",
+            )
+            chase_state = MonsterBehaviorState.from_parts(
                 state=BehaviorStateEnum.CHASE,
                 target_id=WorldObjectId(321),
                 last_known_position=Coordinate(7, 8, 0),
-                initial_position=spawned_monster.behavior_initial_position,
+                initial_position=Coordinate(0, 0, 0),
             )
+            spawned_monster = MonsterAggregate.reconstitute(
+                monster_id=MonsterId.create(1),
+                template=template,
+                world_object_id=WorldObjectId.create(1001),
+                skill_loadout=skill_loadout,
+                coordinate=Coordinate(0, 0, 0),
+                spot_id=spot_id,
+                current_tick=WorldTick(0),
+                behavior_state=chase_state,
+            )
+            spawned_monster.clear_events()
 
             result = StateTransitionResult(
                 do_lose_target=True,
@@ -1716,18 +1748,21 @@ class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
                 description="x",
                 territory_radius=5,
             )
-            agg = MonsterAggregate.create(
-                monster_id=MonsterId.create(2),
-                template=template,
-                world_object_id=WorldObjectId(2),
-                skill_loadout=skill_loadout,
-            )
-            agg.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            agg._behavior_state = MonsterBehaviorState.from_legacy(
+            chase_state = MonsterBehaviorState.from_parts(
                 state=BehaviorStateEnum.CHASE,
                 target_id=None,
                 last_known_position=None,
                 initial_position=Coordinate(0, 0, 0),
+            )
+            agg = MonsterAggregate.reconstitute(
+                monster_id=MonsterId.create(2),
+                template=template,
+                world_object_id=WorldObjectId(2),
+                skill_loadout=skill_loadout,
+                coordinate=Coordinate(0, 0, 0),
+                spot_id=spot_id,
+                current_tick=WorldTick(0),
+                behavior_state=chase_state,
             )
             agg.clear_events()
             # 座標 (10, 0, 0) は初期位置 (0,0,0) から距離 10 > territory_radius 5
@@ -1755,18 +1790,21 @@ class TestMonsterAggregateBehaviorState(TestMonsterAggregate):
                 description="x",
                 territory_radius=10,
             )
-            agg = MonsterAggregate.create(
-                monster_id=MonsterId.create(2),
-                template=template,
-                world_object_id=WorldObjectId(2),
-                skill_loadout=skill_loadout,
-            )
-            agg.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
-            agg._behavior_state = MonsterBehaviorState.from_legacy(
+            chase_state = MonsterBehaviorState.from_parts(
                 state=BehaviorStateEnum.CHASE,
                 target_id=None,
                 last_known_position=None,
                 initial_position=Coordinate(0, 0, 0),
+            )
+            agg = MonsterAggregate.reconstitute(
+                monster_id=MonsterId.create(2),
+                template=template,
+                world_object_id=WorldObjectId(2),
+                skill_loadout=skill_loadout,
+                coordinate=Coordinate(0, 0, 0),
+                spot_id=spot_id,
+                current_tick=WorldTick(0),
+                behavior_state=chase_state,
             )
             agg.clear_events()
             agg.apply_territory_return_if_needed(Coordinate(2, 0, 0))
