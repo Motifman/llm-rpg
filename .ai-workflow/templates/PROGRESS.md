@@ -24,6 +24,8 @@ branch: codex/example-feature
 - Tests:
 - Findings:
 - Plan updates:
+- Goal check:
+- Next-phase impact:
 
 ## Phase 2
 
@@ -33,3 +35,5 @@ branch: codex/example-feature
 - Tests:
 - Findings:
 - Plan updates:
+- Goal check:
+- Next-phase impact:

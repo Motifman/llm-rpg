@@ -248,10 +248,25 @@ def _check_feature(feature_dir: Path) -> list[str]:
 
     if not _has_header(idea_text, "Goal"):
         findings.append("IDEA.md missing Goal section")
+    if not _has_header(idea_text, "Success Signals"):
+        findings.append("IDEA.md missing Success Signals section")
+    if not _has_header(idea_text, "Non-Goals"):
+        findings.append("IDEA.md missing Non-Goals section")
     if not _has_header(idea_text, "Code Context"):
         findings.append("IDEA.md missing Code Context section")
+    if not _has_header(idea_text, "Alignment Notes"):
+        findings.append("IDEA.md missing Alignment Notes section")
     if _looks_like_placeholder(re.search(r"(?s)# Goal\n\n(.+?)(?:\n# |\Z)", idea_text).group(1).strip()) if re.search(r"(?s)# Goal\n\n(.+?)(?:\n# |\Z)", idea_text) else True:
         findings.append("IDEA.md goal is still placeholder or empty")
+    success_signals = re.findall(r"(?m)^- .+\S$", idea_text.split("# Success Signals", 1)[1].split("#", 1)[0]) if "# Success Signals" in idea_text else []
+    if len(success_signals) < 2:
+        findings.append("IDEA.md success signals should contain at least two concrete bullets")
+    non_goals = re.findall(r"(?m)^- .+\S$", idea_text.split("# Non-Goals", 1)[1].split("#", 1)[0]) if "# Non-Goals" in idea_text else []
+    if len(non_goals) < 1:
+        findings.append("IDEA.md should contain at least one non-goal bullet")
+    for label in ("Initial interpretation", "User-confirmed intent", "Cost or complexity concerns raised during discussion"):
+        if not _has_nonempty_bullet(idea_text, label):
+            findings.append(f"IDEA.md missing alignment value for '{label}'")
     if "Question 1" in idea_text or "Question 2" in idea_text:
         findings.append("IDEA.md still contains template open questions")
 
@@ -259,6 +274,8 @@ def _check_feature(feature_dir: Path) -> list[str]:
         findings.append("PLAN.md missing Objective section")
     if not _has_header(plan_text, "Success Criteria"):
         findings.append("PLAN.md missing Success Criteria section")
+    if not _has_header(plan_text, "Alignment Loop"):
+        findings.append("PLAN.md missing Alignment Loop section")
     if not _has_header(plan_text, "Review Standard"):
         findings.append("PLAN.md missing Review Standard section")
     if not _has_header(plan_text, "Change Log"):
@@ -269,6 +286,14 @@ def _check_feature(feature_dir: Path) -> list[str]:
     success_bullets = re.findall(r"(?m)^- .+\S$", plan_text.split("# Success Criteria", 1)[1].split("#", 1)[0]) if "# Success Criteria" in plan_text else []
     if len(success_bullets) < 2:
         findings.append("PLAN.md success criteria should contain at least two concrete bullets")
+    for label in (
+        "Initial phase proposal",
+        "User-confirmed success definition",
+        "User-confirmed phase ordering",
+        "Cost or scope tradeoffs discussed",
+    ):
+        if not _has_nonempty_bullet(plan_text, label):
+            findings.append(f"PLAN.md missing alignment value for '{label}'")
 
     phase_blocks = _extract_phase_blocks(plan_text)
     if not phase_blocks:
@@ -299,7 +324,7 @@ def _check_feature(feature_dir: Path) -> list[str]:
         start = match.start()
         end = phase_journal_matches[index].start() if index < len(phase_journal_matches) else len(progress_text)
         block = progress_text[start:end]
-        for field in ("Started", "Completed", "Commit", "Tests", "Findings", "Plan updates"):
+        for field in ("Started", "Completed", "Commit", "Tests", "Findings", "Plan updates", "Goal check", "Next-phase impact"):
             if not _has_nonempty_bullet(block, field):
                 findings.append(f"PROGRESS.md phase journal {index} is missing a value for '{field}'")
 

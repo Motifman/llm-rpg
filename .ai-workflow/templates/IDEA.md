@@ -14,6 +14,15 @@ related_idea_file: null
 
 What user value are we trying to create?
 
+# Success Signals
+
+- What would make the user say this idea succeeded?
+- What observable behavior matters most?
+
+# Non-Goals
+
+- What should this idea explicitly avoid doing now?
+
 # Problem
 
 What is painful, unclear, or missing today?
@@ -34,6 +43,12 @@ What is painful, unclear, or missing today?
 
 - Question 1
 - Question 2
+
+# Alignment Notes
+
+- Initial interpretation:
+- User-confirmed intent:
+- Cost or complexity concerns raised during discussion:
 
 # Promotion Criteria
 
