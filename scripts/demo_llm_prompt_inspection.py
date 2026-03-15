@@ -62,7 +62,7 @@ from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
     ObservationOutput,
 )
-from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
+from ai_rpg_world.application.world.world_query_wiring import create_world_query_service
 from ai_rpg_world.application.world.services.gateway_based_connected_spots_provider import (
     GatewayBasedConnectedSpotsProvider,
 )
@@ -139,7 +139,7 @@ def _setup_components(
     spot_repo.save(Spot(SpotId(2), "隣のエリア", "草原が広がる"))
 
     connected = GatewayBasedConnectedSpotsProvider(phys_repo)
-    world_query = WorldQueryService(
+    world_query = create_world_query_service(
         player_status_repository=status_repo,
         player_profile_repository=profile_repo,
         physical_map_repository=phys_repo,

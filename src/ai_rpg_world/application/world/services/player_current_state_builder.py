@@ -24,8 +24,8 @@ from ai_rpg_world.application.world.services.visible_object_read_model_builder i
 from ai_rpg_world.application.world.services.visible_tile_map_builder import (
     VisibleTileMapBuilder,
 )
-from ai_rpg_world.application.world.services.player_supplemental_context_builder import (
-    PlayerSupplementalContextBuilder,
+from ai_rpg_world.application.world.services.player_runtime_context_builder import (
+    PlayerRuntimeContextBuilder,
 )
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -136,7 +136,7 @@ class PlayerCurrentStateBuilder:
             monster_repository=monster_repository,
         )
         self._visible_tile_map_builder = VisibleTileMapBuilder()
-        self._supplemental_context_builder = PlayerSupplementalContextBuilder(
+        self._runtime_context_builder = PlayerRuntimeContextBuilder(
             player_inventory_repository=player_inventory_repository,
             item_repository=item_repository,
             conversation_command_service=conversation_command_service,
@@ -332,40 +332,40 @@ class PlayerCurrentStateBuilder:
             is_busy=is_busy,
             busy_until_tick=busy_until_tick,
             has_active_path=has_active_path,
-            inventory_items=self._supplemental_context_builder.build_inventory_items(player_id),
-            chest_items=self._supplemental_context_builder.build_chest_items(physical_map, visible_objects),
-            active_conversation=self._supplemental_context_builder.build_active_conversation(
+            inventory_items=self._runtime_context_builder.build_inventory_items(player_id),
+            chest_items=self._runtime_context_builder.build_chest_items(physical_map, visible_objects),
+            active_conversation=self._runtime_context_builder.build_active_conversation(
                 query.player_id, visible_objects
             ),
             active_harvest=active_harvest,
-            active_quest_ids=self._supplemental_context_builder.build_active_quest_ids(query.player_id),
-            guild_ids=self._supplemental_context_builder.build_guild_ids(query.player_id),
-            nearby_shop_ids=self._supplemental_context_builder.build_nearby_shop_ids(
+            active_quest_ids=self._runtime_context_builder.build_active_quest_ids(query.player_id),
+            guild_ids=self._runtime_context_builder.build_guild_ids(query.player_id),
+            nearby_shop_ids=self._runtime_context_builder.build_nearby_shop_ids(
                 int(player_status.current_spot_id), area_ids
             ),
-            active_quests=self._supplemental_context_builder.build_active_quests(query.player_id),
-            guild_memberships=self._supplemental_context_builder.build_guild_memberships(
+            active_quests=self._runtime_context_builder.build_active_quests(query.player_id),
+            guild_memberships=self._runtime_context_builder.build_guild_memberships(
                 query.player_id, area_ids
             ),
-            nearby_shops=self._supplemental_context_builder.build_nearby_shops(
+            nearby_shops=self._runtime_context_builder.build_nearby_shops(
                 int(player_status.current_spot_id), area_ids
             ),
-            available_trades=self._supplemental_context_builder.build_available_trades(query.player_id),
-            usable_skills=self._supplemental_context_builder.build_usable_skills(query.player_id),
-            equipable_skill_candidates=self._supplemental_context_builder.build_equipable_skill_candidates(
+            available_trades=self._runtime_context_builder.build_available_trades(query.player_id),
+            usable_skills=self._runtime_context_builder.build_usable_skills(query.player_id),
+            equipable_skill_candidates=self._runtime_context_builder.build_equipable_skill_candidates(
                 query.player_id
             ),
-            skill_equip_slots=self._supplemental_context_builder.build_skill_equip_slots(
+            skill_equip_slots=self._runtime_context_builder.build_skill_equip_slots(
                 query.player_id
             ),
-            pending_skill_proposals=self._supplemental_context_builder.build_pending_skill_proposals(
+            pending_skill_proposals=self._runtime_context_builder.build_pending_skill_proposals(
                 query.player_id
             ),
-            awakened_action=self._supplemental_context_builder.build_awakened_action(
+            awakened_action=self._runtime_context_builder.build_awakened_action(
                 query.player_id
             ),
-            attention_level_options=self._supplemental_context_builder.build_attention_level_options(),
-            can_destroy_placeable=self._supplemental_context_builder.can_destroy_placeable(
+            attention_level_options=self._runtime_context_builder.build_attention_level_options(),
+            can_destroy_placeable=self._runtime_context_builder.can_destroy_placeable(
                 physical_map, query.player_id
             ),
             actionable_objects=actionable_objects,
