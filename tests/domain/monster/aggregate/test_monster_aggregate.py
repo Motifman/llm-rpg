@@ -39,6 +39,7 @@ from ai_rpg_world.domain.monster.exception.monster_exceptions import (
     MonsterInsufficientMpException,
     MonsterNotDeadException,
     MonsterNotSpawnedException,
+    MonsterPursuitException,
     MonsterRespawnIntervalNotMetException,
 )
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
@@ -444,6 +445,58 @@ class TestMonsterAggregate:
                 event for event in monster.get_events() if isinstance(event, PursuitFailedEvent)
             )
             assert failed.failure_reason == PursuitFailureReason.TARGET_MISSING
+
+        def test_fail_pursuit_when_no_active_pursuit_raises(
+            self, monster: MonsterAggregate, spot_id: SpotId
+        ):
+            """追跡なしで fail_pursuit すると MonsterPursuitException"""
+            monster.spawn(Coordinate(0, 0, 0), spot_id, WorldTick(0))
+            with pytest.raises(MonsterPursuitException, match="no active pursuit"):
+                monster.fail_pursuit(
+                    PursuitFailureReason.TARGET_MISSING,
+                    current_tick=WorldTick(0),
+                )
+
+        def test_fail_pursuit_when_no_last_known_state_raises(
+            self,
+            monster_template: MonsterTemplate,
+            skill_loadout: SkillLoadoutAggregate,
+            spot_id: SpotId,
+        ):
+            """pursuit はあるが last_known も behavior_last_known_position もない場合 MonsterPursuitException"""
+            # PursuitState(target_snapshot=あり, last_known=None) かつ behavior_state.last_known_position=None
+            agg = MonsterAggregate.reconstitute(
+                monster_id=MonsterId.create(1),
+                template=monster_template,
+                world_object_id=WorldObjectId.create(1001),
+                skill_loadout=skill_loadout,
+                coordinate=Coordinate(0, 0, 0),
+                spot_id=spot_id,
+                current_tick=WorldTick(0),
+                behavior_state=MonsterBehaviorState.from_parts(
+                    state=BehaviorStateEnum.CHASE,
+                    target_id=WorldObjectId.create(2011),
+                    last_known_position=None,
+                    initial_position=Coordinate(0, 0, 0),
+                ),
+                pursuit_state=MonsterPursuitState(
+                    pursuit=PursuitState(
+                        actor_id=WorldObjectId.create(1001),
+                        target_id=WorldObjectId.create(2011),
+                        target_snapshot=PursuitTargetSnapshot(
+                            target_id=WorldObjectId.create(2011),
+                            spot_id=spot_id,
+                            coordinate=Coordinate(3, 0, 0),
+                        ),
+                        last_known=None,
+                    )
+                ),
+            )
+            with pytest.raises(MonsterPursuitException, match="last-known state"):
+                agg.fail_pursuit(
+                    PursuitFailureReason.TARGET_MISSING,
+                    current_tick=WorldTick(0),
+                )
 
         def test_non_pursuit_exit_clears_aligned_pursuit_state(
             self, monster: MonsterAggregate, spot_id: SpotId

@@ -9,6 +9,9 @@ MonsterAggregate が持つ餌場記憶（object_id + coordinate）を LRU で保
 from dataclasses import dataclass
 from typing import Tuple
 
+from ai_rpg_world.domain.monster.exception.monster_exceptions import (
+    MonsterStatsValidationException,
+)
 from ai_rpg_world.domain.monster.value_object.feed_memory_entry import FeedMemoryEntry
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
@@ -30,7 +33,7 @@ class FeedMemory:
 
     def __post_init__(self) -> None:
         if len(self._entries) > MAX_FEED_MEMORIES:
-            raise ValueError(
+            raise MonsterStatsValidationException(
                 f"FeedMemory cannot hold more than {MAX_FEED_MEMORIES} entries, got {len(self._entries)}"
             )
 
