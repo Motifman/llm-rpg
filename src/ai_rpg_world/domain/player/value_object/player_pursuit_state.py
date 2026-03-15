@@ -15,6 +15,7 @@ from ai_rpg_world.domain.pursuit.value_object.pursuit_state import PursuitState
 from ai_rpg_world.domain.pursuit.value_object.pursuit_target_snapshot import (
     PursuitTargetSnapshot,
 )
+from ai_rpg_world.domain.player.exception import NoActivePursuitException
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
@@ -92,12 +93,14 @@ class PlayerPursuitState:
     ) -> "PlayerPursuitState":
         """
         追跡対象を更新した新しい状態を返す。
-        追跡中でない場合は ValueError を送出する。
+        追跡中でない場合は NoActivePursuitException を送出する。
         target_snapshot が None のときは現在の target_snapshot を保持する。
         変更がなければ self を返す（同一インスタンス）。
         """
         if self.pursuit is None:
-            raise ValueError("Cannot update pursuit when no active pursuit exists.")
+            raise NoActivePursuitException(
+                "追跡中でない状態では追跡の更新は行えません。"
+            )
         next_snapshot = (
             target_snapshot if target_snapshot is not None else self.pursuit.target_snapshot
         )

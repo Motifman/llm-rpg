@@ -32,11 +32,17 @@ from ai_rpg_world.domain.player.event.status_events import (
 )
 from ai_rpg_world.domain.player.event.conversation_events import PlayerSpokeEvent
 from ai_rpg_world.domain.player.exception import (
+    CannotSwitchPursuitTargetException,
     InsufficientMpException,
     InsufficientStaminaException,
     InsufficientHpException,
     InsufficientGoldException,
+    NoActivePursuitException,
     PlayerDownedException,
+    PlayerNotDownedException,
+    PursuitLastKnownMismatchException,
+    PursuitStateRequiredException,
+    PursuitTargetMismatchException,
     SpeechValidationException,
 )
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
@@ -253,7 +259,9 @@ class PlayerStatusAggregate(AggregateRoot):
         """追跡を開始し、開始イベントを発行する。"""
         target_id = target_snapshot.target_id
         if self._pursuit_state.has_active_pursuit and self._pursuit_state.target_id != target_id:
-            raise ValueError("Switching pursuit targets requires ending the current pursuit first.")
+            raise CannotSwitchPursuitTargetException(
+                "追跡対象を切り替えるには、先に現在の追跡を終了してください。",
+            )
 
         resolved_last_known = self._coerce_last_known(target_id, target_snapshot, last_known)
         self._pursuit_state = self._pursuit_state.with_started(
@@ -281,12 +289,16 @@ class PlayerStatusAggregate(AggregateRoot):
     ) -> bool:
         """意味のある変化があるときだけ追跡状態を更新する。"""
         if not self._pursuit_state.has_active_pursuit:
-            raise ValueError("Cannot update pursuit when no active pursuit exists.")
+            raise NoActivePursuitException(
+                "追跡中でない状態では追跡の更新はできません。",
+            )
 
         current_state = self._pursuit_state
         target_id = current_state.target_id
         if target_snapshot is not None and target_snapshot.target_id != target_id:
-            raise ValueError("Cannot update pursuit with a different target_id.")
+            raise PursuitTargetMismatchException(
+                "追跡更新時の target_snapshot の target_id が現行の追跡対象と一致しません。",
+            )
 
         next_last_known = self._coerce_last_known(
             target_id,
@@ -321,7 +333,9 @@ class PlayerStatusAggregate(AggregateRoot):
     ) -> None:
         """追跡を失敗で終了し、失敗イベントを発行する。"""
         if not self._pursuit_state.has_active_pursuit:
-            raise ValueError("Cannot fail pursuit when no active pursuit exists.")
+            raise NoActivePursuitException(
+                "追跡中でない状態では追跡の失敗処理はできません。",
+            )
 
         current_state = self._pursuit_state
         next_snapshot = target_snapshot if target_snapshot is not None else current_state.target_snapshot
@@ -348,7 +362,9 @@ class PlayerStatusAggregate(AggregateRoot):
     ) -> None:
         """追跡を明示的に中断し、中断イベントを発行する。"""
         if not self._pursuit_state.has_active_pursuit:
-            raise ValueError("Cannot cancel pursuit when no active pursuit exists.")
+            raise NoActivePursuitException(
+                "追跡中でない状態では追跡の中断はできません。",
+            )
 
         current_state = self._pursuit_state
         next_snapshot = target_snapshot if target_snapshot is not None else current_state.target_snapshot
@@ -375,10 +391,14 @@ class PlayerStatusAggregate(AggregateRoot):
     ) -> PursuitLastKnownState:
         if last_known is not None:
             if last_known.target_id != target_id:
-                raise ValueError("last_known target_id must match the pursuit target.")
+                raise PursuitLastKnownMismatchException(
+                    "last_known の target_id は追跡対象と一致している必要があります。",
+                )
             return last_known
         if target_snapshot is None:
-            raise ValueError("Pursuit requires target_snapshot or last_known state.")
+            raise PursuitStateRequiredException(
+                "追跡には target_snapshot または last_known のいずれかを指定してください。",
+            )
         return PursuitLastKnownState(
             target_id=target_snapshot.target_id,
             spot_id=target_snapshot.spot_id,
@@ -726,7 +746,9 @@ class PlayerStatusAggregate(AggregateRoot):
             ValueError: 既にダウン状態でない場合
         """
         if not self._is_down:
-            raise ValueError("プレイヤーは戦闘不能状態ではありません")
+            raise PlayerNotDownedException(
+                "プレイヤーは戦闘不能状態ではありません。",
+            )
 
         # HPを渡された率に応じて回復
         recovery_hp = int(self._base_stats.max_hp * hp_recovery_rate)

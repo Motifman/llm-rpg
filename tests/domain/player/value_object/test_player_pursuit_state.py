@@ -6,6 +6,8 @@ PlayerPursuitState のテスト
 
 import pytest
 
+from ai_rpg_world.domain.player.exception import NoActivePursuitException
+from ai_rpg_world.domain.player.exception import NoActivePursuitException
 from ai_rpg_world.domain.player.value_object.player_pursuit_state import PlayerPursuitState
 from ai_rpg_world.domain.pursuit.value_object.pursuit_last_known_state import (
     PursuitLastKnownState,
@@ -316,8 +318,8 @@ class TestPlayerPursuitStateWithUpdated:
         assert updated.target_snapshot == original_snapshot
         assert updated.last_known == new_last_known
 
-    def test_with_updated_empty_raises_value_error(self):
-        """追跡なしの状態で with_updated は ValueError を送出"""
+    def test_with_updated_empty_raises_no_active_pursuit_exception(self):
+        """追跡なしの状態で with_updated は NoActivePursuitException を送出"""
         empty = PlayerPursuitState.empty()
         last_known = PursuitLastKnownState(
             target_id=WorldObjectId(999),
@@ -325,7 +327,7 @@ class TestPlayerPursuitStateWithUpdated:
             coordinate=Coordinate(0, 0, 0),
             observed_at_tick=None,
         )
-        with pytest.raises(ValueError, match="Cannot update pursuit when no active pursuit exists"):
+        with pytest.raises(NoActivePursuitException, match="追跡中でない"):
             empty.with_updated(
                 target_snapshot=None,
                 last_known=last_known,
