@@ -107,6 +107,22 @@ class TestInMemoryUnitOfWork:
         # コミット時にイベントパブリッシャーのpublish_pending_eventsが呼ばれたことを確認
         mock_event_publisher.publish_pending_events.assert_called_once()
 
+    def test_async_event_processing_failure_re_raises_exception(self):
+        """非同期イベント処理で例外が発生した場合、握りつぶさず再送出する"""
+        mock_event_publisher = Mock()
+        mock_event_publisher._pending_events = []
+        mock_event_publisher.publish_pending_events = Mock(
+            side_effect=RuntimeError("Async handler failed")
+        )
+        self.unit_of_work._event_publisher = mock_event_publisher
+
+        event = Mock(spec=DomainEvent)
+        with pytest.raises(RuntimeError, match="Async handler failed"):
+            with self.unit_of_work:
+                self.unit_of_work.add_events([event])
+
+        mock_event_publisher.publish_pending_events.assert_called_once()
+
     def test_no_event_publishing_without_event_publisher(self):
         """イベントパブリッシャーが設定されていない場合のテスト"""
         event = Mock(spec=DomainEvent)
