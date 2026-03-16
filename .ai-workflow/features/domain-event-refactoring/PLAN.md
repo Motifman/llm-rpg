@@ -138,16 +138,103 @@ Sync/Async の使い分けを明確化し、トランザクション境界を DD
 - Reopen alignment if: Repository の変更が想定より大きく、InMemoryRepositoryBase を継承していないリポジトリで漏れが発生
 - Notes: register_aggregate を完全削除する前に、全 Repository が InMemoryRepositoryBase を経由しているか確認する
 
-## Phase 5: UoW とイベント処理の完全分離（任意・長期）
+## Phase 5: UoW とイベント処理の完全分離
 
-- Goal: process_sync_events を UoW から外し、Application Service または TransactionalEventDispatcher の責務にする。UnitOfWork Protocol から process_sync_events を削除
-- Scope: Application Service が UoW の commit 前に EventPublisher.flush_sync_events を呼ぶ形に変更、または UoW の commit 内でイベント処理を委譲するインターフェース（ITransactionScope）を導入。UnitOfWork Protocol から process_sync_events を削除
+- Goal: process_sync_events を UoW から外し、SyncEventDispatcher の責務にする。UnitOfWork Protocol から process_sync_events を削除
+- Scope: SyncEventDispatcher の新設、commit 内委譲、Coordinator の呼び出し変更、UnitOfWork Protocol 更新、テストモック更新
 - Dependencies: Phase 4 完了
-- Parallelizable: 設計見直しが必要なため、単一の変更単位で実施
-- Success definition: UoW がイベント処理の詳細を知らない。全テスト通過
-- Checkpoint: 設計レビュー、全テスト通過
+- Parallelizable: Sub-phase 内は順次実施。5.1→5.2→5.3→5.4 の順
+- Success definition: UoW がイベント処理の詳細を知らない。全テスト通過。event-handler-patterns スキルの参照先更新
+- Checkpoint: 各 sub-phase でテスト通過確認
 - Reopen alignment if: 設計の見直しが必要になった、既存の process_sync_events 呼び出し元との整合が難しい
-- Notes: 本 Phase は任意。Phase 4 までで十分な改善が得られる場合は後回し可
+- Notes: Success Criteria 上 Phase 5 の完了をもって feature 全体の完了
+
+### Phase 5 調査結果（2026-03-17）
+
+**process_sync_events 呼び出し箇所（正確な一覧）**
+
+| 箇所 | コンテキスト |
+|------|--------------|
+| InMemoryUnitOfWork.commit() L62 | コミット冒頭。保留イベントを同期処理してから finalize |
+| MonsterLifecycleSurvivalCoordinator | process_survival_for_spot 終了時、apply_hunger_migration_for_spot 終了時 |
+| MonsterBehaviorCoordinator | 1 モンスター行動後（2 パス: 通常・追逐失敗時） |
+| MonsterSpawnSlotService | process_spawn_and_respawn_by_slots 後、process_respawn_legacy 後 |
+| MovementStepExecutor | 1 ステップ処理後 |
+
+**process_sync_events の現在の責務**
+
+1. `_execute_pending_operations()` で Repository の保留操作を実行
+2. `_pending_events[_processed_sync_count:]` を取得
+3. `_event_publisher.publish_sync_events(events_to_process)` で同期ハンドラ実行
+4. ハンドラがさらにイベントを発行した場合はループ継続（`_processed_sync_count` で未処理分のみ処理）
+
+**UoW と EventPublisher の関係**
+
+- InMemoryEventPublisherWithUow は `publish()` で `unit_of_work.add_events([event])` を呼ぶ → イベントは UoW の `_pending_events` に蓄積
+- `publish_sync_events(events)` は渡されたイベントリストを同期ハンドラで処理するのみ（UoW 非依存）
+- `_processed_sync_count` とループ制御は UoW 側に存在
+
+**必要な UoW 公開 API（SyncEventDispatcher 用）**
+
+- `get_pending_events()` - 既存
+- `execute_pending_operations()` - 要追加（現在は `_execute_pending_operations` が private）
+- 未処理イベントの取得・進捗管理は Dispatcher 側で `last_processed_index` として保持可能
+
+### Phase 5 設計案: SyncEventDispatcher + 委譲パターン
+
+**採用方針**: UoW の commit 内で SyncEventDispatcher に委譲する。Application Service の書き換えは最小限とする。
+
+1. **SyncEventDispatcher**（新規）
+   - `__init__(self, unit_of_work, event_publisher)` - InMemoryUnitOfWork と EventPublisher を受け取る
+   - `flush_sync_events()` - 現在の process_sync_events ロジックを移植
+   - UoW の `execute_pending_operations()`（public 化）と `get_pending_events()` を使用
+
+2. **InMemoryUnitOfWork**
+   - `execute_pending_operations()` を public メソッドとして追加（中身は既存の `_execute_pending_operations`）
+   - `commit()` 冒頭で `self._sync_event_dispatcher.flush_sync_events()` を呼ぶ（dispatcher をコンストラクタで注入）
+   - `process_sync_events` メソッドを削除
+
+3. **UnitOfWork Protocol**
+   - `process_sync_events` を削除
+   - `execute_pending_operations` は追加しない（InMemoryUnitOfWork 固有。他実装では no-op の stub でよいが、Protocol を肥やさない）
+
+4. **Coordinator 等の呼び出し元**
+   - `unit_of_work.process_sync_events()` → `sync_event_dispatcher.flush_sync_events()` に変更
+   - 依存: `SyncEventDispatcher` を注入
+
+5. **create_with_event_publisher**
+   - 戻り値を `(uow, event_publisher, sync_event_dispatcher)` に拡張、または
+   - DI コンテナ・ワイヤリング層で SyncEventDispatcher を作成し、UoW と Coordinators に渡す
+
+### Phase 5 Sub-phases
+
+#### Phase 5.1: SyncEventDispatcher 新設と UoW への委譲準備
+
+- Scope: `SyncEventDispatcher` クラスを `infrastructure/events/` に新設。`flush_sync_events()` で現在の process_sync_events ロジックを実装。InMemoryUnitOfWork に `execute_pending_operations()` を public 追加。create_with_event_publisher で SyncEventDispatcher を生成し UoW に注入。commit() では `_sync_event_dispatcher.flush_sync_events()` を呼び、既存の `process_sync_events()` 呼び出しを削除
+- Success: InMemoryUnitOfWork が内部で dispatcher に委譲し、従来どおり commit 時に同期イベントが処理される。全テスト通過
+- Tests: test_in_memory_unit_of_work が通過することを確認
+
+#### Phase 5.2: Coordinator の process_sync_events → flush_sync_events 置換
+
+- Scope: MonsterLifecycleSurvivalCoordinator, MonsterBehaviorCoordinator, MonsterSpawnSlotService, MovementStepExecutor の 4 サービスで、`unit_of_work` に加えて `sync_event_dispatcher` を注入。`unit_of_work.process_sync_events()` を `sync_event_dispatcher.flush_sync_events()` に置換
+- Success: 4 サービスが Dispatcher 経由で flush する。全テスト通過（world simulation 系、monster_behavior_coordinator、movement_step_executor 等）
+- Wiring: WorldSimulationCollaboratorFactory 等で SyncEventDispatcher を生成し、各 coordinator に渡す
+
+#### Phase 5.3: UnitOfWork Protocol と InMemoryUnitOfWork から process_sync_events 削除
+
+- Scope: UnitOfWork Protocol から `process_sync_events` を削除。InMemoryUnitOfWork から `process_sync_events` メソッドを削除（Phase 5.1 で dispatcher 委譲済みのため不要）
+- Success: Protocol がトランザクション管理のみを定義。全テスト通過
+- Tests: FakeUow 等のテストモックから `process_sync_events` を削除し、必要なら `flush_sync_events` のモックに変更
+
+#### Phase 5.4: テスト・ドキュメント・ワイヤリング最終調整
+
+- Scope: 全 FakeUow / モックの `process_sync_events` を削除または no-op 化。event-handler-patterns スキルの「process_sync_events」記述を「flush_sync_events（SyncEventDispatcher）」に更新。DI コンテナ・ワイヤリングで SyncEventDispatcher が正しく注入されることを確認
+- Success: 全テスト通過。ドキュメント整合。feature 完了
+
+### Phase 5 リスクと注意点
+
+- **R5.1**: InMemoryUnitOfWork が SyncEventDispatcher を保持するため、作成順序が `uow → dispatcher(uow, ep)` → `uow.set_dispatcher(dispatcher)` のような循環になる。`create_with_event_publisher` 内で一括作成する場合は、dispatcher を最後に uow に設定すれば解決
+- **R5.2**: MovementStepExecutor のワイヤリングが movement_wiring 等別経路である場合、SyncEventDispatcher の注入経路を確認する必要あり
 
 # Review Standard
 
@@ -176,3 +263,4 @@ Sync/Async の使い分けを明確化し、トランザクション境界を DD
 - 2026-03-16: Initial plan created from idea artifact
 - 2026-03-16: Phase 0（コード調査）追加、Phase 5 を必須に変更、Phase 1/2 の順序オプションを記載
 - 2026-03-16: Phase 0 調査完了、調査メモ追記
+- 2026-03-17: Phase 5 着手に伴い再調査・計画詳細化。調査結果（呼び出し箇所・責務・UoW/EP 関係）、設計案（SyncEventDispatcher + 委譲パターン）、Sub-phase 5.1〜5.4、リスク R5.1/R5.2 を追記
