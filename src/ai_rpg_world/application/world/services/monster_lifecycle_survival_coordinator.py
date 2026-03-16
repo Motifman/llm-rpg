@@ -1,6 +1,6 @@
 import logging
 import random
-from typing import Callable, List, Optional, Set
+from typing import Any, Callable, List, Optional, Protocol, Set
 
 from ai_rpg_world.application.world.services.hunger_migration_policy import (
     HungerMigrationCandidate,
@@ -22,6 +22,10 @@ from ai_rpg_world.domain.world.service.map_transition_service import MapTransiti
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
+class _SyncEventDispatcherProtocol(Protocol):
+    def flush_sync_events(self) -> None: ...
+
+
 class MonsterLifecycleSurvivalCoordinator:
     """生存進行と hunger migration apply を束ねる coordinator。"""
 
@@ -37,6 +41,7 @@ class MonsterLifecycleSurvivalCoordinator:
         ],
         unit_of_work: UnitOfWork,
         logger: logging.Logger,
+        sync_event_dispatcher: Optional["_SyncEventDispatcherProtocol"] = None,
     ) -> None:
         self._monster_repository = monster_repository
         self._physical_map_repository = physical_map_repository
@@ -46,6 +51,7 @@ class MonsterLifecycleSurvivalCoordinator:
         self._spot_has_feed_for_monster = spot_has_feed_for_monster
         self._unit_of_work = unit_of_work
         self._logger = logger
+        self._sync_event_dispatcher = sync_event_dispatcher
 
     def process_survival_for_spot(
         self,
@@ -63,7 +69,6 @@ class MonsterLifecycleSurvivalCoordinator:
                 try:
                     monster.starve(current_tick)
                     self._monster_repository.save(monster)
-                    self._unit_of_work.process_sync_events()
                 except DomainException as exc:
                     self._logger.warning(
                         "Starvation skipped for actor %s: %s",
@@ -75,7 +80,6 @@ class MonsterLifecycleSurvivalCoordinator:
             if monster.die_from_old_age(current_tick):
                 try:
                     self._monster_repository.save(monster)
-                    self._unit_of_work.process_sync_events()
                 except DomainException as exc:
                     self._logger.warning(
                         "Old-age death skipped for actor %s: %s",
@@ -94,6 +98,8 @@ class MonsterLifecycleSurvivalCoordinator:
         if migrated_actor_id is not None:
             blocked_actor_ids.add(migrated_actor_id)
 
+        if self._sync_event_dispatcher is not None:
+            self._sync_event_dispatcher.flush_sync_events()
         return blocked_actor_ids
 
     def apply_hunger_migration_for_spot(
@@ -166,7 +172,6 @@ class MonsterLifecycleSurvivalCoordinator:
             self._physical_map_repository.save(physical_map)
             self._physical_map_repository.save(to_map)
             self._monster_repository.save(migrant)
-            self._unit_of_work.process_sync_events()
         except DomainException as exc:
             self._logger.warning(
                 "Hunger migration skipped for monster %s: %s",

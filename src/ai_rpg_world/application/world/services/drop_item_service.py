@@ -100,8 +100,6 @@ class DropItemApplicationService:
             if not inventory:
                 raise DropPlayerOrInventoryNotFoundException(command.player_id)
 
-            self._unit_of_work.register_aggregate(inventory)
-
             inventory.drop_item(slot_id)
 
             self._player_inventory_repository.save(inventory)

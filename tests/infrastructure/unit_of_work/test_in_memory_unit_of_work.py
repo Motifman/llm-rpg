@@ -107,6 +107,22 @@ class TestInMemoryUnitOfWork:
         # コミット時にイベントパブリッシャーのpublish_pending_eventsが呼ばれたことを確認
         mock_event_publisher.publish_pending_events.assert_called_once()
 
+    def test_async_event_processing_failure_re_raises_exception(self):
+        """非同期イベント処理で例外が発生した場合、握りつぶさず再送出する"""
+        mock_event_publisher = Mock()
+        mock_event_publisher._pending_events = []
+        mock_event_publisher.publish_pending_events = Mock(
+            side_effect=RuntimeError("Async handler failed")
+        )
+        self.unit_of_work._event_publisher = mock_event_publisher
+
+        event = Mock(spec=DomainEvent)
+        with pytest.raises(RuntimeError, match="Async handler failed"):
+            with self.unit_of_work:
+                self.unit_of_work.add_events([event])
+
+        mock_event_publisher.publish_pending_events.assert_called_once()
+
     def test_no_event_publishing_without_event_publisher(self):
         """イベントパブリッシャーが設定されていない場合のテスト"""
         event = Mock(spec=DomainEvent)
@@ -167,8 +183,13 @@ class TestInMemoryUnitOfWork:
         # 双方向参照が正しく設定されていることを確認
         assert unit_of_work._event_publisher is event_publisher
 
-    def test_register_aggregate_and_automatic_event_collection(self):
-        """集約の登録とイベント自動収集のテスト"""
+        # SyncEventDispatcher が注入されていること（Phase 5.1）
+        assert unit_of_work._sync_event_dispatcher is not None
+        assert unit_of_work._sync_event_dispatcher._unit_of_work is unit_of_work
+        assert unit_of_work._sync_event_dispatcher._event_publisher is event_publisher
+
+    def test_add_events_from_aggregate_collects_events(self):
+        """add_events_from_aggregate が集約からイベントを収集し pending_events に追加するテスト"""
         # モック集約の作成
         mock_event = Mock(spec=DomainEvent)
         mock_aggregate = Mock()
@@ -176,41 +197,36 @@ class TestInMemoryUnitOfWork:
         mock_aggregate.clear_events = Mock()
 
         with self.unit_of_work:
-            # 集約を登録
-            self.unit_of_work.register_aggregate(mock_aggregate)
+            # 集約からイベントを収集・追加
+            self.unit_of_work.add_events_from_aggregate(mock_aggregate)
             
-            # まだ収集されていない
-            assert self.unit_of_work.get_pending_events() == []
+            # 即座に pending_events に反映される
+            assert self.unit_of_work.get_pending_events() == [mock_event]
             
-        # コミット後に収集されている
-        # 内部で events_to_process_async にコピーされてクリアされるため、
-        # テストでは途中の状態を確認するためにモックを調整
         mock_aggregate.get_events.assert_called_once()
         mock_aggregate.clear_events.assert_called_once()
 
-    def test_automatic_collection_before_sync_event_processing(self):
-        """同期イベント処理前の自動収集テスト"""
+    def test_add_events_from_aggregate_before_sync_event_processing(self):
+        """add_events_from_aggregate で収集したイベントが SyncEventDispatcher.flush_sync_events で処理されるテスト"""
+        def create_uow():
+            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
+        unit_of_work, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(
+            unit_of_work_factory=create_uow
+        )
         mock_event = Mock(spec=DomainEvent)
         mock_aggregate = Mock()
         mock_aggregate.get_events.return_value = [mock_event]
         mock_aggregate.clear_events = Mock()
-        
-        # モックイベントパブリッシャー
-        mock_publisher = Mock()
-        self.unit_of_work._event_publisher = mock_publisher
+        # パブリッシャーの publish_sync_events をモックして呼び出しを検証
+        event_publisher.publish_sync_events = Mock()
 
-        with self.unit_of_work:
-            self.unit_of_work.register_aggregate(mock_aggregate)
-            
-            # 同期イベント処理を呼び出す
-            self.unit_of_work.process_sync_events()
-            
-            # 同期処理の前に収集されているはず
-            mock_aggregate.get_events.assert_called_once()
-            mock_aggregate.clear_events.assert_called_once()
-            
-            # パブリッシャーに渡されている
-            mock_publisher.publish_sync_events.assert_called_once_with([mock_event])
+        with unit_of_work:
+            unit_of_work.add_events_from_aggregate(mock_aggregate)
+            unit_of_work.sync_event_dispatcher.flush_sync_events()
+
+        mock_aggregate.get_events.assert_called_once()
+        mock_aggregate.clear_events.assert_called_once()
+        event_publisher.publish_sync_events.assert_called_once_with([mock_event])
 
     def test_register_pending_aggregate_and_get_pending_aggregate(self):
         """同一トランザクション内で保留集約を登録・取得できること。コミット/ロールバックでクリアされること。"""

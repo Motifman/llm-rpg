@@ -32,29 +32,35 @@ class SnsEventHandlerRegistry:
         # 通知関連イベントハンドラ
         event_publisher.register_handler(
             SnsUserSubscribedEvent,
-            self._create_event_handler(self._notification_event_handler.handle_user_subscribed)
+            self._create_event_handler(self._notification_event_handler.handle_user_subscribed),
+            is_synchronous=False,
         )
         event_publisher.register_handler(
             SnsUserFollowedEvent,
-            self._create_event_handler(self._notification_event_handler.handle_user_followed)
+            self._create_event_handler(self._notification_event_handler.handle_user_followed),
+            is_synchronous=False,
         )
         event_publisher.register_handler(
             SnsPostCreatedEvent,
-            self._create_event_handler(self._notification_event_handler.handle_post_created)
+            self._create_event_handler(self._notification_event_handler.handle_post_created),
+            is_synchronous=False,
         )
         event_publisher.register_handler(
             SnsReplyCreatedEvent,
-            self._create_event_handler(self._notification_event_handler.handle_reply_created)
+            self._create_event_handler(self._notification_event_handler.handle_reply_created),
+            is_synchronous=False,
         )
         event_publisher.register_handler(
             SnsContentLikedEvent,
-            self._create_event_handler(self._notification_event_handler.handle_content_liked)
+            self._create_event_handler(self._notification_event_handler.handle_content_liked),
+            is_synchronous=False,
         )
 
         # 関係管理イベントハンドラ
         event_publisher.register_handler(
             SnsUserBlockedEvent,
-            self._create_event_handler(self._relationship_event_handler.handle_user_blocked)
+            self._create_event_handler(self._relationship_event_handler.handle_user_blocked),
+            is_synchronous=False,
         )
 
     def _create_event_handler(self, handler_method) -> "EventHandler":

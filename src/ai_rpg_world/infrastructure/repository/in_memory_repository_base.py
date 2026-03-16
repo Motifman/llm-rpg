@@ -51,10 +51,11 @@ class InMemoryRepositoryBase:
         return operation()
 
     def _register_aggregate(self, aggregate: Any) -> None:
-        """集約をUOWに登録し、イベントの自動収集を有効にする"""
-        if self._unit_of_work and self._is_in_transaction():
-            if hasattr(self._unit_of_work, 'register_aggregate'):
-                self._unit_of_work.register_aggregate(aggregate)
+        """集約からイベントを収集し、UoW 経由で add_events する（イベント収集 1 本化）"""
+        if not self._unit_of_work or not self._is_in_transaction():
+            return
+        if hasattr(self._unit_of_work, 'add_events_from_aggregate'):
+            self._unit_of_work.add_events_from_aggregate(aggregate)
 
     def _repo_key(self) -> str:
         """同一トランザクション内の保留集約のキー用。リポジトリ種別の一意な文字列。"""

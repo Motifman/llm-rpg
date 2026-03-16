@@ -2,6 +2,7 @@
 InMemoryUnitOfWork - インメモリ実装のUnit of Work
 実際のデータベーストランザクションは存在しないが、論理的なトランザクション境界を提供します。
 """
+import logging
 from typing import List, Callable, Any, Tuple, TYPE_CHECKING, Optional, Dict
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
@@ -9,6 +10,8 @@ from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 
 if TYPE_CHECKING:
     from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
+
+logger = logging.getLogger(__name__)
 
 
 class InMemoryUnitOfWork(UnitOfWork):
@@ -18,22 +21,27 @@ class InMemoryUnitOfWork(UnitOfWork):
     複数の集約更新の一貫性を保証します。
     """
 
-    def __init__(self, event_publisher=None, unit_of_work_factory=None, data_store=None):
+    def __init__(self, event_publisher=None, unit_of_work_factory=None, data_store=None, sync_event_dispatcher=None):
         self._in_transaction = False
         self._pending_operations: List[Callable[[], None]] = []
         self._pending_events: List[BaseDomainEvent[Any, Any]] = []
-        self._registered_aggregates: set = set()
         self._pending_aggregates: Dict[Tuple[str, Any], Any] = {}  # (repo_key, entity_id) -> 未反映の集約
         self._processed_sync_count = 0
         self._committed = False
         self._event_publisher = event_publisher
         self._data_store = data_store
         self._snapshot = None
+        self._sync_event_dispatcher = sync_event_dispatcher
 
         # 別トランザクション処理専用 - 必須パラメータ
         if unit_of_work_factory is None:
             raise ValueError("unit_of_work_factory is required for separate transaction event processing")
         self._unit_of_work_factory = unit_of_work_factory
+
+    @property
+    def sync_event_dispatcher(self):
+        """Phase 5.2: Coordinator 等に注入する SyncEventDispatcher を返す。create_with_event_publisher で生成された場合のみ存在。"""
+        return self._sync_event_dispatcher
 
     def begin(self) -> None:
         """トランザクション開始"""
@@ -42,7 +50,6 @@ class InMemoryUnitOfWork(UnitOfWork):
         self._in_transaction = True
         self._pending_operations = []
         self._pending_events = []
-        self._registered_aggregates = set()
         self._pending_aggregates = {}
         self._processed_sync_count = 0
         self._committed = False
@@ -57,11 +64,11 @@ class InMemoryUnitOfWork(UnitOfWork):
             raise RuntimeError("No transaction in progress")
 
         try:
-            # 1. 登録された集約から最終的なイベントを収集
-            self._collect_events_from_aggregates()
-
-            # 2. 同期イベントの処理（保留中の操作も適宜実行される）
-            self.process_sync_events()
+            # 1. 同期イベントの処理（保留中の操作も適宜実行される）
+            # イベントは add_events 経由のみで pending_events に追加される（Phase 4）
+            # create_with_event_publisher 経由で作成された場合のみ dispatcher が存在
+            if self._sync_event_dispatcher:
+                self._sync_event_dispatcher.flush_sync_events()
 
             # 2. 残った保留中の操作があれば実行
             self._execute_pending_operations()
@@ -99,32 +106,16 @@ class InMemoryUnitOfWork(UnitOfWork):
             for operation in operations:
                 operation()
 
-    def process_sync_events(self) -> None:
-        """同期イベントを即座に処理する（同一トランザクション内）"""
-        if not self._in_transaction:
-            return
-
-        if not hasattr(self, '_processed_sync_count'):
-            self._processed_sync_count = 0
-
-        while True:
-            # 処理前に、現時点で登録されている集約からイベントを収集
-            self._collect_events_from_aggregates()
-            
-            # 同期イベントを処理する前に、そこまでの操作を全て反映させる
-            # これにより、ハンドラが最新の状態をリポジトリから取得できる
-            self._execute_pending_operations()
-            
-            if self._processed_sync_count >= len(self._pending_events):
-                break
-                
-            events_to_process = self._pending_events[self._processed_sync_count:]
-            self._processed_sync_count = len(self._pending_events)
-            if self._event_publisher:
-                self._event_publisher.publish_sync_events(events_to_process)
+    def execute_pending_operations(self) -> None:
+        """保留中の操作を順次実行する（SyncEventDispatcher から呼び出される）"""
+        self._execute_pending_operations()
 
     def _process_events_in_separate_transaction(self) -> None:
-        """保留中のイベントを別トランザクションで処理（非同期ハンドラ）"""
+        """保留中のイベントを別トランザクションで処理（非同期ハンドラ）
+
+        非同期ハンドラは各ハンドラが自分で UoW を管理するため、
+        外側の UoW は廃止し、publish_pending_events を直接呼ぶ。
+        """
         if not self._pending_events:
             return
 
@@ -132,27 +123,17 @@ class InMemoryUnitOfWork(UnitOfWork):
         if self._event_publisher is None:
             return
 
-        # 別トランザクションを開始
-        separate_uow = self._unit_of_work_factory()
         try:
-            with separate_uow:
-                # 保留中のイベントを別トランザクションのパブリッシャーに渡す
-                separate_uow._event_publisher = self._event_publisher
-                separate_uow._event_publisher._pending_events.extend(self._pending_events)
-                separate_uow._event_publisher.publish_pending_events()
-
+            self._event_publisher._pending_events.extend(self._pending_events)
+            self._event_publisher.publish_pending_events()
         except Exception as e:
-            # イベント処理全体の失敗はログに記録するが、メインのコミットを失敗させない
-            print(f"Failed to process events in separate transaction: {e}")
+            logger.exception("Failed to process async events in separate transaction: %s", e)
+            raise
 
     def rollback(self) -> None:
         """ロールバック - 保留中の操作を破棄し、状態を復元"""
         if not self._in_transaction:
             raise RuntimeError("No transaction in progress")
-
-        # 集約の状態を戻すことはできない（メモリ上のオブジェクトが直接変更されているため）が、
-        # 登録情報はクリアする
-        self._registered_aggregates.clear()
 
         # 状態を復元
         if self._data_store and self._snapshot:
@@ -190,25 +171,15 @@ class InMemoryUnitOfWork(UnitOfWork):
             raise RuntimeError("No transaction in progress")
         self._pending_events.extend(events)
 
-    def register_aggregate(self, aggregate: Any) -> None:
-        """集約を登録し、コミット時にイベントを自動収集できるようにする"""
+    def add_events_from_aggregate(self, aggregate: Any) -> None:
+        """集約からイベントを収集し、add_events 経由で追加する（イベント収集 1 本化）"""
         if not self._in_transaction:
             raise RuntimeError("No transaction in progress")
-        self._registered_aggregates.add(aggregate)
-
-    def _collect_events_from_aggregates(self) -> None:
-        """登録された集約からイベントを収集し、クリアする"""
-        # セットをコピーしてループ（収集中にさらに追加される可能性に備える）
-        aggregates = list(self._registered_aggregates)
-        # 収集済みとして一旦クリア
-        self._registered_aggregates.clear()
-        
-        for aggregate in aggregates:
-            if hasattr(aggregate, 'get_events') and hasattr(aggregate, 'clear_events'):
-                events = aggregate.get_events()
-                if events:
-                    self._pending_events.extend(events)
-                    aggregate.clear_events()
+        if hasattr(aggregate, 'get_events') and hasattr(aggregate, 'clear_events'):
+            events = aggregate.get_events()
+            if events:
+                self._pending_events.extend(events)
+            aggregate.clear_events()
 
     def get_pending_events(self) -> List[BaseDomainEvent[Any, Any]]:
         """保留中のイベントを取得（テスト用）"""
@@ -258,8 +229,13 @@ class InMemoryUnitOfWork(UnitOfWork):
 
         # 実行時にインポートして循環インポートを回避
         from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
+        from ai_rpg_world.infrastructure.events.sync_event_dispatcher import SyncEventDispatcher
 
         unit_of_work = cls(unit_of_work_factory=unit_of_work_factory, data_store=data_store)
         event_publisher = InMemoryEventPublisherWithUow(unit_of_work)
         unit_of_work._event_publisher = event_publisher
+
+        sync_event_dispatcher = SyncEventDispatcher(unit_of_work, event_publisher)
+        unit_of_work._sync_event_dispatcher = sync_event_dispatcher
+
         return unit_of_work, event_publisher

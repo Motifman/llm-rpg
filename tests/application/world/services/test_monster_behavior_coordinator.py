@@ -88,6 +88,7 @@ class TestMonsterBehaviorCoordinator:
         actor = SimpleNamespace(object_id=WorldObjectId(1), coordinate=Coordinate(0, 0, 0))
         physical_map = mock.Mock()
         unit_of_work = mock.Mock()
+        sync_event_dispatcher = mock.Mock()
         coordinator = MonsterBehaviorCoordinator(
             monster_repository=monster_repository,
             behavior_service=behavior_service,
@@ -103,6 +104,7 @@ class TestMonsterBehaviorCoordinator:
             target_context_builder=self._target_context_builder(
                 mock.sentinel.target_context
             ),
+            sync_event_dispatcher=sync_event_dispatcher,
         )
 
         coordinator.process_actor_behavior(actor, physical_map, WorldTick(10))
@@ -121,7 +123,7 @@ class TestMonsterBehaviorCoordinator:
         )
         monster.record_move.assert_called_once_with(Coordinate(1, 0, 0), WorldTick(10))
         monster_repository.save.assert_called_once_with(monster)
-        unit_of_work.process_sync_events.assert_called_once()
+        sync_event_dispatcher.flush_sync_events.assert_called_once()
 
     def test_fails_with_target_missing_before_resolver(self):
         monster = mock.Mock()
@@ -184,6 +186,7 @@ class TestMonsterBehaviorCoordinator:
         resolver = mock.Mock()
         resolver.resolve_action.return_value = BehaviorAction.wait()
         unit_of_work = mock.Mock()
+        sync_event_dispatcher = mock.Mock()
         coordinator = MonsterBehaviorCoordinator(
             monster_repository=monster_repository,
             behavior_service=behavior_service,
@@ -196,6 +199,7 @@ class TestMonsterBehaviorCoordinator:
             unit_of_work=unit_of_work,
             behavior_context_builder=self._behavior_context_builder(None, None),
             target_context_builder=self._target_context_builder(None),
+            sync_event_dispatcher=sync_event_dispatcher,
         )
         actor = SimpleNamespace(object_id=WorldObjectId(1), coordinate=Coordinate(0, 0, 0))
 
@@ -207,7 +211,7 @@ class TestMonsterBehaviorCoordinator:
             current_tick=WorldTick(10),
         )
         monster.record_move.assert_not_called()
-        unit_of_work.process_sync_events.assert_called_once()
+        sync_event_dispatcher.flush_sync_events.assert_called_once()
 
     def test_records_skill_and_interact_actions(self):
         for action in (

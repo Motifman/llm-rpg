@@ -1,4 +1,4 @@
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Protocol
 
 from ai_rpg_world.application.world.services.monster_behavior_context_builder import (
     MonsterBehaviorContextBuilder,
@@ -29,6 +29,10 @@ from ai_rpg_world.application.world.services.monster_target_context_builder impo
 )
 
 
+class _SyncEventDispatcherProtocol(Protocol):
+    def flush_sync_events(self) -> None: ...
+
+
 class MonsterBehaviorCoordinator:
     """monster behavior を一本道で調停する coordinator。"""
 
@@ -46,6 +50,7 @@ class MonsterBehaviorCoordinator:
         action_resolver_factory_getter: Optional[
             Callable[[], Callable[[PhysicalMapAggregate, WorldObject], Any]]
         ] = None,
+        sync_event_dispatcher: Optional["_SyncEventDispatcherProtocol"] = None,
     ) -> None:
         self._monster_repository = monster_repository
         self._behavior_service = behavior_service
@@ -57,6 +62,11 @@ class MonsterBehaviorCoordinator:
         self._unit_of_work = unit_of_work
         self._behavior_context_builder = behavior_context_builder
         self._target_context_builder = target_context_builder
+        self._sync_event_dispatcher = sync_event_dispatcher
+
+    def _flush_sync_events(self) -> None:
+        if self._sync_event_dispatcher is not None:
+            self._sync_event_dispatcher.flush_sync_events()
 
     def process_actor_behavior(
         self,
@@ -153,7 +163,7 @@ class MonsterBehaviorCoordinator:
             monster.record_interact(action.target_id, current_tick)
 
         self._monster_repository.save(monster)
-        self._unit_of_work.process_sync_events()
+        self._flush_sync_events()
 
     def _fail_and_save(
         self,
@@ -163,4 +173,4 @@ class MonsterBehaviorCoordinator:
     ) -> None:
         monster.fail_pursuit(failure_reason, current_tick=current_tick)
         self._monster_repository.save(monster)
-        self._unit_of_work.process_sync_events()
+        self._flush_sync_events()

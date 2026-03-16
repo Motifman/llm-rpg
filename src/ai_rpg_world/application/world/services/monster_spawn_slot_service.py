@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional, Set
+from typing import List, Optional, Protocol, Set
 
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
@@ -22,6 +22,10 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.time_of_day import TimeOfDay
 
 
+class _SyncEventDispatcherProtocol(Protocol):
+    def flush_sync_events(self) -> None: ...
+
+
 class MonsterSpawnSlotService:
     """spawn slot と legacy respawn を扱う service。"""
 
@@ -34,6 +38,7 @@ class MonsterSpawnSlotService:
         monster_template_repository: MonsterTemplateRepository | None,
         unit_of_work: UnitOfWork,
         logger: logging.Logger,
+        sync_event_dispatcher: Optional["_SyncEventDispatcherProtocol"] = None,
     ) -> None:
         self._physical_map_repository = physical_map_repository
         self._monster_repository = monster_repository
@@ -42,6 +47,11 @@ class MonsterSpawnSlotService:
         self._monster_template_repository = monster_template_repository
         self._unit_of_work = unit_of_work
         self._logger = logger
+        self._sync_event_dispatcher = sync_event_dispatcher
+
+    def _flush_sync_events(self) -> None:
+        if self._sync_event_dispatcher is not None:
+            self._sync_event_dispatcher.flush_sync_events()
 
     def process_spawn_and_respawn_by_slots(
         self,
@@ -127,7 +137,7 @@ class MonsterSpawnSlotService:
         try:
             monster_for_slot.respawn(slot.coordinate, current_tick, slot.spot_id)
             self._monster_repository.save(monster_for_slot)
-            self._unit_of_work.process_sync_events()
+            self._flush_sync_events()
         except DomainException as exc:
             self._logger.warning(
                 "Respawn skipped for slot %s %s: %s",
@@ -165,7 +175,7 @@ class MonsterSpawnSlotService:
             monster.spawn(slot.coordinate, slot.spot_id, current_tick)
             self._monster_repository.save(monster)
             self._skill_loadout_repository.save(loadout)
-            self._unit_of_work.process_sync_events()
+            self._flush_sync_events()
         except DomainException as exc:
             self._logger.warning(
                 "Spawn skipped for slot %s %s: %s",

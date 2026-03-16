@@ -167,9 +167,6 @@ class PlaceObjectApplicationService:
             except Exception:
                 raise PlacementBlockedException(command.player_id, command.spot_id)
 
-            self._unit_of_work.register_aggregate(physical_map)
-            self._unit_of_work.register_aggregate(inventory)
-
             placed_object_id = self._physical_map_repository.generate_world_object_id()
             component = _build_placeable_component(placeable_object_type, item_spec.item_spec_id)
             object_type = ObjectTypeEnum(placeable_object_type)
@@ -234,9 +231,6 @@ class PlaceObjectApplicationService:
             inventory = self._player_inventory_repository.find_by_id(player_id)
             if not inventory:
                 raise PlacementSpotNotFoundException(command.player_id, command.spot_id)
-
-            self._unit_of_work.register_aggregate(physical_map)
-            self._unit_of_work.register_aggregate(inventory)
 
             physical_map.remove_object(target_object_id)
 

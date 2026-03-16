@@ -60,7 +60,7 @@ class GatewayTriggeredEventHandler(EventHandler[GatewayTriggeredEvent]):
     def handle(self, event: GatewayTriggeredEvent) -> None:
         """
         ゲートウェイ通過イベントを処理する。
-        呼び出し元（MovementApplicationService 等）が同一 UoW 内で process_sync_events により
+        呼び出し元（MovementApplicationService 等）が同一 UoW 内で flush_sync_events により
         本ハンドラを呼ぶため、ここでは UoW を開始しない。リポジトリ操作は呼び出し元のトランザクションに参加する。
         """
         try:

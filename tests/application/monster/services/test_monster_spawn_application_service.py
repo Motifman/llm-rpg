@@ -54,10 +54,7 @@ class _FakeUow(UnitOfWork):
     def add_events(self, events):
         self.events.extend(events)
 
-    def register_aggregate(self, aggregate):
-        pass
-
-    def process_sync_events(self):
+    def add_events_from_aggregate(self, aggregate):
         pass
 
 
