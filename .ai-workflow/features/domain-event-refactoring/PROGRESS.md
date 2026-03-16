@@ -4,16 +4,16 @@ title: Domain Event Refactoring
 slug: domain-event-refactoring
 status: in_progress
 created_at: 2026-03-16
-updated_at: 2026-03-16
+updated_at: 2026-03-17
 branch: codex/domain-event-refactoring
 ---
 
 # Current State
 
-- Active phase: Phase 5.2（Phase 5.1 完了済み）
-- Last completed phase: Phase 5.1
-- Next recommended action: Phase 5.2 着手。MonsterLifecycleSurvivalCoordinator, MonsterBehaviorCoordinator, MonsterSpawnSlotService, MovementStepExecutor の 4 サービスで process_sync_events → flush_sync_events 置換
-- Handoff summary: Phase 5.1 で SyncEventDispatcher を新設し UoW に委譲。create_with_event_publisher で dispatcher を生成・注入。commit/process_sync_events が dispatcher 経由で処理。全テスト通過
+- Active phase: Phase 5.3（Phase 5.2 完了済み）
+- Last completed phase: Phase 5.2
+- Next recommended action: Phase 5.3 着手。UnitOfWork Protocol と InMemoryUnitOfWork から process_sync_events 削除
+- Handoff summary: Phase 5.2 で 4 サービスに sync_event_dispatcher を注入し、process_sync_events → flush_sync_events に置換。WorldSimulationCollaboratorFactory、movement_wiring で unit_of_work.sync_event_dispatcher を各サービスに渡す。全テスト通過
 
 # Phase Journal
 
@@ -81,3 +81,16 @@ branch: codex/domain-event-refactoring
 - Scope delta: なし
 - Handoff summary: Phase 5 は任意。UoW とイベント処理の完全分離。Success Criteria 上 Phase 4 までで feature の必須要件は満たしている
 - Next-phase impact: Phase 5 は設計見直しが必要。後回し可
+
+## Phase 5.2
+
+- Started: 2026-03-17
+- Completed: 2026-03-17
+- Commit: (TBD)
+- Tests: 全 5896 テスト通過（5 skipped）
+- Findings: 4 サービス（MonsterLifecycleSurvivalCoordinator, MonsterBehaviorCoordinator, MonsterSpawnSlotService, MovementStepExecutor）に sync_event_dispatcher を Optional で注入。提供時は flush_sync_events、未提供時は unit_of_work.process_sync_events にフォールバック。InMemoryUnitOfWork に sync_event_dispatcher プロパティを追加。WorldSimulationCollaboratorFactory と movement_wiring で getattr(unit_of_work, "sync_event_dispatcher", None) から取得して注入
+- Plan updates: なし
+- Goal check: 4 サービスが Dispatcher 経由で flush する。全テスト通過を達成
+- Scope delta: なし
+- Handoff summary: Phase 5.3 は UnitOfWork Protocol と InMemoryUnitOfWork から process_sync_events を削除。FakeUow 等のテストモックを更新
+- Next-phase impact: Phase 5.3 で process_sync_events を Protocol から削除するため、テストモックは flush_sync_events のモックに切り替えが必要

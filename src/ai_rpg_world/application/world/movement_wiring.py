@@ -66,6 +66,7 @@ def create_movement_application_service(
         connected_spots_provider=connected_spots_provider,
         global_pathfinding_service=global_pathfinding_service,
     )
+    sync_event_dispatcher = getattr(unit_of_work, "sync_event_dispatcher", None)
     movement_step_executor = MovementStepExecutor(
         player_status_repository=player_status_repository,
         player_profile_repository=player_profile_repository,
@@ -76,6 +77,7 @@ def create_movement_application_service(
         unit_of_work=unit_of_work,
         transition_policy_repository=transition_policy_repository,
         transition_condition_evaluator=transition_condition_evaluator,
+        sync_event_dispatcher=sync_event_dispatcher,
     )
     return MovementApplicationService(
         set_destination_service=set_destination_service,

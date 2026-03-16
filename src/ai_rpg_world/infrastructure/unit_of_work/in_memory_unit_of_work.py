@@ -38,6 +38,11 @@ class InMemoryUnitOfWork(UnitOfWork):
             raise ValueError("unit_of_work_factory is required for separate transaction event processing")
         self._unit_of_work_factory = unit_of_work_factory
 
+    @property
+    def sync_event_dispatcher(self):
+        """Phase 5.2: Coordinator 等に注入する SyncEventDispatcher を返す。create_with_event_publisher で生成された場合のみ存在。"""
+        return self._sync_event_dispatcher
+
     def begin(self) -> None:
         """トランザクション開始"""
         if self._in_transaction:
