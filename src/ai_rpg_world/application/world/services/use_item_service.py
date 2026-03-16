@@ -133,10 +133,8 @@ class UseItemApplicationService:
             if item.item_spec.item_type != ItemType.CONSUMABLE:
                 raise ItemNotConsumableException(command.player_id, command.inventory_slot_id)
 
-            self._unit_of_work.register_aggregate(inventory)
-            self._unit_of_work.register_aggregate(item)
-
             item.use()
+            self._unit_of_work.add_events_from_aggregate(item)
 
             if item.quantity == 0:
                 self._item_repository.delete(item_instance_id)

@@ -30,8 +30,8 @@ class UnitOfWork(Protocol):
         pass
 
     @abstractmethod
-    def register_aggregate(self, aggregate: any) -> None:
-        """集約を登録し、コミット時にイベントを自動収集できるようにする"""
+    def add_events_from_aggregate(self, aggregate: any) -> None:
+        """集約からイベントを収集し、add_events 経由で追加する（イベント収集 1 本化）"""
         pass
 
     @abstractmethod
