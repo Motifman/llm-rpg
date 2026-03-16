@@ -66,10 +66,9 @@ class InMemoryUnitOfWork(UnitOfWork):
         try:
             # 1. 同期イベントの処理（保留中の操作も適宜実行される）
             # イベントは add_events 経由のみで pending_events に追加される（Phase 4）
+            # create_with_event_publisher 経由で作成された場合のみ dispatcher が存在
             if self._sync_event_dispatcher:
                 self._sync_event_dispatcher.flush_sync_events()
-            else:
-                self.process_sync_events()
 
             # 2. 残った保留中の操作があれば実行
             self._execute_pending_operations()
@@ -110,31 +109,6 @@ class InMemoryUnitOfWork(UnitOfWork):
     def execute_pending_operations(self) -> None:
         """保留中の操作を順次実行する（SyncEventDispatcher から呼び出される）"""
         self._execute_pending_operations()
-
-    def process_sync_events(self) -> None:
-        """同期イベントを即座に処理する（同一トランザクション内）
-
-        SyncEventDispatcher が注入されている場合は dispatcher に委譲。
-        注入されていない場合（直接インスタンス化等）は従来ロジックを実行。
-        """
-        if self._sync_event_dispatcher:
-            self._sync_event_dispatcher.flush_sync_events()
-            return
-
-        if not self._in_transaction:
-            return
-
-        if not hasattr(self, '_processed_sync_count'):
-            self._processed_sync_count = 0
-
-        while True:
-            self._execute_pending_operations()
-            if self._processed_sync_count >= len(self._pending_events):
-                break
-            events_to_process = self._pending_events[self._processed_sync_count:]
-            self._processed_sync_count = len(self._pending_events)
-            if self._event_publisher:
-                self._event_publisher.publish_sync_events(events_to_process)
 
     def _process_events_in_separate_transaction(self) -> None:
         """保留中のイベントを別トランザクションで処理（非同期ハンドラ）

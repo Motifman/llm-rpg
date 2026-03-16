@@ -100,8 +100,6 @@ class MonsterLifecycleSurvivalCoordinator:
 
         if self._sync_event_dispatcher is not None:
             self._sync_event_dispatcher.flush_sync_events()
-        else:
-            self._unit_of_work.process_sync_events()
         return blocked_actor_ids
 
     def apply_hunger_migration_for_spot(

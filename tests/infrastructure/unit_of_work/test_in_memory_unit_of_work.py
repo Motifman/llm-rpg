@@ -207,25 +207,26 @@ class TestInMemoryUnitOfWork:
         mock_aggregate.clear_events.assert_called_once()
 
     def test_add_events_from_aggregate_before_sync_event_processing(self):
-        """add_events_from_aggregate で収集したイベントが process_sync_events で処理されるテスト"""
+        """add_events_from_aggregate で収集したイベントが SyncEventDispatcher.flush_sync_events で処理されるテスト"""
+        def create_uow():
+            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
+        unit_of_work, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(
+            unit_of_work_factory=create_uow
+        )
         mock_event = Mock(spec=DomainEvent)
         mock_aggregate = Mock()
         mock_aggregate.get_events.return_value = [mock_event]
         mock_aggregate.clear_events = Mock()
-        
-        # モックイベントパブリッシャー
-        mock_publisher = Mock()
-        self.unit_of_work._event_publisher = mock_publisher
+        # パブリッシャーの publish_sync_events をモックして呼び出しを検証
+        event_publisher.publish_sync_events = Mock()
 
-        with self.unit_of_work:
-            self.unit_of_work.add_events_from_aggregate(mock_aggregate)
-            
-            # 同期イベント処理を呼び出す
-            self.unit_of_work.process_sync_events()
-            
-            mock_aggregate.get_events.assert_called_once()
-            mock_aggregate.clear_events.assert_called_once()
-            mock_publisher.publish_sync_events.assert_called_once_with([mock_event])
+        with unit_of_work:
+            unit_of_work.add_events_from_aggregate(mock_aggregate)
+            unit_of_work.sync_event_dispatcher.flush_sync_events()
+
+        mock_aggregate.get_events.assert_called_once()
+        mock_aggregate.clear_events.assert_called_once()
+        event_publisher.publish_sync_events.assert_called_once_with([mock_event])
 
     def test_register_pending_aggregate_and_get_pending_aggregate(self):
         """同一トランザクション内で保留集約を登録・取得できること。コミット/ロールバックでクリアされること。"""
