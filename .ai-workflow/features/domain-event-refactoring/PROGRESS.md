@@ -10,10 +10,10 @@ branch: codex/domain-event-refactoring
 
 # Current State
 
-- Active phase: Phase 5.3（Phase 5.2 完了済み）
-- Last completed phase: Phase 5.2
-- Next recommended action: Phase 5.3 着手。UnitOfWork Protocol と InMemoryUnitOfWork から process_sync_events 削除
-- Handoff summary: Phase 5.2 で 4 サービスに sync_event_dispatcher を注入し、process_sync_events → flush_sync_events に置換。WorldSimulationCollaboratorFactory、movement_wiring で unit_of_work.sync_event_dispatcher を各サービスに渡す。全テスト通過
+- Active phase: Phase 5.4（Phase 5.3 完了済み）
+- Last completed phase: Phase 5.3
+- Next recommended action: Phase 5.4 着手。event-handler-patterns スキル・gateway_handler の docstring 更新、全 FakeUow 最終確認
+- Handoff summary: Phase 5.3 で UnitOfWork Protocol と InMemoryUnitOfWork から process_sync_events を削除。4 Coordinator + MovementStepExecutor のフォールバックを削除し、sync_event_dispatcher 提供時のみ flush する形に統一。test_movement_service の MovementStepExecutor に sync_event_dispatcher を注入して全テスト通過
 
 # Phase Journal
 
@@ -86,7 +86,7 @@ branch: codex/domain-event-refactoring
 
 - Started: 2026-03-17
 - Completed: 2026-03-17
-- Commit: (TBD)
+- Commit: 710f253
 - Tests: 全 5896 テスト通過（5 skipped）
 - Findings: 4 サービス（MonsterLifecycleSurvivalCoordinator, MonsterBehaviorCoordinator, MonsterSpawnSlotService, MovementStepExecutor）に sync_event_dispatcher を Optional で注入。提供時は flush_sync_events、未提供時は unit_of_work.process_sync_events にフォールバック。InMemoryUnitOfWork に sync_event_dispatcher プロパティを追加。WorldSimulationCollaboratorFactory と movement_wiring で getattr(unit_of_work, "sync_event_dispatcher", None) から取得して注入
 - Plan updates: なし

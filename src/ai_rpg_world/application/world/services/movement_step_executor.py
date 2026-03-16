@@ -203,8 +203,6 @@ class MovementStepExecutor:
             # 同期イベントの即時実行（マップ遷移などを反映させるため）
             if self._sync_event_dispatcher is not None:
                 self._sync_event_dispatcher.flush_sync_events()
-            else:
-                self._unit_of_work.process_sync_events()
 
             # 状態が変わっている可能性があるため再ロード
             player_status = self._player_status_repository.find_by_id(player_id)

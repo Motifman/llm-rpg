@@ -70,9 +70,6 @@ class _FakeUow(UnitOfWork):
     def add_events_from_aggregate(self, aggregate):
         pass
 
-    def process_sync_events(self):
-        pass
-
 
 def _create_map(spot_id_int: int) -> PhysicalMapAggregate:
     tiles = [

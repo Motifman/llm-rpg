@@ -52,8 +52,6 @@ class MonsterSpawnSlotService:
     def _flush_sync_events(self) -> None:
         if self._sync_event_dispatcher is not None:
             self._sync_event_dispatcher.flush_sync_events()
-        else:
-            self._unit_of_work.process_sync_events()
 
     def process_spawn_and_respawn_by_slots(
         self,

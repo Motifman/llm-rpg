@@ -57,9 +57,6 @@ class _FakeUow(UnitOfWork):
     def add_events_from_aggregate(self, aggregate):
         pass
 
-    def process_sync_events(self):
-        pass
-
 
 class _InMemoryMonsterRepo:
     def __init__(self):
