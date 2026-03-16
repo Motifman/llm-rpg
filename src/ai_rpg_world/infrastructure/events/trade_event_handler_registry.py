@@ -23,19 +23,23 @@ class TradeEventHandlerRegistry:
 
         event_publisher.register_handler(
             TradeOfferedEvent,
-            self._create_event_handler(self._trade_event_handler.handle_trade_offered)
+            self._create_event_handler(self._trade_event_handler.handle_trade_offered),
+            is_synchronous=False,
         )
         event_publisher.register_handler(
             TradeAcceptedEvent,
-            self._create_event_handler(self._trade_event_handler.handle_trade_accepted)
+            self._create_event_handler(self._trade_event_handler.handle_trade_accepted),
+            is_synchronous=False,
         )
         event_publisher.register_handler(
             TradeCancelledEvent,
-            self._create_event_handler(self._trade_event_handler.handle_trade_cancelled)
+            self._create_event_handler(self._trade_event_handler.handle_trade_cancelled),
+            is_synchronous=False,
         )
         event_publisher.register_handler(
             TradeDeclinedEvent,
-            self._create_event_handler(self._trade_event_handler.handle_trade_declined)
+            self._create_event_handler(self._trade_event_handler.handle_trade_declined),
+            is_synchronous=False,
         )
 
     def _create_event_handler(self, handler_method) -> "EventHandler":

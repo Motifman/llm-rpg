@@ -204,6 +204,9 @@ class WorldSimulationCollaboratorFactory:
         self._actors_sorted_by_distance_to_players = actors_sorted_by_distance_to_players
 
     def build(self) -> WorldSimulationCollaborators:
+        sync_event_dispatcher = getattr(
+            self._unit_of_work, "sync_event_dispatcher", None
+        )
         hunger_migration_policy = HungerMigrationPolicy()
         monster_feed_query_service = MonsterFeedQueryService(self._loot_table_repository)
         monster_behavior_context_builder = MonsterBehaviorContextBuilder(
@@ -224,6 +227,7 @@ class WorldSimulationCollaboratorFactory:
             monster_template_repository=self._monster_template_repository,
             unit_of_work=self._unit_of_work,
             logger=self._logger,
+            sync_event_dispatcher=sync_event_dispatcher,
         )
         environment_effect_service = WorldSimulationEnvironmentEffectService(
             player_status_repository=self._player_status_repository,
@@ -246,6 +250,7 @@ class WorldSimulationCollaboratorFactory:
             spot_has_feed_for_monster=monster_feed_query_service.spot_has_feed_for_monster,
             unit_of_work=self._unit_of_work,
             logger=self._logger,
+            sync_event_dispatcher=sync_event_dispatcher,
         )
         monster_behavior_coordinator = MonsterBehaviorCoordinator(
             monster_repository=self._monster_repository,
@@ -258,6 +263,7 @@ class WorldSimulationCollaboratorFactory:
             unit_of_work=self._unit_of_work,
             behavior_context_builder=monster_behavior_context_builder,
             target_context_builder=monster_target_context_builder,
+            sync_event_dispatcher=sync_event_dispatcher,
         )
         environment_stage = WorldSimulationEnvironmentStageService(
             weather_zone_repository=self._weather_zone_repository,

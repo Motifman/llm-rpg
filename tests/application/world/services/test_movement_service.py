@@ -136,6 +136,7 @@ class TestMovementApplicationService:
             connected_spots_provider=connected_spots_provider,
             global_pathfinding_service=global_pathfinding_service,
         )
+        sync_event_dispatcher = getattr(unit_of_work, "sync_event_dispatcher", None)
         movement_step_executor = MovementStepExecutor(
             player_status_repository=player_status_repo,
             player_profile_repository=player_profile_repo,
@@ -144,6 +145,7 @@ class TestMovementApplicationService:
             movement_config_service=movement_config_service,
             time_provider=time_provider,
             unit_of_work=unit_of_work,
+            sync_event_dispatcher=sync_event_dispatcher,
         )
         service = MovementApplicationService(
             set_destination_service=set_destination_service,
@@ -193,6 +195,7 @@ class TestMovementApplicationService:
             unit_of_work=uow,
             transition_policy_repository=policy_repo,
             transition_condition_evaluator=evaluator,
+            sync_event_dispatcher=getattr(uow, "sync_event_dispatcher", None),
         )
         service_with_policy = MovementApplicationService(
             set_destination_service=set_destination_service,

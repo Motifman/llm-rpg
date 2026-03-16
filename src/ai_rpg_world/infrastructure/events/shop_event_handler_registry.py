@@ -25,20 +25,24 @@ class ShopEventHandlerRegistry:
         event_publisher.register_handler(
             ShopCreatedEvent,
             self._create_event_handler(self._shop_event_handler.handle_shop_created),
+            is_synchronous=False,
         )
         event_publisher.register_handler(
             ShopItemListedEvent,
             self._create_event_handler(self._shop_event_handler.handle_shop_item_listed),
+            is_synchronous=False,
         )
         event_publisher.register_handler(
             ShopItemUnlistedEvent,
             self._create_event_handler(self._shop_event_handler.handle_shop_item_unlisted),
+            is_synchronous=False,
         )
         event_publisher.register_handler(
             ShopItemPurchasedEvent,
             self._create_event_handler(
                 self._shop_event_handler.handle_shop_item_purchased
             ),
+            is_synchronous=False,
         )
 
     def _create_event_handler(self, handler_method) -> "EventHandler":
