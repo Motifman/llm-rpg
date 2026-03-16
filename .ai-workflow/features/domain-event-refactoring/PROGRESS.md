@@ -10,10 +10,10 @@ branch: codex/domain-event-refactoring
 
 # Current State
 
-- Active phase: Phase 5（Phase 4 完了済み）
-- Last completed phase: Phase 4
-- Next recommended action: Phase 5 着手（任意）。UoW とイベント処理の完全分離。または feature 完了として Phase 5 をスキップ
-- Handoff summary: Phase 4 でイベント収集を add_events 経由 1 本に統一済み。InMemoryRepositoryBase._register_aggregate が add_events_from_aggregate を呼ぶ形に変更。UoW から _collect_events_from_aggregates と register_aggregate を削除。全テスト通過
+- Active phase: Phase 5.2（Phase 5.1 完了済み）
+- Last completed phase: Phase 5.1
+- Next recommended action: Phase 5.2 着手。MonsterLifecycleSurvivalCoordinator, MonsterBehaviorCoordinator, MonsterSpawnSlotService, MovementStepExecutor の 4 サービスで process_sync_events → flush_sync_events 置換
+- Handoff summary: Phase 5.1 で SyncEventDispatcher を新設し UoW に委譲。create_with_event_publisher で dispatcher を生成・注入。commit/process_sync_events が dispatcher 経由で処理。全テスト通過
 
 # Phase Journal
 
@@ -73,7 +73,7 @@ branch: codex/domain-event-refactoring
 
 - Started: 2026-03-17
 - Completed: 2026-03-17
-- Commit: (コミット予定)
+- Commit: 09cd9a7
 - Tests: 全 5901 テスト通過（5 skipped）
 - Findings: InMemoryRepositoryBase._register_aggregate を add_events_from_aggregate 呼び出しに変更。InMemoryUnitOfWork から _collect_events_from_aggregates、register_aggregate、_registered_aggregates を削除。add_events_from_aggregate を新設。UnitOfWork Protocol を register_aggregate → add_events_from_aggregate に変更。Application Services（chest, place, drop）は Repository save で収集するため add_events_from_aggregate 呼び出しを削除。use_item_service は item が delete される場合があるため add_events_from_aggregate(item) を item.use() の後に維持。テストモックを add_events_from_aggregate に更新
 - Plan updates: なし

@@ -21,7 +21,7 @@ class InMemoryUnitOfWork(UnitOfWork):
     複数の集約更新の一貫性を保証します。
     """
 
-    def __init__(self, event_publisher=None, unit_of_work_factory=None, data_store=None):
+    def __init__(self, event_publisher=None, unit_of_work_factory=None, data_store=None, sync_event_dispatcher=None):
         self._in_transaction = False
         self._pending_operations: List[Callable[[], None]] = []
         self._pending_events: List[BaseDomainEvent[Any, Any]] = []
@@ -31,6 +31,7 @@ class InMemoryUnitOfWork(UnitOfWork):
         self._event_publisher = event_publisher
         self._data_store = data_store
         self._snapshot = None
+        self._sync_event_dispatcher = sync_event_dispatcher
 
         # 別トランザクション処理専用 - 必須パラメータ
         if unit_of_work_factory is None:
@@ -60,7 +61,10 @@ class InMemoryUnitOfWork(UnitOfWork):
         try:
             # 1. 同期イベントの処理（保留中の操作も適宜実行される）
             # イベントは add_events 経由のみで pending_events に追加される（Phase 4）
-            self.process_sync_events()
+            if self._sync_event_dispatcher:
+                self._sync_event_dispatcher.flush_sync_events()
+            else:
+                self.process_sync_events()
 
             # 2. 残った保留中の操作があれば実行
             self._execute_pending_operations()
@@ -98,8 +102,20 @@ class InMemoryUnitOfWork(UnitOfWork):
             for operation in operations:
                 operation()
 
+    def execute_pending_operations(self) -> None:
+        """保留中の操作を順次実行する（SyncEventDispatcher から呼び出される）"""
+        self._execute_pending_operations()
+
     def process_sync_events(self) -> None:
-        """同期イベントを即座に処理する（同一トランザクション内）"""
+        """同期イベントを即座に処理する（同一トランザクション内）
+
+        SyncEventDispatcher が注入されている場合は dispatcher に委譲。
+        注入されていない場合（直接インスタンス化等）は従来ロジックを実行。
+        """
+        if self._sync_event_dispatcher:
+            self._sync_event_dispatcher.flush_sync_events()
+            return
+
         if not self._in_transaction:
             return
 
@@ -107,13 +123,9 @@ class InMemoryUnitOfWork(UnitOfWork):
             self._processed_sync_count = 0
 
         while True:
-            # 同期イベントを処理する前に、そこまでの操作を全て反映させる
-            # これにより、ハンドラが最新の状態をリポジトリから取得できる
             self._execute_pending_operations()
-            
             if self._processed_sync_count >= len(self._pending_events):
                 break
-                
             events_to_process = self._pending_events[self._processed_sync_count:]
             self._processed_sync_count = len(self._pending_events)
             if self._event_publisher:
@@ -238,8 +250,13 @@ class InMemoryUnitOfWork(UnitOfWork):
 
         # 実行時にインポートして循環インポートを回避
         from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
+        from ai_rpg_world.infrastructure.events.sync_event_dispatcher import SyncEventDispatcher
 
         unit_of_work = cls(unit_of_work_factory=unit_of_work_factory, data_store=data_store)
         event_publisher = InMemoryEventPublisherWithUow(unit_of_work)
         unit_of_work._event_publisher = event_publisher
+
+        sync_event_dispatcher = SyncEventDispatcher(unit_of_work, event_publisher)
+        unit_of_work._sync_event_dispatcher = sync_event_dispatcher
+
         return unit_of_work, event_publisher
