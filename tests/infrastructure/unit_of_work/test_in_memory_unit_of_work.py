@@ -183,6 +183,11 @@ class TestInMemoryUnitOfWork:
         # 双方向参照が正しく設定されていることを確認
         assert unit_of_work._event_publisher is event_publisher
 
+        # SyncEventDispatcher が注入されていること（Phase 5.1）
+        assert unit_of_work._sync_event_dispatcher is not None
+        assert unit_of_work._sync_event_dispatcher._unit_of_work is unit_of_work
+        assert unit_of_work._sync_event_dispatcher._event_publisher is event_publisher
+
     def test_add_events_from_aggregate_collects_events(self):
         """add_events_from_aggregate が集約からイベントを収集し pending_events に追加するテスト"""
         # モック集約の作成
