@@ -1,7 +1,7 @@
 """
 SyncEventDispatcher - 同期ドメインイベントの即時処理を担当するディスパッチャー
 
-Unit of Work から process_sync_events ロジックを分離し、責務を明確化する。
+Unit of Work から同期イベント処理ロジックを分離し、flush_sync_events として責務を明確化する。
 PLAN Phase 5 設計: UoW とイベント処理の完全分離。
 """
 from typing import TYPE_CHECKING, Any
