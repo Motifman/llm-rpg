@@ -113,7 +113,6 @@ class ChestCommandService:
             if not inventory.has_item(item_instance_id):
                 raise ItemNotInPlayerInventoryException(command.player_id, command.item_instance_id)
 
-            self._unit_of_work.register_aggregate(physical_map)
             physical_map.store_item_in_chest(
                 actor_id=WorldObjectId.create(command.actor_world_object_id),
                 target_chest_id=WorldObjectId.create(command.chest_world_object_id),
@@ -156,7 +155,6 @@ class ChestCommandService:
                 raise PlayerInventoryNotFoundException(command.player_id)
 
             item_instance_id = ItemInstanceId.create(command.item_instance_id)
-            self._unit_of_work.register_aggregate(physical_map)
             try:
                 physical_map.take_item_from_chest(
                     actor_id=WorldObjectId.create(command.actor_world_object_id),

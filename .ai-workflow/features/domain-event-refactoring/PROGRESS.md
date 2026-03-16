@@ -10,10 +10,10 @@ branch: codex/domain-event-refactoring
 
 # Current State
 
-- Active phase: Phase 4（Phase 3 完了済み）
-- Last completed phase: Phase 3
-- Next recommended action: Phase 4 着手。イベント収集を add_events 経由 1 本に統一。InMemoryRepositoryBase の save で add_events、InMemoryUnitOfWork から _collect_events_from_aggregates と register_aggregate を削除
-- Handoff summary: Phase 3 で MonsterLifecycleSurvivalCoordinator の process_sync_events を 1 スポット処理の終わりに 1 回へ変更。他サービス（MonsterBehaviorCoordinator, MovementStepExecutor, MonsterSpawnSlotService）は意味的単位で 1 回のまま維持を確認
+- Active phase: Phase 5（Phase 4 完了済み）
+- Last completed phase: Phase 4
+- Next recommended action: Phase 5 着手（任意）。UoW とイベント処理の完全分離。または feature 完了として Phase 5 をスキップ
+- Handoff summary: Phase 4 でイベント収集を add_events 経由 1 本に統一済み。InMemoryRepositoryBase._register_aggregate が add_events_from_aggregate を呼ぶ形に変更。UoW から _collect_events_from_aggregates と register_aggregate を削除。全テスト通過
 
 # Phase Journal
 
@@ -60,7 +60,7 @@ branch: codex/domain-event-refactoring
 
 - Started: 2026-03-16
 - Completed: 2026-03-16
-- Commit: (pending)
+- Commit: 36829ea
 - Tests: 全 5896 テスト通過（5 skipped）。test_monster_lifecycle_survival_coordinator, test_hunger_migration, test_monster_behavior_coordinator 含む
 - Findings: process_survival_for_spot のループ内（starve/die 各モンスターごと）と apply_hunger_migration_for_spot 内の process_sync_events を削除し、1 スポット処理の終わりに 1 回だけ呼ぶ形に変更。MonsterBehaviorCoordinator, MovementStepExecutor, MonsterSpawnSlotService は「意味的単位で 1 回」のまま維持を確認
 - Plan updates: なし
@@ -68,3 +68,16 @@ branch: codex/domain-event-refactoring
 - Scope delta: なし
 - Handoff summary: Phase 4 はイベント収集を add_events 経由 1 本に統一。InMemoryRepositoryBase save で add_events、UoW から _collect_events_from_aggregates と register_aggregate 削除
 - Next-phase impact: Phase 4 で Repository と UoW の変更が中心
+
+## Phase 4
+
+- Started: 2026-03-17
+- Completed: 2026-03-17
+- Commit: (コミット予定)
+- Tests: 全 5901 テスト通過（5 skipped）
+- Findings: InMemoryRepositoryBase._register_aggregate を add_events_from_aggregate 呼び出しに変更。InMemoryUnitOfWork から _collect_events_from_aggregates、register_aggregate、_registered_aggregates を削除。add_events_from_aggregate を新設。UnitOfWork Protocol を register_aggregate → add_events_from_aggregate に変更。Application Services（chest, place, drop）は Repository save で収集するため add_events_from_aggregate 呼び出しを削除。use_item_service は item が delete される場合があるため add_events_from_aggregate(item) を item.use() の後に維持。テストモックを add_events_from_aggregate に更新
+- Plan updates: なし
+- Goal check: イベントが add_events 経由のみで pending_events に追加される。_collect_events_from_aggregates が削除されている。全テスト通過を達成
+- Scope delta: なし
+- Handoff summary: Phase 5 は任意。UoW とイベント処理の完全分離。Success Criteria 上 Phase 4 までで feature の必須要件は満たしている
+- Next-phase impact: Phase 5 は設計見直しが必要。後回し可
