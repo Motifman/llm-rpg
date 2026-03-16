@@ -219,6 +219,7 @@ Sync/Async の使い分けを明確化し、トランザクション境界を DD
 - Scope: MonsterLifecycleSurvivalCoordinator, MonsterBehaviorCoordinator, MonsterSpawnSlotService, MovementStepExecutor の 4 サービスで、`unit_of_work` に加えて `sync_event_dispatcher` を注入。`unit_of_work.process_sync_events()` を `sync_event_dispatcher.flush_sync_events()` に置換
 - Success: 4 サービスが Dispatcher 経由で flush する。全テスト通過（world simulation 系、monster_behavior_coordinator、movement_step_executor 等）
 - Wiring: WorldSimulationCollaboratorFactory 等で SyncEventDispatcher を生成し、各 coordinator に渡す
+- **設計理由（getattr による防御的取得）**: `sync_event_dispatcher` は UnitOfWork Protocol に定義されていない InMemoryUnitOfWork 固有のプロパティ。Factory や movement_wiring は `UnitOfWork` 型を受け取るため、FakeUow 等の他実装には本属性が存在しない。`getattr(unit_of_work, "sync_event_dispatcher", None)` で安全に取得し、`None` の場合は各 Coordinator が `unit_of_work.process_sync_events()` にフォールバック。テスト用モック UoW でも動作し、Phase 5.3 で Protocol から process_sync_events を削除するまでの段階的移行を可能にする。
 
 #### Phase 5.3: UnitOfWork Protocol と InMemoryUnitOfWork から process_sync_events 削除
 
