@@ -82,6 +82,19 @@ branch: codex/domain-event-refactoring
 - Handoff summary: Phase 5 は任意。UoW とイベント処理の完全分離。Success Criteria 上 Phase 4 までで feature の必須要件は満たしている
 - Next-phase impact: Phase 5 は設計見直しが必要。後回し可
 
+## Phase 5.1
+
+- Started: 2026-03-17
+- Completed: 2026-03-17
+- Commit: 44e2956
+- Tests: test_in_memory_unit_of_work 通過。create_with_event_publisher 経由で SyncEventDispatcher 注入を検証。add_events_from_aggregate 収集イベントが flush_sync_events で処理されることを検証
+- Findings: SyncEventDispatcher を infrastructure/events/ に新設。flush_sync_events() で execute_pending_operations → _pending_events 未処理分 → publish_sync_events の流れを実装。InMemoryUnitOfWork に execute_pending_operations() を public 追加。create_with_event_publisher で SyncEventDispatcher を生成し UoW に注入。commit() 冒頭で _sync_event_dispatcher.flush_sync_events() を呼ぶ形に変更
+- Plan updates: なし
+- Goal check: InMemoryUnitOfWork が dispatcher に委譲し、commit 時に同期イベントが処理される。全テスト通過を達成
+- Scope delta: なし
+- Handoff summary: Phase 5.2 は 4 サービスに sync_event_dispatcher を注入し process_sync_events → flush_sync_events に置換
+- Next-phase impact: Phase 5.2 で Coordinator 等の呼び出し元を Dispatcher 経由に変更する必要あり
+
 ## Phase 5.2
 
 - Started: 2026-03-17
