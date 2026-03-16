@@ -2,7 +2,7 @@
 id: feature-domain-event-refactoring
 title: Domain Event Refactoring
 slug: domain-event-refactoring
-status: in_progress
+status: completed
 created_at: 2026-03-16
 updated_at: 2026-03-17
 branch: codex/domain-event-refactoring
@@ -10,10 +10,10 @@ branch: codex/domain-event-refactoring
 
 # Current State
 
-- Active phase: Phase 5.4（Phase 5.3 完了済み）
-- Last completed phase: Phase 5.3
-- Next recommended action: Phase 5.4 着手。event-handler-patterns スキル・gateway_handler の docstring 更新、全 FakeUow 最終確認
-- Handoff summary: Phase 5.3 で UnitOfWork Protocol と InMemoryUnitOfWork から process_sync_events を削除。4 Coordinator + MovementStepExecutor のフォールバックを削除し、sync_event_dispatcher 提供時のみ flush する形に統一。test_movement_service の MovementStepExecutor に sync_event_dispatcher を注入して全テスト通過
+- Active phase: なし（feature 完了）
+- Last completed phase: Phase 5.4
+- Next recommended action: コミット・main マージ
+- Handoff summary: Phase 5.4 で event-handler-patterns スキル、gateway_handler、sync_event_dispatcher の docstring を flush_sync_events 表記に統一。全 FakeUow は process_sync_events を持たない（Protocol から削除済み）。全 5896 テスト通過。DDD_REVIEW.md で追加 Phase 不要と評価済み
 
 # Phase Journal
 
@@ -94,3 +94,15 @@ branch: codex/domain-event-refactoring
 - Scope delta: なし
 - Handoff summary: Phase 5.3 は UnitOfWork Protocol と InMemoryUnitOfWork から process_sync_events を削除。FakeUow 等のテストモックを更新
 - Next-phase impact: Phase 5.3 で process_sync_events を Protocol から削除するため、テストモックは flush_sync_events のモックに切り替えが必要
+
+## Phase 5.4
+
+- Started: 2026-03-17
+- Completed: 2026-03-17
+- Commit: （未コミット）
+- Tests: 全 5896 テスト通過（5 skipped）
+- Findings: event-handler-patterns スキルの「process_sync_events」を「flush_sync_events（SyncEventDispatcher）」に更新。gateway_handler の docstring を「flush_sync_events により」に修正。sync_event_dispatcher のモジュール docstring を flush_sync_events 表記に更新。FakeUow は UnitOfWork Protocol 準拠で process_sync_events を持たず変更不要
+- Plan updates: なし
+- Goal check: ドキュメント・用語の整合性を達成。全テスト通過。feature 完了
+- Scope delta: なし
+- Handoff summary: feature 完了。DDD_REVIEW.md で追加 Phase 不要と評価済み。コミット・main マージ推奨
