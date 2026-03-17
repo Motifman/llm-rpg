@@ -60,10 +60,7 @@ class InMemoryEventPublisherWithUow(EventPublisher[DomainEvent]):
             event_type = type(event)
             handlers = self._async_handlers.get(event_type, [])
             for handler in handlers:
-                try:
-                    handler.handle(event)
-                except Exception as e:
-                    print(f"Error handling async event {event_type}: {e}")
+                handler.handle(event)
 
         # 発行済みのイベントをクリア
         if self._pending_events:
