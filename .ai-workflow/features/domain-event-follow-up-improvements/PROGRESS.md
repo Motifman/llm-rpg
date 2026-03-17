@@ -21,7 +21,7 @@ branch: codex/domain-event-follow-up-improvements
 
 - Started: 2026-03-17
 - Completed: 2026-03-17
-- Commit: 5175281
+- Commit: 9366e75
 - Tests: pytest 全実行 5897 passed。test_in_memory_event_publisher_with_uow.py に test_publish_pending_events_propagates_async_handler_exception を追加
 - Findings: 想定どおり。InMemoryUnitOfWork._process_events_in_separate_transaction は既に logger.exception + raise で例外を再送出しており、publish_pending_events の try/except 削除により例外が適切に伝播する
 - Plan revision check: 不要。Phase 1 は想定どおり完了
