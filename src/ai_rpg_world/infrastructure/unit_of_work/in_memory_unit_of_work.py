@@ -193,6 +193,19 @@ class InMemoryUnitOfWork(UnitOfWork):
         """トランザクション中かどうかを返す（テスト用）"""
         return self._in_transaction
 
+    def get_sync_processed_count(self) -> int:
+        """同期イベント処理済み件数を返す。"""
+        return self._processed_sync_count
+
+    def get_pending_events_since(self, processed_count: int) -> Tuple[List[BaseDomainEvent[Any, Any]], int]:
+        """processed_count 以降の保留イベントを取得する。戻り値は (イベントリスト, 次の processed_count)。"""
+        events = self._pending_events[processed_count:]
+        return (events, len(self._pending_events))
+
+    def advance_sync_processed_count(self, new_count: int) -> None:
+        """同期イベント処理済み件数を進める。"""
+        self._processed_sync_count = new_count
+
     def is_committed(self) -> bool:
         """コミット済みかどうかを返す（テスト用）"""
         return self._committed
