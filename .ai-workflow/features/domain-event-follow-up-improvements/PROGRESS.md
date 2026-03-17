@@ -36,7 +36,7 @@ branch: codex/domain-event-follow-up-improvements
 
 - Started: 2026-03-17
 - Completed: 2026-03-17
-- Commit: (pending)
+- Commit: 604e7b4
 - Tests: pytest 全実行 5897 passed
 - Findings: flush_sync_events が同一トランザクション内で複数回呼ばれる場合（テストの明示呼び出し + commit 内呼び出し）、処理済み件数を UoW に永続化しないと重複 publish が発生。get_sync_processed_count() を Protocol と InMemoryUnitOfWork に追加して対応。
 - Plan revision check: 不要。get_sync_processed_count は plan の「get_pending_events_since / advance_sync_processed_count」の補完として最小限の拡張。API 形状の本質的変更なし。
