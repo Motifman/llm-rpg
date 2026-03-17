@@ -265,7 +265,11 @@ class TestPlayerStatusAggregate:
 
     def test_application_style_damage_flow_success(self):
         """アプリケーション層経由で計算したダメージが適用されること"""
-        aggregate = create_test_status_aggregate(hp=100)
+        # テストの決定性を担保するため、防御側の回避率を0%にする
+        defender_base_stats = create_test_base_stats(
+            evasion_rate=0.0,
+        )
+        aggregate = create_test_status_aggregate(hp=100, base_stats=defender_base_stats)
         attacker_stats = create_test_base_stats(
             attack=40,
             defense=10,
