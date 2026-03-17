@@ -12,8 +12,8 @@ branch: codex/domain-event-follow-up-improvements
 
 - Active phase: なし（全 Phase 完了）
 - Last completed phase: Phase 2
-- Next recommended action: コミット、flow-ship 等で出荷準備
-- Handoff summary: Phase 2 完了。UnitOfWork Protocol に get_sync_processed_count / get_pending_events_since / advance_sync_processed_count を追加。SyncEventDispatcher を public API 経由に変更。全 FakeUow に no-op 実装追加。pytest 5897 passed。
+- Next recommended action: flow-ship 等で出荷準備
+- Handoff summary: Phase 2 完了。UnitOfWork Protocol に get_sync_processed_count / get_pending_events_since / advance_sync_processed_count を追加。SyncEventDispatcher を public API 経由に変更。全 FakeUow に no-op 実装追加。pytest 5897 passed。flow-exec 検証時に test_application_style_damage_flow_success の flaky を発見し、defender evasion_rate=0.0 固定で修正（feature スコープ外）。
 
 # Phase Journal
 
