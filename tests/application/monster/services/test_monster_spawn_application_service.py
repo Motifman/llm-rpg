@@ -57,6 +57,15 @@ class _FakeUow(UnitOfWork):
     def add_events_from_aggregate(self, aggregate):
         pass
 
+    def get_sync_processed_count(self):
+        return 0
+
+    def get_pending_events_since(self, processed_count):
+        return ([], 0)
+
+    def advance_sync_processed_count(self, new_count):
+        pass
+
 
 class _InMemoryMonsterRepo:
     def __init__(self):

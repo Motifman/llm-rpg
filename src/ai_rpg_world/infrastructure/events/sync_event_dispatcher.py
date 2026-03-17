@@ -40,23 +40,18 @@ class SyncEventDispatcher:
         if not self._unit_of_work.is_in_transaction():
             return
 
-        if not hasattr(self._unit_of_work, "_processed_sync_count"):
-            self._unit_of_work._processed_sync_count = 0
-
+        processed_count = self._unit_of_work.get_sync_processed_count()
         while True:
             # 同期イベントを処理する前に、そこまでの操作を全て反映させる
             self._unit_of_work.execute_pending_operations()
 
-            if self._unit_of_work._processed_sync_count >= len(
-                self._unit_of_work._pending_events
-            ):
+            events_to_process, new_count = self._unit_of_work.get_pending_events_since(
+                processed_count
+            )
+            if not events_to_process:
                 break
 
-            events_to_process: list[BaseDomainEvent[Any, Any]] = self._unit_of_work._pending_events[
-                self._unit_of_work._processed_sync_count :
-            ]
-            self._unit_of_work._processed_sync_count = len(
-                self._unit_of_work._pending_events
-            )
+            self._unit_of_work.advance_sync_processed_count(new_count)
+            processed_count = new_count
             if self._event_publisher:
                 self._event_publisher.publish_sync_events(events_to_process)
