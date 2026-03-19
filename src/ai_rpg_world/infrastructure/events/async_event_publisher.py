@@ -31,3 +31,14 @@ class AsyncEventPublisher(EventPublisher[DomainEvent]):
     def publish_all(self, events: List[DomainEvent]):
         for event in events:
             self.publish(event)
+
+    def publish_async_events(self, events: List[DomainEvent]) -> None:
+        """EventPublisher 契約: post-commit handoff。本実装は登録ハンドラを即時実行する"""
+        for event in events:
+            event_type = type(event)
+            handlers = self._handlers.get(event_type, [])
+            for handler in handlers:
+                try:
+                    handler.handle(event)
+                except Exception as e:
+                    print(f"Error handling event {event_type}: {e}")
