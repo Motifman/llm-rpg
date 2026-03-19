@@ -66,7 +66,7 @@ branch: codex/uow-event-publisher-ddd-separation
 
 - Started: 2026-03-20
 - Completed: 2026-03-20
-- Commit: b539231
+- Commit: ac8641e
 - Tests: test_get_committed_events_returns_events_after_commit, test_clear_committed_events_clears_buffer, test_committed_events_empty_when_no_events, test_committed_events_cleared_on_begin, test_committed_events_empty_on_rollback 追加。tests/infrastructure/unit_of_work, tests/infrastructure/events, 全 5906 件通過
 - Findings: Phase 2 で publish_async_events(events) が既に UoW pending 非依存の API として存在するため、Phase 3 scope 4 の EventPublisher 追加は不要
 - Plan revision check: 不要。committed events 契約はテストで固定され、future phase 変更不要
