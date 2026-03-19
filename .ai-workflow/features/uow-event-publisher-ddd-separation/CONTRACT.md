@@ -76,7 +76,21 @@
 - [ ] `publish_async(events)` は EventPublisher に追加し、UoW の pending に依存しない API とする
 - [ ] post-commit orchestration は Application 層または wrapper が担う
 
-## 4. Phase 間依存
+## 4. Registration 契約（Phase 1 正規化）
+
+### 現行契約
+
+- `EventPublisher.register_handler(event_type, handler, is_synchronous=True|False)` を全実装で統一
+- 呼び出し側は **`is_synchronous` を常に明示**する（デフォルトに頼らない）。`docs/domain_events_sync_async_rules.md` 参照
+- 判定基準: 同一 UoW 内で他集約を find/save する必要がある → sync、それ以外（ReadModel、通知、クエスト進捗等）→ async
+
+### 将来の昇格方針（後段で検討）
+
+- `register_handler(..., is_synchronous=...)` は当面維持
+- 必要になった場合、`register_sync_handler` / `register_async_handler` 専用 API または `HandlerExecutionMode` enum へ昇格可能
+- 昇格時も既存 `register_handler` は互換のため残し、段階的移行とする
+
+## 5. Phase 間依存
 
 - **Phase 0** → 本契約の確定。以降の phase は本 CONTRACT を参照する。
 - **Phase 1** → sync/async registration 契約の正規化。`is_synchronous` 明示を全 registry で保証。

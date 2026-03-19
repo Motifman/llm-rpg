@@ -10,10 +10,10 @@ branch: codex/uow-event-publisher-ddd-separation
 
 # Current State
 
-- Active phase: Phase 0 completed
-- Last completed phase: Phase 0 契約と用語の固定
-- Next recommended action: Phase 1 で sync/async registration 契約を正規化する
-- Handoff summary: CONTRACT.md で pending/committed event、sync/async handler、post-commit orchestration、async runtime の用語とイベントライフサイクル、with uow:/with scope: 移行ポリシーを固定した
+- Active phase: Phase 1 completed
+- Last completed phase: Phase 1 registration 契約の正規化
+- Next recommended action: Phase 2 で private handoff 廃止、publish_async_events(events) 等の public API 追加
+- Handoff summary: 全 registry で is_synchronous 明示済み。InMemoryEventPublisher / AsyncEventPublisher に register_handler(..., is_synchronous=...) を追加し、全 EventPublisher 実装の API を統一。CONTRACT に将来昇格先（register_sync_handler / register_async_handler）を追記
 
 # Phase Journal
 

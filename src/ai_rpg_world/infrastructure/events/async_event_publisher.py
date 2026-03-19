@@ -8,7 +8,13 @@ class AsyncEventPublisher(EventPublisher[DomainEvent]):
     def __init__(self):
         self._handlers: Dict[Type[DomainEvent], List[EventHandler[DomainEvent]]] = {}
 
-    def register_handler(self, event_type: Type[DomainEvent], handler: EventHandler[DomainEvent]):
+    def register_handler(
+        self,
+        event_type: Type[DomainEvent],
+        handler: EventHandler[DomainEvent],
+        is_synchronous: bool = False,
+    ) -> None:
+        """EventPublisher 契約に従い is_synchronous を受け取る（本実装は非同期専用のため常に async として扱う）"""
         if event_type not in self._handlers:
             self._handlers[event_type] = []
         self._handlers[event_type].append(handler)
