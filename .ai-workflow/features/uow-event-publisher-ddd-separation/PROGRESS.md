@@ -34,18 +34,18 @@ branch: codex/uow-event-publisher-ddd-separation
 
 ## Phase 1
 
-- Started:
-- Completed:
-- Commit:
-- Tests:
-- Findings:
-- Plan revision check:
-- User approval:
-- Plan updates:
-- Goal check:
-- Scope delta:
-- Handoff summary:
-- Next-phase impact:
+- Started: 2026-03-19
+- Completed: 2026-03-19
+- Commit: b441785
+- Tests: test_event_publisher_registration_contract.py 追加、tests/infrastructure/events, tests/application/social 通過
+- Findings: 全 registry は既に is_synchronous を明示。InMemoryEventPublisher / AsyncEventPublisher のみ register_handler に is_synchronous がなく API 齟齬。両者に追加して契約統一
+- Plan revision check: 不要。future phase 変更不要
+- User approval: 不要
+- Plan updates: なし
+- Goal check: sync/async 判定が全 registry で明示、旧 publisher が現行 API と一致、「まずフラグ方式を正規化」を CONTRACT に文書化
+- Scope delta: なし
+- Handoff summary: Phase 2 は CONTRACT の private handoff 廃止方針に従い、publish_async_events(events) 等の public API を追加する
+- Next-phase impact: Phase 2 で InMemoryEventPublisherWithUow に public handoff API を追加する際、既存 registry は変更不要
 
 ## Phase 2
 
