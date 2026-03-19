@@ -4,16 +4,16 @@ title: Uow Event Publisher Ddd Separation
 slug: uow-event-publisher-ddd-separation
 status: planned
 created_at: 2026-03-17
-updated_at: 2026-03-19
+updated_at: 2026-03-20
 branch: codex/uow-event-publisher-ddd-separation
 ---
 
 # Current State
 
-- Active phase: Phase 6 completed
-- Last completed phase: Phase 6 outbox-ready seam の確定
-- Next recommended action: feature 完了（全 phase 完了）
-- Handoff summary: SEAM.md で envelope / serialization / transport 境界を明文化。EventPayloadSerializer と AsyncEventTransport port を domain/common に定義。test_outbox_seam_phase6 で契約検証。将来 outbox 導入時も UoW 契約変更不要。
+- Active phase: Phase 8 着手可能
+- Last completed phase: Phase 7 post-commit handoff 契約の抽象固定
+- Next recommended action: Phase 8 transport / envelope 差し替え点の production 接続に着手
+- Handoff summary: Phase 7 で EventPublisher 抽象に publish_async_events(events) を追加し、全実装（InMemoryEventPublisherWithUow, InMemoryEventPublisher, AsyncEventPublisher）が契約を満たすよう揃えた。TransactionalScope は抽象 API のみに依存。
 
 # Phase Journal
 
@@ -111,7 +111,7 @@ branch: codex/uow-event-publisher-ddd-separation
 
 - Started: 2026-03-20
 - Completed: 2026-03-20
-- Commit: aceffef
+- Commit: dd9d856
 - Tests: test_outbox_seam_phase6.py 追加（EventPayloadSerializer / AsyncEventTransport 契約検証）。全テスト通過
 - Findings: AsyncDispatchTask が in-process envelope 表現としてそのまま有効。EventPayloadSerializer・AsyncEventTransport を port のみ定義し、将来 outbox 導入時に差し替え可能な境界を固定。実装はテスト内の PickleEventPayloadSerializer / InProcessAsyncEventTransport で契約検証
 - Plan revision check: 不要。SEAM.md の envelope / transport 境界は PLAN 想定と整合、future phase 変更不要
@@ -119,8 +119,23 @@ branch: codex/uow-event-publisher-ddd-separation
 - Plan updates: なし
 - Goal check: future outbox 実装で UoW 契約変更不要、in-process と transport の境界が明文化
 - Scope delta: なし
-- Handoff summary: feature 完了。flow-ship で出荷準備へ
-- Next-phase impact: なし（本 feature 最終 phase）
+- Handoff summary: Review Replan で Phase 7 が追加されたため、次は Phase 7 着手
+- Next-phase impact: Phase 7 で abstract handoff API 昇格後、Phase 8 の transport 接続が容易になる
+
+## Phase 7
+
+- Started: 2026-03-20
+- Completed: 2026-03-20
+- Commit: c5a39eb
+- Tests: TestEventPublisherPostCommitHandoffContract 追加（全実装の publish_async_events 契約検証）。tests/infrastructure/unit_of_work, tests/infrastructure/events 全 54 件、全体 703 件通過
+- Findings: EventPublisher 抽象に publish_async_events(events) を追加。InMemoryEventPublisherWithUow は既存実装を継続、InMemoryEventPublisher / AsyncEventPublisher は publish_all 相当で指定イベントをハンドラに配送。TransactionalScope はもともと抽象型経由で呼んでいたため変更不要
+- Plan revision check: 不要。責務は publish/publish_all と publish_async_events で分離されており、future phase 変更不要
+- User approval: 不要
+- Plan updates: なし
+- Goal check: wrapper/orchestrator が具象に依存しない、post-commit handoff が EventPublisher 契約として表現、with uow: 互換維持
+- Scope delta: なし
+- Handoff summary: Phase 8 は transport / envelope 差し替え点を production code に挿入する
+- Next-phase impact: Phase 8 で InMemoryEventPublisherWithUow.publish_async_events が executor 直呼びではなく transport 経由になる
 
 ## Planning
 
@@ -136,3 +151,18 @@ branch: codex/uow-event-publisher-ddd-separation
 - Scope delta: runtime ライブラリ導入フェーズと outbox-ready seam 固定フェーズを明示追加
 - Handoff summary: 次は Phase 0 の契約固定から開始する
 - Next-phase impact: Phase 0 の成果が Phase 1 以降の API 命名と migration 方針を確定させる
+
+## Review Replan
+
+- Started: 2026-03-20
+- Completed: 2026-03-20
+- Commit:
+- Tests: none (planning artifact update)
+- Findings: `REVIEW.md` で feature 完了判定を差し戻し。`EventPublisher` 抽象に post-commit handoff がない、outbox-ready seam が production code 未接続、`AnyIOAsyncEventExecutor` が async context で破綻、legacy publisher が例外を握りつぶす、`InMemoryUnitOfWork` に不要な `unit_of_work_factory` 必須依存が残ることを確認
+- Plan revision check: 実施。既存 Phase 0-6 は履歴として維持しつつ、review gap を閉じる remediation phase 7-10 を追加
+- User approval: 不要
+- Plan updates: Phase 7 `EventPublisher` handoff 契約固定、Phase 8 production transport 接続、Phase 9 async runtime adapter 契約再固定、Phase 10 legacy publisher / UoW 責務整理を追加
+- Goal check: feature は未完了に戻る。元の目的を ship-ready にするための残作業が phase 単位で明文化された
+- Scope delta: 「review で見つかった契約不整合と実運用 gap の是正」が feature scope に追加
+- Handoff summary: 次は Phase 7 で `TransactionalScope` が具象 publisher に依存しないよう `EventPublisher` 抽象へ post-commit handoff API を昇格する
+- Next-phase impact: Phase 7 を終えると、Phase 8 の transport 差し替え点を production path に挿入しやすくなる
