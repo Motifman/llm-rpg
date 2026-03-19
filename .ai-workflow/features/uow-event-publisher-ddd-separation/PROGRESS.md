@@ -51,7 +51,7 @@ branch: codex/uow-event-publisher-ddd-separation
 
 - Started: 2026-03-20
 - Completed: 2026-03-20
-- Commit: 5044cc7 (本コミット)
+- Commit: 7bcf782
 - Tests: test_publish_async_events_processes_events_with_async_handlers 追加、test_event_publishing_with_event_publisher / test_async_event_processing_failure_re_raises_exception を publish_async_events 使用に更新。tests/infrastructure/unit_of_work, tests/infrastructure/events 全 39 件通過
 - Findings: extend 削除は publish_pending_events の get_pending_events() フォールバックで吸収可能と IDEA 記載の通り。public API publish_async_events(events) を追加し、events を引数で渡す形にすることで private アクセスを完全排除
 - Plan revision check: 不要。public handoff と publish_pending_events の共存は簡潔で、future phase 変更不要
