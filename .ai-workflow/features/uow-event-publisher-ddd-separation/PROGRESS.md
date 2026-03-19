@@ -126,7 +126,7 @@ branch: codex/uow-event-publisher-ddd-separation
 
 - Started: 2026-03-20
 - Completed: 2026-03-20
-- Commit: c5a39eb
+- Commit: ddaca60
 - Tests: TestEventPublisherPostCommitHandoffContract 追加（全実装の publish_async_events 契約検証）。tests/infrastructure/unit_of_work, tests/infrastructure/events 全 54 件、全体 703 件通過
 - Findings: EventPublisher 抽象に publish_async_events(events) を追加。InMemoryEventPublisherWithUow は既存実装を継続、InMemoryEventPublisher / AsyncEventPublisher は publish_all 相当で指定イベントをハンドラに配送。TransactionalScope はもともと抽象型経由で呼んでいたため変更不要
 - Plan revision check: 不要。責務は publish/publish_all と publish_async_events で分離されており、future phase 変更不要
