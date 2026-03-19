@@ -49,6 +49,14 @@ class UnitOfWork(Protocol):
         """同期イベント処理済み件数を進める。"""
         ...
 
+    def get_committed_events(self) -> List["BaseDomainEvent"]:
+        """コミット成功後に取り出し可能なイベントを返す。post-commit orchestration で使用。"""
+        ...
+
+    def clear_committed_events(self) -> None:
+        """コミット済みイベントをクリアする。post-commit orchestration 完了後に呼ぶ。"""
+        ...
+
     @abstractmethod
     def __enter__(self):
         """コンテキストマネージャー開始"""

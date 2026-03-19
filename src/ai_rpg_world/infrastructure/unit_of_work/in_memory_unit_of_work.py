@@ -28,6 +28,7 @@ class InMemoryUnitOfWork(UnitOfWork):
         self._pending_aggregates: Dict[Tuple[str, Any], Any] = {}  # (repo_key, entity_id) -> 未反映の集約
         self._processed_sync_count = 0
         self._committed = False
+        self._committed_events: List[BaseDomainEvent[Any, Any]] = []
         self._event_publisher = event_publisher
         self._data_store = data_store
         self._snapshot = None
@@ -53,7 +54,8 @@ class InMemoryUnitOfWork(UnitOfWork):
         self._pending_aggregates = {}
         self._processed_sync_count = 0
         self._committed = False
-        
+        self._committed_events = []
+
         # ロールバック用にスナップショットを取得
         if self._data_store:
             self._snapshot = self._data_store.take_snapshot()
@@ -83,7 +85,11 @@ class InMemoryUnitOfWork(UnitOfWork):
             # トランザクション完了後は状態をクリアするが、
             # 非同期イベント処理のためにイベントリストは一時的に保持
             events_to_process_async = self._pending_events.copy()
-            
+
+            # Phase 3: コミット成功時は committed events に格納（post-commit orchestration 用）
+            if self._committed:
+                self._committed_events = events_to_process_async.copy()
+
             self._in_transaction = False
             self._pending_operations.clear()
             self._pending_events.clear()
@@ -202,6 +208,14 @@ class InMemoryUnitOfWork(UnitOfWork):
     def advance_sync_processed_count(self, new_count: int) -> None:
         """同期イベント処理済み件数を進める。"""
         self._processed_sync_count = new_count
+
+    def get_committed_events(self) -> List[BaseDomainEvent[Any, Any]]:
+        """コミット成功後に取り出し可能なイベントを返す。post-commit orchestration で使用。"""
+        return self._committed_events.copy()
+
+    def clear_committed_events(self) -> None:
+        """コミット済みイベントをクリアする。post-commit orchestration 完了後に呼ぶ。"""
+        self._committed_events.clear()
 
     def is_committed(self) -> bool:
         """コミット済みかどうかを返す（テスト用）"""
