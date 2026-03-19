@@ -228,12 +228,14 @@ class InMemoryUnitOfWork(UnitOfWork):
             raise ValueError("unit_of_work_factory is required for separate transaction event processing")
 
         from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
+        from ai_rpg_world.infrastructure.events.in_process_async_event_executor import InProcessAsyncEventExecutor
         from ai_rpg_world.infrastructure.events.sync_event_dispatcher import SyncEventDispatcher
         from ai_rpg_world.infrastructure.unit_of_work.transactional_scope import TransactionalScope
 
         unit_of_work = cls(unit_of_work_factory=unit_of_work_factory, data_store=data_store)
         scope = TransactionalScope(unit_of_work, None)
-        event_publisher = InMemoryEventPublisherWithUow(scope)
+        async_executor = InProcessAsyncEventExecutor()
+        event_publisher = InMemoryEventPublisherWithUow(scope, async_executor=async_executor)
         scope.set_event_publisher(event_publisher)
 
         sync_event_dispatcher = SyncEventDispatcher(scope, event_publisher)
