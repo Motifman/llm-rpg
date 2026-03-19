@@ -1,8 +1,9 @@
-"""Outbox-ready seam の契約検証テスト (Phase 6)
+"""Outbox-ready seam の契約検証テスト (Phase 6 / Phase 8)
 
 EventPayloadSerializer と AsyncEventTransport の port 契約が
 将来の outbox 実装で差し替え可能であることを検証する。
-実装はテスト内で定義し、production コードには追加しない。
+Phase 8: InProcessAsyncEventTransport は production コードに存在。
+EventPayloadSerializer は in-process では不使用のため、テスト内の Pickle 実装で契約検証。
 """
 import pickle
 from typing import Sequence
@@ -20,9 +21,12 @@ from ai_rpg_world.domain.common.event_payload_serializer import EventPayloadSeri
 from ai_rpg_world.infrastructure.events.in_process_async_event_executor import (
     InProcessAsyncEventExecutor,
 )
+from ai_rpg_world.infrastructure.events.in_process_async_event_transport import (
+    InProcessAsyncEventTransport,
+)
 
 
-# --- EventPayloadSerializer 契約検証用の最小実装 ---
+# --- EventPayloadSerializer 契約検証用の最小実装（outbox 実装時の参照。in-process では不使用）---
 
 
 class PickleEventPayloadSerializer:
@@ -40,21 +44,7 @@ class PickleEventPayloadSerializer:
         return pickle.loads(payload)
 
 
-# --- AsyncEventTransport 契約検証用の in-process 互換実装 ---
-
-
-class InProcessAsyncEventTransport:
-    """AsyncEventTransport 契約を満たす in-process 実装
-
-    dispatch で即 Executor に委譲する。SEAM.md の「将来 Transport を挿入」時の
-    in-process 実装の参照。
-    """
-
-    def __init__(self, executor: AsyncEventExecutor) -> None:
-        self._executor = executor
-
-    def dispatch(self, envelopes: Sequence[AsyncDispatchTask]) -> None:
-        self._executor.execute(envelopes)
+# --- RecordingHandler (テスト用) ---
 
 
 class RecordingHandler(EventHandler[BaseDomainEvent]):
@@ -116,3 +106,93 @@ class TestAsyncEventTransportSeam:
 
         assert handler1.handled == [event]
         assert handler2.handled == [event]
+
+
+class TestPhase8TransportProductionPath:
+    """Phase 8: InMemoryEventPublisherWithUow が transport 経由で async publish する production path"""
+
+    def test_publish_async_events_routes_through_transport(self) -> None:
+        """InMemoryEventPublisherWithUow が async_transport 注入時に transport.dispatch 経由で配送する"""
+        from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import (
+            InMemoryEventPublisherWithUow,
+        )
+        from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
+            InMemoryUnitOfWork,
+        )
+
+        def create_uow():
+            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
+
+        uow = InMemoryUnitOfWork(unit_of_work_factory=create_uow)
+        executor = InProcessAsyncEventExecutor()
+        dispatched: list[Sequence[AsyncDispatchTask]] = []
+
+        class RecordingTransport:
+            def __init__(self, delegate: AsyncEventExecutor):
+                self._delegate = delegate
+                self.dispatched: list[Sequence[AsyncDispatchTask]] = []
+
+            def dispatch(self, envelopes: Sequence[AsyncDispatchTask]) -> None:
+                self.dispatched.append(list(envelopes))
+                self._delegate.execute(envelopes)
+
+        transport = RecordingTransport(executor)
+        handler = RecordingHandler()
+        event = BaseDomainEvent.create(aggregate_id=1, aggregate_type="Test")
+
+        publisher = InMemoryEventPublisherWithUow(uow, async_transport=transport)
+        publisher.register_handler(type(event), handler, is_synchronous=False)
+        publisher.publish_async_events([event])
+
+        assert len(transport.dispatched) == 1
+        assert len(transport.dispatched[0]) == 1
+        assert transport.dispatched[0][0][0] is event
+        assert transport.dispatched[0][0][1] is handler
+        assert handler.handled == [event]
+
+    def test_create_with_event_publisher_uses_transport_path(self) -> None:
+        """create_with_event_publisher が返す publisher が transport 経由で async ハンドラを実行する"""
+        from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
+            InMemoryUnitOfWork,
+        )
+
+        def create_uow():
+            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
+
+        scope, publisher = InMemoryUnitOfWork.create_with_event_publisher(
+            unit_of_work_factory=create_uow
+        )
+
+        handler = RecordingHandler()
+        event = BaseDomainEvent.create(aggregate_id=99, aggregate_type="Test")
+        publisher.register_handler(type(event), handler, is_synchronous=False)
+
+        with scope:
+            scope.add_events([event])
+
+        assert handler.handled == [event]
+
+
+class TestPublishAsyncEventsViaTransport:
+    """Phase 8: InMemoryEventPublisherWithUow の publish_async_events が transport 経由で流れる検証"""
+
+    def test_create_with_event_publisher_uses_transport_for_async_dispatch(self) -> None:
+        """create_with_event_publisher で生成した publisher が transport 経由で async ハンドラを実行する"""
+        from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
+            InMemoryUnitOfWork,
+        )
+
+        def create_uow():
+            return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
+
+        _, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(
+            unit_of_work_factory=create_uow
+        )
+        handler = RecordingHandler()
+        event = BaseDomainEvent.create(aggregate_id=1, aggregate_type="Test")
+        event_publisher.register_handler(type(event), handler, is_synchronous=False)
+
+        event_publisher.publish_async_events([event])
+
+        # transport → executor 経由で handler が実行される
+        assert handler.handled == [event]

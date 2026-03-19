@@ -23,6 +23,10 @@
 
 **境界**: UoW の `get_committed_events()` は `List[DomainEvent]` を返す。シリアライズは **post-commit orchestration の下流**（transport または outbox 実装）の責務。UoW 契約は変更しない。
 
+**EventPayloadSerializer の責務境界（Phase 8 確定）**:
+- **in-process**: Transport が envelope（`AsyncDispatchTask`）を Executor にそのまま渡すため、serializer は使用しない。DomainEvent は永続化されない。
+- **outbox（将来）**: Transport の outbox 実装が envelope を永続化する段階で、EventPayloadSerializer が**初めて**使用される。責務は「Transport の下流＝永続化層」にあり、Publisher / Executor / UoW の責務外。
+
 ## 3. Executor と Transport の責務分離
 
 | 責務 | 定義 | in-process | outbox（将来） |
@@ -30,9 +34,9 @@
 | **Transport** | envelope の配送。受け取った envelope を実行基盤に渡す。 | 即 Executor に委譲（実質 identity）。 | DB に永続化 → Worker が poll → Executor に渡す。 |
 | **Executor** | envelope を受け取り、handler を解決・実行する。 | 受け取った `(event, handler)` をそのまま実行。 | デシリアライズ → handler 解決 → 実行。 |
 
-**境界**: 現状 `EventPublisher.publish_async_events(events)` が `_build_async_dispatch_tasks` で envelope 相当を組み立て、`AsyncEventExecutor.execute` に直接渡している。将来 Transport を挿入する場合、`publish_async_events` → `transport.dispatch(envelopes)` となり、Transport の in-process 実装が内部で `executor.execute` を呼ぶ。UoW / EventPublisher の API は変わらない。
+**境界**: Phase 8 で `EventPublisher.publish_async_events(events)` が `_build_async_dispatch_tasks` で envelope を組み立て、`AsyncEventTransport.dispatch(envelopes)` 経由で流れるようになった。`InProcessAsyncEventTransport` が production で Executor に委譲。UoW / EventPublisher の API は変わらない。
 
-## 4. Adapter 差し替え境界
+## 4. Adapter 差し替え境界（Phase 8 で production path に接続済み）
 
 ```
 [ UoW.get_committed_events() ]
@@ -41,13 +45,19 @@
          ↓
 [ EventPublisher.publish_async_events(events) ]
          ↓  _build_async_dispatch_tasks で envelope 化
-[ ★ Transport.dispatch(envelopes) ★ ]  ← 差し替え点（将来）
+[ ★ Transport.dispatch(envelopes) ★ ]  ← 差し替え点（InProcessAsyncEventTransport / 将来 outbox）
          ↓  in-process: 即 Executor へ
          ↓  outbox: 永続化 → Worker poll
 [ AsyncEventExecutor.execute(tasks) ]
 ```
 
-**★** が adapter 差し替え点。現状は Transport を挿入せず、Publisher が直接 Executor に渡す。将来 `AsyncEventTransport` port を導入し、in-process 実装（Executor 即呼び出し）と outbox 実装（永続化）を差し替え可能にする。
+**★** が adapter 差し替え点。Phase 8 で `InProcessAsyncEventTransport` を production に導入し、`InMemoryEventPublisherWithUow` が transport 経由で async 配信するようになった。将来 outbox transport を差し替えるだけで UoW / EventPublisher 契約を変えずに済む。
+
+### EventPayloadSerializer の責務境界
+
+**in-process**: EventPayloadSerializer は使用しない。envelope は `AsyncDispatchTask` のまま渡り、シリアライズは発生しない。責務境界は Transport の上流（Publisher の `_build_async_dispatch_tasks` 出力）まで。下流（Transport 内部）は in-process では identity 相当。
+
+**outbox**: EventPayloadSerializer の責務は **Transport の outbox 実装内** で発生する。永続化の直前で `serialize`、Worker 側で `deserialize` を使用。UoW / Publisher の責務外。
 
 ## 5. UoW 契約の不変性
 

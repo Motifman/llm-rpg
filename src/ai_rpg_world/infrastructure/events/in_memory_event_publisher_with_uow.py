@@ -4,6 +4,7 @@ InMemoryEventPublisherWithUow - Unit of Workと統合されたインメモリイ
 from typing import Dict, List, Optional, Tuple, Type
 
 from ai_rpg_world.domain.common.async_event_executor import AsyncDispatchTask, AsyncEventExecutor
+from ai_rpg_world.domain.common.async_event_transport import AsyncEventTransport
 from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
@@ -14,15 +15,25 @@ class InMemoryEventPublisherWithUow(EventPublisher[DomainEvent]):
     """Unit of Workと統合されたインメモリイベントパブリッシャー
 
     イベントの発行をUnit of Workのトランザクション境界内で管理します。
-    Phase 5: AsyncEventExecutor を注入可能。未注入時は従来通りインライン実行。
+    Phase 5: AsyncEventExecutor 注入可能。Phase 8: AsyncEventTransport 経由が優先。
+    - async_transport 注入時: publish_async_events → transport.dispatch(envelopes) → executor
+    - async_executor のみ注入時（後方互換）: publish_async_events → executor.execute 直呼び
+    - 未注入時: インライン実行。
     """
 
-    def __init__(self, unit_of_work: InMemoryUnitOfWork, async_executor: Optional[AsyncEventExecutor] = None):
+    def __init__(
+        self,
+        unit_of_work: InMemoryUnitOfWork,
+        async_transport: Optional[AsyncEventTransport] = None,
+        *,
+        async_executor: Optional[AsyncEventExecutor] = None,
+    ):
         self._sync_handlers: Dict[Type[DomainEvent], List[EventHandler[DomainEvent]]] = {}
         self._async_handlers: Dict[Type[DomainEvent], List[EventHandler[DomainEvent]]] = {}
         self._published_events: List[DomainEvent] = []
         self._pending_events: List[DomainEvent] = []
         self._unit_of_work = unit_of_work
+        self._async_transport = async_transport
         self._async_executor = async_executor
 
     def register_handler(self, event_type: Type[DomainEvent], handler: EventHandler[DomainEvent], is_synchronous: bool = False):
@@ -67,10 +78,12 @@ class InMemoryEventPublisherWithUow(EventPublisher[DomainEvent]):
 
         UoW の pending に依存せず、明示的に渡されたイベントのみを処理する。
         post-commit orchestration から呼ばれることを想定。
-        Phase 5: AsyncEventExecutor 注入時は executor に委譲、未注入時はインライン実行。
+        Phase 8: transport 注入時は transport.dispatch、後方互換で executor のみ注入時は executor 直呼び、未注入時はインライン実行。
         """
         tasks = self._build_async_dispatch_tasks(events)
-        if self._async_executor is not None:
+        if self._async_transport is not None:
+            self._async_transport.dispatch(tasks)
+        elif self._async_executor is not None:
             self._async_executor.execute(tasks)
         else:
             for event, handler in tasks:
