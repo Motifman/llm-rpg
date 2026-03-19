@@ -10,10 +10,10 @@ branch: codex/uow-event-publisher-ddd-separation
 
 # Current State
 
-- Active phase: Phase 8 着手可能
-- Last completed phase: Phase 7 post-commit handoff 契約の抽象固定
-- Next recommended action: Phase 8 transport / envelope 差し替え点の production 接続に着手
-- Handoff summary: Phase 7 で EventPublisher 抽象に publish_async_events(events) を追加し、全実装（InMemoryEventPublisherWithUow, InMemoryEventPublisher, AsyncEventPublisher）が契約を満たすよう揃えた。TransactionalScope は抽象 API のみに依存。
+- Active phase: Phase 9 着手可能
+- Last completed phase: Phase 8 transport / envelope 差し替え点の production 接続
+- Next recommended action: Phase 9 async runtime adapter 契約の再固定に着手
+- Handoff summary: Phase 8 で InProcessAsyncEventTransport を production に追加し、InMemoryEventPublisherWithUow.publish_async_events が transport.dispatch 経由で流れるよう変更。create_with_event_publisher は InProcessAsyncEventTransport(executor) を注入。SEAM.md を Phase 8 状態に更新。
 
 # Phase Journal
 
