@@ -93,9 +93,7 @@ class InMemoryUnitOfWork(UnitOfWork):
 
             # コミット成功時のみ、別トランザクションで非同期イベントを処理
             if self._committed and events_to_process_async:
-                self._pending_events = events_to_process_async
-                self._process_events_in_separate_transaction()
-                self._pending_events.clear()
+                self._process_events_in_separate_transaction(events_to_process_async)
 
     def _execute_pending_operations(self) -> None:
         """保留中の操作を順次実行する"""
@@ -110,13 +108,13 @@ class InMemoryUnitOfWork(UnitOfWork):
         """保留中の操作を順次実行する（SyncEventDispatcher から呼び出される）"""
         self._execute_pending_operations()
 
-    def _process_events_in_separate_transaction(self) -> None:
-        """保留中のイベントを別トランザクションで処理（非同期ハンドラ）
+    def _process_events_in_separate_transaction(self, events: List[BaseDomainEvent[Any, Any]]) -> None:
+        """指定イベントを別トランザクションで処理（非同期ハンドラ）
 
         非同期ハンドラは各ハンドラが自分で UoW を管理するため、
-        外側の UoW は廃止し、publish_pending_events を直接呼ぶ。
+        外側の UoW は廃止し、EventPublisher の public API 経由で配信する。
         """
-        if not self._pending_events:
+        if not events:
             return
 
         # イベントパブリッシャーがない場合は処理をスキップ（テスト等で event_publisher=None のとき）
@@ -124,8 +122,7 @@ class InMemoryUnitOfWork(UnitOfWork):
             return
 
         try:
-            self._event_publisher._pending_events.extend(self._pending_events)
-            self._event_publisher.publish_pending_events()
+            self._event_publisher.publish_async_events(events)
         except Exception as e:
             logger.exception("Failed to process async events in separate transaction: %s", e)
             raise
