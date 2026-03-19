@@ -10,10 +10,10 @@ branch: codex/uow-event-publisher-ddd-separation
 
 # Current State
 
-- Active phase: Phase 5 completed
-- Last completed phase: Phase 5 async runtime port とライブラリ導入
-- Next recommended action: Phase 6 outbox-ready seam の確定
-- Handoff summary: AsyncEventExecutor port 定義。InProcessAsyncEventExecutor（直列）と AnyIOAsyncEventExecutor（anyio.to_thread）を実装。create_with_event_publisher で InProcessAsyncEventExecutor を注入。post-commit orchestration が executor port 経由で async 配信。
+- Active phase: Phase 6 completed
+- Last completed phase: Phase 6 outbox-ready seam の確定
+- Next recommended action: feature 完了（全 phase 完了）
+- Handoff summary: SEAM.md で envelope / serialization / transport 境界を明文化。EventPayloadSerializer と AsyncEventTransport port を domain/common に定義。test_outbox_seam_phase6 で契約検証。将来 outbox 導入時も UoW 契約変更不要。
 
 # Phase Journal
 
@@ -96,7 +96,7 @@ branch: codex/uow-event-publisher-ddd-separation
 
 - Started: 2026-03-20
 - Completed: 2026-03-20
-- Commit: (pending)
+- Commit: 1446825
 - Tests: test_in_process_async_event_executor.py, test_anyio_async_event_executor.py 追加。全 697 件通過
 - Findings: AsyncEventExecutor port を domain/common に定義。InProcessAsyncEventExecutor は直列 for ループ、AnyIOAsyncEventExecutor は anyio.to_thread.run_sync で各ハンドラをスレッド実行（直列互換）。create_with_event_publisher で InProcessAsyncEventExecutor を注入。InMemoryEventPublisherWithUow に _build_async_dispatch_tasks と async_executor 委譲を追加
 - Plan revision check: 不要。anyio は UoW 境界と噛み合い、future phase 変更不要
@@ -106,6 +106,21 @@ branch: codex/uow-event-publisher-ddd-separation
 - Scope delta: なし
 - Handoff summary: Phase 6 は outbox-ready seam の確定。envelope / serialization seam 定義
 - Next-phase impact: executor と transport の責務分離、outbox 実装時の UoW 契約変更回避
+
+## Phase 6
+
+- Started: 2026-03-20
+- Completed: 2026-03-20
+- Commit: aceffef
+- Tests: test_outbox_seam_phase6.py 追加（EventPayloadSerializer / AsyncEventTransport 契約検証）。全テスト通過
+- Findings: AsyncDispatchTask が in-process envelope 表現としてそのまま有効。EventPayloadSerializer・AsyncEventTransport を port のみ定義し、将来 outbox 導入時に差し替え可能な境界を固定。実装はテスト内の PickleEventPayloadSerializer / InProcessAsyncEventTransport で契約検証
+- Plan revision check: 不要。SEAM.md の envelope / transport 境界は PLAN 想定と整合、future phase 変更不要
+- User approval: 不要
+- Plan updates: なし
+- Goal check: future outbox 実装で UoW 契約変更不要、in-process と transport の境界が明文化
+- Scope delta: なし
+- Handoff summary: feature 完了。flow-ship で出荷準備へ
+- Next-phase impact: なし（本 feature 最終 phase）
 
 ## Planning
 

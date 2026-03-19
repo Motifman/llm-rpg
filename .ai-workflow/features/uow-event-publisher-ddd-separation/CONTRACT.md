@@ -44,6 +44,8 @@
 | **EventPublisher** | ハンドラ登録、sync/async 判定、publish_async(events) による明示的な push 受け取り。pending への pull fallback は互換のため当面残す。 |
 | **Post-commit orchestration** | commit 後の get_committed_events → publish_async → clear_committed_events の一連処理。TransactionalScope または Application 層が担当。 |
 | **AsyncEventExecutor (port)** | 非同期ハンドラ実行の抽象。in-process adapter や outbox adapter が実装する。 |
+| **EventPayloadSerializer (port)** | イベントのシリアライズ／デシリアライズ。outbox 実装で使用。in-process では不使用。SEAM.md 参照。 |
+| **AsyncEventTransport (port)** | envelope の配送。将来 outbox 導入時、in-process（即 Executor へ）と outbox（永続化）を差し替え。SEAM.md 参照。 |
 
 ## 3. with uow: / with scope: 移行ポリシー
 
@@ -98,4 +100,4 @@
 - **Phase 3** → committed events 契約導入。UoW に `get_committed_events` / `clear_committed_events` を追加。
 - **Phase 4** → post-commit orchestration を UoW から分離。UoW.commit から async  trigger を除去。
 - **Phase 5** → async runtime port とライブラリ導入。
-- **Phase 6** → outbox-ready seam 確定。
+- **Phase 6** → outbox-ready seam 確定。envelope / serialization / transport の境界を SEAM.md で明文化し、EventPayloadSerializer / AsyncEventTransport port を定義。adapter テストで契約を検証。EventPayloadSerializer / AsyncEventTransport port 定義。envelope、serialization、executor/transport 責務境界を SEAM.md で明文化。adapter 契約検証テスト追加。EventPayloadSerializer / AsyncEventTransport port 定義、SEAM.md で envelope／serialization／transport 境界を明文化。adapter 差し替え境界のテストあり。
