@@ -100,4 +100,14 @@
 - **Phase 3** → committed events 契約導入。UoW に `get_committed_events` / `clear_committed_events` を追加。
 - **Phase 4** → post-commit orchestration を UoW から分離。UoW.commit から async  trigger を除去。
 - **Phase 5** → async runtime port とライブラリ導入。
-- **Phase 6** → outbox-ready seam 確定。envelope / serialization / transport の境界を SEAM.md で明文化し、EventPayloadSerializer / AsyncEventTransport port を定義。adapter テストで契約を検証。EventPayloadSerializer / AsyncEventTransport port 定義。envelope、serialization、executor/transport 責務境界を SEAM.md で明文化。adapter 契約検証テスト追加。EventPayloadSerializer / AsyncEventTransport port 定義、SEAM.md で envelope／serialization／transport 境界を明文化。adapter 差し替え境界のテストあり。
+- **Phase 6** → outbox-ready seam 確定。envelope / serialization / transport の境界を SEAM.md で明文化し、EventPayloadSerializer / AsyncEventTransport port を定義。adapter テストで契約を検証。EventPayloadSerializer / AsyncEventTransport port 定義、SEAM.md で envelope／serialization／transport 境界を明文化。adapter 差し替え境界のテストあり。
+- **Phase 9** → async runtime adapter 契約の再固定。AnyIOAsyncEventExecutor の利用条件を「同期専用」として契約化。docstring・artifact・ガード・テストで固定。
+
+## 6. Async Runtime Adapter 契約（Phase 9）
+
+### AnyIOAsyncEventExecutor の利用条件
+
+- **同期専用契約**: `execute()` は **同期コンテキストからのみ** 呼ぶこと。
+- **理由**: `anyio.run()` は既存の asyncio イベントループと競合する。async コンテキスト内（例: `async def` 内、`asyncio.run` のコールバック内）から呼ぶと破綻する。
+- **ガード**: `execute()` 起動時に `asyncio.get_running_loop()` で既存ループを検出し、async 内からの呼び出し時は `InvalidOperationError` を投げる。
+- **default wiring**: `create_with_event_publisher` は `InProcessAsyncEventExecutor` を使用。AnyIO adapter は opt-in で同期専用用途に限定。
