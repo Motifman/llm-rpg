@@ -65,7 +65,16 @@
 - post-commit orchestration が `DomainEvent` を `publish_async_events` に渡す。envelope 化は Publisher または Transport の責務。
 - 将来 outbox を導入する場合も、上流の UoW / orchestration 契約は変更不要。
 
-## 6. Reopen alignment if
+## 6. Async Runtime Adapter 契約（Phase 9）
+
+| Adapter | 利用条件 | default wiring |
+|---------|----------|----------------|
+| **InProcessAsyncEventExecutor** | 同期・async どちらのコンテキストからも呼べる（event loop を新規作成） | `create_with_event_publisher` で使用 |
+| **AnyIOAsyncEventExecutor** | **同期コンテキストからのみ**。`anyio.run()` のため async 内からの呼び出しは破綻。ガードで `InvalidOperationError` を投げる | opt-in |
+
+役割分担: InProcess が default、AnyIO はスレッドプール実行の利点を活かす opt-in・同期専用。
+
+## 7. Reopen alignment if
 
 - イベント envelope の形がドメインイベント設計全体の見直しを要求した
 - EventPayloadSerializer が DomainEvent の全サブクラスを扱えず、設計変更が必要になった

@@ -10,10 +10,10 @@ branch: codex/uow-event-publisher-ddd-separation
 
 # Current State
 
-- Active phase: Phase 9 着手可能
-- Last completed phase: Phase 8 transport / envelope 差し替え点の production 接続
-- Next recommended action: Phase 9 async runtime adapter 契約の再固定に着手
-- Handoff summary: Phase 8 で InProcessAsyncEventTransport を production に追加し、InMemoryEventPublisherWithUow.publish_async_events が transport.dispatch 経由で流れるよう変更。create_with_event_publisher は InProcessAsyncEventTransport(executor) を注入。SEAM.md を Phase 8 状態に更新。
+- Active phase: Phase 10 着手可能
+- Last completed phase: Phase 9 async runtime adapter 契約の再固定（同期専用契約）
+- Next recommended action: Phase 10 legacy publisher / UoW 責務の後片付けに着手
+- Handoff summary: Phase 9 で AnyIOAsyncEventExecutor に同期専用契約を導入。docstring・execute() ガード・InvalidOperationError・test_execute_succeeds_from_sync_context / test_execute_raises_when_called_from_async_context を追加。CONTRACT.md / SEAM.md に Async Runtime Adapter 契約を追記。
 
 # Phase Journal
 
@@ -151,6 +151,21 @@ branch: codex/uow-event-publisher-ddd-separation
 - Scope delta: なし
 - Handoff summary: Phase 9 は AnyIOAsyncEventExecutor の async context 安全性を契約化する
 - Next-phase impact: Phase 9 で runtime adapter の利用条件が明確になり、将来の outbox 導入時の破綻を防げる
+
+## Phase 9
+
+- Started: 2026-03-20
+- Completed: 2026-03-20
+- Commit: dca1195
+- Tests: test_execute_succeeds_from_sync_context, test_execute_raises_when_called_from_async_context 追加。tests/infrastructure/unit_of_work, tests/infrastructure/events 全 59 件通過
+- Findings: asyncio.get_running_loop() で async コンテキスト検出。RuntimeError 時は sync 扱いで OK。InvalidOperationError を event_executor_exceptions に定義
+- Plan revision check: 不要。future phase 変更不要
+- User approval: 不要
+- Plan updates: なし
+- Goal check: 利用条件がコード・docstring・artifact で一致。同期成功・async 契約違反の両テスト通過
+- Scope delta: なし
+- Handoff summary: Phase 10 は legacy publisher の例外握りつぶし廃止と UoW 不要依存の整理
+- Next-phase impact: Phase 10 で registration/failure semantics と UoW constructor 責務を整理
 
 ## Planning
 
