@@ -10,10 +10,10 @@ branch: codex/uow-event-publisher-ddd-separation
 
 # Current State
 
-- Active phase: Phase 3 completed
-- Last completed phase: Phase 3 committed events 契約の導入
-- Next recommended action: Phase 4 で post-commit orchestration を UoW から分離
-- Handoff summary: UoW に get_committed_events / clear_committed_events を追加。InMemoryUnitOfWork は commit 成功時に _committed_events に格納。FakeUow 4 ファイルに no-op 実装を追加。Phase 2 で既に publish_async_events(events) が UoW pending 非依存の API として存在
+- Active phase: Phase 4 completed
+- Last completed phase: Phase 4 post-commit orchestration を UoW から分離
+- Next recommended action: Phase 5 async runtime port とライブラリ導入
+- Handoff summary: TransactionalScope 導入。InMemoryUnitOfWork.commit から async trigger 除去。create_with_event_publisher は (scope, event_publisher) を返し、scope が post-commit orchestration (get_committed_events → publish_async_events → clear_committed_events) を担当。with uow: 互換維持。
 
 # Phase Journal
 
@@ -76,6 +76,21 @@ branch: codex/uow-event-publisher-ddd-separation
 - Scope delta: なし
 - Handoff summary: Phase 4 は CONTRACT の post-commit orchestration 分離に従い、UoW.commit から async trigger を除去し、TransactionalScope 等で orchestration を担う
 - Next-phase impact: Phase 4 で get_committed_events → publish_async_events → clear_committed_events の流れを wrapper 側に移す
+
+## Phase 4
+
+- Started: 2026-03-20
+- Completed: 2026-03-20
+- Commit: (pending)
+- Tests: test_create_with_event_publisher_factory_method を TransactionalScope 対応に更新、test_event_publishing_with_event_publisher / test_async_event_processing_failure_re_raises_exception を TransactionalScope 経由の post-commit orchestration 検証に変更。全 5906 件通過
+- Findings: uow.commit() は SyncEventDispatcher を呼ぶが、flush は raw uow に _sync_event_dispatcher を設定しないと動かない。create_with_event_publisher で unit_of_work._sync_event_dispatcher も設定する必要あり
+- Plan revision check: 不要。future phase 変更不要
+- User approval: 不要
+- Plan updates: なし
+- Goal check: UoW.commit が async publish を知らない、commit 後 orchestration が明示、with uow: 互換維持
+- Scope delta: with uow: 利用箇所の migration plan は設計上不要（透過的に scope を返すため呼び出し元変更なし）
+- Handoff summary: Phase 5 は AsyncEventExecutor port 定義と anyio 評価
+- Next-phase impact: post-commit orchestration が executor port に差し替え可能になる
 
 ## Planning
 

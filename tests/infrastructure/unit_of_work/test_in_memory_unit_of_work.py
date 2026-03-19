@@ -2,9 +2,10 @@
 InMemoryUnitOfWorkのテスト
 """
 import pytest
-from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
-from ai_rpg_world.domain.common.domain_event import DomainEvent
 from unittest.mock import Mock
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.infrastructure.unit_of_work.transactional_scope import TransactionalScope
+from ai_rpg_world.domain.common.domain_event import DomainEvent
 from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
 
 
@@ -90,36 +91,33 @@ class TestInMemoryUnitOfWork:
             self.unit_of_work.add_events([event])
 
     def test_event_publishing_with_event_publisher(self):
-        """イベントパブリッシャーを使ったイベント発行テスト"""
-        # モックイベントパブリッシャーを作成
+        """Phase 4: TransactionalScope の post-commit orchestration で publish_async_events が呼ばれる"""
         mock_event_publisher = Mock()
         mock_event_publisher.publish_async_events = Mock()
 
-        # Unit of Workにイベントパブリッシャーを設定
-        self.unit_of_work._event_publisher = mock_event_publisher
-
+        scope = TransactionalScope(self.unit_of_work, mock_event_publisher)
         event1 = Mock(spec=DomainEvent)
         event2 = Mock(spec=DomainEvent)
 
-        with self.unit_of_work:
-            self.unit_of_work.add_events([event1, event2])
+        with scope:
+            scope.add_events([event1, event2])
 
-        # コミット時にイベントパブリッシャーの publish_async_events が呼ばれたことを確認（public handoff API）
+        # post-commit orchestration で publish_async_events が呼ばれたことを確認
         mock_event_publisher.publish_async_events.assert_called_once()
         mock_event_publisher.publish_async_events.assert_called_with([event1, event2])
 
     def test_async_event_processing_failure_re_raises_exception(self):
-        """非同期イベント処理で例外が発生した場合、握りつぶさず再送出する"""
+        """Phase 4: post-commit orchestration で publish_async_events が例外を投げたら、握りつぶさず再送出する"""
         mock_event_publisher = Mock()
         mock_event_publisher.publish_async_events = Mock(
             side_effect=RuntimeError("Async handler failed")
         )
-        self.unit_of_work._event_publisher = mock_event_publisher
+        scope = TransactionalScope(self.unit_of_work, mock_event_publisher)
 
         event = Mock(spec=DomainEvent)
         with pytest.raises(RuntimeError, match="Async handler failed"):
-            with self.unit_of_work:
-                self.unit_of_work.add_events([event])
+            with scope:
+                scope.add_events([event])
 
         mock_event_publisher.publish_async_events.assert_called_once()
 
@@ -168,13 +166,13 @@ class TestInMemoryUnitOfWork:
         assert self.unit_of_work.get_pending_events() == []
 
     def test_create_with_event_publisher_factory_method(self):
-        """ファクトリーメソッドのテスト"""
+        """ファクトリーメソッドのテスト - Phase 4: TransactionalScope を返し、with uow: 互換を維持"""
         def create_unit_of_work():
             return InMemoryUnitOfWork(unit_of_work_factory=create_unit_of_work)
         unit_of_work, event_publisher = InMemoryUnitOfWork.create_with_event_publisher(unit_of_work_factory=create_unit_of_work)
 
-        # Unit of Workが正しく作成されていることを確認
-        assert isinstance(unit_of_work, InMemoryUnitOfWork)
+        # Phase 4: create_with_event_publisher は TransactionalScope を返す（内部で InMemoryUnitOfWork をラップ）
+        assert isinstance(unit_of_work, TransactionalScope)
         assert unit_of_work._event_publisher is event_publisher
 
         # イベントパブリッシャーが正しく作成されていることを確認
