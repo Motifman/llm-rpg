@@ -10,10 +10,10 @@ branch: codex/uow-event-publisher-ddd-separation
 
 # Current State
 
-- Active phase: Phase 4 completed
-- Last completed phase: Phase 4 post-commit orchestration を UoW から分離
-- Next recommended action: Phase 5 async runtime port とライブラリ導入
-- Handoff summary: TransactionalScope 導入。InMemoryUnitOfWork.commit から async trigger 除去。create_with_event_publisher は (scope, event_publisher) を返し、scope が post-commit orchestration (get_committed_events → publish_async_events → clear_committed_events) を担当。with uow: 互換維持。
+- Active phase: Phase 5 completed
+- Last completed phase: Phase 5 async runtime port とライブラリ導入
+- Next recommended action: Phase 6 outbox-ready seam の確定
+- Handoff summary: AsyncEventExecutor port 定義。InProcessAsyncEventExecutor（直列）と AnyIOAsyncEventExecutor（anyio.to_thread）を実装。create_with_event_publisher で InProcessAsyncEventExecutor を注入。post-commit orchestration が executor port 経由で async 配信。
 
 # Phase Journal
 
@@ -91,6 +91,21 @@ branch: codex/uow-event-publisher-ddd-separation
 - Scope delta: with uow: 利用箇所の migration plan は設計上不要（透過的に scope を返すため呼び出し元変更なし）
 - Handoff summary: Phase 5 は AsyncEventExecutor port 定義と anyio 評価
 - Next-phase impact: post-commit orchestration が executor port に差し替え可能になる
+
+## Phase 5
+
+- Started: 2026-03-20
+- Completed: 2026-03-20
+- Commit: (pending)
+- Tests: test_in_process_async_event_executor.py, test_anyio_async_event_executor.py 追加。全 697 件通過
+- Findings: AsyncEventExecutor port を domain/common に定義。InProcessAsyncEventExecutor は直列 for ループ、AnyIOAsyncEventExecutor は anyio.to_thread.run_sync で各ハンドラをスレッド実行（直列互換）。create_with_event_publisher で InProcessAsyncEventExecutor を注入。InMemoryEventPublisherWithUow に _build_async_dispatch_tasks と async_executor 委譲を追加
+- Plan revision check: 不要。anyio は UoW 境界と噛み合い、future phase 変更不要
+- User approval: 不要
+- Plan updates: なし
+- Goal check: post-commit orchestration が executor port 経由、ライブラリ差し替え点が 1 箇所、既存テスト通過
+- Scope delta: なし
+- Handoff summary: Phase 6 は outbox-ready seam の確定。envelope / serialization seam 定義
+- Next-phase impact: executor と transport の責務分離、outbox 実装時の UoW 契約変更回避
 
 ## Planning
 
