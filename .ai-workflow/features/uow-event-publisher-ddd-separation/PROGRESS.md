@@ -137,6 +137,21 @@ branch: codex/uow-event-publisher-ddd-separation
 - Handoff summary: Phase 8 は transport / envelope 差し替え点を production code に挿入する
 - Next-phase impact: Phase 8 で InMemoryEventPublisherWithUow.publish_async_events が executor 直呼びではなく transport 経由になる
 
+## Phase 8
+
+- Started: 2026-03-20
+- Completed: 2026-03-20
+- Commit: f6e0d48
+- Tests: TestPhase8TransportProductionPath, TestPublishAsyncEventsViaTransport 追加。test_outbox_seam_phase6 を production InProcessAsyncEventTransport に移行。全 706 件通過
+- Findings: InProcessAsyncEventTransport を infrastructure/events に追加。InMemoryEventPublisherWithUow は async_transport 注入時に transport.dispatch 経由で配送。create_with_event_publisher は InProcessAsyncEventTransport(executor) を注入。EventPayloadSerializer の下流責務境界を SEAM.md に明文化
+- Plan revision check: 不要。future phase 変更不要
+- User approval: 不要
+- Plan updates: なし
+- Goal check: async publish の差し替え点が production code で 1 箇所に閉じる、transport 経由のテスト通過
+- Scope delta: なし
+- Handoff summary: Phase 9 は AnyIOAsyncEventExecutor の async context 安全性を契約化する
+- Next-phase impact: Phase 9 で runtime adapter の利用条件が明確になり、将来の outbox 導入時の破綻を防げる
+
 ## Planning
 
 - Started: 2026-03-19
