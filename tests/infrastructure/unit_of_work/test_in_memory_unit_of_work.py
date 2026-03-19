@@ -247,3 +247,59 @@ class TestInMemoryUnitOfWork:
             self.unit_of_work.register_pending_aggregate("TestRepo", 1, obj)
             assert self.unit_of_work.get_pending_aggregate("TestRepo", 1) is obj
         assert self.unit_of_work.get_pending_aggregate("TestRepo", 1) is None
+
+    def test_get_committed_events_returns_events_after_commit(self):
+        """Phase 3: コミット成功後に get_committed_events でイベントが取得できる"""
+        self.unit_of_work._event_publisher = Mock()
+        event1 = Mock(spec=DomainEvent)
+        event2 = Mock(spec=DomainEvent)
+
+        with self.unit_of_work:
+            self.unit_of_work.add_events([event1, event2])
+
+        committed = self.unit_of_work.get_committed_events()
+        assert len(committed) == 2
+        assert event1 in committed
+        assert event2 in committed
+
+    def test_clear_committed_events_clears_buffer(self):
+        """Phase 3: clear_committed_events でバッファが空になる"""
+        self.unit_of_work._event_publisher = Mock()
+        event = Mock(spec=DomainEvent)
+
+        with self.unit_of_work:
+            self.unit_of_work.add_events([event])
+
+        assert len(self.unit_of_work.get_committed_events()) == 1
+        self.unit_of_work.clear_committed_events()
+        assert self.unit_of_work.get_committed_events() == []
+
+    def test_committed_events_empty_when_no_events(self):
+        """Phase 3: イベントなしで commit した場合、get_committed_events は空"""
+        with self.unit_of_work:
+            self.unit_of_work.add_operation(lambda: None)
+
+        assert self.unit_of_work.get_committed_events() == []
+
+    def test_committed_events_cleared_on_begin(self):
+        """Phase 3: begin で前回の committed events がクリアされる"""
+        self.unit_of_work._event_publisher = Mock()
+        event = Mock(spec=DomainEvent)
+
+        with self.unit_of_work:
+            self.unit_of_work.add_events([event])
+        assert len(self.unit_of_work.get_committed_events()) == 1
+
+        self.unit_of_work.begin()
+        # begin で _committed_events が [] にリセットされる
+        assert self.unit_of_work.get_committed_events() == []
+
+    def test_committed_events_empty_on_rollback(self):
+        """Phase 3: rollback 時は commit されないので get_committed_events は空"""
+        event = Mock(spec=DomainEvent)
+
+        self.unit_of_work.begin()
+        self.unit_of_work.add_events([event])
+        self.unit_of_work.rollback()
+
+        assert self.unit_of_work.get_committed_events() == []

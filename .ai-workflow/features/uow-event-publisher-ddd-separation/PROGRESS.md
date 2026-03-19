@@ -10,10 +10,10 @@ branch: codex/uow-event-publisher-ddd-separation
 
 # Current State
 
-- Active phase: Phase 2 completed
-- Last completed phase: Phase 2 private handoff 廃止
-- Next recommended action: Phase 3 で committed events 契約の導入
-- Handoff summary: UoW は EventPublisher の private 属性を触らず、publish_async_events(events) public API 経由で非同期配信。publish_pending_events() は互換 API として残存。_process_events_in_separate_transaction が events を引数で受け取り渡す形に整理
+- Active phase: Phase 3 completed
+- Last completed phase: Phase 3 committed events 契約の導入
+- Next recommended action: Phase 4 で post-commit orchestration を UoW から分離
+- Handoff summary: UoW に get_committed_events / clear_committed_events を追加。InMemoryUnitOfWork は commit 成功時に _committed_events に格納。FakeUow 4 ファイルに no-op 実装を追加。Phase 2 で既に publish_async_events(events) が UoW pending 非依存の API として存在
 
 # Phase Journal
 
@@ -61,6 +61,21 @@ branch: codex/uow-event-publisher-ddd-separation
 - Scope delta: なし
 - Handoff summary: Phase 3 は CONTRACT の committed events 契約に従い、UoW に get_committed_events/clear_committed_events を追加する
 - Next-phase impact: Phase 3 で UoW から committed events 取得可能になると、post-commit orchestration が get_committed_events → publish_async_events の流れで実装しやすくなる
+
+## Phase 3
+
+- Started: 2026-03-20
+- Completed: 2026-03-20
+- Commit: b539231
+- Tests: test_get_committed_events_returns_events_after_commit, test_clear_committed_events_clears_buffer, test_committed_events_empty_when_no_events, test_committed_events_cleared_on_begin, test_committed_events_empty_on_rollback 追加。tests/infrastructure/unit_of_work, tests/infrastructure/events, 全 5906 件通過
+- Findings: Phase 2 で publish_async_events(events) が既に UoW pending 非依存の API として存在するため、Phase 3 scope 4 の EventPublisher 追加は不要
+- Plan revision check: 不要。committed events 契約はテストで固定され、future phase 変更不要
+- User approval: 不要
+- Plan updates: なし
+- Goal check: commit 後イベント取得の契約がテストで固定。UoW の pending 状態に依存しない async publish API は既存
+- Scope delta: なし
+- Handoff summary: Phase 4 は CONTRACT の post-commit orchestration 分離に従い、UoW.commit から async trigger を除去し、TransactionalScope 等で orchestration を担う
+- Next-phase impact: Phase 4 で get_committed_events → publish_async_events → clear_committed_events の流れを wrapper 側に移す
 
 ## Planning
 
