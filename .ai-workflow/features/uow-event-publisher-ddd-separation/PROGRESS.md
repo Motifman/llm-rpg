@@ -10,10 +10,10 @@ branch: codex/uow-event-publisher-ddd-separation
 
 # Current State
 
-- Active phase: Phase 1 completed
-- Last completed phase: Phase 1 registration 契約の正規化
-- Next recommended action: Phase 2 で private handoff 廃止、publish_async_events(events) 等の public API 追加
-- Handoff summary: 全 registry で is_synchronous 明示済み。InMemoryEventPublisher / AsyncEventPublisher に register_handler(..., is_synchronous=...) を追加し、全 EventPublisher 実装の API を統一。CONTRACT に将来昇格先（register_sync_handler / register_async_handler）を追記
+- Active phase: Phase 2 completed
+- Last completed phase: Phase 2 private handoff 廃止
+- Next recommended action: Phase 3 で committed events 契約の導入
+- Handoff summary: UoW は EventPublisher の private 属性を触らず、publish_async_events(events) public API 経由で非同期配信。publish_pending_events() は互換 API として残存。_process_events_in_separate_transaction が events を引数で受け取り渡す形に整理
 
 # Phase Journal
 
@@ -49,18 +49,18 @@ branch: codex/uow-event-publisher-ddd-separation
 
 ## Phase 2
 
-- Started:
-- Completed:
-- Commit:
-- Tests:
-- Findings:
-- Plan revision check:
-- User approval:
-- Plan updates:
-- Goal check:
-- Scope delta:
-- Handoff summary:
-- Next-phase impact:
+- Started: 2026-03-20
+- Completed: 2026-03-20
+- Commit: 5044cc7 (本コミット)
+- Tests: test_publish_async_events_processes_events_with_async_handlers 追加、test_event_publishing_with_event_publisher / test_async_event_processing_failure_re_raises_exception を publish_async_events 使用に更新。tests/infrastructure/unit_of_work, tests/infrastructure/events 全 39 件通過
+- Findings: extend 削除は publish_pending_events の get_pending_events() フォールバックで吸収可能と IDEA 記載の通り。public API publish_async_events(events) を追加し、events を引数で渡す形にすることで private アクセスを完全排除
+- Plan revision check: 不要。public handoff と publish_pending_events の共存は簡潔で、future phase 変更不要
+- User approval: 不要
+- Plan updates: なし
+- Goal check: private アクセス廃止、async handoff が public API で表現、既存挙動維持
+- Scope delta: なし
+- Handoff summary: Phase 3 は CONTRACT の committed events 契約に従い、UoW に get_committed_events/clear_committed_events を追加する
+- Next-phase impact: Phase 3 で UoW から committed events 取得可能になると、post-commit orchestration が get_committed_events → publish_async_events の流れで実装しやすくなる
 
 ## Planning
 

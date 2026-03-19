@@ -46,8 +46,27 @@ class InMemoryEventPublisherWithUow(EventPublisher[DomainEvent]):
         # 保留中のイベントに追加
         self._unit_of_work.add_events(events)
 
+    def publish_async_events(self, events: List[DomainEvent]) -> None:
+        """指定イベントを非同期ハンドラで処理する（public handoff API）
+
+        UoW の pending に依存せず、明示的に渡されたイベントのみを処理する。
+        post-commit orchestration から呼ばれることを想定。
+        """
+        for event in events:
+            if event not in self._published_events:
+                self._published_events.append(event)
+
+            event_type = type(event)
+            handlers = self._async_handlers.get(event_type, [])
+            for handler in handlers:
+                handler.handle(event)
+
     def publish_pending_events(self) -> None:
-        """保留中のイベントを別トランザクションで処理（非同期ハンドラ用）"""
+        """保留中のイベントを別トランザクションで処理（非同期ハンドラ用）
+
+        互換 API。UoW またはパブリッシャーの pending から pull する。
+        新規コードは publish_async_events(events) の push API を優先すること。
+        """
         # Unit of Workの保留イベントを取得、またはパブリッシャーの保留イベントを使用
         pending_events = self._pending_events if self._pending_events else self._unit_of_work.get_pending_events()
 
