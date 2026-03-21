@@ -30,7 +30,7 @@
          ↓
 [ committed events が取り出し可能になる ]
          ↓
-[ post-commit orchestration が EventPublisher.publish_async(events) を呼ぶ ]
+[ post-commit orchestration が EventPublisher.publish_async_events(events) を呼ぶ ]
          ↓
 [ async runtime が async handler を実行 ]
 ```
@@ -41,7 +41,7 @@
 |----------------|------|
 | **UnitOfWork** | トランザクション境界。pending events の収集・保持。同期 dispatch の起点（SyncEventDispatcher への委譲）。commit / rollback。**非同期配信トリガーは持たない**。 |
 | **SyncEventDispatcher** | pending から sync handler を呼ぶ。同一トランザクション内で queue drain。 |
-| **EventPublisher** | ハンドラ登録、sync/async 判定、publish_async(events) による明示的な push 受け取り。pending への pull fallback は互換のため当面残す。 |
+| **EventPublisher** | ハンドラ登録、sync/async 判定、`publish_async_events(events)` による明示的な push 受け取り。pending への pull fallback は互換のため当面残す。 |
 | **Post-commit orchestration** | commit 後の get_committed_events → publish_async → clear_committed_events の一連処理。TransactionalScope または Application 層が担当。 |
 | **AsyncEventExecutor (port)** | 非同期ハンドラ実行の抽象。in-process adapter や outbox adapter が実装する。 |
 | **EventPayloadSerializer (port)** | イベントのシリアライズ／デシリアライズ。outbox 実装で使用。in-process では不使用。SEAM.md 参照。 |
@@ -76,7 +76,7 @@
 - [ ] UoW は `begin`, `commit`, `rollback`, `add_events`, `add_events_from_aggregate` を提供する
 - [ ] UoW は commit 内で async 配信をトリガーしない（Phase 4 完了後）
 - [ ] `get_committed_events` / `clear_committed_events` は Phase 3 で UoW に追加する
-- [ ] `publish_async(events)` は EventPublisher に追加し、UoW の pending に依存しない API とする
+- [x] `publish_async_events(events)` は EventPublisher に追加し、UoW の pending に依存しない API とする（Phase 2/7 で固定済み）
 - [ ] post-commit orchestration は Application 層または wrapper が担う
 
 ## 4. Registration 契約（Phase 1 正規化）

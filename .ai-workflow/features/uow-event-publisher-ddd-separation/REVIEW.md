@@ -4,7 +4,7 @@ title: Uow Event Publisher Ddd Separation
 slug: uow-event-publisher-ddd-separation
 status: completed
 created_at: 2026-03-17
-updated_at: 2026-03-21
+updated_at: 2026-03-22
 branch: codex/uow-event-publisher-ddd-separation
 ---
 
@@ -66,3 +66,31 @@ Review all files for this feature. Verify DDD boundaries, implementation quality
 
 - **Regression:** `pytest tests/` → 5926 passed（2026-03-21、サンドボックス実行可）
 - **Release Gate（更新）:** PLAN Phase 0–10 の scope について ship ready とみなす
+
+# Final verification (2026-03-21)
+
+## Findings
+
+### Critical
+
+- None
+
+### Major
+
+- None
+
+### Minor
+
+- None（2026-03-21 追記: `PLAN.md` / `CONTRACT.md` の `publish_async_events` 表記整合、`SEAM.md` の `InProcessAsyncEventExecutor` 説明を実装に合わせて修正済み）
+
+## Follow-up
+
+- Additional phases needed: no
+- Decision: artifact 軽微修正まで完了。実装・テスト観点で差し戻し不要
+
+## Release Gate (final verification)
+
+- Ship ready: yes
+- Non-blocking findings: none（上記 Minor を解消済み）
+- Test evidence:
+  - `python -m pytest tests/infrastructure/unit_of_work/test_in_memory_unit_of_work.py tests/infrastructure/events/test_anyio_async_event_executor.py tests/infrastructure/events/test_event_publisher_registration_contract.py tests/infrastructure/events/test_outbox_seam_phase6.py tests/infrastructure/events/test_in_process_async_event_executor.py tests/infrastructure/events/test_in_memory_event_publisher_with_uow.py tests/application/world/test_movement_wiring.py tests/application/world/services/test_movement_step_executor.py -q` → 64 passed
