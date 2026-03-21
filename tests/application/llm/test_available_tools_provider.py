@@ -30,6 +30,13 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
     TOOL_NAME_SKILL_EQUIP,
     TOOL_NAME_SKILL_REJECT_PROPOSAL,
+    TOOL_NAME_SNS_CREATE_POST,
+    TOOL_NAME_SNS_ENTER,
+    TOOL_NAME_SNS_HOME_TIMELINE,
+    TOOL_NAME_SNS_LIST_MY_POSTS,
+    TOOL_NAME_SNS_LIST_USER_POSTS,
+    TOOL_NAME_SNS_LOGOUT,
+    TOOL_NAME_TRADE_OFFER,
 )
 from ai_rpg_world.application.llm.services.tool_catalog import (
     register_default_tools,
@@ -38,6 +45,7 @@ from ai_rpg_world.application.world.contracts.dtos import (
     ActiveHarvestDto,
     ActiveConversationDto,
     AvailableMoveDto,
+    AvailableTradeSummaryDto,
     AttentionLevelOptionDto,
     AwakenedActionDto,
     ChestItemDto,
@@ -80,6 +88,7 @@ def _context_with_moves(total: int, *, is_busy: bool = False, visible_objects=No
         total_available_moves=total,
         attention_level=AttentionLevel.FULL,
         is_busy=is_busy,
+        is_sns_mode_active=False,
     )
 
 
@@ -105,6 +114,53 @@ class TestDefaultAvailableToolsProvider:
     @pytest.fixture
     def provider(self, registry):
         return DefaultAvailableToolsProvider(registry)
+
+    @pytest.fixture
+    def registry_sns_trade(self):
+        r = DefaultGameToolRegistry()
+        register_default_tools(
+            r,
+            speech_enabled=True,
+            sns_enabled=True,
+            trade_enabled=True,
+        )
+        return r
+
+    @pytest.fixture
+    def provider_sns_trade(self, registry_sns_trade):
+        return DefaultAvailableToolsProvider(registry_sns_trade)
+
+    def test_sns_mode_off_shows_only_sns_enter_among_sns_tools(self, provider_sns_trade):
+        """SNS モード OFF では SNS 系は sns_enter のみ（投稿・取引は出ない）"""
+        ctx = _context_with_moves(1)
+        ctx.is_sns_mode_active = False
+        ctx.inventory_items = [InventoryItemDto(1, 10, "剣", 1)]
+        ctx.available_trades = [AvailableTradeSummaryDto(trade_id=1, item_name="盾", requested_gold=10)]
+        tools = provider_sns_trade.get_available_tools(ctx)
+        names = [t["function"]["name"] for t in tools if t.get("type") == "function"]
+        assert TOOL_NAME_SNS_ENTER in names
+        assert TOOL_NAME_SNS_LOGOUT not in names
+        assert TOOL_NAME_SNS_CREATE_POST not in names
+        assert TOOL_NAME_TRADE_OFFER not in names
+        assert TOOL_NAME_SNS_HOME_TIMELINE not in names
+        assert TOOL_NAME_SNS_LIST_MY_POSTS not in names
+        assert TOOL_NAME_SNS_LIST_USER_POSTS not in names
+
+    def test_sns_mode_on_shows_sns_interaction_and_trade_not_enter(self, provider_sns_trade):
+        """SNS モード ON では操作系 SNS・取引が出るが sns_enter は出ない"""
+        ctx = _context_with_moves(1)
+        ctx.is_sns_mode_active = True
+        ctx.inventory_items = [InventoryItemDto(1, 10, "剣", 1)]
+        ctx.available_trades = [AvailableTradeSummaryDto(trade_id=1, item_name="盾", requested_gold=10)]
+        tools = provider_sns_trade.get_available_tools(ctx)
+        names = [t["function"]["name"] for t in tools if t.get("type") == "function"]
+        assert TOOL_NAME_SNS_ENTER not in names
+        assert TOOL_NAME_SNS_LOGOUT in names
+        assert TOOL_NAME_SNS_CREATE_POST in names
+        assert TOOL_NAME_TRADE_OFFER in names
+        assert TOOL_NAME_SNS_HOME_TIMELINE in names
+        assert TOOL_NAME_SNS_LIST_MY_POSTS in names
+        assert TOOL_NAME_SNS_LIST_USER_POSTS in names
 
     def test_get_available_tools_context_none_returns_no_op_only(self, provider):
         """context が None のときは no_op のみ（move_to_destination は利用不可）"""

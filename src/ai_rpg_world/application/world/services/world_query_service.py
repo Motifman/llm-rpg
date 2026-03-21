@@ -55,6 +55,9 @@ from ai_rpg_world.application.observation.services.player_audience_query_service
 )
 
 if TYPE_CHECKING:
+    from ai_rpg_world.application.social.services.sns_mode_session_service import (
+        SnsModeSessionService,
+    )
     from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
     from ai_rpg_world.application.conversation.services.conversation_command_service import (
         ConversationCommandService,
@@ -111,6 +114,7 @@ class WorldQueryService:
         spot_context_query_service: Optional[SpotContextQueryService] = None,
         available_moves_query_service: Optional[AvailableMovesQueryService] = None,
         visible_context_query_service: Optional[VisibleContextQueryService] = None,
+        sns_mode_session: Optional["SnsModeSessionService"] = None,
     ):
         self._player_location_query_service = (
             player_location_query_service
@@ -194,6 +198,7 @@ class WorldQueryService:
                 shop_repository=shop_repository,
                 personal_trade_query_service=personal_trade_query_service,
                 player_audience_query=self._player_audience_query,
+                sns_mode_session=sns_mode_session,
             )
         )
         self._logger = logging.getLogger(self.__class__.__name__)

@@ -48,6 +48,9 @@ from ai_rpg_world.domain.world.entity.world_object_component import HarvestableC
 from ai_rpg_world.application.common.interfaces import IPlayerAudienceQueryPort
 
 if TYPE_CHECKING:
+    from ai_rpg_world.application.social.services.sns_mode_session_service import (
+        SnsModeSessionService,
+    )
     from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
     from ai_rpg_world.application.conversation.services.conversation_command_service import (
         ConversationCommandService,
@@ -113,6 +116,7 @@ class PlayerCurrentStateBuilder:
         shop_repository: Optional["ShopRepository"] = None,
         personal_trade_query_service: Optional["PersonalTradeQueryService"] = None,
         player_audience_query: Optional[IPlayerAudienceQueryPort] = None,
+        sns_mode_session: Optional["SnsModeSessionService"] = None,
     ) -> None:
         if player_audience_query is None:
             raise ValueError(
@@ -135,6 +139,7 @@ class PlayerCurrentStateBuilder:
         self._shop_repository = shop_repository
         self._personal_trade_query_service = personal_trade_query_service
         self._player_audience_query = player_audience_query
+        self._sns_mode_session = sns_mode_session
         self._visible_object_builder = VisibleObjectReadModelBuilder(
             player_profile_repository=player_profile_repository,
             monster_repository=monster_repository,
@@ -368,6 +373,11 @@ class PlayerCurrentStateBuilder:
             ),
             actionable_objects=actionable_objects,
             notable_objects=notable_objects,
+            is_sns_mode_active=(
+                self._sns_mode_session.is_sns_mode_active(query.player_id)
+                if self._sns_mode_session is not None
+                else False
+            ),
         )
 
     def build_visible_objects(

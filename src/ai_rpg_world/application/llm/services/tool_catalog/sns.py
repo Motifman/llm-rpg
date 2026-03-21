@@ -5,10 +5,20 @@ from typing import List, Tuple
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
 from ai_rpg_world.application.llm.services.availability_resolvers import (
+    SnsEnterToolAvailabilityResolver,
     SnsToolAvailabilityResolver,
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SNS_BLOCK,
+    TOOL_NAME_SNS_DELETE_POST,
+    TOOL_NAME_SNS_DELETE_REPLY,
+    TOOL_NAME_SNS_ENTER,
+    TOOL_NAME_SNS_HOME_TIMELINE,
+    TOOL_NAME_SNS_LIST_MY_POSTS,
+    TOOL_NAME_SNS_LIST_USER_POSTS,
+    TOOL_NAME_SNS_LOGOUT,
+    TOOL_NAME_SNS_MARK_ALL_NOTIFICATIONS_READ,
+    TOOL_NAME_SNS_MARK_NOTIFICATION_READ,
     TOOL_NAME_SNS_CREATE_POST,
     TOOL_NAME_SNS_CREATE_REPLY,
     TOOL_NAME_SNS_FOLLOW,
@@ -18,6 +28,35 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SNS_UNBLOCK,
     TOOL_NAME_SNS_UNFOLLOW,
     TOOL_NAME_SNS_UNSUBSCRIBE,
+    TOOL_NAME_SNS_UPDATE_PROFILE,
+)
+
+SNS_ENTER_PARAMETERS = {
+    "type": "object",
+    "properties": {},
+    "required": [],
+}
+SNS_ENTER_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_ENTER,
+    description=(
+        "ゲーム内の SNS アプリを開きます（実認証ではありません）。"
+        "開くと投稿・取引など SNS モード用ツールが利用可能になります。"
+    ),
+    parameters=SNS_ENTER_PARAMETERS,
+)
+
+SNS_LOGOUT_PARAMETERS = {
+    "type": "object",
+    "properties": {},
+    "required": [],
+}
+SNS_LOGOUT_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_LOGOUT,
+    description=(
+        "ゲーム内の SNS アプリを閉じます（実認証のログアウトではありません）。"
+        "閉じると SNS モード用ツールは一覧から外れます。"
+    ),
+    parameters=SNS_LOGOUT_PARAMETERS,
 )
 
 SNS_CREATE_POST_PARAMETERS = {
@@ -160,11 +199,127 @@ SNS_UNBLOCK_DEFINITION = ToolDefinitionDto(
     parameters=SNS_UNBLOCK_PARAMETERS,
 )
 
+SNS_DELETE_POST_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "post_id": {"type": "integer", "description": "削除するポストのID。"},
+    },
+    "required": ["post_id"],
+}
+SNS_DELETE_POST_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_DELETE_POST,
+    description="自分が投稿したポストを削除します。",
+    parameters=SNS_DELETE_POST_PARAMETERS,
+)
+
+SNS_DELETE_REPLY_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "reply_id": {"type": "integer", "description": "削除するリプライのID。"},
+    },
+    "required": ["reply_id"],
+}
+SNS_DELETE_REPLY_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_DELETE_REPLY,
+    description="自分が投稿したリプライを削除します。",
+    parameters=SNS_DELETE_REPLY_PARAMETERS,
+)
+
+SNS_UPDATE_PROFILE_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "new_display_name": {
+            "type": "string",
+            "description": "新しい表示名。省略可（他方と併用）。",
+        },
+        "new_bio": {
+            "type": "string",
+            "description": "新しい自己紹介。省略可（他方と併用）。",
+        },
+    },
+    "required": [],
+}
+SNS_UPDATE_PROFILE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_UPDATE_PROFILE,
+    description="SNS の表示名または自己紹介を更新します。いずれか一方または両方を指定してください。",
+    parameters=SNS_UPDATE_PROFILE_PARAMETERS,
+)
+
+SNS_MARK_NOTIFICATION_READ_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "notification_id": {"type": "integer", "description": "既読にする通知のID。"},
+    },
+    "required": ["notification_id"],
+}
+SNS_MARK_NOTIFICATION_READ_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_MARK_NOTIFICATION_READ,
+    description="指定した通知を既読にします。",
+    parameters=SNS_MARK_NOTIFICATION_READ_PARAMETERS,
+)
+
+SNS_MARK_ALL_NOTIFICATIONS_READ_PARAMETERS = {
+    "type": "object",
+    "properties": {},
+    "required": [],
+}
+SNS_MARK_ALL_NOTIFICATIONS_READ_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_MARK_ALL_NOTIFICATIONS_READ,
+    description="自分宛ての通知をすべて既読にします。",
+    parameters=SNS_MARK_ALL_NOTIFICATIONS_READ_PARAMETERS,
+)
+
+SNS_HOME_TIMELINE_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "limit": {"type": "integer", "description": "取得件数（省略時は 20、最大 100）。"},
+        "offset": {"type": "integer", "description": "先頭からスキップする件数（省略時は 0）。"},
+    },
+    "required": [],
+}
+SNS_HOME_TIMELINE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_HOME_TIMELINE,
+    description="フォロー中ユーザーのホームタイムライン（投稿一覧）を取得します。",
+    parameters=SNS_HOME_TIMELINE_PARAMETERS,
+)
+
+SNS_LIST_MY_POSTS_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "limit": {"type": "integer", "description": "取得件数（省略時は 20、最大 100）。"},
+        "offset": {"type": "integer", "description": "先頭からスキップする件数（省略時は 0）。"},
+    },
+    "required": [],
+}
+SNS_LIST_MY_POSTS_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_LIST_MY_POSTS,
+    description="自分の投稿一覧を取得します。",
+    parameters=SNS_LIST_MY_POSTS_PARAMETERS,
+)
+
+SNS_LIST_USER_POSTS_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "target_user_id": {"type": "integer", "description": "投稿一覧を見る対象の SNS ユーザー ID。"},
+        "limit": {"type": "integer", "description": "取得件数（省略時は 20、最大 100）。"},
+        "offset": {"type": "integer", "description": "先頭からスキップする件数（省略時は 0）。"},
+    },
+    "required": ["target_user_id"],
+}
+SNS_LIST_USER_POSTS_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_LIST_USER_POSTS,
+    description="指定したユーザーの投稿一覧を取得します（閲覧権限に従います）。",
+    parameters=SNS_LIST_USER_POSTS_PARAMETERS,
+)
+
 
 def get_sns_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
-    """SNS 系ツールの (definition, resolver) 一覧を返す。SNS 全ツールは同一 resolver を共有。"""
+    """SNS 系ツールの (definition, resolver) 一覧を返す。"""
+    enter_resolver = SnsEnterToolAvailabilityResolver()
     sns_resolver = SnsToolAvailabilityResolver()
     return [
+        (SNS_ENTER_DEFINITION, enter_resolver),
+        (SNS_LOGOUT_DEFINITION, sns_resolver),
         (SNS_CREATE_POST_DEFINITION, sns_resolver),
         (SNS_CREATE_REPLY_DEFINITION, sns_resolver),
         (SNS_LIKE_POST_DEFINITION, sns_resolver),
@@ -175,6 +330,14 @@ def get_sns_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
         (SNS_UNSUBSCRIBE_DEFINITION, sns_resolver),
         (SNS_BLOCK_DEFINITION, sns_resolver),
         (SNS_UNBLOCK_DEFINITION, sns_resolver),
+        (SNS_DELETE_POST_DEFINITION, sns_resolver),
+        (SNS_DELETE_REPLY_DEFINITION, sns_resolver),
+        (SNS_UPDATE_PROFILE_DEFINITION, sns_resolver),
+        (SNS_MARK_NOTIFICATION_READ_DEFINITION, sns_resolver),
+        (SNS_MARK_ALL_NOTIFICATIONS_READ_DEFINITION, sns_resolver),
+        (SNS_HOME_TIMELINE_DEFINITION, sns_resolver),
+        (SNS_LIST_MY_POSTS_DEFINITION, sns_resolver),
+        (SNS_LIST_USER_POSTS_DEFINITION, sns_resolver),
     ]
 
 
