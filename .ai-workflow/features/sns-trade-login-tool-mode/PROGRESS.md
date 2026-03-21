@@ -10,13 +10,36 @@ branch: feature/sns-trade-login-tool-mode
 
 # Current State
 
-- Active phase: Phase 2（次に着手）
-- Last completed phase: Phase 1
-- Next recommended action: `flow-exec` で Phase 2（モード別カタログ切替の基盤化）を実装
+- Active phase: Phase 3（次に着手）
+- Last completed phase: Phase 2
+- Next recommended action: `flow-exec` で Phase 3（SNS モード遷移ツールと不足 command tool）
 - Handoff summary:
-  - `STATE_AND_TOOL_MATRIX.md` に `is_sns_mode_active`、OFF/ON 表示行列、command parity（Phase 3/4 対象と defer）、MVP timeline 3 種の想定ツール名を固定。`IDEA.md` に要約を追記し `PLAN.md` の Code Context / Phase 1 / Change Log を更新。
+  - `PlayerCurrentStateDto.is_sns_mode_active` とビルダー既定 `False`、`sns_enter` 定義、`SnsEnterToolAvailabilityResolver` / `SnsModeRequiredAvailabilityResolver`、既存 SNS 操作系は `SnsToolAvailabilityResolver` を SNS モード ON のみに変更。Trade は `trade_enabled and sns_enabled` でのみ登録し resolver で SNS モード必須に。`test_available_tools_provider` / `test_tool_definitions` で OFF/ON の tool 名を固定。
 
 # Phase Journal
+
+## Phase 2: モード別カタログ切替の基盤化
+
+- Started: 2026-03-21
+- Completed: 2026-03-21
+- Tests: `pytest tests/application/llm/test_available_tools_provider.py tests/application/llm/test_tool_definitions.py`、および `tests/application/llm/` 全件
+- Findings:
+  - 登録集合は「Trade は sns と同時登録」に寄せ、モード別の「見えない」は resolver + `is_sns_mode_active` で達成。`sns_enter` の executor / mapper は Phase 3（現状はツール一覧のみ、実行は UNKNOWN_TOOL）。
+  - ビルダーは永続ソース未確定のため `is_sns_mode_active=False` 固定。Phase 3 の enter/logout ユースケース接続時に供給元を確定する。
+- Plan revision check:
+  - Phase 3〜5 の順序・成功条件は維持。`sns_enter` の実行経路は Phase 3 スコープとして既に PLAN にあり追加 phase は不要。
+- User approval:
+  - 不要（PLAN の future phase 文言変更なし）
+- Plan updates:
+  - `PLAN.md` Change Log のみ（完了記録）
+- Goal check:
+  - SNS モード OFF/ON で tool 名がテストで固定され、通常時は SNS 系は `sns_enter` のみ（他 sns_* / trade_* は非表示）を満たす
+- Scope delta:
+  - なし
+- Handoff summary:
+  - Phase 3 で `sns_enter`/`sns_logout` の application ユースケース、executor・mapper、モード状態の更新先（永続またはセッション）を接続
+- Next-phase impact:
+  - `sns_logout` 定数・resolver（ON のみ）と既存 command ツール追加が Phase 3 の主作業
 
 ## Phase 1: 状態契約とツール行列の固定
 

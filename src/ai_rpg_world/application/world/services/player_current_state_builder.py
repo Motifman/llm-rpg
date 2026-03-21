@@ -368,6 +368,7 @@ class PlayerCurrentStateBuilder:
             ),
             actionable_objects=actionable_objects,
             notable_objects=notable_objects,
+            is_sns_mode_active=False,
         )
 
     def build_visible_objects(

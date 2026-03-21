@@ -398,3 +398,5 @@ class PlayerCurrentStateDto:
     visible_tile_map: Optional["VisibleTileMapDto"] = None
     # ゲーム内現在時刻（game_time_provider と world_time_config が設定されているときのみ）
     current_game_time_label: Optional[str] = None
+    # ゲーム内 SNS アプリを開いている（認証ではない UI メタファ）。ツール一覧の SNS/Trade 露出に利用。
+    is_sns_mode_active: bool = False
