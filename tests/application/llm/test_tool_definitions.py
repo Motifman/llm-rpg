@@ -66,6 +66,9 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SKILL_REJECT_PROPOSAL,
     TOOL_NAME_WHISPER,
     TOOL_NAME_SNS_ENTER,
+    TOOL_NAME_SNS_HOME_TIMELINE,
+    TOOL_NAME_SNS_LIST_MY_POSTS,
+    TOOL_NAME_SNS_LIST_USER_POSTS,
     TOOL_NAME_SNS_LOGOUT,
     TOOL_NAME_TRADE_OFFER,
 )
@@ -296,3 +299,6 @@ class TestRegisterDefaultTools:
         names = [e[0].name for e in registry.get_definitions_with_resolvers()]
         assert TOOL_NAME_SNS_ENTER in names
         assert TOOL_NAME_SNS_LOGOUT in names
+        assert TOOL_NAME_SNS_HOME_TIMELINE in names
+        assert TOOL_NAME_SNS_LIST_MY_POSTS in names
+        assert TOOL_NAME_SNS_LIST_USER_POSTS in names
