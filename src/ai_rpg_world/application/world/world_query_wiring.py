@@ -102,6 +102,7 @@ def create_world_query_service(
         shop_repository: ショップリポジトリ（省略可）
         personal_trade_query_service: 個人取引クエリサービス（省略可）
         player_audience_query: プレイヤーオーディエンスクエリ（省略可、省略時は PlayerAudienceQueryService を自前構築）
+        sns_mode_session: SNS モード状態（省略可）。`create_llm_agent_wiring` に渡すインスタンスと同一にすること。
 
     Returns:
         WorldQueryService: 構築済みの WorldQueryService

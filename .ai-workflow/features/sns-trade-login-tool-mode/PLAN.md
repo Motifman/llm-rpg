@@ -2,7 +2,7 @@
 id: feature-sns-trade-login-tool-mode
 title: SNS ツール拡充と SNS モード切替
 slug: sns-trade-login-tool-mode
-status: in_progress
+status: completed
 created_at: 2026-03-21
 updated_at: 2026-03-21
 branch: feature/sns-trade-login-tool-mode
@@ -261,3 +261,4 @@ LLM エージェントが SNS ドメインを既存 application 層の command/q
 - 2026-03-21: Phase 2 完了 — `is_sns_mode_active`、`sns_enter`、SNS/Trade のモード連動 resolver、`register_default_tools` で Trade は sns と同時登録のみ
 - 2026-03-21: Phase 3 完了 — `SnsModeSessionService`、`sns_enter`/`sns_logout` 実行経路、削除・プロフィール更新・通知既読ツール、`create_llm_agent_wiring` の `sns_mode_session` / `notification_command_service` / `LlmAgentWiringResult.sns_mode_session`
 - 2026-03-21: Phase 4 完了 — `sns_home_timeline` / `sns_list_my_posts` / `sns_list_user_posts`、`PostQueryService` 接続、`post_query_service` による wiring・`sns_enabled` 拡張、provider / mapper / tool_definitions テスト
+- 2026-03-21: Phase 5 完了 — wiring モジュール doc に SNS セッション同一インスタンス契約と `post_query_service` を追記、`world_query_wiring` の `sns_mode_session` 説明を補強、`test_sns_mode_wiring_e2e.py` で `create_llm_agent_wiring` → `DefaultPromptBuilder.build` のツール一覧をモード別に回帰固定

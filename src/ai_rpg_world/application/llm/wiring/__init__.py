@@ -20,6 +20,13 @@ EventHandlerComposition のインスタンス化）は**呼び出し元（外部
   ItemDroppedFromInventoryDropHandler と IntentionalDropEventHandlerRegistry を組み立て、
   EventHandlerComposition の intentional_drop_registry 引数に渡す。
   （inventory_overflow_registry と同様に、player_status_repository と physical_map_repository をハンドラに渡す。）
+
+【SNS モード・タイムライン read ツール】
+- `create_world_query_service(..., sns_mode_session=...)` と `create_llm_agent_wiring(..., sns_mode_session=...)`
+  には**同一の** `SnsModeSessionService` インスタンスを渡す（`PlayerCurrentStateDto.is_sns_mode_active` と
+  enter/logout のセッション状態を一致させるため）。
+- ホーム TL / ユーザー TL 系ツールを実行可能にするには `PostQueryService` を
+  `create_llm_agent_wiring(..., post_query_service=...)` に渡す。WorldQueryService の組み立てには不要。
 """
 
 import os
