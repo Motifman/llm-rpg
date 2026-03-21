@@ -43,15 +43,22 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SKILL_REJECT_PROPOSAL,
     TOOL_NAME_SHOP_PURCHASE,
     TOOL_NAME_SNS_BLOCK,
+    TOOL_NAME_SNS_DELETE_POST,
+    TOOL_NAME_SNS_DELETE_REPLY,
+    TOOL_NAME_SNS_ENTER,
     TOOL_NAME_SNS_CREATE_POST,
     TOOL_NAME_SNS_CREATE_REPLY,
     TOOL_NAME_SNS_FOLLOW,
     TOOL_NAME_SNS_LIKE_POST,
     TOOL_NAME_SNS_LIKE_REPLY,
+    TOOL_NAME_SNS_LOGOUT,
+    TOOL_NAME_SNS_MARK_ALL_NOTIFICATIONS_READ,
+    TOOL_NAME_SNS_MARK_NOTIFICATION_READ,
     TOOL_NAME_SNS_SUBSCRIBE,
     TOOL_NAME_SNS_UNBLOCK,
     TOOL_NAME_SNS_UNFOLLOW,
     TOOL_NAME_SNS_UNSUBSCRIBE,
+    TOOL_NAME_SNS_UPDATE_PROFILE,
     TOOL_NAME_SUBAGENT,
     TOOL_NAME_TRADE_ACCEPT,
     TOOL_NAME_TRADE_CANCEL,
@@ -62,6 +69,9 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_TODO_LIST,
     TOOL_NAME_WHISPER,
     TOOL_NAME_WORKING_MEMORY_APPEND,
+)
+from ai_rpg_world.application.social.services.sns_mode_session_service import (
+    SnsModeSessionService,
 )
 from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
@@ -1929,3 +1939,123 @@ class TestToolCommandMapperSns:
         )
         assert result.success is False
         assert result.error_code is not None
+
+    def test_sns_enter_success_sets_session(self):
+        session = SnsModeSessionService()
+        mapper = _create_tool_command_mapper(
+            movement_service=MagicMock(),
+            sns_mode_session=session,
+        )
+        result = mapper.execute(1, TOOL_NAME_SNS_ENTER, {})
+        assert result.success is True
+        assert "開き" in result.message
+        assert session.is_sns_mode_active(1) is True
+
+    def test_sns_logout_success_clears_session(self):
+        session = SnsModeSessionService()
+        session.enter_sns_mode(1)
+        mapper = _create_tool_command_mapper(
+            movement_service=MagicMock(),
+            sns_mode_session=session,
+        )
+        result = mapper.execute(1, TOOL_NAME_SNS_LOGOUT, {})
+        assert result.success is True
+        assert "閉じ" in result.message
+        assert session.is_sns_mode_active(1) is False
+
+    def test_sns_enter_without_session_returns_unknown_tool(self):
+        mapper = _create_tool_command_mapper(movement_service=MagicMock())
+        result = mapper.execute(1, TOOL_NAME_SNS_ENTER, {})
+        assert result.success is False
+        assert result.error_code == "UNKNOWN_TOOL"
+
+    def test_sns_delete_post_success(self):
+        post_service = MagicMock()
+        post_service.delete_post.return_value = MagicMock(success=True, message="削除しました。")
+        mapper = _create_tool_command_mapper(
+            movement_service=MagicMock(),
+            post_service=post_service,
+        )
+        result = mapper.execute(1, TOOL_NAME_SNS_DELETE_POST, {"post_id": 9})
+        assert result.success is True
+        post_service.delete_post.assert_called_once()
+
+    def test_sns_delete_post_missing_post_id_returns_invalid_arg(self):
+        post_service = MagicMock()
+        mapper = _create_tool_command_mapper(
+            movement_service=MagicMock(),
+            post_service=post_service,
+        )
+        result = mapper.execute(1, TOOL_NAME_SNS_DELETE_POST, {})
+        assert result.success is False
+        assert "post_id" in result.message
+        post_service.delete_post.assert_not_called()
+
+    def test_sns_delete_reply_success(self):
+        reply_service = MagicMock()
+        reply_service.delete_reply.return_value = MagicMock(success=True, message="削除しました。")
+        mapper = _create_tool_command_mapper(
+            movement_service=MagicMock(),
+            reply_service=reply_service,
+        )
+        result = mapper.execute(1, TOOL_NAME_SNS_DELETE_REPLY, {"reply_id": 3})
+        assert result.success is True
+        reply_service.delete_reply.assert_called_once()
+
+    def test_sns_update_profile_success(self):
+        user_command_service = MagicMock()
+        user_command_service.update_user_profile.return_value = MagicMock(
+            success=True, message="更新しました。"
+        )
+        mapper = _create_tool_command_mapper(
+            movement_service=MagicMock(),
+            user_command_service=user_command_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SNS_UPDATE_PROFILE,
+            {"new_display_name": "新しい名前"},
+        )
+        assert result.success is True
+        user_command_service.update_user_profile.assert_called_once()
+
+    def test_sns_update_profile_missing_both_fields_returns_invalid_arg(self):
+        user_command_service = MagicMock()
+        mapper = _create_tool_command_mapper(
+            movement_service=MagicMock(),
+            user_command_service=user_command_service,
+        )
+        result = mapper.execute(1, TOOL_NAME_SNS_UPDATE_PROFILE, {})
+        assert result.success is False
+        assert "new_display_name" in result.message or "new_bio" in result.message
+        user_command_service.update_user_profile.assert_not_called()
+
+    def test_sns_mark_notification_read_success(self):
+        notification_service = MagicMock()
+        notification_service.mark_notification_as_read.return_value = MagicMock(
+            success=True, message="既読にしました。"
+        )
+        mapper = _create_tool_command_mapper(
+            movement_service=MagicMock(),
+            notification_command_service=notification_service,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SNS_MARK_NOTIFICATION_READ,
+            {"notification_id": 100},
+        )
+        assert result.success is True
+        notification_service.mark_notification_as_read.assert_called_once()
+
+    def test_sns_mark_all_notifications_read_success(self):
+        notification_service = MagicMock()
+        notification_service.mark_all_notifications_as_read.return_value = MagicMock(
+            success=True, message="全件既読にしました。"
+        )
+        mapper = _create_tool_command_mapper(
+            movement_service=MagicMock(),
+            notification_command_service=notification_service,
+        )
+        result = mapper.execute(1, TOOL_NAME_SNS_MARK_ALL_NOTIFICATIONS_READ, {})
+        assert result.success is True
+        notification_service.mark_all_notifications_as_read.assert_called_once()

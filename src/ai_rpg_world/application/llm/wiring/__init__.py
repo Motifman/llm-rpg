@@ -283,6 +283,8 @@ def _build_tool_handler_map(
     post_service: Optional[Any],
     reply_service: Optional[Any],
     user_command_service: Optional[Any],
+    notification_command_service: Optional[Any],
+    sns_mode_session: Optional[Any],
     item_repository: Optional[Any],
     monster_repository: Optional[Any],
     physical_map_repository: PhysicalMapRepository,
@@ -348,6 +350,8 @@ def _build_tool_handler_map(
             post_service=post_service,
             reply_service=reply_service,
             user_command_service=user_command_service,
+            notification_command_service=notification_command_service,
+            sns_mode_session=sns_mode_session,
         ).get_handlers()
     )
     handler_map.update(
@@ -394,6 +398,8 @@ def _build_tool_stack(
     post_service: Optional[Any],
     reply_service: Optional[Any],
     user_command_service: Optional[Any],
+    notification_command_service: Optional[Any],
+    sns_mode_session: Optional[Any],
     item_repository: Optional[Any],
     monster_repository: Optional[Any],
     physical_map_repository: PhysicalMapRepository,
@@ -426,6 +432,8 @@ def _build_tool_stack(
             post_service is not None
             or reply_service is not None
             or user_command_service is not None
+            or notification_command_service is not None
+            or sns_mode_session is not None
         ),
         inspect_item_enabled=item_repository is not None,
         inspect_target_enabled=(
@@ -458,6 +466,8 @@ def _build_tool_stack(
         post_service=post_service,
         reply_service=reply_service,
         user_command_service=user_command_service,
+        notification_command_service=notification_command_service,
+        sns_mode_session=sns_mode_session,
         item_repository=item_repository,
         monster_repository=monster_repository,
         physical_map_repository=physical_map_repository,
@@ -657,10 +667,12 @@ class LlmAgentWiringResult:
         observation_registry: "ObservationEventHandlerRegistry",
         llm_turn_trigger: ILlmTurnTrigger,
         reflection_runner: Optional[IReflectionRunner] = None,
+        sns_mode_session: Optional[Any] = None,
     ) -> None:
         self.observation_registry = observation_registry
         self.llm_turn_trigger = llm_turn_trigger
         self.reflection_runner = reflection_runner
+        self.sns_mode_session = sns_mode_session
 
     def __iter__(self) -> Any:
         yield self.observation_registry
@@ -708,6 +720,8 @@ def create_llm_agent_wiring(
     post_service: Optional[Any] = None,
     reply_service: Optional[Any] = None,
     user_command_service: Optional[Any] = None,
+    notification_command_service: Optional[Any] = None,
+    sns_mode_session: Optional[Any] = None,
     llm_client: Optional[ILLMClient] = None,
     game_time_provider: Optional[Any] = None,
     world_time_config_service: Optional[Any] = None,
@@ -836,6 +850,8 @@ def create_llm_agent_wiring(
         post_service=post_service,
         reply_service=reply_service,
         user_command_service=user_command_service,
+        notification_command_service=notification_command_service,
+        sns_mode_session=sns_mode_session,
         item_repository=item_repository,
         monster_repository=monster_repository,
         physical_map_repository=physical_map_repository,
@@ -927,6 +943,7 @@ def create_llm_agent_wiring(
         observation_registry=observation_registry,
         llm_turn_trigger=llm_turn_trigger,
         reflection_runner=reflection_runner,
+        sns_mode_session=sns_mode_session,
     )
 
 

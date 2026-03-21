@@ -32,6 +32,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SKILL_REJECT_PROPOSAL,
     TOOL_NAME_SNS_CREATE_POST,
     TOOL_NAME_SNS_ENTER,
+    TOOL_NAME_SNS_LOGOUT,
     TOOL_NAME_TRADE_OFFER,
 )
 from ai_rpg_world.application.llm.services.tool_catalog import (
@@ -135,6 +136,7 @@ class TestDefaultAvailableToolsProvider:
         tools = provider_sns_trade.get_available_tools(ctx)
         names = [t["function"]["name"] for t in tools if t.get("type") == "function"]
         assert TOOL_NAME_SNS_ENTER in names
+        assert TOOL_NAME_SNS_LOGOUT not in names
         assert TOOL_NAME_SNS_CREATE_POST not in names
         assert TOOL_NAME_TRADE_OFFER not in names
 
@@ -147,6 +149,7 @@ class TestDefaultAvailableToolsProvider:
         tools = provider_sns_trade.get_available_tools(ctx)
         names = [t["function"]["name"] for t in tools if t.get("type") == "function"]
         assert TOOL_NAME_SNS_ENTER not in names
+        assert TOOL_NAME_SNS_LOGOUT in names
         assert TOOL_NAME_SNS_CREATE_POST in names
         assert TOOL_NAME_TRADE_OFFER in names
 

@@ -10,13 +10,36 @@ branch: feature/sns-trade-login-tool-mode
 
 # Current State
 
-- Active phase: Phase 3（次に着手）
-- Last completed phase: Phase 2
-- Next recommended action: `flow-exec` で Phase 3（SNS モード遷移ツールと不足 command tool）
+- Active phase: Phase 4（次に着手）
+- Last completed phase: Phase 3
+- Next recommended action: `flow-exec` で Phase 4（MVP timeline/query tool）
 - Handoff summary:
-  - `PlayerCurrentStateDto.is_sns_mode_active` とビルダー既定 `False`、`sns_enter` 定義、`SnsEnterToolAvailabilityResolver` / `SnsModeRequiredAvailabilityResolver`、既存 SNS 操作系は `SnsToolAvailabilityResolver` を SNS モード ON のみに変更。Trade は `trade_enabled and sns_enabled` でのみ登録し resolver で SNS モード必須に。`test_available_tools_provider` / `test_tool_definitions` で OFF/ON の tool 名を固定。
+  - `SnsModeSessionService` でプロセス内 SNS モード状態を保持し、`PlayerCurrentStateBuilder` / `create_world_query_service(..., sns_mode_session=)` で `is_sns_mode_active` を供給。`sns_enter` / `sns_logout` と `sns_delete_post` / `sns_delete_reply` / `sns_update_profile` / 通知既読 2 種を `SnsToolExecutor`・`tool_constants`・`sns` カタログに追加。`create_llm_agent_wiring` に `sns_mode_session`・`notification_command_service` を追加し `LlmAgentWiringResult.sns_mode_session` で共有。mapper / provider / tool_definitions テストを更新。
 
 # Phase Journal
+
+## Phase 3: SNS モード遷移ツールと不足 command tool の追加
+
+- Started: 2026-03-21
+- Completed: 2026-03-21
+- Tests: `pytest tests/application/llm/test_tool_command_mapper.py tests/application/llm/test_available_tools_provider.py tests/application/llm/test_tool_definitions.py tests/application/llm/wiring/test_build_tool_stack.py`
+- Findings:
+  - モード状態は永続化せず `SnsModeSessionService`（メモリ）で統一。`world_query` と LLM wiring で同一インスタンスを渡す必要あり（`LlmAgentWiringResult.sns_mode_session` を参照可能）。
+  - `register_default_tools` の `sns_enabled` は通知専用・セッションのみの構成でも SNS カタログを載せるよう拡張。
+- Plan revision check:
+  - Phase 4（timeline 3 種）・Phase 5 の順序・成功条件は維持。追加 phase 不要。
+- User approval:
+  - 不要（PLAN の future phase 文言変更なし）
+- Plan updates:
+  - `PLAN.md` Change Log のみ
+- Goal check:
+  - enter/logout の executor・mapper 経路、パリティ対象 command ツールの定義・実行、テスト追加を満たす
+- Scope delta:
+  - なし
+- Handoff summary:
+  - Phase 4 で `sns_home_timeline` 等 3 種の定義・query 接続・provider テスト
+- Next-phase impact:
+  - timeline ツールは `SnsToolAvailabilityResolver` と query service への wiring が主作業
 
 ## Phase 2: モード別カタログ切替の基盤化
 
