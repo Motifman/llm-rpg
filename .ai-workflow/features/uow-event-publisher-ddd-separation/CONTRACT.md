@@ -51,9 +51,10 @@
 
 ### 現状
 
-- `with unit_of_work:` で begin → (業務処理) → commit / rollback を行う
-- `create_with_event_publisher()` は `(uow, event_publisher)` を返し、内部で sync_event_dispatcher を保持
-- 非同期イベント配信は UoW.commit の finally 内で `_process_events_in_separate_transaction` により実行されている
+- `with unit_of_work:` / `TransactionalScope` で begin → (業務処理) → commit / rollback を行う
+- `create_with_event_publisher()` は `(TransactionalScope, event_publisher)` を返し、内部で sync_event_dispatcher を保持する
+- 非同期イベント配信は UoW.commit では行わず、post-commit orchestration（`get_committed_events` → `publish_async_events` → `clear_committed_events`）が scope 側で実行される
+- `InMemoryUnitOfWork` の `unit_of_work_factory` 引数は後方互換のみで保持されない（Phase 10）
 
 ### 移行方針
 

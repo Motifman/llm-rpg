@@ -31,10 +31,8 @@ class InMemoryUnitOfWork(UnitOfWork):
         self._snapshot = None
         self._sync_event_dispatcher = sync_event_dispatcher
 
-        # 別トランザクション処理専用 - 必須パラメータ
-        if unit_of_work_factory is None:
-            raise ValueError("unit_of_work_factory is required for separate transaction event processing")
-        self._unit_of_work_factory = unit_of_work_factory
+        # unit_of_work_factory は過去の別トランザクション用 UoW 生成に使われたが、
+        # post-commit orchestration 分離後は未使用。後方互換のため引数は受け取るが保持しない。
 
     @property
     def sync_event_dispatcher(self):
@@ -218,22 +216,19 @@ class InMemoryUnitOfWork(UnitOfWork):
         scope 側で担う。with uow: 互換を維持しつつ、UoW.commit は async 配信を知らない。
 
         Args:
-            unit_of_work_factory: 別トランザクション用のUnit of Workファクトリ（必須）
+            unit_of_work_factory: 未使用。後方互換のため残す。
             data_store: 状態復元用のデータストア
 
         Returns:
             (scope, event_publisher) のタプル。scope は with scope: で使用し UoW インターフェースを委譲。
         """
-        if unit_of_work_factory is None:
-            raise ValueError("unit_of_work_factory is required for separate transaction event processing")
-
         from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
         from ai_rpg_world.infrastructure.events.in_process_async_event_executor import InProcessAsyncEventExecutor
         from ai_rpg_world.infrastructure.events.in_process_async_event_transport import InProcessAsyncEventTransport
         from ai_rpg_world.infrastructure.events.sync_event_dispatcher import SyncEventDispatcher
         from ai_rpg_world.infrastructure.unit_of_work.transactional_scope import TransactionalScope
 
-        unit_of_work = cls(unit_of_work_factory=unit_of_work_factory, data_store=data_store)
+        unit_of_work = cls(data_store=data_store)
         scope = TransactionalScope(unit_of_work, None)
         async_executor = InProcessAsyncEventExecutor()
         async_transport = InProcessAsyncEventTransport(async_executor)

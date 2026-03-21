@@ -18,6 +18,13 @@ class TestInMemoryUnitOfWork:
             return InMemoryUnitOfWork(unit_of_work_factory=create_unit_of_work)
         self.unit_of_work = create_unit_of_work()
 
+    def test_constructor_does_not_require_unit_of_work_factory(self):
+        """Phase 10: unit_of_work_factory は任意（未使用・後方互換のみ）"""
+        uow = InMemoryUnitOfWork()
+        uow.begin()
+        uow.rollback()
+        assert uow.is_in_transaction() is False
+
     def test_begin_starts_transaction(self):
         """トランザクション開始のテスト"""
         self.unit_of_work.begin()

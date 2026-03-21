@@ -27,10 +27,7 @@ class InMemoryEventPublisher(EventPublisher[DomainEvent]):
         event_type = type(event)
         handlers = self._handlers.get(event_type, [])
         for handler in handlers:
-            try:
-                handler.handle(event)
-            except Exception as e:
-                print(f"Error handling event {event_type}: {e}")
+            handler.handle(event)
 
     def publish_all(self, events: List[DomainEvent]):
         for event in events:
@@ -43,10 +40,7 @@ class InMemoryEventPublisher(EventPublisher[DomainEvent]):
             event_type = type(event)
             handlers = self._handlers.get(event_type, [])
             for handler in handlers:
-                try:
-                    handler.handle(event)
-                except Exception as e:
-                    print(f"Error handling event {event_type}: {e}")
+                handler.handle(event)
 
     def get_published_events(self) -> List[DomainEvent]:
         """テスト用：発行されたイベントを取得"""

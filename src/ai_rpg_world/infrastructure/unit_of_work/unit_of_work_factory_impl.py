@@ -38,7 +38,6 @@ class InMemoryUnitOfWorkFactory(UnitOfWorkFactory):
             # 初回のみファクトリ関数を作成（循環参照を避ける）
             self._factory_function = lambda: InMemoryUnitOfWork(
                 event_publisher=self._event_publisher,
-                unit_of_work_factory=self.create
             )
 
         return self._factory_function()

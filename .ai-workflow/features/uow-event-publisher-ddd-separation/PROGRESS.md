@@ -2,18 +2,18 @@
 id: feature-uow-event-publisher-ddd-separation
 title: Uow Event Publisher Ddd Separation
 slug: uow-event-publisher-ddd-separation
-status: planned
+status: completed
 created_at: 2026-03-17
-updated_at: 2026-03-20
+updated_at: 2026-03-21
 branch: codex/uow-event-publisher-ddd-separation
 ---
 
 # Current State
 
-- Active phase: Phase 10 着手可能
-- Last completed phase: Phase 9 async runtime adapter 契約の再固定（同期専用契約）
-- Next recommended action: Phase 10 legacy publisher / UoW 責務の後片付けに着手
-- Handoff summary: Phase 9 で AnyIOAsyncEventExecutor に同期専用契約を導入。docstring・execute() ガード・InvalidOperationError・test_execute_succeeds_from_sync_context / test_execute_raises_when_called_from_async_context を追加。CONTRACT.md / SEAM.md に Async Runtime Adapter 契約を追記。
+- Active phase: なし（全フェーズ完了）
+- Last completed phase: Phase 10 legacy publisher / UoW 責務の後片付け
+- Next recommended action: `/flow-ship` または main へのマージ判断
+- Handoff summary: Phase 10 で `InMemoryEventPublisher` / `AsyncEventPublisher` の例外握りつぶしを廃止、`TestLegacyEventPublisherFailureSemantics` を追加。`InMemoryUnitOfWork` の `unit_of_work_factory` 必須を撤廃（後方互換のため引数のみ受け取る）。`create_with_event_publisher` / DI / `InMemoryUnitOfWorkFactory` を整理。CONTRACT.md の「現状」を post-commit モデルに合わせて更新。全テスト 5926 passed。
 
 # Phase Journal
 
@@ -156,7 +156,7 @@ branch: codex/uow-event-publisher-ddd-separation
 
 - Started: 2026-03-20
 - Completed: 2026-03-20
-- Commit: dca1195
+- Commit: 695253e
 - Tests: test_execute_succeeds_from_sync_context, test_execute_raises_when_called_from_async_context 追加。tests/infrastructure/unit_of_work, tests/infrastructure/events 全 59 件通過
 - Findings: asyncio.get_running_loop() で async コンテキスト検出。RuntimeError 時は sync 扱いで OK。InvalidOperationError を event_executor_exceptions に定義
 - Plan revision check: 不要。future phase 変更不要
@@ -166,6 +166,20 @@ branch: codex/uow-event-publisher-ddd-separation
 - Scope delta: なし
 - Handoff summary: Phase 10 は legacy publisher の例外握りつぶし廃止と UoW 不要依存の整理
 - Next-phase impact: Phase 10 で registration/failure semantics と UoW constructor 責務を整理
+
+## Phase 10
+
+- Started: 2026-03-21
+- Completed: 2026-03-21
+- Tests: TestLegacyEventPublisherFailureSemantics、test_constructor_does_not_require_unit_of_work_factory 追加。全テスト 5926 passed（5 skipped）
+- Findings: `_unit_of_work_factory` は未参照のため必須チェックとインスタンス保持を削除。`unit_of_work_factory` 引数は呼び出し互換のため残す。legacy publisher は `handler.handle` をそのまま伝播。DI container と `InMemoryUnitOfWorkFactory` は factory 引数を渡さない形に簡素化
+- Plan revision check: 不要。PLAN Phase 0–10 の scope で収束
+- User approval: 不要
+- Plan updates: なし
+- Goal check: 旧 publisher の例外握りつぶし解消、UoW を separate-transaction 前提から解放、契約テストで failure semantics 固定
+- Scope delta: なし
+- Handoff summary: feature 計画フェーズは完了。出荷は flow-ship / レビュー承認で判断
+- Next-phase impact: 別 feature で outbox 実装や DB UoW など PLAN 外の拡張を検討
 
 ## Planning
 

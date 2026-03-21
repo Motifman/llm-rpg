@@ -12,7 +12,6 @@ import pytest
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
 from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
-from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.infrastructure.events.async_event_publisher import AsyncEventPublisher
 from ai_rpg_world.infrastructure.events.event_publisher_impl import InMemoryEventPublisher
 from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import (
@@ -95,3 +94,39 @@ class TestEventPublisherPostCommitHandoffContract:
         publisher.register_handler(BaseDomainEvent, DummyHandler(), is_synchronous=False)
         ep: EventPublisher = publisher
         ep.publish_async_events([event])  # TransactionalScope と同様に抽象経由で呼び出し
+
+
+class TestLegacyEventPublisherFailureSemantics:
+    """Phase 10: 旧 InMemoryEventPublisher / AsyncEventPublisher はハンドラ例外を握りつぶさない"""
+
+    class FailingHandler(EventHandler[BaseDomainEvent]):
+        def handle(self, event: BaseDomainEvent) -> None:
+            raise RuntimeError("handler failure")
+
+    def test_in_memory_event_publisher_publish_propagates_handler_exception(self):
+        publisher = InMemoryEventPublisher()
+        event = BaseDomainEvent.create(aggregate_id=1, aggregate_type="Test")
+        publisher.register_handler(BaseDomainEvent, self.FailingHandler(), is_synchronous=False)
+        with pytest.raises(RuntimeError, match="handler failure"):
+            publisher.publish(event)
+
+    def test_in_memory_event_publisher_publish_async_events_propagates_handler_exception(self):
+        publisher = InMemoryEventPublisher()
+        event = BaseDomainEvent.create(aggregate_id=1, aggregate_type="Test")
+        publisher.register_handler(BaseDomainEvent, self.FailingHandler(), is_synchronous=False)
+        with pytest.raises(RuntimeError, match="handler failure"):
+            publisher.publish_async_events([event])
+
+    def test_async_event_publisher_publish_propagates_handler_exception(self):
+        publisher = AsyncEventPublisher()
+        event = BaseDomainEvent.create(aggregate_id=1, aggregate_type="Test")
+        publisher.register_handler(BaseDomainEvent, self.FailingHandler(), is_synchronous=False)
+        with pytest.raises(RuntimeError, match="handler failure"):
+            publisher.publish(event)
+
+    def test_async_event_publisher_publish_async_events_propagates_handler_exception(self):
+        publisher = AsyncEventPublisher()
+        event = BaseDomainEvent.create(aggregate_id=1, aggregate_type="Test")
+        publisher.register_handler(BaseDomainEvent, self.FailingHandler(), is_synchronous=False)
+        with pytest.raises(RuntimeError, match="handler failure"):
+            publisher.publish_async_events([event])
