@@ -69,7 +69,7 @@
 
 | Adapter | 利用条件 | default wiring |
 |---------|----------|----------------|
-| **InProcessAsyncEventExecutor** | 同期・async どちらのコンテキストからも呼べる（event loop を新規作成） | `create_with_event_publisher` で使用 |
+| **InProcessAsyncEventExecutor** | 同期・async どちらのコンテキストからも呼べる（各ハンドラを `handle` で同期直列実行。asyncio / event loop は使用しない） | `create_with_event_publisher` で使用 |
 | **AnyIOAsyncEventExecutor** | **同期コンテキストからのみ**。`anyio.run()` のため async 内からの呼び出しは破綻。ガードで `InvalidOperationError` を投げる | opt-in |
 
 役割分担: InProcess が default、AnyIO はスレッドプール実行の利点を活かす opt-in・同期専用。
