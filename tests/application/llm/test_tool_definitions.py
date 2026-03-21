@@ -65,6 +65,12 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SKILL_EQUIP,
     TOOL_NAME_SKILL_REJECT_PROPOSAL,
     TOOL_NAME_WHISPER,
+    TOOL_NAME_SNS_ENTER,
+    TOOL_NAME_SNS_HOME_TIMELINE,
+    TOOL_NAME_SNS_LIST_MY_POSTS,
+    TOOL_NAME_SNS_LIST_USER_POSTS,
+    TOOL_NAME_SNS_LOGOUT,
+    TOOL_NAME_TRADE_OFFER,
 )
 
 
@@ -271,3 +277,28 @@ class TestRegisterDefaultTools:
         """registry が IGameToolRegistry でないとき TypeError"""
         with pytest.raises(TypeError, match="registry must be IGameToolRegistry"):
             register_default_tools(None)  # type: ignore[arg-type]
+
+    def test_register_default_tools_trade_only_without_sns_does_not_register_trade(self):
+        """trade_enabled のみでは取引ツールを登録しない（SNS カタログと同時のみ）"""
+        registry = DefaultGameToolRegistry()
+        register_default_tools(registry, trade_enabled=True)
+        names = [e[0].name for e in registry.get_definitions_with_resolvers()]
+        assert TOOL_NAME_TRADE_OFFER not in names
+
+    def test_register_default_tools_trade_with_sns_registers_trade(self):
+        """trade_enabled かつ sns_enabled で取引ツールが登録される"""
+        registry = DefaultGameToolRegistry()
+        register_default_tools(registry, trade_enabled=True, sns_enabled=True)
+        names = [e[0].name for e in registry.get_definitions_with_resolvers()]
+        assert TOOL_NAME_TRADE_OFFER in names
+
+    def test_register_default_tools_sns_enabled_registers_sns_enter(self):
+        """sns_enabled で sns_enter が登録される"""
+        registry = DefaultGameToolRegistry()
+        register_default_tools(registry, sns_enabled=True)
+        names = [e[0].name for e in registry.get_definitions_with_resolvers()]
+        assert TOOL_NAME_SNS_ENTER in names
+        assert TOOL_NAME_SNS_LOGOUT in names
+        assert TOOL_NAME_SNS_HOME_TIMELINE in names
+        assert TOOL_NAME_SNS_LIST_MY_POSTS in names
+        assert TOOL_NAME_SNS_LIST_USER_POSTS in names

@@ -9,6 +9,9 @@ from ai_rpg_world.application.conversation.contracts.dtos import (
     ConversationNodeDto,
     ConversationSessionDto,
 )
+from ai_rpg_world.application.social.services.sns_mode_session_service import (
+    SnsModeSessionService,
+)
 from ai_rpg_world.application.world.world_query_wiring import create_world_query_service
 from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
 from ai_rpg_world.application.world.contracts.queries import (
@@ -731,6 +734,40 @@ class TestWorldQueryService:
             assert visible.direction_from_player is not None
         assert result.available_moves is not None
         assert result.total_available_moves is not None
+
+    def test_get_player_current_state_reflects_sns_mode_session_wiring(self, setup_service):
+        """create_world_query_service に渡した SnsModeSessionService が is_sns_mode_active に実配線されること"""
+        _service, status_repo, profile_repo, phys_repo, spot_repo = setup_service
+        player_id = 1
+        spot_id = 1
+        profile_repo.save(self._create_sample_profile(player_id, "Alice"))
+        status_repo.save(self._create_sample_status(player_id, spot_id, 3, 4))
+        phys_repo.save(self._create_sample_map(spot_id, objects=[self._create_player_object(player_id, 3, 4)]))
+        spot_repo.save(Spot(SpotId(1), "Town", "A town"))
+
+        sns_mode_session = SnsModeSessionService()
+        service = create_world_query_service(
+            player_status_repository=status_repo,
+            player_profile_repository=profile_repo,
+            physical_map_repository=phys_repo,
+            spot_repository=spot_repo,
+            connected_spots_provider=GatewayBasedConnectedSpotsProvider(phys_repo),
+            sns_mode_session=sns_mode_session,
+        )
+
+        off = service.get_player_current_state(GetPlayerCurrentStateQuery(player_id=player_id))
+        assert off is not None
+        assert off.is_sns_mode_active is False
+
+        sns_mode_session.enter_sns_mode(player_id)
+        on = service.get_player_current_state(GetPlayerCurrentStateQuery(player_id=player_id))
+        assert on is not None
+        assert on.is_sns_mode_active is True
+
+        sns_mode_session.exit_sns_mode(player_id)
+        off2 = service.get_player_current_state(GetPlayerCurrentStateQuery(player_id=player_id))
+        assert off2 is not None
+        assert off2.is_sns_mode_active is False
 
     def test_get_player_current_state_delegates_assembly_to_builder(self, setup_service):
         """現在状態の組み立ては builder に委譲すること"""

@@ -469,13 +469,31 @@ class TradeDeclineAvailabilityResolver(IAvailabilityResolver):
 
 class SnsToolAvailabilityResolver(IAvailabilityResolver):
     """
-    SNS 全ツール共通の利用可否リゾルバ。
-    投稿・リプライ・いいね・フォロー・サブスクライブ・ブロック等、
-    いずれも現在状態が取得できているときに利用可能。
+    SNS 操作系ツール共通の利用可否リゾルバ。
+    SNS モード ON のときのみ利用可能（通常プレイ中は sns_enter のみ別 resolver）。
     """
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return context is not None
+        return context is not None and context.is_sns_mode_active
+
+
+class SnsEnterToolAvailabilityResolver(IAvailabilityResolver):
+    """ゲーム内 SNS アプリを開くツール。SNS モード OFF のときのみ一覧に出す。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None and not context.is_sns_mode_active
+
+
+class SnsModeRequiredAvailabilityResolver(IAvailabilityResolver):
+    """内側のリゾルバを、SNS モード ON のときだけ評価する（Trade 等）。"""
+
+    def __init__(self, inner: IAvailabilityResolver) -> None:
+        self._inner = inner
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None or not context.is_sns_mode_active:
+            return False
+        return self._inner.is_available(context)
 
 
 class MemoryQueryAvailabilityResolver(IAvailabilityResolver):

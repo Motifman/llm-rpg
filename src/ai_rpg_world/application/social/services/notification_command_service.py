@@ -11,6 +11,9 @@ from ai_rpg_world.application.social.contracts.dtos import CommandResultDto
 from ai_rpg_world.application.social.exceptions import ApplicationException
 from ai_rpg_world.application.social.exceptions import ApplicationExceptionFactory
 from ai_rpg_world.application.social.exceptions import SystemErrorException
+from ai_rpg_world.application.social.exceptions.command.notification_command_exception import (
+    NotificationOwnershipException,
+)
 from ai_rpg_world.domain.sns.exception import SnsDomainException
 
 if TYPE_CHECKING:
@@ -64,7 +67,15 @@ class NotificationCommandService:
         # トランザクション境界の設定
         with self._unit_of_work:
             notification_id = NotificationId(command.notification_id)
-            self._notification_repository.mark_as_read(notification_id)
+            notification = self._notification_repository.find_by_id(notification_id)
+            if notification is not None:
+                if notification.user_id != UserId(command.user_id):
+                    raise NotificationOwnershipException(
+                        command.notification_id,
+                        command.user_id,
+                        "mark_as_read",
+                    )
+                self._notification_repository.mark_as_read(notification_id)
 
         self._logger.info(f"Notification marked as read successfully: notification_id={command.notification_id}")
 
