@@ -5,7 +5,7 @@ slug: sns-trade-login-tool-mode
 status: in_progress
 created_at: 2026-03-21
 updated_at: 2026-03-21
-branch: codex/sns-trade-login-tool-mode
+branch: feature/sns-trade-login-tool-mode
 ---
 
 # Outcome

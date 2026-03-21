@@ -6,7 +6,7 @@ status: in_progress
 created_at: 2026-03-21
 updated_at: 2026-03-21
 source: flow-plan
-branch: codex/sns-trade-login-tool-mode
+branch: feature/sns-trade-login-tool-mode
 related_idea_file: .ai-workflow/ideas/2026-03-21-sns-trade-login-tool-mode.md
 ---
 
