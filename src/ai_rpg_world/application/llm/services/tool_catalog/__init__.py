@@ -59,7 +59,10 @@ def register_default_tools(
     todo_enabled: bool = False,
     working_memory_enabled: bool = False,
 ) -> None:
-    """標準ツール群を登録し、依存サービスがあるカテゴリだけ追加する。"""
+    """標準ツール群を登録し、依存サービスがあるカテゴリだけ追加する。
+
+    Trade は sns_enabled と同時にのみ登録する（一覧の露出は SNS モードと各 resolver で制御）。
+    """
     if not isinstance(registry, IGameToolRegistry):
         raise TypeError("registry must be IGameToolRegistry")
 
@@ -91,7 +94,8 @@ def register_default_tools(
         _register_specs(registry, get_guild_specs())
     if shop_enabled:
         _register_specs(registry, get_shop_specs())
-    if trade_enabled:
+    # Trade は SNS カタログとセットで登録し、露出は SNS モード ON + 各 resolver で制御する
+    if trade_enabled and sns_enabled:
         _register_specs(registry, get_trade_specs())
     if sns_enabled:
         _register_specs(registry, get_sns_specs())

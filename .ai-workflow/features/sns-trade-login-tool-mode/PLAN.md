@@ -258,3 +258,4 @@ LLM エージェントが SNS ドメインを既存 application 層の command/q
 
 - 2026-03-21: idea artifact を feature 化し、`PlayerCurrentStateDto` 拡張 + B 案 + MVP timeline 3 種で初回 plan を作成
 - 2026-03-21: Phase 1 完了 — `STATE_AND_TOOL_MATRIX.md` を追加し、`IDEA.md` と整合
+- 2026-03-21: Phase 2 完了 — `is_sns_mode_active`、`sns_enter`、SNS/Trade のモード連動 resolver、`register_default_tools` で Trade は sns と同時登録のみ

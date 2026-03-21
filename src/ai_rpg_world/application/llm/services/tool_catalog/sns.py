@@ -5,10 +5,12 @@ from typing import List, Tuple
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
 from ai_rpg_world.application.llm.services.availability_resolvers import (
+    SnsEnterToolAvailabilityResolver,
     SnsToolAvailabilityResolver,
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SNS_BLOCK,
+    TOOL_NAME_SNS_ENTER,
     TOOL_NAME_SNS_CREATE_POST,
     TOOL_NAME_SNS_CREATE_REPLY,
     TOOL_NAME_SNS_FOLLOW,
@@ -18,6 +20,20 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SNS_UNBLOCK,
     TOOL_NAME_SNS_UNFOLLOW,
     TOOL_NAME_SNS_UNSUBSCRIBE,
+)
+
+SNS_ENTER_PARAMETERS = {
+    "type": "object",
+    "properties": {},
+    "required": [],
+}
+SNS_ENTER_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_ENTER,
+    description=(
+        "ゲーム内の SNS アプリを開きます（実認証ではありません）。"
+        "開くと投稿・取引など SNS モード用ツールが利用可能になります。"
+    ),
+    parameters=SNS_ENTER_PARAMETERS,
 )
 
 SNS_CREATE_POST_PARAMETERS = {
@@ -162,9 +178,11 @@ SNS_UNBLOCK_DEFINITION = ToolDefinitionDto(
 
 
 def get_sns_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
-    """SNS 系ツールの (definition, resolver) 一覧を返す。SNS 全ツールは同一 resolver を共有。"""
+    """SNS 系ツールの (definition, resolver) 一覧を返す。"""
+    enter_resolver = SnsEnterToolAvailabilityResolver()
     sns_resolver = SnsToolAvailabilityResolver()
     return [
+        (SNS_ENTER_DEFINITION, enter_resolver),
         (SNS_CREATE_POST_DEFINITION, sns_resolver),
         (SNS_CREATE_REPLY_DEFINITION, sns_resolver),
         (SNS_LIKE_POST_DEFINITION, sns_resolver),

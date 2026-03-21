@@ -5,6 +5,7 @@ from typing import List, Tuple
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
 from ai_rpg_world.application.llm.services.availability_resolvers import (
+    SnsModeRequiredAvailabilityResolver,
     TradeAcceptAvailabilityResolver,
     TradeCancelAvailabilityResolver,
     TradeDeclineAvailabilityResolver,
@@ -81,12 +82,12 @@ TRADE_DECLINE_DEFINITION = ToolDefinitionDto(
 
 
 def get_trade_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
-    """取引系ツールの (definition, resolver) 一覧を返す。"""
+    """取引系ツールの (definition, resolver) 一覧を返す。SNS モード ON のときのみ利用可能。"""
     return [
-        (TRADE_OFFER_DEFINITION, TradeOfferAvailabilityResolver()),
-        (TRADE_ACCEPT_DEFINITION, TradeAcceptAvailabilityResolver()),
-        (TRADE_CANCEL_DEFINITION, TradeCancelAvailabilityResolver()),
-        (TRADE_DECLINE_DEFINITION, TradeDeclineAvailabilityResolver()),
+        (TRADE_OFFER_DEFINITION, SnsModeRequiredAvailabilityResolver(TradeOfferAvailabilityResolver())),
+        (TRADE_ACCEPT_DEFINITION, SnsModeRequiredAvailabilityResolver(TradeAcceptAvailabilityResolver())),
+        (TRADE_CANCEL_DEFINITION, SnsModeRequiredAvailabilityResolver(TradeCancelAvailabilityResolver())),
+        (TRADE_DECLINE_DEFINITION, SnsModeRequiredAvailabilityResolver(TradeDeclineAvailabilityResolver())),
     ]
 
 
