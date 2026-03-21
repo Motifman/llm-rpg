@@ -48,10 +48,7 @@ class DependencyInjectionContainer:
     def _init_uow_and_publisher(self):
         """UOWとパブリッシャーの初期化"""
         if self._unit_of_work is None:
-            factory_func = self._unit_of_work_factory.create if self._unit_of_work_factory else None
-            self._unit_of_work, self._event_publisher = InMemoryUnitOfWork.create_with_event_publisher(
-                unit_of_work_factory=factory_func
-            )
+            self._unit_of_work, self._event_publisher = InMemoryUnitOfWork.create_with_event_publisher()
 
     def get_unit_of_work_and_publisher(self) -> Tuple[InMemoryUnitOfWork, "InMemoryEventPublisherWithUow"]:
         """Unit of Workとイベントパブリッシャーのペアを取得"""
