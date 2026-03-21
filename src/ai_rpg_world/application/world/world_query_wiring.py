@@ -24,6 +24,9 @@ from ai_rpg_world.application.world.services.transition_condition_evaluator impo
 )
 
 if TYPE_CHECKING:
+    from ai_rpg_world.application.social.services.sns_mode_session_service import (
+        SnsModeSessionService,
+    )
     from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
     from ai_rpg_world.application.conversation.services.conversation_command_service import (
         ConversationCommandService,
@@ -70,6 +73,7 @@ def create_world_query_service(
     shop_repository: Optional["ShopRepository"] = None,
     personal_trade_query_service: Optional["PersonalTradeQueryService"] = None,
     player_audience_query: Optional[IPlayerAudienceQueryPort] = None,
+    sns_mode_session: Optional["SnsModeSessionService"] = None,
 ) -> WorldQueryService:
     """
     PlayerLocationQueryService・SpotContextQueryService・AvailableMovesQueryService・
@@ -126,6 +130,7 @@ def create_world_query_service(
         shop_repository=shop_repository,
         personal_trade_query_service=personal_trade_query_service,
         player_audience_query=audience_query,
+        sns_mode_session=sns_mode_session,
     )
 
 
