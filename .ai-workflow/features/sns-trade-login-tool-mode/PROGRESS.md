@@ -2,7 +2,7 @@
 id: feature-sns-trade-login-tool-mode
 title: SNS ツール拡充と SNS モード切替
 slug: sns-trade-login-tool-mode
-status: in_progress
+status: completed
 created_at: 2026-03-21
 updated_at: 2026-03-21
 branch: feature/sns-trade-login-tool-mode
@@ -10,13 +10,36 @@ branch: feature/sns-trade-login-tool-mode
 
 # Current State
 
-- Active phase: Phase 5（次に着手）
-- Last completed phase: Phase 4
-- Next recommended action: `flow-exec` で Phase 5（wiring 統合と回帰テスト固定）
+- Active phase: なし（全 Phase 完了）
+- Last completed phase: Phase 5
+- Next recommended action: `flow-review` / `flow-ship` またはマージ作業
 - Handoff summary:
-  - `TOOL_NAME_SNS_HOME_TIMELINE` / `sns_list_my_posts` / `sns_list_user_posts` を `tool_constants`・`sns` カタログ・`SnsToolAvailabilityResolver` 配下に追加。`SnsToolExecutor` が `PostQueryService`（`post_query_service`）経由で `get_home_timeline` / `get_user_timeline` を呼び、`LlmCommandResultDto.message` に投稿テキストを整形。`create_llm_agent_wiring` / `_build_tool_handler_map` / `_build_tool_stack` に `post_query_service` を追加し、`sns_enabled` が query のみでも有効になるようにした。`test_available_tools_provider` / `test_tool_definitions` / `TestToolCommandMapperSns` を更新。ランタイムで TL を使うには composition root から `post_query_service=PostQueryService(...)` を渡す（Phase 5 でアプリ配線を確認）。
+  - Phase 5 で `application/llm/wiring` と `world_query_wiring` のブートストラップ文書を補い、`tests/application/llm/test_sns_mode_wiring_e2e.py` で `create_llm_agent_wiring` 経由の `DefaultPromptBuilder.build` が `is_sns_mode_active` に応じた `tools` を返すことを固定。`LlmAgentWiringResult.sns_mode_session` の参照同一性もテスト。
 
 # Phase Journal
+
+## Phase 5: Wiring 統合と回帰テスト固定
+
+- Started: 2026-03-21
+- Completed: 2026-03-21
+- Tests: `pytest tests/application/llm/test_sns_mode_wiring_e2e.py`、`pytest tests/application/llm/`
+- Findings:
+  - 実アプリの composition root はリポジトリごとに異なるため、コード側は doc + E2E テストで「同一 `SnsModeSessionService`」「`post_query_service` は LLM wiring のみ」を固定した。
+  - プロンプトに載るツール一覧は `DefaultPromptBuilder.build` 内で `available_tools_provider.get_available_tools(current_state_dto)` と一致するため、provider 単体テストに加え wiring 経路のテストが有効。
+- Plan revision check:
+  - future phase の追加・順序変更は不要。MVP 外 read（人気・検索・通知一覧等）は従来どおり follow-up。
+- User approval:
+  - 不要（PLAN の phase 定義変更なし）
+- Plan updates:
+  - `PLAN.md` の status / Change Log のみ
+- Goal check:
+  - wiring 文書化、prompt builder 経路の回帰テスト、defer の SUMMARY 記載を満たす
+- Scope delta:
+  - なし
+- Handoff summary:
+  - ship 前に実際のゲーム起動パスで `create_world_query_service` / `create_llm_agent_wiring` に同一 `sns_mode_session` と `post_query_service` が渡るか確認すると安心
+- Next-phase impact:
+  - なし（feature 完了）
 
 ## Phase 4: MVP timeline/query tool の追加
 
@@ -75,7 +98,7 @@ branch: feature/sns-trade-login-tool-mode
 - Plan revision check:
   - Phase 3〜5 の順序・成功条件は維持。`sns_enter` の実行経路は Phase 3 スコープとして既に PLAN にあり追加 phase は不要。
 - User approval:
-  - 不要（PLAN の future phase 文言変更なし）
+  - 不要（PLAN の future phase 変更なし）
 - Plan updates:
   - `PLAN.md` Change Log のみ（完了記録）
 - Goal check:
