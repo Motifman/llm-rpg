@@ -10,13 +10,36 @@ branch: feature/sns-trade-login-tool-mode
 
 # Current State
 
-- Active phase: Phase 4（次に着手）
-- Last completed phase: Phase 3
-- Next recommended action: `flow-exec` で Phase 4（MVP timeline/query tool）
+- Active phase: Phase 5（次に着手）
+- Last completed phase: Phase 4
+- Next recommended action: `flow-exec` で Phase 5（wiring 統合と回帰テスト固定）
 - Handoff summary:
-  - `SnsModeSessionService` でプロセス内 SNS モード状態を保持し、`PlayerCurrentStateBuilder` / `create_world_query_service(..., sns_mode_session=)` で `is_sns_mode_active` を供給。`sns_enter` / `sns_logout` と `sns_delete_post` / `sns_delete_reply` / `sns_update_profile` / 通知既読 2 種を `SnsToolExecutor`・`tool_constants`・`sns` カタログに追加。`create_llm_agent_wiring` に `sns_mode_session`・`notification_command_service` を追加し `LlmAgentWiringResult.sns_mode_session` で共有。mapper / provider / tool_definitions テストを更新。
+  - `TOOL_NAME_SNS_HOME_TIMELINE` / `sns_list_my_posts` / `sns_list_user_posts` を `tool_constants`・`sns` カタログ・`SnsToolAvailabilityResolver` 配下に追加。`SnsToolExecutor` が `PostQueryService`（`post_query_service`）経由で `get_home_timeline` / `get_user_timeline` を呼び、`LlmCommandResultDto.message` に投稿テキストを整形。`create_llm_agent_wiring` / `_build_tool_handler_map` / `_build_tool_stack` に `post_query_service` を追加し、`sns_enabled` が query のみでも有効になるようにした。`test_available_tools_provider` / `test_tool_definitions` / `TestToolCommandMapperSns` を更新。ランタイムで TL を使うには composition root から `post_query_service=PostQueryService(...)` を渡す（Phase 5 でアプリ配線を確認）。
 
 # Phase Journal
+
+## Phase 4: MVP timeline/query tool の追加
+
+- Started: 2026-03-21
+- Completed: 2026-03-21
+- Tests: `pytest tests/application/llm/`
+- Findings:
+  - 読み取り結果は専用 DTO ではなく `LlmCommandResultDto.message` にテキストで載せる（既存パターンに合わせる）。`post_query_service` が無い場合は timeline ハンドラ未登録のため `UNKNOWN_TOOL`。
+  - `sns_enabled` に `post_query_service is not None` を OR 追加（query のみで SNS カタログを載せる用途）。
+- Plan revision check:
+  - Phase 5（wiring 統合）の順序・成功条件は維持。追加 phase 不要。
+- User approval:
+  - 不要（PLAN の future phase 文言変更なし）
+- Plan updates:
+  - `PLAN.md` Change Log のみ
+- Goal check:
+  - MVP timeline 3 種の定義・executor・provider テスト・mapper テストを満たす
+- Scope delta:
+  - なし
+- Handoff summary:
+  - Phase 5 で `create_llm_agent_wiring` / bootstrap / world 配線に `post_query_service` を渡す経路を確認し、回帰テストを固定
+- Next-phase impact:
+  - composition root が `PostQueryService` を構築する場合は `create_llm_agent_wiring(..., post_query_service=...)` を明示
 
 ## Phase 3: SNS モード遷移ツールと不足 command tool の追加
 

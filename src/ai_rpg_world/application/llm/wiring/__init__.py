@@ -285,6 +285,7 @@ def _build_tool_handler_map(
     user_command_service: Optional[Any],
     notification_command_service: Optional[Any],
     sns_mode_session: Optional[Any],
+    post_query_service: Optional[Any],
     item_repository: Optional[Any],
     monster_repository: Optional[Any],
     physical_map_repository: PhysicalMapRepository,
@@ -352,6 +353,7 @@ def _build_tool_handler_map(
             user_command_service=user_command_service,
             notification_command_service=notification_command_service,
             sns_mode_session=sns_mode_session,
+            post_query_service=post_query_service,
         ).get_handlers()
     )
     handler_map.update(
@@ -400,6 +402,7 @@ def _build_tool_stack(
     user_command_service: Optional[Any],
     notification_command_service: Optional[Any],
     sns_mode_session: Optional[Any],
+    post_query_service: Optional[Any],
     item_repository: Optional[Any],
     monster_repository: Optional[Any],
     physical_map_repository: PhysicalMapRepository,
@@ -434,6 +437,7 @@ def _build_tool_stack(
             or user_command_service is not None
             or notification_command_service is not None
             or sns_mode_session is not None
+            or post_query_service is not None
         ),
         inspect_item_enabled=item_repository is not None,
         inspect_target_enabled=(
@@ -468,6 +472,7 @@ def _build_tool_stack(
         user_command_service=user_command_service,
         notification_command_service=notification_command_service,
         sns_mode_session=sns_mode_session,
+        post_query_service=post_query_service,
         item_repository=item_repository,
         monster_repository=monster_repository,
         physical_map_repository=physical_map_repository,
@@ -722,6 +727,7 @@ def create_llm_agent_wiring(
     user_command_service: Optional[Any] = None,
     notification_command_service: Optional[Any] = None,
     sns_mode_session: Optional[Any] = None,
+    post_query_service: Optional[Any] = None,
     llm_client: Optional[ILLMClient] = None,
     game_time_provider: Optional[Any] = None,
     world_time_config_service: Optional[Any] = None,
@@ -852,6 +858,7 @@ def create_llm_agent_wiring(
         user_command_service=user_command_service,
         notification_command_service=notification_command_service,
         sns_mode_session=sns_mode_session,
+        post_query_service=post_query_service,
         item_repository=item_repository,
         monster_repository=monster_repository,
         physical_map_repository=physical_map_repository,

@@ -1,6 +1,6 @@
 """SNS ツール（create_post, create_reply, like_post, like_reply, follow, block 等）の実行。"""
 
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
@@ -16,8 +16,11 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SNS_DELETE_REPLY,
     TOOL_NAME_SNS_ENTER,
     TOOL_NAME_SNS_FOLLOW,
+    TOOL_NAME_SNS_HOME_TIMELINE,
     TOOL_NAME_SNS_LIKE_POST,
     TOOL_NAME_SNS_LIKE_REPLY,
+    TOOL_NAME_SNS_LIST_MY_POSTS,
+    TOOL_NAME_SNS_LIST_USER_POSTS,
     TOOL_NAME_SNS_LOGOUT,
     TOOL_NAME_SNS_MARK_ALL_NOTIFICATIONS_READ,
     TOOL_NAME_SNS_MARK_NOTIFICATION_READ,
@@ -44,7 +47,23 @@ from ai_rpg_world.application.social.contracts.commands import (
     UnsubscribeUserCommand,
     UpdateUserProfileCommand,
 )
+from ai_rpg_world.application.social.contracts.dtos import PostDto
 from ai_rpg_world.domain.sns.enum import PostVisibility
+
+
+def _format_post_dtos_for_llm(posts: List[PostDto]) -> str:
+    """投稿一覧を LLM 向けテキストに整形する。"""
+    if not posts:
+        return "表示できる投稿はありません。"
+    blocks: List[str] = []
+    for p in posts:
+        blocks.append(
+            f"[post_id={p.post_id}] @{p.author_display_name} ({p.author_user_name})\n"
+            f"{p.content}\n"
+            f"いいね: {p.like_count} 返信: {p.reply_count} 公開: {p.visibility} "
+            f"日時: {p.created_at.isoformat()}"
+        )
+    return "\n\n".join(blocks)
 
 
 class SnsToolExecutor:
@@ -66,12 +85,14 @@ class SnsToolExecutor:
         user_command_service: Optional[Any] = None,
         notification_command_service: Optional[Any] = None,
         sns_mode_session: Optional[Any] = None,
+        post_query_service: Optional[Any] = None,
     ) -> None:
         self._post_service = post_service
         self._reply_service = reply_service
         self._user_command_service = user_command_service
         self._notification_command_service = notification_command_service
         self._sns_mode_session = sns_mode_session
+        self._post_query_service = post_query_service
 
     def get_handlers(
         self,
@@ -101,6 +122,10 @@ class SnsToolExecutor:
             handlers[TOOL_NAME_SNS_MARK_ALL_NOTIFICATIONS_READ] = (
                 self._execute_mark_all_notifications_read
             )
+        if self._post_query_service is not None:
+            handlers[TOOL_NAME_SNS_HOME_TIMELINE] = self._execute_home_timeline
+            handlers[TOOL_NAME_SNS_LIST_MY_POSTS] = self._execute_list_my_posts
+            handlers[TOOL_NAME_SNS_LIST_USER_POSTS] = self._execute_list_user_posts
         return handlers
 
     def _execute_sns_enter(
@@ -214,6 +239,81 @@ class SnsToolExecutor:
                 MarkAllNotificationsAsReadCommand(user_id=player_id)
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
+        except Exception as e:
+            return exception_result(e)
+
+    def _parse_limit_offset(self, args: Dict[str, Any]) -> tuple[int, int]:
+        """limit / offset を解釈（省略時 20 / 0、limit は 1〜100）。"""
+        default_limit = 20
+        limit = default_limit
+        offset = 0
+        raw_limit = args.get("limit")
+        raw_offset = args.get("offset")
+        if raw_limit is not None:
+            limit = int(raw_limit)
+        if raw_offset is not None:
+            offset = int(raw_offset)
+        if limit < 1:
+            limit = default_limit
+        if limit > 100:
+            limit = 100
+        if offset < 0:
+            offset = 0
+        return limit, offset
+
+    def _execute_home_timeline(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> LlmCommandResultDto:
+        if self._post_query_service is None:
+            return unknown_tool("タイムライン取得ツールはまだ利用できません。")
+        try:
+            limit, offset = self._parse_limit_offset(args)
+            posts = self._post_query_service.get_home_timeline(
+                viewer_user_id=player_id,
+                limit=limit,
+                offset=offset,
+            )
+            text = _format_post_dtos_for_llm(posts)
+            return LlmCommandResultDto(success=True, message=text)
+        except Exception as e:
+            return exception_result(e)
+
+    def _execute_list_my_posts(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> LlmCommandResultDto:
+        if self._post_query_service is None:
+            return unknown_tool("投稿一覧取得ツールはまだ利用できません。")
+        try:
+            limit, offset = self._parse_limit_offset(args)
+            posts = self._post_query_service.get_user_timeline(
+                user_id=player_id,
+                viewer_user_id=player_id,
+                limit=limit,
+                offset=offset,
+            )
+            text = _format_post_dtos_for_llm(posts)
+            return LlmCommandResultDto(success=True, message=text)
+        except Exception as e:
+            return exception_result(e)
+
+    def _execute_list_user_posts(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> LlmCommandResultDto:
+        if self._post_query_service is None:
+            return unknown_tool("投稿一覧取得ツールはまだ利用できません。")
+        target = args.get("target_user_id")
+        if target is None:
+            return invalid_arg_result("target_user_id")
+        try:
+            limit, offset = self._parse_limit_offset(args)
+            posts = self._post_query_service.get_user_timeline(
+                user_id=int(target),
+                viewer_user_id=player_id,
+                limit=limit,
+                offset=offset,
+            )
+            text = _format_post_dtos_for_llm(posts)
+            return LlmCommandResultDto(success=True, message=text)
         except Exception as e:
             return exception_result(e)
 

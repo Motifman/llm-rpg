@@ -76,6 +76,7 @@ def _minimal_tool_stack_deps():
         "user_command_service": None,
         "notification_command_service": None,
         "sns_mode_session": None,
+        "post_query_service": None,
         "item_repository": None,
         "monster_repository": None,
         "physical_map_repository": MagicMock(spec=PhysicalMapRepository),
