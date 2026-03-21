@@ -6,7 +6,6 @@ import logging
 from unittest.mock import Mock, patch
 from ai_rpg_world.application.social.services.user_command_service import UserCommandService
 from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
-from ai_rpg_world.infrastructure.events.event_publisher_impl import InMemoryEventPublisher
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 from ai_rpg_world.application.social.contracts.commands import (
     CreateUserCommand,

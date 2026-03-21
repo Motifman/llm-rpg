@@ -79,6 +79,12 @@ class _FakeUow(UnitOfWork):
     def advance_sync_processed_count(self, new_count):
         pass
 
+    def get_committed_events(self):
+        return []
+
+    def clear_committed_events(self):
+        pass
+
 
 def _create_map(spot_id_int: int) -> PhysicalMapAggregate:
     tiles = [

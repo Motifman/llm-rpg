@@ -62,6 +62,8 @@ class _FakeUow(UnitOfWork):
     def get_sync_processed_count(self): return 0
     def get_pending_events_since(self, processed_count): return ([], 0)
     def advance_sync_processed_count(self, new_count): pass
+    def get_committed_events(self): return []
+    def clear_committed_events(self): pass
 
 class _InMemoryRepo:
     def __init__(self): self.data = {}

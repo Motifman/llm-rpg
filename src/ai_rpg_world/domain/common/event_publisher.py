@@ -24,3 +24,12 @@ class EventPublisher(ABC, Generic[E]):
     def publish_all(self, events: List[E]) -> None:
         """複数イベントを一括発行"""
         pass
+
+    @abstractmethod
+    def publish_async_events(self, events: List[E]) -> None:
+        """指定イベントを非同期ハンドラで処理する（post-commit handoff API）
+
+        UoW の pending に依存せず、明示的に渡されたイベントのみを処理する。
+        post-commit orchestration から呼ばれることを想定。
+        """
+        pass

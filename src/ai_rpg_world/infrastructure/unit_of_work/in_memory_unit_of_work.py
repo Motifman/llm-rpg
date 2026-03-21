@@ -2,7 +2,6 @@
 InMemoryUnitOfWork - インメモリ実装のUnit of Work
 実際のデータベーストランザクションは存在しないが、論理的なトランザクション境界を提供します。
 """
-import logging
 from typing import List, Callable, Any, Tuple, TYPE_CHECKING, Optional, Dict
 
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
@@ -10,8 +9,6 @@ from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 
 if TYPE_CHECKING:
     from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
-
-logger = logging.getLogger(__name__)
 
 
 class InMemoryUnitOfWork(UnitOfWork):
@@ -28,15 +25,14 @@ class InMemoryUnitOfWork(UnitOfWork):
         self._pending_aggregates: Dict[Tuple[str, Any], Any] = {}  # (repo_key, entity_id) -> 未反映の集約
         self._processed_sync_count = 0
         self._committed = False
+        self._committed_events: List[BaseDomainEvent[Any, Any]] = []
         self._event_publisher = event_publisher
         self._data_store = data_store
         self._snapshot = None
         self._sync_event_dispatcher = sync_event_dispatcher
 
-        # 別トランザクション処理専用 - 必須パラメータ
-        if unit_of_work_factory is None:
-            raise ValueError("unit_of_work_factory is required for separate transaction event processing")
-        self._unit_of_work_factory = unit_of_work_factory
+        # unit_of_work_factory は過去の別トランザクション用 UoW 生成に使われたが、
+        # post-commit orchestration 分離後は未使用。後方互換のため引数は受け取るが保持しない。
 
     @property
     def sync_event_dispatcher(self):
@@ -53,7 +49,8 @@ class InMemoryUnitOfWork(UnitOfWork):
         self._pending_aggregates = {}
         self._processed_sync_count = 0
         self._committed = False
-        
+        self._committed_events = []
+
         # ロールバック用にスナップショットを取得
         if self._data_store:
             self._snapshot = self._data_store.take_snapshot()
@@ -83,19 +80,18 @@ class InMemoryUnitOfWork(UnitOfWork):
             # トランザクション完了後は状態をクリアするが、
             # 非同期イベント処理のためにイベントリストは一時的に保持
             events_to_process_async = self._pending_events.copy()
-            
+
+            # Phase 3: コミット成功時は committed events に格納（post-commit orchestration 用）
+            # Phase 4: 非同期配信は UoW の責務ではない。TransactionalScope が post-commit orchestration で行う。
+            if self._committed:
+                self._committed_events = events_to_process_async.copy()
+
             self._in_transaction = False
             self._pending_operations.clear()
             self._pending_events.clear()
             self._pending_aggregates = {}
-            self._processed_sync_count = 0 # リセット
+            self._processed_sync_count = 0  # リセット
             self._snapshot = None
-
-            # コミット成功時のみ、別トランザクションで非同期イベントを処理
-            if self._committed and events_to_process_async:
-                self._pending_events = events_to_process_async
-                self._process_events_in_separate_transaction()
-                self._pending_events.clear()
 
     def _execute_pending_operations(self) -> None:
         """保留中の操作を順次実行する"""
@@ -109,26 +105,6 @@ class InMemoryUnitOfWork(UnitOfWork):
     def execute_pending_operations(self) -> None:
         """保留中の操作を順次実行する（SyncEventDispatcher から呼び出される）"""
         self._execute_pending_operations()
-
-    def _process_events_in_separate_transaction(self) -> None:
-        """保留中のイベントを別トランザクションで処理（非同期ハンドラ）
-
-        非同期ハンドラは各ハンドラが自分で UoW を管理するため、
-        外側の UoW は廃止し、publish_pending_events を直接呼ぶ。
-        """
-        if not self._pending_events:
-            return
-
-        # イベントパブリッシャーがない場合は処理をスキップ（テスト等で event_publisher=None のとき）
-        if self._event_publisher is None:
-            return
-
-        try:
-            self._event_publisher._pending_events.extend(self._pending_events)
-            self._event_publisher.publish_pending_events()
-        except Exception as e:
-            logger.exception("Failed to process async events in separate transaction: %s", e)
-            raise
 
     def rollback(self) -> None:
         """ロールバック - 保留中の操作を破棄し、状態を復元"""
@@ -206,6 +182,14 @@ class InMemoryUnitOfWork(UnitOfWork):
         """同期イベント処理済み件数を進める。"""
         self._processed_sync_count = new_count
 
+    def get_committed_events(self) -> List[BaseDomainEvent[Any, Any]]:
+        """コミット成功後に取り出し可能なイベントを返す。post-commit orchestration で使用。"""
+        return self._committed_events.copy()
+
+    def clear_committed_events(self) -> None:
+        """コミット済みイベントをクリアする。post-commit orchestration 完了後に呼ぶ。"""
+        self._committed_events.clear()
+
     def is_committed(self) -> bool:
         """コミット済みかどうかを返す（テスト用）"""
         return self._committed
@@ -225,30 +209,35 @@ class InMemoryUnitOfWork(UnitOfWork):
             self.commit()
 
     @classmethod
-    def create_with_event_publisher(cls, unit_of_work_factory=None, data_store=None) -> Tuple["InMemoryUnitOfWork", "InMemoryEventPublisherWithUow"]:
+    def create_with_event_publisher(cls, unit_of_work_factory=None, data_store=None) -> Tuple[Any, "InMemoryEventPublisherWithUow"]:
         """Unit of Workとイベントパブリッシャーを作成し、適切に接続する
-        
-        双方向参照の設定をカプセル化し、テストでの使用を簡素化します。
+
+        Phase 4: TransactionalScope を返し、commit 後の post-commit orchestration を
+        scope 側で担う。with uow: 互換を維持しつつ、UoW.commit は async 配信を知らない。
 
         Args:
-            unit_of_work_factory: 別トランザクション用のUnit of Workファクトリ（必須）
+            unit_of_work_factory: 未使用。後方互換のため残す。
             data_store: 状態復元用のデータストア
 
         Returns:
-            (unit_of_work, event_publisher)のタプル
+            (scope, event_publisher) のタプル。scope は with scope: で使用し UoW インターフェースを委譲。
         """
-        if unit_of_work_factory is None:
-            raise ValueError("unit_of_work_factory is required for separate transaction event processing")
-
-        # 実行時にインポートして循環インポートを回避
         from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
+        from ai_rpg_world.infrastructure.events.in_process_async_event_executor import InProcessAsyncEventExecutor
+        from ai_rpg_world.infrastructure.events.in_process_async_event_transport import InProcessAsyncEventTransport
         from ai_rpg_world.infrastructure.events.sync_event_dispatcher import SyncEventDispatcher
+        from ai_rpg_world.infrastructure.unit_of_work.transactional_scope import TransactionalScope
 
-        unit_of_work = cls(unit_of_work_factory=unit_of_work_factory, data_store=data_store)
-        event_publisher = InMemoryEventPublisherWithUow(unit_of_work)
-        unit_of_work._event_publisher = event_publisher
+        unit_of_work = cls(data_store=data_store)
+        scope = TransactionalScope(unit_of_work, None)
+        async_executor = InProcessAsyncEventExecutor()
+        async_transport = InProcessAsyncEventTransport(async_executor)
+        event_publisher = InMemoryEventPublisherWithUow(scope, async_transport=async_transport)
+        scope.set_event_publisher(event_publisher)
 
-        sync_event_dispatcher = SyncEventDispatcher(unit_of_work, event_publisher)
+        sync_event_dispatcher = SyncEventDispatcher(scope, event_publisher)
+        scope.set_sync_event_dispatcher(sync_event_dispatcher)
+        # uow.commit() 内で flush_sync_events を呼ぶため、raw uow にも dispatcher を設定
         unit_of_work._sync_event_dispatcher = sync_event_dispatcher
 
-        return unit_of_work, event_publisher
+        return scope, event_publisher

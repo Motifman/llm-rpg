@@ -23,6 +23,7 @@ dependencies = [
     "litellm==1.44.9",
     "pydantic==2.8.2",
     "python-dotenv==1.0.1",
+    "anyio>=4.0",
 ]
 
 [tool.setuptools.packages.find]
