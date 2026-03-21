@@ -223,7 +223,10 @@ class SnsToolExecutor:
             return invalid_arg_result("notification_id")
         try:
             result = self._notification_command_service.mark_notification_as_read(
-                MarkNotificationAsReadCommand(notification_id=int(notification_id))
+                MarkNotificationAsReadCommand(
+                    user_id=player_id,
+                    notification_id=int(notification_id),
+                )
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
