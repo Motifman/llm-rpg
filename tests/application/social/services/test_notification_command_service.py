@@ -20,6 +20,7 @@ from ai_rpg_world.application.social.exceptions.command.notification_command_exc
     NotificationMarkAllAsReadException,
     NotificationNotFoundForCommandException,
     NotificationAccessDeniedException,
+    NotificationOwnershipException,
 )
 from ai_rpg_world.application.social.exceptions.query.user_query_exception import UserQueryException
 from ai_rpg_world.application.social.exceptions import SystemErrorException
@@ -140,7 +141,8 @@ class TestNotificationCommandService:
             service, repository, unit_of_work = setup_service
 
             command = MarkNotificationAsReadCommand(
-                notification_id=1
+                user_id=1,
+                notification_id=1,
             )
 
             result = service.mark_notification_as_read(command)
@@ -161,7 +163,8 @@ class TestNotificationCommandService:
             repository.mark_as_read(NotificationId(1))
 
             command = MarkNotificationAsReadCommand(
-                notification_id=1
+                user_id=1,
+                notification_id=1,
             )
 
             result = service.mark_notification_as_read(command)
@@ -174,7 +177,8 @@ class TestNotificationCommandService:
             service, repository, unit_of_work = setup_service
 
             command = MarkNotificationAsReadCommand(
-                notification_id=999
+                user_id=1,
+                notification_id=999,
             )
 
             # 存在しない通知IDの場合は何も起こらない（正常動作）
@@ -183,12 +187,29 @@ class TestNotificationCommandService:
             assert isinstance(result, CommandResultDto)
             assert result.success is True
 
+        def test_error_cannot_mark_other_users_notification(self, setup_service):
+            """異常系: 他人の通知は既読にできない"""
+            service, repository, unit_of_work = setup_service
+
+            command = MarkNotificationAsReadCommand(
+                user_id=1,
+                notification_id=3,
+            )
+
+            with pytest.raises(NotificationOwnershipException):
+                service.mark_notification_as_read(command)
+
+            n3 = repository.find_by_id(NotificationId(3))
+            assert n3 is not None
+            assert n3.is_read is False
+
         def test_error_invalid_notification_id(self, setup_service):
             """異常系: 無効な通知ID"""
             service, repository, unit_of_work = setup_service
 
             command = MarkNotificationAsReadCommand(
-                notification_id=0
+                user_id=1,
+                notification_id=0,
             )
 
             with pytest.raises(NotificationCommandException):
@@ -246,7 +267,8 @@ class TestNotificationCommandService:
             service, repository, unit_of_work = setup_service
 
             command = MarkNotificationAsReadCommand(
-                notification_id=-1  # 無効な通知ID
+                user_id=1,
+                notification_id=-1,  # 無効な通知ID
             )
 
             with pytest.raises(NotificationCommandException):
@@ -259,7 +281,8 @@ class TestNotificationCommandService:
             # リポジトリのmark_as_readをモックして例外を投げるようにする
             with patch.object(repository, 'mark_as_read', side_effect=RuntimeError("Database connection failed")):
                 command = MarkNotificationAsReadCommand(
-                    notification_id=1
+                    user_id=1,
+                    notification_id=1,
                 )
 
                 with pytest.raises(SystemErrorException):
@@ -274,7 +297,8 @@ class TestNotificationCommandService:
 
             with caplog.at_level(logging.INFO):
                 command = MarkNotificationAsReadCommand(
-                    notification_id=1
+                    user_id=1,
+                    notification_id=1,
                 )
                 service.mark_notification_as_read(command)
 

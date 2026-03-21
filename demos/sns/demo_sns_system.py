@@ -1754,7 +1754,8 @@ class SnsDemo:
 
             # コマンド実行
             command = MarkNotificationAsReadCommand(
-                notification_id=selected_notification.notification_id
+                user_id=self.current_user_id,
+                notification_id=selected_notification.notification_id,
             )
 
             result = self.notification_command_service.mark_notification_as_read(command)

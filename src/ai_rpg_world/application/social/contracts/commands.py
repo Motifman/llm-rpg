@@ -117,6 +117,7 @@ class DeleteReplyCommand:
 @dataclass(frozen=True)
 class MarkNotificationAsReadCommand:
     """通知既読コマンド"""
+    user_id: int
     notification_id: int
 
 

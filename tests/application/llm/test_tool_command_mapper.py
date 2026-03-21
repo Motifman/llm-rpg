@@ -2050,6 +2050,9 @@ class TestToolCommandMapperSns:
         )
         assert result.success is True
         notification_service.mark_notification_as_read.assert_called_once()
+        read_cmd = notification_service.mark_notification_as_read.call_args[0][0]
+        assert read_cmd.user_id == 1
+        assert read_cmd.notification_id == 100
 
     def test_sns_mark_all_notifications_read_success(self):
         notification_service = MagicMock()
