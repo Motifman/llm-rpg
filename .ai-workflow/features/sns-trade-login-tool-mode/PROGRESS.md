@@ -22,7 +22,7 @@ branch: codex/sns-trade-login-tool-mode
 
 - Started: 2026-03-21
 - Completed: 2026-03-21
-- Commit: （phase 完了コミットで埋める）
+- Commit: f269eaf
 - Tests: コード変更なしのためスキップ（既存テストへの影響なし）
 - Findings:
   - 既存 `sns.py` には `sns_enter` / `sns_logout` / timeline ツールは未存在。行列上の論理名は Phase 2〜4 で `tool_constants` および catalog に追加する前提で固定した。
