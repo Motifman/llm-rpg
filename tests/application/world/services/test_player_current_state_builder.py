@@ -335,6 +335,64 @@ class TestPlayerCurrentStateBuilder:
             viewer_user_id=1,
         )
 
+    def test_build_player_current_state_includes_trade_page_snapshot_json(self):
+        """取引所モード ON かつ TradePageSessionService 配線時、trade_* と JSON が埋まる"""
+        data_store = InMemoryDataStore()
+        status_repo = InMemoryPlayerStatusRepository(data_store)
+        profile_repo = InMemoryPlayerProfileRepository(data_store)
+        phys_repo = InMemoryPhysicalMapRepository(data_store)
+        spot_repo = InMemorySpotRepository(data_store)
+        spot_repo.save(Spot(SpotId(1), "Town", "A town"))
+        from ai_rpg_world.application.social.services.sns_mode_session_service import (
+            SnsModeSessionService,
+        )
+        from ai_rpg_world.application.trade.trade_virtual_pages import (
+            TradePageSessionService,
+        )
+        from ai_rpg_world.application.trade.trade_virtual_pages.kinds import (
+            TradeVirtualPageKind,
+        )
+
+        sns_mode_session = SnsModeSessionService()
+        trade_page_session = TradePageSessionService()
+        sns_mode_session.enter_trade_mode(1)
+        trade_page_session.on_enter_trade(1)
+        trade_page_session.set_page_kind(1, TradeVirtualPageKind.SEARCH)
+        trade_page_session.set_search_filters(1, item_name="axe")
+
+        builder = PlayerCurrentStateBuilder(
+            player_status_repository=status_repo,
+            player_profile_repository=profile_repo,
+            spot_repository=spot_repo,
+            connected_spots_provider=GatewayBasedConnectedSpotsProvider(phys_repo),
+            player_audience_query=PlayerAudienceQueryService(status_repo),
+            sns_mode_session=sns_mode_session,
+            trade_page_session=trade_page_session,
+        )
+        profile_repo.save(_make_profile(1, "Alice"))
+        status = _make_status(1, 1, 0, 0)
+        status_repo.save(status)
+        actor = WorldObject(
+            object_id=WorldObjectId.create(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.PLAYER,
+            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
+        )
+        physical_map = _make_map(1, [actor])
+        result = builder.build_player_current_state(
+            query=GetPlayerCurrentStateQuery(player_id=1),
+            player_status=status,
+            player_name="Alice",
+            spot=spot_repo.find_by_id(SpotId(1)),
+            physical_map=physical_map,
+            available_moves_result=None,
+        )
+        assert result.trade_virtual_page_kind == "search"
+        assert result.trade_my_trades_tab is None
+        assert result.trade_current_page_snapshot_json is not None
+        assert '"page_kind": "search"' in result.trade_current_page_snapshot_json
+        assert '"item_name": "axe"' in result.trade_current_page_snapshot_json
+
     def test_build_player_current_state_with_location_area_includes_description(
         self, setup_builder
     ):

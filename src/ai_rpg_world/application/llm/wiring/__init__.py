@@ -296,6 +296,7 @@ def _build_tool_handler_map(
     sns_mode_session: Optional[Any],
     sns_page_session: Optional[Any],
     sns_page_query_service: Optional[Any],
+    trade_page_session: Optional[Any],
     reply_query_service: Optional[Any],
     notification_query_service: Optional[Any],
     item_repository: Optional[Any],
@@ -359,6 +360,7 @@ def _build_tool_handler_map(
         TradeToolExecutor(
             trade_service=trade_command_service,
             sns_mode_session=sns_mode_session,
+            trade_page_session=trade_page_session,
         ).get_handlers()
     )
     handler_map.update(
@@ -423,6 +425,7 @@ def _build_tool_stack(
     sns_page_session: Optional[Any],
     post_query_service: Optional[Any],
     sns_page_query_service: Optional[Any],
+    trade_page_session: Optional[Any],
     reply_query_service: Optional[Any],
     notification_query_service: Optional[Any],
     item_repository: Optional[Any],
@@ -497,6 +500,7 @@ def _build_tool_stack(
         sns_mode_session=sns_mode_session,
         sns_page_session=sns_page_session,
         sns_page_query_service=sns_page_query_service,
+        trade_page_session=trade_page_session,
         reply_query_service=reply_query_service,
         notification_query_service=notification_query_service,
         item_repository=item_repository,
@@ -700,12 +704,14 @@ class LlmAgentWiringResult:
         reflection_runner: Optional[IReflectionRunner] = None,
         sns_mode_session: Optional[Any] = None,
         sns_page_session: Optional[Any] = None,
+        trade_page_session: Optional[Any] = None,
     ) -> None:
         self.observation_registry = observation_registry
         self.llm_turn_trigger = llm_turn_trigger
         self.reflection_runner = reflection_runner
         self.sns_mode_session = sns_mode_session
         self.sns_page_session = sns_page_session
+        self.trade_page_session = trade_page_session
 
     def __iter__(self) -> Any:
         yield self.observation_registry
@@ -758,6 +764,7 @@ def create_llm_agent_wiring(
     sns_page_session: Optional[Any] = None,
     post_query_service: Optional[Any] = None,
     sns_page_query_service: Optional[Any] = None,
+    trade_page_session: Optional[Any] = None,
     reply_query_service: Optional[Any] = None,
     notification_query_service: Optional[Any] = None,
     llm_client: Optional[ILLMClient] = None,
@@ -893,6 +900,7 @@ def create_llm_agent_wiring(
         sns_page_session=sns_page_session,
         post_query_service=post_query_service,
         sns_page_query_service=sns_page_query_service,
+        trade_page_session=trade_page_session,
         reply_query_service=reply_query_service,
         notification_query_service=notification_query_service,
         item_repository=item_repository,
@@ -988,6 +996,7 @@ def create_llm_agent_wiring(
         reflection_runner=reflection_runner,
         sns_mode_session=sns_mode_session,
         sns_page_session=sns_page_session,
+        trade_page_session=trade_page_session,
     )
 
 

@@ -43,9 +43,11 @@ class TradeToolExecutor:
         self,
         trade_service: Optional[Any] = None,
         sns_mode_session: Optional[Any] = None,
+        trade_page_session: Optional[Any] = None,
     ) -> None:
         self._trade_service = trade_service
         self._sns_mode_session = sns_mode_session
+        self._trade_page_session = trade_page_session
 
     def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
         """利用可能なツール名→ハンドラの辞書を返す。trade_service が None の場合は入退場のみ。"""
@@ -74,6 +76,8 @@ class TradeToolExecutor:
             self._sns_mode_session.enter_trade_mode(player_id)
         except ActiveGameAppConflictError as e:
             return LlmCommandResultDto(success=False, message=str(e))
+        if self._trade_page_session is not None:
+            self._trade_page_session.on_enter_trade(player_id)
         return LlmCommandResultDto(success=True, message="取引所を開きました。")
 
     def _execute_trade_exit(
@@ -82,6 +86,8 @@ class TradeToolExecutor:
         if self._sns_mode_session is None:
             return unknown_tool("取引所モード状態が利用できません。")
         self._sns_mode_session.exit_trade_mode(player_id)
+        if self._trade_page_session is not None:
+            self._trade_page_session.on_exit_trade(player_id)
         return LlmCommandResultDto(success=True, message="取引所を閉じました。")
 
     def _execute_trade_offer(
