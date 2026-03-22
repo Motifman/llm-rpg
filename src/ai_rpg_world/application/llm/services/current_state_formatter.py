@@ -19,92 +19,95 @@ class DefaultCurrentStateFormatter(ICurrentStateFormatter):
     def format(self, dto: PlayerCurrentStateDto) -> str:
         if not isinstance(dto, PlayerCurrentStateDto):
             raise TypeError("dto must be PlayerCurrentStateDto")
+        world = dto.world_state
+        runtime = dto.runtime_context
+        app = dto.app_session_state
         lines: List[str] = []
 
         # 場所
-        if dto.current_spot_name is not None:
-            lines.append(f"現在地: {dto.current_spot_name}")
-            if dto.current_spot_description:
-                lines.append(f"  {dto.current_spot_description}")
+        if world.current_spot_name is not None:
+            lines.append(f"現在地: {world.current_spot_name}")
+            if world.current_spot_description:
+                lines.append(f"  {world.current_spot_description}")
         else:
             lines.append("現在地: 未配置")
 
-        if dto.area_name:
-            lines.append(f"エリア: {dto.area_name}")
-            if dto.current_location_description and dto.current_location_description.strip():
-                desc = dto.current_location_description.strip()
+        if world.area_name:
+            lines.append(f"エリア: {world.area_name}")
+            if world.current_location_description and world.current_location_description.strip():
+                desc = world.current_location_description.strip()
                 if len(desc) > self._LOCATION_DESCRIPTION_TRUNCATE_LENGTH:
                     desc = desc[: self._LOCATION_DESCRIPTION_TRUNCATE_LENGTH] + "…"
                 lines.append(f"  {desc}")
-        if dto.x is not None and dto.y is not None:
-            lines.append(f"座標: (x={dto.x}, y={dto.y}, z={dto.z or 0})")
+        if world.x is not None and world.y is not None:
+            lines.append(f"座標: (x={world.x}, y={world.y}, z={world.z or 0})")
 
         # 同スポットの他プレイヤー
-        if dto.current_player_count > 0:
-            lines.append(f"同スポットのプレイヤー: {dto.current_player_count}人")
+        if world.current_player_count > 0:
+            lines.append(f"同スポットのプレイヤー: {world.current_player_count}人")
 
         # 接続先
-        if dto.connected_spot_names:
-            names = sorted(dto.connected_spot_names)
+        if world.connected_spot_names:
+            names = sorted(world.connected_spot_names)
             lines.append(f"接続先スポット: {', '.join(names)}")
 
         # ゲーム内現在時刻
-        if dto.current_game_time_label:
-            lines.append(f"現在時刻: {dto.current_game_time_label}")
+        if world.current_game_time_label:
+            lines.append(f"現在時刻: {world.current_game_time_label}")
 
         # 天気・地形
-        lines.append(f"天気: {dto.weather_type} (強度: {dto.weather_intensity})")
-        if dto.current_terrain_type:
-            lines.append(f"地形: {dto.current_terrain_type}")
+        lines.append(f"天気: {world.weather_type} (強度: {world.weather_intensity})")
+        if world.current_terrain_type:
+            lines.append(f"地形: {world.current_terrain_type}")
 
-        lines.append(f"視界距離: {dto.view_distance}")
+        lines.append(f"視界距離: {world.view_distance}")
 
         # 視界タイルマップ（オプション）
-        if dto.visible_tile_map is not None:
+        if world.visible_tile_map is not None:
             legend_parts = [
-                f"{char}={label}" for char, label in sorted(dto.visible_tile_map.legend.items())
+                f"{char}={label}" for char, label in sorted(world.visible_tile_map.legend.items())
             ]
             lines.append("視界タイルマップ凡例: " + " ".join(legend_parts))
             lines.append("視界タイルマップ:")
-            for row in dto.visible_tile_map.rows:
+            for row in world.visible_tile_map.rows:
                 lines.append(f"  {row}")
 
         # 高レベルな注目点（件数のみ。詳細は UiContextBuilder）
-        notable_n = len(dto.notable_objects) if dto.notable_objects else 0
-        actionable_n = len(dto.actionable_objects) if dto.actionable_objects else 0
+        notable_n = len(runtime.notable_objects) if runtime.notable_objects else 0
+        actionable_n = len(runtime.actionable_objects) if runtime.actionable_objects else 0
         lines.append(f"注目対象: {notable_n}件")
         lines.append(f"今すぐ行動可能な対象: {actionable_n}件")
 
         # 利用可能な移動先（件数のみ。詳細は UiContextBuilder）
-        if dto.available_moves is not None and dto.total_available_moves is not None:
-            lines.append(f"利用可能な移動先: {dto.total_available_moves} 件")
+        if world.available_moves is not None and world.total_available_moves is not None:
+            lines.append(f"利用可能な移動先: {world.total_available_moves} 件")
 
         # 注意レベル・行動状態
-        lines.append(f"注意レベル: {dto.attention_level.value}")
+        lines.append(f"注意レベル: {world.attention_level.value}")
 
-        if dto.is_busy:
+        if world.is_busy:
             suffix = (
-                f" (busy_until={dto.busy_until_tick})"
-                if dto.busy_until_tick is not None
+                f" (busy_until={world.busy_until_tick})"
+                if world.busy_until_tick is not None
                 else ""
             )
             lines.append(f"行動状態: 実行中{suffix}")
-        elif dto.has_active_path:
+        elif world.has_active_path:
             lines.append("行動状態: 移動計画あり")
 
-        if dto.active_harvest is not None:
+        if runtime.active_harvest is not None:
             lines.append(
                 "採集中: "
-                f"{dto.active_harvest.target_display_name}"
-                f" (finish_tick={dto.active_harvest.finish_tick})"
+                f"{runtime.active_harvest.target_display_name}"
+                f" (finish_tick={runtime.active_harvest.finish_tick})"
             )
 
-        if dto.sns_current_page_snapshot_json:
+        if app.sns_current_page_snapshot_json:
             lines.append("現在のSNS画面:")
-            lines.append(dto.sns_current_page_snapshot_json)
+            lines.append(app.sns_current_page_snapshot_json)
 
-        if dto.trade_current_page_snapshot_json:
+        if app.trade_current_page_snapshot_json:
             lines.append("現在の取引所画面:")
-            lines.append(dto.trade_current_page_snapshot_json)
+            lines.append(app.trade_current_page_snapshot_json)
 
         return "\n".join(lines)

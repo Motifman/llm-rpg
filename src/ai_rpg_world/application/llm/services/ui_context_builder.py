@@ -109,18 +109,21 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
                 tool_runtime_context=ToolRuntimeContextDto.empty(),
             )
 
+        world = current_state.world_state
+        runtime = current_state.runtime_context
+        app = current_state.app_session_state
         allocator = LabelAllocator()
         collector = RuntimeTargetCollector()
         lines = [current_state_text.rstrip()]
 
         visible_lines, labels_by_object_id = self._build_visible_target_lines(
-            current_state.visible_objects,
-            current_state,
+            world.visible_objects,
+            world,
             allocator,
             collector,
         )
         notable_lines = self._build_object_summary_lines(
-            current_state.notable_objects,
+            runtime.notable_objects,
             labels_by_object_id,
             include_reason=True,
         )
@@ -130,7 +133,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             lines.extend(notable_lines)
 
         actionable_lines = self._build_object_summary_lines(
-            current_state.actionable_objects,
+            runtime.actionable_objects,
             labels_by_object_id,
             include_actions=True,
         )
@@ -145,7 +148,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             lines.extend(visible_lines)
 
         active_harvest_lines = self._build_active_harvest_lines(
-            current_state,
+            runtime,
             allocator,
             collector,
         )
@@ -155,7 +158,8 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             lines.extend(active_harvest_lines)
 
         move_lines = self._build_move_lines(
-            current_state,
+            world,
+            runtime,
             allocator,
             collector,
         )
@@ -165,7 +169,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             lines.extend(move_lines)
 
         inventory_lines = self._build_inventory_lines(
-            current_state.inventory_items, allocator, collector
+            runtime.inventory_items, allocator, collector
         )
         if inventory_lines:
             lines.append("")
@@ -173,7 +177,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             lines.extend(inventory_lines)
 
         chest_item_lines = self._build_chest_item_lines(
-            current_state.chest_items, allocator, collector
+            runtime.chest_items, allocator, collector
         )
         if chest_item_lines:
             lines.append("")
@@ -181,7 +185,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             lines.extend(chest_item_lines)
 
         conversation_lines = self._build_conversation_lines(
-            current_state, allocator, collector
+            runtime, allocator, collector
         )
         if conversation_lines:
             lines.append("")
@@ -189,7 +193,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             lines.extend(conversation_lines)
 
         skill_lines = self._build_skill_lines(
-            current_state.usable_skills, allocator, collector
+            runtime.usable_skills, allocator, collector
         )
         if skill_lines:
             lines.append("")
@@ -197,7 +201,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             lines.extend(skill_lines)
 
         equip_candidate_lines = self._build_skill_equip_candidate_lines(
-            current_state.equipable_skill_candidates,
+            runtime.equipable_skill_candidates,
             allocator,
             collector,
         )
@@ -207,7 +211,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             lines.extend(equip_candidate_lines)
 
         equip_slot_lines = self._build_skill_equip_slot_lines(
-            current_state.skill_equip_slots,
+            runtime.skill_equip_slots,
             allocator,
             collector,
         )
@@ -217,7 +221,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             lines.extend(equip_slot_lines)
 
         proposal_lines = self._build_skill_proposal_lines(
-            current_state.pending_skill_proposals,
+            runtime.pending_skill_proposals,
             allocator,
             collector,
         )
@@ -227,7 +231,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             lines.extend(proposal_lines)
 
         awakened_action_lines = self._build_awakened_action_lines(
-            current_state.awakened_action,
+            runtime.awakened_action,
             allocator,
             collector,
         )
@@ -237,7 +241,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             lines.extend(awakened_action_lines)
 
         attention_lines = self._build_attention_lines(
-            current_state.attention_level_options, allocator, collector
+            runtime.attention_level_options, allocator, collector
         )
         if attention_lines:
             lines.append("")
@@ -245,7 +249,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             lines.extend(attention_lines)
 
         quest_lines, quest_targets = self._build_active_quest_lines(
-            current_state.active_quests, allocator, collector
+            runtime.active_quests, allocator, collector
         )
         if quest_lines:
             lines.append("")
@@ -254,7 +258,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             collector.add_all(quest_targets)
 
         guild_lines, guild_targets = self._build_guild_membership_lines(
-            current_state.guild_memberships, allocator, collector
+            runtime.guild_memberships, allocator, collector
         )
         if guild_lines:
             lines.append("")
@@ -263,7 +267,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             collector.add_all(guild_targets)
 
         shop_lines, shop_targets = self._build_nearby_shop_lines(
-            current_state.nearby_shops, allocator, collector
+            runtime.nearby_shops, allocator, collector
         )
         if shop_lines:
             lines.append("")
@@ -271,24 +275,21 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             lines.extend(shop_lines)
             collector.add_all(shop_targets)
 
-        if (
-            current_state.is_trade_mode_active
-            and current_state.trade_virtual_page_kind is not None
-        ):
+        if app.is_trade_mode_active and app.trade_virtual_page_kind is not None:
             lines.append("")
             lines.append(
                 "取引の受諾・辞退・キャンセルは、trade_view_current_page のスナップショットに含まれる "
                 "r_trade_* を trade_ref に指定してください。"
             )
-            if current_state.available_trades:
+            if runtime.available_trades:
                 lines.append("宛先取引（参考・T* ラベルはミューテーションに使いません）:")
-                for t in current_state.available_trades:
+                for t in runtime.available_trades:
                     lines.append(
                         f"- 取引 {t.trade_id} {t.item_name}（希望価格: {t.requested_gold}G）"
                     )
         else:
             trade_lines, trade_targets = self._build_available_trade_lines(
-                current_state.available_trades, allocator, collector
+                runtime.available_trades, allocator, collector
             )
             if trade_lines:
                 lines.append("")
@@ -296,7 +297,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
                 lines.extend(trade_lines)
                 collector.add_all(trade_targets)
 
-        if current_state.can_destroy_placeable:
+        if runtime.can_destroy_placeable:
             lines.append("")
             lines.append("前方の設置物は破壊可能です。")
 
@@ -304,21 +305,21 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             current_state_text="\n".join(lines).rstrip(),
             tool_runtime_context=ToolRuntimeContextDto(
                 targets=collector.get_targets(),
-                current_x=current_state.x,
-                current_y=current_state.y,
-                current_z=current_state.z,
-                current_spot_id=current_state.current_spot_id,
-                current_area_ids=tuple(current_state.area_ids) if current_state.area_ids else None,
+                current_x=world.x,
+                current_y=world.y,
+                current_z=world.z,
+                current_spot_id=world.current_spot_id,
+                current_area_ids=tuple(world.area_ids) if world.area_ids else None,
             ),
         )
 
     def _build_active_harvest_lines(
         self,
-        current_state: PlayerCurrentStateDto,
+        runtime_context,
         allocator: LabelAllocator,
         collector: RuntimeTargetCollector,
     ) -> list[str]:
-        active = current_state.active_harvest
+        active = runtime_context.active_harvest
         if active is None:
             return []
         label = allocator.next("H")
@@ -336,7 +337,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
     def _build_visible_target_lines(
         self,
         visible_objects: list[VisibleObjectDto],
-        current_state: PlayerCurrentStateDto,
+        world_state,
         allocator: LabelAllocator,
         collector: RuntimeTargetCollector,
     ) -> tuple[list[str], dict[int, str]]:
@@ -364,7 +365,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
                 kind=kind,
                 display_name=display_name,
                 obj=obj,
-                current_state=current_state,
+                world_state=world_state,
             )
             collector.add(label, target)
         return lines, labels_by_object_id
@@ -422,7 +423,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
         kind: str,
         display_name: str,
         obj: VisibleObjectDto,
-        current_state: PlayerCurrentStateDto,
+        world_state,
     ) -> ToolRuntimeTargetDto:
         common_kwargs = dict(
             label=label,
@@ -435,9 +436,9 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             target_x=obj.x,
             target_y=obj.y,
             target_z=obj.z,
-            relative_dx=obj.x - current_state.x if current_state.x is not None else None,
-            relative_dy=obj.y - current_state.y if current_state.y is not None else None,
-            relative_dz=obj.z - current_state.z if current_state.z is not None else None,
+            relative_dx=obj.x - world_state.x if world_state.x is not None else None,
+            relative_dy=obj.y - world_state.y if world_state.y is not None else None,
+            relative_dz=obj.z - world_state.z if world_state.z is not None else None,
             interaction_type=obj.interaction_type,
             available_interactions=tuple(obj.available_interactions),
         )
@@ -457,19 +458,20 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
 
     def _build_move_lines(
         self,
-        current_state: PlayerCurrentStateDto,
+        world_state,
+        runtime_context,
         allocator: LabelAllocator,
         collector: RuntimeTargetCollector,
     ) -> list[str]:
-        has_moves = bool(current_state.available_moves)
-        has_locations = bool(current_state.available_location_areas)
-        has_objects = bool(current_state.actionable_objects)
+        has_moves = bool(world_state.available_moves)
+        has_locations = bool(world_state.available_location_areas)
+        has_objects = bool(runtime_context.actionable_objects)
         if not has_moves and not has_locations and not has_objects:
             return []
 
         lines: list[str] = []
-        if current_state.available_moves:
-            for move in current_state.available_moves:
+        if world_state.available_moves:
+            for move in world_state.available_moves:
                 label = allocator.next("S")
                 status = "移動可能" if move.conditions_met else "条件未達"
                 extra = (
@@ -488,8 +490,8 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
                         destination_type="spot",
                     ),
                 )
-        if current_state.available_location_areas and current_state.current_spot_id is not None:
-            for loc in current_state.available_location_areas:
+        if world_state.available_location_areas and world_state.current_spot_id is not None:
+            for loc in world_state.available_location_areas:
                 label = allocator.next("LA")
                 lines.append(f"- {label}: {loc.name}（同一スポット内ロケーション）")
                 collector.add(
@@ -498,13 +500,13 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
                         label=label,
                         kind="destination",
                         display_name=loc.name,
-                        spot_id=current_state.current_spot_id,
+                        spot_id=world_state.current_spot_id,
                         location_area_id=loc.location_area_id,
                         destination_type="location",
                     ),
                 )
-        if current_state.actionable_objects and current_state.current_spot_id is not None:
-            for obj in current_state.actionable_objects:
+        if runtime_context.actionable_objects and world_state.current_spot_id is not None:
+            for obj in runtime_context.actionable_objects:
                 if obj.is_self:
                     continue
                 label = allocator.next("D")
@@ -516,7 +518,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
                         label=label,
                         kind="destination",
                         display_name=display_name,
-                        spot_id=current_state.current_spot_id,
+                        spot_id=world_state.current_spot_id,
                         world_object_id=obj.object_id,
                         target_x=obj.x,
                         target_y=obj.y,
@@ -583,11 +585,11 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
 
     def _build_conversation_lines(
         self,
-        current_state: PlayerCurrentStateDto,
+        runtime_context,
         allocator: LabelAllocator,
         collector: RuntimeTargetCollector,
     ) -> list[str]:
-        convo = current_state.active_conversation
+        convo = runtime_context.active_conversation
         if convo is None:
             return []
         lines = [

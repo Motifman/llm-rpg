@@ -5,7 +5,7 @@ slug: player-current-state-dto-refactoring
 status: planned
 created_at: 2026-03-23
 updated_at: 2026-03-23
-branch: codex/player-current-state-dto-refactoring-phase3
+branch: codex/player-current-state-dto-refactoring-phase4
 ---
 
 # Objective
@@ -220,6 +220,7 @@ branch: codex/player-current-state-dto-refactoring-phase3
   - 直接 constructor を使うテストの更新量が想定より大きく、先に factory/fixture の整理が必要と判明した場合
 - Notes:
   - 変更が広がる場合は、fixture 共通化を先に挟む選択肢を残す。
+  - Phase 4 では public API を変えず、`dto.world_state` / `dto.runtime_context` / `dto.app_session_state` の local alias を内部参照へ広げる。
 
 ## Phase 5: Compat 縮小方針の固定
 
