@@ -2,18 +2,18 @@
 id: feature-sns-virtual-pages-readmodel
 title: Sns Virtual Pages Readmodel
 slug: sns-virtual-pages-readmodel
-status: in_progress
+status: completed
 created_at: 2026-03-22
-updated_at: 2026-03-22
+updated_at: 2026-03-23
 branch: codex/sns-virtual-pages-readmodel
 ---
 
 # Current State
 
-- Active phase: **Phase 6**（軽量 Projection の要否判定と必要最小限導入）
-- Last completed phase: **Phase 5**（既存 Read ツール置換と削除）
-- Next recommended action: 未読数・無効化に projection が要るかコードと契約を照合し、不要なら「不採用」を文書化、要るなら最小 handler を追加する
-- Handoff summary: `sns_home_timeline` / `sns_list_my_posts` / `sns_list_user_posts` を `tool_catalog`・`tool_constants`・`SnsToolExecutor` から削除。`SnsToolExecutor` は `post_query_service` を受け取らない。読取は `sns_page_query_service` ＋仮想画面ツールに一本化。e2e で仮想ページ配線時に `sns_view_current_page` がプロンプトに載ることを追加検証。
+- Active phase: **なし**（全 phase 完了）
+- Last completed phase: **Phase 6**（軽量 Projection の要否判定）
+- Next recommended action: 必要なら `flow-review` / `flow-ship`、または本番配線での運用観測
+- Handoff summary: Phase 6 で **read projection は不採用**を確定。未読は `NotificationQueryService.get_unread_count`、ref 世代は `SnsPageSessionService.bump_snapshot_generation`。`PLAN.md` に根拠を記載、`test_phase6_projection_decision.py` で未読経路を固定。
 
 # Phase Journal
 
@@ -108,3 +108,20 @@ branch: codex/sns-virtual-pages-readmodel
 - Scope delta: なし
 - Handoff summary: Phase 6 で未読・ref 世代以外に永続 projection が要るかをアプリ契約と照合する
 - Next-phase impact: projection を入れない結論なら `PLAN.md` に「不採用」根拠を 1 セクション足すだけでよい
+
+## Phase 6
+
+- Started: 2026-03-23
+- Completed: 2026-03-23
+- Commit: （phase 完了コミット）
+- Tests: `pytest tests/application/social/sns_virtual_pages/test_phase6_projection_decision.py -q`、`pytest tests/application/social/sns_virtual_pages/ -q`
+- Findings:
+  - 未読数は既存 `NotificationQueryService.get_unread_count`（リポジトリ直参照）で足り、通知本文の二重保存や投影テーブルは不要。
+  - ref 無効化は `get_current_page_snapshot` 先頭の `bump_snapshot_generation` が担い、永続 projection ではない。
+- Plan revision check: **不要**。feature scope は完了。将来 projection が要るのは運用負荷・整合性が変わった場合のみ（PLAN Reopen と整合）。
+- User approval: **不要**（Phase 6 の「不採用を成果とする」に合致）
+- Plan updates: **Phase 6 実施結果**セクション、Change Log、frontmatter `status: completed`
+- Goal check: **達成** — 採用しない理由が PLAN・実装コメント・テストで説明可能
+- Scope delta: なし（projection handler は追加しない）
+- Handoff summary: feature 完了。追加の read model は導入していない
+- Next-phase impact: なし（本 feature 終了）
