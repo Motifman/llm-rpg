@@ -10,6 +10,7 @@ from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     exception_result,
     invalid_arg_result,
+    invalid_arg_value_result,
     unknown_tool,
 )
 from ai_rpg_world.application.llm.tool_constants import (
@@ -50,13 +51,18 @@ def _parse_trade_virtual_page_kind(raw: Any) -> Optional[TradeVirtualPageKind]:
     return None
 
 
-def _parse_my_trades_tab(raw: Any) -> MyTradesTab:
-    if raw is None or (isinstance(raw, str) and not raw.strip()):
-        return MyTradesTab.SELLING
+def _parse_my_trades_tab_strict(raw: Any) -> Optional[MyTradesTab]:
+    """incoming|selling のみ受理。空・未知値は None。"""
+    if raw is None:
+        return None
     t = str(raw).strip().lower()
+    if not t:
+        return None
     if t == MyTradesTab.INCOMING.value:
         return MyTradesTab.INCOMING
-    return MyTradesTab.SELLING
+    if t == MyTradesTab.SELLING.value:
+        return MyTradesTab.SELLING
+    return None
 
 
 def _non_empty_str_list(raw: Any) -> Optional[List[str]]:
@@ -205,7 +211,17 @@ class TradeToolExecutor:
                 sess.set_paging(player_id, offset=0)
                 return LlmCommandResultDto(success=True, message="検索画面へ遷移しました。")
             if kind == TradeVirtualPageKind.MY_TRADES:
-                tab = _parse_my_trades_tab(args.get("my_trades_tab"))
+                raw_tab = args.get("my_trades_tab")
+                if raw_tab is None or (
+                    isinstance(raw_tab, str) and not raw_tab.strip()
+                ):
+                    tab = MyTradesTab.SELLING
+                else:
+                    tab = _parse_my_trades_tab_strict(raw_tab)
+                    if tab is None:
+                        return invalid_arg_value_result(
+                            "my_trades_tab", "incoming|selling"
+                        )
                 sess.set_page_kind(player_id, TradeVirtualPageKind.MY_TRADES)
                 sess.set_my_trades_tab(player_id, tab)
                 sess.set_paging(player_id, offset=0)
@@ -235,7 +251,9 @@ class TradeToolExecutor:
         raw_tab = args.get("tab")
         if raw_tab is None or not str(raw_tab).strip():
             return invalid_arg_result("tab")
-        tab = _parse_my_trades_tab(raw_tab)
+        tab = _parse_my_trades_tab_strict(raw_tab)
+        if tab is None:
+            return invalid_arg_value_result("tab", "incoming|selling")
         st = self._trade_page_session.get_state(player_id)
         if st.page_kind != TradeVirtualPageKind.MY_TRADES:
             return LlmCommandResultDto(
