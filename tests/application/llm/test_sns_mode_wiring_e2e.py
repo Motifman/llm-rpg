@@ -77,6 +77,7 @@ def _player_current_state_for_sns_tools(
     *,
     is_sns_mode_active: bool,
     sns_virtual_page_kind: str | None = None,
+    sns_current_page_snapshot_json: str | None = None,
 ) -> PlayerCurrentStateDto:
     moves = [
         AvailableMoveDto(
@@ -113,6 +114,7 @@ def _player_current_state_for_sns_tools(
         attention_level=AttentionLevel.FULL,
         is_sns_mode_active=is_sns_mode_active,
         sns_virtual_page_kind=sns_virtual_page_kind,
+        sns_current_page_snapshot_json=sns_current_page_snapshot_json,
         inventory_items=[InventoryItemDto(1, 10, "剣", 1)],
         available_trades=[
             AvailableTradeSummaryDto(trade_id=1, item_name="盾", requested_gold=10)
@@ -220,6 +222,26 @@ class TestSnsModeWiringPromptTools:
             if t.get("type") == "function"
         ]
         assert TOOL_NAME_SNS_VIEW_CURRENT_PAGE in names
+
+    def test_prompt_includes_current_virtual_page_snapshot_when_present(
+        self, sns_wiring_deps
+    ):
+        deps = dict(sns_wiring_deps)
+        deps["sns_page_query_service"] = MagicMock()
+        deps["sns_page_session"] = SnsPageSessionService()
+        world_query: MagicMock = deps["world_query_service"]
+        world_query.get_player_current_state.return_value = _player_current_state_for_sns_tools(
+            is_sns_mode_active=True,
+            sns_virtual_page_kind="home",
+            sns_current_page_snapshot_json='{"page_kind":"home","home":{"posts":[{"post_ref":"r_post_01"}]}}',
+        )
+        result = create_llm_agent_wiring(**deps)
+        prompt_builder = result.llm_turn_trigger._turn_runner._orchestrator._prompt_builder
+        built = prompt_builder.build(PlayerId(1))
+        user_content = built["messages"][1]["content"]
+        assert "現在のSNS画面:" in user_content
+        assert '"page_kind":"home"' in user_content
+        assert '"post_ref":"r_post_01"' in user_content
 
     def test_wiring_result_exposes_same_sns_mode_session_instance(self, sns_wiring_deps):
         session = sns_wiring_deps["sns_mode_session"]

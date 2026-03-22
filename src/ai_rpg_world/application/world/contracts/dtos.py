@@ -404,5 +404,6 @@ class PlayerCurrentStateDto:
     sns_virtual_page_kind: Optional[str] = None
     sns_home_tab: Optional[str] = None
     sns_page_snapshot_generation: int = 0
+    sns_current_page_snapshot_json: Optional[str] = None
     # profile 画面で閲覧中のユーザーが自分自身か（ツール出し分け用）
     sns_profile_is_self: Optional[bool] = None

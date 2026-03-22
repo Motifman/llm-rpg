@@ -99,4 +99,8 @@ class DefaultCurrentStateFormatter(ICurrentStateFormatter):
                 f" (finish_tick={dto.active_harvest.finish_tick})"
             )
 
+        if dto.sns_current_page_snapshot_json:
+            lines.append("現在のSNS画面:")
+            lines.append(dto.sns_current_page_snapshot_json)
+
         return "\n".join(lines)
