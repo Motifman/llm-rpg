@@ -4,8 +4,8 @@ title: Sns Virtual Pages Readmodel
 slug: sns-virtual-pages-readmodel
 status: review
 created_at: 2026-03-22
-updated_at: 2026-03-22
-branch: codex/sns-virtual-pages-readmodel
+updated_at: 2026-03-23
+branch: feature/sns-virtual-pages-readmodel
 ---
 
 # Review Prompt
