@@ -2,7 +2,7 @@
 id: feature-trade-label-ref-unification
 title: Trade Label Ref Unification
 slug: trade-label-ref-unification
-status: in_progress
+status: completed
 created_at: 2026-03-22
 updated_at: 2026-03-22
 branch: codex/trade-label-ref-unification
@@ -10,10 +10,10 @@ branch: codex/trade-label-ref-unification
 
 # Current State
 
-- Active phase: Phase 2
-- Last completed phase: Phase 1
-- Next recommended action: Phase 2（内部 resolver / executor の `trade_label` 互換除去と回帰テスト一本化）
-- Handoff summary: 公開スキーマは `trade_ref` のみ・仮想ページ時は UI から T* と trade runtime target を外し、incoming の availability を `available_trades` 非依存に変更。resolver はプログラム引数向けに `trade_label` 分岐を残している（Phase 2 で削除予定）。
+- Active phase: （なし・PLAN の Phase は完了）
+- Last completed phase: Phase 2
+- Next recommended action: REVIEW / ship（`flow-review` または main へのマージ判断）
+- Handoff summary: 取引ミューテーションの引数解決は `trade_ref` のみ。executor は `trade_page_session.resolve_trade_ref` 経由のみで `trade_id` 直指定を廃止。`TradeToolRuntimeTargetDto` は非仮想ページ時の UI 要約（T*）にのみ残存。
 
 # Phase Journal
 
@@ -21,7 +21,7 @@ branch: codex/trade-label-ref-unification
 
 - Started: 2026-03-22
 - Completed: 2026-03-22
-- Commit: （このコミット）
+- Commit: 09a4e71
 - Tests: `pytest tests/application/llm/test_tool_definitions.py tests/application/llm/test_available_tools_provider.py tests/application/llm/test_ui_context_builder.py tests/application/llm/test_tool_command_mapper.py`
 - Findings:
   - `dataclasses.replace` では `PlayerCurrentStateDto.__post_init__` が再実行されないため、テストでは `is_trade_mode_active` を明示する必要がある。
@@ -36,15 +36,17 @@ branch: codex/trade-label-ref-unification
 
 ## Phase 2
 
-- Started:
-- Completed:
-- Commit:
-- Tests:
+- Started: 2026-03-22
+- Completed: 2026-03-22
+- Commit: e9cf84e
+- Tests: `pytest tests/application/llm/`
 - Findings:
-- Plan revision check:
-- User approval:
-- Plan updates:
-- Goal check:
-- Scope delta:
-- Handoff summary:
-- Next-phase impact:
+  - `ToolCommandMapper` は引数 resolver を通さないため、mapper 単体テストの欠落系は executor の `invalid_arg_result("trade_ref")` に依存する（メッセージに `trade_ref` を含む）。
+  - `DefaultToolArgumentResolver` 経由のテストでは `trade_ref` の正規化（strip）を明示的に検証した。
+- Plan revision check: 不要（2 phase で PLAN どおり完了）
+- User approval: 不要
+- Plan updates: なし
+- Goal check: 達成（mutation 解決に `trade_label` コードパスなし、テストの `trade_label` 許容 assertion を除去）
+- Scope delta: なし
+- Handoff summary: `GuildShopTradeArgumentResolver._resolve_trade_ref_mutation` に整理し `trade_label` / `TradeToolRuntimeTargetDto` 依存を削除。`TradeToolExecutor._resolve_trade_id` から `trade_id` 直読みを削除。`test_tool_argument_resolver` に trade accept の成功・失敗を追加し、`_make_shop_guild_trade_context` から未使用の T1 trade target を削除。`test_tool_command_mapper` の欠落系は `trade_ref` のみ assert。
+- Next-phase impact: なし（本 feature の PLAN は Phase 2 まで）
