@@ -2,18 +2,18 @@
 id: feature-player-current-state-dto-refactoring
 title: Player Current State Dto Refactoring
 slug: player-current-state-dto-refactoring
-status: in_progress
+status: completed
 created_at: 2026-03-23
 updated_at: 2026-03-23
-branch: codex/player-current-state-dto-refactoring-phase4
+branch: codex/player-current-state-dto-refactoring-phase5
 ---
 
 # Current State
 
-- Active phase: **Phase 5**（Compat 縮小方針の固定）
-- Last completed phase: **Phase 4**（実装修正とテスト移行）
-- Next recommended action: `flow-exec` で compat property の残置方針と新規項目追加ルールを明文化する
-- Handoff summary: Phase 4 で [`current_state_formatter.py`](/Users/minagawa/.codex/worktrees/4a2d/ai_rpg_world/src/ai_rpg_world/application/llm/services/current_state_formatter.py)、[`ui_context_builder.py`](/Users/minagawa/.codex/worktrees/4a2d/ai_rpg_world/src/ai_rpg_world/application/llm/services/ui_context_builder.py)、[`availability_resolvers.py`](/Users/minagawa/.codex/worktrees/4a2d/ai_rpg_world/src/ai_rpg_world/application/llm/services/availability_resolvers.py) の内部参照を `world` / `runtime` / `app` alias に寄せた。public 入力型と既存 fixture 形は維持している。
+- Active phase: なし（feature 完了）
+- Last completed phase: **Phase 5**（Compat 縮小方針の固定）
+- Next recommended action: `flow-review` / `flow-ship`、または main へのマージ判断
+- Handoff summary: Phase 5 で [`PHASE5_COMPAT_POLICY.md`](/Users/minagawa/.codex/worktrees/4a2d/ai_rpg_world/.ai-workflow/features/player-current-state-dto-refactoring/PHASE5_COMPAT_POLICY.md) を追加し、`PlayerCurrentStateDto` は当面 compat facade として維持しつつ、canonical owner は `world_state` / `runtime_context` / `app_session_state` に置く方針を固定した。新規 app-local state は top-level ではなく `app_session_state` に閉じ込める。
 
 # Phase Journal
 
@@ -152,3 +152,30 @@ branch: codex/player-current-state-dto-refactoring-phase4
   - Phase 5 では compat property をどこまで残すか、新規項目追加時のルールを artifact に固定する。
 - Next-phase impact:
   - 主要 consumer が sub DTO alias を使う形になったので、今後 top-level compat property を縮小しても影響点を追いやすくなった。
+
+## Phase 5
+
+- Started: 2026-03-23
+- Completed: 2026-03-23
+- Commit: （この phase 完了コミット）
+- Tests:
+  - コード変更なし。artifact 固定のみのため追加テストは未実施
+- Findings:
+  - 現時点で最も重要なのは compat facade の即削除ではなく、「新規追加が top-level へ再流入しない」ルールを固定することだった。
+  - canonical owner を sub DTO に寄せ、top-level access は互換専用 shortcut とみなす整理にすると、既存 public API を壊さず今後の追加耐性を確保できる。
+  - SNS / Trade の mode/page/snapshot 系は、今後の縮小候補として最も自然に `app_session_state` へ集約できる。
+- Plan revision check:
+  - **不要**。追加 phase なしで feature の成功条件を満たしており、今後の compat 削減は別 feature として切り出せる。
+- User approval:
+  - 不要（future phase の追加・並び替えなし）
+- Plan updates:
+  - `PHASE5_COMPAT_POLICY.md` を追加
+  - `PLAN.md` frontmatter を `status: completed` に更新
+- Goal check:
+  - **達成**。`PlayerCurrentStateDto` の compat 残置方針、新規項目追加ルール、将来の縮小条件が artifact として参照可能になった。
+- Scope delta:
+  - なし（artifact 固定のみ）
+- Handoff summary:
+  - 上記 Current State のとおり。
+- Next-phase impact:
+  - なし（feature scope 完了）。必要なら次は `flow-review` または `flow-ship`。

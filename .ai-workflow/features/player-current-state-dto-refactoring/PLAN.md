@@ -2,10 +2,10 @@
 id: feature-player-current-state-dto-refactoring
 title: PlayerCurrentStateDto の段階分割と互換維持リファクタリング
 slug: player-current-state-dto-refactoring
-status: planned
+status: completed
 created_at: 2026-03-23
 updated_at: 2026-03-23
-branch: codex/player-current-state-dto-refactoring-phase4
+branch: codex/player-current-state-dto-refactoring-phase5
 ---
 
 # Objective
@@ -238,25 +238,27 @@ branch: codex/player-current-state-dto-refactoring-phase4
   - 今後の実装者が `PlayerCurrentStateDto` のトップレベルへ安易に属性追加しない運用ルールが定まる。
 - Checkpoint:
   - feature 完了時の `SUMMARY.md` または follow-up note で追加ルールを参照できる。
+  - `PHASE5_COMPAT_POLICY.md` に canonical owner、shortcut policy、新規追加ルールが記録されている。
 - Reopen alignment if:
   - 実運用上、compat property を広く残す方が保守性が高いと判明した場合
 - Notes:
+  - Phase 5 では compat facade を削除せず、「新規追加を sub DTO に閉じ込める」運用ルールを優先する。
   - この phase は実装修正と同時ではなく、出口戦略の明文化として扱う。
 
 # Recommended Implementation Order
 
 1. Phase 0 で属性棚卸しと境界を固定する
-2. Phase 1 で compat facade を導入する
-3. Phase 2 で builder を責務ごとに整理する
-4. Phase 3 で利用側の着地点を決める
-5. Phase 4 で実装修正とテスト移行を行う
-6. Phase 5 で compat 縮小ルールを残す
+2. Phase 1 で sub DTO と compat facade を導入する
+3. Phase 2 で builder を compose 構造へ整理する
+4. Phase 3 で consumer ごとの依存着地点を固定する
+5. Phase 4 で consumer 内部参照を sub DTO alias に寄せる
+6. Phase 5 で compat policy と新規追加ルールを固定する
 
-# Branch Readiness
+# Change Log
 
-- Proposed branch: `feature/player-current-state-dto-refactoring`
-- Branch creation is deferred until implementation starts.
-- Preconditions before execution:
-  - Phase 0 の属性棚卸し表 (`PHASE0_ATTRIBUTE_INVENTORY.md`) がある
-  - phase 1 で導入する sub DTO 名と責務が固定されている
-  - compat property に載せる代表属性が決まっている
+- 2026-03-23: Phase 0 で属性棚卸しと owner 分類を `PHASE0_ATTRIBUTE_INVENTORY.md` に固定。
+- 2026-03-23: Phase 1 で `PlayerWorldStateDto` / `PlayerRuntimeContextDto` / `PlayerAppSessionStateDto` を導入し、`PlayerCurrentStateDto` を compat facade 化。
+- 2026-03-23: Phase 2 で builder を `world` / `runtime` / `app_session` compose に整理。
+- 2026-03-23: Phase 3 で consumer 依存整理を `PHASE3_CONSUMER_DEPENDENCY_PLAN.md` に固定。
+- 2026-03-23: Phase 4 で formatter / UI builder / availability resolver の内部参照を sub DTO alias ベースへ移行。
+- 2026-03-23: Phase 5 で `PHASE5_COMPAT_POLICY.md` を追加し、compat 残置方針と新規項目追加ルールを feature 完了状態で固定。
