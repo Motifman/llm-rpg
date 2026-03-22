@@ -11,16 +11,15 @@ import pytest
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SNS_CREATE_POST,
     TOOL_NAME_SNS_ENTER,
-    TOOL_NAME_SNS_HOME_TIMELINE,
-    TOOL_NAME_SNS_LIST_MY_POSTS,
-    TOOL_NAME_SNS_LIST_USER_POSTS,
     TOOL_NAME_SNS_LOGOUT,
+    TOOL_NAME_SNS_VIEW_CURRENT_PAGE,
     TOOL_NAME_TRADE_OFFER,
 )
 from ai_rpg_world.application.llm.wiring import create_llm_agent_wiring
 from ai_rpg_world.application.social.services.sns_mode_session_service import (
     SnsModeSessionService,
 )
+from ai_rpg_world.application.social.sns_virtual_pages import SnsPageSessionService
 from ai_rpg_world.application.world.contracts.dtos import (
     AvailableMoveDto,
     AvailableTradeSummaryDto,
@@ -77,6 +76,7 @@ def _minimal_wiring_deps():
 def _player_current_state_for_sns_tools(
     *,
     is_sns_mode_active: bool,
+    sns_virtual_page_kind: str | None = None,
 ) -> PlayerCurrentStateDto:
     moves = [
         AvailableMoveDto(
@@ -112,6 +112,7 @@ def _player_current_state_for_sns_tools(
         total_available_moves=1,
         attention_level=AttentionLevel.FULL,
         is_sns_mode_active=is_sns_mode_active,
+        sns_virtual_page_kind=sns_virtual_page_kind,
         inventory_items=[InventoryItemDto(1, 10, "剣", 1)],
         available_trades=[
             AvailableTradeSummaryDto(trade_id=1, item_name="盾", requested_gold=10)
@@ -170,11 +171,12 @@ class TestSnsModeWiringPromptTools:
         assert TOOL_NAME_SNS_LOGOUT not in names
         assert TOOL_NAME_SNS_CREATE_POST not in names
         assert TOOL_NAME_TRADE_OFFER not in names
-        assert TOOL_NAME_SNS_HOME_TIMELINE not in names
-        assert TOOL_NAME_SNS_LIST_MY_POSTS not in names
-        assert TOOL_NAME_SNS_LIST_USER_POSTS not in names
+        assert "sns_home_timeline" not in names
+        assert "sns_list_my_posts" not in names
+        assert "sns_list_user_posts" not in names
+        assert TOOL_NAME_SNS_VIEW_CURRENT_PAGE not in names
 
-    def test_prompt_tools_sns_mode_on_shows_trade_and_timeline_not_enter(
+    def test_prompt_tools_sns_mode_on_shows_trade_not_legacy_read_tools(
         self, sns_wiring_deps
     ):
         world_query: MagicMock = sns_wiring_deps["world_query_service"]
@@ -193,9 +195,31 @@ class TestSnsModeWiringPromptTools:
         assert TOOL_NAME_SNS_LOGOUT in names
         assert TOOL_NAME_SNS_CREATE_POST in names
         assert TOOL_NAME_TRADE_OFFER in names
-        assert TOOL_NAME_SNS_HOME_TIMELINE in names
-        assert TOOL_NAME_SNS_LIST_MY_POSTS in names
-        assert TOOL_NAME_SNS_LIST_USER_POSTS in names
+        assert "sns_home_timeline" not in names
+        assert "sns_list_my_posts" not in names
+        assert "sns_list_user_posts" not in names
+        assert TOOL_NAME_SNS_VIEW_CURRENT_PAGE not in names
+
+    def test_prompt_tools_sns_mode_on_with_virtual_pages_shows_view_current_page(
+        self, sns_wiring_deps
+    ):
+        deps = dict(sns_wiring_deps)
+        deps["sns_page_query_service"] = MagicMock()
+        deps["sns_page_session"] = SnsPageSessionService()
+        world_query: MagicMock = deps["world_query_service"]
+        world_query.get_player_current_state.return_value = _player_current_state_for_sns_tools(
+            is_sns_mode_active=True,
+            sns_virtual_page_kind="home",
+        )
+        result = create_llm_agent_wiring(**deps)
+        prompt_builder = result.llm_turn_trigger._turn_runner._orchestrator._prompt_builder
+        built = prompt_builder.build(PlayerId(1))
+        names = [
+            t["function"]["name"]
+            for t in built["tools"]
+            if t.get("type") == "function"
+        ]
+        assert TOOL_NAME_SNS_VIEW_CURRENT_PAGE in names
 
     def test_wiring_result_exposes_same_sns_mode_session_instance(self, sns_wiring_deps):
         session = sns_wiring_deps["sns_mode_session"]

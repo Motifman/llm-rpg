@@ -10,10 +10,10 @@ branch: codex/sns-virtual-pages-readmodel
 
 # Current State
 
-- Active phase: **Phase 5**（既存 Read ツール置換と削除）
-- Last completed phase: **Phase 4**（Tool Catalog / Executor / Provider 統合）
-- Next recommended action: `sns_home_timeline` 等の旧 read ツールを catalog から外し、仮想画面ツールへの移行を完了する
-- Handoff summary: 汎用ツール 7 種（`sns_view_current_page` 等）を `register_default_tools(..., sns_virtual_pages_enabled=...)` / `SnsToolExecutor` / `create_llm_agent_wiring(sns_page_query_service=..., reply_query_service=..., notification_query_service=...)` で配線。画面別 resolver で書き込み系を gating。`PlayerCurrentStateDto.sns_profile_is_self` を追加。
+- Active phase: **Phase 6**（軽量 Projection の要否判定と必要最小限導入）
+- Last completed phase: **Phase 5**（既存 Read ツール置換と削除）
+- Next recommended action: 未読数・無効化に projection が要るかコードと契約を照合し、不要なら「不採用」を文書化、要るなら最小 handler を追加する
+- Handoff summary: `sns_home_timeline` / `sns_list_my_posts` / `sns_list_user_posts` を `tool_catalog`・`tool_constants`・`SnsToolExecutor` から削除。`SnsToolExecutor` は `post_query_service` を受け取らない。読取は `sns_page_query_service` ＋仮想画面ツールに一本化。e2e で仮想ページ配線時に `sns_view_current_page` がプロンプトに載ることを追加検証。
 
 # Phase Journal
 
@@ -90,3 +90,21 @@ branch: codex/sns-virtual-pages-readmodel
 - Scope delta: なし
 - Handoff summary: アプリ組み立てで `sns_page_query_service` と同一の `sns_page_session` を world query と wiring に渡すこと。`reply_query_service` / `notification_query_service` は open_ref 精度用に任意で注入。
 - Next-phase impact: Phase 5 で旧 read ツールを catalog から外すと provider / テストの期待ツール名が変わる
+
+## Phase 5
+
+- Started: 2026-03-22
+- Completed: 2026-03-22
+- Commit: （phase 完了コミット）
+- Tests: `pytest tests/application/llm/ -q`、`pytest tests/ -q`（全件通過）
+- Findings:
+  - 旧 read 3 種は `get_sns_specs()` から除去。LLM 向け読取は `sns_virtual_pages_enabled` 時の仮想ナビ＋`SnsPageQueryService` に集約。
+  - `create_llm_agent_wiring` は引き続き `post_query_service` を受け取り SNS カタログ有効化に利用するが、`SnsToolExecutor` には渡さない（timeline 専用ハンドラ廃止のため）。
+  - プロンプト上、仮想ページ未配線かつ SNS モード ON のときは `sns_view_current_page` は一覧に出ない（`sns_virtual_page_kind` が必要）。読取が要るアプリは `sns_page_query_service` と `sns_page_session` を配線する。
+- Plan revision check: **不要**。Phase 6 の projection 判定は PLAN どおり進められる。
+- User approval: **不要**（Phase 5 scope から逸脱なし）
+- Plan updates: **なし**
+- Goal check: **達成** — 旧 read が catalog / 定数 / executor から除去され、provider・mapper・wiring テストが新方針に追従
+- Scope delta: なし
+- Handoff summary: Phase 6 で未読・ref 世代以外に永続 projection が要るかをアプリ契約と照合する
+- Next-phase impact: projection を入れない結論なら `PLAN.md` に「不採用」根拠を 1 セクション足すだけでよい

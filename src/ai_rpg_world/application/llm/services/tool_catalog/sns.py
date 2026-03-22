@@ -18,9 +18,6 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SNS_DELETE_POST,
     TOOL_NAME_SNS_DELETE_REPLY,
     TOOL_NAME_SNS_ENTER,
-    TOOL_NAME_SNS_HOME_TIMELINE,
-    TOOL_NAME_SNS_LIST_MY_POSTS,
-    TOOL_NAME_SNS_LIST_USER_POSTS,
     TOOL_NAME_SNS_LOGOUT,
     TOOL_NAME_SNS_MARK_ALL_NOTIFICATIONS_READ,
     TOOL_NAME_SNS_MARK_NOTIFICATION_READ,
@@ -280,49 +277,6 @@ SNS_MARK_ALL_NOTIFICATIONS_READ_DEFINITION = ToolDefinitionDto(
     parameters=SNS_MARK_ALL_NOTIFICATIONS_READ_PARAMETERS,
 )
 
-SNS_HOME_TIMELINE_PARAMETERS = {
-    "type": "object",
-    "properties": {
-        "limit": {"type": "integer", "description": "取得件数（省略時は 20、最大 100）。"},
-        "offset": {"type": "integer", "description": "先頭からスキップする件数（省略時は 0）。"},
-    },
-    "required": [],
-}
-SNS_HOME_TIMELINE_DEFINITION = ToolDefinitionDto(
-    name=TOOL_NAME_SNS_HOME_TIMELINE,
-    description="フォロー中ユーザーのホームタイムライン（投稿一覧）を取得します。",
-    parameters=SNS_HOME_TIMELINE_PARAMETERS,
-)
-
-SNS_LIST_MY_POSTS_PARAMETERS = {
-    "type": "object",
-    "properties": {
-        "limit": {"type": "integer", "description": "取得件数（省略時は 20、最大 100）。"},
-        "offset": {"type": "integer", "description": "先頭からスキップする件数（省略時は 0）。"},
-    },
-    "required": [],
-}
-SNS_LIST_MY_POSTS_DEFINITION = ToolDefinitionDto(
-    name=TOOL_NAME_SNS_LIST_MY_POSTS,
-    description="自分の投稿一覧を取得します。",
-    parameters=SNS_LIST_MY_POSTS_PARAMETERS,
-)
-
-SNS_LIST_USER_POSTS_PARAMETERS = {
-    "type": "object",
-    "properties": {
-        "target_user_id": {"type": "integer", "description": "投稿一覧を見る対象の SNS ユーザー ID。"},
-        "limit": {"type": "integer", "description": "取得件数（省略時は 20、最大 100）。"},
-        "offset": {"type": "integer", "description": "先頭からスキップする件数（省略時は 0）。"},
-    },
-    "required": ["target_user_id"],
-}
-SNS_LIST_USER_POSTS_DEFINITION = ToolDefinitionDto(
-    name=TOOL_NAME_SNS_LIST_USER_POSTS,
-    description="指定したユーザーの投稿一覧を取得します（閲覧権限に従います）。",
-    parameters=SNS_LIST_USER_POSTS_PARAMETERS,
-)
-
 _PG_HOME_SEARCH_PROFILE = frozenset({"home", "search", "profile"})
 _PG_POST_DETAIL = frozenset({"post_detail"})
 _PG_LIKE_POST = frozenset({"home", "post_detail", "search", "profile"})
@@ -463,9 +417,6 @@ def get_sns_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
         (SNS_UPDATE_PROFILE_DEFINITION, pg_profile_update),
         (SNS_MARK_NOTIFICATION_READ_DEFINITION, pg_notifications),
         (SNS_MARK_ALL_NOTIFICATIONS_READ_DEFINITION, pg_notifications),
-        (SNS_HOME_TIMELINE_DEFINITION, sns_resolver),
-        (SNS_LIST_MY_POSTS_DEFINITION, sns_resolver),
-        (SNS_LIST_USER_POSTS_DEFINITION, sns_resolver),
     ]
 
 

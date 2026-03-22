@@ -7,7 +7,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
-from ai_rpg_world.application.social.contracts.dtos import PostDto
 from ai_rpg_world.application.llm.services.tool_command_mapper import ToolCommandMapper
 
 from tests.application.llm.conftest import _create_tool_command_mapper
@@ -47,14 +46,11 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SNS_DELETE_POST,
     TOOL_NAME_SNS_DELETE_REPLY,
     TOOL_NAME_SNS_ENTER,
-    TOOL_NAME_SNS_HOME_TIMELINE,
     TOOL_NAME_SNS_CREATE_POST,
     TOOL_NAME_SNS_CREATE_REPLY,
     TOOL_NAME_SNS_FOLLOW,
     TOOL_NAME_SNS_LIKE_POST,
     TOOL_NAME_SNS_LIKE_REPLY,
-    TOOL_NAME_SNS_LIST_MY_POSTS,
-    TOOL_NAME_SNS_LIST_USER_POSTS,
     TOOL_NAME_SNS_LOGOUT,
     TOOL_NAME_SNS_MARK_ALL_NOTIFICATIONS_READ,
     TOOL_NAME_SNS_MARK_NOTIFICATION_READ,
@@ -2066,84 +2062,3 @@ class TestToolCommandMapperSns:
         result = mapper.execute(1, TOOL_NAME_SNS_MARK_ALL_NOTIFICATIONS_READ, {})
         assert result.success is True
         notification_service.mark_all_notifications_as_read.assert_called_once()
-
-    def _sample_post(self) -> PostDto:
-        return PostDto(
-            post_id=101,
-            author_user_id=1,
-            author_user_name="u1",
-            author_display_name="表示名",
-            content="本文です",
-            hashtags=[],
-            visibility="public",
-            created_at=datetime(2024, 6, 1, 12, 0, 0),
-            like_count=2,
-            reply_count=1,
-            is_liked_by_viewer=False,
-            is_replied_by_viewer=False,
-            mentioned_users=[],
-            is_deleted=False,
-        )
-
-    def test_sns_home_timeline_success(self):
-        post_query = MagicMock()
-        post_query.get_home_timeline.return_value = [self._sample_post()]
-        mapper = _create_tool_command_mapper(
-            movement_service=MagicMock(),
-            post_query_service=post_query,
-        )
-        result = mapper.execute(1, TOOL_NAME_SNS_HOME_TIMELINE, {"limit": 5})
-        assert result.success is True
-        assert "post_id=101" in result.message
-        post_query.get_home_timeline.assert_called_once_with(
-            viewer_user_id=1, limit=5, offset=0
-        )
-
-    def test_sns_list_my_posts_success(self):
-        post_query = MagicMock()
-        post_query.get_user_timeline.return_value = []
-        mapper = _create_tool_command_mapper(
-            movement_service=MagicMock(),
-            post_query_service=post_query,
-        )
-        result = mapper.execute(1, TOOL_NAME_SNS_LIST_MY_POSTS, {})
-        assert result.success is True
-        assert "表示できる投稿はありません" in result.message
-        post_query.get_user_timeline.assert_called_once_with(
-            user_id=1, viewer_user_id=1, limit=20, offset=0
-        )
-
-    def test_sns_list_user_posts_success(self):
-        post_query = MagicMock()
-        post_query.get_user_timeline.return_value = [self._sample_post()]
-        mapper = _create_tool_command_mapper(
-            movement_service=MagicMock(),
-            post_query_service=post_query,
-        )
-        result = mapper.execute(
-            1,
-            TOOL_NAME_SNS_LIST_USER_POSTS,
-            {"target_user_id": 2},
-        )
-        assert result.success is True
-        assert "post_id=101" in result.message
-        post_query.get_user_timeline.assert_called_once_with(
-            user_id=2, viewer_user_id=1, limit=20, offset=0
-        )
-
-    def test_sns_list_user_posts_missing_target_returns_invalid_arg(self):
-        post_query = MagicMock()
-        mapper = _create_tool_command_mapper(
-            movement_service=MagicMock(),
-            post_query_service=post_query,
-        )
-        result = mapper.execute(1, TOOL_NAME_SNS_LIST_USER_POSTS, {})
-        assert result.success is False
-        assert "target_user_id" in result.message
-        post_query.get_user_timeline.assert_not_called()
-
-    def test_sns_home_timeline_not_registered_without_post_query_service(self):
-        mapper = _create_tool_command_mapper(movement_service=MagicMock())
-        result = mapper.execute(1, TOOL_NAME_SNS_HOME_TIMELINE, {})
-        assert result.success is False
-        assert result.error_code == "UNKNOWN_TOOL"
