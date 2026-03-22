@@ -5,15 +5,15 @@ slug: player-current-state-dto-refactoring
 status: in_progress
 created_at: 2026-03-23
 updated_at: 2026-03-23
-branch: codex/player-current-state-dto-refactoring-phase2
+branch: codex/player-current-state-dto-refactoring-phase3
 ---
 
 # Current State
 
-- Active phase: **Phase 3**（Formatter / Availability / UI の依存整理）
-- Last completed phase: **Phase 2**（Builder の責務分割）
-- Next recommended action: `flow-exec` で consumer 側の依存棚卸しと最終着地点整理に着手
-- Handoff summary: Phase 2 で `PlayerCurrentStateBuilder` に `_build_world_state` / `_build_runtime_context` / `_build_app_session_state` を導入し、`PlayerCurrentStateDto.from_components` 経由で assemble する構造へ整理した。public return shape は維持しているため、既存 world / llm テストの期待はそのまま保てている。
+- Active phase: **Phase 4**（実装修正とテスト移行）
+- Last completed phase: **Phase 3**（Formatter / Availability / UI の依存整理）
+- Next recommended action: `flow-exec` で `current_state_formatter.py` → `ui_context_builder.py` → `availability_resolvers.py` の順に内部参照を置換する
+- Handoff summary: Phase 3 で consumer ごとの着地点を [`PHASE3_CONSUMER_DEPENDENCY_PLAN.md`](/Users/minagawa/.codex/worktrees/4a2d/ai_rpg_world/.ai-workflow/features/player-current-state-dto-refactoring/PHASE3_CONSUMER_DEPENDENCY_PLAN.md) に固定した。結論は、public 入力型は維持しつつ、内部だけ `world` / `runtime` / `app` alias へ寄せる方針である。
 
 # Phase Journal
 
@@ -98,3 +98,30 @@ branch: codex/player-current-state-dto-refactoring-phase2
   - Phase 3 では formatter / availability / UI の各 consumer が、どこまで sub DTO 直参照へ寄せるべきかを棚卸しし、compat property を残す対象を決める。
 - Next-phase impact:
   - `from_components` ができたので、Phase 4 以降に builder 以外から facade を再構成する必要が出ても共通の assemble 入口を使える。
+
+## Phase 3
+
+- Started: 2026-03-23
+- Completed: 2026-03-23
+- Commit: （この phase 完了コミット）
+- Tests:
+  - コード変更なし。artifact 固定のみのため追加テストは未実施
+- Findings:
+  - `current_state_formatter.py` は world 依存が最も強く、最初の移行対象にしやすい。
+  - `ui_context_builder.py` は runtime 依存が最も強いが、関数冒頭で alias を束縛するだけでも依存境界がかなり明確になる。
+  - `availability_resolvers.py` は件数が多いため、入力型変更ではなく resolver family ごとの内部 alias 化が最も安全。
+- Plan revision check:
+  - **不要**。入力型を維持したまま内部参照だけを新境界へ寄せる方針で、既存 future phase の順序と成功条件を維持できる。
+- User approval:
+  - 不要（future phase の追加・並び替えなし）
+- Plan updates:
+  - `PHASE3_CONSUMER_DEPENDENCY_PLAN.md` を追加
+  - `PLAN.md` の Phase 3 checkpoint / notes を更新
+- Goal check:
+  - **達成**。formatter / availability / UI の各 consumer について、Phase 4 で何をどの順に変更するかが明文化された。
+- Scope delta:
+  - なし（dependency plan の固定のみ）
+- Handoff summary:
+  - Phase 4 は formatter → UI builder → availability resolver の順で内部参照を `world` / `runtime` / `app` alias に寄せる。
+- Next-phase impact:
+  - Phase 4 では public API や fixture 形を変えず、内部参照差し替えとテスト更新に集中できる。
