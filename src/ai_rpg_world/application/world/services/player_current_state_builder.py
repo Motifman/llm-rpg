@@ -51,6 +51,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.social.services.sns_mode_session_service import (
         SnsModeSessionService,
     )
+    from ai_rpg_world.application.social.sns_virtual_pages import SnsPageSessionService
     from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
     from ai_rpg_world.application.conversation.services.conversation_command_service import (
         ConversationCommandService,
@@ -117,6 +118,7 @@ class PlayerCurrentStateBuilder:
         personal_trade_query_service: Optional["PersonalTradeQueryService"] = None,
         player_audience_query: Optional[IPlayerAudienceQueryPort] = None,
         sns_mode_session: Optional["SnsModeSessionService"] = None,
+        sns_page_session: Optional["SnsPageSessionService"] = None,
     ) -> None:
         if player_audience_query is None:
             raise ValueError(
@@ -140,6 +142,7 @@ class PlayerCurrentStateBuilder:
         self._personal_trade_query_service = personal_trade_query_service
         self._player_audience_query = player_audience_query
         self._sns_mode_session = sns_mode_session
+        self._sns_page_session = sns_page_session
         self._visible_object_builder = VisibleObjectReadModelBuilder(
             player_profile_repository=player_profile_repository,
             monster_repository=monster_repository,
@@ -299,6 +302,23 @@ class PlayerCurrentStateBuilder:
             )
             current_game_time_label = game_dt.format_for_display()
 
+        from ai_rpg_world.application.social.sns_virtual_pages.kinds import SnsVirtualPageKind
+
+        sns_virtual_page_kind: Optional[str] = None
+        sns_home_tab: Optional[str] = None
+        sns_page_snapshot_generation = 0
+        if (
+            self._sns_page_session is not None
+            and self._sns_mode_session is not None
+            and self._sns_mode_session.is_sns_mode_active(query.player_id)
+        ):
+            st = self._sns_page_session.get_state(query.player_id)
+            sns_virtual_page_kind = st.page_kind.value
+            sns_home_tab = (
+                st.home_tab.value if st.page_kind == SnsVirtualPageKind.HOME else None
+            )
+            sns_page_snapshot_generation = st.snapshot_generation
+
         # 境界: ツール/runtime context（LLM prompt 上のラベル解決・利用可否判定に利用）
         # - available_moves, visible_objects, actionable/notable
         # - inventory_items, chest_items, nearby_shops, available_trades
@@ -378,6 +398,9 @@ class PlayerCurrentStateBuilder:
                 if self._sns_mode_session is not None
                 else False
             ),
+            sns_virtual_page_kind=sns_virtual_page_kind,
+            sns_home_tab=sns_home_tab,
+            sns_page_snapshot_generation=sns_page_snapshot_generation,
         )
 
     def build_visible_objects(

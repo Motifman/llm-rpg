@@ -85,6 +85,7 @@ class SnsToolExecutor:
         user_command_service: Optional[Any] = None,
         notification_command_service: Optional[Any] = None,
         sns_mode_session: Optional[Any] = None,
+        sns_page_session: Optional[Any] = None,
         post_query_service: Optional[Any] = None,
     ) -> None:
         self._post_service = post_service
@@ -92,6 +93,7 @@ class SnsToolExecutor:
         self._user_command_service = user_command_service
         self._notification_command_service = notification_command_service
         self._sns_mode_session = sns_mode_session
+        self._sns_page_session = sns_page_session
         self._post_query_service = post_query_service
 
     def get_handlers(
@@ -134,6 +136,8 @@ class SnsToolExecutor:
         if self._sns_mode_session is None:
             return unknown_tool("SNS モード状態が利用できません。")
         self._sns_mode_session.enter_sns_mode(player_id)
+        if self._sns_page_session is not None:
+            self._sns_page_session.on_enter_sns(player_id)
         return LlmCommandResultDto(
             success=True,
             message="ゲーム内 SNS を開きました。",
@@ -145,6 +149,8 @@ class SnsToolExecutor:
         if self._sns_mode_session is None:
             return unknown_tool("SNS モード状態が利用できません。")
         self._sns_mode_session.exit_sns_mode(player_id)
+        if self._sns_page_session is not None:
+            self._sns_page_session.on_exit_sns(player_id)
         return LlmCommandResultDto(
             success=True,
             message="ゲーム内 SNS を閉じました。",
