@@ -268,12 +268,6 @@ class TradeToolExecutor:
             return exception_result(e)
 
     def _resolve_trade_id(self, player_id: int, args: Dict[str, Any]) -> Optional[int]:
-        tid = args.get("trade_id")
-        if tid is not None:
-            try:
-                return int(tid)
-            except (TypeError, ValueError):
-                return None
         ref = args.get("trade_ref")
         if ref is not None and str(ref).strip() and self._trade_page_session is not None:
             resolved = self._trade_page_session.resolve_trade_ref(
@@ -313,7 +307,7 @@ class TradeToolExecutor:
             return unknown_tool("取引受諾ツールはまだ利用できません。")
         tid = self._resolve_trade_id(player_id, args)
         if tid is None:
-            return invalid_arg_result("trade_label または trade_ref")
+            return invalid_arg_result("trade_ref")
         try:
             result = self._trade_service.accept_trade(
                 AcceptTradeCommand(trade_id=tid, buyer_id=player_id)
@@ -329,7 +323,7 @@ class TradeToolExecutor:
             return unknown_tool("取引キャンセルツールはまだ利用できません。")
         tid = self._resolve_trade_id(player_id, args)
         if tid is None:
-            return invalid_arg_result("trade_label または trade_ref")
+            return invalid_arg_result("trade_ref")
         try:
             result = self._trade_service.cancel_trade(
                 CancelTradeCommand(trade_id=tid, player_id=player_id)
@@ -345,7 +339,7 @@ class TradeToolExecutor:
             return unknown_tool("取引拒否ツールはまだ利用できません。")
         tid = self._resolve_trade_id(player_id, args)
         if tid is None:
-            return invalid_arg_result("trade_label または trade_ref")
+            return invalid_arg_result("trade_ref")
         try:
             result = self._trade_service.decline_trade(
                 DeclineTradeCommand(trade_id=tid, decliner_id=player_id)

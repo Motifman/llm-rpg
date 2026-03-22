@@ -185,8 +185,8 @@ class TestDefaultAvailableToolsProvider:
         assert TOOL_NAME_TRADE_OFFER not in names
         assert TOOL_NAME_SNS_VIEW_CURRENT_PAGE not in names
 
-    def test_trade_mode_on_shows_trade_mutations_and_exit_not_enter(self, provider_sns_and_trade):
-        """取引所モード ON では 4 ミューテーションと trade_exit。trade_enter は出ない"""
+    def test_trade_mode_on_without_virtual_page_hides_trade_ref_mutations(self, provider_sns_and_trade):
+        """trade page 未配線では trade_ref 前提ミューテーションは表示しない。"""
         ctx = replace(
             _context_with_moves(1),
             active_game_app="trade",
@@ -198,7 +198,8 @@ class TestDefaultAvailableToolsProvider:
         assert TOOL_NAME_TRADE_ENTER not in names
         assert TOOL_NAME_TRADE_EXIT in names
         assert TOOL_NAME_TRADE_OFFER in names
-        assert TOOL_NAME_TRADE_ACCEPT in names
+        assert TOOL_NAME_TRADE_ACCEPT not in names
+        assert TOOL_NAME_TRADE_CANCEL not in names
 
     def test_trade_mode_with_virtual_page_shows_nav_tools(self, provider_trade_vp):
         """仮想取引所配線時、取引所モードかつ page kind があるとナビツールが出る"""
@@ -227,6 +228,22 @@ class TestDefaultAvailableToolsProvider:
         names = [t["function"]["name"] for t in tools if t.get("type") == "function"]
         assert TOOL_NAME_TRADE_ACCEPT in names
         assert TOOL_NAME_TRADE_CANCEL not in names
+
+    def test_trade_mode_incoming_tab_shows_accept_when_available_trades_empty(
+        self, provider_trade_vp
+    ):
+        """my_trades / incoming では宛先要約が空でも受諾を出す（スナップショットの trade_ref を正とする）"""
+        ctx = replace(
+            _context_with_moves(1),
+            active_game_app="trade",
+            trade_virtual_page_kind="my_trades",
+            trade_my_trades_tab="incoming",
+            inventory_items=[InventoryItemDto(1, 10, "剣", 1)],
+            available_trades=[],
+        )
+        tools = provider_trade_vp.get_available_tools(ctx)
+        names = [t["function"]["name"] for t in tools if t.get("type") == "function"]
+        assert TOOL_NAME_TRADE_ACCEPT in names
 
     def test_trade_mode_selling_tab_shows_cancel_not_accept(self, provider_trade_vp):
         """my_trades / selling ではキャンセルのみ（incoming 要約が空でも cancel を出す）"""

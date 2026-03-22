@@ -619,31 +619,27 @@ class TradeVirtualPageMyTradesTabAvailabilityResolver(IAvailabilityResolver):
 
 
 class TradeAcceptTradePageAvailabilityResolver(IAvailabilityResolver):
-    """受諾は my_trades / incoming のとき（未配線時は従来どおり available_trades のみ）。"""
+    """受諾は my_trades / incoming のときのみ。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        if context is None or not bool(context.available_trades):
+        if context is None:
             return False
         k = context.trade_virtual_page_kind
-        if k is None:
-            return True
         return k == "my_trades" and context.trade_my_trades_tab == "incoming"
 
 
 class TradeDeclineTradePageAvailabilityResolver(IAvailabilityResolver):
-    """拒否は my_trades / incoming のとき（未配線時は従来どおり）。"""
+    """拒否は my_trades / incoming のときのみ。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        if context is None or not bool(context.available_trades):
+        if context is None:
             return False
         k = context.trade_virtual_page_kind
-        if k is None:
-            return True
         return k == "my_trades" and context.trade_my_trades_tab == "incoming"
 
 
 class TradeCancelTradePageAvailabilityResolver(IAvailabilityResolver):
-    """キャンセルは my_trades / selling のとき（未配線時は従来どおり）。
+    """キャンセルは my_trades / selling のときのみ。
 
     selling タブでは `trade_ref` / スナップショットで対象を解決するため、
     `available_trades`（自分宛 incoming の要約）の有無には依存しない。
@@ -653,8 +649,6 @@ class TradeCancelTradePageAvailabilityResolver(IAvailabilityResolver):
         if context is None:
             return False
         k = context.trade_virtual_page_kind
-        if k is None:
-            return bool(context.available_trades)
         if k == "my_trades" and context.trade_my_trades_tab == "selling":
             return True
         return False

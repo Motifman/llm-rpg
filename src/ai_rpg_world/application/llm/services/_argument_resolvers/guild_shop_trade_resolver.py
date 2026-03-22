@@ -8,7 +8,6 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     PlayerToolRuntimeTargetDto,
     ShopListingToolRuntimeTargetDto,
     ShopToolRuntimeTargetDto,
-    TradeToolRuntimeTargetDto,
     ToolRuntimeContextDto,
 )
 from ai_rpg_world.application.llm.services._resolver_helpers import (
@@ -66,11 +65,11 @@ class GuildShopTradeArgumentResolver:
         if tool_name == TOOL_NAME_TRADE_OFFER:
             return self._resolve_trade_offer(args, runtime_context)
         if tool_name == TOOL_NAME_TRADE_ACCEPT:
-            return self._resolve_trade_label(args, runtime_context)
+            return self._resolve_trade_ref_mutation(args)
         if tool_name == TOOL_NAME_TRADE_CANCEL:
-            return self._resolve_trade_label(args, runtime_context)
+            return self._resolve_trade_ref_mutation(args)
         if tool_name == TOOL_NAME_TRADE_DECLINE:
-            return self._resolve_trade_label(args, runtime_context)
+            return self._resolve_trade_ref_mutation(args)
         return None
 
     def _resolve_guild_create(
@@ -378,24 +377,12 @@ class GuildShopTradeArgumentResolver:
             )
         return result
 
-    def _resolve_trade_label(
-        self,
-        args: Dict[str, Any],
-        runtime_context: ToolRuntimeContextDto,
-    ) -> Dict[str, Any]:
+    def _resolve_trade_ref_mutation(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """取引ミューテーションは page-local `trade_ref` のみ受理する。"""
         ref = args.get("trade_ref")
         if ref is not None and str(ref).strip():
             return {"trade_ref": str(ref).strip()}
-        label = args.get("trade_label")
-        target = require_target_type(
-            label,
-            runtime_context,
-            "取引ラベル",
-            (TradeToolRuntimeTargetDto,),
+        raise ToolArgumentResolutionException(
+            "trade_ref が指定されていません。trade_view_current_page のスナップショットに含まれる r_trade_* を指定してください。",
+            "INVALID_TARGET_LABEL",
         )
-        if target.trade_id is None:
-            raise ToolArgumentResolutionException(
-                f"取引として解決できません: {label}",
-                "INVALID_TARGET_KIND",
-            )
-        return {"trade_id": target.trade_id}
