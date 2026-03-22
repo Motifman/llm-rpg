@@ -113,7 +113,7 @@ branch: codex/sns-virtual-pages-readmodel
 
 - Started: 2026-03-23
 - Completed: 2026-03-23
-- Commit: （phase 完了コミット）
+- Commit: `7de6957`
 - Tests: `pytest tests/application/social/sns_virtual_pages/test_phase6_projection_decision.py -q`、`pytest tests/application/social/sns_virtual_pages/ -q`
 - Findings:
   - 未読数は既存 `NotificationQueryService.get_unread_count`（リポジトリ直参照）で足り、通知本文の二重保存や投影テーブルは不要。
