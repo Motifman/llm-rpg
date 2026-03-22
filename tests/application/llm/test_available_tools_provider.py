@@ -32,10 +32,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SKILL_REJECT_PROPOSAL,
     TOOL_NAME_SNS_CREATE_POST,
     TOOL_NAME_SNS_ENTER,
-    TOOL_NAME_SNS_HOME_TIMELINE,
-    TOOL_NAME_SNS_LIST_MY_POSTS,
-    TOOL_NAME_SNS_LIST_USER_POSTS,
     TOOL_NAME_SNS_LOGOUT,
+    TOOL_NAME_SNS_VIEW_CURRENT_PAGE,
     TOOL_NAME_TRADE_OFFER,
 )
 from ai_rpg_world.application.llm.services.tool_catalog import (
@@ -142,9 +140,7 @@ class TestDefaultAvailableToolsProvider:
         assert TOOL_NAME_SNS_LOGOUT not in names
         assert TOOL_NAME_SNS_CREATE_POST not in names
         assert TOOL_NAME_TRADE_OFFER not in names
-        assert TOOL_NAME_SNS_HOME_TIMELINE not in names
-        assert TOOL_NAME_SNS_LIST_MY_POSTS not in names
-        assert TOOL_NAME_SNS_LIST_USER_POSTS not in names
+        assert TOOL_NAME_SNS_VIEW_CURRENT_PAGE not in names
 
     def test_sns_mode_on_shows_sns_interaction_and_trade_not_enter(self, provider_sns_trade):
         """SNS モード ON では操作系 SNS・取引が出るが sns_enter は出ない"""
@@ -158,9 +154,7 @@ class TestDefaultAvailableToolsProvider:
         assert TOOL_NAME_SNS_LOGOUT in names
         assert TOOL_NAME_SNS_CREATE_POST in names
         assert TOOL_NAME_TRADE_OFFER in names
-        assert TOOL_NAME_SNS_HOME_TIMELINE in names
-        assert TOOL_NAME_SNS_LIST_MY_POSTS in names
-        assert TOOL_NAME_SNS_LIST_USER_POSTS in names
+        assert TOOL_NAME_SNS_VIEW_CURRENT_PAGE not in names
 
     def test_get_available_tools_context_none_returns_no_op_only(self, provider):
         """context が None のときは no_op のみ（move_to_destination は利用不可）"""
