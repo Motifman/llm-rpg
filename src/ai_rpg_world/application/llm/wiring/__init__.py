@@ -27,6 +27,8 @@ EventHandlerComposition のインスタンス化）は**呼び出し元（外部
   enter/logout のセッション状態を一致させるため）。
 - 仮想 SNS 画面状態を `PlayerCurrentStateDto` と enter/logout で共有する場合は、同様に
   `sns_page_session` に**同一の** `SnsPageSessionService` を渡す。
+- 仮想取引所ページツール（`trade_view_current_page` 等）を有効にするには `trade_page_query_service` と
+  `trade_page_session` を `create_llm_agent_wiring(...)` に渡す（`WorldQueryService` 側と同一インスタンス）。
 - ホーム TL / ユーザー TL 系ツールを実行可能にするには `PostQueryService` を
   `create_llm_agent_wiring(..., post_query_service=...)` に渡す。WorldQueryService の組み立てには不要。
 """
@@ -297,6 +299,7 @@ def _build_tool_handler_map(
     sns_page_session: Optional[Any],
     sns_page_query_service: Optional[Any],
     trade_page_session: Optional[Any],
+    trade_page_query_service: Optional[Any],
     reply_query_service: Optional[Any],
     notification_query_service: Optional[Any],
     item_repository: Optional[Any],
@@ -361,6 +364,7 @@ def _build_tool_handler_map(
             trade_service=trade_command_service,
             sns_mode_session=sns_mode_session,
             trade_page_session=trade_page_session,
+            trade_page_query_service=trade_page_query_service,
         ).get_handlers()
     )
     handler_map.update(
@@ -426,6 +430,7 @@ def _build_tool_stack(
     post_query_service: Optional[Any],
     sns_page_query_service: Optional[Any],
     trade_page_session: Optional[Any],
+    trade_page_query_service: Optional[Any],
     reply_query_service: Optional[Any],
     notification_query_service: Optional[Any],
     item_repository: Optional[Any],
@@ -465,6 +470,7 @@ def _build_tool_stack(
             or post_query_service is not None
         ),
         sns_virtual_pages_enabled=sns_page_query_service is not None,
+        trade_virtual_pages_enabled=trade_page_query_service is not None,
         inspect_item_enabled=item_repository is not None,
         inspect_target_enabled=(
             monster_repository is not None
@@ -501,6 +507,7 @@ def _build_tool_stack(
         sns_page_session=sns_page_session,
         sns_page_query_service=sns_page_query_service,
         trade_page_session=trade_page_session,
+        trade_page_query_service=trade_page_query_service,
         reply_query_service=reply_query_service,
         notification_query_service=notification_query_service,
         item_repository=item_repository,
@@ -765,6 +772,7 @@ def create_llm_agent_wiring(
     post_query_service: Optional[Any] = None,
     sns_page_query_service: Optional[Any] = None,
     trade_page_session: Optional[Any] = None,
+    trade_page_query_service: Optional[Any] = None,
     reply_query_service: Optional[Any] = None,
     notification_query_service: Optional[Any] = None,
     llm_client: Optional[ILLMClient] = None,
@@ -901,6 +909,7 @@ def create_llm_agent_wiring(
         post_query_service=post_query_service,
         sns_page_query_service=sns_page_query_service,
         trade_page_session=trade_page_session,
+        trade_page_query_service=trade_page_query_service,
         reply_query_service=reply_query_service,
         notification_query_service=notification_query_service,
         item_repository=item_repository,

@@ -383,6 +383,9 @@ class GuildShopTradeArgumentResolver:
         args: Dict[str, Any],
         runtime_context: ToolRuntimeContextDto,
     ) -> Dict[str, Any]:
+        ref = args.get("trade_ref")
+        if ref is not None and str(ref).strip():
+            return {"trade_ref": str(ref).strip()}
         label = args.get("trade_label")
         target = require_target_type(
             label,

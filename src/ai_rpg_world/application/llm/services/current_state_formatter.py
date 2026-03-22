@@ -103,4 +103,8 @@ class DefaultCurrentStateFormatter(ICurrentStateFormatter):
             lines.append("現在のSNS画面:")
             lines.append(dto.sns_current_page_snapshot_json)
 
+        if dto.trade_current_page_snapshot_json:
+            lines.append("現在の取引所画面:")
+            lines.append(dto.trade_current_page_snapshot_json)
+
         return "\n".join(lines)
