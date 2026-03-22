@@ -387,15 +387,20 @@ class GuildShopTradeArgumentResolver:
         if ref is not None and str(ref).strip():
             return {"trade_ref": str(ref).strip()}
         label = args.get("trade_label")
-        target = require_target_type(
-            label,
-            runtime_context,
-            "取引ラベル",
-            (TradeToolRuntimeTargetDto,),
-        )
-        if target.trade_id is None:
-            raise ToolArgumentResolutionException(
-                f"取引として解決できません: {label}",
-                "INVALID_TARGET_KIND",
+        if isinstance(label, str) and label.strip():
+            target = require_target_type(
+                label.strip(),
+                runtime_context,
+                "取引ラベル",
+                (TradeToolRuntimeTargetDto,),
             )
-        return {"trade_id": target.trade_id}
+            if target.trade_id is None:
+                raise ToolArgumentResolutionException(
+                    f"取引として解決できません: {label}",
+                    "INVALID_TARGET_KIND",
+                )
+            return {"trade_id": target.trade_id}
+        raise ToolArgumentResolutionException(
+            "trade_ref が指定されていません。trade_view_current_page のスナップショットに含まれる r_trade_* を指定してください。",
+            "INVALID_TARGET_LABEL",
+        )

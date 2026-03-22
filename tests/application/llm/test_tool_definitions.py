@@ -316,6 +316,28 @@ class TestRegisterDefaultTools:
         assert TOOL_NAME_SNS_ENTER in names
         assert TOOL_NAME_TRADE_OFFER in names
 
+    def test_trade_mutation_definitions_expose_trade_ref_only(self):
+        """取引ミューテーションは trade_ref のみ（trade_label はスキーマに含めない）"""
+        from ai_rpg_world.application.llm.services.tool_catalog.trade import (
+            TRADE_ACCEPT_DEFINITION,
+            TRADE_CANCEL_DEFINITION,
+            TRADE_DECLINE_DEFINITION,
+        )
+        from ai_rpg_world.application.llm.tool_constants import (
+            TOOL_NAME_TRADE_ACCEPT,
+            TOOL_NAME_TRADE_CANCEL,
+            TOOL_NAME_TRADE_DECLINE,
+        )
+
+        assert TRADE_ACCEPT_DEFINITION.name == TOOL_NAME_TRADE_ACCEPT
+        assert TRADE_CANCEL_DEFINITION.name == TOOL_NAME_TRADE_CANCEL
+        assert TRADE_DECLINE_DEFINITION.name == TOOL_NAME_TRADE_DECLINE
+        for d in (TRADE_ACCEPT_DEFINITION, TRADE_CANCEL_DEFINITION, TRADE_DECLINE_DEFINITION):
+            props = d.parameters.get("properties") or {}
+            assert "trade_ref" in props
+            assert "trade_label" not in props
+            assert d.parameters.get("required") == ["trade_ref"]
+
     def test_register_default_tools_sns_enabled_registers_sns_enter(self):
         """sns_enabled で sns_enter が登録される"""
         registry = DefaultGameToolRegistry()
