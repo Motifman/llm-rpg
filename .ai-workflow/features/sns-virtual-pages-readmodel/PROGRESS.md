@@ -10,10 +10,10 @@ branch: codex/sns-virtual-pages-readmodel
 
 # Current State
 
-- Active phase: **Phase 3**（Page Query Service 実装）
-- Last completed phase: **Phase 2**（Page Session と Page DTO 基盤）
-- Next recommended action: 既存 `PostQueryService` / `ReplyQueryService` 等を束ねる `SnsPageQueryService`（仮称）と画面スナップショット DTO の組み立て、各画面＋ref のテスト
-- Handoff summary: `SnsPageSessionService`・画面 enum・`SnsPageSessionState`・ref 発行/解決・`PlayerCurrentStateDto` の `sns_virtual_page_kind` / `sns_home_tab` / `sns_page_snapshot_generation`・`create_world_query_service` / `create_llm_agent_wiring` / `SnsToolExecutor` への同一インスタンス配線を追加済み。
+- Active phase: **Phase 4**（Tool Catalog / Executor / Provider 統合）
+- Last completed phase: **Phase 3**（Page Query Service）
+- Next recommended action: `sns_view_current_page` 等の汎用ツールと `SnsPageQueryService` を LLM wiring / `SnsToolExecutor` / `available_tools_provider` に接続し、画面依存 gating を実装する
+- Handoff summary: `SnsPageQueryService.get_current_page_snapshot`・`page_snapshot_dtos`（LLM 向けに内部 ID 非露出）・スナップショット取得時の ref 世代更新・各画面のモック単体テスト。`SnsPageQueryService` は未配線（Phase 4 で injector / executor へ渡す）。
 
 # Phase Journal
 
@@ -51,3 +51,24 @@ branch: codex/sns-virtual-pages-readmodel
 - Scope delta: なし
 - Handoff summary: Phase 3 で `SnsPageSessionService` を注入した query 層サービスが、各画面のスナップショット用 DTO と ref 発行を担う
 - Next-phase impact: スナップショット DTO は `application/social/` 配下の新モジュールに置くと page session と並びやすい
+
+## Phase 3
+
+- Started: 2026-03-22
+- Completed: 2026-03-22
+- Commit: （phase 完了コミット）
+- Tests: `pytest tests/application/social/sns_virtual_pages/test_sns_page_query_service.py`、`pytest tests/` 全件通過
+- Findings:
+  - `SnsPageQueryService.get_current_page_snapshot` は先頭で `bump_snapshot_generation` を呼び、スナップショット取得のたびに ref マップを捨て世代を進める（古い ref の再利用を防ぐ）。
+  - `post_detail` で `post_detail_root_post_id` が未設定のときは `SnsVirtualPageSnapshotDto.error` にメッセージを載せ、本文は返さない（遷移は Phase 4 のツールで事前設定する想定）。
+  - `home` / `popular` は `limit+1` 件取得で `has_more` を付与。`popular` では追加で `get_trending_hashtags`（最大 10 件）を載せる。
+  - `profile` は `profile_target_user_id` が未設定のとき閲覧者自身（`show_my_profile`）として扱う。
+  - `search` は `search_mode` が `HASHTAG` のとき `search_posts_by_hashtag`、それ以外（`KEYWORD` または未設定）は `search_posts_by_keyword`。クエリ空なら結果は空。
+  - `notifications` は一覧に `get_unread_count` を併記（数値のみ）。
+- Plan revision check: **不要**。Phase 4 の汎用ツール一覧・provider 統合の前提は維持できる。
+- User approval: **不要**（PLAN の Phase 3 scope から外れていない）
+- Plan updates: **なし**
+- Goal check: **達成** — 各画面が既存 query で組み立てられ、スナップショット DTO に page-local ref が載る
+- Scope delta: なし
+- Handoff summary: Phase 4 で `SnsPageQueryService` と `SnsPageSessionService` を executor / wiring に渡し、`sns_view_current_page` がスナップショット JSON を返すようにする
+- Next-phase impact: ツール実行時に viewer = プレイヤーの SNS user id をどう渡すかは既存 SNS ツールと揃える
