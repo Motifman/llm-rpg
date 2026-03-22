@@ -324,6 +324,87 @@ class AvailableTradeSummaryDto:
     requested_gold: int
 
 
+@dataclass(frozen=True)
+class PlayerWorldStateDto:
+    """プレイヤーの world state に属する現在状態。"""
+
+    player_id: int
+    player_name: str
+    current_spot_id: Optional[int]
+    current_spot_name: Optional[str]
+    current_spot_description: Optional[str]
+    x: Optional[int]
+    y: Optional[int]
+    z: Optional[int]
+    current_player_count: int
+    current_player_ids: Set[int]
+    connected_spot_ids: Set[int]
+    connected_spot_names: Set[str]
+    weather_type: str
+    weather_intensity: float
+    current_terrain_type: Optional[str]
+    visible_objects: List[VisibleObjectDto]
+    view_distance: int
+    available_moves: Optional[List[AvailableMoveDto]]
+    total_available_moves: Optional[int]
+    attention_level: AttentionLevel
+    area_ids: List[int] = field(default_factory=list)
+    area_names: List[str] = field(default_factory=list)
+    area_id: Optional[int] = None
+    area_name: Optional[str] = None
+    available_location_areas: Optional[List[AvailableLocationAreaDto]] = None
+    current_location_description: Optional[str] = None
+    is_busy: bool = False
+    busy_until_tick: Optional[int] = None
+    has_active_path: bool = False
+    visible_tile_map: Optional["VisibleTileMapDto"] = None
+    current_game_time_label: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class PlayerRuntimeContextDto:
+    """プレイヤーの LLM/runtime 向け補助コンテキスト。"""
+
+    inventory_items: List[InventoryItemDto] = field(default_factory=list)
+    chest_items: List[ChestItemDto] = field(default_factory=list)
+    active_conversation: Optional[ActiveConversationDto] = None
+    active_harvest: Optional[ActiveHarvestDto] = None
+    usable_skills: List[UsableSkillDto] = field(default_factory=list)
+    equipable_skill_candidates: List[EquipableSkillCandidateDto] = field(default_factory=list)
+    skill_equip_slots: List[SkillEquipSlotDto] = field(default_factory=list)
+    pending_skill_proposals: List[PendingSkillProposalDto] = field(default_factory=list)
+    awakened_action: Optional[AwakenedActionDto] = None
+    attention_level_options: List[AttentionLevelOptionDto] = field(default_factory=list)
+    can_destroy_placeable: bool = False
+    actionable_objects: List[VisibleObjectDto] = field(default_factory=list)
+    notable_objects: List[VisibleObjectDto] = field(default_factory=list)
+    active_quest_ids: List[int] = field(default_factory=list)
+    guild_ids: List[int] = field(default_factory=list)
+    nearby_shop_ids: List[int] = field(default_factory=list)
+    active_quests: List["ActiveQuestSummaryDto"] = field(default_factory=list)
+    guild_memberships: List["GuildMembershipSummaryDto"] = field(default_factory=list)
+    nearby_shops: List["NearbyShopSummaryDto"] = field(default_factory=list)
+    available_trades: List["AvailableTradeSummaryDto"] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class PlayerAppSessionStateDto:
+    """ゲーム内 app の active state / page state。"""
+
+    active_game_app: str = "none"
+    is_sns_mode_active: bool = False
+    is_trade_mode_active: bool = False
+    sns_virtual_page_kind: Optional[str] = None
+    sns_home_tab: Optional[str] = None
+    sns_page_snapshot_generation: int = 0
+    sns_current_page_snapshot_json: Optional[str] = None
+    sns_profile_is_self: Optional[bool] = None
+    trade_virtual_page_kind: Optional[str] = None
+    trade_my_trades_tab: Optional[str] = None
+    trade_page_snapshot_generation: int = 0
+    trade_current_page_snapshot_json: Optional[str] = None
+
+
 @dataclass
 class PlayerCurrentStateDto:
     """
@@ -418,27 +499,134 @@ class PlayerCurrentStateDto:
     trade_current_page_snapshot_json: Optional[str] = None
 
     def __post_init__(self) -> None:
-        allowed = {"none", "sns", "trade"}
-        if self.active_game_app not in allowed:
-            raise ValueError(
-                f"active_game_app must be one of {allowed}, got {self.active_game_app!r}"
+        active_game_app, is_sns_mode_active, is_trade_mode_active = (
+            self._normalize_app_session_state(
+                active_game_app=self.active_game_app,
+                is_sns_mode_active=self.is_sns_mode_active,
+                is_trade_mode_active=self.is_trade_mode_active,
             )
-        if self.active_game_app == "none":
-            if self.is_sns_mode_active and self.is_trade_mode_active:
+        )
+        self.active_game_app = active_game_app
+        self.is_sns_mode_active = is_sns_mode_active
+        self.is_trade_mode_active = is_trade_mode_active
+
+    @staticmethod
+    def _normalize_app_session_state(
+        *,
+        active_game_app: str,
+        is_sns_mode_active: bool,
+        is_trade_mode_active: bool,
+    ) -> tuple[str, bool, bool]:
+        allowed = {"none", "sns", "trade"}
+        if active_game_app not in allowed:
+            raise ValueError(
+                f"active_game_app must be one of {allowed}, got {active_game_app!r}"
+            )
+        if active_game_app == "none":
+            if is_sns_mode_active and is_trade_mode_active:
                 raise ValueError(
                     "is_sns_mode_active and is_trade_mode_active cannot both be true when active_game_app is none"
                 )
-            if self.is_trade_mode_active and not self.is_sns_mode_active:
-                self.active_game_app = "trade"
-            elif self.is_sns_mode_active:
-                self.active_game_app = "sns"
-        ag = self.active_game_app
+            if is_trade_mode_active and not is_sns_mode_active:
+                active_game_app = "trade"
+            elif is_sns_mode_active:
+                active_game_app = "sns"
+        ag = active_game_app
         if ag == "sns":
-            self.is_sns_mode_active = True
-            self.is_trade_mode_active = False
+            is_sns_mode_active = True
+            is_trade_mode_active = False
         elif ag == "trade":
-            self.is_sns_mode_active = False
-            self.is_trade_mode_active = True
+            is_sns_mode_active = False
+            is_trade_mode_active = True
         else:
-            self.is_sns_mode_active = False
-            self.is_trade_mode_active = False
+            is_sns_mode_active = False
+            is_trade_mode_active = False
+        return active_game_app, is_sns_mode_active, is_trade_mode_active
+
+    @property
+    def world_state(self) -> PlayerWorldStateDto:
+        """Phase 1 で導入した world state への論理的な分離境界。"""
+        return PlayerWorldStateDto(
+            player_id=self.player_id,
+            player_name=self.player_name,
+            current_spot_id=self.current_spot_id,
+            current_spot_name=self.current_spot_name,
+            current_spot_description=self.current_spot_description,
+            x=self.x,
+            y=self.y,
+            z=self.z,
+            current_player_count=self.current_player_count,
+            current_player_ids=self.current_player_ids,
+            connected_spot_ids=self.connected_spot_ids,
+            connected_spot_names=self.connected_spot_names,
+            weather_type=self.weather_type,
+            weather_intensity=self.weather_intensity,
+            current_terrain_type=self.current_terrain_type,
+            visible_objects=self.visible_objects,
+            view_distance=self.view_distance,
+            available_moves=self.available_moves,
+            total_available_moves=self.total_available_moves,
+            attention_level=self.attention_level,
+            area_ids=self.area_ids,
+            area_names=self.area_names,
+            area_id=self.area_id,
+            area_name=self.area_name,
+            available_location_areas=self.available_location_areas,
+            current_location_description=self.current_location_description,
+            is_busy=self.is_busy,
+            busy_until_tick=self.busy_until_tick,
+            has_active_path=self.has_active_path,
+            visible_tile_map=self.visible_tile_map,
+            current_game_time_label=self.current_game_time_label,
+        )
+
+    @property
+    def runtime_context(self) -> PlayerRuntimeContextDto:
+        """Phase 1 で導入した runtime context への論理的な分離境界。"""
+        return PlayerRuntimeContextDto(
+            inventory_items=self.inventory_items,
+            chest_items=self.chest_items,
+            active_conversation=self.active_conversation,
+            active_harvest=self.active_harvest,
+            usable_skills=self.usable_skills,
+            equipable_skill_candidates=self.equipable_skill_candidates,
+            skill_equip_slots=self.skill_equip_slots,
+            pending_skill_proposals=self.pending_skill_proposals,
+            awakened_action=self.awakened_action,
+            attention_level_options=self.attention_level_options,
+            can_destroy_placeable=self.can_destroy_placeable,
+            actionable_objects=self.actionable_objects,
+            notable_objects=self.notable_objects,
+            active_quest_ids=self.active_quest_ids,
+            guild_ids=self.guild_ids,
+            nearby_shop_ids=self.nearby_shop_ids,
+            active_quests=self.active_quests,
+            guild_memberships=self.guild_memberships,
+            nearby_shops=self.nearby_shops,
+            available_trades=self.available_trades,
+        )
+
+    @property
+    def app_session_state(self) -> PlayerAppSessionStateDto:
+        """Phase 1 で導入した app session state への論理的な分離境界。"""
+        active_game_app, is_sns_mode_active, is_trade_mode_active = (
+            self._normalize_app_session_state(
+                active_game_app=self.active_game_app,
+                is_sns_mode_active=self.is_sns_mode_active,
+                is_trade_mode_active=self.is_trade_mode_active,
+            )
+        )
+        return PlayerAppSessionStateDto(
+            active_game_app=active_game_app,
+            is_sns_mode_active=is_sns_mode_active,
+            is_trade_mode_active=is_trade_mode_active,
+            sns_virtual_page_kind=self.sns_virtual_page_kind,
+            sns_home_tab=self.sns_home_tab,
+            sns_page_snapshot_generation=self.sns_page_snapshot_generation,
+            sns_current_page_snapshot_json=self.sns_current_page_snapshot_json,
+            sns_profile_is_self=self.sns_profile_is_self,
+            trade_virtual_page_kind=self.trade_virtual_page_kind,
+            trade_my_trades_tab=self.trade_my_trades_tab,
+            trade_page_snapshot_generation=self.trade_page_snapshot_generation,
+            trade_current_page_snapshot_json=self.trade_current_page_snapshot_json,
+        )

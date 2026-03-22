@@ -5,7 +5,7 @@ slug: player-current-state-dto-refactoring
 status: planned
 created_at: 2026-03-23
 updated_at: 2026-03-23
-branch: codex/player-current-state-dto-refactoring-phase0
+branch: codex/player-current-state-dto-refactoring-phase1
 ---
 
 # Objective
@@ -150,6 +150,7 @@ branch: codex/player-current-state-dto-refactoring-phase0
   - dataclass 初期化シグネチャが不自然になり、互換 facade としての価値を損なう場合
 - Notes:
   - 初手では resolver / formatter / UI builder の入力型は変えない。
+  - 既存テストが top-level 属性を構築後に差し替えるため、Phase 1 の sub DTO は保存値よりも計算プロパティの方が安全な可能性が高い。
 
 ## Phase 2: Builder の責務分割
 
