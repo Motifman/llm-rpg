@@ -344,6 +344,13 @@ class PlayerCurrentStateBuilder:
         # - available_moves, visible_objects, actionable/notable
         # - inventory_items, chest_items, nearby_shops, available_trades
         # - memory retrieval hints: active_quest_ids, guild_ids, nearby_shop_ids
+        if self._sns_mode_session is not None:
+            active_game_app = self._sns_mode_session.active_game_app_session.get_active_app(
+                query.player_id
+            ).value
+        else:
+            active_game_app = "none"
+
         return PlayerCurrentStateDto(
             player_id=query.player_id,
             player_name=player_name,
@@ -414,11 +421,9 @@ class PlayerCurrentStateBuilder:
             ),
             actionable_objects=actionable_objects,
             notable_objects=notable_objects,
-            is_sns_mode_active=(
-                self._sns_mode_session.is_sns_mode_active(query.player_id)
-                if self._sns_mode_session is not None
-                else False
-            ),
+            active_game_app=active_game_app,
+            is_sns_mode_active=False,
+            is_trade_mode_active=False,
             sns_virtual_page_kind=sns_virtual_page_kind,
             sns_home_tab=sns_home_tab,
             sns_page_snapshot_generation=sns_page_snapshot_generation,
