@@ -5,7 +5,7 @@ slug: player-current-state-dto-refactoring
 status: planned
 created_at: 2026-03-23
 updated_at: 2026-03-23
-branch: codex/player-current-state-dto-refactoring-phase2
+branch: codex/player-current-state-dto-refactoring-phase3
 ---
 
 # Objective
@@ -192,10 +192,12 @@ branch: codex/player-current-state-dto-refactoring-phase2
   - 利用側ごとに最終着地が定義され、互換レイヤを剥がす順序が決まる。
 - Checkpoint:
   - formatter / availability / UI について、それぞれ「phase 4 で実装する変更点」が箇条書きで明文化される。
+  - `PHASE3_CONSUMER_DEPENDENCY_PLAN.md` に consumer ごとの着地点と変更順序が記録されている。
 - Reopen alignment if:
   - `ToolAvailabilityContext` を `PlayerCurrentStateDto` のまま維持する方が長期的にも自然と判明した場合
 - Notes:
   - UI builder は runtime target label 契約が重いので、最後尾候補として扱う。
+  - Phase 3 の結論として、入力型は維持しつつ内部だけ `world` / `runtime` / `app` alias に寄せる。
 
 ## Phase 4: 実装修正とテスト移行
 
