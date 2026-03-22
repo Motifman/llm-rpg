@@ -37,9 +37,11 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SNS_LOGOUT,
     TOOL_NAME_SNS_VIEW_CURRENT_PAGE,
     TOOL_NAME_TRADE_ACCEPT,
+    TOOL_NAME_TRADE_CANCEL,
     TOOL_NAME_TRADE_ENTER,
     TOOL_NAME_TRADE_EXIT,
     TOOL_NAME_TRADE_OFFER,
+    TOOL_NAME_TRADE_VIEW_CURRENT_PAGE,
 )
 from ai_rpg_world.application.llm.services.tool_catalog import (
     register_default_tools,
@@ -133,6 +135,22 @@ class TestDefaultAvailableToolsProvider:
     def provider_sns_trade(self, registry_sns_trade):
         return DefaultAvailableToolsProvider(registry_sns_trade)
 
+    @pytest.fixture
+    def registry_trade_virtual_pages(self):
+        r = DefaultGameToolRegistry()
+        register_default_tools(
+            r,
+            speech_enabled=True,
+            sns_enabled=True,
+            trade_enabled=True,
+            trade_virtual_pages_enabled=True,
+        )
+        return r
+
+    @pytest.fixture
+    def provider_trade_vp(self, registry_trade_virtual_pages):
+        return DefaultAvailableToolsProvider(registry_trade_virtual_pages)
+
     def test_sns_mode_off_shows_sns_enter_and_trade_enter_only(self, provider_sns_trade):
         """未起動では SNS は sns_enter のみ、取引は trade_enter のみ（ミューテーションは出ない）"""
         ctx = _context_with_moves(1)
@@ -180,6 +198,49 @@ class TestDefaultAvailableToolsProvider:
         assert TOOL_NAME_TRADE_EXIT in names
         assert TOOL_NAME_TRADE_OFFER in names
         assert TOOL_NAME_TRADE_ACCEPT in names
+
+    def test_trade_mode_with_virtual_page_shows_nav_tools(self, provider_trade_vp):
+        """仮想取引所配線時、取引所モードかつ page kind があるとナビツールが出る"""
+        ctx = replace(
+            _context_with_moves(1),
+            active_game_app="trade",
+            trade_virtual_page_kind="market",
+            inventory_items=[InventoryItemDto(1, 10, "剣", 1)],
+            available_trades=[],
+        )
+        tools = provider_trade_vp.get_available_tools(ctx)
+        names = [t["function"]["name"] for t in tools if t.get("type") == "function"]
+        assert TOOL_NAME_TRADE_VIEW_CURRENT_PAGE in names
+
+    def test_trade_mode_incoming_tab_shows_accept_not_cancel(self, provider_trade_vp):
+        """my_trades / incoming では受諾・拒否のみ（キャンセルは selling のみ）"""
+        ctx = replace(
+            _context_with_moves(1),
+            active_game_app="trade",
+            trade_virtual_page_kind="my_trades",
+            trade_my_trades_tab="incoming",
+            inventory_items=[InventoryItemDto(1, 10, "剣", 1)],
+            available_trades=[AvailableTradeSummaryDto(trade_id=1, item_name="盾", requested_gold=10)],
+        )
+        tools = provider_trade_vp.get_available_tools(ctx)
+        names = [t["function"]["name"] for t in tools if t.get("type") == "function"]
+        assert TOOL_NAME_TRADE_ACCEPT in names
+        assert TOOL_NAME_TRADE_CANCEL not in names
+
+    def test_trade_mode_selling_tab_shows_cancel_not_accept(self, provider_trade_vp):
+        """my_trades / selling ではキャンセルのみ"""
+        ctx = replace(
+            _context_with_moves(1),
+            active_game_app="trade",
+            trade_virtual_page_kind="my_trades",
+            trade_my_trades_tab="selling",
+            inventory_items=[InventoryItemDto(1, 10, "剣", 1)],
+            available_trades=[AvailableTradeSummaryDto(trade_id=1, item_name="盾", requested_gold=10)],
+        )
+        tools = provider_trade_vp.get_available_tools(ctx)
+        names = [t["function"]["name"] for t in tools if t.get("type") == "function"]
+        assert TOOL_NAME_TRADE_CANCEL in names
+        assert TOOL_NAME_TRADE_ACCEPT not in names
 
     def test_get_available_tools_context_none_returns_no_op_only(self, provider):
         """context が None のときは no_op のみ（move_to_destination は利用不可）"""

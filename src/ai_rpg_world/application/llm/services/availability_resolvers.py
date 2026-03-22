@@ -588,6 +588,72 @@ class TradeExitToolAvailabilityResolver(IAvailabilityResolver):
         return context is not None and context.is_trade_mode_active
 
 
+class TradeVirtualPageNavigationAvailabilityResolver(IAvailabilityResolver):
+    """仮想取引所画面が配線され一覧に載るとき（page kind が載っている）にナビ系ツールを出す。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None or not context.is_trade_mode_active:
+            return False
+        return context.trade_virtual_page_kind is not None
+
+
+class TradeVirtualPagePagingAvailabilityResolver(IAvailabilityResolver):
+    """一覧ページングが意味を持つ画面のみ次ページを許可。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None or not context.is_trade_mode_active:
+            return False
+        k = context.trade_virtual_page_kind
+        if k is None:
+            return False
+        return k in ("market", "search", "my_trades")
+
+
+class TradeVirtualPageMyTradesTabAvailabilityResolver(IAvailabilityResolver):
+    """my_trades 画面でのみ selling / incoming を切り替え可能。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None or not context.is_trade_mode_active:
+            return False
+        return context.trade_virtual_page_kind == "my_trades"
+
+
+class TradeAcceptTradePageAvailabilityResolver(IAvailabilityResolver):
+    """受諾は my_trades / incoming のとき（未配線時は従来どおり available_trades のみ）。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None or not bool(context.available_trades):
+            return False
+        k = context.trade_virtual_page_kind
+        if k is None:
+            return True
+        return k == "my_trades" and context.trade_my_trades_tab == "incoming"
+
+
+class TradeDeclineTradePageAvailabilityResolver(IAvailabilityResolver):
+    """拒否は my_trades / incoming のとき（未配線時は従来どおり）。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None or not bool(context.available_trades):
+            return False
+        k = context.trade_virtual_page_kind
+        if k is None:
+            return True
+        return k == "my_trades" and context.trade_my_trades_tab == "incoming"
+
+
+class TradeCancelTradePageAvailabilityResolver(IAvailabilityResolver):
+    """キャンセルは my_trades / selling のとき（未配線時は従来どおり）。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None or not bool(context.available_trades):
+            return False
+        k = context.trade_virtual_page_kind
+        if k is None:
+            return True
+        return k == "my_trades" and context.trade_my_trades_tab == "selling"
+
+
 class MemoryQueryAvailabilityResolver(IAvailabilityResolver):
     """memory_query は現在状態が取得できているときに利用可能。"""
 

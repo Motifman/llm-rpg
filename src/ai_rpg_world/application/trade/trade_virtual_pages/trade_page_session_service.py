@@ -74,6 +74,16 @@ class TradePageSessionService:
         if equipment_types is not None:
             st.equipment_types = list(equipment_types)
 
+    def clear_search_filters(self, player_id: int) -> None:
+        """検索画面へ遷移する直前に条件を初期化する。"""
+        st = self.get_state(player_id)
+        st.item_name = ""
+        st.min_price = None
+        st.max_price = None
+        st.item_types = []
+        st.rarities = []
+        st.equipment_types = []
+
     def bump_snapshot_generation(self, player_id: int) -> int:
         """同一条件の再取得などで ref を無効化する。世代を上げて ref マップを空にする。"""
         st = self.get_state(player_id)

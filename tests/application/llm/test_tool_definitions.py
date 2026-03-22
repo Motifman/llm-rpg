@@ -291,6 +291,21 @@ class TestRegisterDefaultTools:
         assert TOOL_NAME_TRADE_EXIT in names
         assert TOOL_NAME_TRADE_OFFER in names
 
+    def test_register_default_tools_trade_virtual_pages_adds_nav_tools(self):
+        """trade_enabled かつ trade_virtual_pages_enabled で仮想取引所ナビツールが追加される"""
+        from ai_rpg_world.application.llm.tool_constants import (
+            TOOL_NAME_TRADE_OPEN_PAGE,
+            TOOL_NAME_TRADE_VIEW_CURRENT_PAGE,
+        )
+
+        registry = DefaultGameToolRegistry()
+        register_default_tools(
+            registry, trade_enabled=True, trade_virtual_pages_enabled=True
+        )
+        names = [e[0].name for e in registry.get_definitions_with_resolvers()]
+        assert TOOL_NAME_TRADE_VIEW_CURRENT_PAGE in names
+        assert TOOL_NAME_TRADE_OPEN_PAGE in names
+
     def test_register_default_tools_trade_with_sns_registers_both(self):
         """trade_enabled かつ sns_enabled で SNS と取引の両カタログが登録される"""
         registry = DefaultGameToolRegistry()

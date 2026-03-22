@@ -64,6 +64,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_TRADE_CANCEL,
     TOOL_NAME_TRADE_DECLINE,
     TOOL_NAME_TRADE_OFFER,
+    TOOL_NAME_TRADE_VIEW_CURRENT_PAGE,
     TOOL_NAME_TODO_ADD,
     TOOL_NAME_TODO_COMPLETE,
     TOOL_NAME_TODO_LIST,
@@ -1528,7 +1529,7 @@ class TestToolCommandMapperRequiredArgsValidation:
         result = mapper.execute(1, TOOL_NAME_TRADE_ACCEPT, {})
         assert result.success is False
         assert result.error_code == "INVALID_TARGET_LABEL"
-        assert "trade_id" in result.message
+        assert "trade_label" in result.message or "trade_ref" in result.message
         trade_service.accept_trade.assert_not_called()
 
     def test_guild_create_missing_spot_id_returns_invalid_target_label(self):
@@ -1581,7 +1582,7 @@ class TestToolCommandMapperRequiredArgsValidation:
         result = mapper.execute(1, TOOL_NAME_TRADE_CANCEL, {})
         assert result.success is False
         assert result.error_code == "INVALID_TARGET_LABEL"
-        assert "trade_id" in result.message
+        assert "trade_label" in result.message or "trade_ref" in result.message
         trade_service.cancel_trade.assert_not_called()
 
     def test_trade_decline_missing_trade_id_returns_invalid_target_label(self):
@@ -1593,8 +1594,24 @@ class TestToolCommandMapperRequiredArgsValidation:
         result = mapper.execute(1, TOOL_NAME_TRADE_DECLINE, {})
         assert result.success is False
         assert result.error_code == "INVALID_TARGET_LABEL"
-        assert "trade_id" in result.message
+        assert "trade_label" in result.message or "trade_ref" in result.message
         trade_service.decline_trade.assert_not_called()
+
+    def test_trade_view_current_page_returns_snapshot_json(self):
+        trade_service = MagicMock()
+        page_q = MagicMock()
+        page_q.build_current_page_snapshot_json.return_value = '{"page_kind":"market"}'
+        sess = MagicMock()
+        mapper = _create_tool_command_mapper(
+            movement_service=MagicMock(),
+            trade_service=trade_service,
+            trade_page_session=sess,
+            trade_page_query_service=page_q,
+        )
+        result = mapper.execute(1, TOOL_NAME_TRADE_VIEW_CURRENT_PAGE, {})
+        assert result.success is True
+        assert "market" in result.message
+        page_q.build_current_page_snapshot_json.assert_called_once_with(1)
 
 
 class TestToolCommandMapperSns:

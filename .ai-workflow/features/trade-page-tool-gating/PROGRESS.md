@@ -10,10 +10,10 @@ branch: feature/trade-page-tool-gating
 
 # Current State
 
-- Active phase: Phase 5（Tool Catalog / Executor / Prompt 統合）
-- Last completed phase: Phase 4（Trade Page Query Service 実装）
-- Next recommended action: Trade ページ用ツール群と `trade_ref` 入力・prompt へのスナップショット差し込み（Phase 5 scope）
-- Handoff summary: `TradePageQueryService` が `GlobalMarketQueryService` / `TradeQueryService` / `PersonalTradeQueryService` を束ね、`build_current_page_snapshot_json` で rows・`paging.next_cursor`・`trade_ref` を含む JSON を返す。`PlayerCurrentStateBuilder` は `trade_page_query_service` 注入時に当該 JSON を `trade_current_page_snapshot_json` に載せる（未注入時は Phase 3 どおりセッションメタのみ）。`create_world_query_service(..., trade_page_query_service=...)` で配線可能。
+- Active phase: Phase 6（旧前提の整理と回帰テスト固定）
+- Last completed phase: Phase 5（Tool Catalog / Executor / Prompt 統合）
+- Next recommended action: Phase 6 scope（コメント・テスト期待の Trade 独立前提への統一）
+- Handoff summary: `trade_view_current_page` / `trade_open_page` / `trade_page_next` / `trade_page_refresh` / `trade_switch_tab` を `register_default_tools(..., trade_virtual_pages_enabled=True)` と `create_llm_agent_wiring(..., trade_page_query_service=..., trade_page_session=...)` で有効化。`TradeToolExecutor` が `TradePageQueryService` と連携。`trade_accept` / `cancel` / `decline` は `trade_ref` または `trade_label`（`trade_id` 解決後）で実行。`my_trades` の `incoming` で accept/decline、`selling` で cancel のみ露出（`trade_virtual_page_kind` 配線時）。`DefaultCurrentStateFormatter` が `trade_current_page_snapshot_json` をプロンプトに含める。
 
 # Phase Journal
 
@@ -85,3 +85,21 @@ branch: feature/trade-page-tool-gating
 - Scope delta: なし
 - Handoff summary: 上記 Current State のとおり。
 - Next-phase impact: Phase 5 でツール定義・executor・prompt が `TradePageQueryService` / `trade_ref` と接続できる。
+
+## Phase 5
+
+- Started: 2026-03-22
+- Completed: 2026-03-22
+- Commit: （本コミット）
+- Tests: `test_tool_definitions.py`、`test_available_tools_provider.py`、`test_tool_command_mapper.py`、`test_build_tool_stack.py`、`conftest.py`、`pytest tests/` 全件通過
+- Findings:
+  - `trade_virtual_pages_enabled` は `sns_virtual_pages_enabled` と同様、`trade_page_query_service` 配線で ON（カタログと executor の両方）。
+  - 検索画面遷移時は `clear_search_filters` で条件を初期化してから引数で上書き（部分指定の取り残しを防ぐ）。
+  - ミューテーションのページ別露出は `trade_virtual_page_kind is None` のとき従来どおり（ラベル解決のみの環境向け）。
+- Plan revision check: 不要。Phase 5 checkpoint（ページツール・`trade_ref`・prompt）と整合。
+- User approval: （plan 変更なし）
+- Plan updates: なし
+- Goal check: Trade モード中にナビツールとミューテーションがページ文脈で揃い、スナップショットが要約プロンプトに載る。
+- Scope delta: なし
+- Handoff summary: 上記 Current State のとおり。
+- Next-phase impact: Phase 6 でコメント・E2E 期待を「Trade は SNS 配下でない」前提に揃える。
