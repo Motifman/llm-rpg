@@ -6,6 +6,33 @@ from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillProposalType
 
 
+def _normalize_player_app_session_state(
+    *,
+    active_game_app: str,
+    is_sns_mode_active: bool,
+    is_trade_mode_active: bool,
+) -> tuple[str, bool, bool]:
+    allowed = {"none", "sns", "trade"}
+    if active_game_app not in allowed:
+        raise ValueError(
+            f"active_game_app must be one of {allowed}, got {active_game_app!r}"
+        )
+    if active_game_app == "none":
+        if is_sns_mode_active and is_trade_mode_active:
+            raise ValueError(
+                "is_sns_mode_active and is_trade_mode_active cannot both be true when active_game_app is none"
+            )
+        if is_trade_mode_active and not is_sns_mode_active:
+            active_game_app = "trade"
+        elif is_sns_mode_active:
+            active_game_app = "sns"
+    if active_game_app == "sns":
+        return active_game_app, True, False
+    if active_game_app == "trade":
+        return active_game_app, False, True
+    return active_game_app, False, False
+
+
 @dataclass
 class PlayerLocationDto:
     """プレイヤー位置DTO"""
@@ -404,6 +431,18 @@ class PlayerAppSessionStateDto:
     trade_page_snapshot_generation: int = 0
     trade_current_page_snapshot_json: Optional[str] = None
 
+    def __post_init__(self) -> None:
+        active_game_app, is_sns_mode_active, is_trade_mode_active = (
+            _normalize_player_app_session_state(
+                active_game_app=self.active_game_app,
+                is_sns_mode_active=self.is_sns_mode_active,
+                is_trade_mode_active=self.is_trade_mode_active,
+            )
+        )
+        object.__setattr__(self, "active_game_app", active_game_app)
+        object.__setattr__(self, "is_sns_mode_active", is_sns_mode_active)
+        object.__setattr__(self, "is_trade_mode_active", is_trade_mode_active)
+
 
 @dataclass
 class PlayerCurrentStateDto:
@@ -517,31 +556,11 @@ class PlayerCurrentStateDto:
         is_sns_mode_active: bool,
         is_trade_mode_active: bool,
     ) -> tuple[str, bool, bool]:
-        allowed = {"none", "sns", "trade"}
-        if active_game_app not in allowed:
-            raise ValueError(
-                f"active_game_app must be one of {allowed}, got {active_game_app!r}"
-            )
-        if active_game_app == "none":
-            if is_sns_mode_active and is_trade_mode_active:
-                raise ValueError(
-                    "is_sns_mode_active and is_trade_mode_active cannot both be true when active_game_app is none"
-                )
-            if is_trade_mode_active and not is_sns_mode_active:
-                active_game_app = "trade"
-            elif is_sns_mode_active:
-                active_game_app = "sns"
-        ag = active_game_app
-        if ag == "sns":
-            is_sns_mode_active = True
-            is_trade_mode_active = False
-        elif ag == "trade":
-            is_sns_mode_active = False
-            is_trade_mode_active = True
-        else:
-            is_sns_mode_active = False
-            is_trade_mode_active = False
-        return active_game_app, is_sns_mode_active, is_trade_mode_active
+        return _normalize_player_app_session_state(
+            active_game_app=active_game_app,
+            is_sns_mode_active=is_sns_mode_active,
+            is_trade_mode_active=is_trade_mode_active,
+        )
 
     @property
     def world_state(self) -> PlayerWorldStateDto:

@@ -13,7 +13,7 @@ branch: codex/player-current-state-dto-refactoring-phase5
 - Active phase: なし（feature 完了）
 - Last completed phase: **Phase 5**（Compat 縮小方針の固定）
 - Next recommended action: `flow-review` / `flow-ship`、または main へのマージ判断
-- Handoff summary: Phase 5 で [`PHASE5_COMPAT_POLICY.md`](/Users/minagawa/.codex/worktrees/4a2d/ai_rpg_world/.ai-workflow/features/player-current-state-dto-refactoring/PHASE5_COMPAT_POLICY.md) を追加し、`PlayerCurrentStateDto` は当面 compat facade として維持しつつ、canonical owner は `world_state` / `runtime_context` / `app_session_state` に置く方針を固定した。新規 app-local state は top-level ではなく `app_session_state` に閉じ込める。
+- Handoff summary: Phase 5 で [`PHASE5_COMPAT_POLICY.md`](/Users/minagawa/.codex/worktrees/aece/ai_rpg_world/.ai-workflow/features/player-current-state-dto-refactoring/PHASE5_COMPAT_POLICY.md) を追加し、`PlayerCurrentStateDto` は当面 compat facade として維持しつつ、canonical owner は `world_state` / `runtime_context` / `app_session_state` に置く方針を固定した。新規 app-local state は top-level ではなく `app_session_state` に閉じ込める。
 
 # Phase Journal
 
