@@ -13,6 +13,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SNS_ENTER,
     TOOL_NAME_SNS_LOGOUT,
     TOOL_NAME_SNS_VIEW_CURRENT_PAGE,
+    TOOL_NAME_TRADE_ENTER,
     TOOL_NAME_TRADE_OFFER,
 )
 from ai_rpg_world.application.llm.wiring import create_llm_agent_wiring
@@ -172,6 +173,7 @@ class TestSnsModeWiringPromptTools:
         assert TOOL_NAME_SNS_ENTER in names
         assert TOOL_NAME_SNS_LOGOUT not in names
         assert TOOL_NAME_SNS_CREATE_POST not in names
+        assert TOOL_NAME_TRADE_ENTER in names
         assert TOOL_NAME_TRADE_OFFER not in names
         assert "sns_home_timeline" not in names
         assert "sns_list_my_posts" not in names
@@ -196,7 +198,8 @@ class TestSnsModeWiringPromptTools:
         assert TOOL_NAME_SNS_ENTER not in names
         assert TOOL_NAME_SNS_LOGOUT in names
         assert TOOL_NAME_SNS_CREATE_POST in names
-        assert TOOL_NAME_TRADE_OFFER in names
+        assert TOOL_NAME_TRADE_ENTER not in names
+        assert TOOL_NAME_TRADE_OFFER not in names
         assert "sns_home_timeline" not in names
         assert "sns_list_my_posts" not in names
         assert "sns_list_user_posts" not in names

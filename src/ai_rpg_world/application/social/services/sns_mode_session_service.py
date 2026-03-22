@@ -39,5 +39,15 @@ class SnsModeSessionService:
     def exit_sns_mode(self, player_id: int) -> None:
         self._active_app.exit_sns(player_id)
 
+    def enter_trade_mode(self, player_id: int) -> None:
+        """取引所アプリをフォアグラウンドにする（単一スロット。SNS アクティブ時は拒否）。"""
+        self._active_app.enter_trade(player_id)
+
+    def exit_trade_mode(self, player_id: int) -> None:
+        self._active_app.exit_trade(player_id)
+
+    def is_trade_mode_active(self, player_id: int) -> bool:
+        return self._active_app.get_active_app(player_id) == GameAppKind.TRADE
+
 
 __all__ = ["SnsModeSessionService"]

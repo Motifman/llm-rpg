@@ -65,7 +65,7 @@ def register_default_tools(
 ) -> None:
     """標準ツール群を登録し、依存サービスがあるカテゴリだけ追加する。
 
-    Trade は sns_enabled と同時にのみ登録する（一覧の露出は SNS モードと各 resolver で制御）。
+    Trade は trade_enabled のとき登録し、一覧の露出は取引所モードと各 resolver で制御する。
     """
     if not isinstance(registry, IGameToolRegistry):
         raise TypeError("registry must be IGameToolRegistry")
@@ -98,8 +98,7 @@ def register_default_tools(
         _register_specs(registry, get_guild_specs())
     if shop_enabled:
         _register_specs(registry, get_shop_specs())
-    # Trade は SNS カタログとセットで登録し、露出は SNS モード ON + 各 resolver で制御する
-    if trade_enabled and sns_enabled:
+    if trade_enabled:
         _register_specs(registry, get_trade_specs())
     if sns_enabled:
         _register_specs(registry, get_sns_specs())

@@ -1,5 +1,7 @@
 """DefaultAvailableToolsProvider のテスト（正常・例外）"""
 
+from dataclasses import replace
+
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
@@ -34,6 +36,9 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SNS_ENTER,
     TOOL_NAME_SNS_LOGOUT,
     TOOL_NAME_SNS_VIEW_CURRENT_PAGE,
+    TOOL_NAME_TRADE_ACCEPT,
+    TOOL_NAME_TRADE_ENTER,
+    TOOL_NAME_TRADE_EXIT,
     TOOL_NAME_TRADE_OFFER,
 )
 from ai_rpg_world.application.llm.services.tool_catalog import (
@@ -128,10 +133,11 @@ class TestDefaultAvailableToolsProvider:
     def provider_sns_trade(self, registry_sns_trade):
         return DefaultAvailableToolsProvider(registry_sns_trade)
 
-    def test_sns_mode_off_shows_only_sns_enter_among_sns_tools(self, provider_sns_trade):
-        """SNS モード OFF では SNS 系は sns_enter のみ（投稿・取引は出ない）"""
+    def test_sns_mode_off_shows_sns_enter_and_trade_enter_only(self, provider_sns_trade):
+        """未起動では SNS は sns_enter のみ、取引は trade_enter のみ（ミューテーションは出ない）"""
         ctx = _context_with_moves(1)
         ctx.is_sns_mode_active = False
+        ctx.is_trade_mode_active = False
         ctx.inventory_items = [InventoryItemDto(1, 10, "剣", 1)]
         ctx.available_trades = [AvailableTradeSummaryDto(trade_id=1, item_name="盾", requested_gold=10)]
         tools = provider_sns_trade.get_available_tools(ctx)
@@ -139,11 +145,14 @@ class TestDefaultAvailableToolsProvider:
         assert TOOL_NAME_SNS_ENTER in names
         assert TOOL_NAME_SNS_LOGOUT not in names
         assert TOOL_NAME_SNS_CREATE_POST not in names
+        assert TOOL_NAME_TRADE_ENTER in names
+        assert TOOL_NAME_TRADE_EXIT not in names
         assert TOOL_NAME_TRADE_OFFER not in names
+        assert TOOL_NAME_TRADE_ACCEPT not in names
         assert TOOL_NAME_SNS_VIEW_CURRENT_PAGE not in names
 
-    def test_sns_mode_on_shows_sns_interaction_and_trade_not_enter(self, provider_sns_trade):
-        """SNS モード ON では操作系 SNS・取引が出るが sns_enter は出ない"""
+    def test_sns_mode_on_shows_sns_tools_trade_family_hidden(self, provider_sns_trade):
+        """SNS モード ON では SNS 操作のみ。取引ファミリーは非表示"""
         ctx = _context_with_moves(1)
         ctx.is_sns_mode_active = True
         ctx.inventory_items = [InventoryItemDto(1, 10, "剣", 1)]
@@ -153,8 +162,24 @@ class TestDefaultAvailableToolsProvider:
         assert TOOL_NAME_SNS_ENTER not in names
         assert TOOL_NAME_SNS_LOGOUT in names
         assert TOOL_NAME_SNS_CREATE_POST in names
-        assert TOOL_NAME_TRADE_OFFER in names
+        assert TOOL_NAME_TRADE_ENTER not in names
+        assert TOOL_NAME_TRADE_OFFER not in names
         assert TOOL_NAME_SNS_VIEW_CURRENT_PAGE not in names
+
+    def test_trade_mode_on_shows_trade_mutations_and_exit_not_enter(self, provider_sns_trade):
+        """取引所モード ON では 4 ミューテーションと trade_exit。trade_enter は出ない"""
+        ctx = replace(
+            _context_with_moves(1),
+            active_game_app="trade",
+            inventory_items=[InventoryItemDto(1, 10, "剣", 1)],
+            available_trades=[AvailableTradeSummaryDto(trade_id=1, item_name="盾", requested_gold=10)],
+        )
+        tools = provider_sns_trade.get_available_tools(ctx)
+        names = [t["function"]["name"] for t in tools if t.get("type") == "function"]
+        assert TOOL_NAME_TRADE_ENTER not in names
+        assert TOOL_NAME_TRADE_EXIT in names
+        assert TOOL_NAME_TRADE_OFFER in names
+        assert TOOL_NAME_TRADE_ACCEPT in names
 
     def test_get_available_tools_context_none_returns_no_op_only(self, provider):
         """context が None のときは no_op のみ（move_to_destination は利用不可）"""

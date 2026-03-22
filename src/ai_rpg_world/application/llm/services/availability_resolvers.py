@@ -540,14 +540,16 @@ class SnsVirtualPagePagingAvailabilityResolver(IAvailabilityResolver):
 
 
 class SnsEnterToolAvailabilityResolver(IAvailabilityResolver):
-    """ゲーム内 SNS アプリを開くツール。SNS モード OFF のときのみ一覧に出す。"""
+    """ゲーム内 SNS アプリを開くツール。どのアプリも未起動のときのみ一覧に出す。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return context is not None and not context.is_sns_mode_active
+        if context is None:
+            return False
+        return not context.is_sns_mode_active and not context.is_trade_mode_active
 
 
 class SnsModeRequiredAvailabilityResolver(IAvailabilityResolver):
-    """内側のリゾルバを、SNS モード ON のときだけ評価する（Trade 等）。"""
+    """内側のリゾルバを、SNS モード ON のときだけ評価する。"""
 
     def __init__(self, inner: IAvailabilityResolver) -> None:
         self._inner = inner
@@ -556,6 +558,34 @@ class SnsModeRequiredAvailabilityResolver(IAvailabilityResolver):
         if context is None or not context.is_sns_mode_active:
             return False
         return self._inner.is_available(context)
+
+
+class TradeModeRequiredAvailabilityResolver(IAvailabilityResolver):
+    """内側のリゾルバを、取引所モード ON のときだけ評価する。"""
+
+    def __init__(self, inner: IAvailabilityResolver) -> None:
+        self._inner = inner
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None or not context.is_trade_mode_active:
+            return False
+        return self._inner.is_available(context)
+
+
+class TradeEnterToolAvailabilityResolver(IAvailabilityResolver):
+    """取引所に入るツール。SNS も取引所も未起動のときのみ一覧に出す。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None:
+            return False
+        return not context.is_sns_mode_active and not context.is_trade_mode_active
+
+
+class TradeExitToolAvailabilityResolver(IAvailabilityResolver):
+    """取引所を閉じるツール。取引所モード ON のときのみ一覧に出す。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        return context is not None and context.is_trade_mode_active
 
 
 class MemoryQueryAvailabilityResolver(IAvailabilityResolver):
