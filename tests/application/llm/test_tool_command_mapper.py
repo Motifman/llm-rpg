@@ -1532,7 +1532,7 @@ class TestToolCommandMapperRequiredArgsValidation:
         result = mapper.execute(1, TOOL_NAME_TRADE_ACCEPT, {})
         assert result.success is False
         assert result.error_code == "INVALID_TARGET_LABEL"
-        assert "trade_label" in result.message or "trade_ref" in result.message
+        assert "trade_ref" in result.message
         trade_service.accept_trade.assert_not_called()
 
     def test_guild_create_missing_spot_id_returns_invalid_target_label(self):
@@ -1585,7 +1585,7 @@ class TestToolCommandMapperRequiredArgsValidation:
         result = mapper.execute(1, TOOL_NAME_TRADE_CANCEL, {})
         assert result.success is False
         assert result.error_code == "INVALID_TARGET_LABEL"
-        assert "trade_label" in result.message or "trade_ref" in result.message
+        assert "trade_ref" in result.message
         trade_service.cancel_trade.assert_not_called()
 
     def test_trade_decline_missing_trade_id_returns_invalid_target_label(self):
@@ -1597,7 +1597,7 @@ class TestToolCommandMapperRequiredArgsValidation:
         result = mapper.execute(1, TOOL_NAME_TRADE_DECLINE, {})
         assert result.success is False
         assert result.error_code == "INVALID_TARGET_LABEL"
-        assert "trade_label" in result.message or "trade_ref" in result.message
+        assert "trade_ref" in result.message
         trade_service.decline_trade.assert_not_called()
 
     def test_trade_view_current_page_returns_snapshot_json(self):

@@ -268,12 +268,6 @@ class TradeToolExecutor:
             return exception_result(e)
 
     def _resolve_trade_id(self, player_id: int, args: Dict[str, Any]) -> Optional[int]:
-        tid = args.get("trade_id")
-        if tid is not None:
-            try:
-                return int(tid)
-            except (TypeError, ValueError):
-                return None
         ref = args.get("trade_ref")
         if ref is not None and str(ref).strip() and self._trade_page_session is not None:
             resolved = self._trade_page_session.resolve_trade_ref(
