@@ -38,7 +38,7 @@ branch: codex/trade-label-ref-unification
 
 - Started: 2026-03-22
 - Completed: 2026-03-22
-- Commit: e9cf84e
+- Commit: 332d169
 - Tests: `pytest tests/application/llm/`
 - Findings:
   - `ToolCommandMapper` は引数 resolver を通さないため、mapper 単体テストの欠落系は executor の `invalid_arg_result("trade_ref")` に依存する（メッセージに `trade_ref` を含む）。
