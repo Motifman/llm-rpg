@@ -11,8 +11,11 @@ from ai_rpg_world.application.world.contracts.dtos import (
     AttentionLevelOptionDto,
     ChestItemDto,
     ConversationChoiceDto,
+    PlayerAppSessionStateDto,
     PlayerCurrentStateDto,
     PlayerMovementOptionsDto,
+    PlayerRuntimeContextDto,
+    PlayerWorldStateDto,
     UsableSkillDto,
     VisibleObjectDto,
     InventoryItemDto,
@@ -242,13 +245,6 @@ class PlayerCurrentStateBuilder:
             distance=distance,
             player_id=player_id,
         )
-        actionable_objects = self._visible_object_builder.build_actionable_objects(
-            visible_objects
-        )
-        notable_objects = self._visible_object_builder.build_notable_objects(
-            visible_objects
-        )
-
         actor = self._get_player_actor(physical_map, player_id)
         current_tick_value = (
             self._game_time_provider.get_current_tick().value
@@ -315,81 +311,94 @@ class PlayerCurrentStateBuilder:
             )
             current_game_time_label = game_dt.format_for_display()
 
-        from ai_rpg_world.application.social.sns_virtual_pages.kinds import SnsVirtualPageKind
+        world_state = self._build_world_state(
+            query=query,
+            player_status=player_status,
+            player_name=player_name,
+            spot=spot,
+            coord=coord,
+            area_ids=area_ids,
+            area_names=area_names,
+            area_id=area_id,
+            area_name=area_name,
+            area_description=area_description,
+            current_player_ids=current_player_ids,
+            connected_spot_ids=connected_spot_ids,
+            connected_spot_names=connected_spot_names,
+            weather_state=weather_state,
+            current_terrain_type=current_terrain_type,
+            visible_objects=visible_objects,
+            distance=distance,
+            available_moves=available_moves,
+            total_available_moves=total_available_moves,
+            available_location_areas=available_location_areas,
+            is_busy=is_busy,
+            busy_until_tick=busy_until_tick,
+            has_active_path=has_active_path,
+            visible_tile_map=visible_tile_map,
+            current_game_time_label=current_game_time_label,
+        )
+        runtime_context = self._build_runtime_context(
+            query=query,
+            player_id=player_id,
+            current_spot_id=int(player_status.current_spot_id),
+            physical_map=physical_map,
+            visible_objects=visible_objects,
+            area_ids=area_ids,
+            active_harvest=active_harvest,
+        )
+        app_session_state = self._build_app_session_state(player_id=query.player_id)
+        return PlayerCurrentStateDto.from_components(
+            world_state=world_state,
+            runtime_context=runtime_context,
+            app_session_state=app_session_state,
+        )
 
-        sns_virtual_page_kind: Optional[str] = None
-        sns_home_tab: Optional[str] = None
-        sns_page_snapshot_generation = 0
-        sns_current_page_snapshot_json: Optional[str] = None
-        sns_profile_is_self: Optional[bool] = None
-        if (
-            self._sns_page_session is not None
-            and self._sns_mode_session is not None
-            and self._sns_mode_session.is_sns_mode_active(query.player_id)
-        ):
-            st = self._sns_page_session.get_state(query.player_id)
-            sns_virtual_page_kind = st.page_kind.value
-            sns_home_tab = (
-                st.home_tab.value if st.page_kind == SnsVirtualPageKind.HOME else None
-            )
-            sns_page_snapshot_generation = st.snapshot_generation
-            if st.page_kind == SnsVirtualPageKind.PROFILE:
-                tid = st.profile_target_user_id
-                sns_profile_is_self = tid is None or tid == query.player_id
-            if self._sns_page_query_service is not None:
-                from ai_rpg_world.application.social.sns_virtual_pages import (
-                    sns_snapshot_to_json,
-                )
+    def build_visible_objects(
+        self,
+        *,
+        physical_map: "PhysicalMapAggregate",
+        origin: Coordinate,
+        distance: int,
+        player_id: PlayerId,
+    ) -> List[VisibleObjectDto]:
+        return self._visible_object_builder.build_visible_objects(
+            physical_map=physical_map,
+            origin=origin,
+            distance=distance,
+            player_id=player_id,
+        )
 
-                snapshot = self._sns_page_query_service.get_current_page_snapshot(
-                    player_id=query.player_id,
-                    viewer_user_id=query.player_id,
-                )
-                sns_page_snapshot_generation = snapshot.snapshot_generation
-                sns_current_page_snapshot_json = sns_snapshot_to_json(snapshot)
-
-        trade_virtual_page_kind: Optional[str] = None
-        trade_my_trades_tab: Optional[str] = None
-        trade_page_snapshot_generation = 0
-        trade_current_page_snapshot_json: Optional[str] = None
-        if (
-            self._trade_page_session is not None
-            and self._sns_mode_session is not None
-            and self._sns_mode_session.is_trade_mode_active(query.player_id)
-        ):
-            from ai_rpg_world.application.trade.trade_virtual_pages.kinds import (
-                TradeVirtualPageKind,
-            )
-            from ai_rpg_world.application.trade.trade_virtual_pages.snapshot_json import (
-                trade_page_state_to_json,
-            )
-
-            st = self._trade_page_session.get_state(query.player_id)
-            trade_virtual_page_kind = st.page_kind.value
-            trade_my_trades_tab = (
-                st.my_trades_tab.value if st.page_kind == TradeVirtualPageKind.MY_TRADES else None
-            )
-            if self._trade_page_query_service is not None:
-                trade_current_page_snapshot_json = self._trade_page_query_service.build_current_page_snapshot_json(
-                    query.player_id
-                )
-            else:
-                trade_current_page_snapshot_json = trade_page_state_to_json(st)
-            st = self._trade_page_session.get_state(query.player_id)
-            trade_page_snapshot_generation = st.snapshot_generation
-
-        # 境界: ツール/runtime context（LLM prompt 上のラベル解決・利用可否判定に利用）
-        # - available_moves, visible_objects, actionable/notable
-        # - inventory_items, chest_items, nearby_shops, available_trades
-        # - memory retrieval hints: active_quest_ids, guild_ids, nearby_shop_ids
-        if self._sns_mode_session is not None:
-            active_game_app = self._sns_mode_session.active_game_app_session.get_active_app(
-                query.player_id
-            ).value
-        else:
-            active_game_app = "none"
-
-        return PlayerCurrentStateDto(
+    def _build_world_state(
+        self,
+        *,
+        query: GetPlayerCurrentStateQuery,
+        player_status: "PlayerStatusAggregate",
+        player_name: str,
+        spot: "Spot",
+        coord: Coordinate,
+        area_ids: List[int],
+        area_names: List[str],
+        area_id: Optional[int],
+        area_name: Optional[str],
+        area_description: Optional[str],
+        current_player_ids: Set[int],
+        connected_spot_ids: Set[int],
+        connected_spot_names: Set[str],
+        weather_state: WeatherState,
+        current_terrain_type: Optional[str],
+        visible_objects: List[VisibleObjectDto],
+        distance: int,
+        available_moves: Optional[list],
+        total_available_moves: Optional[int],
+        available_location_areas: Optional[List[AvailableLocationAreaDto]],
+        is_busy: bool,
+        busy_until_tick: Optional[int],
+        has_active_path: bool,
+        visible_tile_map: Optional["VisibleTileMapDto"],
+        current_game_time_label: Optional[str],
+    ) -> PlayerWorldStateDto:
+        return PlayerWorldStateDto(
             player_id=query.player_id,
             player_name=player_name,
             current_spot_id=int(player_status.current_spot_id),
@@ -398,48 +407,57 @@ class PlayerCurrentStateBuilder:
             x=coord.x,
             y=coord.y,
             z=coord.z,
-            area_ids=area_ids,
-            area_names=area_names,
-            area_id=area_id,
-            area_name=area_name,
-            current_location_description=area_description,
             current_player_count=len(current_player_ids),
             current_player_ids=current_player_ids,
             connected_spot_ids=connected_spot_ids,
             connected_spot_names=connected_spot_names,
             weather_type=weather_state.weather_type.value,
             weather_intensity=weather_state.intensity,
-            current_game_time_label=current_game_time_label,
             current_terrain_type=current_terrain_type,
             visible_objects=visible_objects,
             view_distance=distance,
-            visible_tile_map=visible_tile_map,
             available_moves=available_moves,
             total_available_moves=total_available_moves,
-            available_location_areas=available_location_areas,
             attention_level=player_status.attention_level,
+            area_ids=area_ids,
+            area_names=area_names,
+            area_id=area_id,
+            area_name=area_name,
+            available_location_areas=available_location_areas,
+            current_location_description=area_description,
             is_busy=is_busy,
             busy_until_tick=busy_until_tick,
             has_active_path=has_active_path,
+            visible_tile_map=visible_tile_map,
+            current_game_time_label=current_game_time_label,
+        )
+
+    def _build_runtime_context(
+        self,
+        *,
+        query: GetPlayerCurrentStateQuery,
+        player_id: PlayerId,
+        current_spot_id: int,
+        physical_map: "PhysicalMapAggregate",
+        visible_objects: List[VisibleObjectDto],
+        area_ids: List[int],
+        active_harvest: Optional[ActiveHarvestDto],
+    ) -> PlayerRuntimeContextDto:
+        actionable_objects = self._visible_object_builder.build_actionable_objects(
+            visible_objects
+        )
+        notable_objects = self._visible_object_builder.build_notable_objects(
+            visible_objects
+        )
+        return PlayerRuntimeContextDto(
             inventory_items=self._runtime_context_builder.build_inventory_items(player_id),
-            chest_items=self._runtime_context_builder.build_chest_items(physical_map, visible_objects),
+            chest_items=self._runtime_context_builder.build_chest_items(
+                physical_map, visible_objects
+            ),
             active_conversation=self._runtime_context_builder.build_active_conversation(
                 query.player_id, visible_objects
             ),
             active_harvest=active_harvest,
-            active_quest_ids=self._runtime_context_builder.build_active_quest_ids(query.player_id),
-            guild_ids=self._runtime_context_builder.build_guild_ids(query.player_id),
-            nearby_shop_ids=self._runtime_context_builder.build_nearby_shop_ids(
-                int(player_status.current_spot_id), area_ids
-            ),
-            active_quests=self._runtime_context_builder.build_active_quests(query.player_id),
-            guild_memberships=self._runtime_context_builder.build_guild_memberships(
-                query.player_id, area_ids
-            ),
-            nearby_shops=self._runtime_context_builder.build_nearby_shops(
-                int(player_status.current_spot_id), area_ids
-            ),
-            available_trades=self._runtime_context_builder.build_available_trades(query.player_id),
             usable_skills=self._runtime_context_builder.build_usable_skills(query.player_id),
             equipable_skill_candidates=self._runtime_context_builder.build_equipable_skill_candidates(
                 query.player_id
@@ -459,6 +477,97 @@ class PlayerCurrentStateBuilder:
             ),
             actionable_objects=actionable_objects,
             notable_objects=notable_objects,
+            active_quest_ids=self._runtime_context_builder.build_active_quest_ids(query.player_id),
+            guild_ids=self._runtime_context_builder.build_guild_ids(query.player_id),
+            nearby_shop_ids=self._runtime_context_builder.build_nearby_shop_ids(
+                current_spot_id, area_ids
+            ),
+            active_quests=self._runtime_context_builder.build_active_quests(query.player_id),
+            guild_memberships=self._runtime_context_builder.build_guild_memberships(
+                query.player_id, area_ids
+            ),
+            nearby_shops=self._runtime_context_builder.build_nearby_shops(
+                current_spot_id, area_ids
+            ),
+            available_trades=self._runtime_context_builder.build_available_trades(
+                query.player_id
+            ),
+        )
+
+    def _build_app_session_state(self, *, player_id: int) -> PlayerAppSessionStateDto:
+        from ai_rpg_world.application.social.sns_virtual_pages.kinds import SnsVirtualPageKind
+
+        sns_virtual_page_kind: Optional[str] = None
+        sns_home_tab: Optional[str] = None
+        sns_page_snapshot_generation = 0
+        sns_current_page_snapshot_json: Optional[str] = None
+        sns_profile_is_self: Optional[bool] = None
+        if (
+            self._sns_page_session is not None
+            and self._sns_mode_session is not None
+            and self._sns_mode_session.is_sns_mode_active(player_id)
+        ):
+            st = self._sns_page_session.get_state(player_id)
+            sns_virtual_page_kind = st.page_kind.value
+            sns_home_tab = (
+                st.home_tab.value if st.page_kind == SnsVirtualPageKind.HOME else None
+            )
+            sns_page_snapshot_generation = st.snapshot_generation
+            if st.page_kind == SnsVirtualPageKind.PROFILE:
+                tid = st.profile_target_user_id
+                sns_profile_is_self = tid is None or tid == player_id
+            if self._sns_page_query_service is not None:
+                from ai_rpg_world.application.social.sns_virtual_pages import (
+                    sns_snapshot_to_json,
+                )
+
+                snapshot = self._sns_page_query_service.get_current_page_snapshot(
+                    player_id=player_id,
+                    viewer_user_id=player_id,
+                )
+                sns_page_snapshot_generation = snapshot.snapshot_generation
+                sns_current_page_snapshot_json = sns_snapshot_to_json(snapshot)
+
+        trade_virtual_page_kind: Optional[str] = None
+        trade_my_trades_tab: Optional[str] = None
+        trade_page_snapshot_generation = 0
+        trade_current_page_snapshot_json: Optional[str] = None
+        if (
+            self._trade_page_session is not None
+            and self._sns_mode_session is not None
+            and self._sns_mode_session.is_trade_mode_active(player_id)
+        ):
+            from ai_rpg_world.application.trade.trade_virtual_pages.kinds import (
+                TradeVirtualPageKind,
+            )
+            from ai_rpg_world.application.trade.trade_virtual_pages.snapshot_json import (
+                trade_page_state_to_json,
+            )
+
+            st = self._trade_page_session.get_state(player_id)
+            trade_virtual_page_kind = st.page_kind.value
+            trade_my_trades_tab = (
+                st.my_trades_tab.value if st.page_kind == TradeVirtualPageKind.MY_TRADES else None
+            )
+            if self._trade_page_query_service is not None:
+                trade_current_page_snapshot_json = (
+                    self._trade_page_query_service.build_current_page_snapshot_json(
+                        player_id
+                    )
+                )
+            else:
+                trade_current_page_snapshot_json = trade_page_state_to_json(st)
+            st = self._trade_page_session.get_state(player_id)
+            trade_page_snapshot_generation = st.snapshot_generation
+
+        if self._sns_mode_session is not None:
+            active_game_app = self._sns_mode_session.active_game_app_session.get_active_app(
+                player_id
+            ).value
+        else:
+            active_game_app = "none"
+
+        return PlayerAppSessionStateDto(
             active_game_app=active_game_app,
             is_sns_mode_active=False,
             is_trade_mode_active=False,
@@ -471,21 +580,6 @@ class PlayerCurrentStateBuilder:
             trade_my_trades_tab=trade_my_trades_tab,
             trade_page_snapshot_generation=trade_page_snapshot_generation,
             trade_current_page_snapshot_json=trade_current_page_snapshot_json,
-        )
-
-    def build_visible_objects(
-        self,
-        *,
-        physical_map: "PhysicalMapAggregate",
-        origin: Coordinate,
-        distance: int,
-        player_id: PlayerId,
-    ) -> List[VisibleObjectDto]:
-        return self._visible_object_builder.build_visible_objects(
-            physical_map=physical_map,
-            origin=origin,
-            distance=distance,
-            player_id=player_id,
         )
 
     def _build_active_harvest(

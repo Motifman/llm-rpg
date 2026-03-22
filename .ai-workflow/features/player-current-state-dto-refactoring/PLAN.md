@@ -5,7 +5,7 @@ slug: player-current-state-dto-refactoring
 status: planned
 created_at: 2026-03-23
 updated_at: 2026-03-23
-branch: codex/player-current-state-dto-refactoring-phase1
+branch: codex/player-current-state-dto-refactoring-phase2
 ---
 
 # Objective
@@ -173,6 +173,7 @@ branch: codex/player-current-state-dto-refactoring-phase1
   - runtime context builder 側に寄せるべき責務が多すぎて、phase 境界の引き直しが必要な場合
 - Notes:
   - `PlayerRuntimeContextBuilder` を再利用し、重複抽出を避ける。
+  - Phase 2 では `PlayerCurrentStateBuilder` の public return shape を変えず、private helper + `PlayerCurrentStateDto.from_components` に寄せて compose を明示する。
 
 ## Phase 3: Formatter / Availability / UI の依存整理
 
