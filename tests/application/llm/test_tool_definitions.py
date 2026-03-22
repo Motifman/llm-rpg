@@ -66,10 +66,12 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SKILL_REJECT_PROPOSAL,
     TOOL_NAME_WHISPER,
     TOOL_NAME_SNS_ENTER,
-    TOOL_NAME_SNS_HOME_TIMELINE,
-    TOOL_NAME_SNS_LIST_MY_POSTS,
-    TOOL_NAME_SNS_LIST_USER_POSTS,
+    TOOL_NAME_SNS_CREATE_REPLY,
+    TOOL_NAME_SNS_LIKE_POST,
+    TOOL_NAME_SNS_FOLLOW,
+    TOOL_NAME_SNS_MARK_NOTIFICATION_READ,
     TOOL_NAME_SNS_LOGOUT,
+    TOOL_NAME_SNS_VIEW_CURRENT_PAGE,
     TOOL_NAME_TRADE_OFFER,
 )
 
@@ -299,6 +301,45 @@ class TestRegisterDefaultTools:
         names = [e[0].name for e in registry.get_definitions_with_resolvers()]
         assert TOOL_NAME_SNS_ENTER in names
         assert TOOL_NAME_SNS_LOGOUT in names
-        assert TOOL_NAME_SNS_HOME_TIMELINE in names
-        assert TOOL_NAME_SNS_LIST_MY_POSTS in names
-        assert TOOL_NAME_SNS_LIST_USER_POSTS in names
+
+    def test_register_default_tools_sns_definitions_use_ref_arguments(self):
+        """仮想画面 SNS の書き込み系ツールは raw ID ではなく ref を表に出す"""
+        registry = DefaultGameToolRegistry()
+        register_default_tools(registry, sns_enabled=True)
+        defs = {
+            entry[0].name: entry[0] for entry in registry.get_definitions_with_resolvers()
+        }
+
+        create_reply = defs[TOOL_NAME_SNS_CREATE_REPLY].parameters
+        assert "parent_post_ref" in create_reply["properties"]
+        assert "parent_reply_ref" in create_reply["properties"]
+        assert "parent_post_id" not in create_reply["properties"]
+        assert "parent_reply_id" not in create_reply["properties"]
+
+        like_post = defs[TOOL_NAME_SNS_LIKE_POST].parameters
+        assert "post_ref" in like_post["properties"]
+        assert "post_id" not in like_post["properties"]
+
+        follow = defs[TOOL_NAME_SNS_FOLLOW].parameters
+        assert "target_user_ref" in follow["properties"]
+        assert "target_user_id" not in follow["properties"]
+
+        mark_notification = defs[TOOL_NAME_SNS_MARK_NOTIFICATION_READ].parameters
+        assert "notification_ref" in mark_notification["properties"]
+        assert "notification_id" not in mark_notification["properties"]
+
+    def test_register_default_tools_sns_virtual_pages_adds_navigation_tools(self):
+        """sns_enabled かつ sns_virtual_pages_enabled で仮想画面ナビツールが追加される"""
+        registry = DefaultGameToolRegistry()
+        register_default_tools(
+            registry, sns_enabled=True, sns_virtual_pages_enabled=True
+        )
+        names = [e[0].name for e in registry.get_definitions_with_resolvers()]
+        assert TOOL_NAME_SNS_VIEW_CURRENT_PAGE in names
+
+    def test_register_default_tools_virtual_pages_without_sns_does_not_add(self):
+        """sns_enabled が False なら sns_virtual_pages_enabled だけではナビを足さない"""
+        registry = DefaultGameToolRegistry()
+        register_default_tools(registry, sns_virtual_pages_enabled=True)
+        names = [e[0].name for e in registry.get_definitions_with_resolvers()]
+        assert TOOL_NAME_SNS_VIEW_CURRENT_PAGE not in names

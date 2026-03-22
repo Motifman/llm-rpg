@@ -340,3 +340,11 @@ class TestDefaultCurrentStateFormatter:
         dto = _minimal_current_state_dto(current_game_time_label="")
         text = formatter.format(dto)
         assert "現在時刻:" not in text
+
+    def test_format_includes_current_sns_page_snapshot_when_present(self, formatter):
+        dto = _minimal_current_state_dto()
+        dto.sns_current_page_snapshot_json = '{"page_kind":"home","home":{"posts":[{"post_ref":"r_post_01"}]}}'
+        text = formatter.format(dto)
+        assert "現在のSNS画面:" in text
+        assert '"page_kind":"home"' in text
+        assert '"post_ref":"r_post_01"' in text

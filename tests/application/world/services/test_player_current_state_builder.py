@@ -17,6 +17,17 @@ from ai_rpg_world.application.world.services.gateway_based_connected_spots_provi
 from ai_rpg_world.application.observation.services.player_audience_query_service import (
     PlayerAudienceQueryService,
 )
+from ai_rpg_world.application.social.services.sns_mode_session_service import (
+    SnsModeSessionService,
+)
+from ai_rpg_world.application.social.sns_virtual_pages import (
+    SnsPageSessionService,
+    SnsVirtualPageSnapshotDto,
+)
+from ai_rpg_world.application.social.sns_virtual_pages.kinds import SnsVirtualPageKind
+from ai_rpg_world.application.social.sns_virtual_pages.page_snapshot_dtos import (
+    SnsPagingSnapshotDto,
+)
 from ai_rpg_world.application.world.services.player_current_state_builder import (
     PlayerCurrentStateBuilder,
 )
@@ -268,6 +279,61 @@ class TestPlayerCurrentStateBuilder:
         assert result.active_harvest.target_world_object_id == 200
         assert result.active_harvest.target_display_name
         assert result.active_harvest.finish_tick == 15
+
+    def test_build_player_current_state_includes_current_sns_page_snapshot_json(self):
+        data_store = InMemoryDataStore()
+        status_repo = InMemoryPlayerStatusRepository(data_store)
+        profile_repo = InMemoryPlayerProfileRepository(data_store)
+        phys_repo = InMemoryPhysicalMapRepository(data_store)
+        spot_repo = InMemorySpotRepository(data_store)
+        spot_repo.save(Spot(SpotId(1), "Town", "A town"))
+        sns_mode_session = SnsModeSessionService()
+        sns_page_session = SnsPageSessionService()
+        sns_mode_session.enter_sns_mode(1)
+        sns_page_session.on_enter_sns(1)
+        sns_page_query_service = MagicMock()
+        sns_page_query_service.get_current_page_snapshot.return_value = (
+            SnsVirtualPageSnapshotDto(
+                page_kind=SnsVirtualPageKind.HOME,
+                snapshot_generation=1,
+                paging=SnsPagingSnapshotDto(offset=0, limit=20, has_more=False),
+            )
+        )
+        builder = PlayerCurrentStateBuilder(
+            player_status_repository=status_repo,
+            player_profile_repository=profile_repo,
+            spot_repository=spot_repo,
+            connected_spots_provider=GatewayBasedConnectedSpotsProvider(phys_repo),
+            player_audience_query=PlayerAudienceQueryService(status_repo),
+            sns_mode_session=sns_mode_session,
+            sns_page_session=sns_page_session,
+            sns_page_query_service=sns_page_query_service,
+        )
+        profile_repo.save(_make_profile(1, "Alice"))
+        status = _make_status(1, 1, 0, 0)
+        status_repo.save(status)
+        actor = WorldObject(
+            object_id=WorldObjectId.create(1),
+            coordinate=Coordinate(0, 0, 0),
+            object_type=ObjectTypeEnum.PLAYER,
+            component=ActorComponent(direction=DirectionEnum.SOUTH, player_id=PlayerId(1)),
+        )
+        physical_map = _make_map(1, [actor])
+        result = builder.build_player_current_state(
+            query=GetPlayerCurrentStateQuery(player_id=1),
+            player_status=status,
+            player_name="Alice",
+            spot=spot_repo.find_by_id(SpotId(1)),
+            physical_map=physical_map,
+            available_moves_result=None,
+        )
+        assert result.sns_virtual_page_kind == "home"
+        assert result.sns_current_page_snapshot_json is not None
+        assert '"page_kind": "home"' in result.sns_current_page_snapshot_json
+        sns_page_query_service.get_current_page_snapshot.assert_called_once_with(
+            player_id=1,
+            viewer_user_id=1,
+        )
 
     def test_build_player_current_state_with_location_area_includes_description(
         self, setup_builder

@@ -1,6 +1,6 @@
 """ツール利用可否リゾルバのデフォルト実装"""
 
-from typing import Optional
+from typing import FrozenSet, Optional
 
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
@@ -475,6 +475,68 @@ class SnsToolAvailabilityResolver(IAvailabilityResolver):
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
         return context is not None and context.is_sns_mode_active
+
+
+class SnsPageKindAvailabilityResolver(IAvailabilityResolver):
+    """
+    仮想 SNS 画面の種別が allowed に含まれるときのみ利用可能。
+    仮想ページが未配線 (sns_virtual_page_kind is None) のときは True（従来の一覧挙動を維持）。
+    """
+
+    def __init__(self, allowed_page_kinds: FrozenSet[str]) -> None:
+        self._allowed = allowed_page_kinds
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None or not context.is_sns_mode_active:
+            return False
+        k = context.sns_virtual_page_kind
+        if k is None:
+            return True
+        return k in self._allowed
+
+
+class SnsProfileUpdateAvailabilityResolver(IAvailabilityResolver):
+    """profile 画面で自分自身を見ているときのみプロフィール更新を許可。未配線時は従来どおり許可。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None or not context.is_sns_mode_active:
+            return False
+        k = context.sns_virtual_page_kind
+        if k is None:
+            return True
+        if k != "profile":
+            return False
+        return bool(context.sns_profile_is_self)
+
+
+class SnsVirtualPageNavigationAvailabilityResolver(IAvailabilityResolver):
+    """仮想ページが配線され SNS モード中のとき（画面種別が載っている）にナビ系ツールを出す。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None or not context.is_sns_mode_active:
+            return False
+        return context.sns_virtual_page_kind is not None
+
+
+class SnsVirtualPageHomeTabAvailabilityResolver(IAvailabilityResolver):
+    """home 画面でのみタブ切替を許可。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None or not context.is_sns_mode_active:
+            return False
+        return context.sns_virtual_page_kind == "home"
+
+
+class SnsVirtualPagePagingAvailabilityResolver(IAvailabilityResolver):
+    """一覧ページングが意味を持つ画面のみ次ページを許可。"""
+
+    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
+        if context is None or not context.is_sns_mode_active:
+            return False
+        k = context.sns_virtual_page_kind
+        if k is None:
+            return False
+        return k in ("home", "search", "profile", "notifications")
 
 
 class SnsEnterToolAvailabilityResolver(IAvailabilityResolver):
