@@ -306,8 +306,10 @@ class TestRegisterDefaultTools:
         assert TOOL_NAME_TRADE_VIEW_CURRENT_PAGE in names
         assert TOOL_NAME_TRADE_OPEN_PAGE in names
 
-    def test_register_default_tools_trade_with_sns_registers_both(self):
-        """trade_enabled かつ sns_enabled で SNS と取引の両カタログが登録される"""
+    def test_register_default_tools_sns_and_trade_both_enabled_registers_independent_catalogs(
+        self,
+    ):
+        """両方有効時は SNS カタログと取引カタログが別々に登録される（取引は sns 必須ではない）"""
         registry = DefaultGameToolRegistry()
         register_default_tools(registry, trade_enabled=True, sns_enabled=True)
         names = [e[0].name for e in registry.get_definitions_with_resolvers()]
