@@ -5,15 +5,15 @@ slug: player-current-state-dto-refactoring
 status: in_progress
 created_at: 2026-03-23
 updated_at: 2026-03-23
-branch: codex/player-current-state-dto-refactoring-phase3
+branch: codex/player-current-state-dto-refactoring-phase4
 ---
 
 # Current State
 
-- Active phase: **Phase 4**（実装修正とテスト移行）
-- Last completed phase: **Phase 3**（Formatter / Availability / UI の依存整理）
-- Next recommended action: `flow-exec` で `current_state_formatter.py` → `ui_context_builder.py` → `availability_resolvers.py` の順に内部参照を置換する
-- Handoff summary: Phase 3 で consumer ごとの着地点を [`PHASE3_CONSUMER_DEPENDENCY_PLAN.md`](/Users/minagawa/.codex/worktrees/4a2d/ai_rpg_world/.ai-workflow/features/player-current-state-dto-refactoring/PHASE3_CONSUMER_DEPENDENCY_PLAN.md) に固定した。結論は、public 入力型は維持しつつ、内部だけ `world` / `runtime` / `app` alias へ寄せる方針である。
+- Active phase: **Phase 5**（Compat 縮小方針の固定）
+- Last completed phase: **Phase 4**（実装修正とテスト移行）
+- Next recommended action: `flow-exec` で compat property の残置方針と新規項目追加ルールを明文化する
+- Handoff summary: Phase 4 で [`current_state_formatter.py`](/Users/minagawa/.codex/worktrees/4a2d/ai_rpg_world/src/ai_rpg_world/application/llm/services/current_state_formatter.py)、[`ui_context_builder.py`](/Users/minagawa/.codex/worktrees/4a2d/ai_rpg_world/src/ai_rpg_world/application/llm/services/ui_context_builder.py)、[`availability_resolvers.py`](/Users/minagawa/.codex/worktrees/4a2d/ai_rpg_world/src/ai_rpg_world/application/llm/services/availability_resolvers.py) の内部参照を `world` / `runtime` / `app` alias に寄せた。public 入力型と既存 fixture 形は維持している。
 
 # Phase Journal
 
@@ -125,3 +125,30 @@ branch: codex/player-current-state-dto-refactoring-phase3
   - Phase 4 は formatter → UI builder → availability resolver の順で内部参照を `world` / `runtime` / `app` alias に寄せる。
 - Next-phase impact:
   - Phase 4 では public API や fixture 形を変えず、内部参照差し替えとテスト更新に集中できる。
+
+## Phase 4
+
+- Started: 2026-03-23
+- Completed: 2026-03-23
+- Commit: （この phase 完了コミット）
+- Tests:
+  - `uv run pytest tests/application/llm/test_current_state_formatter.py tests/application/llm/test_ui_context_builder.py tests/application/llm/test_availability_resolvers.py -q`
+  - `uv run pytest tests/application/world/test_player_current_state_dto.py tests/application/world/services/test_player_current_state_builder.py tests/application/world/services/test_world_query_service.py -q`
+- Findings:
+  - formatter は world/runtime/app の alias 導入だけで素直に置き換えられ、出力文言も変えずに済んだ。
+  - UI builder は `build()` 冒頭で alias を束縛し、helper に `world_state` / `runtime_context` を渡す形へ寄せると、境界がかなり見えやすくなった。
+  - availability resolver は `visible_objects=None` のような既存 fixture 境界ケースがあるため、alias 化しても `or []` の互換挙動は残す必要があった。
+- Plan revision check:
+  - **不要**。既存の public API / fixture 形を維持したまま内部参照を置換でき、future phase の順序や成功条件も崩れていない。
+- User approval:
+  - 不要（future phase 追加・並び替えなし）
+- Plan updates:
+  - `PLAN.md` の Phase 4 notes に local alias 化方針を追記
+- Goal check:
+  - **達成**。consumer 3 系統の内部参照は `world` / `runtime` / `app` 境界に沿って整理され、world / llm 代表テストも green になった。
+- Scope delta:
+  - なし（consumer 内部参照の差し替えのみ）
+- Handoff summary:
+  - Phase 5 では compat property をどこまで残すか、新規項目追加時のルールを artifact に固定する。
+- Next-phase impact:
+  - 主要 consumer が sub DTO alias を使う形になったので、今後 top-level compat property を縮小しても影響点を追いやすくなった。

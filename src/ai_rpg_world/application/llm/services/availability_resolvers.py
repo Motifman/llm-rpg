@@ -13,8 +13,22 @@ def _has_visible_action(obj, flag_name: str, legacy_name: str) -> bool:
 
 
 def _iter_actionable_objects(context: PlayerCurrentStateDto):
-    objs = context.actionable_objects or context.visible_objects
+    runtime = context.runtime_context
+    world = context.world_state
+    objs = runtime.actionable_objects or world.visible_objects
     return objs if objs is not None else []
+
+
+def _world(context: PlayerCurrentStateDto):
+    return context.world_state
+
+
+def _runtime(context: PlayerCurrentStateDto):
+    return context.runtime_context
+
+
+def _app(context: PlayerCurrentStateDto):
+    return context.app_session_state
 
 
 class NoOpAvailabilityResolver(IAvailabilityResolver):
@@ -36,22 +50,24 @@ class SetDestinationAvailabilityResolver(IAvailabilityResolver):
     ) -> bool:
         if context is None:
             return False
-        if context.is_busy or context.has_active_path:
+        world = _world(context)
+        runtime = _runtime(context)
+        if world.is_busy or world.has_active_path:
             return False
-        if context.current_spot_id is None:
+        if world.current_spot_id is None:
             return False
         has_spot_moves = (
-            context.available_moves is not None
-            and context.total_available_moves is not None
-            and context.total_available_moves > 0
+            world.available_moves is not None
+            and world.total_available_moves is not None
+            and world.total_available_moves > 0
         )
         has_location_moves = (
-            context.available_location_areas is not None
-            and len(context.available_location_areas) > 0
+            world.available_location_areas is not None
+            and len(world.available_location_areas) > 0
         )
         has_object_moves = (
-            context.actionable_objects is not None
-            and len(context.actionable_objects) > 0
+            runtime.actionable_objects is not None
+            and len(runtime.actionable_objects) > 0
         )
         return has_spot_moves or has_location_moves or has_object_moves
 
@@ -63,9 +79,12 @@ class PursuitStartAvailabilityResolver(IAvailabilityResolver):
         self,
         context: Optional[PlayerCurrentStateDto],
     ) -> bool:
-        if context is None or context.is_busy:
+        if context is None:
             return False
-        visible = context.visible_objects if context.visible_objects is not None else []
+        world = _world(context)
+        if world.is_busy:
+            return False
+        visible = world.visible_objects or []
         return any(
             obj.object_kind in {"player", "monster"} and not obj.is_self
             for obj in visible
@@ -89,7 +108,7 @@ class CancelMovementAvailabilityResolver(IAvailabilityResolver):
         self,
         context: Optional[PlayerCurrentStateDto],
     ) -> bool:
-        return context is not None and context.has_active_path
+        return context is not None and _world(context).has_active_path
 
 
 class MoveOneStepAvailabilityResolver(IAvailabilityResolver):
@@ -99,9 +118,12 @@ class MoveOneStepAvailabilityResolver(IAvailabilityResolver):
         self,
         context: Optional[PlayerCurrentStateDto],
     ) -> bool:
-        if context is None or context.is_busy:
+        if context is None:
             return False
-        return context.current_spot_id is not None
+        world = _world(context)
+        if world.is_busy:
+            return False
+        return world.current_spot_id is not None
 
 
 class WhisperAvailabilityResolver(IAvailabilityResolver):
@@ -113,7 +135,7 @@ class WhisperAvailabilityResolver(IAvailabilityResolver):
     ) -> bool:
         if context is None:
             return False
-        visible = context.visible_objects if context.visible_objects is not None else []
+        visible = _world(context).visible_objects or []
         return any(
             obj.object_kind == "player" and not obj.is_self
             for obj in visible
@@ -153,7 +175,11 @@ class HarvestStartAvailabilityResolver(IAvailabilityResolver):
         self,
         context: Optional[PlayerCurrentStateDto],
     ) -> bool:
-        if context is None or context.is_busy or context.active_harvest is not None:
+        if context is None:
+            return False
+        world = _world(context)
+        runtime = _runtime(context)
+        if world.is_busy or runtime.active_harvest is not None:
             return False
         return any(
             _has_visible_action(obj, "can_harvest", "harvest")
@@ -169,7 +195,7 @@ class HarvestCancelAvailabilityResolver(IAvailabilityResolver):
         self,
         context: Optional[PlayerCurrentStateDto],
     ) -> bool:
-        return context is not None and context.active_harvest is not None
+        return context is not None and _runtime(context).active_harvest is not None
 
 
 class ChangeAttentionAvailabilityResolver(IAvailabilityResolver):
@@ -179,7 +205,7 @@ class ChangeAttentionAvailabilityResolver(IAvailabilityResolver):
         self,
         context: Optional[PlayerCurrentStateDto],
     ) -> bool:
-        return context is not None and bool(context.attention_level_options)
+        return context is not None and bool(_runtime(context).attention_level_options)
 
 
 class ConversationAdvanceAvailabilityResolver(IAvailabilityResolver):
@@ -189,7 +215,7 @@ class ConversationAdvanceAvailabilityResolver(IAvailabilityResolver):
         self,
         context: Optional[PlayerCurrentStateDto],
     ) -> bool:
-        return context is not None and context.active_conversation is not None
+        return context is not None and _runtime(context).active_conversation is not None
 
 
 class PlaceObjectAvailabilityResolver(IAvailabilityResolver):
@@ -201,7 +227,7 @@ class PlaceObjectAvailabilityResolver(IAvailabilityResolver):
     ) -> bool:
         if context is None:
             return False
-        items = context.inventory_items if context.inventory_items is not None else []
+        items = _runtime(context).inventory_items
         return any(item.is_placeable for item in items)
 
 
@@ -214,7 +240,7 @@ class InspectItemAvailabilityResolver(IAvailabilityResolver):
     ) -> bool:
         if context is None:
             return False
-        return bool(context.inventory_items)
+        return bool(_runtime(context).inventory_items)
 
 
 class InspectTargetAvailabilityResolver(IAvailabilityResolver):
@@ -241,7 +267,7 @@ class DestroyPlaceableAvailabilityResolver(IAvailabilityResolver):
         self,
         context: Optional[PlayerCurrentStateDto],
     ) -> bool:
-        return context is not None and context.can_destroy_placeable
+        return context is not None and _runtime(context).can_destroy_placeable
 
 
 class DropItemAvailabilityResolver(IAvailabilityResolver):
@@ -251,7 +277,7 @@ class DropItemAvailabilityResolver(IAvailabilityResolver):
         self,
         context: Optional[PlayerCurrentStateDto],
     ) -> bool:
-        return context is not None and bool(context.inventory_items)
+        return context is not None and bool(_runtime(context).inventory_items)
 
 
 class ChestStoreAvailabilityResolver(IAvailabilityResolver):
@@ -263,14 +289,16 @@ class ChestStoreAvailabilityResolver(IAvailabilityResolver):
     ) -> bool:
         if context is None:
             return False
-        if context.is_busy:
+        world = _world(context)
+        runtime = _runtime(context)
+        if world.is_busy:
             return False
         has_open_chest = any(
             _has_visible_action(obj, "can_store_in_chest", "store_in_chest")
             for obj in _iter_actionable_objects(context)
             if not obj.is_self
         )
-        return has_open_chest and bool(context.inventory_items)
+        return has_open_chest and bool(runtime.inventory_items)
 
 
 class ChestTakeAvailabilityResolver(IAvailabilityResolver):
@@ -282,9 +310,11 @@ class ChestTakeAvailabilityResolver(IAvailabilityResolver):
     ) -> bool:
         if context is None:
             return False
-        if context.is_busy:
+        world = _world(context)
+        runtime = _runtime(context)
+        if world.is_busy:
             return False
-        return bool(context.chest_items)
+        return bool(runtime.chest_items)
 
 
 class CombatUseSkillAvailabilityResolver(IAvailabilityResolver):
@@ -294,7 +324,7 @@ class CombatUseSkillAvailabilityResolver(IAvailabilityResolver):
         self,
         context: Optional[PlayerCurrentStateDto],
     ) -> bool:
-        return context is not None and bool(context.usable_skills)
+        return context is not None and bool(_runtime(context).usable_skills)
 
 
 class SkillEquipAvailabilityResolver(IAvailabilityResolver):
@@ -303,28 +333,29 @@ class SkillEquipAvailabilityResolver(IAvailabilityResolver):
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
         if context is None:
             return False
-        return bool(context.equipable_skill_candidates) and bool(context.skill_equip_slots)
+        runtime = _runtime(context)
+        return bool(runtime.equipable_skill_candidates) and bool(runtime.skill_equip_slots)
 
 
 class SkillAcceptProposalAvailabilityResolver(IAvailabilityResolver):
     """スキル提案受諾は pending proposal があるときに利用可能。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return context is not None and bool(context.pending_skill_proposals)
+        return context is not None and bool(_runtime(context).pending_skill_proposals)
 
 
 class SkillRejectProposalAvailabilityResolver(IAvailabilityResolver):
     """スキル提案却下は pending proposal があるときに利用可能。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return context is not None and bool(context.pending_skill_proposals)
+        return context is not None and bool(_runtime(context).pending_skill_proposals)
 
 
 class SkillActivateAwakenedModeAvailabilityResolver(IAvailabilityResolver):
     """覚醒モード発動は action label があるときに利用可能。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return context is not None and context.awakened_action is not None
+        return context is not None and _runtime(context).awakened_action is not None
 
 
 class QuestAcceptAvailabilityResolver(IAvailabilityResolver):
@@ -338,14 +369,14 @@ class QuestCancelAvailabilityResolver(IAvailabilityResolver):
     """クエストキャンセルは受託中クエストがあるときに利用可能。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return context is not None and bool(context.active_quests)
+        return context is not None and bool(_runtime(context).active_quests)
 
 
 class QuestApproveAvailabilityResolver(IAvailabilityResolver):
     """クエスト承認はギルド所属があるときに利用可能（オフィサー以上）。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return context is not None and bool(context.guild_memberships)
+        return context is not None and bool(_runtime(context).guild_memberships)
 
 
 class QuestIssueAvailabilityResolver(IAvailabilityResolver):
@@ -359,21 +390,28 @@ class GuildCreateAvailabilityResolver(IAvailabilityResolver):
     """ギルド作成はギルド未所属かつ current_spot_id と area_ids が存在するときに利用可能。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        if context is None or context.current_spot_id is None:
+        if context is None:
             return False
-        if not context.area_ids:
+        world = _world(context)
+        runtime = _runtime(context)
+        if world.current_spot_id is None:
             return False
-        return not bool(context.guild_memberships)
+        if not world.area_ids:
+            return False
+        return not bool(runtime.guild_memberships)
 
 
 class GuildAddMemberAvailabilityResolver(IAvailabilityResolver):
     """ギルド招待は guild_memberships があり、いずれかが leader または officer のときに利用可能。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        if context is None or not context.guild_memberships:
+        if context is None:
+            return False
+        memberships = _runtime(context).guild_memberships
+        if not memberships:
             return False
         return any(
-            m.role in ("leader", "officer") for m in context.guild_memberships
+            m.role in ("leader", "officer") for m in memberships
         )
 
 
@@ -381,10 +419,13 @@ class GuildChangeRoleAvailabilityResolver(IAvailabilityResolver):
     """ギルド役職変更は guild_memberships があり、いずれかが leader または officer のときに利用可能。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        if context is None or not context.guild_memberships:
+        if context is None:
+            return False
+        memberships = _runtime(context).guild_memberships
+        if not memberships:
             return False
         return any(
-            m.role in ("leader", "officer") for m in context.guild_memberships
+            m.role in ("leader", "officer") for m in memberships
         )
 
 
@@ -392,79 +433,82 @@ class GuildDisbandAvailabilityResolver(IAvailabilityResolver):
     """ギルド解散は guild_memberships のいずれかが leader のときに利用可能。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        if context is None or not context.guild_memberships:
+        if context is None:
             return False
-        return any(m.role == "leader" for m in context.guild_memberships)
+        memberships = _runtime(context).guild_memberships
+        if not memberships:
+            return False
+        return any(m.role == "leader" for m in memberships)
 
 
 class GuildLeaveAvailabilityResolver(IAvailabilityResolver):
     """ギルド脱退は所属ギルドがあるときに利用可能。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return context is not None and bool(context.guild_memberships)
+        return context is not None and bool(_runtime(context).guild_memberships)
 
 
 class GuildDepositBankAvailabilityResolver(IAvailabilityResolver):
     """ギルド金庫入金は所属ギルドがあるときに利用可能。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return context is not None and bool(context.guild_memberships)
+        return context is not None and bool(_runtime(context).guild_memberships)
 
 
 class GuildWithdrawBankAvailabilityResolver(IAvailabilityResolver):
     """ギルド金庫出金は所属ギルドがあるときに利用可能（オフィサー以上）。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return context is not None and bool(context.guild_memberships)
+        return context is not None and bool(_runtime(context).guild_memberships)
 
 
 class ShopPurchaseAvailabilityResolver(IAvailabilityResolver):
     """ショップ購入は近隣ショップがあるときに利用可能。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return context is not None and bool(context.nearby_shops)
+        return context is not None and bool(_runtime(context).nearby_shops)
 
 
 class ShopListItemAvailabilityResolver(IAvailabilityResolver):
     """ショップ出品は近隣ショップがあるときに利用可能（オーナー時）。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return context is not None and bool(context.nearby_shops)
+        return context is not None and bool(_runtime(context).nearby_shops)
 
 
 class ShopUnlistItemAvailabilityResolver(IAvailabilityResolver):
     """ショップ取り下げは近隣ショップがあるときに利用可能（オーナー時）。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return context is not None and bool(context.nearby_shops)
+        return context is not None and bool(_runtime(context).nearby_shops)
 
 
 class TradeOfferAvailabilityResolver(IAvailabilityResolver):
     """取引出品はインベントリがあるときに利用可能。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return context is not None and bool(context.inventory_items)
+        return context is not None and bool(_runtime(context).inventory_items)
 
 
 class TradeAcceptAvailabilityResolver(IAvailabilityResolver):
     """取引受諾は宛先取引があるときに利用可能。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return context is not None and bool(context.available_trades)
+        return context is not None and bool(_runtime(context).available_trades)
 
 
 class TradeCancelAvailabilityResolver(IAvailabilityResolver):
     """取引キャンセルは宛先取引または自分発信取引があるときに利用可能。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return context is not None and bool(context.available_trades)
+        return context is not None and bool(_runtime(context).available_trades)
 
 
 class TradeDeclineAvailabilityResolver(IAvailabilityResolver):
     """取引拒否は自分宛ての直接取引があるときに利用可能。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return context is not None and bool(context.available_trades)
+        return context is not None and bool(_runtime(context).available_trades)
 
 
 class SnsToolAvailabilityResolver(IAvailabilityResolver):
@@ -474,7 +518,7 @@ class SnsToolAvailabilityResolver(IAvailabilityResolver):
     """
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return context is not None and context.is_sns_mode_active
+        return context is not None and _app(context).is_sns_mode_active
 
 
 class SnsPageKindAvailabilityResolver(IAvailabilityResolver):
@@ -487,9 +531,12 @@ class SnsPageKindAvailabilityResolver(IAvailabilityResolver):
         self._allowed = allowed_page_kinds
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        if context is None or not context.is_sns_mode_active:
+        if context is None:
             return False
-        k = context.sns_virtual_page_kind
+        app = _app(context)
+        if not app.is_sns_mode_active:
+            return False
+        k = app.sns_virtual_page_kind
         if k is None:
             return True
         return k in self._allowed
@@ -499,41 +546,53 @@ class SnsProfileUpdateAvailabilityResolver(IAvailabilityResolver):
     """profile 画面で自分自身を見ているときのみプロフィール更新を許可。未配線時は従来どおり許可。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        if context is None or not context.is_sns_mode_active:
+        if context is None:
             return False
-        k = context.sns_virtual_page_kind
+        app = _app(context)
+        if not app.is_sns_mode_active:
+            return False
+        k = app.sns_virtual_page_kind
         if k is None:
             return True
         if k != "profile":
             return False
-        return bool(context.sns_profile_is_self)
+        return bool(app.sns_profile_is_self)
 
 
 class SnsVirtualPageNavigationAvailabilityResolver(IAvailabilityResolver):
     """仮想ページが配線され SNS モード中のとき（画面種別が載っている）にナビ系ツールを出す。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        if context is None or not context.is_sns_mode_active:
+        if context is None:
             return False
-        return context.sns_virtual_page_kind is not None
+        app = _app(context)
+        if not app.is_sns_mode_active:
+            return False
+        return app.sns_virtual_page_kind is not None
 
 
 class SnsVirtualPageHomeTabAvailabilityResolver(IAvailabilityResolver):
     """home 画面でのみタブ切替を許可。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        if context is None or not context.is_sns_mode_active:
+        if context is None:
             return False
-        return context.sns_virtual_page_kind == "home"
+        app = _app(context)
+        if not app.is_sns_mode_active:
+            return False
+        return app.sns_virtual_page_kind == "home"
 
 
 class SnsVirtualPagePagingAvailabilityResolver(IAvailabilityResolver):
     """一覧ページングが意味を持つ画面のみ次ページを許可。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        if context is None or not context.is_sns_mode_active:
+        if context is None:
             return False
-        k = context.sns_virtual_page_kind
+        app = _app(context)
+        if not app.is_sns_mode_active:
+            return False
+        k = app.sns_virtual_page_kind
         if k is None:
             return False
         return k in ("home", "search", "profile", "notifications")
@@ -545,7 +604,8 @@ class SnsEnterToolAvailabilityResolver(IAvailabilityResolver):
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
         if context is None:
             return False
-        return not context.is_sns_mode_active and not context.is_trade_mode_active
+        app = _app(context)
+        return not app.is_sns_mode_active and not app.is_trade_mode_active
 
 
 class SnsModeRequiredAvailabilityResolver(IAvailabilityResolver):
@@ -555,7 +615,7 @@ class SnsModeRequiredAvailabilityResolver(IAvailabilityResolver):
         self._inner = inner
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        if context is None or not context.is_sns_mode_active:
+        if context is None or not _app(context).is_sns_mode_active:
             return False
         return self._inner.is_available(context)
 
@@ -567,7 +627,7 @@ class TradeModeRequiredAvailabilityResolver(IAvailabilityResolver):
         self._inner = inner
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        if context is None or not context.is_trade_mode_active:
+        if context is None or not _app(context).is_trade_mode_active:
             return False
         return self._inner.is_available(context)
 
@@ -578,32 +638,39 @@ class TradeEnterToolAvailabilityResolver(IAvailabilityResolver):
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
         if context is None:
             return False
-        return not context.is_sns_mode_active and not context.is_trade_mode_active
+        app = _app(context)
+        return not app.is_sns_mode_active and not app.is_trade_mode_active
 
 
 class TradeExitToolAvailabilityResolver(IAvailabilityResolver):
     """取引所を閉じるツール。取引所モード ON のときのみ一覧に出す。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return context is not None and context.is_trade_mode_active
+        return context is not None and _app(context).is_trade_mode_active
 
 
 class TradeVirtualPageNavigationAvailabilityResolver(IAvailabilityResolver):
     """仮想取引所画面が配線され一覧に載るとき（page kind が載っている）にナビ系ツールを出す。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        if context is None or not context.is_trade_mode_active:
+        if context is None:
             return False
-        return context.trade_virtual_page_kind is not None
+        app = _app(context)
+        if not app.is_trade_mode_active:
+            return False
+        return app.trade_virtual_page_kind is not None
 
 
 class TradeVirtualPagePagingAvailabilityResolver(IAvailabilityResolver):
     """一覧ページングが意味を持つ画面のみ次ページを許可。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        if context is None or not context.is_trade_mode_active:
+        if context is None:
             return False
-        k = context.trade_virtual_page_kind
+        app = _app(context)
+        if not app.is_trade_mode_active:
+            return False
+        k = app.trade_virtual_page_kind
         if k is None:
             return False
         return k in ("market", "search", "my_trades")
@@ -613,9 +680,12 @@ class TradeVirtualPageMyTradesTabAvailabilityResolver(IAvailabilityResolver):
     """my_trades 画面でのみ selling / incoming を切り替え可能。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        if context is None or not context.is_trade_mode_active:
+        if context is None:
             return False
-        return context.trade_virtual_page_kind == "my_trades"
+        app = _app(context)
+        if not app.is_trade_mode_active:
+            return False
+        return app.trade_virtual_page_kind == "my_trades"
 
 
 class TradeAcceptTradePageAvailabilityResolver(IAvailabilityResolver):
@@ -624,8 +694,9 @@ class TradeAcceptTradePageAvailabilityResolver(IAvailabilityResolver):
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
         if context is None:
             return False
-        k = context.trade_virtual_page_kind
-        return k == "my_trades" and context.trade_my_trades_tab == "incoming"
+        app = _app(context)
+        k = app.trade_virtual_page_kind
+        return k == "my_trades" and app.trade_my_trades_tab == "incoming"
 
 
 class TradeDeclineTradePageAvailabilityResolver(IAvailabilityResolver):
@@ -634,8 +705,9 @@ class TradeDeclineTradePageAvailabilityResolver(IAvailabilityResolver):
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
         if context is None:
             return False
-        k = context.trade_virtual_page_kind
-        return k == "my_trades" and context.trade_my_trades_tab == "incoming"
+        app = _app(context)
+        k = app.trade_virtual_page_kind
+        return k == "my_trades" and app.trade_my_trades_tab == "incoming"
 
 
 class TradeCancelTradePageAvailabilityResolver(IAvailabilityResolver):
@@ -648,8 +720,9 @@ class TradeCancelTradePageAvailabilityResolver(IAvailabilityResolver):
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
         if context is None:
             return False
-        k = context.trade_virtual_page_kind
-        if k == "my_trades" and context.trade_my_trades_tab == "selling":
+        app = _app(context)
+        k = app.trade_virtual_page_kind
+        if k == "my_trades" and app.trade_my_trades_tab == "selling":
             return True
         return False
 
