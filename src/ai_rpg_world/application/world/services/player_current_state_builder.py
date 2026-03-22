@@ -55,7 +55,10 @@ if TYPE_CHECKING:
         SnsPageQueryService,
         SnsPageSessionService,
     )
-    from ai_rpg_world.application.trade.trade_virtual_pages import TradePageSessionService
+    from ai_rpg_world.application.trade.trade_virtual_pages import (
+        TradePageQueryService,
+        TradePageSessionService,
+    )
     from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
     from ai_rpg_world.application.conversation.services.conversation_command_service import (
         ConversationCommandService,
@@ -125,6 +128,7 @@ class PlayerCurrentStateBuilder:
         sns_page_session: Optional["SnsPageSessionService"] = None,
         sns_page_query_service: Optional["SnsPageQueryService"] = None,
         trade_page_session: Optional["TradePageSessionService"] = None,
+        trade_page_query_service: Optional["TradePageQueryService"] = None,
     ) -> None:
         if player_audience_query is None:
             raise ValueError(
@@ -151,6 +155,7 @@ class PlayerCurrentStateBuilder:
         self._sns_page_session = sns_page_session
         self._sns_page_query_service = sns_page_query_service
         self._trade_page_session = trade_page_session
+        self._trade_page_query_service = trade_page_query_service
         self._visible_object_builder = VisibleObjectReadModelBuilder(
             player_profile_repository=player_profile_repository,
             monster_repository=monster_repository,
@@ -364,8 +369,14 @@ class PlayerCurrentStateBuilder:
             trade_my_trades_tab = (
                 st.my_trades_tab.value if st.page_kind == TradeVirtualPageKind.MY_TRADES else None
             )
+            if self._trade_page_query_service is not None:
+                trade_current_page_snapshot_json = self._trade_page_query_service.build_current_page_snapshot_json(
+                    query.player_id
+                )
+            else:
+                trade_current_page_snapshot_json = trade_page_state_to_json(st)
+            st = self._trade_page_session.get_state(query.player_id)
             trade_page_snapshot_generation = st.snapshot_generation
-            trade_current_page_snapshot_json = trade_page_state_to_json(st)
 
         # 境界: ツール/runtime context（LLM prompt 上のラベル解決・利用可否判定に利用）
         # - available_moves, visible_objects, actionable/notable
