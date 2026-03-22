@@ -564,13 +564,17 @@ class PlayerCurrentStateBuilder:
             active_game_app = self._sns_mode_session.active_game_app_session.get_active_app(
                 player_id
             ).value
+            is_sns_mode_active = self._sns_mode_session.is_sns_mode_active(player_id)
+            is_trade_mode_active = self._sns_mode_session.is_trade_mode_active(player_id)
         else:
             active_game_app = "none"
+            is_sns_mode_active = False
+            is_trade_mode_active = False
 
         return PlayerAppSessionStateDto(
             active_game_app=active_game_app,
-            is_sns_mode_active=False,
-            is_trade_mode_active=False,
+            is_sns_mode_active=is_sns_mode_active,
+            is_trade_mode_active=is_trade_mode_active,
             sns_virtual_page_kind=sns_virtual_page_kind,
             sns_home_tab=sns_home_tab,
             sns_page_snapshot_generation=sns_page_snapshot_generation,

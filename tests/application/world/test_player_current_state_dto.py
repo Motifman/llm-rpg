@@ -2,7 +2,10 @@
 
 from ai_rpg_world.application.world.contracts.dtos import (
     AvailableTradeSummaryDto,
+    PlayerAppSessionStateDto,
     PlayerCurrentStateDto,
+    PlayerRuntimeContextDto,
+    PlayerWorldStateDto,
 )
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 
@@ -102,3 +105,68 @@ class TestPlayerCurrentStateSubDtos:
         assert app.active_game_app == "trade"
         assert app.is_trade_mode_active is True
         assert app.is_sns_mode_active is False
+
+    def test_player_app_session_state_normalizes_direct_instances(self):
+        app = PlayerAppSessionStateDto(
+            active_game_app="none",
+            is_trade_mode_active=True,
+            trade_virtual_page_kind="market",
+        )
+
+        assert app.active_game_app == "trade"
+        assert app.is_trade_mode_active is True
+        assert app.is_sns_mode_active is False
+        assert app.trade_virtual_page_kind == "market"
+
+    def test_from_components_normalizes_app_session_before_exposing_facade(self):
+        world = PlayerWorldStateDto(
+            player_id=1,
+            player_name="Hero",
+            current_spot_id=10,
+            current_spot_name="Town",
+            current_spot_description="Peaceful town",
+            x=1,
+            y=2,
+            z=0,
+            current_player_count=0,
+            current_player_ids=set(),
+            connected_spot_ids={11},
+            connected_spot_names={"Field"},
+            weather_type="clear",
+            weather_intensity=0.2,
+            current_terrain_type="grass",
+            visible_objects=[],
+            view_distance=5,
+            available_moves=[],
+            total_available_moves=0,
+            attention_level=AttentionLevel.FULL,
+        )
+        runtime = PlayerRuntimeContextDto()
+        app = PlayerAppSessionStateDto(
+            active_game_app="none",
+            is_sns_mode_active=True,
+            sns_virtual_page_kind="home",
+        )
+
+        dto = PlayerCurrentStateDto.from_components(
+            world_state=world,
+            runtime_context=runtime,
+            app_session_state=app,
+        )
+
+        assert dto.active_game_app == "sns"
+        assert dto.is_sns_mode_active is True
+        assert dto.is_trade_mode_active is False
+        assert dto.app_session_state.active_game_app == "sns"
+
+    def test_player_app_session_state_rejects_conflicting_flags(self):
+        try:
+            PlayerAppSessionStateDto(
+                active_game_app="none",
+                is_sns_mode_active=True,
+                is_trade_mode_active=True,
+            )
+        except ValueError as exc:
+            assert "cannot both be true" in str(exc)
+        else:
+            raise AssertionError("ValueError was not raised")
