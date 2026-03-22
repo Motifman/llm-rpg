@@ -229,14 +229,14 @@ class TestDefaultAvailableToolsProvider:
         assert TOOL_NAME_TRADE_CANCEL not in names
 
     def test_trade_mode_selling_tab_shows_cancel_not_accept(self, provider_trade_vp):
-        """my_trades / selling ではキャンセルのみ"""
+        """my_trades / selling ではキャンセルのみ（incoming 要約が空でも cancel を出す）"""
         ctx = replace(
             _context_with_moves(1),
             active_game_app="trade",
             trade_virtual_page_kind="my_trades",
             trade_my_trades_tab="selling",
             inventory_items=[InventoryItemDto(1, 10, "剣", 1)],
-            available_trades=[AvailableTradeSummaryDto(trade_id=1, item_name="盾", requested_gold=10)],
+            available_trades=[],
         )
         tools = provider_trade_vp.get_available_tools(ctx)
         names = [t["function"]["name"] for t in tools if t.get("type") == "function"]

@@ -643,15 +643,21 @@ class TradeDeclineTradePageAvailabilityResolver(IAvailabilityResolver):
 
 
 class TradeCancelTradePageAvailabilityResolver(IAvailabilityResolver):
-    """キャンセルは my_trades / selling のとき（未配線時は従来どおり）。"""
+    """キャンセルは my_trades / selling のとき（未配線時は従来どおり）。
+
+    selling タブでは `trade_ref` / スナップショットで対象を解決するため、
+    `available_trades`（自分宛 incoming の要約）の有無には依存しない。
+    """
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        if context is None or not bool(context.available_trades):
+        if context is None:
             return False
         k = context.trade_virtual_page_kind
         if k is None:
+            return bool(context.available_trades)
+        if k == "my_trades" and context.trade_my_trades_tab == "selling":
             return True
-        return k == "my_trades" and context.trade_my_trades_tab == "selling"
+        return False
 
 
 class MemoryQueryAvailabilityResolver(IAvailabilityResolver):

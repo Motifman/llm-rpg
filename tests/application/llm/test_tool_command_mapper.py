@@ -64,6 +64,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_TRADE_CANCEL,
     TOOL_NAME_TRADE_DECLINE,
     TOOL_NAME_TRADE_OFFER,
+    TOOL_NAME_TRADE_OPEN_PAGE,
+    TOOL_NAME_TRADE_SWITCH_TAB,
     TOOL_NAME_TRADE_VIEW_CURRENT_PAGE,
     TOOL_NAME_TODO_ADD,
     TOOL_NAME_TODO_COMPLETE,
@@ -78,6 +80,7 @@ from ai_rpg_world.application.social.sns_virtual_pages import SnsPageSessionServ
 from ai_rpg_world.application.social.sns_virtual_pages.kinds import SnsVirtualPageKind
 from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
+from ai_rpg_world.application.trade.trade_virtual_pages.kinds import TradeVirtualPageKind
 from ai_rpg_world.application.world.contracts.dtos import (
     MoveResultDto,
     PursuitCommandResultDto,
@@ -1612,6 +1615,49 @@ class TestToolCommandMapperRequiredArgsValidation:
         assert result.success is True
         assert "market" in result.message
         page_q.build_current_page_snapshot_json.assert_called_once_with(1)
+
+    def test_trade_open_page_my_trades_invalid_tab_returns_invalid_target_label(self):
+        trade_service = MagicMock()
+        page_q = MagicMock()
+        sess = MagicMock()
+        mapper = _create_tool_command_mapper(
+            movement_service=MagicMock(),
+            trade_service=trade_service,
+            trade_page_session=sess,
+            trade_page_query_service=page_q,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_TRADE_OPEN_PAGE,
+            {"page": "my_trades", "my_trades_tab": "bogus"},
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        assert "my_trades_tab" in result.message
+        sess.set_page_kind.assert_not_called()
+
+    def test_trade_switch_tab_invalid_tab_returns_invalid_target_label(self):
+        trade_service = MagicMock()
+        page_q = MagicMock()
+        sess = MagicMock()
+        st = MagicMock()
+        st.page_kind = TradeVirtualPageKind.MY_TRADES
+        sess.get_state.return_value = st
+        mapper = _create_tool_command_mapper(
+            movement_service=MagicMock(),
+            trade_service=trade_service,
+            trade_page_session=sess,
+            trade_page_query_service=page_q,
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_TRADE_SWITCH_TAB,
+            {"tab": "bogus"},
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_TARGET_LABEL"
+        assert "tab" in result.message
+        sess.set_my_trades_tab.assert_not_called()
 
 
 class TestToolCommandMapperSns:
