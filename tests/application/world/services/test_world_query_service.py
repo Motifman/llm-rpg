@@ -758,16 +758,22 @@ class TestWorldQueryService:
         off = service.get_player_current_state(GetPlayerCurrentStateQuery(player_id=player_id))
         assert off is not None
         assert off.is_sns_mode_active is False
+        assert off.active_game_app == "none"
+        assert off.is_trade_mode_active is False
 
         sns_mode_session.enter_sns_mode(player_id)
         on = service.get_player_current_state(GetPlayerCurrentStateQuery(player_id=player_id))
         assert on is not None
         assert on.is_sns_mode_active is True
+        assert on.active_game_app == "sns"
+        assert on.is_trade_mode_active is False
 
         sns_mode_session.exit_sns_mode(player_id)
         off2 = service.get_player_current_state(GetPlayerCurrentStateQuery(player_id=player_id))
         assert off2 is not None
         assert off2.is_sns_mode_active is False
+        assert off2.active_game_app == "none"
+        assert off2.is_trade_mode_active is False
 
     def test_get_player_current_state_delegates_assembly_to_builder(self, setup_service):
         """現在状態の組み立ては builder に委譲すること"""

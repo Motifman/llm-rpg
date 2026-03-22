@@ -399,7 +399,11 @@ class PlayerCurrentStateDto:
     # ゲーム内現在時刻（game_time_provider と world_time_config が設定されているときのみ）
     current_game_time_label: Optional[str] = None
     # ゲーム内 SNS アプリを開いている（認証ではない UI メタファ）。ツール一覧の SNS/Trade 露出に利用。
+    # active_game_app が真実。後方互換のため __post_init__ で整える。
     is_sns_mode_active: bool = False
+    # 単一 active app slot（none / sns / trade）。Trade は Phase 2 以降でモード導線と同期。
+    active_game_app: str = "none"
+    is_trade_mode_active: bool = False
     # 仮想 SNS 画面（SnsPageSessionService が配線され、かつ SNS モード ON のときのみ有効）
     sns_virtual_page_kind: Optional[str] = None
     sns_home_tab: Optional[str] = None
@@ -407,3 +411,29 @@ class PlayerCurrentStateDto:
     sns_current_page_snapshot_json: Optional[str] = None
     # profile 画面で閲覧中のユーザーが自分自身か（ツール出し分け用）
     sns_profile_is_self: Optional[bool] = None
+
+    def __post_init__(self) -> None:
+        allowed = {"none", "sns", "trade"}
+        if self.active_game_app not in allowed:
+            raise ValueError(
+                f"active_game_app must be one of {allowed}, got {self.active_game_app!r}"
+            )
+        if self.active_game_app == "none":
+            if self.is_sns_mode_active and self.is_trade_mode_active:
+                raise ValueError(
+                    "is_sns_mode_active and is_trade_mode_active cannot both be true when active_game_app is none"
+                )
+            if self.is_trade_mode_active and not self.is_sns_mode_active:
+                self.active_game_app = "trade"
+            elif self.is_sns_mode_active:
+                self.active_game_app = "sns"
+        ag = self.active_game_app
+        if ag == "sns":
+            self.is_sns_mode_active = True
+            self.is_trade_mode_active = False
+        elif ag == "trade":
+            self.is_sns_mode_active = False
+            self.is_trade_mode_active = True
+        else:
+            self.is_sns_mode_active = False
+            self.is_trade_mode_active = False
