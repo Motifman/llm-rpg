@@ -10,10 +10,10 @@ branch: codex/sns-virtual-pages-readmodel
 
 # Current State
 
-- Active phase: **Phase 2**（Page Session と Page DTO 基盤）
-- Last completed phase: **Phase 1**（画面契約と遷移モデル固定）
-- Next recommended action: `SnsPageSessionService` または `sns_mode_session` 拡張の設計確定と、画面種別 enum / DTO / ref 生成の最小実装＋ unit test
-- Handoff summary: `PLAN.md` に **Screen Scope Contracts** を追加済み。5 画面・タブ・ref・ページング・汎用ツール一覧・既存 query 対応表を固定。以降の phase はこの契約を原則変更しない。
+- Active phase: **Phase 3**（Page Query Service 実装）
+- Last completed phase: **Phase 2**（Page Session と Page DTO 基盤）
+- Next recommended action: 既存 `PostQueryService` / `ReplyQueryService` 等を束ねる `SnsPageQueryService`（仮称）と画面スナップショット DTO の組み立て、各画面＋ref のテスト
+- Handoff summary: `SnsPageSessionService`・画面 enum・`SnsPageSessionState`・ref 発行/解決・`PlayerCurrentStateDto` の `sns_virtual_page_kind` / `sns_home_tab` / `sns_page_snapshot_generation`・`create_world_query_service` / `create_llm_agent_wiring` / `SnsToolExecutor` への同一インスタンス配線を追加済み。
 
 # Phase Journal
 
@@ -36,15 +36,18 @@ branch: codex/sns-virtual-pages-readmodel
 
 ## Phase 2
 
-- Started:
-- Completed:
-- Commit:
-- Tests:
+- Started: 2026-03-22
+- Completed: 2026-03-22
+- Commit: （phase 完了コミット）
+- Tests: `pytest tests/application/social/sns_virtual_pages/`、`pytest tests/` 全件通過
 - Findings:
-- Plan revision check:
-- User approval:
-- Plan updates:
-- Goal check:
-- Scope delta:
-- Handoff summary:
-- Next-phase impact:
+  - page session は `SnsModeSessionService` とは別インスタンスで保持し、`sns_enter` / `sns_logout` で `on_enter_sns` / `on_exit_sns` を呼ぶと、モード ON/OFF とページ状態が整合する。
+  - `get_state` は未初期化時に home 既定を自動作成するため、page session を配線していても enter 前に `get_player_current_state` が呼ばれると DTO に home が載りうる。Phase 4 で enter 必須にするかは運用で決められる（現状は `is_sns_mode_active` が False なら DTO の仮想ページフィールドは空のまま）。
+  - ref プレフィックスは `r_post_NN` / `r_user_NN` / `r_reply_NN` / `r_notif_NN`（不透明文字列の契約を満たす）。
+- Plan revision check: **不要**。Phase 3 の「page query が ref を含む DTO を組み立てる」前提は維持可能。
+- User approval: **不要**（PLAN の Phase 2 scope から外れていない）
+- Plan updates: **なし**
+- Goal check: **達成** — メモリ上の page session・DTO 拡張・enter/logout 連動・単体テストで検証
+- Scope delta: なし
+- Handoff summary: Phase 3 で `SnsPageSessionService` を注入した query 層サービスが、各画面のスナップショット用 DTO と ref 発行を担う
+- Next-phase impact: スナップショット DTO は `application/social/` 配下の新モジュールに置くと page session と並びやすい

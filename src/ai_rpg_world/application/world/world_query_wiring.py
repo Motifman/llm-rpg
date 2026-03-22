@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from ai_rpg_world.application.social.services.sns_mode_session_service import (
         SnsModeSessionService,
     )
+    from ai_rpg_world.application.social.sns_virtual_pages import SnsPageSessionService
     from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
     from ai_rpg_world.application.conversation.services.conversation_command_service import (
         ConversationCommandService,
@@ -74,6 +75,7 @@ def create_world_query_service(
     personal_trade_query_service: Optional["PersonalTradeQueryService"] = None,
     player_audience_query: Optional[IPlayerAudienceQueryPort] = None,
     sns_mode_session: Optional["SnsModeSessionService"] = None,
+    sns_page_session: Optional["SnsPageSessionService"] = None,
 ) -> WorldQueryService:
     """
     PlayerLocationQueryService・SpotContextQueryService・AvailableMovesQueryService・
@@ -103,6 +105,7 @@ def create_world_query_service(
         personal_trade_query_service: 個人取引クエリサービス（省略可）
         player_audience_query: プレイヤーオーディエンスクエリ（省略可、省略時は PlayerAudienceQueryService を自前構築）
         sns_mode_session: SNS モード状態（省略可）。`create_llm_agent_wiring` に渡すインスタンスと同一にすること。
+        sns_page_session: 仮想 SNS 画面（省略可）。`create_llm_agent_wiring` の `sns_page_session` と同一にすること。
 
     Returns:
         WorldQueryService: 構築済みの WorldQueryService
@@ -132,6 +135,7 @@ def create_world_query_service(
         personal_trade_query_service=personal_trade_query_service,
         player_audience_query=audience_query,
         sns_mode_session=sns_mode_session,
+        sns_page_session=sns_page_session,
     )
 
 
