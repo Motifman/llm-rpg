@@ -88,6 +88,13 @@ def _parse_sns_search_mode(raw: Any) -> Optional[SnsSearchMode]:
     return SnsSearchMode.KEYWORD
 
 
+def _non_empty_str(raw: Any) -> Optional[str]:
+    if raw is None:
+        return None
+    value = str(raw).strip()
+    return value or None
+
+
 class SnsToolExecutor:
     """
     SNS ツールの実行を担当するサブマッパー。
@@ -190,12 +197,12 @@ class SnsToolExecutor:
     ) -> LlmCommandResultDto:
         if self._post_service is None:
             return unknown_tool("ポスト削除ツールはまだ利用できません。")
-        post_id = args.get("post_id")
-        if post_id is None:
-            return invalid_arg_result("post_id")
+        post_id, error = self._resolve_post_id_from_args(player_id, args)
+        if error is not None:
+            return error
         try:
             result = self._post_service.delete_post(
-                DeletePostCommand(post_id=int(post_id), user_id=player_id)
+                DeletePostCommand(post_id=post_id, user_id=player_id)
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
@@ -206,12 +213,12 @@ class SnsToolExecutor:
     ) -> LlmCommandResultDto:
         if self._reply_service is None:
             return unknown_tool("リプライ削除ツールはまだ利用できません。")
-        reply_id = args.get("reply_id")
-        if reply_id is None:
-            return invalid_arg_result("reply_id")
+        reply_id, error = self._resolve_reply_id_from_args(player_id, args)
+        if error is not None:
+            return error
         try:
             result = self._reply_service.delete_reply(
-                DeleteReplyCommand(reply_id=int(reply_id), user_id=player_id)
+                DeleteReplyCommand(reply_id=reply_id, user_id=player_id)
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
@@ -253,14 +260,14 @@ class SnsToolExecutor:
     ) -> LlmCommandResultDto:
         if self._notification_command_service is None:
             return unknown_tool("通知既読ツールはまだ利用できません。")
-        notification_id = args.get("notification_id")
-        if notification_id is None:
-            return invalid_arg_result("notification_id")
+        notification_id, error = self._resolve_notification_id_from_args(player_id, args)
+        if error is not None:
+            return error
         try:
             result = self._notification_command_service.mark_notification_as_read(
                 MarkNotificationAsReadCommand(
                     user_id=player_id,
-                    notification_id=int(notification_id),
+                    notification_id=notification_id,
                 )
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
@@ -330,10 +337,11 @@ class SnsToolExecutor:
         content = args.get("content")
         if content is None or (isinstance(content, str) and not content.strip()):
             return invalid_arg_result("content")
-        parent_post_id = args.get("parent_post_id")
-        parent_reply_id = args.get("parent_reply_id")
-        if parent_post_id is None and parent_reply_id is None:
-            return invalid_arg_result("parent_post_id または parent_reply_id")
+        parent_post_id, parent_reply_id, error = self._resolve_reply_parent_args(
+            player_id, args
+        )
+        if error is not None:
+            return error
         try:
             visibility, visibility_defaulted = self._parse_visibility(args.get("visibility"))
             result = self._reply_service.create_reply(
@@ -341,8 +349,8 @@ class SnsToolExecutor:
                     user_id=player_id,
                     content=str(content).strip(),
                     visibility=visibility,
-                    parent_post_id=int(parent_post_id) if parent_post_id is not None else None,
-                    parent_reply_id=int(parent_reply_id) if parent_reply_id is not None else None,
+                    parent_post_id=parent_post_id,
+                    parent_reply_id=parent_reply_id,
                 )
             )
             msg = result.message
@@ -357,12 +365,12 @@ class SnsToolExecutor:
     ) -> LlmCommandResultDto:
         if self._post_service is None:
             return unknown_tool("ポストいいねツールはまだ利用できません。")
-        post_id = args.get("post_id")
-        if post_id is None:
-            return invalid_arg_result("post_id")
+        post_id, error = self._resolve_post_id_from_args(player_id, args)
+        if error is not None:
+            return error
         try:
             result = self._post_service.like_post(
-                LikePostCommand(post_id=int(post_id), user_id=player_id)
+                LikePostCommand(post_id=post_id, user_id=player_id)
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
@@ -373,12 +381,12 @@ class SnsToolExecutor:
     ) -> LlmCommandResultDto:
         if self._reply_service is None:
             return unknown_tool("リプライいいねツールはまだ利用できません。")
-        reply_id = args.get("reply_id")
-        if reply_id is None:
-            return invalid_arg_result("reply_id")
+        reply_id, error = self._resolve_reply_id_from_args(player_id, args)
+        if error is not None:
+            return error
         try:
             result = self._reply_service.like_reply(
-                LikeReplyCommand(reply_id=int(reply_id), user_id=player_id)
+                LikeReplyCommand(reply_id=reply_id, user_id=player_id)
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
@@ -389,14 +397,14 @@ class SnsToolExecutor:
     ) -> LlmCommandResultDto:
         if self._user_command_service is None:
             return unknown_tool("フォローツールはまだ利用できません。")
-        target_user_id = args.get("target_user_id")
-        if target_user_id is None:
-            return invalid_arg_result("target_user_id")
+        target_user_id, error = self._resolve_target_user_id_from_args(player_id, args)
+        if error is not None:
+            return error
         try:
             result = self._user_command_service.follow_user(
                 FollowUserCommand(
                     follower_user_id=player_id,
-                    followee_user_id=int(target_user_id),
+                    followee_user_id=target_user_id,
                 )
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
@@ -408,14 +416,14 @@ class SnsToolExecutor:
     ) -> LlmCommandResultDto:
         if self._user_command_service is None:
             return unknown_tool("フォロー解除ツールはまだ利用できません。")
-        target_user_id = args.get("target_user_id")
-        if target_user_id is None:
-            return invalid_arg_result("target_user_id")
+        target_user_id, error = self._resolve_target_user_id_from_args(player_id, args)
+        if error is not None:
+            return error
         try:
             result = self._user_command_service.unfollow_user(
                 UnfollowUserCommand(
                     follower_user_id=player_id,
-                    followee_user_id=int(target_user_id),
+                    followee_user_id=target_user_id,
                 )
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
@@ -427,14 +435,14 @@ class SnsToolExecutor:
     ) -> LlmCommandResultDto:
         if self._user_command_service is None:
             return unknown_tool("サブスクライブツールはまだ利用できません。")
-        target_user_id = args.get("target_user_id")
-        if target_user_id is None:
-            return invalid_arg_result("target_user_id")
+        target_user_id, error = self._resolve_target_user_id_from_args(player_id, args)
+        if error is not None:
+            return error
         try:
             result = self._user_command_service.subscribe_user(
                 SubscribeUserCommand(
                     subscriber_user_id=player_id,
-                    subscribed_user_id=int(target_user_id),
+                    subscribed_user_id=target_user_id,
                 )
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
@@ -446,14 +454,14 @@ class SnsToolExecutor:
     ) -> LlmCommandResultDto:
         if self._user_command_service is None:
             return unknown_tool("サブスクライブ解除ツールはまだ利用できません。")
-        target_user_id = args.get("target_user_id")
-        if target_user_id is None:
-            return invalid_arg_result("target_user_id")
+        target_user_id, error = self._resolve_target_user_id_from_args(player_id, args)
+        if error is not None:
+            return error
         try:
             result = self._user_command_service.unsubscribe_user(
                 UnsubscribeUserCommand(
                     subscriber_user_id=player_id,
-                    subscribed_user_id=int(target_user_id),
+                    subscribed_user_id=target_user_id,
                 )
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
@@ -465,14 +473,14 @@ class SnsToolExecutor:
     ) -> LlmCommandResultDto:
         if self._user_command_service is None:
             return unknown_tool("ブロックツールはまだ利用できません。")
-        target_user_id = args.get("target_user_id")
-        if target_user_id is None:
-            return invalid_arg_result("target_user_id")
+        target_user_id, error = self._resolve_target_user_id_from_args(player_id, args)
+        if error is not None:
+            return error
         try:
             result = self._user_command_service.block_user(
                 BlockUserCommand(
                     blocker_user_id=player_id,
-                    blocked_user_id=int(target_user_id),
+                    blocked_user_id=target_user_id,
                 )
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
@@ -484,19 +492,141 @@ class SnsToolExecutor:
     ) -> LlmCommandResultDto:
         if self._user_command_service is None:
             return unknown_tool("ブロック解除ツールはまだ利用できません。")
-        target_user_id = args.get("target_user_id")
-        if target_user_id is None:
-            return invalid_arg_result("target_user_id")
+        target_user_id, error = self._resolve_target_user_id_from_args(player_id, args)
+        if error is not None:
+            return error
         try:
             result = self._user_command_service.unblock_user(
                 UnblockUserCommand(
                     blocker_user_id=player_id,
-                    blocked_user_id=int(target_user_id),
+                    blocked_user_id=target_user_id,
                 )
             )
             return LlmCommandResultDto(success=result.success, message=result.message)
         except Exception as e:
             return exception_result(e)
+
+    def _resolve_post_id_from_args(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> tuple[Optional[int], Optional[LlmCommandResultDto]]:
+        post_ref = _non_empty_str(args.get("post_ref"))
+        if post_ref is not None:
+            if self._sns_page_session is None:
+                return None, unknown_tool("仮想 SNS 画面が利用できません。")
+            post_id = self._sns_page_session.resolve_post_ref(player_id, post_ref)
+            if post_id is None:
+                return (
+                    None,
+                    LlmCommandResultDto(
+                        success=False,
+                        message="post_ref が無効か、古い世代です。画面を再取得してください。",
+                    ),
+                )
+            return post_id, None
+        post_id = args.get("post_id")
+        if post_id is None:
+            return None, invalid_arg_result("post_ref")
+        return int(post_id), None
+
+    def _resolve_reply_id_from_args(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> tuple[Optional[int], Optional[LlmCommandResultDto]]:
+        reply_ref = _non_empty_str(args.get("reply_ref"))
+        if reply_ref is not None:
+            if self._sns_page_session is None:
+                return None, unknown_tool("仮想 SNS 画面が利用できません。")
+            reply_id = self._sns_page_session.resolve_reply_ref(player_id, reply_ref)
+            if reply_id is None:
+                return (
+                    None,
+                    LlmCommandResultDto(
+                        success=False,
+                        message="reply_ref が無効か、古い世代です。画面を再取得してください。",
+                    ),
+                )
+            return reply_id, None
+        reply_id = args.get("reply_id")
+        if reply_id is None:
+            return None, invalid_arg_result("reply_ref")
+        return int(reply_id), None
+
+    def _resolve_notification_id_from_args(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> tuple[Optional[int], Optional[LlmCommandResultDto]]:
+        notification_ref = _non_empty_str(args.get("notification_ref"))
+        if notification_ref is not None:
+            if self._sns_page_session is None:
+                return None, unknown_tool("仮想 SNS 画面が利用できません。")
+            notification_id = self._sns_page_session.resolve_notification_ref(
+                player_id, notification_ref
+            )
+            if notification_id is None:
+                return (
+                    None,
+                    LlmCommandResultDto(
+                        success=False,
+                        message="notification_ref が無効か、古い世代です。画面を再取得してください。",
+                    ),
+                )
+            return notification_id, None
+        notification_id = args.get("notification_id")
+        if notification_id is None:
+            return None, invalid_arg_result("notification_ref")
+        return int(notification_id), None
+
+    def _resolve_target_user_id_from_args(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> tuple[Optional[int], Optional[LlmCommandResultDto]]:
+        target_user_ref = _non_empty_str(args.get("target_user_ref"))
+        if target_user_ref is not None:
+            if self._sns_page_session is None:
+                return None, unknown_tool("仮想 SNS 画面が利用できません。")
+            user_id = self._sns_page_session.resolve_user_ref(player_id, target_user_ref)
+            if user_id is None:
+                return (
+                    None,
+                    LlmCommandResultDto(
+                        success=False,
+                        message="target_user_ref が無効か、古い世代です。画面を再取得してください。",
+                    ),
+                )
+            return user_id, None
+        target_user_id = args.get("target_user_id")
+        if target_user_id is not None:
+            return int(target_user_id), None
+        if self._sns_page_session is not None:
+            st = self._sns_page_session.get_state(player_id)
+            if (
+                st.page_kind == SnsVirtualPageKind.PROFILE
+                and st.profile_target_user_id is not None
+            ):
+                return st.profile_target_user_id, None
+        return None, invalid_arg_result("target_user_ref")
+
+    def _resolve_reply_parent_args(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> tuple[Optional[int], Optional[int], Optional[LlmCommandResultDto]]:
+        parent_post_ref = _non_empty_str(args.get("parent_post_ref"))
+        if parent_post_ref is not None:
+            post_id, error = self._resolve_post_id_from_args(
+                player_id, {"post_ref": parent_post_ref}
+            )
+            return post_id, None, error
+        parent_reply_ref = _non_empty_str(args.get("parent_reply_ref"))
+        if parent_reply_ref is not None:
+            reply_id, error = self._resolve_reply_id_from_args(
+                player_id, {"reply_ref": parent_reply_ref}
+            )
+            return None, reply_id, error
+        parent_post_id = args.get("parent_post_id")
+        parent_reply_id = args.get("parent_reply_id")
+        if parent_post_id is None and parent_reply_id is None:
+            return None, None, invalid_arg_result("parent_post_ref または parent_reply_ref")
+        return (
+            int(parent_post_id) if parent_post_id is not None else None,
+            int(parent_reply_id) if parent_reply_id is not None else None,
+            None,
+        )
 
     def _find_notification_by_id(
         self, user_id: int, notification_id: int
@@ -666,6 +796,11 @@ class SnsToolExecutor:
                         sess.set_post_detail_root_post_id(player_id, r.parent_post_id)
                         sess.set_paging(player_id, offset=0)
                         return LlmCommandResultDto(success=True, message="投稿詳細へ遷移しました。")
+                if n.actor_user_id is None:
+                    return LlmCommandResultDto(
+                        success=False,
+                        message="この通知からは遷移できません。",
+                    )
                 sess.set_page_kind(player_id, SnsVirtualPageKind.PROFILE)
                 sess.set_profile_target_user_id(player_id, n.actor_user_id)
                 sess.set_paging(player_id, offset=0)

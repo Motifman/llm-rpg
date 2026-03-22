@@ -29,10 +29,14 @@ Review all files for this feature. Verify DDD boundaries, implementation quality
 # Follow-up
 
 - Additional phases needed:
+  - なし
 - Files to revisit:
+  - なし
 - Decision:
+  - review findings を修正済み。ref ベース書き込み、current prompt への画面スナップショット同梱、通知の遷移不能ケースをテスト付きで解消。
 
 # Release Gate
 
-- Ship ready: no
+- Ship ready: yes
 - Blocking findings:
+  - None
