@@ -411,6 +411,11 @@ class PlayerCurrentStateDto:
     sns_current_page_snapshot_json: Optional[str] = None
     # profile 画面で閲覧中のユーザーが自分自身か（ツール出し分け用）
     sns_profile_is_self: Optional[bool] = None
+    # 仮想取引所画面（TradePageSessionService が配線され、かつ取引所モード ON のときのみ有効）
+    trade_virtual_page_kind: Optional[str] = None
+    trade_my_trades_tab: Optional[str] = None
+    trade_page_snapshot_generation: int = 0
+    trade_current_page_snapshot_json: Optional[str] = None
 
     def __post_init__(self) -> None:
         allowed = {"none", "sns", "trade"}

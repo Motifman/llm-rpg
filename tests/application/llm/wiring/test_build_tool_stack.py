@@ -79,6 +79,7 @@ def _minimal_tool_stack_deps():
         "sns_page_session": None,
         "post_query_service": None,
         "sns_page_query_service": None,
+        "trade_page_session": None,
         "reply_query_service": None,
         "notification_query_service": None,
         "item_repository": None,

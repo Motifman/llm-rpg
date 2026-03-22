@@ -10,10 +10,10 @@ branch: feature/trade-page-tool-gating
 
 # Current State
 
-- Active phase: Phase 3（Trade Page Session と Snapshot DTO）
-- Last completed phase: Phase 2（Trade モード導線と露出分離）
-- Next recommended action: `TradePageSessionService` 相当・page kind / ref・DTO 配線
-- Handoff summary: `register_default_tools` は `trade_enabled` のみで Trade カタログを登録。`trade_enter` / `trade_exit` と `TradeModeRequiredAvailabilityResolver` で 4 ミューテーションを取引所モードにゲート。`SnsEnterToolAvailabilityResolver` は SNS/取引のいずれも未起動時のみ `sns_enter`。`SnsModeSessionService` に `enter_trade_mode` / `exit_trade_mode` / `is_trade_mode_active`。executor は `TradeToolExecutor` が `sns_mode_session` を共有し、`ActiveGameAppConflictError` を enter 系で捕捉。
+- Active phase: Phase 4（Trade Page Query Service 実装）
+- Last completed phase: Phase 3（Trade Page Session と Snapshot DTO）
+- Next recommended action: `TradePageQueryService` で market/search/my_trades スナップショットを既存 query に束ねる
+- Handoff summary: `TradePageSessionService`（`market`/`search`/`my_trades`・`trade_ref`・世代バンプ）と `PlayerCurrentStateDto` の `trade_*` フィールド・セッション由来の最小 JSON。`create_llm_agent_wiring` / `WorldQueryService` / `TradeToolExecutor` に同一 `trade_page_session` を渡せる。入退場で `on_enter_trade` / `on_exit_trade`。
 
 # Phase Journal
 
@@ -53,15 +53,17 @@ branch: feature/trade-page-tool-gating
 
 ## Phase 3
 
-- Started:
-- Completed:
-- Commit:
-- Tests:
+- Started: 2026-03-22
+- Completed: 2026-03-22
+- Commit: （本コミット）
+- Tests: `tests/application/trade/trade_virtual_pages/test_trade_page_session_service.py`、`test_player_current_state_builder` の trade スナップショット、`pytest tests/` 全件通過
 - Findings:
-- Plan revision check:
-- User approval:
-- Plan updates:
-- Goal check:
-- Scope delta:
-- Handoff summary:
-- Next-phase impact:
+  - Phase 3 のスナップショット JSON はセッション状態のみ（filters/paging/generation）。Phase 4 で query 由来の行一覧を足す前提。
+  - `trade_enter` / `trade_exit` の順序は SNS enter/logout に揃えた（モード遷移の直後に page session を初期化／破棄）。
+- Plan revision check: 不要。checkpoint（market→search→my_trades・ref 世代）と PLAN の Phase 3 scope と整合。
+- User approval: （plan 変更なし）
+- Plan updates: なし
+- Goal check: ページ状態遷移と `trade_ref` の無効化が `TradePageSessionService` 単体で成立。DTO に kind/tab/generation/JSON が載る。
+- Scope delta: なし
+- Handoff summary: 上記 Current State のとおり。
+- Next-phase impact: Phase 4 で `TradePageQueryService` がスナップショット本文を組み立て、`trade_current_page_snapshot_json` を query 結果に差し替え可能。
