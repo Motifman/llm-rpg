@@ -10,10 +10,10 @@ branch: feature/trade-page-tool-gating
 
 # Current State
 
-- Active phase: Phase 4（Trade Page Query Service 実装）
-- Last completed phase: Phase 3（Trade Page Session と Snapshot DTO）
-- Next recommended action: `TradePageQueryService` で market/search/my_trades スナップショットを既存 query に束ねる
-- Handoff summary: `TradePageSessionService`（`market`/`search`/`my_trades`・`trade_ref`・世代バンプ）と `PlayerCurrentStateDto` の `trade_*` フィールド・セッション由来の最小 JSON。`create_llm_agent_wiring` / `WorldQueryService` / `TradeToolExecutor` に同一 `trade_page_session` を渡せる。入退場で `on_enter_trade` / `on_exit_trade`。
+- Active phase: Phase 5（Tool Catalog / Executor / Prompt 統合）
+- Last completed phase: Phase 4（Trade Page Query Service 実装）
+- Next recommended action: Trade ページ用ツール群と `trade_ref` 入力・prompt へのスナップショット差し込み（Phase 5 scope）
+- Handoff summary: `TradePageQueryService` が `GlobalMarketQueryService` / `TradeQueryService` / `PersonalTradeQueryService` を束ね、`build_current_page_snapshot_json` で rows・`paging.next_cursor`・`trade_ref` を含む JSON を返す。`PlayerCurrentStateBuilder` は `trade_page_query_service` 注入時に当該 JSON を `trade_current_page_snapshot_json` に載せる（未注入時は Phase 3 どおりセッションメタのみ）。`create_world_query_service(..., trade_page_query_service=...)` で配線可能。
 
 # Phase Journal
 
@@ -67,3 +67,21 @@ branch: feature/trade-page-tool-gating
 - Scope delta: なし
 - Handoff summary: 上記 Current State のとおり。
 - Next-phase impact: Phase 4 で `TradePageQueryService` がスナップショット本文を組み立て、`trade_current_page_snapshot_json` を query 結果に差し替え可能。
+
+## Phase 4
+
+- Started: 2026-03-22
+- Completed: 2026-03-22
+- Commit: （本コミット）
+- Tests: `tests/application/trade/trade_virtual_pages/test_trade_page_query_service.py`、`pytest tests/` 全件通過
+- Findings:
+  - `my_trades` / `selling` は `get_trades_for_player` をページングしつつ `seller_id == player_id` でフィルタ（カーソルは未フィルタストリーム基準のため、`next_cursor` は厳密な「次ウィンドウ」ではない場合あり）。
+  - `PersonalTradeQueryService` の limit 上限 50 に合わせ、incoming 取得のバッチは `min(50, batch_limit)`。
+  - スナップショット組み立て前に `bump_snapshot_generation` し、`trade_ref` を再発行する。
+- Plan revision check: 不要。checkpoint（検索・2 タブ・既存 query 再利用）と PLAN Phase 4 と整合。
+- User approval: （plan 変更なし）
+- Plan updates: なし
+- Goal check: 3 画面の行 DTO が query サービス再利用のみで組み立て可能。`trade_ref` 付き。
+- Scope delta: なし
+- Handoff summary: 上記 Current State のとおり。
+- Next-phase impact: Phase 5 でツール定義・executor・prompt が `TradePageQueryService` / `trade_ref` と接続できる。
