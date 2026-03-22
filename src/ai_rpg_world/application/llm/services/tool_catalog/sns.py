@@ -48,7 +48,7 @@ SNS_ENTER_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SNS_ENTER,
     description=(
         "ゲーム内の SNS アプリを開きます（実認証ではありません）。"
-        "開くと投稿・取引など SNS モード用ツールが利用可能になります。"
+        "開くと SNS モード用ツールが利用可能になります。"
     ),
     parameters=SNS_ENTER_PARAMETERS,
 )

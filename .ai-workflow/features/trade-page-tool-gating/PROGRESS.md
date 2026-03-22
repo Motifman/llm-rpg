@@ -10,10 +10,10 @@ branch: feature/trade-page-tool-gating
 
 # Current State
 
-- Active phase: Phase 2（Trade モード導線と露出分離）
-- Last completed phase: Phase 1（Active App Slot 契約の固定）
-- Next recommended action: `register_default_tools` / resolver / `trade_enter`・`trade_exit` と SNS 配線の更新
-- Handoff summary: 単一 `ActiveGameAppSessionService` が `SnsModeSessionService` 配下に統合済み。`PlayerCurrentStateDto` に `active_game_app` / `is_trade_mode_active` を追加し、`is_sns_mode_active` は `__post_init__` で整合。Trade 入場 API は `enter_trade` / `exit_trade` がセッション層に存在（Phase 2 で executor から接続予定）。
+- Active phase: Phase 3（Trade Page Session と Snapshot DTO）
+- Last completed phase: Phase 2（Trade モード導線と露出分離）
+- Next recommended action: `TradePageSessionService` 相当・page kind / ref・DTO 配線
+- Handoff summary: `register_default_tools` は `trade_enabled` のみで Trade カタログを登録。`trade_enter` / `trade_exit` と `TradeModeRequiredAvailabilityResolver` で 4 ミューテーションを取引所モードにゲート。`SnsEnterToolAvailabilityResolver` は SNS/取引のいずれも未起動時のみ `sns_enter`。`SnsModeSessionService` に `enter_trade_mode` / `exit_trade_mode` / `is_trade_mode_active`。executor は `TradeToolExecutor` が `sns_mode_session` を共有し、`ActiveGameAppConflictError` を enter 系で捕捉。
 
 # Phase Journal
 
@@ -35,6 +35,23 @@ branch: feature/trade-page-tool-gating
 - Next-phase impact: Phase 2 で `trade_enter` が `enter_trade` を呼ぶよう executor を接続すれば、`ActiveGameAppConflictError` が SNS 未退出のまま取引所に入る経路をブロック可能。
 
 ## Phase 2
+
+- Started: 2026-03-22
+- Completed: 2026-03-22
+- Commit: feature ブランチの最新コミット（Phase 2 完了時点）
+- Tests: `tests/application/llm/test_tool_definitions.py`、`test_available_tools_provider.py`、`test_sns_mode_wiring_e2e.py`、`pytest tests/application/llm/` 全件通過
+- Findings:
+  - `PlayerCurrentStateDto` の `active_game_app` をテストで差し替えるときは `dataclasses.replace` を使うと `__post_init__` により `is_trade_mode_active` が整合する（構築後の属性代入だけでは resolver が誤る）。
+  - `TradeToolExecutor` は入退場ハンドラを常に登録し、`sns_mode_session` が無い場合は `_execute_trade_enter` が unknown を返す。
+- Plan revision check: 不要。Phase 2 の success criteria（3 状態の露出・trade_enabled のみ登録）と整合。
+- User approval: （plan 変更なし）
+- Plan updates: なし
+- Goal check: Trade は `sns_enabled` に依存せず登録され、取引所モード時のみ 4 ミューテーション、SNS モード時は Trade ファミリー非表示。
+- Scope delta: なし
+- Handoff summary: 上記 Current State のとおり。
+- Next-phase impact: Phase 3 で Trade page session を載せれば、`PlayerCurrentStateDto` への snapshot 配線と整合させる。
+
+## Phase 3
 
 - Started:
 - Completed:

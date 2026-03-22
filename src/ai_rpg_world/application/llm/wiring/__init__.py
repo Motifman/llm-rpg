@@ -356,7 +356,10 @@ def _build_tool_handler_map(
         ShopToolExecutor(shop_service=shop_command_service).get_handlers()
     )
     handler_map.update(
-        TradeToolExecutor(trade_service=trade_command_service).get_handlers()
+        TradeToolExecutor(
+            trade_service=trade_command_service,
+            sns_mode_session=sns_mode_session,
+        ).get_handlers()
     )
     handler_map.update(
         SnsToolExecutor(

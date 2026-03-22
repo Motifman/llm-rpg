@@ -5,17 +5,43 @@ from typing import List, Tuple
 from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
 from ai_rpg_world.application.llm.services.availability_resolvers import (
-    SnsModeRequiredAvailabilityResolver,
     TradeAcceptAvailabilityResolver,
     TradeCancelAvailabilityResolver,
     TradeDeclineAvailabilityResolver,
+    TradeEnterToolAvailabilityResolver,
+    TradeExitToolAvailabilityResolver,
+    TradeModeRequiredAvailabilityResolver,
     TradeOfferAvailabilityResolver,
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_TRADE_ACCEPT,
     TOOL_NAME_TRADE_CANCEL,
     TOOL_NAME_TRADE_DECLINE,
+    TOOL_NAME_TRADE_ENTER,
+    TOOL_NAME_TRADE_EXIT,
     TOOL_NAME_TRADE_OFFER,
+)
+
+TRADE_ENTER_PARAMETERS = {
+    "type": "object",
+    "properties": {},
+    "required": [],
+}
+TRADE_ENTER_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_TRADE_ENTER,
+    description="ゲーム内の取引所アプリを開きます。開くと取引用ツールが利用可能になります。",
+    parameters=TRADE_ENTER_PARAMETERS,
+)
+
+TRADE_EXIT_PARAMETERS = {
+    "type": "object",
+    "properties": {},
+    "required": [],
+}
+TRADE_EXIT_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_TRADE_EXIT,
+    description="取引所アプリを閉じ、通常プレイに戻ります。",
+    parameters=TRADE_EXIT_PARAMETERS,
 )
 
 TRADE_OFFER_PARAMETERS = {
@@ -82,12 +108,26 @@ TRADE_DECLINE_DEFINITION = ToolDefinitionDto(
 
 
 def get_trade_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
-    """取引系ツールの (definition, resolver) 一覧を返す。SNS モード ON のときのみ利用可能。"""
+    """取引系ツールの (definition, resolver) 一覧を返す。入場は未起動時、操作は取引所モード時のみ。"""
     return [
-        (TRADE_OFFER_DEFINITION, SnsModeRequiredAvailabilityResolver(TradeOfferAvailabilityResolver())),
-        (TRADE_ACCEPT_DEFINITION, SnsModeRequiredAvailabilityResolver(TradeAcceptAvailabilityResolver())),
-        (TRADE_CANCEL_DEFINITION, SnsModeRequiredAvailabilityResolver(TradeCancelAvailabilityResolver())),
-        (TRADE_DECLINE_DEFINITION, SnsModeRequiredAvailabilityResolver(TradeDeclineAvailabilityResolver())),
+        (TRADE_ENTER_DEFINITION, TradeEnterToolAvailabilityResolver()),
+        (TRADE_EXIT_DEFINITION, TradeExitToolAvailabilityResolver()),
+        (
+            TRADE_OFFER_DEFINITION,
+            TradeModeRequiredAvailabilityResolver(TradeOfferAvailabilityResolver()),
+        ),
+        (
+            TRADE_ACCEPT_DEFINITION,
+            TradeModeRequiredAvailabilityResolver(TradeAcceptAvailabilityResolver()),
+        ),
+        (
+            TRADE_CANCEL_DEFINITION,
+            TradeModeRequiredAvailabilityResolver(TradeCancelAvailabilityResolver()),
+        ),
+        (
+            TRADE_DECLINE_DEFINITION,
+            TradeModeRequiredAvailabilityResolver(TradeDeclineAvailabilityResolver()),
+        ),
     ]
 
 

@@ -72,6 +72,8 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SNS_MARK_NOTIFICATION_READ,
     TOOL_NAME_SNS_LOGOUT,
     TOOL_NAME_SNS_VIEW_CURRENT_PAGE,
+    TOOL_NAME_TRADE_ENTER,
+    TOOL_NAME_TRADE_EXIT,
     TOOL_NAME_TRADE_OFFER,
 )
 
@@ -280,18 +282,21 @@ class TestRegisterDefaultTools:
         with pytest.raises(TypeError, match="registry must be IGameToolRegistry"):
             register_default_tools(None)  # type: ignore[arg-type]
 
-    def test_register_default_tools_trade_only_without_sns_does_not_register_trade(self):
-        """trade_enabled のみでは取引ツールを登録しない（SNS カタログと同時のみ）"""
+    def test_register_default_tools_trade_only_registers_trade_family(self):
+        """trade_enabled のみで取引カタログ（入退場・4 ミューテーション）が登録される"""
         registry = DefaultGameToolRegistry()
         register_default_tools(registry, trade_enabled=True)
         names = [e[0].name for e in registry.get_definitions_with_resolvers()]
-        assert TOOL_NAME_TRADE_OFFER not in names
+        assert TOOL_NAME_TRADE_ENTER in names
+        assert TOOL_NAME_TRADE_EXIT in names
+        assert TOOL_NAME_TRADE_OFFER in names
 
-    def test_register_default_tools_trade_with_sns_registers_trade(self):
-        """trade_enabled かつ sns_enabled で取引ツールが登録される"""
+    def test_register_default_tools_trade_with_sns_registers_both(self):
+        """trade_enabled かつ sns_enabled で SNS と取引の両カタログが登録される"""
         registry = DefaultGameToolRegistry()
         register_default_tools(registry, trade_enabled=True, sns_enabled=True)
         names = [e[0].name for e in registry.get_definitions_with_resolvers()]
+        assert TOOL_NAME_SNS_ENTER in names
         assert TOOL_NAME_TRADE_OFFER in names
 
     def test_register_default_tools_sns_enabled_registers_sns_enter(self):

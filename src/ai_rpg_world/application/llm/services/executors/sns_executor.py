@@ -50,6 +50,9 @@ from ai_rpg_world.application.social.contracts.commands import (
     UnsubscribeUserCommand,
     UpdateUserProfileCommand,
 )
+from ai_rpg_world.application.social.services.active_game_app_session_service import (
+    ActiveGameAppConflictError,
+)
 from ai_rpg_world.application.social.contracts.dtos import NotificationDto
 from ai_rpg_world.application.social.sns_virtual_pages.kinds import (
     SnsHomeTab,
@@ -171,7 +174,10 @@ class SnsToolExecutor:
     ) -> LlmCommandResultDto:
         if self._sns_mode_session is None:
             return unknown_tool("SNS モード状態が利用できません。")
-        self._sns_mode_session.enter_sns_mode(player_id)
+        try:
+            self._sns_mode_session.enter_sns_mode(player_id)
+        except ActiveGameAppConflictError as e:
+            return LlmCommandResultDto(success=False, message=str(e))
         if self._sns_page_session is not None:
             self._sns_page_session.on_enter_sns(player_id)
         return LlmCommandResultDto(
