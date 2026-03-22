@@ -622,11 +622,11 @@ class TradeAcceptTradePageAvailabilityResolver(IAvailabilityResolver):
     """受諾は my_trades / incoming のとき（未配線時は従来どおり available_trades のみ）。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        if context is None or not bool(context.available_trades):
+        if context is None:
             return False
         k = context.trade_virtual_page_kind
         if k is None:
-            return True
+            return bool(context.available_trades)
         return k == "my_trades" and context.trade_my_trades_tab == "incoming"
 
 
@@ -634,11 +634,11 @@ class TradeDeclineTradePageAvailabilityResolver(IAvailabilityResolver):
     """拒否は my_trades / incoming のとき（未配線時は従来どおり）。"""
 
     def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        if context is None or not bool(context.available_trades):
+        if context is None:
             return False
         k = context.trade_virtual_page_kind
         if k is None:
-            return True
+            return bool(context.available_trades)
         return k == "my_trades" and context.trade_my_trades_tab == "incoming"
 
 

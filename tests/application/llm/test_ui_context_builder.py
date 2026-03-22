@@ -1,5 +1,7 @@
 """DefaultLlmUiContextBuilder のテスト。"""
 
+from dataclasses import replace
+
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActiveHarvestToolRuntimeTargetDto,
     AwakenedActionToolRuntimeTargetDto,
@@ -20,6 +22,7 @@ from ai_rpg_world.application.world.contracts.dtos import (
     ActiveConversationDto,
     AvailableLocationAreaDto,
     AvailableMoveDto,
+    AvailableTradeSummaryDto,
     AttentionLevelOptionDto,
     AwakenedActionDto,
     ChestItemDto,
@@ -263,6 +266,31 @@ def _make_state() -> PlayerCurrentStateDto:
 
 
 class TestDefaultLlmUiContextBuilder:
+    def test_build_trade_virtual_page_skips_t_labels_and_trade_targets(self):
+        """仮想取引所配線時は T* ラベルと trade runtime target を出さず trade_ref 案内に寄せる"""
+        builder = DefaultLlmUiContextBuilder()
+        state = replace(
+            _make_state(),
+            active_game_app="trade",
+            is_trade_mode_active=True,
+            is_sns_mode_active=False,
+            trade_virtual_page_kind="my_trades",
+            trade_my_trades_tab="incoming",
+            available_trades=[
+                AvailableTradeSummaryDto(trade_id=1, item_name="盾", requested_gold=10)
+            ],
+        )
+        result = builder.build("現在地: 広場", state)
+        assert "trade_view_current_page" in result.current_state_text
+        assert "r_trade_" in result.current_state_text
+        assert "T1" not in result.current_state_text
+        trade_targets = [
+            t
+            for t in result.tool_runtime_context.targets.values()
+            if getattr(t, "kind", None) == "trade"
+        ]
+        assert trade_targets == []
+
     def test_build_adds_visible_target_labels_and_runtime_context(self):
         builder = DefaultLlmUiContextBuilder()
         state = _make_state()

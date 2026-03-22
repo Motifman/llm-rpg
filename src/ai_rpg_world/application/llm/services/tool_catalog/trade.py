@@ -75,54 +75,50 @@ TRADE_OFFER_DEFINITION = ToolDefinitionDto(
     parameters=TRADE_OFFER_PARAMETERS,
 )
 
+_TRADE_REF_PROPERTY = {
+    "type": "string",
+    "description": (
+        "現在のスナップショットに含まれる page-local ref（r_trade_*）。"
+        "trade_view_current_page の JSON からコピーして指定する。"
+    ),
+}
+
 TRADE_ACCEPT_PARAMETERS = {
     "type": "object",
     "properties": {
-        "trade_label": {"type": "string", "description": "受諾する取引ラベル（例: T1）。trade_ref とどちらか一方。"},
-        "trade_ref": {
-            "type": "string",
-            "description": "現在のスナップショットの page-local ref（r_trade_*）。trade_label とどちらか一方。",
-        },
+        "trade_ref": _TRADE_REF_PROPERTY,
     },
-    "required": [],
+    "required": ["trade_ref"],
 }
 TRADE_ACCEPT_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_TRADE_ACCEPT,
-    description="宛先の取引を受諾して購入します。",
+    description="宛先の取引を受諾して購入します。対象は trade_ref（スナップショットの r_trade_*）のみ。",
     parameters=TRADE_ACCEPT_PARAMETERS,
 )
 
 TRADE_CANCEL_PARAMETERS = {
     "type": "object",
     "properties": {
-        "trade_label": {"type": "string", "description": "キャンセルする取引ラベル（例: T1）。trade_ref とどちらか一方。"},
-        "trade_ref": {
-            "type": "string",
-            "description": "現在のスナップショットの page-local ref（r_trade_*）。",
-        },
+        "trade_ref": _TRADE_REF_PROPERTY,
     },
-    "required": [],
+    "required": ["trade_ref"],
 }
 TRADE_CANCEL_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_TRADE_CANCEL,
-    description="自分が発信した取引をキャンセルします。",
+    description="自分が発信した取引をキャンセルします。対象は trade_ref（スナップショットの r_trade_*）のみ。",
     parameters=TRADE_CANCEL_PARAMETERS,
 )
 
 TRADE_DECLINE_PARAMETERS = {
     "type": "object",
     "properties": {
-        "trade_label": {"type": "string", "description": "断る取引ラベル（例: T1）。trade_ref とどちらか一方。"},
-        "trade_ref": {
-            "type": "string",
-            "description": "現在のスナップショットの page-local ref（r_trade_*）。",
-        },
+        "trade_ref": _TRADE_REF_PROPERTY,
     },
-    "required": [],
+    "required": ["trade_ref"],
 }
 TRADE_DECLINE_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_TRADE_DECLINE,
-    description="自分宛ての取引提案を断ります。直接取引の宛先のみ実行可能。",
+    description="自分宛ての取引提案を断ります。直接取引の宛先のみ。対象は trade_ref（スナップショットの r_trade_*）のみ。",
     parameters=TRADE_DECLINE_PARAMETERS,
 )
 
@@ -133,7 +129,7 @@ TRADE_VIEW_CURRENT_PAGE_PARAMETERS = {
 }
 TRADE_VIEW_CURRENT_PAGE_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_TRADE_VIEW_CURRENT_PAGE,
-    description="現在の仮想取引所画面のスナップショット（JSON）を返します。page-local trade_ref はこの結果に従います。",
+    description="現在の仮想取引所画面のスナップショット（JSON）を返します。page-local ref（r_trade_*）はこの結果に従います。",
     parameters=TRADE_VIEW_CURRENT_PAGE_PARAMETERS,
 )
 
@@ -185,7 +181,7 @@ TRADE_PAGE_REFRESH_PARAMETERS = {
 }
 TRADE_PAGE_REFRESH_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_TRADE_PAGE_REFRESH,
-    description="同一条件で画面を再取得します（ref の世代が更新されることがあります）。",
+    description="同一条件で仮想取引所画面を再取得します（スナップショットの ref 世代が更新されることがあります）。",
     parameters=TRADE_PAGE_REFRESH_PARAMETERS,
 )
 

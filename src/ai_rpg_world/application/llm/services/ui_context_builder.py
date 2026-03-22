@@ -271,14 +271,30 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
             lines.extend(shop_lines)
             collector.add_all(shop_targets)
 
-        trade_lines, trade_targets = self._build_available_trade_lines(
-            current_state.available_trades, allocator, collector
-        )
-        if trade_lines:
+        if (
+            current_state.is_trade_mode_active
+            and current_state.trade_virtual_page_kind is not None
+        ):
             lines.append("")
-            lines.append("宛先取引:")
-            lines.extend(trade_lines)
-            collector.add_all(trade_targets)
+            lines.append(
+                "取引の受諾・辞退・キャンセルは、trade_view_current_page のスナップショットに含まれる "
+                "r_trade_* を trade_ref に指定してください。"
+            )
+            if current_state.available_trades:
+                lines.append("宛先取引（参考・T* ラベルはミューテーションに使いません）:")
+                for t in current_state.available_trades:
+                    lines.append(
+                        f"- 取引 {t.trade_id} {t.item_name}（希望価格: {t.requested_gold}G）"
+                    )
+        else:
+            trade_lines, trade_targets = self._build_available_trade_lines(
+                current_state.available_trades, allocator, collector
+            )
+            if trade_lines:
+                lines.append("")
+                lines.append("宛先取引:")
+                lines.extend(trade_lines)
+                collector.add_all(trade_targets)
 
         if current_state.can_destroy_placeable:
             lines.append("")
