@@ -349,6 +349,7 @@ class SnsPageQueryService:
             viewer_user_id, limit=lim, offset=st.offset
         )
         rows, has_more = _slice_page(list(raw), st.limit)
+        # 未読はリポジトリ集約の live query（別 projection 層は不要。Phase 6 確定）
         unread = self._notification_query.get_unread_count(viewer_user_id)
         lines = [self._notification_line(player_id, n) for n in rows]
         body = SnsNotificationsSnapshotDto(notifications=lines, unread_count=unread)
