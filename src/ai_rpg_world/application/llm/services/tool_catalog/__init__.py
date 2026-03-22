@@ -24,7 +24,10 @@ from ai_rpg_world.application.llm.services.tool_catalog.sns import (
     get_sns_virtual_page_specs,
 )
 from ai_rpg_world.application.llm.services.tool_catalog.speech import get_speech_specs
-from ai_rpg_world.application.llm.services.tool_catalog.trade import get_trade_specs
+from ai_rpg_world.application.llm.services.tool_catalog.trade import (
+    get_trade_specs,
+    get_trade_virtual_page_specs,
+)
 from ai_rpg_world.application.llm.services.tool_catalog.world import get_world_specs
 
 
@@ -56,6 +59,7 @@ def register_default_tools(
     trade_enabled: bool = False,
     sns_enabled: bool = False,
     sns_virtual_pages_enabled: bool = False,
+    trade_virtual_pages_enabled: bool = False,
     inspect_item_enabled: bool = False,
     inspect_target_enabled: bool = False,
     memory_query_enabled: bool = False,
@@ -65,7 +69,10 @@ def register_default_tools(
 ) -> None:
     """標準ツール群を登録し、依存サービスがあるカテゴリだけ追加する。
 
-    Trade は sns_enabled と同時にのみ登録する（一覧の露出は SNS モードと各 resolver で制御）。
+    取引所（Trade）カタログは `trade_enabled` のみで登録され、`sns_enabled` には依存しない。
+    プロダクト設定で SNS と取引の両方を有効にした場合は、SNS 系と取引系が**別カタログとして**並ぶ
+    （取引は SNS の下位機能ではない）。利用可能ツールの切り替えは `PlayerCurrentStateDto` の
+    アクティブアプリ（none / sns / trade）と各 resolver が担う。
     """
     if not isinstance(registry, IGameToolRegistry):
         raise TypeError("registry must be IGameToolRegistry")
@@ -98,9 +105,10 @@ def register_default_tools(
         _register_specs(registry, get_guild_specs())
     if shop_enabled:
         _register_specs(registry, get_shop_specs())
-    # Trade は SNS カタログとセットで登録し、露出は SNS モード ON + 各 resolver で制御する
-    if trade_enabled and sns_enabled:
+    if trade_enabled:
         _register_specs(registry, get_trade_specs())
+    if trade_enabled and trade_virtual_pages_enabled:
+        _register_specs(registry, get_trade_virtual_page_specs())
     if sns_enabled:
         _register_specs(registry, get_sns_specs())
     if sns_enabled and sns_virtual_pages_enabled:

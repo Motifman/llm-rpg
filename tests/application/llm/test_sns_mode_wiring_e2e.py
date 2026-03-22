@@ -2,6 +2,8 @@
 
 composition root が sns_mode_session / post_query_service / SNS command 系を渡したとき、
 DefaultPromptBuilder.build が PlayerCurrentStateDto.is_sns_mode_active に応じた tools を返すことを固定する。
+
+取引所ツールは別カタログとして同梱されうるが、SNS モード ON では取引ファミリーは非表示（相互排他）。
 """
 
 from unittest.mock import MagicMock
@@ -13,6 +15,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SNS_ENTER,
     TOOL_NAME_SNS_LOGOUT,
     TOOL_NAME_SNS_VIEW_CURRENT_PAGE,
+    TOOL_NAME_TRADE_ENTER,
     TOOL_NAME_TRADE_OFFER,
 )
 from ai_rpg_world.application.llm.wiring import create_llm_agent_wiring
@@ -172,13 +175,14 @@ class TestSnsModeWiringPromptTools:
         assert TOOL_NAME_SNS_ENTER in names
         assert TOOL_NAME_SNS_LOGOUT not in names
         assert TOOL_NAME_SNS_CREATE_POST not in names
+        assert TOOL_NAME_TRADE_ENTER in names
         assert TOOL_NAME_TRADE_OFFER not in names
         assert "sns_home_timeline" not in names
         assert "sns_list_my_posts" not in names
         assert "sns_list_user_posts" not in names
         assert TOOL_NAME_SNS_VIEW_CURRENT_PAGE not in names
 
-    def test_prompt_tools_sns_mode_on_shows_trade_not_legacy_read_tools(
+    def test_prompt_tools_sns_mode_on_hides_trade_family_and_legacy_read_tools(
         self, sns_wiring_deps
     ):
         world_query: MagicMock = sns_wiring_deps["world_query_service"]
@@ -196,7 +200,8 @@ class TestSnsModeWiringPromptTools:
         assert TOOL_NAME_SNS_ENTER not in names
         assert TOOL_NAME_SNS_LOGOUT in names
         assert TOOL_NAME_SNS_CREATE_POST in names
-        assert TOOL_NAME_TRADE_OFFER in names
+        assert TOOL_NAME_TRADE_ENTER not in names
+        assert TOOL_NAME_TRADE_OFFER not in names
         assert "sns_home_timeline" not in names
         assert "sns_list_my_posts" not in names
         assert "sns_list_user_posts" not in names
