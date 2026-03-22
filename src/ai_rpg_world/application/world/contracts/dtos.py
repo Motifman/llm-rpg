@@ -400,3 +400,10 @@ class PlayerCurrentStateDto:
     current_game_time_label: Optional[str] = None
     # ゲーム内 SNS アプリを開いている（認証ではない UI メタファ）。ツール一覧の SNS/Trade 露出に利用。
     is_sns_mode_active: bool = False
+    # 仮想 SNS 画面（SnsPageSessionService が配線され、かつ SNS モード ON のときのみ有効）
+    sns_virtual_page_kind: Optional[str] = None
+    sns_home_tab: Optional[str] = None
+    sns_page_snapshot_generation: int = 0
+    sns_current_page_snapshot_json: Optional[str] = None
+    # profile 画面で閲覧中のユーザーが自分自身か（ツール出し分け用）
+    sns_profile_is_self: Optional[bool] = None

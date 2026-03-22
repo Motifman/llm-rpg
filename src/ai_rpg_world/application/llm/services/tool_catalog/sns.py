@@ -6,19 +6,27 @@ from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
 from ai_rpg_world.application.llm.services.availability_resolvers import (
     SnsEnterToolAvailabilityResolver,
+    SnsPageKindAvailabilityResolver,
+    SnsProfileUpdateAvailabilityResolver,
     SnsToolAvailabilityResolver,
+    SnsVirtualPageHomeTabAvailabilityResolver,
+    SnsVirtualPageNavigationAvailabilityResolver,
+    SnsVirtualPagePagingAvailabilityResolver,
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SNS_BLOCK,
     TOOL_NAME_SNS_DELETE_POST,
     TOOL_NAME_SNS_DELETE_REPLY,
     TOOL_NAME_SNS_ENTER,
-    TOOL_NAME_SNS_HOME_TIMELINE,
-    TOOL_NAME_SNS_LIST_MY_POSTS,
-    TOOL_NAME_SNS_LIST_USER_POSTS,
     TOOL_NAME_SNS_LOGOUT,
     TOOL_NAME_SNS_MARK_ALL_NOTIFICATIONS_READ,
     TOOL_NAME_SNS_MARK_NOTIFICATION_READ,
+    TOOL_NAME_SNS_OPEN_PAGE,
+    TOOL_NAME_SNS_OPEN_REF,
+    TOOL_NAME_SNS_PAGE_NEXT,
+    TOOL_NAME_SNS_PAGE_REFRESH,
+    TOOL_NAME_SNS_SWITCH_TAB,
+    TOOL_NAME_SNS_VIEW_CURRENT_PAGE,
     TOOL_NAME_SNS_CREATE_POST,
     TOOL_NAME_SNS_CREATE_REPLY,
     TOOL_NAME_SNS_FOLLOW,
@@ -80,8 +88,14 @@ SNS_CREATE_REPLY_PARAMETERS = {
     "type": "object",
     "properties": {
         "content": {"type": "string", "description": "リプライする内容。"},
-        "parent_post_id": {"type": "integer", "description": "親ポストのID。parent_reply_id とどちらか必須。"},
-        "parent_reply_id": {"type": "integer", "description": "親リプライのID。parent_post_id とどちらか必須。"},
+        "parent_post_ref": {
+            "type": "string",
+            "description": "親ポストの page-local ref。`parent_reply_ref` とどちらか必須。",
+        },
+        "parent_reply_ref": {
+            "type": "string",
+            "description": "親リプライの page-local ref。`parent_post_ref` とどちらか必須。",
+        },
         "visibility": {
             "type": "string",
             "description": "公開範囲。public, followers_only, private のいずれか。省略時または不明な値の場合は public（公開）として扱います。",
@@ -91,16 +105,19 @@ SNS_CREATE_REPLY_PARAMETERS = {
 }
 SNS_CREATE_REPLY_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SNS_CREATE_REPLY,
-    description="ポストまたはリプライに返信します。parent_post_id または parent_reply_id のどちらかを指定してください。",
+    description="ポストまたはリプライに返信します。`parent_post_ref` または `parent_reply_ref` のどちらかを指定してください。",
     parameters=SNS_CREATE_REPLY_PARAMETERS,
 )
 
 SNS_LIKE_POST_PARAMETERS = {
     "type": "object",
     "properties": {
-        "post_id": {"type": "integer", "description": "いいねするポストのID。"},
+        "post_ref": {
+            "type": "string",
+            "description": "いいねするポストの page-local ref。",
+        },
     },
-    "required": ["post_id"],
+    "required": ["post_ref"],
 }
 SNS_LIKE_POST_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SNS_LIKE_POST,
@@ -111,9 +128,12 @@ SNS_LIKE_POST_DEFINITION = ToolDefinitionDto(
 SNS_LIKE_REPLY_PARAMETERS = {
     "type": "object",
     "properties": {
-        "reply_id": {"type": "integer", "description": "いいねするリプライのID。"},
+        "reply_ref": {
+            "type": "string",
+            "description": "いいねするリプライの page-local ref。",
+        },
     },
-    "required": ["reply_id"],
+    "required": ["reply_ref"],
 }
 SNS_LIKE_REPLY_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SNS_LIKE_REPLY,
@@ -124,9 +144,12 @@ SNS_LIKE_REPLY_DEFINITION = ToolDefinitionDto(
 SNS_FOLLOW_PARAMETERS = {
     "type": "object",
     "properties": {
-        "target_user_id": {"type": "integer", "description": "フォローするユーザーのID。"},
+        "target_user_ref": {
+            "type": "string",
+            "description": "フォローするユーザーの page-local ref。profile 画面では省略時に現在の表示対象を使います。",
+        },
     },
-    "required": ["target_user_id"],
+    "required": [],
 }
 SNS_FOLLOW_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SNS_FOLLOW,
@@ -137,9 +160,12 @@ SNS_FOLLOW_DEFINITION = ToolDefinitionDto(
 SNS_UNFOLLOW_PARAMETERS = {
     "type": "object",
     "properties": {
-        "target_user_id": {"type": "integer", "description": "フォロー解除するユーザーのID。"},
+        "target_user_ref": {
+            "type": "string",
+            "description": "フォロー解除するユーザーの page-local ref。profile 画面では省略時に現在の表示対象を使います。",
+        },
     },
-    "required": ["target_user_id"],
+    "required": [],
 }
 SNS_UNFOLLOW_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SNS_UNFOLLOW,
@@ -150,9 +176,12 @@ SNS_UNFOLLOW_DEFINITION = ToolDefinitionDto(
 SNS_SUBSCRIBE_PARAMETERS = {
     "type": "object",
     "properties": {
-        "target_user_id": {"type": "integer", "description": "サブスクライブするユーザーのID。"},
+        "target_user_ref": {
+            "type": "string",
+            "description": "サブスクライブするユーザーの page-local ref。profile 画面では省略時に現在の表示対象を使います。",
+        },
     },
-    "required": ["target_user_id"],
+    "required": [],
 }
 SNS_SUBSCRIBE_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SNS_SUBSCRIBE,
@@ -163,9 +192,12 @@ SNS_SUBSCRIBE_DEFINITION = ToolDefinitionDto(
 SNS_UNSUBSCRIBE_PARAMETERS = {
     "type": "object",
     "properties": {
-        "target_user_id": {"type": "integer", "description": "サブスクライブ解除するユーザーのID。"},
+        "target_user_ref": {
+            "type": "string",
+            "description": "サブスクライブ解除するユーザーの page-local ref。profile 画面では省略時に現在の表示対象を使います。",
+        },
     },
-    "required": ["target_user_id"],
+    "required": [],
 }
 SNS_UNSUBSCRIBE_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SNS_UNSUBSCRIBE,
@@ -176,9 +208,12 @@ SNS_UNSUBSCRIBE_DEFINITION = ToolDefinitionDto(
 SNS_BLOCK_PARAMETERS = {
     "type": "object",
     "properties": {
-        "target_user_id": {"type": "integer", "description": "ブロックするユーザーのID。"},
+        "target_user_ref": {
+            "type": "string",
+            "description": "ブロックするユーザーの page-local ref。profile 画面では省略時に現在の表示対象を使います。",
+        },
     },
-    "required": ["target_user_id"],
+    "required": [],
 }
 SNS_BLOCK_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SNS_BLOCK,
@@ -189,9 +224,12 @@ SNS_BLOCK_DEFINITION = ToolDefinitionDto(
 SNS_UNBLOCK_PARAMETERS = {
     "type": "object",
     "properties": {
-        "target_user_id": {"type": "integer", "description": "ブロック解除するユーザーのID。"},
+        "target_user_ref": {
+            "type": "string",
+            "description": "ブロック解除するユーザーの page-local ref。profile 画面では省略時に現在の表示対象を使います。",
+        },
     },
-    "required": ["target_user_id"],
+    "required": [],
 }
 SNS_UNBLOCK_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SNS_UNBLOCK,
@@ -202,9 +240,12 @@ SNS_UNBLOCK_DEFINITION = ToolDefinitionDto(
 SNS_DELETE_POST_PARAMETERS = {
     "type": "object",
     "properties": {
-        "post_id": {"type": "integer", "description": "削除するポストのID。"},
+        "post_ref": {
+            "type": "string",
+            "description": "削除するポストの page-local ref。",
+        },
     },
-    "required": ["post_id"],
+    "required": ["post_ref"],
 }
 SNS_DELETE_POST_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SNS_DELETE_POST,
@@ -215,9 +256,12 @@ SNS_DELETE_POST_DEFINITION = ToolDefinitionDto(
 SNS_DELETE_REPLY_PARAMETERS = {
     "type": "object",
     "properties": {
-        "reply_id": {"type": "integer", "description": "削除するリプライのID。"},
+        "reply_ref": {
+            "type": "string",
+            "description": "削除するリプライの page-local ref。",
+        },
     },
-    "required": ["reply_id"],
+    "required": ["reply_ref"],
 }
 SNS_DELETE_REPLY_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SNS_DELETE_REPLY,
@@ -248,9 +292,12 @@ SNS_UPDATE_PROFILE_DEFINITION = ToolDefinitionDto(
 SNS_MARK_NOTIFICATION_READ_PARAMETERS = {
     "type": "object",
     "properties": {
-        "notification_id": {"type": "integer", "description": "既読にする通知のID。"},
+        "notification_ref": {
+            "type": "string",
+            "description": "既読にする通知の page-local ref。",
+        },
     },
-    "required": ["notification_id"],
+    "required": ["notification_ref"],
 }
 SNS_MARK_NOTIFICATION_READ_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SNS_MARK_NOTIFICATION_READ,
@@ -269,47 +316,112 @@ SNS_MARK_ALL_NOTIFICATIONS_READ_DEFINITION = ToolDefinitionDto(
     parameters=SNS_MARK_ALL_NOTIFICATIONS_READ_PARAMETERS,
 )
 
-SNS_HOME_TIMELINE_PARAMETERS = {
+_PG_HOME_SEARCH_PROFILE = frozenset({"home", "search", "profile"})
+_PG_POST_DETAIL = frozenset({"post_detail"})
+_PG_LIKE_POST = frozenset({"home", "post_detail", "search", "profile"})
+_PG_DELETE_POST = frozenset({"home", "post_detail", "search", "profile"})
+_PG_SOCIAL = frozenset({"profile"})
+_PG_NOTIFICATIONS = frozenset({"notifications"})
+
+SNS_VIEW_CURRENT_PAGE_PARAMETERS = {
     "type": "object",
-    "properties": {
-        "limit": {"type": "integer", "description": "取得件数（省略時は 20、最大 100）。"},
-        "offset": {"type": "integer", "description": "先頭からスキップする件数（省略時は 0）。"},
-    },
+    "properties": {},
     "required": [],
 }
-SNS_HOME_TIMELINE_DEFINITION = ToolDefinitionDto(
-    name=TOOL_NAME_SNS_HOME_TIMELINE,
-    description="フォロー中ユーザーのホームタイムライン（投稿一覧）を取得します。",
-    parameters=SNS_HOME_TIMELINE_PARAMETERS,
+SNS_VIEW_CURRENT_PAGE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_VIEW_CURRENT_PAGE,
+    description="現在の仮想 SNS 画面のスナップショット（JSON）を返します。page-local ref はこの結果に従います。",
+    parameters=SNS_VIEW_CURRENT_PAGE_PARAMETERS,
 )
 
-SNS_LIST_MY_POSTS_PARAMETERS = {
+SNS_OPEN_PAGE_PARAMETERS = {
     "type": "object",
     "properties": {
-        "limit": {"type": "integer", "description": "取得件数（省略時は 20、最大 100）。"},
-        "offset": {"type": "integer", "description": "先頭からスキップする件数（省略時は 0）。"},
+        "page": {
+            "type": "string",
+            "description": "遷移先: home, post_detail, search, profile, notifications のいずれか。",
+        },
+        "home_tab": {
+            "type": "string",
+            "description": "page が home のとき: following または popular。",
+        },
+        "search_mode": {
+            "type": "string",
+            "description": "page が search のとき: keyword または hashtag。",
+        },
+        "search_query": {
+            "type": "string",
+            "description": "page が search のときの検索語（省略可）。",
+        },
+        "profile_user_ref": {
+            "type": "string",
+            "description": "page が profile のとき、スナップショットの user ref。省略時は自分のプロフィール。",
+        },
+        "post_ref": {
+            "type": "string",
+            "description": "page が post_detail のとき必須。スナップショットの post ref（ルート投稿）。",
+        },
     },
+    "required": ["page"],
+}
+SNS_OPEN_PAGE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_OPEN_PAGE,
+    description="論理画面へ遷移します。post_detail には post_ref が必要です。",
+    parameters=SNS_OPEN_PAGE_PARAMETERS,
+)
+
+SNS_OPEN_REF_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "ref": {
+            "type": "string",
+            "description": "現在のスナップショットに含まれる page-local ref（r_post_*, r_user_*, r_reply_*, r_notif_*）。",
+        },
+    },
+    "required": ["ref"],
+}
+SNS_OPEN_REF_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_OPEN_REF,
+    description="スナップショット上の ref に対応する画面へ遷移します。",
+    parameters=SNS_OPEN_REF_PARAMETERS,
+)
+
+SNS_PAGE_NEXT_PARAMETERS = {
+    "type": "object",
+    "properties": {},
     "required": [],
 }
-SNS_LIST_MY_POSTS_DEFINITION = ToolDefinitionDto(
-    name=TOOL_NAME_SNS_LIST_MY_POSTS,
-    description="自分の投稿一覧を取得します。",
-    parameters=SNS_LIST_MY_POSTS_PARAMETERS,
+SNS_PAGE_NEXT_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_PAGE_NEXT,
+    description="現在画面の次ページへ進みます（offset を limit 分進める）。",
+    parameters=SNS_PAGE_NEXT_PARAMETERS,
 )
 
-SNS_LIST_USER_POSTS_PARAMETERS = {
+SNS_PAGE_REFRESH_PARAMETERS = {
+    "type": "object",
+    "properties": {},
+    "required": [],
+}
+SNS_PAGE_REFRESH_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_PAGE_REFRESH,
+    description="同一条件で画面を再取得します（ref の世代が更新されることがあります）。",
+    parameters=SNS_PAGE_REFRESH_PARAMETERS,
+)
+
+SNS_SWITCH_TAB_PARAMETERS = {
     "type": "object",
     "properties": {
-        "target_user_id": {"type": "integer", "description": "投稿一覧を見る対象の SNS ユーザー ID。"},
-        "limit": {"type": "integer", "description": "取得件数（省略時は 20、最大 100）。"},
-        "offset": {"type": "integer", "description": "先頭からスキップする件数（省略時は 0）。"},
+        "tab": {
+            "type": "string",
+            "description": "home のタブ: following または popular。",
+        },
     },
-    "required": ["target_user_id"],
+    "required": ["tab"],
 }
-SNS_LIST_USER_POSTS_DEFINITION = ToolDefinitionDto(
-    name=TOOL_NAME_SNS_LIST_USER_POSTS,
-    description="指定したユーザーの投稿一覧を取得します（閲覧権限に従います）。",
-    parameters=SNS_LIST_USER_POSTS_PARAMETERS,
+SNS_SWITCH_TAB_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_SWITCH_TAB,
+    description="home 画面で following / popular を切り替えます。",
+    parameters=SNS_SWITCH_TAB_PARAMETERS,
 )
 
 
@@ -317,27 +429,48 @@ def get_sns_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """SNS 系ツールの (definition, resolver) 一覧を返す。"""
     enter_resolver = SnsEnterToolAvailabilityResolver()
     sns_resolver = SnsToolAvailabilityResolver()
+    pg_create_post = SnsPageKindAvailabilityResolver(_PG_HOME_SEARCH_PROFILE)
+    pg_create_reply = SnsPageKindAvailabilityResolver(_PG_POST_DETAIL)
+    pg_like_post = SnsPageKindAvailabilityResolver(_PG_LIKE_POST)
+    pg_like_reply = SnsPageKindAvailabilityResolver(_PG_POST_DETAIL)
+    pg_social = SnsPageKindAvailabilityResolver(_PG_SOCIAL)
+    pg_delete_post = SnsPageKindAvailabilityResolver(_PG_DELETE_POST)
+    pg_delete_reply = SnsPageKindAvailabilityResolver(_PG_POST_DETAIL)
+    pg_profile_update = SnsProfileUpdateAvailabilityResolver()
+    pg_notifications = SnsPageKindAvailabilityResolver(_PG_NOTIFICATIONS)
     return [
         (SNS_ENTER_DEFINITION, enter_resolver),
         (SNS_LOGOUT_DEFINITION, sns_resolver),
-        (SNS_CREATE_POST_DEFINITION, sns_resolver),
-        (SNS_CREATE_REPLY_DEFINITION, sns_resolver),
-        (SNS_LIKE_POST_DEFINITION, sns_resolver),
-        (SNS_LIKE_REPLY_DEFINITION, sns_resolver),
-        (SNS_FOLLOW_DEFINITION, sns_resolver),
-        (SNS_UNFOLLOW_DEFINITION, sns_resolver),
-        (SNS_SUBSCRIBE_DEFINITION, sns_resolver),
-        (SNS_UNSUBSCRIBE_DEFINITION, sns_resolver),
-        (SNS_BLOCK_DEFINITION, sns_resolver),
-        (SNS_UNBLOCK_DEFINITION, sns_resolver),
-        (SNS_DELETE_POST_DEFINITION, sns_resolver),
-        (SNS_DELETE_REPLY_DEFINITION, sns_resolver),
-        (SNS_UPDATE_PROFILE_DEFINITION, sns_resolver),
-        (SNS_MARK_NOTIFICATION_READ_DEFINITION, sns_resolver),
-        (SNS_MARK_ALL_NOTIFICATIONS_READ_DEFINITION, sns_resolver),
-        (SNS_HOME_TIMELINE_DEFINITION, sns_resolver),
-        (SNS_LIST_MY_POSTS_DEFINITION, sns_resolver),
-        (SNS_LIST_USER_POSTS_DEFINITION, sns_resolver),
+        (SNS_CREATE_POST_DEFINITION, pg_create_post),
+        (SNS_CREATE_REPLY_DEFINITION, pg_create_reply),
+        (SNS_LIKE_POST_DEFINITION, pg_like_post),
+        (SNS_LIKE_REPLY_DEFINITION, pg_like_reply),
+        (SNS_FOLLOW_DEFINITION, pg_social),
+        (SNS_UNFOLLOW_DEFINITION, pg_social),
+        (SNS_SUBSCRIBE_DEFINITION, pg_social),
+        (SNS_UNSUBSCRIBE_DEFINITION, pg_social),
+        (SNS_BLOCK_DEFINITION, pg_social),
+        (SNS_UNBLOCK_DEFINITION, pg_social),
+        (SNS_DELETE_POST_DEFINITION, pg_delete_post),
+        (SNS_DELETE_REPLY_DEFINITION, pg_delete_reply),
+        (SNS_UPDATE_PROFILE_DEFINITION, pg_profile_update),
+        (SNS_MARK_NOTIFICATION_READ_DEFINITION, pg_notifications),
+        (SNS_MARK_ALL_NOTIFICATIONS_READ_DEFINITION, pg_notifications),
+    ]
+
+
+def get_sns_virtual_page_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+    """仮想 SNS 画面ナビゲーション用ツール（SnsPageQueryService 配線時のみ登録）。"""
+    nav = SnsVirtualPageNavigationAvailabilityResolver()
+    paging = SnsVirtualPagePagingAvailabilityResolver()
+    home_tab = SnsVirtualPageHomeTabAvailabilityResolver()
+    return [
+        (SNS_VIEW_CURRENT_PAGE_DEFINITION, nav),
+        (SNS_OPEN_PAGE_DEFINITION, nav),
+        (SNS_OPEN_REF_DEFINITION, nav),
+        (SNS_PAGE_NEXT_DEFINITION, paging),
+        (SNS_PAGE_REFRESH_DEFINITION, nav),
+        (SNS_SWITCH_TAB_DEFINITION, home_tab),
     ]
 
 

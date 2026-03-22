@@ -25,6 +25,8 @@ EventHandlerComposition のインスタンス化）は**呼び出し元（外部
 - `create_world_query_service(..., sns_mode_session=...)` と `create_llm_agent_wiring(..., sns_mode_session=...)`
   には**同一の** `SnsModeSessionService` インスタンスを渡す（`PlayerCurrentStateDto.is_sns_mode_active` と
   enter/logout のセッション状態を一致させるため）。
+- 仮想 SNS 画面状態を `PlayerCurrentStateDto` と enter/logout で共有する場合は、同様に
+  `sns_page_session` に**同一の** `SnsPageSessionService` を渡す。
 - ホーム TL / ユーザー TL 系ツールを実行可能にするには `PostQueryService` を
   `create_llm_agent_wiring(..., post_query_service=...)` に渡す。WorldQueryService の組み立てには不要。
 """
@@ -292,7 +294,10 @@ def _build_tool_handler_map(
     user_command_service: Optional[Any],
     notification_command_service: Optional[Any],
     sns_mode_session: Optional[Any],
-    post_query_service: Optional[Any],
+    sns_page_session: Optional[Any],
+    sns_page_query_service: Optional[Any],
+    reply_query_service: Optional[Any],
+    notification_query_service: Optional[Any],
     item_repository: Optional[Any],
     monster_repository: Optional[Any],
     physical_map_repository: PhysicalMapRepository,
@@ -360,7 +365,10 @@ def _build_tool_handler_map(
             user_command_service=user_command_service,
             notification_command_service=notification_command_service,
             sns_mode_session=sns_mode_session,
-            post_query_service=post_query_service,
+            sns_page_session=sns_page_session,
+            sns_page_query_service=sns_page_query_service,
+            reply_query_service=reply_query_service,
+            notification_query_service=notification_query_service,
         ).get_handlers()
     )
     handler_map.update(
@@ -409,7 +417,11 @@ def _build_tool_stack(
     user_command_service: Optional[Any],
     notification_command_service: Optional[Any],
     sns_mode_session: Optional[Any],
+    sns_page_session: Optional[Any],
     post_query_service: Optional[Any],
+    sns_page_query_service: Optional[Any],
+    reply_query_service: Optional[Any],
+    notification_query_service: Optional[Any],
     item_repository: Optional[Any],
     monster_repository: Optional[Any],
     physical_map_repository: PhysicalMapRepository,
@@ -446,6 +458,7 @@ def _build_tool_stack(
             or sns_mode_session is not None
             or post_query_service is not None
         ),
+        sns_virtual_pages_enabled=sns_page_query_service is not None,
         inspect_item_enabled=item_repository is not None,
         inspect_target_enabled=(
             monster_repository is not None
@@ -479,7 +492,10 @@ def _build_tool_stack(
         user_command_service=user_command_service,
         notification_command_service=notification_command_service,
         sns_mode_session=sns_mode_session,
-        post_query_service=post_query_service,
+        sns_page_session=sns_page_session,
+        sns_page_query_service=sns_page_query_service,
+        reply_query_service=reply_query_service,
+        notification_query_service=notification_query_service,
         item_repository=item_repository,
         monster_repository=monster_repository,
         physical_map_repository=physical_map_repository,
@@ -680,11 +696,13 @@ class LlmAgentWiringResult:
         llm_turn_trigger: ILlmTurnTrigger,
         reflection_runner: Optional[IReflectionRunner] = None,
         sns_mode_session: Optional[Any] = None,
+        sns_page_session: Optional[Any] = None,
     ) -> None:
         self.observation_registry = observation_registry
         self.llm_turn_trigger = llm_turn_trigger
         self.reflection_runner = reflection_runner
         self.sns_mode_session = sns_mode_session
+        self.sns_page_session = sns_page_session
 
     def __iter__(self) -> Any:
         yield self.observation_registry
@@ -734,7 +752,11 @@ def create_llm_agent_wiring(
     user_command_service: Optional[Any] = None,
     notification_command_service: Optional[Any] = None,
     sns_mode_session: Optional[Any] = None,
+    sns_page_session: Optional[Any] = None,
     post_query_service: Optional[Any] = None,
+    sns_page_query_service: Optional[Any] = None,
+    reply_query_service: Optional[Any] = None,
+    notification_query_service: Optional[Any] = None,
     llm_client: Optional[ILLMClient] = None,
     game_time_provider: Optional[Any] = None,
     world_time_config_service: Optional[Any] = None,
@@ -865,7 +887,11 @@ def create_llm_agent_wiring(
         user_command_service=user_command_service,
         notification_command_service=notification_command_service,
         sns_mode_session=sns_mode_session,
+        sns_page_session=sns_page_session,
         post_query_service=post_query_service,
+        sns_page_query_service=sns_page_query_service,
+        reply_query_service=reply_query_service,
+        notification_query_service=notification_query_service,
         item_repository=item_repository,
         monster_repository=monster_repository,
         physical_map_repository=physical_map_repository,
@@ -958,6 +984,7 @@ def create_llm_agent_wiring(
         llm_turn_trigger=llm_turn_trigger,
         reflection_runner=reflection_runner,
         sns_mode_session=sns_mode_session,
+        sns_page_session=sns_page_session,
     )
 
 

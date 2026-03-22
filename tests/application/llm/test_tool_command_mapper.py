@@ -7,7 +7,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
-from ai_rpg_world.application.social.contracts.dtos import PostDto
 from ai_rpg_world.application.llm.services.tool_command_mapper import ToolCommandMapper
 
 from tests.application.llm.conftest import _create_tool_command_mapper
@@ -47,14 +46,11 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SNS_DELETE_POST,
     TOOL_NAME_SNS_DELETE_REPLY,
     TOOL_NAME_SNS_ENTER,
-    TOOL_NAME_SNS_HOME_TIMELINE,
     TOOL_NAME_SNS_CREATE_POST,
     TOOL_NAME_SNS_CREATE_REPLY,
     TOOL_NAME_SNS_FOLLOW,
     TOOL_NAME_SNS_LIKE_POST,
     TOOL_NAME_SNS_LIKE_REPLY,
-    TOOL_NAME_SNS_LIST_MY_POSTS,
-    TOOL_NAME_SNS_LIST_USER_POSTS,
     TOOL_NAME_SNS_LOGOUT,
     TOOL_NAME_SNS_MARK_ALL_NOTIFICATIONS_READ,
     TOOL_NAME_SNS_MARK_NOTIFICATION_READ,
@@ -77,6 +73,8 @@ from ai_rpg_world.application.llm.tool_constants import (
 from ai_rpg_world.application.social.services.sns_mode_session_service import (
     SnsModeSessionService,
 )
+from ai_rpg_world.application.social.sns_virtual_pages import SnsPageSessionService
+from ai_rpg_world.application.social.sns_virtual_pages.kinds import SnsVirtualPageKind
 from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.application.world.contracts.dtos import (
@@ -1717,8 +1715,30 @@ class TestToolCommandMapperSns:
             {"content": "返信"},
         )
         assert result.success is False
-        assert "parent_post_id" in result.message or "parent_reply_id" in result.message
+        assert "parent_post_ref" in result.message or "parent_reply_ref" in result.message
         reply_service.create_reply.assert_not_called()
+
+    def test_sns_create_reply_resolves_parent_post_ref(self):
+        reply_service = MagicMock()
+        reply_service.create_reply.return_value = MagicMock(success=True, message="リプライしました。")
+        page_session = SnsPageSessionService()
+        page_session.issue_post_ref(1, 10)
+        ref = next(iter(page_session.get_state(1).ref_to_post_id.keys()))
+        mapper = _create_tool_command_mapper(
+            movement_service=MagicMock(),
+            reply_service=reply_service,
+            sns_page_session=page_session,
+            sns_page_query_service=MagicMock(),
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SNS_CREATE_REPLY,
+            {"content": "返信です", "parent_post_ref": ref},
+        )
+        assert result.success is True
+        reply_cmd = reply_service.create_reply.call_args[0][0]
+        assert reply_cmd.parent_post_id == 10
+        assert reply_cmd.parent_reply_id is None
 
     def test_sns_like_post_success(self):
         post_service = MagicMock()
@@ -1743,8 +1763,25 @@ class TestToolCommandMapperSns:
         )
         result = mapper.execute(1, TOOL_NAME_SNS_LIKE_POST, {})
         assert result.success is False
-        assert "post_id" in result.message
+        assert "post_ref" in result.message
         post_service.like_post.assert_not_called()
+
+    def test_sns_like_post_resolves_post_ref(self):
+        post_service = MagicMock()
+        post_service.like_post.return_value = MagicMock(success=True, message="いいねしました。")
+        page_session = SnsPageSessionService()
+        page_session.issue_post_ref(1, 5)
+        ref = next(iter(page_session.get_state(1).ref_to_post_id.keys()))
+        mapper = _create_tool_command_mapper(
+            movement_service=MagicMock(),
+            post_service=post_service,
+            sns_page_session=page_session,
+            sns_page_query_service=MagicMock(),
+        )
+        result = mapper.execute(1, TOOL_NAME_SNS_LIKE_POST, {"post_ref": ref})
+        assert result.success is True
+        like_cmd = post_service.like_post.call_args[0][0]
+        assert like_cmd.post_id == 5
 
     def test_sns_like_reply_success(self):
         reply_service = MagicMock()
@@ -1769,7 +1806,7 @@ class TestToolCommandMapperSns:
         )
         result = mapper.execute(1, TOOL_NAME_SNS_LIKE_REPLY, {})
         assert result.success is False
-        assert "reply_id" in result.message
+        assert "reply_ref" in result.message
         reply_service.like_reply.assert_not_called()
 
     def test_sns_follow_success(self):
@@ -1797,8 +1834,27 @@ class TestToolCommandMapperSns:
         )
         result = mapper.execute(1, TOOL_NAME_SNS_FOLLOW, {})
         assert result.success is False
-        assert "target_user_id" in result.message
+        assert "target_user_ref" in result.message
         user_command_service.follow_user.assert_not_called()
+
+    def test_sns_follow_uses_profile_target_when_target_user_ref_omitted(self):
+        user_command_service = MagicMock()
+        user_command_service.follow_user.return_value = MagicMock(
+            success=True, message="フォローしました。"
+        )
+        page_session = SnsPageSessionService()
+        page_session.set_page_kind(1, SnsVirtualPageKind.PROFILE)
+        page_session.set_profile_target_user_id(1, 2)
+        mapper = _create_tool_command_mapper(
+            movement_service=MagicMock(),
+            user_command_service=user_command_service,
+            sns_page_session=page_session,
+            sns_page_query_service=MagicMock(),
+        )
+        result = mapper.execute(1, TOOL_NAME_SNS_FOLLOW, {})
+        assert result.success is True
+        follow_cmd = user_command_service.follow_user.call_args[0][0]
+        assert follow_cmd.followee_user_id == 2
 
     def test_sns_unfollow_success(self):
         user_command_service = MagicMock()
@@ -1992,7 +2048,7 @@ class TestToolCommandMapperSns:
         )
         result = mapper.execute(1, TOOL_NAME_SNS_DELETE_POST, {})
         assert result.success is False
-        assert "post_id" in result.message
+        assert "post_ref" in result.message
         post_service.delete_post.assert_not_called()
 
     def test_sns_delete_reply_success(self):
@@ -2054,6 +2110,29 @@ class TestToolCommandMapperSns:
         assert read_cmd.user_id == 1
         assert read_cmd.notification_id == 100
 
+    def test_sns_mark_notification_read_resolves_notification_ref(self):
+        notification_service = MagicMock()
+        notification_service.mark_notification_as_read.return_value = MagicMock(
+            success=True, message="既読にしました。"
+        )
+        page_session = SnsPageSessionService()
+        page_session.issue_notification_ref(1, 100)
+        ref = next(iter(page_session.get_state(1).ref_to_notification_id.keys()))
+        mapper = _create_tool_command_mapper(
+            movement_service=MagicMock(),
+            notification_command_service=notification_service,
+            sns_page_session=page_session,
+            sns_page_query_service=MagicMock(),
+        )
+        result = mapper.execute(
+            1,
+            TOOL_NAME_SNS_MARK_NOTIFICATION_READ,
+            {"notification_ref": ref},
+        )
+        assert result.success is True
+        read_cmd = notification_service.mark_notification_as_read.call_args[0][0]
+        assert read_cmd.notification_id == 100
+
     def test_sns_mark_all_notifications_read_success(self):
         notification_service = MagicMock()
         notification_service.mark_all_notifications_as_read.return_value = MagicMock(
@@ -2066,84 +2145,3 @@ class TestToolCommandMapperSns:
         result = mapper.execute(1, TOOL_NAME_SNS_MARK_ALL_NOTIFICATIONS_READ, {})
         assert result.success is True
         notification_service.mark_all_notifications_as_read.assert_called_once()
-
-    def _sample_post(self) -> PostDto:
-        return PostDto(
-            post_id=101,
-            author_user_id=1,
-            author_user_name="u1",
-            author_display_name="表示名",
-            content="本文です",
-            hashtags=[],
-            visibility="public",
-            created_at=datetime(2024, 6, 1, 12, 0, 0),
-            like_count=2,
-            reply_count=1,
-            is_liked_by_viewer=False,
-            is_replied_by_viewer=False,
-            mentioned_users=[],
-            is_deleted=False,
-        )
-
-    def test_sns_home_timeline_success(self):
-        post_query = MagicMock()
-        post_query.get_home_timeline.return_value = [self._sample_post()]
-        mapper = _create_tool_command_mapper(
-            movement_service=MagicMock(),
-            post_query_service=post_query,
-        )
-        result = mapper.execute(1, TOOL_NAME_SNS_HOME_TIMELINE, {"limit": 5})
-        assert result.success is True
-        assert "post_id=101" in result.message
-        post_query.get_home_timeline.assert_called_once_with(
-            viewer_user_id=1, limit=5, offset=0
-        )
-
-    def test_sns_list_my_posts_success(self):
-        post_query = MagicMock()
-        post_query.get_user_timeline.return_value = []
-        mapper = _create_tool_command_mapper(
-            movement_service=MagicMock(),
-            post_query_service=post_query,
-        )
-        result = mapper.execute(1, TOOL_NAME_SNS_LIST_MY_POSTS, {})
-        assert result.success is True
-        assert "表示できる投稿はありません" in result.message
-        post_query.get_user_timeline.assert_called_once_with(
-            user_id=1, viewer_user_id=1, limit=20, offset=0
-        )
-
-    def test_sns_list_user_posts_success(self):
-        post_query = MagicMock()
-        post_query.get_user_timeline.return_value = [self._sample_post()]
-        mapper = _create_tool_command_mapper(
-            movement_service=MagicMock(),
-            post_query_service=post_query,
-        )
-        result = mapper.execute(
-            1,
-            TOOL_NAME_SNS_LIST_USER_POSTS,
-            {"target_user_id": 2},
-        )
-        assert result.success is True
-        assert "post_id=101" in result.message
-        post_query.get_user_timeline.assert_called_once_with(
-            user_id=2, viewer_user_id=1, limit=20, offset=0
-        )
-
-    def test_sns_list_user_posts_missing_target_returns_invalid_arg(self):
-        post_query = MagicMock()
-        mapper = _create_tool_command_mapper(
-            movement_service=MagicMock(),
-            post_query_service=post_query,
-        )
-        result = mapper.execute(1, TOOL_NAME_SNS_LIST_USER_POSTS, {})
-        assert result.success is False
-        assert "target_user_id" in result.message
-        post_query.get_user_timeline.assert_not_called()
-
-    def test_sns_home_timeline_not_registered_without_post_query_service(self):
-        mapper = _create_tool_command_mapper(movement_service=MagicMock())
-        result = mapper.execute(1, TOOL_NAME_SNS_HOME_TIMELINE, {})
-        assert result.success is False
-        assert result.error_code == "UNKNOWN_TOOL"
