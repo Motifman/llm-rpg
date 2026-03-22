@@ -1532,7 +1532,7 @@ class TestToolCommandMapperRequiredArgsValidation:
         result = mapper.execute(1, TOOL_NAME_TRADE_ACCEPT, {})
         assert result.success is False
         assert result.error_code == "INVALID_TARGET_LABEL"
-        assert "trade_label" in result.message or "trade_ref" in result.message
+        assert "trade_ref" in result.message
         trade_service.accept_trade.assert_not_called()
 
     def test_guild_create_missing_spot_id_returns_invalid_target_label(self):
@@ -1585,7 +1585,7 @@ class TestToolCommandMapperRequiredArgsValidation:
         result = mapper.execute(1, TOOL_NAME_TRADE_CANCEL, {})
         assert result.success is False
         assert result.error_code == "INVALID_TARGET_LABEL"
-        assert "trade_label" in result.message or "trade_ref" in result.message
+        assert "trade_ref" in result.message
         trade_service.cancel_trade.assert_not_called()
 
     def test_trade_decline_missing_trade_id_returns_invalid_target_label(self):
@@ -1597,8 +1597,29 @@ class TestToolCommandMapperRequiredArgsValidation:
         result = mapper.execute(1, TOOL_NAME_TRADE_DECLINE, {})
         assert result.success is False
         assert result.error_code == "INVALID_TARGET_LABEL"
-        assert "trade_label" in result.message or "trade_ref" in result.message
+        assert "trade_ref" in result.message
         trade_service.decline_trade.assert_not_called()
+
+    def test_trade_accept_with_trade_ref_resolves_trade_id_and_calls_service(self):
+        trade_service = MagicMock()
+        trade_service.accept_trade.return_value = MagicMock(
+            success=True, message="受諾しました。"
+        )
+        sess = MagicMock()
+        sess.resolve_trade_ref.return_value = 77
+        mapper = _create_tool_command_mapper(
+            movement_service=MagicMock(),
+            trade_service=trade_service,
+            trade_page_session=sess,
+        )
+        result = mapper.execute(1, TOOL_NAME_TRADE_ACCEPT, {"trade_ref": "r_trade_01"})
+        assert result.success is True
+        assert "受諾" in result.message
+        sess.resolve_trade_ref.assert_called_once_with(1, "r_trade_01")
+        trade_service.accept_trade.assert_called_once()
+        cmd = trade_service.accept_trade.call_args.args[0]
+        assert cmd.trade_id == 77
+        assert cmd.buyer_id == 1
 
     def test_trade_view_current_page_returns_snapshot_json(self):
         trade_service = MagicMock()

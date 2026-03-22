@@ -23,7 +23,6 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     SkillProposalToolRuntimeTargetDto,
     SkillToolRuntimeTargetDto,
     ToolRuntimeContextDto,
-    TradeToolRuntimeTargetDto,
 )
 from ai_rpg_world.application.llm.services.tool_argument_resolver import (
     DefaultToolArgumentResolver,
@@ -60,6 +59,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SKILL_ACTIVATE_AWAKENED_MODE,
     TOOL_NAME_SKILL_EQUIP,
     TOOL_NAME_SKILL_REJECT_PROPOSAL,
+    TOOL_NAME_TRADE_ACCEPT,
     TOOL_NAME_TRADE_OFFER,
     TOOL_NAME_WHISPER,
 )
@@ -880,12 +880,6 @@ def _make_shop_guild_trade_context() -> ToolRuntimeContextDto:
             shop_id=10,
             listing_id=5,
         ),
-        "T1": TradeToolRuntimeTargetDto(
-            label="T1",
-            kind="trade",
-            display_name="取引 #1",
-            trade_id=100,
-        ),
     }
     return ToolRuntimeContextDto(targets={**base.targets, **extra})
 
@@ -923,6 +917,22 @@ class TestDefaultToolArgumentResolverSafeInt:
             )
         assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
         assert "整数" in str(exc_info.value)
+
+    def test_resolve_trade_accept_trade_ref_returns_normalized(self):
+        resolver = DefaultToolArgumentResolver()
+        out = resolver.resolve(
+            TOOL_NAME_TRADE_ACCEPT,
+            {"trade_ref": "  r_trade_x  "},
+            _make_context(),
+        )
+        assert out == {"trade_ref": "r_trade_x"}
+
+    def test_resolve_trade_accept_missing_trade_ref_raises(self):
+        resolver = DefaultToolArgumentResolver()
+        with pytest.raises(ToolArgumentResolutionException) as exc_info:
+            resolver.resolve(TOOL_NAME_TRADE_ACCEPT, {}, _make_context())
+        assert exc_info.value.error_code == "INVALID_TARGET_LABEL"
+        assert "trade_ref" in str(exc_info.value)
 
     def test_resolve_guild_label_amount_invalid_raises(self):
         resolver = DefaultToolArgumentResolver()
