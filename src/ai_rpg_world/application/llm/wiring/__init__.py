@@ -27,10 +27,16 @@ EventHandlerComposition のインスタンス化）は**呼び出し元（外部
   enter/logout のセッション状態を一致させるため）。
 - 仮想 SNS 画面状態を `PlayerCurrentStateDto` と enter/logout で共有する場合は、同様に
   `sns_page_session` に**同一の** `SnsPageSessionService` を渡す。
-- 仮想取引所ページツール（`trade_view_current_page` 等）を有効にするには `trade_page_query_service` と
-  `trade_page_session` を `create_llm_agent_wiring(...)` に渡す（`WorldQueryService` 側と同一インスタンス）。
 - ホーム TL / ユーザー TL 系ツールを実行可能にするには `PostQueryService` を
   `create_llm_agent_wiring(..., post_query_service=...)` に渡す。WorldQueryService の組み立てには不要。
+
+【取引所モード（Trade）】
+- 取引所は SNS とは別のゲーム内アプリ。ツール登録は `register_default_tools(..., trade_enabled=True)` で
+  行い、SNS 有効化とは独立している。
+- セッション上は `SnsModeSessionService` がアクティブアプリスロット（SNS / 取引の相互排他）も担うため、
+  取引の enter/exit を配線する場合も **WorldQuery と同一の** `sns_mode_session` を渡す。
+- 仮想取引所ページツール（`trade_view_current_page` 等）を有効にするには `trade_page_query_service` と
+  `trade_page_session` を `create_llm_agent_wiring(...)` に渡す（`WorldQueryService` 側と同一インスタンス）。
 """
 
 import os

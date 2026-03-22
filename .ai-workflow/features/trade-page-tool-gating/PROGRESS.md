@@ -2,7 +2,7 @@
 id: feature-trade-page-tool-gating
 title: Trade Page Tool Gating
 slug: trade-page-tool-gating
-status: in_progress
+status: completed
 created_at: 2026-03-22
 updated_at: 2026-03-22
 branch: feature/trade-page-tool-gating
@@ -10,10 +10,10 @@ branch: feature/trade-page-tool-gating
 
 # Current State
 
-- Active phase: Phase 6（旧前提の整理と回帰テスト固定）
-- Last completed phase: Phase 5（Tool Catalog / Executor / Prompt 統合）
-- Next recommended action: Phase 6 scope（コメント・テスト期待の Trade 独立前提への統一）
-- Handoff summary: `trade_view_current_page` / `trade_open_page` / `trade_page_next` / `trade_page_refresh` / `trade_switch_tab` を `register_default_tools(..., trade_virtual_pages_enabled=True)` と `create_llm_agent_wiring(..., trade_page_query_service=..., trade_page_session=...)` で有効化。`TradeToolExecutor` が `TradePageQueryService` と連携。`trade_accept` / `cancel` / `decline` は `trade_ref` または `trade_label`（`trade_id` 解決後）で実行。`my_trades` の `incoming` で accept/decline、`selling` で cancel のみ露出（`trade_virtual_page_kind` 配線時）。`DefaultCurrentStateFormatter` が `trade_current_page_snapshot_json` をプロンプトに含める。
+- Active phase: なし（feature 完了）
+- Last completed phase: Phase 6（旧前提の整理と回帰テスト固定）
+- Next recommended action: `flow-ship` で SUMMARY / マージ動線、または別 feature へ
+- Handoff summary: Phase 5 までの実装に加え、`register_default_tools` / `wiring` のモジュール説明で Trade が SNS 非依存カタログであることを明示。`test_available_tools_provider` の fixture 名、`test_tool_definitions` / `test_sns_mode_wiring_e2e` のテスト名・docstring を「取引は SNS 配下ではない／SNS ON では取引を隠す」に整合。
 
 # Phase Journal
 
@@ -103,3 +103,20 @@ branch: feature/trade-page-tool-gating
 - Scope delta: なし
 - Handoff summary: 上記 Current State のとおり。
 - Next-phase impact: Phase 6 でコメント・E2E 期待を「Trade は SNS 配下でない」前提に揃える。
+
+## Phase 6
+
+- Started: 2026-03-22
+- Completed: 2026-03-22
+- Commit: （本コミット）
+- Tests: `test_available_tools_provider.py`、`test_tool_definitions.py`、`test_sns_mode_wiring_e2e.py`、`pytest tests/` 全件通過（6007 passed）
+- Findings:
+  - `test_prompt_tools_sns_mode_on_shows_trade_*` は実際は取引ファミリーを**隠す**挙動のため、誤解を招く名前を `..._hides_trade_family_...` に変更。
+  - `registry_sns_trade` は「両カタログ登録」の fixture なので `registry_sns_and_trade` に改名。
+- Plan revision check: 不要。Phase 6 checkpoint（コメント・テストの Trade 独立前提の一貫）と整合。PLAN の future phase 変更なし。
+- User approval: （plan 変更なし）
+- Plan updates: なし
+- Goal check: 「Trade は SNS 配下」という旧前提がコードコメントとテスト名・docstring から排除され、相互排他と独立カタログが読み取れる。
+- Scope delta: なし（`trade_label` 互換の縮退は未実施。Phase 5 のノートどおり従来環境向けに残す）
+- Handoff summary: 上記 Current State のとおり。
+- Next-phase impact: なし（feature scope 完了）。出荷は `flow-ship` 側。

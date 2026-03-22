@@ -69,7 +69,10 @@ def register_default_tools(
 ) -> None:
     """標準ツール群を登録し、依存サービスがあるカテゴリだけ追加する。
 
-    Trade は trade_enabled のとき登録し、一覧の露出は取引所モードと各 resolver で制御する。
+    取引所（Trade）カタログは `trade_enabled` のみで登録され、`sns_enabled` には依存しない。
+    プロダクト設定で SNS と取引の両方を有効にした場合は、SNS 系と取引系が**別カタログとして**並ぶ
+    （取引は SNS の下位機能ではない）。利用可能ツールの切り替えは `PlayerCurrentStateDto` の
+    アクティブアプリ（none / sns / trade）と各 resolver が担う。
     """
     if not isinstance(registry, IGameToolRegistry):
         raise TypeError("registry must be IGameToolRegistry")
