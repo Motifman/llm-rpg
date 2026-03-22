@@ -44,5 +44,4 @@ SNS モード中のゲーム内 SNS を、LLM 向けの **仮想画面（home / 
 
 # 未解決・隠していない事項
 
-- **REVIEW.md の frontmatter** の `branch` は歴史的に `codex/sns-virtual-pages-readmodel` のまま残っている場合がある。現在の作業ブランチは **`feature/sns-virtual-pages-readmodel`**（`SUMMARY` / `PLAN` の `updated_at` 以降で整合を取るなら REVIEW のメタデータ更新可）。
 - **軽量 projection**: 意図的に未導入。将来、一覧・未読コストや整合性が問題になった場合のみ再検討（`PLAN.md` Phase 6 記載どおり）。
