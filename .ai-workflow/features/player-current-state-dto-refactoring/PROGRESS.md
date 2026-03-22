@@ -5,15 +5,15 @@ slug: player-current-state-dto-refactoring
 status: in_progress
 created_at: 2026-03-23
 updated_at: 2026-03-23
-branch: codex/player-current-state-dto-refactoring-phase1
+branch: codex/player-current-state-dto-refactoring-phase2
 ---
 
 # Current State
 
-- Active phase: **Phase 2**（Builder の責務分割）
-- Last completed phase: **Phase 1**（Sub DTO 導入と Compat Facade 化）
-- Next recommended action: `flow-exec` で Phase 2 の builder 分割に着手
-- Handoff summary: Phase 1 で `PlayerWorldStateDto` / `PlayerRuntimeContextDto` / `PlayerAppSessionStateDto` を導入し、`PlayerCurrentStateDto` から `world_state` / `runtime_context` / `app_session_state` の計算プロパティで返す形にした。既存の top-level フィールドと public 契約は維持しつつ、app session 正規化ロジックは `_normalize_app_session_state` に集約した。
+- Active phase: **Phase 3**（Formatter / Availability / UI の依存整理）
+- Last completed phase: **Phase 2**（Builder の責務分割）
+- Next recommended action: `flow-exec` で consumer 側の依存棚卸しと最終着地点整理に着手
+- Handoff summary: Phase 2 で `PlayerCurrentStateBuilder` に `_build_world_state` / `_build_runtime_context` / `_build_app_session_state` を導入し、`PlayerCurrentStateDto.from_components` 経由で assemble する構造へ整理した。public return shape は維持しているため、既存 world / llm テストの期待はそのまま保てている。
 
 # Phase Journal
 
@@ -71,3 +71,30 @@ branch: codex/player-current-state-dto-refactoring-phase1
   - Phase 2 では `PlayerCurrentStateBuilder` が返す 1 個の巨大 DTO 組み立てを、少なくとも `world` / `app_session` の塊に分けて compose する実装へ整理していく。
 - Next-phase impact:
   - builder 分割では、Phase 1 の計算プロパティに対応する形で private build helper を切り出すと、既存 return shape を保ったまま進めやすい。
+
+## Phase 2
+
+- Started: 2026-03-23
+- Completed: 2026-03-23
+- Commit: （この phase 完了コミット）
+- Tests:
+  - `uv run pytest tests/application/world/test_player_current_state_dto.py tests/application/world/services/test_player_current_state_builder.py tests/application/world/services/test_world_query_service.py -q`
+  - `uv run pytest tests/application/llm/test_current_state_formatter.py tests/application/llm/test_ui_context_builder.py tests/application/llm/test_availability_resolvers.py -q`
+- Findings:
+  - `PlayerCurrentStateDto.from_components` を用意すると、builder 側で facade への field mapping を 1 箇所に寄せられ、Phase 2 の compose 構造が見えやすくなる。
+  - `PlayerCurrentStateBuilder` では `runtime` の詳細組み立てをなお `PlayerRuntimeContextBuilder` に委譲できるため、Phase 2 で無理に runtime builder 自体を分割する必要はなかった。
+  - app session helper 抽出直後に SNS snapshot query が二重実行されたが、旧ロジック除去で解消した。これは compose 移行時に旧直書きロジックが残りやすい、という注意点になった。
+- Plan revision check:
+  - **不要**。builder の責務は `world` / `runtime` / `app_session` の compose として十分説明可能になり、後続の consumer 棚卸し順序も維持できる。
+- User approval:
+  - 不要（future phase の並び替えや scope 変更なし）
+- Plan updates:
+  - `PLAN.md` の Phase 2 notes に `from_components` ベース compose を追記
+- Goal check:
+  - **達成**。`PlayerCurrentStateBuilder` の返却処理は、巨大な 1 回の dataclass 初期化から、複数コンテキストを assemble する構造へ整理された。
+- Scope delta:
+  - なし（builder と DTO assembly の範囲内）
+- Handoff summary:
+  - Phase 3 では formatter / availability / UI の各 consumer が、どこまで sub DTO 直参照へ寄せるべきかを棚卸しし、compat property を残す対象を決める。
+- Next-phase impact:
+  - `from_components` ができたので、Phase 4 以降に builder 以外から facade を再構成する必要が出ても共通の assemble 入口を使える。
