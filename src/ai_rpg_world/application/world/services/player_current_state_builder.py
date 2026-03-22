@@ -307,6 +307,7 @@ class PlayerCurrentStateBuilder:
         sns_virtual_page_kind: Optional[str] = None
         sns_home_tab: Optional[str] = None
         sns_page_snapshot_generation = 0
+        sns_profile_is_self: Optional[bool] = None
         if (
             self._sns_page_session is not None
             and self._sns_mode_session is not None
@@ -318,6 +319,9 @@ class PlayerCurrentStateBuilder:
                 st.home_tab.value if st.page_kind == SnsVirtualPageKind.HOME else None
             )
             sns_page_snapshot_generation = st.snapshot_generation
+            if st.page_kind == SnsVirtualPageKind.PROFILE:
+                tid = st.profile_target_user_id
+                sns_profile_is_self = tid is None or tid == query.player_id
 
         # 境界: ツール/runtime context（LLM prompt 上のラベル解決・利用可否判定に利用）
         # - available_moves, visible_objects, actionable/notable
@@ -401,6 +405,7 @@ class PlayerCurrentStateBuilder:
             sns_virtual_page_kind=sns_virtual_page_kind,
             sns_home_tab=sns_home_tab,
             sns_page_snapshot_generation=sns_page_snapshot_generation,
+            sns_profile_is_self=sns_profile_is_self,
         )
 
     def build_visible_objects(

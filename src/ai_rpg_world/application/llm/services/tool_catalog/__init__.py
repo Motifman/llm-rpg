@@ -19,7 +19,10 @@ from ai_rpg_world.application.llm.services.tool_catalog.movement import get_move
 from ai_rpg_world.application.llm.services.tool_catalog.pursuit import get_pursuit_specs
 from ai_rpg_world.application.llm.services.tool_catalog.quest import get_quest_specs
 from ai_rpg_world.application.llm.services.tool_catalog.shop import get_shop_specs
-from ai_rpg_world.application.llm.services.tool_catalog.sns import get_sns_specs
+from ai_rpg_world.application.llm.services.tool_catalog.sns import (
+    get_sns_specs,
+    get_sns_virtual_page_specs,
+)
 from ai_rpg_world.application.llm.services.tool_catalog.speech import get_speech_specs
 from ai_rpg_world.application.llm.services.tool_catalog.trade import get_trade_specs
 from ai_rpg_world.application.llm.services.tool_catalog.world import get_world_specs
@@ -52,6 +55,7 @@ def register_default_tools(
     shop_enabled: bool = False,
     trade_enabled: bool = False,
     sns_enabled: bool = False,
+    sns_virtual_pages_enabled: bool = False,
     inspect_item_enabled: bool = False,
     inspect_target_enabled: bool = False,
     memory_query_enabled: bool = False,
@@ -99,6 +103,8 @@ def register_default_tools(
         _register_specs(registry, get_trade_specs())
     if sns_enabled:
         _register_specs(registry, get_sns_specs())
+    if sns_enabled and sns_virtual_pages_enabled:
+        _register_specs(registry, get_sns_virtual_page_specs())
     _register_specs(
         registry,
         get_memory_specs(

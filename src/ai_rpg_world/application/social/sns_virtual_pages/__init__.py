@@ -10,6 +10,9 @@ from ai_rpg_world.application.social.sns_virtual_pages.page_session_state import
 from ai_rpg_world.application.social.sns_virtual_pages.page_snapshot_dtos import (
     SnsVirtualPageSnapshotDto,
 )
+from ai_rpg_world.application.social.sns_virtual_pages.snapshot_json import (
+    sns_snapshot_to_json,
+)
 from ai_rpg_world.application.social.sns_virtual_pages.sns_page_query_service import (
     SnsPageQueryService,
 )
@@ -26,4 +29,5 @@ __all__ = [
     "SnsPageSessionService",
     "SnsPageQueryService",
     "SnsVirtualPageSnapshotDto",
+    "sns_snapshot_to_json",
 ]

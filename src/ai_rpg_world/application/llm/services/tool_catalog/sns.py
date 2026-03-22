@@ -6,7 +6,12 @@ from ai_rpg_world.application.llm.contracts.dtos import ToolDefinitionDto
 from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResolver
 from ai_rpg_world.application.llm.services.availability_resolvers import (
     SnsEnterToolAvailabilityResolver,
+    SnsPageKindAvailabilityResolver,
+    SnsProfileUpdateAvailabilityResolver,
     SnsToolAvailabilityResolver,
+    SnsVirtualPageHomeTabAvailabilityResolver,
+    SnsVirtualPageNavigationAvailabilityResolver,
+    SnsVirtualPagePagingAvailabilityResolver,
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SNS_BLOCK,
@@ -19,6 +24,12 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SNS_LOGOUT,
     TOOL_NAME_SNS_MARK_ALL_NOTIFICATIONS_READ,
     TOOL_NAME_SNS_MARK_NOTIFICATION_READ,
+    TOOL_NAME_SNS_OPEN_PAGE,
+    TOOL_NAME_SNS_OPEN_REF,
+    TOOL_NAME_SNS_PAGE_NEXT,
+    TOOL_NAME_SNS_PAGE_REFRESH,
+    TOOL_NAME_SNS_SWITCH_TAB,
+    TOOL_NAME_SNS_VIEW_CURRENT_PAGE,
     TOOL_NAME_SNS_CREATE_POST,
     TOOL_NAME_SNS_CREATE_REPLY,
     TOOL_NAME_SNS_FOLLOW,
@@ -312,32 +323,164 @@ SNS_LIST_USER_POSTS_DEFINITION = ToolDefinitionDto(
     parameters=SNS_LIST_USER_POSTS_PARAMETERS,
 )
 
+_PG_HOME_SEARCH_PROFILE = frozenset({"home", "search", "profile"})
+_PG_POST_DETAIL = frozenset({"post_detail"})
+_PG_LIKE_POST = frozenset({"home", "post_detail", "search", "profile"})
+_PG_DELETE_POST = frozenset({"home", "post_detail", "search", "profile"})
+_PG_SOCIAL = frozenset({"profile"})
+_PG_NOTIFICATIONS = frozenset({"notifications"})
+
+SNS_VIEW_CURRENT_PAGE_PARAMETERS = {
+    "type": "object",
+    "properties": {},
+    "required": [],
+}
+SNS_VIEW_CURRENT_PAGE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_VIEW_CURRENT_PAGE,
+    description="現在の仮想 SNS 画面のスナップショット（JSON）を返します。page-local ref はこの結果に従います。",
+    parameters=SNS_VIEW_CURRENT_PAGE_PARAMETERS,
+)
+
+SNS_OPEN_PAGE_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "page": {
+            "type": "string",
+            "description": "遷移先: home, post_detail, search, profile, notifications のいずれか。",
+        },
+        "home_tab": {
+            "type": "string",
+            "description": "page が home のとき: following または popular。",
+        },
+        "search_mode": {
+            "type": "string",
+            "description": "page が search のとき: keyword または hashtag。",
+        },
+        "search_query": {
+            "type": "string",
+            "description": "page が search のときの検索語（省略可）。",
+        },
+        "profile_user_ref": {
+            "type": "string",
+            "description": "page が profile のとき、スナップショットの user ref。省略時は自分のプロフィール。",
+        },
+        "post_ref": {
+            "type": "string",
+            "description": "page が post_detail のとき必須。スナップショットの post ref（ルート投稿）。",
+        },
+    },
+    "required": ["page"],
+}
+SNS_OPEN_PAGE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_OPEN_PAGE,
+    description="論理画面へ遷移します。post_detail には post_ref が必要です。",
+    parameters=SNS_OPEN_PAGE_PARAMETERS,
+)
+
+SNS_OPEN_REF_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "ref": {
+            "type": "string",
+            "description": "現在のスナップショットに含まれる page-local ref（r_post_*, r_user_*, r_reply_*, r_notif_*）。",
+        },
+    },
+    "required": ["ref"],
+}
+SNS_OPEN_REF_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_OPEN_REF,
+    description="スナップショット上の ref に対応する画面へ遷移します。",
+    parameters=SNS_OPEN_REF_PARAMETERS,
+)
+
+SNS_PAGE_NEXT_PARAMETERS = {
+    "type": "object",
+    "properties": {},
+    "required": [],
+}
+SNS_PAGE_NEXT_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_PAGE_NEXT,
+    description="現在画面の次ページへ進みます（offset を limit 分進める）。",
+    parameters=SNS_PAGE_NEXT_PARAMETERS,
+)
+
+SNS_PAGE_REFRESH_PARAMETERS = {
+    "type": "object",
+    "properties": {},
+    "required": [],
+}
+SNS_PAGE_REFRESH_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_PAGE_REFRESH,
+    description="同一条件で画面を再取得します（ref の世代が更新されることがあります）。",
+    parameters=SNS_PAGE_REFRESH_PARAMETERS,
+)
+
+SNS_SWITCH_TAB_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "tab": {
+            "type": "string",
+            "description": "home のタブ: following または popular。",
+        },
+    },
+    "required": ["tab"],
+}
+SNS_SWITCH_TAB_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SNS_SWITCH_TAB,
+    description="home 画面で following / popular を切り替えます。",
+    parameters=SNS_SWITCH_TAB_PARAMETERS,
+)
+
 
 def get_sns_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """SNS 系ツールの (definition, resolver) 一覧を返す。"""
     enter_resolver = SnsEnterToolAvailabilityResolver()
     sns_resolver = SnsToolAvailabilityResolver()
+    pg_create_post = SnsPageKindAvailabilityResolver(_PG_HOME_SEARCH_PROFILE)
+    pg_create_reply = SnsPageKindAvailabilityResolver(_PG_POST_DETAIL)
+    pg_like_post = SnsPageKindAvailabilityResolver(_PG_LIKE_POST)
+    pg_like_reply = SnsPageKindAvailabilityResolver(_PG_POST_DETAIL)
+    pg_social = SnsPageKindAvailabilityResolver(_PG_SOCIAL)
+    pg_delete_post = SnsPageKindAvailabilityResolver(_PG_DELETE_POST)
+    pg_delete_reply = SnsPageKindAvailabilityResolver(_PG_POST_DETAIL)
+    pg_profile_update = SnsProfileUpdateAvailabilityResolver()
+    pg_notifications = SnsPageKindAvailabilityResolver(_PG_NOTIFICATIONS)
     return [
         (SNS_ENTER_DEFINITION, enter_resolver),
         (SNS_LOGOUT_DEFINITION, sns_resolver),
-        (SNS_CREATE_POST_DEFINITION, sns_resolver),
-        (SNS_CREATE_REPLY_DEFINITION, sns_resolver),
-        (SNS_LIKE_POST_DEFINITION, sns_resolver),
-        (SNS_LIKE_REPLY_DEFINITION, sns_resolver),
-        (SNS_FOLLOW_DEFINITION, sns_resolver),
-        (SNS_UNFOLLOW_DEFINITION, sns_resolver),
-        (SNS_SUBSCRIBE_DEFINITION, sns_resolver),
-        (SNS_UNSUBSCRIBE_DEFINITION, sns_resolver),
-        (SNS_BLOCK_DEFINITION, sns_resolver),
-        (SNS_UNBLOCK_DEFINITION, sns_resolver),
-        (SNS_DELETE_POST_DEFINITION, sns_resolver),
-        (SNS_DELETE_REPLY_DEFINITION, sns_resolver),
-        (SNS_UPDATE_PROFILE_DEFINITION, sns_resolver),
-        (SNS_MARK_NOTIFICATION_READ_DEFINITION, sns_resolver),
-        (SNS_MARK_ALL_NOTIFICATIONS_READ_DEFINITION, sns_resolver),
+        (SNS_CREATE_POST_DEFINITION, pg_create_post),
+        (SNS_CREATE_REPLY_DEFINITION, pg_create_reply),
+        (SNS_LIKE_POST_DEFINITION, pg_like_post),
+        (SNS_LIKE_REPLY_DEFINITION, pg_like_reply),
+        (SNS_FOLLOW_DEFINITION, pg_social),
+        (SNS_UNFOLLOW_DEFINITION, pg_social),
+        (SNS_SUBSCRIBE_DEFINITION, pg_social),
+        (SNS_UNSUBSCRIBE_DEFINITION, pg_social),
+        (SNS_BLOCK_DEFINITION, pg_social),
+        (SNS_UNBLOCK_DEFINITION, pg_social),
+        (SNS_DELETE_POST_DEFINITION, pg_delete_post),
+        (SNS_DELETE_REPLY_DEFINITION, pg_delete_reply),
+        (SNS_UPDATE_PROFILE_DEFINITION, pg_profile_update),
+        (SNS_MARK_NOTIFICATION_READ_DEFINITION, pg_notifications),
+        (SNS_MARK_ALL_NOTIFICATIONS_READ_DEFINITION, pg_notifications),
         (SNS_HOME_TIMELINE_DEFINITION, sns_resolver),
         (SNS_LIST_MY_POSTS_DEFINITION, sns_resolver),
         (SNS_LIST_USER_POSTS_DEFINITION, sns_resolver),
+    ]
+
+
+def get_sns_virtual_page_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+    """仮想 SNS 画面ナビゲーション用ツール（SnsPageQueryService 配線時のみ登録）。"""
+    nav = SnsVirtualPageNavigationAvailabilityResolver()
+    paging = SnsVirtualPagePagingAvailabilityResolver()
+    home_tab = SnsVirtualPageHomeTabAvailabilityResolver()
+    return [
+        (SNS_VIEW_CURRENT_PAGE_DEFINITION, nav),
+        (SNS_OPEN_PAGE_DEFINITION, nav),
+        (SNS_OPEN_REF_DEFINITION, nav),
+        (SNS_PAGE_NEXT_DEFINITION, paging),
+        (SNS_PAGE_REFRESH_DEFINITION, nav),
+        (SNS_SWITCH_TAB_DEFINITION, home_tab),
     ]
 
 

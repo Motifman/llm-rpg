@@ -10,10 +10,10 @@ branch: codex/sns-virtual-pages-readmodel
 
 # Current State
 
-- Active phase: **Phase 4**（Tool Catalog / Executor / Provider 統合）
-- Last completed phase: **Phase 3**（Page Query Service）
-- Next recommended action: `sns_view_current_page` 等の汎用ツールと `SnsPageQueryService` を LLM wiring / `SnsToolExecutor` / `available_tools_provider` に接続し、画面依存 gating を実装する
-- Handoff summary: `SnsPageQueryService.get_current_page_snapshot`・`page_snapshot_dtos`（LLM 向けに内部 ID 非露出）・スナップショット取得時の ref 世代更新・各画面のモック単体テスト。`SnsPageQueryService` は未配線（Phase 4 で injector / executor へ渡す）。
+- Active phase: **Phase 5**（既存 Read ツール置換と削除）
+- Last completed phase: **Phase 4**（Tool Catalog / Executor / Provider 統合）
+- Next recommended action: `sns_home_timeline` 等の旧 read ツールを catalog から外し、仮想画面ツールへの移行を完了する
+- Handoff summary: 汎用ツール 7 種（`sns_view_current_page` 等）を `register_default_tools(..., sns_virtual_pages_enabled=...)` / `SnsToolExecutor` / `create_llm_agent_wiring(sns_page_query_service=..., reply_query_service=..., notification_query_service=...)` で配線。画面別 resolver で書き込み系を gating。`PlayerCurrentStateDto.sns_profile_is_self` を追加。
 
 # Phase Journal
 
@@ -72,3 +72,21 @@ branch: codex/sns-virtual-pages-readmodel
 - Scope delta: なし
 - Handoff summary: Phase 4 で `SnsPageQueryService` と `SnsPageSessionService` を executor / wiring に渡し、`sns_view_current_page` がスナップショット JSON を返すようにする
 - Next-phase impact: ツール実行時に viewer = プレイヤーの SNS user id をどう渡すかは既存 SNS ツールと揃える
+
+## Phase 4
+
+- Started: 2026-03-22
+- Completed: 2026-03-22
+- Commit: （phase 完了コミット）
+- Tests: `pytest tests/application/llm/services/executors/test_sns_executor_virtual_pages.py`、`pytest tests/application/llm/ -q`、`pytest tests/application/social/sns_virtual_pages/ -q`
+- Findings:
+  - `sns_virtual_pages_enabled` は `sns_enabled` と併用時のみ仮想ナビツールを登録（SNS 無効単体では追加しない）。
+  - 画面別 gating は `sns_virtual_page_kind is None` のとき従来どおり許可（page session 未配線の互換）。
+  - `sns_open_ref` の通知は `NotificationQueryService.get_user_notifications` を走査して ID 一致を探す（一覧外は失敗メッセージ）。
+- Plan revision check: **不要**。Phase 5 の旧 read 削除・Phase 6 projection 判定は PLAN のまま進められる。
+- User approval: **不要**（PLAN Phase 4 scope から逸脱なし）
+- Plan updates: **なし**
+- Goal check: **達成** — 汎用ツール・executor・wiring・provider（登録）・画面別 gating・回帰テスト
+- Scope delta: なし
+- Handoff summary: アプリ組み立てで `sns_page_query_service` と同一の `sns_page_session` を world query と wiring に渡すこと。`reply_query_service` / `notification_query_service` は open_ref 精度用に任意で注入。
+- Next-phase impact: Phase 5 で旧 read ツールを catalog から外すと provider / テストの期待ツール名が変わる

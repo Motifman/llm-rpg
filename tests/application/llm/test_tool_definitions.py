@@ -70,6 +70,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SNS_LIST_MY_POSTS,
     TOOL_NAME_SNS_LIST_USER_POSTS,
     TOOL_NAME_SNS_LOGOUT,
+    TOOL_NAME_SNS_VIEW_CURRENT_PAGE,
     TOOL_NAME_TRADE_OFFER,
 )
 
@@ -302,3 +303,19 @@ class TestRegisterDefaultTools:
         assert TOOL_NAME_SNS_HOME_TIMELINE in names
         assert TOOL_NAME_SNS_LIST_MY_POSTS in names
         assert TOOL_NAME_SNS_LIST_USER_POSTS in names
+
+    def test_register_default_tools_sns_virtual_pages_adds_navigation_tools(self):
+        """sns_enabled かつ sns_virtual_pages_enabled で仮想画面ナビツールが追加される"""
+        registry = DefaultGameToolRegistry()
+        register_default_tools(
+            registry, sns_enabled=True, sns_virtual_pages_enabled=True
+        )
+        names = [e[0].name for e in registry.get_definitions_with_resolvers()]
+        assert TOOL_NAME_SNS_VIEW_CURRENT_PAGE in names
+
+    def test_register_default_tools_virtual_pages_without_sns_does_not_add(self):
+        """sns_enabled が False なら sns_virtual_pages_enabled だけではナビを足さない"""
+        registry = DefaultGameToolRegistry()
+        register_default_tools(registry, sns_virtual_pages_enabled=True)
+        names = [e[0].name for e in registry.get_definitions_with_resolvers()]
+        assert TOOL_NAME_SNS_VIEW_CURRENT_PAGE not in names
