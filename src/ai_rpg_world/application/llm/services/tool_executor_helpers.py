@@ -38,3 +38,13 @@ def invalid_arg_result(field_name: str) -> LlmCommandResultDto:
         error_code="INVALID_TARGET_LABEL",
         remediation=get_remediation("INVALID_TARGET_LABEL"),
     )
+
+
+def invalid_arg_value_result(field_name: str, allowed: str) -> LlmCommandResultDto:
+    """列挙値など、引数の値が不正なときの失敗結果を返す。"""
+    return LlmCommandResultDto(
+        success=False,
+        message=f"{field_name} が不正です。次を指定してください: {allowed}。",
+        error_code="INVALID_TARGET_LABEL",
+        remediation=get_remediation("INVALID_TARGET_LABEL"),
+    )

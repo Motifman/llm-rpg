@@ -31,6 +31,10 @@ if TYPE_CHECKING:
         SnsPageQueryService,
         SnsPageSessionService,
     )
+    from ai_rpg_world.application.trade.trade_virtual_pages import (
+        TradePageQueryService,
+        TradePageSessionService,
+    )
     from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
     from ai_rpg_world.application.conversation.services.conversation_command_service import (
         ConversationCommandService,
@@ -80,6 +84,8 @@ def create_world_query_service(
     sns_mode_session: Optional["SnsModeSessionService"] = None,
     sns_page_session: Optional["SnsPageSessionService"] = None,
     sns_page_query_service: Optional["SnsPageQueryService"] = None,
+    trade_page_session: Optional["TradePageSessionService"] = None,
+    trade_page_query_service: Optional["TradePageQueryService"] = None,
 ) -> WorldQueryService:
     """
     PlayerLocationQueryService・SpotContextQueryService・AvailableMovesQueryService・
@@ -111,6 +117,8 @@ def create_world_query_service(
         sns_mode_session: SNS モード状態（省略可）。`create_llm_agent_wiring` に渡すインスタンスと同一にすること。
         sns_page_session: 仮想 SNS 画面（省略可）。`create_llm_agent_wiring` の `sns_page_session` と同一にすること。
         sns_page_query_service: 現在画面スナップショット供給用。prompt に現在画面を自動同梱したい場合は同一インスタンスを渡すこと。
+        trade_page_session: 仮想取引所画面（省略可）。`create_llm_agent_wiring` の `trade_page_session` と同一にすること。
+        trade_page_query_service: 取引所ページのスナップショット本文（省略可）。`PlayerCurrentStateDto.trade_current_page_snapshot_json` に行一覧を載せるときに `GlobalMarketQueryService` 等と同一のインスタンスを渡すこと。
 
     Returns:
         WorldQueryService: 構築済みの WorldQueryService
@@ -142,6 +150,8 @@ def create_world_query_service(
         sns_mode_session=sns_mode_session,
         sns_page_session=sns_page_session,
         sns_page_query_service=sns_page_query_service,
+        trade_page_session=trade_page_session,
+        trade_page_query_service=trade_page_query_service,
     )
 
 

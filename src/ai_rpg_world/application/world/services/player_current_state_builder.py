@@ -55,6 +55,10 @@ if TYPE_CHECKING:
         SnsPageQueryService,
         SnsPageSessionService,
     )
+    from ai_rpg_world.application.trade.trade_virtual_pages import (
+        TradePageQueryService,
+        TradePageSessionService,
+    )
     from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
     from ai_rpg_world.application.conversation.services.conversation_command_service import (
         ConversationCommandService,
@@ -123,6 +127,8 @@ class PlayerCurrentStateBuilder:
         sns_mode_session: Optional["SnsModeSessionService"] = None,
         sns_page_session: Optional["SnsPageSessionService"] = None,
         sns_page_query_service: Optional["SnsPageQueryService"] = None,
+        trade_page_session: Optional["TradePageSessionService"] = None,
+        trade_page_query_service: Optional["TradePageQueryService"] = None,
     ) -> None:
         if player_audience_query is None:
             raise ValueError(
@@ -148,6 +154,8 @@ class PlayerCurrentStateBuilder:
         self._sns_mode_session = sns_mode_session
         self._sns_page_session = sns_page_session
         self._sns_page_query_service = sns_page_query_service
+        self._trade_page_session = trade_page_session
+        self._trade_page_query_service = trade_page_query_service
         self._visible_object_builder = VisibleObjectReadModelBuilder(
             player_profile_repository=player_profile_repository,
             monster_repository=monster_repository,
@@ -340,10 +348,47 @@ class PlayerCurrentStateBuilder:
                 sns_page_snapshot_generation = snapshot.snapshot_generation
                 sns_current_page_snapshot_json = sns_snapshot_to_json(snapshot)
 
+        trade_virtual_page_kind: Optional[str] = None
+        trade_my_trades_tab: Optional[str] = None
+        trade_page_snapshot_generation = 0
+        trade_current_page_snapshot_json: Optional[str] = None
+        if (
+            self._trade_page_session is not None
+            and self._sns_mode_session is not None
+            and self._sns_mode_session.is_trade_mode_active(query.player_id)
+        ):
+            from ai_rpg_world.application.trade.trade_virtual_pages.kinds import (
+                TradeVirtualPageKind,
+            )
+            from ai_rpg_world.application.trade.trade_virtual_pages.snapshot_json import (
+                trade_page_state_to_json,
+            )
+
+            st = self._trade_page_session.get_state(query.player_id)
+            trade_virtual_page_kind = st.page_kind.value
+            trade_my_trades_tab = (
+                st.my_trades_tab.value if st.page_kind == TradeVirtualPageKind.MY_TRADES else None
+            )
+            if self._trade_page_query_service is not None:
+                trade_current_page_snapshot_json = self._trade_page_query_service.build_current_page_snapshot_json(
+                    query.player_id
+                )
+            else:
+                trade_current_page_snapshot_json = trade_page_state_to_json(st)
+            st = self._trade_page_session.get_state(query.player_id)
+            trade_page_snapshot_generation = st.snapshot_generation
+
         # 境界: ツール/runtime context（LLM prompt 上のラベル解決・利用可否判定に利用）
         # - available_moves, visible_objects, actionable/notable
         # - inventory_items, chest_items, nearby_shops, available_trades
         # - memory retrieval hints: active_quest_ids, guild_ids, nearby_shop_ids
+        if self._sns_mode_session is not None:
+            active_game_app = self._sns_mode_session.active_game_app_session.get_active_app(
+                query.player_id
+            ).value
+        else:
+            active_game_app = "none"
+
         return PlayerCurrentStateDto(
             player_id=query.player_id,
             player_name=player_name,
@@ -414,16 +459,18 @@ class PlayerCurrentStateBuilder:
             ),
             actionable_objects=actionable_objects,
             notable_objects=notable_objects,
-            is_sns_mode_active=(
-                self._sns_mode_session.is_sns_mode_active(query.player_id)
-                if self._sns_mode_session is not None
-                else False
-            ),
+            active_game_app=active_game_app,
+            is_sns_mode_active=False,
+            is_trade_mode_active=False,
             sns_virtual_page_kind=sns_virtual_page_kind,
             sns_home_tab=sns_home_tab,
             sns_page_snapshot_generation=sns_page_snapshot_generation,
             sns_current_page_snapshot_json=sns_current_page_snapshot_json,
             sns_profile_is_self=sns_profile_is_self,
+            trade_virtual_page_kind=trade_virtual_page_kind,
+            trade_my_trades_tab=trade_my_trades_tab,
+            trade_page_snapshot_generation=trade_page_snapshot_generation,
+            trade_current_page_snapshot_json=trade_current_page_snapshot_json,
         )
 
     def build_visible_objects(
