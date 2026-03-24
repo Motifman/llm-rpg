@@ -485,6 +485,46 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
 
         return result_trades, next_cursor
 
+    def find_active_trades_as_seller(
+        self,
+        seller_id: PlayerId,
+        limit: int = 10,
+        cursor: Optional[TradeCursor] = None,
+    ) -> Tuple[List[TradeReadModel], Optional[TradeCursor]]:
+        """出品者の ACTIVE 取引のみを取得（カーソルベースページング）"""
+        selling_trades = [
+            trade
+            for trade in self._trades.values()
+            if trade.seller_id == int(seller_id) and trade.is_active
+        ]
+
+        selling_trades.sort(key=lambda t: t.created_at, reverse=True)
+
+        if cursor:
+            filtered_trades = []
+            for trade in selling_trades:
+                if (
+                    trade.created_at < cursor.created_at
+                    or (
+                        trade.created_at == cursor.created_at
+                        and trade.trade_id > cursor.trade_id
+                    )
+                ):
+                    filtered_trades.append(trade)
+            selling_trades = filtered_trades
+
+        result_trades = selling_trades[:limit]
+
+        next_cursor = None
+        if len(selling_trades) > limit and len(result_trades) > 0:
+            last_trade = result_trades[-1]
+            next_cursor = TradeCursor(
+                created_at=last_trade.created_at,
+                trade_id=int(last_trade.trade_id),
+            )
+
+        return result_trades, next_cursor
+
     def find_active_trades(self, limit: int = 50, cursor: Optional[TradeCursor] = None) -> Tuple[List[TradeReadModel], Optional[TradeCursor]]:
         """アクティブな取引を取得（カーソルベースページング）"""
         active_trades = [trade for trade in self._trades.values() if trade.is_active]

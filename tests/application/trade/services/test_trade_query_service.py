@@ -179,6 +179,44 @@ class TestTradeQueryService:
         assert isinstance(result, TradeListDto)
         # リポジトリの実装によっては0件になる可能性がある
 
+    def test_get_active_trades_as_seller_only_active_listings(self):
+        """出品中（ACTIVE）のみ取得し、成立済み出品は含まない"""
+        result = self.service.get_active_trades_as_seller(player_id=1, limit=20)
+        assert isinstance(result, TradeListDto)
+        ids = {t.trade_id for t in result.trades}
+        assert 1 in ids
+        assert 11 in ids
+        assert 6 not in ids
+        for t in result.trades:
+            assert t.seller_id == 1
+            assert t.status == "ACTIVE"
+
+    def test_get_active_trades_as_seller_empty(self):
+        """出品が無いプレイヤーは空リストと cursor None"""
+        result = self.service.get_active_trades_as_seller(player_id=999)
+        assert isinstance(result, TradeListDto)
+        assert result.trades == []
+        assert result.next_cursor is None
+
+    def test_get_active_trades_as_seller_with_cursor(self):
+        """出品ストリームをカーソルページングできる"""
+        first = self.service.get_active_trades_as_seller(player_id=1, limit=1)
+        assert len(first.trades) == 1
+        assert first.next_cursor is not None
+        second = self.service.get_active_trades_as_seller(
+            player_id=1, limit=1, cursor=first.next_cursor
+        )
+        assert len(second.trades) == 1
+        assert first.trades[0].trade_id != second.trades[0].trade_id
+
+    def test_get_active_trades_as_seller_zero_player_id(self):
+        """player_id=0 は PlayerId バリデーションで失敗"""
+        with pytest.raises(TradeQueryApplicationException) as exc_info:
+            self.service.get_active_trades_as_seller(player_id=0)
+        assert "Domain error in TradeQuery usecase: PLAYER.ID_VALIDATION" in str(
+            exc_info.value
+        )
+
     def test_search_trades_no_filter(self):
         """フィルタなしで全取引を検索できる"""
         filter_dto = TradeSearchFilterDto()

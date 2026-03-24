@@ -110,6 +110,43 @@ class TradeQueryService:
             next_cursor=next_cursor_encoded
         )
 
+    def get_active_trades_as_seller(
+        self, player_id: int, limit: int = 10, cursor: Optional[str] = None
+    ) -> TradeListDto:
+        """出品中（ACTIVE）の取引のみを取得（カーソルベースページング）
+
+        `my_trades.selling` 用。`get_trades_for_player` の混合ストリームとは独立した
+        カーソル位置を返す。
+        """
+        return self._execute_with_error_handling(
+            operation=lambda: self._get_active_trades_as_seller_impl(
+                player_id, limit, cursor
+            ),
+            context={
+                "action": "get_active_trades_as_seller",
+                "player_id": player_id,
+                "limit": limit,
+                "cursor": cursor,
+            },
+        )
+
+    def _get_active_trades_as_seller_impl(
+        self, player_id: int, limit: int, cursor: Optional[str]
+    ) -> TradeListDto:
+        domain_cursor = TradeCursorCodec.decode(cursor) if cursor else None
+
+        trade_read_models, next_cursor = (
+            self._trade_read_model_repository.find_active_trades_as_seller(
+                PlayerId(player_id), limit, domain_cursor
+            )
+        )
+        trades = [self._convert_to_dto(model) for model in trade_read_models]
+        next_cursor_encoded = (
+            TradeCursorCodec.encode(next_cursor) if next_cursor else None
+        )
+
+        return TradeListDto(trades=trades, next_cursor=next_cursor_encoded)
+
     def search_trades(self, filter_dto: TradeSearchFilterDto, limit: int = 20,
                      cursor: Optional[str] = None) -> TradeListDto:
         """フィルタ条件で取引を検索"""

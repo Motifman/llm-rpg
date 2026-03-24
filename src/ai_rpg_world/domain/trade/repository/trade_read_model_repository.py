@@ -52,6 +52,29 @@ class TradeReadModelRepository(Repository[TradeReadModel, TradeId]):
         pass
 
     @abstractmethod
+    def find_active_trades_as_seller(
+        self,
+        seller_id: PlayerId,
+        limit: int = 10,
+        cursor: Optional[TradeCursor] = None,
+    ) -> Tuple[List[TradeReadModel], Optional[TradeCursor]]:
+        """出品者の ACTIVE 取引のみを取得（カーソルベースページング）
+
+        `my_trades.selling` 専用。`seller_id` が一致しステータスが ACTIVE のみを対象とし、
+        並びは `created_at` 降順、`trade_id` を tie-break とする。`next_cursor` は
+        このストリーム上の次ページ位置を指す。
+
+        Args:
+            seller_id: 出品者プレイヤーID
+            limit: 取得する最大件数
+            cursor: ページングカーソル（Noneの場合は最初のページ）
+
+        Returns:
+            (取引リスト, 次のページのカーソル)
+        """
+        pass
+
+    @abstractmethod
     def find_active_trades(self, limit: int = 50, cursor: Optional[TradeCursor] = None) -> Tuple[List[TradeReadModel], Optional[TradeCursor]]:
         """アクティブな取引を取得（カーソルベースページング）
 
