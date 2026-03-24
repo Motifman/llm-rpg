@@ -91,12 +91,41 @@ class TestTradePageQueryService:
         data = json.loads(raw)
         assert data["page_kind"] == "my_trades"
         assert data["active_tab"] == "selling"
+        seen_ids: set[int] = set()
         for row in data["rows"]:
             ref = row["trade_ref"]
             tid = self.session.resolve_trade_ref(pid, ref)
             assert tid is not None
+            seen_ids.add(tid)
             dto = self.trade_svc.get_trade_details(tid)
             assert dto.seller_id == pid
+            assert dto.status == "ACTIVE"
+            assert row["status"] == "ACTIVE"
+        assert 6 not in seen_ids
+
+    def test_my_trades_selling_next_cursor_matches_selling_stream(self) -> None:
+        """スナップショットの next_cursor が混合ストリームではなく出品 ACTIVE ストリームの続きを指す。"""
+        pid = 1
+        self.session.on_enter_trade(pid)
+        self.session.set_page_kind(pid, TradeVirtualPageKind.MY_TRADES)
+        self.session.set_my_trades_tab(pid, MyTradesTab.SELLING)
+        self.session.set_paging(pid, limit=1, offset=0)
+
+        raw = self.query.build_current_page_snapshot_json(pid)
+        data = json.loads(raw)
+        assert len(data["rows"]) == 1
+        snap_cursor = data["paging"]["next_cursor"]
+        assert snap_cursor is not None
+
+        first_tid = self.session.resolve_trade_ref(pid, data["rows"][0]["trade_ref"])
+        assert first_tid is not None
+
+        page2 = self.trade_svc.get_active_trades_as_seller(
+            player_id=pid, limit=1, cursor=snap_cursor
+        )
+        assert len(page2.trades) == 1
+        assert page2.trades[0].trade_id != first_tid
+        assert {first_tid, page2.trades[0].trade_id} == {1, 11}
 
     def test_my_trades_incoming_lists_personal_trades_for_recipient(self) -> None:
         pid = 1

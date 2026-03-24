@@ -178,36 +178,19 @@ class TradePageQueryService:
         player_id: int,
         st: TradePageSessionState,
     ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
-        """出品一覧: 関与取引から seller_id が一致する行のみ（ページングはストリーム上でスキップ）。"""
+        """出品一覧: ACTIVE のみを `get_active_trades_as_seller` の専用ストリームでページングする。"""
 
-        offset, limit = st.offset, st.limit
-        skip = offset
-        collected: List[TradeDto] = []
-        cursor: Optional[str] = None
-        last_next: Optional[str] = None
+        def fetch(cur: Optional[str], batch_limit: int) -> Tuple[List[TradeDto], Optional[str]]:
+            r = self._trade_query.get_active_trades_as_seller(
+                player_id, limit=batch_limit, cursor=cur
+            )
+            return r.trades, r.next_cursor
 
-        while len(collected) < limit:
-            page = self._trade_query.get_trades_for_player(player_id, limit=50, cursor=cursor)
-            last_next = page.next_cursor
-            selling = [t for t in page.trades if t.seller_id == player_id]
-            for t in selling:
-                if skip > 0:
-                    skip -= 1
-                    continue
-                if len(collected) >= limit:
-                    break
-                collected.append(t)
-            if len(collected) >= limit:
-                break
-            cursor = page.next_cursor
-            if cursor is None:
-                break
-
+        trades, next_c = _cursor_stream_slice(fetch, st.offset, st.limit)
         rows: List[Dict[str, Any]] = []
-        for t in collected:
+        for t in trades:
             ref = self._session.issue_trade_ref(player_id, t.trade_id)
             rows.append(self._selling_row(ref, t))
-        next_c = last_next if len(collected) == limit else None
         return rows, next_c
 
     def _selling_row(self, trade_ref: str, t: TradeDto) -> Dict[str, Any]:
