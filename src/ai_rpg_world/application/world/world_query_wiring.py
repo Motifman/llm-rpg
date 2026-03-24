@@ -118,7 +118,10 @@ def create_world_query_service(
         sns_page_session: 仮想 SNS 画面（省略可）。`create_llm_agent_wiring` の `sns_page_session` と同一にすること。
         sns_page_query_service: 現在画面スナップショット供給用。prompt に現在画面を自動同梱したい場合は同一インスタンスを渡すこと。
         trade_page_session: 仮想取引所画面（省略可）。`create_llm_agent_wiring` の `trade_page_session` と同一にすること。
-        trade_page_query_service: 取引所ページのスナップショット本文（省略可）。`PlayerCurrentStateDto.trade_current_page_snapshot_json` に行一覧を載せるときに `GlobalMarketQueryService` 等と同一のインスタンスを渡すこと。
+        trade_page_query_service: 取引所ページのスナップショット本文（省略可）。
+            `PlayerCurrentStateDto.trade_current_page_snapshot_json` に行一覧を載せるときは `GlobalMarketQueryService` 等と同一インスタンス。
+            ReadModel を SQLite に置く場合は `TRADE_READMODEL_DB_PATH` と `create_trade_read_model_repository_from_env` で組み立てた
+            `TradeQueryService` / `TradePageQueryService` を LLM wiring 等と共有すること。
 
     Returns:
         WorldQueryService: 構築済みの WorldQueryService

@@ -2,7 +2,7 @@
 id: feature-trade-selling-pagination-sqlite
 title: マイトレード出品中のカーソル厳密化と SQLite ReadModel
 slug: trade-selling-pagination-sqlite
-status: planned
+status: completed
 created_at: 2026-03-25
 updated_at: 2026-03-25
 branch: codex/trade-selling-pagination-sqlite
@@ -244,3 +244,4 @@ branch: codex/trade-selling-pagination-sqlite
 - 2026-03-25: Alignment 反映。`selling = ACTIVE only`、同 feature 後半 phase で SQLite 実装、フラット 1 テーブル方針を確定
 - 2026-03-25: Phase 2 実装完了。`TradePageQueryService._build_selling_rows` を `get_active_trades_as_seller` + `_cursor_stream_slice` に置換。仮想ページ snapshot の `next_cursor` を selling 専用ストリームでテスト固定。Phase 3/4 の順序・契約に変更なし。
 - 2026-03-25: Phase 3 実装完了。`trade_read_model_sqlite.init_trade_read_model_schema` と `SqliteTradeReadModelRepository` を追加（フラット 1 テーブル + seller 向け index、全 read path + `save`）。単体テストで seller paging・ACTIVE 限定・カーソルを固定。Phase 4 は wiring・env・回帰のまま。
+- 2026-03-25: Phase 4 実装完了。`trade_read_model_repository_factory`（`TRADE_READMODEL_DB_PATH` / `create_trade_read_model_repository_from_env`）、`.env.example`、LLM / world_query wiring ドキュメント。ファクトリ＋`TradeEventHandler`＋SQLite の統合テスト。`SqliteTradeReadModelRepository.save` の `_model_tuple` を SQLite バインド向けにスカラー正規化（イベント投影経路の堅牢化）。後続 phase の追加は不要。

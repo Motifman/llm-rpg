@@ -2,7 +2,7 @@
 id: feature-trade-selling-pagination-sqlite
 title: マイトレード出品中のカーソル厳密化と SQLite ReadModel
 slug: trade-selling-pagination-sqlite
-status: in_progress
+status: completed
 created_at: 2026-03-25
 updated_at: 2026-03-25
 branch: codex/trade-selling-pagination-sqlite
@@ -10,10 +10,10 @@ branch: codex/trade-selling-pagination-sqlite
 
 # Current State
 
-- Active phase: Phase 4（次）
-- Last completed phase: Phase 3（SQLite Trade ReadModel 実装）
-- Next recommended action: bootstrap / wiring と `TRADE_READMODEL_DB_PATH` 相当の最小配線、回帰テスト（Phase 4）
-- Handoff summary: `trade_read_model_sqlite.init_trade_read_model_schema` と `SqliteTradeReadModelRepository(conn)` が追加済み。seller+ACTIVE paging は `ORDER BY created_at DESC, trade_id ASC` とカーソル `TradeCursor` で in-memory 契約と一致。Phase 4 で repository 差し替えポイントを明示する。
+- Active phase: （なし）
+- Last completed phase: Phase 4（Wiring と回帰固定）
+- Next recommended action: なし（feature 完了）。必要なら `flow-review` / `flow-ship` で SUMMARY 更新と main マージ判断。
+- Handoff summary: `create_trade_read_model_repository_from_env` / `create_trade_read_model_repository_from_path` で既定 in-memory または `TRADE_READMODEL_DB_PATH` 指定時の SQLite。`TradeQueryService`・`TradePageQueryService`・`TradeEventHandler` へ同一インスタンス注入を wiring ドキュメントで明示。SQLite `save` は `_model_tuple` でスカラー正規化（イベント投影経路）。
 
 # Phase Journal
 
@@ -68,3 +68,20 @@ branch: codex/trade-selling-pagination-sqlite
 - Scope delta: なし
 - Handoff summary: アプリ既定は引き続き in-memory。Phase 4 で `SqliteTradeReadModelRepository` を注入する composition root と任意 env を追加する。
 - Next-phase impact: `trade_event_handler` の `save()` は同一シグネチャのため、SQLite 実装差し替えで投影更新可能。接続寿命とファイルパスは Phase 4 で決める。
+
+## Phase 4
+
+- Started: 2026-03-25
+- Completed: 2026-03-25
+- Commit: （本コミット）
+- Tests: `tests/infrastructure/repository/test_trade_read_model_repository_factory.py`（env/パス・永続化・`TradeEventHandler`+SQLite）。既存 trade 系 160 件回帰。
+- Findings:
+  - 単一 composition root がリポジトリ内に無いため、ファクトリ＋`TRADE_READMODEL_DB_PATH`＋`create_llm_agent_wiring` / `create_world_query_service` ドキュメントで「差し替えポイント」を明示した。
+  - `TradeEventHandler`→SQLite `save` で、テストモック由来の非スカラーが混ざるとバインドに失敗するため、`SqliteTradeReadModelRepository._model_tuple` で int/str 正規化を追加（本番ドメイン経路でも型が安定）。
+- Plan revision check: 不要。Phase 4 の scope（既定 in-memory・任意 env・回帰・event handler 投影確認）を満たす。追加 phase は不要。
+- User approval: plan 範囲内（ドキュメント・`.env.example`・factory のみ）
+- Plan updates: `PLAN.md` の status を completed、Change Log に Phase 4 完了を追記
+- Goal check: 達成（SQLite を選ぶ path がコードと env で明示され、handler 投影がテストで固定）
+- Scope delta: `_model_tuple` 正規化は Phase 3 の SQLite 実装の堅牢化に含まれる軽微な追補（契約変更ではない）
+- Handoff summary: 本 feature は完了。runtime で SQLite を使う場合はファクトリで 1 インスタンスを組み、Trade 関連サービスと handler に共有する。
+- Next-phase impact: なし
