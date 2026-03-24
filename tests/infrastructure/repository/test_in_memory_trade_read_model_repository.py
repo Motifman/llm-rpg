@@ -116,6 +116,55 @@ class TestInMemoryTradeReadModelRepository:
         for i in range(len(trades) - 1):
             assert trades[i].created_at >= trades[i + 1].created_at
 
+    def test_find_recent_trades_same_created_at_tie_break_trade_id_asc(self):
+        """created_at が同一なら trade_id 昇順（全ストリーム共通のカーソル順序）"""
+        self.repository.clear()
+        same = datetime(2025, 6, 1, 10, 0, 0)
+        self.repository.save(
+            TradeReadModel.create_from_trade_and_item(
+                trade_id=TradeId(11),
+                seller_id=PlayerId(2),
+                seller_name="s",
+                buyer_id=None,
+                buyer_name=None,
+                item_instance_id=ItemInstanceId(11),
+                item_name="b",
+                item_quantity=1,
+                item_type=ItemType.EQUIPMENT,
+                item_rarity=Rarity.COMMON,
+                item_description="d",
+                item_equipment_type=EquipmentType.WEAPON,
+                durability_current=10,
+                durability_max=10,
+                requested_gold=TradeRequestedGold(100),
+                status=TradeStatus.ACTIVE,
+                created_at=same,
+            )
+        )
+        self.repository.save(
+            TradeReadModel.create_from_trade_and_item(
+                trade_id=TradeId(1),
+                seller_id=PlayerId(1),
+                seller_name="s",
+                buyer_id=None,
+                buyer_name=None,
+                item_instance_id=ItemInstanceId(1),
+                item_name="a",
+                item_quantity=1,
+                item_type=ItemType.EQUIPMENT,
+                item_rarity=Rarity.COMMON,
+                item_description="d",
+                item_equipment_type=EquipmentType.WEAPON,
+                durability_current=10,
+                durability_max=10,
+                requested_gold=TradeRequestedGold(100),
+                status=TradeStatus.ACTIVE,
+                created_at=same,
+            )
+        )
+        trades, _ = self.repository.find_recent_trades(limit=10)
+        assert [t.trade_id for t in trades] == [1, 11]
+
     def test_find_recent_trades_with_cursor_pagination(self):
         """find_recent_tradesでカーソルページングが機能する"""
         # 最初のページを取得
@@ -210,6 +259,55 @@ class TestInMemoryTradeReadModelRepository:
         trades, _ = self.repository.find_active_trades_as_seller(PlayerId(1), limit=10)
         for i in range(len(trades) - 1):
             assert trades[i].created_at >= trades[i + 1].created_at
+
+    def test_find_active_trades_as_seller_same_created_at_tie_break_trade_id_asc(self):
+        """created_at が同一なら trade_id 昇順（SQLite の ORDER BY と一致）"""
+        self.repository.clear()
+        same = datetime(2025, 6, 1, 10, 0, 0)
+        self.repository.save(
+            TradeReadModel.create_from_trade_and_item(
+                trade_id=TradeId(11),
+                seller_id=PlayerId(1),
+                seller_name="s",
+                buyer_id=None,
+                buyer_name=None,
+                item_instance_id=ItemInstanceId(11),
+                item_name="b",
+                item_quantity=1,
+                item_type=ItemType.EQUIPMENT,
+                item_rarity=Rarity.COMMON,
+                item_description="d",
+                item_equipment_type=EquipmentType.WEAPON,
+                durability_current=10,
+                durability_max=10,
+                requested_gold=TradeRequestedGold(100),
+                status=TradeStatus.ACTIVE,
+                created_at=same,
+            )
+        )
+        self.repository.save(
+            TradeReadModel.create_from_trade_and_item(
+                trade_id=TradeId(1),
+                seller_id=PlayerId(1),
+                seller_name="s",
+                buyer_id=None,
+                buyer_name=None,
+                item_instance_id=ItemInstanceId(1),
+                item_name="a",
+                item_quantity=1,
+                item_type=ItemType.EQUIPMENT,
+                item_rarity=Rarity.COMMON,
+                item_description="d",
+                item_equipment_type=EquipmentType.WEAPON,
+                durability_current=10,
+                durability_max=10,
+                requested_gold=TradeRequestedGold(100),
+                status=TradeStatus.ACTIVE,
+                created_at=same,
+            )
+        )
+        trades, _ = self.repository.find_active_trades_as_seller(PlayerId(1), limit=10)
+        assert [t.trade_id for t in trades] == [1, 11]
 
     def test_find_active_trades_as_seller_empty_when_no_listings(self):
         """出品が無いプレイヤーは空"""

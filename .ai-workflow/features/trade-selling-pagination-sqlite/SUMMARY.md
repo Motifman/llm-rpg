@@ -25,5 +25,12 @@ branch: codex/trade-selling-pagination-sqlite
 
 # Evidence
 
-- `pytest tests/application/trade/ tests/infrastructure/repository/test_in_memory_trade_read_model_repository.py tests/infrastructure/repository/test_sqlite_trade_read_model_repository.py tests/infrastructure/repository/test_trade_read_model_repository_factory.py`（trade 関連は 160+ 件パス）
-- Review: `REVIEW.md` は既存。マージはローカル main へ未プッシュ。
+- Review gate: `REVIEW.md` の Release Gate は `Ship ready: yes`、Blocking findings なし。
+- `source venv/bin/activate && pytest tests/application/trade/test_trade_read_model_wiring.py tests/infrastructure/repository/test_trade_read_model_repository_parity.py tests/infrastructure/repository/test_in_memory_trade_read_model_repository.py tests/infrastructure/repository/test_sqlite_trade_read_model_repository.py tests/application/trade/services/test_trade_query_service.py tests/application/trade/trade_virtual_pages/test_trade_page_query_service.py tests/infrastructure/repository/test_trade_read_model_repository_factory.py` を実行し、`105 passed`。
+
+# Merge Path
+
+- Current branch: `main`（`origin/main` に対して ahead）。
+- このリポジトリ運用では本 feature は main 直マージ済み相当（ローカルコミット積み上げ）なので、出荷動線は **main を push** が第一候補。
+- PR 運用に切り替える場合は、現在差分を `feature/trade-selling-pagination-sqlite` へ切り出して push 後に PR 作成。
+- 未解決事項: なし（既知の blocking finding なし）。
