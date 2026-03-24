@@ -192,6 +192,46 @@ class TestInMemoryTradeReadModelRepository:
             second_page, final_cursor = self.repository.find_active_trades(limit=1, cursor=next_cursor)
             assert len(second_page) == 1
 
+    def test_find_active_trades_as_seller_returns_only_active_listings(self):
+        """find_active_trades_as_seller は出品者の ACTIVE のみ返す"""
+        trades, cursor = self.repository.find_active_trades_as_seller(
+            PlayerId(1), limit=20
+        )
+        ids = {t.trade_id for t in trades}
+        assert 1 in ids
+        assert 11 in ids
+        assert 6 not in ids
+        for t in trades:
+            assert t.seller_id == 1
+            assert t.is_active
+
+    def test_find_active_trades_as_seller_orders_newest_first(self):
+        """find_active_trades_as_seller は created_at 降順"""
+        trades, _ = self.repository.find_active_trades_as_seller(PlayerId(1), limit=10)
+        for i in range(len(trades) - 1):
+            assert trades[i].created_at >= trades[i + 1].created_at
+
+    def test_find_active_trades_as_seller_empty_when_no_listings(self):
+        """出品が無いプレイヤーは空"""
+        trades, cursor = self.repository.find_active_trades_as_seller(
+            PlayerId(999), limit=10
+        )
+        assert trades == []
+        assert cursor is None
+
+    def test_find_active_trades_as_seller_pagination_no_overlap(self):
+        """find_active_trades_as_seller でページを跨いでも重複しない"""
+        first_page, next_cursor = self.repository.find_active_trades_as_seller(
+            PlayerId(1), limit=1
+        )
+        assert len(first_page) == 1
+        assert next_cursor is not None
+        second_page, final_cursor = self.repository.find_active_trades_as_seller(
+            PlayerId(1), limit=1, cursor=next_cursor
+        )
+        assert len(second_page) == 1
+        assert first_page[0].trade_id != second_page[0].trade_id
+
     def test_search_trades_by_item_name(self):
         """アイテム名で取引を検索できる"""
         # 「剣」を含むアイテムを検索
