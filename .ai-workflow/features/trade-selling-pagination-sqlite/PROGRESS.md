@@ -10,10 +10,10 @@ branch: codex/trade-selling-pagination-sqlite
 
 # Current State
 
-- Active phase: Phase 3（次）
-- Last completed phase: Phase 2（Trade Virtual Page の selling を専用ストリームへ切替）
-- Next recommended action: `SqliteTradeReadModelRepository` と schema / テスト（Phase 3）
-- Handoff summary: selling 行は `get_active_trades_as_seller` のみ。スナップショット `next_cursor` は出品 ACTIVE ストリームと一致することをテストで固定済み。
+- Active phase: Phase 4（次）
+- Last completed phase: Phase 3（SQLite Trade ReadModel 実装）
+- Next recommended action: bootstrap / wiring と `TRADE_READMODEL_DB_PATH` 相当の最小配線、回帰テスト（Phase 4）
+- Handoff summary: `trade_read_model_sqlite.init_trade_read_model_schema` と `SqliteTradeReadModelRepository(conn)` が追加済み。seller+ACTIVE paging は `ORDER BY created_at DESC, trade_id ASC` とカーソル `TradeCursor` で in-memory 契約と一致。Phase 4 で repository 差し替えポイントを明示する。
 
 # Phase Journal
 
@@ -50,3 +50,21 @@ branch: codex/trade-selling-pagination-sqlite
 - Scope delta: なし
 - Handoff summary: Phase 3 は in-memory と同一シグネチャの SQLite `find_active_trades_as_seller` / `save` / `find_by_id` 等を実装し、単体テストで順序・ACTIVE・カーソルを in-memory と揃える。
 - Next-phase impact: Phase 4 wiring は引き続き ReadModel repository 差し替えで足りる。env 名や composition root は Phase 4 で確定でよい。
+
+## Phase 3
+
+- Started: 2026-03-25
+- Completed: 2026-03-25
+- Commit: （本コミット）
+- Tests: `tests/infrastructure/repository/test_sqlite_trade_read_model_repository.py`（save/find、seller ACTIVE のみ・順序・同一 `created_at` の tie-break・ページ重複なし・検索）
+- Findings:
+  - スキーマは `trade_read_models` 1 テーブル。index `idx_trade_read_seller_status_created_trade` を `(seller_id, status, created_at, trade_id)` に設定。ページングは `WHERE seller_id=? AND status='ACTIVE'` にカーソル句を足し `ORDER BY created_at DESC, trade_id ASC` で `limit+1` 取得。
+  - `created_at` は ISO 文字列で格納し、`TradeCursor` 句は in-memory と同じ「より古い時刻、または同一時刻でより大きい `trade_id`」。
+  - LLM 用 `sqlite_memory_db.py` は触らず、`trade_read_model_sqlite` で ReadModel 専用に分離。
+- Plan revision check: 不要。Phase 3 scope / Success Criteria と一致。Phase 4（wiring・env・event handler 投影）は PLAN のまま。
+- User approval: （事前 plan の範囲内）
+- Plan updates: Change Log のみ
+- Goal check: 達成（SQLite が `TradeReadModelRepository` 契約を満たし、seller paging を説明可能な SQL + index で取得可能）
+- Scope delta: なし
+- Handoff summary: アプリ既定は引き続き in-memory。Phase 4 で `SqliteTradeReadModelRepository` を注入する composition root と任意 env を追加する。
+- Next-phase impact: `trade_event_handler` の `save()` は同一シグネチャのため、SQLite 実装差し替えで投影更新可能。接続寿命とファイルパスは Phase 4 で決める。
