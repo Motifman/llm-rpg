@@ -52,22 +52,23 @@ def _row_to_model(row: sqlite3.Row) -> TradeReadModel:
 
 
 def _model_tuple(m: TradeReadModel) -> Tuple[Any, ...]:
+    """SQLite バインド用。ReadModel 上の値が列型とずれないようスカラーに正規化する。"""
     return (
-        m.trade_id,
-        m.seller_id,
-        m.seller_name,
+        int(m.trade_id),
+        int(m.seller_id),
+        str(m.seller_name),
         m.buyer_id,
         m.buyer_name,
-        m.requested_gold,
-        m.status,
+        int(m.requested_gold),
+        str(m.status),
         _dt_to_str(m.created_at),
-        m.item_instance_id,
-        m.item_name,
-        m.item_quantity,
-        m.item_type,
-        m.item_rarity,
-        m.item_description,
-        m.item_equipment_type,
+        int(m.item_instance_id),
+        str(m.item_name),
+        int(m.item_quantity),
+        str(m.item_type),
+        str(m.item_rarity),
+        str(m.item_description),
+        str(m.item_equipment_type) if m.item_equipment_type is not None else None,
         m.durability_current,
         m.durability_max,
     )
