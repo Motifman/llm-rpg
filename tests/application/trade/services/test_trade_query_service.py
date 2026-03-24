@@ -217,6 +217,37 @@ class TestTradeQueryService:
             exc_info.value
         )
 
+    def test_get_active_trades_as_seller_invalid_cursor_base64(self):
+        """無効な base64 のカーソルは SystemErrorException"""
+        with pytest.raises(SystemErrorException) as exc_info:
+            self.service.get_active_trades_as_seller(
+                player_id=1, cursor="invalid_base64_string!"
+            )
+        assert "get_active_trades_as_seller failed: Invalid cursor format" in str(
+            exc_info.value
+        )
+
+    def test_get_active_trades_as_seller_invalid_cursor_json(self):
+        """base64 は有効だが JSON が無効なカーソルは SystemErrorException"""
+        invalid_cursor = "aW52YWxpZF9qc29u"
+        with pytest.raises(SystemErrorException) as exc_info:
+            self.service.get_active_trades_as_seller(player_id=1, cursor=invalid_cursor)
+        assert "get_active_trades_as_seller failed: Invalid cursor format" in str(
+            exc_info.value
+        )
+
+    def test_get_active_trades_as_seller_zero_limit(self):
+        """limit=0 は空リスト"""
+        result = self.service.get_active_trades_as_seller(player_id=1, limit=0)
+        assert isinstance(result, TradeListDto)
+        assert result.trades == []
+        assert result.next_cursor is None
+
+    def test_get_active_trades_as_seller_negative_limit(self):
+        """負の limit はリポジトリ実装に依存し空に寄せうる"""
+        result = self.service.get_active_trades_as_seller(player_id=1, limit=-1)
+        assert isinstance(result, TradeListDto)
+
     def test_search_trades_no_filter(self):
         """フィルタなしで全取引を検索できる"""
         filter_dto = TradeSearchFilterDto()

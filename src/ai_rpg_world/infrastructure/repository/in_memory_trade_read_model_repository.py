@@ -15,6 +15,14 @@ from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeReq
 from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
 
 
+def _sort_read_models_newest_first_tie_break_trade_id(trades: List[TradeReadModel]) -> None:
+    """`SqliteTradeReadModelRepository` の `ORDER BY created_at DESC, trade_id ASC` と同じ順序。
+
+    カーソル句（より古い行へ進む）と整合するため、同一 `created_at` では `trade_id` 昇順で固定する。
+    """
+    trades.sort(key=lambda t: (-t.created_at.timestamp(), t.trade_id))
+
+
 class InMemoryTradeReadModelRepository(TradeReadModelRepository):
     """TradeReadModelを使用するインメモリリポジトリ"""
 
@@ -425,8 +433,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
         """最新の取引を取得（カーソルベースページング）"""
         all_trades = list(self._trades.values())
 
-        # 作成日時の降順でソート
-        all_trades.sort(key=lambda t: t.created_at, reverse=True)
+        _sort_read_models_newest_first_tie_break_trade_id(all_trades)
 
         # カーソルが指定されている場合は、それ以降の取引を取得
         if cursor:
@@ -459,8 +466,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
             if trade.seller_id == int(player_id) or trade.buyer_id == int(player_id)
         ]
 
-        # 作成日時の降順でソート
-        player_trades.sort(key=lambda t: t.created_at, reverse=True)
+        _sort_read_models_newest_first_tie_break_trade_id(player_trades)
 
         # カーソルが指定されている場合は、それ以降の取引を取得
         if cursor:
@@ -498,7 +504,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
             if trade.seller_id == int(seller_id) and trade.is_active
         ]
 
-        selling_trades.sort(key=lambda t: t.created_at, reverse=True)
+        _sort_read_models_newest_first_tie_break_trade_id(selling_trades)
 
         if cursor:
             filtered_trades = []
@@ -529,8 +535,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
         """アクティブな取引を取得（カーソルベースページング）"""
         active_trades = [trade for trade in self._trades.values() if trade.is_active]
 
-        # 作成日時の降順でソート
-        active_trades.sort(key=lambda t: t.created_at, reverse=True)
+        _sort_read_models_newest_first_tie_break_trade_id(active_trades)
 
         # カーソルが指定されている場合は、それ以降の取引を取得
         if cursor:
@@ -565,8 +570,7 @@ class InMemoryTradeReadModelRepository(TradeReadModelRepository):
             if self._matches_filter(trade, filter):
                 filtered_trades.append(trade)
 
-        # 作成日時の降順でソート
-        filtered_trades.sort(key=lambda t: t.created_at, reverse=True)
+        _sort_read_models_newest_first_tie_break_trade_id(filtered_trades)
 
         # カーソルが指定されている場合は、それ以降の取引を取得
         if cursor:
