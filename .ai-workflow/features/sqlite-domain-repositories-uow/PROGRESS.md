@@ -10,10 +10,10 @@ branch: feature/sqlite-domain-repositories-uow
 
 # Current State
 
-- Active phase: **Phase 4**（EventPublisher / DI / composition root の SQLite 切替・`GAME_DB_PATH` と `TRADE_READMODEL_DB_PATH` の整理）
-- Last completed phase: **Phase 3**（ReadModel SQLite 横展開）
-- Next recommended action: Phase 4 で container / wiring に `GAME_DB_PATH`・`SqliteUnitOfWork` 選択を接続し、Trade メイン ReadModel の env を単一 DB 方針に寄せるか判断
-- Handoff summary: Personal / TradeDetail / GlobalMarket は `GAME_DB_PATH` 経由のファクトリで SQLite 化可能。ページング順序は InMemory の `(created_at DESC, trade_id DESC)` に SQLite を合わせて parity。`TradeReadModel` は未統合（`TRADE_READMODEL_DB_PATH` のまま）。
+- Active phase: **Phase 5**（回帰固定・運用ドキュメント化）
+- Last completed phase: **Phase 4**（EventPublisher / DI / composition root 切替）
+- Next recommended action: Phase 5 で repository 実装チェックリスト・運用手順を `SUMMARY.md` 等に集約
+- Handoff summary: Trade メイン ReadModel は `TRADE_READMODEL_DB_PATH` 優先・なければ `GAME_DB_PATH`。周辺 3 リポジトリと同一ファイルに揃えるには `create_trade_read_model_repositories_bundle_for_app`。`USE_SQLITE_UNIT_OF_WORK` + `GAME_DB_PATH` で `SqliteUnitOfWorkFactory` を選べるが `InMemoryEventPublisherWithUow` とは併用不可（`EVENT_PUBLISHER_UOW_POLICY.md`）。
 
 # Phase Journal
 
@@ -63,6 +63,21 @@ branch: feature/sqlite-domain-repositories-uow
 - Next-phase impact: wiring で同一 `GAME_DB_PATH` ファイルに複数テーブルを載せる場合、`create_trade_read_model_repository_from_env` を `GAME_DB_PATH` に寄せるか、合成ファクトリを追加するかを決める
 
 ## Phase 4
+
+- Started: 2026-03-27
+- Completed: 2026-03-27
+- Commit: （本コミット）
+- Tests: `pytest tests/infrastructure/unit_of_work/test_unit_of_work_factory_from_env.py tests/infrastructure/di/test_container_sqlite_uow_factory.py tests/infrastructure/repository/test_trade_read_model_repository_factory.py tests/application/trade/test_trade_read_model_wiring.py` — passed
+- Findings: SNS `DependencyInjectionContainer` の UoW は引き続き InMemory のみ。SQLite UoW は `create_unit_of_work_factory_from_env` または `create_sqlite_unit_of_work_factory_for_game_db` の別経路。`InMemoryEventPublisherWithUow` を触らずにドキュメントで Option C を固定した。post-commit の順序は既存 InMemory 経路で変えていない。
+- Plan revision check: **変更なし**
+- User approval: 不要
+- Plan updates: `PLAN.md` Change Log、`EVENT_PUBLISHER_UOW_POLICY.md` 新設
+- Goal check: env 切替・バンドル wiring・方針文書・最低限の wiring テストを満たす
+- Scope delta: 実アプリの `create_llm_agent_wiring` へのバンドル組み込みは呼び出し側任せ（本 phase はライブラリ導線まで）
+- Handoff summary: 上記 Current State のとおり
+- Next-phase impact: Phase 5 でチェックリスト化し、実プロセスでの env 例を 1 本残す
+
+## Phase 5
 
 - Started:
 - Completed:

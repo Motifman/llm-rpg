@@ -1,7 +1,10 @@
 """Composition root 向け: Trade ReadModel リポジトリをパスまたは環境変数から生成する。
 
-既定は `InMemoryTradeReadModelRepository`。`TRADE_READMODEL_DB_PATH` に SQLite ファイルパスを
-設定すると `SqliteTradeReadModelRepository` を返す。
+既定は `InMemoryTradeReadModelRepository`。永続化パスは次の優先順位で解決する:
+
+1. `TRADE_READMODEL_DB_PATH` が非空 → そのパス（従来どおり・明示上書き）
+2. 上記が空で `GAME_DB_PATH` が非空 → 単一ゲーム DB（Phase 3–4 の方針）
+3. どちらも空 → インメモリ
 
 `TradeQueryService`・`TradePageQueryService`・`TradeEventHandler` には同一のリポジトリ
 インスタンスを注入すること（ReadModel の投影とクエリの一貫性のため）。
@@ -17,6 +20,7 @@ from typing import Mapping, Optional, Union
 from ai_rpg_world.domain.trade.repository.trade_read_model_repository import (
     TradeReadModelRepository,
 )
+from ai_rpg_world.infrastructure.repository.game_db_path import get_game_db_path_from_env
 from ai_rpg_world.infrastructure.repository.in_memory_trade_read_model_repository import (
     InMemoryTradeReadModelRepository,
 )
@@ -25,6 +29,18 @@ from ai_rpg_world.infrastructure.repository.sqlite_trade_read_model_repository i
 )
 
 _ENV_TRADE_READMODEL_DB_PATH = "TRADE_READMODEL_DB_PATH"
+
+
+def resolve_trade_read_model_persisted_path(
+    *,
+    environ: Optional[Mapping[str, str]] = None,
+) -> Optional[str]:
+    """Trade メイン ReadModel 用の SQLite ファイルパス。無ければ None（インメモリ）。"""
+    env = environ if environ is not None else os.environ
+    raw_trade = (env.get(_ENV_TRADE_READMODEL_DB_PATH, "") or "").strip()
+    if raw_trade:
+        return str(Path(raw_trade).expanduser().resolve())
+    return get_game_db_path_from_env(environ=env)
 
 
 def create_trade_read_model_repository_from_path(
@@ -45,19 +61,18 @@ def create_trade_read_model_repository_from_env(
     *,
     environ: Optional[Mapping[str, str]] = None,
 ) -> TradeReadModelRepository:
-    """環境変数 `TRADE_READMODEL_DB_PATH` に基づきリポジトリを生成する。
+    """`TRADE_READMODEL_DB_PATH` を優先し、無ければ `GAME_DB_PATH` で SQLite を選ぶ。
 
-    未設定・空文字のときはインメモリ。テストでは `environ` に差し替え可能。
+    どちらも空のときはインメモリ。テストでは `environ` に差し替え可能。
     """
-    env = environ if environ is not None else os.environ
-    raw = env.get(_ENV_TRADE_READMODEL_DB_PATH, "") or ""
-    raw = raw.strip()
-    if not raw:
+    path = resolve_trade_read_model_persisted_path(environ=environ)
+    if path is None:
         return InMemoryTradeReadModelRepository()
-    return create_trade_read_model_repository_from_path(raw)
+    return create_trade_read_model_repository_from_path(path)
 
 
 __all__ = [
     "create_trade_read_model_repository_from_env",
     "create_trade_read_model_repository_from_path",
+    "resolve_trade_read_model_persisted_path",
 ]

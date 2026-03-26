@@ -37,9 +37,9 @@ EventHandlerComposition のインスタンス化）は**呼び出し元（外部
   取引の enter/exit を配線する場合も **WorldQuery と同一の** `sns_mode_session` を渡す。
 - 仮想取引所ページツール（`trade_view_current_page` 等）を有効にするには `trade_page_query_service` と
   `trade_page_session` を `create_llm_agent_wiring(...)` に渡す（`WorldQueryService` 側と同一インスタンス）。
-- Trade ReadModel を SQLite に置く場合は環境変数 `TRADE_READMODEL_DB_PATH` を設定し、
+- Trade ReadModel を SQLite に置く場合は `TRADE_READMODEL_DB_PATH`（明示）または単一 DB 用の `GAME_DB_PATH` を設定し、
   `ai_rpg_world.application.trade.trade_read_model_wiring.create_trade_read_model_repository_for_app`
-  （または `create_trade_query_service_for_app`）で得たリポジトリを
+  （または `create_trade_query_service_for_app` / `create_trade_read_model_repositories_bundle_for_app`）で得たリポジトリを
   `TradeQueryService`・`TradePageQueryService`・`TradeEventHandler` 等に**同一インスタンスで**
   渡す（`.env.example` 参照）。
 """

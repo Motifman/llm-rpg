@@ -120,8 +120,9 @@ def create_world_query_service(
         trade_page_session: 仮想取引所画面（省略可）。`create_llm_agent_wiring` の `trade_page_session` と同一にすること。
         trade_page_query_service: 取引所ページのスナップショット本文（省略可）。
             `PlayerCurrentStateDto.trade_current_page_snapshot_json` に行一覧を載せるときは `GlobalMarketQueryService` 等と同一インスタンス。
-            ReadModel を SQLite に置く場合は `TRADE_READMODEL_DB_PATH` と
+            ReadModel を SQLite に置く場合は `TRADE_READMODEL_DB_PATH` または `GAME_DB_PATH` と
             `ai_rpg_world.application.trade.trade_read_model_wiring.create_trade_read_model_repository_for_app`
+            （周辺 ReadModel まで同一ファイルに揃えるなら `create_trade_read_model_repositories_bundle_for_app`）
             （または `create_trade_query_service_for_app`）で組み立てた
             `TradeQueryService` / `TradePageQueryService` を LLM wiring 等と共有すること。
 
