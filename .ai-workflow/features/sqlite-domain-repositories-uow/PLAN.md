@@ -365,6 +365,7 @@ branch: codex/sqlite-domain-repositories-uow
 
 # Change Log
 
+- 2026-03-27: Phase 2 実装（コード）。`SqliteUnitOfWork` / `SqliteUnitOfWorkFactory`、`SqliteTradeReadModelRepository.autocommit`、`init_trade_read_model_schema` の UoW 整合（DDL で `commit` しない）、`tests/infrastructure/unit_of_work/test_sqlite_unit_of_work.py`
 - 2026-03-27: Phase 1 完了。ドメイン repository インターフェースの一覧・ReadModel/書き込み分類・`GAME_DB_PATH` と現行 env の差分を PLAN に記録
 - 2026-03-27: Initial plan created
 - 2026-03-27: flow-plan 実行。UoW/DI/Event/Trade SQLite 実装の現状を反映し、懸念点と解決オプション、Phase 1-5 を具体化
