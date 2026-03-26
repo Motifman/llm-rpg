@@ -10,10 +10,10 @@ branch: feature/sqlite-domain-repositories-uow
 
 # Current State
 
-- Active phase: **Phase 3**（ReadModel SQLite パターン横展開）
-- Last completed phase: **Phase 2**（`SqliteUnitOfWork` 先行導入）
-- Next recommended action: Phase 3 で追加 ReadModel の schema + sqlite repo + factory + parity テスト
-- Handoff summary: `SqliteUnitOfWork` は `database` または注入 `connection` のどちらか一方。所有接続は commit/rollback 後に close。`connection` プロパティで参加者が同一 `sqlite3.Connection` を共有。Trade ReadModel は `autocommit=False` で UoW commit まで DB 確定を遅延。スキーマ初期化は `commit()` を呼ばず UoW と合成可能にした（既存ファクトリ経路は `save` 等の既定 autocommit で従来どおり永続化）。
+- Active phase: **Phase 4**（EventPublisher / DI / composition root の SQLite 切替・`GAME_DB_PATH` と `TRADE_READMODEL_DB_PATH` の整理）
+- Last completed phase: **Phase 3**（ReadModel SQLite 横展開）
+- Next recommended action: Phase 4 で container / wiring に `GAME_DB_PATH`・`SqliteUnitOfWork` 選択を接続し、Trade メイン ReadModel の env を単一 DB 方針に寄せるか判断
+- Handoff summary: Personal / TradeDetail / GlobalMarket は `GAME_DB_PATH` 経由のファクトリで SQLite 化可能。ページング順序は InMemory の `(created_at DESC, trade_id DESC)` に SQLite を合わせて parity。`TradeReadModel` は未統合（`TRADE_READMODEL_DB_PATH` のまま）。
 
 # Phase Journal
 
@@ -48,6 +48,21 @@ branch: feature/sqlite-domain-repositories-uow
 - Next-phase impact: Phase 3 で他 ReadModel を足す際は `autocommit` とスキーマ初期化の `commit` なしパターンを踏襲する
 
 ## Phase 3
+
+- Started: 2026-03-27
+- Completed: 2026-03-27
+- Commit: （本コミット）
+- Tests: `pytest tests/infrastructure/repository/test_trade_aux_read_models_sqlite_parity.py tests/infrastructure/repository/test_sqlite_trade_read_model_repository.py` — passed
+- Findings: InMemory の `find_for_player` / `find_listings` は `sort(..., reverse=True)` により同一 `created_at` では **trade_id 降順**。SQLite も `ORDER BY created_at DESC, trade_id DESC` とカーソル条件 `(created_at < ? OR (created_at = ? AND trade_id < ?))` で一致。Global のフィルタは `TradeSearchFilter` を SQL 化（装備タイプは `item_equipment_type IS NOT NULL AND IN (...)`）。**メイン `TradeReadModel` のファクトリは `TRADE_READMODEL_DB_PATH` のまま** — 単一 `GAME_DB_PATH` ファイルに `trade_read_models` を同居させるには Phase 4 でファクトリ／wiring をまとめる必要あり。
+- Plan revision check: **変更なし**（Phase 4 が当初どおり DI・env 統合を担う）
+- User approval: 不要
+- Plan updates: `PLAN.md` Change Log に Phase 3 行を追加
+- Goal check: 3 ReadModel について schema + sqlite + factory + parity を満たす。`GAME_DB_PATH` 導線は `.env.example` と `get_game_db_path_from_env` で明示
+- Scope delta: `TradeReadModel` の `GAME_DB_PATH` 移行は未実施（後続 Phase 4）
+- Handoff summary: 上記 Current State のとおり
+- Next-phase impact: wiring で同一 `GAME_DB_PATH` ファイルに複数テーブルを載せる場合、`create_trade_read_model_repository_from_env` を `GAME_DB_PATH` に寄せるか、合成ファクトリを追加するかを決める
+
+## Phase 4
 
 - Started:
 - Completed:
