@@ -115,6 +115,26 @@ class TestTradeReadModelRepositoryFactory:
         )
         assert path == str(trade_db.resolve())
 
+    def test_trade_path_whitespace_only_falls_back_to_game_db(self, tmp_path: Path) -> None:
+        game_db = tmp_path / "game_only.db"
+        path = resolve_trade_read_model_persisted_path(
+            environ={
+                "TRADE_READMODEL_DB_PATH": "   \t  ",
+                "GAME_DB_PATH": str(game_db),
+            },
+        )
+        assert path == str(game_db.resolve())
+
+    def test_from_env_whitespace_trade_uses_game_sqlite(self, tmp_path: Path) -> None:
+        db = tmp_path / "fallback.db"
+        repo = create_trade_read_model_repository_from_env(
+            environ={
+                "TRADE_READMODEL_DB_PATH": " ",
+                "GAME_DB_PATH": str(db),
+            },
+        )
+        assert isinstance(repo, SqliteTradeReadModelRepository)
+
     def test_trade_event_handler_offered_persists_via_factory_sqlite(
         self, tmp_path: Path
     ) -> None:

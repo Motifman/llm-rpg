@@ -2,7 +2,7 @@
 id: feature-sqlite-domain-repositories-uow
 title: Sqlite Domain Repositories Uow
 slug: sqlite-domain-repositories-uow
-status: in_progress
+status: done
 created_at: 2026-03-27
 updated_at: 2026-03-27
 branch: feature/sqlite-domain-repositories-uow
@@ -10,10 +10,10 @@ branch: feature/sqlite-domain-repositories-uow
 
 # Current State
 
-- Active phase: **Phase 5**（回帰固定・運用ドキュメント化）
-- Last completed phase: **Phase 4**（EventPublisher / DI / composition root 切替）
-- Next recommended action: Phase 5 で repository 実装チェックリスト・運用手順を `SUMMARY.md` 等に集約
-- Handoff summary: Trade メイン ReadModel は `TRADE_READMODEL_DB_PATH` 優先・なければ `GAME_DB_PATH`。周辺 3 リポジトリと同一ファイルに揃えるには `create_trade_read_model_repositories_bundle_for_app`。`USE_SQLITE_UNIT_OF_WORK` + `GAME_DB_PATH` で `SqliteUnitOfWorkFactory` を選べるが `InMemoryEventPublisherWithUow` とは併用不可（`EVENT_PUBLISHER_UOW_POLICY.md`）。
+- Active phase: **なし**（feature 完了）
+- Last completed phase: **Phase 5**（回帰固定・運用ドキュメント化・振り返り）
+- Next recommended action: `REVIEW.md` に沿った外部レビュー → 問題なければ main へマージ。follow-up は `SUMMARY.md` Remaining Work / `EVENT_PUBLISHER_UOW_POLICY.md` を参照
+- Handoff summary: 成果・テスト証跡・目的達成度・残課題は `SUMMARY.md`。レビュー観点と自己レビューは `REVIEW.md`。新規 SQLite ReadModel は `SQLITE_REPOSITORY_CHECKLIST.md`。
 
 # Phase Journal
 
@@ -79,15 +79,15 @@ branch: feature/sqlite-domain-repositories-uow
 
 ## Phase 5
 
-- Started:
-- Completed:
-- Commit:
-- Tests:
-- Findings:
-- Plan revision check:
-- User approval:
-- Plan updates:
-- Goal check:
-- Scope delta:
-- Handoff summary:
-- Next-phase impact:
+- Started: 2026-03-27
+- Completed: 2026-03-27
+- Commit: （本コミット）
+- Tests: `pytest tests/infrastructure/unit_of_work/test_sqlite_unit_of_work.py tests/infrastructure/unit_of_work/test_unit_of_work_factory_from_env.py tests/infrastructure/repository/test_game_db_path.py tests/infrastructure/repository/test_trade_read_model_repository_factory.py tests/infrastructure/repository/test_trade_aux_read_models_sqlite_parity.py tests/application/trade/test_trade_read_model_wiring.py` — passed
+- Findings: `SQLITE_REPOSITORY_CHECKLIST.md` で禁止事項・最小運用・follow-up 分離条件を 1 ファイル化。UoW / env / パス解決の **失敗系・境界** をテストで固定（begin なしの commit/rollback/add_events、偽の `USE_SQLITE_UNIT_OF_WORK`、空白のみの `TRADE_READMODEL_DB_PATH` / `GAME_DB_PATH`、bundle で単一ファイルに 4 ReadModel テーブル実在）。`SUMMARY.md` に全体目的の達成表と残課題、`REVIEW.md` にレビュア向け観点と自己レビューを記載。
+- Plan revision check: **変更なし**。future phase の追加・順序変更は不要。残作業は当初 PLAN の Execution Deltas / follow-up と一致（集約 SQLite、Event Protocol、migration）。
+- User approval: 不要（PLAN 本文の future phase を編集していない）
+- Plan updates: `PLAN.md` Change Log に Phase 5 行を追加
+- Goal check: チェックリスト 1 ファイル、SUMMARY/REVIEW で検証観点が追える、最低 1 ケースの実証（4 テーブル materialize）をテストで根拠化 — **達成**
+- Scope delta: なし（書き込み集約 SQLite は follow-up のまま）
+- Handoff summary: 上記 Current State のとおり
+- Next-phase impact: なし（本 feature 完了）。別 feature で Protocol 化・集約永続化を起票可能

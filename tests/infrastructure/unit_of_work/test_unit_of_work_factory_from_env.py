@@ -38,3 +38,27 @@ class TestCreateUnitOfWorkFactoryFromEnv:
             environ={ENV_USE_SQLITE_UNIT_OF_WORK: "true"},
         )
         assert isinstance(fac.create(), InMemoryUnitOfWork)
+
+    def test_explicit_false_and_zero_use_in_memory(self, tmp_path: Path) -> None:
+        db = tmp_path / "ignored.db"
+        for val in ("0", "false", "no", "FALSE"):
+            fac = create_unit_of_work_factory_from_env(
+                environ={
+                    ENV_USE_SQLITE_UNIT_OF_WORK: val,
+                    "GAME_DB_PATH": str(db),
+                },
+            )
+            assert isinstance(
+                fac.create(),
+                InMemoryUnitOfWork,
+            ), f"expected in-memory for flag={val!r}"
+
+    def test_yes_enables_sqlite(self, tmp_path: Path) -> None:
+        db = tmp_path / "y.db"
+        fac = create_unit_of_work_factory_from_env(
+            environ={
+                ENV_USE_SQLITE_UNIT_OF_WORK: "yes",
+                "GAME_DB_PATH": str(db),
+            },
+        )
+        assert isinstance(fac, SqliteUnitOfWorkFactory)

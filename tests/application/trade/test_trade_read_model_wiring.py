@@ -1,5 +1,6 @@
 """`trade_read_model_wiring` が環境に応じて正しいリポジトリ実装へ接続すること。"""
 
+import sqlite3
 from pathlib import Path
 
 from ai_rpg_world.application.trade.services.trade_query_service import TradeQueryService
@@ -66,3 +67,31 @@ class TestTradeReadModelWiring:
         assert isinstance(b.personal_listing, SqlitePersonalTradeListingReadModelRepository)
         assert isinstance(b.trade_detail, SqliteTradeDetailReadModelRepository)
         assert isinstance(b.global_market_listing, SqliteGlobalMarketListingReadModelRepository)
+
+    def test_bundle_single_file_materializes_all_read_model_tables(self, tmp_path: Path) -> None:
+        """単一 GAME_DB_PATH で 4 種の ReadModel 用テーブルが同一 DB に作成される（単一ファイル方針の実証）。"""
+        db = tmp_path / "unified.db"
+        create_trade_read_model_repositories_bundle_for_app(environ={"GAME_DB_PATH": str(db)})
+        conn = sqlite3.connect(str(db))
+        try:
+            cur = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+            )
+            names = {row[0] for row in cur.fetchall()}
+        finally:
+            conn.close()
+        assert "trade_read_models" in names
+        assert "personal_trade_listing_read_models" in names
+        assert "trade_detail_read_models" in names
+        assert "global_market_listing_read_models" in names
+
+    def test_resolve_trade_read_model_persisted_path_exported_matches_bundle_path(
+        self, tmp_path: Path
+    ) -> None:
+        from ai_rpg_world.application.trade.trade_read_model_wiring import (
+            resolve_trade_read_model_persisted_path,
+        )
+
+        db = tmp_path / "p.db"
+        env = {"GAME_DB_PATH": str(db)}
+        assert resolve_trade_read_model_persisted_path(environ=env) == str(db.resolve())
