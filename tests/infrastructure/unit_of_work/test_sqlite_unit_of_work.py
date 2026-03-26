@@ -170,3 +170,30 @@ class TestSqliteUnitOfWorkGuards:
         uow = SqliteUnitOfWork(tmp_path / "z.db")
         with pytest.raises(RuntimeError, match="アクティブな SQLite"):
             _ = uow.connection
+
+    def test_commit_without_begin_raises(self, tmp_path: Path) -> None:
+        uow = SqliteUnitOfWork(tmp_path / "no_tx.db")
+        with pytest.raises(RuntimeError, match="No transaction in progress"):
+            uow.commit()
+
+    def test_rollback_without_begin_raises(self, tmp_path: Path) -> None:
+        uow = SqliteUnitOfWork(tmp_path / "no_tx2.db")
+        with pytest.raises(RuntimeError, match="No transaction in progress"):
+            uow.rollback()
+
+    def test_after_owned_commit_connection_property_raises_until_next_begin(
+        self, tmp_path: Path
+    ) -> None:
+        db = tmp_path / "lifecycle.db"
+        uow = SqliteUnitOfWork(database=str(db))
+        with uow:
+            uow.connection.execute("CREATE TABLE IF NOT EXISTS z (id INTEGER PRIMARY KEY)")
+        with pytest.raises(RuntimeError, match="アクティブな SQLite"):
+            _ = uow.connection
+        with uow:
+            assert uow.connection is not None
+
+    def test_add_events_outside_transaction_raises(self, tmp_path: Path) -> None:
+        uow = SqliteUnitOfWork(tmp_path / "ev.db")
+        with pytest.raises(RuntimeError, match="No transaction in progress"):
+            uow.add_events([])
