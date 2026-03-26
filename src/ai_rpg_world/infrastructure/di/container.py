@@ -1,11 +1,19 @@
 """
 Dependency Injection Container - 依存性注入コンテナ実装
+
+SNS 向けスタック（`get_unit_of_work_factory` / `get_unit_of_work_and_publisher`）は
+`InMemoryUnitOfWork` + `InMemoryEventPublisherWithUow` に固定している。
+`InMemoryEventPublisherWithUow` は SQLite UoW とそのままでは併用できない（イベント層の Option C）。
+ゲーム DB 用の `SqliteUnitOfWorkFactory` が必要なときは `create_sqlite_unit_of_work_factory_for_game_db` を使い、
+SNS コンテナの UoW ファクトリとは別経路で組み立てること。
 """
-from typing import TYPE_CHECKING, Tuple, Optional
+from pathlib import Path
+from typing import TYPE_CHECKING, Tuple, Optional, Union
 
 from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
 from ai_rpg_world.infrastructure.unit_of_work.unit_of_work_factory_impl import InMemoryUnitOfWorkFactory
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import SqliteUnitOfWorkFactory
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_player_repository import InMemoryPlayerRepository
 from ai_rpg_world.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
@@ -19,8 +27,9 @@ if TYPE_CHECKING:
 
 class DependencyInjectionContainer:
     """依存性注入コンテナ
-    
+
     アプリケーション全体で使用する依存関係を管理します。
+    SNS 用リポジトリは共有 `InMemoryDataStore` と In-Memory UoW に紐づく。
     """
 
     def __init__(self):
@@ -93,3 +102,13 @@ class DependencyInjectionContainer:
             uow, _ = self.get_unit_of_work_and_publisher()
             self._reply_repository = InMemoryReplyRepository(self._data_store, uow)
         return self._reply_repository
+
+    @staticmethod
+    def create_sqlite_unit_of_work_factory_for_game_db(
+        database: Union[str, Path],
+    ) -> SqliteUnitOfWorkFactory:
+        """ゲーム永続化用の `SqliteUnitOfWorkFactory` を返す（SNS 用 `get_unit_of_work_factory` とは別）。
+
+        `InMemoryEventPublisherWithUow` と同一プロセスで使い回さないこと。
+        """
+        return SqliteUnitOfWorkFactory(database)

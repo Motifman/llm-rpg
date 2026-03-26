@@ -365,6 +365,7 @@ branch: codex/sqlite-domain-repositories-uow
 
 # Change Log
 
+- 2026-03-27: Phase 4 実装（コード）。`resolve_trade_read_model_persisted_path`（TRADE 優先→GAME フォールバック）、`create_trade_read_model_repositories_bundle_for_app`、`create_unit_of_work_factory_from_env` + `USE_SQLITE_UNIT_OF_WORK`、container の Sqlite UoW 補助、`InMemoryEventPublisherWithUow` ドキュメント、`EVENT_PUBLISHER_UOW_POLICY.md`
 - 2026-03-27: Phase 3 実装（コード）。`GAME_DB_PATH` ヘルパー、Personal / TradeDetail / GlobalMarket の schema + `Sqlite*Repository` + `create_*_from_path|from_env`、parity テスト。メイン `TradeReadModel` は引き続き `TRADE_READMODEL_DB_PATH`（Phase 4 で単一ファイル配線を検討）
 - 2026-03-27: Phase 2 実装（コード）。`SqliteUnitOfWork` / `SqliteUnitOfWorkFactory`、`SqliteTradeReadModelRepository.autocommit`、`init_trade_read_model_schema` の UoW 整合（DDL で `commit` しない）、`tests/infrastructure/unit_of_work/test_sqlite_unit_of_work.py`
 - 2026-03-27: Phase 1 完了。ドメイン repository インターフェースの一覧・ReadModel/書き込み分類・`GAME_DB_PATH` と現行 env の差分を PLAN に記録

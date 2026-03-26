@@ -30,6 +30,7 @@ from ai_rpg_world.infrastructure.repository.sqlite_trade_read_model_repository i
 from ai_rpg_world.infrastructure.repository.trade_read_model_repository_factory import (
     create_trade_read_model_repository_from_env,
     create_trade_read_model_repository_from_path,
+    resolve_trade_read_model_persisted_path,
 )
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 
@@ -95,6 +96,24 @@ class TestTradeReadModelRepositoryFactory:
             environ={"TRADE_READMODEL_DB_PATH": str(db)},
         )
         assert isinstance(repo, SqliteTradeReadModelRepository)
+
+    def test_from_env_game_db_path_when_trade_unset(self, tmp_path: Path) -> None:
+        db = tmp_path / "game.db"
+        repo = create_trade_read_model_repository_from_env(
+            environ={"GAME_DB_PATH": str(db)},
+        )
+        assert isinstance(repo, SqliteTradeReadModelRepository)
+
+    def test_trade_readmodel_path_overrides_game_db(self, tmp_path: Path) -> None:
+        trade_db = tmp_path / "trade.db"
+        game_db = tmp_path / "game.db"
+        path = resolve_trade_read_model_persisted_path(
+            environ={
+                "TRADE_READMODEL_DB_PATH": str(trade_db),
+                "GAME_DB_PATH": str(game_db),
+            },
+        )
+        assert path == str(trade_db.resolve())
 
     def test_trade_event_handler_offered_persists_via_factory_sqlite(
         self, tmp_path: Path
