@@ -54,7 +54,7 @@ def _make_trade(
 def sqlite_repo() -> SqliteTradeReadModelRepository:
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
-    repo = SqliteTradeReadModelRepository(conn)
+    repo = SqliteTradeReadModelRepository.for_standalone_connection(conn)
     yield repo
     conn.close()
 

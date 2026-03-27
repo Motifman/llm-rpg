@@ -609,6 +609,7 @@ class MonsterAggregate(AggregateRoot):
             respawn_tick=respawn_tick,
             exp=self._template.reward_info.exp,
             gold=self._template.reward_info.gold,
+            template_id=self._template.template_id.value,
             loot_table_id=self._template.reward_info.loot_table_id,
             killer_player_id=killer_player_id,
             killer_world_object_id=killer_world_object_id,

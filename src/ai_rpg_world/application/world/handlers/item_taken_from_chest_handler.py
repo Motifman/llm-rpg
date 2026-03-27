@@ -8,6 +8,7 @@ from ai_rpg_world.application.common.exceptions import ApplicationException, Sys
 from ai_rpg_world.domain.common.event_handler import EventHandler
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
+from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.player.repository.player_inventory_repository import PlayerInventoryRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.event.map_events import ItemTakenFromChestEvent
@@ -19,9 +20,11 @@ class ItemTakenFromChestHandler(EventHandler[ItemTakenFromChestEvent]):
     def __init__(
         self,
         player_inventory_repository: PlayerInventoryRepository,
+        item_repository: ItemRepository,
         unit_of_work: UnitOfWork,
     ):
         self._player_inventory_repository = player_inventory_repository
+        self._item_repository = item_repository
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -47,7 +50,15 @@ class ItemTakenFromChestHandler(EventHandler[ItemTakenFromChestEvent]):
             )
             return
 
-        inventory.acquire_item(event.item_instance_id)
+        item_aggregate = self._item_repository.find_by_id(event.item_instance_id)
+        inventory.acquire_item(
+            event.item_instance_id,
+            item_spec_id_value=(
+                item_aggregate.item_spec.item_spec_id.value
+                if item_aggregate is not None
+                else None
+            ),
+        )
         self._player_inventory_repository.save(inventory)
         self._logger.debug(
             "Added item %s to player %s inventory (taken from chest %s)",

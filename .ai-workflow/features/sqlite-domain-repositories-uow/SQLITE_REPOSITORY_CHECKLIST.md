@@ -4,13 +4,15 @@
 
 ## スキーマ
 
-- [ ] `*_sqlite.py`（または同等）で `CREATE TABLE IF NOT EXISTS` のみ発行し、**`connection.commit()` を呼ばない**（外側の UoW / 単体接続の autocommit に任せる）。
+- [ ] `*_sqlite.py`（または同等）で `CREATE TABLE IF NOT EXISTS` のみ発行し、**スキーマ関数内では `connection.commit()` を呼ばない**（UoW 内 DDL は呼び出し側の境界で扱う）。
+- [ ] `game_write_sqlite_schema.init_game_write_schema` のように **INSERT でシーケンス行を埋める処理をスキーマ初期化に混ぜない**（sqlite3 は DML で暗黙トランザクションが開き、後続の `BEGIN` と衝突し得る）。シーケンス行は `allocate_sequence_value` の初回 `INSERT OR IGNORE` に任せるか、ブートストラップで一度だけ `commit` 済みにする。
 - [ ] `executescript` は UoW 内で暗黙コミットを誘発し得るため、原則 **`execute` を複数回**に分ける。
 
 ## SQLite リポジトリ実装
 
 - [ ] コンストラクタで `row_factory = sqlite3.Row` を保証する。
-- [ ] **`autocommit: bool = True`** を受け取り、`save` / `delete`（およびその他の書き込み）で UoW 参加時は `commit()` しない。
+- [ ] **public な `autocommit: bool` は使わない**。`for_standalone_connection`（書き込み後にリポジトリが `commit`）と `for_shared_unit_of_work`（確定は `SqliteUnitOfWork.commit` のみ）の二系統で責務を表す（`sqlite_trade_read_model_repository` / `sqlite_*_write_repository` 参照）。
+- [ ] 共有接続かつ **TransactionalScope 外**での書き込み後は、Python sqlite3 の暗黙トランザクションを閉じるため **`commit` が必要**（`Sqlite*WriteRepository._finalize_write` パターン: scope 内は省略、外は `commit`）。
 - [ ] バインド値は Enum の **`.value`**、日時は **ISO 文字列**など、列型とドメインのずれを正規化する。
 
 ## ファクトリ
@@ -38,4 +40,5 @@
 ## Follow-up を分ける条件
 
 - スキーマのバージョン管理が `CREATE IF NOT EXISTS` だけでは追えなくなった → 軽量 migration テーブルまたは Alembic 等を別 feature で検討。
-- 書き込み集約を SQLite + 共有 UoW で本番運用する → 集約リポジトリ実装 + `SqliteUnitOfWork` との接続共有を別 feature で完遂。
+- `PlayerStatus` の pickle BLOB を正規化スキーマへ置き換える → 別 feature で段階的に列設計。
+- アプリ全体の `GAME_DB_PATH` 配線で Trade コマンドを SQLite 5 リポジトリに切り替える → `trade_command_sqlite_wiring` を llm wiring 等へ接続する作業は別タスク。

@@ -99,7 +99,7 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
         """作成日時"""
         return self._created_at
 
-    def like(self, user_id: UserId, content_type: str) -> None:
+    def like(self, user_id: UserId, content_type: str, *, liker_display_name: str = "") -> None:
         """いいね機能（共通実装）"""
         # コンテンツタイプのバリデーション
         if content_type not in ["post", "reply"]:
@@ -120,7 +120,9 @@ class BaseSnsContentAggregate(AggregateRoot, ABC):
             target_id=self._content_id,
             user_id=user_id,
             content_type=content_type,
-            content_author_id=self._author_user_id
+            content_author_id=self._author_user_id,
+            content_text=self._content.content,
+            liker_display_name=liker_display_name,
         )
         self.add_event(event)
 

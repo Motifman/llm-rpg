@@ -67,7 +67,6 @@ from ai_rpg_world.domain.quest.value_object.quest_id import QuestId
 from ai_rpg_world.domain.quest.value_object.quest_objective import QuestObjective
 from ai_rpg_world.domain.quest.value_object.quest_reward import QuestReward
 from ai_rpg_world.domain.quest.value_object.quest_scope import QuestScope
-from ai_rpg_world.domain.shop.aggregate.shop_aggregate import ShopAggregate
 from ai_rpg_world.domain.shop.event.shop_event import (
     ShopItemListedEvent,
     ShopItemPurchasedEvent,
@@ -76,6 +75,7 @@ from ai_rpg_world.domain.shop.event.shop_event import (
 from ai_rpg_world.domain.shop.value_object.shop_id import ShopId
 from ai_rpg_world.domain.shop.value_object.shop_listing_id import ShopListingId
 from ai_rpg_world.domain.shop.value_object.shop_listing_price import ShopListingPrice
+from ai_rpg_world.domain.shop.value_object.shop_listing_projection import ShopListingProjection
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillProposalType
 from ai_rpg_world.domain.skill.event.skill_events import (
@@ -109,9 +109,6 @@ from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository i
 )
 from ai_rpg_world.infrastructure.repository.in_memory_quest_repository import (
     InMemoryQuestRepository,
-)
-from ai_rpg_world.infrastructure.repository.in_memory_shop_repository import (
-    InMemoryShopRepository,
 )
 
 
@@ -369,49 +366,47 @@ class TestObservationRecipientResolverExtendedEvents:
         )
         assert {p.value for p in resolver.resolve(event)} == {2, 3}
 
-    def test_shop_item_listed_delivers_players_at_shop_spot_with_real_shop_repository(self):
+    def test_shop_item_listed_delivers_players_at_event_spot(self):
         data_store = InMemoryDataStore()
         status_repo = InMemoryPlayerStatusRepository(data_store=data_store)
         physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
-        shop_repo = InMemoryShopRepository(data_store=data_store)
         status_repo.save(_make_status(1, 5))
         status_repo.save(_make_status(2, 5))
-        shop_repo.save(
-            ShopAggregate.create(
-                shop_id=ShopId(1),
-                spot_id=SpotId(5),
-                location_area_id=LocationAreaId(1),
-                owner_id=PlayerId(9),
-                name="道具屋",
-            )
-        )
         resolver = create_observation_recipient_resolver(
             player_status_repository=status_repo,
             physical_map_repository=physical_map_repo,
-            shop_repository=shop_repo,
         )
         event = ShopItemListedEvent.create(
             aggregate_id=ShopId(1),
             aggregate_type="ShopAggregate",
+            spot_id=SpotId(5),
+            location_area_id=LocationAreaId(1),
             listing_id=ShopListingId(1),
             item_instance_id=ItemInstanceId(10),
             price_per_unit=ShopListingPrice(1),
             listed_by=PlayerId(9),
+            listing_projection=ShopListingProjection("i", 1, 1),
         )
         assert {p.value for p in resolver.resolve(event)} == {1, 2}
 
-    def test_shop_item_unlisted_without_shop_repository_falls_back_to_operator(self):
+    def test_shop_item_unlisted_delivers_players_at_event_spot(self):
+        data_store = InMemoryDataStore()
+        status_repo = InMemoryPlayerStatusRepository(data_store=data_store)
+        physical_map_repo = InMemoryPhysicalMapRepository(data_store=data_store)
+        status_repo.save(_make_status(4, 5))
         resolver = create_observation_recipient_resolver(
-            player_status_repository=MagicMock(),
-            physical_map_repository=MagicMock(),
+            player_status_repository=status_repo,
+            physical_map_repository=physical_map_repo,
         )
         event = ShopItemUnlistedEvent.create(
             aggregate_id=ShopId(1),
             aggregate_type="ShopAggregate",
+            spot_id=SpotId(5),
+            location_area_id=LocationAreaId(1),
             listing_id=ShopListingId(1),
             unlisted_by=PlayerId(4),
         )
-        assert [p.value for p in resolver.resolve(event)] == [4]
+        assert {p.value for p in resolver.resolve(event)} == {4}
 
     def test_shop_item_purchased_delivers_buyer_and_seller(self):
         resolver = create_observation_recipient_resolver(
@@ -843,25 +838,6 @@ class TestObservationRecipientResolverExtendedEvents:
             reward=QuestReward.of(),
         )
         with pytest.raises(RuntimeError, match="guild lookup failed"):
-            resolver.resolve(event)
-
-    def test_shop_resolution_propagates_shop_repository_error(self):
-        shop_repo = MagicMock()
-        shop_repo.find_by_id.side_effect = RuntimeError("shop lookup failed")
-        resolver = create_observation_recipient_resolver(
-            player_status_repository=MagicMock(),
-            physical_map_repository=MagicMock(),
-            shop_repository=shop_repo,
-        )
-        event = ShopItemListedEvent.create(
-            aggregate_id=ShopId(1),
-            aggregate_type="ShopAggregate",
-            listing_id=ShopListingId(1),
-            item_instance_id=ItemInstanceId(10),
-            price_per_unit=ShopListingPrice(1),
-            listed_by=PlayerId(1),
-        )
-        with pytest.raises(RuntimeError, match="shop lookup failed"):
             resolver.resolve(event)
 
     def test_monster_resolution_propagates_monster_repository_error(self):

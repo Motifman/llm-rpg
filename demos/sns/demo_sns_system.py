@@ -157,7 +157,7 @@ class SnsDemo:
 
         # イベントハンドラを作成（ファクトリインスタンスを使用）
         self.notification_event_handler = NotificationEventHandlerService(
-            self.repository, self.notification_repository, self.post_repository, self.reply_repository, unit_of_work_factory
+            self.repository, self.notification_repository, unit_of_work_factory
         )
         self.relationship_event_handler = RelationshipEventHandlerService(self.repository, unit_of_work_factory)
 

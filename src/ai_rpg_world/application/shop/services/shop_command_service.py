@@ -51,6 +51,7 @@ from ai_rpg_world.application.shop.exceptions.command_exception import (
     CannotPartiallyPurchaseException,
     ShopAlreadyExistsAtLocationException,
 )
+from ai_rpg_world.domain.shop.value_object.shop_listing_projection import ShopListingProjection
 
 
 class ShopCommandService:
@@ -207,6 +208,15 @@ class ShopCommandService:
                 SlotId(command.slot_id)
             )
 
+            item = self._item_repository.find_by_id(item_instance_id)
+            if item is None:
+                raise ShopCommandException(
+                    f"Item instance not found after placement: {item_instance_id.value}",
+                    user_id=command.player_id,
+                    shop_id=command.shop_id,
+                )
+            listing_projection = ShopListingProjection.from_item(item.item_instance)
+
             listing_id = self._shop_repository.generate_listing_id()
             price = ShopListingPrice.of(command.price_per_unit)
             shop.list_item(
@@ -214,6 +224,7 @@ class ShopCommandService:
                 item_instance_id=item_instance_id,
                 price_per_unit=price,
                 listed_by=player_id,
+                listing_projection=listing_projection,
             )
 
             self._shop_repository.save(shop)
@@ -273,7 +284,15 @@ class ShopCommandService:
                     f"Player inventory not found: {command.player_id}",
                     user_id=command.player_id,
                 )
-            owner_inventory.acquire_item(item_instance_id)
+            item_aggregate = self._item_repository.find_by_id(item_instance_id)
+            owner_inventory.acquire_item(
+                item_instance_id,
+                item_spec_id_value=(
+                    item_aggregate.item_spec.item_spec_id.value
+                    if item_aggregate is not None
+                    else None
+                ),
+            )
 
             self._shop_repository.save(shop)
             self._player_inventory_repository.save(owner_inventory)
@@ -388,7 +407,10 @@ class ShopCommandService:
             seller_status.earn_gold(total_gold)
 
             if command.quantity == available:
-                buyer_inventory.acquire_item(listing.item_instance_id)
+                buyer_inventory.acquire_item(
+                    listing.item_instance_id,
+                    item_spec_id_value=item_aggregate.item_spec.item_spec_id.value,
+                )
                 shop.remove_listing(listing_id)
                 self._shop_repository.save(shop)
                 self._player_status_repository.save(buyer_status)
@@ -407,7 +429,10 @@ class ShopCommandService:
                     quantity=command.quantity,
                 )
                 self._item_repository.save(new_item)
-                buyer_inventory.acquire_item(new_item_id)
+                buyer_inventory.acquire_item(
+                    new_item_id,
+                    item_spec_id_value=new_item.item_spec.item_spec_id.value,
+                )
                 item_aggregate.remove_quantity(command.quantity)
                 if item_aggregate.quantity == 0:
                     self._item_repository.delete(listing.item_instance_id)
@@ -466,7 +491,17 @@ class ShopCommandService:
                     listing.listed_by
                 )
                 if owner_inventory is not None:
-                    owner_inventory.acquire_item(listing.item_instance_id)
+                    item_aggregate = self._item_repository.find_by_id(
+                        listing.item_instance_id
+                    )
+                    owner_inventory.acquire_item(
+                        listing.item_instance_id,
+                        item_spec_id_value=(
+                            item_aggregate.item_spec.item_spec_id.value
+                            if item_aggregate is not None
+                            else None
+                        ),
+                    )
                     self._player_inventory_repository.save(owner_inventory)
                 shop.remove_listing(listing_id)
 

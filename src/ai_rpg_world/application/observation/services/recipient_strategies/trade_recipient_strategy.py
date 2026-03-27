@@ -51,10 +51,8 @@ class TradeRecipientStrategy(IRecipientResolutionStrategy):
 
         if isinstance(event, TradeAcceptedEvent):
             result = [event.buyer_id]
-            if self._trade_repository is not None:
-                trade = self._trade_repository.find_by_id(event.aggregate_id)
-                if trade is not None and trade.seller_id.value != event.buyer_id.value:
-                    result.append(trade.seller_id)
+            if event.seller_id.value != event.buyer_id.value:
+                result.append(event.seller_id)
             return result
 
         if isinstance(event, TradeCancelledEvent):

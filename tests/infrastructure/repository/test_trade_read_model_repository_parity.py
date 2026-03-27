@@ -57,7 +57,7 @@ class TestTradeReadModelRepositoryParity:
 
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
-        sql = SqliteTradeReadModelRepository(conn)
+        sql = SqliteTradeReadModelRepository.for_standalone_connection(conn)
         sql.save(_make_trade(1, 1, created_at=same))
         sql.save(_make_trade(11, 1, created_at=same))
 

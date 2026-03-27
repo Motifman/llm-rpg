@@ -55,7 +55,10 @@ class ReplyAggregate(BaseSnsContentAggregate):
         parent_reply_id: Optional[ReplyId],
         parent_author_id: Optional[UserId],
         author_user_id: UserId,
-        content: PostContent
+        content: PostContent,
+        *,
+        author_display_name: str = "",
+        mentioned_user_ids: frozenset[UserId] = frozenset(),
     ) -> "ReplyAggregate":
         """リプライを作成"""
         mentions = cls._create_mentions_from_content_static(reply_id, content)
@@ -73,7 +76,9 @@ class ReplyAggregate(BaseSnsContentAggregate):
             mentions=mentions,
             parent_post_id=parent_post_id,
             parent_reply_id=parent_reply_id,
-            parent_author_id=parent_author_id
+            parent_author_id=parent_author_id,
+            author_display_name=author_display_name,
+            mentioned_user_ids=mentioned_user_ids,
         )
         reply.add_event(event)
 
@@ -103,9 +108,9 @@ class ReplyAggregate(BaseSnsContentAggregate):
         """親情報を取得"""
         return self._parent_post_id, self._parent_reply_id
 
-    def like_reply(self, user_id: UserId):
+    def like_reply(self, user_id: UserId, liker_display_name: str = ""):
         """リプライにいいね"""
-        self.like(user_id, "reply")
+        self.like(user_id, "reply", liker_display_name=liker_display_name)
 
     def delete_reply(self, user_id: UserId):
         """リプライを削除"""

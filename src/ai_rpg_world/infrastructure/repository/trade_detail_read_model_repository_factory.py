@@ -32,7 +32,7 @@ def create_trade_detail_read_model_repository_from_path(
     path = str(Path(db_path).expanduser().resolve())
     ensure_parent_dir(path)
     conn = sqlite3.connect(path)
-    return SqliteTradeDetailReadModelRepository(conn)
+    return SqliteTradeDetailReadModelRepository.for_standalone_connection(conn)
 
 
 def create_trade_detail_read_model_repository_from_env(

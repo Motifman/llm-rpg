@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from ai_rpg_world.domain.sns.value_object import PostContent, Mention, UserId, PostId, ReplyId
 from ai_rpg_world.domain.common.domain_event import BaseDomainEvent
-from typing import Set, Optional, Union, TYPE_CHECKING
+from typing import FrozenSet, Set, Optional, Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.sns.aggregate import PostAggregate, ReplyAggregate
@@ -14,6 +14,9 @@ class SnsPostCreatedEvent(BaseDomainEvent[PostId, "PostAggregate"]):
     author_user_id: UserId
     content: PostContent
     mentions: Set[Mention] = field(default_factory=set)
+    author_display_name: str = ""
+    mentioned_user_ids: FrozenSet[UserId] = field(default_factory=frozenset)
+    subscriber_user_ids: FrozenSet[UserId] = field(default_factory=frozenset)
 
 
 @dataclass(frozen=True)
@@ -26,6 +29,8 @@ class SnsReplyCreatedEvent(BaseDomainEvent[ReplyId, "ReplyAggregate"]):
     parent_post_id: Optional[PostId] = None
     parent_reply_id: Optional[ReplyId] = None
     parent_author_id: Optional[UserId] = None  # 親コンテンツの作成者
+    author_display_name: str = ""
+    mentioned_user_ids: FrozenSet[UserId] = field(default_factory=frozenset)
 
 
 @dataclass(frozen=True)
@@ -35,6 +40,8 @@ class SnsContentLikedEvent(BaseDomainEvent[Union[PostId, ReplyId], "PostAggregat
     user_id: UserId      # いいねしたユーザー
     content_author_id: UserId  # コンテンツの作成者
     content_type: str = "post"  # "post" or "reply"
+    content_text: str = ""
+    liker_display_name: str = ""
 
 
 @dataclass(frozen=True)

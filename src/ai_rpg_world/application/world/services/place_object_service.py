@@ -252,7 +252,10 @@ class PlaceObjectApplicationService:
                 quantity=1,
             )
             self._item_repository.save(new_item)
-            inventory.acquire_item(new_item_instance_id)
+            inventory.acquire_item(
+                new_item_instance_id,
+                item_spec_id_value=item_spec.item_spec_id.value,
+            )
 
             self._physical_map_repository.save(physical_map)
             self._player_inventory_repository.save(inventory)

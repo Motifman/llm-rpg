@@ -21,8 +21,24 @@ from ai_rpg_world.domain.trade.event.trade_event import (
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
 from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
+from ai_rpg_world.domain.trade.value_object.trade_listing_projection import TradeListingProjection
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
+
+
+def _trade_listing_projection(seller_display_name: str = "Seller") -> TradeListingProjection:
+    return TradeListingProjection(
+        seller_display_name=seller_display_name,
+        item_name="Item",
+        item_quantity=1,
+        item_type=ItemType.CONSUMABLE,
+        item_rarity=Rarity.COMMON,
+        item_description="test",
+        item_equipment_type=None,
+        durability_current=None,
+        durability_max=None,
+    )
 
 
 class TestTradeAggregate:
@@ -187,6 +203,7 @@ class TestTradeAggregate:
                 requested_gold=requested_gold,
                 created_at=created_at,
                 trade_scope=global_trade_scope,
+                listing_projection=_trade_listing_projection(),
             )
 
             # Then
@@ -218,6 +235,7 @@ class TestTradeAggregate:
                 requested_gold=requested_gold,
                 created_at=created_at,
                 trade_scope=direct_trade_scope,
+                listing_projection=_trade_listing_projection(),
             )
 
             # Then
@@ -249,6 +267,7 @@ class TestTradeAggregate:
                 requested_gold=requested_gold,
                 created_at=created_at,
                 trade_scope=global_trade_scope,
+                listing_projection=_trade_listing_projection(),
             )
 
             # Then
@@ -364,7 +383,7 @@ class TestTradeAggregate:
         ):
             """グローバル取引の受託が成功する"""
             # When
-            active_global_trade.accept_by(buyer_id)
+            active_global_trade.accept_by(buyer_id, "Buyer", _trade_listing_projection())
 
             # Then
             assert active_global_trade.buyer_id == buyer_id
@@ -376,7 +395,7 @@ class TestTradeAggregate:
             target_player_id = active_direct_trade.trade_scope.target_player_id
 
             # When
-            active_direct_trade.accept_by(target_player_id)
+            active_direct_trade.accept_by(target_player_id, "Target", _trade_listing_projection())
 
             # Then
             assert active_direct_trade.buyer_id == target_player_id
@@ -386,7 +405,7 @@ class TestTradeAggregate:
             """非アクティブな取引を受託しようとすると例外が発生する"""
             # When & Then
             with pytest.raises(InvalidTradeStatusException):
-                completed_trade.accept_by(buyer_id)
+                completed_trade.accept_by(buyer_id, "Buyer", _trade_listing_projection())
 
         def test_seller_accept_own_trade_raises_exception(self, active_global_trade: TradeAggregate):
             """出品者が自分の取引を受託しようとすると例外が発生する"""
@@ -395,7 +414,7 @@ class TestTradeAggregate:
 
             # When & Then
             with pytest.raises(CannotAcceptOwnTradeException):
-                active_global_trade.accept_by(seller_id)
+                active_global_trade.accept_by(seller_id, "Seller", _trade_listing_projection())
 
         def test_wrong_player_accept_direct_trade_raises_exception(
             self, active_direct_trade: TradeAggregate, other_player_id: PlayerId
@@ -403,12 +422,12 @@ class TestTradeAggregate:
             """直接取引で対象外プレイヤーが受託しようとすると例外が発生する"""
             # When & Then
             with pytest.raises(CannotAcceptTradeWithOtherPlayerException):
-                active_direct_trade.accept_by(other_player_id)
+                active_direct_trade.accept_by(other_player_id, "Other", _trade_listing_projection())
 
         def test_accept_adds_trade_accepted_event(self, active_global_trade: TradeAggregate, buyer_id: PlayerId):
             """取引受託時にTradeAcceptedEventが発行される"""
             # When
-            active_global_trade.accept_by(buyer_id)
+            active_global_trade.accept_by(buyer_id, "Buyer", _trade_listing_projection())
 
             # Then
             events = active_global_trade.get_events()
@@ -422,7 +441,7 @@ class TestTradeAggregate:
             """キャンセル済み取引を受託しようとすると例外が発生する"""
             # When & Then
             with pytest.raises(InvalidTradeStatusException):
-                cancelled_trade.accept_by(buyer_id)
+                cancelled_trade.accept_by(buyer_id, "Buyer", _trade_listing_projection())
 
     class TestCancelBy:
         """cancel_byメソッドのテスト"""
@@ -579,10 +598,11 @@ class TestTradeAggregate:
                 requested_gold=requested_gold,
                 created_at=created_at,
                 trade_scope=global_trade_scope,
+                listing_projection=_trade_listing_projection(),
             )
 
             # When - 受託
-            trade.accept_by(buyer_id)
+            trade.accept_by(buyer_id, "Buyer", _trade_listing_projection())
 
             # Then - 2つのイベントが溜まっている
             events = trade.get_events()
@@ -608,6 +628,7 @@ class TestTradeAggregate:
                 requested_gold=requested_gold,
                 created_at=created_at,
                 trade_scope=global_trade_scope,
+                listing_projection=_trade_listing_projection(),
             )
 
             # When - イベントクリア
@@ -648,6 +669,7 @@ class TestTradeAggregate:
                 requested_gold=requested_gold,
                 created_at=created_at,
                 trade_scope=global_trade_scope,
+                listing_projection=_trade_listing_projection(),
             )
 
             # Then
@@ -660,6 +682,8 @@ class TestTradeAggregate:
             assert event.offered_item_id == offered_item_id
             assert event.requested_gold == requested_gold
             assert event.trade_scope == global_trade_scope
+            assert event.listing_projection == _trade_listing_projection()
+            assert event.trade_created_at == created_at
             # 基底クラスのフィールドも確認
             assert hasattr(event, 'occurred_at')
             assert hasattr(event, 'event_id')
@@ -671,7 +695,7 @@ class TestTradeAggregate:
         ):
             """TradeAcceptedEventが全てのフィールドを含む"""
             # When
-            active_global_trade.accept_by(buyer_id)
+            active_global_trade.accept_by(buyer_id, "Buyer", _trade_listing_projection())
 
             # Then
             events = active_global_trade.get_events()
@@ -680,6 +704,12 @@ class TestTradeAggregate:
             assert event.aggregate_id == active_global_trade.trade_id
             assert event.aggregate_type == "TradeAggregate"
             assert event.buyer_id == buyer_id
+            assert event.buyer_display_name == "Buyer"
+            assert event.seller_id == active_global_trade.seller_id
+            assert event.offered_item_id == active_global_trade.offered_item_id
+            assert event.requested_gold == active_global_trade.requested_gold
+            assert event.trade_created_at == active_global_trade.created_at
+            assert event.listing_projection == _trade_listing_projection()
             # 基底クラスのフィールドも確認
             assert hasattr(event, 'occurred_at')
             assert hasattr(event, 'event_id')
