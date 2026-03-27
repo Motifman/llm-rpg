@@ -52,6 +52,8 @@ def _skill_spec(skill_id: int, name: str = "Slash") -> SkillSpec:
 def test_skill_loadout_repository_roundtrip_and_owner_lookup() -> None:
     conn = sqlite3.connect(":memory:")
     repo = SqliteSkillLoadoutRepository.for_standalone_connection(conn)
+    writer = SqliteSkillSpecWriter.for_standalone_connection(conn)
+    writer.replace_spec(_skill_spec(1))
 
     loadout = SkillLoadoutAggregate.create(
         loadout_id=SkillLoadoutId(1),

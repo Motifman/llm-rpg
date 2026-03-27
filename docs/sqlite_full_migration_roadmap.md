@@ -201,3 +201,8 @@ interface 整理:
 guild / quest / skill / dialogue の一部は、移行速度を優先して BLOB snapshot 保存を使っています。
 いまの検索要件には足りますが、将来「部分更新したい」「SQL で集計したい」という要件が増えると、
 列分解や追加索引が必要になる見込みです。
+## Phase 7.5: pickle/BLOB 正規化
+
+- `guild / guild_bank / quest / skill / dialogue` の SQLite 実装から `pickle` / `aggregate_blob` / `node_blob` 依存を撤去する。
+- 未リリース前提に合わせて、旧 blob 定義を残さず migration 自体を正規化後の正式テーブル定義へ更新する。
+- この段階から、対象リポジトリはすべて正規化テーブルだけを読む。
