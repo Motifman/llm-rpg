@@ -93,6 +93,51 @@ branch: codex/sqlite-repository-transaction-alignment
 - SQLite の書き込み系パイロットで、同一 tx 内 find semantics をどう守るかに追加設計が必要になる可能性がある。
 - `sqlite-domain-repositories-uow` をマージ前に先走って実装すると差分が競合しやすい。
 
+# Trade イベント・ハンドラの監査結果（Phase 1）
+
+コマンド側と投影側の責務をコード（`TradeCommandService`、`TradeAggregate`、`TradeEventHandler`、`TradeEventHandlerRegistry`）に照らして整理した。**いずれの Trade ハンドラも「本体の業務一貫性」を担っておらず、ReadModel の投影に限定されている**。したがって **現状の非同期登録を維持する**判断とする。同期へ戻す必要はない（後述）。
+
+## 呼び出し関係
+
+- **コマンド**: `TradeCommandService` の `offer_item` / `accept_trade` / `cancel_trade` / `decline_trade` はいずれも `with self._unit_of_work` 内で集約とインベントリ・ステータス等を保存する。`TradeAggregate` が `Trade*Event` を `add_event` する。
+- **投影**: `TradeEventHandlerRegistry` は 4 イベントすべてを `is_synchronous=False` で登録する。各 `handle_*` は `_execute_in_separate_transaction` により **新規に作成した UoW** のブロック内で ReadModel リポジトリのみを更新する（コマンド時の UoW とは別トランザクション）。
+
+## イベント別: ペイロードとドメイン意味
+
+| イベント | ペイロード（現状） | ドメイン上の意味 |
+|----------|-------------------|------------------|
+| `TradeOfferedEvent` | `seller_id`, `offered_item_id`, `requested_gold`, `trade_scope` | 新規取引がアクティブとして成立した |
+| `TradeAcceptedEvent` | `buyer_id` | 取引が完了し購入者が確定した |
+| `TradeCancelledEvent` | 集約 ID のみ（基底の `aggregate_id` 等） | 出品者により取引がキャンセルされた |
+| `TradeDeclinedEvent` | `decliner_id` | 直接取引の宛先プレイヤーが拒否し、状態はキャンセル相当になった |
+
+## ハンドラ別: 保証すること・同期／非同期・根拠
+
+| ハンドラ | 処理の内容（保証しようとしていること） | 登録 | 結論と根拠 |
+|----------|----------------------------------------|------|------------|
+| `handle_trade_offered` | 出品者名・アイテム表示情報を付与した `TradeReadModel` を新規 `save`（`PlayerProfileRepository` / `ItemRepository` で後読み） | 非同期 | **非同期のまま妥当**。インベントリ予約と取引集約の一貫性はコマンドの UoW で既に確定。ReadModel は追従でよい。リポジトリの event-handler-patterns における「Trade ReadModel は非同期」の例と一致。 |
+| `handle_trade_accepted` | 既存 ReadModel に購入者名・状態を反映（ReadModel が無い場合は集約 `find` を試みるが、未整備なら警告してスキップ） | 非同期 | **同上**。ゴールド移転・インベントリ更新は `accept_trade` 内で完了済み。 |
+| `handle_trade_cancelled` | ReadModel の status をキャンセル相当に更新 | 非同期 | **同上**。 |
+| `handle_trade_declined` | ReadModel の status をキャンセル相当に更新（`decliner_id` は現状ハンドラ内で ReadModel フィールドに未反映） | 非同期 | **同上**。拒否とキャンセルの表示差分が必要になったらペイロードまたは投影の整理対象（Phase 2 以降で要否判断）。 |
+
+## 同一トランザクション必須の処理（境界の切り分け）
+
+次は **Trade イベントハンドラではなく `TradeCommandService` の UoW 内**に属する。ここが取引の業務一貫性の本体である。
+
+- **出品**: インベントリの予約、取引集約の作成と保存
+- **受諾**: ゴールドの移転、インベントリの変更、取引完了と保存
+- **キャンセル／拒否**: 予約解除、取引状態の更新と保存
+
+## 先行レビュー（sqlite-domain-repositories-uow）の前提への取り込み
+
+- **意味論的 `with uow:` と SQLite ReadModel のズレ**（別接続・別コミットになりうること）は、ハンドラが「投影専用・別トランザクション」であること自体とは別次元の、**永続化 API と接続共有の整理課題**として Phase 4 以降で扱う。
+- **同期ハンドラへ寄せてコマンド UoW と ReadModel を同一トランザクションにまとめる**方針は、本 feature のユーザー合意（非同期 ReadModel 更新は許容）および「同期は同一一貫性が必須な処理のみ」という制約に照らし、**Phase 1 の結論では採用しない**。
+
+## Phase 2 へのインプット（観測されたズレ）
+
+- `handle_trade_offered` / `handle_trade_accepted` が **イベントだけでは足りず**、プロフィール・アイテムを後読みしている（IDEA・先行 REVIEW の指摘どおり）。
+- `handle_trade_accepted` が ReadModel 欠落時に **完全な再投影を持たず**警告で終わる。Phase 2 でペイロード十分化とあわせ、再投影方針を整理する。
+
 # Phases
 
 ## Phase 1: Trade イベントとハンドラの意味論監査
@@ -282,3 +327,4 @@ branch: codex/sqlite-repository-transaction-alignment
 
 - 2026-03-27: Initial plan created
 - 2026-03-27: ユーザーとの再整理を反映し、Trade イベント payload 十分化、非同期ハンドラ監査、`autocommit` 廃止、transaction seam 固定、書き込み集約 SQLite パイロットまでを含む 6 phase に更新
+- 2026-03-27: Phase 1 監査完了。Trade 4 イベント・4 ハンドラの分類表と同期／非同期判断を本章「Trade イベント・ハンドラの監査結果（Phase 1）」に追記
