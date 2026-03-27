@@ -138,6 +138,57 @@ branch: codex/sqlite-repository-transaction-alignment
 - `handle_trade_offered` / `handle_trade_accepted` が **イベントだけでは足りず**、プロフィール・アイテムを後読みしている（IDEA・先行 REVIEW の指摘どおり）。
 - `handle_trade_accepted` が ReadModel 欠落時に **完全な再投影を持たず**警告で終わる。Phase 2 でペイロード十分化とあわせ、再投影方針を整理する。
 
+# 非同期ハンドラ監査結果（Phase 3）
+
+`src/ai_rpg_world/infrastructure/events/` 配下のレジストリで `is_synchronous=False` が付与されている本番経路を対象に、**役割・イベントだけで足りる情報・後読み依存・同期化の要否**を整理した。テスト専用の登録は含めない。
+
+## レジストリ単位の概要
+
+| レジストリ | 非同期登録数（目安） | 担当中枢 | 非同期でよい主な理由 |
+|------------|---------------------|----------|----------------------|
+| `trade_event_handler_registry` | 4 | `TradeEventHandler` | ReadModel 投影のみ。Phase 2 以降、投影はイベントペイロードで自己完結。 |
+| `shop_event_handler_registry` | 4 | `ShopEventHandler` | ReadModel 投影。ただし **集約・Item の後読みが残る**（下表）。 |
+| `sns_event_handler_registry` | 6 | `NotificationEventHandlerService` / `RelationshipEventHandlerService` | 通知生成・関係更新は **コマンド成功後でよい**。失敗しても本体をロールバックしない方針。 |
+| `quest_event_handler_registry` | 7 | `QuestProgressHandler` | クエスト進捗・報酬は eventual でよい設計。ただし **複数リポジトリ依存が大きい**（下表）。 |
+| `observation_event_handler_registry` | **74 型**（`_OBSERVED_EVENT_TYPES` の要素数） | `ObservationEventHandler` | LLM 向け観測の蓄積。**本文生成は formatter / name_resolver 側**で型ごとに後読みがありうる（ReadModel ハンドラとは別経路）。 |
+
+## ハンドラ別・分類表
+
+**凡例**: 「イベントのみ」= 別リポジトリに投影用データを取りにいかなくてよい理想状態。「後読みあり」= 現実装で `find` 等に依存。
+
+| コンテキスト | ハンドラ（メソッド等） | 役割 | イベントのみで足りる範囲 | 後読み依存（現状） | 同期化の要否（現判断） |
+|-------------|------------------------|------|--------------------------|-------------------|------------------------|
+| Trade | `TradeEventHandler` 4 メソッド | メイン Trade ReadModel 更新 | Phase 2 済：**投影用スナップショットはイベント内** | なし（ReadModel 用） | **不要**（非同期のまま） |
+| Shop | `handle_shop_created` | ショップ概要 ReadModel 新規 | `spot_id` / `location_area_id` はイベントにある | **Shop 集約**（name, description, owner_ids） | 不要。改善なら **イベントに表示用スナップショット**を載せる案（Trade 型） |
+| Shop | `handle_shop_item_listed` | 出品行 ReadModel + 件数 | listing id, price, 出品者などはイベントにある | **Item 集約**（名称・数量・spec_id） | 同上 |
+| Shop | `handle_shop_item_unlisted` / `handle_shop_item_purchased` | 行削除・数量更新 | 主に listing_id / quantity | **既存 ReadModel 行の find**（投影ストア） | 不要。欠落時はログ・スキップ |
+| SNS | `NotificationEventHandlerService.handle_user_subscribed` / `handle_user_followed` | 通知レコード作成 | 相手 user id はイベントにある | **両者の User 集約**（表示名など） | 不要。改善なら **表示名をイベントに載せる** |
+| SNS | `handle_post_created` | メンション・サブスク通知 | 本文・メンションはイベントに近い形で保持 | **subscriber 一覧の取得**、メンションの **display_name → user 解決** | 不要。payload / 購読者 ID 列挙の設計判断が横断課題 |
+| SNS | `handle_reply_created` | 同上 | 親 id・本文など | **user 解決**、**parent_author の取得** | 同上 |
+| SNS | `handle_content_liked` | いいね通知 | liker / author id・種別 | **Post または Reply 集約から本文** | **後読みが重い**。イベントに **抜粋テキスト**を載せるか要検討 |
+| SNS | `RelationshipEventHandlerService.handle_user_blocked` | ブロック時の follow / subscribe 解除 | blocker / blocked id | **両者の User 集約 load と変更** | 不要（非同期のまま）。** Writable だがコマンド本体とは別 tx** で意図的 |
+| Quest | `QuestProgressHandler`（複数イベント型） | 目標進捗・完了・報酬 | イベントごとに id はある | **Quest / Monster / Inventory / Status / Item / ItemSpec 等** | 不要とするのが現状方針。**同期化は設計・負荷・デッドリスクが大きい**別論 |
+| Observation | `ObservationEventHandler.handle` | pipeline → appender → 中断・ターン | イベントインスタンス全体 | **各 `TradeObservationFormatter` 等**が `ObservationNameResolver` で player/item を解決する例あり | 不要。観測は **ReadModel 更新とは別の後読み経路**として理解する |
+
+## 横断結論（payload 不足は Trade だけか）
+
+- **Trade の ReadModel 投影だけが特殊だったわけではない。** **Shop ReadModel** は **Trade 以前と同型**（集約・アイテムの後読み）が残る。
+- **SNS 通知**は、イベントにテキストや id があっても **購読者列挙・メンション解決・いいね時の本文取得**など **ドメインクエリ型の後読み**が多い。payload 十分化だけでは足りず、**読み取り専用クエリサービス**や **通知用 DTO** の切り出しも長期的候補になりうる。
+- **Quest** は「後読み」以前に **1 ハンドラが担う業務が重い**。payload 話と **同期／非同期の再検討**は切り離して扱うのが安全。
+- **Observation** は **74 型を 1 ハンドラ**が受け、**formatter 層の後読み**が型ごとにばらつく。Trade 投影をイベント完結にしても、**観測プローズ用の name_resolver 経路**は別途残りうる。
+
+## 推奨リファクタ優先度（本 phase の範囲・実装はしない）
+
+1. **Shop ReadModel** — Trade と同様、投影に必要なスナップショットをイベントまたはコマンド側で組み立て、`ShopEventHandler` の集約・Item 後読みを減らす。
+2. **SNS `handle_content_liked`** — Post/Reply リポジトリへの依存を薄める（抜粋をイベントに載せる等）。
+3. **SNS subscribe / follow / post / reply** — 表示名・subscriber 列挙のどこまでをイベントに載せるか、段階的に決める。
+4. **Quest** — 現状維持を前提に監視。同期化は別イシューで扱う。
+5. **Observation formatter** — ReadModel ハンドラと混同せず、型ごとに「resolver 必須か」を今後の表に追記していく。
+
+## event-handler-patterns への反映
+
+詳細表は本章（本 PLAN）を正とする。`.cursor/skills/event-handler-patterns/SKILL.md` には **分類ラベルと PLAN 参照**を追記し、新規非同期ハンドラ追加時に「ReadModel 投影／通知／観測／重い業務」のどれに近いかを意識させる。
+
 # Phases
 
 ## Phase 1: Trade イベントとハンドラの意味論監査
@@ -329,3 +380,4 @@ branch: codex/sqlite-repository-transaction-alignment
 - 2026-03-27: ユーザーとの再整理を反映し、Trade イベント payload 十分化、非同期ハンドラ監査、`autocommit` 廃止、transaction seam 固定、書き込み集約 SQLite パイロットまでを含む 6 phase に更新
 - 2026-03-27: Phase 1 監査完了。Trade 4 イベント・4 ハンドラの分類表と同期／非同期判断を本章「Trade イベント・ハンドラの監査結果（Phase 1）」に追記
 - 2026-03-27: Phase 2 完了。`TradeListingProjection`・`TradeOfferedEvent` / `TradeAcceptedEvent` のペイロード拡張、`TradeEventHandler` の後読み廃止、受諾時 ReadModel 欠落のイベントからの再投影を実装
+- 2026-03-27: Phase 3 完了。非同期レジストリ全体の監査表・横断結論・リファクタ優先度を本章「非同期ハンドラ監査結果（Phase 3）」に追記

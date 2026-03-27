@@ -10,10 +10,10 @@ branch: codex/sqlite-repository-transaction-alignment
 
 # Current State
 
-- Active phase: **なし**（Phase 2 完了、次は Phase 3）
-- Last completed phase: **Phase 2**（Trade イベント payload 十分化と投影単純化）
-- Next recommended action: Phase 3（非同期ハンドラ全体監査と分類表）
-- Handoff summary: `TradeOfferedEvent` / `TradeAcceptedEvent` に `TradeListingProjection` と再投影用フィールドを載せ、`TradeCommandService` が出品・受諾時にスナップショットを組み立てて集約へ渡す。`TradeEventHandler` は ReadModel リポジトリと UoW ファクトリのみ保持し、プロフィール・アイテムの後読みを廃止。`TradeRecipientStrategy` の `TradeAcceptedEvent` は `event.seller_id` を参照（取引リポジトリ必須ではなくなった）。Phase 3 で他コンテキストの async handler を棚卸しする。
+- Active phase: **なし**（Phase 3 完了、次は Phase 4）
+- Last completed phase: **Phase 3**（非同期レジストリ全体の監査表・横断結論・優先度）
+- Next recommended action: Phase 4（SQLite repository の `autocommit` 廃止と API 再設計）
+- Handoff summary: `PLAN.md` に「非同期ハンドラ監査結果（Phase 3）」を追加。Trade / Shop / SNS / Quest / Observation の async 経路を表に整理し、payload 不足は Trade 固有ではなく **Shop・SNS・Quest・観測 formatter** にも横断的に残ることを明文化。リファクタ優先度は Shop → SNS（いいね等）→ その他。`.cursor/skills/event-handler-patterns/SKILL.md` に分類ラベルと PLAN 参照を追記。コード変更なし。
 
 # Phase Journal
 
@@ -53,3 +53,20 @@ branch: codex/sqlite-repository-transaction-alignment
 - Scope delta: 観測レシピエント戦略の `TradeAcceptedEvent` 解決ロジックをイベント駆動に寄せた（payload 十分化の自然な帰結）。
 - Handoff summary: 上記 Current State と同じ。
 - Next-phase impact: Phase 3 の監査表に「Trade はイベント自己完結に更新済み」と記載できる。Phase 4 の SQLite factory は `TradeEventHandler` の引数が 2 個になった点のみ留意。
+
+## Phase 3
+
+- Started: 2026-03-27
+- Completed: 2026-03-27
+- Commit: （本コミット）
+- Tests: コード変更なし。回帰として `python -m pytest tests/infrastructure/events/test_event_publisher_registration_contract.py -q` → **10 passed**
+- Findings:
+  - 本番 async レジストリは `trade`（4）・`shop`（4）・`sns`（6）・`quest`（7）・`observation`（74 型を 1 ハンドラ登録）に整理できる。
+  - Shop ReadModel は Trade 以前と同型の **集約・Item 後読み**が残る。SNS は **購読者列挙・メンション解決・いいね時の本文取得**など読み取り依存が多い。Quest は payload 以前に **1 ハンドラの業務が重い**。Observation は **formatter / name_resolver** が ReadModel 投影とは別の後読み経路。
+- Plan revision check: **変更不要**。Phase 4〜6 の主軸（repository API・seam・パイロット）は Phase 3 の結論と矛盾しない。同期へ戻すべき handler が複数、という「Reopen alignment」条件にも該当しない（現判断はすべて非同期維持で整合）。
+- User approval: future phase の PLAN 本文変更なしのため不要。
+- Plan updates: `PLAN.md` に監査章と Change Log 1 行。`event-handler-patterns` SKILL に短い分類表と PLAN 参照。
+- Goal check: Success Criteria の「監査表」「payload が Trade だけの特殊例か横断か」は本章で充足。
+- Scope delta: 監査対象に Quest を明示的に表に含めた（当初の「Trade / Shop / SNS / Observation など」の「など」を具体化）。
+- Handoff summary: 上記 Current State と同じ。
+- Next-phase impact: Phase 4 の SQLite `autocommit` 整理は、Phase 3 で特定した **Shop/SNS の別 tx 後読み**とは独立に進められる。将来 Shop payload 十分化を別 feature でやる場合の優先度は PLAN 内のリストを参照。
