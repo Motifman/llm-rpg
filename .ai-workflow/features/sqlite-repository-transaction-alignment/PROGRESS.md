@@ -10,10 +10,10 @@ branch: codex/sqlite-repository-transaction-alignment
 
 # Current State
 
-- Active phase: **なし**（Phase 4 完了、次は Phase 5）
-- Last completed phase: **Phase 4**（SQLite Trade ReadModel API 整理＋Shop／SNS 非同期経路のイベント完結化）
-- Next recommended action: Phase 5（書き込み集約向け transaction seam の固定）
-- Handoff summary: Trade 系 SQLite の `autocommit` を廃止し、単独接続用／UoW 共有用ファクトリを名前付きで分離。Shop は `ShopListingProjection` とイベント拡張で `ShopEventHandler` の集約・Item 後読みを除去。SNS はイベントペイロードと `PostCommandService`／`ReplyCommandService` の ID 解決で `NotificationEventHandlerService` の Post/Reply 後読みと `SnsRecipientStrategy` のユーザーリポジトリ依存を除去。さらに Quest は `QuestProgressReactionService` 抽出とイベント種別ごとの薄い handler 分割を行い、`MonsterDiedEvent.template_id` / `ItemAddedToInventoryEvent.item_spec_id_value` 追加で Quest 進捗判定の Monster / Item 後読みを除去した。`PLAN.md` の Phase 3 監査表（Shop・SNS・Quest 行）と優先度リストを実装後に合わせて更新。
+- Active phase: **なし**（Phase 5 完了、次は Phase 6）
+- Last completed phase: **Phase 5**（書き込み集約向け transaction seam の文書化＋SQLite UoW の可視性テスト）
+- Next recommended action: Phase 6（書き込み集約系 SQLite パイロット）
+- Handoff summary: `PLAN.md` に Phase 5 採用方針（共有接続での即時 SQL、UoW は commit のみ、InMemory の pending と対応する「同一接続内の未コミット read」）と代替案を固定した。`test_sqlite_unit_of_work` に同一接続が未コミット INSERT を即座に読めること、およびファイル DB で別接続が未コミット行を読めないことを検証するテストを追加。Phase 4 までの Handoff（Trade／Shop／SNS／Quest のイベント完結・SQLite API 整理）はそのまま下層として維持。
 
 # Phase Journal
 
@@ -89,3 +89,20 @@ branch: codex/sqlite-repository-transaction-alignment
 - Scope delta: Phase 4 の「Trade 系のみ」記述を超えて Shop／SNS に加え Quest も同一セッションで実装（ユーザー明示の優先度に整合）。
 - Handoff summary: 上記 Current State と同じ。
 - Next-phase impact: Phase 5 は書き込み集約の transaction seam に専念できる。Observation formatter の監査は未着手のまま別途。
+
+## Phase 5
+
+- Started: 2026-03-27
+- Completed: 2026-03-27
+- Commit: （本コミット）
+- Tests: `python -m pytest tests/infrastructure/unit_of_work/test_sqlite_unit_of_work.py -q` → **13 passed**
+- Findings:
+  - InMemory の `register_pending_aggregate` に相当する「save 直後の同一 tx 内 find」は、SQLite では **同一 sqlite3 接続上の未コミット可視性**で満たす方針を PLAN に明文化した。
+  - 別接続から未コミット行が見えないことは、スキーマを先に commit したうえでファイル DB＋2 接続のテストで担保した（`:memory:` では別接続共有不可のためファイルパスを使用）。
+- Plan revision check: **変更不要**。Phase 6 のパイロット前提は PLAN の採用方針と整合。future phase の順序変更は不要。
+- User approval: PLAN 本文は前段で方針追記済みで、本コミットはその確定＋テスト追加のみのため不要。
+- Plan updates: `PLAN.md` の Phase 5 採用方針セクションと Change Log（前段編集を本コミットに含める）。
+- Goal check: Success Criteria の「transaction seam が決まりテストで検知できる」に対し、方針文書化＋`test_sqlite_unit_of_work` の可視性・分離テストで充足（パイロット実装は Phase 6）。
+- Scope delta: Phase 5 を「設計固定＋契約テスト」に留め、書き込み集約パイロットは Phase 6 に分離したまま。
+- Handoff summary: 上記 Current State と同じ。
+- Next-phase impact: Phase 6 で採用 seam に沿った最初の書き込み SQLite リポジトリを選び、parity／rollback を追加する。
