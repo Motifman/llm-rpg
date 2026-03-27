@@ -93,7 +93,10 @@ class MonsterDeathRewardHandler(EventHandler[MonsterDiedEvent]):
                     quantity=loot_result.quantity,
                 )
                 self._item_repository.save(item_aggregate)
-                inventory.acquire_item(instance_id)
+                inventory.acquire_item(
+                    instance_id,
+                    item_spec_id_value=item_spec.item_spec_id.value,
+                )
                 self._player_inventory_repository.save(inventory)
                 self._logger.info(
                     "Player %s acquired %s of %s",

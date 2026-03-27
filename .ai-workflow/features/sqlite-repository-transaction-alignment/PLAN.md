@@ -149,7 +149,7 @@ branch: codex/sqlite-repository-transaction-alignment
 | `trade_event_handler_registry` | 4 | `TradeEventHandler` | ReadModel 投影のみ。Phase 2 以降、投影はイベントペイロードで自己完結。 |
 | `shop_event_handler_registry` | 4 | `ShopEventHandler` | ReadModel 投影。ただし **集約・Item の後読みが残る**（下表）。 |
 | `sns_event_handler_registry` | 6 | `NotificationEventHandlerService` / `RelationshipEventHandlerService` | 通知生成・関係更新は **コマンド成功後でよい**。失敗しても本体をロールバックしない方針。 |
-| `quest_event_handler_registry` | 7 | `QuestProgressHandler` | クエスト進捗・報酬は eventual でよい設計。ただし **複数リポジトリ依存が大きい**（下表）。 |
+| `quest_event_handler_registry` | 7 | イベント種別ごとの薄い Quest handler + `QuestProgressReactionService` | クエスト進捗・報酬は eventual でよい設計。Phase 4 後半で **ハンドラ分割 + reaction service 化**を実施。 |
 | `observation_event_handler_registry` | **74 型**（`_OBSERVED_EVENT_TYPES` の要素数） | `ObservationEventHandler` | LLM 向け観測の蓄積。**本文生成は formatter / name_resolver 側**で型ごとに後読みがありうる（ReadModel ハンドラとは別経路）。 |
 
 ## ハンドラ別・分類表
@@ -167,14 +167,14 @@ branch: codex/sqlite-repository-transaction-alignment
 | SNS | `handle_reply_created` | 同上 | **author 表示名・mentioned_user_ids**、親 id・本文 | **なし**（同上） | **不要** |
 | SNS | `handle_content_liked` | いいね通知 | **content_text・liker_display_name** をイベントに保持（いいね時の集約から） | **Post/Reply リポジトリへの後読みなし** | **不要** |
 | SNS | `RelationshipEventHandlerService.handle_user_blocked` | ブロック時の follow / subscribe 解除 | blocker / blocked id | **両者の User 集約 load と変更** | 不要（非同期のまま）。** Writable だがコマンド本体とは別 tx** で意図的 |
-| Quest | `QuestProgressHandler`（複数イベント型） | 目標進捗・完了・報酬 | イベントごとに id はある | **Quest / Monster / Inventory / Status / Item / ItemSpec 等** | 不要とするのが現状方針。**同期化は設計・負荷・デッドリスクが大きい**別論 |
+| Quest | `MonsterDiedQuestProgressHandler` など 7 handler + `QuestProgressReactionService` | 目標進捗・完了・報酬 | `MonsterDiedEvent.template_id` / `ItemAddedToInventoryEvent.item_spec_id_value` を含め、**進捗判定はイベントのみで完結** | **Quest / Inventory / Status / ItemSpec**（報酬付与のための正当な書き込み参照） | 不要。**同期化は設計・負荷・デッドリスクが大きい**別論 |
 | Observation | `ObservationEventHandler.handle` | pipeline → appender → 中断・ターン | イベントインスタンス全体 | **各 `TradeObservationFormatter` 等**が `ObservationNameResolver` で player/item を解決する例あり | 不要。観測は **ReadModel 更新とは別の後読み経路**として理解する |
 
 ## 横断結論（payload 不足は Trade だけか）
 
 - **Trade の ReadModel 投影だけが特殊だったわけではない。** ~~**Shop ReadModel** は **Trade 以前と同型**（集約・アイテムの後読み）が残る。~~ → **Phase 4 で Shop 投影はイベント＋コマンド側スナップショットで完結**するよう更新済み。
 - ~~**SNS 通知**は…~~ → **Phase 4 で通知ハンドラの Post/Reply 後読みを廃止**し、フォロー／サブスク表示名・ポストの購読者／メンション ID・いいね本文・いいね者表示名をイベント（およびコマンドで解決した ID 集合）に載せる形に更新済み。
-- **Quest** は「後読み」以前に **1 ハンドラが担う業務が重い**。payload 話と **同期／非同期の再検討**は切り離して扱うのが安全。
+- **Quest** は当初「後読み」以前に **1 ハンドラが担う業務が重い**のが主問題だったが、現在は **イベント種別ごとの薄い handler + `QuestProgressReactionService`** に分割済み。さらに `MonsterDiedEvent.template_id` と `ItemAddedToInventoryEvent.item_spec_id_value` を載せ、**Quest 進捗判定のための Monster / Item 後読みは除去**した。
 - **Observation** は **74 型を 1 ハンドラ**が受け、**formatter 層の後読み**が型ごとにばらつく。Trade 投影をイベント完結にしても、**観測プローズ用の name_resolver 経路**は別途残りうる。
 
 ## 推奨リファクタ優先度（Phase 3 時点のメモ → Phase 4 で実施した項目を反映）
@@ -182,7 +182,7 @@ branch: codex/sqlite-repository-transaction-alignment
 1. ~~**Shop ReadModel**~~ — **Phase 4 で対応済み**（イベント＋`ShopCommandService` で listing 投影を組み立て、`ShopEventHandler` から集約／Item 後読みを除去）。
 2. ~~**SNS `handle_content_liked`**~~ — **Phase 4 で対応済み**（`SnsContentLikedEvent` に本文・いいね者表示名、`NotificationEventHandlerService` から Post/Reply リポジトリを除去）。
 3. ~~**SNS subscribe / follow / post / reply**~~ — **Phase 4 で対応済み**（表示名・subscriber／mention user id 集合をイベントまたはコマンド解決で載せる）。
-4. **Quest** — 現状維持を前提に監視。同期化は別イシューで扱う。
+4. ~~**Quest**~~ — **同日対応済み**（薄い handler 分割、`QuestProgressReactionService` 抽出、Monster / Item payload 十分化）。同期化は別イシューで扱う。
 5. **Observation formatter** — ReadModel ハンドラと混同せず、型ごとに「resolver 必須か」を今後の表に追記していく。
 
 ## event-handler-patterns への反映
@@ -382,3 +382,4 @@ branch: codex/sqlite-repository-transaction-alignment
 - 2026-03-27: Phase 2 完了。`TradeListingProjection`・`TradeOfferedEvent` / `TradeAcceptedEvent` のペイロード拡張、`TradeEventHandler` の後読み廃止、受諾時 ReadModel 欠落のイベントからの再投影を実装
 - 2026-03-27: Phase 3 完了。非同期レジストリ全体の監査表・横断結論・リファクタ優先度を本章「非同期ハンドラ監査結果（Phase 3）」に追記
 - 2026-03-27: Phase 4 完了。Trade 系 SQLite ReadModel の `autocommit` 廃止と `for_standalone_connection` / `for_shared_unit_of_work` 整理、Shop／SNS の非同期ハンドラ・観測戦略をイベント完結に寄せた（監査表の Shop・SNS 行と優先度リストを実装後状態に更新）
+- 2026-03-27: Quest 追補。`QuestProgressReactionService` 抽出、イベント種別ごとの薄い Quest handler への分割、`MonsterDiedEvent.template_id` / `ItemAddedToInventoryEvent.item_spec_id_value` 追加により Quest 進捗判定の Monster / Item 後読みを除去

@@ -1,9 +1,21 @@
 import pytest
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 from ai_rpg_world.application.common.exceptions import SystemErrorException
 from ai_rpg_world.application.quest.exceptions import QuestRewardGrantException
-from ai_rpg_world.application.quest.handlers.quest_progress_handler import QuestProgressHandler
+from ai_rpg_world.application.quest.handlers.quest_progress_handler import (
+    ConversationEndedQuestProgressHandler,
+    GatewayTriggeredQuestProgressHandler,
+    ItemAddedToInventoryQuestProgressHandler,
+    ItemTakenFromChestQuestProgressHandler,
+    LocationEnteredQuestProgressHandler,
+    MonsterDiedQuestProgressHandler,
+    PlayerDownedQuestProgressHandler,
+)
+from ai_rpg_world.application.quest.services.quest_progress_reaction_service import (
+    QuestProgressReactionService,
+)
 from ai_rpg_world.domain.common.exception import DomainException
 from ai_rpg_world.domain.monster.event.monster_events import MonsterDiedEvent
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
@@ -72,16 +84,6 @@ class TestQuestProgressHandler:
         )
 
     @pytest.fixture
-    def monster_repository(self, data_store):
-        """モンスターはモックで template_id のみ返す"""
-        repo = Mock()
-        monster = Mock()
-        monster.template = Mock()
-        monster.template.template_id = MonsterTemplateId(101)
-        repo.find_by_id = Mock(return_value=monster)
-        return repo
-
-    @pytest.fixture
     def player_status_repository(self, data_store):
         return Mock()
 
@@ -98,24 +100,57 @@ class TestQuestProgressHandler:
         return Mock()
 
     @pytest.fixture
-    def handler(
+    def reaction_service(
         self,
         quest_repository,
-        monster_repository,
         player_status_repository,
         player_inventory_repository,
         item_repository,
         item_spec_repository,
-        uow_factory,
     ):
-        return QuestProgressHandler(
+        return QuestProgressReactionService(
             quest_repository=quest_repository,
-            monster_repository=monster_repository,
             player_status_repository=player_status_repository,
             player_inventory_repository=player_inventory_repository,
             item_repository=item_repository,
             item_spec_repository=item_spec_repository,
-            unit_of_work_factory=uow_factory,
+        )
+
+    @pytest.fixture
+    def handler(
+        self,
+        reaction_service,
+        uow_factory,
+    ):
+        return SimpleNamespace(
+            handle=MonsterDiedQuestProgressHandler(
+                reaction_service=reaction_service,
+                unit_of_work_factory=uow_factory,
+            ).handle,
+            handle_player_downed=PlayerDownedQuestProgressHandler(
+                reaction_service=reaction_service,
+                unit_of_work_factory=uow_factory,
+            ).handle,
+            handle_item_taken_from_chest=ItemTakenFromChestQuestProgressHandler(
+                reaction_service=reaction_service,
+                unit_of_work_factory=uow_factory,
+            ).handle,
+            handle_location_entered=LocationEnteredQuestProgressHandler(
+                reaction_service=reaction_service,
+                unit_of_work_factory=uow_factory,
+            ).handle,
+            handle_gateway_triggered=GatewayTriggeredQuestProgressHandler(
+                reaction_service=reaction_service,
+                unit_of_work_factory=uow_factory,
+            ).handle,
+            handle_item_added_to_inventory=ItemAddedToInventoryQuestProgressHandler(
+                reaction_service=reaction_service,
+                unit_of_work_factory=uow_factory,
+            ).handle,
+            handle_conversation_ended=ConversationEndedQuestProgressHandler(
+                reaction_service=reaction_service,
+                unit_of_work_factory=uow_factory,
+            ).handle,
         )
 
     def test_handle_skips_when_no_killer(self, handler):
@@ -131,11 +166,8 @@ class TestQuestProgressHandler:
         handler.handle(event)
         # 例外なく完了することのみ確認
 
-    def test_handle_skips_when_monster_not_found(
-        self, handler, monster_repository
-    ):
-        """モンスターがリポジトリにないときはスキップ"""
-        monster_repository.find_by_id.return_value = None
+    def test_handle_skips_when_template_id_missing(self, handler):
+        """template_id がないときはスキップ"""
         event = MonsterDiedEvent.create(
             aggregate_id=MonsterId(999),
             aggregate_type="MonsterAggregate",
@@ -143,9 +175,9 @@ class TestQuestProgressHandler:
             exp=10,
             gold=5,
             killer_player_id=PlayerId(1),
+            template_id=None,
         )
         handler.handle(event)
-        monster_repository.find_by_id.assert_called_once()
 
     def test_handle_advances_objective_when_quest_accepted(
         self, handler, quest_repository, data_store
@@ -179,6 +211,7 @@ class TestQuestProgressHandler:
             respawn_tick=0,
             exp=10,
             gold=5,
+            template_id=101,
             killer_player_id=PlayerId(1),
         )
         handler.handle(event)
@@ -191,7 +224,6 @@ class TestQuestProgressHandler:
         self,
         handler,
         quest_repository,
-        monster_repository,
         player_status_repository,
         player_inventory_repository,
     ):
@@ -229,6 +261,7 @@ class TestQuestProgressHandler:
             respawn_tick=0,
             exp=10,
             gold=5,
+            template_id=101,
             killer_player_id=PlayerId(1),
         )
         handler.handle(event)
@@ -245,7 +278,6 @@ class TestQuestProgressHandler:
         self,
         handler,
         quest_repository,
-        monster_repository,
         player_status_repository,
         player_inventory_repository,
     ):
@@ -295,6 +327,7 @@ class TestQuestProgressHandler:
             respawn_tick=0,
             exp=10,
             gold=5,
+            template_id=101,
             killer_player_id=acceptor_id,
         )
         handler.handle(event)
@@ -307,9 +340,7 @@ class TestQuestProgressHandler:
         player_status_repository.save.assert_called_once()
         player_inventory_repository.save.assert_called_once()
 
-    def test_handle_domain_exception_re_raised(
-        self, handler, quest_repository, monster_repository, data_store
-    ):
+    def test_handle_domain_exception_re_raised(self, handler, quest_repository, data_store):
         """トランザクション内で DomainException が発生した場合はそのまま再送出される"""
         quest_repository.find_accepted_quests_by_player = Mock(
             side_effect=DomainException("domain rule violated")
@@ -320,6 +351,7 @@ class TestQuestProgressHandler:
             respawn_tick=0,
             exp=10,
             gold=5,
+            template_id=101,
             killer_player_id=PlayerId(1),
         )
         with pytest.raises(DomainException, match="domain rule violated"):
@@ -338,6 +370,7 @@ class TestQuestProgressHandler:
             respawn_tick=0,
             exp=10,
             gold=5,
+            template_id=101,
             killer_player_id=PlayerId(1),
         )
         with pytest.raises(SystemErrorException) as exc_info:
@@ -351,7 +384,6 @@ class TestQuestProgressHandler:
         self,
         handler,
         quest_repository,
-        monster_repository,
         player_status_repository,
         player_inventory_repository,
     ):
@@ -392,6 +424,7 @@ class TestQuestProgressHandler:
             respawn_tick=0,
             exp=10,
             gold=5,
+            template_id=101,
             killer_player_id=acceptor_id,
         )
         with pytest.raises(QuestRewardGrantException) as exc_info:
@@ -409,7 +442,6 @@ class TestQuestProgressHandler:
         self,
         handler,
         quest_repository,
-        monster_repository,
         player_status_repository,
         player_inventory_repository,
     ):
@@ -460,6 +492,7 @@ class TestQuestProgressHandler:
             respawn_tick=0,
             exp=10,
             gold=5,
+            template_id=101,
             killer_player_id=acceptor_id,
         )
         with pytest.raises(QuestRewardGrantException) as exc_info:
@@ -470,7 +503,6 @@ class TestQuestProgressHandler:
         self,
         handler,
         quest_repository,
-        monster_repository,
         player_status_repository,
         player_inventory_repository,
         item_spec_repository,
@@ -520,6 +552,7 @@ class TestQuestProgressHandler:
             respawn_tick=0,
             exp=10,
             gold=5,
+            template_id=101,
             killer_player_id=acceptor_id,
         )
         with pytest.raises(QuestRewardGrantException) as exc_info:
@@ -1184,18 +1217,18 @@ class TestQuestProgressHandler:
 
     # --- handle_item_added_to_inventory (OBTAIN_ITEM) ---
 
-    def test_handle_item_added_to_inventory_skips_when_item_not_found(
+    def test_handle_item_added_to_inventory_skips_when_item_spec_payload_missing(
         self, handler, quest_repository, item_repository
     ):
-        """アイテムがリポジトリにないときはスキップ"""
-        item_repository.find_by_id.return_value = None
+        """item_spec payload がないときはスキップ"""
         event = ItemAddedToInventoryEvent.create(
             aggregate_id=PlayerId(1),
             aggregate_type="PlayerInventoryAggregate",
             item_instance_id=ItemInstanceId.create(100),
+            item_spec_id_value=None,
         )
         handler.handle_item_added_to_inventory(event)
-        item_repository.find_by_id.assert_called_once()
+        item_repository.find_by_id.assert_not_called()
 
     def test_handle_item_added_to_inventory_advances_objective_when_quest_accepted(
         self, handler, quest_repository, item_repository
@@ -1234,6 +1267,7 @@ class TestQuestProgressHandler:
             aggregate_id=acceptor_id,
             aggregate_type="PlayerInventoryAggregate",
             item_instance_id=ItemInstanceId.create(100),
+            item_spec_id_value=item_spec_id_value,
         )
         handler.handle_item_added_to_inventory(event)
 
@@ -1287,6 +1321,7 @@ class TestQuestProgressHandler:
             aggregate_id=acceptor_id,
             aggregate_type="PlayerInventoryAggregate",
             item_instance_id=ItemInstanceId.create(100),
+            item_spec_id_value=item_spec_id_value,
         )
         handler.handle_item_added_to_inventory(event)
 
@@ -1333,6 +1368,7 @@ class TestQuestProgressHandler:
             aggregate_id=PlayerId(1),
             aggregate_type="PlayerInventoryAggregate",
             item_instance_id=ItemInstanceId.create(100),
+            item_spec_id_value=999,
         )
         handler.handle_item_added_to_inventory(event)
 

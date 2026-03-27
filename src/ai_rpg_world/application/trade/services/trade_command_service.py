@@ -211,8 +211,18 @@ class TradeCommandService:
             # 3. 出品者のインベントリから予約アイテムを削除
             seller_inventory.remove_reserved_item(trade.offered_item_id)
             
+            item_aggregate = self._item_repository.find_by_id(trade.offered_item_id)
+            if item_aggregate is None:
+                raise TradeCommandException(
+                    f"Offered item not found: {trade.offered_item_id.value}",
+                    trade_id=command.trade_id,
+                )
+
             # 4. 購入者のインベントリにアイテムを追加
-            buyer_inventory.acquire_item(trade.offered_item_id)
+            buyer_inventory.acquire_item(
+                trade.offered_item_id,
+                item_spec_id_value=item_aggregate.item_spec.item_spec_id.value,
+            )
             
             seller_profile = self._player_profile_repository.find_by_id(trade.seller_id)
             if seller_profile is None:
@@ -221,13 +231,6 @@ class TradeCommandService:
             buyer_profile = self._player_profile_repository.find_by_id(buyer_id)
             if buyer_profile is None:
                 raise TradeCommandException(f"Buyer profile not found: {command.buyer_id}", user_id=command.buyer_id)
-
-            item_aggregate = self._item_repository.find_by_id(trade.offered_item_id)
-            if item_aggregate is None:
-                raise TradeCommandException(
-                    f"Offered item not found: {trade.offered_item_id.value}",
-                    trade_id=command.trade_id,
-                )
 
             listing_projection = TradeListingProjection.from_seller_and_item(
                 seller_display_name=seller_profile.name.value,

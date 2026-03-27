@@ -1173,7 +1173,7 @@ class TestCombatIntegration:
         from ai_rpg_world.domain.skill.service.skill_to_hitbox_service import SkillToHitBoxDomainService
 
         item_stored_handler = ItemStoredInChestHandler(inventory_repo, uow)
-        item_taken_handler = ItemTakenFromChestHandler(inventory_repo, uow)
+        item_taken_handler = ItemTakenFromChestHandler(inventory_repo, item_repo, uow)
         monster_decided_to_move_handler = MonsterDecidedToMoveHandler(
             physical_map_repository=map_repo,
             monster_repository=monster_repo,

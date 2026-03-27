@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 class ItemAddedToInventoryEvent(BaseDomainEvent[PlayerId, "PlayerInventoryAggregate"]):
     """インベントリにアイテムが追加されたイベント"""
     item_instance_id: ItemInstanceId
+    item_spec_id_value: Optional[int] = None
 
 
 @dataclass(frozen=True)

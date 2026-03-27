@@ -40,7 +40,10 @@ class HarvestDomainService:
                 item_spec=item_spec,
                 quantity=loot_result.quantity
             )
-            inventory.acquire_item(new_item_id)
+            inventory.acquire_item(
+                new_item_id,
+                item_spec_id_value=item_spec.item_spec_id.value,
+            )
             
             # 生成されたアイテムのイベントとインベントリのイベント（取得成功 or オーバーフロー）を収集
             events.extend(item_aggregate.get_events())
