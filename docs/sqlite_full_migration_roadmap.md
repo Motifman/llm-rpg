@@ -147,11 +147,13 @@
 - bundle / factory / fixture を統一する
 
 状態:
-- 進行中
+- 完了
 
 進捗:
 - SNS 向けに `SqliteSocialDependencyInjectionContainer` を追加し、既存の in-memory 固定コンテナとは別に SQLite 本番経路を持てるようにした
 - 既存の in-memory コンテナは後方互換のため残しつつ、SQLite 側の正式入口を docs に残した
+- `SqliteGameDependencyInjectionContainer` を追加し、single game DB 上の world / static master / shop / guild / quest / skill / conversation / social / trade command を 1 つの SQLite 入口から取得できるようにした
+- アプリケーション本番経路で使う SQLite bundle / factory / container の整理を優先し、テスト用 in-memory 実装とは役割を分離した
 
 ### Phase 9: 総合検証
 
@@ -200,11 +202,13 @@ interface 整理:
 - 設定データ系の read repository は `ReadRepository` 側へ寄せ始めている
 - `InMemory` 側も writer ポート互換メソッドを追加して追従済み
 
-### 4. snapshot 保存の進化コスト
+### 4. world 内部構造の payload_json
 
-`player_status` など、一部はまだ JSON payload 保存です。
-pickle / `aggregate_blob` は撤去済みですが、将来「部分更新したい」「SQL で集計したい」という要件が増えると、
-JSON payload 部分も列分解や追加索引が必要になる見込みです。
+`player_status` / `player_inventory` / `item` / `transition_policy` / `item_spec` / `recipe` / `shop`
+のような集約レベルの `payload_json` は正規化済みです。
+一方で `physical_map` 配下の area / trigger / object component はまだ `payload_json` を使っています。
+ここは world オブジェクト構造が多態的で、正規化する場合は専用子テーブルを複数追加する必要があります。
+次の着手候補として明示的に残します。
 ## Phase 7.5: pickle/BLOB 正規化
 
 - `guild / guild_bank / quest / skill / dialogue` の SQLite 実装から `pickle` / `aggregate_blob` / `node_blob` 依存を撤去する。

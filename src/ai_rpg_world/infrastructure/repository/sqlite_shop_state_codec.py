@@ -1,10 +1,10 @@
-"""Shop aggregate and read model codecs for SQLite repositories."""
+"""Shop aggregate and read model helpers for SQLite repositories."""
 
 from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -19,45 +19,23 @@ from ai_rpg_world.domain.world.value_object.location_area_id import LocationArea
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
-def shop_to_json(shop: ShopAggregate) -> str:
-    payload: Dict[str, Any] = {
-        "shop_id": int(shop.shop_id),
-        "spot_id": int(shop.spot_id),
-        "location_area_id": int(shop.location_area_id),
-        "owner_ids": [int(owner_id) for owner_id in sorted(shop.owner_ids, key=int)],
-        "name": shop.name,
-        "description": shop.description,
-        "listings": [
-            {
-                "listing_id": int(listing.listing_id),
-                "item_instance_id": int(listing.item_instance_id),
-                "price_per_unit": int(listing.price_per_unit),
-                "listed_by": int(listing.listed_by),
-            }
-            for listing in sorted(shop.listings.values(), key=lambda x: int(x.listing_id))
-        ],
-    }
-    return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
-
-
-def json_to_shop(payload_json: str) -> ShopAggregate:
-    data = json.loads(payload_json)
+def build_shop(*, row: object, owner_rows: list[object], listing_rows: list[object]) -> ShopAggregate:
     listings = {
-        ShopListingId(int(listing["listing_id"])): ShopListing(
-            listing_id=ShopListingId(int(listing["listing_id"])),
-            item_instance_id=ItemInstanceId(int(listing["item_instance_id"])),
-            price_per_unit=ShopListingPrice.of(int(listing["price_per_unit"])),
-            listed_by=PlayerId(int(listing["listed_by"])),
+        ShopListingId(int(listing_row["listing_id"])): ShopListing(
+            listing_id=ShopListingId(int(listing_row["listing_id"])),
+            item_instance_id=ItemInstanceId(int(listing_row["item_instance_id"])),
+            price_per_unit=ShopListingPrice.of(int(listing_row["price_per_unit"])),
+            listed_by=PlayerId(int(listing_row["listed_by"])),
         )
-        for listing in data.get("listings", [])
+        for listing_row in listing_rows
     }
     return ShopAggregate(
-        shop_id=ShopId(int(data["shop_id"])),
-        spot_id=SpotId(int(data["spot_id"])),
-        location_area_id=LocationAreaId(int(data["location_area_id"])),
-        owner_ids={PlayerId(int(owner_id)) for owner_id in data.get("owner_ids", [])},
-        name=str(data.get("name", "")),
-        description=str(data.get("description", "")),
+        shop_id=ShopId(int(row["shop_id"])),
+        spot_id=SpotId(int(row["spot_id"])),
+        location_area_id=LocationAreaId(int(row["location_area_id"])),
+        owner_ids={PlayerId(int(owner_row["owner_id"])) for owner_row in owner_rows},
+        name=str(row["name"]),
+        description=str(row["description"]),
         listings=listings,
     )
 
@@ -79,9 +57,7 @@ def shop_summary_row_to_model(row: Any) -> ShopSummaryReadModel:
 
 def shop_listing_row_to_model(row: Any) -> ShopListingReadModel:
     listed_at_raw = row["listed_at"]
-    listed_at = (
-        None if listed_at_raw is None else datetime.fromisoformat(str(listed_at_raw))
-    )
+    listed_at = None if listed_at_raw is None else datetime.fromisoformat(str(listed_at_raw))
     return ShopListingReadModel(
         shop_id=int(row["shop_id"]),
         listing_id=int(row["listing_id"]),
@@ -95,9 +71,4 @@ def shop_listing_row_to_model(row: Any) -> ShopListingReadModel:
     )
 
 
-__all__ = [
-    "json_to_shop",
-    "shop_to_json",
-    "shop_summary_row_to_model",
-    "shop_listing_row_to_model",
-]
+__all__ = ["build_shop", "shop_summary_row_to_model", "shop_listing_row_to_model"]
