@@ -55,11 +55,16 @@ class SqlitePlayerProfileWriteRepository(PlayerProfileRepository):
     def _finalize_write(self) -> None:
         if self._commits_after_write:
             self._conn.commit()
+        return
+
+    def _assert_shared_transaction_active(self) -> None:
+        if self._commits_after_write:
             return
-        if self._event_sink is not None and hasattr(self._event_sink, "is_in_transaction"):
-            if self._event_sink.is_in_transaction():
-                return
-        self._conn.commit()
+        if not self._conn.in_transaction:
+            raise RuntimeError(
+                "for_shared_unit_of_work で生成したリポジトリの書き込みは、"
+                "アクティブなトランザクション内（with uow）で実行してください"
+            )
 
     def _maybe_emit_events(self, aggregate: Any) -> None:
         sink = self._event_sink
@@ -70,6 +75,7 @@ class SqlitePlayerProfileWriteRepository(PlayerProfileRepository):
         sink.add_events_from_aggregate(aggregate)
 
     def generate_id(self) -> PlayerId:
+        self._assert_shared_transaction_active()
         pid = PlayerId(allocate_sequence_value(self._conn, "player_id"))
         self._finalize_write()
         return pid
@@ -105,6 +111,7 @@ class SqlitePlayerProfileWriteRepository(PlayerProfileRepository):
         return cur.fetchone() is not None
 
     def save(self, profile: PlayerProfileAggregate) -> PlayerProfileAggregate:
+        self._assert_shared_transaction_active()
         self._maybe_emit_events(profile)
         row = profile_to_row(profile)
         self._conn.execute(
@@ -125,6 +132,7 @@ class SqlitePlayerProfileWriteRepository(PlayerProfileRepository):
         return copy.deepcopy(profile)
 
     def delete(self, player_id: PlayerId) -> bool:
+        self._assert_shared_transaction_active()
         cur = self._conn.execute(
             "DELETE FROM game_player_profiles WHERE player_id = ?",
             (int(player_id),),

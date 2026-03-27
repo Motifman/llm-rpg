@@ -20,16 +20,16 @@ Review all files for this feature. Verify DDD boundaries, implementation quality
 
 ## Major
 
-- `PlayerStatus` をインフラ層 pickle で永続化している。パイロットとしては許容だが、バージョン互換・監査・DB 可読性の観点では正規化スキーマへの移行が望ましい（CHECKLIST Follow-up に記載）。
+- None
 
 ## Minor
 
-- `ItemSpec.consume_effect` 付きは JSON コーデック未対応（明示的に `ValueError`）。Trade テスト経路では未使用。
+- `PlayerStatus` をインフラ層 pickle で永続化している。パイロットとしては許容だが、バージョン互換・監査・DB 可読性の観点では正規化スキーマへの移行が望ましい（CHECKLIST Follow-up に記載）。
 
 # Follow-up
 
 - Additional phases needed: アプリ本番 wiring で SQLite Trade 束を選択可能にする作業
-- Files to revisit: `sqlite_trade_command_codec.py`（Item / Status の表現）、`llm/wiring`
+- Files to revisit: `sqlite_trade_command_codec.py`（Status の表現）、`llm/wiring`
 - Decision: Phase 6 は「雛形＋Trade コマンド統合テスト」で完了とする
 
 # Release Gate
