@@ -13,7 +13,7 @@ branch: codex/sqlite-repository-transaction-alignment
 - Active phase: **なし**（Phase 4 完了、次は Phase 5）
 - Last completed phase: **Phase 4**（SQLite Trade ReadModel API 整理＋Shop／SNS 非同期経路のイベント完結化）
 - Next recommended action: Phase 5（書き込み集約向け transaction seam の固定）
-- Handoff summary: Trade 系 SQLite の `autocommit` を廃止し、単独接続用／UoW 共有用ファクトリを名前付きで分離。Shop は `ShopListingProjection` とイベント拡張で `ShopEventHandler` の集約・Item 後読みを除去。SNS はイベントペイロードと `PostCommandService`／`ReplyCommandService` の ID 解決で `NotificationEventHandlerService` の Post/Reply 後読みと `SnsRecipientStrategy` のユーザーリポジトリ依存を除去。`PLAN.md` の Phase 3 監査表（Shop・SNS 行）と優先度リストを実装後に合わせて更新。
+- Handoff summary: Trade 系 SQLite の `autocommit` を廃止し、単独接続用／UoW 共有用ファクトリを名前付きで分離。Shop は `ShopListingProjection` とイベント拡張で `ShopEventHandler` の集約・Item 後読みを除去。SNS はイベントペイロードと `PostCommandService`／`ReplyCommandService` の ID 解決で `NotificationEventHandlerService` の Post/Reply 後読みと `SnsRecipientStrategy` のユーザーリポジトリ依存を除去。さらに Quest は `QuestProgressReactionService` 抽出とイベント種別ごとの薄い handler 分割を行い、`MonsterDiedEvent.template_id` / `ItemAddedToInventoryEvent.item_spec_id_value` 追加で Quest 進捗判定の Monster / Item 後読みを除去した。`PLAN.md` の Phase 3 監査表（Shop・SNS・Quest 行）と優先度リストを実装後に合わせて更新。
 
 # Phase Journal
 
@@ -81,10 +81,11 @@ branch: codex/sqlite-repository-transaction-alignment
   - Trade 系 SQLite ReadModel は public `autocommit` をやめ、`for_standalone_connection` / `for_shared_unit_of_work` と factory の `attach_*_to_shared_connection` で責務を明示した（先行実装の要約）。
   - Shop: `ShopListingProjection`・イベントの `spot_id` / `location_area_id` / 表示用フィールド拡張、`ShopCommandService` で Item から投影を組み立て、`ShopEventHandler` から `ShopRepository`／`ItemRepository` を除去。`ShopRecipientStrategy` は `shop_repository` を後方互換の未使用引数にし、listed/unlisted/closed はイベント上の spot のみで観測配信先を解決。
   - SNS: `SnsUserSubscribedEvent` / `SnsUserFollowedEvent` に表示名、`SnsPostCreatedEvent` / `SnsReplyCreatedEvent` に `author_display_name`・`mentioned_user_ids`・（ポストのみ）`subscriber_user_ids`、`SnsContentLikedEvent` に `content_text`・`liker_display_name`。`PostAggregate`／`ReplyAggregate` の `like` はいいね者表示名を受け取る。`NotificationEventHandlerService` から `PostRepository`／`ReplyRepository` を削除。`SnsRecipientStrategy` は SNS ユーザーリポジトリなしでイベント上の ID 集合のみで解決。
+  - Quest: `QuestProgressHandler` を残さず、イベント種別ごとの 7 handler と `QuestProgressReactionService` に分割。`MonsterDiedEvent.template_id` と `ItemAddedToInventoryEvent.item_spec_id_value` を追加し、Quest 進捗判定のための Monster / Item 後読みを除去。報酬付与に必要な `PlayerStatus` / `PlayerInventory` / `ItemSpec` 参照のみ reaction service に残す。
 - Plan revision check: **実施**。Phase 3 本文の「Shop・SNS は後読みあり」記述と矛盾するため、**同一 feature 内で PLAN の監査表・優先度リストを実装後状態に更新**（future phase の順序や Phase 5/6 の定義は変更なし）。
 - User approval: ユーザー依頼（非同期ハンドラの見つけ次第修正・タスク残さない）に沿い、PLAN 本文の事実更新を同一コミットに含める。
 - Plan updates: `PLAN.md` の Phase 3 表（Shop・SNS 行）、横断結論の打ち消し線、優先度 1〜3 の取り消しと Phase 4 完了の Change Log。
 - Goal check: Phase 4 の Success Criteria（SQLite API・autocommit 廃止）に加え、ユーザー拡張要求としての Shop／SNS の通知・観測経路のイベント完結を満たす。
-- Scope delta: Phase 4 の「Trade 系のみ」記述を超えて Shop／SNS を同一セッションで実装（ユーザー明示の優先度に整合）。
+- Scope delta: Phase 4 の「Trade 系のみ」記述を超えて Shop／SNS に加え Quest も同一セッションで実装（ユーザー明示の優先度に整合）。
 - Handoff summary: 上記 Current State と同じ。
-- Next-phase impact: Phase 5 は書き込み集約の transaction seam に専念できる。Quest・Observation formatter は未着手のまま監査表どおり別途。
+- Next-phase impact: Phase 5 は書き込み集約の transaction seam に専念できる。Observation formatter の監査は未着手のまま別途。

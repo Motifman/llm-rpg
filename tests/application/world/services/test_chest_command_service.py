@@ -1,6 +1,7 @@
 """ChestCommandService の正常・例外ケースの網羅的テスト"""
 
 import pytest
+from unittest.mock import Mock
 from ai_rpg_world.application.world.services.chest_command_service import ChestCommandService
 from ai_rpg_world.application.world.contracts.commands import (
     StoreItemInChestCommand,
@@ -76,8 +77,9 @@ class TestChestCommandService:
         )
         inventory_repo = InMemoryPlayerInventoryRepository(data_store, uow)
         map_repo = InMemoryPhysicalMapRepository(data_store, uow)
+        item_repo = Mock()
         item_stored_handler = ItemStoredInChestHandler(inventory_repo, uow)
-        item_taken_handler = ItemTakenFromChestHandler(inventory_repo, uow)
+        item_taken_handler = ItemTakenFromChestHandler(inventory_repo, item_repo, uow)
         registry = MapInteractionEventHandlerRegistry(
             item_stored_in_chest_handler=item_stored_handler,
             item_taken_from_chest_handler=item_taken_handler,

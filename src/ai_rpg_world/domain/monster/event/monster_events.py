@@ -39,6 +39,7 @@ class MonsterDiedEvent(BaseDomainEvent[MonsterId, "MonsterAggregate"]):
     respawn_tick: int
     exp: int
     gold: int
+    template_id: Optional[int] = None
     loot_table_id: Optional[LootTableId] = None
     killer_player_id: Optional[PlayerId] = None
     killer_world_object_id: Optional[WorldObjectId] = None

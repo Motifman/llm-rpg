@@ -1,6 +1,7 @@
 """ItemTakenFromChestHandler のテスト"""
 
 import pytest
+from unittest.mock import Mock
 from ai_rpg_world.application.world.handlers.item_taken_from_chest_handler import (
     ItemTakenFromChestHandler,
 )
@@ -27,8 +28,12 @@ class TestItemTakenFromChestHandler:
         return InMemoryPlayerInventoryRepository()
 
     @pytest.fixture
-    def handler(self, inventory_repo):
-        return ItemTakenFromChestHandler(inventory_repo, _FakeUow())
+    def item_repo(self):
+        return Mock()
+
+    @pytest.fixture
+    def handler(self, inventory_repo, item_repo):
+        return ItemTakenFromChestHandler(inventory_repo, item_repo, _FakeUow())
 
     def test_adds_item_to_player_inventory(self, handler, inventory_repo):
         """取得イベントでプレイヤーインベントリにアイテムが追加されること"""
