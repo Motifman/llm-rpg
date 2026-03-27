@@ -2,7 +2,7 @@
 id: feature-sqlite-domain-repositories-uow
 title: Sqlite Domain Repositories Uow
 slug: sqlite-domain-repositories-uow
-status: done
+status: shipped
 created_at: 2026-03-27
 updated_at: 2026-03-27
 branch: feature/sqlite-domain-repositories-uow
@@ -42,6 +42,7 @@ branch: feature/sqlite-domain-repositories-uow
 2. **集約リポジトリの SQLite 化**と UoW 内 `autocommit=False` の横展開（Shop / Trade コマンド等）。
 3. **スキーマ進化**: `CREATE IF NOT EXISTS` 限界が出たら migration 方針を別 feature で確定。
 4. **本番 wiring**: LLM / WorldQuery の bootstrap で `create_trade_read_model_repositories_bundle_for_app` を実際に渡すかの判断と二重 Connection の運用ルール整理。
+5. **イベントと SQLite の整合**: Trade 非同期投影のイベント情報十分化、`autocommit` 廃止と repository API の整理、書き込み集約向け transaction seam（後続 feature `sqlite-repository-transaction-alignment` の `PLAN.md`）。
 
 # Evidence
 
@@ -64,8 +65,10 @@ pytest tests/infrastructure/unit_of_work/test_sqlite_unit_of_work.py \
 
 # Final review status
 
-- 自己レビュー済み（REVIEW.md）。外部レビュー待ち。
+- レビュー完了。`REVIEW.md` の **Ship ready: yes** に合わせて出荷扱い。
 
 # Merge or PR status
 
-- ブランチ: `feature/sqlite-domain-repositories-uow`（ローカルコミット積み上げ想定）。マージはレビュー後。
+- 方針: **ローカルで `main` にマージ**（リモートへは `git push origin main` を別途）。
+- マージ後: ローカル feature ブランチは削除可能（`git branch -d feature/sqlite-domain-repositories-uow`）。
+- 後続: `.ai-workflow/features/sqlite-repository-transaction-alignment/` でイベント payload・非同期ハンドラ監査・repository API 再設計を進める。
