@@ -242,7 +242,129 @@ def _migration_v2(connection: sqlite3.Connection) -> None:
             is_blocking_sight INTEGER NOT NULL,
             busy_until_tick INTEGER,
             component_type TEXT,
-            component_payload_json TEXT
+            actor_direction TEXT,
+            actor_speed_modifier REAL,
+            actor_player_id INTEGER,
+            actor_is_npc INTEGER,
+            actor_fov_angle REAL,
+            actor_race TEXT,
+            actor_faction TEXT,
+            actor_pack_id TEXT,
+            autonomous_vision_range INTEGER,
+            autonomous_initial_x INTEGER,
+            autonomous_initial_y INTEGER,
+            autonomous_initial_z INTEGER,
+            autonomous_random_move_chance REAL,
+            autonomous_behavior_strategy_type TEXT,
+            autonomous_is_pack_leader INTEGER,
+            autonomous_ecology_type TEXT,
+            autonomous_ambush_chase_range INTEGER,
+            autonomous_territory_radius INTEGER,
+            autonomous_aggro_forget_after_ticks INTEGER,
+            autonomous_aggro_revenge_never_forget INTEGER,
+            autonomous_active_time TEXT,
+            chest_is_open INTEGER,
+            door_is_open INTEGER,
+            door_is_locked INTEGER,
+            ground_item_instance_id INTEGER,
+            interactable_type TEXT,
+            interactable_duration INTEGER,
+            placeable_item_spec_id INTEGER,
+            placeable_inner_type TEXT,
+            placeable_trigger_type TEXT,
+            placeable_trigger_warp_target_spot_id INTEGER,
+            placeable_trigger_warp_target_x INTEGER,
+            placeable_trigger_warp_target_y INTEGER,
+            placeable_trigger_warp_target_z INTEGER,
+            placeable_trigger_damage INTEGER,
+            harvest_loot_table_id INTEGER,
+            harvest_max_quantity INTEGER,
+            harvest_current_quantity INTEGER,
+            harvest_respawn_interval INTEGER,
+            harvest_last_update_tick INTEGER,
+            harvest_required_tool_category TEXT,
+            harvest_duration INTEGER,
+            harvest_stamina_cost INTEGER,
+            harvest_current_actor_id INTEGER,
+            harvest_finish_tick INTEGER
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_physical_map_object_capabilities (
+            world_object_id INTEGER NOT NULL,
+            capability_index INTEGER NOT NULL,
+            capability TEXT NOT NULL,
+            PRIMARY KEY (world_object_id, capability_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_physical_map_object_chest_items (
+            world_object_id INTEGER NOT NULL,
+            item_index INTEGER NOT NULL,
+            item_instance_id INTEGER NOT NULL,
+            PRIMARY KEY (world_object_id, item_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_physical_map_object_interaction_data (
+            world_object_id INTEGER NOT NULL,
+            data_key TEXT NOT NULL,
+            value_type TEXT NOT NULL,
+            value_text TEXT,
+            value_integer INTEGER,
+            value_real REAL,
+            value_boolean INTEGER,
+            PRIMARY KEY (world_object_id, data_key)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_physical_map_object_patrol_points (
+            world_object_id INTEGER NOT NULL,
+            point_index INTEGER NOT NULL,
+            x INTEGER NOT NULL,
+            y INTEGER NOT NULL,
+            z INTEGER NOT NULL,
+            PRIMARY KEY (world_object_id, point_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_physical_map_object_available_skills (
+            world_object_id INTEGER NOT NULL,
+            skill_index INTEGER NOT NULL,
+            slot_index INTEGER NOT NULL,
+            range INTEGER NOT NULL,
+            mp_cost INTEGER NOT NULL,
+            PRIMARY KEY (world_object_id, skill_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_physical_map_object_threat_races (
+            world_object_id INTEGER NOT NULL,
+            race_index INTEGER NOT NULL,
+            race TEXT NOT NULL,
+            PRIMARY KEY (world_object_id, race_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_physical_map_object_prey_races (
+            world_object_id INTEGER NOT NULL,
+            race_index INTEGER NOT NULL,
+            race TEXT NOT NULL,
+            PRIMARY KEY (world_object_id, race_index)
         )
         """
     )

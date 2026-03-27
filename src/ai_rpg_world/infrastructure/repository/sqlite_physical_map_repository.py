@@ -18,7 +18,7 @@ from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
 from ai_rpg_world.infrastructure.repository.sqlite_world_state_codec import (
     area_to_record_storage,
     build_physical_map,
-    component_to_storage,
+    component_to_record_storage,
     trigger_to_record_storage,
 )
 
@@ -157,6 +157,25 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
                 physical_map.weather_state.intensity,
             ),
         )
+        object_child_tables = (
+            "game_physical_map_object_capabilities",
+            "game_physical_map_object_chest_items",
+            "game_physical_map_object_interaction_data",
+            "game_physical_map_object_patrol_points",
+            "game_physical_map_object_available_skills",
+            "game_physical_map_object_threat_races",
+            "game_physical_map_object_prey_races",
+        )
+        for table_name in object_child_tables:
+            self._conn.execute(
+                f"""
+                DELETE FROM {table_name}
+                WHERE world_object_id IN (
+                    SELECT world_object_id FROM game_physical_map_objects WHERE spot_id = ?
+                )
+                """,
+                (spot_id,),
+            )
         for table_name, key_column in (
             ("game_physical_map_area_traits", "spot_id"),
             ("game_physical_map_tiles", "spot_id"),
@@ -204,16 +223,37 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
                 )
             ],
         )
+        object_component_rows = [
+            (
+                int(obj.object_id),
+                *component_to_record_storage(obj.component),
+            )
+            for obj in physical_map.get_all_objects()
+        ]
         self._conn.executemany(
             """
             INSERT INTO game_physical_map_objects (
                 world_object_id, spot_id, x, y, z, object_type, is_blocking, is_blocking_sight,
-                busy_until_tick, component_type, component_payload_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                busy_until_tick, component_type,
+                actor_direction, actor_speed_modifier, actor_player_id, actor_is_npc, actor_fov_angle,
+                actor_race, actor_faction, actor_pack_id,
+                autonomous_vision_range, autonomous_initial_x, autonomous_initial_y, autonomous_initial_z,
+                autonomous_random_move_chance, autonomous_behavior_strategy_type, autonomous_is_pack_leader,
+                autonomous_ecology_type, autonomous_ambush_chase_range, autonomous_territory_radius,
+                autonomous_aggro_forget_after_ticks, autonomous_aggro_revenge_never_forget, autonomous_active_time,
+                chest_is_open, door_is_open, door_is_locked, ground_item_instance_id,
+                interactable_type, interactable_duration,
+                placeable_item_spec_id, placeable_inner_type,
+                placeable_trigger_type, placeable_trigger_warp_target_spot_id, placeable_trigger_warp_target_x,
+                placeable_trigger_warp_target_y, placeable_trigger_warp_target_z, placeable_trigger_damage,
+                harvest_loot_table_id, harvest_max_quantity, harvest_current_quantity, harvest_respawn_interval,
+                harvest_last_update_tick, harvest_required_tool_category, harvest_duration, harvest_stamina_cost,
+                harvest_current_actor_id, harvest_finish_tick
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
-                    int(obj.object_id),
+                    object_id,
                     spot_id,
                     obj.coordinate.x,
                     obj.coordinate.y,
@@ -222,9 +262,98 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
                     1 if obj.is_blocking else 0,
                     1 if obj.is_blocking_sight else 0,
                     None if obj.busy_until is None else obj.busy_until.value,
-                    *component_to_storage(obj.component),
+                    *component_parent_row,
                 )
-                for obj in physical_map.get_all_objects()
+                for obj, (object_id, component_parent_row, _capability_rows, _chest_item_rows, _interaction_data_rows, _patrol_rows, _available_skill_rows, _threat_race_rows, _prey_race_rows) in zip(
+                    physical_map.get_all_objects(), object_component_rows
+                )
+            ],
+        )
+        self._conn.executemany(
+            """
+            INSERT INTO game_physical_map_object_capabilities (world_object_id, capability_index, capability)
+            VALUES (?, ?, ?)
+            """,
+            [
+                (object_id, idx, capability)
+                for object_id, _component_parent_row, capability_rows, _chest_item_rows, _interaction_data_rows, _patrol_rows, _available_skill_rows, _threat_race_rows, _prey_race_rows in object_component_rows
+                for idx, capability in enumerate(capability_rows)
+            ],
+        )
+        self._conn.executemany(
+            """
+            INSERT INTO game_physical_map_object_chest_items (world_object_id, item_index, item_instance_id)
+            VALUES (?, ?, ?)
+            """,
+            [
+                (object_id, idx, item_instance_id)
+                for object_id, _component_parent_row, _capability_rows, chest_item_rows, _interaction_data_rows, _patrol_rows, _available_skill_rows, _threat_race_rows, _prey_race_rows in object_component_rows
+                for idx, item_instance_id in enumerate(chest_item_rows)
+            ],
+        )
+        self._conn.executemany(
+            """
+            INSERT INTO game_physical_map_object_interaction_data (
+                world_object_id, data_key, value_type, value_text, value_integer, value_real, value_boolean
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    object_id,
+                    data_key,
+                    value_type,
+                    None if value_type != "text" else value,
+                    None if value_type != "int" else value,
+                    None if value_type != "float" else value,
+                    None if value_type != "bool" else value,
+                )
+                for object_id, _component_parent_row, _capability_rows, _chest_item_rows, interaction_data_rows, _patrol_rows, _available_skill_rows, _threat_race_rows, _prey_race_rows in object_component_rows
+                for data_key, value_type, value in interaction_data_rows
+            ],
+        )
+        self._conn.executemany(
+            """
+            INSERT INTO game_physical_map_object_patrol_points (world_object_id, point_index, x, y, z)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                (object_id, idx, point.x, point.y, point.z)
+                for object_id, _component_parent_row, _capability_rows, _chest_item_rows, _interaction_data_rows, patrol_rows, _available_skill_rows, _threat_race_rows, _prey_race_rows in object_component_rows
+                for idx, point in enumerate(patrol_rows)
+            ],
+        )
+        self._conn.executemany(
+            """
+            INSERT INTO game_physical_map_object_available_skills (
+                world_object_id, skill_index, slot_index, range, mp_cost
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                (object_id, idx, skill.slot_index, skill.range, skill.mp_cost)
+                for object_id, _component_parent_row, _capability_rows, _chest_item_rows, _interaction_data_rows, _patrol_rows, available_skill_rows, _threat_race_rows, _prey_race_rows in object_component_rows
+                for idx, skill in enumerate(available_skill_rows)
+            ],
+        )
+        self._conn.executemany(
+            """
+            INSERT INTO game_physical_map_object_threat_races (world_object_id, race_index, race)
+            VALUES (?, ?, ?)
+            """,
+            [
+                (object_id, idx, race)
+                for object_id, _component_parent_row, _capability_rows, _chest_item_rows, _interaction_data_rows, _patrol_rows, _available_skill_rows, threat_race_rows, _prey_race_rows in object_component_rows
+                for idx, race in enumerate(threat_race_rows)
+            ],
+        )
+        self._conn.executemany(
+            """
+            INSERT INTO game_physical_map_object_prey_races (world_object_id, race_index, race)
+            VALUES (?, ?, ?)
+            """,
+            [
+                (object_id, idx, race)
+                for object_id, _component_parent_row, _capability_rows, _chest_item_rows, _interaction_data_rows, _patrol_rows, _available_skill_rows, _threat_race_rows, prey_race_rows in object_component_rows
+                for idx, race in enumerate(prey_race_rows)
             ],
         )
         self._conn.executemany(
@@ -320,6 +449,24 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
     def delete(self, entity_id: SpotId) -> bool:
         self._assert_shared_transaction_active()
         spot_id = int(entity_id)
+        for table_name in (
+            "game_physical_map_object_capabilities",
+            "game_physical_map_object_chest_items",
+            "game_physical_map_object_interaction_data",
+            "game_physical_map_object_patrol_points",
+            "game_physical_map_object_available_skills",
+            "game_physical_map_object_threat_races",
+            "game_physical_map_object_prey_races",
+        ):
+            self._conn.execute(
+                f"""
+                DELETE FROM {table_name}
+                WHERE world_object_id IN (
+                    SELECT world_object_id FROM game_physical_map_objects WHERE spot_id = ?
+                )
+                """,
+                (spot_id,),
+            )
         for table_name, key_column in (
             ("game_physical_map_area_traits", "spot_id"),
             ("game_physical_map_tiles", "spot_id"),
@@ -379,6 +526,45 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
             "SELECT * FROM game_physical_map_objects WHERE spot_id = ? ORDER BY world_object_id ASC",
             (spot_id,),
         ).fetchall()
+        object_ids = [int(row["world_object_id"]) for row in object_rows]
+        if object_ids:
+            placeholders = ",".join("?" for _ in object_ids)
+            capability_rows = self._conn.execute(
+                f"SELECT * FROM game_physical_map_object_capabilities WHERE world_object_id IN ({placeholders}) ORDER BY world_object_id ASC, capability_index ASC",
+                object_ids,
+            ).fetchall()
+            chest_item_rows = self._conn.execute(
+                f"SELECT * FROM game_physical_map_object_chest_items WHERE world_object_id IN ({placeholders}) ORDER BY world_object_id ASC, item_index ASC",
+                object_ids,
+            ).fetchall()
+            interaction_data_rows = self._conn.execute(
+                f"SELECT * FROM game_physical_map_object_interaction_data WHERE world_object_id IN ({placeholders}) ORDER BY world_object_id ASC, data_key ASC",
+                object_ids,
+            ).fetchall()
+            patrol_rows = self._conn.execute(
+                f"SELECT * FROM game_physical_map_object_patrol_points WHERE world_object_id IN ({placeholders}) ORDER BY world_object_id ASC, point_index ASC",
+                object_ids,
+            ).fetchall()
+            available_skill_rows = self._conn.execute(
+                f"SELECT * FROM game_physical_map_object_available_skills WHERE world_object_id IN ({placeholders}) ORDER BY world_object_id ASC, skill_index ASC",
+                object_ids,
+            ).fetchall()
+            threat_race_rows = self._conn.execute(
+                f"SELECT * FROM game_physical_map_object_threat_races WHERE world_object_id IN ({placeholders}) ORDER BY world_object_id ASC, race_index ASC",
+                object_ids,
+            ).fetchall()
+            prey_race_rows = self._conn.execute(
+                f"SELECT * FROM game_physical_map_object_prey_races WHERE world_object_id IN ({placeholders}) ORDER BY world_object_id ASC, race_index ASC",
+                object_ids,
+            ).fetchall()
+        else:
+            capability_rows = []
+            chest_item_rows = []
+            interaction_data_rows = []
+            patrol_rows = []
+            available_skill_rows = []
+            threat_race_rows = []
+            prey_race_rows = []
         area_trigger_rows = self._conn.execute(
             "SELECT * FROM game_physical_map_area_triggers WHERE spot_id = ? ORDER BY trigger_id ASC",
             (spot_id,),
@@ -403,6 +589,13 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
             location_area_rows=list(location_area_rows),
             gateway_rows=list(gateway_rows),
             area_trait_rows=[str(area_trait_row["trait"]) for area_trait_row in area_trait_rows],
+            capability_rows=list(capability_rows),
+            chest_item_rows=list(chest_item_rows),
+            interaction_data_rows=list(interaction_data_rows),
+            patrol_rows=list(patrol_rows),
+            available_skill_rows=list(available_skill_rows),
+            threat_race_rows=list(threat_race_rows),
+            prey_race_rows=list(prey_race_rows),
         )
 
 

@@ -212,10 +212,9 @@ interface 整理:
 
 `player_status` / `player_inventory` / `item` / `transition_policy` / `item_spec` / `recipe` / `shop`
 のような集約レベルの `payload_json` は正規化済みです。
-`physical_map` 配下では、`area` と `trigger` は正規化済みです。
-一方で `object component` はまだ `component_payload_json` を使っています。
-ここは world オブジェクト構造が多態的で、正規化する場合は component 種別ごとの専用子テーブルを複数追加する必要があります。
-次の着手候補として明示的に残します。
+`physical_map` 配下でも、`area` / `trigger` / `object component` を正規化済みです。
+`object component` は多態的なので、親テーブルに共通列を置きつつ、能力・中身アイテム・巡回点・対話データ・スキル・種族関係は子テーブルへ分けています。
+この段階で、集約丸ごとの JSON snapshot に依存する SQLite repository は解消済みです。
 ## Phase 7.5: pickle/BLOB 正規化
 
 - `guild / guild_bank / quest / skill / dialogue` の SQLite 実装から `pickle` / `aggregate_blob` / `node_blob` 依存を撤去する。
