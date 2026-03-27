@@ -50,40 +50,52 @@ def apply_migrations(
 ) -> int:
     """Apply unapplied migrations in order and return the latest version."""
     started_without_transaction = not connection.in_transaction
-    ensure_migration_table(connection)
-    applied_version = get_applied_version(connection, namespace)
-    ordered = sorted(migrations, key=lambda item: item.version)
+    savepoint_name = f"migration_{namespace.replace('-', '_')}"
+    if started_without_transaction:
+        connection.execute("BEGIN")
+    else:
+        connection.execute(f"SAVEPOINT {savepoint_name}")
 
-    latest_version = applied_version
-    changed = False
-    for migration in ordered:
-        if migration.version <= applied_version:
-            latest_version = max(latest_version, migration.version)
-            continue
-        migration.apply(connection)
-        latest_version = migration.version
-        changed = True
-        connection.execute(
-            """
-            INSERT INTO schema_migrations (namespace, version, applied_at)
-            VALUES (?, ?, ?)
-            ON CONFLICT(namespace) DO UPDATE SET
-                version = excluded.version,
-                applied_at = excluded.applied_at
-            """,
-            (
-                namespace,
-                latest_version,
-                datetime.now(timezone.utc).isoformat(),
-            ),
-        )
+    try:
+        ensure_migration_table(connection)
+        applied_version = get_applied_version(connection, namespace)
+        ordered = sorted(migrations, key=lambda item: item.version)
 
-    # Standalone sqlite3 connections keep an implicit transaction open after DDL/DML.
-    # Commit only when schema initialization was invoked outside an existing UoW tx.
-    if changed and started_without_transaction and connection.in_transaction:
-        connection.commit()
+        latest_version = applied_version
+        for migration in ordered:
+            if migration.version <= applied_version:
+                latest_version = max(latest_version, migration.version)
+                continue
+            migration.apply(connection)
+            latest_version = migration.version
+            connection.execute(
+                """
+                INSERT INTO schema_migrations (namespace, version, applied_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(namespace) DO UPDATE SET
+                    version = excluded.version,
+                    applied_at = excluded.applied_at
+                """,
+                (
+                    namespace,
+                    latest_version,
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
 
-    return latest_version
+        if started_without_transaction:
+            connection.commit()
+        else:
+            connection.execute(f"RELEASE SAVEPOINT {savepoint_name}")
+        return latest_version
+    except Exception:
+        if started_without_transaction:
+            if connection.in_transaction:
+                connection.rollback()
+        else:
+            connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint_name}")
+            connection.execute(f"RELEASE SAVEPOINT {savepoint_name}")
+        raise
 
 
 __all__ = [

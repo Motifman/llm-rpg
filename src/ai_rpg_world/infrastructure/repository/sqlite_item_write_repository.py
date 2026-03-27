@@ -205,7 +205,35 @@ class SqliteItemWriteRepository(ItemRepository):
         return [copy.deepcopy(self._row_to_aggregate(r)) for r in cur.fetchall()]
 
     def find_by_owner_id(self, owner_id: int) -> List[ItemAggregate]:
-        return []
+        owner_id_value = int(owner_id)
+        row = self._conn.execute(
+            "SELECT 1 FROM game_player_inventories WHERE player_id = ?",
+            (owner_id_value,),
+        ).fetchone()
+        if row is None:
+            return []
+        cur = self._conn.execute(
+            """
+            SELECT DISTINCT item.item_instance_id, item.item_spec_id, item.quantity, item.durability_current
+            FROM game_items item
+            JOIN (
+                SELECT item_instance_id
+                FROM game_player_inventory_slots
+                WHERE player_id = ? AND item_instance_id IS NOT NULL
+                UNION
+                SELECT item_instance_id
+                FROM game_player_equipment_slots
+                WHERE player_id = ? AND item_instance_id IS NOT NULL
+                UNION
+                SELECT item_instance_id
+                FROM game_player_reserved_items
+                WHERE player_id = ?
+            ) owned ON owned.item_instance_id = item.item_instance_id
+            ORDER BY item.item_instance_id ASC
+            """,
+            (owner_id_value, owner_id_value, owner_id_value),
+        )
+        return [copy.deepcopy(self._row_to_aggregate(r)) for r in cur.fetchall()]
 
 
 __all__ = ["SqliteItemWriteRepository"]
