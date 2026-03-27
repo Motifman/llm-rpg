@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sqlite3
 
+import pytest
+
 from ai_rpg_world.infrastructure.repository.game_db_schema import init_game_db_schema
 from ai_rpg_world.infrastructure.repository.sqlite_migration import (
     SqliteMigration,
@@ -48,6 +50,57 @@ class TestSqliteMigration:
 
         assert calls["count"] == 1
         assert get_applied_version(conn, "demo") == 1
+
+    def test_apply_migrations_rolls_back_all_changes_on_failure(self) -> None:
+        conn = sqlite3.connect(":memory:")
+
+        def _ok(c: sqlite3.Connection) -> None:
+            c.execute("CREATE TABLE demo_ok (id INTEGER PRIMARY KEY)")
+
+        def _ng(c: sqlite3.Connection) -> None:
+            c.execute("CREATE TABLE demo_ng (id INTEGER PRIMARY KEY)")
+            raise RuntimeError("boom")
+
+        with pytest.raises(RuntimeError, match="boom"):
+            apply_migrations(
+                conn,
+                namespace="demo",
+                migrations=(
+                    SqliteMigration(version=1, apply=_ok),
+                    SqliteMigration(version=2, apply=_ng),
+                ),
+            )
+
+        assert get_applied_version(conn, "demo") == 0
+        cur = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('demo_ok', 'demo_ng')"
+        )
+        assert cur.fetchall() == []
+
+    def test_apply_migrations_uses_savepoint_inside_outer_transaction(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        conn.execute("CREATE TABLE outer_table (id INTEGER PRIMARY KEY)")
+        conn.execute("BEGIN")
+        conn.execute("INSERT INTO outer_table (id) VALUES (1)")
+
+        def _ng(c: sqlite3.Connection) -> None:
+            c.execute("CREATE TABLE nested_fail (id INTEGER PRIMARY KEY)")
+            raise RuntimeError("nested boom")
+
+        with pytest.raises(RuntimeError, match="nested boom"):
+            apply_migrations(
+                conn,
+                namespace="demo",
+                migrations=(SqliteMigration(version=1, apply=_ng),),
+            )
+
+        cur = conn.execute("SELECT id FROM outer_table")
+        assert [row[0] for row in cur.fetchall()] == [1]
+        cur = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'nested_fail'"
+        )
+        assert cur.fetchone() is None
+        conn.commit()
 
 
 class TestInitGameDbSchema:

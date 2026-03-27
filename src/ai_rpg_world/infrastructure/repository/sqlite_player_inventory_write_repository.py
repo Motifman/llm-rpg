@@ -78,49 +78,73 @@ class SqlitePlayerInventoryWriteRepository(PlayerInventoryRepository):
     def save(self, inventory: PlayerInventoryAggregate) -> PlayerInventoryAggregate:
         self._assert_shared_transaction_active()
         self._maybe_emit_events(inventory)
+        began_local_transaction = False
+        if self._commits_after_write and not self._conn.in_transaction:
+            self._conn.execute("BEGIN")
+            began_local_transaction = True
         player_id = int(inventory.player_id)
-        self._conn.execute(
-            """
-            INSERT INTO game_player_inventories (player_id, max_slots)
-            VALUES (?, ?)
-            ON CONFLICT(player_id) DO UPDATE SET max_slots = excluded.max_slots
-            """,
-            (player_id, inventory.max_slots),
-        )
-        for table_name in (
-            "game_player_inventory_slots",
-            "game_player_equipment_slots",
-            "game_player_reserved_items",
-        ):
-            self._conn.execute(f"DELETE FROM {table_name} WHERE player_id = ?", (player_id,))
-        self._conn.executemany(
-            "INSERT INTO game_player_inventory_slots (player_id, slot_id, item_instance_id) VALUES (?, ?, ?)",
-            [
-                (player_id, slot_id.value, None if item_id is None else int(item_id))
-                for slot_id, item_id in sorted(inventory._inventory_slots.items(), key=lambda x: x[0].value)
-            ],
-        )
-        self._conn.executemany(
-            "INSERT INTO game_player_equipment_slots (player_id, equipment_slot_type, item_instance_id) VALUES (?, ?, ?)",
-            [
-                (player_id, slot_type.value, None if item_id is None else int(item_id))
-                for slot_type, item_id in sorted(inventory._equipment_slots.items(), key=lambda x: x[0].value)
-            ],
-        )
-        self._conn.executemany(
-            "INSERT INTO game_player_reserved_items (player_id, item_instance_id) VALUES (?, ?)",
-            [(player_id, int(item_id)) for item_id in sorted(inventory.reserved_item_ids, key=int)],
-        )
-        self._finalize_write()
+        try:
+            self._conn.execute(
+                """
+                INSERT INTO game_player_inventories (player_id, max_slots)
+                VALUES (?, ?)
+                ON CONFLICT(player_id) DO UPDATE SET max_slots = excluded.max_slots
+                """,
+                (player_id, inventory.max_slots),
+            )
+            for table_name in (
+                "game_player_inventory_slots",
+                "game_player_equipment_slots",
+                "game_player_reserved_items",
+            ):
+                self._conn.execute(f"DELETE FROM {table_name} WHERE player_id = ?", (player_id,))
+            self._conn.executemany(
+                "INSERT INTO game_player_inventory_slots (player_id, slot_id, item_instance_id) VALUES (?, ?, ?)",
+                [
+                    (player_id, slot_id.value, None if item_id is None else int(item_id))
+                    for slot_id, item_id in sorted(inventory._inventory_slots.items(), key=lambda x: x[0].value)
+                ],
+            )
+            self._conn.executemany(
+                "INSERT INTO game_player_equipment_slots (player_id, equipment_slot_type, item_instance_id) VALUES (?, ?, ?)",
+                [
+                    (player_id, slot_type.value, None if item_id is None else int(item_id))
+                    for slot_type, item_id in sorted(inventory._equipment_slots.items(), key=lambda x: x[0].value)
+                ],
+            )
+            self._conn.executemany(
+                "INSERT INTO game_player_reserved_items (player_id, item_instance_id) VALUES (?, ?)",
+                [(player_id, int(item_id)) for item_id in sorted(inventory.reserved_item_ids, key=int)],
+            )
+            if began_local_transaction:
+                self._conn.commit()
+            else:
+                self._finalize_write()
+        except Exception:
+            if began_local_transaction and self._conn.in_transaction:
+                self._conn.rollback()
+            raise
         return copy.deepcopy(inventory)
 
     def delete(self, player_id: PlayerId) -> bool:
         self._assert_shared_transaction_active()
+        began_local_transaction = False
+        if self._commits_after_write and not self._conn.in_transaction:
+            self._conn.execute("BEGIN")
+            began_local_transaction = True
         player_id_value = int(player_id)
-        for table_name in ("game_player_inventory_slots", "game_player_equipment_slots", "game_player_reserved_items"):
-            self._conn.execute(f"DELETE FROM {table_name} WHERE player_id = ?", (player_id_value,))
-        cur = self._conn.execute("DELETE FROM game_player_inventories WHERE player_id = ?", (player_id_value,))
-        self._finalize_write()
+        try:
+            for table_name in ("game_player_inventory_slots", "game_player_equipment_slots", "game_player_reserved_items"):
+                self._conn.execute(f"DELETE FROM {table_name} WHERE player_id = ?", (player_id_value,))
+            cur = self._conn.execute("DELETE FROM game_player_inventories WHERE player_id = ?", (player_id_value,))
+            if began_local_transaction:
+                self._conn.commit()
+            else:
+                self._finalize_write()
+        except Exception:
+            if began_local_transaction and self._conn.in_transaction:
+                self._conn.rollback()
+            raise
         return cur.rowcount > 0
 
     def find_all(self) -> List[PlayerInventoryAggregate]:

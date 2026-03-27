@@ -1,3 +1,5 @@
+from abc import ABC, abstractmethod
+
 from ai_rpg_world.domain.common.repository import ReadRepository, Repository
 from ai_rpg_world.domain.skill.aggregate.skill_deck_progress_aggregate import SkillDeckProgressAggregate
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
@@ -7,20 +9,22 @@ from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadout
 from ai_rpg_world.domain.skill.value_object.skill_spec import SkillSpec
 
 
-class SkillLoadoutRepository(Repository[SkillLoadoutAggregate, SkillLoadoutId]):
+class SkillLoadoutRepository(Repository[SkillLoadoutAggregate, SkillLoadoutId], ABC):
     """スキルデッキ構成集約のリポジトリインターフェース"""
 
+    @abstractmethod
     def find_by_owner_id(self, owner_id: int) -> SkillLoadoutAggregate | None:
         """所有者IDに紐付くロードアウトを検索する"""
-        raise NotImplementedError
+        pass
 
 
-class SkillDeckProgressRepository(Repository[SkillDeckProgressAggregate, SkillDeckProgressId]):
+class SkillDeckProgressRepository(Repository[SkillDeckProgressAggregate, SkillDeckProgressId], ABC):
     """スキルデッキ進化進行集約のリポジトリインターフェース"""
 
+    @abstractmethod
     def find_by_owner_id(self, owner_id: int) -> SkillDeckProgressAggregate | None:
         """所有者IDに紐付く進行状況を検索する"""
-        raise NotImplementedError
+        pass
 
 
 class SkillSpecRepository(ReadRepository[SkillSpec, SkillId]):
@@ -29,11 +33,13 @@ class SkillSpecRepository(ReadRepository[SkillSpec, SkillId]):
     pass
 
 
-class SkillSpecWriter:
+class SkillSpecWriter(ABC):
     """スキル定義の投入専用 writer ポート"""
 
+    @abstractmethod
     def replace_spec(self, spec: SkillSpec) -> None:
-        raise NotImplementedError
+        pass
 
+    @abstractmethod
     def delete_spec(self, skill_id: SkillId) -> bool:
-        raise NotImplementedError
+        pass

@@ -116,57 +116,69 @@ class SqliteSnsNotificationRepository(SnsNotificationRepository):
     def save(self, notification: Notification) -> Notification:
         self._assert_shared_transaction_active()
         self._maybe_emit_events(notification)
-        self._conn.execute(
-            """
-            INSERT INTO game_sns_notifications (
-                notification_id,
-                user_id,
-                notification_type,
-                title,
-                message,
-                actor_user_id,
-                actor_user_name,
-                related_post_id,
-                related_reply_id,
-                content_type,
-                content_text,
-                created_at,
-                is_read,
-                expires_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(notification_id) DO UPDATE SET
-                user_id = excluded.user_id,
-                notification_type = excluded.notification_type,
-                title = excluded.title,
-                message = excluded.message,
-                actor_user_id = excluded.actor_user_id,
-                actor_user_name = excluded.actor_user_name,
-                related_post_id = excluded.related_post_id,
-                related_reply_id = excluded.related_reply_id,
-                content_type = excluded.content_type,
-                content_text = excluded.content_text,
-                created_at = excluded.created_at,
-                is_read = excluded.is_read,
-                expires_at = excluded.expires_at
-            """,
-            (
-                int(notification.notification_id),
-                int(notification.user_id),
-                notification.notification_type.value,
-                notification.content.title,
-                notification.content.message,
-                int(notification.content.actor_user_id),
-                notification.content.actor_user_name,
-                None if notification.content.related_post_id is None else int(notification.content.related_post_id),
-                None if notification.content.related_reply_id is None else int(notification.content.related_reply_id),
-                notification.content.content_type,
-                notification.content.content_text,
-                notification.created_at.isoformat(),
-                1 if notification.is_read else 0,
-                None if notification.expires_at is None else notification.expires_at.isoformat(),
-            ),
-        )
-        self._finalize_write()
+        began_local_transaction = False
+        if self._commits_after_write and not self._conn.in_transaction:
+            self._conn.execute("BEGIN")
+            began_local_transaction = True
+        try:
+            self._conn.execute(
+                """
+                INSERT INTO game_sns_notifications (
+                    notification_id,
+                    user_id,
+                    notification_type,
+                    title,
+                    message,
+                    actor_user_id,
+                    actor_user_name,
+                    related_post_id,
+                    related_reply_id,
+                    content_type,
+                    content_text,
+                    created_at,
+                    is_read,
+                    expires_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(notification_id) DO UPDATE SET
+                    user_id = excluded.user_id,
+                    notification_type = excluded.notification_type,
+                    title = excluded.title,
+                    message = excluded.message,
+                    actor_user_id = excluded.actor_user_id,
+                    actor_user_name = excluded.actor_user_name,
+                    related_post_id = excluded.related_post_id,
+                    related_reply_id = excluded.related_reply_id,
+                    content_type = excluded.content_type,
+                    content_text = excluded.content_text,
+                    created_at = excluded.created_at,
+                    is_read = excluded.is_read,
+                    expires_at = excluded.expires_at
+                """,
+                (
+                    int(notification.notification_id),
+                    int(notification.user_id),
+                    notification.notification_type.value,
+                    notification.content.title,
+                    notification.content.message,
+                    int(notification.content.actor_user_id),
+                    notification.content.actor_user_name,
+                    None if notification.content.related_post_id is None else int(notification.content.related_post_id),
+                    None if notification.content.related_reply_id is None else int(notification.content.related_reply_id),
+                    notification.content.content_type,
+                    notification.content.content_text,
+                    notification.created_at.isoformat(),
+                    1 if notification.is_read else 0,
+                    None if notification.expires_at is None else notification.expires_at.isoformat(),
+                ),
+            )
+            if began_local_transaction:
+                self._conn.commit()
+            else:
+                self._finalize_write()
+        except Exception:
+            if began_local_transaction and self._conn.in_transaction:
+                self._conn.rollback()
+            raise
         return copy.deepcopy(notification)
 
     def find_by_id(self, notification_id: NotificationId) -> Optional[Notification]:
@@ -181,11 +193,23 @@ class SqliteSnsNotificationRepository(SnsNotificationRepository):
 
     def delete(self, notification_id: NotificationId) -> bool:
         self._assert_shared_transaction_active()
-        cur = self._conn.execute(
-            "DELETE FROM game_sns_notifications WHERE notification_id = ?",
-            (int(notification_id),),
-        )
-        self._finalize_write()
+        began_local_transaction = False
+        if self._commits_after_write and not self._conn.in_transaction:
+            self._conn.execute("BEGIN")
+            began_local_transaction = True
+        try:
+            cur = self._conn.execute(
+                "DELETE FROM game_sns_notifications WHERE notification_id = ?",
+                (int(notification_id),),
+            )
+            if began_local_transaction:
+                self._conn.commit()
+            else:
+                self._finalize_write()
+        except Exception:
+            if began_local_transaction and self._conn.in_transaction:
+                self._conn.rollback()
+            raise
         return cur.rowcount > 0
 
     def find_all(self) -> List[Notification]:
@@ -221,51 +245,99 @@ class SqliteSnsNotificationRepository(SnsNotificationRepository):
 
     def mark_as_read(self, notification_id: NotificationId) -> None:
         self._assert_shared_transaction_active()
-        self._conn.execute(
-            "UPDATE game_sns_notifications SET is_read = 1 WHERE notification_id = ?",
-            (int(notification_id),),
-        )
-        self._finalize_write()
+        began_local_transaction = False
+        if self._commits_after_write and not self._conn.in_transaction:
+            self._conn.execute("BEGIN")
+            began_local_transaction = True
+        try:
+            self._conn.execute(
+                "UPDATE game_sns_notifications SET is_read = 1 WHERE notification_id = ?",
+                (int(notification_id),),
+            )
+            if began_local_transaction:
+                self._conn.commit()
+            else:
+                self._finalize_write()
+        except Exception:
+            if began_local_transaction and self._conn.in_transaction:
+                self._conn.rollback()
+            raise
 
     def mark_all_as_read(self, user_id: UserId) -> None:
         self._assert_shared_transaction_active()
-        self._conn.execute(
-            "UPDATE game_sns_notifications SET is_read = 1 WHERE user_id = ?",
-            (int(user_id),),
-        )
-        self._finalize_write()
+        began_local_transaction = False
+        if self._commits_after_write and not self._conn.in_transaction:
+            self._conn.execute("BEGIN")
+            began_local_transaction = True
+        try:
+            self._conn.execute(
+                "UPDATE game_sns_notifications SET is_read = 1 WHERE user_id = ?",
+                (int(user_id),),
+            )
+            if began_local_transaction:
+                self._conn.commit()
+            else:
+                self._finalize_write()
+        except Exception:
+            if began_local_transaction and self._conn.in_transaction:
+                self._conn.rollback()
+            raise
 
     def delete_expired_notifications(self, current_time: datetime) -> int:
         self._assert_shared_transaction_active()
-        cur = self._conn.execute(
-            """
-            DELETE FROM game_sns_notifications
-            WHERE expires_at IS NOT NULL AND expires_at < ?
-            """,
-            (current_time.isoformat(),),
-        )
-        self._finalize_write()
+        began_local_transaction = False
+        if self._commits_after_write and not self._conn.in_transaction:
+            self._conn.execute("BEGIN")
+            began_local_transaction = True
+        try:
+            cur = self._conn.execute(
+                """
+                DELETE FROM game_sns_notifications
+                WHERE expires_at IS NOT NULL AND expires_at < ?
+                """,
+                (current_time.isoformat(),),
+            )
+            if began_local_transaction:
+                self._conn.commit()
+            else:
+                self._finalize_write()
+        except Exception:
+            if began_local_transaction and self._conn.in_transaction:
+                self._conn.rollback()
+            raise
         return cur.rowcount
 
     def delete_old_notifications(self, user_id: UserId, keep_count: int = 100) -> int:
         self._assert_shared_transaction_active()
-        cur = self._conn.execute(
-            """
-            SELECT notification_id
-            FROM game_sns_notifications
-            WHERE user_id = ? AND expires_at IS NULL
-            ORDER BY created_at DESC, notification_id DESC
-            """,
-            (int(user_id),),
-        )
-        notification_ids = [int(row[0]) for row in cur.fetchall()]
-        to_delete = notification_ids[keep_count:]
-        for notification_id in to_delete:
-            self._conn.execute(
-                "DELETE FROM game_sns_notifications WHERE notification_id = ?",
-                (notification_id,),
+        began_local_transaction = False
+        if self._commits_after_write and not self._conn.in_transaction:
+            self._conn.execute("BEGIN")
+            began_local_transaction = True
+        try:
+            cur = self._conn.execute(
+                """
+                SELECT notification_id
+                FROM game_sns_notifications
+                WHERE user_id = ? AND expires_at IS NULL
+                ORDER BY created_at DESC, notification_id DESC
+                """,
+                (int(user_id),),
             )
-        self._finalize_write()
+            notification_ids = [int(row[0]) for row in cur.fetchall()]
+            to_delete = notification_ids[keep_count:]
+            for notification_id in to_delete:
+                self._conn.execute(
+                    "DELETE FROM game_sns_notifications WHERE notification_id = ?",
+                    (notification_id,),
+                )
+            if began_local_transaction:
+                self._conn.commit()
+            else:
+                self._finalize_write()
+        except Exception:
+            if began_local_transaction and self._conn.in_transaction:
+                self._conn.rollback()
+            raise
         return len(to_delete)
 
     def get_unread_count(self, user_id: UserId) -> int:

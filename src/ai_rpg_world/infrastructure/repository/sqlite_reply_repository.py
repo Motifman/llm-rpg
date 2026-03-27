@@ -163,60 +163,72 @@ class SqliteReplyRepository(ReplyRepository):
     def save(self, reply: ReplyAggregate) -> ReplyAggregate:
         self._assert_shared_transaction_active()
         self._maybe_emit_events(reply)
-        self._conn.execute(
-            """
-            INSERT INTO game_sns_replies (
-                reply_id,
-                author_user_id,
-                parent_post_id,
-                parent_reply_id,
-                content,
-                visibility,
-                deleted,
-                created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(reply_id) DO UPDATE SET
-                author_user_id = excluded.author_user_id,
-                parent_post_id = excluded.parent_post_id,
-                parent_reply_id = excluded.parent_reply_id,
-                content = excluded.content,
-                visibility = excluded.visibility,
-                deleted = excluded.deleted,
-                created_at = excluded.created_at
-            """,
-            (
-                int(reply.reply_id),
-                int(reply.author_user_id),
-                None if reply.parent_post_id is None else int(reply.parent_post_id),
-                None if reply.parent_reply_id is None else int(reply.parent_reply_id),
-                reply.content.content,
-                reply.content.visibility.value,
-                1 if reply.deleted else 0,
-                reply.created_at.isoformat(),
-            ),
-        )
-        self._conn.execute("DELETE FROM game_sns_reply_hashtags WHERE reply_id = ?", (int(reply.reply_id),))
-        self._conn.execute("DELETE FROM game_sns_reply_likes WHERE reply_id = ?", (int(reply.reply_id),))
-        self._conn.execute("DELETE FROM game_sns_reply_mentions WHERE reply_id = ?", (int(reply.reply_id),))
-        self._conn.executemany(
-            "INSERT INTO game_sns_reply_hashtags (reply_id, hashtag) VALUES (?, ?)",
-            [(int(reply.reply_id), hashtag) for hashtag in reply.content.hashtags],
-        )
-        self._conn.executemany(
-            """
-            INSERT INTO game_sns_reply_likes (reply_id, user_id, created_at)
-            VALUES (?, ?, ?)
-            """,
-            [
-                (int(reply.reply_id), int(like.user_id), like.created_at.isoformat())
-                for like in reply.likes
-            ],
-        )
-        self._conn.executemany(
-            "INSERT INTO game_sns_reply_mentions (reply_id, user_name) VALUES (?, ?)",
-            [(int(reply.reply_id), mention.mentioned_user_name) for mention in reply.mentions],
-        )
-        self._finalize_write()
+        began_local_transaction = False
+        if self._commits_after_write and not self._conn.in_transaction:
+            self._conn.execute("BEGIN")
+            began_local_transaction = True
+        try:
+            self._conn.execute(
+                """
+                INSERT INTO game_sns_replies (
+                    reply_id,
+                    author_user_id,
+                    parent_post_id,
+                    parent_reply_id,
+                    content,
+                    visibility,
+                    deleted,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(reply_id) DO UPDATE SET
+                    author_user_id = excluded.author_user_id,
+                    parent_post_id = excluded.parent_post_id,
+                    parent_reply_id = excluded.parent_reply_id,
+                    content = excluded.content,
+                    visibility = excluded.visibility,
+                    deleted = excluded.deleted,
+                    created_at = excluded.created_at
+                """,
+                (
+                    int(reply.reply_id),
+                    int(reply.author_user_id),
+                    None if reply.parent_post_id is None else int(reply.parent_post_id),
+                    None if reply.parent_reply_id is None else int(reply.parent_reply_id),
+                    reply.content.content,
+                    reply.content.visibility.value,
+                    1 if reply.deleted else 0,
+                    reply.created_at.isoformat(),
+                ),
+            )
+            self._conn.execute("DELETE FROM game_sns_reply_hashtags WHERE reply_id = ?", (int(reply.reply_id),))
+            self._conn.execute("DELETE FROM game_sns_reply_likes WHERE reply_id = ?", (int(reply.reply_id),))
+            self._conn.execute("DELETE FROM game_sns_reply_mentions WHERE reply_id = ?", (int(reply.reply_id),))
+            self._conn.executemany(
+                "INSERT INTO game_sns_reply_hashtags (reply_id, hashtag) VALUES (?, ?)",
+                [(int(reply.reply_id), hashtag) for hashtag in reply.content.hashtags],
+            )
+            self._conn.executemany(
+                """
+                INSERT INTO game_sns_reply_likes (reply_id, user_id, created_at)
+                VALUES (?, ?, ?)
+                """,
+                [
+                    (int(reply.reply_id), int(like.user_id), like.created_at.isoformat())
+                    for like in reply.likes
+                ],
+            )
+            self._conn.executemany(
+                "INSERT INTO game_sns_reply_mentions (reply_id, user_name) VALUES (?, ?)",
+                [(int(reply.reply_id), mention.mentioned_user_name) for mention in reply.mentions],
+            )
+            if began_local_transaction:
+                self._conn.commit()
+            else:
+                self._finalize_write()
+        except Exception:
+            if began_local_transaction and self._conn.in_transaction:
+                self._conn.rollback()
+            raise
         return copy.deepcopy(reply)
 
     def delete(self, entity_id: ReplyId) -> bool:
@@ -484,30 +496,54 @@ class SqliteReplyRepository(ReplyRepository):
 
     def cleanup_deleted_replies(self, older_than_days: int = 30) -> int:
         self._assert_shared_transaction_active()
+        began_local_transaction = False
+        if self._commits_after_write and not self._conn.in_transaction:
+            self._conn.execute("BEGIN")
+            began_local_transaction = True
         cutoff = (datetime.now() - timedelta(days=older_than_days)).isoformat()
-        cur = self._conn.execute(
-            "SELECT reply_id FROM game_sns_replies WHERE deleted = 1 AND created_at < ?",
-            (cutoff,),
-        )
-        reply_ids = [int(row[0]) for row in cur.fetchall()]
-        for reply_id in reply_ids:
-            self._conn.execute("DELETE FROM game_sns_reply_hashtags WHERE reply_id = ?", (reply_id,))
-            self._conn.execute("DELETE FROM game_sns_reply_likes WHERE reply_id = ?", (reply_id,))
-            self._conn.execute("DELETE FROM game_sns_reply_mentions WHERE reply_id = ?", (reply_id,))
-            self._conn.execute("DELETE FROM game_sns_replies WHERE reply_id = ?", (reply_id,))
-        self._finalize_write()
+        try:
+            cur = self._conn.execute(
+                "SELECT reply_id FROM game_sns_replies WHERE deleted = 1 AND created_at < ?",
+                (cutoff,),
+            )
+            reply_ids = [int(row[0]) for row in cur.fetchall()]
+            for reply_id in reply_ids:
+                self._conn.execute("DELETE FROM game_sns_reply_hashtags WHERE reply_id = ?", (reply_id,))
+                self._conn.execute("DELETE FROM game_sns_reply_likes WHERE reply_id = ?", (reply_id,))
+                self._conn.execute("DELETE FROM game_sns_reply_mentions WHERE reply_id = ?", (reply_id,))
+                self._conn.execute("DELETE FROM game_sns_replies WHERE reply_id = ?", (reply_id,))
+            if began_local_transaction:
+                self._conn.commit()
+            else:
+                self._finalize_write()
+        except Exception:
+            if began_local_transaction and self._conn.in_transaction:
+                self._conn.rollback()
+            raise
         return len(reply_ids)
 
     def clear(self) -> None:
         self._assert_shared_transaction_active()
-        for table_name in (
-            "game_sns_reply_mentions",
-            "game_sns_reply_likes",
-            "game_sns_reply_hashtags",
-            "game_sns_replies",
-        ):
-            self._conn.execute(f"DELETE FROM {table_name}")
-        self._finalize_write()
+        began_local_transaction = False
+        if self._commits_after_write and not self._conn.in_transaction:
+            self._conn.execute("BEGIN")
+            began_local_transaction = True
+        try:
+            for table_name in (
+                "game_sns_reply_mentions",
+                "game_sns_reply_likes",
+                "game_sns_reply_hashtags",
+                "game_sns_replies",
+            ):
+                self._conn.execute(f"DELETE FROM {table_name}")
+            if began_local_transaction:
+                self._conn.commit()
+            else:
+                self._finalize_write()
+        except Exception:
+            if began_local_transaction and self._conn.in_transaction:
+                self._conn.rollback()
+            raise
 
 
 __all__ = ["SqliteReplyRepository"]

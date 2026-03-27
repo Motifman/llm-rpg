@@ -47,6 +47,7 @@ from ai_rpg_world.infrastructure.repository.sqlite_player_status_write_repositor
 from ai_rpg_world.infrastructure.repository.sqlite_trade_aggregate_repository import SqliteTradeAggregateRepository
 from ai_rpg_world.infrastructure.repository.sqlite_trade_command_codec import (
     item_aggregate_to_storage,
+    json_bytes_to_player_status,
     storage_to_item_aggregate,
 )
 
@@ -154,3 +155,39 @@ class TestItemConsumeEffectCodec:
         }
         with pytest.raises(ValueError, match="unknown consume_effect kind"):
             storage_to_item_aggregate(1, 1, json.dumps(payload))
+
+    def test_item_storage_spec_id_mismatch_raises(self) -> None:
+        payload = {
+            "quantity": 1,
+            "durability": None,
+            "spec": {
+                "item_spec_id": 999,
+                "name": "broken",
+                "item_type": ItemType.CONSUMABLE.value,
+                "rarity": Rarity.COMMON.value,
+                "description": "x",
+                "max_stack_size": 10,
+                "durability_max": None,
+                "equipment_type": None,
+                "is_placeable": False,
+                "placeable_object_type": None,
+                "consume_effect": None,
+            },
+        }
+        with pytest.raises(ValueError, match="item_spec_id column"):
+            storage_to_item_aggregate(1, 1, json.dumps(payload))
+
+
+class TestPlayerStatusJsonCodec:
+    def test_rejects_non_utf8_payload(self) -> None:
+        with pytest.raises(ValueError, match="UTF-8 JSON"):
+            json_bytes_to_player_status(b"\xff\xfe\xfa")
+
+    def test_rejects_non_object_json_root(self) -> None:
+        with pytest.raises(ValueError, match="JSON object"):
+            json_bytes_to_player_status(b"[]")
+
+    def test_rejects_unsupported_schema_version(self) -> None:
+        payload = {"schema_version": 999, "player_id": 1}
+        with pytest.raises(ValueError, match="unsupported player status schema_version"):
+            json_bytes_to_player_status(json.dumps(payload).encode("utf-8"))

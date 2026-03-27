@@ -131,103 +131,127 @@ class SqliteSnsUserRepository(UserRepository):
     def save(self, entity: UserAggregate) -> UserAggregate:
         self._assert_shared_transaction_active()
         self._maybe_emit_events(entity)
+        began_local_transaction = False
+        if self._commits_after_write and not self._conn.in_transaction:
+            self._conn.execute("BEGIN")
+            began_local_transaction = True
         profile = entity.get_user_profile_info()
-        self._conn.execute(
-            """
-            INSERT INTO game_sns_users (user_id, user_name, display_name, bio)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(user_id) DO UPDATE SET
-                user_name = excluded.user_name,
-                display_name = excluded.display_name,
-                bio = excluded.bio
-            """,
-            (
-                int(entity.user_id),
-                profile["user_name"],
-                profile["display_name"],
-                profile["bio"],
-            ),
-        )
-        self._conn.execute(
-            "DELETE FROM game_sns_follows WHERE follower_user_id = ?",
-            (int(entity.user_id),),
-        )
-        self._conn.execute(
-            "DELETE FROM game_sns_blocks WHERE blocker_user_id = ?",
-            (int(entity.user_id),),
-        )
-        self._conn.execute(
-            "DELETE FROM game_sns_subscriptions WHERE subscriber_user_id = ?",
-            (int(entity.user_id),),
-        )
-        self._conn.executemany(
-            """
-            INSERT INTO game_sns_follows (follower_user_id, followee_user_id, created_at)
-            VALUES (?, ?, ?)
-            """,
-            [
+        try:
+            self._conn.execute(
+                """
+                INSERT INTO game_sns_users (user_id, user_name, display_name, bio)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    user_name = excluded.user_name,
+                    display_name = excluded.display_name,
+                    bio = excluded.bio
+                """,
                 (
-                    int(rel.follower_user_id),
-                    int(rel.followee_user_id),
-                    rel.created_at.isoformat(),
-                )
-                for rel in entity.follow_relationships
-            ],
-        )
-        self._conn.executemany(
-            """
-            INSERT INTO game_sns_blocks (blocker_user_id, blocked_user_id, created_at)
-            VALUES (?, ?, ?)
-            """,
-            [
-                (
-                    int(rel.blocker_user_id),
-                    int(rel.blocked_user_id),
-                    rel.created_at.isoformat(),
-                )
-                for rel in entity.block_relationships
-            ],
-        )
-        self._conn.executemany(
-            """
-            INSERT INTO game_sns_subscriptions (
-                subscriber_user_id, subscribed_user_id, created_at
-            ) VALUES (?, ?, ?)
-            """,
-            [
-                (
-                    int(rel.subscriber_user_id),
-                    int(rel.subscribed_user_id),
-                    rel.created_at.isoformat(),
-                )
-                for rel in entity.subscribe_relationships
-            ],
-        )
-        self._finalize_write()
+                    int(entity.user_id),
+                    profile["user_name"],
+                    profile["display_name"],
+                    profile["bio"],
+                ),
+            )
+            self._conn.execute(
+                "DELETE FROM game_sns_follows WHERE follower_user_id = ?",
+                (int(entity.user_id),),
+            )
+            self._conn.execute(
+                "DELETE FROM game_sns_blocks WHERE blocker_user_id = ?",
+                (int(entity.user_id),),
+            )
+            self._conn.execute(
+                "DELETE FROM game_sns_subscriptions WHERE subscriber_user_id = ?",
+                (int(entity.user_id),),
+            )
+            self._conn.executemany(
+                """
+                INSERT INTO game_sns_follows (follower_user_id, followee_user_id, created_at)
+                VALUES (?, ?, ?)
+                """,
+                [
+                    (
+                        int(rel.follower_user_id),
+                        int(rel.followee_user_id),
+                        rel.created_at.isoformat(),
+                    )
+                    for rel in entity.follow_relationships
+                ],
+            )
+            self._conn.executemany(
+                """
+                INSERT INTO game_sns_blocks (blocker_user_id, blocked_user_id, created_at)
+                VALUES (?, ?, ?)
+                """,
+                [
+                    (
+                        int(rel.blocker_user_id),
+                        int(rel.blocked_user_id),
+                        rel.created_at.isoformat(),
+                    )
+                    for rel in entity.block_relationships
+                ],
+            )
+            self._conn.executemany(
+                """
+                INSERT INTO game_sns_subscriptions (
+                    subscriber_user_id, subscribed_user_id, created_at
+                ) VALUES (?, ?, ?)
+                """,
+                [
+                    (
+                        int(rel.subscriber_user_id),
+                        int(rel.subscribed_user_id),
+                        rel.created_at.isoformat(),
+                    )
+                    for rel in entity.subscribe_relationships
+                ],
+            )
+            if began_local_transaction:
+                self._conn.commit()
+            else:
+                self._finalize_write()
+        except Exception:
+            if began_local_transaction and self._conn.in_transaction:
+                self._conn.rollback()
+            raise
         return copy.deepcopy(entity)
 
     def delete(self, entity_id: UserId) -> bool:
         self._assert_shared_transaction_active()
-        self._conn.execute(
-            "DELETE FROM game_sns_follows WHERE follower_user_id = ? OR followee_user_id = ?",
-            (int(entity_id), int(entity_id)),
-        )
-        self._conn.execute(
-            "DELETE FROM game_sns_blocks WHERE blocker_user_id = ? OR blocked_user_id = ?",
-            (int(entity_id), int(entity_id)),
-        )
-        self._conn.execute(
-            """
-            DELETE FROM game_sns_subscriptions
-            WHERE subscriber_user_id = ? OR subscribed_user_id = ?
-            """,
-            (int(entity_id), int(entity_id)),
-        )
-        cur = self._conn.execute(
-            "DELETE FROM game_sns_users WHERE user_id = ?",
-            (int(entity_id),),
-        )
-        self._finalize_write()
+        began_local_transaction = False
+        if self._commits_after_write and not self._conn.in_transaction:
+            self._conn.execute("BEGIN")
+            began_local_transaction = True
+        try:
+            self._conn.execute(
+                "DELETE FROM game_sns_follows WHERE follower_user_id = ? OR followee_user_id = ?",
+                (int(entity_id), int(entity_id)),
+            )
+            self._conn.execute(
+                "DELETE FROM game_sns_blocks WHERE blocker_user_id = ? OR blocked_user_id = ?",
+                (int(entity_id), int(entity_id)),
+            )
+            self._conn.execute(
+                """
+                DELETE FROM game_sns_subscriptions
+                WHERE subscriber_user_id = ? OR subscribed_user_id = ?
+                """,
+                (int(entity_id), int(entity_id)),
+            )
+            cur = self._conn.execute(
+                "DELETE FROM game_sns_users WHERE user_id = ?",
+                (int(entity_id),),
+            )
+            if began_local_transaction:
+                self._conn.commit()
+            else:
+                self._finalize_write()
+        except Exception:
+            if began_local_transaction and self._conn.in_transaction:
+                self._conn.rollback()
+            raise
         return cur.rowcount > 0
 
     def find_by_user_name(self, user_name: str) -> Optional[UserAggregate]:
@@ -428,21 +452,33 @@ class SqliteSnsUserRepository(UserRepository):
 
     def cleanup_broken_relationships(self) -> int:
         self._assert_shared_transaction_active()
+        began_local_transaction = False
+        if self._commits_after_write and not self._conn.in_transaction:
+            self._conn.execute("BEGIN")
+            began_local_transaction = True
         removed = 0
-        for table_name, lhs_column, rhs_column in (
-            ("game_sns_follows", "follower_user_id", "followee_user_id"),
-            ("game_sns_blocks", "blocker_user_id", "blocked_user_id"),
-            ("game_sns_subscriptions", "subscriber_user_id", "subscribed_user_id"),
-        ):
-            cur = self._conn.execute(
-                f"""
-                DELETE FROM {table_name}
-                WHERE {lhs_column} NOT IN (SELECT user_id FROM game_sns_users)
-                   OR {rhs_column} NOT IN (SELECT user_id FROM game_sns_users)
-                """
-            )
-            removed += cur.rowcount
-        self._finalize_write()
+        try:
+            for table_name, lhs_column, rhs_column in (
+                ("game_sns_follows", "follower_user_id", "followee_user_id"),
+                ("game_sns_blocks", "blocker_user_id", "blocked_user_id"),
+                ("game_sns_subscriptions", "subscriber_user_id", "subscribed_user_id"),
+            ):
+                cur = self._conn.execute(
+                    f"""
+                    DELETE FROM {table_name}
+                    WHERE {lhs_column} NOT IN (SELECT user_id FROM game_sns_users)
+                       OR {rhs_column} NOT IN (SELECT user_id FROM game_sns_users)
+                    """
+                )
+                removed += cur.rowcount
+            if began_local_transaction:
+                self._conn.commit()
+            else:
+                self._finalize_write()
+        except Exception:
+            if began_local_transaction and self._conn.in_transaction:
+                self._conn.rollback()
+            raise
         return removed
 
     def find_users_by_ids(self, user_ids: List[UserId]) -> List[UserAggregate]:
@@ -473,14 +509,26 @@ class SqliteSnsUserRepository(UserRepository):
 
     def clear(self) -> None:
         self._assert_shared_transaction_active()
-        for table_name in (
-            "game_sns_subscriptions",
-            "game_sns_blocks",
-            "game_sns_follows",
-            "game_sns_users",
-        ):
-            self._conn.execute(f"DELETE FROM {table_name}")
-        self._finalize_write()
+        began_local_transaction = False
+        if self._commits_after_write and not self._conn.in_transaction:
+            self._conn.execute("BEGIN")
+            began_local_transaction = True
+        try:
+            for table_name in (
+                "game_sns_subscriptions",
+                "game_sns_blocks",
+                "game_sns_follows",
+                "game_sns_users",
+            ):
+                self._conn.execute(f"DELETE FROM {table_name}")
+            if began_local_transaction:
+                self._conn.commit()
+            else:
+                self._finalize_write()
+        except Exception:
+            if began_local_transaction and self._conn.in_transaction:
+                self._conn.rollback()
+            raise
 
 
 __all__ = ["SqliteSnsUserRepository"]

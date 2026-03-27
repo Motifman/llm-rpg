@@ -77,10 +77,15 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
     def save(self, status: PlayerStatusAggregate) -> PlayerStatusAggregate:
         self._assert_shared_transaction_active()
         self._maybe_emit_events(status)
+        began_local_transaction = False
+        if self._commits_after_write and not self._conn.in_transaction:
+            self._conn.execute("BEGIN")
+            began_local_transaction = True
         player_id = int(status.player_id)
-        self._conn.execute(
-            """
-            INSERT INTO game_player_statuses (
+        try:
+            self._conn.execute(
+                """
+                INSERT INTO game_player_statuses (
                 player_id,
                 base_max_hp, base_max_mp, base_attack, base_defense, base_speed, base_critical_rate, base_evasion_rate,
                 growth_hp_factor, growth_mp_factor, growth_attack_factor, growth_defense_factor, growth_speed_factor,
@@ -133,57 +138,64 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
                 goal_world_object_id = excluded.goal_world_object_id,
                 is_down = excluded.is_down,
                 attention_level = excluded.attention_level
-            """,
-            (
-                player_id,
-                status.base_stats.max_hp, status.base_stats.max_mp, status.base_stats.attack, status.base_stats.defense, status.base_stats.speed, status.base_stats.critical_rate, status.base_stats.evasion_rate,
-                status.stat_growth_factor.hp_factor, status.stat_growth_factor.mp_factor, status.stat_growth_factor.attack_factor, status.stat_growth_factor.defense_factor, status.stat_growth_factor.speed_factor,
-                status.stat_growth_factor.critical_rate_factor, status.stat_growth_factor.evasion_rate_factor,
-                status.exp_table.base_exp, status.exp_table.exponent, status.exp_table.level_offset,
-                status.growth.level, status.growth.total_exp, status.gold.value,
-                status.hp.value, status.hp.max_hp, status.mp.value, status.mp.max_mp, status.stamina.value, status.stamina.max_stamina,
-                None if status.current_spot_id is None else int(status.current_spot_id),
-                None if status.current_coordinate is None else status.current_coordinate.x,
-                None if status.current_coordinate is None else status.current_coordinate.y,
-                None if status.current_coordinate is None else status.current_coordinate.z,
-                None if status.current_destination is None else status.current_destination.x,
-                None if status.current_destination is None else status.current_destination.y,
-                None if status.current_destination is None else status.current_destination.z,
-                status.goal_destination_type,
-                None if status.goal_spot_id is None else int(status.goal_spot_id),
-                None if status.goal_location_area_id is None else int(status.goal_location_area_id),
-                None if status.goal_world_object_id is None else int(status.goal_world_object_id),
-                1 if status.is_down else 0,
-                status.attention_level.value,
-            ),
-        )
-        for table_name in (
-            "game_player_navigation_path",
-            "game_player_active_effects",
-            "game_player_pursuit_target_snapshots",
-            "game_player_pursuit_last_known",
-        ):
-            self._conn.execute(f"DELETE FROM {table_name} WHERE player_id = ?", (player_id,))
-        self._conn.executemany(
-            "INSERT INTO game_player_navigation_path (player_id, step_index, x, y, z) VALUES (?, ?, ?, ?, ?)",
-            [(player_id, idx, coord.x, coord.y, coord.z) for idx, coord in enumerate(status.planned_path)],
-        )
-        self._conn.executemany(
-            "INSERT INTO game_player_active_effects (player_id, effect_index, effect_type, effect_value, expiry_tick) VALUES (?, ?, ?, ?, ?)",
-            [(player_id, idx, effect.effect_type.name, effect.value, effect.expiry_tick.value) for idx, effect in enumerate(status.active_effects)],
-        )
-        pursuit = status.pursuit_state
-        if pursuit is not None and pursuit.target_snapshot is not None:
-            self._conn.execute(
-                "INSERT INTO game_player_pursuit_target_snapshots (player_id, target_id, spot_id, x, y, z) VALUES (?, ?, ?, ?, ?, ?)",
-                (player_id, int(pursuit.target_snapshot.target_id), int(pursuit.target_snapshot.spot_id), pursuit.target_snapshot.coordinate.x, pursuit.target_snapshot.coordinate.y, pursuit.target_snapshot.coordinate.z),
+                """,
+                (
+                    player_id,
+                    status.base_stats.max_hp, status.base_stats.max_mp, status.base_stats.attack, status.base_stats.defense, status.base_stats.speed, status.base_stats.critical_rate, status.base_stats.evasion_rate,
+                    status.stat_growth_factor.hp_factor, status.stat_growth_factor.mp_factor, status.stat_growth_factor.attack_factor, status.stat_growth_factor.defense_factor, status.stat_growth_factor.speed_factor,
+                    status.stat_growth_factor.critical_rate_factor, status.stat_growth_factor.evasion_rate_factor,
+                    status.exp_table.base_exp, status.exp_table.exponent, status.exp_table.level_offset,
+                    status.growth.level, status.growth.total_exp, status.gold.value,
+                    status.hp.value, status.hp.max_hp, status.mp.value, status.mp.max_mp, status.stamina.value, status.stamina.max_stamina,
+                    None if status.current_spot_id is None else int(status.current_spot_id),
+                    None if status.current_coordinate is None else status.current_coordinate.x,
+                    None if status.current_coordinate is None else status.current_coordinate.y,
+                    None if status.current_coordinate is None else status.current_coordinate.z,
+                    None if status.current_destination is None else status.current_destination.x,
+                    None if status.current_destination is None else status.current_destination.y,
+                    None if status.current_destination is None else status.current_destination.z,
+                    status.goal_destination_type,
+                    None if status.goal_spot_id is None else int(status.goal_spot_id),
+                    None if status.goal_location_area_id is None else int(status.goal_location_area_id),
+                    None if status.goal_world_object_id is None else int(status.goal_world_object_id),
+                    1 if status.is_down else 0,
+                    status.attention_level.value,
+                ),
             )
-        if pursuit is not None and pursuit.last_known is not None:
-            self._conn.execute(
-                "INSERT INTO game_player_pursuit_last_known (player_id, target_id, spot_id, x, y, z, observed_at_tick) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (player_id, int(pursuit.last_known.target_id), int(pursuit.last_known.spot_id), pursuit.last_known.coordinate.x, pursuit.last_known.coordinate.y, pursuit.last_known.coordinate.z, None if pursuit.last_known.observed_at_tick is None else pursuit.last_known.observed_at_tick.value),
+            for table_name in (
+                "game_player_navigation_path",
+                "game_player_active_effects",
+                "game_player_pursuit_target_snapshots",
+                "game_player_pursuit_last_known",
+            ):
+                self._conn.execute(f"DELETE FROM {table_name} WHERE player_id = ?", (player_id,))
+            self._conn.executemany(
+                "INSERT INTO game_player_navigation_path (player_id, step_index, x, y, z) VALUES (?, ?, ?, ?, ?)",
+                [(player_id, idx, coord.x, coord.y, coord.z) for idx, coord in enumerate(status.planned_path)],
             )
-        self._finalize_write()
+            self._conn.executemany(
+                "INSERT INTO game_player_active_effects (player_id, effect_index, effect_type, effect_value, expiry_tick) VALUES (?, ?, ?, ?, ?)",
+                [(player_id, idx, effect.effect_type.name, effect.value, effect.expiry_tick.value) for idx, effect in enumerate(status.active_effects)],
+            )
+            pursuit = status.pursuit_state
+            if pursuit is not None and pursuit.target_snapshot is not None:
+                self._conn.execute(
+                    "INSERT INTO game_player_pursuit_target_snapshots (player_id, target_id, spot_id, x, y, z) VALUES (?, ?, ?, ?, ?, ?)",
+                    (player_id, int(pursuit.target_snapshot.target_id), int(pursuit.target_snapshot.spot_id), pursuit.target_snapshot.coordinate.x, pursuit.target_snapshot.coordinate.y, pursuit.target_snapshot.coordinate.z),
+                )
+            if pursuit is not None and pursuit.last_known is not None:
+                self._conn.execute(
+                    "INSERT INTO game_player_pursuit_last_known (player_id, target_id, spot_id, x, y, z, observed_at_tick) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (player_id, int(pursuit.last_known.target_id), int(pursuit.last_known.spot_id), pursuit.last_known.coordinate.x, pursuit.last_known.coordinate.y, pursuit.last_known.coordinate.z, None if pursuit.last_known.observed_at_tick is None else pursuit.last_known.observed_at_tick.value),
+                )
+            if began_local_transaction:
+                self._conn.commit()
+            else:
+                self._finalize_write()
+        except Exception:
+            if began_local_transaction and self._conn.in_transaction:
+                self._conn.rollback()
+            raise
         return copy.deepcopy(status)
 
     def save_all(self, statuses: List[PlayerStatusAggregate]) -> None:
@@ -192,16 +204,28 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
 
     def delete(self, player_id: PlayerId) -> bool:
         self._assert_shared_transaction_active()
+        began_local_transaction = False
+        if self._commits_after_write and not self._conn.in_transaction:
+            self._conn.execute("BEGIN")
+            began_local_transaction = True
         player_id_value = int(player_id)
-        for table_name in (
-            "game_player_navigation_path",
-            "game_player_active_effects",
-            "game_player_pursuit_target_snapshots",
-            "game_player_pursuit_last_known",
-        ):
-            self._conn.execute(f"DELETE FROM {table_name} WHERE player_id = ?", (player_id_value,))
-        cur = self._conn.execute("DELETE FROM game_player_statuses WHERE player_id = ?", (player_id_value,))
-        self._finalize_write()
+        try:
+            for table_name in (
+                "game_player_navigation_path",
+                "game_player_active_effects",
+                "game_player_pursuit_target_snapshots",
+                "game_player_pursuit_last_known",
+            ):
+                self._conn.execute(f"DELETE FROM {table_name} WHERE player_id = ?", (player_id_value,))
+            cur = self._conn.execute("DELETE FROM game_player_statuses WHERE player_id = ?", (player_id_value,))
+            if began_local_transaction:
+                self._conn.commit()
+            else:
+                self._finalize_write()
+        except Exception:
+            if began_local_transaction and self._conn.in_transaction:
+                self._conn.rollback()
+            raise
         return cur.rowcount > 0
 
     def find_all(self) -> List[PlayerStatusAggregate]:
