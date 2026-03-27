@@ -72,6 +72,10 @@ class TestInitGameDbSchema:
         assert "game_skill_specs" in names
         assert "game_dialogue_trees" in names
         assert "game_dialogue_tree_nodes" in names
+        assert "game_sns_users" in names
+        assert "game_sns_posts" in names
+        assert "game_sns_replies" in names
+        assert "game_sns_notifications" in names
         assert "trade_read_models" in names
         assert "trade_detail_read_models" in names
         assert "personal_trade_listing_read_models" in names
@@ -82,7 +86,7 @@ class TestInitGameDbSchema:
         )
         applied = {row[0]: row[1] for row in cur.fetchall()}
         assert applied == {
-            "game_write": 19,
+            "game_write": 20,
             "global_market_listing_read_model": 1,
             "personal_trade_listing_read_model": 1,
             "trade_detail_read_model": 1,

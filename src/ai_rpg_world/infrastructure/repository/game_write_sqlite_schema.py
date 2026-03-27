@@ -544,6 +544,229 @@ def _migration_v19(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migration_v20(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_sns_users (
+            user_id INTEGER PRIMARY KEY NOT NULL,
+            user_name TEXT NOT NULL UNIQUE,
+            display_name TEXT NOT NULL,
+            bio TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_sns_follows (
+            follower_user_id INTEGER NOT NULL,
+            followee_user_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (follower_user_id, followee_user_id)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_sns_blocks (
+            blocker_user_id INTEGER NOT NULL,
+            blocked_user_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (blocker_user_id, blocked_user_id)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_sns_subscriptions (
+            subscriber_user_id INTEGER NOT NULL,
+            subscribed_user_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (subscriber_user_id, subscribed_user_id)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_sns_posts (
+            post_id INTEGER PRIMARY KEY NOT NULL,
+            author_user_id INTEGER NOT NULL,
+            content TEXT NOT NULL,
+            visibility TEXT NOT NULL,
+            deleted INTEGER NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_sns_post_hashtags (
+            post_id INTEGER NOT NULL,
+            hashtag TEXT NOT NULL,
+            PRIMARY KEY (post_id, hashtag)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_sns_post_likes (
+            post_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (post_id, user_id)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_sns_post_mentions (
+            post_id INTEGER NOT NULL,
+            user_name TEXT NOT NULL,
+            PRIMARY KEY (post_id, user_name)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_sns_replies (
+            reply_id INTEGER PRIMARY KEY NOT NULL,
+            author_user_id INTEGER NOT NULL,
+            parent_post_id INTEGER,
+            parent_reply_id INTEGER,
+            content TEXT NOT NULL,
+            visibility TEXT NOT NULL,
+            deleted INTEGER NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_sns_reply_hashtags (
+            reply_id INTEGER NOT NULL,
+            hashtag TEXT NOT NULL,
+            PRIMARY KEY (reply_id, hashtag)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_sns_reply_likes (
+            reply_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (reply_id, user_id)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_sns_reply_mentions (
+            reply_id INTEGER NOT NULL,
+            user_name TEXT NOT NULL,
+            PRIMARY KEY (reply_id, user_name)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_sns_notifications (
+            notification_id INTEGER PRIMARY KEY NOT NULL,
+            user_id INTEGER NOT NULL,
+            notification_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            actor_user_id INTEGER NOT NULL,
+            actor_user_name TEXT NOT NULL,
+            related_post_id INTEGER,
+            related_reply_id INTEGER,
+            content_type TEXT,
+            content_text TEXT,
+            created_at TEXT NOT NULL,
+            is_read INTEGER NOT NULL,
+            expires_at TEXT
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_game_sns_follows_followee
+            ON game_sns_follows(followee_user_id, follower_user_id)
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_game_sns_blocks_blocked
+            ON game_sns_blocks(blocked_user_id, blocker_user_id)
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_game_sns_subscriptions_subscribed
+            ON game_sns_subscriptions(subscribed_user_id, subscriber_user_id)
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_game_sns_posts_author_created
+            ON game_sns_posts(author_user_id, created_at DESC, post_id DESC)
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_game_sns_post_hashtags_hashtag
+            ON game_sns_post_hashtags(hashtag, post_id)
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_game_sns_post_mentions_user
+            ON game_sns_post_mentions(user_name, post_id)
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_game_sns_post_likes_user
+            ON game_sns_post_likes(user_id, post_id)
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_game_sns_replies_parent_post_created
+            ON game_sns_replies(parent_post_id, created_at DESC, reply_id DESC)
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_game_sns_replies_parent_reply_created
+            ON game_sns_replies(parent_reply_id, created_at DESC, reply_id DESC)
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_game_sns_replies_author_created
+            ON game_sns_replies(author_user_id, created_at DESC, reply_id DESC)
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_game_sns_reply_mentions_user
+            ON game_sns_reply_mentions(user_name, reply_id)
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_game_sns_reply_likes_user
+            ON game_sns_reply_likes(user_id, reply_id)
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_game_sns_notifications_user_created
+            ON game_sns_notifications(user_id, created_at DESC, notification_id DESC)
+        """
+    )
+
+
 _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=1, apply=_migration_v1),
     SqliteMigration(version=2, apply=_migration_v2),
@@ -564,6 +787,7 @@ _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=17, apply=_migration_v17),
     SqliteMigration(version=18, apply=_migration_v18),
     SqliteMigration(version=19, apply=_migration_v19),
+    SqliteMigration(version=20, apply=_migration_v20),
 )
 
 

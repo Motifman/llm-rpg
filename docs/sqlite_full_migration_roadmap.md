@@ -131,7 +131,15 @@
 - `SnsNotificationRepository`
 
 状態:
-- 未着手
+- 完了
+
+進捗:
+- `UserRepository` を SQLite 化済み
+- `PostRepository` を SQLite 化済み
+- `ReplyRepository` を SQLite 化済み
+- `SnsNotificationRepository` を SQLite 化済み
+- SNS 向け SQLite wiring を追加済み
+- SNS は relation table ベースで実装し、`pickle` / BLOB snapshot を使わない方針で着手済み
 
 ### Phase 8: in-memory 依存除去
 
