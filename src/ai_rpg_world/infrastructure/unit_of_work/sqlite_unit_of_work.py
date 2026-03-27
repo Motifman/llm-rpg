@@ -148,6 +148,13 @@ class SqliteUnitOfWork(UnitOfWork):
     def clear_committed_events(self) -> None:
         self._committed_events.clear()
 
+    def is_in_transaction(self) -> bool:
+        return self._in_transaction
+
+    def execute_pending_operations(self) -> None:
+        """`SyncEventDispatcher` / InMemory UoW との整合。SQLite は即時 SQL のため保留なし。"""
+        return
+
     def __enter__(self) -> SqliteUnitOfWork:
         self.begin()
         return self

@@ -10,10 +10,10 @@ branch: codex/sqlite-repository-transaction-alignment
 
 # Current State
 
-- Active phase: **なし**（Phase 5 完了、次は Phase 6）
-- Last completed phase: **Phase 5**（書き込み集約向け transaction seam の文書化＋SQLite UoW の可視性テスト）
-- Next recommended action: Phase 6（書き込み集約系 SQLite パイロット）
-- Handoff summary: `PLAN.md` に Phase 5 採用方針（共有接続での即時 SQL、UoW は commit のみ、InMemory の pending と対応する「同一接続内の未コミット read」）と代替案を固定した。`test_sqlite_unit_of_work` に同一接続が未コミット INSERT を即座に読めること、およびファイル DB で別接続が未コミット行を読めないことを検証するテストを追加。Phase 4 までの Handoff（Trade／Shop／SNS／Quest のイベント完結・SQLite API 整理）はそのまま下層として維持。
+- Active phase: **なし**（Phase 6 まで完了）
+- Last completed phase: **Phase 6**（Trade コマンド経路の 5 書き込み SQLite リポジトリ＋統合テスト）
+- Next recommended action: アプリ wiring で `GAME_DB_PATH` 時に Trade を SQLite 束へ切替（チェックリスト Follow-up）／他集約の横展開
+- Handoff summary: `game_write_sqlite_schema`・`sqlite_*_write_repository`・`trade_command_sqlite_wiring`・`create_sqlite_scope_with_event_publisher` で Trade 用ドメイン書き込みを単一接続＋`SqliteUnitOfWork`＋`TransactionalScope` に載せた。Python sqlite3 の **DML 暗黙トランザクション**対策として、scope 外では `_finalize_write` が `commit`、scope 内では UoW に委譲。スキーマ初期化でのシーケンス INSERT をやめ、`allocate_sequence_value` に一本化。`PlayerStatus` は当面 pickle BLOB（インフラ層）。`TestTradeCommandServiceSqlite` が親クラス 38 テスト＋採番 rollback を網羅。
 
 # Phase Journal
 
@@ -106,3 +106,19 @@ branch: codex/sqlite-repository-transaction-alignment
 - Scope delta: Phase 5 を「設計固定＋契約テスト」に留め、書き込み集約パイロットは Phase 6 に分離したまま。
 - Handoff summary: 上記 Current State と同じ。
 - Next-phase impact: Phase 6 で採用 seam に沿った最初の書き込み SQLite リポジトリを選び、parity／rollback を追加する。
+
+## Phase 6
+
+- Started: 2026-03-27
+- Completed: 2026-03-27
+- Tests: `pytest tests/application/trade/services/test_trade_command_service_sqlite.py tests/application/trade/services/test_trade_command_service.py -q` → **58 passed**
+- Findings:
+  - Python 3.10 の sqlite3 は、共有モードで `commit` しない DML のあと **暗黙トランザクションが開いたまま**になり、次の `BEGIN` と衝突する。対策: UoW 外では書き込み後に `commit`（`_finalize_write`）、シーケンス用 INSERT はスキーマ init から分離。
+  - `SyncEventDispatcher` は `execute_pending_operations` を呼ぶため、`SqliteUnitOfWork` に空実装を追加。
+  - トランザクション外シードでは `add_events_from_aggregate` を呼ばない（`TransactionalScope.is_in_transaction` で判定）。
+- Plan revision check: **変更不要**。Phase 6 をユーザー合意どおり「Trade 5 リポジトリまで」で完結。アプリ全体 wiring は CHECKLIST の Follow-up に明記。
+- User approval: PLAN 本文の Phase 6 scope 拡張（5 リポジトリ・採番 rollback）は実装に反映済み。
+- Plan updates: `PLAN.md` Phase 6 Scope と Change Log を更新。
+- Goal check: 書き込み集約の SQLite 実証・横展開雛形・チェックリスト更新を充足。
+- Scope delta: `PlayerStatus` の pickle 永続化は正規化スキーマより先にパイロット速度を優先（CHECKLIST に Follow-up 記載）。
+- Handoff summary: 上記 Current State と同じ。
