@@ -32,7 +32,7 @@ def create_global_market_listing_read_model_repository_from_path(
     path = str(Path(db_path).expanduser().resolve())
     ensure_parent_dir(path)
     conn = sqlite3.connect(path)
-    return SqliteGlobalMarketListingReadModelRepository(conn)
+    return SqliteGlobalMarketListingReadModelRepository.for_standalone_connection(conn)
 
 
 def create_global_market_listing_read_model_repository_from_env(

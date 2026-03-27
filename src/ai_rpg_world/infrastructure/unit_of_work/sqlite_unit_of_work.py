@@ -3,7 +3,7 @@ SqliteUnitOfWork — 1 UoW スコープで 1 つの sqlite3.Connection とトラ
 
 `begin` / `commit` / `rollback` を SQLite のトランザクションに対応付け、参加リポジトリは
 `connection` プロパティ経由で同一 Connection を使う。リポジトリ側の `commit()` は
-`autocommit=False` 等で抑止し、永続化の確定は UoW の `commit` に任せる。
+ReadModel 等は `Sqlite*Repository.for_shared_unit_of_work(connection)` で共有し、永続化の確定は UoW の `commit` に任せる。
 
 イベント関連 API は `UnitOfWork` Protocol および `TransactionalScope` との整合のため
 `InMemoryUnitOfWork` と同形の状態を保持する（同期 dispatcher は任意注入）。

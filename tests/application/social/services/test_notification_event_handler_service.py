@@ -17,8 +17,6 @@ from ai_rpg_world.domain.sns.event import (
 )
 from ai_rpg_world.domain.sns.value_object import UserId, PostId, ReplyId, PostContent, Mention
 from ai_rpg_world.domain.sns.value_object.notification_type import NotificationType
-from ai_rpg_world.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
-from ai_rpg_world.infrastructure.repository.in_memory_reply_repository import InMemoryReplyRepository
 from ai_rpg_world.infrastructure.repository.in_memory_sns_notification_repository import InMemorySnsNotificationRepository
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
@@ -51,25 +49,11 @@ class TestNotificationEventHandlerService:
         return InMemorySnsNotificationRepository(data_store, unit_of_work)
 
     @pytest.fixture
-    def post_repository(self, data_store, unit_of_work_factory):
-        """テスト用のPostRepository"""
-        unit_of_work = unit_of_work_factory.create()
-        return InMemoryPostRepository(data_store, unit_of_work)
-
-    @pytest.fixture
-    def reply_repository(self, data_store, unit_of_work_factory):
-        """テスト用のReplyRepository"""
-        unit_of_work = unit_of_work_factory.create()
-        return InMemoryReplyRepository(data_store, unit_of_work)
-
-    @pytest.fixture
-    def service(self, user_repository, notification_repository, post_repository, reply_repository, unit_of_work_factory):
+    def service(self, user_repository, notification_repository, unit_of_work_factory):
         """テスト用のNotificationEventHandlerService"""
         return NotificationEventHandlerService(
             user_repository=user_repository,
             notification_repository=notification_repository,
-            post_repository=post_repository,
-            reply_repository=reply_repository,
             unit_of_work_factory=unit_of_work_factory
         )
 
@@ -94,7 +78,8 @@ class TestNotificationEventHandlerService:
             aggregate_id=user2.user_id,
             aggregate_type="UserAggregate",
             subscriber_user_id=user1.user_id,
-            subscribed_user_id=user2.user_id
+            subscribed_user_id=user2.user_id,
+            subscriber_display_name=user1.profile.display_name,
         )
 
         # 実行前の通知数を確認
@@ -161,7 +146,8 @@ class TestNotificationEventHandlerService:
             aggregate_id=user2.user_id,
             aggregate_type="UserAggregate",
             follower_user_id=user1.user_id,
-            followee_user_id=user2.user_id
+            followee_user_id=user2.user_id,
+            follower_display_name=user1.profile.display_name,
         )
 
         # 実行前の通知数を確認
@@ -258,7 +244,10 @@ class TestNotificationEventHandlerService:
             post_id=PostId(1),
             author_user_id=user1.user_id,
             content=PostContent(f"テスト @{user2.profile.display_name}"),
-            mentions=mentions
+            mentions=mentions,
+            author_display_name=user1.profile.display_name,
+            mentioned_user_ids=frozenset({user2.user_id}),
+            subscriber_user_ids=frozenset({user2.user_id}),
         )
 
         # 実行前の通知数を確認
@@ -299,7 +288,10 @@ class TestNotificationEventHandlerService:
             post_id=PostId(1),
             author_user_id=user1.user_id,
             content=PostContent(f"テスト @{user1.profile.display_name}"),
-            mentions=mentions
+            mentions=mentions,
+            author_display_name=user1.profile.display_name,
+            mentioned_user_ids=frozenset(),
+            subscriber_user_ids=frozenset(),
         )
 
         # 実行前の通知数を確認
@@ -321,7 +313,10 @@ class TestNotificationEventHandlerService:
             post_id=PostId(1),
             author_user_id=user1.user_id,
             content=PostContent("テスト @nonexistent_user"),
-            mentions=mentions
+            mentions=mentions,
+            author_display_name=user1.profile.display_name,
+            mentioned_user_ids=frozenset(),
+            subscriber_user_ids=frozenset(),
         )
 
         # 実行前の通知数を確認（該当ユーザーなし）
@@ -350,7 +345,8 @@ class TestNotificationEventHandlerService:
             aggregate_id=user2.user_id,
             aggregate_type="UserAggregate",
             follower_user_id=user1.user_id,
-            followee_user_id=user2.user_id
+            followee_user_id=user2.user_id,
+            follower_display_name=user1.profile.display_name,
         )
         service.handle_user_followed(follow_event)
 
@@ -485,7 +481,9 @@ class TestNotificationEventHandlerService:
             content=PostContent(reply_content_text),
             mentions=mentions,
             parent_post_id=PostId(1),  # ポストへの返信
-            parent_author_id=user2.user_id  # 親ポストの作成者
+            parent_author_id=user2.user_id,  # 親ポストの作成者
+            author_display_name=user1.profile.display_name,
+            mentioned_user_ids=frozenset({user2.user_id}),
         )
 
         # 実行前の通知数を確認
@@ -519,7 +517,9 @@ class TestNotificationEventHandlerService:
             content=PostContent("自分への返信"),
             mentions=set(),
             parent_post_id=PostId(1),  # ポストへの返信
-            parent_author_id=user1.user_id  # 自分自身のポスト
+            parent_author_id=user1.user_id,  # 自分自身のポスト
+            author_display_name=user1.profile.display_name,
+            mentioned_user_ids=frozenset(),
         )
 
         # 実行前の通知数を確認
@@ -558,26 +558,11 @@ class TestNotificationEventHandlerServiceImprovements:
         return InMemorySnsNotificationRepository(data_store, unit_of_work)
 
     @pytest.fixture
-    def post_repository(self, data_store, unit_of_work_factory):
-        """テスト用のPostRepository"""
-        unit_of_work = unit_of_work_factory.create()
-        return InMemoryPostRepository(data_store, unit_of_work)
-
-    @pytest.fixture
-    def reply_repository(self, data_store, unit_of_work_factory):
-        """テスト用のReplyRepository"""
-        unit_of_work = unit_of_work_factory.create()
-        return InMemoryReplyRepository(data_store, unit_of_work)
-
-
-    @pytest.fixture
-    def service(self, user_repository, notification_repository, post_repository, reply_repository, unit_of_work_factory):
+    def service(self, user_repository, notification_repository, unit_of_work_factory):
         """テスト用のNotificationEventHandlerService"""
         return NotificationEventHandlerService(
             user_repository=user_repository,
             notification_repository=notification_repository,
-            post_repository=post_repository,
-            reply_repository=reply_repository,
             unit_of_work_factory=unit_of_work_factory
         )
 
@@ -729,7 +714,8 @@ class TestNotificationEventHandlerServiceImprovements:
                 aggregate_id=user2.user_id,
                 aggregate_type="UserAggregate",
                 follower_user_id=user1.user_id,
-                followee_user_id=user2.user_id
+                followee_user_id=user2.user_id,
+                follower_display_name=user1.profile.display_name,
             )
         ]
 

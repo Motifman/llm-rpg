@@ -19,6 +19,11 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.shop.value_object.shop_listing_projection import ShopListingProjection
+
+
+def _sample_listing_projection() -> ShopListingProjection:
+    return ShopListingProjection(item_name="item", item_spec_id=1, quantity=1)
 
 
 class TestShopAggregate:
@@ -110,6 +115,9 @@ class TestShopAggregate:
             assert events[0].spot_id == spot_id
             assert events[0].location_area_id == location_area_id
             assert events[0].owner_id == owner_id
+            assert events[0].name == ""
+            assert events[0].description == ""
+            assert events[0].owner_ids == (owner_id,)
 
         def test_create_event_contains_all_fields(
             self,
@@ -133,6 +141,9 @@ class TestShopAggregate:
             assert event.spot_id == spot_id
             assert event.location_area_id == location_area_id
             assert event.owner_id == owner_id
+            assert event.name == ""
+            assert event.description == ""
+            assert event.owner_ids == (owner_id,)
             assert hasattr(event, "occurred_at")
             assert hasattr(event, "event_id")
 
@@ -167,6 +178,7 @@ class TestShopAggregate:
                 item_instance_id=item_id,
                 price_per_unit=price,
                 listed_by=owner_id,
+                listing_projection=_sample_listing_projection(),
             )
             assert listing_id in shop.listings
             listing = shop.get_listing(listing_id)
@@ -193,6 +205,7 @@ class TestShopAggregate:
                     item_instance_id=item_id,
                     price_per_unit=price,
                     listed_by=other_player_id,
+                    listing_projection=_sample_listing_projection(),
                 )
 
         def test_list_item_event_contains_all_fields(
@@ -210,6 +223,7 @@ class TestShopAggregate:
                 item_instance_id=item_id,
                 price_per_unit=price,
                 listed_by=owner_id,
+                listing_projection=_sample_listing_projection(),
             )
             events = shop.get_events()
             event = events[0]
@@ -220,6 +234,7 @@ class TestShopAggregate:
             assert event.item_instance_id == item_id
             assert event.price_per_unit == price
             assert event.listed_by == owner_id
+            assert event.listing_projection == _sample_listing_projection()
             assert hasattr(event, "occurred_at")
             assert hasattr(event, "event_id")
 
@@ -239,6 +254,7 @@ class TestShopAggregate:
                 item_instance_id=item_id,
                 price_per_unit=ShopListingPrice.of(50),
                 listed_by=owner_id,
+                listing_projection=_sample_listing_projection(),
             )
             shop.clear_events()
             shop.unlist_item(listing_id, owner_id)
@@ -260,6 +276,7 @@ class TestShopAggregate:
                 item_instance_id=ItemInstanceId(100),
                 price_per_unit=ShopListingPrice.of(50),
                 listed_by=owner_id,
+                listing_projection=_sample_listing_projection(),
             )
             with pytest.raises(NotShopOwnerException):
                 shop.unlist_item(listing_id, other_player_id)
@@ -285,6 +302,7 @@ class TestShopAggregate:
                 item_instance_id=ItemInstanceId(100),
                 price_per_unit=ShopListingPrice.of(50),
                 listed_by=owner_id,
+                listing_projection=_sample_listing_projection(),
             )
             shop.clear_events()
             shop.unlist_item(listing_id, owner_id)
@@ -293,6 +311,8 @@ class TestShopAggregate:
             assert isinstance(event, ShopItemUnlistedEvent)
             assert event.aggregate_id == shop.shop_id
             assert event.aggregate_type == "ShopAggregate"
+            assert event.spot_id == shop.spot_id
+            assert event.location_area_id == shop.location_area_id
             assert event.listing_id == listing_id
             assert event.unlisted_by == owner_id
             assert hasattr(event, "occurred_at")
@@ -315,6 +335,7 @@ class TestShopAggregate:
                 item_instance_id=item_id,
                 price_per_unit=ShopListingPrice.of(50),
                 listed_by=owner_id,
+                listing_projection=_sample_listing_projection(),
             )
             shop.clear_events()
             shop.record_purchase(
@@ -342,6 +363,7 @@ class TestShopAggregate:
                 item_instance_id=item_id,
                 price_per_unit=price,
                 listed_by=owner_id,
+                listing_projection=_sample_listing_projection(),
             )
             shop.clear_events()
             shop.record_purchase(
@@ -393,6 +415,7 @@ class TestShopAggregate:
                 item_instance_id=ItemInstanceId(100),
                 price_per_unit=ShopListingPrice.of(50),
                 listed_by=owner_id,
+                listing_projection=_sample_listing_projection(),
             )
             shop.remove_listing(listing_id)
             assert shop.get_listing(listing_id) is None
@@ -418,6 +441,7 @@ class TestShopAggregate:
                 item_instance_id=item_id,
                 price_per_unit=ShopListingPrice.of(50),
                 listed_by=owner_id,
+                listing_projection=_sample_listing_projection(),
             )
             listing = shop.get_listing(listing_id)
             assert listing is not None

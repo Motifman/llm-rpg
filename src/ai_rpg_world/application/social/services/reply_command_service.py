@@ -134,9 +134,24 @@ class ReplyCommandService:
             elif parent_reply is not None:
                 parent_author_id = parent_reply.author_user_id
 
+            mentioned_ids: set[UserId] = set()
+            for name in PostContent.extract_mention_display_names(reply_content.content):
+                u = self._user_repository.find_by_display_name(name)
+                if u is not None:
+                    mentioned_ids.add(u.user_id)
+
             # ReplyAggregateの作成
             reply_id = self._reply_repository.generate_reply_id()
-            reply_aggregate = ReplyAggregate.create(reply_id, parent_post_id, parent_reply_id, parent_author_id, UserId(command.user_id), reply_content)
+            reply_aggregate = ReplyAggregate.create(
+                reply_id,
+                parent_post_id,
+                parent_reply_id,
+                parent_author_id,
+                UserId(command.user_id),
+                reply_content,
+                author_display_name=user_aggregate.profile.display_name,
+                mentioned_user_ids=frozenset(mentioned_ids),
+            )
 
             # リプライを保存
             self._reply_repository.save(reply_aggregate)
@@ -183,7 +198,10 @@ class ReplyCommandService:
                 raise ReplyNotFoundForCommandException(command.reply_id, "like_reply")
 
             # いいね実行
-            reply_aggregate.like_reply(UserId(command.user_id))
+            reply_aggregate.like_reply(
+                UserId(command.user_id),
+                liker_display_name=user_aggregate.profile.display_name,
+            )
 
             # リプライを保存
             self._reply_repository.save(reply_aggregate)

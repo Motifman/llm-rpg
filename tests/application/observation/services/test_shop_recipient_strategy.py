@@ -26,6 +26,7 @@ from ai_rpg_world.domain.shop.event.shop_event import (
 from ai_rpg_world.domain.shop.value_object.shop_id import ShopId
 from ai_rpg_world.domain.shop.value_object.shop_listing_id import ShopListingId
 from ai_rpg_world.domain.shop.value_object.shop_listing_price import ShopListingPrice
+from ai_rpg_world.domain.shop.value_object.shop_listing_projection import ShopListingProjection
 from ai_rpg_world.domain.world.value_object.location_area_id import LocationAreaId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -38,6 +39,10 @@ from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository i
 def _make_audience_query(status_repo: PlayerStatusRepository) -> PlayerAudienceQueryService:
     """テスト用 PlayerAudienceQueryService"""
     return PlayerAudienceQueryService(player_status_repository=status_repo)
+
+
+def _lp() -> ShopListingProjection:
+    return ShopListingProjection(item_name="i", item_spec_id=1, quantity=1)
 
 
 class TestShopRecipientStrategyNormal:
@@ -69,6 +74,9 @@ class TestShopRecipientStrategyNormal:
             spot_id=SpotId(10),
             location_area_id=LocationAreaId(1),
             owner_id=PlayerId(1),
+            name="",
+            description="",
+            owner_ids=(PlayerId(1),),
         )
         result = strategy.resolve(event)
         assert len(result) == 3
@@ -98,63 +106,64 @@ class TestShopRecipientStrategyNormal:
         assert result[1].value == 3
         assert {p.value for p in result} == {3, 5}
 
-    def test_shop_item_listed_returns_players_at_spot_when_shop_found(self, audience_query):
-        """ShopItemListedEvent: ショップが見つかるとそのスポットのプレイヤーが配信先"""
-        shop_repo = MagicMock()
-        shop = MagicMock()
-        shop.spot_id = SpotId(7)
-        shop_repo.find_by_id.return_value = shop
+    def test_shop_item_listed_returns_players_at_spot_from_event(self, audience_query):
+        """ShopItemListedEvent: イベント上の spot で観測配信先を解決する"""
         audience_query = MagicMock()
         audience_query.players_at_spot.return_value = [PlayerId(1), PlayerId(2), PlayerId(4)]
         strategy = ShopRecipientStrategy(
             observed_event_registry=ObservedEventRegistry(),
             player_audience_query=audience_query,
-            shop_repository=shop_repo,
         )
         event = ShopItemListedEvent.create(
             aggregate_id=ShopId(1),
             aggregate_type="ShopAggregate",
+            spot_id=SpotId(7),
+            location_area_id=LocationAreaId(1),
             listing_id=ShopListingId(1),
             item_instance_id=ItemInstanceId(1),
             price_per_unit=ShopListingPrice.of(100),
             listed_by=PlayerId(1),
+            listing_projection=_lp(),
         )
         result = strategy.resolve(event)
         assert len(result) == 3
         assert {p.value for p in result} == {1, 2, 4}
         audience_query.players_at_spot.assert_called_once_with(SpotId(7))
 
-    def test_shop_item_unlisted_returns_listed_by_when_shop_not_found(self, audience_query):
-        """ShopItemUnlistedEvent: ショップが見つからないときは unlisted_by のみ"""
-        shop_repo = MagicMock()
-        shop_repo.find_by_id.return_value = None
+    def test_shop_item_unlisted_uses_event_spot(self, audience_query):
+        """ShopItemUnlistedEvent: イベントの spot で観測配信先を解決する"""
+        audience_query = MagicMock()
+        audience_query.players_at_spot.return_value = [PlayerId(3), PlayerId(9)]
         strategy = ShopRecipientStrategy(
             observed_event_registry=ObservedEventRegistry(),
             player_audience_query=audience_query,
-            shop_repository=shop_repo,
         )
         event = ShopItemUnlistedEvent.create(
             aggregate_id=ShopId(99),
             aggregate_type="ShopAggregate",
+            spot_id=SpotId(42),
+            location_area_id=LocationAreaId(1),
             listing_id=ShopListingId(1),
             unlisted_by=PlayerId(3),
         )
         result = strategy.resolve(event)
-        assert len(result) == 1
-        assert result[0].value == 3
+        assert len(result) == 2
+        assert {p.value for p in result} == {3, 9}
+        audience_query.players_at_spot.assert_called_once_with(SpotId(42))
 
-    def test_shop_closed_returns_closed_by_when_shop_not_found(self, audience_query):
-        """ShopClosedEvent: ショップが見つからないときは closed_by のみ"""
-        shop_repo = MagicMock()
-        shop_repo.find_by_id.return_value = None
+    def test_shop_closed_uses_event_spot(self, audience_query):
+        """ShopClosedEvent: イベントの spot で観測配信先を解決する"""
+        audience_query = MagicMock()
+        audience_query.players_at_spot.return_value = [PlayerId(5)]
         strategy = ShopRecipientStrategy(
             observed_event_registry=ObservedEventRegistry(),
             player_audience_query=audience_query,
-            shop_repository=shop_repo,
         )
         event = ShopClosedEvent.create(
             aggregate_id=ShopId(99),
             aggregate_type="ShopAggregate",
+            spot_id=SpotId(8),
+            location_area_id=LocationAreaId(2),
             closed_by=PlayerId(5),
         )
         result = strategy.resolve(event)
@@ -177,47 +186,6 @@ class TestShopRecipientStrategyExceptions:
     def audience_query(self, status_repo):
         return _make_audience_query(status_repo)
 
-    def test_spot_id_from_shop_returns_none_when_repository_none(self, audience_query):
-        """_spot_id_from_shop: リポジトリが None のとき None"""
-        strategy = ShopRecipientStrategy(
-            observed_event_registry=ObservedEventRegistry(),
-            player_audience_query=audience_query,
-            shop_repository=None,
-        )
-        event = ShopItemListedEvent.create(
-            aggregate_id=ShopId(1),
-            aggregate_type="ShopAggregate",
-            listing_id=ShopListingId(1),
-            item_instance_id=ItemInstanceId(1),
-            price_per_unit=ShopListingPrice.of(100),
-            listed_by=PlayerId(1),
-        )
-        result = strategy.resolve(event)
-        assert len(result) == 1
-        assert result[0].value == 1
-
-    def test_resolve_propagates_repository_exception(self, audience_query):
-        """resolve: リポジトリが例外を投げた場合、その例外が伝播する"""
-        shop_repo = MagicMock()
-        shop_repo.find_by_id.side_effect = RuntimeError("Shop find failed")
-        audience_query = MagicMock()
-        audience_query.players_at_spot.return_value = []
-        strategy = ShopRecipientStrategy(
-            observed_event_registry=ObservedEventRegistry(),
-            player_audience_query=audience_query,
-            shop_repository=shop_repo,
-        )
-        event = ShopItemListedEvent.create(
-            aggregate_id=ShopId(1),
-            aggregate_type="ShopAggregate",
-            listing_id=ShopListingId(1),
-            item_instance_id=ItemInstanceId(1),
-            price_per_unit=ShopListingPrice.of(100),
-            listed_by=PlayerId(1),
-        )
-        with pytest.raises(RuntimeError, match="Shop find failed"):
-            strategy.resolve(event)
-
     def test_shop_created_with_empty_players_at_spot_returns_owner_only(self, audience_query):
         """ShopCreatedEvent: 同一スポットに他プレイヤーがいないときオーナーのみ"""
         audience_query = MagicMock()
@@ -232,6 +200,9 @@ class TestShopRecipientStrategyExceptions:
             spot_id=SpotId(10),
             location_area_id=LocationAreaId(1),
             owner_id=PlayerId(1),
+            name="",
+            description="",
+            owner_ids=(PlayerId(1),),
         )
         result = strategy.resolve(event)
         assert len(result) == 1
@@ -256,6 +227,9 @@ class TestShopRecipientStrategySupports:
             spot_id=SpotId(1),
             location_area_id=LocationAreaId(1),
             owner_id=PlayerId(1),
+            name="",
+            description="",
+            owner_ids=(PlayerId(1),),
         )
         assert strategy.supports(event) is True
 

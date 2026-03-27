@@ -153,7 +153,7 @@ class TestPersonalTradeListingParity:
         db = tmp_path / "g.db"
         conn = sqlite3.connect(str(db))
         conn.row_factory = sqlite3.Row
-        sql = SqlitePersonalTradeListingReadModelRepository(conn)
+        sql = SqlitePersonalTradeListingReadModelRepository.for_standalone_connection(conn)
 
         p1 = PlayerId(1)
         models = [
@@ -214,7 +214,7 @@ class TestTradeDetailParity:
         mem.clear()
         conn = sqlite3.connect(str(tmp_path / "d.db"))
         conn.row_factory = sqlite3.Row
-        sql = SqliteTradeDetailReadModelRepository(conn)
+        sql = SqliteTradeDetailReadModelRepository.for_standalone_connection(conn)
 
         d1 = _detail(1, status=TradeStatus.COMPLETED)
         mem.save(d1)
@@ -233,7 +233,7 @@ class TestGlobalMarketParity:
         mem.clear()
         conn = sqlite3.connect(str(tmp_path / "m.db"))
         conn.row_factory = sqlite3.Row
-        sql = SqliteGlobalMarketListingReadModelRepository(conn)
+        sql = SqliteGlobalMarketListingReadModelRepository.for_standalone_connection(conn)
 
         rows = [
             _global(1, created=T0 + timedelta(hours=1), name="alpha sword", gold=100),

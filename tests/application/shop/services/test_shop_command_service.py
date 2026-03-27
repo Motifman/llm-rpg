@@ -51,6 +51,7 @@ from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.shop.value_object.shop_listing_price import ShopListingPrice
+from ai_rpg_world.domain.shop.value_object.shop_listing_projection import ShopListingProjection
 
 from ai_rpg_world.infrastructure.repository.in_memory_shop_repository import InMemoryShopRepository
 from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repository import (
@@ -70,6 +71,14 @@ from ai_rpg_world.infrastructure.repository.in_memory_location_establishment_rep
 )
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
+
+
+def _listing_proj_from_item(item: ItemAggregate) -> ShopListingProjection:
+    return ShopListingProjection.from_item(item.item_instance)
+
+
+def _dummy_listing_projection() -> ShopListingProjection:
+    return ShopListingProjection(item_name="item", item_spec_id=1, quantity=1)
 
 
 def _create_player_status(player_id: int, gold: int = 1000, spot_id: int = None, coord: Coordinate = None):
@@ -435,6 +444,7 @@ class TestShopCommandService:
             item_instance_id=item_id,
             price_per_unit=ShopListingPrice.of(20),
             listed_by=PlayerId(owner_id),
+            listing_projection=_listing_proj_from_item(item),
         )
         s["shop_repo"].save(shop)
 
@@ -495,6 +505,7 @@ class TestShopCommandService:
             item_instance_id=ItemInstanceId(100),
             price_per_unit=ShopListingPrice.of(20),
             listed_by=PlayerId(1),
+            listing_projection=_dummy_listing_projection(),
         )
         s["shop_repo"].save(shop)
         cmd = UnlistShopItemCommand(
@@ -532,6 +543,7 @@ class TestShopCommandService:
             item_instance_id=item_id,
             price_per_unit=ShopListingPrice.of(50),
             listed_by=PlayerId(owner_id),
+            listing_projection=_listing_proj_from_item(item),
         )
         s["shop_repo"].save(shop)
 
@@ -580,6 +592,7 @@ class TestShopCommandService:
             item_instance_id=item_id,
             price_per_unit=ShopListingPrice.of(50),
             listed_by=PlayerId(owner_id),
+            listing_projection=_listing_proj_from_item(item),
         )
         s["shop_repo"].save(shop)
         s["status_repo"].save(_create_player_status(owner_id, 0))
@@ -620,6 +633,7 @@ class TestShopCommandService:
             item_instance_id=item_id,
             price_per_unit=ShopListingPrice.of(50),
             listed_by=PlayerId(owner_id),
+            listing_projection=_listing_proj_from_item(item),
         )
         s["shop_repo"].save(shop)
         s["status_repo"].save(_create_player_status(owner_id, 0))
@@ -660,6 +674,7 @@ class TestShopCommandService:
             item_instance_id=item_id,
             price_per_unit=ShopListingPrice.of(10),
             listed_by=PlayerId(owner_id),
+            listing_projection=_listing_proj_from_item(item),
         )
         s["shop_repo"].save(shop)
         s["status_repo"].save(_create_player_status(owner_id, 0))
@@ -703,6 +718,7 @@ class TestShopCommandService:
             item_instance_id=ItemInstanceId(1),
             price_per_unit=ShopListingPrice.of(10),
             listed_by=PlayerId(1),
+            listing_projection=_dummy_listing_projection(),
         )
         s["shop_repo"].save(shop)
         cmd = PurchaseFromShopCommand(
@@ -784,6 +800,7 @@ class TestShopCommandService:
             item_instance_id=item_id,
             price_per_unit=ShopListingPrice.of(500),
             listed_by=PlayerId(owner_id),
+            listing_projection=_listing_proj_from_item(item),
         )
         s["shop_repo"].save(shop)
         s["status_repo"].save(_create_player_status(owner_id, 0))

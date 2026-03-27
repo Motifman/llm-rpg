@@ -76,7 +76,7 @@ class TestTradeReadModelRepositoryFactory:
         repo1.save(m)
 
         conn2 = sqlite3.connect(str(db))
-        repo2 = SqliteTradeReadModelRepository(conn2)
+        repo2 = SqliteTradeReadModelRepository.for_standalone_connection(conn2)
         loaded = repo2.find_by_id(TradeId(42))
         assert loaded is not None
         assert loaded.trade_id == 42
@@ -173,7 +173,7 @@ class TestTradeReadModelRepositoryFactory:
         handler.handle_trade_offered(event)
 
         conn2 = sqlite3.connect(str(db))
-        repo2 = SqliteTradeReadModelRepository(conn2)
+        repo2 = SqliteTradeReadModelRepository.for_standalone_connection(conn2)
         read_back = repo2.find_by_id(TradeId(1))
         assert read_back is not None
         assert read_back.seller_name == "Seller"

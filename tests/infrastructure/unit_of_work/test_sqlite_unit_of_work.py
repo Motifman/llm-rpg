@@ -1,5 +1,5 @@
 """
-SqliteUnitOfWork — 接続共有・rollback・Trade ReadModel の autocommit 抑止
+SqliteUnitOfWork — 接続共有・rollback・Trade ReadModel の UoW 共有接続（遅延 commit）
 """
 from __future__ import annotations
 
@@ -116,12 +116,12 @@ class TestSqliteUnitOfWorkConnectionSharing:
 
 
 class TestSqliteUnitOfWorkTradeReadModel:
-    def test_autocommit_false_defers_until_uow_commit(self, tmp_path: Path) -> None:
+    def test_shared_connection_defers_commit_until_uow_commit(self, tmp_path: Path) -> None:
         db = tmp_path / "t.db"
         fac = SqliteUnitOfWorkFactory(db)
         uow = fac.create()
         uow.begin()
-        repo = SqliteTradeReadModelRepository(uow.connection, autocommit=False)
+        repo = SqliteTradeReadModelRepository.for_shared_unit_of_work(uow.connection)
         repo.save(_make_trade(1, 1))
         uow.commit()
 
@@ -133,17 +133,17 @@ class TestSqliteUnitOfWorkTradeReadModel:
         finally:
             conn2.close()
 
-    def test_autocommit_false_rollbacks_trade_row(self, tmp_path: Path) -> None:
+    def test_shared_connection_rollbacks_trade_row(self, tmp_path: Path) -> None:
         db = tmp_path / "t2.db"
         fac = SqliteUnitOfWorkFactory(db)
         # スキーマだけ先にコミットしておく（失敗トランザクションの rollback で DDL まで巻き戻ると後続 SELECT でテーブルが無い）
         with fac.create() as bootstrap:
-            SqliteTradeReadModelRepository(bootstrap.connection, autocommit=False)
+            SqliteTradeReadModelRepository.for_shared_unit_of_work(bootstrap.connection)
 
         uow = fac.create()
         try:
             with uow:
-                repo = SqliteTradeReadModelRepository(uow.connection, autocommit=False)
+                repo = SqliteTradeReadModelRepository.for_shared_unit_of_work(uow.connection)
                 repo.save(_make_trade(99, 1))
                 raise ValueError("fail")
         except ValueError:

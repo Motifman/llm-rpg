@@ -51,6 +51,7 @@ from ai_rpg_world.application.shop.exceptions.command_exception import (
     CannotPartiallyPurchaseException,
     ShopAlreadyExistsAtLocationException,
 )
+from ai_rpg_world.domain.shop.value_object.shop_listing_projection import ShopListingProjection
 
 
 class ShopCommandService:
@@ -207,6 +208,15 @@ class ShopCommandService:
                 SlotId(command.slot_id)
             )
 
+            item = self._item_repository.find_by_id(item_instance_id)
+            if item is None:
+                raise ShopCommandException(
+                    f"Item instance not found after placement: {item_instance_id.value}",
+                    user_id=command.player_id,
+                    shop_id=command.shop_id,
+                )
+            listing_projection = ShopListingProjection.from_item(item.item_instance)
+
             listing_id = self._shop_repository.generate_listing_id()
             price = ShopListingPrice.of(command.price_per_unit)
             shop.list_item(
@@ -214,6 +224,7 @@ class ShopCommandService:
                 item_instance_id=item_instance_id,
                 price_per_unit=price,
                 listed_by=player_id,
+                listing_projection=listing_projection,
             )
 
             self._shop_repository.save(shop)

@@ -83,13 +83,25 @@ def _listing_cursor_sql(cursor: Optional[ListingCursor]) -> Tuple[str, List[Any]
 
 class SqlitePersonalTradeListingReadModelRepository(PersonalTradeListingReadModelRepository):
     def __init__(
-        self, connection: sqlite3.Connection, *, autocommit: bool = True
+        self, connection: sqlite3.Connection, *, _commits_after_write: bool
     ) -> None:
         self._conn = connection
-        self._autocommit = autocommit
+        self._commits_after_write = _commits_after_write
         if connection.row_factory is not sqlite3.Row:
             connection.row_factory = sqlite3.Row
         init_personal_trade_listing_read_model_schema(connection)
+
+    @classmethod
+    def for_standalone_connection(
+        cls, connection: sqlite3.Connection
+    ) -> SqlitePersonalTradeListingReadModelRepository:
+        return cls(connection, _commits_after_write=True)
+
+    @classmethod
+    def for_shared_unit_of_work(
+        cls, connection: sqlite3.Connection
+    ) -> SqlitePersonalTradeListingReadModelRepository:
+        return cls(connection, _commits_after_write=False)
 
     def find_by_id(self, entity_id: TradeId) -> Optional[PersonalTradeListingReadModel]:
         cur = self._conn.execute(
@@ -135,7 +147,7 @@ class SqlitePersonalTradeListingReadModelRepository(PersonalTradeListingReadMode
             """,
             _model_tuple(entity),
         )
-        if self._autocommit:
+        if self._commits_after_write:
             self._conn.commit()
         return entity
 
@@ -144,7 +156,7 @@ class SqlitePersonalTradeListingReadModelRepository(PersonalTradeListingReadMode
             "DELETE FROM personal_trade_listing_read_models WHERE trade_id = ?",
             (int(entity_id),),
         )
-        if self._autocommit:
+        if self._commits_after_write:
             self._conn.commit()
         return cur.rowcount > 0
 

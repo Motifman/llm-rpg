@@ -1427,6 +1427,9 @@ class TestObservationFormatter:
             spot_id=SpotId(1),
             location_area_id=LocationAreaId(1),
             owner_id=PlayerId(3),
+            name="店",
+            description="",
+            owner_ids=(PlayerId(3),),
         )
         created_out = formatter.format(created, PlayerId(1))
         assert created_out is not None
