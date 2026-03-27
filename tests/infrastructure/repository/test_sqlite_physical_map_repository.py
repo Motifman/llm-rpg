@@ -145,9 +145,7 @@ class TestSqlitePhysicalMapRepository:
         from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
             init_game_write_schema,
         )
-        from ai_rpg_world.infrastructure.repository.sqlite_world_state_codec import (
-            physical_map_to_blob,
-        )
+        from ai_rpg_world.infrastructure.repository.sqlite_world_state_codec import area_to_storage
 
         init_game_write_schema(sqlite_conn)
         physical_map = PhysicalMapAggregate.create(
@@ -163,9 +161,40 @@ class TestSqlitePhysicalMapRepository:
                 )
             ],
         )
+        gateway = physical_map.get_all_gateways()[0]
+        area_kind, area_payload_json = area_to_storage(gateway.area)
         sqlite_conn.execute(
-            "INSERT INTO game_physical_maps (spot_id, aggregate_blob) VALUES (?, ?)",
-            (20, physical_map_to_blob(physical_map)),
+            """
+            INSERT INTO game_physical_maps (
+                spot_id, environment_type, weather_type, weather_intensity
+            ) VALUES (?, ?, ?, ?)
+            """,
+            (
+                20,
+                physical_map.environment_type.value,
+                physical_map.weather_state.weather_type.value,
+                physical_map.weather_state.intensity,
+            ),
+        )
+        sqlite_conn.execute(
+            """
+            INSERT INTO game_physical_map_gateways (
+                gateway_id, spot_id, name, is_active, area_kind, area_payload_json,
+                target_spot_id, landing_x, landing_y, landing_z
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                int(gateway.gateway_id),
+                20,
+                gateway.name,
+                1 if gateway.is_active else 0,
+                area_kind,
+                area_payload_json,
+                int(gateway.target_spot_id),
+                gateway.landing_coordinate.x,
+                gateway.landing_coordinate.y,
+                gateway.landing_coordinate.z,
+            ),
         )
         sqlite_conn.commit()
 

@@ -1,23 +1,29 @@
-"""Pickle codec helpers for WeatherZone snapshots."""
+"""Helpers for normalized WeatherZone persistence."""
 
 from __future__ import annotations
 
-import pickle
-
 from ai_rpg_world.domain.world.aggregate.weather_zone import WeatherZone
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
+from ai_rpg_world.domain.world.value_object.weather_zone_id import WeatherZoneId
+from ai_rpg_world.domain.world.value_object.weather_zone_name import WeatherZoneName
 
 
-def weather_zone_to_blob(weather_zone: WeatherZone) -> bytes:
-    return pickle.dumps(weather_zone, protocol=pickle.HIGHEST_PROTOCOL)
+def build_weather_zone(
+    *,
+    zone_id: int,
+    name: str,
+    weather_type: str,
+    intensity: float,
+    spot_ids: list[int],
+) -> WeatherZone:
+    return WeatherZone(
+        zone_id=WeatherZoneId(zone_id),
+        name=WeatherZoneName(name),
+        spot_ids={SpotId(spot_id) for spot_id in spot_ids},
+        current_state=WeatherState(WeatherTypeEnum(weather_type), intensity),
+    )
 
 
-def blob_to_weather_zone(blob: bytes) -> WeatherZone:
-    aggregate = pickle.loads(blob)
-    if not isinstance(aggregate, WeatherZone):
-        raise TypeError(
-            "game_weather_zones.aggregate_blob does not contain a WeatherZone instance"
-        )
-    return aggregate
-
-
-__all__ = ["blob_to_weather_zone", "weather_zone_to_blob"]
+__all__ = ["build_weather_zone"]

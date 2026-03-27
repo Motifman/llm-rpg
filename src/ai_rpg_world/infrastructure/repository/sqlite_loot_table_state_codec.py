@@ -1,23 +1,24 @@
-"""Pickle codec helpers for LootTableAggregate snapshots."""
+"""Helpers for normalized loot table persistence."""
 
 from __future__ import annotations
 
-import pickle
-
-from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import LootTableAggregate
-
-
-def loot_table_to_blob(table: LootTableAggregate) -> bytes:
-    return pickle.dumps(table, protocol=pickle.HIGHEST_PROTOCOL)
+from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import LootEntry, LootTableAggregate
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 
 
-def blob_to_loot_table(blob: bytes) -> LootTableAggregate:
-    table = pickle.loads(blob)
-    if not isinstance(table, LootTableAggregate):
-        raise TypeError(
-            "game_loot_tables.aggregate_blob does not contain a LootTableAggregate instance"
-        )
-    return table
+def build_loot_table(*, loot_table_id: int, name: str, entry_rows: list[object]) -> LootTableAggregate:
+    return LootTableAggregate.create(
+        loot_table_id=LootTableId(loot_table_id),
+        name=name,
+        entries=[
+            LootEntry(
+                item_spec_id=ItemSpecId(int(row["item_spec_id"])),
+                weight=int(row["weight"]),
+                min_quantity=int(row["min_quantity"]),
+                max_quantity=int(row["max_quantity"]),
+            )
+            for row in entry_rows
+        ],
+    )
 
-
-__all__ = ["blob_to_loot_table", "loot_table_to_blob"]

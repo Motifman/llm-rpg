@@ -8,18 +8,26 @@ SNS 向けスタック（`get_unit_of_work_factory` / `get_unit_of_work_and_publ
 SNS コンテナの UoW ファクトリとは別経路で組み立てること。
 """
 from pathlib import Path
+import sqlite3
 from typing import TYPE_CHECKING, Tuple, Optional, Union
 
 from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
 from ai_rpg_world.infrastructure.unit_of_work.unit_of_work_factory_impl import InMemoryUnitOfWorkFactory
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMemoryUnitOfWork
 from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import SqliteUnitOfWorkFactory
+from ai_rpg_world.application.social.social_sqlite_wiring import bootstrap_social_schema
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_player_repository import InMemoryPlayerRepository
 from ai_rpg_world.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
 from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
 from ai_rpg_world.infrastructure.repository.in_memory_sns_notification_repository import InMemorySnsNotificationRepository
 from ai_rpg_world.infrastructure.repository.in_memory_reply_repository import InMemoryReplyRepository
+from ai_rpg_world.infrastructure.repository.sqlite_post_repository import SqlitePostRepository
+from ai_rpg_world.infrastructure.repository.sqlite_reply_repository import SqliteReplyRepository
+from ai_rpg_world.infrastructure.repository.sqlite_sns_notification_repository import (
+    SqliteSnsNotificationRepository,
+)
+from ai_rpg_world.infrastructure.repository.sqlite_sns_user_repository import SqliteSnsUserRepository
 
 if TYPE_CHECKING:
     from ai_rpg_world.infrastructure.events.in_memory_event_publisher_with_uow import InMemoryEventPublisherWithUow
@@ -112,3 +120,75 @@ class DependencyInjectionContainer:
         `InMemoryEventPublisherWithUow` と同一プロセスで使い回さないこと。
         """
         return SqliteUnitOfWorkFactory(database)
+
+
+class SqliteSocialDependencyInjectionContainer:
+    """SNS 用 SQLite コンテナ。
+
+    既存の `DependencyInjectionContainer` を壊さず、本番経路で InMemory に固定しないための
+    明示的な SQLite 版コンテナを提供する。
+    """
+
+    def __init__(self, database: Union[str, Path]):
+        self._database = Path(database)
+        self._connection: Optional[sqlite3.Connection] = None
+        self._unit_of_work_factory: Optional[SqliteUnitOfWorkFactory] = None
+        self._user_repository: Optional[SqliteSnsUserRepository] = None
+        self._post_repository: Optional[SqlitePostRepository] = None
+        self._notification_repository: Optional[SqliteSnsNotificationRepository] = None
+        self._reply_repository: Optional[SqliteReplyRepository] = None
+
+    def _get_connection(self) -> sqlite3.Connection:
+        if self._connection is None:
+            connection = sqlite3.connect(str(self._database))
+            connection.row_factory = sqlite3.Row
+            bootstrap_social_schema(connection)
+            self._connection = connection
+        return self._connection
+
+    def get_unit_of_work_factory(self) -> SqliteUnitOfWorkFactory:
+        if self._unit_of_work_factory is None:
+            self._unit_of_work_factory = SqliteUnitOfWorkFactory(self._database)
+        return self._unit_of_work_factory
+
+    def get_user_repository(self) -> SqliteSnsUserRepository:
+        if self._user_repository is None:
+            self._user_repository = SqliteSnsUserRepository.for_standalone_connection(
+                self._get_connection()
+            )
+        return self._user_repository
+
+    def get_post_repository(self) -> SqlitePostRepository:
+        if self._post_repository is None:
+            self._post_repository = SqlitePostRepository.for_standalone_connection(
+                self._get_connection()
+            )
+        return self._post_repository
+
+    def get_notification_repository(self) -> SqliteSnsNotificationRepository:
+        if self._notification_repository is None:
+            self._notification_repository = (
+                SqliteSnsNotificationRepository.for_standalone_connection(
+                    self._get_connection()
+                )
+            )
+        return self._notification_repository
+
+    def get_reply_repository(self) -> SqliteReplyRepository:
+        if self._reply_repository is None:
+            self._reply_repository = SqliteReplyRepository.for_standalone_connection(
+                self._get_connection()
+            )
+        return self._reply_repository
+
+    def close(self) -> None:
+        if self._connection is None:
+            return
+        self._connection.close()
+        self._connection = None
+
+
+__all__ = [
+    "DependencyInjectionContainer",
+    "SqliteSocialDependencyInjectionContainer",
+]

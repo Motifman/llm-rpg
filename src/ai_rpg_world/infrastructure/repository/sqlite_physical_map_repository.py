@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import copy
-import sqlite3
 from typing import Any, List, Optional
+import json
+import sqlite3
 
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
@@ -15,8 +16,10 @@ from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
     init_game_write_schema,
 )
 from ai_rpg_world.infrastructure.repository.sqlite_world_state_codec import (
-    blob_to_physical_map,
-    physical_map_to_blob,
+    area_to_storage,
+    build_physical_map,
+    component_to_storage,
+    trigger_to_storage,
 )
 
 
@@ -24,7 +27,7 @@ _WORLD_OBJECT_SEQUENCE_START = 99_999
 
 
 class SqlitePhysicalMapRepository(PhysicalMapRepository):
-    """Store physical maps as snapshots plus a relational object-location index."""
+    """Store physical maps in normalized child tables plus relational indexes."""
 
     def __init__(
         self,
@@ -85,29 +88,22 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
         gateway_count = int(cur.fetchone()[0])
         if gateway_count > 0:
             return
-
-        cur = self._conn.execute("SELECT spot_id, aggregate_blob FROM game_physical_maps")
-        rows = cur.fetchall()
+        rows = self._conn.execute(
+            """
+            SELECT DISTINCT spot_id, target_spot_id
+            FROM game_physical_map_gateways
+            ORDER BY spot_id ASC, target_spot_id ASC
+            """
+        ).fetchall()
         if not rows:
             return
-
-        inserts: list[tuple[int, int]] = []
-        for row in rows:
-            physical_map = blob_to_physical_map(bytes(row["aggregate_blob"]))
-            from_spot_id = int(physical_map.spot_id)
-            for gateway in physical_map.get_all_gateways():
-                inserts.append((from_spot_id, int(gateway.target_spot_id)))
-
-        if not inserts:
-            return
-
         self._conn.executemany(
             """
             INSERT INTO game_gateway_connections (from_spot_id, to_spot_id)
             VALUES (?, ?)
             ON CONFLICT(from_spot_id, to_spot_id) DO NOTHING
             """,
-            inserts,
+            [(int(row["spot_id"]), int(row["target_spot_id"])) for row in rows],
         )
         if self._commits_after_write and not self._conn.in_transaction:
             self._conn.commit()
@@ -126,13 +122,13 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
 
     def find_by_id(self, entity_id: SpotId) -> Optional[PhysicalMapAggregate]:
         cur = self._conn.execute(
-            "SELECT aggregate_blob FROM game_physical_maps WHERE spot_id = ?",
+            "SELECT * FROM game_physical_maps WHERE spot_id = ?",
             (int(entity_id),),
         )
         row = cur.fetchone()
         if row is None:
             return None
-        return copy.deepcopy(blob_to_physical_map(bytes(row["aggregate_blob"])))
+        return copy.deepcopy(self._build_physical_map_from_row(row))
 
     def find_by_spot_id(self, spot_id: SpotId) -> Optional[PhysicalMapAggregate]:
         return self.find_by_id(spot_id)
@@ -143,23 +139,93 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
     def save(self, physical_map: PhysicalMapAggregate) -> PhysicalMapAggregate:
         self._assert_shared_transaction_active()
         self._maybe_emit_events(physical_map)
-        blob = physical_map_to_blob(physical_map)
         spot_id = int(physical_map.spot_id)
         self._conn.execute(
             """
-            INSERT INTO game_physical_maps (spot_id, aggregate_blob)
-            VALUES (?, ?)
-            ON CONFLICT(spot_id) DO UPDATE SET aggregate_blob = excluded.aggregate_blob
+            INSERT INTO game_physical_maps (
+                spot_id, environment_type, weather_type, weather_intensity
+            ) VALUES (?, ?, ?, ?)
+            ON CONFLICT(spot_id) DO UPDATE SET
+                environment_type = excluded.environment_type,
+                weather_type = excluded.weather_type,
+                weather_intensity = excluded.weather_intensity
             """,
-            (spot_id, blob),
+            (
+                spot_id,
+                physical_map.environment_type.value,
+                physical_map.weather_state.weather_type.value,
+                physical_map.weather_state.intensity,
+            ),
         )
-        self._conn.execute(
-            "DELETE FROM game_world_object_locations WHERE spot_id = ?",
-            (spot_id,),
+        for table_name, key_column in (
+            ("game_physical_map_area_traits", "spot_id"),
+            ("game_physical_map_tiles", "spot_id"),
+            ("game_physical_map_objects", "spot_id"),
+            ("game_world_object_locations", "spot_id"),
+            ("game_physical_map_area_triggers", "spot_id"),
+            ("game_physical_map_location_areas", "spot_id"),
+            ("game_physical_map_gateways", "spot_id"),
+            ("game_gateway_connections", "from_spot_id"),
+        ):
+            self._conn.execute(f"DELETE FROM {table_name} WHERE {key_column} = ?", (spot_id,))
+
+        self._conn.executemany(
+            """
+            INSERT INTO game_physical_map_area_traits (spot_id, trait)
+            VALUES (?, ?)
+            """,
+            [(spot_id, trait.value) for trait in sorted(physical_map.area_traits, key=lambda trait: trait.value)],
         )
-        self._conn.execute(
-            "DELETE FROM game_gateway_connections WHERE from_spot_id = ?",
-            (spot_id,),
+        self._conn.executemany(
+            """
+            INSERT INTO game_physical_map_tiles (
+                spot_id, x, y, z, terrain_type, base_cost, required_capabilities_json,
+                is_opaque, is_walkable_override
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    spot_id,
+                    tile.coordinate.x,
+                    tile.coordinate.y,
+                    tile.coordinate.z,
+                    tile.terrain_type.type.value,
+                    tile.terrain_type.base_cost.value,
+                    json.dumps(
+                        sorted(cap.value for cap in tile.terrain_type.required_capabilities),
+                        ensure_ascii=True,
+                    ),
+                    1 if tile.terrain_type.is_opaque else 0,
+                    None if tile._is_walkable_override is None else (1 if tile._is_walkable_override else 0),
+                )
+                for tile in sorted(
+                    physical_map.get_all_tiles(),
+                    key=lambda tile: (tile.coordinate.z, tile.coordinate.y, tile.coordinate.x),
+                )
+            ],
+        )
+        self._conn.executemany(
+            """
+            INSERT INTO game_physical_map_objects (
+                world_object_id, spot_id, x, y, z, object_type, is_blocking, is_blocking_sight,
+                busy_until_tick, component_type, component_payload_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    int(obj.object_id),
+                    spot_id,
+                    obj.coordinate.x,
+                    obj.coordinate.y,
+                    obj.coordinate.z,
+                    obj.object_type.value,
+                    1 if obj.is_blocking else 0,
+                    1 if obj.is_blocking_sight else 0,
+                    None if obj.busy_until is None else obj.busy_until.value,
+                    *component_to_storage(obj.component),
+                )
+                for obj in physical_map.get_all_objects()
+            ],
         )
         self._conn.executemany(
             """
@@ -167,9 +233,65 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
             VALUES (?, ?)
             ON CONFLICT(world_object_id) DO UPDATE SET spot_id = excluded.spot_id
             """,
+            [(int(obj.object_id), spot_id) for obj in physical_map.get_all_objects()],
+        )
+        self._conn.executemany(
+            """
+            INSERT INTO game_physical_map_area_triggers (
+                trigger_id, spot_id, name, is_active, area_kind, area_payload_json,
+                trigger_type, trigger_payload_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
             [
-                (int(obj.object_id), spot_id)
-                for obj in physical_map.get_all_objects()
+                (
+                    int(trigger.trigger_id),
+                    spot_id,
+                    trigger.name,
+                    1 if trigger.is_active else 0,
+                    *area_to_storage(trigger.area),
+                    *trigger_to_storage(trigger.trigger),
+                )
+                for trigger in physical_map.get_all_area_triggers()
+            ],
+        )
+        self._conn.executemany(
+            """
+            INSERT INTO game_physical_map_location_areas (
+                location_area_id, spot_id, name, description, is_active, area_kind, area_payload_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    int(location.location_id),
+                    spot_id,
+                    location.name,
+                    location.description,
+                    1 if location.is_active else 0,
+                    *area_to_storage(location.area),
+                )
+                for location in physical_map.get_all_location_areas()
+            ],
+        )
+        self._conn.executemany(
+            """
+            INSERT INTO game_physical_map_gateways (
+                gateway_id, spot_id, name, is_active, area_kind, area_payload_json,
+                target_spot_id, landing_x, landing_y, landing_z
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    int(gateway.gateway_id),
+                    spot_id,
+                    gateway.name,
+                    1 if gateway.is_active else 0,
+                    *area_to_storage(gateway.area),
+                    int(gateway.target_spot_id),
+                    gateway.landing_coordinate.x,
+                    gateway.landing_coordinate.y,
+                    gateway.landing_coordinate.z,
+                )
+                for gateway in physical_map.get_all_gateways()
             ],
         )
         self._conn.executemany(
@@ -188,28 +310,32 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
 
     def delete(self, entity_id: SpotId) -> bool:
         self._assert_shared_transaction_active()
-        self._conn.execute(
-            "DELETE FROM game_world_object_locations WHERE spot_id = ?",
-            (int(entity_id),),
-        )
-        self._conn.execute(
-            "DELETE FROM game_gateway_connections WHERE from_spot_id = ?",
-            (int(entity_id),),
-        )
+        spot_id = int(entity_id)
+        for table_name, key_column in (
+            ("game_physical_map_area_traits", "spot_id"),
+            ("game_physical_map_tiles", "spot_id"),
+            ("game_physical_map_objects", "spot_id"),
+            ("game_world_object_locations", "spot_id"),
+            ("game_physical_map_area_triggers", "spot_id"),
+            ("game_physical_map_location_areas", "spot_id"),
+            ("game_physical_map_gateways", "spot_id"),
+            ("game_gateway_connections", "from_spot_id"),
+        ):
+            self._conn.execute(f"DELETE FROM {table_name} WHERE {key_column} = ?", (spot_id,))
         cur = self._conn.execute(
             "DELETE FROM game_physical_maps WHERE spot_id = ?",
-            (int(entity_id),),
+            (spot_id,),
         )
         self._finalize_write()
         return cur.rowcount > 0
 
     def find_all(self) -> List[PhysicalMapAggregate]:
-        cur = self._conn.execute(
-            "SELECT aggregate_blob FROM game_physical_maps ORDER BY spot_id ASC"
-        )
+        cur = self._conn.execute("SELECT spot_id FROM game_physical_maps ORDER BY spot_id ASC")
         return [
-            copy.deepcopy(blob_to_physical_map(bytes(row["aggregate_blob"])))
+            aggregate
             for row in cur.fetchall()
+            for aggregate in [self.find_by_id(SpotId(int(row["spot_id"])))]
+            if aggregate is not None
         ]
 
     def find_spot_id_by_object_id(self, object_id: WorldObjectId) -> Optional[SpotId]:
@@ -233,6 +359,42 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
             (int(spot_id),),
         )
         return [SpotId(int(row["to_spot_id"])) for row in cur.fetchall()]
+
+    def _build_physical_map_from_row(self, row: sqlite3.Row) -> PhysicalMapAggregate:
+        spot_id = int(row["spot_id"])
+        tile_rows = self._conn.execute(
+            "SELECT * FROM game_physical_map_tiles WHERE spot_id = ? ORDER BY z ASC, y ASC, x ASC",
+            (spot_id,),
+        ).fetchall()
+        object_rows = self._conn.execute(
+            "SELECT * FROM game_physical_map_objects WHERE spot_id = ? ORDER BY world_object_id ASC",
+            (spot_id,),
+        ).fetchall()
+        area_trigger_rows = self._conn.execute(
+            "SELECT * FROM game_physical_map_area_triggers WHERE spot_id = ? ORDER BY trigger_id ASC",
+            (spot_id,),
+        ).fetchall()
+        location_area_rows = self._conn.execute(
+            "SELECT * FROM game_physical_map_location_areas WHERE spot_id = ? ORDER BY location_area_id ASC",
+            (spot_id,),
+        ).fetchall()
+        gateway_rows = self._conn.execute(
+            "SELECT * FROM game_physical_map_gateways WHERE spot_id = ? ORDER BY gateway_id ASC",
+            (spot_id,),
+        ).fetchall()
+        area_trait_rows = self._conn.execute(
+            "SELECT trait FROM game_physical_map_area_traits WHERE spot_id = ? ORDER BY trait ASC",
+            (spot_id,),
+        ).fetchall()
+        return build_physical_map(
+            row=row,
+            tile_rows=list(tile_rows),
+            object_rows=list(object_rows),
+            area_trigger_rows=list(area_trigger_rows),
+            location_area_rows=list(location_area_rows),
+            gateway_rows=list(gateway_rows),
+            area_trait_rows=[str(area_trait_row["trait"]) for area_trait_row in area_trait_rows],
+        )
 
 
 __all__ = ["SqlitePhysicalMapRepository"]

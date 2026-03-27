@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import sqlite3
 from typing import List, Optional
 
@@ -16,8 +15,7 @@ from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
     init_game_write_schema,
 )
 from ai_rpg_world.infrastructure.repository.sqlite_loot_table_state_codec import (
-    blob_to_loot_table,
-    loot_table_to_blob,
+    build_loot_table,
 )
 
 
@@ -36,22 +34,19 @@ class SqliteLootTableRepository(LootTableRepository):
 
     def find_by_id(self, entity_id: LootTableId) -> Optional[LootTableAggregate]:
         cur = self._conn.execute(
-            "SELECT aggregate_blob FROM game_loot_tables WHERE loot_table_id = ?",
+            "SELECT loot_table_id, name FROM game_loot_tables WHERE loot_table_id = ?",
             (int(entity_id),),
         )
         row = cur.fetchone()
         if row is None:
             return None
-        return copy.deepcopy(blob_to_loot_table(bytes(row["aggregate_blob"])))
+        return self._build_table_from_row(row)
 
     def find_all(self) -> List[LootTableAggregate]:
         cur = self._conn.execute(
-            "SELECT aggregate_blob FROM game_loot_tables ORDER BY loot_table_id ASC"
+            "SELECT loot_table_id, name FROM game_loot_tables ORDER BY loot_table_id ASC"
         )
-        return [
-            copy.deepcopy(blob_to_loot_table(bytes(row["aggregate_blob"])))
-            for row in cur.fetchall()
-        ]
+        return [self._build_table_from_row(row) for row in cur.fetchall()]
 
     def find_by_ids(self, entity_ids: List[LootTableId]) -> List[LootTableAggregate]:
         return [x for entity_id in entity_ids for x in [self.find_by_id(entity_id)] if x is not None]
@@ -59,6 +54,22 @@ class SqliteLootTableRepository(LootTableRepository):
     def save(self, entity: LootTableAggregate) -> LootTableAggregate:
         raise NotImplementedError(
             "SqliteLootTableRepository is read-only. Use SqliteLootTableWriter."
+        )
+
+    def _build_table_from_row(self, row: sqlite3.Row) -> LootTableAggregate:
+        entry_rows = self._conn.execute(
+            """
+            SELECT *
+            FROM game_loot_table_entries
+            WHERE loot_table_id = ?
+            ORDER BY entry_index ASC
+            """,
+            (int(row["loot_table_id"]),),
+        ).fetchall()
+        return build_loot_table(
+            loot_table_id=int(row["loot_table_id"]),
+            name=row["name"],
+            entry_rows=list(entry_rows),
         )
 
     def delete(self, entity_id: LootTableId) -> bool:
@@ -106,22 +117,46 @@ class SqliteLootTableWriter(LootTableWriter):
         self._assert_shared_transaction_active()
         self._conn.execute(
             """
-            INSERT INTO game_loot_tables (loot_table_id, name, aggregate_blob)
-            VALUES (?, ?, ?)
+            INSERT INTO game_loot_tables (loot_table_id, name)
+            VALUES (?, ?)
             ON CONFLICT(loot_table_id) DO UPDATE SET
-                name = excluded.name,
-                aggregate_blob = excluded.aggregate_blob
+                name = excluded.name
             """,
             (
                 int(table.loot_table_id),
                 table.name,
-                loot_table_to_blob(table),
             ),
+        )
+        self._conn.execute(
+            "DELETE FROM game_loot_table_entries WHERE loot_table_id = ?",
+            (int(table.loot_table_id),),
+        )
+        self._conn.executemany(
+            """
+            INSERT INTO game_loot_table_entries (
+                loot_table_id, entry_index, item_spec_id, weight, min_quantity, max_quantity
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    int(table.loot_table_id),
+                    index,
+                    int(entry.item_spec_id),
+                    entry.weight,
+                    entry.min_quantity,
+                    entry.max_quantity,
+                )
+                for index, entry in enumerate(table.entries)
+            ],
         )
         self._finalize_write()
 
     def delete_table(self, loot_table_id: LootTableId) -> bool:
         self._assert_shared_transaction_active()
+        self._conn.execute(
+            "DELETE FROM game_loot_table_entries WHERE loot_table_id = ?",
+            (int(loot_table_id),),
+        )
         cur = self._conn.execute(
             "DELETE FROM game_loot_tables WHERE loot_table_id = ?",
             (int(loot_table_id),),
