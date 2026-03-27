@@ -15,13 +15,12 @@ from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
     init_game_write_schema,
 )
 from ai_rpg_world.infrastructure.repository.sqlite_hit_box_state_codec import (
-    blob_to_hit_box,
-    hit_box_to_blob,
+    build_hit_box,
 )
 
 
 class SqliteHitBoxRepository(HitBoxRepository):
-    """Store hit boxes as snapshots with spot/activity lookup columns."""
+    """Store hit boxes in normalized tables with spot/activity lookup columns."""
 
     def __init__(
         self,
@@ -93,13 +92,13 @@ class SqliteHitBoxRepository(HitBoxRepository):
 
     def find_by_id(self, entity_id: HitBoxId) -> Optional[HitBoxAggregate]:
         cur = self._conn.execute(
-            "SELECT aggregate_blob FROM game_hit_boxes WHERE hit_box_id = ?",
+            "SELECT * FROM game_hit_boxes WHERE hit_box_id = ?",
             (int(entity_id),),
         )
         row = cur.fetchone()
         if row is None:
             return None
-        return copy.deepcopy(blob_to_hit_box(bytes(row["aggregate_blob"])))
+        return copy.deepcopy(self._build_hit_box_from_row(row))
 
     def find_by_ids(self, entity_ids: List[HitBoxId]) -> List[HitBoxAggregate]:
         return [
@@ -109,24 +108,152 @@ class SqliteHitBoxRepository(HitBoxRepository):
     def save(self, entity: HitBoxAggregate) -> HitBoxAggregate:
         self._assert_shared_transaction_active()
         self._maybe_emit_events(entity)
+        capabilities = ",".join(sorted(cap.value for cap in entity.movement_capability.capabilities))
         self._conn.execute(
             """
             INSERT INTO game_hit_boxes (
-                hit_box_id, spot_id, owner_id, is_active, aggregate_blob
-            ) VALUES (?, ?, ?, ?, ?)
+                hit_box_id, spot_id, owner_id, is_active,
+                current_x, current_y, current_z,
+                previous_x, previous_y, previous_z,
+                precise_x, precise_y, precise_z,
+                start_tick, duration, power_multiplier,
+                velocity_dx, velocity_dy, velocity_dz,
+                attacker_max_hp, attacker_max_mp, attacker_attack, attacker_defense,
+                attacker_speed, attacker_critical_rate, attacker_evasion_rate,
+                target_collision_policy, obstacle_collision_policy,
+                movement_capabilities, movement_speed_modifier,
+                activation_tick, skill_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(hit_box_id) DO UPDATE SET
                 spot_id = excluded.spot_id,
                 owner_id = excluded.owner_id,
                 is_active = excluded.is_active,
-                aggregate_blob = excluded.aggregate_blob
+                current_x = excluded.current_x,
+                current_y = excluded.current_y,
+                current_z = excluded.current_z,
+                previous_x = excluded.previous_x,
+                previous_y = excluded.previous_y,
+                previous_z = excluded.previous_z,
+                precise_x = excluded.precise_x,
+                precise_y = excluded.precise_y,
+                precise_z = excluded.precise_z,
+                start_tick = excluded.start_tick,
+                duration = excluded.duration,
+                power_multiplier = excluded.power_multiplier,
+                velocity_dx = excluded.velocity_dx,
+                velocity_dy = excluded.velocity_dy,
+                velocity_dz = excluded.velocity_dz,
+                attacker_max_hp = excluded.attacker_max_hp,
+                attacker_max_mp = excluded.attacker_max_mp,
+                attacker_attack = excluded.attacker_attack,
+                attacker_defense = excluded.attacker_defense,
+                attacker_speed = excluded.attacker_speed,
+                attacker_critical_rate = excluded.attacker_critical_rate,
+                attacker_evasion_rate = excluded.attacker_evasion_rate,
+                target_collision_policy = excluded.target_collision_policy,
+                obstacle_collision_policy = excluded.obstacle_collision_policy,
+                movement_capabilities = excluded.movement_capabilities,
+                movement_speed_modifier = excluded.movement_speed_modifier,
+                activation_tick = excluded.activation_tick,
+                skill_id = excluded.skill_id
             """,
             (
                 int(entity.hit_box_id),
                 int(entity.spot_id),
                 int(entity.owner_id),
                 1 if entity.is_active else 0,
-                hit_box_to_blob(entity),
+                entity.current_coordinate.x,
+                entity.current_coordinate.y,
+                entity.current_coordinate.z,
+                entity._previous_coordinate.x,
+                entity._previous_coordinate.y,
+                entity._previous_coordinate.z,
+                entity.precise_position[0],
+                entity.precise_position[1],
+                entity.precise_position[2],
+                entity._start_tick.value,
+                entity._duration,
+                entity.power_multiplier,
+                entity.velocity.dx,
+                entity.velocity.dy,
+                entity.velocity.dz,
+                None if entity.attacker_stats is None else entity.attacker_stats.max_hp,
+                None if entity.attacker_stats is None else entity.attacker_stats.max_mp,
+                None if entity.attacker_stats is None else entity.attacker_stats.attack,
+                None if entity.attacker_stats is None else entity.attacker_stats.defense,
+                None if entity.attacker_stats is None else entity.attacker_stats.speed,
+                None if entity.attacker_stats is None else entity.attacker_stats.critical_rate,
+                None if entity.attacker_stats is None else entity.attacker_stats.evasion_rate,
+                entity._target_collision_policy.value,
+                entity._obstacle_collision_policy.value,
+                capabilities,
+                entity.movement_capability.speed_modifier,
+                entity.activation_tick,
+                entity.skill_id,
             ),
+        )
+        hit_box_id = int(entity.hit_box_id)
+        for table_name in (
+            "game_hit_box_shape_coordinates",
+            "game_hit_box_effects",
+            "game_hit_box_targets",
+            "game_hit_box_obstacle_coordinates",
+        ):
+            self._conn.execute(f"DELETE FROM {table_name} WHERE hit_box_id = ?", (hit_box_id,))
+        self._conn.executemany(
+            """
+            INSERT INTO game_hit_box_shape_coordinates (
+                hit_box_id, coordinate_index, dx, dy, dz
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    hit_box_id,
+                    index,
+                    rel.dx,
+                    rel.dy,
+                    rel.dz,
+                )
+                for index, rel in enumerate(entity._shape.relative_coordinates)
+            ],
+        )
+        self._conn.executemany(
+            """
+            INSERT INTO game_hit_box_effects (
+                hit_box_id, effect_index, effect_type, duration_ticks, intensity, chance
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    hit_box_id,
+                    index,
+                    effect.effect_type.value,
+                    effect.duration_ticks,
+                    effect.intensity,
+                    effect.chance,
+                )
+                for index, effect in enumerate(entity.hit_effects)
+            ],
+        )
+        self._conn.executemany(
+            """
+            INSERT INTO game_hit_box_targets (hit_box_id, target_id)
+            VALUES (?, ?)
+            """,
+            [(hit_box_id, int(target_id)) for target_id in sorted(entity._hit_targets, key=int)],
+        )
+        self._conn.executemany(
+            """
+            INSERT INTO game_hit_box_obstacle_coordinates (hit_box_id, x, y, z)
+            VALUES (?, ?, ?, ?)
+            """,
+            [
+                (hit_box_id, coordinate.x, coordinate.y, coordinate.z)
+                for coordinate in sorted(
+                    entity._hit_obstacle_coordinates,
+                    key=lambda coordinate: (coordinate.z, coordinate.y, coordinate.x),
+                )
+            ],
         )
         self._finalize_write()
         return copy.deepcopy(entity)
@@ -137,51 +264,96 @@ class SqliteHitBoxRepository(HitBoxRepository):
 
     def delete(self, entity_id: HitBoxId) -> bool:
         self._assert_shared_transaction_active()
+        hit_box_id = int(entity_id)
+        for table_name in (
+            "game_hit_box_shape_coordinates",
+            "game_hit_box_effects",
+            "game_hit_box_targets",
+            "game_hit_box_obstacle_coordinates",
+        ):
+            self._conn.execute(f"DELETE FROM {table_name} WHERE hit_box_id = ?", (hit_box_id,))
         cur = self._conn.execute(
             "DELETE FROM game_hit_boxes WHERE hit_box_id = ?",
-            (int(entity_id),),
+            (hit_box_id,),
         )
         self._finalize_write()
         return cur.rowcount > 0
 
     def find_all(self) -> List[HitBoxAggregate]:
         cur = self._conn.execute(
-            "SELECT aggregate_blob FROM game_hit_boxes ORDER BY hit_box_id ASC"
+            "SELECT * FROM game_hit_boxes ORDER BY hit_box_id ASC"
         )
-        return [
-            copy.deepcopy(blob_to_hit_box(bytes(row["aggregate_blob"])))
-            for row in cur.fetchall()
-        ]
+        return [copy.deepcopy(self._build_hit_box_from_row(row)) for row in cur.fetchall()]
 
     def find_active_by_spot_id(self, spot_id: SpotId) -> List[HitBoxAggregate]:
         cur = self._conn.execute(
             """
-            SELECT aggregate_blob
+            SELECT *
             FROM game_hit_boxes
             WHERE spot_id = ? AND is_active = 1
             ORDER BY hit_box_id ASC
             """,
             (int(spot_id),),
         )
-        return [
-            copy.deepcopy(blob_to_hit_box(bytes(row["aggregate_blob"])))
-            for row in cur.fetchall()
-        ]
+        return [copy.deepcopy(self._build_hit_box_from_row(row)) for row in cur.fetchall()]
 
     def find_by_spot_id(self, spot_id: SpotId) -> List[HitBoxAggregate]:
         cur = self._conn.execute(
             """
-            SELECT aggregate_blob
+            SELECT *
             FROM game_hit_boxes
             WHERE spot_id = ?
             ORDER BY hit_box_id ASC
             """,
             (int(spot_id),),
         )
-        return [
-            copy.deepcopy(blob_to_hit_box(bytes(row["aggregate_blob"])))
-            for row in cur.fetchall()
-        ]
+        return [copy.deepcopy(self._build_hit_box_from_row(row)) for row in cur.fetchall()]
+
+    def _build_hit_box_from_row(self, row: sqlite3.Row) -> HitBoxAggregate:
+        hit_box_id = int(row["hit_box_id"])
+        shape_rows = self._conn.execute(
+            """
+            SELECT dx, dy, dz
+            FROM game_hit_box_shape_coordinates
+            WHERE hit_box_id = ?
+            ORDER BY coordinate_index ASC
+            """,
+            (hit_box_id,),
+        ).fetchall()
+        effect_rows = self._conn.execute(
+            """
+            SELECT effect_type, duration_ticks, intensity, chance
+            FROM game_hit_box_effects
+            WHERE hit_box_id = ?
+            ORDER BY effect_index ASC
+            """,
+            (hit_box_id,),
+        ).fetchall()
+        hit_target_rows = self._conn.execute(
+            """
+            SELECT target_id
+            FROM game_hit_box_targets
+            WHERE hit_box_id = ?
+            ORDER BY target_id ASC
+            """,
+            (hit_box_id,),
+        ).fetchall()
+        obstacle_rows = self._conn.execute(
+            """
+            SELECT x, y, z
+            FROM game_hit_box_obstacle_coordinates
+            WHERE hit_box_id = ?
+            ORDER BY z ASC, y ASC, x ASC
+            """,
+            (hit_box_id,),
+        ).fetchall()
+        return build_hit_box(
+            row=row,
+            shape_rows=list(shape_rows),
+            effect_rows=list(effect_rows),
+            hit_target_rows=[int(target_row["target_id"]) for target_row in hit_target_rows],
+            obstacle_rows=list(obstacle_rows),
+        )
 
 
 __all__ = ["SqliteHitBoxRepository"]

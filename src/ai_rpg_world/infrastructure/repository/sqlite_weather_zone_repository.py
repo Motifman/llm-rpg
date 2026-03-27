@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import sqlite3
 from typing import Any, List, Optional
 
@@ -16,8 +15,7 @@ from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
     init_game_write_schema,
 )
 from ai_rpg_world.infrastructure.repository.sqlite_weather_zone_state_codec import (
-    blob_to_weather_zone,
-    weather_zone_to_blob,
+    build_weather_zone,
 )
 
 
@@ -84,20 +82,18 @@ class SqliteWeatherZoneRepository(WeatherZoneRepository):
         self._conn.execute(
             """
             INSERT INTO game_weather_zones (
-                zone_id, name, weather_type, intensity, aggregate_blob
-            ) VALUES (?, ?, ?, ?, ?)
+                zone_id, name, weather_type, intensity
+            ) VALUES (?, ?, ?, ?)
             ON CONFLICT(zone_id) DO UPDATE SET
                 name = excluded.name,
                 weather_type = excluded.weather_type,
-                intensity = excluded.intensity,
-                aggregate_blob = excluded.aggregate_blob
+                intensity = excluded.intensity
             """,
             (
                 zone_id,
                 weather_zone.name.value,
                 weather_zone.current_state.weather_type.value,
                 weather_zone.current_state.intensity,
-                weather_zone_to_blob(weather_zone),
             ),
         )
         self._conn.execute(
@@ -113,17 +109,27 @@ class SqliteWeatherZoneRepository(WeatherZoneRepository):
             [(int(spot_id), zone_id) for spot_id in sorted(weather_zone.spot_ids, key=int)],
         )
         self._finalize_write()
-        return copy.deepcopy(weather_zone)
+        return weather_zone
 
     def find_by_id(self, zone_id: WeatherZoneId) -> Optional[WeatherZone]:
         cur = self._conn.execute(
-            "SELECT aggregate_blob FROM game_weather_zones WHERE zone_id = ?",
+            "SELECT zone_id, name, weather_type, intensity FROM game_weather_zones WHERE zone_id = ?",
             (int(zone_id),),
         )
         row = cur.fetchone()
         if row is None:
             return None
-        return copy.deepcopy(blob_to_weather_zone(bytes(row["aggregate_blob"])))
+        spot_rows = self._conn.execute(
+            "SELECT spot_id FROM game_weather_zone_spots WHERE zone_id = ? ORDER BY spot_id ASC",
+            (int(zone_id),),
+        ).fetchall()
+        return build_weather_zone(
+            zone_id=int(row["zone_id"]),
+            name=row["name"],
+            weather_type=row["weather_type"],
+            intensity=float(row["intensity"]),
+            spot_ids=[int(spot_row["spot_id"]) for spot_row in spot_rows],
+        )
 
     def find_by_ids(self, zone_ids: List[WeatherZoneId]) -> List[WeatherZone]:
         return [x for zone_id in zone_ids for x in [self.find_by_id(zone_id)] if x is not None]
@@ -140,12 +146,9 @@ class SqliteWeatherZoneRepository(WeatherZoneRepository):
 
     def find_all(self) -> List[WeatherZone]:
         cur = self._conn.execute(
-            "SELECT aggregate_blob FROM game_weather_zones ORDER BY zone_id ASC"
+            "SELECT zone_id FROM game_weather_zones ORDER BY zone_id ASC"
         )
-        return [
-            copy.deepcopy(blob_to_weather_zone(bytes(row["aggregate_blob"])))
-            for row in cur.fetchall()
-        ]
+        return [zone for row in cur.fetchall() for zone in [self.find_by_id(WeatherZoneId(int(row["zone_id"])))] if zone is not None]
 
     def delete(self, zone_id: WeatherZoneId) -> bool:
         self._assert_shared_transaction_active()

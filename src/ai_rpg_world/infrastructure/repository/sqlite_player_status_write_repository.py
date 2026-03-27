@@ -1,4 +1,4 @@
-"""プレイヤーステータス集約の SQLite 実装（UTF-8 JSON BLOB。ゲーム書き込み DB）。"""
+"""プレイヤーステータス集約の SQLite 実装（UTF-8 JSON payload。ゲーム書き込み DB）。"""
 from __future__ import annotations
 
 import copy
@@ -16,7 +16,7 @@ from ai_rpg_world.infrastructure.repository.sqlite_trade_command_codec import (
 
 
 class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
-    """ステータスはドメインが大きいため、スキーマ付き JSON スナップショットを BLOB 列に保持する。"""
+    """ステータスはドメインが大きいため、スキーマ付き JSON スナップショットを TEXT 列に保持する。"""
 
     def __init__(
         self,
@@ -74,13 +74,13 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
 
     def find_by_id(self, player_id: PlayerId) -> Optional[PlayerStatusAggregate]:
         cur = self._conn.execute(
-            "SELECT aggregate_blob FROM game_player_statuses WHERE player_id = ?",
+            "SELECT payload_json FROM game_player_statuses WHERE player_id = ?",
             (int(player_id),),
         )
         row = cur.fetchone()
         if row is None:
             return None
-        st = json_bytes_to_player_status(bytes(row["aggregate_blob"]))
+        st = json_bytes_to_player_status(str(row["payload_json"]).encode("utf-8"))
         return copy.deepcopy(st)
 
     def find_by_ids(self, player_ids: List[PlayerId]) -> List[PlayerStatusAggregate]:
@@ -89,15 +89,15 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
     def save(self, status: PlayerStatusAggregate) -> PlayerStatusAggregate:
         self._assert_shared_transaction_active()
         self._maybe_emit_events(status)
-        blob = player_status_to_json_bytes(status)
+        payload_json = player_status_to_json_bytes(status).decode("utf-8")
         pid = int(status.player_id)
         self._conn.execute(
             """
-            INSERT INTO game_player_statuses (player_id, aggregate_blob)
+            INSERT INTO game_player_statuses (player_id, payload_json)
             VALUES (?, ?)
-            ON CONFLICT(player_id) DO UPDATE SET aggregate_blob = excluded.aggregate_blob
+            ON CONFLICT(player_id) DO UPDATE SET payload_json = excluded.payload_json
             """,
-            (pid, blob),
+            (pid, payload_json),
         )
         self._finalize_write()
         return copy.deepcopy(status)
@@ -116,9 +116,9 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
         return cur.rowcount > 0
 
     def find_all(self) -> List[PlayerStatusAggregate]:
-        cur = self._conn.execute("SELECT player_id, aggregate_blob FROM game_player_statuses")
+        cur = self._conn.execute("SELECT player_id, payload_json FROM game_player_statuses")
         return [
-            copy.deepcopy(json_bytes_to_player_status(bytes(r["aggregate_blob"])))
+            copy.deepcopy(json_bytes_to_player_status(str(r["payload_json"]).encode("utf-8")))
             for r in cur.fetchall()
         ]
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import sqlite3
 from typing import Optional
 
@@ -15,9 +14,9 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
     init_game_write_schema,
 )
-from ai_rpg_world.infrastructure.repository.sqlite_spawn_table_state_codec import (
-    blob_to_spawn_table,
-    spawn_table_to_blob,
+from ai_rpg_world.infrastructure.repository.sqlite_monster_spawn_state_codec import (
+    build_spawn_table,
+    build_spawn_slot,
 )
 
 
@@ -36,13 +35,50 @@ class SqliteSpawnTableRepository(SpawnTableRepository):
 
     def find_by_spot_id(self, spot_id: SpotId) -> Optional[SpotSpawnTable]:
         cur = self._conn.execute(
-            "SELECT aggregate_blob FROM game_spawn_tables WHERE spot_id = ?",
+            "SELECT spot_id FROM game_spawn_tables WHERE spot_id = ?",
             (int(spot_id),),
         )
         row = cur.fetchone()
         if row is None:
             return None
-        return copy.deepcopy(blob_to_spawn_table(bytes(row["aggregate_blob"])))
+        slot_rows = self._conn.execute(
+            """
+            SELECT *
+            FROM game_spawn_table_slots
+            WHERE spot_id = ?
+            ORDER BY slot_index ASC
+            """,
+            (int(spot_id),),
+        ).fetchall()
+        slots = []
+        for slot_row in slot_rows:
+            preferred_weather_rows = self._conn.execute(
+                """
+                SELECT weather_type
+                FROM game_spawn_slot_preferred_weather
+                WHERE spot_id = ? AND slot_index = ?
+                ORDER BY weather_index ASC
+                """,
+                (int(spot_id), int(slot_row["slot_index"])),
+            ).fetchall()
+            required_trait_rows = self._conn.execute(
+                """
+                SELECT trait
+                FROM game_spawn_slot_required_area_traits
+                WHERE spot_id = ? AND slot_index = ?
+                ORDER BY trait_index ASC
+                """,
+                (int(spot_id), int(slot_row["slot_index"])),
+            ).fetchall()
+            slots.append(
+                build_spawn_slot(
+                    spot_id=int(spot_id),
+                    row=slot_row,
+                    preferred_weather_rows=[row["weather_type"] for row in preferred_weather_rows],
+                    required_trait_rows=[row["trait"] for row in required_trait_rows],
+                )
+            )
+        return build_spawn_table(int(spot_id), slots)
 
 
 class SqliteSpawnTableWriter(SpawnTableWriter):
@@ -84,11 +120,68 @@ class SqliteSpawnTableWriter(SpawnTableWriter):
         self._assert_shared_transaction_active()
         self._conn.execute(
             """
-            INSERT INTO game_spawn_tables (spot_id, aggregate_blob)
-            VALUES (?, ?)
-            ON CONFLICT(spot_id) DO UPDATE SET aggregate_blob = excluded.aggregate_blob
+            INSERT INTO game_spawn_tables (spot_id)
+            VALUES (?)
+            ON CONFLICT(spot_id) DO NOTHING
             """,
-            (int(table.spot_id), spawn_table_to_blob(table)),
+            (int(table.spot_id),),
+        )
+        for table_name in (
+            "game_spawn_table_slots",
+            "game_spawn_slot_preferred_weather",
+            "game_spawn_slot_required_area_traits",
+        ):
+            self._conn.execute(f"DELETE FROM {table_name} WHERE spot_id = ?", (int(table.spot_id),))
+        self._conn.executemany(
+            """
+            INSERT INTO game_spawn_table_slots (
+                spot_id, slot_index, x, y, z, template_id, weight, max_concurrent, time_band
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    int(table.spot_id),
+                    index,
+                    slot.coordinate.x,
+                    slot.coordinate.y,
+                    slot.coordinate.z,
+                    int(slot.template_id),
+                    slot.weight,
+                    slot.max_concurrent,
+                    None if slot.condition is None or slot.condition.time_band is None else slot.condition.time_band.value,
+                )
+                for index, slot in enumerate(table.slots)
+            ],
+        )
+        self._conn.executemany(
+            """
+            INSERT INTO game_spawn_slot_preferred_weather (
+                spot_id, slot_index, weather_index, weather_type
+            ) VALUES (?, ?, ?, ?)
+            """,
+            [
+                (int(table.spot_id), slot_index, weather_index, weather_type.value)
+                for slot_index, slot in enumerate(table.slots)
+                if slot.condition is not None and slot.condition.preferred_weather is not None
+                for weather_index, weather_type in enumerate(
+                    sorted(slot.condition.preferred_weather, key=lambda value: value.value)
+                )
+            ],
+        )
+        self._conn.executemany(
+            """
+            INSERT INTO game_spawn_slot_required_area_traits (
+                spot_id, slot_index, trait_index, trait
+            ) VALUES (?, ?, ?, ?)
+            """,
+            [
+                (int(table.spot_id), slot_index, trait_index, trait.value)
+                for slot_index, slot in enumerate(table.slots)
+                if slot.condition is not None and slot.condition.required_area_traits is not None
+                for trait_index, trait in enumerate(
+                    sorted(slot.condition.required_area_traits, key=lambda value: value.value)
+                )
+            ],
         )
         self._finalize_write()
 

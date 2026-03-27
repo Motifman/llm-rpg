@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import sqlite3
 from typing import Any, List, Optional
 
@@ -19,8 +18,7 @@ from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
     init_game_write_schema,
 )
 from ai_rpg_world.infrastructure.repository.sqlite_location_establishment_state_codec import (
-    blob_to_location_establishment,
-    location_establishment_to_blob,
+    build_location_establishment,
 )
 
 
@@ -85,7 +83,7 @@ class SqliteLocationEstablishmentRepository(LocationEstablishmentRepository):
     ) -> Optional[LocationEstablishmentAggregate]:
         cur = self._conn.execute(
             """
-            SELECT aggregate_blob
+            SELECT spot_id, location_area_id, establishment_type, establishment_id
             FROM game_location_establishments
             WHERE spot_id = ? AND location_area_id = ?
             """,
@@ -94,7 +92,12 @@ class SqliteLocationEstablishmentRepository(LocationEstablishmentRepository):
         row = cur.fetchone()
         if row is None:
             return None
-        return copy.deepcopy(blob_to_location_establishment(bytes(row["aggregate_blob"])))
+        return build_location_establishment(
+            spot_id=int(row["spot_id"]),
+            location_area_id=int(row["location_area_id"]),
+            establishment_type=row["establishment_type"],
+            establishment_id=row["establishment_id"],
+        )
 
     def find_by_spot_and_location(
         self,
@@ -119,13 +122,11 @@ class SqliteLocationEstablishmentRepository(LocationEstablishmentRepository):
                 spot_id,
                 location_area_id,
                 establishment_type,
-                establishment_id,
-                aggregate_blob
-            ) VALUES (?, ?, ?, ?, ?)
+                establishment_id
+            ) VALUES (?, ?, ?, ?)
             ON CONFLICT(spot_id, location_area_id) DO UPDATE SET
                 establishment_type = excluded.establishment_type,
-                establishment_id = excluded.establishment_id,
-                aggregate_blob = excluded.aggregate_blob
+                establishment_id = excluded.establishment_id
             """,
             (
                 int(slot.spot_id),
@@ -136,11 +137,10 @@ class SqliteLocationEstablishmentRepository(LocationEstablishmentRepository):
                     else None
                 ),
                 slot.establishment_id,
-                location_establishment_to_blob(slot),
             ),
         )
         self._finalize_write()
-        return copy.deepcopy(slot)
+        return slot
 
     def delete(self, slot_id: LocationSlotId) -> bool:
         self._assert_shared_transaction_active()
@@ -157,13 +157,18 @@ class SqliteLocationEstablishmentRepository(LocationEstablishmentRepository):
     def find_all(self) -> List[LocationEstablishmentAggregate]:
         cur = self._conn.execute(
             """
-            SELECT aggregate_blob
+            SELECT spot_id, location_area_id, establishment_type, establishment_id
             FROM game_location_establishments
             ORDER BY spot_id ASC, location_area_id ASC
             """
         )
         return [
-            copy.deepcopy(blob_to_location_establishment(bytes(row["aggregate_blob"])))
+            build_location_establishment(
+                spot_id=int(row["spot_id"]),
+                location_area_id=int(row["location_area_id"]),
+                establishment_type=row["establishment_type"],
+                establishment_id=row["establishment_id"],
+            )
             for row in cur.fetchall()
         ]
 

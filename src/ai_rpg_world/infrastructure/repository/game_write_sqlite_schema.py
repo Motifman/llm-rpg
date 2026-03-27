@@ -70,7 +70,7 @@ def _migration_v1(connection: sqlite3.Connection) -> None:
         """
         CREATE TABLE IF NOT EXISTS game_player_statuses (
             player_id INTEGER PRIMARY KEY NOT NULL,
-            aggregate_blob BLOB NOT NULL
+            payload_json TEXT NOT NULL
         )
         """
     )
@@ -81,7 +81,94 @@ def _migration_v2(connection: sqlite3.Connection) -> None:
         """
         CREATE TABLE IF NOT EXISTS game_physical_maps (
             spot_id INTEGER PRIMARY KEY NOT NULL,
-            aggregate_blob BLOB NOT NULL
+            environment_type TEXT NOT NULL,
+            weather_type TEXT NOT NULL,
+            weather_intensity REAL NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_physical_map_area_traits (
+            spot_id INTEGER NOT NULL,
+            trait TEXT NOT NULL,
+            PRIMARY KEY (spot_id, trait)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_physical_map_tiles (
+            spot_id INTEGER NOT NULL,
+            x INTEGER NOT NULL,
+            y INTEGER NOT NULL,
+            z INTEGER NOT NULL,
+            terrain_type TEXT NOT NULL,
+            base_cost REAL NOT NULL,
+            required_capabilities_json TEXT NOT NULL,
+            is_opaque INTEGER NOT NULL,
+            is_walkable_override INTEGER,
+            PRIMARY KEY (spot_id, x, y, z)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_physical_map_objects (
+            world_object_id INTEGER PRIMARY KEY NOT NULL,
+            spot_id INTEGER NOT NULL,
+            x INTEGER NOT NULL,
+            y INTEGER NOT NULL,
+            z INTEGER NOT NULL,
+            object_type TEXT NOT NULL,
+            is_blocking INTEGER NOT NULL,
+            is_blocking_sight INTEGER NOT NULL,
+            busy_until_tick INTEGER,
+            component_type TEXT,
+            component_payload_json TEXT
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_physical_map_area_triggers (
+            trigger_id INTEGER PRIMARY KEY NOT NULL,
+            spot_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            is_active INTEGER NOT NULL,
+            area_kind TEXT NOT NULL,
+            area_payload_json TEXT NOT NULL,
+            trigger_type TEXT NOT NULL,
+            trigger_payload_json TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_physical_map_location_areas (
+            location_area_id INTEGER PRIMARY KEY NOT NULL,
+            spot_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            is_active INTEGER NOT NULL,
+            area_kind TEXT NOT NULL,
+            area_payload_json TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_physical_map_gateways (
+            gateway_id INTEGER PRIMARY KEY NOT NULL,
+            spot_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            is_active INTEGER NOT NULL,
+            area_kind TEXT NOT NULL,
+            area_payload_json TEXT NOT NULL,
+            target_spot_id INTEGER NOT NULL,
+            landing_x INTEGER NOT NULL,
+            landing_y INTEGER NOT NULL,
+            landing_z INTEGER NOT NULL
         )
         """
     )
@@ -108,7 +195,37 @@ def _migration_v3(connection: sqlite3.Connection) -> None:
             monster_id INTEGER PRIMARY KEY NOT NULL,
             world_object_id INTEGER NOT NULL UNIQUE,
             spot_id INTEGER,
-            aggregate_blob BLOB NOT NULL
+            template_id INTEGER NOT NULL,
+            skill_loadout_id INTEGER NOT NULL,
+            hp_value INTEGER NOT NULL,
+            hp_max INTEGER NOT NULL,
+            mp_value INTEGER NOT NULL,
+            mp_max INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            last_death_tick INTEGER,
+            coordinate_x INTEGER,
+            coordinate_y INTEGER,
+            coordinate_z INTEGER,
+            pack_id TEXT,
+            is_pack_leader INTEGER NOT NULL,
+            initial_spawn_x INTEGER,
+            initial_spawn_y INTEGER,
+            initial_spawn_z INTEGER,
+            spawned_at_tick INTEGER,
+            behavior_state TEXT NOT NULL,
+            behavior_target_id INTEGER,
+            behavior_last_known_x INTEGER,
+            behavior_last_known_y INTEGER,
+            behavior_last_known_z INTEGER,
+            behavior_initial_x INTEGER,
+            behavior_initial_y INTEGER,
+            behavior_initial_z INTEGER,
+            behavior_patrol_index INTEGER NOT NULL,
+            behavior_search_timer INTEGER NOT NULL,
+            behavior_failure_count INTEGER NOT NULL,
+            pursuit_failure_reason TEXT,
+            hunger REAL NOT NULL,
+            starvation_timer INTEGER NOT NULL
         )
         """
     )
@@ -116,6 +233,56 @@ def _migration_v3(connection: sqlite3.Connection) -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_game_monsters_spot_monster
             ON game_monsters(spot_id, monster_id)
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_monster_active_effects (
+            monster_id INTEGER NOT NULL,
+            effect_index INTEGER NOT NULL,
+            effect_type TEXT NOT NULL,
+            effect_value REAL NOT NULL,
+            expiry_tick INTEGER NOT NULL,
+            PRIMARY KEY (monster_id, effect_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_monster_feed_memories (
+            monster_id INTEGER NOT NULL,
+            memory_index INTEGER NOT NULL,
+            object_id INTEGER NOT NULL,
+            x INTEGER NOT NULL,
+            y INTEGER NOT NULL,
+            z INTEGER NOT NULL,
+            PRIMARY KEY (monster_id, memory_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_monster_pursuit_target_snapshots (
+            monster_id INTEGER PRIMARY KEY NOT NULL,
+            target_id INTEGER NOT NULL,
+            spot_id INTEGER NOT NULL,
+            x INTEGER NOT NULL,
+            y INTEGER NOT NULL,
+            z INTEGER NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_monster_pursuit_last_known (
+            monster_id INTEGER PRIMARY KEY NOT NULL,
+            target_id INTEGER NOT NULL,
+            spot_id INTEGER NOT NULL,
+            x INTEGER NOT NULL,
+            y INTEGER NOT NULL,
+            z INTEGER NOT NULL,
+            observed_at_tick INTEGER
+        )
         """
     )
 
@@ -128,7 +295,34 @@ def _migration_v4(connection: sqlite3.Connection) -> None:
             spot_id INTEGER NOT NULL,
             owner_id INTEGER NOT NULL,
             is_active INTEGER NOT NULL,
-            aggregate_blob BLOB NOT NULL
+            current_x INTEGER NOT NULL,
+            current_y INTEGER NOT NULL,
+            current_z INTEGER NOT NULL,
+            previous_x INTEGER NOT NULL,
+            previous_y INTEGER NOT NULL,
+            previous_z INTEGER NOT NULL,
+            precise_x REAL NOT NULL,
+            precise_y REAL NOT NULL,
+            precise_z REAL NOT NULL,
+            start_tick INTEGER NOT NULL,
+            duration INTEGER NOT NULL,
+            power_multiplier REAL NOT NULL,
+            velocity_dx REAL NOT NULL,
+            velocity_dy REAL NOT NULL,
+            velocity_dz REAL NOT NULL,
+            attacker_max_hp INTEGER,
+            attacker_max_mp INTEGER,
+            attacker_attack INTEGER,
+            attacker_defense INTEGER,
+            attacker_speed INTEGER,
+            attacker_critical_rate REAL,
+            attacker_evasion_rate REAL,
+            target_collision_policy TEXT NOT NULL,
+            obstacle_collision_policy TEXT NOT NULL,
+            movement_capabilities TEXT NOT NULL,
+            movement_speed_modifier REAL NOT NULL,
+            activation_tick INTEGER NOT NULL,
+            skill_id TEXT
         )
         """
     )
@@ -136,6 +330,51 @@ def _migration_v4(connection: sqlite3.Connection) -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_game_hit_boxes_spot_active_hit_box
             ON game_hit_boxes(spot_id, is_active, hit_box_id)
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_hit_box_shape_coordinates (
+            hit_box_id INTEGER NOT NULL,
+            coordinate_index INTEGER NOT NULL,
+            dx INTEGER NOT NULL,
+            dy INTEGER NOT NULL,
+            dz INTEGER NOT NULL,
+            PRIMARY KEY (hit_box_id, coordinate_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_hit_box_effects (
+            hit_box_id INTEGER NOT NULL,
+            effect_index INTEGER NOT NULL,
+            effect_type TEXT NOT NULL,
+            duration_ticks INTEGER NOT NULL,
+            intensity REAL NOT NULL,
+            chance REAL NOT NULL,
+            PRIMARY KEY (hit_box_id, effect_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_hit_box_targets (
+            hit_box_id INTEGER NOT NULL,
+            target_id INTEGER NOT NULL,
+            PRIMARY KEY (hit_box_id, target_id)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_hit_box_obstacle_coordinates (
+            hit_box_id INTEGER NOT NULL,
+            x INTEGER NOT NULL,
+            y INTEGER NOT NULL,
+            z INTEGER NOT NULL,
+            PRIMARY KEY (hit_box_id, x, y, z)
+        )
         """
     )
 
@@ -168,7 +407,6 @@ def _migration_v6(connection: sqlite3.Connection) -> None:
             location_area_id INTEGER NOT NULL,
             establishment_type TEXT,
             establishment_id INTEGER,
-            aggregate_blob BLOB NOT NULL,
             PRIMARY KEY (spot_id, location_area_id)
         )
         """
@@ -219,8 +457,7 @@ def _migration_v9(connection: sqlite3.Connection) -> None:
             zone_id INTEGER PRIMARY KEY NOT NULL,
             name TEXT NOT NULL,
             weather_type TEXT NOT NULL,
-            intensity REAL NOT NULL,
-            aggregate_blob BLOB NOT NULL
+            intensity REAL NOT NULL
         )
         """
     )
@@ -244,8 +481,45 @@ def _migration_v10(connection: sqlite3.Connection) -> None:
     connection.execute(
         """
         CREATE TABLE IF NOT EXISTS game_spawn_tables (
-            spot_id INTEGER PRIMARY KEY NOT NULL,
-            aggregate_blob BLOB NOT NULL
+            spot_id INTEGER PRIMARY KEY NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_spawn_table_slots (
+            spot_id INTEGER NOT NULL,
+            slot_index INTEGER NOT NULL,
+            x INTEGER NOT NULL,
+            y INTEGER NOT NULL,
+            z INTEGER NOT NULL,
+            template_id INTEGER NOT NULL,
+            weight INTEGER NOT NULL,
+            max_concurrent INTEGER NOT NULL,
+            time_band TEXT,
+            PRIMARY KEY (spot_id, slot_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_spawn_slot_preferred_weather (
+            spot_id INTEGER NOT NULL,
+            slot_index INTEGER NOT NULL,
+            weather_index INTEGER NOT NULL,
+            weather_type TEXT NOT NULL,
+            PRIMARY KEY (spot_id, slot_index, weather_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_spawn_slot_required_area_traits (
+            spot_id INTEGER NOT NULL,
+            slot_index INTEGER NOT NULL,
+            trait_index INTEGER NOT NULL,
+            trait TEXT NOT NULL,
+            PRIMARY KEY (spot_id, slot_index, trait_index)
         )
         """
     )
@@ -257,7 +531,36 @@ def _migration_v11(connection: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS game_monster_templates (
             template_id INTEGER PRIMARY KEY NOT NULL,
             name TEXT NOT NULL,
-            aggregate_blob BLOB NOT NULL
+            description TEXT NOT NULL,
+            base_max_hp INTEGER NOT NULL,
+            base_max_mp INTEGER NOT NULL,
+            base_attack INTEGER NOT NULL,
+            base_defense INTEGER NOT NULL,
+            base_speed INTEGER NOT NULL,
+            base_critical_rate REAL NOT NULL,
+            base_evasion_rate REAL NOT NULL,
+            reward_exp INTEGER NOT NULL,
+            reward_gold INTEGER NOT NULL,
+            reward_loot_table_id INTEGER,
+            respawn_interval_ticks INTEGER NOT NULL,
+            respawn_is_auto INTEGER NOT NULL,
+            respawn_time_band TEXT,
+            race TEXT NOT NULL,
+            faction TEXT NOT NULL,
+            vision_range INTEGER NOT NULL,
+            flee_threshold REAL NOT NULL,
+            behavior_strategy_type TEXT NOT NULL,
+            ecology_type TEXT NOT NULL,
+            ambush_chase_range INTEGER,
+            territory_radius INTEGER,
+            active_time TEXT NOT NULL,
+            hunger_increase_per_tick REAL NOT NULL,
+            hunger_decrease_on_prey_kill REAL NOT NULL,
+            hunger_starvation_threshold REAL NOT NULL,
+            starvation_ticks INTEGER NOT NULL,
+            max_age_ticks INTEGER,
+            forage_threshold REAL NOT NULL,
+            hunger_decrease_on_feed REAL NOT NULL
         )
         """
     )
@@ -267,6 +570,89 @@ def _migration_v11(connection: sqlite3.Connection) -> None:
             ON game_monster_templates(name)
         """
     )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_monster_template_skill_ids (
+            template_id INTEGER NOT NULL,
+            skill_index INTEGER NOT NULL,
+            skill_id INTEGER NOT NULL,
+            PRIMARY KEY (template_id, skill_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_monster_template_phase_thresholds (
+            template_id INTEGER NOT NULL,
+            threshold_index INTEGER NOT NULL,
+            threshold REAL NOT NULL,
+            PRIMARY KEY (template_id, threshold_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_monster_template_threat_races (
+            template_id INTEGER NOT NULL,
+            race_index INTEGER NOT NULL,
+            race TEXT NOT NULL,
+            PRIMARY KEY (template_id, race_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_monster_template_prey_races (
+            template_id INTEGER NOT NULL,
+            race_index INTEGER NOT NULL,
+            race TEXT NOT NULL,
+            PRIMARY KEY (template_id, race_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_monster_template_growth_stages (
+            template_id INTEGER NOT NULL,
+            stage_index INTEGER NOT NULL,
+            after_ticks INTEGER NOT NULL,
+            stats_multiplier REAL NOT NULL,
+            flee_bias_multiplier REAL,
+            allow_chase INTEGER NOT NULL,
+            PRIMARY KEY (template_id, stage_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_monster_template_preferred_feed_items (
+            template_id INTEGER NOT NULL,
+            item_index INTEGER NOT NULL,
+            item_spec_id INTEGER NOT NULL,
+            PRIMARY KEY (template_id, item_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_monster_template_respawn_preferred_weather (
+            template_id INTEGER NOT NULL,
+            weather_index INTEGER NOT NULL,
+            weather_type TEXT NOT NULL,
+            PRIMARY KEY (template_id, weather_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_monster_template_respawn_required_area_traits (
+            template_id INTEGER NOT NULL,
+            trait_index INTEGER NOT NULL,
+            trait TEXT NOT NULL,
+            PRIMARY KEY (template_id, trait_index)
+        )
+        """
+    )
 
 
 def _migration_v12(connection: sqlite3.Connection) -> None:
@@ -274,8 +660,7 @@ def _migration_v12(connection: sqlite3.Connection) -> None:
         """
         CREATE TABLE IF NOT EXISTS game_loot_tables (
             loot_table_id INTEGER PRIMARY KEY NOT NULL,
-            name TEXT NOT NULL,
-            aggregate_blob BLOB NOT NULL
+            name TEXT NOT NULL
         )
         """
     )
@@ -283,6 +668,19 @@ def _migration_v12(connection: sqlite3.Connection) -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_game_loot_tables_name
             ON game_loot_tables(name, loot_table_id)
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_loot_table_entries (
+            loot_table_id INTEGER NOT NULL,
+            entry_index INTEGER NOT NULL,
+            item_spec_id INTEGER NOT NULL,
+            weight INTEGER NOT NULL,
+            min_quantity INTEGER NOT NULL,
+            max_quantity INTEGER NOT NULL,
+            PRIMARY KEY (loot_table_id, entry_index)
+        )
         """
     )
 
