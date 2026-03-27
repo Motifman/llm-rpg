@@ -54,7 +54,17 @@ def create_trade_read_model_repository_from_path(
     path = Path(db_path).expanduser().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path))
-    return SqliteTradeReadModelRepository(conn)
+    return SqliteTradeReadModelRepository.for_standalone_connection(conn)
+
+
+def attach_trade_read_model_repository_to_shared_connection(
+    connection: sqlite3.Connection,
+) -> SqliteTradeReadModelRepository:
+    """既存の sqlite3 接続（例: `SqliteUnitOfWork.connection`）に ReadModel を載せる。
+
+    書き込みの確定は接続を管理する UoW の `commit` に任せる。
+    """
+    return SqliteTradeReadModelRepository.for_shared_unit_of_work(connection)
 
 
 def create_trade_read_model_repository_from_env(
@@ -72,6 +82,7 @@ def create_trade_read_model_repository_from_env(
 
 
 __all__ = [
+    "attach_trade_read_model_repository_to_shared_connection",
     "create_trade_read_model_repository_from_env",
     "create_trade_read_model_repository_from_path",
     "resolve_trade_read_model_persisted_path",

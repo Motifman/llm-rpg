@@ -102,7 +102,8 @@ class UserAggregate(AggregateRoot):
             aggregate_id=int(self._user_id),
             aggregate_type="UserAggregate",
             follower_user_id=self._user_id,
-            followee_user_id=followee_user_id
+            followee_user_id=followee_user_id,
+            follower_display_name=self.profile.display_name,
         )
         self.add_event(event)
 
@@ -183,7 +184,8 @@ class UserAggregate(AggregateRoot):
             aggregate_id=self._user_id,
             aggregate_type="UserAggregate",
             subscriber_user_id=self._user_id,
-            subscribed_user_id=subscribed_user_id
+            subscribed_user_id=subscribed_user_id,
+            subscriber_display_name=self.profile.display_name,
         )
         self.add_event(event)
 

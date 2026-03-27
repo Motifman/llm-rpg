@@ -44,7 +44,16 @@ class PostAggregate(BaseSnsContentAggregate):
         return super().create_from_db(post_id, author_user_id, post_content, likes, mentions, reply_ids, deleted, None, None, created_at)
 
     @classmethod
-    def create(cls, post_id: PostId, author_user_id: UserId, post_content: PostContent) -> "PostAggregate":
+    def create(
+        cls,
+        post_id: PostId,
+        author_user_id: UserId,
+        post_content: PostContent,
+        *,
+        author_display_name: str = "",
+        mentioned_user_ids: frozenset[UserId] = frozenset(),
+        subscriber_user_ids: frozenset[UserId] = frozenset(),
+    ) -> "PostAggregate":
         """投稿を作成"""
         mentions = cls._create_mentions_from_content_static(post_id, post_content)
         likes = set()
@@ -62,7 +71,10 @@ class PostAggregate(BaseSnsContentAggregate):
             post_id=post_id,
             author_user_id=author_user_id,
             content=post_content,
-            mentions=mentions
+            mentions=mentions,
+            author_display_name=author_display_name,
+            mentioned_user_ids=mentioned_user_ids,
+            subscriber_user_ids=subscriber_user_ids,
         )
         post.add_event(event)
 
@@ -97,9 +109,9 @@ class PostAggregate(BaseSnsContentAggregate):
         """親情報を取得"""
         return None, None
 
-    def like_post(self, user_id: UserId):
+    def like_post(self, user_id: UserId, liker_display_name: str = ""):
         """ポストにいいね"""
-        self.like(user_id, "post")
+        self.like(user_id, "post", liker_display_name=liker_display_name)
 
     def delete_post(self, user_id: UserId):
         """ポストを削除"""

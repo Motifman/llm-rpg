@@ -12,6 +12,7 @@ from ai_rpg_world.domain.shop.event.shop_event import (
     ShopItemPurchasedEvent,
     ShopClosedEvent,
 )
+from ai_rpg_world.domain.shop.value_object.shop_listing_projection import ShopListingProjection
 from ai_rpg_world.domain.shop.exception.shop_exception import (
     NotShopOwnerException,
     ListingNotFoundException,
@@ -75,6 +76,9 @@ class ShopAggregate(AggregateRoot):
             spot_id=spot_id,
             location_area_id=location_area_id,
             owner_id=owner_id,
+            name=name,
+            description=description,
+            owner_ids=(owner_id,),
         )
         shop.add_event(event)
         return shop
@@ -125,6 +129,7 @@ class ShopAggregate(AggregateRoot):
         item_instance_id: ItemInstanceId,
         price_per_unit: ShopListingPrice,
         listed_by: PlayerId,
+        listing_projection: ShopListingProjection,
     ) -> None:
         """アイテムを出品する。listed_by はオーナーである必要がある。"""
         if listed_by not in self._owner_ids:
@@ -141,10 +146,13 @@ class ShopAggregate(AggregateRoot):
         event = ShopItemListedEvent.create(
             aggregate_id=self._shop_id,
             aggregate_type="ShopAggregate",
+            spot_id=self._spot_id,
+            location_area_id=self._location_area_id,
             listing_id=listing_id,
             item_instance_id=item_instance_id,
             price_per_unit=price_per_unit,
             listed_by=listed_by,
+            listing_projection=listing_projection,
         )
         self.add_event(event)
 
@@ -162,6 +170,8 @@ class ShopAggregate(AggregateRoot):
         event = ShopItemUnlistedEvent.create(
             aggregate_id=self._shop_id,
             aggregate_type="ShopAggregate",
+            spot_id=self._spot_id,
+            location_area_id=self._location_area_id,
             listing_id=listing_id,
             unlisted_by=player_id,
         )
@@ -217,6 +227,8 @@ class ShopAggregate(AggregateRoot):
         event = ShopClosedEvent.create(
             aggregate_id=self._shop_id,
             aggregate_type="ShopAggregate",
+            spot_id=self._spot_id,
+            location_area_id=self._location_area_id,
             closed_by=closed_by,
         )
         self.add_event(event)

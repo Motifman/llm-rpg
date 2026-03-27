@@ -22,28 +22,24 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.shop.repository.shop_listing_read_model_repository import (
         ShopListingReadModelRepository,
     )
-    from ai_rpg_world.domain.shop.repository.shop_repository import ShopRepository
-    from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 
 
 class ShopEventHandler:
     """ショップイベントハンドラ
 
     ドメインイベントを購読し、ReadModelを更新する。
+    投影用スナップショットはイベントペイロードに含まれる前提とし、
+    集約・Item リポジトリへは読みにいかない。
     """
 
     def __init__(
         self,
         shop_summary_read_model_repository: "ShopSummaryReadModelRepository",
         shop_listing_read_model_repository: "ShopListingReadModelRepository",
-        shop_repository: "ShopRepository",
-        item_repository: "ItemRepository",
         unit_of_work_factory: UnitOfWorkFactory,
     ):
         self._shop_summary_read_model_repository = shop_summary_read_model_repository
         self._shop_listing_read_model_repository = shop_listing_read_model_repository
-        self._shop_repository = shop_repository
-        self._item_repository = item_repository
         self._unit_of_work_factory = unit_of_work_factory
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -72,21 +68,13 @@ class ShopEventHandler:
     def handle_shop_created(self, event: ShopCreatedEvent) -> None:
         """ショップ開設イベントのハンドリング"""
         def operation():
-            shop = self._shop_repository.find_by_id(event.aggregate_id)
-            if not shop:
-                self._logger.error(
-                    "Shop aggregate not found for ReadModel update: %s",
-                    event.aggregate_id,
-                )
-                return
-
             read_model = ShopSummaryReadModel.create(
                 shop_id=event.aggregate_id,
                 spot_id=event.spot_id,
                 location_area_id=event.location_area_id,
-                name=shop.name,
-                description=shop.description,
-                owner_ids=list(shop.owner_ids),
+                name=event.name,
+                description=event.description,
+                owner_ids=list(event.owner_ids),
                 listing_count=0,
                 created_at=event.occurred_at,
             )
@@ -103,26 +91,15 @@ class ShopEventHandler:
     def handle_shop_item_listed(self, event: ShopItemListedEvent) -> None:
         """ショップ出品イベントのハンドリング"""
         def operation():
-            item = self._item_repository.find_by_id(event.item_instance_id)
-            if not item:
-                self._logger.error(
-                    "Item instance not found for ReadModel update: %s",
-                    event.item_instance_id.value,
-                )
-                return
-
-            item_spec = item.item_spec
-            quantity = item.item_instance.quantity
-            item_spec_id = item_spec.item_spec_id.value
-
+            p = event.listing_projection
             listing_read_model = ShopListingReadModel.create(
                 shop_id=event.aggregate_id,
                 listing_id=event.listing_id,
                 item_instance_id=event.item_instance_id,
-                item_name=item_spec.name,
-                item_spec_id=item_spec_id,
+                item_name=p.item_name,
+                item_spec_id=p.item_spec_id,
                 price_per_unit=event.price_per_unit.value,
-                quantity=quantity,
+                quantity=p.quantity,
                 listed_by=event.listed_by,
                 listed_at=event.occurred_at,
             )

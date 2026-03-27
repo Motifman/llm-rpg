@@ -10,10 +10,10 @@ branch: codex/sqlite-repository-transaction-alignment
 
 # Current State
 
-- Active phase: **なし**（Phase 3 完了、次は Phase 4）
-- Last completed phase: **Phase 3**（非同期レジストリ全体の監査表・横断結論・優先度）
-- Next recommended action: Phase 4（SQLite repository の `autocommit` 廃止と API 再設計）
-- Handoff summary: `PLAN.md` に「非同期ハンドラ監査結果（Phase 3）」を追加。Trade / Shop / SNS / Quest / Observation の async 経路を表に整理し、payload 不足は Trade 固有ではなく **Shop・SNS・Quest・観測 formatter** にも横断的に残ることを明文化。リファクタ優先度は Shop → SNS（いいね等）→ その他。`.cursor/skills/event-handler-patterns/SKILL.md` に分類ラベルと PLAN 参照を追記。コード変更なし。
+- Active phase: **なし**（Phase 4 完了、次は Phase 5）
+- Last completed phase: **Phase 4**（SQLite Trade ReadModel API 整理＋Shop／SNS 非同期経路のイベント完結化）
+- Next recommended action: Phase 5（書き込み集約向け transaction seam の固定）
+- Handoff summary: Trade 系 SQLite の `autocommit` を廃止し、単独接続用／UoW 共有用ファクトリを名前付きで分離。Shop は `ShopListingProjection` とイベント拡張で `ShopEventHandler` の集約・Item 後読みを除去。SNS はイベントペイロードと `PostCommandService`／`ReplyCommandService` の ID 解決で `NotificationEventHandlerService` の Post/Reply 後読みと `SnsRecipientStrategy` のユーザーリポジトリ依存を除去。`PLAN.md` の Phase 3 監査表（Shop・SNS 行）と優先度リストを実装後に合わせて更新。
 
 # Phase Journal
 
@@ -70,3 +70,21 @@ branch: codex/sqlite-repository-transaction-alignment
 - Scope delta: 監査対象に Quest を明示的に表に含めた（当初の「Trade / Shop / SNS / Observation など」の「など」を具体化）。
 - Handoff summary: 上記 Current State と同じ。
 - Next-phase impact: Phase 4 の SQLite `autocommit` 整理は、Phase 3 で特定した **Shop/SNS の別 tx 後読み**とは独立に進められる。将来 Shop payload 十分化を別 feature でやる場合の優先度は PLAN 内のリストを参照。
+
+## Phase 4
+
+- Started: 2026-03-27
+- Completed: 2026-03-27
+- Commit: （本コミット）
+- Tests: `pytest tests/domain/sns tests/application/social tests/application/observation/services/test_sns_recipient_strategy.py tests/infrastructure/repository/test_sqlite_trade_read_model_repository.py tests/infrastructure/unit_of_work/test_sqlite_unit_of_work.py` ほか関連スライス → **685+ passed**（SNS スライス単体では domain/social/observation の広い集合で 685 passed）
+- Findings:
+  - Trade 系 SQLite ReadModel は public `autocommit` をやめ、`for_standalone_connection` / `for_shared_unit_of_work` と factory の `attach_*_to_shared_connection` で責務を明示した（先行実装の要約）。
+  - Shop: `ShopListingProjection`・イベントの `spot_id` / `location_area_id` / 表示用フィールド拡張、`ShopCommandService` で Item から投影を組み立て、`ShopEventHandler` から `ShopRepository`／`ItemRepository` を除去。`ShopRecipientStrategy` は `shop_repository` を後方互換の未使用引数にし、listed/unlisted/closed はイベント上の spot のみで観測配信先を解決。
+  - SNS: `SnsUserSubscribedEvent` / `SnsUserFollowedEvent` に表示名、`SnsPostCreatedEvent` / `SnsReplyCreatedEvent` に `author_display_name`・`mentioned_user_ids`・（ポストのみ）`subscriber_user_ids`、`SnsContentLikedEvent` に `content_text`・`liker_display_name`。`PostAggregate`／`ReplyAggregate` の `like` はいいね者表示名を受け取る。`NotificationEventHandlerService` から `PostRepository`／`ReplyRepository` を削除。`SnsRecipientStrategy` は SNS ユーザーリポジトリなしでイベント上の ID 集合のみで解決。
+- Plan revision check: **実施**。Phase 3 本文の「Shop・SNS は後読みあり」記述と矛盾するため、**同一 feature 内で PLAN の監査表・優先度リストを実装後状態に更新**（future phase の順序や Phase 5/6 の定義は変更なし）。
+- User approval: ユーザー依頼（非同期ハンドラの見つけ次第修正・タスク残さない）に沿い、PLAN 本文の事実更新を同一コミットに含める。
+- Plan updates: `PLAN.md` の Phase 3 表（Shop・SNS 行）、横断結論の打ち消し線、優先度 1〜3 の取り消しと Phase 4 完了の Change Log。
+- Goal check: Phase 4 の Success Criteria（SQLite API・autocommit 廃止）に加え、ユーザー拡張要求としての Shop／SNS の通知・観測経路のイベント完結を満たす。
+- Scope delta: Phase 4 の「Trade 系のみ」記述を超えて Shop／SNS を同一セッションで実装（ユーザー明示の優先度に整合）。
+- Handoff summary: 上記 Current State と同じ。
+- Next-phase impact: Phase 5 は書き込み集約の transaction seam に専念できる。Quest・Observation formatter は未着手のまま監査表どおり別途。
