@@ -69,6 +69,48 @@ def shared_conn() -> sqlite3.Connection:
 
 
 class TestSqliteUnitOfWorkConnectionSharing:
+    def test_same_connection_sees_uncommitted_write_before_commit(
+        self, shared_conn: sqlite3.Connection
+    ) -> None:
+        """Phase 5: InMemory の pending aggregate と同目的の「同一論理 tx 内 save 直後の find」を、SQLite は同一接続の未コミット可視性で満たす。"""
+        uow = SqliteUnitOfWork(connection=shared_conn)
+        uow.begin()
+        try:
+            uow.connection.execute("INSERT INTO uow_t1 (id, v) VALUES (42, 'pending')")
+            cur = uow.connection.execute("SELECT v FROM uow_t1 WHERE id = 42")
+            row = cur.fetchone()
+            assert row is not None
+            assert row["v"] == "pending"
+        finally:
+            uow.rollback()
+
+    def test_other_file_connection_does_not_see_uncommitted_row(
+        self, tmp_path: Path
+    ) -> None:
+        """ファイル DB では、別接続は未コミットの INSERT を読めない（デフォルト分離）。"""
+        db = tmp_path / "iso.db"
+        fac = SqliteUnitOfWorkFactory(db)
+        setup = fac.create()
+        setup.begin()
+        setup.connection.execute(
+            "CREATE TABLE IF NOT EXISTS seam_iso (id INTEGER PRIMARY KEY, v TEXT NOT NULL)"
+        )
+        setup.commit()
+
+        uow = fac.create()
+        uow.begin()
+        try:
+            uow.connection.execute("INSERT INTO seam_iso (id, v) VALUES (1, 'x')")
+            conn2 = sqlite3.connect(str(Path(db).resolve()))
+            try:
+                conn2.row_factory = sqlite3.Row
+                cur = conn2.execute("SELECT id FROM seam_iso WHERE id = 1")
+                assert cur.fetchone() is None
+            finally:
+                conn2.close()
+        finally:
+            uow.rollback()
+
     def test_two_writers_use_same_connection_object(self, shared_conn: sqlite3.Connection) -> None:
         uow = SqliteUnitOfWork(connection=shared_conn)
         with uow:

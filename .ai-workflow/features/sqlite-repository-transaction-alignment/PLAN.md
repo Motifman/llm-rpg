@@ -308,6 +308,46 @@ branch: codex/sqlite-repository-transaction-alignment
 - Notes:
   - ここを曖昧にしたまま全 SQLite 化へ進まない
 
+### Phase 5 採用方針（transaction seam）
+
+**1. InMemory の seam（現状の意味）**
+
+| 機構 | 役割 |
+|------|------|
+| `add_operation` | トランザクション中の `save` 等を **コミット直前まで遅延**し、論理ロールバック時に datastore を触らない。 |
+| `register_pending_aggregate` / `get_pending_aggregate` | 上記遅延のため **datastore にはまだ無いが論理上は保存済み**の集約を、`find` が同一論理 tx 内で返せるようにする。 |
+| `InMemoryDataStore` のスナップショット | `rollback` でストア全体を戻す。 |
+
+**2. 同一 tx 内の `find` が満たすべき契約（実装非依存）**
+
+- 同一 `with uow:` 内で `repository.save(a)` の後に `repository.find_by_id(id)` したとき、**少なくとも `a` と整合する状態**が返ること（未コミットでもよい）。
+- `rollback` 後は、その tx 中に行った変更が **永続ストア／他接続から見えない**こと。
+
+**3. 採用案（SQLite 書き込み集約）: 即時 SQL + 共有接続 — SqliteUnitOfWork に pending map を載せない**
+
+- `SqliteUnitOfWork` は既に **1 トランザクションあたり 1 `sqlite3.Connection`** を `BEGIN` で束ねる（Phase 4 系の ReadModel と同型）。
+- 書き込み集約用 SQLite リポジトリは **`for_shared_unit_of_work(uow.connection)`**（または同等）で接続を共有し、**`save` / `delete` 内で即座に SQL を実行**する。リポジトリは **自前で `commit()` しない**（確定は UoW の `commit` のみ）。
+- SQLite は **同一接続・同一トランザクション内では、未コミットの行を自分の `SELECT` で読める**。よって InMemory の `register_pending_aggregate` と**同じユーザー向け保証**（save 直後の find）を、**DB のトランザクション分離**で満たす。
+- `add_operation` に相当する **二重の遅延キューは SQLite 側では持たない**（InMemory の「遅延コミットのシミュレーション」と SQLite の「実トランザクション」を二重にしない）。
+
+**4. 代替案の比較**
+
+| 案 | 内容 | 却下・保留理由 |
+|----|------|----------------|
+| A（採用） | 上記のとおり即時 SQL + 共有接続 | — |
+| B | `UnitOfWork` Protocol に `add_operation` / pending aggregate を追加し、`SqliteUnitOfWork` は no-op 実装 | 空実装の蓄積と「SQLite でも遅延すべき」誤解のリスク。Phase 6 で必要性が出たら再検討。 |
+| C | ステージングテーブルに溜め、コミット時に本テーブルへマージ | パイロット前に複雑さが過大。マルチテーブル一貫性が本当に必要になったら別論。 |
+
+**5. InMemory と SQLite の「揃え方」**
+
+- **揃えるのは契約**（同一 tx 内 save→find、rollback で巻き戻し）であり、**内部機構の一致は不要**。
+- 回帰は InMemory 既存テスト + SQLite 統合テスト（`tests/infrastructure/unit_of_work/test_sqlite_unit_of_work.py` 等）で **同じシナリオを言語化**して固定する（Phase 6 パイロットで具体リポジトリを追加）。
+
+**6. FakeUow / テストダブル**
+
+- 既存の InMemory 系テストは `InMemoryUnitOfWork` のまま変更しない。
+- SQLite パイロットでは **`SqliteUnitOfWork` 実物**または `:memory:` + 共有接続で検証し、`add_operation` を要求しないリポジトリ実装に寄せる。
+
 ## Phase 6: 書き込み集約 SQLite パイロットと回帰固定
 
 - Goal:
@@ -383,3 +423,4 @@ branch: codex/sqlite-repository-transaction-alignment
 - 2026-03-27: Phase 3 完了。非同期レジストリ全体の監査表・横断結論・リファクタ優先度を本章「非同期ハンドラ監査結果（Phase 3）」に追記
 - 2026-03-27: Phase 4 完了。Trade 系 SQLite ReadModel の `autocommit` 廃止と `for_standalone_connection` / `for_shared_unit_of_work` 整理、Shop／SNS の非同期ハンドラ・観測戦略をイベント完結に寄せた（監査表の Shop・SNS 行と優先度リストを実装後状態に更新）
 - 2026-03-27: Quest 追補。`QuestProgressReactionService` 抽出、イベント種別ごとの薄い Quest handler への分割、`MonsterDiedEvent.template_id` / `ItemAddedToInventoryEvent.item_spec_id_value` 追加により Quest 進捗判定の Monster / Item 後読みを除去
+- 2026-03-27: Phase 5 完了。書き込み集約向け transaction seam を「SQLite は共有接続で即時 SQL、InMemory は遅延操作＋ pending aggregate」と定義し、代替案比較と同一 tx 内 find 契約を PLAN に固定。`test_sqlite_unit_of_work` に未コミット read の可視性テストを追加
