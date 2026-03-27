@@ -31,3 +31,9 @@ class PostContent:
         hashtag_pattern = r'#(\w+)'
         matches = re.findall(hashtag_pattern, content)
         return tuple(matches)
+
+    @staticmethod
+    def extract_mention_display_names(content: str) -> frozenset[str]:
+        """@メンションの表示名を抽出（通知・観測でリポジトリ解決に使う）"""
+        mention_pattern = r"@(\S+)"
+        return frozenset(re.findall(mention_pattern, content))

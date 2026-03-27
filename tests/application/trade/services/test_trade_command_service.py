@@ -41,6 +41,32 @@ from ai_rpg_world.domain.trade.aggregate.trade_aggregate import TradeAggregate
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
 from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
+from ai_rpg_world.domain.trade.value_object.trade_listing_projection import TradeListingProjection
+from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
+from ai_rpg_world.domain.player.value_object.player_name import PlayerName
+from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
+from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
+from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import (
+    InMemoryPlayerProfileRepository,
+)
+from ai_rpg_world.infrastructure.repository.in_memory_item_repository import InMemoryItemRepository
+
+
+def _cmd_trade_listing_projection() -> TradeListingProjection:
+    return TradeListingProjection(
+        seller_display_name="SellerOne",
+        item_name="TradeItem",
+        item_quantity=1,
+        item_type=ItemType.CONSUMABLE,
+        item_rarity=Rarity.COMMON,
+        item_description="for trade command tests",
+        item_equipment_type=None,
+        durability_current=None,
+        durability_max=None,
+    )
 
 
 class TestTradeCommandService:
@@ -57,15 +83,60 @@ class TestTradeCommandService:
         trade_repository = InMemoryTradeRepository(data_store, unit_of_work)
         inventory_repository = InMemoryPlayerInventoryRepository(data_store, unit_of_work)
         status_repository = InMemoryPlayerStatusRepository(data_store, unit_of_work)
+        profile_repository = InMemoryPlayerProfileRepository(data_store, unit_of_work)
+        item_repository = InMemoryItemRepository(data_store, unit_of_work)
 
         service = TradeCommandService(
             trade_repository,
             inventory_repository,
             status_repository,
-            unit_of_work
+            profile_repository,
+            item_repository,
+            unit_of_work,
         )
 
-        return service, trade_repository, inventory_repository, status_repository, unit_of_work, event_publisher
+        return (
+            service,
+            trade_repository,
+            inventory_repository,
+            status_repository,
+            unit_of_work,
+            event_publisher,
+            profile_repository,
+            item_repository,
+        )
+
+    def _cmd_item_spec(self) -> ItemSpec:
+        return ItemSpec(
+            item_spec_id=ItemSpecId(1),
+            name="TradeItem",
+            item_type=ItemType.CONSUMABLE,
+            rarity=Rarity.COMMON,
+            description="for trade command tests",
+            max_stack_size=MaxStackSize(64),
+        )
+
+    def _seed_profile_item(
+        self,
+        profile_repo: InMemoryPlayerProfileRepository,
+        item_repo: InMemoryItemRepository,
+        *,
+        seller_id: int,
+        item_numeric_id: int,
+        buyer_ids: list[int],
+    ) -> None:
+        profile_repo.save(
+            PlayerProfileAggregate.create(PlayerId(seller_id), PlayerName("SellerOne"))
+        )
+        buyer_names = {2: "BuyerOne", 3: "BuyerTwo", 4: "BuyerFou"}
+        for bid in buyer_ids:
+            nm = buyer_names.get(bid, f"Play{bid}")
+            profile_repo.save(PlayerProfileAggregate.create(PlayerId(bid), PlayerName(nm)))
+        item_repo.save(
+            ItemAggregate.create(
+                ItemInstanceId(item_numeric_id), self._cmd_item_spec(), quantity=1
+            )
+        )
 
     def _create_sample_status(self, player_id: int):
         exp_table = ExpTable(100, 1.5)
@@ -82,10 +153,17 @@ class TestTradeCommandService:
         )
 
     def test_offer_item_success(self, setup_service):
-        service, trade_repo, inv_repo, status_repo, uow, _ = setup_service
+        service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
         
         # Setup seller inventory
         seller_id = 1
+        self._seed_profile_item(
+            profile_repo,
+            item_repo,
+            seller_id=seller_id,
+            item_numeric_id=100,
+            buyer_ids=[],
+        )
         inventory = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
         item_id = ItemInstanceId(100)
         inventory.acquire_item(item_id)
@@ -116,7 +194,7 @@ class TestTradeCommandService:
         assert inventory.is_item_reserved(item_id) is True
 
     def test_offer_item_seller_inventory_not_found(self, setup_service):
-        service, _, _, _, _, _ = setup_service
+        service, _, _, _, _, _, _, _ = setup_service
         
         command = OfferItemCommand(
             seller_id=999,
@@ -130,7 +208,7 @@ class TestTradeCommandService:
         assert "Seller inventory not found" in str(excinfo.value)
 
     def test_offer_item_slot_mismatch(self, setup_service):
-        service, trade_repo, inv_repo, status_repo, uow, _ = setup_service
+        service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
         
         seller_id = 1
         inventory = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
@@ -149,7 +227,7 @@ class TestTradeCommandService:
         assert "Item ID mismatch" in str(excinfo.value)
 
     def test_offer_item_direct_trade_missing_target(self, setup_service):
-        service, trade_repo, inv_repo, status_repo, uow, _ = setup_service
+        service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
         
         seller_id = 1
         inventory = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
@@ -170,12 +248,19 @@ class TestTradeCommandService:
         assert "Target player ID is required" in str(excinfo.value)
 
     def test_accept_trade_success(self, setup_service):
-        service, trade_repo, inv_repo, status_repo, uow, _ = setup_service
+        service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
         
         # Setup seller and buyer
         seller_id = 1
         buyer_id = 2
         item_id = ItemInstanceId(100)
+        self._seed_profile_item(
+            profile_repo,
+            item_repo,
+            seller_id=seller_id,
+            item_numeric_id=item_id.value,
+            buyer_ids=[buyer_id],
+        )
         
         seller_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
         seller_inv.acquire_item(item_id)
@@ -199,7 +284,8 @@ class TestTradeCommandService:
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
             created_at=datetime.now(),
-            trade_scope=TradeScope.global_trade()
+            trade_scope=TradeScope.global_trade(),
+            listing_projection=_cmd_trade_listing_projection(),
         )
         trade_repo.save(trade)
 
@@ -222,14 +308,14 @@ class TestTradeCommandService:
         assert inv_repo.find_by_id(PlayerId(buyer_id)).get_item_instance_id_by_slot(SlotId(0)) == item_id
 
     def test_accept_trade_not_found(self, setup_service):
-        service, _, _, _, _, _ = setup_service
+        service, _, _, _, _, _, _, _ = setup_service
         
         command = AcceptTradeCommand(trade_id=999, buyer_id=2)
         with pytest.raises(TradeNotFoundForCommandException):
             service.accept_trade(command)
 
     def test_accept_trade_self_trade_not_allowed(self, setup_service):
-        service, trade_repo, inv_repo, status_repo, uow, _ = setup_service
+        service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
         
         seller_id = 1
         item_id = ItemInstanceId(100)
@@ -246,7 +332,8 @@ class TestTradeCommandService:
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
             created_at=datetime.now(),
-            trade_scope=TradeScope.global_trade()
+            trade_scope=TradeScope.global_trade(),
+            listing_projection=_cmd_trade_listing_projection(),
         )
         trade_repo.save(trade)
 
@@ -256,7 +343,7 @@ class TestTradeCommandService:
             service.accept_trade(command)
 
     def test_accept_trade_target_mismatch(self, setup_service):
-        service, trade_repo, inv_repo, status_repo, uow, _ = setup_service
+        service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
         
         seller_id = 1
         buyer_id = 2
@@ -271,7 +358,8 @@ class TestTradeCommandService:
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
             created_at=datetime.now(),
-            trade_scope=TradeScope.direct_trade(PlayerId(other_id))
+            trade_scope=TradeScope.direct_trade(PlayerId(other_id)),
+            listing_projection=_cmd_trade_listing_projection(),
         )
         trade_repo.save(trade)
 
@@ -281,11 +369,18 @@ class TestTradeCommandService:
             service.accept_trade(command)
 
     def test_accept_trade_insufficient_gold(self, setup_service):
-        service, trade_repo, inv_repo, status_repo, uow, _ = setup_service
+        service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
         
         seller_id = 1
         buyer_id = 2
         item_id = ItemInstanceId(100)
+        self._seed_profile_item(
+            profile_repo,
+            item_repo,
+            seller_id=seller_id,
+            item_numeric_id=item_id.value,
+            buyer_ids=[buyer_id],
+        )
         
         # Setup seller
         seller_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
@@ -310,7 +405,8 @@ class TestTradeCommandService:
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
             created_at=datetime.now(),
-            trade_scope=TradeScope.global_trade()
+            trade_scope=TradeScope.global_trade(),
+            listing_projection=_cmd_trade_listing_projection(),
         )
         trade_repo.save(trade)
 
@@ -322,11 +418,18 @@ class TestTradeCommandService:
         assert "ゴールドが不足しています" in str(excinfo.value)
 
     def test_accept_trade_inventory_full(self, setup_service):
-        service, trade_repo, inv_repo, status_repo, uow, _ = setup_service
+        service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
         
         seller_id = 1
         buyer_id = 2
         item_id = ItemInstanceId(100)
+        self._seed_profile_item(
+            profile_repo,
+            item_repo,
+            seller_id=seller_id,
+            item_numeric_id=item_id.value,
+            buyer_ids=[buyer_id],
+        )
         
         # Setup seller
         seller_inv = PlayerInventoryAggregate.create_new_inventory(PlayerId(seller_id))
@@ -349,7 +452,8 @@ class TestTradeCommandService:
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
             created_at=datetime.now(),
-            trade_scope=TradeScope.global_trade()
+            trade_scope=TradeScope.global_trade(),
+            listing_projection=_cmd_trade_listing_projection(),
         )
         trade_repo.save(trade)
 
@@ -360,7 +464,7 @@ class TestTradeCommandService:
         assert "Buyer inventory is full" in str(excinfo.value)
 
     def test_cancel_trade_success(self, setup_service):
-        service, trade_repo, inv_repo, status_repo, uow, _ = setup_service
+        service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
         
         seller_id = 1
         item_id = ItemInstanceId(100)
@@ -377,7 +481,8 @@ class TestTradeCommandService:
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
             created_at=datetime.now(),
-            trade_scope=TradeScope.global_trade()
+            trade_scope=TradeScope.global_trade(),
+            listing_projection=_cmd_trade_listing_projection(),
         )
         trade_repo.save(trade)
 
@@ -396,7 +501,7 @@ class TestTradeCommandService:
         assert inventory.get_item_instance_id_by_slot(SlotId(0)) == item_id
 
     def test_cancel_trade_not_seller(self, setup_service):
-        service, trade_repo, inv_repo, status_repo, uow, _ = setup_service
+        service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
         
         seller_id = 1
         other_id = 2
@@ -410,7 +515,8 @@ class TestTradeCommandService:
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
             created_at=datetime.now(),
-            trade_scope=TradeScope.global_trade()
+            trade_scope=TradeScope.global_trade(),
+            listing_projection=_cmd_trade_listing_projection(),
         )
         trade_repo.save(trade)
 
@@ -419,7 +525,7 @@ class TestTradeCommandService:
             service.cancel_trade(command)
 
     def test_cancel_trade_already_completed(self, setup_service):
-        service, trade_repo, inv_repo, status_repo, uow, _ = setup_service
+        service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
         
         seller_id = 1
         buyer_id = 2
@@ -439,9 +545,14 @@ class TestTradeCommandService:
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
             created_at=datetime.now(),
-            trade_scope=TradeScope.global_trade()
+            trade_scope=TradeScope.global_trade(),
+            listing_projection=_cmd_trade_listing_projection(),
         )
-        trade.accept_by(PlayerId(buyer_id)) # Complete it
+        trade.accept_by(
+            PlayerId(buyer_id),
+            "BuyerOne",
+            _cmd_trade_listing_projection(),
+        )
         trade_repo.save(trade)
 
         command = CancelTradeCommand(trade_id=trade_id.value, player_id=seller_id)
@@ -453,7 +564,7 @@ class TestTradeCommandService:
 
     def test_decline_trade_success(self, setup_service):
         """直接取引の宛先が断ると成功する"""
-        service, trade_repo, inv_repo, status_repo, uow, _ = setup_service
+        service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
 
         seller_id = 1
         target_id = 2
@@ -474,6 +585,7 @@ class TestTradeCommandService:
             requested_gold=TradeRequestedGold.of(500),
             created_at=datetime.now(),
             trade_scope=TradeScope.direct_trade(PlayerId(target_id)),
+            listing_projection=_cmd_trade_listing_projection(),
         )
         trade_repo.save(trade)
 
@@ -492,14 +604,14 @@ class TestTradeCommandService:
 
     def test_decline_trade_not_found(self, setup_service):
         """存在しない取引を断ろうとするとTradeNotFoundForCommandException"""
-        service, _, _, _, _, _ = setup_service
+        service, _, _, _, _, _, _, _ = setup_service
         command = DeclineTradeCommand(trade_id=999, decliner_id=2)
         with pytest.raises(TradeNotFoundForCommandException):
             service.decline_trade(command)
 
     def test_decline_trade_seller_cannot_decline(self, setup_service):
         """出品者は自分の取引を断れない"""
-        service, trade_repo, inv_repo, status_repo, uow, _ = setup_service
+        service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
 
         seller_id = 1
         target_id = 2
@@ -518,6 +630,7 @@ class TestTradeCommandService:
             requested_gold=TradeRequestedGold.of(500),
             created_at=datetime.now(),
             trade_scope=TradeScope.direct_trade(PlayerId(target_id)),
+            listing_projection=_cmd_trade_listing_projection(),
         )
         trade_repo.save(trade)
 
@@ -528,7 +641,7 @@ class TestTradeCommandService:
 
     def test_decline_trade_non_target_cannot_decline(self, setup_service):
         """直接取引の宛先以外は断れない"""
-        service, trade_repo, inv_repo, status_repo, uow, _ = setup_service
+        service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
 
         seller_id = 1
         target_id = 2
@@ -548,6 +661,7 @@ class TestTradeCommandService:
             requested_gold=TradeRequestedGold.of(500),
             created_at=datetime.now(),
             trade_scope=TradeScope.direct_trade(PlayerId(target_id)),
+            listing_projection=_cmd_trade_listing_projection(),
         )
         trade_repo.save(trade)
 
@@ -558,7 +672,7 @@ class TestTradeCommandService:
 
     def test_decline_trade_global_raises(self, setup_service):
         """グローバル取引は断れない"""
-        service, trade_repo, inv_repo, status_repo, uow, _ = setup_service
+        service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
 
         seller_id = 1
         buyer_id = 2
@@ -577,6 +691,7 @@ class TestTradeCommandService:
             requested_gold=TradeRequestedGold.of(500),
             created_at=datetime.now(),
             trade_scope=TradeScope.global_trade(),
+            listing_projection=_cmd_trade_listing_projection(),
         )
         trade_repo.save(trade)
 
@@ -587,7 +702,7 @@ class TestTradeCommandService:
 
     def test_decline_trade_already_cancelled(self, setup_service):
         """キャンセル済み取引を断ろうとするとTradeCommandExceptionが発生する"""
-        service, trade_repo, inv_repo, status_repo, uow, _ = setup_service
+        service, trade_repo, inv_repo, status_repo, uow, _, profile_repo, item_repo = setup_service
 
         seller_id = 1
         target_id = 2
@@ -606,6 +721,7 @@ class TestTradeCommandService:
             requested_gold=TradeRequestedGold.of(500),
             created_at=datetime.now(),
             trade_scope=TradeScope.direct_trade(PlayerId(target_id)),
+            listing_projection=_cmd_trade_listing_projection(),
         )
         trade.cancel_by(PlayerId(seller_id))  # 出品者がキャンセル済み
         trade_repo.save(trade)

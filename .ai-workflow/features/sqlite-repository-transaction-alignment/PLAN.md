@@ -93,6 +93,102 @@ branch: codex/sqlite-repository-transaction-alignment
 - SQLite の書き込み系パイロットで、同一 tx 内 find semantics をどう守るかに追加設計が必要になる可能性がある。
 - `sqlite-domain-repositories-uow` をマージ前に先走って実装すると差分が競合しやすい。
 
+# Trade イベント・ハンドラの監査結果（Phase 1）
+
+コマンド側と投影側の責務をコード（`TradeCommandService`、`TradeAggregate`、`TradeEventHandler`、`TradeEventHandlerRegistry`）に照らして整理した。**いずれの Trade ハンドラも「本体の業務一貫性」を担っておらず、ReadModel の投影に限定されている**。したがって **現状の非同期登録を維持する**判断とする。同期へ戻す必要はない（後述）。
+
+## 呼び出し関係
+
+- **コマンド**: `TradeCommandService` の `offer_item` / `accept_trade` / `cancel_trade` / `decline_trade` はいずれも `with self._unit_of_work` 内で集約とインベントリ・ステータス等を保存する。`TradeAggregate` が `Trade*Event` を `add_event` する。
+- **投影**: `TradeEventHandlerRegistry` は 4 イベントすべてを `is_synchronous=False` で登録する。各 `handle_*` は `_execute_in_separate_transaction` により **新規に作成した UoW** のブロック内で ReadModel リポジトリのみを更新する（コマンド時の UoW とは別トランザクション）。
+
+## イベント別: ペイロードとドメイン意味
+
+| イベント | ペイロード（現状） | ドメイン上の意味 |
+|----------|-------------------|------------------|
+| `TradeOfferedEvent` | `seller_id`, `offered_item_id`, `requested_gold`, `trade_scope` | 新規取引がアクティブとして成立した |
+| `TradeAcceptedEvent` | `buyer_id` | 取引が完了し購入者が確定した |
+| `TradeCancelledEvent` | 集約 ID のみ（基底の `aggregate_id` 等） | 出品者により取引がキャンセルされた |
+| `TradeDeclinedEvent` | `decliner_id` | 直接取引の宛先プレイヤーが拒否し、状態はキャンセル相当になった |
+
+## ハンドラ別: 保証すること・同期／非同期・根拠
+
+| ハンドラ | 処理の内容（保証しようとしていること） | 登録 | 結論と根拠 |
+|----------|----------------------------------------|------|------------|
+| `handle_trade_offered` | 出品者名・アイテム表示情報を付与した `TradeReadModel` を新規 `save`（`PlayerProfileRepository` / `ItemRepository` で後読み） | 非同期 | **非同期のまま妥当**。インベントリ予約と取引集約の一貫性はコマンドの UoW で既に確定。ReadModel は追従でよい。リポジトリの event-handler-patterns における「Trade ReadModel は非同期」の例と一致。 |
+| `handle_trade_accepted` | 既存 ReadModel に購入者名・状態を反映（ReadModel が無い場合は集約 `find` を試みるが、未整備なら警告してスキップ） | 非同期 | **同上**。ゴールド移転・インベントリ更新は `accept_trade` 内で完了済み。 |
+| `handle_trade_cancelled` | ReadModel の status をキャンセル相当に更新 | 非同期 | **同上**。 |
+| `handle_trade_declined` | ReadModel の status をキャンセル相当に更新（`decliner_id` は現状ハンドラ内で ReadModel フィールドに未反映） | 非同期 | **同上**。拒否とキャンセルの表示差分が必要になったらペイロードまたは投影の整理対象（Phase 2 以降で要否判断）。 |
+
+## 同一トランザクション必須の処理（境界の切り分け）
+
+次は **Trade イベントハンドラではなく `TradeCommandService` の UoW 内**に属する。ここが取引の業務一貫性の本体である。
+
+- **出品**: インベントリの予約、取引集約の作成と保存
+- **受諾**: ゴールドの移転、インベントリの変更、取引完了と保存
+- **キャンセル／拒否**: 予約解除、取引状態の更新と保存
+
+## 先行レビュー（sqlite-domain-repositories-uow）の前提への取り込み
+
+- **意味論的 `with uow:` と SQLite ReadModel のズレ**（別接続・別コミットになりうること）は、ハンドラが「投影専用・別トランザクション」であること自体とは別次元の、**永続化 API と接続共有の整理課題**として Phase 4 以降で扱う。
+- **同期ハンドラへ寄せてコマンド UoW と ReadModel を同一トランザクションにまとめる**方針は、本 feature のユーザー合意（非同期 ReadModel 更新は許容）および「同期は同一一貫性が必須な処理のみ」という制約に照らし、**Phase 1 の結論では採用しない**。
+
+## Phase 2 へのインプット（観測されたズレ）
+
+- `handle_trade_offered` / `handle_trade_accepted` が **イベントだけでは足りず**、プロフィール・アイテムを後読みしている（IDEA・先行 REVIEW の指摘どおり）。
+- `handle_trade_accepted` が ReadModel 欠落時に **完全な再投影を持たず**警告で終わる。Phase 2 でペイロード十分化とあわせ、再投影方針を整理する。
+
+# 非同期ハンドラ監査結果（Phase 3）
+
+`src/ai_rpg_world/infrastructure/events/` 配下のレジストリで `is_synchronous=False` が付与されている本番経路を対象に、**役割・イベントだけで足りる情報・後読み依存・同期化の要否**を整理した。テスト専用の登録は含めない。
+
+## レジストリ単位の概要
+
+| レジストリ | 非同期登録数（目安） | 担当中枢 | 非同期でよい主な理由 |
+|------------|---------------------|----------|----------------------|
+| `trade_event_handler_registry` | 4 | `TradeEventHandler` | ReadModel 投影のみ。Phase 2 以降、投影はイベントペイロードで自己完結。 |
+| `shop_event_handler_registry` | 4 | `ShopEventHandler` | ReadModel 投影。ただし **集約・Item の後読みが残る**（下表）。 |
+| `sns_event_handler_registry` | 6 | `NotificationEventHandlerService` / `RelationshipEventHandlerService` | 通知生成・関係更新は **コマンド成功後でよい**。失敗しても本体をロールバックしない方針。 |
+| `quest_event_handler_registry` | 7 | イベント種別ごとの薄い Quest handler + `QuestProgressReactionService` | クエスト進捗・報酬は eventual でよい設計。Phase 4 後半で **ハンドラ分割 + reaction service 化**を実施。 |
+| `observation_event_handler_registry` | **74 型**（`_OBSERVED_EVENT_TYPES` の要素数） | `ObservationEventHandler` | LLM 向け観測の蓄積。**本文生成は formatter / name_resolver 側**で型ごとに後読みがありうる（ReadModel ハンドラとは別経路）。 |
+
+## ハンドラ別・分類表
+
+**凡例**: 「イベントのみ」= 別リポジトリに投影用データを取りにいかなくてよい理想状態。「後読みあり」= 現実装で `find` 等に依存。
+
+| コンテキスト | ハンドラ（メソッド等） | 役割 | イベントのみで足りる範囲 | 後読み依存（現状） | 同期化の要否（現判断） |
+|-------------|------------------------|------|--------------------------|-------------------|------------------------|
+| Trade | `TradeEventHandler` 4 メソッド | メイン Trade ReadModel 更新 | Phase 2 済：**投影用スナップショットはイベント内** | なし（ReadModel 用） | **不要**（非同期のまま） |
+| Shop | `handle_shop_created` | ショップ概要 ReadModel 新規 | **イベントに name / description / owner_ids を保持**（Phase 4 で実装） | **なし**（ReadModel 用） | **不要**（非同期のまま） |
+| Shop | `handle_shop_item_listed` | 出品行 ReadModel + 件数 | **listing 投影・spot・location をイベントに保持** | **なし**（ReadModel 用） | **不要** |
+| Shop | `handle_shop_item_unlisted` / `handle_shop_item_purchased` | 行削除・数量更新 | **spot / location をイベントに保持**、listing_id / quantity | **既存 ReadModel 行の find**（投影ストアのみ） | 不要。欠落時はログ・スキップ |
+| SNS | `NotificationEventHandlerService.handle_user_subscribed` / `handle_user_followed` | 通知レコード作成 | **表示名をイベントに保持**（Phase 4 で実装）。宛先ユーザーの存在確認のみ `find` | 表示名の **プロフィールへの後読みは不要** | **不要**（非同期のまま） |
+| SNS | `handle_post_created` | メンション・サブスク通知 | **author 表示名・mentioned_user_ids・subscriber_user_ids** をイベントに保持（コマンドで解決） | **なし**（通知本文はイベント由来） | **不要** |
+| SNS | `handle_reply_created` | 同上 | **author 表示名・mentioned_user_ids**、親 id・本文 | **なし**（同上） | **不要** |
+| SNS | `handle_content_liked` | いいね通知 | **content_text・liker_display_name** をイベントに保持（いいね時の集約から） | **Post/Reply リポジトリへの後読みなし** | **不要** |
+| SNS | `RelationshipEventHandlerService.handle_user_blocked` | ブロック時の follow / subscribe 解除 | blocker / blocked id | **両者の User 集約 load と変更** | 不要（非同期のまま）。** Writable だがコマンド本体とは別 tx** で意図的 |
+| Quest | `MonsterDiedQuestProgressHandler` など 7 handler + `QuestProgressReactionService` | 目標進捗・完了・報酬 | `MonsterDiedEvent.template_id` / `ItemAddedToInventoryEvent.item_spec_id_value` を含め、**進捗判定はイベントのみで完結** | **Quest / Inventory / Status / ItemSpec**（報酬付与のための正当な書き込み参照） | 不要。**同期化は設計・負荷・デッドリスクが大きい**別論 |
+| Observation | `ObservationEventHandler.handle` | pipeline → appender → 中断・ターン | イベントインスタンス全体 | **各 `TradeObservationFormatter` 等**が `ObservationNameResolver` で player/item を解決する例あり | 不要。観測は **ReadModel 更新とは別の後読み経路**として理解する |
+
+## 横断結論（payload 不足は Trade だけか）
+
+- **Trade の ReadModel 投影だけが特殊だったわけではない。** ~~**Shop ReadModel** は **Trade 以前と同型**（集約・アイテムの後読み）が残る。~~ → **Phase 4 で Shop 投影はイベント＋コマンド側スナップショットで完結**するよう更新済み。
+- ~~**SNS 通知**は…~~ → **Phase 4 で通知ハンドラの Post/Reply 後読みを廃止**し、フォロー／サブスク表示名・ポストの購読者／メンション ID・いいね本文・いいね者表示名をイベント（およびコマンドで解決した ID 集合）に載せる形に更新済み。
+- **Quest** は当初「後読み」以前に **1 ハンドラが担う業務が重い**のが主問題だったが、現在は **イベント種別ごとの薄い handler + `QuestProgressReactionService`** に分割済み。さらに `MonsterDiedEvent.template_id` と `ItemAddedToInventoryEvent.item_spec_id_value` を載せ、**Quest 進捗判定のための Monster / Item 後読みは除去**した。
+- **Observation** は **74 型を 1 ハンドラ**が受け、**formatter 層の後読み**が型ごとにばらつく。Trade 投影をイベント完結にしても、**観測プローズ用の name_resolver 経路**は別途残りうる。
+
+## 推奨リファクタ優先度（Phase 3 時点のメモ → Phase 4 で実施した項目を反映）
+
+1. ~~**Shop ReadModel**~~ — **Phase 4 で対応済み**（イベント＋`ShopCommandService` で listing 投影を組み立て、`ShopEventHandler` から集約／Item 後読みを除去）。
+2. ~~**SNS `handle_content_liked`**~~ — **Phase 4 で対応済み**（`SnsContentLikedEvent` に本文・いいね者表示名、`NotificationEventHandlerService` から Post/Reply リポジトリを除去）。
+3. ~~**SNS subscribe / follow / post / reply**~~ — **Phase 4 で対応済み**（表示名・subscriber／mention user id 集合をイベントまたはコマンド解決で載せる）。
+4. ~~**Quest**~~ — **同日対応済み**（薄い handler 分割、`QuestProgressReactionService` 抽出、Monster / Item payload 十分化）。同期化は別イシューで扱う。
+5. **Observation formatter** — ReadModel ハンドラと混同せず、型ごとに「resolver 必須か」を今後の表に追記していく。
+
+## event-handler-patterns への反映
+
+詳細表は本章（本 PLAN）を正とする。`.cursor/skills/event-handler-patterns/SKILL.md` には **分類ラベルと PLAN 参照**を追記し、新規非同期ハンドラ追加時に「ReadModel 投影／通知／観測／重い業務」のどれに近いかを意識させる。
+
 # Phases
 
 ## Phase 1: Trade イベントとハンドラの意味論監査
@@ -212,14 +308,54 @@ branch: codex/sqlite-repository-transaction-alignment
 - Notes:
   - ここを曖昧にしたまま全 SQLite 化へ進まない
 
+### Phase 5 採用方針（transaction seam）
+
+**1. InMemory の seam（現状の意味）**
+
+| 機構 | 役割 |
+|------|------|
+| `add_operation` | トランザクション中の `save` 等を **コミット直前まで遅延**し、論理ロールバック時に datastore を触らない。 |
+| `register_pending_aggregate` / `get_pending_aggregate` | 上記遅延のため **datastore にはまだ無いが論理上は保存済み**の集約を、`find` が同一論理 tx 内で返せるようにする。 |
+| `InMemoryDataStore` のスナップショット | `rollback` でストア全体を戻す。 |
+
+**2. 同一 tx 内の `find` が満たすべき契約（実装非依存）**
+
+- 同一 `with uow:` 内で `repository.save(a)` の後に `repository.find_by_id(id)` したとき、**少なくとも `a` と整合する状態**が返ること（未コミットでもよい）。
+- `rollback` 後は、その tx 中に行った変更が **永続ストア／他接続から見えない**こと。
+
+**3. 採用案（SQLite 書き込み集約）: 即時 SQL + 共有接続 — SqliteUnitOfWork に pending map を載せない**
+
+- `SqliteUnitOfWork` は既に **1 トランザクションあたり 1 `sqlite3.Connection`** を `BEGIN` で束ねる（Phase 4 系の ReadModel と同型）。
+- 書き込み集約用 SQLite リポジトリは **`for_shared_unit_of_work(uow.connection)`**（または同等）で接続を共有し、**`save` / `delete` 内で即座に SQL を実行**する。リポジトリは **自前で `commit()` しない**（確定は UoW の `commit` のみ）。
+- SQLite は **同一接続・同一トランザクション内では、未コミットの行を自分の `SELECT` で読める**。よって InMemory の `register_pending_aggregate` と**同じユーザー向け保証**（save 直後の find）を、**DB のトランザクション分離**で満たす。
+- `add_operation` に相当する **二重の遅延キューは SQLite 側では持たない**（InMemory の「遅延コミットのシミュレーション」と SQLite の「実トランザクション」を二重にしない）。
+
+**4. 代替案の比較**
+
+| 案 | 内容 | 却下・保留理由 |
+|----|------|----------------|
+| A（採用） | 上記のとおり即時 SQL + 共有接続 | — |
+| B | `UnitOfWork` Protocol に `add_operation` / pending aggregate を追加し、`SqliteUnitOfWork` は no-op 実装 | 空実装の蓄積と「SQLite でも遅延すべき」誤解のリスク。Phase 6 で必要性が出たら再検討。 |
+| C | ステージングテーブルに溜め、コミット時に本テーブルへマージ | パイロット前に複雑さが過大。マルチテーブル一貫性が本当に必要になったら別論。 |
+
+**5. InMemory と SQLite の「揃え方」**
+
+- **揃えるのは契約**（同一 tx 内 save→find、rollback で巻き戻し）であり、**内部機構の一致は不要**。
+- 回帰は InMemory 既存テスト + SQLite 統合テスト（`tests/infrastructure/unit_of_work/test_sqlite_unit_of_work.py` 等）で **同じシナリオを言語化**して固定する（Phase 6 パイロットで具体リポジトリを追加）。
+
+**6. FakeUow / テストダブル**
+
+- 既存の InMemory 系テストは `InMemoryUnitOfWork` のまま変更しない。
+- SQLite パイロットでは **`SqliteUnitOfWork` 実物**または `:memory:` + 共有接続で検証し、`add_operation` を要求しないリポジトリ実装に寄せる。
+
 ## Phase 6: 書き込み集約 SQLite パイロットと回帰固定
 
 - Goal:
   - 固定した seam を使って 1 つ以上の書き込み集約を SQLite 化し、設計の実効性を検証する。
 - Scope:
-  - Trade または Shop の最小パイロットを選定
+  - Trade コマンドが依存する **5 書き込みリポジトリ**を SQLite 化し、`GAME_DB_PATH` 単一 DB に同居する雛形とする（ユーザー合意: 後回しにしない）
   - `SqliteUnitOfWork` 共有接続で複数 repository 更新の原子性を確認
-  - 同一 tx 内 save → find と rollback をテストで固定
+  - 同一 tx 内 save → find と rollback・**シーケンス採番の rollback** をテストで固定
   - `SQLITE_REPOSITORY_CHECKLIST.md` と新 feature の SUMMARY / REVIEW を更新
 - Dependencies:
   - Phase 4
@@ -282,3 +418,10 @@ branch: codex/sqlite-repository-transaction-alignment
 
 - 2026-03-27: Initial plan created
 - 2026-03-27: ユーザーとの再整理を反映し、Trade イベント payload 十分化、非同期ハンドラ監査、`autocommit` 廃止、transaction seam 固定、書き込み集約 SQLite パイロットまでを含む 6 phase に更新
+- 2026-03-27: Phase 1 監査完了。Trade 4 イベント・4 ハンドラの分類表と同期／非同期判断を本章「Trade イベント・ハンドラの監査結果（Phase 1）」に追記
+- 2026-03-27: Phase 2 完了。`TradeListingProjection`・`TradeOfferedEvent` / `TradeAcceptedEvent` のペイロード拡張、`TradeEventHandler` の後読み廃止、受諾時 ReadModel 欠落のイベントからの再投影を実装
+- 2026-03-27: Phase 3 完了。非同期レジストリ全体の監査表・横断結論・リファクタ優先度を本章「非同期ハンドラ監査結果（Phase 3）」に追記
+- 2026-03-27: Phase 4 完了。Trade 系 SQLite ReadModel の `autocommit` 廃止と `for_standalone_connection` / `for_shared_unit_of_work` 整理、Shop／SNS の非同期ハンドラ・観測戦略をイベント完結に寄せた（監査表の Shop・SNS 行と優先度リストを実装後状態に更新）
+- 2026-03-27: Quest 追補。`QuestProgressReactionService` 抽出、イベント種別ごとの薄い Quest handler への分割、`MonsterDiedEvent.template_id` / `ItemAddedToInventoryEvent.item_spec_id_value` 追加により Quest 進捗判定の Monster / Item 後読みを除去
+- 2026-03-27: Phase 5 完了。書き込み集約向け transaction seam を「SQLite は共有接続で即時 SQL、InMemory は遅延操作＋ pending aggregate」と定義し、代替案比較と同一 tx 内 find 契約を PLAN に固定。`test_sqlite_unit_of_work` に未コミット read の可視性テストを追加
+- 2026-03-27: Phase 6 完了。Trade コマンド経路の 5 書き込みリポジトリ（取引集約・プロフィール・アイテム・インベントリ・ステータス）を `GAME_DB_PATH` 同居用の `game_*` / `trade_aggregates` テーブルに実装。`trade_command_sqlite_wiring`・`create_sqlite_scope_with_event_publisher`・`TransactionalScope.is_in_transaction`・`SqliteUnitOfWork.execute_pending_operations` を追加。`TestTradeCommandServiceSqlite` で既存 38 ケース＋採番 rollback を回帰。`SQLITE_REPOSITORY_CHECKLIST.md` を書き込み系・暗黙トランザクション注意に更新

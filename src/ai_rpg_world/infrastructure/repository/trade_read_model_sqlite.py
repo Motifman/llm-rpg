@@ -7,7 +7,7 @@ def init_trade_read_model_schema(conn: sqlite3.Connection) -> None:
     """trade_read_models テーブルと seller+ACTIVE 向け複合 index を作成する。
 
     明示的な `commit()` は行わない。`SqliteUnitOfWork` 等の外側トランザクションに含められるよう、
-    DDL のみを発行する。単体接続で autocommit のときは各文が自動確定される。
+    DDL のみを発行する。単体接続（既定の自動コミットモード）では各文が自動確定される。
     """
     conn.execute(
         """

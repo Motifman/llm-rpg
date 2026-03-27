@@ -275,7 +275,10 @@ class ConversationCommandService:
                                 quantity=1,
                             )
                             self._item_repository.save(item_agg)
-                            inv.acquire_item(instance_id)
+                            inv.acquire_item(
+                                instance_id,
+                                item_spec_id_value=item_spec.item_spec_id.value,
+                            )
                         self._player_inventory_repository.save(inv)
         self._event_publisher.publish(
             ConversationEndedEvent.create(

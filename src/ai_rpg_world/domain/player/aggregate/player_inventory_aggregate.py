@@ -205,7 +205,11 @@ class PlayerInventoryAggregate(AggregateRoot):
         """装備スロットタイプからItemInstanceIdを取得"""
         return self._equipment_slots.get(equipment_slot)
 
-    def acquire_item(self, item_instance_id: ItemInstanceId) -> None:
+    def acquire_item(
+        self,
+        item_instance_id: ItemInstanceId,
+        item_spec_id_value: int | None = None,
+    ) -> None:
         """アイテムを入手する（アイテム入手イベントを発行）"""
         # 空きスロットを探す
         empty_slot = self._find_empty_inventory_slot()
@@ -227,7 +231,8 @@ class PlayerInventoryAggregate(AggregateRoot):
         event = ItemAddedToInventoryEvent.create(
             aggregate_id=self._player_id,
             aggregate_type="PlayerInventoryAggregate",
-            item_instance_id=item_instance_id
+            item_instance_id=item_instance_id,
+            item_spec_id_value=item_spec_id_value,
         )
         self.add_event(event)
 

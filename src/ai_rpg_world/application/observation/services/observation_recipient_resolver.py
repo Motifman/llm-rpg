@@ -90,7 +90,7 @@ def create_observation_recipient_resolver(
     physical_map_repository: PhysicalMapRepository,
     quest_repository: Optional[QuestRepository] = None,
     guild_repository: Optional[GuildRepository] = None,
-    shop_repository: Optional[ShopRepository] = None,
+    shop_repository: Optional[ShopRepository] = None,  # 後方互換のみ（未使用）
     trade_repository: Optional[TradeRepository] = None,
     monster_repository: Optional[MonsterRepository] = None,
     hit_box_repository: Optional[HitBoxRepository] = None,
@@ -102,6 +102,8 @@ def create_observation_recipient_resolver(
     既存と同様の振る舞いになる Resolver を組み立てる。
     デフォルト戦略と WorldObjectToPlayerResolver を用いる。
     """
+    _ = shop_repository
+    _ = sns_user_repository
     observed_event_registry = ObservedEventRegistry()
     world_object_resolver = WorldObjectToPlayerResolver(physical_map_repository)
     player_audience_query = PlayerAudienceQueryService(
@@ -120,7 +122,6 @@ def create_observation_recipient_resolver(
         ShopRecipientStrategy(
             observed_event_registry=observed_event_registry,
             player_audience_query=player_audience_query,
-            shop_repository=shop_repository,
         ),
         TradeRecipientStrategy(
             observed_event_registry=observed_event_registry,
@@ -128,7 +129,6 @@ def create_observation_recipient_resolver(
         ),
         SnsRecipientStrategy(
             observed_event_registry=observed_event_registry,
-            sns_user_repository=sns_user_repository,
         ),
         GuildRecipientStrategy(
             observed_event_registry=observed_event_registry,

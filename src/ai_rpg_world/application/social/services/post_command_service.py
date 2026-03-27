@@ -72,6 +72,14 @@ class PostCommandService:
             }
         )
 
+    def _mentioned_user_ids_for_content(self, post_content: PostContent) -> frozenset[UserId]:
+        resolved: set[UserId] = set()
+        for name in PostContent.extract_mention_display_names(post_content.content):
+            user = self._user_repository.find_by_display_name(name)
+            if user is not None:
+                resolved.add(user.user_id)
+        return frozenset(resolved)
+
     def _create_post_impl(self, command: CreatePostCommand) -> CommandResultDto:
         """ポストを作成の実装"""
         # トランザクション境界の設定
@@ -83,10 +91,20 @@ class PostCommandService:
 
             # PostContentの作成（ハッシュタグはドメイン層で自動抽出）
             post_content = PostContent.create(command.content, command.visibility)
+            author_id = UserId(command.user_id)
+            mentioned_ids = self._mentioned_user_ids_for_content(post_content)
+            subscriber_ids = frozenset(self._user_repository.find_subscribers(author_id))
 
             # PostAggregateの作成
             post_id = self._post_repository.generate_post_id()
-            post_aggregate = PostAggregate.create(post_id, UserId(command.user_id), post_content)
+            post_aggregate = PostAggregate.create(
+                post_id,
+                author_id,
+                post_content,
+                author_display_name=user_aggregate.profile.display_name,
+                mentioned_user_ids=mentioned_ids,
+                subscriber_user_ids=subscriber_ids,
+            )
 
             # リポジトリに保存
             self._post_repository.save(post_aggregate)
@@ -125,7 +143,10 @@ class PostCommandService:
                 raise PostNotFoundForCommandException(command.post_id, "like_post")
 
             # いいね実行
-            post_aggregate.like_post(UserId(command.user_id))
+            post_aggregate.like_post(
+                UserId(command.user_id),
+                liker_display_name=user_aggregate.profile.display_name,
+            )
 
             # リポジトリに保存
             self._post_repository.save(post_aggregate)

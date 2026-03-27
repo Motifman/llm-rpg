@@ -1,5 +1,7 @@
 """TradeRecipientStrategy のテスト（正常系・境界・例外）"""
 
+from datetime import datetime
+
 import pytest
 from unittest.mock import MagicMock
 
@@ -19,7 +21,39 @@ from ai_rpg_world.domain.trade.event.trade_event import (
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
 from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
+from ai_rpg_world.domain.trade.value_object.trade_listing_projection import TradeListingProjection
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
+
+_TRADE_OBS_TS = datetime(2024, 1, 1, 12, 0, 0)
+
+
+def _trade_obs_listing() -> TradeListingProjection:
+    return TradeListingProjection(
+        seller_display_name="Seller",
+        item_name="Item",
+        item_quantity=1,
+        item_type=ItemType.CONSUMABLE,
+        item_rarity=Rarity.COMMON,
+        item_description="d",
+        item_equipment_type=None,
+        durability_current=None,
+        durability_max=None,
+    )
+
+
+def _trade_accepted_event(*, seller: int, buyer: int) -> TradeAcceptedEvent:
+    return TradeAcceptedEvent.create(
+        aggregate_id=TradeId(1),
+        aggregate_type="TradeAggregate",
+        buyer_id=PlayerId(buyer),
+        buyer_display_name="Buyer",
+        listing_projection=_trade_obs_listing(),
+        seller_id=PlayerId(seller),
+        offered_item_id=ItemInstanceId(1),
+        requested_gold=TradeRequestedGold.of(100),
+        trade_created_at=_TRADE_OBS_TS,
+    )
 
 
 class TestTradeRecipientStrategyNormal:
@@ -41,6 +75,8 @@ class TestTradeRecipientStrategyNormal:
             offered_item_id=ItemInstanceId(1),
             requested_gold=TradeRequestedGold.of(100),
             trade_scope=TradeScope.global_trade(),
+            listing_projection=_trade_obs_listing(),
+            trade_created_at=_TRADE_OBS_TS,
         )
         result = strategy.resolve(event)
         assert len(result) == 1
@@ -55,6 +91,8 @@ class TestTradeRecipientStrategyNormal:
             offered_item_id=ItemInstanceId(1),
             requested_gold=TradeRequestedGold.of(100),
             trade_scope=TradeScope.direct_trade(PlayerId(2)),
+            listing_projection=_trade_obs_listing(),
+            trade_created_at=_TRADE_OBS_TS,
         )
         result = strategy.resolve(event)
         assert len(result) == 2
@@ -69,56 +107,23 @@ class TestTradeRecipientStrategyNormal:
             offered_item_id=ItemInstanceId(1),
             requested_gold=TradeRequestedGold.of(100),
             trade_scope=TradeScope.direct_trade(PlayerId(1)),
+            listing_projection=_trade_obs_listing(),
+            trade_created_at=_TRADE_OBS_TS,
         )
         result = strategy.resolve(event)
         assert len(result) == 1
         assert result[0].value == 1
 
-    def test_trade_accepted_returns_buyer_only_when_no_repo(self, strategy):
-        """TradeAcceptedEvent: リポジトリが None のとき購入者のみ"""
-        event = TradeAcceptedEvent.create(
-            aggregate_id=TradeId(1),
-            aggregate_type="TradeAggregate",
-            buyer_id=PlayerId(2),
-        )
-        result = strategy.resolve(event)
-        assert len(result) == 1
-        assert result[0].value == 2
-
-    def test_trade_accepted_returns_buyer_and_seller_when_different(self):
-        """TradeAcceptedEvent: リポジトリあり・出品者≠購入者なら両方が配信先"""
-        trade_repo = MagicMock()
-        trade = MagicMock()
-        trade.seller_id = PlayerId(1)
-        trade_repo.find_by_id.return_value = trade
-        strategy = TradeRecipientStrategy(
-            observed_event_registry=ObservedEventRegistry(),
-            trade_repository=trade_repo,
-        )
-        event = TradeAcceptedEvent.create(
-            aggregate_id=TradeId(1),
-            aggregate_type="TradeAggregate",
-            buyer_id=PlayerId(2),
-        )
+    def test_trade_accepted_returns_buyer_and_seller_when_different(self, strategy):
+        """TradeAcceptedEvent: 出品者≠購入者なら両方が配信先（イベントの seller_id を使用）"""
+        event = _trade_accepted_event(seller=1, buyer=2)
         result = strategy.resolve(event)
         assert len(result) == 2
         assert {p.value for p in result} == {1, 2}
 
-    def test_trade_accepted_returns_buyer_only_when_seller_equals_buyer(self):
+    def test_trade_accepted_returns_buyer_only_when_seller_equals_buyer(self, strategy):
         """TradeAcceptedEvent: 出品者=購入者（不正想定）のとき購入者のみ"""
-        trade_repo = MagicMock()
-        trade = MagicMock()
-        trade.seller_id = PlayerId(2)
-        trade_repo.find_by_id.return_value = trade
-        strategy = TradeRecipientStrategy(
-            observed_event_registry=ObservedEventRegistry(),
-            trade_repository=trade_repo,
-        )
-        event = TradeAcceptedEvent.create(
-            aggregate_id=TradeId(1),
-            aggregate_type="TradeAggregate",
-            buyer_id=PlayerId(2),
-        )
+        event = _trade_accepted_event(seller=2, buyer=2)
         result = strategy.resolve(event)
         assert len(result) == 1
         assert result[0].value == 2
@@ -296,16 +301,14 @@ class TestTradeRecipientStrategySupports:
             offered_item_id=ItemInstanceId(1),
             requested_gold=TradeRequestedGold.of(100),
             trade_scope=TradeScope.global_trade(),
+            listing_projection=_trade_obs_listing(),
+            trade_created_at=_TRADE_OBS_TS,
         )
         assert strategy.supports(event) is True
 
     def test_supports_trade_accepted_event(self, strategy):
         """TradeAcceptedEvent を supports"""
-        event = TradeAcceptedEvent.create(
-            aggregate_id=TradeId(1),
-            aggregate_type="TradeAggregate",
-            buyer_id=PlayerId(1),
-        )
+        event = _trade_accepted_event(seller=1, buyer=2)
         assert strategy.supports(event) is True
 
     def test_supports_returns_false_for_unknown_event(self, strategy):

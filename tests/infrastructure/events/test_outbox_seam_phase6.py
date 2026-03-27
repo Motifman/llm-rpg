@@ -3,10 +3,13 @@
 EventPayloadSerializer と AsyncEventTransport の port 契約が
 将来の outbox 実装で差し替え可能であることを検証する。
 Phase 8: InProcessAsyncEventTransport は production コードに存在。
-EventPayloadSerializer は in-process では不使用のため、テスト内の Pickle 実装で契約検証。
+EventPayloadSerializer は in-process では不使用のため、テスト内の JSON 実装で契約検証。
 """
-import pickle
-from typing import Sequence
+import json
+from datetime import datetime
+from typing import Any, Sequence
+
+from ai_rpg_world.domain.common.value_object import WorldTick
 
 import pytest
 
@@ -29,19 +32,33 @@ from ai_rpg_world.infrastructure.events.in_process_async_event_transport import 
 # --- EventPayloadSerializer 契約検証用の最小実装（outbox 実装時の参照。in-process では不使用）---
 
 
-class PickleEventPayloadSerializer:
-    """EventPayloadSerializer 契約を満たすテスト用実装 (pickle ベース)
-
-    outbox 実装時の参照。本番では JSON 等を検討する。
-    """
+class JsonEventPayloadSerializer:
+    """EventPayloadSerializer 契約を満たすテスト用実装（JSON / UTF-8）。"""
 
     def serialize(self, event: BaseDomainEvent) -> bytes:
-        return pickle.dumps(event)
+        tick = event.occurred_tick.value if event.occurred_tick is not None else None
+        body: dict[str, Any] = {
+            "event_id": event.event_id,
+            "occurred_at": event.occurred_at.isoformat(),
+            "aggregate_id": event.aggregate_id,
+            "aggregate_type": event.aggregate_type,
+            "occurred_tick": tick,
+        }
+        return json.dumps(body, sort_keys=True).encode("utf-8")
 
     def deserialize(
         self, payload: bytes, event_type: type[BaseDomainEvent]
     ) -> BaseDomainEvent:
-        return pickle.loads(payload)
+        data = json.loads(payload.decode("utf-8"))
+        tick_raw = data.get("occurred_tick")
+        tick: WorldTick | None = WorldTick(int(tick_raw)) if tick_raw is not None else None
+        return event_type(
+            event_id=int(data["event_id"]),
+            occurred_at=datetime.fromisoformat(str(data["occurred_at"])),
+            aggregate_id=data["aggregate_id"],
+            aggregate_type=data["aggregate_type"],
+            occurred_tick=tick,
+        )
 
 
 # --- RecordingHandler (テスト用) ---
@@ -58,10 +75,10 @@ class RecordingHandler(EventHandler[BaseDomainEvent]):
 class TestEventPayloadSerializerSeam:
     """EventPayloadSerializer port の契約検証"""
 
-    def test_pickle_serializer_roundtrip(self) -> None:
-        """PickleEventPayloadSerializer が EventPayloadSerializer 契約を満たし、
+    def test_json_serializer_roundtrip(self) -> None:
+        """JsonEventPayloadSerializer が EventPayloadSerializer 契約を満たし、
         serialize → deserialize で roundtrip する"""
-        serializer: EventPayloadSerializer = PickleEventPayloadSerializer()
+        serializer: EventPayloadSerializer = JsonEventPayloadSerializer()
         event = BaseDomainEvent.create(aggregate_id=42, aggregate_type="Test")
 
         payload = serializer.serialize(event)

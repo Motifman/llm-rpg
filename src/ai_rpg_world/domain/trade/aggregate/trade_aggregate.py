@@ -20,6 +20,7 @@ from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
 from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
+from ai_rpg_world.domain.trade.value_object.trade_listing_projection import TradeListingProjection
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -58,6 +59,7 @@ class TradeAggregate(AggregateRoot):
         requested_gold: TradeRequestedGold,
         created_at: datetime,
         trade_scope: TradeScope,
+        listing_projection: TradeListingProjection,
     ) -> "TradeAggregate":
         """新規取引作成"""
         trade = cls(
@@ -79,6 +81,8 @@ class TradeAggregate(AggregateRoot):
             offered_item_id=offered_item_id,
             requested_gold=requested_gold,
             trade_scope=trade_scope,
+            listing_projection=listing_projection,
+            trade_created_at=created_at,
         )
         trade.add_event(event)
 
@@ -106,7 +110,12 @@ class TradeAggregate(AggregateRoot):
             return False  # 直接取引で対象外
         return True
 
-    def accept_by(self, buyer_id: PlayerId):
+    def accept_by(
+        self,
+        buyer_id: PlayerId,
+        buyer_display_name: str,
+        listing_projection: TradeListingProjection,
+    ) -> None:
         """取引を受託"""
         if self.status != TradeStatus.ACTIVE:
             raise InvalidTradeStatusException(f"Trade is not active: {self.status}")
@@ -123,6 +132,12 @@ class TradeAggregate(AggregateRoot):
             aggregate_id=self.trade_id,
             aggregate_type="TradeAggregate",
             buyer_id=buyer_id,
+            buyer_display_name=buyer_display_name,
+            listing_projection=listing_projection,
+            seller_id=self.seller_id,
+            offered_item_id=self.offered_item_id,
+            requested_gold=self.requested_gold,
+            trade_created_at=self.created_at,
         )
         self.add_event(event)
 

@@ -22,6 +22,7 @@ class SnsUserFollowedEvent(BaseDomainEvent[UserId, "UserAggregate"]):
     """フォローイベント"""
     follower_user_id: UserId
     followee_user_id: UserId
+    follower_display_name: str = ""
 
 
 @dataclass(frozen=True)
@@ -58,6 +59,7 @@ class SnsUserSubscribedEvent(BaseDomainEvent[UserId, "UserAggregate"]):
     """ユーザーサブスクライブイベント"""
     subscriber_user_id: UserId
     subscribed_user_id: UserId
+    subscriber_display_name: str = ""
 
 
 @dataclass(frozen=True)

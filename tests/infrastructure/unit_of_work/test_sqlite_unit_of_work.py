@@ -1,5 +1,5 @@
 """
-SqliteUnitOfWork — 接続共有・rollback・Trade ReadModel の autocommit 抑止
+SqliteUnitOfWork — 接続共有・rollback・Trade ReadModel の UoW 共有接続（遅延 commit）
 """
 from __future__ import annotations
 
@@ -69,6 +69,48 @@ def shared_conn() -> sqlite3.Connection:
 
 
 class TestSqliteUnitOfWorkConnectionSharing:
+    def test_same_connection_sees_uncommitted_write_before_commit(
+        self, shared_conn: sqlite3.Connection
+    ) -> None:
+        """Phase 5: InMemory の pending aggregate と同目的の「同一論理 tx 内 save 直後の find」を、SQLite は同一接続の未コミット可視性で満たす。"""
+        uow = SqliteUnitOfWork(connection=shared_conn)
+        uow.begin()
+        try:
+            uow.connection.execute("INSERT INTO uow_t1 (id, v) VALUES (42, 'pending')")
+            cur = uow.connection.execute("SELECT v FROM uow_t1 WHERE id = 42")
+            row = cur.fetchone()
+            assert row is not None
+            assert row["v"] == "pending"
+        finally:
+            uow.rollback()
+
+    def test_other_file_connection_does_not_see_uncommitted_row(
+        self, tmp_path: Path
+    ) -> None:
+        """ファイル DB では、別接続は未コミットの INSERT を読めない（デフォルト分離）。"""
+        db = tmp_path / "iso.db"
+        fac = SqliteUnitOfWorkFactory(db)
+        setup = fac.create()
+        setup.begin()
+        setup.connection.execute(
+            "CREATE TABLE IF NOT EXISTS seam_iso (id INTEGER PRIMARY KEY, v TEXT NOT NULL)"
+        )
+        setup.commit()
+
+        uow = fac.create()
+        uow.begin()
+        try:
+            uow.connection.execute("INSERT INTO seam_iso (id, v) VALUES (1, 'x')")
+            conn2 = sqlite3.connect(str(Path(db).resolve()))
+            try:
+                conn2.row_factory = sqlite3.Row
+                cur = conn2.execute("SELECT id FROM seam_iso WHERE id = 1")
+                assert cur.fetchone() is None
+            finally:
+                conn2.close()
+        finally:
+            uow.rollback()
+
     def test_two_writers_use_same_connection_object(self, shared_conn: sqlite3.Connection) -> None:
         uow = SqliteUnitOfWork(connection=shared_conn)
         with uow:
@@ -116,12 +158,12 @@ class TestSqliteUnitOfWorkConnectionSharing:
 
 
 class TestSqliteUnitOfWorkTradeReadModel:
-    def test_autocommit_false_defers_until_uow_commit(self, tmp_path: Path) -> None:
+    def test_shared_connection_defers_commit_until_uow_commit(self, tmp_path: Path) -> None:
         db = tmp_path / "t.db"
         fac = SqliteUnitOfWorkFactory(db)
         uow = fac.create()
         uow.begin()
-        repo = SqliteTradeReadModelRepository(uow.connection, autocommit=False)
+        repo = SqliteTradeReadModelRepository.for_shared_unit_of_work(uow.connection)
         repo.save(_make_trade(1, 1))
         uow.commit()
 
@@ -133,17 +175,17 @@ class TestSqliteUnitOfWorkTradeReadModel:
         finally:
             conn2.close()
 
-    def test_autocommit_false_rollbacks_trade_row(self, tmp_path: Path) -> None:
+    def test_shared_connection_rollbacks_trade_row(self, tmp_path: Path) -> None:
         db = tmp_path / "t2.db"
         fac = SqliteUnitOfWorkFactory(db)
         # スキーマだけ先にコミットしておく（失敗トランザクションの rollback で DDL まで巻き戻ると後続 SELECT でテーブルが無い）
         with fac.create() as bootstrap:
-            SqliteTradeReadModelRepository(bootstrap.connection, autocommit=False)
+            SqliteTradeReadModelRepository.for_shared_unit_of_work(bootstrap.connection)
 
         uow = fac.create()
         try:
             with uow:
-                repo = SqliteTradeReadModelRepository(uow.connection, autocommit=False)
+                repo = SqliteTradeReadModelRepository.for_shared_unit_of_work(uow.connection)
                 repo.save(_make_trade(99, 1))
                 raise ValueError("fail")
         except ValueError:

@@ -87,19 +87,34 @@ def _cursor_sql_params(cursor: Optional[TradeCursor]) -> Tuple[str, List[Any]]:
 class SqliteTradeReadModelRepository(TradeReadModelRepository):
     """TradeReadModel を SQLite に保持するリポジトリ
 
-    `autocommit` が True（既定）のときは `save` / `delete` のたびに `Connection.commit()` する。
-    `SqliteUnitOfWork` と共有トランザクションに参加するときは `autocommit=False` とし、
-    確定は UoW の `commit` に任せる。
+    接続の使い方はファクトリまたはクラスメソッドで明示する:
+
+    - `for_standalone_connection`: 単体ファイル用。`save` / `delete` のたびに `commit` する。
+    - `for_shared_unit_of_work`: `SqliteUnitOfWork` と同一接続。確定は UoW の `commit` に任せる。
     """
 
     def __init__(
-        self, connection: sqlite3.Connection, *, autocommit: bool = True
+        self, connection: sqlite3.Connection, *, _commits_after_write: bool
     ) -> None:
         self._conn = connection
-        self._autocommit = autocommit
+        self._commits_after_write = _commits_after_write
         if connection.row_factory is not sqlite3.Row:
             connection.row_factory = sqlite3.Row
         init_trade_read_model_schema(connection)
+
+    @classmethod
+    def for_standalone_connection(
+        cls, connection: sqlite3.Connection
+    ) -> SqliteTradeReadModelRepository:
+        """単体 `sqlite3.connect` 用。各書き込み後に `commit` する。"""
+        return cls(connection, _commits_after_write=True)
+
+    @classmethod
+    def for_shared_unit_of_work(
+        cls, connection: sqlite3.Connection
+    ) -> SqliteTradeReadModelRepository:
+        """UoW と共有する接続用。リポジトリ内では `commit` しない。"""
+        return cls(connection, _commits_after_write=False)
 
     def find_by_id(self, entity_id: TradeId) -> Optional[TradeReadModel]:
         cur = self._conn.execute(
@@ -149,7 +164,7 @@ class SqliteTradeReadModelRepository(TradeReadModelRepository):
             """,
             _model_tuple(entity),
         )
-        if self._autocommit:
+        if self._commits_after_write:
             self._conn.commit()
         return entity
 
@@ -158,7 +173,7 @@ class SqliteTradeReadModelRepository(TradeReadModelRepository):
             "DELETE FROM trade_read_models WHERE trade_id = ?",
             (int(entity_id),),
         )
-        if self._autocommit:
+        if self._commits_after_write:
             self._conn.commit()
         return cur.rowcount > 0
 
