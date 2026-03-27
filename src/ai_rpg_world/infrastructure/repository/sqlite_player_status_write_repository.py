@@ -1,4 +1,4 @@
-"""プレイヤーステータス集約の SQLite 実装（pickle BLOB。ゲーム書き込み DB）。"""
+"""プレイヤーステータス集約の SQLite 実装（UTF-8 JSON BLOB。ゲーム書き込み DB）。"""
 from __future__ import annotations
 
 import copy
@@ -10,13 +10,13 @@ from ai_rpg_world.domain.player.repository.player_status_repository import Playe
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import init_game_write_schema
 from ai_rpg_world.infrastructure.repository.sqlite_trade_command_codec import (
-    pickle_player_status,
-    unpickle_player_status,
+    json_bytes_to_player_status,
+    player_status_to_json_bytes,
 )
 
 
 class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
-    """ステータスはドメインが巨大なため、当面インフラ層で pickle スナップショットとして保持する。"""
+    """ステータスはドメインが大きいため、スキーマ付き JSON スナップショットを BLOB 列に保持する。"""
 
     def __init__(
         self,
@@ -53,11 +53,16 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
     def _finalize_write(self) -> None:
         if self._commits_after_write:
             self._conn.commit()
+        return
+
+    def _assert_shared_transaction_active(self) -> None:
+        if self._commits_after_write:
             return
-        if self._event_sink is not None and hasattr(self._event_sink, "is_in_transaction"):
-            if self._event_sink.is_in_transaction():
-                return
-        self._conn.commit()
+        if not self._conn.in_transaction:
+            raise RuntimeError(
+                "for_shared_unit_of_work で生成したリポジトリの書き込みは、"
+                "アクティブなトランザクション内（with uow）で実行してください"
+            )
 
     def _maybe_emit_events(self, aggregate: Any) -> None:
         sink = self._event_sink
@@ -75,15 +80,16 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
         row = cur.fetchone()
         if row is None:
             return None
-        st = unpickle_player_status(bytes(row["aggregate_blob"]))
+        st = json_bytes_to_player_status(bytes(row["aggregate_blob"]))
         return copy.deepcopy(st)
 
     def find_by_ids(self, player_ids: List[PlayerId]) -> List[PlayerStatusAggregate]:
         return [x for pid in player_ids for x in [self.find_by_id(pid)] if x is not None]
 
     def save(self, status: PlayerStatusAggregate) -> PlayerStatusAggregate:
+        self._assert_shared_transaction_active()
         self._maybe_emit_events(status)
-        blob = pickle_player_status(status)
+        blob = player_status_to_json_bytes(status)
         pid = int(status.player_id)
         self._conn.execute(
             """
@@ -101,6 +107,7 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
             self.save(s)
 
     def delete(self, player_id: PlayerId) -> bool:
+        self._assert_shared_transaction_active()
         cur = self._conn.execute(
             "DELETE FROM game_player_statuses WHERE player_id = ?",
             (int(player_id),),
@@ -111,7 +118,7 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
     def find_all(self) -> List[PlayerStatusAggregate]:
         cur = self._conn.execute("SELECT player_id, aggregate_blob FROM game_player_statuses")
         return [
-            copy.deepcopy(unpickle_player_status(bytes(r["aggregate_blob"])))
+            copy.deepcopy(json_bytes_to_player_status(bytes(r["aggregate_blob"])))
             for r in cur.fetchall()
         ]
 

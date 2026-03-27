@@ -51,11 +51,16 @@ class SqlitePlayerInventoryWriteRepository(PlayerInventoryRepository):
     def _finalize_write(self) -> None:
         if self._commits_after_write:
             self._conn.commit()
+        return
+
+    def _assert_shared_transaction_active(self) -> None:
+        if self._commits_after_write:
             return
-        if self._event_sink is not None and hasattr(self._event_sink, "is_in_transaction"):
-            if self._event_sink.is_in_transaction():
-                return
-        self._conn.commit()
+        if not self._conn.in_transaction:
+            raise RuntimeError(
+                "for_shared_unit_of_work で生成したリポジトリの書き込みは、"
+                "アクティブなトランザクション内（with uow）で実行してください"
+            )
 
     def _maybe_emit_events(self, aggregate: Any) -> None:
         sink = self._event_sink
@@ -80,6 +85,7 @@ class SqlitePlayerInventoryWriteRepository(PlayerInventoryRepository):
         return [x for pid in player_ids for x in [self.find_by_id(pid)] if x is not None]
 
     def save(self, inventory: PlayerInventoryAggregate) -> PlayerInventoryAggregate:
+        self._assert_shared_transaction_active()
         self._maybe_emit_events(inventory)
         payload = inventory_to_json(inventory)
         pid = int(inventory.player_id)
@@ -95,6 +101,7 @@ class SqlitePlayerInventoryWriteRepository(PlayerInventoryRepository):
         return copy.deepcopy(inventory)
 
     def delete(self, player_id: PlayerId) -> bool:
+        self._assert_shared_transaction_active()
         cur = self._conn.execute(
             "DELETE FROM game_player_inventories WHERE player_id = ?",
             (int(player_id),),

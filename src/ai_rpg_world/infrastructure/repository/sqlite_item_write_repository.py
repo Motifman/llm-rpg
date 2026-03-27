@@ -56,11 +56,16 @@ class SqliteItemWriteRepository(ItemRepository):
     def _finalize_write(self) -> None:
         if self._commits_after_write:
             self._conn.commit()
+        return
+
+    def _assert_shared_transaction_active(self) -> None:
+        if self._commits_after_write:
             return
-        if self._event_sink is not None and hasattr(self._event_sink, "is_in_transaction"):
-            if self._event_sink.is_in_transaction():
-                return
-        self._conn.commit()
+        if not self._conn.in_transaction:
+            raise RuntimeError(
+                "for_shared_unit_of_work で生成したリポジトリの書き込みは、"
+                "アクティブなトランザクション内（with uow）で実行してください"
+            )
 
     def _maybe_emit_events(self, aggregate: Any) -> None:
         sink = self._event_sink
@@ -82,6 +87,7 @@ class SqliteItemWriteRepository(ItemRepository):
         return [copy.deepcopy(self._row_to_aggregate(r)) for r in cur.fetchall()]
 
     def generate_item_instance_id(self) -> ItemInstanceId:
+        self._assert_shared_transaction_active()
         iid = ItemInstanceId(allocate_sequence_value(self._conn, "item_instance_id"))
         self._finalize_write()
         return iid
@@ -103,6 +109,7 @@ class SqliteItemWriteRepository(ItemRepository):
         return self._all_aggregates()
 
     def save(self, aggregate: ItemAggregate) -> ItemAggregate:
+        self._assert_shared_transaction_active()
         self._maybe_emit_events(aggregate)
         iid, spec_id, payload = item_aggregate_to_storage(aggregate)
         self._conn.execute(
@@ -119,6 +126,7 @@ class SqliteItemWriteRepository(ItemRepository):
         return copy.deepcopy(aggregate)
 
     def delete(self, item_instance_id: ItemInstanceId) -> bool:
+        self._assert_shared_transaction_active()
         cur = self._conn.execute(
             "DELETE FROM game_items WHERE item_instance_id = ?",
             (int(item_instance_id),),

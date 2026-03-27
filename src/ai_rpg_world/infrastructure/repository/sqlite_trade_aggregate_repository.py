@@ -54,14 +54,19 @@ class SqliteTradeAggregateRepository(TradeRepository):
         return cls(connection, _commits_after_write=False, event_sink=event_sink)
 
     def _finalize_write(self) -> None:
-        """単体接続は常に commit。UoW 共有かつ scope 内は UoW に任せる。それ以外は暗黙 tx を閉じるため commit。"""
+        """単体接続は常に commit。UoW 共有モードでは commit は呼ばない。"""
         if self._commits_after_write:
             self._conn.commit()
+        return
+
+    def _assert_shared_transaction_active(self) -> None:
+        if self._commits_after_write:
             return
-        if self._event_sink is not None and hasattr(self._event_sink, "is_in_transaction"):
-            if self._event_sink.is_in_transaction():
-                return
-        self._conn.commit()
+        if not self._conn.in_transaction:
+            raise RuntimeError(
+                "for_shared_unit_of_work で生成したリポジトリの書き込みは、"
+                "アクティブなトランザクション内（with uow）で実行してください"
+            )
 
     def _maybe_emit_events(self, aggregate: Any) -> None:
         sink = self._event_sink
@@ -72,6 +77,7 @@ class SqliteTradeAggregateRepository(TradeRepository):
         sink.add_events_from_aggregate(aggregate)
 
     def generate_trade_id(self) -> TradeId:
+        self._assert_shared_transaction_active()
         tid = TradeId(allocate_sequence_value(self._conn, "trade_id"))
         self._finalize_write()
         return tid
@@ -90,6 +96,7 @@ class SqliteTradeAggregateRepository(TradeRepository):
         return [t for tid in trade_ids for t in [self.find_by_id(tid)] if t is not None]
 
     def save(self, trade: TradeAggregate) -> TradeAggregate:
+        self._assert_shared_transaction_active()
         self._maybe_emit_events(trade)
         row = trade_aggregate_to_row(trade)
         self._conn.execute(
@@ -115,6 +122,7 @@ class SqliteTradeAggregateRepository(TradeRepository):
         return copy.deepcopy(trade)
 
     def delete(self, trade_id: TradeId) -> bool:
+        self._assert_shared_transaction_active()
         cur = self._conn.execute(
             "DELETE FROM trade_aggregates WHERE trade_id = ?",
             (int(trade_id),),
