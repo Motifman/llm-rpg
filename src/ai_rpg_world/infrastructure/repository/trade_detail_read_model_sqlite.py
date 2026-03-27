@@ -1,10 +1,19 @@
 """TradeDetailReadModel 用 SQLite スキーマ"""
 
+from __future__ import annotations
+
 import sqlite3
 
+from ai_rpg_world.infrastructure.repository.sqlite_migration import (
+    SqliteMigration,
+    apply_migrations,
+)
 
-def init_trade_detail_read_model_schema(conn: sqlite3.Connection) -> None:
-    """trade_detail_read_models テーブルを作成する（commit しない）。"""
+
+_TRADE_DETAIL_NAMESPACE = "trade_detail_read_model"
+
+
+def _migration_v1(conn: sqlite3.Connection) -> None:
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS trade_detail_read_models (
@@ -25,4 +34,18 @@ def init_trade_detail_read_model_schema(conn: sqlite3.Connection) -> None:
             status TEXT NOT NULL
         )
         """
+    )
+
+
+_TRADE_DETAIL_MIGRATIONS = (
+    SqliteMigration(version=1, apply=_migration_v1),
+)
+
+
+def init_trade_detail_read_model_schema(conn: sqlite3.Connection) -> None:
+    """trade_detail_read_models テーブルを作成する（commit しない）。"""
+    apply_migrations(
+        conn,
+        namespace=_TRADE_DETAIL_NAMESPACE,
+        migrations=_TRADE_DETAIL_MIGRATIONS,
     )

@@ -23,6 +23,15 @@ class InMemoryDialogueTreeRepository(DialogueTreeRepository):
         nodes: Dict[int, DialogueNode],
     ) -> None:
         """ツリーを登録する（テスト・初期化用）"""
+        self.replace_tree(tree_id=tree_id, entry_node_id=entry_node_id, nodes=nodes)
+
+    def replace_tree(
+        self,
+        tree_id: int,
+        entry_node_id: int,
+        nodes: Dict[int, DialogueNode],
+    ) -> None:
+        """SQLite writer と同じ責務名でツリーを差し替える。"""
         self._trees[tree_id] = {
             "entry_node_id": entry_node_id,
             "nodes": dict(nodes),

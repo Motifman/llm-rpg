@@ -2,7 +2,10 @@
 InMemoryItemSpecRepository - ItemSpecを使用するインメモリ実装
 """
 from typing import List, Optional, Dict
-from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
+from ai_rpg_world.domain.item.repository.item_spec_repository import (
+    ItemSpecRepository,
+    ItemSpecWriter,
+)
 from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -10,7 +13,7 @@ from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity, EquipmentType
 
 
-class InMemoryItemSpecRepository(ItemSpecRepository):
+class InMemoryItemSpecRepository(ItemSpecRepository, ItemSpecWriter):
     """ItemSpecReadModelを使用するインメモリリポジトリ"""
 
     def __init__(self):
@@ -248,6 +251,14 @@ class InMemoryItemSpecRepository(ItemSpecRepository):
                 del self._name_to_item_spec[item_spec.name]
             return True
         return False
+
+    def replace_spec(self, item_spec: ItemSpecReadModel) -> None:
+        """writer ポート互換の置き換え保存"""
+        self.save(item_spec)
+
+    def delete_spec(self, item_spec_id: ItemSpecId) -> bool:
+        """writer ポート互換の削除"""
+        return self.delete(item_spec_id)
 
     def find_by_type(self, item_type: ItemType) -> List[ItemSpecReadModel]:
         """アイテムタイプで検索"""

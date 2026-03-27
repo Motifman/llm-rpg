@@ -133,7 +133,7 @@ class TestRecipeInfoQueryService:
     def test_find_recipes_by_ingredient_success(self):
         """指定アイテムを材料として使用するレシピ取得 - 正常系"""
         # Given
-        item_spec_id = 4  # 鉄鉱石
+        item_spec_id = 9  # 鉄鉱石
 
         # When
         results = self.service.find_recipes_by_ingredient(item_spec_id)
@@ -311,7 +311,7 @@ class TestRecipeInfoQueryService:
         assert len(iron_sword_recipes) >= 1
 
         # 材料別検索の確認
-        iron_ore_recipes = self.repository.find_by_ingredient(ItemSpecId(4))
+        iron_ore_recipes = self.repository.find_by_ingredient(ItemSpecId(9))
         assert len(iron_ore_recipes) >= 1
 
         # 個別のレシピ取得確認
