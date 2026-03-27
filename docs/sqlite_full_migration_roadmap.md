@@ -168,6 +168,8 @@
 - cross-bundle rollback で未コミット書き込みが残らないことを検証済み
 - SQLite scope 経由のイベント収集を検証済み
 - 既存の `SqliteUnitOfWork` / trade / world 回帰とあわせて、採番・rollback・共有接続可視性を再確認済み
+- `RecentTradeReadModelRepository` と `ItemTradeStatisticsReadModelRepository` にも SQLite 実装を追加済み
+- 旧 `PlayerRepository` は未使用の legacy と判断し、`profile / status / inventory` へ整理したため撤去済み
 
 ## いま注意している問題
 
