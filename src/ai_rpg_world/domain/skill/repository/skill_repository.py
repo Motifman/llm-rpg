@@ -1,4 +1,4 @@
-from ai_rpg_world.domain.common.repository import Repository
+from ai_rpg_world.domain.common.repository import ReadRepository, Repository
 from ai_rpg_world.domain.skill.aggregate.skill_deck_progress_aggregate import SkillDeckProgressAggregate
 from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
 from ai_rpg_world.domain.skill.value_object.skill_deck_progress_id import SkillDeckProgressId
@@ -23,8 +23,17 @@ class SkillDeckProgressRepository(Repository[SkillDeckProgressAggregate, SkillDe
         raise NotImplementedError
 
 
-class SkillSpecRepository(Repository[SkillSpec, SkillId]):
+class SkillSpecRepository(ReadRepository[SkillSpec, SkillId]):
     """スキル定義（マスタ）リポジトリインターフェース"""
 
     pass
 
+
+class SkillSpecWriter:
+    """スキル定義の投入専用 writer ポート"""
+
+    def replace_spec(self, spec: SkillSpec) -> None:
+        raise NotImplementedError
+
+    def delete_spec(self, skill_id: SkillId) -> bool:
+        raise NotImplementedError

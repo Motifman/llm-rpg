@@ -45,6 +45,14 @@ from ai_rpg_world.domain.guild.aggregate.guild_bank_aggregate import GuildBankAg
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
 from ai_rpg_world.domain.shop.aggregate.shop_aggregate import ShopAggregate
 from ai_rpg_world.domain.shop.value_object.shop_id import ShopId
+from ai_rpg_world.domain.skill.aggregate.skill_deck_progress_aggregate import (
+    SkillDeckProgressAggregate,
+)
+from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import SkillLoadoutAggregate
+from ai_rpg_world.domain.skill.value_object.skill_deck_progress_id import (
+    SkillDeckProgressId,
+)
+from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
 
 
 class InMemoryDataStore:
@@ -65,8 +73,7 @@ class InMemoryDataStore:
         self.sns_notifications: Dict[NotificationId, SnsNotification] = {}
         self.next_sns_notification_id = 1
         
-        # Player Domain (TBD: リファクタリング後の集約に合わせる)
-        self.players: Dict[Any, Any] = {}
+        # Player Domain
         self.player_profiles: Dict[PlayerId, Any] = {}
         self.player_inventories: Dict[PlayerId, Any] = {}
         self.player_statuses: Dict[PlayerId, Any] = {}
@@ -89,6 +96,12 @@ class InMemoryDataStore:
         self.guilds: Dict[GuildId, GuildAggregate] = {}
         self.guild_banks: Dict[GuildId, GuildBankAggregate] = {}
         self.next_guild_id = 1
+
+        # Skill Domain
+        self.skill_loadouts: Dict[SkillLoadoutId, SkillLoadoutAggregate] = {}
+        self.skill_deck_progresses: Dict[
+            SkillDeckProgressId, SkillDeckProgressAggregate
+        ] = {}
 
         # Item Domain
         self.items: Dict[ItemInstanceId, ItemAggregate] = {}
@@ -283,7 +296,6 @@ class InMemoryDataStore:
         self.next_reply_id = 1
         self.sns_notifications.clear()
         self.next_sns_notification_id = 1
-        self.players.clear()
         self.next_player_id = 1
         self.player_profiles.clear()
         self.player_inventories.clear()
@@ -298,6 +310,8 @@ class InMemoryDataStore:
         self.guilds.clear()
         self.guild_banks.clear()
         self.next_guild_id = 1
+        self.skill_loadouts.clear()
+        self.skill_deck_progresses.clear()
         self.items.clear()
         self.next_item_instance_id = 1
         self.physical_maps.clear()
@@ -333,6 +347,8 @@ class InMemoryDataStore:
             "quests": copy.deepcopy(self.quests),
             "guilds": copy.deepcopy(self.guilds),
             "guild_banks": copy.deepcopy(self.guild_banks),
+            "skill_loadouts": copy.deepcopy(self.skill_loadouts),
+            "skill_deck_progresses": copy.deepcopy(self.skill_deck_progresses),
             "items": copy.deepcopy(self.items),
             "sns_users": copy.deepcopy(self.sns_users),
             "posts": copy.deepcopy(self.posts),
@@ -359,6 +375,8 @@ class InMemoryDataStore:
         self.quests = snapshot.get("quests", {})
         self.guilds = snapshot.get("guilds", {})
         self.guild_banks = snapshot.get("guild_banks", {})
+        self.skill_loadouts = snapshot.get("skill_loadouts", {})
+        self.skill_deck_progresses = snapshot.get("skill_deck_progresses", {})
         self.items = snapshot["items"]
         self.sns_users = snapshot["sns_users"]
         self.posts = snapshot["posts"]

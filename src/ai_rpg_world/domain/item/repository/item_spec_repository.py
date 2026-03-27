@@ -1,13 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
 
-from ai_rpg_world.domain.common.repository import Repository
+from ai_rpg_world.domain.common.repository import ReadRepository
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 
 
-class ItemSpecRepository(Repository[ItemSpec, ItemSpecId], ABC):
+class ItemSpecRepository(ReadRepository[ItemSpec, ItemSpecId], ABC):
     """アイテム仕様のリポジトリインターフェース"""
 
     @abstractmethod
@@ -28,4 +28,18 @@ class ItemSpecRepository(Repository[ItemSpec, ItemSpecId], ABC):
     @abstractmethod
     def find_by_name(self, name: str) -> Optional[ItemSpec]:
         """名前で検索"""
+        pass
+
+
+class ItemSpecWriter(ABC):
+    """アイテム仕様の投入専用 writer ポート"""
+
+    @abstractmethod
+    def replace_spec(self, item_spec: ItemSpec) -> None:
+        """アイテム仕様を丸ごと置き換える。"""
+        pass
+
+    @abstractmethod
+    def delete_spec(self, item_spec_id: ItemSpecId) -> bool:
+        """アイテム仕様を削除する。"""
         pass

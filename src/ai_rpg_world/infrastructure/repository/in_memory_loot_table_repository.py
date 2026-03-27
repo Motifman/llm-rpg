@@ -1,10 +1,13 @@
 from typing import Dict, Optional, List
 from ai_rpg_world.domain.item.aggregate.loot_table_aggregate import LootTableAggregate
-from ai_rpg_world.domain.item.repository.loot_table_repository import LootTableRepository
+from ai_rpg_world.domain.item.repository.loot_table_repository import (
+    LootTableRepository,
+    LootTableWriter,
+)
 from ai_rpg_world.domain.item.value_object.loot_table_id import LootTableId
 
 
-class InMemoryLootTableRepository(LootTableRepository):
+class InMemoryLootTableRepository(LootTableRepository, LootTableWriter):
     """メモリ内ドロップテーブルリポジトリ"""
 
     def __init__(self, initial_data: Optional[Dict[LootTableId, LootTableAggregate]] = None):
@@ -28,3 +31,9 @@ class InMemoryLootTableRepository(LootTableRepository):
             del self._data[entity_id]
             return True
         return False
+
+    def replace_table(self, table: LootTableAggregate) -> None:
+        self.save(table)
+
+    def delete_table(self, loot_table_id: LootTableId) -> bool:
+        return self.delete(loot_table_id)

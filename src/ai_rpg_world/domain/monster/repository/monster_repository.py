@@ -1,6 +1,6 @@
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from typing import List, Optional, TYPE_CHECKING
-from ai_rpg_world.domain.common.repository import Repository
+from ai_rpg_world.domain.common.repository import ReadRepository, Repository
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
 from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
@@ -35,10 +35,24 @@ class MonsterRepository(Repository[MonsterAggregate, MonsterId]):
         pass
 
 
-class MonsterTemplateRepository(Repository[MonsterTemplate, MonsterTemplateId]):
+class MonsterTemplateRepository(ReadRepository[MonsterTemplate, MonsterTemplateId]):
     """モンスターテンプレートのリポジトリインターフェース"""
 
     @abstractmethod
     def find_by_name(self, name: str) -> Optional[MonsterTemplate]:
         """名前でモンスターテンプレートを検索"""
+        pass
+
+
+class MonsterTemplateWriter(ABC):
+    """モンスターテンプレートの投入専用 writer ポート"""
+
+    @abstractmethod
+    def replace_template(self, template: MonsterTemplate) -> None:
+        """テンプレートを丸ごと置き換える。"""
+        pass
+
+    @abstractmethod
+    def delete_template(self, template_id: MonsterTemplateId) -> bool:
+        """テンプレートを削除する。"""
         pass
