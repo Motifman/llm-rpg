@@ -353,9 +353,9 @@ branch: codex/sqlite-repository-transaction-alignment
 - Goal:
   - 固定した seam を使って 1 つ以上の書き込み集約を SQLite 化し、設計の実効性を検証する。
 - Scope:
-  - Trade または Shop の最小パイロットを選定
+  - Trade コマンドが依存する **5 書き込みリポジトリ**を SQLite 化し、`GAME_DB_PATH` 単一 DB に同居する雛形とする（ユーザー合意: 後回しにしない）
   - `SqliteUnitOfWork` 共有接続で複数 repository 更新の原子性を確認
-  - 同一 tx 内 save → find と rollback をテストで固定
+  - 同一 tx 内 save → find と rollback・**シーケンス採番の rollback** をテストで固定
   - `SQLITE_REPOSITORY_CHECKLIST.md` と新 feature の SUMMARY / REVIEW を更新
 - Dependencies:
   - Phase 4
@@ -424,3 +424,4 @@ branch: codex/sqlite-repository-transaction-alignment
 - 2026-03-27: Phase 4 完了。Trade 系 SQLite ReadModel の `autocommit` 廃止と `for_standalone_connection` / `for_shared_unit_of_work` 整理、Shop／SNS の非同期ハンドラ・観測戦略をイベント完結に寄せた（監査表の Shop・SNS 行と優先度リストを実装後状態に更新）
 - 2026-03-27: Quest 追補。`QuestProgressReactionService` 抽出、イベント種別ごとの薄い Quest handler への分割、`MonsterDiedEvent.template_id` / `ItemAddedToInventoryEvent.item_spec_id_value` 追加により Quest 進捗判定の Monster / Item 後読みを除去
 - 2026-03-27: Phase 5 完了。書き込み集約向け transaction seam を「SQLite は共有接続で即時 SQL、InMemory は遅延操作＋ pending aggregate」と定義し、代替案比較と同一 tx 内 find 契約を PLAN に固定。`test_sqlite_unit_of_work` に未コミット read の可視性テストを追加
+- 2026-03-27: Phase 6 完了。Trade コマンド経路の 5 書き込みリポジトリ（取引集約・プロフィール・アイテム・インベントリ・ステータス）を `GAME_DB_PATH` 同居用の `game_*` / `trade_aggregates` テーブルに実装。`trade_command_sqlite_wiring`・`create_sqlite_scope_with_event_publisher`・`TransactionalScope.is_in_transaction`・`SqliteUnitOfWork.execute_pending_operations` を追加。`TestTradeCommandServiceSqlite` で既存 38 ケース＋採番 rollback を回帰。`SQLITE_REPOSITORY_CHECKLIST.md` を書き込み系・暗黙トランザクション注意に更新

@@ -31,6 +31,12 @@ class TransactionalScope:
         """SyncEventDispatcher を設定。create_with_event_publisher で注入される。"""
         self._sync_event_dispatcher = dispatcher
 
+    def is_in_transaction(self) -> bool:
+        """内側の UoW がトランザクション中か（SQLite 書き込みリポジトリのイベント送出判定用）。"""
+        if hasattr(self._uow, "is_in_transaction"):
+            return bool(self._uow.is_in_transaction())
+        return False
+
     @property
     def sync_event_dispatcher(self):
         """Phase 5.2: Coordinator 等に注入する SyncEventDispatcher を返す。"""
