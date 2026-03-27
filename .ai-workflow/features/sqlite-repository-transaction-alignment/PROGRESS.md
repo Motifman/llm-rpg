@@ -10,10 +10,10 @@ branch: codex/sqlite-repository-transaction-alignment
 
 # Current State
 
-- Active phase: **なし**（Phase 1 完了、次は Phase 2）
-- Last completed phase: **Phase 1**（Trade イベント・ハンドラの意味論監査）
-- Next recommended action: Phase 2（Trade イベント payload 十分化と投影単純化）に着手する
-- Handoff summary: 4 ハンドラはいずれも投影専用で本体一貫性は `TradeCommandService` の UoW にある。**非同期のまま妥当**と固定。分類表・根拠は `PLAN.md` の「Trade イベント・ハンドラの監査結果（Phase 1）」を参照。Phase 2 では `PlayerProfileRepository` / `ItemRepository` 後読みの解消と `handle_trade_accepted` の再投影方針を扱う。
+- Active phase: **なし**（Phase 2 完了、次は Phase 3）
+- Last completed phase: **Phase 2**（Trade イベント payload 十分化と投影単純化）
+- Next recommended action: Phase 3（非同期ハンドラ全体監査と分類表）
+- Handoff summary: `TradeOfferedEvent` / `TradeAcceptedEvent` に `TradeListingProjection` と再投影用フィールドを載せ、`TradeCommandService` が出品・受諾時にスナップショットを組み立てて集約へ渡す。`TradeEventHandler` は ReadModel リポジトリと UoW ファクトリのみ保持し、プロフィール・アイテムの後読みを廃止。`TradeRecipientStrategy` の `TradeAcceptedEvent` は `event.seller_id` を参照（取引リポジトリ必須ではなくなった）。Phase 3 で他コンテキストの async handler を棚卸しする。
 
 # Phase Journal
 
@@ -38,15 +38,18 @@ branch: codex/sqlite-repository-transaction-alignment
 
 ## Phase 2
 
-- Started: 未着手
-- Completed:
-- Commit:
-- Tests:
+- Started: 2026-03-27
+- Completed: 2026-03-27
+- Commit: （本コミット）
+- Tests: `pytest tests/domain/trade/test_trade_aggregate.py tests/application/trade/ tests/application/observation/services/test_trade_recipient_strategy.py tests/application/observation/formatters/test_trade_formatter.py tests/infrastructure/repository/test_trade_read_model_repository_factory.py -q` → **221 passed**
 - Findings:
-- Plan revision check:
-- User approval:
-- Plan updates:
-- Goal check:
-- Scope delta:
-- Handoff summary:
-- Next-phase impact: payload 形状が Phase 4 の repository API と projection テストに影響する
+  - `InMemoryTradeReadModelRepository` が trade_id 1〜15 のサンプル行を持つため、ハンドラの「欠落時作成」テストは **999001** などサンプル外 ID を使用した。
+  - `TradeCommandService` コンストラクタに `PlayerProfileRepository` と `ItemRepository` を追加（アプリケーション層でスナップショット組み立て）。出品時にプロフィール・アイテム欠落は `TradeCreationException`、受諾時は `TradeCommandException`。
+  - 観測の `TradeRecipientStrategy` は受諾イベントの配信先を **イベント上の seller_id** で決め、取引リポジトリの有無と脱結合した。
+- Plan revision check: **変更不要**（Phase 3 以降の順序・成功条件に影響する未計画作業なし）。
+- User approval: 不要（future phase の PLAN 本文変更なし）。
+- Plan updates: `PLAN.md` Change Log に Phase 2 完了の 1 行を追加。
+- Goal check: Trade の async 投影がイベントペイロードのみで完結する目標を本スコープで充足。
+- Scope delta: 観測レシピエント戦略の `TradeAcceptedEvent` 解決ロジックをイベント駆動に寄せた（payload 十分化の自然な帰結）。
+- Handoff summary: 上記 Current State と同じ。
+- Next-phase impact: Phase 3 の監査表に「Trade はイベント自己完結に更新済み」と記載できる。Phase 4 の SQLite factory は `TradeEventHandler` の引数が 2 個になった点のみ留意。

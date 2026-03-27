@@ -328,3 +328,4 @@ branch: codex/sqlite-repository-transaction-alignment
 - 2026-03-27: Initial plan created
 - 2026-03-27: ユーザーとの再整理を反映し、Trade イベント payload 十分化、非同期ハンドラ監査、`autocommit` 廃止、transaction seam 固定、書き込み集約 SQLite パイロットまでを含む 6 phase に更新
 - 2026-03-27: Phase 1 監査完了。Trade 4 イベント・4 ハンドラの分類表と同期／非同期判断を本章「Trade イベント・ハンドラの監査結果（Phase 1）」に追記
+- 2026-03-27: Phase 2 完了。`TradeListingProjection`・`TradeOfferedEvent` / `TradeAcceptedEvent` のペイロード拡張、`TradeEventHandler` の後読み廃止、受諾時 ReadModel 欠落のイベントからの再投影を実装

@@ -8,21 +8,16 @@ from unittest.mock import Mock
 from ai_rpg_world.application.trade.handlers.trade_event_handler import TradeEventHandler
 from ai_rpg_world.domain.item.enum.item_enum import EquipmentType, ItemType, Rarity
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
-from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import PlayerProfileAggregate
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-from ai_rpg_world.domain.player.value_object.player_name import PlayerName
 from ai_rpg_world.domain.trade.enum.trade_enum import TradeStatus
 from ai_rpg_world.domain.trade.event.trade_event import TradeOfferedEvent
 from ai_rpg_world.domain.trade.read_model.trade_read_model import TradeReadModel
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
 from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
+from ai_rpg_world.domain.trade.value_object.trade_listing_projection import TradeListingProjection
 from ai_rpg_world.infrastructure.repository.in_memory_trade_read_model_repository import (
     InMemoryTradeReadModelRepository,
-)
-from ai_rpg_world.infrastructure.repository.in_memory_trade_repository import InMemoryTradeRepository
-from ai_rpg_world.infrastructure.repository.in_memory_player_profile_repository import (
-    InMemoryPlayerProfileRepository,
 )
 from ai_rpg_world.infrastructure.repository.sqlite_trade_read_model_repository import (
     SqliteTradeReadModelRepository,
@@ -145,33 +140,24 @@ class TestTradeReadModelRepositoryFactory:
         def create_uow() -> InMemoryUnitOfWork:
             return InMemoryUnitOfWork(unit_of_work_factory=create_uow)
 
-        trade_repo = InMemoryTradeRepository()
-        profile_repo = InMemoryPlayerProfileRepository()
-        item_instance_repo = Mock()
         uow_factory = Mock()
         uow_factory.create.side_effect = create_uow
 
-        handler = TradeEventHandler(
-            read_model_repo,
-            trade_repo,
-            profile_repo,
-            item_instance_repo,
-            uow_factory,
-        )
+        handler = TradeEventHandler(read_model_repo, uow_factory)
 
         seller_id = PlayerId(1)
-        profile = PlayerProfileAggregate.create(seller_id, PlayerName("Seller"))
-        profile_repo.save(profile)
-
         item_id = ItemInstanceId(100)
-        mock_item = Mock()
-        mock_item.item_spec.name = "Test Item"
-        mock_item.item_spec.item_type = ItemType.CONSUMABLE
-        mock_item.item_spec.rarity = Rarity.COMMON
-        mock_item.item_spec.description = "Test Desc"
-        mock_item.quantity = 1
-        mock_item.durability = None
-        item_instance_repo.find_by_id.return_value = mock_item
+        listing = TradeListingProjection(
+            seller_display_name="Seller",
+            item_name="Test Item",
+            item_quantity=1,
+            item_type=ItemType.CONSUMABLE,
+            item_rarity=Rarity.COMMON,
+            item_description="Test Desc",
+            item_equipment_type=None,
+            durability_current=None,
+            durability_max=None,
+        )
 
         event = TradeOfferedEvent.create(
             aggregate_id=TradeId(1),
@@ -180,6 +166,8 @@ class TestTradeReadModelRepositoryFactory:
             offered_item_id=item_id,
             requested_gold=TradeRequestedGold.of(500),
             trade_scope=TradeScope.global_trade(),
+            listing_projection=listing,
+            trade_created_at=datetime(2024, 1, 1, 12, 0, 0),
         )
 
         handler.handle_trade_offered(event)
