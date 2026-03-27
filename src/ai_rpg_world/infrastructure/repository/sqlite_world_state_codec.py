@@ -138,6 +138,17 @@ def storage_to_trigger(trigger_type: str, payload_json: str) -> MapTrigger:
     raise ValueError(f"Unsupported trigger type: {trigger_type}")
 
 
+def _pad_component_parent_row(values: tuple[Any, ...]) -> tuple[Any, ...]:
+    expected_length = 46
+    if len(values) > expected_length:
+        raise ValueError(
+            f"component parent row too long: expected <= {expected_length}, got {len(values)}"
+        )
+    if len(values) < expected_length:
+        values = values + (None,) * (expected_length - len(values))
+    return values
+
+
 def area_to_record_storage(
     area: Area,
 ) -> tuple[
@@ -281,128 +292,708 @@ def row_to_trigger(row: object, *, prefix: str = "trigger_") -> MapTrigger:
     raise ValueError(f"Unsupported trigger type: {trigger_type}")
 
 
-def component_to_storage(component: WorldObjectComponent | None) -> tuple[str | None, str | None]:
+def component_to_record_storage(
+    component: WorldObjectComponent | None,
+) -> tuple[
+    tuple[Any, ...],
+    list[str],
+    list[int],
+    list[tuple[str, str, Any]],
+    list[Coordinate],
+    list[MonsterSkillInfo],
+    list[str],
+    list[str],
+]:
+    empty = _pad_component_parent_row((
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    ))
     if component is None:
-        return (None, None)
-    component_type = component.get_type_name()
-    payload = _component_payload(component)
-    return (
-        component_type,
-        json.dumps(payload, ensure_ascii=True, sort_keys=True),
-    )
+        return (empty, [], [], [], [], [], [], [])
+
+    if isinstance(component, PlaceableComponent):
+        trigger = component.get_trigger_on_step()
+        trigger_values = (
+            (None, None, None, None, None, None)
+            if trigger is None
+            else trigger_to_record_storage(trigger)
+        )
+        return (
+            _pad_component_parent_row((
+                "placeable",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                1 if isinstance(component._inner, ChestComponent) and component._inner.is_open else 0 if isinstance(component._inner, ChestComponent) else None,
+                1 if isinstance(component._inner, DoorComponent) and component._inner.is_open else 0 if isinstance(component._inner, DoorComponent) else None,
+                1 if isinstance(component._inner, DoorComponent) and component._inner.is_locked else 0 if isinstance(component._inner, DoorComponent) else None,
+                None,
+                None,
+                None,
+                int(component.item_spec_id),
+                component._inner.get_type_name(),
+                *trigger_values,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )),
+            [],
+            [int(item_id) for item_id in component._inner.item_ids] if isinstance(component._inner, ChestComponent) else [],
+            [],
+            [],
+            [],
+            [],
+            [],
+        )
+    if isinstance(component, AutonomousBehaviorComponent):
+        aggro = component.aggro_memory_policy
+        return (
+            _pad_component_parent_row((
+                "autonomous_actor",
+                component.direction.value,
+                component.capability.speed_modifier,
+                None if component.player_id is None else int(component.player_id),
+                1 if component.is_npc else 0,
+                component.fov_angle,
+                component.race,
+                component.faction,
+                None if component.pack_id is None else component.pack_id.value,
+                component.vision_range,
+                None if component.initial_position is None else component.initial_position.x,
+                None if component.initial_position is None else component.initial_position.y,
+                None if component.initial_position is None else component.initial_position.z,
+                component.random_move_chance,
+                component.behavior_strategy_type,
+                1 if component.is_pack_leader else 0,
+                component.ecology_type.value,
+                component.ambush_chase_range,
+                component.territory_radius,
+                None if aggro is None else aggro.forget_after_ticks,
+                None if aggro is None else (1 if aggro.revenge_never_forget else 0),
+                component.active_time.value,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )),
+            [cap.value for cap in sorted(component.capability.capabilities, key=lambda cap: cap.value)],
+            [],
+            [],
+            list(component.patrol_points),
+            list(component.available_skills),
+            sorted(component.threat_races),
+            sorted(component.prey_races),
+        )
+    if isinstance(component, ActorComponent):
+        return (
+            _pad_component_parent_row((
+                "actor",
+                component.direction.value,
+                component.capability.speed_modifier,
+                None if component.player_id is None else int(component.player_id),
+                1 if component.is_npc else 0,
+                component.fov_angle,
+                component.race,
+                component.faction,
+                None if component.pack_id is None else component.pack_id.value,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )),
+            [cap.value for cap in sorted(component.capability.capabilities, key=lambda cap: cap.value)],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+        )
+    if isinstance(component, ChestComponent):
+        return (
+            _pad_component_parent_row((
+                "chest",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                1 if component.is_open else 0,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )),
+            [],
+            [int(item_id) for item_id in component.item_ids],
+            [],
+            [],
+            [],
+            [],
+            [],
+        )
+    if isinstance(component, DoorComponent):
+        return (
+            _pad_component_parent_row((
+                "door",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                1 if component.is_open else 0,
+                1 if component.is_locked else 0,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )),
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+        )
+    if isinstance(component, GroundItemComponent):
+        return (
+            _pad_component_parent_row((
+                "ground_item",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                int(component.item_instance_id),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )),
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+        )
+    if isinstance(component, InteractableComponent):
+        return (
+            _pad_component_parent_row((
+                "interactable",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                component.interaction_type.value,
+                component.interaction_duration,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )),
+            [],
+            [],
+            [_encode_interaction_data(key, value) for key, value in component.interaction_data.items()],
+            [],
+            [],
+            [],
+            [],
+        )
+    if isinstance(component, HarvestableComponent):
+        return (
+            _pad_component_parent_row((
+                "harvestable",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                int(component.loot_table_id),
+                component._max_quantity,
+                component._current_quantity,
+                component._respawn_interval,
+                component._last_update_tick.value,
+                component.required_tool_category,
+                component.harvest_duration,
+                component.stamina_cost,
+                None if component.current_actor_id is None else int(component.current_actor_id),
+                None if component.harvest_finish_tick is None else component.harvest_finish_tick.value,
+            )),
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+        )
+    if isinstance(component, StaticPlaceableInnerComponent):
+        return (
+            _pad_component_parent_row((
+                "static",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )),
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+        )
+    raise ValueError(f"Unsupported component type: {type(component).__name__}")
 
 
-def storage_to_component(component_type: str | None, payload_json: str | None) -> WorldObjectComponent | None:
+def row_to_component(
+    row: object,
+    *,
+    capability_rows: list[object],
+    chest_item_rows: list[object],
+    interaction_data_rows: list[object],
+    patrol_rows: list[object],
+    available_skill_rows: list[object],
+    threat_race_rows: list[object],
+    prey_race_rows: list[object],
+) -> WorldObjectComponent | None:
+    component_type = row["component_type"]
     if component_type is None:
         return None
-    payload = {} if payload_json is None else json.loads(payload_json)
+    component_type = str(component_type)
+    capability = MovementCapability(
+        capabilities=frozenset(
+            MovementCapabilityEnum(str(capability_row["capability"]))
+            for capability_row in capability_rows
+        ),
+        speed_modifier=1.0 if row["actor_speed_modifier"] is None else float(row["actor_speed_modifier"]),
+    )
     if component_type == "chest":
         return ChestComponent(
-            is_open=bool(payload.get("is_open", False)),
-            item_ids=[ItemInstanceId(int(item_id)) for item_id in payload.get("item_ids", [])],
+            is_open=bool(row["chest_is_open"]),
+            item_ids=[ItemInstanceId(int(item_row["item_instance_id"])) for item_row in chest_item_rows],
         )
     if component_type == "door":
         return DoorComponent(
-            is_open=bool(payload.get("is_open", False)),
-            is_locked=bool(payload.get("is_locked", False)),
+            is_open=bool(row["door_is_open"]),
+            is_locked=bool(row["door_is_locked"]),
         )
     if component_type == "ground_item":
-        return GroundItemComponent(ItemInstanceId(int(payload["item_instance_id"])))
+        return GroundItemComponent(ItemInstanceId(int(row["ground_item_instance_id"])))
     if component_type == "static":
         return StaticPlaceableInnerComponent()
-    if component_type.startswith("placeable("):
-        inner_type = payload["inner_type"]
-        inner_payload = json.dumps(payload.get("inner_payload", {}), ensure_ascii=True, sort_keys=True)
-        inner = storage_to_component(inner_type, inner_payload)
-        trigger_payload = payload.get("trigger_on_step")
+    if component_type == "placeable":
+        inner_type = str(row["placeable_inner_type"])
+        if inner_type == "chest":
+            inner: WorldObjectComponent = ChestComponent(
+                is_open=bool(row["chest_is_open"]),
+                item_ids=[ItemInstanceId(int(item_row["item_instance_id"])) for item_row in chest_item_rows],
+            )
+        elif inner_type == "door":
+            inner = DoorComponent(
+                is_open=bool(row["door_is_open"]),
+                is_locked=bool(row["door_is_locked"]),
+            )
+        else:
+            inner = StaticPlaceableInnerComponent()
+        trigger = None
+        if row["placeable_trigger_type"] is not None:
+            trigger = row_to_trigger(row, prefix="placeable_trigger_")
         return PlaceableComponent(
-            item_spec_id=ItemSpecId(int(payload["item_spec_id"])),
-            inner=inner if inner is not None else StaticPlaceableInnerComponent(),
-            trigger_on_step=(
-                None
-                if trigger_payload is None
-                else storage_to_trigger(trigger_payload["type"], json.dumps(trigger_payload["payload"], ensure_ascii=True, sort_keys=True))
-            ),
+            item_spec_id=ItemSpecId(int(row["placeable_item_spec_id"])),
+            inner=inner,
+            trigger_on_step=trigger,
         )
     if component_type == "actor":
         return ActorComponent(
-            direction=DirectionEnum(payload["direction"]),
-            capability=_payload_to_movement_capability(payload["capability"]),
-            player_id=None if payload.get("player_id") is None else PlayerId(int(payload["player_id"])),
-            is_npc=bool(payload.get("is_npc", False)),
-            fov_angle=float(payload.get("fov_angle", 360.0)),
-            race=str(payload.get("race", "human")),
-            faction=str(payload.get("faction", "neutral")),
-            pack_id=None if payload.get("pack_id") is None else PackId.create(payload["pack_id"]),
+            direction=DirectionEnum(str(row["actor_direction"])),
+            capability=capability,
+            player_id=None if row["actor_player_id"] is None else PlayerId(int(row["actor_player_id"])),
+            is_npc=bool(row["actor_is_npc"]),
+            fov_angle=float(row["actor_fov_angle"]),
+            race=str(row["actor_race"]),
+            faction=str(row["actor_faction"]),
+            pack_id=None if row["actor_pack_id"] is None else PackId.create(str(row["actor_pack_id"])),
         )
     if component_type == "interactable":
         return InteractableComponent(
-            interaction_type=InteractionTypeEnum(payload["interaction_type"]),
-            data=dict(payload.get("data", {})),
-            duration=int(payload.get("duration", 1)),
+            interaction_type=InteractionTypeEnum(str(row["interactable_type"])),
+            data={str(data_row["data_key"]): _decode_interaction_data(data_row) for data_row in interaction_data_rows},
+            duration=int(row["interactable_duration"]),
         )
     if component_type == "autonomous_actor":
-        available_skills = [
-            MonsterSkillInfo(
-                slot_index=int(skill["slot_index"]),
-                range=int(skill["range"]),
-                mp_cost=int(skill["mp_cost"]),
+        aggro_policy = None
+        if row["autonomous_aggro_forget_after_ticks"] is not None or row["autonomous_aggro_revenge_never_forget"] is not None:
+            aggro_policy = AggroMemoryPolicy(
+                forget_after_ticks=None if row["autonomous_aggro_forget_after_ticks"] is None else int(row["autonomous_aggro_forget_after_ticks"]),
+                revenge_never_forget=bool(row["autonomous_aggro_revenge_never_forget"]),
             )
-            for skill in payload.get("available_skills", [])
-        ]
-        aggro_memory_policy = payload.get("aggro_memory_policy")
         return AutonomousBehaviorComponent(
-            direction=DirectionEnum(payload["direction"]),
-            capability=_payload_to_movement_capability(payload["capability"]),
-            player_id=None if payload.get("player_id") is None else PlayerId(int(payload["player_id"])),
-            is_npc=bool(payload.get("is_npc", True)),
-            vision_range=int(payload.get("vision_range", 5)),
-            fov_angle=float(payload.get("fov_angle", 90.0)),
-            patrol_points=[
-                payload_to_coordinate(point)
-                for point in payload.get("patrol_points", [])
-                if payload_to_coordinate(point) is not None
-            ],
-            race=str(payload.get("race", "monster")),
-            faction=str(payload.get("faction", "enemy")),
-            initial_position=payload_to_coordinate(payload.get("initial_position")),
-            random_move_chance=float(payload.get("random_move_chance", 0.5)),
-            available_skills=available_skills,
-            behavior_strategy_type=str(payload.get("behavior_strategy_type", "default")),
-            pack_id=None if payload.get("pack_id") is None else PackId.create(payload["pack_id"]),
-            is_pack_leader=bool(payload.get("is_pack_leader", False)),
-            ecology_type=EcologyTypeEnum(payload.get("ecology_type", EcologyTypeEnum.NORMAL.value)),
-            ambush_chase_range=payload.get("ambush_chase_range"),
-            territory_radius=payload.get("territory_radius"),
-            aggro_memory_policy=(
-                None
-                if aggro_memory_policy is None
-                else AggroMemoryPolicy(
-                    forget_after_ticks=aggro_memory_policy.get("forget_after_ticks"),
-                    revenge_never_forget=bool(aggro_memory_policy.get("revenge_never_forget", False)),
+            direction=DirectionEnum(str(row["actor_direction"])),
+            capability=capability,
+            player_id=None if row["actor_player_id"] is None else PlayerId(int(row["actor_player_id"])),
+            is_npc=bool(row["actor_is_npc"]),
+            vision_range=int(row["autonomous_vision_range"]),
+            fov_angle=float(row["actor_fov_angle"]),
+            patrol_points=[Coordinate(int(p["x"]), int(p["y"]), int(p["z"])) for p in patrol_rows],
+            race=str(row["actor_race"]),
+            faction=str(row["actor_faction"]),
+            initial_position=None if row["autonomous_initial_x"] is None else Coordinate(int(row["autonomous_initial_x"]), int(row["autonomous_initial_y"]), int(row["autonomous_initial_z"])),
+            random_move_chance=float(row["autonomous_random_move_chance"]),
+            available_skills=[
+                MonsterSkillInfo(
+                    slot_index=int(skill_row["slot_index"]),
+                    range=int(skill_row["range"]),
+                    mp_cost=int(skill_row["mp_cost"]),
                 )
-            ),
-            active_time=ActiveTimeType(payload.get("active_time", ActiveTimeType.ALWAYS.value)),
-            threat_races=frozenset(str(race) for race in payload.get("threat_races", [])),
-            prey_races=frozenset(str(race) for race in payload.get("prey_races", [])),
+                for skill_row in available_skill_rows
+            ],
+            behavior_strategy_type=str(row["autonomous_behavior_strategy_type"]),
+            pack_id=None if row["actor_pack_id"] is None else PackId.create(str(row["actor_pack_id"])),
+            is_pack_leader=bool(row["autonomous_is_pack_leader"]),
+            ecology_type=EcologyTypeEnum(str(row["autonomous_ecology_type"])),
+            ambush_chase_range=None if row["autonomous_ambush_chase_range"] is None else int(row["autonomous_ambush_chase_range"]),
+            territory_radius=None if row["autonomous_territory_radius"] is None else int(row["autonomous_territory_radius"]),
+            aggro_memory_policy=aggro_policy,
+            active_time=ActiveTimeType(str(row["autonomous_active_time"])),
+            threat_races=frozenset(str(race_row["race"]) for race_row in threat_race_rows),
+            prey_races=frozenset(str(race_row["race"]) for race_row in prey_race_rows),
         )
     if component_type == "harvestable":
         component = HarvestableComponent(
-            loot_table_id=LootTableId(int(payload["loot_table_id"])),
-            max_quantity=int(payload["max_quantity"]),
-            respawn_interval=int(payload["respawn_interval"]),
-            initial_quantity=int(payload["current_quantity"]),
-            last_harvest_tick=WorldTick(int(payload["last_update_tick"])),
-            required_tool_category=payload.get("required_tool_category"),
-            harvest_duration=int(payload.get("harvest_duration", 5)),
-            stamina_cost=int(payload.get("stamina_cost", 10)),
+            loot_table_id=LootTableId(int(row["harvest_loot_table_id"])),
+            max_quantity=int(row["harvest_max_quantity"]),
+            respawn_interval=int(row["harvest_respawn_interval"]),
+            initial_quantity=int(row["harvest_current_quantity"]),
+            last_harvest_tick=WorldTick(int(row["harvest_last_update_tick"])),
+            required_tool_category=row["harvest_required_tool_category"],
+            harvest_duration=int(row["harvest_duration"]),
+            stamina_cost=int(row["harvest_stamina_cost"]),
         )
-        current_actor_id = payload.get("current_actor_id")
-        harvest_finish_tick = payload.get("harvest_finish_tick")
-        component._current_actor_id = None if current_actor_id is None else WorldObjectId(int(current_actor_id))
-        component._harvest_finish_tick = (
-            None if harvest_finish_tick is None else WorldTick(int(harvest_finish_tick))
-        )
+        component._current_actor_id = None if row["harvest_current_actor_id"] is None else WorldObjectId(int(row["harvest_current_actor_id"]))
+        component._harvest_finish_tick = None if row["harvest_finish_tick"] is None else WorldTick(int(row["harvest_finish_tick"]))
         return component
     raise ValueError(f"Unsupported component type: {component_type}")
 
@@ -416,6 +1007,13 @@ def build_physical_map(
     location_area_rows: list[object],
     gateway_rows: list[object],
     area_trait_rows: list[str],
+    capability_rows: list[object],
+    chest_item_rows: list[object],
+    interaction_data_rows: list[object],
+    patrol_rows: list[object],
+    available_skill_rows: list[object],
+    threat_race_rows: list[object],
+    prey_race_rows: list[object],
 ) -> PhysicalMapAggregate:
     tiles = {
         Coordinate(int(tile_row["x"]), int(tile_row["y"]), int(tile_row["z"])): Tile(
@@ -437,8 +1035,24 @@ def build_physical_map(
         )
         for tile_row in tile_rows
     }
+    capability_rows_by_object = _group_rows_by_object_id(capability_rows)
+    chest_item_rows_by_object = _group_rows_by_object_id(chest_item_rows)
+    interaction_data_rows_by_object = _group_rows_by_object_id(interaction_data_rows)
+    patrol_rows_by_object = _group_rows_by_object_id(patrol_rows)
+    available_skill_rows_by_object = _group_rows_by_object_id(available_skill_rows)
+    threat_race_rows_by_object = _group_rows_by_object_id(threat_race_rows)
+    prey_race_rows_by_object = _group_rows_by_object_id(prey_race_rows)
     objects = [
-        _build_world_object(row=object_row)
+        _build_world_object(
+            row=object_row,
+            capability_rows=capability_rows_by_object.get(int(object_row["world_object_id"]), []),
+            chest_item_rows=chest_item_rows_by_object.get(int(object_row["world_object_id"]), []),
+            interaction_data_rows=interaction_data_rows_by_object.get(int(object_row["world_object_id"]), []),
+            patrol_rows=patrol_rows_by_object.get(int(object_row["world_object_id"]), []),
+            available_skill_rows=available_skill_rows_by_object.get(int(object_row["world_object_id"]), []),
+            threat_race_rows=threat_race_rows_by_object.get(int(object_row["world_object_id"]), []),
+            prey_race_rows=prey_race_rows_by_object.get(int(object_row["world_object_id"]), []),
+        )
         for object_row in object_rows
     ]
     area_triggers = [
@@ -496,90 +1110,26 @@ def build_physical_map(
     return physical_map
 
 
-def _component_payload(component: WorldObjectComponent) -> dict[str, Any]:
-    if isinstance(component, PlaceableComponent):
-        trigger_payload = None
-        if component.get_trigger_on_step() is not None:
-            trigger_type, trigger_json = trigger_to_storage(component.get_trigger_on_step())
-            trigger_payload = {"type": trigger_type, "payload": json.loads(trigger_json)}
-        return {
-            "item_spec_id": int(component.item_spec_id),
-            "inner_type": component._inner.get_type_name(),
-            "inner_payload": _component_payload(component._inner),
-            "trigger_on_step": trigger_payload,
-        }
-    if isinstance(component, ActorComponent) and not isinstance(component, AutonomousBehaviorComponent):
-        return {
-            "direction": component.direction.value,
-            "capability": _movement_capability_to_payload(component.capability),
-            "player_id": None if component.player_id is None else int(component.player_id),
-            "is_npc": component.is_npc,
-            "fov_angle": component.fov_angle,
-            "race": component.race,
-            "faction": component.faction,
-            "pack_id": None if component.pack_id is None else component.pack_id.value,
-        }
-    if isinstance(component, AutonomousBehaviorComponent):
-        return {
-            "direction": component.direction.value,
-            "capability": _movement_capability_to_payload(component.capability),
-            "player_id": None if component.player_id is None else int(component.player_id),
-            "is_npc": component.is_npc,
-            "vision_range": component.vision_range,
-            "fov_angle": component.fov_angle,
-            "patrol_points": [coordinate_to_payload(point) for point in component.patrol_points],
-            "race": component.race,
-            "faction": component.faction,
-            "initial_position": coordinate_to_payload(component.initial_position),
-            "random_move_chance": component.random_move_chance,
-            "available_skills": [
-                {"slot_index": skill.slot_index, "range": skill.range, "mp_cost": skill.mp_cost}
-                for skill in component.available_skills
-            ],
-            "behavior_strategy_type": component.behavior_strategy_type,
-            "pack_id": None if component.pack_id is None else component.pack_id.value,
-            "is_pack_leader": component.is_pack_leader,
-            "ecology_type": component.ecology_type.value,
-            "ambush_chase_range": component.ambush_chase_range,
-            "territory_radius": component.territory_radius,
-            "aggro_memory_policy": None
-            if component.aggro_memory_policy is None
-            else {
-                "forget_after_ticks": component.aggro_memory_policy.forget_after_ticks,
-                "revenge_never_forget": component.aggro_memory_policy.revenge_never_forget,
-            },
-            "active_time": component.active_time.value,
-            "threat_races": sorted(component.threat_races),
-            "prey_races": sorted(component.prey_races),
-        }
-    if isinstance(component, InteractableComponent):
-        return {
-            "interaction_type": component.interaction_type.value,
-            "data": dict(component.interaction_data),
-            "duration": component.interaction_duration,
-        }
-    if isinstance(component, HarvestableComponent):
-        return {
-            "loot_table_id": int(component.loot_table_id),
-            "max_quantity": component._max_quantity,
-            "current_quantity": component._current_quantity,
-            "respawn_interval": component._respawn_interval,
-            "last_update_tick": component._last_update_tick.value,
-            "required_tool_category": component.required_tool_category,
-            "harvest_duration": component.harvest_duration,
-            "stamina_cost": component.stamina_cost,
-            "current_actor_id": None if component.current_actor_id is None else int(component.current_actor_id),
-            "harvest_finish_tick": (
-                None if component.harvest_finish_tick is None else component.harvest_finish_tick.value
-            ),
-        }
-    return component.to_dict()
-
-
-def _build_world_object(*, row: object) -> WorldObject:
-    component = storage_to_component(
-        None if row["component_type"] is None else str(row["component_type"]),
-        None if row["component_payload_json"] is None else str(row["component_payload_json"]),
+def _build_world_object(
+    *,
+    row: object,
+    capability_rows: list[object],
+    chest_item_rows: list[object],
+    interaction_data_rows: list[object],
+    patrol_rows: list[object],
+    available_skill_rows: list[object],
+    threat_race_rows: list[object],
+    prey_race_rows: list[object],
+) -> WorldObject:
+    component = row_to_component(
+        row,
+        capability_rows=capability_rows,
+        chest_item_rows=chest_item_rows,
+        interaction_data_rows=interaction_data_rows,
+        patrol_rows=patrol_rows,
+        available_skill_rows=available_skill_rows,
+        threat_race_rows=threat_race_rows,
+        prey_race_rows=prey_race_rows,
     )
     return WorldObject(
         object_id=WorldObjectId(int(row["world_object_id"])),
@@ -592,31 +1142,49 @@ def _build_world_object(*, row: object) -> WorldObject:
     )
 
 
-def _movement_capability_to_payload(capability: MovementCapability) -> dict[str, Any]:
-    return {
-        "capabilities": sorted(cap.value for cap in capability.capabilities),
-        "speed_modifier": capability.speed_modifier,
-    }
+def _group_rows_by_object_id(rows: list[object]) -> dict[int, list[object]]:
+    grouped: dict[int, list[object]] = {}
+    for row in rows:
+        grouped.setdefault(int(row["world_object_id"]), []).append(row)
+    return grouped
 
 
-def _payload_to_movement_capability(payload: dict[str, Any]) -> MovementCapability:
-    return MovementCapability(
-        capabilities=frozenset(MovementCapabilityEnum(value) for value in payload["capabilities"]),
-        speed_modifier=float(payload["speed_modifier"]),
-    )
+def _encode_interaction_data(key: str, value: Any) -> tuple[str, str, Any]:
+    if isinstance(value, bool):
+        return (key, "bool", int(value))
+    if isinstance(value, int) and not isinstance(value, bool):
+        return (key, "int", value)
+    if isinstance(value, float):
+        return (key, "float", value)
+    if value is None:
+        return (key, "null", None)
+    return (key, "text", str(value))
+
+
+def _decode_interaction_data(row: object) -> Any:
+    value_type = str(row["value_type"])
+    if value_type == "bool":
+        return bool(row["value_boolean"])
+    if value_type == "int":
+        return int(row["value_integer"])
+    if value_type == "float":
+        return float(row["value_real"])
+    if value_type == "null":
+        return None
+    return "" if row["value_text"] is None else str(row["value_text"])
 
 
 __all__ = [
     "area_to_storage",
     "area_to_record_storage",
     "build_physical_map",
-    "component_to_storage",
+    "component_to_record_storage",
     "coordinate_to_payload",
     "payload_to_coordinate",
     "row_to_area",
+    "row_to_component",
     "row_to_trigger",
     "storage_to_area",
-    "storage_to_component",
     "storage_to_trigger",
     "trigger_to_storage",
     "trigger_to_record_storage",
