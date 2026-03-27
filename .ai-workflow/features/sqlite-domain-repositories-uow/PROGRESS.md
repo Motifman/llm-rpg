@@ -2,7 +2,7 @@
 id: feature-sqlite-domain-repositories-uow
 title: Sqlite Domain Repositories Uow
 slug: sqlite-domain-repositories-uow
-status: done
+status: shipped
 created_at: 2026-03-27
 updated_at: 2026-03-27
 branch: feature/sqlite-domain-repositories-uow
@@ -12,8 +12,8 @@ branch: feature/sqlite-domain-repositories-uow
 
 - Active phase: **なし**（feature 完了）
 - Last completed phase: **Phase 5**（回帰固定・運用ドキュメント化・振り返り）
-- Next recommended action: `REVIEW.md` に沿った外部レビュー → 問題なければ main へマージ。follow-up は `SUMMARY.md` Remaining Work / `EVENT_PUBLISHER_UOW_POLICY.md` を参照
-- Handoff summary: 成果・テスト証跡・目的達成度・残課題は `SUMMARY.md`。レビュー観点と自己レビューは `REVIEW.md`。新規 SQLite ReadModel は `SQLITE_REPOSITORY_CHECKLIST.md`。
+- Next recommended action: 後続 feature `.ai-workflow/features/sqlite-repository-transaction-alignment/PLAN.md` の Phase 1 から着手。未解決は `SUMMARY.md` Remaining Work と `EVENT_PUBLISHER_UOW_POLICY.md`。
+- Handoff summary: 本 feature は main へマージして区切り。成果・証跡・残課題は `SUMMARY.md`。出荷判定は `REVIEW.md`（Ship ready: yes）。
 
 # Phase Journal
 
