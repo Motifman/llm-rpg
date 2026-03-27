@@ -2,12 +2,15 @@
 
 from typing import Dict, List, Optional
 
-from ai_rpg_world.domain.monster.repository.monster_repository import MonsterTemplateRepository
+from ai_rpg_world.domain.monster.repository.monster_repository import (
+    MonsterTemplateRepository,
+    MonsterTemplateWriter,
+)
 from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
 from ai_rpg_world.domain.monster.value_object.monster_template_id import MonsterTemplateId
 
 
-class InMemoryMonsterTemplateRepository(MonsterTemplateRepository):
+class InMemoryMonsterTemplateRepository(MonsterTemplateRepository, MonsterTemplateWriter):
     """MonsterTemplate のインメモリリポジトリ。find_by_name をサポートする。"""
 
     def __init__(self) -> None:
@@ -52,3 +55,9 @@ class InMemoryMonsterTemplateRepository(MonsterTemplateRepository):
     def find_all(self) -> List[MonsterTemplate]:
         """全てのテンプレートを取得"""
         return list(self._templates.values())
+
+    def replace_template(self, template: MonsterTemplate) -> None:
+        self.save(template)
+
+    def delete_template(self, template_id: MonsterTemplateId) -> bool:
+        return self.delete(template_id)

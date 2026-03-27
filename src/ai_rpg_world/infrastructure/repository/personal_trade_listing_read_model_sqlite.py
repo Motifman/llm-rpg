@@ -1,10 +1,19 @@
 """PersonalTradeListingReadModel 用 SQLite スキーマ"""
 
+from __future__ import annotations
+
 import sqlite3
 
+from ai_rpg_world.infrastructure.repository.sqlite_migration import (
+    SqliteMigration,
+    apply_migrations,
+)
 
-def init_personal_trade_listing_read_model_schema(conn: sqlite3.Connection) -> None:
-    """personal_trade_listing_read_models テーブルを作成する（commit しない）。"""
+
+_PERSONAL_LISTING_NAMESPACE = "personal_trade_listing_read_model"
+
+
+def _migration_v1(conn: sqlite3.Connection) -> None:
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS personal_trade_listing_read_models (
@@ -32,4 +41,18 @@ def init_personal_trade_listing_read_model_schema(conn: sqlite3.Connection) -> N
                 recipient_player_id, created_at, trade_id
             )
         """
+    )
+
+
+_PERSONAL_LISTING_MIGRATIONS = (
+    SqliteMigration(version=1, apply=_migration_v1),
+)
+
+
+def init_personal_trade_listing_read_model_schema(conn: sqlite3.Connection) -> None:
+    """personal_trade_listing_read_models テーブルを作成する（commit しない）。"""
+    apply_migrations(
+        conn,
+        namespace=_PERSONAL_LISTING_NAMESPACE,
+        migrations=_PERSONAL_LISTING_MIGRATIONS,
     )

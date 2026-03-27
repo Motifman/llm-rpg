@@ -2,13 +2,16 @@
 
 from typing import Optional
 
-from ai_rpg_world.domain.monster.repository.spawn_table_repository import SpawnTableRepository
+from ai_rpg_world.domain.monster.repository.spawn_table_repository import (
+    SpawnTableRepository,
+    SpawnTableWriter,
+)
 from ai_rpg_world.domain.monster.value_object.spot_spawn_table import SpotSpawnTable
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 
 
-class InMemorySpawnTableRepository(SpawnTableRepository):
+class InMemorySpawnTableRepository(SpawnTableRepository, SpawnTableWriter):
     """
     スポット単位のスポーンテーブルのインメモリ実装。
     設定的な要素は後から差し替え可能。データストアの spawn_tables を参照する。
@@ -23,3 +26,7 @@ class InMemorySpawnTableRepository(SpawnTableRepository):
     def add_table(self, table: SpotSpawnTable) -> None:
         """スポーンテーブルを登録する（テスト・初期データ用）。"""
         self._data_store.spawn_tables[table.spot_id] = table
+
+    def replace_table(self, table: SpotSpawnTable) -> None:
+        """writer ポート互換の置き換え保存"""
+        self.add_table(table)

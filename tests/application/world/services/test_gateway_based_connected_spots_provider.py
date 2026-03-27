@@ -103,3 +103,14 @@ class TestGatewayBasedConnectedSpotsProvider:
         assert provider.get_connected_spots(SpotId(1)) == [SpotId(2)]
         assert provider.get_connected_spots(SpotId(2)) == [SpotId(3)]
         assert provider.get_connected_spots(SpotId(3)) == []
+
+    def test_uses_indexed_lookup_when_repository_supports_it(self):
+        class _IndexedRepo:
+            def find_connected_spot_ids(self, spot_id):
+                return [SpotId(9)] if spot_id == SpotId(1) else []
+
+            def find_all(self):
+                raise AssertionError("indexed lookup should be used before full scan")
+
+        provider = GatewayBasedConnectedSpotsProvider(_IndexedRepo())
+        assert provider.get_connected_spots(SpotId(1)) == [SpotId(9)]
