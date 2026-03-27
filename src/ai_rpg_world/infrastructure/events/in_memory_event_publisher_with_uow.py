@@ -14,6 +14,12 @@ from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import InMe
 class InMemoryEventPublisherWithUow(EventPublisher[DomainEvent]):
     """Unit of Workと統合されたインメモリイベントパブリッシャー
 
+    **当面は `InMemoryUnitOfWork` 専用**（コンストラクタ引数および `is_in_transaction` /
+    `get_pending_events` / `clear_pending_events` 等への依存）。`SqliteUnitOfWork` とは
+    そのままでは併用できない。SQLite 永続化 UoW と同一プロセスでイベント経路を統合するには、
+    別 feature で UoW を Protocol 化するなどの移行が必要（本リポジトリの sqlite-domain-repositories-uow
+    feature の FOLLOWUP 参照）。
+
     イベントの発行をUnit of Workのトランザクション境界内で管理します。
     Phase 5: AsyncEventExecutor 注入可能。Phase 8: AsyncEventTransport 経由が優先。
     - async_transport 注入時: publish_async_events → transport.dispatch(envelopes) → executor

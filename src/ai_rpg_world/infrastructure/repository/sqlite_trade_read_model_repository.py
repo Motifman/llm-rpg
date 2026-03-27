@@ -85,10 +85,18 @@ def _cursor_sql_params(cursor: Optional[TradeCursor]) -> Tuple[str, List[Any]]:
 
 
 class SqliteTradeReadModelRepository(TradeReadModelRepository):
-    """TradeReadModel を SQLite に保持するリポジトリ"""
+    """TradeReadModel を SQLite に保持するリポジトリ
 
-    def __init__(self, connection: sqlite3.Connection) -> None:
+    `autocommit` が True（既定）のときは `save` / `delete` のたびに `Connection.commit()` する。
+    `SqliteUnitOfWork` と共有トランザクションに参加するときは `autocommit=False` とし、
+    確定は UoW の `commit` に任せる。
+    """
+
+    def __init__(
+        self, connection: sqlite3.Connection, *, autocommit: bool = True
+    ) -> None:
         self._conn = connection
+        self._autocommit = autocommit
         if connection.row_factory is not sqlite3.Row:
             connection.row_factory = sqlite3.Row
         init_trade_read_model_schema(connection)
@@ -141,7 +149,8 @@ class SqliteTradeReadModelRepository(TradeReadModelRepository):
             """,
             _model_tuple(entity),
         )
-        self._conn.commit()
+        if self._autocommit:
+            self._conn.commit()
         return entity
 
     def delete(self, entity_id: TradeId) -> bool:
@@ -149,7 +158,8 @@ class SqliteTradeReadModelRepository(TradeReadModelRepository):
             "DELETE FROM trade_read_models WHERE trade_id = ?",
             (int(entity_id),),
         )
-        self._conn.commit()
+        if self._autocommit:
+            self._conn.commit()
         return cur.rowcount > 0
 
     def find_all(self) -> List[TradeReadModel]:

@@ -4,8 +4,12 @@ import sqlite3
 
 
 def init_trade_read_model_schema(conn: sqlite3.Connection) -> None:
-    """trade_read_models テーブルと seller+ACTIVE 向け複合 index を作成する。"""
-    conn.executescript(
+    """trade_read_models テーブルと seller+ACTIVE 向け複合 index を作成する。
+
+    明示的な `commit()` は行わない。`SqliteUnitOfWork` 等の外側トランザクションに含められるよう、
+    DDL のみを発行する。単体接続で autocommit のときは各文が自動確定される。
+    """
+    conn.execute(
         """
         CREATE TABLE IF NOT EXISTS trade_read_models (
             trade_id INTEGER PRIMARY KEY NOT NULL,
@@ -25,10 +29,12 @@ def init_trade_read_model_schema(conn: sqlite3.Connection) -> None:
             item_equipment_type TEXT,
             durability_current INTEGER,
             durability_max INTEGER
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_trade_read_seller_status_created_trade
-            ON trade_read_models(seller_id, status, created_at, trade_id);
+        )
         """
     )
-    conn.commit()
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_trade_read_seller_status_created_trade
+            ON trade_read_models(seller_id, status, created_at, trade_id)
+        """
+    )
