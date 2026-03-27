@@ -6,17 +6,19 @@ import sqlite3
 from typing import Any, List, Optional
 
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
+from ai_rpg_world.domain.item.entity.item_instance import ItemInstance
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+from ai_rpg_world.domain.item.value_object.durability import Durability
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
     allocate_sequence_value,
     init_game_write_schema,
 )
-from ai_rpg_world.infrastructure.repository.sqlite_trade_command_codec import (
-    item_aggregate_to_storage,
-    storage_to_item_aggregate,
+from ai_rpg_world.infrastructure.repository.sqlite_item_spec_repository import (
+    SqliteItemSpecRepository,
+    SqliteItemSpecWriter,
 )
 
 
@@ -76,10 +78,20 @@ class SqliteItemWriteRepository(ItemRepository):
         sink.add_events_from_aggregate(aggregate)
 
     def _row_to_aggregate(self, row: sqlite3.Row) -> ItemAggregate:
-        return storage_to_item_aggregate(
-            int(row["item_instance_id"]),
-            int(row["item_spec_id"]),
-            str(row["payload_json"]),
+        spec_repo = SqliteItemSpecRepository.for_connection(self._conn)
+        spec = spec_repo.find_by_id(ItemSpecId(int(row["item_spec_id"])))
+        if spec is None:
+            raise RuntimeError("game_items が参照する item_spec_id に対応する game_item_specs が見つかりません")
+        durability = None
+        if row["durability_current"] is not None and spec.durability_max is not None:
+            durability = Durability(current=int(row["durability_current"]), max_value=int(spec.durability_max))
+        return ItemAggregate.create_from_instance(
+            ItemInstance(
+                item_instance_id=ItemInstanceId(int(row["item_instance_id"])),
+                item_spec=spec,
+                durability=durability,
+                quantity=int(row["quantity"]),
+            )
         )
 
     def _all_aggregates(self) -> List[ItemAggregate]:
@@ -93,10 +105,7 @@ class SqliteItemWriteRepository(ItemRepository):
         return iid
 
     def find_by_id(self, item_instance_id: ItemInstanceId) -> Optional[ItemAggregate]:
-        cur = self._conn.execute(
-            "SELECT * FROM game_items WHERE item_instance_id = ?",
-            (int(item_instance_id),),
-        )
+        cur = self._conn.execute("SELECT * FROM game_items WHERE item_instance_id = ?", (int(item_instance_id),))
         row = cur.fetchone()
         if row is None:
             return None
@@ -111,44 +120,89 @@ class SqliteItemWriteRepository(ItemRepository):
     def save(self, aggregate: ItemAggregate) -> ItemAggregate:
         self._assert_shared_transaction_active()
         self._maybe_emit_events(aggregate)
-        iid, spec_id, payload = item_aggregate_to_storage(aggregate)
-        self._conn.execute(
-            """
-            INSERT INTO game_items (item_instance_id, item_spec_id, payload_json)
-            VALUES (?, ?, ?)
-            ON CONFLICT(item_instance_id) DO UPDATE SET
-                item_spec_id = excluded.item_spec_id,
-                payload_json = excluded.payload_json
-            """,
-            (iid, spec_id, payload),
-        )
-        self._finalize_write()
+        began_local_transaction = False
+        if self._commits_after_write and not self._conn.in_transaction:
+            self._conn.execute("BEGIN")
+            began_local_transaction = True
+        try:
+            SqliteItemSpecWriter.for_shared_unit_of_work(self._conn).replace_spec(aggregate.item_spec)
+            self._conn.execute(
+                """
+                INSERT INTO game_items (item_instance_id, item_spec_id, quantity, durability_current)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(item_instance_id) DO UPDATE SET
+                    item_spec_id = excluded.item_spec_id,
+                    quantity = excluded.quantity,
+                    durability_current = excluded.durability_current
+                """,
+                (
+                    int(aggregate.item_instance_id),
+                    int(aggregate.item_spec.item_spec_id),
+                    int(aggregate.quantity),
+                    None if aggregate.durability is None else int(aggregate.durability.current),
+                ),
+            )
+            if began_local_transaction:
+                self._conn.commit()
+            else:
+                self._finalize_write()
+        except Exception:
+            if began_local_transaction and self._conn.in_transaction:
+                self._conn.rollback()
+            raise
         return copy.deepcopy(aggregate)
 
     def delete(self, item_instance_id: ItemInstanceId) -> bool:
         self._assert_shared_transaction_active()
-        cur = self._conn.execute(
-            "DELETE FROM game_items WHERE item_instance_id = ?",
-            (int(item_instance_id),),
-        )
+        cur = self._conn.execute("DELETE FROM game_items WHERE item_instance_id = ?", (int(item_instance_id),))
         self._finalize_write()
         return cur.rowcount > 0
 
     def find_by_spec_id(self, item_spec_id: ItemSpecId) -> List[ItemAggregate]:
-        target = int(item_spec_id)
-        return [a for a in self._all_aggregates() if int(a.item_spec.item_spec_id) == target]
+        cur = self._conn.execute("SELECT * FROM game_items WHERE item_spec_id = ? ORDER BY item_instance_id ASC", (int(item_spec_id),))
+        return [copy.deepcopy(self._row_to_aggregate(r)) for r in cur.fetchall()]
 
     def find_by_type(self, item_type: ItemType) -> List[ItemAggregate]:
-        return [a for a in self._all_aggregates() if a.item_spec.item_type == item_type]
+        cur = self._conn.execute(
+            """
+            SELECT item.*
+            FROM game_items item
+            JOIN game_item_specs spec ON spec.item_spec_id = item.item_spec_id
+            WHERE spec.item_type = ?
+            ORDER BY item.item_instance_id ASC
+            """,
+            (item_type.value,),
+        )
+        return [copy.deepcopy(self._row_to_aggregate(r)) for r in cur.fetchall()]
 
     def find_by_rarity(self, rarity: Rarity) -> List[ItemAggregate]:
-        return [a for a in self._all_aggregates() if a.item_spec.rarity == rarity]
+        cur = self._conn.execute(
+            """
+            SELECT item.*
+            FROM game_items item
+            JOIN game_item_specs spec ON spec.item_spec_id = item.item_spec_id
+            WHERE spec.rarity = ?
+            ORDER BY item.item_instance_id ASC
+            """,
+            (rarity.value,),
+        )
+        return [copy.deepcopy(self._row_to_aggregate(r)) for r in cur.fetchall()]
 
     def find_broken_items(self) -> List[ItemAggregate]:
-        return [a for a in self._all_aggregates() if a.is_broken]
+        cur = self._conn.execute("SELECT * FROM game_items WHERE durability_current = 0 ORDER BY item_instance_id ASC")
+        return [copy.deepcopy(self._row_to_aggregate(r)) for r in cur.fetchall()]
 
     def find_tradeable_items(self) -> List[ItemAggregate]:
-        return [a for a in self._all_aggregates() if a.item_spec.item_type != ItemType.QUEST]
+        cur = self._conn.execute(
+            """
+            SELECT item.*
+            FROM game_items item
+            JOIN game_item_specs spec ON spec.item_spec_id = item.item_spec_id
+            WHERE spec.is_tradeable = 1
+            ORDER BY item.item_instance_id ASC
+            """
+        )
+        return [copy.deepcopy(self._row_to_aggregate(r)) for r in cur.fetchall()]
 
     def find_by_owner_id(self, owner_id: int) -> List[ItemAggregate]:
         return []

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from typing import List
 
@@ -18,54 +17,11 @@ from ai_rpg_world.domain.world.value_object.transition_condition import (
     RequireToll,
     TransitionCondition,
 )
-from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
-    init_game_write_schema,
-)
-
-
-def _condition_to_payload(condition: TransitionCondition) -> dict:
-    if isinstance(condition, RequireToll):
-        return {
-            "type": "require_toll",
-            "amount_gold": condition.amount_gold,
-            "recipient_type": condition.recipient_type,
-            "recipient_id": condition.recipient_id,
-        }
-    if isinstance(condition, BlockIfWeather):
-        return {
-            "type": "block_if_weather",
-            "blocked_weather_types": [
-                weather.value for weather in condition.blocked_weather_types
-            ],
-        }
-    if isinstance(condition, RequireRelation):
-        return {
-            "type": "require_relation",
-            "relation_type": condition.relation_type,
-        }
-    raise TypeError(f"Unsupported transition condition type: {type(condition)!r}")
-
-
-def _payload_to_condition(payload: dict) -> TransitionCondition:
-    condition_type = payload["type"]
-    if condition_type == "require_toll":
-        return RequireToll(
-            amount_gold=int(payload["amount_gold"]),
-            recipient_type=str(payload.get("recipient_type", "spot")),
-            recipient_id=payload.get("recipient_id"),
-        )
-    if condition_type == "block_if_weather":
-        values = payload.get("blocked_weather_types", [])
-        return BlockIfWeather(
-            blocked_weather_types=tuple(WeatherTypeEnum(value) for value in values)
-        )
-    if condition_type == "require_relation":
-        return RequireRelation(relation_type=str(payload["relation_type"]))
-    raise ValueError(f"Unknown transition condition type: {condition_type}")
+from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import init_game_write_schema
 
 
 class SqliteTransitionPolicyRepository(ITransitionPolicyRepository):
-    """Store per-edge transition conditions in JSON."""
+    """Store per-edge transition conditions in normalized rows."""
 
     def __init__(self, connection: sqlite3.Connection, *, _commits_after_write: bool) -> None:
         self._conn = connection
@@ -75,33 +31,63 @@ class SqliteTransitionPolicyRepository(ITransitionPolicyRepository):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(
-        cls, connection: sqlite3.Connection
-    ) -> "SqliteTransitionPolicyRepository":
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> "SqliteTransitionPolicyRepository":
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(
-        cls, connection: sqlite3.Connection
-    ) -> "SqliteTransitionPolicyRepository":
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> "SqliteTransitionPolicyRepository":
         return cls(connection, _commits_after_write=False)
 
-    def get_conditions(
-        self, from_spot_id: SpotId, to_spot_id: SpotId
-    ) -> List[TransitionCondition]:
-        cur = self._conn.execute(
+    def get_conditions(self, from_spot_id: SpotId, to_spot_id: SpotId) -> List[TransitionCondition]:
+        edge = self._conn.execute(
+            "SELECT 1 FROM game_transition_policies WHERE from_spot_id = ? AND to_spot_id = ?",
+            (int(from_spot_id), int(to_spot_id)),
+        ).fetchone()
+        if edge is None:
+            return []
+        rows = self._conn.execute(
             """
-            SELECT payload_json
-            FROM game_transition_policies
+            SELECT condition_index, condition_type, amount_gold, recipient_type, recipient_id, relation_type
+            FROM game_transition_policy_conditions
             WHERE from_spot_id = ? AND to_spot_id = ?
+            ORDER BY condition_index ASC
             """,
             (int(from_spot_id), int(to_spot_id)),
-        )
-        row = cur.fetchone()
-        if row is None:
-            return []
-        payload = json.loads(str(row["payload_json"]))
-        return [_payload_to_condition(item) for item in payload]
+        ).fetchall()
+        conditions: List[TransitionCondition] = []
+        for row in rows:
+            condition_type = str(row["condition_type"])
+            if condition_type == "require_toll":
+                conditions.append(
+                    RequireToll(
+                        amount_gold=int(row["amount_gold"]),
+                        recipient_type=str(row["recipient_type"]),
+                        recipient_id=row["recipient_id"],
+                    )
+                )
+            elif condition_type == "block_if_weather":
+                weather_rows = self._conn.execute(
+                    """
+                    SELECT weather_type
+                    FROM game_transition_policy_blocked_weather
+                    WHERE from_spot_id = ? AND to_spot_id = ? AND condition_index = ?
+                    ORDER BY weather_index ASC
+                    """,
+                    (int(from_spot_id), int(to_spot_id), int(row["condition_index"])),
+                ).fetchall()
+                conditions.append(
+                    BlockIfWeather(
+                        blocked_weather_types=tuple(
+                            WeatherTypeEnum(str(weather_row["weather_type"])) for weather_row in weather_rows
+                        )
+                    )
+                )
+            elif condition_type == "require_relation":
+                conditions.append(RequireRelation(relation_type=str(row["relation_type"])))
+            else:
+                raise ValueError(f"Unknown transition condition type: {condition_type}")
+        return conditions
+
 
 class SqliteTransitionPolicyWriter(ITransitionPolicyWriter):
     """TransitionPolicy 登録専用の SQLite writer。seed とテスト投入を担当する。"""
@@ -114,15 +100,11 @@ class SqliteTransitionPolicyWriter(ITransitionPolicyWriter):
         init_game_write_schema(connection)
 
     @classmethod
-    def for_standalone_connection(
-        cls, connection: sqlite3.Connection
-    ) -> "SqliteTransitionPolicyWriter":
+    def for_standalone_connection(cls, connection: sqlite3.Connection) -> "SqliteTransitionPolicyWriter":
         return cls(connection, _commits_after_write=True)
 
     @classmethod
-    def for_shared_unit_of_work(
-        cls, connection: sqlite3.Connection
-    ) -> "SqliteTransitionPolicyWriter":
+    def for_shared_unit_of_work(cls, connection: sqlite3.Connection) -> "SqliteTransitionPolicyWriter":
         return cls(connection, _commits_after_write=False)
 
     def _finalize_write(self) -> None:
@@ -133,36 +115,62 @@ class SqliteTransitionPolicyWriter(ITransitionPolicyWriter):
         if self._commits_after_write:
             return
         if not self._conn.in_transaction:
-            raise RuntimeError(
-                "for_shared_unit_of_work で生成した writer の書き込みは、"
-                "アクティブなトランザクション内（with uow）で実行してください"
-            )
+            raise RuntimeError("for_shared_unit_of_work で生成した writer の書き込みは、アクティブなトランザクション内（with uow）で実行してください")
 
-    def replace_conditions(
-        self,
-        from_spot_id: SpotId,
-        to_spot_id: SpotId,
-        conditions: List[TransitionCondition],
-    ) -> None:
+    def replace_conditions(self, from_spot_id: SpotId, to_spot_id: SpotId, conditions: List[TransitionCondition]) -> None:
         self._assert_shared_transaction_active()
-        payload_json = json.dumps(
-            [_condition_to_payload(condition) for condition in conditions],
-            ensure_ascii=True,
-            separators=(",", ":"),
+        from_id, to_id = int(from_spot_id), int(to_spot_id)
+        self._conn.execute(
+            "INSERT INTO game_transition_policies (from_spot_id, to_spot_id) VALUES (?, ?) ON CONFLICT(from_spot_id, to_spot_id) DO NOTHING",
+            (from_id, to_id),
         )
         self._conn.execute(
-            """
-            INSERT INTO game_transition_policies (from_spot_id, to_spot_id, payload_json)
-            VALUES (?, ?, ?)
-            ON CONFLICT(from_spot_id, to_spot_id) DO UPDATE SET
-                payload_json = excluded.payload_json
-            """,
-            (int(from_spot_id), int(to_spot_id), payload_json),
+            "DELETE FROM game_transition_policy_conditions WHERE from_spot_id = ? AND to_spot_id = ?",
+            (from_id, to_id),
         )
+        self._conn.execute(
+            "DELETE FROM game_transition_policy_blocked_weather WHERE from_spot_id = ? AND to_spot_id = ?",
+            (from_id, to_id),
+        )
+        for idx, condition in enumerate(conditions):
+            if isinstance(condition, RequireToll):
+                self._conn.execute(
+                    """
+                    INSERT INTO game_transition_policy_conditions (
+                        from_spot_id, to_spot_id, condition_index, condition_type, amount_gold, recipient_type, recipient_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (from_id, to_id, idx, "require_toll", condition.amount_gold, condition.recipient_type, condition.recipient_id),
+                )
+            elif isinstance(condition, BlockIfWeather):
+                self._conn.execute(
+                    """
+                    INSERT INTO game_transition_policy_conditions (
+                        from_spot_id, to_spot_id, condition_index, condition_type
+                    ) VALUES (?, ?, ?, ?)
+                    """,
+                    (from_id, to_id, idx, "block_if_weather"),
+                )
+                self._conn.executemany(
+                    """
+                    INSERT INTO game_transition_policy_blocked_weather (
+                        from_spot_id, to_spot_id, condition_index, weather_index, weather_type
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    [(from_id, to_id, idx, weather_idx, weather.value) for weather_idx, weather in enumerate(condition.blocked_weather_types)],
+                )
+            elif isinstance(condition, RequireRelation):
+                self._conn.execute(
+                    """
+                    INSERT INTO game_transition_policy_conditions (
+                        from_spot_id, to_spot_id, condition_index, condition_type, relation_type
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (from_id, to_id, idx, "require_relation", condition.relation_type),
+                )
+            else:
+                raise TypeError(f"Unsupported transition condition type: {type(condition)!r}")
         self._finalize_write()
 
 
-__all__ = [
-    "SqliteTransitionPolicyRepository",
-    "SqliteTransitionPolicyWriter",
-]
+__all__ = ["SqliteTransitionPolicyRepository", "SqliteTransitionPolicyWriter"]
