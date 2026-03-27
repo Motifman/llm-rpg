@@ -2,7 +2,10 @@
 InMemoryRecipeRepository - RecipeAggregateを使用するインメモリ実装
 """
 from typing import List, Optional, Dict
-from ai_rpg_world.domain.item.repository.recipe_repository import RecipeRepository
+from ai_rpg_world.domain.item.repository.recipe_repository import (
+    RecipeRepository,
+    RecipeWriter,
+)
 from ai_rpg_world.domain.item.aggregate.recipe_aggregate import RecipeAggregate
 from ai_rpg_world.domain.item.value_object.recipe_id import RecipeId
 from ai_rpg_world.domain.item.value_object.recipe_ingredient import RecipeIngredient
@@ -10,7 +13,7 @@ from ai_rpg_world.domain.item.value_object.recipe_result import RecipeResult
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 
 
-class InMemoryRecipeRepository(RecipeRepository):
+class InMemoryRecipeRepository(RecipeRepository, RecipeWriter):
     """RecipeAggregateを使用するインメモリリポジトリ"""
 
     def __init__(self):
@@ -30,8 +33,8 @@ class InMemoryRecipeRepository(RecipeRepository):
             name="鉄の剣の作成",
             description="鉄鉱石と鋼鉄インゴットから鉄の剣を作成します。",
             ingredients=[
-                RecipeIngredient(item_spec_id=ItemSpecId(4), quantity=2),  # 鉄鉱石 x2
-                RecipeIngredient(item_spec_id=ItemSpecId(5), quantity=1),  # 鋼鉄インゴット x1
+                RecipeIngredient(item_spec_id=ItemSpecId(9), quantity=2),  # 鉄鉱石 x2
+                RecipeIngredient(item_spec_id=ItemSpecId(10), quantity=1),  # 鋼鉄インゴット x1
             ],
             result=RecipeResult(item_spec_id=ItemSpecId(1), quantity=1)  # 鉄の剣 x1
         )
@@ -41,12 +44,12 @@ class InMemoryRecipeRepository(RecipeRepository):
         healing_potion_recipe = RecipeAggregate(
             recipe_id=RecipeId(2),
             name="回復ポーションの作成",
-            description="ハーブと水から回復ポーションを作成します。",
+            description="回復ポーションと神秘のクリスタルから上級回復ポーションを作成します。",
             ingredients=[
-                RecipeIngredient(item_spec_id=ItemSpecId(6), quantity=1),  # ハーブ x1
-                RecipeIngredient(item_spec_id=ItemSpecId(7), quantity=1),  # 水 x1
+                RecipeIngredient(item_spec_id=ItemSpecId(6), quantity=1),  # 回復ポーション x1
+                RecipeIngredient(item_spec_id=ItemSpecId(11), quantity=1),  # 神秘のクリスタル x1
             ],
-            result=RecipeResult(item_spec_id=ItemSpecId(8), quantity=1)  # 回復ポーション x1
+            result=RecipeResult(item_spec_id=ItemSpecId(8), quantity=1)  # 上級回復ポーション x1
         )
         self._save_recipe(healing_potion_recipe)
 
@@ -54,12 +57,12 @@ class InMemoryRecipeRepository(RecipeRepository):
         steel_ingot_recipe = RecipeAggregate(
             recipe_id=RecipeId(3),
             name="鋼鉄インゴットの作成",
-            description="鉄鉱石と石炭から鋼鉄インゴットを作成します。",
+            description="鉄鉱石と神秘のクリスタルから鋼鉄インゴットを作成します。",
             ingredients=[
-                RecipeIngredient(item_spec_id=ItemSpecId(4), quantity=1),  # 鉄鉱石 x1
-                RecipeIngredient(item_spec_id=ItemSpecId(9), quantity=1),  # 石炭 x1
+                RecipeIngredient(item_spec_id=ItemSpecId(9), quantity=1),  # 鉄鉱石 x1
+                RecipeIngredient(item_spec_id=ItemSpecId(11), quantity=1),  # 神秘のクリスタル x1
             ],
-            result=RecipeResult(item_spec_id=ItemSpecId(5), quantity=1)  # 鋼鉄インゴット x1
+            result=RecipeResult(item_spec_id=ItemSpecId(10), quantity=1)  # 鋼鉄インゴット x1
         )
         self._save_recipe(steel_ingot_recipe)
 
@@ -127,3 +130,11 @@ class InMemoryRecipeRepository(RecipeRepository):
             del self._recipes[recipe_id]
             return True
         return False
+
+    def replace_recipe(self, recipe: RecipeAggregate) -> None:
+        """writer ポート互換の置き換え保存"""
+        self.save(recipe)
+
+    def delete_recipe(self, recipe_id: RecipeId) -> bool:
+        """writer ポート互換の削除"""
+        return self.delete(recipe_id)

@@ -13,3 +13,17 @@ class ITransitionPolicyRepository(ABC):
     def get_conditions(self, from_spot_id: SpotId, to_spot_id: SpotId) -> List[TransitionCondition]:
         """指定の遷移に対する条件リストを返す。条件がなければ空リスト。"""
         pass
+
+
+class ITransitionPolicyWriter(ABC):
+    """遷移条件の初期投入やテスト投入を担う writer ポート"""
+
+    @abstractmethod
+    def replace_conditions(
+        self,
+        from_spot_id: SpotId,
+        to_spot_id: SpotId,
+        conditions: List[TransitionCondition],
+    ) -> None:
+        """指定経路の条件一覧を丸ごと置き換える。"""
+        pass

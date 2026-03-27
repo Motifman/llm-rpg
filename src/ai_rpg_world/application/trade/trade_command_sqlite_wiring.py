@@ -4,7 +4,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any, Tuple
 
-from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import init_game_write_schema
+from ai_rpg_world.infrastructure.repository.game_db_schema import init_game_db_schema
 from ai_rpg_world.infrastructure.repository.sqlite_item_write_repository import SqliteItemWriteRepository
 from ai_rpg_world.infrastructure.repository.sqlite_player_inventory_write_repository import (
     SqlitePlayerInventoryWriteRepository,
@@ -21,10 +21,8 @@ from ai_rpg_world.infrastructure.repository.sqlite_trade_aggregate_repository im
 
 
 def bootstrap_game_write_schema(connection: sqlite3.Connection) -> None:
-    """DDL のみ。アプリ起動時またはテストで UoW 開始前に `commit` すること。"""
-    if connection.row_factory is not sqlite3.Row:
-        connection.row_factory = sqlite3.Row
-    init_game_write_schema(connection)
+    """DDL のみ。単一 game DB に載る既存スキーマをまとめて初期化する。"""
+    init_game_db_schema(connection)
 
 
 def attach_trade_command_sqlite_repositories(
