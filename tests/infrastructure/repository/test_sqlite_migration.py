@@ -72,6 +72,12 @@ class TestInitGameDbSchema:
         assert "game_skill_specs" in names
         assert "game_dialogue_trees" in names
         assert "game_dialogue_tree_nodes" in names
+        assert "game_guild_members" in names
+        assert "game_quest_objectives" in names
+        assert "game_skill_loadout_slots" in names
+        assert "game_skill_deck_progress_proposals" in names
+        assert "game_skill_spec_hit_pattern_segments" in names
+        assert "game_dialogue_node_choices" in names
         assert "game_sns_users" in names
         assert "game_sns_posts" in names
         assert "game_sns_replies" in names

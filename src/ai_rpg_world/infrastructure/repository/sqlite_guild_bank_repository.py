@@ -2,19 +2,15 @@
 
 from __future__ import annotations
 
-import copy
 import sqlite3
 from typing import List, Optional
 
 from ai_rpg_world.domain.guild.aggregate.guild_bank_aggregate import GuildBankAggregate
 from ai_rpg_world.domain.guild.repository.guild_bank_repository import GuildBankRepository
 from ai_rpg_world.domain.guild.value_object.guild_id import GuildId
+from ai_rpg_world.domain.player.value_object.gold import Gold
 from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
     init_game_write_schema,
-)
-from ai_rpg_world.infrastructure.repository.sqlite_pickle_codec import (
-    blob_to_object,
-    object_to_blob,
 )
 
 
@@ -40,31 +36,33 @@ class SqliteGuildBankRepository(GuildBankRepository):
 
     def find_by_id(self, entity_id: GuildId) -> Optional[GuildBankAggregate]:
         cur = self._conn.execute(
-            "SELECT aggregate_blob FROM game_guild_banks WHERE guild_id = ?",
+            "SELECT guild_id, gold FROM game_guild_banks WHERE guild_id = ?",
             (int(entity_id),),
         )
         row = cur.fetchone()
         if row is None:
             return None
-        return copy.deepcopy(blob_to_object(bytes(row["aggregate_blob"])))
+        return GuildBankAggregate(guild_id=GuildId(int(row["guild_id"])), gold=Gold.create(int(row["gold"])))
 
     def find_by_ids(self, entity_ids: List[GuildId]) -> List[GuildBankAggregate]:
         return [x for entity_id in entity_ids for x in [self.find_by_id(entity_id)] if x is not None]
 
     def find_all(self) -> List[GuildBankAggregate]:
-        cur = self._conn.execute("SELECT aggregate_blob FROM game_guild_banks ORDER BY guild_id ASC")
-        return [copy.deepcopy(blob_to_object(bytes(row["aggregate_blob"]))) for row in cur.fetchall()]
+        cur = self._conn.execute("SELECT guild_id, gold FROM game_guild_banks ORDER BY guild_id ASC")
+        return [
+            GuildBankAggregate(guild_id=GuildId(int(row["guild_id"])), gold=Gold.create(int(row["gold"])))
+            for row in cur.fetchall()
+        ]
 
     def save(self, entity: GuildBankAggregate) -> GuildBankAggregate:
         self._conn.execute(
             """
-            INSERT INTO game_guild_banks (guild_id, gold, aggregate_blob)
-            VALUES (?, ?, ?)
+            INSERT INTO game_guild_banks (guild_id, gold)
+            VALUES (?, ?)
             ON CONFLICT(guild_id) DO UPDATE SET
-                gold = excluded.gold,
-                aggregate_blob = excluded.aggregate_blob
+                gold = excluded.gold
             """,
-            (int(entity.guild_id), int(entity.gold.value), object_to_blob(entity)),
+            (int(entity.guild_id), int(entity.gold.value)),
         )
         self._finalize_write()
         return entity

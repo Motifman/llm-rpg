@@ -430,7 +430,7 @@ def _migration_v16(connection: sqlite3.Connection) -> None:
             spot_id INTEGER NOT NULL,
             location_area_id INTEGER NOT NULL,
             name TEXT NOT NULL,
-            aggregate_blob BLOB NOT NULL
+            description TEXT NOT NULL
         )
         """
     )
@@ -445,6 +445,9 @@ def _migration_v16(connection: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS game_guild_members (
             guild_id INTEGER NOT NULL,
             player_id INTEGER NOT NULL,
+            role TEXT NOT NULL,
+            joined_at TEXT NOT NULL,
+            contribution_points INTEGER NOT NULL,
             PRIMARY KEY (guild_id, player_id)
         )
         """
@@ -459,8 +462,7 @@ def _migration_v16(connection: sqlite3.Connection) -> None:
         """
         CREATE TABLE IF NOT EXISTS game_guild_banks (
             guild_id INTEGER PRIMARY KEY NOT NULL,
-            gold INTEGER NOT NULL,
-            aggregate_blob BLOB NOT NULL
+            gold INTEGER NOT NULL
         )
         """
     )
@@ -472,10 +474,17 @@ def _migration_v17(connection: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS game_quests (
             quest_id INTEGER PRIMARY KEY NOT NULL,
             status TEXT NOT NULL,
+            issuer_player_id INTEGER,
             guild_id INTEGER,
             acceptor_player_id INTEGER,
-            created_at TEXT NOT NULL,
-            aggregate_blob BLOB NOT NULL
+            scope_type TEXT NOT NULL,
+            scope_target_player_id INTEGER,
+            scope_guild_id INTEGER,
+            reward_gold INTEGER NOT NULL,
+            reward_exp INTEGER NOT NULL,
+            reserved_gold INTEGER NOT NULL,
+            version INTEGER NOT NULL,
+            created_at TEXT NOT NULL
         )
         """
     )
@@ -483,6 +492,41 @@ def _migration_v17(connection: sqlite3.Connection) -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_game_quests_acceptor_status
             ON game_quests(acceptor_player_id, status, quest_id)
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_quest_objectives (
+            quest_id INTEGER NOT NULL,
+            objective_index INTEGER NOT NULL,
+            objective_type TEXT NOT NULL,
+            target_id INTEGER NOT NULL,
+            required_count INTEGER NOT NULL,
+            current_count INTEGER NOT NULL,
+            target_id_secondary INTEGER,
+            PRIMARY KEY (quest_id, objective_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_quest_reward_items (
+            quest_id INTEGER NOT NULL,
+            reward_index INTEGER NOT NULL,
+            item_spec_id INTEGER NOT NULL,
+            quantity INTEGER NOT NULL,
+            PRIMARY KEY (quest_id, reward_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_quest_reserved_items (
+            quest_id INTEGER NOT NULL,
+            item_index INTEGER NOT NULL,
+            item_instance_id INTEGER NOT NULL,
+            PRIMARY KEY (quest_id, item_index)
+        )
         """
     )
 
@@ -493,7 +537,12 @@ def _migration_v18(connection: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS game_skill_loadouts (
             loadout_id INTEGER PRIMARY KEY NOT NULL,
             owner_id INTEGER NOT NULL UNIQUE,
-            aggregate_blob BLOB NOT NULL
+            normal_capacity INTEGER NOT NULL,
+            awakened_capacity INTEGER NOT NULL,
+            awaken_is_active INTEGER NOT NULL,
+            awaken_active_until_tick INTEGER NOT NULL,
+            awaken_cooldown_reduction_rate REAL NOT NULL,
+            cast_lock_until_tick INTEGER NOT NULL
         )
         """
     )
@@ -502,7 +551,12 @@ def _migration_v18(connection: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS game_skill_deck_progresses (
             progress_id INTEGER PRIMARY KEY NOT NULL,
             owner_id INTEGER NOT NULL UNIQUE,
-            aggregate_blob BLOB NOT NULL
+            deck_level INTEGER NOT NULL,
+            deck_exp INTEGER NOT NULL,
+            exp_table_base_exp INTEGER NOT NULL,
+            exp_table_exponent REAL NOT NULL,
+            exp_table_level_offset INTEGER NOT NULL,
+            capacity_growth_per_level INTEGER NOT NULL
         )
         """
     )
@@ -511,7 +565,17 @@ def _migration_v18(connection: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS game_skill_specs (
             skill_id INTEGER PRIMARY KEY NOT NULL,
             name TEXT NOT NULL,
-            aggregate_blob BLOB NOT NULL
+            element TEXT NOT NULL,
+            deck_cost INTEGER NOT NULL,
+            cast_lock_ticks INTEGER NOT NULL,
+            cooldown_ticks INTEGER NOT NULL,
+            power_multiplier REAL NOT NULL,
+            pattern_type TEXT NOT NULL,
+            mp_cost INTEGER,
+            stamina_cost INTEGER,
+            hp_cost INTEGER,
+            is_awakened_deck_only INTEGER NOT NULL,
+            targeting_range INTEGER NOT NULL
         )
         """
     )
@@ -519,6 +583,126 @@ def _migration_v18(connection: sqlite3.Connection) -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_game_skill_specs_name
             ON game_skill_specs(name, skill_id)
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_skill_loadout_slots (
+            loadout_id INTEGER NOT NULL,
+            deck_tier TEXT NOT NULL,
+            slot_index INTEGER NOT NULL,
+            skill_id INTEGER NOT NULL,
+            PRIMARY KEY (loadout_id, deck_tier, slot_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_skill_loadout_cooldowns (
+            loadout_id INTEGER NOT NULL,
+            skill_id INTEGER NOT NULL,
+            ready_at_tick INTEGER NOT NULL,
+            PRIMARY KEY (loadout_id, skill_id)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_skill_deck_progress_capacity_bonuses (
+            progress_id INTEGER NOT NULL,
+            level INTEGER NOT NULL,
+            bonus_capacity INTEGER NOT NULL,
+            PRIMARY KEY (progress_id, level)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_skill_deck_progress_proposals (
+            progress_id INTEGER NOT NULL,
+            proposal_id INTEGER NOT NULL,
+            proposal_type TEXT NOT NULL,
+            offered_skill_id INTEGER NOT NULL,
+            deck_tier TEXT NOT NULL,
+            target_slot_index INTEGER,
+            reason TEXT NOT NULL,
+            PRIMARY KEY (progress_id, proposal_id)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_skill_deck_progress_proposal_required_skills (
+            progress_id INTEGER NOT NULL,
+            proposal_id INTEGER NOT NULL,
+            required_index INTEGER NOT NULL,
+            skill_id INTEGER NOT NULL,
+            PRIMARY KEY (progress_id, proposal_id, required_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_skill_spec_required_skills (
+            skill_id INTEGER NOT NULL,
+            required_index INTEGER NOT NULL,
+            required_skill_id INTEGER NOT NULL,
+            PRIMARY KEY (skill_id, required_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_skill_spec_slayer_races (
+            skill_id INTEGER NOT NULL,
+            race_index INTEGER NOT NULL,
+            race TEXT NOT NULL,
+            PRIMARY KEY (skill_id, race_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_skill_spec_hit_effects (
+            skill_id INTEGER NOT NULL,
+            effect_index INTEGER NOT NULL,
+            effect_type TEXT NOT NULL,
+            duration_ticks INTEGER NOT NULL,
+            intensity REAL NOT NULL,
+            chance REAL NOT NULL,
+            PRIMARY KEY (skill_id, effect_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_skill_spec_hit_pattern_segments (
+            skill_id INTEGER NOT NULL,
+            segment_index INTEGER NOT NULL,
+            start_offset_ticks INTEGER NOT NULL,
+            duration_ticks INTEGER NOT NULL,
+            velocity_dx REAL NOT NULL,
+            velocity_dy REAL NOT NULL,
+            velocity_dz REAL NOT NULL,
+            spawn_dx INTEGER NOT NULL,
+            spawn_dy INTEGER NOT NULL,
+            spawn_dz INTEGER NOT NULL,
+            segment_power_multiplier REAL NOT NULL,
+            PRIMARY KEY (skill_id, segment_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_skill_spec_hit_pattern_coords (
+            skill_id INTEGER NOT NULL,
+            segment_index INTEGER NOT NULL,
+            coord_index INTEGER NOT NULL,
+            dx INTEGER NOT NULL,
+            dy INTEGER NOT NULL,
+            dz INTEGER NOT NULL,
+            PRIMARY KEY (skill_id, segment_index, coord_index)
+        )
         """
     )
 
@@ -537,8 +721,57 @@ def _migration_v19(connection: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS game_dialogue_tree_nodes (
             tree_id INTEGER NOT NULL,
             node_id INTEGER NOT NULL,
-            node_blob BLOB NOT NULL,
+            text TEXT NOT NULL,
+            next_node_id INTEGER,
+            is_terminal INTEGER NOT NULL,
+            reward_gold INTEGER NOT NULL,
             PRIMARY KEY (tree_id, node_id)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_dialogue_node_choices (
+            tree_id INTEGER NOT NULL,
+            node_id INTEGER NOT NULL,
+            choice_index INTEGER NOT NULL,
+            label TEXT NOT NULL,
+            next_node_id INTEGER NOT NULL,
+            PRIMARY KEY (tree_id, node_id, choice_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_dialogue_node_reward_items (
+            tree_id INTEGER NOT NULL,
+            node_id INTEGER NOT NULL,
+            reward_index INTEGER NOT NULL,
+            item_spec_id INTEGER NOT NULL,
+            quantity INTEGER NOT NULL,
+            PRIMARY KEY (tree_id, node_id, reward_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_dialogue_node_quest_unlocks (
+            tree_id INTEGER NOT NULL,
+            node_id INTEGER NOT NULL,
+            quest_index INTEGER NOT NULL,
+            quest_id INTEGER NOT NULL,
+            PRIMARY KEY (tree_id, node_id, quest_index)
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_dialogue_node_quest_completions (
+            tree_id INTEGER NOT NULL,
+            node_id INTEGER NOT NULL,
+            quest_index INTEGER NOT NULL,
+            quest_id INTEGER NOT NULL,
+            PRIMARY KEY (tree_id, node_id, quest_index)
         )
         """
     )

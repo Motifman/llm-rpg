@@ -14,9 +14,8 @@ from ai_rpg_world.domain.conversation.value_object.dialogue_tree_id import Dialo
 from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
     init_game_write_schema,
 )
-from ai_rpg_world.infrastructure.repository.sqlite_pickle_codec import (
-    blob_to_object,
-    object_to_blob,
+from ai_rpg_world.infrastructure.repository.sqlite_dialogue_tree_state_codec import (
+    build_dialogue_node,
 )
 
 
@@ -46,7 +45,8 @@ class SqliteDialogueTreeRepository(DialogueTreeRepository):
     ) -> Optional[DialogueNode]:
         cur = self._conn.execute(
             """
-            SELECT node_blob FROM game_dialogue_tree_nodes
+            SELECT *
+            FROM game_dialogue_tree_nodes
             WHERE tree_id = ? AND node_id = ?
             """,
             (int(tree_id), int(node_id)),
@@ -54,7 +54,52 @@ class SqliteDialogueTreeRepository(DialogueTreeRepository):
         row = cur.fetchone()
         if row is None:
             return None
-        return blob_to_object(bytes(row["node_blob"]))
+        choice_rows = self._conn.execute(
+            """
+            SELECT label, next_node_id
+            FROM game_dialogue_node_choices
+            WHERE tree_id = ? AND node_id = ?
+            ORDER BY choice_index ASC
+            """,
+            (int(tree_id), int(node_id)),
+        ).fetchall()
+        reward_rows = self._conn.execute(
+            """
+            SELECT item_spec_id, quantity
+            FROM game_dialogue_node_reward_items
+            WHERE tree_id = ? AND node_id = ?
+            ORDER BY reward_index ASC
+            """,
+            (int(tree_id), int(node_id)),
+        ).fetchall()
+        unlock_rows = self._conn.execute(
+            """
+            SELECT quest_id
+            FROM game_dialogue_node_quest_unlocks
+            WHERE tree_id = ? AND node_id = ?
+            ORDER BY quest_index ASC
+            """,
+            (int(tree_id), int(node_id)),
+        ).fetchall()
+        completion_rows = self._conn.execute(
+            """
+            SELECT quest_id
+            FROM game_dialogue_node_quest_completions
+            WHERE tree_id = ? AND node_id = ?
+            ORDER BY quest_index ASC
+            """,
+            (int(tree_id), int(node_id)),
+        ).fetchall()
+        return build_dialogue_node(
+            row=row,
+            choice_rows=[(choice_row["label"], int(choice_row["next_node_id"])) for choice_row in choice_rows],
+            reward_item_rows=[
+                (int(reward_row["item_spec_id"]), int(reward_row["quantity"]))
+                for reward_row in reward_rows
+            ],
+            unlock_rows=[int(unlock_row["quest_id"]) for unlock_row in unlock_rows],
+            completion_rows=[int(completion_row["quest_id"]) for completion_row in completion_rows],
+        )
 
 
 class SqliteDialogueTreeWriter:
@@ -102,18 +147,78 @@ class SqliteDialogueTreeWriter:
             """,
             (int(tree_id), int(entry_node_id)),
         )
-        self._conn.execute(
-            "DELETE FROM game_dialogue_tree_nodes WHERE tree_id = ?",
-            (int(tree_id),),
+        for table_name in (
+            "game_dialogue_tree_nodes",
+            "game_dialogue_node_choices",
+            "game_dialogue_node_reward_items",
+            "game_dialogue_node_quest_unlocks",
+            "game_dialogue_node_quest_completions",
+        ):
+            self._conn.execute(f"DELETE FROM {table_name} WHERE tree_id = ?", (int(tree_id),))
+        self._conn.executemany(
+            """
+            INSERT INTO game_dialogue_tree_nodes (
+                tree_id, node_id, text, next_node_id, is_terminal, reward_gold
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    int(tree_id),
+                    int(node_id),
+                    node.text,
+                    node.next_node_id,
+                    int(node.is_terminal),
+                    node.reward_gold,
+                )
+                for node_id, node in sorted(nodes.items())
+            ],
         )
         self._conn.executemany(
             """
-            INSERT INTO game_dialogue_tree_nodes (tree_id, node_id, node_blob)
-            VALUES (?, ?, ?)
+            INSERT INTO game_dialogue_node_choices (
+                tree_id, node_id, choice_index, label, next_node_id
+            ) VALUES (?, ?, ?, ?, ?)
             """,
             [
-                (int(tree_id), int(node_id), object_to_blob(node))
+                (int(tree_id), int(node_id), choice_index, label, next_node_id)
                 for node_id, node in sorted(nodes.items())
+                for choice_index, (label, next_node_id) in enumerate(node.choices)
+            ],
+        )
+        self._conn.executemany(
+            """
+            INSERT INTO game_dialogue_node_reward_items (
+                tree_id, node_id, reward_index, item_spec_id, quantity
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                (int(tree_id), int(node_id), reward_index, item_spec_id, quantity)
+                for node_id, node in sorted(nodes.items())
+                for reward_index, (item_spec_id, quantity) in enumerate(node.reward_items)
+            ],
+        )
+        self._conn.executemany(
+            """
+            INSERT INTO game_dialogue_node_quest_unlocks (
+                tree_id, node_id, quest_index, quest_id
+            ) VALUES (?, ?, ?, ?)
+            """,
+            [
+                (int(tree_id), int(node_id), quest_index, quest_id)
+                for node_id, node in sorted(nodes.items())
+                for quest_index, quest_id in enumerate(node.quest_unlock_ids)
+            ],
+        )
+        self._conn.executemany(
+            """
+            INSERT INTO game_dialogue_node_quest_completions (
+                tree_id, node_id, quest_index, quest_id
+            ) VALUES (?, ?, ?, ?)
+            """,
+            [
+                (int(tree_id), int(node_id), quest_index, quest_id)
+                for node_id, node in sorted(nodes.items())
+                for quest_index, quest_id in enumerate(node.quest_complete_quest_ids)
             ],
         )
         self._finalize_write()
