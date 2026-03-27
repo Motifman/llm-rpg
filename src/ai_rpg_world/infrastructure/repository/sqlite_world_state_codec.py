@@ -138,6 +138,149 @@ def storage_to_trigger(trigger_type: str, payload_json: str) -> MapTrigger:
     raise ValueError(f"Unsupported trigger type: {trigger_type}")
 
 
+def area_to_record_storage(
+    area: Area,
+) -> tuple[
+    str,
+    int | None,
+    int | None,
+    int | None,
+    int | None,
+    int | None,
+    int | None,
+    int | None,
+    int | None,
+    int | None,
+    int | None,
+    int | None,
+    int | None,
+    int | None,
+]:
+    if isinstance(area, PointArea):
+        return (
+            "point",
+            area.coordinate.x,
+            area.coordinate.y,
+            area.coordinate.z,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+    if isinstance(area, RectArea):
+        return (
+            "rect",
+            None,
+            None,
+            None,
+            area.min_x,
+            area.max_x,
+            area.min_y,
+            area.max_y,
+            area.min_z,
+            area.max_z,
+            None,
+            None,
+            None,
+            None,
+        )
+    if isinstance(area, CircleArea):
+        return (
+            "circle",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            area.center.x,
+            area.center.y,
+            area.center.z,
+            area.radius,
+        )
+    raise ValueError(f"Unsupported area type: {type(area).__name__}")
+
+
+def row_to_area(row: object, *, prefix: str = "area_") -> Area:
+    area_kind = str(row[f"{prefix}kind"])
+    if area_kind == "point":
+        return PointArea(
+            Coordinate(
+                int(row[f"{prefix}point_x"]),
+                int(row[f"{prefix}point_y"]),
+                int(row[f"{prefix}point_z"]),
+            )
+        )
+    if area_kind == "rect":
+        return RectArea(
+            min_x=int(row[f"{prefix}rect_min_x"]),
+            max_x=int(row[f"{prefix}rect_max_x"]),
+            min_y=int(row[f"{prefix}rect_min_y"]),
+            max_y=int(row[f"{prefix}rect_max_y"]),
+            min_z=int(row[f"{prefix}rect_min_z"]),
+            max_z=int(row[f"{prefix}rect_max_z"]),
+        )
+    if area_kind == "circle":
+        return CircleArea(
+            center=Coordinate(
+                int(row[f"{prefix}circle_center_x"]),
+                int(row[f"{prefix}circle_center_y"]),
+                int(row[f"{prefix}circle_center_z"]),
+            ),
+            radius=int(row[f"{prefix}circle_radius"]),
+        )
+    raise ValueError(f"Unsupported area kind: {area_kind}")
+
+
+def trigger_to_record_storage(
+    trigger: MapTrigger,
+) -> tuple[str, int | None, int | None, int | None, int | None, int | None]:
+    if isinstance(trigger, WarpTrigger):
+        return (
+            TriggerTypeEnum.WARP.value,
+            int(trigger.target_spot_id),
+            trigger.target_coordinate.x,
+            trigger.target_coordinate.y,
+            trigger.target_coordinate.z,
+            None,
+        )
+    if isinstance(trigger, DamageTrigger):
+        return (
+            TriggerTypeEnum.DAMAGE.value,
+            None,
+            None,
+            None,
+            None,
+            int(trigger.damage),
+        )
+    raise ValueError(f"Unsupported trigger type: {type(trigger).__name__}")
+
+
+def row_to_trigger(row: object, *, prefix: str = "trigger_") -> MapTrigger:
+    trigger_type = str(row[f"{prefix}type"])
+    if trigger_type == TriggerTypeEnum.WARP.value:
+        return WarpTrigger(
+            target_spot_id=SpotId(int(row[f"{prefix}warp_target_spot_id"])),
+            target_coordinate=Coordinate(
+                int(row[f"{prefix}warp_target_x"]),
+                int(row[f"{prefix}warp_target_y"]),
+                int(row[f"{prefix}warp_target_z"]),
+            ),
+        )
+    if trigger_type == TriggerTypeEnum.DAMAGE.value:
+        return DamageTrigger(damage=int(row[f"{prefix}damage"]))
+    raise ValueError(f"Unsupported trigger type: {trigger_type}")
+
+
 def component_to_storage(component: WorldObjectComponent | None) -> tuple[str | None, str | None]:
     if component is None:
         return (None, None)
@@ -301,11 +444,8 @@ def build_physical_map(
     area_triggers = [
         AreaTrigger(
             trigger_id=AreaTriggerId(int(trigger_row["trigger_id"])),
-            area=storage_to_area(str(trigger_row["area_kind"]), str(trigger_row["area_payload_json"])),
-            trigger=storage_to_trigger(
-                str(trigger_row["trigger_type"]),
-                str(trigger_row["trigger_payload_json"]),
-            ),
+            area=row_to_area(trigger_row),
+            trigger=row_to_trigger(trigger_row),
             name=str(trigger_row["name"]),
             is_active=bool(trigger_row["is_active"]),
         )
@@ -314,7 +454,7 @@ def build_physical_map(
     location_areas = [
         LocationArea(
             location_id=LocationAreaId(int(location_row["location_area_id"])),
-            area=storage_to_area(str(location_row["area_kind"]), str(location_row["area_payload_json"])),
+            area=row_to_area(location_row),
             name=str(location_row["name"]),
             description=str(location_row["description"]),
             is_active=bool(location_row["is_active"]),
@@ -325,7 +465,7 @@ def build_physical_map(
         Gateway(
             gateway_id=GatewayId(int(gateway_row["gateway_id"])),
             name=str(gateway_row["name"]),
-            area=storage_to_area(str(gateway_row["area_kind"]), str(gateway_row["area_payload_json"])),
+            area=row_to_area(gateway_row),
             target_spot_id=SpotId(int(gateway_row["target_spot_id"])),
             landing_coordinate=Coordinate(
                 int(gateway_row["landing_x"]),
@@ -468,12 +608,16 @@ def _payload_to_movement_capability(payload: dict[str, Any]) -> MovementCapabili
 
 __all__ = [
     "area_to_storage",
+    "area_to_record_storage",
     "build_physical_map",
     "component_to_storage",
     "coordinate_to_payload",
     "payload_to_coordinate",
+    "row_to_area",
+    "row_to_trigger",
     "storage_to_area",
     "storage_to_component",
     "storage_to_trigger",
     "trigger_to_storage",
+    "trigger_to_record_storage",
 ]

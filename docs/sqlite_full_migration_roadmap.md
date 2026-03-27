@@ -161,7 +161,13 @@
 - rollback / 同一 tx 可視性 / 採番 / event 連携を検証する
 
 状態:
-- 未着手
+- 完了
+
+進捗:
+- static master と world state をまたぐ同一 tx 可視性を検証済み
+- cross-bundle rollback で未コミット書き込みが残らないことを検証済み
+- SQLite scope 経由のイベント収集を検証済み
+- 既存の `SqliteUnitOfWork` / trade / world 回帰とあわせて、採番・rollback・共有接続可視性を再確認済み
 
 ## いま注意している問題
 
@@ -206,8 +212,9 @@ interface 整理:
 
 `player_status` / `player_inventory` / `item` / `transition_policy` / `item_spec` / `recipe` / `shop`
 のような集約レベルの `payload_json` は正規化済みです。
-一方で `physical_map` 配下の area / trigger / object component はまだ `payload_json` を使っています。
-ここは world オブジェクト構造が多態的で、正規化する場合は専用子テーブルを複数追加する必要があります。
+`physical_map` 配下では、`area` と `trigger` は正規化済みです。
+一方で `object component` はまだ `component_payload_json` を使っています。
+ここは world オブジェクト構造が多態的で、正規化する場合は component 種別ごとの専用子テーブルを複数追加する必要があります。
 次の着手候補として明示的に残します。
 ## Phase 7.5: pickle/BLOB 正規化
 

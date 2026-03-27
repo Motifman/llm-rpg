@@ -16,10 +16,10 @@ from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
     init_game_write_schema,
 )
 from ai_rpg_world.infrastructure.repository.sqlite_world_state_codec import (
-    area_to_storage,
+    area_to_record_storage,
     build_physical_map,
     component_to_storage,
-    trigger_to_storage,
+    trigger_to_record_storage,
 )
 
 
@@ -238,9 +238,12 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
         self._conn.executemany(
             """
             INSERT INTO game_physical_map_area_triggers (
-                trigger_id, spot_id, name, is_active, area_kind, area_payload_json,
-                trigger_type, trigger_payload_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                trigger_id, spot_id, name, is_active, area_kind,
+                area_point_x, area_point_y, area_point_z,
+                area_rect_min_x, area_rect_max_x, area_rect_min_y, area_rect_max_y, area_rect_min_z, area_rect_max_z,
+                area_circle_center_x, area_circle_center_y, area_circle_center_z, area_circle_radius,
+                trigger_type, trigger_warp_target_spot_id, trigger_warp_target_x, trigger_warp_target_y, trigger_warp_target_z, trigger_damage
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -248,8 +251,8 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
                     spot_id,
                     trigger.name,
                     1 if trigger.is_active else 0,
-                    *area_to_storage(trigger.area),
-                    *trigger_to_storage(trigger.trigger),
+                    *area_to_record_storage(trigger.area),
+                    *trigger_to_record_storage(trigger.trigger),
                 )
                 for trigger in physical_map.get_all_area_triggers()
             ],
@@ -257,8 +260,11 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
         self._conn.executemany(
             """
             INSERT INTO game_physical_map_location_areas (
-                location_area_id, spot_id, name, description, is_active, area_kind, area_payload_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                location_area_id, spot_id, name, description, is_active, area_kind,
+                area_point_x, area_point_y, area_point_z,
+                area_rect_min_x, area_rect_max_x, area_rect_min_y, area_rect_max_y, area_rect_min_z, area_rect_max_z,
+                area_circle_center_x, area_circle_center_y, area_circle_center_z, area_circle_radius
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -267,7 +273,7 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
                     location.name,
                     location.description,
                     1 if location.is_active else 0,
-                    *area_to_storage(location.area),
+                    *area_to_record_storage(location.area),
                 )
                 for location in physical_map.get_all_location_areas()
             ],
@@ -275,9 +281,12 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
         self._conn.executemany(
             """
             INSERT INTO game_physical_map_gateways (
-                gateway_id, spot_id, name, is_active, area_kind, area_payload_json,
+                gateway_id, spot_id, name, is_active, area_kind,
+                area_point_x, area_point_y, area_point_z,
+                area_rect_min_x, area_rect_max_x, area_rect_min_y, area_rect_max_y, area_rect_min_z, area_rect_max_z,
+                area_circle_center_x, area_circle_center_y, area_circle_center_z, area_circle_radius,
                 target_spot_id, landing_x, landing_y, landing_z
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -285,7 +294,7 @@ class SqlitePhysicalMapRepository(PhysicalMapRepository):
                     spot_id,
                     gateway.name,
                     1 if gateway.is_active else 0,
-                    *area_to_storage(gateway.area),
+                    *area_to_record_storage(gateway.area),
                     int(gateway.target_spot_id),
                     gateway.landing_coordinate.x,
                     gateway.landing_coordinate.y,

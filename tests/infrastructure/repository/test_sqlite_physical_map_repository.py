@@ -145,7 +145,9 @@ class TestSqlitePhysicalMapRepository:
         from ai_rpg_world.infrastructure.repository.game_write_sqlite_schema import (
             init_game_write_schema,
         )
-        from ai_rpg_world.infrastructure.repository.sqlite_world_state_codec import area_to_storage
+        from ai_rpg_world.infrastructure.repository.sqlite_world_state_codec import (
+            area_to_record_storage,
+        )
 
         init_game_write_schema(sqlite_conn)
         physical_map = PhysicalMapAggregate.create(
@@ -162,7 +164,7 @@ class TestSqlitePhysicalMapRepository:
             ],
         )
         gateway = physical_map.get_all_gateways()[0]
-        area_kind, area_payload_json = area_to_storage(gateway.area)
+        area_values = area_to_record_storage(gateway.area)
         sqlite_conn.execute(
             """
             INSERT INTO game_physical_maps (
@@ -179,17 +181,19 @@ class TestSqlitePhysicalMapRepository:
         sqlite_conn.execute(
             """
             INSERT INTO game_physical_map_gateways (
-                gateway_id, spot_id, name, is_active, area_kind, area_payload_json,
+                gateway_id, spot_id, name, is_active, area_kind,
+                area_point_x, area_point_y, area_point_z,
+                area_rect_min_x, area_rect_max_x, area_rect_min_y, area_rect_max_y, area_rect_min_z, area_rect_max_z,
+                area_circle_center_x, area_circle_center_y, area_circle_center_z, area_circle_radius,
                 target_spot_id, landing_x, landing_y, landing_z
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 int(gateway.gateway_id),
                 20,
                 gateway.name,
                 1 if gateway.is_active else 0,
-                area_kind,
-                area_payload_json,
+                *area_values,
                 int(gateway.target_spot_id),
                 gateway.landing_coordinate.x,
                 gateway.landing_coordinate.y,
@@ -200,6 +204,50 @@ class TestSqlitePhysicalMapRepository:
 
         repo = SqlitePhysicalMapRepository.for_standalone_connection(sqlite_conn)
         assert repo.find_connected_spot_ids(SpotId(20)) == [SpotId(4)]
+
+    def test_area_trigger_and_gateway_roundtrip_with_normalized_area_and_trigger_columns(
+        self, sqlite_conn: sqlite3.Connection
+    ) -> None:
+        from ai_rpg_world.domain.world.entity.area_trigger import AreaTrigger
+        from ai_rpg_world.domain.world.entity.gateway import Gateway
+        from ai_rpg_world.domain.world.entity.map_trigger import DamageTrigger
+        from ai_rpg_world.domain.world.value_object.area import CircleArea, RectArea
+        from ai_rpg_world.domain.world.value_object.area_trigger_id import AreaTriggerId
+        from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
+
+        repo = SqlitePhysicalMapRepository.for_standalone_connection(sqlite_conn)
+        physical_map = PhysicalMapAggregate.create(
+            SpotId(30),
+            [_tile_at(0, 0), _tile_at(1, 0)],
+            area_triggers=[
+                AreaTrigger(
+                    trigger_id=AreaTriggerId(1),
+                    name="trap",
+                    area=RectArea(min_x=0, max_x=1, min_y=0, max_y=2, min_z=0, max_z=0),
+                    trigger=DamageTrigger(damage=7),
+                )
+            ],
+            gateways=[
+                Gateway(
+                    gateway_id=GatewayId(2),
+                    name="circle-gate",
+                    area=CircleArea(center=Coordinate(1, 1, 0), radius=2),
+                    target_spot_id=SpotId(99),
+                    landing_coordinate=Coordinate(5, 6, 0),
+                )
+            ],
+        )
+
+        repo.save(physical_map)
+        loaded = repo.find_by_spot_id(SpotId(30))
+
+        assert loaded is not None
+        trigger = loaded.get_all_area_triggers()[0]
+        gateway = loaded.get_all_gateways()[0]
+        assert trigger.area.contains(Coordinate(1, 1, 0))
+        assert trigger.trigger.damage == 7
+        assert gateway.area.contains(Coordinate(1, 1, 0))
+        assert gateway.target_spot_id == SpotId(99)
 
     def test_world_object_id_sequence_starts_above_player_range(
         self, sqlite_conn: sqlite3.Connection
