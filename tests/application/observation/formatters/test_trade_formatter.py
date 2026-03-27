@@ -1,5 +1,7 @@
 """TradeObservationFormatter の単体テスト。"""
 
+from datetime import datetime
+
 import pytest
 from unittest.mock import MagicMock
 
@@ -23,10 +25,28 @@ from ai_rpg_world.domain.trade.event.trade_event import (
 from ai_rpg_world.domain.trade.value_object.trade_id import TradeId
 from ai_rpg_world.domain.trade.value_object.trade_requested_gold import TradeRequestedGold
 from ai_rpg_world.domain.trade.value_object.trade_scope import TradeScope
+from ai_rpg_world.domain.trade.value_object.trade_listing_projection import TradeListingProjection
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.world.event.harvest_events import HarvestStartedEvent
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 from ai_rpg_world.domain.common.value_object import WorldTick
+
+_TRADE_FMT_TS = datetime(2024, 1, 1, 12, 0, 0)
+
+
+def _fmt_listing() -> TradeListingProjection:
+    return TradeListingProjection(
+        seller_display_name="Seller",
+        item_name="Item",
+        item_quantity=1,
+        item_type=ItemType.CONSUMABLE,
+        item_rarity=Rarity.COMMON,
+        item_description="d",
+        item_equipment_type=None,
+        durability_current=None,
+        durability_max=None,
+    )
 
 
 def _make_context(
@@ -84,6 +104,8 @@ class TestTradeObservationFormatterTradeOffered:
             offered_item_id=ItemInstanceId(1),
             requested_gold=TradeRequestedGold.of(100),
             trade_scope=TradeScope.global_trade(),
+            listing_projection=_fmt_listing(),
+            trade_created_at=_TRADE_FMT_TS,
         )
         out = formatter.format(event, PlayerId(1))
         assert out is not None
@@ -111,6 +133,8 @@ class TestTradeObservationFormatterTradeOffered:
             offered_item_id=ItemInstanceId(1),
             requested_gold=TradeRequestedGold.of(100),
             trade_scope=TradeScope.global_trade(),
+            listing_projection=_fmt_listing(),
+            trade_created_at=_TRADE_FMT_TS,
         )
         out = formatter.format(event, PlayerId(1))
         assert out is not None
@@ -133,6 +157,12 @@ class TestTradeObservationFormatterTradeAccepted:
             aggregate_id=TradeId(1),
             aggregate_type="TradeAggregate",
             buyer_id=PlayerId(1),
+            buyer_display_name="Buyer",
+            listing_projection=_fmt_listing(),
+            seller_id=PlayerId(2),
+            offered_item_id=ItemInstanceId(1),
+            requested_gold=TradeRequestedGold.of(100),
+            trade_created_at=_TRADE_FMT_TS,
         )
         out = formatter.format(event, PlayerId(1))
         assert out is not None
@@ -146,6 +176,12 @@ class TestTradeObservationFormatterTradeAccepted:
             aggregate_id=TradeId(1),
             aggregate_type="TradeAggregate",
             buyer_id=PlayerId(2),
+            buyer_display_name="Buyer",
+            listing_projection=_fmt_listing(),
+            seller_id=PlayerId(1),
+            offered_item_id=ItemInstanceId(1),
+            requested_gold=TradeRequestedGold.of(100),
+            trade_created_at=_TRADE_FMT_TS,
         )
         out = formatter.format(event, PlayerId(1))
         assert out is not None

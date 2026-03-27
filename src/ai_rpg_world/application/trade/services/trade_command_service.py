@@ -12,7 +12,10 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.player.repository.player_inventory_repository import PlayerInventoryRepository
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
+from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
+from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
+from ai_rpg_world.domain.trade.value_object.trade_listing_projection import TradeListingProjection
 
 from ai_rpg_world.application.trade.contracts.commands import (
     OfferItemCommand,
@@ -47,11 +50,15 @@ class TradeCommandService:
         trade_repository: TradeRepository,
         player_inventory_repository: PlayerInventoryRepository,
         player_status_repository: PlayerStatusRepository,
+        player_profile_repository: PlayerProfileRepository,
+        item_repository: ItemRepository,
         unit_of_work: UnitOfWork
     ):
         self._trade_repository = trade_repository
         self._player_inventory_repository = player_inventory_repository
         self._player_status_repository = player_status_repository
+        self._player_profile_repository = player_profile_repository
+        self._item_repository = item_repository
         self._unit_of_work = unit_of_work
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -104,15 +111,30 @@ class TradeCommandService:
             else:
                 trade_scope = TradeScope.global_trade()
 
+            seller_profile = self._player_profile_repository.find_by_id(seller_id)
+            if seller_profile is None:
+                raise TradeCreationException(f"Seller profile not found: {command.seller_id}", command.seller_id)
+
+            item_aggregate = self._item_repository.find_by_id(item_id)
+            if item_aggregate is None:
+                raise TradeCreationException(f"Item instance not found: {command.item_instance_id}", command.seller_id)
+
+            listing_projection = TradeListingProjection.from_seller_and_item(
+                seller_display_name=seller_profile.name.value,
+                item=item_aggregate.item_instance,
+            )
+
             # 取引集約の作成
             trade_id = self._trade_repository.generate_trade_id()
+            created_at = datetime.now()
             trade = TradeAggregate.create_new_trade(
                 trade_id=trade_id,
                 seller_id=seller_id,
                 offered_item_id=item_id,
                 requested_gold=TradeRequestedGold.of(command.requested_gold),
-                created_at=datetime.now(),
-                trade_scope=trade_scope
+                created_at=created_at,
+                trade_scope=trade_scope,
+                listing_projection=listing_projection,
             )
 
             # 保存
@@ -192,8 +214,32 @@ class TradeCommandService:
             # 4. 購入者のインベントリにアイテムを追加
             buyer_inventory.acquire_item(trade.offered_item_id)
             
+            seller_profile = self._player_profile_repository.find_by_id(trade.seller_id)
+            if seller_profile is None:
+                raise TradeCommandException(f"Seller profile not found: {trade.seller_id.value}", trade_id=command.trade_id)
+
+            buyer_profile = self._player_profile_repository.find_by_id(buyer_id)
+            if buyer_profile is None:
+                raise TradeCommandException(f"Buyer profile not found: {command.buyer_id}", user_id=command.buyer_id)
+
+            item_aggregate = self._item_repository.find_by_id(trade.offered_item_id)
+            if item_aggregate is None:
+                raise TradeCommandException(
+                    f"Offered item not found: {trade.offered_item_id.value}",
+                    trade_id=command.trade_id,
+                )
+
+            listing_projection = TradeListingProjection.from_seller_and_item(
+                seller_display_name=seller_profile.name.value,
+                item=item_aggregate.item_instance,
+            )
+
             # 5. 取引を完了状態にする
-            trade.accept_by(buyer_id)
+            trade.accept_by(
+                buyer_id,
+                buyer_display_name=buyer_profile.name.value,
+                listing_projection=listing_projection,
+            )
 
             # 保存
             self._trade_repository.save(trade)
