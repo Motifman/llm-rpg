@@ -73,8 +73,7 @@ class InMemoryDataStore:
         self.sns_notifications: Dict[NotificationId, SnsNotification] = {}
         self.next_sns_notification_id = 1
         
-        # Player Domain (TBD: リファクタリング後の集約に合わせる)
-        self.players: Dict[Any, Any] = {}
+        # Player Domain
         self.player_profiles: Dict[PlayerId, Any] = {}
         self.player_inventories: Dict[PlayerId, Any] = {}
         self.player_statuses: Dict[PlayerId, Any] = {}
@@ -297,7 +296,6 @@ class InMemoryDataStore:
         self.next_reply_id = 1
         self.sns_notifications.clear()
         self.next_sns_notification_id = 1
-        self.players.clear()
         self.next_player_id = 1
         self.player_profiles.clear()
         self.player_inventories.clear()

@@ -52,7 +52,6 @@ from ai_rpg_world.application.world.world_state_sqlite_wiring import (
     attach_world_state_sqlite_repositories,
 )
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
-from ai_rpg_world.infrastructure.repository.in_memory_player_repository import InMemoryPlayerRepository
 from ai_rpg_world.infrastructure.repository.in_memory_post_repository import InMemoryPostRepository
 from ai_rpg_world.infrastructure.repository.in_memory_sns_user_repository import InMemorySnsUserRepository
 from ai_rpg_world.infrastructure.repository.in_memory_sns_notification_repository import InMemorySnsNotificationRepository
@@ -83,7 +82,6 @@ class DependencyInjectionContainer:
         self._unit_of_work: Optional[InMemoryUnitOfWork] = None
         
         # リポジトリのキャッシュ
-        self._player_repository: Optional[InMemoryPlayerRepository] = None
         self._post_repository: Optional[InMemoryPostRepository] = None
         self._user_repository: Optional[InMemorySnsUserRepository] = None
         self._notification_repository: Optional[InMemorySnsNotificationRepository] = None
@@ -110,13 +108,6 @@ class DependencyInjectionContainer:
     def get_data_store(self) -> InMemoryDataStore:
         """共有データストアを取得"""
         return self._data_store
-
-    def get_player_repository(self) -> InMemoryPlayerRepository:
-        """Playerリポジトリを取得"""
-        if self._player_repository is None:
-            uow, _ = self.get_unit_of_work_and_publisher()
-            self._player_repository = InMemoryPlayerRepository(self._data_store, uow)
-        return self._player_repository
 
     def get_post_repository(self) -> InMemoryPostRepository:
         """Postリポジトリを取得"""
