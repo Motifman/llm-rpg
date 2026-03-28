@@ -17,4 +17,8 @@ def main() -> None:
     )
 
 
+if __name__ == "__main__":
+    main()
+
+
 __all__ = ["create_sqlite_web_app_from_env", "main"]

@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI
 
+from ai_rpg_world.presentation.web.demo_seed import seed_demo_world_database
 from ai_rpg_world.presentation.web.runtime import create_sqlite_web_app_from_env
-from tests.presentation.web.test_runtime import _seed_world
 
 
 def test_create_sqlite_web_app_from_env_uses_database_and_manual_player_ids(
@@ -16,7 +16,7 @@ def test_create_sqlite_web_app_from_env_uses_database_and_manual_player_ids(
     monkeypatch: pytest.MonkeyPatch,
 ):
     database = tmp_path / "env-runtime.db"
-    _seed_world(database)
+    seed_demo_world_database(database)
     monkeypatch.setenv("AI_RPG_WORLD_GAME_DB", str(database))
     monkeypatch.setenv("AI_RPG_WORLD_MANUAL_PLAYER_IDS", "1,2")
 
@@ -34,7 +34,7 @@ def test_create_sqlite_web_app_from_env_allows_empty_manual_player_ids(
     monkeypatch: pytest.MonkeyPatch,
 ):
     database = tmp_path / "env-runtime-empty.db"
-    _seed_world(database)
+    seed_demo_world_database(database)
     monkeypatch.setenv("AI_RPG_WORLD_GAME_DB", str(database))
     monkeypatch.setenv("AI_RPG_WORLD_MANUAL_PLAYER_IDS", "")
 
@@ -50,7 +50,7 @@ def test_create_sqlite_web_app_from_env_rejects_invalid_manual_player_ids(
     monkeypatch: pytest.MonkeyPatch,
 ):
     database = tmp_path / "env-runtime-invalid.db"
-    _seed_world(database)
+    seed_demo_world_database(database)
     monkeypatch.setenv("AI_RPG_WORLD_GAME_DB", str(database))
     monkeypatch.setenv("AI_RPG_WORLD_MANUAL_PLAYER_IDS", "1,hero")
 
