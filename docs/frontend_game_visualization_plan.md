@@ -418,25 +418,127 @@ Phaser 側で以下を実装します。
 
 - UI の `pause / resume / speed` を projection 表示だけでなく、実際の world simulation loop に効かせる
 - LLM agent / world tick / monster update を常駐実行で回し、viewer へリアルタイム反映する
+- manual actor が `busy` 解消後に継続して移動できるようにする
+- WebSocket の接続状態を安定させ、scene 更新を継続購読できるようにする
 
-実装候補:
+Phase 9 で最優先に解消する問題:
+
+- manual move は 1 回通るが、`busy_until_tick` が進まず次の移動が詰まる
+- frontend に `Stream closed` が出て、scene delta の継続追従が弱い
+- `pause / resume / speed` が projection 上の表示変更に留まり、実 simulation に効いていない
+
+実装ワークストリーム:
+
+#### 9.1 Simulation Loop Runtime
+
+追加候補:
 
 - `ISimulationRuntimeControlPort` の SQLite / in-process 実装を追加
 - `world_simulation_service.py` と接続する runtime loop manager を追加
-- simulation thread / task の start / stop / tick rate 管理を追加
+- `src/ai_rpg_world/presentation/web/simulation_runtime.py`
+- `src/ai_rpg_world/application/ui/services/simulation_loop_service.py`
+
+責務:
+
+- simulation thread / task の start / stop を管理する
+- 一定間隔で world tick を進める
+- tick ごとに発生した event を UI projection / broker へ流す
 - pause 中は movement / weather / monster AI の進行を止める
 - speed 変更時は tick sleep / scheduler interval を再計算する
+
+#### 9.2 Runtime Control Port 本接続
+
+`SimulationControlService` が受けた command を live runtime へ流す。
+
+必要な port 契約:
+
+- `pause()`
+- `resume()`
+- `set_speed_multiplier(speed_multiplier)`
+
+必要な runtime state:
+
+- `is_paused`
+- `speed_multiplier`
+- `current_tick`
+- `last_tick_started_at`
+
+#### 9.3 Busy 解消と手動移動の継続化
+
+最重要要件:
+
+- 手動移動した actor が一定 tick 後に再び移動可能になる
+- 長押し入力で `1 tile step` が連続して進む
+
+必要な実装:
+
+- actor の `busy_until_tick` を loop の current tick と照合する
+- current tick 到達後に manual move を再許可する
+- frontend 側は busy actor への入力を抑止してもよいが、最終判定は backend で行う
+- debug 用に `current tick` と actor の `state/busy` を UI に出せるようにする
+
+#### 9.4 WebSocket 安定化
+
+目標:
+
+- scene 切替・再接続時にも stream が常態的に `closed` にならない
+- backlog cursor を維持しながら reconnect できる
+
+backend 側:
+
+- scene ごとの subscriber 管理
+- publish 時の live push と backlog 保持
+- `ping/pong` heartbeat
+- close / cursor mismatch / invalid payload のログ強化
+
+frontend 側:
+
+- reconnect backoff
+- `connecting / open / reconnecting / closed / error` の状態分離
+- reconnect 時に `last_seen_scene_version` から backlog を再取得
+- close reason や fetch failure を UI に出す
+
+#### 9.5 Event / Tick 可視化
+
+最低限追加したい delta:
+
+- `tick_advanced`
+- `actor_moved`
+- `actor_removed`
+- `scene_changed`
+- `simulation_paused`
+- `simulation_resumed`
+- `simulation_speed_changed`
+- `log_appended`
+
+`tick_advanced` は必須ではないが、busy 解消や stream デバッグに非常に有効。
+
+おすすめ実装順:
+
+1. simulation loop の骨組み
+2. runtime control port 接続
+3. tick 進行で busy 解消
+4. manual move の再連続化確認
+5. WebSocket reconnect / backlog 安定化
+6. tick/log の UI 可視化
 
 テスト方針:
 
 - control port unit test
 - runtime loop の pause / resume / speed 変更 integration test
+- move -> busy -> tick advance -> busy 解消 integration test
 - Web API から control command を送った際に loop state が変わることの E2E test
+- reconnect 後も `last_seen_scene_version` から scene delta を継続取得できる test
+- scene 切替中に WebSocket が再接続しても follow camera が破綻しない test
 
 完了条件:
 
+- manual actor が複数歩連続で動ける
+- `現在行動中` が tick 進行で自然に解消する
 - UI の pause / resume / speed が実 simulation に効く
 - tick を進めると weather / actor / monster delta が継続的に stream へ流れる
+- `Stream closed` が常態でなくなる
+- gateway 通過時も scene 更新と stream 継続が成立する
 
 ### Phase 10: Asset Catalog and SpriteSheet Integration
 
