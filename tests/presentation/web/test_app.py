@@ -94,7 +94,11 @@ def _create_client() -> tuple[TestClient, GameSceneProjection, InMemoryGameScene
     )
     scene_api = GameSceneApi(snapshot_service, stream_service)
     control_api = GameControlApi(simulation_control, manual_control)
-    app = create_web_app(scene_api=scene_api, control_api=control_api)
+    app = create_web_app(
+        scene_api=scene_api,
+        control_api=control_api,
+        cors_allowed_origins=("http://127.0.0.1:5173",),
+    )
     return TestClient(app), projection, broker, movement_port
 
 
@@ -168,6 +172,35 @@ def test_world_overview_returns_scene_summaries():
     assert response.status_code == 200
     assert response.json()[0]["spot_id"] == 1
     assert response.json()[0]["actor_count"] == 1
+
+
+def test_world_overview_includes_cors_header_for_allowed_origin():
+    client, _, _, _ = _create_client()
+
+    response = client.get(
+        "/api/world/overview",
+        headers={"Origin": "http://127.0.0.1:5173"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
+
+
+def test_world_overview_preflight_returns_cors_headers():
+    client, _, _, _ = _create_client()
+
+    response = client.options(
+        "/api/world/overview",
+        headers={
+            "Origin": "http://127.0.0.1:5173",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
+    assert "content-type" in response.headers["access-control-allow-headers"].lower()
 
 
 def test_websocket_stream_sends_initial_backlog_and_poll_updates():

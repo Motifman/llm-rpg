@@ -47,6 +47,10 @@ from ai_rpg_world.presentation.web.app import create_web_app
 class SqliteWebAppConfig:
     database_path: Path
     manual_player_ids: tuple[int, ...] = ()
+    cors_allowed_origins: tuple[str, ...] = (
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+    )
     scene_catalog: Mapping[int, SceneRenderCatalogEntry] = field(default_factory=dict)
     viewport_width: int = 960
     viewport_height: int = 540
@@ -132,6 +136,7 @@ def create_sqlite_web_runtime(config: SqliteWebAppConfig) -> SqliteWebRuntime:
         scene_api=scene_api,
         control_api=control_api,
         lifespan=_lifespan,
+        cors_allowed_origins=config.cors_allowed_origins,
     )
 
     runtime = SqliteWebRuntime(
@@ -161,10 +166,19 @@ def create_sqlite_web_app_from_env() -> FastAPI:
         for raw in os.getenv("AI_RPG_WORLD_MANUAL_PLAYER_IDS", "").split(",")
         if raw.strip()
     )
+    cors_allowed_origins = tuple(
+        raw.strip()
+        for raw in os.getenv(
+            "AI_RPG_WORLD_CORS_ORIGINS",
+            "http://127.0.0.1:5173,http://localhost:5173",
+        ).split(",")
+        if raw.strip()
+    )
     return create_sqlite_web_app(
         SqliteWebAppConfig(
             database_path=database_path,
             manual_player_ids=manual_player_ids,
+            cors_allowed_origins=cors_allowed_origins,
         )
     )
 
