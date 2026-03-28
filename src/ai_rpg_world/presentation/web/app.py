@@ -5,9 +5,10 @@ from __future__ import annotations
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Sequence
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field, ValidationError
 
@@ -100,8 +101,17 @@ def create_web_app(
     scene_api: GameSceneApi,
     control_api: GameControlApi,
     lifespan: Any = None,
+    cors_allowed_origins: Sequence[str] = (),
 ) -> FastAPI:
     app = FastAPI(lifespan=lifespan)
+    if cors_allowed_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(cors_allowed_origins),
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     @app.exception_handler(GameSceneNotFoundException)
     async def _handle_scene_not_found(_, exc: GameSceneNotFoundException):
