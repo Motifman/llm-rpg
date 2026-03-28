@@ -1,0 +1,267 @@
+"""Projection that maintains UI-facing scene state and emits delta envelopes."""
+
+from __future__ import annotations
+
+import copy
+import time
+import uuid
+from typing import Optional
+
+from ai_rpg_world.application.ui.contracts.dtos import (
+    GameSceneDeltaEventDto,
+    GameSceneSnapshotDto,
+    SceneActorDto,
+    SceneLogEntryDto,
+    SceneWeatherDto,
+)
+from ai_rpg_world.application.ui.exceptions import GameSceneNotFoundException
+
+
+class GameSceneProjection:
+    """In-memory projection of game scenes for frontend snapshot/delta consumption."""
+
+    def __init__(self) -> None:
+        self._snapshots: dict[int, GameSceneSnapshotDto] = {}
+
+    def upsert_snapshot(self, snapshot: GameSceneSnapshotDto) -> None:
+        self._snapshots[snapshot.spot_id] = copy.deepcopy(snapshot)
+
+    def get_snapshot(self, spot_id: int) -> GameSceneSnapshotDto:
+        snapshot = self._snapshots.get(spot_id)
+        if snapshot is None:
+            raise GameSceneNotFoundException(spot_id)
+        return copy.deepcopy(snapshot)
+
+    def list_snapshots(self) -> list[GameSceneSnapshotDto]:
+        return [copy.deepcopy(snapshot) for _, snapshot in sorted(self._snapshots.items())]
+
+    def apply_actor_moved(
+        self,
+        *,
+        spot_id: int,
+        actor_id: int,
+        to_tile_x: int,
+        to_tile_y: int,
+        facing: str,
+        actor_kind: str,
+        display_name: str,
+        sprite_key: str,
+        move_duration_ms: int = 180,
+        move_mode: str = "step",
+    ) -> GameSceneDeltaEventDto:
+        snapshot = self._require_snapshot_mutable(spot_id)
+        actor = next((a for a in snapshot.actors if a.actor_id == actor_id), None)
+        if actor is None:
+            actor = SceneActorDto(
+                actor_id=actor_id,
+                player_id=actor_id if actor_kind == "player" else None,
+                display_name=display_name,
+                actor_kind=actor_kind,
+                tile_x=to_tile_x,
+                tile_y=to_tile_y,
+                facing=facing,
+                sprite_key=sprite_key,
+                is_manual_controlled=False,
+                is_llm_controlled=(actor_kind == "player"),
+                state="idle",
+            )
+            snapshot.actors.append(actor)
+            from_x = to_tile_x
+            from_y = to_tile_y
+        else:
+            from_x = actor.tile_x
+            from_y = actor.tile_y
+            actor.tile_x = to_tile_x
+            actor.tile_y = to_tile_y
+            actor.facing = facing
+
+        snapshot.scene_version += 1
+        return self._make_delta(
+            snapshot=snapshot,
+            event_type="actor_moved",
+            payload={
+                "actor_id": actor_id,
+                "from_tile_x": from_x,
+                "from_tile_y": from_y,
+                "to_tile_x": to_tile_x,
+                "to_tile_y": to_tile_y,
+                "facing": facing,
+                "move_duration_ms": move_duration_ms,
+                "move_mode": move_mode,
+            },
+        )
+
+    def apply_weather_changed(
+        self,
+        *,
+        spot_id: int,
+        weather_type: str,
+        weather_intensity: float,
+        weather_overlay_key: Optional[str],
+        transition_ms: int = 300,
+    ) -> GameSceneDeltaEventDto:
+        snapshot = self._require_snapshot_mutable(spot_id)
+        snapshot.weather = SceneWeatherDto(
+            weather_type=weather_type,
+            weather_intensity=weather_intensity,
+            weather_overlay_key=weather_overlay_key,
+        )
+        snapshot.scene_version += 1
+        return self._make_delta(
+            snapshot=snapshot,
+            event_type="weather_changed",
+            payload={
+                "weather_type": weather_type,
+                "weather_intensity": weather_intensity,
+                "weather_overlay_key": weather_overlay_key,
+                "transition_ms": transition_ms,
+            },
+        )
+
+    def apply_scene_changed(
+        self,
+        *,
+        actor_id: int,
+        from_spot_id: int,
+        to_spot_id: int,
+        landing_tile_x: int,
+        landing_tile_y: int,
+        auto_follow_switched: bool,
+    ) -> tuple[GameSceneDeltaEventDto, GameSceneDeltaEventDto]:
+        source = self._require_snapshot_mutable(from_spot_id)
+        target = self._require_snapshot_mutable(to_spot_id)
+        actor = next((a for a in source.actors if a.actor_id == actor_id), None)
+        source_actor_payload = {
+            "actor_id": actor_id,
+            "target_spot_id": to_spot_id,
+            "landing_tile_x": landing_tile_x,
+            "landing_tile_y": landing_tile_y,
+            "removal_reason": "scene_transition",
+            "auto_follow_switched": auto_follow_switched,
+        }
+        if actor is not None:
+            source.actors = [a for a in source.actors if a.actor_id != actor_id]
+            actor.tile_x = landing_tile_x
+            actor.tile_y = landing_tile_y
+            target.actors = [a for a in target.actors if a.actor_id != actor_id] + [actor]
+        source.scene_version += 1
+        target.scene_version += 1
+        source_delta = self._make_delta(
+            snapshot=source,
+            event_type="actor_removed",
+            payload=source_actor_payload,
+        )
+        target_delta = self._make_delta(
+            snapshot=target,
+            event_type="scene_changed",
+            payload={
+                "actor_id": actor_id,
+                "player_id": actor.player_id if actor is not None else None,
+                "display_name": actor.display_name if actor is not None else f"Actor {actor_id}",
+                "actor_kind": actor.actor_kind if actor is not None else "player",
+                "sprite_key": actor.sprite_key if actor is not None else "unknown_actor",
+                "facing": actor.facing if actor is not None else "down",
+                "is_manual_controlled": actor.is_manual_controlled if actor is not None else False,
+                "is_llm_controlled": actor.is_llm_controlled if actor is not None else True,
+                "state": actor.state if actor is not None else "idle",
+                "from_spot_id": from_spot_id,
+                "to_spot_id": to_spot_id,
+                "landing_tile_x": landing_tile_x,
+                "landing_tile_y": landing_tile_y,
+                "auto_follow_switched": auto_follow_switched,
+            },
+        )
+        return source_delta, target_delta
+
+    def append_log(
+        self,
+        *,
+        spot_id: int,
+        level: str,
+        message: str,
+        related_actor_id: Optional[int] = None,
+    ) -> GameSceneDeltaEventDto:
+        snapshot = self._require_snapshot_mutable(spot_id)
+        snapshot.ui_logs.append(
+            SceneLogEntryDto(
+                level=level,
+                message=message,
+                related_actor_id=related_actor_id,
+            )
+        )
+        snapshot.scene_version += 1
+        return self._make_delta(
+            snapshot=snapshot,
+            event_type="log_appended",
+            payload={
+                "level": level,
+                "message": message,
+                "related_actor_id": related_actor_id,
+            },
+        )
+
+    def set_simulation_paused(
+        self,
+        *,
+        spot_id: int,
+        is_paused: bool,
+    ) -> GameSceneDeltaEventDto:
+        snapshot = self._require_snapshot_mutable(spot_id)
+        snapshot.simulation.is_paused = is_paused
+        snapshot.scene_version += 1
+        return self._make_delta(
+            snapshot=snapshot,
+            event_type="simulation_paused" if is_paused else "simulation_resumed",
+            payload={"is_paused": is_paused},
+        )
+
+    def set_simulation_speed(
+        self,
+        *,
+        spot_id: int,
+        speed_multiplier: float,
+    ) -> GameSceneDeltaEventDto:
+        snapshot = self._require_snapshot_mutable(spot_id)
+        snapshot.simulation.speed_multiplier = float(speed_multiplier)
+        snapshot.scene_version += 1
+        return self._make_delta(
+            snapshot=snapshot,
+            event_type="simulation_speed_changed",
+            payload={"speed_multiplier": float(speed_multiplier)},
+        )
+
+    def set_actor_control_flags(
+        self,
+        *,
+        actor_id: int,
+        is_manual_controlled: bool,
+        is_llm_controlled: bool,
+    ) -> None:
+        for snapshot in self._snapshots.values():
+            for actor in snapshot.actors:
+                if actor.actor_id == actor_id:
+                    actor.is_manual_controlled = is_manual_controlled
+                    actor.is_llm_controlled = is_llm_controlled
+
+    def _require_snapshot_mutable(self, spot_id: int) -> GameSceneSnapshotDto:
+        snapshot = self._snapshots.get(spot_id)
+        if snapshot is None:
+            raise GameSceneNotFoundException(spot_id)
+        return snapshot
+
+    @staticmethod
+    def _make_delta(
+        *,
+        snapshot: GameSceneSnapshotDto,
+        event_type: str,
+        payload: dict,
+    ) -> GameSceneDeltaEventDto:
+        return GameSceneDeltaEventDto(
+            event_id=str(uuid.uuid4()),
+            event_type=event_type,
+            scene_id=snapshot.scene_id,
+            spot_id=snapshot.spot_id,
+            scene_version=snapshot.scene_version,
+            emitted_at_ms=int(time.time() * 1000),
+            payload=payload,
+        )
