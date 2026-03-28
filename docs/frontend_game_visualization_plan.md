@@ -412,6 +412,159 @@ Phaser 側で以下を実装します。
   - visual helper
   を検証済み
 
+### Phase 9: Live Simulation Runtime Control
+
+目的:
+
+- UI の `pause / resume / speed` を projection 表示だけでなく、実際の world simulation loop に効かせる
+- LLM agent / world tick / monster update を常駐実行で回し、viewer へリアルタイム反映する
+
+実装候補:
+
+- `ISimulationRuntimeControlPort` の SQLite / in-process 実装を追加
+- `world_simulation_service.py` と接続する runtime loop manager を追加
+- simulation thread / task の start / stop / tick rate 管理を追加
+- pause 中は movement / weather / monster AI の進行を止める
+- speed 変更時は tick sleep / scheduler interval を再計算する
+
+テスト方針:
+
+- control port unit test
+- runtime loop の pause / resume / speed 変更 integration test
+- Web API から control command を送った際に loop state が変わることの E2E test
+
+完了条件:
+
+- UI の pause / resume / speed が実 simulation に効く
+- tick を進めると weather / actor / monster delta が継続的に stream へ流れる
+
+### Phase 10: Asset Catalog and SpriteSheet Integration
+
+目的:
+
+- 仮の図形 actor を実アセットへ置き換える
+- sprite key と spritesheet / animation 定義を結び、Phaser が real animation を再生できるようにする
+
+実装候補:
+
+- `frontend/public/assets/` に sprite / tileset / weather 素材を配置
+- `frontend/src/phaser/assetCatalog.ts` を追加
+- `actor sprite key` / `monster sprite key` / `weather overlay key` を asset catalog で解決
+- `preload` 相当の asset loading を `SceneRenderer` に追加
+- Tiled tileset image の読み込みルールを固定する
+
+テスト方針:
+
+- asset catalog の正常 / 欠落 key test
+- animation 定義の contract test
+- missing asset 時に fallback sprite へ落ちる例外系 test
+
+完了条件:
+
+- player / monster / weather が sprite / animation 付きで表示される
+- missing asset でも viewer が落ちず fallback で表示できる
+
+### Phase 11: Content Pipeline and Seed World
+
+目的:
+
+- 実際の最小世界を Tiled JSON + SQLite seed で再現できるようにする
+- 2〜3 体の agent が動ける初期 world を reproducible に準備する
+
+実装候補:
+
+- Tiled map と DB seed の対応表を docs 化
+- gateway / spawn / area / weather 初期値の seed script を追加
+- starter town / field / dungeon entrance の 3 spot 構成を投入
+- manual player 1 体 + LLM players 2 体 + monster templates を初期化
+
+テスト方針:
+
+- seed script integration test
+- projection bootstrap が seed world を正しく snapshot 化する test
+- gateway / spawn / weather が Tiled と DB で整合する test
+
+完了条件:
+
+- seed した DB を指定すれば backend / frontend がそのまま起動する
+- spot 間移動と天候変化が最小世界で確認できる
+
+### Phase 12: Multi-Agent E2E Demo
+
+目的:
+
+- 2〜3 体の LLM player を live world に接続し、viewer で追えるようにする
+- 最小の「見て面白い」E2E デモを成立させる
+
+実装候補:
+
+- LLM runtime 起動導線と web runtime の同時起動
+- agent role preset（探索 / 社交 / 採取 など）
+- event log に agent の行動理由や失敗理由を表示
+- replay / capture 用ログの保存
+
+テスト方針:
+
+- runtime composition integration test
+- multi-agent actor update が stream へ流れる test
+- fixed / follow camera で scene 切替が破綻しない test
+
+完了条件:
+
+- 2〜3 体の agent が map 上で動き、人間が観察・介入できる
+- movement + weather + scene transition が viewer 上で一通り見える
+
+## 11.1 Current Validation Against Initial Goal
+
+当初目標に対する達成状況:
+
+- 複数スポットから成る world:
+  - 部分達成。sample Tiled JSON は複数 spot 対応済みで、backend も spot ごとの scene model を実装済み
+- 各スポットを独立 scene として描画:
+  - 達成。`spot_id` ごとの snapshot / stream と viewer scene 切替がある
+- 人間が 1 体に手動介入:
+  - 達成。HTTP move command と WASD / 矢印キー長押しがある
+- 一時停止 / 再開 / 速度変更:
+  - 部分達成。UI / API / projection は実装済みだが、live simulation loop への本接続は未実装
+- マップ上で移動と天候が可視化:
+  - 達成。actor movement tween と weather fade がある
+- ゲートウェイ通過で scene 遷移:
+  - 達成。delta と follow auto-switch を実装済み
+- 2〜3 体の LLM player を live world で走らせる:
+  - 未達成。viewer 基盤はあるが、常駐 simulation と LLM runtime 接続が次段階
+- 実アセットによる表示:
+  - 未達成。現在は placeholder rendering で、Phase 10 で置換予定
+
+## 11.2 Local Verification Guide
+
+現状、ユーザーが手元で確認しやすい導線:
+
+1. backend test を流す
+   - `uv run pytest tests/application/ui tests/presentation/web/test_app.py tests/presentation/web/test_runtime.py tests/presentation/web/test_runtime_env.py -q`
+2. frontend dependency を入れる
+   - `cd frontend`
+   - `npm install`
+3. frontend test / build を流す
+   - `npm run test`
+   - `npm run build`
+4. backend を起動する
+   - `AI_RPG_WORLD_GAME_DB=/path/to/game.db AI_RPG_WORLD_MANUAL_PLAYER_IDS=1 uv run python -m ai_rpg_world.presentation.web.server`
+5. frontend を起動する
+   - `cd frontend`
+   - `npm run dev`
+6. ブラウザで確認する
+   - `http://127.0.0.1:5173`
+   - scene selector
+   - fixed / follow camera
+   - pause / resume / speed
+   - manual actor の button / WASD / 矢印キー移動
+   - gateway を跨いだときの scene 切替
+
+補足:
+
+- 起動用 DB の seed 導線はまだ正式化していない。現時点では `tests/presentation/web/test_runtime.py` の `_seed_world(...)` が最小例に最も近い
+- live simulation loop は未接続なので、pause / resume / speed は今は viewer 状態の確認が主目的
+
 
 ## 7. Data and Asset Plan
 
