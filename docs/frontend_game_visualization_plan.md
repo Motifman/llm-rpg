@@ -541,18 +541,18 @@ Phaser 側で以下を実装します。
 
 1. backend test を流す
    - `uv run pytest tests/application/ui tests/presentation/web/test_app.py tests/presentation/web/test_runtime.py tests/presentation/web/test_runtime_env.py -q`
-2. frontend dependency を入れる
-   - `cd frontend`
-   - `npm install`
-3. frontend test / build を流す
-   - `npm run test`
-   - `npm run build`
-4. backend を起動する
-   - `AI_RPG_WORLD_GAME_DB=/path/to/game.db AI_RPG_WORLD_MANUAL_PLAYER_IDS=1 uv run python -m ai_rpg_world.presentation.web.server`
-5. frontend を起動する
-   - `cd frontend`
-   - `npm run dev`
-6. ブラウザで確認する
+2. demo DB を作る
+   - `make web-demo-db`
+3. frontend dependency を入れる
+   - `make web-frontend-install`
+4. frontend test / build を流す
+   - `make web-frontend-test`
+   - `make web-frontend-build`
+5. backend を起動する
+   - `make web-backend`
+6. 別ターミナルで frontend を起動する
+   - `make web-frontend`
+7. ブラウザで確認する
    - `http://127.0.0.1:5173`
    - scene selector
    - fixed / follow camera
@@ -562,7 +562,7 @@ Phaser 側で以下を実装します。
 
 補足:
 
-- 起動用 DB の seed 導線はまだ正式化していない。現時点では `tests/presentation/web/test_runtime.py` の `_seed_world(...)` が最小例に最も近い
+- `make web-demo-db-reset` で demo DB を再作成できる
 - live simulation loop は未接続なので、pause / resume / speed は今は viewer 状態の確認が主目的
 
 
