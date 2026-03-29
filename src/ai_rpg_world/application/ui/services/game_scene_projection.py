@@ -29,6 +29,22 @@ class GameSceneProjection:
         with self._lock:
             self._snapshots[snapshot.spot_id] = copy.deepcopy(snapshot)
 
+    def synchronize_snapshot(self, snapshot: GameSceneSnapshotDto) -> None:
+        with self._lock:
+            existing = self._snapshots.get(snapshot.spot_id)
+            if existing is None:
+                self._snapshots[snapshot.spot_id] = copy.deepcopy(snapshot)
+                return
+            existing.scene_id = snapshot.scene_id
+            existing.spot_name = snapshot.spot_name
+            existing.map = copy.deepcopy(snapshot.map)
+            existing.camera = copy.deepcopy(snapshot.camera)
+            existing.actors = copy.deepcopy(snapshot.actors)
+            existing.monsters = copy.deepcopy(snapshot.monsters)
+            existing.weather = copy.deepcopy(snapshot.weather)
+            existing.gateways = copy.deepcopy(snapshot.gateways)
+            existing.areas = copy.deepcopy(snapshot.areas)
+
     def get_snapshot(self, spot_id: int) -> GameSceneSnapshotDto:
         with self._lock:
             snapshot = self._snapshots.get(spot_id)
@@ -144,6 +160,11 @@ class GameSceneProjection:
             source = self._require_snapshot_mutable(from_spot_id)
             target = self._require_snapshot_mutable(to_spot_id)
             actor = next((a for a in source.actors if a.actor_id == actor_id), None)
+            if actor is None:
+                for snapshot in self._snapshots.values():
+                    actor = next((a for a in snapshot.actors if a.actor_id == actor_id), None)
+                    if actor is not None:
+                        break
             source_actor_payload = {
                 "actor_id": actor_id,
                 "target_spot_id": to_spot_id,
@@ -152,11 +173,12 @@ class GameSceneProjection:
                 "removal_reason": "scene_transition",
                 "auto_follow_switched": auto_follow_switched,
             }
+            for snapshot in self._snapshots.values():
+                snapshot.actors = [a for a in snapshot.actors if a.actor_id != actor_id]
             if actor is not None:
-                source.actors = [a for a in source.actors if a.actor_id != actor_id]
                 actor.tile_x = landing_tile_x
                 actor.tile_y = landing_tile_y
-                target.actors = [a for a in target.actors if a.actor_id != actor_id] + [actor]
+                target.actors.append(actor)
             source.scene_version += 1
             target.scene_version += 1
             source_delta = self._make_delta(
@@ -253,7 +275,7 @@ class GameSceneProjection:
         spot_id: int,
         current_tick: int,
         server_time_ms: int,
-    ) -> GameSceneDeltaEventDto:
+    ) -> None:
         with self._lock:
             snapshot = self._require_snapshot_mutable(spot_id)
             snapshot.simulation.current_tick = current_tick
@@ -264,12 +286,6 @@ class GameSceneProjection:
                     actor.state = "idle"
                 elif actor.state == "walking":
                     actor.state = "idle"
-            snapshot.scene_version += 1
-            return self._make_delta(
-                snapshot=snapshot,
-                event_type="tick_advanced",
-                payload={"current_tick": current_tick},
-            )
 
     def set_actor_control_flags(
         self,

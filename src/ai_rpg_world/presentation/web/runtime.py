@@ -116,6 +116,13 @@ def create_sqlite_web_runtime(config: SqliteWebAppConfig) -> SqliteWebRuntime:
         projection=projection,
         broker=broker,
         time_provider=time_provider,
+        bootstrap_config=GameSceneBootstrapConfig(
+            scene_catalog=config.scene_catalog,
+            viewport_width=config.viewport_width,
+            viewport_height=config.viewport_height,
+            initial_tick=config.initial_tick,
+            manual_player_ids=frozenset(config.manual_player_ids),
+        ),
     )
     simulation_runtime_control = InProcessSimulationRuntimeControlPort(
         time_provider=time_provider,

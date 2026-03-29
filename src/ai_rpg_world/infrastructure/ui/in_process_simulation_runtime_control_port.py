@@ -96,12 +96,11 @@ class InProcessSimulationRuntimeControlPort(ISimulationRuntimeControlPort):
         current_tick = self._time_provider.advance_tick().value
         server_time_ms = int(time.time() * 1000)
         for snapshot in self._projection.list_snapshots():
-            delta = self._projection.advance_simulation_tick(
+            self._projection.advance_simulation_tick(
                 spot_id=snapshot.spot_id,
                 current_tick=current_tick,
                 server_time_ms=server_time_ms,
             )
-            self._broker.publish(delta)
 
 
 __all__ = ["InProcessSimulationRuntimeControlPort"]

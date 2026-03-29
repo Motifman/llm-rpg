@@ -125,7 +125,7 @@ def test_advance_simulation_tick_updates_tick_and_clears_expired_busy_actor():
         busy_until_tick=12,
     )
 
-    delta = projection.advance_simulation_tick(
+    projection.advance_simulation_tick(
         spot_id=1,
         current_tick=12,
         server_time_ms=999,
@@ -136,4 +136,3 @@ def test_advance_simulation_tick_updates_tick_and_clears_expired_busy_actor():
     assert snapshot.server_time_ms == 999
     assert snapshot.actors[0].state == "idle"
     assert snapshot.actors[0].busy_until_tick is None
-    assert delta.event_type == "tick_advanced"
