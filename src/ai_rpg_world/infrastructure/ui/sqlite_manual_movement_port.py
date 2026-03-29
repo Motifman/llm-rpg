@@ -8,6 +8,10 @@ from typing import Union
 
 from ai_rpg_world.application.ui.contracts.interfaces import IGameSceneEventBroker
 from ai_rpg_world.application.ui.handlers.ui_event_handler import UiEventHandler
+from ai_rpg_world.application.ui.services.game_scene_projection_bootstrap_service import (
+    GameSceneBootstrapConfig,
+    GameSceneProjectionBootstrapService,
+)
 from ai_rpg_world.application.ui.services.game_scene_projection import GameSceneProjection
 from ai_rpg_world.application.world.movement_wiring import (
     create_movement_application_service,
@@ -39,8 +43,14 @@ from ai_rpg_world.application.world.services.gateway_based_connected_spots_provi
     GatewayBasedConnectedSpotsProvider,
 )
 from ai_rpg_world.application.world.contracts.commands import MoveTileCommand
+from ai_rpg_world.application.world.handlers.gateway_handler import (
+    GatewayTriggeredEventHandler,
+)
 from ai_rpg_world.application.world.world_state_sqlite_wiring import (
     attach_world_state_sqlite_repositories,
+)
+from ai_rpg_world.domain.world.service.map_transition_service import (
+    MapTransitionService,
 )
 
 
@@ -54,11 +64,13 @@ class SqliteManualMovementPort:
         projection: GameSceneProjection,
         broker: IGameSceneEventBroker,
         time_provider: InMemoryGameTimeProvider,
+        bootstrap_config: GameSceneBootstrapConfig | None = None,
     ) -> None:
         self._database = str(Path(database).expanduser().resolve())
         self._projection = projection
         self._broker = broker
         self._time_provider = time_provider
+        self._bootstrap_config = bootstrap_config or GameSceneBootstrapConfig()
 
     def move_tile(self, command: MoveTileCommand):
         connection = sqlite3.connect(self._database)
@@ -78,7 +90,18 @@ class SqliteManualMovementPort:
                 physical_map_repository=world_state.world_runtime.physical_maps,
             )
             ui_registry = UiEventHandlerRegistry(ui_handler)
-            EventHandlerComposition(ui_registry=ui_registry).register_for_profile(
+            gateway_handler = GatewayTriggeredEventHandler(
+                physical_map_repository=world_state.world_runtime.physical_maps,
+                player_status_repository=world_state.player_state.player_statuses,
+                monster_repository=world_state.world_runtime.monsters,
+                map_transition_service=MapTransitionService(),
+                unit_of_work=scope,
+                event_publisher=event_publisher,
+            )
+            EventHandlerComposition(
+                gateway_handler=gateway_handler,
+                ui_registry=ui_registry,
+            ).register_for_profile(
                 event_publisher,
                 EventHandlerProfile.FULL,
             )
@@ -98,7 +121,16 @@ class SqliteManualMovementPort:
                 time_provider=self._time_provider,
                 unit_of_work=scope,
             )
-            return movement_service.move_tile(command)
+            result = movement_service.move_tile(command)
+            bootstrap_service = GameSceneProjectionBootstrapService(
+                spot_repository=world_state.world_structure.spots,
+                physical_map_repository=world_state.world_runtime.physical_maps,
+                player_profile_repository=world_state.player_state.player_profiles,
+                config=self._bootstrap_config,
+            )
+            for snapshot in bootstrap_service.build_initial_snapshots():
+                self._projection.synchronize_snapshot(snapshot)
+            return result
         finally:
             connection.close()
 

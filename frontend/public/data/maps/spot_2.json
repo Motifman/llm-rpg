@@ -25,10 +25,38 @@
       "width": 10,
       "x": 0,
       "y": 0
+    },
+    {
+      "draworder": "topdown",
+      "id": 2,
+      "name": "gateways",
+      "objects": [
+        {
+          "height": 32,
+          "id": 1,
+          "name": "return_gate",
+          "properties": [
+            { "name": "target_spot_id", "type": "int", "value": 1 },
+            { "name": "landing_tile_x", "type": "int", "value": 4 },
+            { "name": "landing_tile_y", "type": "int", "value": 1 }
+          ],
+          "rotation": 0,
+          "type": "gateway",
+          "visible": true,
+          "width": 32,
+          "x": 64,
+          "y": 288
+        }
+      ],
+      "opacity": 1,
+      "type": "objectgroup",
+      "visible": true,
+      "x": 0,
+      "y": 0
     }
   ],
-  "nextlayerid": 2,
-  "nextobjectid": 1,
+  "nextlayerid": 3,
+  "nextobjectid": 2,
   "orientation": "orthogonal",
   "renderorder": "right-down",
   "tiledversion": "1.11.0",

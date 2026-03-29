@@ -88,7 +88,7 @@ def seed_demo_world_database(
         exp_table = ExpTable(100, 1.5)
         navigation_state = PlayerNavigationState.from_parts(
             current_spot_id=SpotId(1),
-            current_coordinate=Coordinate(0, 0, 0),
+            current_coordinate=Coordinate(1, 1, 0),
         )
         world_state.player_state.player_profiles.save(
             PlayerProfileAggregate.create(
@@ -116,11 +116,11 @@ def seed_demo_world_database(
 
         starter_town = PhysicalMapAggregate.create(
             SpotId(1),
-            _make_tiles(width=4, height=4),
+            _make_tiles(width=10, height=10),
             objects=[
                 WorldObject(
                     object_id=WorldObjectId.create(1),
-                    coordinate=Coordinate(0, 0, 0),
+                    coordinate=Coordinate(1, 1, 0),
                     object_type=ObjectTypeEnum.PLAYER,
                     component=ActorComponent(
                         direction=DirectionEnum.EAST,
@@ -132,22 +132,22 @@ def seed_demo_world_database(
                 Gateway(
                     gateway_id=GatewayId(1),
                     name="starter-to-south-gate",
-                    area=PointArea(Coordinate(2, 0, 0)),
+                    area=PointArea(Coordinate(4, 0, 0)),
                     target_spot_id=SpotId(2),
-                    landing_coordinate=Coordinate(0, 1, 0),
+                    landing_coordinate=Coordinate(2, 7, 0),
                 )
             ],
         )
         south_gate = PhysicalMapAggregate.create(
             SpotId(2),
-            _make_tiles(width=4, height=4),
+            _make_tiles(width=10, height=10),
             gateways=[
                 Gateway(
                     gateway_id=GatewayId(2),
                     name="south-gate-to-starter",
-                    area=PointArea(Coordinate(0, 1, 0)),
+                    area=PointArea(Coordinate(2, 8, 0)),
                     target_spot_id=SpotId(1),
-                    landing_coordinate=Coordinate(2, 0, 0),
+                    landing_coordinate=Coordinate(4, 1, 0),
                 )
             ],
         )

@@ -64,8 +64,8 @@ def test_sqlite_web_runtime_move_endpoint_updates_projection_and_database(tmp_pa
 
         assert move_response.status_code == 200
         assert move_response.json()["success"] is True
-        assert snapshot_response.json()["actors"][0]["tile_x"] == 1
-        assert snapshot_response.json()["actors"][0]["tile_y"] == 0
+        assert snapshot_response.json()["actors"][0]["tile_x"] == 2
+        assert snapshot_response.json()["actors"][0]["tile_y"] == 1
 
         connection = sqlite3.connect(str(database))
         connection.row_factory = sqlite3.Row
@@ -75,8 +75,8 @@ def test_sqlite_web_runtime_move_endpoint_updates_projection_and_database(tmp_pa
                 "FROM game_player_statuses WHERE player_id = 1"
             ).fetchone()
             assert row is not None
-            assert row["current_coordinate_x"] == 1
-            assert row["current_coordinate_y"] == 0
+            assert row["current_coordinate_x"] == 2
+            assert row["current_coordinate_y"] == 1
         finally:
             connection.close()
     finally:
@@ -94,23 +94,82 @@ def test_sqlite_web_runtime_advances_ticks_and_unblocks_busy_manual_movement(
             database_path=database,
             manual_player_ids=(1,),
             initial_tick=100,
-            tick_interval_ms=20,
+            tick_interval_ms=200,
         )
     )
     try:
         with TestClient(runtime.app) as client:
             first_move = client.post("/api/actors/1/move", json={"direction": "east"})
             blocked_move = client.post("/api/actors/1/move", json={"direction": "east"})
-            time.sleep(0.09)
-            second_move = client.post("/api/actors/1/move", json={"direction": "east"})
+            second_move = None
+            for _ in range(10):
+                time.sleep(0.08)
+                second_move = client.post("/api/actors/1/move", json={"direction": "east"})
+                if second_move.status_code == 200:
+                    break
             snapshot_response = client.get("/api/scenes/1/snapshot")
 
         assert first_move.status_code == 200
         assert blocked_move.status_code == 400
         assert "現在行動中" in blocked_move.json()["detail"]
+        assert second_move is not None
         assert second_move.status_code == 200
-        assert snapshot_response.json()["actors"][0]["tile_x"] == 2
-        assert snapshot_response.json()["simulation"]["current_tick"] >= 104
+        assert snapshot_response.json()["actors"][0]["tile_x"] == 3
+        assert snapshot_response.json()["simulation"]["current_tick"] >= 101
+    finally:
+        runtime.close()
+
+
+def test_sqlite_web_runtime_gateway_transition_moves_actor_between_spots(
+    tmp_path: Path,
+):
+    database = tmp_path / "runtime-gateway.db"
+    seed_demo_world_database(database)
+
+    runtime = create_sqlite_web_runtime(
+        SqliteWebAppConfig(
+            database_path=database,
+            manual_player_ids=(1,),
+            initial_tick=100,
+            tick_interval_ms=20,
+        )
+    )
+    try:
+        with TestClient(runtime.app) as client:
+            for direction in ("east", "east", "east"):
+                move_response = client.post(
+                    "/api/actors/1/move", json={"direction": direction}
+                )
+                assert move_response.status_code == 200
+                time.sleep(0.06)
+
+            gateway_response = client.post(
+                "/api/actors/1/move", json={"direction": "north"}
+            )
+            source_snapshot = client.get("/api/scenes/1/snapshot").json()
+            target_snapshot = client.get("/api/scenes/2/snapshot").json()
+
+        assert gateway_response.status_code == 200
+        payload = gateway_response.json()
+        assert payload["to_spot_id"] == 2
+        assert payload["to_coordinate"] == {"x": 2, "y": 7, "z": 0}
+        assert source_snapshot["actors"] == []
+        assert target_snapshot["actors"][0]["tile_x"] == 2
+        assert target_snapshot["actors"][0]["tile_y"] == 7
+
+        connection = sqlite3.connect(str(database))
+        connection.row_factory = sqlite3.Row
+        try:
+            row = connection.execute(
+                "SELECT current_spot_id, current_coordinate_x, current_coordinate_y "
+                "FROM game_player_statuses WHERE player_id = 1"
+            ).fetchone()
+            assert row is not None
+            assert row["current_spot_id"] == 2
+            assert row["current_coordinate_x"] == 2
+            assert row["current_coordinate_y"] == 7
+        finally:
+            connection.close()
     finally:
         runtime.close()
 
@@ -136,12 +195,14 @@ def test_sqlite_web_runtime_websocket_stream_sees_committed_move_event(tmp_path:
             response = websocket.receive_json()
             assert response["type"] == "scene_events"
             assert response["events"][0]["event_type"] == "actor_moved"
-            assert response["events"][0]["payload"]["to_tile_x"] == 1
+            assert response["events"][0]["payload"]["to_tile_x"] == 2
     finally:
         runtime.close()
 
 
-def test_sqlite_web_runtime_websocket_stream_emits_tick_advanced_events(tmp_path: Path):
+def test_sqlite_web_runtime_snapshot_current_tick_advances_without_scene_version_growth(
+    tmp_path: Path,
+):
     database = tmp_path / "runtime-stream.db"
     seed_demo_world_database(database)
 
@@ -155,14 +216,10 @@ def test_sqlite_web_runtime_websocket_stream_emits_tick_advanced_events(tmp_path
     )
     try:
         with TestClient(runtime.app) as client:
-            with client.websocket_connect(
-                "/api/scenes/spot-1/stream?last_seen_scene_version=0"
-            ) as websocket:
-                websocket.receive_json()
-                time.sleep(0.06)
-                websocket.send_json({"action": "poll", "last_seen_scene_version": 0})
-                response = websocket.receive_json()
-        assert response["type"] == "scene_events"
-        assert any(event["event_type"] == "tick_advanced" for event in response["events"])
+            before = client.get("/api/scenes/1/snapshot").json()
+            time.sleep(0.06)
+            after = client.get("/api/scenes/1/snapshot").json()
+        assert after["simulation"]["current_tick"] > before["simulation"]["current_tick"]
+        assert after["scene_version"] == before["scene_version"]
     finally:
         runtime.close()

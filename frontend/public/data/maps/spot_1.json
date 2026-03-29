@@ -38,7 +38,7 @@
           "properties": [
             { "name": "target_spot_id", "type": "int", "value": 2 },
             { "name": "landing_tile_x", "type": "int", "value": 2 },
-            { "name": "landing_tile_y", "type": "int", "value": 8 }
+            { "name": "landing_tile_y", "type": "int", "value": 7 }
           ],
           "rotation": 0,
           "type": "gateway",

@@ -96,7 +96,7 @@ export function useSceneRuntime() {
   }, [selectedSpotId]);
 
   useEffect(() => {
-    if (selectedSpotId == null || connectionState === "open") {
+    if (selectedSpotId == null) {
       return;
     }
     let cancelled = false;
@@ -113,7 +113,7 @@ export function useSceneRuntime() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [connectionState, selectedSpotId]);
+  }, [selectedSpotId]);
 
   useEffect(() => {
     if (snapshot == null) {
