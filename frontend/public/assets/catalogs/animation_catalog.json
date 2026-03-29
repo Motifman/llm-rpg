@@ -9,10 +9,10 @@
       "walk_down": { "frames": [0, 1, 2], "frame_rate": 8, "repeat": -1 },
       "idle_up": { "frames": [4], "frame_rate": 1, "repeat": -1 },
       "walk_up": { "frames": [3, 4, 5], "frame_rate": 8, "repeat": -1 },
-      "idle_left": { "frames": [7], "frame_rate": 1, "repeat": -1 },
-      "walk_left": { "frames": [6, 7, 8], "frame_rate": 8, "repeat": -1 },
-      "idle_right": { "frames": [10], "frame_rate": 1, "repeat": -1 },
-      "walk_right": { "frames": [9, 10, 11], "frame_rate": 8, "repeat": -1 }
+      "idle_left": { "frames": [10], "frame_rate": 1, "repeat": -1 },
+      "walk_left": { "frames": [9, 10, 11], "frame_rate": 8, "repeat": -1 },
+      "idle_right": { "frames": [7], "frame_rate": 1, "repeat": -1 },
+      "walk_right": { "frames": [6, 7, 8], "frame_rate": 8, "repeat": -1 }
     }
   },
   "monster_blob": {
