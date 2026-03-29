@@ -76,6 +76,10 @@
   - frontend の WebSocket reconnect / heartbeat を追加済み
 - Phase 10 以降: 未着手
 
+Phase 10 の着手準備として、asset 規約文書を以下に追加済み:
+
+- `frontend/public/assets/README.md`
+
 追加済みの主要ファイル:
 
 - `src/ai_rpg_world/application/ui/contracts/dtos.py`
