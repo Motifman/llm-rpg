@@ -109,7 +109,7 @@ def seed_demo_world_database(
                 gold=Gold(100),
                 hp=Hp.create(100, 100),
                 mp=Mp.create(50, 50),
-                stamina=Stamina.create(100, 100),
+                stamina=Stamina.create(1_000_000, 1_000_000),
                 navigation_state=navigation_state,
             )
         )
