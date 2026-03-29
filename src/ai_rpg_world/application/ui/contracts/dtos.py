@@ -74,6 +74,7 @@ class SceneActorDto:
     is_manual_controlled: bool = False
     is_llm_controlled: bool = True
     state: str = "idle"
+    busy_until_tick: Optional[int] = None
 
     def __post_init__(self) -> None:
         _ensure_int(self.actor_id, "actor_id")
@@ -88,6 +89,8 @@ class SceneActorDto:
         _ensure_bool(self.is_manual_controlled, "is_manual_controlled")
         _ensure_bool(self.is_llm_controlled, "is_llm_controlled")
         _ensure_str(self.state, "state")
+        if self.busy_until_tick is not None:
+            _ensure_int(self.busy_until_tick, "busy_until_tick")
 
 
 @dataclass
@@ -180,10 +183,12 @@ class SceneCameraDto:
 class SimulationStateDto:
     is_paused: bool
     speed_multiplier: float
+    current_tick: int = 0
 
     def __post_init__(self) -> None:
         _ensure_bool(self.is_paused, "is_paused")
         _ensure_float_like(self.speed_multiplier, "speed_multiplier")
+        _ensure_int(self.current_tick, "current_tick")
 
 
 @dataclass

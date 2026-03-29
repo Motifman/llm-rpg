@@ -35,6 +35,9 @@ from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
 from ai_rpg_world.infrastructure.ui.in_memory_game_scene_event_broker import (
     InMemoryGameSceneEventBroker,
 )
+from ai_rpg_world.infrastructure.ui.in_process_simulation_runtime_control_port import (
+    InProcessSimulationRuntimeControlPort,
+)
 from ai_rpg_world.infrastructure.ui.sqlite_manual_movement_port import (
     SqliteManualMovementPort,
 )
@@ -55,6 +58,7 @@ class SqliteWebAppConfig:
     viewport_width: int = 960
     viewport_height: int = 540
     initial_tick: int = 0
+    tick_interval_ms: int = 60
 
 
 class SqliteWebRuntime:
@@ -69,6 +73,7 @@ class SqliteWebRuntime:
         projection: GameSceneProjection,
         broker: InMemoryGameSceneEventBroker,
         time_provider: InMemoryGameTimeProvider,
+        simulation_runtime_control: InProcessSimulationRuntimeControlPort,
     ) -> None:
         self.config = config
         self.app = app
@@ -76,8 +81,10 @@ class SqliteWebRuntime:
         self.projection = projection
         self.broker = broker
         self.time_provider = time_provider
+        self.simulation_runtime_control = simulation_runtime_control
 
     def close(self) -> None:
+        self.simulation_runtime_control.stop()
         self.container.close()
 
 
@@ -94,6 +101,7 @@ def create_sqlite_web_runtime(config: SqliteWebAppConfig) -> SqliteWebRuntime:
             scene_catalog=config.scene_catalog,
             viewport_width=config.viewport_width,
             viewport_height=config.viewport_height,
+            initial_tick=config.initial_tick,
             manual_player_ids=frozenset(config.manual_player_ids),
         ),
     )
@@ -109,9 +117,16 @@ def create_sqlite_web_runtime(config: SqliteWebAppConfig) -> SqliteWebRuntime:
         broker=broker,
         time_provider=time_provider,
     )
+    simulation_runtime_control = InProcessSimulationRuntimeControlPort(
+        time_provider=time_provider,
+        projection=projection,
+        broker=broker,
+        tick_interval_ms=config.tick_interval_ms,
+    )
     simulation_control = SimulationControlService(
         projection,
         broker,
+        runtime_control=simulation_runtime_control,
     )
     manual_control = ManualActorControlService(
         movement_port,
@@ -128,6 +143,7 @@ def create_sqlite_web_runtime(config: SqliteWebAppConfig) -> SqliteWebRuntime:
     @asynccontextmanager
     async def _lifespan(_: FastAPI):
         try:
+            runtime_holder["runtime"].simulation_runtime_control.start()
             yield
         finally:
             runtime_holder["runtime"].close()
@@ -146,6 +162,7 @@ def create_sqlite_web_runtime(config: SqliteWebAppConfig) -> SqliteWebRuntime:
         projection=projection,
         broker=broker,
         time_provider=time_provider,
+        simulation_runtime_control=simulation_runtime_control,
     )
     runtime_holder["runtime"] = runtime
     app.state.sqlite_web_runtime = runtime
@@ -179,6 +196,7 @@ def create_sqlite_web_app_from_env() -> FastAPI:
             database_path=database_path,
             manual_player_ids=manual_player_ids,
             cors_allowed_origins=cors_allowed_origins,
+            tick_interval_ms=int(os.getenv("AI_RPG_WORLD_TICK_INTERVAL_MS", "60")),
         )
     )
 

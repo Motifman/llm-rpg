@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -82,6 +83,38 @@ def test_sqlite_web_runtime_move_endpoint_updates_projection_and_database(tmp_pa
         runtime.close()
 
 
+def test_sqlite_web_runtime_advances_ticks_and_unblocks_busy_manual_movement(
+    tmp_path: Path,
+):
+    database = tmp_path / "runtime-loop.db"
+    seed_demo_world_database(database)
+
+    runtime = create_sqlite_web_runtime(
+        SqliteWebAppConfig(
+            database_path=database,
+            manual_player_ids=(1,),
+            initial_tick=100,
+            tick_interval_ms=20,
+        )
+    )
+    try:
+        with TestClient(runtime.app) as client:
+            first_move = client.post("/api/actors/1/move", json={"direction": "east"})
+            blocked_move = client.post("/api/actors/1/move", json={"direction": "east"})
+            time.sleep(0.09)
+            second_move = client.post("/api/actors/1/move", json={"direction": "east"})
+            snapshot_response = client.get("/api/scenes/1/snapshot")
+
+        assert first_move.status_code == 200
+        assert blocked_move.status_code == 400
+        assert "現在行動中" in blocked_move.json()["detail"]
+        assert second_move.status_code == 200
+        assert snapshot_response.json()["actors"][0]["tile_x"] == 2
+        assert snapshot_response.json()["simulation"]["current_tick"] >= 104
+    finally:
+        runtime.close()
+
+
 def test_sqlite_web_runtime_websocket_stream_sees_committed_move_event(tmp_path: Path):
     database = tmp_path / "runtime.db"
     seed_demo_world_database(database)
@@ -104,5 +137,32 @@ def test_sqlite_web_runtime_websocket_stream_sees_committed_move_event(tmp_path:
             assert response["type"] == "scene_events"
             assert response["events"][0]["event_type"] == "actor_moved"
             assert response["events"][0]["payload"]["to_tile_x"] == 1
+    finally:
+        runtime.close()
+
+
+def test_sqlite_web_runtime_websocket_stream_emits_tick_advanced_events(tmp_path: Path):
+    database = tmp_path / "runtime-stream.db"
+    seed_demo_world_database(database)
+
+    runtime = create_sqlite_web_runtime(
+        SqliteWebAppConfig(
+            database_path=database,
+            manual_player_ids=(1,),
+            initial_tick=100,
+            tick_interval_ms=20,
+        )
+    )
+    try:
+        with TestClient(runtime.app) as client:
+            with client.websocket_connect(
+                "/api/scenes/spot-1/stream?last_seen_scene_version=0"
+            ) as websocket:
+                websocket.receive_json()
+                time.sleep(0.06)
+                websocket.send_json({"action": "poll", "last_seen_scene_version": 0})
+                response = websocket.receive_json()
+        assert response["type"] == "scene_events"
+        assert any(event["event_type"] == "tick_advanced" for event in response["events"])
     finally:
         runtime.close()

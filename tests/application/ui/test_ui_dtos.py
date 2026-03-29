@@ -79,3 +79,11 @@ def test_game_scene_delta_event_rejects_non_dict_payload():
             payload=[],  # type: ignore[arg-type]
         )
 
+
+def test_simulation_state_rejects_invalid_current_tick():
+    with pytest.raises(TypeError, match="current_tick must be int"):
+        SimulationStateDto(  # type: ignore[arg-type]
+            is_paused=False,
+            speed_multiplier=1.0,
+            current_tick="10",
+        )
