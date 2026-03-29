@@ -7,6 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
+from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.presentation.web.demo_seed import (
     DEFAULT_WEB_GAME_DB,
     main,
@@ -34,10 +37,22 @@ def test_seed_demo_world_database_creates_reusable_runtime(tmp_path: Path) -> No
         assert snapshot_two.spot_name == "South Gate"
         assert snapshot_two.weather is not None
         assert snapshot_two.weather.weather_type == "RAIN"
+        assert snapshot_one.gateways[0].tile_x == 4
+        assert snapshot_one.gateways[0].tile_y == 0
         assert snapshot_one.gateways[0].landing_tile_x == 2
         assert snapshot_one.gateways[0].landing_tile_y == 7
         assert snapshot_two.gateways[0].tile_x == 2
         assert snapshot_two.gateways[0].tile_y == 8
+        world_state = runtime.container.get_world_state_repositories()
+        physical_map = world_state.world_runtime.physical_maps.find_by_id(SpotId(1))
+        assert physical_map is not None
+        assert (
+            physical_map.is_passable(
+                Coordinate(6, 5, 0),
+                MovementCapability.normal_walk(),
+            )
+            is False
+        )
     finally:
         runtime.close()
 

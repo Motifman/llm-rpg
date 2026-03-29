@@ -84,7 +84,7 @@
       "name": "objects",
       "objects": [
         {
-          "height": 64,
+          "height": 32,
           "id": 3,
           "name": "starter_chest",
           "properties": [
@@ -93,9 +93,9 @@
           "rotation": 0,
           "type": "object",
           "visible": true,
-          "width": 64,
+          "width": 32,
           "x": 192,
-          "y": 224
+          "y": 192
         }
       ],
       "opacity": 1,
