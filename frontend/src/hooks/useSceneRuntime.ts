@@ -32,6 +32,7 @@ export function useSceneRuntime() {
   const latestSceneVersionRef = useRef<number>(0);
   const trackedActorIdRef = useRef<number | null>(null);
   const cameraModeRef = useRef<CameraMode>("fixed");
+  const streamAvailableRef = useRef(true);
   const [streamNonce, setStreamNonce] = useState(0);
   const moveRefreshTimerRef = useRef<number | null>(null);
 
@@ -127,10 +128,11 @@ export function useSceneRuntime() {
   }, [selectedSpotId]);
 
   useEffect(() => {
-    if (snapshot == null) {
+    if (snapshot == null || !streamAvailableRef.current) {
       return;
     }
     let cancelled = false;
+    let didOpen = false;
     if (reconnectTimerRef.current != null) {
       window.clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
@@ -146,6 +148,7 @@ export function useSceneRuntime() {
           if (cancelled) {
             return;
           }
+          didOpen = true;
           reconnectAttemptRef.current = 0;
           setConnectionState("open");
           setErrorMessage(null);
@@ -190,11 +193,21 @@ export function useSceneRuntime() {
           if (cancelled) {
             return;
           }
+          if (!didOpen) {
+            streamAvailableRef.current = false;
+            setConnectionState("closed");
+            return;
+          }
           setConnectionState("closed");
           scheduleReconnect();
         },
         onError: () => {
           if (cancelled) {
+            return;
+          }
+          if (!didOpen) {
+            streamAvailableRef.current = false;
+            setConnectionState("closed");
             return;
           }
           setConnectionState("error");

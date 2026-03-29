@@ -258,6 +258,11 @@ export class SceneRenderer extends Phaser.Scene {
         targets: sprite.body,
         x: nextPosition.x,
         y: nextPosition.y,
+        duration: moveDuration,
+        ease: "Sine.InOut",
+      });
+      this.tweens.add({
+        targets: sprite.body,
         scaleY: { from: 0.96, to: 1.02 },
         scaleX: { from: 1.04, to: 0.98 },
         duration: moveDuration,
@@ -272,6 +277,11 @@ export class SceneRenderer extends Phaser.Scene {
         targets: sprite.shadow,
         x: nextPosition.x,
         y: nextPosition.y + 12,
+        duration: moveDuration,
+        ease: "Sine.InOut",
+      });
+      this.tweens.add({
+        targets: sprite.shadow,
         scaleX: { from: 1.1, to: 0.92 },
         alpha: { from: 0.18, to: 0.32 },
         duration: moveDuration,
