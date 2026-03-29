@@ -166,7 +166,10 @@ class SqliteSocialDependencyInjectionContainer:
 
     def _get_connection(self) -> sqlite3.Connection:
         if self._connection is None:
-            connection = sqlite3.connect(str(self._database))
+            connection = sqlite3.connect(
+                str(self._database),
+                check_same_thread=False,
+            )
             connection.row_factory = sqlite3.Row
             bootstrap_social_schema(connection)
             self._connection = connection
@@ -233,7 +236,10 @@ class SqliteGameDependencyInjectionContainer:
 
     def _get_connection(self) -> sqlite3.Connection:
         if self._connection is None:
-            connection = sqlite3.connect(str(self._database))
+            connection = sqlite3.connect(
+                str(self._database),
+                check_same_thread=False,
+            )
             connection.row_factory = sqlite3.Row
             bootstrap_social_schema(connection)
             self._connection = connection

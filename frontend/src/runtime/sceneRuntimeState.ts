@@ -20,6 +20,10 @@ export function applySceneDeltaEvent(
             tile_y: Number(event.payload.to_tile_y),
             facing: String(event.payload.facing ?? actor.facing),
             state: "walking",
+            busy_until_tick:
+              (event.payload.busy_until_tick as number | null | undefined) ??
+              actor.busy_until_tick ??
+              null,
           }
         : actor,
     );
@@ -82,6 +86,29 @@ export function applySceneDeltaEvent(
         ...snapshot.simulation,
         speed_multiplier: Number(event.payload.speed_multiplier ?? 1),
       },
+      scene_version: event.scene_version,
+    };
+  }
+
+  if (event.event_type === "tick_advanced") {
+    const currentTick = Number(event.payload.current_tick ?? snapshot.simulation.current_tick);
+    return {
+      ...snapshot,
+      simulation: {
+        ...snapshot.simulation,
+        current_tick: currentTick,
+      },
+      actors: snapshot.actors.map((actor) => ({
+        ...actor,
+        state:
+          actor.busy_until_tick != null && actor.busy_until_tick > currentTick
+            ? actor.state
+            : "idle",
+        busy_until_tick:
+          actor.busy_until_tick != null && actor.busy_until_tick > currentTick
+            ? actor.busy_until_tick
+            : null,
+      })),
       scene_version: event.scene_version,
     };
   }
@@ -223,6 +250,8 @@ function buildSceneChangedActor(
       event.payload.is_llm_controlled ?? existing?.is_llm_controlled ?? true,
     ),
     state: String(event.payload.state ?? existing?.state ?? "idle"),
+    busy_until_tick:
+      coerceNumberOrNull(event.payload.busy_until_tick, existing?.busy_until_tick ?? null) ?? null,
   };
 }
 

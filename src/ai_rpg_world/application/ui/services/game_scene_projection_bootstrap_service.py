@@ -48,6 +48,7 @@ class GameSceneBootstrapConfig:
     scene_catalog: Mapping[int, SceneRenderCatalogEntry] = field(default_factory=dict)
     viewport_width: int = 960
     viewport_height: int = 540
+    initial_tick: int = 0
     manual_player_ids: frozenset[int] = field(default_factory=frozenset)
     actor_sprite_key_resolver: Optional[Callable[[WorldObject], str]] = None
     weather_overlay_key_resolver: Optional[Callable[[str], Optional[str]]] = None
@@ -92,6 +93,7 @@ class GameSceneProjectionBootstrapService:
                     simulation=SimulationStateDto(
                         is_paused=False,
                         speed_multiplier=1.0,
+                        current_tick=self._config.initial_tick,
                     ),
                     actors=self._build_actor_dtos(physical_map.get_all_objects()),
                     weather=SceneWeatherDto(
@@ -172,6 +174,9 @@ class GameSceneProjectionBootstrapService:
                         player_id is not None and player_id not in self._config.manual_player_ids
                     ),
                     state="busy" if obj.busy_until is not None else "idle",
+                    busy_until_tick=(
+                        obj.busy_until.value if obj.busy_until is not None else None
+                    ),
                 )
             )
         return sorted(actors, key=lambda actor: actor.actor_id)

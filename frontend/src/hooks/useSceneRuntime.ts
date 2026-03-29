@@ -26,13 +26,17 @@ export function useSceneRuntime() {
   const [connectionState, setConnectionState] = useState<ConnectionState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const websocketRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const reconnectAttemptRef = useRef<number>(0);
   const latestSceneVersionRef = useRef<number>(0);
   const trackedActorIdRef = useRef<number | null>(null);
   const cameraModeRef = useRef<CameraMode>("fixed");
+  const [streamNonce, setStreamNonce] = useState(0);
 
   async function refreshOverview(): Promise<void> {
     const data = await apiClient.getWorldOverview();
     setOverview(data);
+    setErrorMessage(null);
     if (data.length > 0) {
       setSelectedSpotId((current) => current ?? data[0].spot_id);
     }
@@ -72,6 +76,7 @@ export function useSceneRuntime() {
         }
         latestSceneVersionRef.current = data.scene_version;
         setSnapshot(data);
+        setErrorMessage(null);
       })
       .catch((error: Error) => {
         if (!active) {
@@ -89,6 +94,11 @@ export function useSceneRuntime() {
     if (snapshot == null) {
       return;
     }
+    let cancelled = false;
+    if (reconnectTimerRef.current != null) {
+      window.clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
     websocketRef.current?.close();
     setConnectionState("connecting");
 
@@ -96,9 +106,21 @@ export function useSceneRuntime() {
       snapshot.scene_id,
       latestSceneVersionRef.current,
       {
+        onOpen: () => {
+          if (cancelled) {
+            return;
+          }
+          reconnectAttemptRef.current = 0;
+          setConnectionState("open");
+          setErrorMessage(null);
+        },
         onMessage: (message: StreamMessage) => {
+          if (cancelled) {
+            return;
+          }
           if (message.type === "scene_events") {
             setConnectionState("open");
+            setErrorMessage(null);
             latestSceneVersionRef.current = message.latest_scene_version;
             setOverview((currentOverview) =>
               message.events.reduce(updateOverviewForSceneEvent, currentOverview),
@@ -128,8 +150,20 @@ export function useSceneRuntime() {
             setErrorMessage(message.detail);
           }
         },
-        onClose: () => setConnectionState("closed"),
-        onError: () => setConnectionState("error"),
+        onClose: () => {
+          if (cancelled) {
+            return;
+          }
+          setConnectionState("closed");
+          scheduleReconnect();
+        },
+        onError: () => {
+          if (cancelled) {
+            return;
+          }
+          setConnectionState("error");
+          scheduleReconnect();
+        },
       },
     );
     websocketRef.current = websocket;
@@ -143,14 +177,38 @@ export function useSceneRuntime() {
           last_seen_scene_version: latestSceneVersionRef.current,
         }),
       );
-    }, 500);
+    }, 250);
+    const heartbeatTimer = window.setInterval(() => {
+      if (websocket.readyState !== WebSocket.OPEN) {
+        return;
+      }
+      websocket.send(JSON.stringify({ action: "ping" }));
+    }, 2000);
+
+    function scheduleReconnect() {
+      if (reconnectTimerRef.current != null) {
+        return;
+      }
+      const delayMs = Math.min(250 * 2 ** reconnectAttemptRef.current, 2000);
+      reconnectAttemptRef.current += 1;
+      reconnectTimerRef.current = window.setTimeout(() => {
+        reconnectTimerRef.current = null;
+        setStreamNonce((current) => current + 1);
+      }, delayMs);
+    }
 
     return () => {
+      cancelled = true;
       window.clearInterval(pollTimer);
+      window.clearInterval(heartbeatTimer);
+      if (reconnectTimerRef.current != null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
       websocket.close();
       websocketRef.current = null;
     };
-  }, [snapshot?.scene_id]);
+  }, [snapshot?.scene_id, streamNonce]);
 
   const manualActor = useMemo<SceneActor | null>(() => {
     if (snapshot == null) {
@@ -172,6 +230,7 @@ export function useSceneRuntime() {
     direction: string,
   ): Promise<MoveResult> => {
     const result = await apiClient.moveActor(actorId, direction);
+    setErrorMessage(null);
     setSnapshot((current) =>
       current == null ? current : applyManualMoveResult(current, result),
     );

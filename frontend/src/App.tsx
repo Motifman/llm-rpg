@@ -170,11 +170,12 @@ export function App() {
               <p className="eyebrow">Live Scene</p>
               <h2>{snapshot?.spot_name ?? "No scene selected"}</h2>
             </div>
-            <div className="viewer-meta">
-              <span>Version {snapshot?.scene_version ?? "-"}</span>
-              <span>{snapshot?.weather?.weather_type ?? "CLEAR"}</span>
-              <span>{cameraMode.toUpperCase()}</span>
-            </div>
+          <div className="viewer-meta">
+            <span>Version {snapshot?.scene_version ?? "-"}</span>
+            <span>Tick {snapshot?.simulation.current_tick ?? "-"}</span>
+            <span>{snapshot?.weather?.weather_type ?? "CLEAR"}</span>
+            <span>{cameraMode.toUpperCase()}</span>
+          </div>
           </div>
           <GameCanvas
             cameraMode={cameraMode}

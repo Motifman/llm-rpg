@@ -76,6 +76,7 @@ export const apiClient = {
     sceneId: string,
     lastSeenSceneVersion: number,
     handlers: {
+      onOpen: () => void;
       onMessage: (message: StreamMessage) => void;
       onClose: () => void;
       onError: () => void;
@@ -87,6 +88,7 @@ export const apiClient = {
     websocket.onmessage = (event) => {
       handlers.onMessage(JSON.parse(event.data) as StreamMessage);
     };
+    websocket.onopen = handlers.onOpen;
     websocket.onclose = handlers.onClose;
     websocket.onerror = handlers.onError;
     return websocket;

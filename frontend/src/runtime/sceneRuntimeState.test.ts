@@ -32,6 +32,7 @@ function makeSnapshot(overrides: Partial<GameSceneSnapshot> = {}): GameSceneSnap
     simulation: {
       is_paused: false,
       speed_multiplier: 1,
+      current_tick: 10,
     },
     actors: [
       {
@@ -46,6 +47,7 @@ function makeSnapshot(overrides: Partial<GameSceneSnapshot> = {}): GameSceneSnap
         is_manual_controlled: true,
         is_llm_controlled: false,
         state: "idle",
+        busy_until_tick: null,
       },
     ],
     monsters: [],
@@ -189,6 +191,37 @@ describe("applySceneDeltaEvent", () => {
       message: "hello",
       related_actor_id: null,
     });
+  });
+
+  it("advances simulation tick and clears expired busy actors", () => {
+    const event: SceneDeltaEvent = {
+      event_id: "evt-7",
+      event_type: "tick_advanced",
+      scene_id: "spot-1",
+      spot_id: 1,
+      scene_version: 5,
+      emitted_at_ms: 2000,
+      payload: {
+        current_tick: 12,
+      },
+    };
+
+    const snapshot = applySceneDeltaEvent(
+      makeSnapshot({
+        actors: [
+          {
+            ...makeSnapshot().actors[0],
+            state: "walking",
+            busy_until_tick: 12,
+          },
+        ],
+      }),
+      event,
+    );
+
+    expect(snapshot.simulation.current_tick).toBe(12);
+    expect(snapshot.actors[0].state).toBe("idle");
+    expect(snapshot.actors[0].busy_until_tick).toBeNull();
   });
 });
 

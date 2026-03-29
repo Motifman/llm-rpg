@@ -108,3 +108,32 @@ def test_get_snapshot_raises_when_scene_missing():
     projection = GameSceneProjection()
     with pytest.raises(GameSceneNotFoundException, match="spot_id=99"):
         projection.get_snapshot(99)
+
+
+def test_advance_simulation_tick_updates_tick_and_clears_expired_busy_actor():
+    projection = GameSceneProjection()
+    projection.upsert_snapshot(_make_snapshot(1, actor_id=5))
+    projection.apply_actor_moved(
+        spot_id=1,
+        actor_id=5,
+        to_tile_x=2,
+        to_tile_y=3,
+        facing="right",
+        actor_kind="player",
+        display_name="Player 5",
+        sprite_key="player_default",
+        busy_until_tick=12,
+    )
+
+    delta = projection.advance_simulation_tick(
+        spot_id=1,
+        current_tick=12,
+        server_time_ms=999,
+    )
+
+    snapshot = projection.get_snapshot(1)
+    assert snapshot.simulation.current_tick == 12
+    assert snapshot.server_time_ms == 999
+    assert snapshot.actors[0].state == "idle"
+    assert snapshot.actors[0].busy_until_tick is None
+    assert delta.event_type == "tick_advanced"

@@ -19,6 +19,7 @@ export type SceneCamera = {
 export type SimulationState = {
   is_paused: boolean;
   speed_multiplier: number;
+  current_tick: number;
 };
 
 export type SceneActor = {
@@ -33,6 +34,7 @@ export type SceneActor = {
   is_manual_controlled: boolean;
   is_llm_controlled: boolean;
   state: string;
+  busy_until_tick?: number | null;
 };
 
 export type SceneWeather = {
