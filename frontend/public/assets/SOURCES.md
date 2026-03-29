@@ -7,14 +7,14 @@
 ### `player_default.png`
 
 - 配置先: `/assets/actors/players/player_default.png`
-- 元ファイル: `/assets/sources/actors/player_41_cc0.png`
+- 元ファイル: `/assets/sources/actors/base_32x48_cc0.png`
 - 出典: OpenGameArt
-- URL: `https://opengameart.org/content/player-character-free-sprite`
-- 直接取得元: `https://opengameart.org/sites/default/files/player_41.png`
+- URL: `https://opengameart.org/content/simple-32x48-base-sprite`
+- 直接取得元: `https://opengameart.org/sites/default/files/Base.png`
 - ライセンス: CC0
 - 備考:
-  - 画像サイズは `160x192`
-  - 現在は `40x48` フレームとして扱っている
+  - 画像サイズは `96x192`
+  - 現在は `32x48` の 3 コマ歩行 spritesheet として扱っている
   - Phase 10 で `player_default` の最初の差し替え候補として使用する
 
 ## 2. Tileset

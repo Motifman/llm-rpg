@@ -2,11 +2,11 @@
   "actors": {
     "player_default": {
       "image": "/assets/actors/players/player_default.png",
-      "source": "/assets/sources/actors/player_41_cc0.png",
+      "source": "/assets/sources/actors/base_32x48_cc0.png",
       "license": "CC0",
-      "frame_width": 40,
+      "frame_width": 32,
       "frame_height": 48,
-      "notes": "Imported from OpenGameArt for Phase 10 prototype integration."
+      "notes": "Imported from OpenGameArt as a 32x48 3-frame walk-cycle prototype sprite."
     }
   },
   "monsters": {

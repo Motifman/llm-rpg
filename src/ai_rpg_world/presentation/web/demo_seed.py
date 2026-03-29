@@ -40,6 +40,7 @@ from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, ObjectTypeEnum
+from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
 from ai_rpg_world.domain.world.value_object.area import PointArea
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.domain.world.value_object.gateway_id import GatewayId
@@ -116,7 +117,7 @@ def seed_demo_world_database(
 
         starter_town = PhysicalMapAggregate.create(
             SpotId(1),
-            _make_tiles(width=10, height=10),
+            _make_starter_town_tiles(),
             objects=[
                 WorldObject(
                     object_id=WorldObjectId.create(1),
@@ -126,7 +127,13 @@ def seed_demo_world_database(
                         direction=DirectionEnum.EAST,
                         player_id=PlayerId(1),
                     ),
-                )
+                ),
+                WorldObject(
+                    object_id=WorldObjectId.create(10_001),
+                    coordinate=Coordinate(6, 5, 0),
+                    object_type=ObjectTypeEnum.CHEST,
+                    is_blocking=True,
+                ),
             ],
             gateways=[
                 Gateway(
@@ -140,7 +147,7 @@ def seed_demo_world_database(
         )
         south_gate = PhysicalMapAggregate.create(
             SpotId(2),
-            _make_tiles(width=10, height=10),
+            _make_south_gate_tiles(),
             gateways=[
                 Gateway(
                     gateway_id=GatewayId(2),
@@ -194,6 +201,57 @@ def _make_tiles(*, width: int, height: int) -> list[Tile]:
         for x in range(width)
         for y in range(height)
     ]
+
+
+def _make_starter_town_tiles() -> list[Tile]:
+    tiles: list[Tile] = []
+    gateway_tile = Coordinate(4, 0, 0)
+    road_band = {
+        Coordinate(4, 1, 0),
+        Coordinate(4, 2, 0),
+        Coordinate(4, 3, 0),
+        Coordinate(4, 4, 0),
+        Coordinate(5, 4, 0),
+        Coordinate(4, 5, 0),
+        Coordinate(5, 5, 0),
+        Coordinate(3, 4, 0),
+        Coordinate(3, 5, 0),
+        Coordinate(6, 4, 0),
+        Coordinate(6, 5, 0),
+    }
+
+    for x in range(10):
+        for y in range(10):
+            coordinate = Coordinate(x, y, 0)
+            if coordinate == gateway_tile:
+                terrain = TerrainType.road()
+            elif x in (0, 9) or y in (0, 9):
+                terrain = TerrainType.wall()
+            elif coordinate in road_band:
+                terrain = TerrainType.road()
+            else:
+                terrain = TerrainType.grass()
+            tiles.append(Tile(coordinate, terrain))
+    return tiles
+
+
+def _make_south_gate_tiles() -> list[Tile]:
+    tiles: list[Tile] = []
+    return_gate_tile = Coordinate(2, 8, 0)
+
+    for x in range(10):
+        for y in range(10):
+            coordinate = Coordinate(x, y, 0)
+            if coordinate == return_gate_tile:
+                terrain = TerrainType.road()
+            elif x in (0, 9) or y in (0, 9):
+                terrain = TerrainType.wall()
+            elif 2 <= x <= 7 and 2 <= y <= 7:
+                terrain = TerrainType.road()
+            else:
+                terrain = TerrainType.grass()
+            tiles.append(Tile(coordinate, terrain))
+    return tiles
 
 
 if __name__ == "__main__":

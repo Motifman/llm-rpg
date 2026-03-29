@@ -64,6 +64,8 @@ export class SceneRenderer extends Phaser.Scene {
 
   private objectImages: Phaser.GameObjects.Image[] = [];
 
+  private gatewayLabels: Phaser.GameObjects.Text[] = [];
+
   private tiledMapCache = new Map<string, TiledDocument>();
 
   private assetManifest: AssetManifest | null = null;
@@ -376,6 +378,7 @@ export class SceneRenderer extends Phaser.Scene {
       }
     }
 
+    this.renderGatewayLabels();
     this.cameras.main.setBounds(0, 0, width, height);
   }
 
@@ -411,12 +414,39 @@ export class SceneRenderer extends Phaser.Scene {
     }
 
     const objectWidth = object.width ?? objectEntry.width;
+    const objectHeight = object.height ?? objectEntry.height;
     const objectImage = this.add
       .image(object.x + objectWidth / 2, object.y, textureKey)
       .setOrigin(0.5, 1)
-      .setDisplaySize(objectEntry.width, objectEntry.height)
+      .setDisplaySize(objectWidth, objectHeight)
       .setDepth(object.y);
     this.objectImages.push(objectImage);
+  }
+
+  private renderGatewayLabels(): void {
+    if (this.sceneSnapshot == null) {
+      return;
+    }
+
+    for (const gateway of this.sceneSnapshot.gateways) {
+      const { x, y } = this.toPixel(gateway.tile_x, gateway.tile_y);
+      this.mapGraphics?.lineStyle(3, 0xffd166, 1);
+      this.mapGraphics?.strokeCircle(x, y, 12);
+      this.mapGraphics?.fillStyle(0xffd166, 0.18);
+      this.mapGraphics?.fillCircle(x, y, 12);
+
+      const label = this.add
+        .text(x, y - 18, gateway.target_spot_name, {
+          fontFamily: "Georgia, serif",
+          fontSize: "10px",
+          color: "#ffe8a3",
+          backgroundColor: "#20322bcc",
+          padding: { left: 4, right: 4, top: 2, bottom: 2 },
+        })
+        .setOrigin(0.5, 1)
+        .setDepth(y + 4);
+      this.gatewayLabels.push(label);
+    }
   }
 
   private destroyMapImages(): void {
@@ -424,6 +454,8 @@ export class SceneRenderer extends Phaser.Scene {
     this.mapTileImages = [];
     this.objectImages.forEach((image) => image.destroy());
     this.objectImages = [];
+    this.gatewayLabels.forEach((label) => label.destroy());
+    this.gatewayLabels = [];
   }
 
   private syncActors(): void {

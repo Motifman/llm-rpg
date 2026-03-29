@@ -1,18 +1,18 @@
 {
   "player_default": {
     "image": "/assets/actors/players/player_default.png",
-    "frame_width": 40,
+    "frame_width": 32,
     "frame_height": 48,
     "anchor": { "x": 0.5, "y": 0.9 },
     "animations": {
-      "idle_down": { "frames": [0], "frame_rate": 1, "repeat": -1 },
-      "walk_down": { "frames": [0, 1], "frame_rate": 8, "repeat": -1 },
-      "idle_up": { "frames": [2], "frame_rate": 1, "repeat": -1 },
-      "walk_up": { "frames": [2, 3], "frame_rate": 8, "repeat": -1 },
-      "idle_left": { "frames": [4], "frame_rate": 1, "repeat": -1 },
-      "walk_left": { "frames": [4, 5], "frame_rate": 8, "repeat": -1 },
-      "idle_right": { "frames": [6], "frame_rate": 1, "repeat": -1 },
-      "walk_right": { "frames": [6, 7], "frame_rate": 8, "repeat": -1 }
+      "idle_down": { "frames": [1], "frame_rate": 1, "repeat": -1 },
+      "walk_down": { "frames": [0, 1, 2], "frame_rate": 8, "repeat": -1 },
+      "idle_up": { "frames": [4], "frame_rate": 1, "repeat": -1 },
+      "walk_up": { "frames": [3, 4, 5], "frame_rate": 8, "repeat": -1 },
+      "idle_left": { "frames": [7], "frame_rate": 1, "repeat": -1 },
+      "walk_left": { "frames": [6, 7, 8], "frame_rate": 8, "repeat": -1 },
+      "idle_right": { "frames": [10], "frame_rate": 1, "repeat": -1 },
+      "walk_right": { "frames": [9, 10, 11], "frame_rate": 8, "repeat": -1 }
     }
   },
   "monster_blob": {
