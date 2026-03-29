@@ -33,6 +33,14 @@ export function useSceneRuntime() {
   const cameraModeRef = useRef<CameraMode>("fixed");
   const [streamNonce, setStreamNonce] = useState(0);
 
+  async function refreshSceneSnapshot(spotId: number): Promise<GameSceneSnapshot> {
+    const data = await apiClient.getSceneSnapshot(spotId);
+    latestSceneVersionRef.current = data.scene_version;
+    setSnapshot(data);
+    setErrorMessage(null);
+    return data;
+  }
+
   async function refreshOverview(): Promise<void> {
     const data = await apiClient.getWorldOverview();
     setOverview(data);
@@ -68,15 +76,12 @@ export function useSceneRuntime() {
     let active = true;
     setConnectionState("connecting");
     setErrorMessage(null);
-    void apiClient
-      .getSceneSnapshot(selectedSpotId)
+    void refreshSceneSnapshot(selectedSpotId)
       .then((data) => {
         if (!active) {
           return;
         }
-        latestSceneVersionRef.current = data.scene_version;
         setSnapshot(data);
-        setErrorMessage(null);
       })
       .catch((error: Error) => {
         if (!active) {
@@ -89,6 +94,26 @@ export function useSceneRuntime() {
       active = false;
     };
   }, [selectedSpotId]);
+
+  useEffect(() => {
+    if (selectedSpotId == null || connectionState === "open") {
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      void refreshSceneSnapshot(selectedSpotId).catch((error: Error) => {
+        if (cancelled) {
+          return;
+        }
+        setErrorMessage(error.message);
+      });
+    }, 1000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [connectionState, selectedSpotId]);
 
   useEffect(() => {
     if (snapshot == null) {
@@ -231,6 +256,7 @@ export function useSceneRuntime() {
   ): Promise<MoveResult> => {
     const result = await apiClient.moveActor(actorId, direction);
     setErrorMessage(null);
+    await refreshSceneSnapshot(result.to_spot_id);
     setSnapshot((current) =>
       current == null ? current : applyManualMoveResult(current, result),
     );
