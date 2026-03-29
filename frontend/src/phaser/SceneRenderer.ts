@@ -15,6 +15,10 @@ type ActorSprite = {
   label: Phaser.GameObjects.Text;
   marker: Phaser.GameObjects.Triangle;
   idleTween: Phaser.Tweens.Tween | null;
+  moveTween: Phaser.Tweens.Tween | null;
+  shadowTween: Phaser.Tweens.Tween | null;
+  labelTween: Phaser.Tweens.Tween | null;
+  squashTween: Phaser.Tweens.Tween | null;
   actor: SceneActor;
 };
 
@@ -65,8 +69,6 @@ export class SceneRenderer extends Phaser.Scene {
 
   private overlayGraphics?: Phaser.GameObjects.Graphics;
 
-  private hudLabel?: Phaser.GameObjects.Text;
-
   private tiledMapCache = new Map<string, TiledDocument>();
 
   private cameraMode: CameraMode = "fixed";
@@ -98,14 +100,6 @@ export class SceneRenderer extends Phaser.Scene {
     this.cameras.main.setBackgroundColor("#081310");
     this.mapGraphics = this.add.graphics();
     this.overlayGraphics = this.add.graphics().setDepth(900).setAlpha(0);
-    this.hudLabel = this.add
-      .text(12, 12, "", {
-        fontFamily: "Georgia, serif",
-        fontSize: "16px",
-        color: "#f8f3dc",
-      })
-      .setScrollFactor(0)
-      .setDepth(1000);
     void this.renderScene();
   }
 
@@ -123,12 +117,6 @@ export class SceneRenderer extends Phaser.Scene {
     this.syncActors();
     this.applyWeatherOverlay();
     this.applyCameraMode();
-
-    this.hudLabel?.setText(
-      `${this.sceneSnapshot.spot_name} | ${this.cameraMode.toUpperCase()} | Weather: ${
-        this.sceneSnapshot.weather?.weather_type ?? "CLEAR"
-      }`,
-    );
   }
 
   private async loadTiledMap(mapPath: string): Promise<TiledDocument> {
@@ -240,6 +228,10 @@ export class SceneRenderer extends Phaser.Scene {
       label,
       marker,
       idleTween: null,
+      moveTween: null,
+      shadowTween: null,
+      labelTween: null,
+      squashTween: null,
       actor,
     };
     actorSprite.idleTween = this.createIdleTween(actorSprite);
@@ -247,21 +239,33 @@ export class SceneRenderer extends Phaser.Scene {
   }
 
   private updateActorSprite(sprite: ActorSprite, actor: SceneActor): void {
-    const oldPosition = this.toPixel(sprite.actor.tile_x, sprite.actor.tile_y);
     const nextPosition = this.toPixel(actor.tile_x, actor.tile_y);
-    const moved = oldPosition.x !== nextPosition.x || oldPosition.y !== nextPosition.y;
+    const moved =
+      Math.round(sprite.body.x) !== nextPosition.x || Math.round(sprite.body.y) !== nextPosition.y;
     const moveDuration = this.getMoveDurationMs(actor);
+    sprite.idleTween?.stop();
+    sprite.idleTween = null;
+    sprite.moveTween?.stop();
+    sprite.moveTween = null;
+    sprite.shadowTween?.stop();
+    sprite.shadowTween = null;
+    sprite.labelTween?.stop();
+    sprite.labelTween = null;
+    sprite.squashTween?.stop();
+    sprite.squashTween = null;
+    this.tweens.killTweensOf(sprite.body);
+    this.tweens.killTweensOf(sprite.shadow);
+    this.tweens.killTweensOf(sprite.label);
 
     if (moved) {
-      sprite.idleTween?.stop();
-      this.tweens.add({
+      sprite.moveTween = this.tweens.add({
         targets: sprite.body,
         x: nextPosition.x,
         y: nextPosition.y,
         duration: moveDuration,
         ease: "Sine.InOut",
       });
-      this.tweens.add({
+      sprite.squashTween = this.tweens.add({
         targets: sprite.body,
         scaleY: { from: 0.96, to: 1.02 },
         scaleX: { from: 1.04, to: 0.98 },
@@ -269,11 +273,12 @@ export class SceneRenderer extends Phaser.Scene {
         ease: "Sine.InOut",
         yoyo: true,
         onComplete: () => {
+          sprite.body.setPosition(nextPosition.x, nextPosition.y);
           sprite.body.setScale(1, 1);
           sprite.idleTween = this.createIdleTween(sprite);
         },
       });
-      this.tweens.add({
+      sprite.shadowTween = this.tweens.add({
         targets: sprite.shadow,
         x: nextPosition.x,
         y: nextPosition.y + 12,
@@ -288,13 +293,19 @@ export class SceneRenderer extends Phaser.Scene {
         ease: "Sine.InOut",
         yoyo: true,
       });
-      this.tweens.add({
+      sprite.labelTween = this.tweens.add({
         targets: sprite.label,
         x: nextPosition.x,
         y: nextPosition.y - 22,
         duration: moveDuration,
         ease: "Sine.Out",
       });
+    } else {
+      sprite.body.setPosition(nextPosition.x, nextPosition.y);
+      sprite.shadow.setPosition(nextPosition.x, nextPosition.y + 12);
+      sprite.label.setPosition(nextPosition.x, nextPosition.y - 22);
+      sprite.body.setScale(1, 1);
+      sprite.idleTween = this.createIdleTween(sprite);
     }
 
     sprite.label.setText(actor.display_name);
@@ -391,7 +402,7 @@ export class SceneRenderer extends Phaser.Scene {
       const actorSprite = this.actorSprites.get(this.trackedActorId);
       if (actorSprite != null) {
         camera.startFollow(actorSprite.body, true, 0.12, 0.12);
-        camera.setZoom(1.15);
+        camera.setZoom(1);
         return;
       }
     }
@@ -411,6 +422,10 @@ export class SceneRenderer extends Phaser.Scene {
 
   private destroyActorSprite(sprite: ActorSprite): void {
     sprite.idleTween?.stop();
+    sprite.moveTween?.stop();
+    sprite.shadowTween?.stop();
+    sprite.labelTween?.stop();
+    sprite.squashTween?.stop();
     sprite.body.destroy();
     sprite.shadow.destroy();
     sprite.label.destroy();
