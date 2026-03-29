@@ -14,7 +14,7 @@
 - ライセンス: CC0
 - 備考:
   - 画像サイズは `160x192`
-  - 現状の規約どおり `32x48` フレームとして扱える
+  - 現在は `40x48` フレームとして扱っている
   - Phase 10 で `player_default` の最初の差し替え候補として使用する
 
 ## 2. Tileset
@@ -36,7 +36,36 @@
   - タイルは `32x32`
   - プロトタイプ用の Starter Town / dungeon / gate 周辺の試作に使いやすい
 
-## 3. 運用ルール
+## 3. Monster
+
+### `blob_move.png`
+
+- 配置先: `/assets/monsters/blob_move.png`
+- 元ファイル: `/assets/sources/monsters/blob_move_cc0.png`
+- 出典: OpenGameArt
+- URL: `https://opengameart.org/content/blobs`
+- 直接取得元: `https://opengameart.org/sites/default/files/blob%20move.png`
+- ライセンス: CC0
+- 備考:
+  - 画像サイズは `640x80`
+  - 現在は `80x80` の 8 フレーム歩行アニメーションとして扱っている
+  - Phase 10 の仮モンスター表示候補
+
+## 4. Object
+
+### `object_chest_closed.png`
+
+- 配置先: `/assets/objects/object_chest_closed.png`
+- 元ファイル: `/assets/sources/objects/chest_topdown_cc0.png`
+- 出典: OpenGameArt
+- URL: `https://opengameart.org/content/chest-2`
+- 直接取得元: `https://opengameart.org/sites/default/files/chest_2.png`
+- ライセンス: CC0
+- 備考:
+  - 画像サイズは `64x64`
+  - Starter Town の固定オブジェクト表示の試作用
+
+## 5. 運用ルール
 
 - 外部素材を追加したら必ずこのファイルに追記する
 - ライセンス URL と直接取得元 URL を両方残す

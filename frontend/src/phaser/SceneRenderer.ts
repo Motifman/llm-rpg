@@ -2,10 +2,27 @@ import Phaser from "phaser";
 
 import type { GameSceneSnapshot, SceneActor } from "../types";
 import {
+  buildActorAnimationName,
+  buildCatalogAnimationKey,
+  buildTextureKey,
+  resolveTileFrame,
+  resolveTilesetManifestKey,
+  type AnimationCatalogEntry,
+  type AssetManifest,
+  type ObjectManifestEntry,
+  type TilesetManifestEntry,
+} from "./assetCatalog";
+import {
   getActorPalette,
   getFacingAngleDegrees,
   getWeatherOverlayStyle,
 } from "./sceneVisuals";
+import {
+  getStringObjectProperty,
+  isRenderableObject,
+  type TiledDocument,
+  type TiledObject,
+} from "./tiledMap";
 
 type CameraMode = "fixed" | "follow";
 
@@ -13,41 +30,15 @@ type ActorSprite = {
   body: Phaser.GameObjects.Container;
   shadow: Phaser.GameObjects.Ellipse;
   label: Phaser.GameObjects.Text;
-  marker: Phaser.GameObjects.Triangle;
+  visual: Phaser.GameObjects.GameObject;
+  animationSprite: Phaser.GameObjects.Sprite | null;
+  marker: Phaser.GameObjects.Triangle | null;
   idleTween: Phaser.Tweens.Tween | null;
   moveTween: Phaser.Tweens.Tween | null;
   shadowTween: Phaser.Tweens.Tween | null;
   labelTween: Phaser.Tweens.Tween | null;
   squashTween: Phaser.Tweens.Tween | null;
   actor: SceneActor;
-};
-
-type TiledLayer = {
-  id: number;
-  name: string;
-  type: "tilelayer" | "objectgroup";
-  data?: number[];
-  width?: number;
-  height?: number;
-  visible?: boolean;
-  opacity?: number;
-  objects?: Array<{
-    id: number;
-    name: string;
-    type: string;
-    x: number;
-    y: number;
-    width?: number;
-    height?: number;
-  }>;
-};
-
-type TiledDocument = {
-  width: number;
-  height: number;
-  tilewidth: number;
-  tileheight: number;
-  layers: TiledLayer[];
 };
 
 const DEFAULT_TILE_SIZE = 32;
@@ -69,7 +60,15 @@ export class SceneRenderer extends Phaser.Scene {
 
   private overlayGraphics?: Phaser.GameObjects.Graphics;
 
+  private mapTileImages: Phaser.GameObjects.Image[] = [];
+
+  private objectImages: Phaser.GameObjects.Image[] = [];
+
   private tiledMapCache = new Map<string, TiledDocument>();
+
+  private assetManifest: AssetManifest | null = null;
+
+  private animationCatalog: Record<string, AnimationCatalogEntry> | null = null;
 
   private cameraMode: CameraMode = "fixed";
 
@@ -113,6 +112,8 @@ export class SceneRenderer extends Phaser.Scene {
     }
 
     const tiledMap = await this.loadTiledMap(this.sceneSnapshot.map.tiled_map_path);
+    await this.ensureAssetCatalogs();
+    await this.ensureSceneAssets(tiledMap);
     this.drawMap(tiledMap);
     this.syncActors();
     this.applyWeatherOverlay();
@@ -132,12 +133,197 @@ export class SceneRenderer extends Phaser.Scene {
     return document;
   }
 
+  private async ensureAssetCatalogs(): Promise<void> {
+    if (this.assetManifest != null && this.animationCatalog != null) {
+      return;
+    }
+
+    const [manifestResponse, animationResponse] = await Promise.all([
+      fetch("/assets/catalogs/asset_manifest.json"),
+      fetch("/assets/catalogs/animation_catalog.json"),
+    ]);
+    if (!manifestResponse.ok) {
+      throw new Error("Failed to load asset manifest.");
+    }
+    if (!animationResponse.ok) {
+      throw new Error("Failed to load animation catalog.");
+    }
+
+    this.assetManifest = (await manifestResponse.json()) as AssetManifest;
+    this.animationCatalog = (await animationResponse.json()) as Record<string, AnimationCatalogEntry>;
+  }
+
+  private async ensureSceneAssets(mapDocument: TiledDocument): Promise<void> {
+    if (this.sceneSnapshot == null || this.assetManifest == null || this.animationCatalog == null) {
+      return;
+    }
+
+    const queuedLoads: Array<(loader: Phaser.Loader.LoaderPlugin) => void> = [];
+
+    const tilesetKey = resolveTilesetManifestKey(this.assetManifest, this.sceneSnapshot.map);
+    if (tilesetKey != null) {
+      const tilesetEntry = this.assetManifest.tilesets?.[tilesetKey];
+      if (tilesetEntry != null) {
+        this.queueTilesetLoad(tilesetKey, tilesetEntry, queuedLoads);
+      }
+    }
+
+    for (const actor of this.sceneSnapshot.actors) {
+      const animationEntry = this.animationCatalog[actor.sprite_key];
+      if (animationEntry != null) {
+        this.queueActorLoad(actor.sprite_key, animationEntry, queuedLoads);
+      }
+    }
+
+    for (const object of this.collectRenderableMapObjects(mapDocument)) {
+      const assetKey = getStringObjectProperty(object, "asset_key");
+      const objectEntry =
+        assetKey == null ? null : this.assetManifest.objects?.[assetKey] ?? null;
+      if (assetKey == null || objectEntry == null) {
+        continue;
+      }
+      this.queueObjectLoad(assetKey, objectEntry, queuedLoads);
+    }
+
+    if (queuedLoads.length > 0) {
+      await this.runLoader((loader) => {
+        queuedLoads.forEach((configure) => configure(loader));
+      });
+    }
+
+    this.registerAnimationsForCurrentScene();
+  }
+
+  private queueTilesetLoad(
+    tilesetKey: string,
+    tilesetEntry: TilesetManifestEntry,
+    queuedLoads: Array<(loader: Phaser.Loader.LoaderPlugin) => void>,
+  ): void {
+    const textureKey = buildTextureKey("tileset", tilesetKey);
+    if (this.textures.exists(textureKey)) {
+      return;
+    }
+    queuedLoads.push((loader) => {
+      loader.spritesheet(textureKey, tilesetEntry.image, {
+        frameWidth: tilesetEntry.tile_width,
+        frameHeight: tilesetEntry.tile_height,
+      });
+    });
+  }
+
+  private queueActorLoad(
+    actorSpriteKey: string,
+    animationEntry: AnimationCatalogEntry,
+    queuedLoads: Array<(loader: Phaser.Loader.LoaderPlugin) => void>,
+  ): void {
+    const textureKey = buildTextureKey("actor", actorSpriteKey);
+    if (this.textures.exists(textureKey)) {
+      return;
+    }
+    queuedLoads.push((loader) => {
+      loader.spritesheet(textureKey, animationEntry.image, {
+        frameWidth: animationEntry.frame_width,
+        frameHeight: animationEntry.frame_height,
+      });
+    });
+  }
+
+  private queueObjectLoad(
+    assetKey: string,
+    objectEntry: ObjectManifestEntry,
+    queuedLoads: Array<(loader: Phaser.Loader.LoaderPlugin) => void>,
+  ): void {
+    const textureKey = buildTextureKey("object", assetKey);
+    if (this.textures.exists(textureKey)) {
+      return;
+    }
+    queuedLoads.push((loader) => {
+      loader.image(textureKey, objectEntry.image);
+    });
+  }
+
+  private collectRenderableMapObjects(mapDocument: TiledDocument): TiledObject[] {
+    const objects: TiledObject[] = [];
+    for (const layer of mapDocument.layers) {
+      if (layer.type !== "objectgroup" || layer.objects == null || layer.visible === false) {
+        continue;
+      }
+      for (const object of layer.objects) {
+        if (isRenderableObject(object)) {
+          objects.push(object);
+        }
+      }
+    }
+    return objects;
+  }
+
+  private registerAnimationsForCurrentScene(): void {
+    if (this.sceneSnapshot == null || this.animationCatalog == null) {
+      return;
+    }
+
+    for (const actor of this.sceneSnapshot.actors) {
+      const entry = this.animationCatalog[actor.sprite_key];
+      if (entry == null) {
+        continue;
+      }
+      const textureKey = buildTextureKey("actor", actor.sprite_key);
+      if (!this.textures.exists(textureKey)) {
+        continue;
+      }
+      for (const [animationName, clip] of Object.entries(entry.animations)) {
+        const animationKey = buildCatalogAnimationKey(actor.sprite_key, animationName);
+        if (this.anims.exists(animationKey)) {
+          continue;
+        }
+        this.anims.create({
+          key: animationKey,
+          frames: clip.frames.map((frame) => ({ key: textureKey, frame })),
+          frameRate: clip.frame_rate,
+          repeat: clip.repeat,
+        });
+      }
+    }
+  }
+
+  private runLoader(configure: (loader: Phaser.Loader.LoaderPlugin) => void): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const onComplete = () => {
+        cleanup();
+        resolve();
+      };
+      const onError = (file: Phaser.Loader.File) => {
+        cleanup();
+        reject(new Error(`Failed to load asset: ${file.src}`));
+      };
+      const cleanup = () => {
+        this.load.off(Phaser.Loader.Events.COMPLETE, onComplete);
+        this.load.off(Phaser.Loader.Events.FILE_LOAD_ERROR, onError);
+      };
+
+      this.load.once(Phaser.Loader.Events.COMPLETE, onComplete);
+      this.load.once(Phaser.Loader.Events.FILE_LOAD_ERROR, onError);
+      configure(this.load);
+      this.load.start();
+    });
+  }
+
   private drawMap(mapDocument: TiledDocument): void {
     this.mapGraphics?.clear();
+    this.destroyMapImages();
+
     const tileWidth = mapDocument.tilewidth || DEFAULT_TILE_SIZE;
     const tileHeight = mapDocument.tileheight || DEFAULT_TILE_SIZE;
     const width = mapDocument.width * tileWidth;
     const height = mapDocument.height * tileHeight;
+    const tilesetKey =
+      this.assetManifest == null || this.sceneSnapshot == null
+        ? null
+        : resolveTilesetManifestKey(this.assetManifest, this.sceneSnapshot.map);
+    const tilesetEntry =
+      tilesetKey == null ? null : this.assetManifest?.tilesets?.[tilesetKey] ?? null;
+    const tilesetTextureKey =
+      tilesetKey == null ? null : buildTextureKey("tileset", tilesetKey);
 
     for (const layer of mapDocument.layers) {
       if (layer.visible === false) {
@@ -147,12 +333,21 @@ export class SceneRenderer extends Phaser.Scene {
         layer.data.forEach((gid, index) => {
           const x = (index % mapDocument.width) * tileWidth;
           const y = Math.floor(index / mapDocument.width) * tileHeight;
-          this.mapGraphics?.fillStyle(TILE_COLORS[gid] ?? 0x20322b, layer.opacity ?? 1);
-          this.mapGraphics?.fillRect(x, y, tileWidth, tileHeight);
-          this.mapGraphics?.lineStyle(1, 0x1a2823, 0.35);
-          this.mapGraphics?.strokeRect(x, y, tileWidth, tileHeight);
-          this.mapGraphics?.fillStyle(0xffffff, 0.025);
-          this.mapGraphics?.fillRect(x, y, tileWidth, tileHeight / 4);
+          if (
+            gid > 0 &&
+            tilesetEntry != null &&
+            tilesetTextureKey != null &&
+            this.textures.exists(tilesetTextureKey)
+          ) {
+            const tileImage = this.add
+              .image(x, y, tilesetTextureKey, resolveTileFrame(tilesetEntry, gid))
+              .setOrigin(0, 0)
+              .setAlpha(layer.opacity ?? 1)
+              .setDepth(y);
+            this.mapTileImages.push(tileImage);
+          } else {
+            this.drawFallbackTile(gid, x, y, tileWidth, tileHeight, layer.opacity ?? 1);
+          }
         });
       }
       if (layer.type === "objectgroup" && layer.objects != null) {
@@ -160,6 +355,8 @@ export class SceneRenderer extends Phaser.Scene {
           const objectHeight = object.height ?? tileHeight;
           const objectWidth = object.width ?? tileWidth;
           const drawY = object.y - objectHeight;
+
+          this.maybeRenderObjectSprite(object);
 
           if (object.type === "gateway") {
             this.mapGraphics?.lineStyle(2, 0xf2a65a, 0.95);
@@ -180,6 +377,53 @@ export class SceneRenderer extends Phaser.Scene {
     }
 
     this.cameras.main.setBounds(0, 0, width, height);
+  }
+
+  private drawFallbackTile(
+    gid: number,
+    x: number,
+    y: number,
+    tileWidth: number,
+    tileHeight: number,
+    opacity: number,
+  ): void {
+    this.mapGraphics?.fillStyle(TILE_COLORS[gid] ?? 0x20322b, opacity);
+    this.mapGraphics?.fillRect(x, y, tileWidth, tileHeight);
+    this.mapGraphics?.lineStyle(1, 0x1a2823, 0.35);
+    this.mapGraphics?.strokeRect(x, y, tileWidth, tileHeight);
+    this.mapGraphics?.fillStyle(0xffffff, 0.025);
+    this.mapGraphics?.fillRect(x, y, tileWidth, tileHeight / 4);
+  }
+
+  private maybeRenderObjectSprite(object: TiledObject): void {
+    if (this.assetManifest == null || !isRenderableObject(object)) {
+      return;
+    }
+    const assetKey = getStringObjectProperty(object, "asset_key");
+    const objectEntry =
+      assetKey == null ? null : this.assetManifest.objects?.[assetKey] ?? null;
+    if (assetKey == null || objectEntry == null) {
+      return;
+    }
+    const textureKey = buildTextureKey("object", assetKey);
+    if (!this.textures.exists(textureKey)) {
+      return;
+    }
+
+    const objectWidth = object.width ?? objectEntry.width;
+    const objectImage = this.add
+      .image(object.x + objectWidth / 2, object.y, textureKey)
+      .setOrigin(0.5, 1)
+      .setDisplaySize(objectEntry.width, objectEntry.height)
+      .setDepth(object.y);
+    this.objectImages.push(objectImage);
+  }
+
+  private destroyMapImages(): void {
+    this.mapTileImages.forEach((image) => image.destroy());
+    this.mapTileImages = [];
+    this.objectImages.forEach((image) => image.destroy());
+    this.objectImages = [];
   }
 
   private syncActors(): void {
@@ -207,13 +451,9 @@ export class SceneRenderer extends Phaser.Scene {
 
   private createActorSprite(actor: SceneActor): ActorSprite {
     const { x, y } = this.toPixel(actor.tile_x, actor.tile_y);
-    const palette = getActorPalette(actor);
     const shadow = this.add.ellipse(x, y + 12, 22, 8, 0x050505, 0.28).setDepth(y - 1);
-    const legs = this.add.rectangle(0, 6, 14, 10, palette.outlineColor, 0.88);
-    const torso = this.add.rectangle(0, -2, 18, 18, palette.bodyColor, 1);
-    const highlight = this.add.rectangle(-2, -6, 8, 6, palette.accentColor, 0.8);
-    const marker = this.createFacingMarker(actor);
-    const body = this.add.container(x, y, [legs, torso, highlight, marker]).setDepth(y);
+    const { visual, animationSprite, marker } = this.createActorVisual(actor);
+    const body = this.add.container(x, y, [visual]).setDepth(y);
     const label = this.add
       .text(x, y - 22, actor.display_name, {
         fontFamily: "Georgia, serif",
@@ -222,10 +462,13 @@ export class SceneRenderer extends Phaser.Scene {
       })
       .setOrigin(0.5, 1)
       .setDepth(y + 1);
+
     const actorSprite: ActorSprite = {
       body,
       shadow,
       label,
+      visual,
+      animationSprite,
       marker,
       idleTween: null,
       moveTween: null,
@@ -235,6 +478,7 @@ export class SceneRenderer extends Phaser.Scene {
       actor,
     };
     actorSprite.idleTween = this.createIdleTween(actorSprite);
+    this.syncActorAnimation(actorSprite, actor);
     return actorSprite;
   }
 
@@ -243,6 +487,7 @@ export class SceneRenderer extends Phaser.Scene {
     const moved =
       Math.round(sprite.body.x) !== nextPosition.x || Math.round(sprite.body.y) !== nextPosition.y;
     const moveDuration = this.getMoveDurationMs(actor);
+
     sprite.idleTween?.stop();
     sprite.idleTween = null;
     sprite.moveTween?.stop();
@@ -258,12 +503,27 @@ export class SceneRenderer extends Phaser.Scene {
     this.tweens.killTweensOf(sprite.label);
 
     if (moved) {
+      sprite.actor = {
+        ...actor,
+        state: "walking",
+      };
+      this.syncActorAnimation(sprite, sprite.actor);
       sprite.moveTween = this.tweens.add({
         targets: sprite.body,
         x: nextPosition.x,
         y: nextPosition.y,
         duration: moveDuration,
         ease: "Sine.InOut",
+        onComplete: () => {
+          sprite.body.setPosition(nextPosition.x, nextPosition.y);
+          sprite.body.setScale(1, 1);
+          sprite.actor = {
+            ...actor,
+            state: "idle",
+          };
+          this.syncActorAnimation(sprite, sprite.actor);
+          sprite.idleTween = this.createIdleTween(sprite);
+        },
       });
       sprite.squashTween = this.tweens.add({
         targets: sprite.body,
@@ -272,11 +532,6 @@ export class SceneRenderer extends Phaser.Scene {
         duration: moveDuration,
         ease: "Sine.InOut",
         yoyo: true,
-        onComplete: () => {
-          sprite.body.setPosition(nextPosition.x, nextPosition.y);
-          sprite.body.setScale(1, 1);
-          sprite.idleTween = this.createIdleTween(sprite);
-        },
       });
       sprite.shadowTween = this.tweens.add({
         targets: sprite.shadow,
@@ -305,6 +560,11 @@ export class SceneRenderer extends Phaser.Scene {
       sprite.shadow.setPosition(nextPosition.x, nextPosition.y + 12);
       sprite.label.setPosition(nextPosition.x, nextPosition.y - 22);
       sprite.body.setScale(1, 1);
+      sprite.actor = {
+        ...actor,
+        state: actor.state ?? "idle",
+      };
+      this.syncActorAnimation(sprite, sprite.actor);
       sprite.idleTween = this.createIdleTween(sprite);
     }
 
@@ -312,21 +572,62 @@ export class SceneRenderer extends Phaser.Scene {
     sprite.body.setDepth(nextPosition.y);
     sprite.shadow.setDepth(nextPosition.y - 1);
     sprite.label.setDepth(nextPosition.y + 1);
-    sprite.marker.destroy();
-    sprite.marker = this.createFacingMarker(actor);
+    this.refreshFallbackActorVisual(sprite, actor);
+    this.applyCameraMode();
+  }
+
+  private createActorVisual(actor: SceneActor): {
+    visual: Phaser.GameObjects.GameObject;
+    animationSprite: Phaser.GameObjects.Sprite | null;
+    marker: Phaser.GameObjects.Triangle | null;
+  } {
+    const catalogEntry = this.animationCatalog?.[actor.sprite_key] ?? null;
+    const textureKey = buildTextureKey("actor", actor.sprite_key);
+
+    if (catalogEntry != null && this.textures.exists(textureKey)) {
+      const sprite = this.add.sprite(0, 0, textureKey, 0);
+      sprite.setOrigin(catalogEntry.anchor?.x ?? 0.5, catalogEntry.anchor?.y ?? 0.9);
+      return {
+        visual: sprite,
+        animationSprite: sprite,
+        marker: null,
+      };
+    }
+
     const palette = getActorPalette(actor);
-    sprite.body.removeAll(true);
-    sprite.body.add([
+    const marker = this.createFacingMarker(actor);
+    const placeholder = this.add.container(0, 0, [
       this.add.rectangle(0, 6, 14, 10, palette.outlineColor, 0.88),
       this.add.rectangle(0, -2, 18, 18, palette.bodyColor, 1),
       this.add.rectangle(-2, -6, 8, 6, palette.accentColor, 0.8),
-      sprite.marker,
+      marker,
     ]);
-    sprite.actor = {
-      ...actor,
-      state: moved ? "walking" : "idle",
+    return {
+      visual: placeholder,
+      animationSprite: null,
+      marker,
     };
-    this.applyCameraMode();
+  }
+
+  private refreshFallbackActorVisual(sprite: ActorSprite, actor: SceneActor): void {
+    if (sprite.animationSprite != null || sprite.marker == null) {
+      return;
+    }
+    sprite.marker.setRotation(Phaser.Math.DegToRad(getFacingAngleDegrees(actor.facing)));
+  }
+
+  private syncActorAnimation(sprite: ActorSprite, actor: SceneActor): void {
+    if (sprite.animationSprite == null) {
+      return;
+    }
+    const animationName = buildActorAnimationName(actor);
+    const animationKey = buildCatalogAnimationKey(actor.sprite_key, animationName);
+    if (!this.anims.exists(animationKey)) {
+      return;
+    }
+    if (sprite.animationSprite.anims.currentAnim?.key !== animationKey) {
+      sprite.animationSprite.play(animationKey, true);
+    }
   }
 
   private createFacingMarker(actor: SceneActor): Phaser.GameObjects.Triangle {
@@ -429,7 +730,7 @@ export class SceneRenderer extends Phaser.Scene {
     sprite.body.destroy();
     sprite.shadow.destroy();
     sprite.label.destroy();
-    sprite.marker.destroy();
+    sprite.marker?.destroy();
   }
 
   private toPixel(tileX: number, tileY: number): { x: number; y: number } {
