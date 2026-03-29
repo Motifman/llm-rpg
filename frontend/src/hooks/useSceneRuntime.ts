@@ -18,6 +18,7 @@ import {
 type ConnectionState = "idle" | "connecting" | "open" | "closed" | "error";
 
 type CameraMode = "fixed" | "follow";
+const MOVE_SYNC_DELAY_MS = 220;
 
 export function useSceneRuntime() {
   const [overview, setOverview] = useState<WorldSceneSummary[]>([]);
@@ -32,6 +33,7 @@ export function useSceneRuntime() {
   const trackedActorIdRef = useRef<number | null>(null);
   const cameraModeRef = useRef<CameraMode>("fixed");
   const [streamNonce, setStreamNonce] = useState(0);
+  const moveRefreshTimerRef = useRef<number | null>(null);
 
   async function refreshSceneSnapshot(spotId: number): Promise<GameSceneSnapshot> {
     const data = await apiClient.getSceneSnapshot(spotId);
@@ -66,6 +68,15 @@ export function useSceneRuntime() {
       });
     return () => {
       active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (moveRefreshTimerRef.current != null) {
+        window.clearTimeout(moveRefreshTimerRef.current);
+        moveRefreshTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -256,10 +267,23 @@ export function useSceneRuntime() {
   ): Promise<MoveResult> => {
     const result = await apiClient.moveActor(actorId, direction);
     setErrorMessage(null);
-    await refreshSceneSnapshot(result.to_spot_id);
-    setSnapshot((current) =>
-      current == null ? current : applyManualMoveResult(current, result),
-    );
+    setSnapshot((current) => {
+      if (current == null) {
+        return current;
+      }
+      return applyManualMoveResult(current, result);
+    });
+    if (moveRefreshTimerRef.current != null) {
+      window.clearTimeout(moveRefreshTimerRef.current);
+      moveRefreshTimerRef.current = null;
+    }
+    const refreshTargetSpotId = result.to_spot_id;
+    moveRefreshTimerRef.current = window.setTimeout(() => {
+      moveRefreshTimerRef.current = null;
+      void refreshSceneSnapshot(refreshTargetSpotId).catch((error: Error) => {
+        setErrorMessage(error.message);
+      });
+    }, MOVE_SYNC_DELAY_MS);
     if (result.to_spot_id !== result.from_spot_id) {
       if (cameraModeRef.current === "follow" && trackedActorIdRef.current === actorId) {
         setSelectedSpotId(result.to_spot_id);

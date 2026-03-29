@@ -154,7 +154,7 @@ describe("useSceneRuntime", () => {
     vi.clearAllMocks();
   });
 
-  it("reconnects after websocket close and refreshes snapshot after successful move", async () => {
+  it("reconnects after websocket close and optimistic-updates before delayed snapshot refresh", async () => {
     const sockets: MockWebSocket[] = [];
     apiClientMock.connectSceneStream.mockImplementation((_, __, handlers) => {
       const socket = new MockWebSocket();
@@ -210,8 +210,15 @@ describe("useSceneRuntime", () => {
       await result.current.moveManualActor(1, "east");
     });
 
-    expect(apiClientMock.getSceneSnapshot).toHaveBeenCalledTimes(2);
+    expect(apiClientMock.getSceneSnapshot).toHaveBeenCalledTimes(1);
     expect(result.current.snapshot?.actors[0]?.tile_x).toBe(1);
     expect(result.current.errorMessage).toBeNull();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+      await Promise.resolve();
+    });
+
+    expect(apiClientMock.getSceneSnapshot).toHaveBeenCalledTimes(2);
   });
 });

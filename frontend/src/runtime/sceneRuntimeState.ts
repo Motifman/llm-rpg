@@ -139,12 +139,30 @@ export function applyManualMoveResult(
   snapshot: GameSceneSnapshot,
   result: MoveResult,
 ): GameSceneSnapshot {
-  if (result.from_spot_id !== snapshot.spot_id || result.to_spot_id === snapshot.spot_id) {
+  const actorId = result.player_id;
+  if (result.from_spot_id === snapshot.spot_id && result.to_spot_id === snapshot.spot_id) {
+    return {
+      ...snapshot,
+      actors: snapshot.actors.map((actor) =>
+        actor.actor_id === actorId
+          ? {
+              ...actor,
+              tile_x: result.to_coordinate.x,
+              tile_y: result.to_coordinate.y,
+              state: "walking",
+              busy_until_tick: result.busy_until_tick,
+            }
+          : actor,
+      ),
+    };
+  }
+
+  if (result.from_spot_id !== snapshot.spot_id) {
     return snapshot;
   }
   return {
     ...snapshot,
-    actors: snapshot.actors.filter((actor) => actor.actor_id !== result.player_id),
+    actors: snapshot.actors.filter((actor) => actor.actor_id !== actorId),
   };
 }
 

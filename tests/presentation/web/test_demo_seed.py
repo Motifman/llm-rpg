@@ -65,6 +65,12 @@ def test_seed_demo_world_database_overwrites_existing_file(tmp_path: Path) -> No
         ).fetchone()
         assert row is not None
         assert row[0] == 2
+        stamina_row = connection.execute(
+            "SELECT stamina_value, stamina_max FROM game_player_statuses WHERE player_id = 1"
+        ).fetchone()
+        assert stamina_row is not None
+        assert stamina_row[0] == 1_000_000
+        assert stamina_row[1] == 1_000_000
     finally:
         connection.close()
 

@@ -262,6 +262,33 @@ describe("overview updates", () => {
   });
 });
 
+describe("applyManualMoveResult", () => {
+  it("updates the actor immediately for same-scene movement", () => {
+    const snapshot = applyManualMoveResult(makeSnapshot(), {
+      success: true,
+      player_id: 1,
+      player_name: "Player 1",
+      from_spot_id: 1,
+      from_spot_name: "Spot 1",
+      to_spot_id: 1,
+      to_spot_name: "Spot 1",
+      from_coordinate: { x: 2, y: 3, z: 0 },
+      to_coordinate: { x: 3, y: 3, z: 0 },
+      moved_at: "2026-03-29T00:00:00",
+      busy_until_tick: 14,
+      message: "moved",
+      error_message: null,
+    });
+
+    expect(snapshot.actors[0]).toMatchObject({
+      tile_x: 3,
+      tile_y: 3,
+      state: "walking",
+      busy_until_tick: 14,
+    });
+  });
+});
+
 describe("scene switching helpers", () => {
   it("auto-switches follow camera when tracked actor departs", () => {
     const nextSpotId = shouldAutoSwitchScene(
