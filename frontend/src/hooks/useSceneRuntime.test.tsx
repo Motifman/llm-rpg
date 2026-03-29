@@ -46,6 +46,10 @@ class MockWebSocket {
     this.readyState = MockWebSocket.CLOSED;
     this.onclose?.();
   }
+
+  emitError() {
+    this.onerror?.();
+  }
 }
 
 function makeOverview() {
@@ -219,6 +223,39 @@ describe("useSceneRuntime", () => {
       await Promise.resolve();
     });
 
+    expect(apiClientMock.getSceneSnapshot).toHaveBeenCalledTimes(2);
+  });
+
+  it("falls back to polling when websocket never opens", async () => {
+    const sockets: MockWebSocket[] = [];
+    apiClientMock.connectSceneStream.mockImplementation((_, __, handlers) => {
+      const socket = new MockWebSocket();
+      socket.onopen = handlers.onOpen;
+      socket.onmessage = (event) => handlers.onMessage(JSON.parse(event.data));
+      socket.onclose = handlers.onClose;
+      socket.onerror = handlers.onError;
+      sockets.push(socket);
+      return socket as unknown as WebSocket;
+    });
+
+    renderHook(() => useSceneRuntime());
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    act(() => {
+      sockets[0].emitError();
+      sockets[0].emitClose();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+      await Promise.resolve();
+    });
+
+    expect(apiClientMock.connectSceneStream).toHaveBeenCalledTimes(1);
     expect(apiClientMock.getSceneSnapshot).toHaveBeenCalledTimes(2);
   });
 });
