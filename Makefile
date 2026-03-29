@@ -1,9 +1,11 @@
 .PHONY: test test-cov test-html clean install dev-install help \
 	web-demo-db web-demo-db-reset web-backend web-frontend-install \
-	web-frontend-test web-frontend-build web-frontend
+	web-frontend-test web-frontend-build web-frontend \
+	asset-pipeline-sync asset-pipeline-sync-rembg asset-pipeline
 
 WEB_GAME_DB ?= var/game/ai_rpg_world.db
 WEB_MANUAL_PLAYER_IDS ?= 1
+ASSET_PIPELINE_DIR := tools/asset_pipeline
 
 # デフォルトターゲット
 help:
@@ -21,6 +23,9 @@ help:
 	@echo "  make web-frontend-test  - frontend テストを実行"
 	@echo "  make web-frontend-build - frontend を build"
 	@echo "  make web-frontend       - frontend dev server を起動"
+	@echo "  make asset-pipeline-sync       - スプライト用 CLI (tools/asset_pipeline) の依存を同期"
+	@echo "  make asset-pipeline-sync-rembg - 同上 + rembg（要時間・容量）"
+	@echo "  make asset-pipeline CMD='…'   - 例: make asset-pipeline CMD='split -h'"
 
 # 依存関係のインストール
 install:
@@ -71,3 +76,14 @@ web-frontend-build:
 
 web-frontend:
 	cd frontend && npm run dev
+
+# スプライト前処理 CLI（ゲーム本体の pyproject とは別プロジェクト）
+asset-pipeline-sync:
+	cd $(ASSET_PIPELINE_DIR) && uv sync
+
+asset-pipeline-sync-rembg:
+	cd $(ASSET_PIPELINE_DIR) && uv sync --extra rembg
+
+# 使用例: make asset-pipeline CMD="split sheet.png -r 2 -c 2 -o ./out -W 32 -H 48"
+asset-pipeline:
+	cd $(ASSET_PIPELINE_DIR) && uv run asset-pipeline $(CMD)

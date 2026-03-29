@@ -29,6 +29,7 @@ MANIFEST
 
 # 仮想環境
 venv/
+.venv/
 env/
 ENV/
 
