@@ -4,9 +4,27 @@
       "image": "/assets/actors/players/player_default.png",
       "source": "/assets/sources/actors/player_41_cc0.png",
       "license": "CC0",
-      "frame_width": 32,
+      "frame_width": 40,
       "frame_height": 48,
       "notes": "Imported from OpenGameArt for Phase 10 prototype integration."
+    }
+  },
+  "monsters": {
+    "monster_blob": {
+      "image": "/assets/monsters/blob_move.png",
+      "source": "/assets/sources/monsters/blob_move_cc0.png",
+      "license": "CC0",
+      "frame_width": 80,
+      "frame_height": 80,
+      "notes": "Imported from OpenGameArt as a simple prototype monster animation strip."
+    }
+  },
+  "objects": {
+    "object_chest_closed": {
+      "image": "/assets/objects/object_chest_closed.png",
+      "width": 64,
+      "height": 64,
+      "license": "CC0"
     }
   },
   "tilesets": {
@@ -17,6 +35,12 @@
       "license": "CC0",
       "tile_width": 32,
       "tile_height": 32,
+      "gid_frame_map": {
+        "1": 0,
+        "2": 12,
+        "3": 22,
+        "4": 32
+      },
       "notes": "Imported from OpenGameArt for starter spot prototyping."
     }
   }
