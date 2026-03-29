@@ -62,7 +62,7 @@ function makeOverview() {
   ];
 }
 
-function makeSnapshot() {
+function makeSnapshot(overrides: Record<string, unknown> = {}) {
   return {
     scene_id: "spot-1",
     spot_id: 1,
@@ -111,6 +111,7 @@ function makeSnapshot() {
     ui_logs: [],
     scene_version: 0,
     server_time_ms: 0,
+    ...overrides,
   };
 }
 
@@ -118,7 +119,19 @@ describe("useSceneRuntime", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     apiClientMock.getWorldOverview.mockResolvedValue(makeOverview());
-    apiClientMock.getSceneSnapshot.mockResolvedValue(makeSnapshot());
+    apiClientMock.getSceneSnapshot
+      .mockResolvedValueOnce(makeSnapshot())
+      .mockResolvedValueOnce(
+        makeSnapshot({
+          actors: [
+            {
+              ...makeSnapshot().actors[0],
+              tile_x: 1,
+            },
+          ],
+          scene_version: 2,
+        }),
+      );
     apiClientMock.moveActor.mockResolvedValue({
       success: true,
       player_id: 1,
@@ -141,7 +154,7 @@ describe("useSceneRuntime", () => {
     vi.clearAllMocks();
   });
 
-  it("reconnects after websocket close and clears error on successful move", async () => {
+  it("reconnects after websocket close and refreshes snapshot after successful move", async () => {
     const sockets: MockWebSocket[] = [];
     apiClientMock.connectSceneStream.mockImplementation((_, __, handlers) => {
       const socket = new MockWebSocket();
@@ -197,6 +210,8 @@ describe("useSceneRuntime", () => {
       await result.current.moveManualActor(1, "east");
     });
 
+    expect(apiClientMock.getSceneSnapshot).toHaveBeenCalledTimes(2);
+    expect(result.current.snapshot?.actors[0]?.tile_x).toBe(1);
     expect(result.current.errorMessage).toBeNull();
   });
 });
