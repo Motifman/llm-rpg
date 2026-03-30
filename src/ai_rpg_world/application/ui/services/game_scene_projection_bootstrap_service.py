@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable, Iterable, Mapping, Optional
 
 from ai_rpg_world.application.ui.contracts.dtos import (
@@ -71,6 +73,7 @@ class GameSceneProjectionBootstrapService:
         self._physical_map_repository = physical_map_repository
         self._player_profile_repository = player_profile_repository
         self._config = config or GameSceneBootstrapConfig()
+        self._tiled_metadata_cache: dict[str, dict[str, int] | None] = {}
 
     def build_initial_snapshots(self) -> list[GameSceneSnapshotDto]:
         spot_index = {
@@ -123,24 +126,46 @@ class GameSceneProjectionBootstrapService:
 
     def _build_map_dto(self, spot_id: int, tiles: Iterable) -> SceneMapDto:
         catalog_entry = self._config.scene_catalog.get(spot_id)
+        tiled_map_path = (
+            catalog_entry.tiled_map_path
+            if catalog_entry is not None
+            else f"data/maps/spot_{spot_id}.json"
+        )
+        tiled_metadata = self._load_tiled_metadata(tiled_map_path)
         tile_list = list(tiles)
         if tile_list:
-            map_width_tiles = max(tile.coordinate.x for tile in tile_list) + 1
-            map_height_tiles = max(tile.coordinate.y for tile in tile_list) + 1
+            fallback_map_width_tiles = max(tile.coordinate.x for tile in tile_list) + 1
+            fallback_map_height_tiles = max(tile.coordinate.y for tile in tile_list) + 1
         else:
-            map_width_tiles = 0
-            map_height_tiles = 0
+            fallback_map_width_tiles = 0
+            fallback_map_height_tiles = 0
+        map_width_tiles = (
+            tiled_metadata["width"]
+            if tiled_metadata is not None
+            else fallback_map_width_tiles
+        )
+        map_height_tiles = (
+            tiled_metadata["height"]
+            if tiled_metadata is not None
+            else fallback_map_height_tiles
+        )
+        tile_width = (
+            tiled_metadata["tilewidth"]
+            if tiled_metadata is not None
+            else (catalog_entry.tile_width if catalog_entry is not None else 32)
+        )
+        tile_height = (
+            tiled_metadata["tileheight"]
+            if tiled_metadata is not None
+            else (catalog_entry.tile_height if catalog_entry is not None else 32)
+        )
         return SceneMapDto(
             map_asset_key=(
                 catalog_entry.map_asset_key if catalog_entry is not None else f"spot_{spot_id}"
             ),
-            tiled_map_path=(
-                catalog_entry.tiled_map_path
-                if catalog_entry is not None
-                else f"data/maps/spot_{spot_id}.json"
-            ),
-            tile_width=catalog_entry.tile_width if catalog_entry is not None else 32,
-            tile_height=catalog_entry.tile_height if catalog_entry is not None else 32,
+            tiled_map_path=tiled_map_path,
+            tile_width=tile_width,
+            tile_height=tile_height,
             map_width_tiles=map_width_tiles,
             map_height_tiles=map_height_tiles,
             collision_layer_name=(
@@ -150,6 +175,43 @@ class GameSceneProjectionBootstrapService:
             ),
             tileset_keys=list(catalog_entry.tileset_keys) if catalog_entry is not None else [],
         )
+
+    def _load_tiled_metadata(self, tiled_map_path: str) -> dict[str, int] | None:
+        if tiled_map_path in self._tiled_metadata_cache:
+            return self._tiled_metadata_cache[tiled_map_path]
+        for candidate in self._candidate_tiled_paths(tiled_map_path):
+            if not candidate.exists():
+                continue
+            try:
+                payload = json.loads(candidate.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            width = payload.get("width")
+            height = payload.get("height")
+            tilewidth = payload.get("tilewidth")
+            tileheight = payload.get("tileheight")
+            if not all(isinstance(value, int) for value in (width, height, tilewidth, tileheight)):
+                continue
+            metadata = {
+                "width": width,
+                "height": height,
+                "tilewidth": tilewidth,
+                "tileheight": tileheight,
+            }
+            self._tiled_metadata_cache[tiled_map_path] = metadata
+            return metadata
+        self._tiled_metadata_cache[tiled_map_path] = None
+        return None
+
+    @staticmethod
+    def _candidate_tiled_paths(tiled_map_path: str) -> list[Path]:
+        candidate = Path(tiled_map_path)
+        repo_root = Path(__file__).resolve().parents[5]
+        return [
+            candidate,
+            Path.cwd() / tiled_map_path,
+            repo_root / "frontend" / "public" / tiled_map_path,
+        ]
 
     def _build_actor_dtos(self, objects: Iterable[WorldObject]) -> list[SceneActorDto]:
         actors: list[SceneActorDto] = []

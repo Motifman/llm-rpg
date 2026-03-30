@@ -100,3 +100,60 @@ def test_import_map_rejects_missing_spot_id_property():
     with pytest.raises(TiledImportException, match="spot_id must be int"):
         importer.import_map(payload, tiled_map_path="maps/starter.json")
 
+
+def test_import_map_supports_pixel_coordinates_and_type_based_gateway():
+    importer = TiledSceneImporter()
+    payload = {
+        "width": 16,
+        "height": 16,
+        "tilewidth": 32,
+        "tileheight": 32,
+        "tilesets": [{"name": "starter_tileset"}],
+        "layers": [
+            {
+                "type": "tilelayer",
+                "name": "ground",
+                "data": [1] * (16 * 16),
+            },
+            {
+                "type": "tilelayer",
+                "name": "collision",
+                "data": [0] * (16 * 16),
+            },
+            {
+                "type": "objectgroup",
+                "name": "gateways",
+                "objects": [
+                    {
+                        "id": 77,
+                        "type": "gateway",
+                        "name": "north_gate",
+                        "x": 256,
+                        "y": 64,
+                        "width": 32,
+                        "height": 32,
+                        "properties": [
+                            {"name": "target_spot_id", "value": 2},
+                            {"name": "landing_tile_x", "value": 6},
+                            {"name": "landing_tile_y", "value": 9},
+                        ],
+                    }
+                ],
+            },
+        ],
+    }
+
+    bundle = importer.import_map(
+        payload,
+        tiled_map_path="maps/spot_1.json",
+        spot_id=1,
+        map_asset_key="spot_1",
+    )
+
+    assert bundle.scene_map.spot_id == 1
+    assert bundle.render_metadata is not None
+    assert bundle.render_metadata.map_asset_key == "spot_1"
+    assert bundle.gateways[0].gateway_id == 77
+    assert bundle.gateways[0].tile_x == 8
+    assert bundle.gateways[0].tile_y == 1
+

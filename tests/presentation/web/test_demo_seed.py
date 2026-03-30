@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
@@ -59,6 +60,49 @@ def test_seed_demo_world_database_creates_reusable_runtime(tmp_path: Path) -> No
             )
             is False
         )
+    finally:
+        runtime.close()
+
+
+def test_seed_demo_world_database_uses_tiled_collision_as_source_of_truth(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "demo.db"
+    path = seed_demo_world_database(database)
+    runtime = create_sqlite_web_runtime(
+        SqliteWebAppConfig(database_path=path, manual_player_ids=(1,))
+    )
+    try:
+        world_state = runtime.container.get_world_state_repositories()
+        physical_map = world_state.world_runtime.physical_maps.find_by_id(SpotId(1))
+        assert physical_map is not None
+
+        map_path = (
+            Path(__file__).resolve().parents[3]
+            / "frontend"
+            / "public"
+            / "data"
+            / "maps"
+            / "spot_1.json"
+        )
+        tiled = json.loads(map_path.read_text(encoding="utf-8"))
+        collision_layer = next(
+            layer
+            for layer in tiled["layers"]
+            if layer.get("type") == "tilelayer" and layer.get("name") == "collision"
+        )
+        width = int(tiled["width"])
+        height = int(tiled["height"])
+        collision_data = collision_layer["data"]
+
+        capability = MovementCapability.normal_walk()
+        for y in range(height):
+            for x in range(width):
+                gid = collision_data[(y * width) + x]
+                tile = physical_map.get_tile(Coordinate(x, y, 0))
+                expected_passable = gid == 0
+                actual_passable = tile.terrain_type.can_pass(capability)
+                assert actual_passable is expected_passable
     finally:
         runtime.close()
 
