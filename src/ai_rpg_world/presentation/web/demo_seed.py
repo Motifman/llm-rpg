@@ -173,9 +173,9 @@ def seed_demo_world_database(
                     object_type=ObjectTypeEnum.NPC,
                     component=AutonomousBehaviorComponent(
                         direction=DirectionEnum.WEST,
-                        capability=MovementCapability.normal_walk().with_speed_modifier(0.72),
-                        vision_range=6,
-                        fov_angle=180.0,
+                        capability=MovementCapability.normal_walk().with_speed_modifier(0.5),
+                        vision_range=5,
+                        fov_angle=140.0,
                         patrol_points=[
                             Coordinate(12, 11, 0),
                             Coordinate(13, 11, 0),
@@ -227,7 +227,7 @@ def seed_demo_world_database(
             faction=MonsterFactionEnum.ENEMY,
             description="A cautious demo slime that patrols and chases nearby players.",
             skill_ids=[],
-            vision_range=6,
+            vision_range=5,
         )
         slime_loadout = SkillLoadoutAggregate.create(
             SkillLoadoutId(1),
