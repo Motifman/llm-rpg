@@ -14,6 +14,19 @@ export type WeatherOverlayStyle = {
   streakSpacing: number;
 };
 
+export function getVisualAnimationState({
+  movedThisFrame,
+  tweenActive,
+}: {
+  movedThisFrame: boolean;
+  tweenActive: boolean;
+}): "walking" | "idle" {
+  if (movedThisFrame || tweenActive) {
+    return "walking";
+  }
+  return "idle";
+}
+
 export function getFacingAngleDegrees(facing: string): number {
   const rotationByFacing: Record<string, number> = {
     up: 0,

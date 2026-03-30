@@ -4,6 +4,7 @@ import type { SceneActor } from "../types";
 import {
   getActorPalette,
   getFacingAngleDegrees,
+  getVisualAnimationState,
   getWeatherOverlayStyle,
 } from "./sceneVisuals";
 
@@ -61,5 +62,17 @@ describe("sceneVisuals", () => {
       streakColor: null,
     });
     expect(getWeatherOverlayStyle(null)).toBeNull();
+  });
+
+  it("keeps animation walking only while movement is visually active", () => {
+    expect(
+      getVisualAnimationState({ movedThisFrame: true, tweenActive: false }),
+    ).toBe("walking");
+    expect(
+      getVisualAnimationState({ movedThisFrame: false, tweenActive: true }),
+    ).toBe("walking");
+    expect(
+      getVisualAnimationState({ movedThisFrame: false, tweenActive: false }),
+    ).toBe("idle");
   });
 });

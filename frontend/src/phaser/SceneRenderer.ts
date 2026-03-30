@@ -15,6 +15,7 @@ import {
 import {
   getActorPalette,
   getFacingAngleDegrees,
+  getVisualAnimationState,
   getWeatherOverlayStyle,
 } from "./sceneVisuals";
 import {
@@ -54,6 +55,7 @@ type ActorSprite = {
 
 const DEFAULT_TILE_SIZE = 32;
 const DEFAULT_MOVE_DURATION_MS = 180;
+const NAME_LABEL_PADDING_ABOVE_SPRITE_PX = 6;
 const TILE_COLORS: Record<number, number> = {
   0: 0x000000,
   1: 0x355c4f,
@@ -284,7 +286,7 @@ export class SceneRenderer extends Phaser.Scene {
       return;
     }
 
-    for (const actor of this.sceneSnapshot.actors) {
+    for (const actor of [...this.sceneSnapshot.actors, ...this.sceneSnapshot.monsters]) {
       const entry = this.animationCatalog[actor.sprite_key];
       if (entry == null) {
         continue;
@@ -524,11 +526,12 @@ export class SceneRenderer extends Phaser.Scene {
 
   private createActorSprite(actor: RenderableEntity): ActorSprite {
     const { x, y } = this.toPixel(actor.tile_x, actor.tile_y);
+    const nameYOffset = this.getNameLabelYOffset(actor);
     const shadow = this.add.ellipse(x, y + 12, 22, 8, 0x050505, 0.28).setDepth(y - 1);
     const { visual, animationSprite, marker } = this.createActorVisual(actor);
     const body = this.add.container(x, y, [visual]).setDepth(y);
     const label = this.add
-      .text(x, y - 22, actor.display_name, {
+      .text(x, y - nameYOffset, actor.display_name, {
         fontFamily: "Georgia, serif",
         fontSize: "11px",
         color: "#f8f3dc",
@@ -576,11 +579,11 @@ export class SceneRenderer extends Phaser.Scene {
     this.tweens.killTweensOf(sprite.label);
 
     if (moved) {
+      const nameYOffset = this.getNameLabelYOffset(actor);
       sprite.actor = {
         ...actor,
         state: "walking",
       };
-      this.syncActorAnimation(sprite, sprite.actor);
       sprite.moveTween = this.tweens.add({
         targets: sprite.body,
         x: nextPosition.x,
@@ -590,6 +593,7 @@ export class SceneRenderer extends Phaser.Scene {
         onComplete: () => {
           sprite.body.setPosition(nextPosition.x, nextPosition.y);
           sprite.body.setScale(1, 1);
+          sprite.moveTween = null;
           sprite.actor = {
             ...actor,
             state: "idle",
@@ -598,6 +602,7 @@ export class SceneRenderer extends Phaser.Scene {
           sprite.idleTween = this.createIdleTween(sprite);
         },
       });
+      this.syncActorAnimation(sprite, sprite.actor);
       sprite.squashTween = this.tweens.add({
         targets: sprite.body,
         scaleY: { from: 0.96, to: 1.02 },
@@ -624,18 +629,19 @@ export class SceneRenderer extends Phaser.Scene {
       sprite.labelTween = this.tweens.add({
         targets: sprite.label,
         x: nextPosition.x,
-        y: nextPosition.y - 22,
+        y: nextPosition.y - nameYOffset,
         duration: moveDuration,
         ease: "Sine.Out",
       });
     } else {
+      const nameYOffset = this.getNameLabelYOffset(actor);
       sprite.body.setPosition(nextPosition.x, nextPosition.y);
       sprite.shadow.setPosition(nextPosition.x, nextPosition.y + 12);
-      sprite.label.setPosition(nextPosition.x, nextPosition.y - 22);
+      sprite.label.setPosition(nextPosition.x, nextPosition.y - nameYOffset);
       sprite.body.setScale(1, 1);
       sprite.actor = {
         ...actor,
-        state: actor.state ?? "idle",
+        state: "idle",
       };
       this.syncActorAnimation(sprite, sprite.actor);
       sprite.idleTween = this.createIdleTween(sprite);
@@ -693,7 +699,7 @@ export class SceneRenderer extends Phaser.Scene {
     if (sprite.animationSprite == null) {
       return;
     }
-    const animationName = buildActorAnimationName(actor);
+    const animationName = buildActorAnimationName(this.actorForVisualAnimation(actor, sprite));
     const animationKey = buildCatalogAnimationKey(actor.sprite_key, animationName);
     if (!this.anims.exists(animationKey)) {
       return;
@@ -701,6 +707,35 @@ export class SceneRenderer extends Phaser.Scene {
     if (sprite.animationSprite.anims.currentAnim?.key !== animationKey) {
       sprite.animationSprite.play(animationKey, true);
     }
+  }
+
+  /**
+   * サーバーが移動ティック消化まで state=walking のままにしても、
+   * タイル間補間が終わったら歩行アニメは止める（見た目と一致させる）。
+   */
+  private actorForVisualAnimation(
+    actor: RenderableEntity,
+    sprite: ActorSprite,
+  ): RenderableEntity {
+    const tweenActive = sprite.moveTween != null && sprite.moveTween.isPlaying();
+    return {
+      ...actor,
+      state: getVisualAnimationState({
+        movedThisFrame: false,
+        tweenActive,
+      }),
+    };
+  }
+
+  /** 足元（コンテナ原点）から名前テキスト下端までの上方向オフセット（カタログのフレーム高・アンカー由来）。 */
+  private getNameLabelYOffset(actor: RenderableEntity): number {
+    const entry = this.animationCatalog?.[actor.sprite_key] ?? null;
+    const tileHeight = this.sceneSnapshot?.map.tile_height ?? DEFAULT_TILE_SIZE;
+    if (entry != null) {
+      const anchorY = entry.anchor?.y ?? 0.9;
+      return entry.frame_height * anchorY + NAME_LABEL_PADDING_ABOVE_SPRITE_PX;
+    }
+    return Math.round(tileHeight * 0.65 + NAME_LABEL_PADDING_ABOVE_SPRITE_PX);
   }
 
   private createFacingMarker(actor: RenderableEntity): Phaser.GameObjects.Triangle {
