@@ -156,6 +156,18 @@ class MonsterBehaviorState:
             failure_count=self.failure_count,
         )
 
+    def with_passive_state(self, state: BehaviorStateEnum) -> "MonsterBehaviorState":
+        """target を持たない受動状態へ戻した新しい状態を返す。"""
+        return MonsterBehaviorState(
+            state=state,
+            target_id=None,
+            last_known_position=None,
+            initial_position=self.initial_position,
+            patrol_index=self.patrol_index,
+            search_timer=0,
+            failure_count=0,
+        )
+
     def advance_patrol_index(self, patrol_points_count: int) -> "MonsterBehaviorState":
         """パトロール点に到達したときにインデックスを進めた新しい状態を返す。"""
         if patrol_points_count <= 0:

@@ -13,8 +13,10 @@ from ai_rpg_world.presentation.web.demo_seed import (
 )
 from ai_rpg_world.presentation.web.runtime import (
     SqliteWebAppConfig,
+    SqliteWebRuntime,
     create_sqlite_web_runtime,
 )
+from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
 
 
 def _move_until_success(client: TestClient, direction: str, *, retries: int = 20) -> None:
@@ -49,6 +51,48 @@ def _move_with_response(
     assert response is not None
     assert response.status_code == 200
     return response
+
+
+def _wait_for_monster_state(
+    client: TestClient,
+    expected_states: set[str],
+    *,
+    retries: int = 120,
+    sleep_s: float = 0.05,
+):
+    snapshot = None
+    normalized_expected = {state.upper() for state in expected_states}
+    for _ in range(retries):
+        snapshot = client.get("/api/scenes/1/snapshot").json()
+        monsters = snapshot.get("monsters", [])
+        if monsters and monsters[0]["state"].upper() in normalized_expected:
+            return snapshot
+        time.sleep(sleep_s)
+    assert snapshot is not None
+    assert snapshot["monsters"][0]["state"].upper() in normalized_expected
+    return snapshot
+
+
+def _wait_for_monster_behavior_state(
+    runtime: SqliteWebRuntime,
+    expected_states: set[str],
+    *,
+    retries: int = 120,
+    sleep_s: float = 0.05,
+):
+    world_state = runtime.container.get_world_state_repositories()
+    monster = None
+    normalized_expected = {state.upper() for state in expected_states}
+    for _ in range(retries):
+        monster = world_state.world_runtime.monsters.find_by_world_object_id(
+            WorldObjectId.create(20_001)
+        )
+        if monster is not None and monster.behavior_state.name.upper() in normalized_expected:
+            return monster
+        time.sleep(sleep_s)
+    assert monster is not None
+    assert monster.behavior_state.name.upper() in normalized_expected
+    return monster
 
 
 def test_create_sqlite_web_runtime_bootstraps_projection_from_sqlite(tmp_path: Path):
@@ -291,6 +335,45 @@ def test_sqlite_web_runtime_demo_monster_moves_and_updates_snapshot(tmp_path: Pa
             after["monsters"][0]["tile_y"],
         )
         assert after["scene_version"] > before["scene_version"]
+    finally:
+        runtime.close()
+
+
+def test_sqlite_web_runtime_monster_recovers_to_passive_state_after_losing_player(
+    tmp_path: Path,
+):
+    database = tmp_path / "runtime-monster-reacquire.db"
+    seed_demo_world_database(database)
+
+    runtime = create_sqlite_web_runtime(
+        SqliteWebAppConfig(
+            database_path=database,
+            manual_player_ids=(1,),
+            initial_tick=100,
+            tick_interval_ms=20,
+        )
+    )
+    try:
+        with TestClient(runtime.app) as client:
+            for direction in ("east",) * 6 + ("north",) * 2:
+                _move_until_success(client, direction)
+                time.sleep(0.06)
+
+            chase_snapshot = _wait_for_monster_state(client, {"CHASE", "BUSY"})
+
+            for direction in ("south",) * 2 + ("west",) * 5:
+                _move_until_success(client, direction)
+                time.sleep(0.06)
+
+            passive_monster = _wait_for_monster_behavior_state(
+                runtime,
+                {"PATROL", "IDLE"},
+                retries=320,
+                sleep_s=0.05,
+            )
+
+        assert chase_snapshot["monsters"][0]["state"].upper() in {"CHASE", "BUSY"}
+        assert passive_monster.behavior_state.name.upper() in {"PATROL", "IDLE"}
     finally:
         runtime.close()
 
