@@ -152,3 +152,17 @@ class TestEventHandlerComposition:
         )
         composition.register_for_profile(event_publisher, EventHandlerProfile.FULL)
         consumable_effect_reg.register_handlers.assert_called_once_with(event_publisher)
+
+    def test_register_for_profile_full_invokes_ui_registry_when_provided(
+        self, event_publisher, mock_registry
+    ):
+        """FULL で ui_registry を渡すと register_handlers が呼ばれる"""
+        ui_reg = MagicMock()
+        ui_reg.register_handlers = MagicMock()
+        composition = EventHandlerComposition(
+            gateway_handler=MagicMock(),
+            map_interaction_registry=mock_registry,
+            ui_registry=ui_reg,
+        )
+        composition.register_for_profile(event_publisher, EventHandlerProfile.FULL)
+        ui_reg.register_handlers.assert_called_once_with(event_publisher)

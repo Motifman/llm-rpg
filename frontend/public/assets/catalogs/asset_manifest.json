@@ -1,0 +1,55 @@
+{
+  "actors": {
+    "player_default": {
+      "image": "/assets/actors/players/sprite_sheet_zeriri.png",
+      "source": "/assets/sources/actors/base_32x48_cc0.png",
+      "license": "project",
+      "frame_width": 36,
+      "frame_height": 64,
+      "notes": "4x4 sheet: rows up, left, right, down (Phaser frame order LTR then next row). Actual sheet 144x256."
+    },
+    "player_default_legacy": {
+      "image": "/assets/actors/players/player_default.png",
+      "source": "/assets/sources/actors/base_32x48_cc0.png",
+      "license": "CC0",
+      "frame_width": 32,
+      "frame_height": 48,
+      "notes": "Previous player_default spritesheet; use sprite_key player_default_legacy to reference."
+    }
+  },
+  "monsters": {
+    "monster_blob": {
+      "image": "/assets/monsters/blob_move.png",
+      "source": "/assets/sources/monsters/blob_move_cc0.png",
+      "license": "CC0",
+      "frame_width": 80,
+      "frame_height": 80,
+      "notes": "Imported from OpenGameArt as a simple prototype monster animation strip."
+    }
+  },
+  "objects": {
+    "object_chest_closed": {
+      "image": "/assets/objects/object_chest_closed.png",
+      "width": 64,
+      "height": 64,
+      "license": "CC0"
+    }
+  },
+  "tilesets": {
+    "tileset_sbs_tiny_top_down_pack": {
+      "image": "/assets/tilesets/sbs_tiny_top_down_pack/Tiny Top Down 32x32.png",
+      "tsx": "/assets/tilesets/sbs_tiny_top_down_pack/Tiled Tsx/Tiny Top Down Tiles 32x32.tsx",
+      "source_archive": "/assets/sources/tilesets/sbs_tiny_top_down_pack_cc0.zip",
+      "license": "CC0",
+      "tile_width": 32,
+      "tile_height": 32,
+      "gid_frame_map": {
+        "1": 0,
+        "2": 12,
+        "3": 22,
+        "4": 32
+      },
+      "notes": "Imported from OpenGameArt for starter spot prototyping."
+    }
+  }
+}
