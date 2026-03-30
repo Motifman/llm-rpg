@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -31,7 +32,6 @@ from ai_rpg_world.application.ui.services.manual_object_interaction_service impo
 from ai_rpg_world.application.ui.services.simulation_control_service import (
     SimulationControlService,
 )
-from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.infrastructure.di.container import SqliteGameDependencyInjectionContainer
 from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
     InMemoryGameTimeProvider,
@@ -42,8 +42,8 @@ from ai_rpg_world.infrastructure.ui.in_memory_game_scene_event_broker import (
 from ai_rpg_world.infrastructure.ui.in_process_simulation_runtime_control_port import (
     InProcessSimulationRuntimeControlPort,
 )
-from ai_rpg_world.infrastructure.ui.sqlite_demo_autonomous_world_port import (
-    SqliteDemoAutonomousWorldPort,
+from ai_rpg_world.infrastructure.ui.sqlite_monster_behavior_world_port import (
+    SqliteMonsterBehaviorWorldPort,
 )
 from ai_rpg_world.infrastructure.ui.sqlite_manual_interaction_port import (
     SqliteManualInteractionPort,
@@ -120,12 +120,14 @@ def create_sqlite_web_runtime(config: SqliteWebAppConfig) -> SqliteWebRuntime:
 
     broker = InMemoryGameSceneEventBroker()
     time_provider = InMemoryGameTimeProvider(initial_tick=config.initial_tick)
+    db_lock = threading.RLock()
 
     movement_port = SqliteManualMovementPort(
         database=config.database_path,
         projection=projection,
         broker=broker,
         time_provider=time_provider,
+        db_lock=db_lock,
         bootstrap_config=GameSceneBootstrapConfig(
             scene_catalog=config.scene_catalog,
             viewport_width=config.viewport_width,
@@ -139,6 +141,7 @@ def create_sqlite_web_runtime(config: SqliteWebAppConfig) -> SqliteWebRuntime:
         current_tick_provider=time_provider,
         projection=projection,
         broker=broker,
+        db_lock=db_lock,
         bootstrap_config=GameSceneBootstrapConfig(
             scene_catalog=config.scene_catalog,
             viewport_width=config.viewport_width,
@@ -147,7 +150,7 @@ def create_sqlite_web_runtime(config: SqliteWebAppConfig) -> SqliteWebRuntime:
             manual_player_ids=frozenset(config.manual_player_ids),
         ),
     )
-    demo_automation_port = SqliteDemoAutonomousWorldPort(
+    monster_behavior_port = SqliteMonsterBehaviorWorldPort(
         database=config.database_path,
         projection=projection,
         broker=broker,
@@ -158,20 +161,15 @@ def create_sqlite_web_runtime(config: SqliteWebAppConfig) -> SqliteWebRuntime:
             initial_tick=config.initial_tick,
             manual_player_ids=frozenset(config.manual_player_ids),
         ),
-        patrol_route=(
-            Coordinate(7, 7, 0),
-            Coordinate(7, 6, 0),
-            Coordinate(6, 6, 0),
-            Coordinate(6, 7, 0),
-        ),
-        move_every_ticks=10,
+        time_provider=time_provider,
+        db_lock=db_lock,
     )
     simulation_runtime_control = InProcessSimulationRuntimeControlPort(
         time_provider=time_provider,
         projection=projection,
         broker=broker,
         tick_interval_ms=config.tick_interval_ms,
-        tick_advanced_callback=demo_automation_port.advance_tick,
+        tick_advanced_callback=monster_behavior_port.advance_tick,
     )
     simulation_control = SimulationControlService(
         projection,

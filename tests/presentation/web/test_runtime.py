@@ -17,6 +17,40 @@ from ai_rpg_world.presentation.web.runtime import (
 )
 
 
+def _move_until_success(client: TestClient, direction: str, *, retries: int = 20) -> None:
+    response = None
+    for _ in range(retries):
+        response = client.post(
+            "/api/actors/1/move",
+            json={"direction": direction},
+        )
+        if response.status_code == 200:
+            return
+        time.sleep(0.06)
+    assert response is not None
+    assert response.status_code == 200
+
+
+def _move_with_response(
+    client: TestClient,
+    direction: str,
+    *,
+    retries: int = 20,
+):
+    response = None
+    for _ in range(retries):
+        response = client.post(
+            "/api/actors/1/move",
+            json={"direction": direction},
+        )
+        if response.status_code == 200:
+            return response
+        time.sleep(0.06)
+    assert response is not None
+    assert response.status_code == 200
+    return response
+
+
 def test_create_sqlite_web_runtime_bootstraps_projection_from_sqlite(tmp_path: Path):
     database = tmp_path / "runtime.db"
     seed_demo_world_database(database)
@@ -66,8 +100,8 @@ def test_sqlite_web_runtime_move_endpoint_updates_projection_and_database(tmp_pa
 
         assert move_response.status_code == 200
         assert move_response.json()["success"] is True
-        assert snapshot_response.json()["actors"][0]["tile_x"] == 2
-        assert snapshot_response.json()["actors"][0]["tile_y"] == 1
+        assert snapshot_response.json()["actors"][0]["tile_x"] == 3
+        assert snapshot_response.json()["actors"][0]["tile_y"] == 13
 
         connection = sqlite3.connect(str(database))
         connection.row_factory = sqlite3.Row
@@ -77,8 +111,8 @@ def test_sqlite_web_runtime_move_endpoint_updates_projection_and_database(tmp_pa
                 "FROM game_player_statuses WHERE player_id = 1"
             ).fetchone()
             assert row is not None
-            assert row["current_coordinate_x"] == 2
-            assert row["current_coordinate_y"] == 1
+            assert row["current_coordinate_x"] == 3
+            assert row["current_coordinate_y"] == 13
         finally:
             connection.close()
     finally:
@@ -116,7 +150,7 @@ def test_sqlite_web_runtime_advances_ticks_and_unblocks_busy_manual_movement(
         assert "現在行動中" in blocked_move.json()["detail"]
         assert second_move is not None
         assert second_move.status_code == 200
-        assert snapshot_response.json()["actors"][0]["tile_x"] == 3
+        assert snapshot_response.json()["actors"][0]["tile_x"] == 4
         assert snapshot_response.json()["simulation"]["current_tick"] >= 101
     finally:
         runtime.close()
@@ -138,26 +172,21 @@ def test_sqlite_web_runtime_gateway_transition_moves_actor_between_spots(
     )
     try:
         with TestClient(runtime.app) as client:
-            for direction in ("east", "east", "east"):
-                move_response = client.post(
-                    "/api/actors/1/move", json={"direction": direction}
-                )
-                assert move_response.status_code == 200
+            for direction in ("east",) * 6 + ("north",) * 11:
+                _move_until_success(client, direction)
                 time.sleep(0.06)
 
-            gateway_response = client.post(
-                "/api/actors/1/move", json={"direction": "north"}
-            )
+            gateway_response = _move_with_response(client, "north")
             source_snapshot = client.get("/api/scenes/1/snapshot").json()
             target_snapshot = client.get("/api/scenes/2/snapshot").json()
 
         assert gateway_response.status_code == 200
         payload = gateway_response.json()
         assert payload["to_spot_id"] == 2
-        assert payload["to_coordinate"] == {"x": 2, "y": 7, "z": 0}
+        assert payload["to_coordinate"] == {"x": 6, "y": 9, "z": 0}
         assert source_snapshot["actors"] == []
-        assert target_snapshot["actors"][0]["tile_x"] == 2
-        assert target_snapshot["actors"][0]["tile_y"] == 7
+        assert target_snapshot["actors"][0]["tile_x"] == 6
+        assert target_snapshot["actors"][0]["tile_y"] == 9
 
         connection = sqlite3.connect(str(database))
         connection.row_factory = sqlite3.Row
@@ -168,8 +197,8 @@ def test_sqlite_web_runtime_gateway_transition_moves_actor_between_spots(
             ).fetchone()
             assert row is not None
             assert row["current_spot_id"] == 2
-            assert row["current_coordinate_x"] == 2
-            assert row["current_coordinate_y"] == 7
+            assert row["current_coordinate_x"] == 6
+            assert row["current_coordinate_y"] == 9
         finally:
             connection.close()
     finally:
@@ -197,7 +226,7 @@ def test_sqlite_web_runtime_websocket_stream_sees_committed_move_event(tmp_path:
             response = websocket.receive_json()
             assert response["type"] == "scene_events"
             assert response["events"][0]["event_type"] == "actor_moved"
-            assert response["events"][0]["payload"]["to_tile_x"] == 2
+            assert response["events"][0]["payload"]["to_tile_x"] == 3
     finally:
         runtime.close()
 
@@ -243,7 +272,7 @@ def test_sqlite_web_runtime_demo_monster_moves_and_updates_snapshot(tmp_path: Pa
         with TestClient(runtime.app) as client:
             before = client.get("/api/scenes/1/snapshot").json()
             after = before
-            for _ in range(12):
+            for _ in range(24):
                 time.sleep(0.08)
                 after = client.get("/api/scenes/1/snapshot").json()
                 if (
@@ -281,26 +310,16 @@ def test_sqlite_web_runtime_interact_endpoint_updates_chest_state_and_logs(
     )
     try:
         with TestClient(runtime.app) as client:
-            for direction in ("east", "east", "east", "east", "east", "south", "south", "south"):
-                move_response = None
-                for _ in range(10):
-                    move_response = client.post(
-                        "/api/actors/1/move",
-                        json={"direction": direction},
-                    )
-                    if move_response.status_code == 200:
-                        break
-                    time.sleep(0.06)
-                assert move_response is not None
-                assert move_response.status_code == 200
+            for direction in ("east",) * 2 + ("north",) * 7:
+                _move_until_success(client, direction)
                 time.sleep(0.06)
             snapshot = client.get("/api/scenes/1/snapshot").json()
             for _ in range(20):
                 actor = snapshot["actors"][0]
                 if (
-                    actor["tile_x"] == 6
-                    and actor["tile_y"] == 4
-                    and actor["facing"] == "south"
+                    actor["tile_x"] == 4
+                    and actor["tile_y"] == 6
+                    and actor["facing"] == "north"
                     and actor["state"] == "idle"
                 ):
                     break
@@ -342,38 +361,17 @@ def test_sqlite_web_runtime_interact_auto_turns_actor_toward_target(
     )
     try:
         with TestClient(runtime.app) as client:
-            path = (
-                "east",
-                "east",
-                "east",
-                "east",
-                "east",
-                "south",
-                "south",
-                "south",
-                "west",
-                "east",
-            )
+            path = ("east",) * 2 + ("north",) * 7 + ("west", "east")
             for direction in path:
-                move_response = None
-                for _ in range(10):
-                    move_response = client.post(
-                        "/api/actors/1/move",
-                        json={"direction": direction},
-                    )
-                    if move_response.status_code == 200:
-                        break
-                    time.sleep(0.06)
-                assert move_response is not None
-                assert move_response.status_code == 200
+                _move_until_success(client, direction)
                 time.sleep(0.06)
 
             for _ in range(20):
                 snapshot = client.get("/api/scenes/1/snapshot").json()
                 actor = snapshot["actors"][0]
                 if (
-                    actor["tile_x"] == 6
-                    and actor["tile_y"] == 4
+                    actor["tile_x"] == 4
+                    and actor["tile_y"] == 6
                     and actor["facing"] == "east"
                     and actor["state"] == "idle"
                 ):
@@ -389,6 +387,6 @@ def test_sqlite_web_runtime_interact_auto_turns_actor_toward_target(
         assert response.status_code == 200
         assert response.json()["success"] is True
         assert snapshot["objects"][0]["interaction_data"]["is_open"] is True
-        assert snapshot["actors"][0]["facing"] == "south"
+        assert snapshot["actors"][0]["facing"] == "north"
     finally:
         runtime.close()

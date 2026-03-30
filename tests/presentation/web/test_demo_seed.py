@@ -33,28 +33,28 @@ def test_seed_demo_world_database_creates_reusable_runtime(tmp_path: Path) -> No
         assert snapshot_one.spot_name == "Starter Town"
         assert snapshot_one.actors[0].display_name == "Hero"
         assert snapshot_one.monsters[0].display_name == "Slime"
-        assert snapshot_one.monsters[0].tile_x == 7
-        assert snapshot_one.monsters[0].tile_y == 7
+        assert snapshot_one.monsters[0].tile_x == 12
+        assert snapshot_one.monsters[0].tile_y == 11
         assert snapshot_one.objects[0].display_name == "宝箱"
         assert snapshot_one.objects[0].interaction_type == "open_chest"
         assert snapshot_one.objects[0].interaction_data["is_open"] is False
-        assert snapshot_one.map.map_width_tiles == 10
-        assert snapshot_one.map.map_height_tiles == 10
+        assert snapshot_one.map.map_width_tiles == 16
+        assert snapshot_one.map.map_height_tiles == 16
         assert snapshot_two.spot_name == "South Gate"
         assert snapshot_two.weather is not None
         assert snapshot_two.weather.weather_type == "RAIN"
-        assert snapshot_one.gateways[0].tile_x == 4
-        assert snapshot_one.gateways[0].tile_y == 0
-        assert snapshot_one.gateways[0].landing_tile_x == 2
-        assert snapshot_one.gateways[0].landing_tile_y == 7
-        assert snapshot_two.gateways[0].tile_x == 2
-        assert snapshot_two.gateways[0].tile_y == 8
+        assert snapshot_one.gateways[0].tile_x == 8
+        assert snapshot_one.gateways[0].tile_y == 1
+        assert snapshot_one.gateways[0].landing_tile_x == 6
+        assert snapshot_one.gateways[0].landing_tile_y == 9
+        assert snapshot_two.gateways[0].tile_x == 6
+        assert snapshot_two.gateways[0].tile_y == 10
         world_state = runtime.container.get_world_state_repositories()
         physical_map = world_state.world_runtime.physical_maps.find_by_id(SpotId(1))
         assert physical_map is not None
         assert (
             physical_map.is_passable(
-                Coordinate(6, 5, 0),
+                Coordinate(4, 5, 0),
                 MovementCapability.normal_walk(),
             )
             is False

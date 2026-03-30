@@ -14,7 +14,7 @@ from ai_rpg_world.domain.player.aggregate.player_profile_aggregate import (
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import (
     PlayerStatusAggregate,
 )
-from ai_rpg_world.domain.player.enum.player_enum import Role
+from ai_rpg_world.domain.player.enum.player_enum import Race, Role
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
 from ai_rpg_world.domain.player.value_object.gold import Gold
@@ -30,6 +30,26 @@ from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import (
     StatGrowthFactor,
 )
+from ai_rpg_world.domain.skill.aggregate.skill_loadout_aggregate import (
+    SkillLoadoutAggregate,
+)
+from ai_rpg_world.domain.skill.value_object.skill_loadout_id import SkillLoadoutId
+from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
+from ai_rpg_world.domain.monster.enum.monster_enum import (
+    BehaviorStateEnum,
+    EcologyTypeEnum,
+    MonsterFactionEnum,
+)
+from ai_rpg_world.domain.monster.value_object.monster_id import MonsterId
+from ai_rpg_world.domain.monster.value_object.monster_behavior_state import (
+    MonsterBehaviorState,
+)
+from ai_rpg_world.domain.monster.value_object.monster_template import MonsterTemplate
+from ai_rpg_world.domain.monster.value_object.monster_template_id import (
+    MonsterTemplateId,
+)
+from ai_rpg_world.domain.monster.value_object.respawn_info import RespawnInfo
+from ai_rpg_world.domain.monster.value_object.reward_info import RewardInfo
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import (
     PhysicalMapAggregate,
 )
@@ -37,8 +57,11 @@ from ai_rpg_world.domain.world.entity.gateway import Gateway
 from ai_rpg_world.domain.world.entity.spot import Spot
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
-from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
-from ai_rpg_world.domain.world.entity.world_object_component import ChestComponent
+from ai_rpg_world.domain.world.entity.world_object_component import (
+    ActorComponent,
+    AutonomousBehaviorComponent,
+    ChestComponent,
+)
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, ObjectTypeEnum
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
@@ -49,11 +72,19 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.terrain_type import TerrainType
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world.value_object.world_object_id import WorldObjectId
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import (
     SqliteUnitOfWorkFactory,
 )
 
 DEFAULT_WEB_GAME_DB = Path("var/game/ai_rpg_world.db")
+STARTER_TOWN_GATE = Coordinate(8, 1, 0)
+STARTER_TOWN_GATE_LANDING = Coordinate(6, 9, 0)
+SOUTH_GATE_RETURN = Coordinate(6, 10, 0)
+SOUTH_GATE_RETURN_LANDING = Coordinate(8, 2, 0)
+CHEST_COORDINATE = Coordinate(4, 5, 0)
+MONSTER_START_COORDINATE = Coordinate(12, 11, 0)
+PLAYER_START_COORDINATE = Coordinate(2, 13, 0)
 
 
 def seed_demo_world_database(
@@ -90,7 +121,7 @@ def seed_demo_world_database(
         exp_table = ExpTable(100, 1.5)
         navigation_state = PlayerNavigationState.from_parts(
             current_spot_id=SpotId(1),
-            current_coordinate=Coordinate(1, 1, 0),
+            current_coordinate=PLAYER_START_COORDINATE,
         )
         world_state.player_state.player_profiles.save(
             PlayerProfileAggregate.create(
@@ -122,7 +153,7 @@ def seed_demo_world_database(
             objects=[
                 WorldObject(
                     object_id=WorldObjectId.create(1),
-                    coordinate=Coordinate(1, 1, 0),
+                    coordinate=PLAYER_START_COORDINATE,
                     object_type=ObjectTypeEnum.PLAYER,
                     component=ActorComponent(
                         direction=DirectionEnum.EAST,
@@ -131,19 +162,33 @@ def seed_demo_world_database(
                 ),
                 WorldObject(
                     object_id=WorldObjectId.create(10_001),
-                    coordinate=Coordinate(6, 5, 0),
+                    coordinate=CHEST_COORDINATE,
                     object_type=ObjectTypeEnum.CHEST,
                     is_blocking=True,
                     component=ChestComponent(is_open=False),
                 ),
                 WorldObject(
                     object_id=WorldObjectId.create(20_001),
-                    coordinate=Coordinate(7, 7, 0),
+                    coordinate=MONSTER_START_COORDINATE,
                     object_type=ObjectTypeEnum.NPC,
-                    component=ActorComponent(
+                    component=AutonomousBehaviorComponent(
                         direction=DirectionEnum.WEST,
-                        capability=MovementCapability.normal_walk(),
-                        is_npc=True,
+                        capability=MovementCapability.normal_walk().with_speed_modifier(0.72),
+                        vision_range=6,
+                        fov_angle=180.0,
+                        patrol_points=[
+                            Coordinate(12, 11, 0),
+                            Coordinate(13, 11, 0),
+                            Coordinate(13, 12, 0),
+                            Coordinate(12, 12, 0),
+                        ],
+                        race="slime",
+                        faction="enemy",
+                        initial_position=MONSTER_START_COORDINATE,
+                        random_move_chance=0.0,
+                        ecology_type=EcologyTypeEnum.TERRITORIAL,
+                        territory_radius=6,
+                        prey_races={"human"},
                     ),
                 ),
             ],
@@ -151,9 +196,9 @@ def seed_demo_world_database(
                 Gateway(
                     gateway_id=GatewayId(1),
                     name="starter-to-south-gate",
-                    area=PointArea(Coordinate(4, 0, 0)),
+                    area=PointArea(STARTER_TOWN_GATE),
                     target_spot_id=SpotId(2),
-                    landing_coordinate=Coordinate(2, 7, 0),
+                    landing_coordinate=STARTER_TOWN_GATE_LANDING,
                 )
             ],
         )
@@ -164,16 +209,51 @@ def seed_demo_world_database(
                 Gateway(
                     gateway_id=GatewayId(2),
                     name="south-gate-to-starter",
-                    area=PointArea(Coordinate(2, 8, 0)),
+                    area=PointArea(SOUTH_GATE_RETURN),
                     target_spot_id=SpotId(1),
-                    landing_coordinate=Coordinate(4, 1, 0),
+                    landing_coordinate=SOUTH_GATE_RETURN_LANDING,
                 )
             ],
         )
         south_gate.set_weather(WeatherState(WeatherTypeEnum.RAIN, 0.6))
 
+        slime_template = MonsterTemplate(
+            template_id=MonsterTemplateId(1),
+            name="Slime",
+            base_stats=BaseStats(30, 0, 6, 6, 6, 0.02, 0.02),
+            reward_info=RewardInfo(0, 0),
+            respawn_info=RespawnInfo(200, True),
+            race=Race.BEAST,
+            faction=MonsterFactionEnum.ENEMY,
+            description="A cautious demo slime that patrols and chases nearby players.",
+            skill_ids=[],
+            vision_range=6,
+        )
+        slime_loadout = SkillLoadoutAggregate.create(
+            SkillLoadoutId(1),
+            20_001,
+            4,
+            4,
+        )
+        slime = MonsterAggregate.reconstitute(
+            MonsterId(1),
+            slime_template,
+            WorldObjectId.create(20_001),
+            slime_loadout,
+            MONSTER_START_COORDINATE,
+            SpotId(1),
+            WorldTick(0),
+            behavior_state=MonsterBehaviorState.from_parts(
+                state=BehaviorStateEnum.PATROL,
+                target_id=None,
+                last_known_position=None,
+                initial_position=MONSTER_START_COORDINATE,
+            ),
+        )
+
         world_state.world_runtime.physical_maps.save(starter_town)
         world_state.world_runtime.physical_maps.save(south_gate)
+        world_state.world_runtime.monsters.save(slime)
 
     return database_path
 
@@ -217,29 +297,74 @@ def _make_tiles(*, width: int, height: int) -> list[Tile]:
 
 def _make_starter_town_tiles() -> list[Tile]:
     tiles: list[Tile] = []
-    gateway_tile = Coordinate(4, 0, 0)
-    road_band = {
-        Coordinate(4, 1, 0),
-        Coordinate(4, 2, 0),
-        Coordinate(4, 3, 0),
-        Coordinate(4, 4, 0),
-        Coordinate(5, 4, 0),
-        Coordinate(4, 5, 0),
-        Coordinate(5, 5, 0),
-        Coordinate(3, 4, 0),
-        Coordinate(3, 5, 0),
-        Coordinate(6, 4, 0),
-        Coordinate(6, 5, 0),
+    width = 16
+    height = 16
+    road_tiles = {
+        STARTER_TOWN_GATE,
+        Coordinate(8, 1, 0),
+        Coordinate(8, 2, 0),
+        Coordinate(8, 3, 0),
+        Coordinate(8, 4, 0),
+        Coordinate(8, 5, 0),
+        Coordinate(8, 6, 0),
+        Coordinate(8, 7, 0),
+        Coordinate(8, 8, 0),
+        Coordinate(8, 9, 0),
+        Coordinate(8, 10, 0),
+        Coordinate(8, 11, 0),
+        Coordinate(8, 12, 0),
+        Coordinate(7, 8, 0),
+        Coordinate(9, 8, 0),
+        Coordinate(10, 8, 0),
+        Coordinate(11, 8, 0),
+        Coordinate(12, 8, 0),
+        Coordinate(13, 8, 0),
+        Coordinate(6, 8, 0),
+        Coordinate(5, 8, 0),
+        Coordinate(4, 8, 0),
+        Coordinate(3, 8, 0),
+        Coordinate(2, 8, 0),
+        Coordinate(8, 13, 0),
+        Coordinate(8, 14, 0),
+    }
+    building_walls = {
+        Coordinate(x, 3, 0) for x in range(2, 7)
+    } | {
+        Coordinate(x, 7, 0) for x in range(2, 7) if x != 4
+    } | {
+        Coordinate(2, y, 0) for y in range(3, 8)
+    } | {
+        Coordinate(6, y, 0) for y in range(3, 8)
+    } | {
+        Coordinate(x, 3, 0) for x in range(10, 15)
+    } | {
+        Coordinate(x, 7, 0) for x in range(10, 15) if x != 12
+    } | {
+        Coordinate(10, y, 0) for y in range(3, 8)
+    } | {
+        Coordinate(14, y, 0) for y in range(3, 8)
+    }
+    obstacle_tiles = {
+        Coordinate(5, 10, 0),
+        Coordinate(6, 10, 0),
+        Coordinate(5, 11, 0),
+        Coordinate(6, 11, 0),
+        Coordinate(10, 10, 0),
+        Coordinate(11, 10, 0),
+        Coordinate(10, 11, 0),
+        Coordinate(11, 11, 0),
+        Coordinate(11, 12, 0),
+        Coordinate(11, 13, 0),
     }
 
-    for x in range(10):
-        for y in range(10):
+    for x in range(width):
+        for y in range(height):
             coordinate = Coordinate(x, y, 0)
-            if coordinate == gateway_tile:
-                terrain = TerrainType.road()
-            elif x in (0, 9) or y in (0, 9):
+            if x in (0, width - 1) or y in (0, height - 1):
                 terrain = TerrainType.wall()
-            elif coordinate in road_band:
+            elif coordinate in building_walls or coordinate in obstacle_tiles:
+                terrain = TerrainType.wall()
+            elif coordinate in road_tiles:
                 terrain = TerrainType.road()
             else:
                 terrain = TerrainType.grass()
@@ -249,16 +374,24 @@ def _make_starter_town_tiles() -> list[Tile]:
 
 def _make_south_gate_tiles() -> list[Tile]:
     tiles: list[Tile] = []
-    return_gate_tile = Coordinate(2, 8, 0)
+    width = 12
+    height = 12
+    road_tiles = {
+        Coordinate(6, y, 0) for y in range(1, 11)
+    } | {
+        Coordinate(x, 6, 0) for x in range(2, 10)
+    } | {
+        Coordinate(x, 7, 0) for x in range(3, 9)
+    } | {
+        SOUTH_GATE_RETURN
+    }
 
-    for x in range(10):
-        for y in range(10):
+    for x in range(width):
+        for y in range(height):
             coordinate = Coordinate(x, y, 0)
-            if coordinate == return_gate_tile:
-                terrain = TerrainType.road()
-            elif x in (0, 9) or y in (0, 9):
+            if x in (0, width - 1) or y in (0, height - 1):
                 terrain = TerrainType.wall()
-            elif 2 <= x <= 7 and 2 <= y <= 7:
+            elif coordinate in road_tiles:
                 terrain = TerrainType.road()
             else:
                 terrain = TerrainType.grass()
