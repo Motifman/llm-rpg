@@ -74,7 +74,13 @@
   - `tick_advanced` delta と `current_tick` 表示を追加済み
   - manual actor が busy 解消後に継続移動できることを integration test で確認済み
   - frontend の WebSocket reconnect / heartbeat を追加済み
-- Phase 10 以降: 未着手
+- Phase 9.5: 完了
+  - demo 用の固定巡回を廃止し、SQLite-backed runtime からドメイン駆動の monster behavior を呼ぶ構成へ置換済み
+  - `Starter Town` を 16x16 の大きめスポットとして再構成し、道路 / 建物囲い / 障害物 / 宝箱 / ゲートを分離済み
+  - manual player と monster が同一 spot 内で独立に動くことを web runtime integration test で確認済み
+- Phase 10 以降: 一部着手
+  - player / monster / object の仮アセット取り込みと viewer 反映を開始済み
+  - asset catalog / animation catalog の初版を導入済み
 
 Phase 10 の着手準備として、asset 規約文書を以下に追加済み:
 
@@ -107,6 +113,7 @@ Phase 10 の着手準備として、asset 規約文書を以下に追加済み:
 - `frontend/public/data/maps/spot_1.json`
 - `frontend/public/data/maps/spot_2.json`
 - `frontend/README.md`
+- `src/ai_rpg_world/infrastructure/ui/sqlite_monster_behavior_world_port.py`
 
 
 ## 3. Scene Model
