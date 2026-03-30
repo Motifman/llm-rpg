@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
+from ai_rpg_world.application.ui.contracts.dtos import ImportedSceneBundleDto
+from ai_rpg_world.application.ui.services.tiled_scene_importer import TiledSceneImporter
 from ai_rpg_world.application.world.world_state_sqlite_wiring import (
     attach_world_state_sqlite_repositories,
 )
@@ -78,10 +81,8 @@ from ai_rpg_world.infrastructure.unit_of_work.sqlite_unit_of_work import (
 )
 
 DEFAULT_WEB_GAME_DB = Path("var/game/ai_rpg_world.db")
-STARTER_TOWN_GATE = Coordinate(8, 1, 0)
-STARTER_TOWN_GATE_LANDING = Coordinate(6, 9, 0)
-SOUTH_GATE_RETURN = Coordinate(6, 10, 0)
-SOUTH_GATE_RETURN_LANDING = Coordinate(8, 2, 0)
+REPO_ROOT = Path(__file__).resolve().parents[4]
+DEFAULT_TILED_MAP_DIR = REPO_ROOT / "frontend" / "public" / "data" / "maps"
 CHEST_COORDINATE = Coordinate(4, 5, 0)
 MONSTER_START_COORDINATE = Coordinate(12, 11, 0)
 PLAYER_START_COORDINATE = Coordinate(2, 13, 0)
@@ -147,9 +148,20 @@ def seed_demo_world_database(
             )
         )
 
+        starter_bundle = _load_tiled_scene_bundle(
+            spot_id=1,
+            map_filename="spot_1.json",
+            map_asset_key="spot_1",
+        )
+        south_gate_bundle = _load_tiled_scene_bundle(
+            spot_id=2,
+            map_filename="spot_2.json",
+            map_asset_key="spot_2",
+        )
+
         starter_town = PhysicalMapAggregate.create(
             SpotId(1),
-            _make_starter_town_tiles(),
+            _build_tiles_from_imported_bundle(starter_bundle),
             objects=[
                 WorldObject(
                     object_id=WorldObjectId.create(1),
@@ -192,28 +204,12 @@ def seed_demo_world_database(
                     ),
                 ),
             ],
-            gateways=[
-                Gateway(
-                    gateway_id=GatewayId(1),
-                    name="starter-to-south-gate",
-                    area=PointArea(STARTER_TOWN_GATE),
-                    target_spot_id=SpotId(2),
-                    landing_coordinate=STARTER_TOWN_GATE_LANDING,
-                )
-            ],
+            gateways=_build_gateways_from_imported_bundle(starter_bundle),
         )
         south_gate = PhysicalMapAggregate.create(
             SpotId(2),
-            _make_south_gate_tiles(),
-            gateways=[
-                Gateway(
-                    gateway_id=GatewayId(2),
-                    name="south-gate-to-starter",
-                    area=PointArea(SOUTH_GATE_RETURN),
-                    target_spot_id=SpotId(1),
-                    landing_coordinate=SOUTH_GATE_RETURN_LANDING,
-                )
-            ],
+            _build_tiles_from_imported_bundle(south_gate_bundle),
+            gateways=_build_gateways_from_imported_bundle(south_gate_bundle),
         )
         south_gate.set_weather(WeatherState(WeatherTypeEnum.RAIN, 0.6))
 
@@ -295,108 +291,67 @@ def _make_tiles(*, width: int, height: int) -> list[Tile]:
     ]
 
 
-def _make_starter_town_tiles() -> list[Tile]:
-    tiles: list[Tile] = []
-    width = 16
-    height = 16
-    road_tiles = {
-        STARTER_TOWN_GATE,
-        Coordinate(8, 1, 0),
-        Coordinate(8, 2, 0),
-        Coordinate(8, 3, 0),
-        Coordinate(8, 4, 0),
-        Coordinate(8, 5, 0),
-        Coordinate(8, 6, 0),
-        Coordinate(8, 7, 0),
-        Coordinate(8, 8, 0),
-        Coordinate(8, 9, 0),
-        Coordinate(8, 10, 0),
-        Coordinate(8, 11, 0),
-        Coordinate(8, 12, 0),
-        Coordinate(7, 8, 0),
-        Coordinate(9, 8, 0),
-        Coordinate(10, 8, 0),
-        Coordinate(11, 8, 0),
-        Coordinate(12, 8, 0),
-        Coordinate(13, 8, 0),
-        Coordinate(6, 8, 0),
-        Coordinate(5, 8, 0),
-        Coordinate(4, 8, 0),
-        Coordinate(3, 8, 0),
-        Coordinate(2, 8, 0),
-        Coordinate(8, 13, 0),
-        Coordinate(8, 14, 0),
-    }
-    building_walls = {
-        Coordinate(x, 3, 0) for x in range(2, 7)
-    } | {
-        Coordinate(x, 7, 0) for x in range(2, 7) if x != 4
-    } | {
-        Coordinate(2, y, 0) for y in range(3, 8)
-    } | {
-        Coordinate(6, y, 0) for y in range(3, 8)
-    } | {
-        Coordinate(x, 3, 0) for x in range(10, 15)
-    } | {
-        Coordinate(x, 7, 0) for x in range(10, 15) if x != 12
-    } | {
-        Coordinate(10, y, 0) for y in range(3, 8)
-    } | {
-        Coordinate(14, y, 0) for y in range(3, 8)
-    }
-    obstacle_tiles = {
-        Coordinate(5, 10, 0),
-        Coordinate(6, 10, 0),
-        Coordinate(5, 11, 0),
-        Coordinate(6, 11, 0),
-        Coordinate(10, 10, 0),
-        Coordinate(11, 10, 0),
-        Coordinate(10, 11, 0),
-        Coordinate(11, 11, 0),
-        Coordinate(11, 12, 0),
-        Coordinate(11, 13, 0),
-    }
+def _load_tiled_scene_bundle(
+    *,
+    spot_id: int,
+    map_filename: str,
+    map_asset_key: str,
+) -> ImportedSceneBundleDto:
+    tiled_map_path = DEFAULT_TILED_MAP_DIR / map_filename
+    if not tiled_map_path.exists():
+        raise FileNotFoundError(f"Tiled map not found: {tiled_map_path}")
+    payload = json.loads(tiled_map_path.read_text(encoding="utf-8"))
+    importer = TiledSceneImporter()
+    return importer.import_map(
+        payload,
+        tiled_map_path=f"data/maps/{map_filename}",
+        spot_id=spot_id,
+        map_asset_key=map_asset_key,
+    )
 
-    for x in range(width):
-        for y in range(height):
-            coordinate = Coordinate(x, y, 0)
-            if x in (0, width - 1) or y in (0, height - 1):
-                terrain = TerrainType.wall()
-            elif coordinate in building_walls or coordinate in obstacle_tiles:
-                terrain = TerrainType.wall()
-            elif coordinate in road_tiles:
-                terrain = TerrainType.road()
-            else:
-                terrain = TerrainType.grass()
-            tiles.append(Tile(coordinate, terrain))
+
+def _build_tiles_from_imported_bundle(bundle: ImportedSceneBundleDto) -> list[Tile]:
+    scene_map = bundle.scene_map
+    collision_grid = bundle.collision_grid
+    tiles: list[Tile] = []
+    for y in range(scene_map.map_height_tiles):
+        for x in range(scene_map.map_width_tiles):
+            terrain_name = None
+            if collision_grid.terrain_rows:
+                terrain_name = collision_grid.terrain_rows[y][x]
+            is_passable = collision_grid.passable_rows[y][x]
+            terrain = _terrain_from_imported_cell(terrain_name=terrain_name, is_passable=is_passable)
+            tiles.append(Tile(Coordinate(x, y, 0), terrain))
     return tiles
 
 
-def _make_south_gate_tiles() -> list[Tile]:
-    tiles: list[Tile] = []
-    width = 12
-    height = 12
-    road_tiles = {
-        Coordinate(6, y, 0) for y in range(1, 11)
-    } | {
-        Coordinate(x, 6, 0) for x in range(2, 10)
-    } | {
-        Coordinate(x, 7, 0) for x in range(3, 9)
-    } | {
-        SOUTH_GATE_RETURN
-    }
+def _terrain_from_imported_cell(*, terrain_name: str | None, is_passable: bool) -> TerrainType:
+    if not is_passable:
+        return TerrainType.wall()
+    if terrain_name == "road":
+        return TerrainType.road()
+    if terrain_name == "bush":
+        return TerrainType.bush()
+    if terrain_name == "swamp":
+        return TerrainType.swamp()
+    if terrain_name == "water":
+        return TerrainType.water()
+    return TerrainType.grass()
 
-    for x in range(width):
-        for y in range(height):
-            coordinate = Coordinate(x, y, 0)
-            if x in (0, width - 1) or y in (0, height - 1):
-                terrain = TerrainType.wall()
-            elif coordinate in road_tiles:
-                terrain = TerrainType.road()
-            else:
-                terrain = TerrainType.grass()
-            tiles.append(Tile(coordinate, terrain))
-    return tiles
+
+def _build_gateways_from_imported_bundle(bundle: ImportedSceneBundleDto) -> list[Gateway]:
+    gateways: list[Gateway] = []
+    for dto in bundle.gateways:
+        gateways.append(
+            Gateway(
+                gateway_id=GatewayId(dto.gateway_id),
+                name=f"gateway-{dto.gateway_id}",
+                area=PointArea(Coordinate(dto.tile_x, dto.tile_y, 0)),
+                target_spot_id=SpotId(dto.target_spot_id),
+                landing_coordinate=Coordinate(dto.landing_tile_x, dto.landing_tile_y, 0),
+            )
+        )
+    return gateways
 
 
 if __name__ == "__main__":
