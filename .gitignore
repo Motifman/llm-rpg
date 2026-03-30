@@ -29,6 +29,7 @@ MANIFEST
 
 # 仮想環境
 venv/
+.venv/
 env/
 ENV/
 
@@ -67,11 +68,20 @@ secrets.json
 # キャッシュ
 cache/
 .cache/
+frontend/.npm-cache/
+frontend/node_modules/
 
 # テストカバレッジ
 .coverage
 htmlcov/
 .pytest_cache/ 
+
+# Frontend build artifacts
+frontend/dist/
+frontend/coverage/
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
 
 # cursor
 .cursor/

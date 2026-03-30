@@ -12,6 +12,9 @@ from ai_rpg_world.application.world.services.monster_target_context_builder impo
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
+from ai_rpg_world.domain.world.entity.world_object_component import (
+    AutonomousBehaviorComponent,
+)
 from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
     PursuitFailureReason,
 )
@@ -256,3 +259,92 @@ class TestMonsterBehaviorCoordinator:
                 monster.record_use_skill.assert_called_once_with(2, monster.behavior_target_id, WorldTick(10))
             else:
                 monster.record_interact.assert_called_once_with(WorldObjectId(200), WorldTick(10))
+
+    def test_search_without_pursuit_recovers_to_patrol_before_observation(self):
+        monster = mock.Mock()
+        monster.world_object_id = WorldObjectId(1)
+        monster.behavior_state = BehaviorStateEnum.SEARCH
+        monster.behavior_last_known_position = None
+        monster.has_active_pursuit = False
+        monster.to_behavior_state_snapshot.return_value = mock.sentinel.snapshot
+        monster_repository = mock.Mock()
+        monster_repository.find_by_world_object_id.return_value = monster
+        behavior_service = mock.Mock()
+        behavior_service.build_observation.return_value = SimpleNamespace(
+            selected_target=None
+        )
+        transition_service = mock.Mock()
+        transition_service.compute_transition.return_value = mock.sentinel.transition
+        coordinator = MonsterBehaviorCoordinator(
+            monster_repository=monster_repository,
+            behavior_service=behavior_service,
+            transition_service=transition_service,
+            action_resolver_factory=mock.Mock(return_value=mock.Mock(resolve_action=mock.Mock(return_value=BehaviorAction.wait()))),
+            foraging_rule=self._foraging_rule(
+                SimpleNamespace(visible_feed=[], selected_feed_target=None)
+            ),
+            pursuit_failure_rule=mock.Mock(
+                evaluate_pre_action=mock.Mock(return_value=None),
+                evaluate_post_action=mock.Mock(return_value=None),
+            ),
+            unit_of_work=mock.Mock(),
+            behavior_context_builder=self._behavior_context_builder(None, None),
+            target_context_builder=self._target_context_builder(None),
+        )
+        actor = SimpleNamespace(
+            object_id=WorldObjectId(1),
+            coordinate=Coordinate(0, 0, 0),
+            component=AutonomousBehaviorComponent(
+                patrol_points=[Coordinate(0, 0, 0), Coordinate(1, 0, 0)]
+            ),
+        )
+
+        coordinator.process_actor_behavior(actor, mock.Mock(), WorldTick(10))
+
+        monster.transition_to_passive_state.assert_called_once_with(
+            BehaviorStateEnum.PATROL
+        )
+
+    def test_return_at_initial_position_recovers_to_idle_without_patrol_points(self):
+        monster = mock.Mock()
+        monster.world_object_id = WorldObjectId(1)
+        monster.behavior_state = BehaviorStateEnum.RETURN
+        monster.behavior_initial_position = Coordinate(2, 2, 0)
+        monster.behavior_last_known_position = None
+        monster.has_active_pursuit = False
+        monster.to_behavior_state_snapshot.return_value = mock.sentinel.snapshot
+        monster_repository = mock.Mock()
+        monster_repository.find_by_world_object_id.return_value = monster
+        behavior_service = mock.Mock()
+        behavior_service.build_observation.return_value = SimpleNamespace(
+            selected_target=None
+        )
+        transition_service = mock.Mock()
+        transition_service.compute_transition.return_value = mock.sentinel.transition
+        coordinator = MonsterBehaviorCoordinator(
+            monster_repository=monster_repository,
+            behavior_service=behavior_service,
+            transition_service=transition_service,
+            action_resolver_factory=mock.Mock(return_value=mock.Mock(resolve_action=mock.Mock(return_value=BehaviorAction.wait()))),
+            foraging_rule=self._foraging_rule(
+                SimpleNamespace(visible_feed=[], selected_feed_target=None)
+            ),
+            pursuit_failure_rule=mock.Mock(
+                evaluate_pre_action=mock.Mock(return_value=None),
+                evaluate_post_action=mock.Mock(return_value=None),
+            ),
+            unit_of_work=mock.Mock(),
+            behavior_context_builder=self._behavior_context_builder(None, None),
+            target_context_builder=self._target_context_builder(None),
+        )
+        actor = SimpleNamespace(
+            object_id=WorldObjectId(1),
+            coordinate=Coordinate(2, 2, 0),
+            component=AutonomousBehaviorComponent(),
+        )
+
+        coordinator.process_actor_behavior(actor, mock.Mock(), WorldTick(10))
+
+        monster.transition_to_passive_state.assert_called_once_with(
+            BehaviorStateEnum.IDLE
+        )

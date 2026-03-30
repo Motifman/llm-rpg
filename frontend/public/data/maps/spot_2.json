@@ -1,0 +1,110 @@
+{
+  "compressionlevel": -1,
+  "height": 12,
+  "infinite": false,
+  "layers": [
+    {
+      "data": [
+        4,4,4,4,4,4,4,4,4,4,4,4,
+        4,1,1,1,1,1,2,1,1,1,1,4,
+        4,1,1,1,1,1,2,1,1,1,1,4,
+        4,1,1,1,1,1,2,1,1,1,1,4,
+        4,1,1,1,1,1,2,1,1,1,1,4,
+        4,1,1,1,2,2,2,2,2,1,1,4,
+        4,1,1,1,2,2,2,2,2,1,1,4,
+        4,1,1,1,1,1,2,1,1,1,1,4,
+        4,1,1,1,1,1,2,1,1,1,1,4,
+        4,1,1,1,1,1,2,1,1,1,1,4,
+        4,1,1,1,1,1,2,1,1,1,1,4,
+        4,4,4,4,4,4,2,4,4,4,4,4
+      ],
+      "height": 12,
+      "id": 1,
+      "name": "ground",
+      "opacity": 1,
+      "type": "tilelayer",
+      "visible": true,
+      "width": 12,
+      "x": 0,
+      "y": 0
+    },
+    {
+      "data": [
+        1,1,1,1,1,1,1,1,1,1,1,1,
+        1,0,0,0,0,0,0,0,0,0,0,1,
+        1,0,0,0,0,0,0,0,0,0,0,1,
+        1,0,0,0,0,0,0,0,0,0,0,1,
+        1,0,0,0,0,0,0,0,0,0,0,1,
+        1,0,0,0,0,0,0,0,0,0,0,1,
+        1,0,0,0,0,0,0,0,0,0,0,1,
+        1,0,0,0,0,0,0,0,0,0,0,1,
+        1,0,0,0,0,0,0,0,0,0,0,1,
+        1,0,0,0,0,0,0,0,0,0,0,1,
+        1,0,0,0,0,0,0,0,0,0,0,1,
+        1,1,1,1,1,1,0,1,1,1,1,1
+      ],
+      "height": 12,
+      "id": 3,
+      "name": "collision",
+      "opacity": 1,
+      "type": "tilelayer",
+      "visible": true,
+      "width": 12,
+      "x": 0,
+      "y": 0
+    },
+    {
+      "draworder": "topdown",
+      "id": 2,
+      "name": "gateways",
+      "objects": [
+        {
+          "height": 32,
+          "id": 1,
+          "name": "return_gate",
+          "properties": [
+            { "name": "target_spot_id", "type": "int", "value": 1 },
+            { "name": "landing_tile_x", "type": "int", "value": 8 },
+            { "name": "landing_tile_y", "type": "int", "value": 2 }
+          ],
+          "rotation": 0,
+          "type": "gateway",
+          "visible": true,
+          "width": 32,
+          "x": 192,
+          "y": 352
+        }
+      ],
+      "opacity": 1,
+      "type": "objectgroup",
+      "visible": true,
+      "x": 0,
+      "y": 0
+    }
+  ],
+  "nextlayerid": 4,
+  "nextobjectid": 2,
+  "orientation": "orthogonal",
+  "renderorder": "right-down",
+  "tiledversion": "1.11.0",
+  "tileheight": 32,
+  "tilesets": [
+    {
+      "columns": 4,
+      "firstgid": 1,
+      "image": "virtual_tileset.png",
+      "imageheight": 64,
+      "imagewidth": 128,
+      "margin": 0,
+      "name": "field_tileset",
+      "spacing": 0,
+      "tilecount": 4,
+      "tileheight": 32,
+      "tilewidth": 32
+    }
+  ],
+  "tilewidth": 32,
+  "type": "map",
+  "version": "1.10",
+  "width": 12
+}

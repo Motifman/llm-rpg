@@ -40,6 +40,7 @@ class EventHandlerComposition:
         trade_registry: Optional[EventHandlerRegistryProtocol] = None,
         sns_registry: Optional[EventHandlerRegistryProtocol] = None,
         observation_registry: Optional[EventHandlerRegistryProtocol] = None,
+        ui_registry: Optional[EventHandlerRegistryProtocol] = None,
     ):
         self._gateway_handler = gateway_handler
         self._map_interaction_registry = map_interaction_registry
@@ -54,6 +55,7 @@ class EventHandlerComposition:
         self._trade_registry = trade_registry
         self._sns_registry = sns_registry
         self._observation_registry = observation_registry
+        self._ui_registry = ui_registry
 
     def register_for_profile(
         self,
@@ -111,3 +113,5 @@ class EventHandlerComposition:
             self._sns_registry.register_handlers(event_publisher)
         if self._observation_registry is not None:
             self._observation_registry.register_handlers(event_publisher)
+        if self._ui_registry is not None:
+            self._ui_registry.register_handlers(event_publisher)

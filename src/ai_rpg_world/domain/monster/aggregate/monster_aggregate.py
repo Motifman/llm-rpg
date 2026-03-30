@@ -404,6 +404,24 @@ class MonsterAggregate(AggregateRoot):
         """パトロール点に到達したときにインデックスを進める。patrol_points_count は点の数。"""
         self._behavior_state = self._behavior_state.advance_patrol_index(patrol_points_count)
 
+    def transition_to_passive_state(self, state: BehaviorStateEnum) -> None:
+        """追跡終了後などに PATROL / IDLE へ戻す。"""
+        self._ensure_can_perform_behavior()
+        old_state = self._behavior_state.state
+        if old_state == state:
+            return
+        self._behavior_state = self._behavior_state.with_passive_state(state)
+        self._clear_pursuit_state()
+        self.add_event(
+            ActorStateChangedEvent.create(
+                aggregate_id=self._world_object_id,
+                aggregate_type="Actor",
+                actor_id=self._world_object_id,
+                old_state=old_state,
+                new_state=state,
+            )
+        )
+
     def _initialize_status(
         self,
         coordinate: Coordinate,
