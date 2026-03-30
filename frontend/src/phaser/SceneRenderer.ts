@@ -20,6 +20,7 @@ import {
 } from "./sceneVisuals";
 import {
   getStringObjectProperty,
+  isCollisionLayer,
   isRenderableObject,
   type TiledDocument,
   type TiledObject,
@@ -348,12 +349,18 @@ export class SceneRenderer extends Phaser.Scene {
       tilesetKey == null ? null : this.assetManifest?.tilesets?.[tilesetKey] ?? null;
     const tilesetTextureKey =
       tilesetKey == null ? null : buildTextureKey("tileset", tilesetKey);
+    const collisionLayerName =
+      this.sceneSnapshot?.map.collision_layer_name ?? "collision";
 
     for (const layer of mapDocument.layers) {
       if (layer.visible === false) {
         continue;
       }
       if (layer.type === "tilelayer" && layer.data != null) {
+        if (isCollisionLayer(layer, collisionLayerName)) {
+          this.drawCollisionOverlay(layer.data, mapDocument.width, tileWidth, tileHeight);
+          continue;
+        }
         layer.data.forEach((gid, index) => {
           const x = (index % mapDocument.width) * tileWidth;
           const y = Math.floor(index / mapDocument.width) * tileHeight;
@@ -402,6 +409,27 @@ export class SceneRenderer extends Phaser.Scene {
 
     this.renderGatewayLabels();
     this.cameras.main.setBounds(0, 0, width, height);
+  }
+
+  private drawCollisionOverlay(
+    data: number[],
+    widthInTiles: number,
+    tileWidth: number,
+    tileHeight: number,
+  ): void {
+    data.forEach((gid, index) => {
+      if (gid <= 0) {
+        return;
+      }
+      const x = (index % widthInTiles) * tileWidth;
+      const y = Math.floor(index / widthInTiles) * tileHeight;
+      this.mapGraphics?.fillStyle(0x1a0f16, 0.26);
+      this.mapGraphics?.fillRect(x, y, tileWidth, tileHeight);
+      this.mapGraphics?.lineStyle(2, 0xc76a43, 0.75);
+      this.mapGraphics?.strokeRect(x + 1, y + 1, tileWidth - 2, tileHeight - 2);
+      this.mapGraphics?.lineBetween(x + 5, y + 5, x + tileWidth - 5, y + tileHeight - 5);
+      this.mapGraphics?.lineBetween(x + tileWidth - 5, y + 5, x + 5, y + tileHeight - 5);
+    });
   }
 
   private drawFallbackTile(
@@ -696,15 +724,29 @@ export class SceneRenderer extends Phaser.Scene {
   }
 
   private syncActorAnimation(sprite: ActorSprite, actor: RenderableEntity): void {
-    if (sprite.animationSprite == null) {
+    if (sprite.animationSprite == null || this.animationCatalog == null) {
       return;
     }
-    const animationName = buildActorAnimationName(this.actorForVisualAnimation(actor, sprite));
+    const visualActor = this.actorForVisualAnimation(actor, sprite);
+    const animationName = buildActorAnimationName(visualActor);
     const animationKey = buildCatalogAnimationKey(actor.sprite_key, animationName);
+    const catalogEntry = this.animationCatalog[actor.sprite_key];
+    const clip = catalogEntry?.animations[animationName];
+    if (catalogEntry == null || clip == null) {
+      return;
+    }
+    if (animationName.startsWith("idle_")) {
+      sprite.animationSprite.anims.stop();
+      sprite.animationSprite.setFrame(clip.frames[0] ?? 0);
+      return;
+    }
     if (!this.anims.exists(animationKey)) {
       return;
     }
-    if (sprite.animationSprite.anims.currentAnim?.key !== animationKey) {
+    if (
+      sprite.animationSprite.anims.currentAnim?.key !== animationKey ||
+      sprite.animationSprite.anims.isPlaying === false
+    ) {
       sprite.animationSprite.play(animationKey, true);
     }
   }
@@ -745,7 +787,10 @@ export class SceneRenderer extends Phaser.Scene {
     return triangle;
   }
 
-  private createIdleTween(sprite: ActorSprite): Phaser.Tweens.Tween {
+  private createIdleTween(sprite: ActorSprite): Phaser.Tweens.Tween | null {
+    if (sprite.animationSprite != null) {
+      return null;
+    }
     return this.tweens.add({
       targets: sprite.body,
       y: sprite.body.y - 1.4,

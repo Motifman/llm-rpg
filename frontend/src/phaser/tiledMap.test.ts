@@ -4,6 +4,7 @@ import {
   getNumberObjectProperty,
   getObjectProperty,
   getStringObjectProperty,
+  isCollisionLayer,
   isRenderableObject,
   type TiledObject,
 } from "./tiledMap";
@@ -45,6 +46,31 @@ describe("tiledMap helpers", () => {
         x: 0,
         y: 0,
       }),
+    ).toBe(false);
+  });
+
+  it("detects collision layers by configured name", () => {
+    expect(
+      isCollisionLayer(
+        {
+          id: 10,
+          name: "collision",
+          type: "tilelayer",
+          data: [0, 1, 0, 1],
+        },
+        "collision",
+      ),
+    ).toBe(true);
+    expect(
+      isCollisionLayer(
+        {
+          id: 11,
+          name: "ground",
+          type: "tilelayer",
+          data: [1, 1, 1, 1],
+        },
+        "collision",
+      ),
     ).toBe(false);
   });
 });
