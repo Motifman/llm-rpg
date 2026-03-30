@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 
-import type { GameSceneSnapshot, SceneActor } from "../types";
+import type { GameSceneSnapshot, SceneActor, SceneMonster } from "../types";
 import {
   buildActorAnimationName,
   buildCatalogAnimationKey,
@@ -26,6 +26,17 @@ import {
 
 type CameraMode = "fixed" | "follow";
 
+type RenderableEntity = {
+  display_name: string;
+  tile_x: number;
+  tile_y: number;
+  facing: string;
+  sprite_key: string;
+  state: string;
+  is_manual_controlled?: boolean;
+  actor_kind?: string;
+};
+
 type ActorSprite = {
   body: Phaser.GameObjects.Container;
   shadow: Phaser.GameObjects.Ellipse;
@@ -38,7 +49,7 @@ type ActorSprite = {
   shadowTween: Phaser.Tweens.Tween | null;
   labelTween: Phaser.Tweens.Tween | null;
   squashTween: Phaser.Tweens.Tween | null;
-  actor: SceneActor;
+  actor: RenderableEntity;
 };
 
 const DEFAULT_TILE_SIZE = 32;
@@ -55,6 +66,8 @@ export class SceneRenderer extends Phaser.Scene {
   private sceneSnapshot: GameSceneSnapshot | null = null;
 
   private actorSprites = new Map<number, ActorSprite>();
+
+  private monsterSprites = new Map<number, ActorSprite>();
 
   private mapGraphics?: Phaser.GameObjects.Graphics;
 
@@ -118,6 +131,7 @@ export class SceneRenderer extends Phaser.Scene {
     await this.ensureSceneAssets(tiledMap);
     this.drawMap(tiledMap);
     this.syncActors();
+    this.syncMonsters();
     this.applyWeatherOverlay();
     this.applyCameraMode();
   }
@@ -174,6 +188,12 @@ export class SceneRenderer extends Phaser.Scene {
       const animationEntry = this.animationCatalog[actor.sprite_key];
       if (animationEntry != null) {
         this.queueActorLoad(actor.sprite_key, animationEntry, queuedLoads);
+      }
+    }
+    for (const monster of this.sceneSnapshot.monsters) {
+      const animationEntry = this.animationCatalog[monster.sprite_key];
+      if (animationEntry != null) {
+        this.queueActorLoad(monster.sprite_key, animationEntry, queuedLoads);
       }
     }
 
@@ -481,7 +501,28 @@ export class SceneRenderer extends Phaser.Scene {
     }
   }
 
-  private createActorSprite(actor: SceneActor): ActorSprite {
+  private syncMonsters(): void {
+    if (this.sceneSnapshot == null) {
+      return;
+    }
+    const nextIds = new Set(this.sceneSnapshot.monsters.map((monster) => monster.monster_id));
+    for (const [monsterId, sprite] of this.monsterSprites.entries()) {
+      if (!nextIds.has(monsterId)) {
+        this.destroyActorSprite(sprite);
+        this.monsterSprites.delete(monsterId);
+      }
+    }
+    for (const monster of this.sceneSnapshot.monsters) {
+      const existing = this.monsterSprites.get(monster.monster_id);
+      if (existing == null) {
+        this.monsterSprites.set(monster.monster_id, this.createActorSprite(monster));
+        continue;
+      }
+      this.updateActorSprite(existing, monster);
+    }
+  }
+
+  private createActorSprite(actor: RenderableEntity): ActorSprite {
     const { x, y } = this.toPixel(actor.tile_x, actor.tile_y);
     const shadow = this.add.ellipse(x, y + 12, 22, 8, 0x050505, 0.28).setDepth(y - 1);
     const { visual, animationSprite, marker } = this.createActorVisual(actor);
@@ -514,7 +555,7 @@ export class SceneRenderer extends Phaser.Scene {
     return actorSprite;
   }
 
-  private updateActorSprite(sprite: ActorSprite, actor: SceneActor): void {
+  private updateActorSprite(sprite: ActorSprite, actor: RenderableEntity): void {
     const nextPosition = this.toPixel(actor.tile_x, actor.tile_y);
     const moved =
       Math.round(sprite.body.x) !== nextPosition.x || Math.round(sprite.body.y) !== nextPosition.y;
@@ -608,7 +649,7 @@ export class SceneRenderer extends Phaser.Scene {
     this.applyCameraMode();
   }
 
-  private createActorVisual(actor: SceneActor): {
+  private createActorVisual(actor: RenderableEntity): {
     visual: Phaser.GameObjects.GameObject;
     animationSprite: Phaser.GameObjects.Sprite | null;
     marker: Phaser.GameObjects.Triangle | null;
@@ -641,14 +682,14 @@ export class SceneRenderer extends Phaser.Scene {
     };
   }
 
-  private refreshFallbackActorVisual(sprite: ActorSprite, actor: SceneActor): void {
+  private refreshFallbackActorVisual(sprite: ActorSprite, actor: RenderableEntity): void {
     if (sprite.animationSprite != null || sprite.marker == null) {
       return;
     }
     sprite.marker.setRotation(Phaser.Math.DegToRad(getFacingAngleDegrees(actor.facing)));
   }
 
-  private syncActorAnimation(sprite: ActorSprite, actor: SceneActor): void {
+  private syncActorAnimation(sprite: ActorSprite, actor: RenderableEntity): void {
     if (sprite.animationSprite == null) {
       return;
     }
@@ -662,7 +703,7 @@ export class SceneRenderer extends Phaser.Scene {
     }
   }
 
-  private createFacingMarker(actor: SceneActor): Phaser.GameObjects.Triangle {
+  private createFacingMarker(actor: RenderableEntity): Phaser.GameObjects.Triangle {
     const triangle = this.add.triangle(0, -15, 0, 10, 6, -2, -6, -2, 0xffffff);
     triangle.setRotation(Phaser.Math.DegToRad(getFacingAngleDegrees(actor.facing)));
     triangle.setAlpha(0.92);
@@ -745,7 +786,7 @@ export class SceneRenderer extends Phaser.Scene {
     camera.centerOn(mapWidth / 2, mapHeight / 2);
   }
 
-  private getMoveDurationMs(actor: SceneActor): number {
+  private getMoveDurationMs(actor: RenderableEntity): number {
     const state = actor.state?.toLowerCase() ?? "";
     if (state === "walking") {
       return 140;

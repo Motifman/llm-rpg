@@ -51,6 +51,7 @@ function makeSnapshot(overrides: Partial<GameSceneSnapshot> = {}): GameSceneSnap
       },
     ],
     monsters: [],
+    objects: [],
     weather: null,
     gateways: [],
     areas: [],

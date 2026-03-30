@@ -1,5 +1,6 @@
 import type {
   GameSceneSnapshot,
+  InteractResult,
   MoveResult,
   StreamMessage,
   WorldSceneSummary,
@@ -69,6 +70,13 @@ export const apiClient = {
     return requestJson<MoveResult>(`/api/actors/${actorId}/move`, {
       method: "POST",
       body: JSON.stringify({ direction }),
+    });
+  },
+
+  interactActor(actorId: number, targetObjectId: number): Promise<InteractResult> {
+    return requestJson<InteractResult>(`/api/actors/${actorId}/interact`, {
+      method: "POST",
+      body: JSON.stringify({ target_object_id: targetObjectId }),
     });
   },
 

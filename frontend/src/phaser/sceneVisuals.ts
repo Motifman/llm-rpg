@@ -1,4 +1,4 @@
-import type { SceneActor, SceneWeather } from "../types";
+import type { SceneWeather } from "../types";
 
 export type ActorPalette = {
   bodyColor: number;
@@ -24,8 +24,11 @@ export function getFacingAngleDegrees(facing: string): number {
   return rotationByFacing[facing] ?? 180;
 }
 
-export function getActorPalette(actor: SceneActor): ActorPalette {
-  if (actor.is_manual_controlled) {
+export function getActorPalette(actor: {
+  is_manual_controlled?: boolean;
+  actor_kind?: string;
+}): ActorPalette {
+  if (actor.is_manual_controlled === true) {
     return {
       bodyColor: 0xf2a65a,
       accentColor: 0xfff0b5,

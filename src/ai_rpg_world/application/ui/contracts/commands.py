@@ -38,3 +38,14 @@ class MoveManualActorCommand:
         if not isinstance(self.direction, DirectionEnum):
             raise TypeError("direction must be DirectionEnum")
 
+
+@dataclass(frozen=True)
+class InteractSceneObjectCommand:
+    player_id: int
+    target_object_id: int
+
+    def __post_init__(self) -> None:
+        if self.player_id <= 0:
+            raise ValueError("player_id must be greater than 0")
+        if self.target_object_id <= 0:
+            raise ValueError("target_object_id must be greater than 0")

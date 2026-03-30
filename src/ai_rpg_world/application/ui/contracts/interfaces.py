@@ -2,7 +2,10 @@
 
 from abc import ABC, abstractmethod
 
-from ai_rpg_world.application.ui.contracts.dtos import GameSceneDeltaEventDto
+from ai_rpg_world.application.ui.contracts.dtos import (
+    GameSceneDeltaEventDto,
+    InteractSceneObjectResultDto,
+)
 from ai_rpg_world.application.world.contracts.commands import MoveTileCommand
 
 
@@ -28,6 +31,19 @@ class IManualMovementPort(ABC):
     @abstractmethod
     def move_tile(self, command: MoveTileCommand):
         """Execute one tile movement step."""
+        pass
+
+
+class IManualInteractionPort(ABC):
+    """Port for manual interaction with scene objects."""
+
+    @abstractmethod
+    def interact(
+        self,
+        *,
+        actor_id: int,
+        target_object_id: int,
+    ) -> InteractSceneObjectResultDto:
         pass
 
 

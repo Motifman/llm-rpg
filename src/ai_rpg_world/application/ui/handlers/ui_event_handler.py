@@ -13,6 +13,7 @@ from ai_rpg_world.domain.player.event.status_events import PlayerLocationChanged
 from ai_rpg_world.domain.world.event.map_events import (
     GatewayTriggeredEvent,
     SpotWeatherChangedEvent,
+    WorldObjectInteractedEvent,
     WorldObjectMovedEvent,
 )
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
@@ -69,15 +70,44 @@ class UiEventHandler(EventHandler[Any]):
             spot_id = self._physical_map_repository.find_spot_id_by_object_id(event.object_id)
             if spot_id is None:
                 return
-            delta = self._projection.apply_actor_moved(
+            physical_map = self._physical_map_repository.find_by_id(spot_id)
+            moved_object = (
+                physical_map.get_object(event.object_id) if physical_map is not None else None
+            )
+            if moved_object is None:
+                return
+            if moved_object.object_type.value == "NPC":
+                delta = self._projection.apply_monster_moved(
+                    spot_id=int(spot_id),
+                    monster_id=int(event.object_id),
+                    to_tile_x=event.to_coordinate.x,
+                    to_tile_y=event.to_coordinate.y,
+                    facing=self._derive_facing(event.from_coordinate, event.to_coordinate),
+                    display_name="Slime",
+                    sprite_key="monster_blob",
+                )
+            else:
+                delta = self._projection.apply_actor_moved(
+                    spot_id=int(spot_id),
+                    actor_id=int(event.object_id),
+                    to_tile_x=event.to_coordinate.x,
+                    to_tile_y=event.to_coordinate.y,
+                    facing=self._derive_facing(event.from_coordinate, event.to_coordinate),
+                    actor_kind="world_object",
+                    display_name=f"Object {int(event.object_id)}",
+                    sprite_key="unknown_actor",
+                )
+        elif isinstance(event, WorldObjectInteractedEvent):
+            if self._physical_map_repository is None:
+                return
+            spot_id = self._physical_map_repository.find_spot_id_by_object_id(event.target_id)
+            if spot_id is None:
+                return
+            delta = self._projection.append_log(
                 spot_id=int(spot_id),
-                actor_id=int(event.object_id),
-                to_tile_x=event.to_coordinate.x,
-                to_tile_y=event.to_coordinate.y,
-                facing=self._derive_facing(event.from_coordinate, event.to_coordinate),
-                actor_kind="world_object",
-                display_name=f"Object {int(event.object_id)}",
-                sprite_key="unknown_actor",
+                level="info",
+                message=self._format_interaction_message(event),
+                related_actor_id=int(event.actor_id),
             )
         elif isinstance(event, GatewayTriggeredEvent):
             deltas = self._projection.apply_scene_changed(
@@ -132,3 +162,9 @@ class UiEventHandler(EventHandler[Any]):
             "STORM": "storm_dark",
         }
         return mapping.get(weather_type)
+
+    @staticmethod
+    def _format_interaction_message(event: WorldObjectInteractedEvent) -> str:
+        if event.interaction_type.value == "open_chest":
+            return "宝箱を開けました。" if bool((event.data or {}).get("is_open")) else "宝箱を閉じました。"
+        return f"{event.interaction_type.value} を実行しました。"

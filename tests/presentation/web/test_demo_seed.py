@@ -32,6 +32,12 @@ def test_seed_demo_world_database_creates_reusable_runtime(tmp_path: Path) -> No
         assert path == database.resolve()
         assert snapshot_one.spot_name == "Starter Town"
         assert snapshot_one.actors[0].display_name == "Hero"
+        assert snapshot_one.monsters[0].display_name == "Slime"
+        assert snapshot_one.monsters[0].tile_x == 7
+        assert snapshot_one.monsters[0].tile_y == 7
+        assert snapshot_one.objects[0].display_name == "宝箱"
+        assert snapshot_one.objects[0].interaction_type == "open_chest"
+        assert snapshot_one.objects[0].interaction_data["is_open"] is False
         assert snapshot_one.map.map_width_tiles == 10
         assert snapshot_one.map.map_height_tiles == 10
         assert snapshot_two.spot_name == "South Gate"

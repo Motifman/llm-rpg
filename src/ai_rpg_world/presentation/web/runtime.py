@@ -25,9 +25,13 @@ from ai_rpg_world.application.ui.services.game_scene_stream_service import (
 from ai_rpg_world.application.ui.services.manual_actor_control_service import (
     ManualActorControlService,
 )
+from ai_rpg_world.application.ui.services.manual_object_interaction_service import (
+    ManualObjectInteractionService,
+)
 from ai_rpg_world.application.ui.services.simulation_control_service import (
     SimulationControlService,
 )
+from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 from ai_rpg_world.infrastructure.di.container import SqliteGameDependencyInjectionContainer
 from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
     InMemoryGameTimeProvider,
@@ -37,6 +41,12 @@ from ai_rpg_world.infrastructure.ui.in_memory_game_scene_event_broker import (
 )
 from ai_rpg_world.infrastructure.ui.in_process_simulation_runtime_control_port import (
     InProcessSimulationRuntimeControlPort,
+)
+from ai_rpg_world.infrastructure.ui.sqlite_demo_autonomous_world_port import (
+    SqliteDemoAutonomousWorldPort,
+)
+from ai_rpg_world.infrastructure.ui.sqlite_manual_interaction_port import (
+    SqliteManualInteractionPort,
 )
 from ai_rpg_world.infrastructure.ui.sqlite_manual_movement_port import (
     SqliteManualMovementPort,
@@ -124,11 +134,44 @@ def create_sqlite_web_runtime(config: SqliteWebAppConfig) -> SqliteWebRuntime:
             manual_player_ids=frozenset(config.manual_player_ids),
         ),
     )
+    interaction_port = SqliteManualInteractionPort(
+        database=config.database_path,
+        current_tick_provider=time_provider,
+        projection=projection,
+        broker=broker,
+        bootstrap_config=GameSceneBootstrapConfig(
+            scene_catalog=config.scene_catalog,
+            viewport_width=config.viewport_width,
+            viewport_height=config.viewport_height,
+            initial_tick=config.initial_tick,
+            manual_player_ids=frozenset(config.manual_player_ids),
+        ),
+    )
+    demo_automation_port = SqliteDemoAutonomousWorldPort(
+        database=config.database_path,
+        projection=projection,
+        broker=broker,
+        bootstrap_config=GameSceneBootstrapConfig(
+            scene_catalog=config.scene_catalog,
+            viewport_width=config.viewport_width,
+            viewport_height=config.viewport_height,
+            initial_tick=config.initial_tick,
+            manual_player_ids=frozenset(config.manual_player_ids),
+        ),
+        patrol_route=(
+            Coordinate(7, 7, 0),
+            Coordinate(7, 6, 0),
+            Coordinate(6, 6, 0),
+            Coordinate(6, 7, 0),
+        ),
+        move_every_ticks=10,
+    )
     simulation_runtime_control = InProcessSimulationRuntimeControlPort(
         time_provider=time_provider,
         projection=projection,
         broker=broker,
         tick_interval_ms=config.tick_interval_ms,
+        tick_advanced_callback=demo_automation_port.advance_tick,
     )
     simulation_control = SimulationControlService(
         projection,
@@ -140,11 +183,15 @@ def create_sqlite_web_runtime(config: SqliteWebAppConfig) -> SqliteWebRuntime:
         projection,
         manual_player_ids=config.manual_player_ids,
     )
+    object_interaction = ManualObjectInteractionService(
+        interaction_port,
+        manual_player_ids=config.manual_player_ids,
+    )
     scene_api = GameSceneApi(
         GameSceneSnapshotService(projection),
         GameSceneStreamService(broker),
     )
-    control_api = GameControlApi(simulation_control, manual_control)
+    control_api = GameControlApi(simulation_control, manual_control, object_interaction)
     runtime_holder: dict[str, SqliteWebRuntime] = {}
 
     @asynccontextmanager

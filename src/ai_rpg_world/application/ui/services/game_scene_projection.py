@@ -13,6 +13,8 @@ from ai_rpg_world.application.ui.contracts.dtos import (
     GameSceneSnapshotDto,
     SceneActorDto,
     SceneLogEntryDto,
+    SceneMonsterDto,
+    SceneObjectDto,
     SceneWeatherDto,
 )
 from ai_rpg_world.application.ui.exceptions import GameSceneNotFoundException
@@ -41,6 +43,7 @@ class GameSceneProjection:
             existing.camera = copy.deepcopy(snapshot.camera)
             existing.actors = copy.deepcopy(snapshot.actors)
             existing.monsters = copy.deepcopy(snapshot.monsters)
+            existing.objects = copy.deepcopy(snapshot.objects)
             existing.weather = copy.deepcopy(snapshot.weather)
             existing.gateways = copy.deepcopy(snapshot.gateways)
             existing.areas = copy.deepcopy(snapshot.areas)
@@ -145,6 +148,88 @@ class GameSceneProjection:
                     "transition_ms": transition_ms,
                 },
             )
+
+    def apply_monster_moved(
+        self,
+        *,
+        spot_id: int,
+        monster_id: int,
+        to_tile_x: int,
+        to_tile_y: int,
+        facing: str,
+        display_name: str,
+        sprite_key: str,
+        state: str = "walking",
+    ) -> GameSceneDeltaEventDto:
+        with self._lock:
+            snapshot = self._require_snapshot_mutable(spot_id)
+            monster = next((m for m in snapshot.monsters if m.monster_id == monster_id), None)
+            if monster is None:
+                monster = SceneMonsterDto(
+                    monster_id=monster_id,
+                    display_name=display_name,
+                    tile_x=to_tile_x,
+                    tile_y=to_tile_y,
+                    facing=facing,
+                    sprite_key=sprite_key,
+                    state=state,
+                )
+                snapshot.monsters.append(monster)
+                from_x = to_tile_x
+                from_y = to_tile_y
+            else:
+                from_x = monster.tile_x
+                from_y = monster.tile_y
+                monster.tile_x = to_tile_x
+                monster.tile_y = to_tile_y
+                monster.facing = facing
+                monster.state = state
+            snapshot.scene_version += 1
+            return self._make_delta(
+                snapshot=snapshot,
+                event_type="monster_moved",
+                payload={
+                    "monster_id": monster_id,
+                    "from_tile_x": from_x,
+                    "from_tile_y": from_y,
+                    "to_tile_x": to_tile_x,
+                    "to_tile_y": to_tile_y,
+                    "display_name": display_name,
+                    "facing": facing,
+                    "sprite_key": sprite_key,
+                    "state": state,
+                },
+            )
+
+    def update_object_state(
+        self,
+        *,
+        spot_id: int,
+        object_id: int,
+        interaction_data: dict[str, object],
+        sprite_key: str | None = None,
+    ) -> None:
+        with self._lock:
+            snapshot = self._require_snapshot_mutable(spot_id)
+            scene_object = next(
+                (obj for obj in snapshot.objects if obj.object_id == object_id),
+                None,
+            )
+            if scene_object is None:
+                scene_object = SceneObjectDto(
+                    object_id=object_id,
+                    display_name=f"Object {object_id}",
+                    object_kind="object",
+                    tile_x=0,
+                    tile_y=0,
+                    sprite_key=sprite_key or "object_unknown",
+                    interaction_data=dict(interaction_data),
+                )
+                snapshot.objects.append(scene_object)
+            else:
+                scene_object.interaction_data = dict(interaction_data)
+                if sprite_key is not None:
+                    scene_object.sprite_key = sprite_key
 
     def apply_scene_changed(
         self,

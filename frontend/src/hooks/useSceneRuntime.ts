@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { apiClient } from "../api/client";
 import type {
   GameSceneSnapshot,
+  InteractResult,
   MoveResult,
   SceneActor,
   StreamMessage,
@@ -306,6 +307,18 @@ export function useSceneRuntime() {
     return result;
   };
 
+  const interactWithObject = async (
+    actorId: number,
+    targetObjectId: number,
+  ): Promise<InteractResult> => {
+    const result = await apiClient.interactActor(actorId, targetObjectId);
+    setErrorMessage(null);
+    if (selectedSpotId != null) {
+      await refreshSceneSnapshot(selectedSpotId);
+    }
+    return result;
+  };
+
   const setCameraMode = (mode: CameraMode): void => {
     cameraModeRef.current = mode;
   };
@@ -314,6 +327,7 @@ export function useSceneRuntime() {
     connectionState,
     errorMessage,
     manualActor,
+    interactWithObject,
     moveManualActor,
     overview,
     setCameraMode,

@@ -13,6 +13,8 @@ from ai_rpg_world.application.ui.contracts.dtos import (
     SceneGatewayDto,
     SceneLogEntryDto,
     SceneMapDto,
+    SceneMonsterDto,
+    SceneObjectDto,
     ScenePointDto,
     SceneWeatherDto,
     SimulationStateDto,
@@ -96,6 +98,8 @@ class GameSceneProjectionBootstrapService:
                         current_tick=self._config.initial_tick,
                     ),
                     actors=self._build_actor_dtos(physical_map.get_all_objects()),
+                    monsters=self._build_monster_dtos(physical_map.get_all_objects()),
+                    objects=self._build_object_dtos(physical_map.get_all_objects()),
                     weather=SceneWeatherDto(
                         weather_type=physical_map.weather_state.weather_type.value,
                         weather_intensity=float(physical_map.weather_state.intensity),
@@ -150,17 +154,15 @@ class GameSceneProjectionBootstrapService:
     def _build_actor_dtos(self, objects: Iterable[WorldObject]) -> list[SceneActorDto]:
         actors: list[SceneActorDto] = []
         for obj in objects:
-            if not obj.is_actor:
+            if not obj.is_actor or obj.object_type != ObjectTypeEnum.PLAYER:
                 continue
             player_id = int(obj.player_id) if obj.player_id is not None else None
-            display_name = self._resolve_display_name(obj)
-            actor_kind = self._resolve_actor_kind(obj)
             actors.append(
                 SceneActorDto(
                     actor_id=int(obj.object_id),
                     player_id=player_id,
-                    display_name=display_name,
-                    actor_kind=actor_kind,
+                    display_name=self._resolve_display_name(obj),
+                    actor_kind=self._resolve_actor_kind(obj),
                     tile_x=obj.coordinate.x,
                     tile_y=obj.coordinate.y,
                     facing=(
@@ -180,6 +182,48 @@ class GameSceneProjectionBootstrapService:
                 )
             )
         return sorted(actors, key=lambda actor: actor.actor_id)
+
+    def _build_monster_dtos(self, objects: Iterable[WorldObject]) -> list[SceneMonsterDto]:
+        monsters: list[SceneMonsterDto] = []
+        for obj in objects:
+            if not obj.is_actor or obj.object_type != ObjectTypeEnum.NPC:
+                continue
+            monsters.append(
+                SceneMonsterDto(
+                    monster_id=int(obj.object_id),
+                    display_name=self._resolve_display_name(obj),
+                    tile_x=obj.coordinate.x,
+                    tile_y=obj.coordinate.y,
+                    facing=(
+                        obj.direction.name.lower() if obj.direction is not None else "down"
+                    ),
+                    sprite_key=self._resolve_sprite_key(obj),
+                    state="busy" if obj.busy_until is not None else "idle",
+                )
+            )
+        return sorted(monsters, key=lambda monster: monster.monster_id)
+
+    def _build_object_dtos(self, objects: Iterable[WorldObject]) -> list[SceneObjectDto]:
+        scene_objects: list[SceneObjectDto] = []
+        for obj in objects:
+            if obj.is_actor:
+                continue
+            scene_objects.append(
+                SceneObjectDto(
+                    object_id=int(obj.object_id),
+                    display_name=self._resolve_display_name(obj),
+                    object_kind=obj.object_type.value.lower(),
+                    tile_x=obj.coordinate.x,
+                    tile_y=obj.coordinate.y,
+                    sprite_key=self._resolve_object_sprite_key(obj),
+                    is_blocking=obj.is_blocking,
+                    interaction_type=(
+                        obj.interaction_type.value if obj.interaction_type is not None else None
+                    ),
+                    interaction_data=dict(obj.interaction_data),
+                )
+            )
+        return sorted(scene_objects, key=lambda scene_object: scene_object.object_id)
 
     def _build_gateway_dtos(
         self,
@@ -251,6 +295,10 @@ class GameSceneProjectionBootstrapService:
             if profile is not None:
                 return profile.name.value
             return f"Player {int(obj.player_id)}"
+        if obj.object_type == ObjectTypeEnum.NPC:
+            return "Slime"
+        if obj.object_type == ObjectTypeEnum.CHEST:
+            return "宝箱"
         return f"{obj.object_type.value.title()} {int(obj.object_id)}"
 
     @staticmethod
@@ -258,7 +306,7 @@ class GameSceneProjectionBootstrapService:
         if obj.object_type == ObjectTypeEnum.PLAYER:
             return "player"
         if obj.object_type == ObjectTypeEnum.NPC:
-            return "npc"
+            return "monster"
         return obj.object_type.value.lower()
 
     def _resolve_sprite_key(self, obj: WorldObject) -> str:
@@ -267,7 +315,13 @@ class GameSceneProjectionBootstrapService:
         if obj.object_type == ObjectTypeEnum.PLAYER:
             return "player_default"
         if obj.object_type == ObjectTypeEnum.NPC:
-            return "npc_default"
+            return "monster_blob"
+        return obj.object_type.value.lower()
+
+    @staticmethod
+    def _resolve_object_sprite_key(obj: WorldObject) -> str:
+        if obj.object_type == ObjectTypeEnum.CHEST:
+            return "object_chest_closed"
         return obj.object_type.value.lower()
 
     def _resolve_weather_overlay_key(self, weather_type: str) -> Optional[str]:
