@@ -46,6 +46,13 @@ export type TiledDocument = {
   tilesets?: TiledTileset[];
 };
 
+export function isCollisionLayer(
+  layer: TiledLayer,
+  collisionLayerName: string,
+): boolean {
+  return layer.type === "tilelayer" && layer.name === collisionLayerName;
+}
+
 export function getObjectProperty(
   object: TiledObject,
   propertyName: string,
