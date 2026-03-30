@@ -1,5 +1,21 @@
 {
   "player_default": {
+    "image": "/assets/actors/players/sprite_sheet_zeriri.png",
+    "frame_width": 36,
+    "frame_height": 64,
+    "anchor": { "x": 0.5, "y": 0.9 },
+    "animations": {
+      "idle_up": { "frames": [12], "frame_rate": 1, "repeat": -1 },
+      "walk_up": { "frames": [12, 13, 14, 15], "frame_rate": 8, "repeat": -1 },
+      "idle_left": { "frames": [5], "frame_rate": 1, "repeat": -1 },
+      "walk_left": { "frames": [5, 6, 7, 4], "frame_rate": 8, "repeat": -1 },
+      "idle_right": { "frames": [9], "frame_rate": 1, "repeat": -1 },
+      "walk_right": { "frames": [9, 10, 9, 11], "frame_rate": 8, "repeat": -1 },
+      "idle_down": { "frames": [0], "frame_rate": 1, "repeat": -1 },
+      "walk_down": { "frames": [0, 1, 2, 3], "frame_rate": 8, "repeat": -1 }
+    }
+  },
+  "player_default_legacy": {
     "image": "/assets/actors/players/player_default.png",
     "frame_width": 32,
     "frame_height": 48,
@@ -16,9 +32,9 @@
     }
   },
   "monster_blob": {
-    "image": "/assets/monsters/blob_move.png",
-    "frame_width": 80,
-    "frame_height": 80,
+    "image": "/assets/monsters/sprite_sheet_slime.png",
+    "frame_width": 32,
+    "frame_height": 48,
     "anchor": { "x": 0.5, "y": 0.8 },
     "animations": {
       "idle_down": { "frames": [0], "frame_rate": 1, "repeat": -1 },
