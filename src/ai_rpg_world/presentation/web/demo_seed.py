@@ -185,9 +185,9 @@ def seed_demo_world_database(
                     object_type=ObjectTypeEnum.NPC,
                     component=AutonomousBehaviorComponent(
                         direction=DirectionEnum.WEST,
-                        capability=MovementCapability.normal_walk().with_speed_modifier(0.5),
+                        capability=MovementCapability.normal_walk().with_speed_modifier(0.1),
                         vision_range=5,
-                        fov_angle=140.0,
+                        fov_angle=360.0,
                         patrol_points=[
                             Coordinate(12, 11, 0),
                             Coordinate(13, 11, 0),
@@ -204,12 +204,12 @@ def seed_demo_world_database(
                     ),
                 ),
             ],
-            gateways=_build_gateways_from_imported_bundle(starter_bundle),
+            gateways=_build_gateways_from_imported_bundle(starter_bundle, spot_id=1),
         )
         south_gate = PhysicalMapAggregate.create(
             SpotId(2),
             _build_tiles_from_imported_bundle(south_gate_bundle),
-            gateways=_build_gateways_from_imported_bundle(south_gate_bundle),
+            gateways=_build_gateways_from_imported_bundle(south_gate_bundle, spot_id=2),
         )
         south_gate.set_weather(WeatherState(WeatherTypeEnum.RAIN, 0.6))
 
@@ -339,13 +339,20 @@ def _terrain_from_imported_cell(*, terrain_name: str | None, is_passable: bool) 
     return TerrainType.grass()
 
 
-def _build_gateways_from_imported_bundle(bundle: ImportedSceneBundleDto) -> list[Gateway]:
+def _build_gateways_from_imported_bundle(
+    bundle: ImportedSceneBundleDto,
+    *,
+    spot_id: int,
+) -> list[Gateway]:
     gateways: list[Gateway] = []
     for dto in bundle.gateways:
+        # gateway_id is globally unique in SQLite schema.
+        # Tiled object ids are only unique per-map, so namespace by spot_id.
+        gateway_id = (spot_id * 10_000) + dto.gateway_id
         gateways.append(
             Gateway(
-                gateway_id=GatewayId(dto.gateway_id),
-                name=f"gateway-{dto.gateway_id}",
+                gateway_id=GatewayId(gateway_id),
+                name=f"gateway-{spot_id}-{dto.gateway_id}",
                 area=PointArea(Coordinate(dto.tile_x, dto.tile_y, 0)),
                 target_spot_id=SpotId(dto.target_spot_id),
                 landing_coordinate=Coordinate(dto.landing_tile_x, dto.landing_tile_y, 0),

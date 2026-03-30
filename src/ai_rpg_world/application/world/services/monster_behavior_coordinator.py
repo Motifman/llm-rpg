@@ -6,6 +6,7 @@ from ai_rpg_world.application.world.services.monster_behavior_context_builder im
 from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.monster.aggregate.monster_aggregate import MonsterAggregate
+from ai_rpg_world.domain.monster.enum.monster_enum import BehaviorStateEnum
 from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
 from ai_rpg_world.domain.monster.service.behavior_state_transition_service import (
     BehaviorStateTransitionService,
@@ -15,6 +16,9 @@ from ai_rpg_world.domain.pursuit.enum.pursuit_failure_reason import (
 )
 from ai_rpg_world.domain.world.aggregate.physical_map_aggregate import PhysicalMapAggregate
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
+from ai_rpg_world.domain.world.entity.world_object_component import (
+    AutonomousBehaviorComponent,
+)
 from ai_rpg_world.domain.world.enum.world_enum import BehaviorActionType
 from ai_rpg_world.domain.world.service.behavior_service import BehaviorService
 
@@ -77,6 +81,8 @@ class MonsterBehaviorCoordinator:
         monster = self._monster_repository.find_by_world_object_id(actor.object_id)
         if monster is None:
             return
+
+        self._recover_passive_behavior_state(monster, actor)
 
         skill_context = self._behavior_context_builder.build_skill_context(
             actor,
@@ -164,6 +170,39 @@ class MonsterBehaviorCoordinator:
 
         self._monster_repository.save(monster)
         self._flush_sync_events()
+
+    def _recover_passive_behavior_state(
+        self,
+        monster: MonsterAggregate,
+        actor: WorldObject,
+    ) -> None:
+        component = getattr(actor, "component", None)
+        has_patrol_points = (
+            isinstance(component, AutonomousBehaviorComponent)
+            and bool(component.patrol_points)
+        )
+        desired_passive_state = (
+            BehaviorStateEnum.PATROL if has_patrol_points else BehaviorStateEnum.IDLE
+        )
+
+        if (
+            monster.behavior_state == BehaviorStateEnum.RETURN
+            and monster.behavior_initial_position is not None
+            and actor.coordinate == monster.behavior_initial_position
+        ):
+            monster.transition_to_passive_state(desired_passive_state)
+            self._monster_repository.save(monster)
+            self._flush_sync_events()
+            return
+
+        if (
+            monster.behavior_state == BehaviorStateEnum.SEARCH
+            and not monster.has_active_pursuit
+            and monster.behavior_last_known_position is None
+        ):
+            monster.transition_to_passive_state(desired_passive_state)
+            self._monster_repository.save(monster)
+            self._flush_sync_events()
 
     def _fail_and_save(
         self,
