@@ -2,6 +2,7 @@
 
 from fastapi.testclient import TestClient
 
+from ai_rpg_world.domain.world.exception.map_exception import NotFacingTargetException
 from ai_rpg_world.application.ui.contracts.dtos import (
     GameSceneDeltaEventDto,
     GameSceneSnapshotDto,
@@ -45,11 +46,14 @@ class _StubMovementPort:
 
 
 class _StubInteractionPort:
-    def __init__(self) -> None:
+    def __init__(self, *, exception: Exception | None = None) -> None:
         self.calls = []
+        self.exception = exception
 
     def interact(self, *, actor_id: int, target_object_id: int):
         self.calls.append((actor_id, target_object_id))
+        if self.exception is not None:
+            raise self.exception
         return {
             "success": True,
             "actor_id": actor_id,
@@ -113,7 +117,10 @@ def _make_snapshot(spot_id: int = 1) -> GameSceneSnapshotDto:
     )
 
 
-def _create_client() -> tuple[
+def _create_client(
+    *,
+    interaction_exception: Exception | None = None,
+) -> tuple[
     TestClient,
     GameSceneProjection,
     InMemoryGameSceneEventBroker,
@@ -126,7 +133,7 @@ def _create_client() -> tuple[
     snapshot_service = GameSceneSnapshotService(projection)
     stream_service = GameSceneStreamService(broker)
     movement_port = _StubMovementPort()
-    interaction_port = _StubInteractionPort()
+    interaction_port = _StubInteractionPort(exception=interaction_exception)
     simulation_control = SimulationControlService(projection, broker)
     manual_control = ManualActorControlService(
         movement_port,
@@ -323,6 +330,16 @@ def test_websocket_stream_returns_error_for_invalid_cursor_query():
 def test_websocket_stream_returns_error_for_invalid_poll_payload():
     client, _, _, _, _ = _create_client()
 
+    with client.websocket_connect("/api/scenes/spot-1/stream") as websocket:
+        websocket.receive_json()
+        websocket.send_json(
+            {"action": "poll", "last_seen_scene_version": "not-a-number"}
+        )
+        response = websocket.receive_json()
+        assert response["type"] == "error"
+        assert response["detail"] == "Invalid stream request payload."
+        assert response["errors"][0]["loc"] == ["last_seen_scene_version"]
+
 
 def test_interact_actor_delegates_to_manual_object_interaction():
     client, _, _, _, interaction_port = _create_client()
@@ -342,12 +359,13 @@ def test_interact_actor_returns_403_when_manual_control_is_forbidden():
     assert response.status_code == 403
     assert "not allowed" in response.json()["detail"]
 
-    with client.websocket_connect("/api/scenes/spot-1/stream") as websocket:
-        websocket.receive_json()
-        websocket.send_json(
-            {"action": "poll", "last_seen_scene_version": "not-a-number"}
-        )
-        response = websocket.receive_json()
-        assert response["type"] == "error"
-        assert response["detail"] == "Invalid stream request payload."
-        assert response["errors"][0]["loc"] == ["last_seen_scene_version"]
+
+def test_interact_actor_returns_400_for_map_domain_failure():
+    client, _, _, _, _ = _create_client(
+        interaction_exception=NotFacingTargetException("Actor 1 is not facing target 2001")
+    )
+
+    response = client.post("/api/actors/1/interact", json={"target_object_id": 2001})
+
+    assert response.status_code == 400
+    assert "not facing target" in response.json()["detail"]
