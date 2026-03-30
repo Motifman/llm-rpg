@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.application.ui.contracts.commands import (
+    InteractSceneObjectCommand,
     MoveManualActorCommand,
     PauseSimulationCommand,
     ResumeSimulationCommand,
@@ -35,6 +36,10 @@ class SpeedRequest(BaseModel):
 
 class MoveRequest(BaseModel):
     direction: str
+
+
+class InteractRequest(BaseModel):
+    target_object_id: int = Field(..., gt=0)
 
 
 class PollRequest(BaseModel):
@@ -169,6 +174,16 @@ def create_web_app(
             MoveManualActorCommand(
                 player_id=actor_id,
                 direction=direction,
+            )
+        )
+        return JSONResponse(content=_to_jsonable(result))
+
+    @app.post("/api/actors/{actor_id}/interact")
+    async def interact_actor(actor_id: int, request: InteractRequest):
+        result = control_api.interact_scene_object(
+            InteractSceneObjectCommand(
+                player_id=actor_id,
+                target_object_id=int(request.target_object_id),
             )
         )
         return JSONResponse(content=_to_jsonable(result))

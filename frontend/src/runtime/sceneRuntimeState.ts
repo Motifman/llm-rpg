@@ -3,6 +3,7 @@ import type {
   MoveResult,
   SceneActor,
   SceneDeltaEvent,
+  SceneMonster,
   WorldSceneSummary,
 } from "../types";
 
@@ -68,6 +69,28 @@ export function applySceneDeltaEvent(
     };
   }
 
+  if (event.event_type === "monster_moved") {
+    const monsterId = Number(event.payload.monster_id);
+    const existingMonster = snapshot.monsters.find((monster) => monster.monster_id === monsterId);
+    const nextMonster: SceneMonster = {
+      monster_id: monsterId,
+      display_name: String(event.payload.display_name ?? existingMonster?.display_name ?? "Monster"),
+      tile_x: Number(event.payload.to_tile_x ?? existingMonster?.tile_x ?? 0),
+      tile_y: Number(event.payload.to_tile_y ?? existingMonster?.tile_y ?? 0),
+      facing: String(event.payload.facing ?? existingMonster?.facing ?? "down"),
+      sprite_key: String(event.payload.sprite_key ?? existingMonster?.sprite_key ?? "monster_blob"),
+      state: String(event.payload.state ?? existingMonster?.state ?? "walking"),
+    };
+    return {
+      ...snapshot,
+      monsters: [
+        ...snapshot.monsters.filter((monster) => monster.monster_id !== monsterId),
+        nextMonster,
+      ],
+      scene_version: event.scene_version,
+    };
+  }
+
   if (event.event_type === "simulation_paused" || event.event_type === "simulation_resumed") {
     return {
       ...snapshot,
@@ -108,6 +131,10 @@ export function applySceneDeltaEvent(
           actor.busy_until_tick != null && actor.busy_until_tick > currentTick
             ? actor.busy_until_tick
             : null,
+      })),
+      monsters: snapshot.monsters.map((monster) => ({
+        ...monster,
+        state: monster.state === "walking" ? "idle" : monster.state,
       })),
       scene_version: event.scene_version,
     };

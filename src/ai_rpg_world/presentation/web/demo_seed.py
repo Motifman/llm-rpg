@@ -38,6 +38,7 @@ from ai_rpg_world.domain.world.entity.spot import Spot
 from ai_rpg_world.domain.world.entity.tile import Tile
 from ai_rpg_world.domain.world.entity.world_object import WorldObject
 from ai_rpg_world.domain.world.entity.world_object_component import ActorComponent
+from ai_rpg_world.domain.world.entity.world_object_component import ChestComponent
 from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum, ObjectTypeEnum
 from ai_rpg_world.domain.world.value_object.movement_capability import MovementCapability
@@ -133,6 +134,17 @@ def seed_demo_world_database(
                     coordinate=Coordinate(6, 5, 0),
                     object_type=ObjectTypeEnum.CHEST,
                     is_blocking=True,
+                    component=ChestComponent(is_open=False),
+                ),
+                WorldObject(
+                    object_id=WorldObjectId.create(20_001),
+                    coordinate=Coordinate(7, 7, 0),
+                    object_type=ObjectTypeEnum.NPC,
+                    component=ActorComponent(
+                        direction=DirectionEnum.WEST,
+                        capability=MovementCapability.normal_walk(),
+                        is_npc=True,
+                    ),
                 ),
             ],
             gateways=[

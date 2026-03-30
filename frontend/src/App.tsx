@@ -16,6 +16,7 @@ export function App() {
   const {
     connectionState,
     errorMessage,
+    interactWithObject,
     manualActor,
     moveManualActor,
     overview,
@@ -189,7 +190,7 @@ export function App() {
             <div>
               <p className="eyebrow">Actors</p>
               <div className="list-block">
-                {snapshot?.actors.map((actor) => (
+                {snapshot?.actors?.map((actor) => (
                   <div className="list-item" key={actor.actor_id}>
                     <strong>{actor.display_name}</strong>
                     <span>
@@ -197,6 +198,54 @@ export function App() {
                     </span>
                   </div>
                 )) ?? <p className="muted">No actors yet.</p>}
+              </div>
+            </div>
+            <div>
+              <p className="eyebrow">Monsters</p>
+              <div className="list-block">
+                {snapshot?.monsters?.map((monster) => (
+                  <div className="list-item" key={monster.monster_id}>
+                    <strong>{monster.display_name}</strong>
+                    <span>
+                      ({monster.tile_x}, {monster.tile_y}) / {monster.facing}
+                    </span>
+                  </div>
+                )) ?? <p className="muted">No monsters yet.</p>}
+              </div>
+            </div>
+            <div>
+              <p className="eyebrow">Objects</p>
+              <div className="list-block">
+                {snapshot?.objects?.map((object) => (
+                  <div className="list-item" key={object.object_id}>
+                    <strong>{object.display_name}</strong>
+                    <span>
+                      ({object.tile_x}, {object.tile_y}) / {object.object_kind}
+                    </span>
+                    <span>
+                      {object.interaction_type ?? "no interaction"}
+                      {" / "}
+                      {object.is_blocking ? "blocking" : "passable"}
+                    </span>
+                    {"is_open" in object.interaction_data ? (
+                      <span>
+                        {(object.interaction_data.is_open as boolean) ? "opened" : "closed"}
+                      </span>
+                    ) : null}
+                    {manualActor && object.interaction_type ? (
+                      <button
+                        onClick={() =>
+                          void runCommand(() =>
+                            interactWithObject(manualActor.actor_id, object.object_id),
+                          )
+                        }
+                        type="button"
+                      >
+                        Interact
+                      </button>
+                    ) : null}
+                  </div>
+                )) ?? <p className="muted">No objects yet.</p>}
               </div>
             </div>
             <div>

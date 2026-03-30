@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 from ai_rpg_world.application.ui.contracts.interfaces import (
     IGameSceneEventBroker,
@@ -26,6 +26,7 @@ class InProcessSimulationRuntimeControlPort(ISimulationRuntimeControlPort):
         projection: GameSceneProjection,
         broker: IGameSceneEventBroker,
         tick_interval_ms: int = 60,
+        tick_advanced_callback: Optional[Callable[[int], None]] = None,
     ) -> None:
         if tick_interval_ms <= 0:
             raise ValueError("tick_interval_ms must be greater than 0")
@@ -39,6 +40,7 @@ class InProcessSimulationRuntimeControlPort(ISimulationRuntimeControlPort):
         self._stop_event = threading.Event()
         self._state_changed = threading.Event()
         self._lock = threading.Lock()
+        self._tick_advanced_callback = tick_advanced_callback
 
     def start(self) -> None:
         with self._lock:
@@ -101,6 +103,8 @@ class InProcessSimulationRuntimeControlPort(ISimulationRuntimeControlPort):
                 current_tick=current_tick,
                 server_time_ms=server_time_ms,
             )
+        if self._tick_advanced_callback is not None:
+            self._tick_advanced_callback(current_tick)
 
 
 __all__ = ["InProcessSimulationRuntimeControlPort"]

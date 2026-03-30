@@ -6,6 +6,7 @@ from ai_rpg_world.domain.player.event.status_events import PlayerLocationChanged
 from ai_rpg_world.domain.world.event.map_events import (
     GatewayTriggeredEvent,
     SpotWeatherChangedEvent,
+    WorldObjectInteractedEvent,
     WorldObjectMovedEvent,
 )
 
@@ -18,6 +19,7 @@ class UiEventHandlerRegistry:
         for event_type in (
             PlayerLocationChangedEvent,
             WorldObjectMovedEvent,
+            WorldObjectInteractedEvent,
             GatewayTriggeredEvent,
             SpotWeatherChangedEvent,
         ):

@@ -1,4 +1,4 @@
-import type { SceneActor, SceneMap } from "../types";
+import type { SceneMap } from "../types";
 
 export type AnimationClip = {
   frames: number[];
@@ -51,7 +51,10 @@ export function facingToAnimationDirection(facing: string): "up" | "down" | "lef
   return "right";
 }
 
-export function buildActorAnimationName(actor: SceneActor): string {
+export function buildActorAnimationName(actor: {
+  facing: string;
+  state: string;
+}): string {
   const direction = facingToAnimationDirection(actor.facing);
   const normalizedState = actor.state?.toLowerCase() ?? "idle";
   const mode = normalizedState === "walking" ? "walk" : "idle";

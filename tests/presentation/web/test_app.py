@@ -7,6 +7,7 @@ from ai_rpg_world.application.ui.contracts.dtos import (
     GameSceneSnapshotDto,
     SceneActorDto,
     SceneCameraDto,
+    SceneObjectDto,
     SceneMapDto,
     SimulationStateDto,
 )
@@ -19,6 +20,9 @@ from ai_rpg_world.application.ui.services.game_scene_stream_service import (
 )
 from ai_rpg_world.application.ui.services.manual_actor_control_service import (
     ManualActorControlService,
+)
+from ai_rpg_world.application.ui.services.manual_object_interaction_service import (
+    ManualObjectInteractionService,
 )
 from ai_rpg_world.application.ui.services.simulation_control_service import (
     SimulationControlService,
@@ -38,6 +42,23 @@ class _StubMovementPort:
     def move_tile(self, command):
         self.calls.append(command)
         return {"success": True, "message": "moved"}
+
+
+class _StubInteractionPort:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def interact(self, *, actor_id: int, target_object_id: int):
+        self.calls.append((actor_id, target_object_id))
+        return {
+            "success": True,
+            "actor_id": actor_id,
+            "target_object_id": target_object_id,
+            "spot_id": 1,
+            "interaction_type": "chest",
+            "message": "opened",
+            "object_state": {"is_open": True},
+        }
 
 
 def _make_snapshot(spot_id: int = 1) -> GameSceneSnapshotDto:
@@ -74,36 +95,64 @@ def _make_snapshot(spot_id: int = 1) -> GameSceneSnapshotDto:
                 sprite_key="player_default",
             )
         ],
+        monsters=[],
+        objects=[
+            SceneObjectDto(
+                object_id=2001,
+                display_name="宝箱",
+                object_kind="chest",
+                tile_x=2,
+                tile_y=2,
+                sprite_key="object_chest_closed",
+                is_blocking=True,
+                interaction_type="chest",
+            )
+        ],
         scene_version=0,
         server_time_ms=0,
     )
 
 
-def _create_client() -> tuple[TestClient, GameSceneProjection, InMemoryGameSceneEventBroker, _StubMovementPort]:
+def _create_client() -> tuple[
+    TestClient,
+    GameSceneProjection,
+    InMemoryGameSceneEventBroker,
+    _StubMovementPort,
+    _StubInteractionPort,
+]:
     projection = GameSceneProjection()
     projection.upsert_snapshot(_make_snapshot(1))
     broker = InMemoryGameSceneEventBroker()
     snapshot_service = GameSceneSnapshotService(projection)
     stream_service = GameSceneStreamService(broker)
     movement_port = _StubMovementPort()
+    interaction_port = _StubInteractionPort()
     simulation_control = SimulationControlService(projection, broker)
     manual_control = ManualActorControlService(
         movement_port,
         projection,
         manual_player_ids=[1],
     )
+    interaction_control = ManualObjectInteractionService(
+        interaction_port,
+        manual_player_ids=[1],
+    )
     scene_api = GameSceneApi(snapshot_service, stream_service)
-    control_api = GameControlApi(simulation_control, manual_control)
+    control_api = GameControlApi(
+        simulation_control,
+        manual_control,
+        interaction_control,
+    )
     app = create_web_app(
         scene_api=scene_api,
         control_api=control_api,
         cors_allowed_origins=("http://127.0.0.1:5173",),
     )
-    return TestClient(app), projection, broker, movement_port
+    return TestClient(app), projection, broker, movement_port, interaction_port
 
 
 def test_get_scene_snapshot_returns_snapshot_json():
-    client, _, _, _ = _create_client()
+    client, _, _, _, _ = _create_client()
 
     response = client.get("/api/scenes/1/snapshot")
 
@@ -113,7 +162,7 @@ def test_get_scene_snapshot_returns_snapshot_json():
 
 
 def test_get_scene_snapshot_returns_404_for_missing_scene():
-    client, _, _, _ = _create_client()
+    client, _, _, _, _ = _create_client()
 
     response = client.get("/api/scenes/999/snapshot")
 
@@ -122,7 +171,7 @@ def test_get_scene_snapshot_returns_404_for_missing_scene():
 
 
 def test_control_endpoints_update_projection_state():
-    client, projection, _, _ = _create_client()
+    client, projection, _, _, _ = _create_client()
 
     pause_response = client.post("/api/control/pause")
     speed_response = client.post("/api/control/speed", json={"speed_multiplier": 2.0})
@@ -137,7 +186,7 @@ def test_control_endpoints_update_projection_state():
 
 
 def test_move_actor_returns_400_for_unknown_direction():
-    client, _, _, _ = _create_client()
+    client, _, _, _, _ = _create_client()
 
     response = client.post("/api/actors/1/move", json={"direction": "bad"})
 
@@ -146,7 +195,7 @@ def test_move_actor_returns_400_for_unknown_direction():
 
 
 def test_move_actor_returns_403_when_manual_control_is_forbidden():
-    client, _, _, _ = _create_client()
+    client, _, _, _, _ = _create_client()
 
     response = client.post("/api/actors/2/move", json={"direction": "north"})
 
@@ -155,7 +204,7 @@ def test_move_actor_returns_403_when_manual_control_is_forbidden():
 
 
 def test_move_actor_delegates_to_manual_control():
-    client, _, _, movement_port = _create_client()
+    client, _, _, movement_port, _ = _create_client()
 
     response = client.post("/api/actors/1/move", json={"direction": "east"})
 
@@ -165,7 +214,7 @@ def test_move_actor_delegates_to_manual_control():
 
 
 def test_world_overview_returns_scene_summaries():
-    client, _, _, _ = _create_client()
+    client, _, _, _, _ = _create_client()
 
     response = client.get("/api/world/overview")
 
@@ -175,7 +224,7 @@ def test_world_overview_returns_scene_summaries():
 
 
 def test_world_overview_includes_cors_header_for_allowed_origin():
-    client, _, _, _ = _create_client()
+    client, _, _, _, _ = _create_client()
 
     response = client.get(
         "/api/world/overview",
@@ -187,7 +236,7 @@ def test_world_overview_includes_cors_header_for_allowed_origin():
 
 
 def test_world_overview_preflight_returns_cors_headers():
-    client, _, _, _ = _create_client()
+    client, _, _, _, _ = _create_client()
 
     response = client.options(
         "/api/world/overview",
@@ -204,7 +253,7 @@ def test_world_overview_preflight_returns_cors_headers():
 
 
 def test_websocket_stream_sends_initial_backlog_and_poll_updates():
-    client, _, broker, _ = _create_client()
+    client, _, broker, _, _ = _create_client()
     broker.publish(
         GameSceneDeltaEventDto(
             event_id="evt-1",
@@ -239,7 +288,7 @@ def test_websocket_stream_sends_initial_backlog_and_poll_updates():
 
 
 def test_websocket_stream_returns_error_for_unsupported_action():
-    client, _, _, _ = _create_client()
+    client, _, _, _, _ = _create_client()
 
     with client.websocket_connect("/api/scenes/spot-1/stream") as websocket:
         websocket.receive_json()
@@ -250,7 +299,7 @@ def test_websocket_stream_returns_error_for_unsupported_action():
 
 
 def test_websocket_stream_returns_pong_for_ping():
-    client, _, _, _ = _create_client()
+    client, _, _, _, _ = _create_client()
 
     with client.websocket_connect("/api/scenes/spot-1/stream") as websocket:
         websocket.receive_json()
@@ -260,7 +309,7 @@ def test_websocket_stream_returns_pong_for_ping():
 
 
 def test_websocket_stream_returns_error_for_invalid_cursor_query():
-    client, _, _, _ = _create_client()
+    client, _, _, _, _ = _create_client()
 
     with client.websocket_connect(
         "/api/scenes/spot-1/stream?last_seen_scene_version=oops"
@@ -272,7 +321,26 @@ def test_websocket_stream_returns_error_for_invalid_cursor_query():
 
 
 def test_websocket_stream_returns_error_for_invalid_poll_payload():
-    client, _, _, _ = _create_client()
+    client, _, _, _, _ = _create_client()
+
+
+def test_interact_actor_delegates_to_manual_object_interaction():
+    client, _, _, _, interaction_port = _create_client()
+
+    response = client.post("/api/actors/1/interact", json={"target_object_id": 2001})
+
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert interaction_port.calls == [(1, 2001)]
+
+
+def test_interact_actor_returns_403_when_manual_control_is_forbidden():
+    client, _, _, _, _ = _create_client()
+
+    response = client.post("/api/actors/2/interact", json={"target_object_id": 2001})
+
+    assert response.status_code == 403
+    assert "not allowed" in response.json()["detail"]
 
     with client.websocket_connect("/api/scenes/spot-1/stream") as websocket:
         websocket.receive_json()

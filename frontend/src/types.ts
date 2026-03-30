@@ -43,6 +43,28 @@ export type SceneWeather = {
   weather_overlay_key: string | null;
 };
 
+export type SceneMonster = {
+  monster_id: number;
+  display_name: string;
+  tile_x: number;
+  tile_y: number;
+  facing: string;
+  sprite_key: string;
+  state: string;
+};
+
+export type SceneObject = {
+  object_id: number;
+  display_name: string;
+  object_kind: string;
+  tile_x: number;
+  tile_y: number;
+  sprite_key: string;
+  is_blocking: boolean;
+  interaction_type: string | null;
+  interaction_data: Record<string, unknown>;
+};
+
 export type SceneGateway = {
   gateway_id: number;
   tile_x: number;
@@ -74,7 +96,8 @@ export type GameSceneSnapshot = {
   camera: SceneCamera;
   simulation: SimulationState;
   actors: SceneActor[];
-  monsters: unknown[];
+  monsters: SceneMonster[];
+  objects: SceneObject[];
   weather: SceneWeather | null;
   gateways: SceneGateway[];
   areas: SceneArea[];
@@ -136,4 +159,14 @@ export type MoveResult = {
   busy_until_tick: number;
   message: string;
   error_message: string | null;
+};
+
+export type InteractResult = {
+  success: boolean;
+  actor_id: number;
+  target_object_id: number;
+  spot_id: number;
+  interaction_type: string;
+  message: string;
+  object_state: Record<string, unknown>;
 };

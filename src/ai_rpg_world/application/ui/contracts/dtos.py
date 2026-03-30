@@ -114,6 +114,32 @@ class SceneMonsterDto:
 
 
 @dataclass
+class SceneObjectDto:
+    object_id: int
+    display_name: str
+    object_kind: str
+    tile_x: int
+    tile_y: int
+    sprite_key: str
+    is_blocking: bool = True
+    interaction_type: Optional[str] = None
+    interaction_data: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _ensure_int(self.object_id, "object_id")
+        _ensure_str(self.display_name, "display_name")
+        _ensure_str(self.object_kind, "object_kind")
+        _ensure_int(self.tile_x, "tile_x")
+        _ensure_int(self.tile_y, "tile_y")
+        _ensure_str(self.sprite_key, "sprite_key")
+        _ensure_bool(self.is_blocking, "is_blocking")
+        if self.interaction_type is not None:
+            _ensure_str(self.interaction_type, "interaction_type")
+        if not isinstance(self.interaction_data, dict):
+            raise TypeError("interaction_data must be dict")
+
+
+@dataclass
 class SceneWeatherDto:
     weather_type: str
     weather_intensity: float
@@ -235,6 +261,7 @@ class GameSceneSnapshotDto:
     simulation: SimulationStateDto
     actors: List[SceneActorDto] = field(default_factory=list)
     monsters: List[SceneMonsterDto] = field(default_factory=list)
+    objects: List[SceneObjectDto] = field(default_factory=list)
     weather: Optional[SceneWeatherDto] = None
     gateways: List[SceneGatewayDto] = field(default_factory=list)
     areas: List[SceneAreaDto] = field(default_factory=list)
@@ -255,6 +282,7 @@ class GameSceneSnapshotDto:
         for field_name, values, expected_type in (
             ("actors", self.actors, SceneActorDto),
             ("monsters", self.monsters, SceneMonsterDto),
+            ("objects", self.objects, SceneObjectDto),
             ("gateways", self.gateways, SceneGatewayDto),
             ("areas", self.areas, SceneAreaDto),
             ("ui_logs", self.ui_logs, SceneLogEntryDto),
@@ -469,3 +497,24 @@ class ImportedSceneBundleDto:
             self.render_metadata, ImportedRenderMetadataDto
         ):
             raise TypeError("render_metadata must be ImportedRenderMetadataDto or None")
+
+
+@dataclass(frozen=True)
+class InteractSceneObjectResultDto:
+    success: bool
+    actor_id: int
+    target_object_id: int
+    spot_id: int
+    interaction_type: str
+    message: str
+    object_state: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _ensure_bool(self.success, "success")
+        _ensure_int(self.actor_id, "actor_id")
+        _ensure_int(self.target_object_id, "target_object_id")
+        _ensure_int(self.spot_id, "spot_id")
+        _ensure_str(self.interaction_type, "interaction_type")
+        _ensure_str(self.message, "message")
+        if not isinstance(self.object_state, dict):
+            raise TypeError("object_state must be dict")
