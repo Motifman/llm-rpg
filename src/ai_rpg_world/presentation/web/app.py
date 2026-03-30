@@ -25,6 +25,7 @@ from ai_rpg_world.application.ui.exceptions import (
     ManualControlForbiddenException,
     SimulationSpeedValidationException,
 )
+from ai_rpg_world.domain.world.exception.map_exception import MapDomainException
 from ai_rpg_world.domain.world.enum.world_enum import DirectionEnum
 from ai_rpg_world.presentation.game_control_api import GameControlApi
 from ai_rpg_world.presentation.game_scene_api import GameSceneApi
@@ -133,6 +134,10 @@ def create_web_app(
     @app.exception_handler(ApplicationException)
     async def _handle_application_exception(_, exc: ApplicationException):
         return JSONResponse(status_code=400, content={"detail": exc.message})
+
+    @app.exception_handler(MapDomainException)
+    async def _handle_map_domain_exception(_, exc: MapDomainException):
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
 
     @app.get("/api/scenes/{spot_id}/snapshot")
     async def get_scene_snapshot(spot_id: int):

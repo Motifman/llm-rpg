@@ -29,6 +29,7 @@ from ai_rpg_world.infrastructure.unit_of_work.sqlite_transactional_scope_factory
 from ai_rpg_world.application.world.world_state_sqlite_wiring import (
     attach_world_state_sqlite_repositories,
 )
+from ai_rpg_world.domain.world.exception.map_exception import ObjectNotFoundException
 
 
 class SqliteManualInteractionPort:
@@ -79,13 +80,21 @@ class SqliteManualInteractionPort:
                 raise ValueError(f"Physical map not found for spot {spot_id}")
 
             current_tick = WorldTick(self._current_tick_provider.get_current_tick().value)
+            actor = physical_map.get_actor(WorldObjectId(actor_id))
+            target = physical_map.get_object(WorldObjectId(target_object_id))
+            if actor is None:
+                raise ObjectNotFoundException(f"Actor {actor_id} not found")
+            if target is None:
+                raise ObjectNotFoundException(f"Target {target_object_id} not found")
+            distance = actor.coordinate.chebyshev_distance_to(target.coordinate)
+            if distance == 1:
+                actor.turn(actor.coordinate.direction_to(target.coordinate))
             with scope:
                 physical_map.interact_with(
                     WorldObjectId(actor_id),
                     WorldObjectId(target_object_id),
                     current_tick,
                 )
-                target = physical_map.get_object(WorldObjectId(target_object_id))
                 world_state.world_runtime.physical_maps.save(physical_map)
             bootstrap_service = GameSceneProjectionBootstrapService(
                 spot_repository=world_state.world_structure.spots,

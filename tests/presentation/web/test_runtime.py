@@ -307,7 +307,7 @@ def test_sqlite_web_runtime_interact_endpoint_updates_chest_state_and_logs(
                 time.sleep(0.06)
                 snapshot = client.get("/api/scenes/1/snapshot").json()
             response = None
-            for _ in range(10):
+            for _ in range(20):
                 response = client.post(
                     "/api/actors/1/interact",
                     json={"target_object_id": 10001},
@@ -323,5 +323,72 @@ def test_sqlite_web_runtime_interact_endpoint_updates_chest_state_and_logs(
         assert response.json()["object_state"]["is_open"] is True
         assert snapshot["objects"][0]["interaction_data"]["is_open"] is True
         assert any("宝箱を開けました" in entry["message"] for entry in snapshot["ui_logs"])
+    finally:
+        runtime.close()
+
+
+def test_sqlite_web_runtime_interact_auto_turns_actor_toward_target(
+    tmp_path: Path,
+):
+    database = tmp_path / "runtime-interact-facing.db"
+    seed_demo_world_database(database)
+
+    runtime = create_sqlite_web_runtime(
+        SqliteWebAppConfig(
+            database_path=database,
+            manual_player_ids=(1,),
+            initial_tick=100,
+        )
+    )
+    try:
+        with TestClient(runtime.app) as client:
+            path = (
+                "east",
+                "east",
+                "east",
+                "east",
+                "east",
+                "south",
+                "south",
+                "south",
+                "west",
+                "east",
+            )
+            for direction in path:
+                move_response = None
+                for _ in range(10):
+                    move_response = client.post(
+                        "/api/actors/1/move",
+                        json={"direction": direction},
+                    )
+                    if move_response.status_code == 200:
+                        break
+                    time.sleep(0.06)
+                assert move_response is not None
+                assert move_response.status_code == 200
+                time.sleep(0.06)
+
+            for _ in range(20):
+                snapshot = client.get("/api/scenes/1/snapshot").json()
+                actor = snapshot["actors"][0]
+                if (
+                    actor["tile_x"] == 6
+                    and actor["tile_y"] == 4
+                    and actor["facing"] == "east"
+                    and actor["state"] == "idle"
+                ):
+                    break
+                time.sleep(0.06)
+
+            response = client.post(
+                "/api/actors/1/interact",
+                json={"target_object_id": 10001},
+            )
+            snapshot = client.get("/api/scenes/1/snapshot").json()
+
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+        assert snapshot["objects"][0]["interaction_data"]["is_open"] is True
+        assert snapshot["actors"][0]["facing"] == "south"
     finally:
         runtime.close()
