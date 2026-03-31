@@ -92,3 +92,13 @@ class InteractionNotAllowedException(SpotGraphDomainException, BusinessRuleExcep
     """インタラクションの前提条件を満たしていない"""
     error_code = "WORLD_GRAPH.INTERACTION_NOT_ALLOWED"
 
+
+class SpotTravelUnreachableException(SpotGraphDomainException, BusinessRuleException):
+    """指定スポットへの経路が存在しない（または到達不能）"""
+    error_code = "WORLD_GRAPH.SPOT_TRAVEL_UNREACHABLE"
+
+
+class SpotTravelAlreadyInProgressException(SpotGraphDomainException, BusinessRuleException):
+    """既にスポット間移動中のときに再度移動開始しようとした"""
+    error_code = "WORLD_GRAPH.SPOT_TRAVEL_ALREADY_IN_PROGRESS"
+

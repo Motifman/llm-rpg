@@ -40,6 +40,28 @@ def _node(i: int) -> SpotNode:
     )
 
 
+class TestSpotGraphAggregateFindConnection:
+    def test_find_first_passable_connection_between(self):
+        g = SpotGraphAggregate.empty(SpotGraphId.create(1))
+        g.add_spot(_node(1))
+        g.add_spot(_node(2))
+        g.add_connection(
+            SpotConnection(
+                connection_id=ConnectionId.create(1),
+                from_spot_id=SpotId.create(1),
+                to_spot_id=SpotId.create(2),
+                name="door",
+                description="",
+                travel_ticks=1,
+                is_bidirectional=False,
+            )
+        )
+        c = g.find_first_passable_connection_between(SpotId.create(1), SpotId.create(2))
+        assert c is not None
+        assert c.connection_id == ConnectionId.create(1)
+        assert g.find_first_passable_connection_between(SpotId.create(2), SpotId.create(1)) is None
+
+
 class TestSpotGraphAggregateSpotsAndConnections:
     def test_duplicate_spot_raises(self):
         g = SpotGraphAggregate.empty(SpotGraphId.create(1))
