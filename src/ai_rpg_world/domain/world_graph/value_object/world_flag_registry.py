@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import FrozenSet, Iterable
+from typing import FrozenSet
 
 
 @dataclass(frozen=True)
@@ -13,6 +13,11 @@ class WorldFlagRegistry:
     @classmethod
     def empty(cls) -> WorldFlagRegistry:
         return cls(frozenset())
+
+    @classmethod
+    def from_frozen_set(cls, flags: FrozenSet[str]) -> WorldFlagRegistry:
+        """既存のフラグ集合から構築（インタラクション結果の一括反映用）。"""
+        return cls(flags)
 
     @classmethod
     def of(cls, *names: str) -> WorldFlagRegistry:
