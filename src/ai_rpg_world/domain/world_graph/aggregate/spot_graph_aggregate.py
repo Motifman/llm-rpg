@@ -78,6 +78,16 @@ class SpotGraphAggregate(AggregateRoot):
                 out.append(c.to_spot_id)
         return out
 
+    def find_first_passable_connection_between(
+        self, from_spot_id: SpotId, to_spot_id: SpotId
+    ) -> Optional[SpotConnection]:
+        """from から出る有向エッジのうち、先が to かつ通行可能な最初の接続。無ければ None。"""
+        for cid in self._outgoing.get(from_spot_id, []):
+            c = self._connections_by_id[cid]
+            if c.to_spot_id == to_spot_id and c.is_passable:
+                return c
+        return None
+
     def add_spot(self, node: SpotNode) -> None:
         if node.spot_id in self._spots:
             raise DuplicateSpotException(f"Spot already registered: {node.spot_id}")
