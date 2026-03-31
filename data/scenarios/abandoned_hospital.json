@@ -1,0 +1,971 @@
+{
+  "scenario_format_version": "1.0",
+
+  "metadata": {
+    "id": "abandoned_hospital_escape",
+    "title": "廃病院からの脱出 ―― 白鷺病院の記憶",
+    "description": "かつて地域医療の要だった白鷺総合病院。1987年に起きた『地下実験室事件』の後、病院は閉鎖された。院長・鶴見博士が極秘に進めていた延命研究は多くの犠牲者を出し、事件は闇に葬られた。それから数十年——あなたたちは廃墟探索の最中、崩落に巻き込まれ、病院の奥深くに閉じ込められてしまった。出口を見つけ、この忌まわしい場所から脱出せよ。",
+    "theme": "horror",
+    "difficulty": "medium",
+    "estimated_ticks": 120,
+    "author": "ai_rpg_world_demo",
+    "tags": ["horror", "escape", "cooperative", "puzzle", "exploration"]
+  },
+
+  "item_specs": [
+    {
+      "id": "directors_office_key",
+      "name": "院長室の鍵",
+      "description": "真鍮製の古い鍵。『院長室』と刻印されている。受付の引き出しの奥に隠されていた。",
+      "category": "KEY_ITEM"
+    },
+    {
+      "id": "emergency_exit_key",
+      "name": "非常口の鍵",
+      "description": "頑丈な鉄製の鍵。非常口の頑丈な錠前に対応しているようだ。",
+      "category": "KEY_ITEM"
+    },
+    {
+      "id": "rusty_scalpel",
+      "name": "錆びたメス",
+      "description": "手術室から持ち出した古い外科用メス。刃先はまだ鋭い。薄い壁なら切り開けるかもしれない。",
+      "category": "TOOL"
+    },
+    {
+      "id": "surgery_log",
+      "name": "手術記録簿",
+      "description": "変色したカルテファイル。最後のページに走り書きがある：『被験体No.7——投与量を3倍に。心拍数187。院長は止めない。1987.11.03』。裏表紙に4桁の数字が薄く書かれている：『19__』。",
+      "category": "DOCUMENT"
+    },
+    {
+      "id": "directors_diary",
+      "name": "院長の日記",
+      "description": "革表紙の日記帳。几帳面な文字で書かれているが、後半は乱れている。最後の記述：『研究は成功に近い。犠牲は必要だった。金庫の番号は私の研究開始の年だ。忘れるな。全ては1987年に始まった。』",
+      "category": "DOCUMENT"
+    },
+    {
+      "id": "patient_wristband",
+      "name": "患者の腕輪",
+      "description": "プラスチック製の入院患者識別バンド。『氏名：████　病棟：B-3　担当：鶴見』と印字されている。名前の部分は黒く塗りつぶされている。",
+      "category": "LORE"
+    },
+    {
+      "id": "faded_photograph",
+      "name": "色褪せた写真",
+      "description": "集合写真。白衣の医師たちが笑顔で写っている。裏に『白鷺総合病院 開院記念 1972年』と書かれている。一人だけ、カメラを見ていない男がいる。",
+      "category": "LORE"
+    },
+    {
+      "id": "broken_syringe",
+      "name": "割れた注射器",
+      "description": "ガラス製の古い注射器の残骸。内壁に黒ずんだ液体の跡が残っている。異様な甘い匂いがする。",
+      "category": "LORE"
+    },
+    {
+      "id": "nurse_memo",
+      "name": "看護師のメモ",
+      "description": "破れかけたメモ用紙。震える文字で書かれている：『地下には絶対に行くな。鶴見先生に逆らった者はみんな消えた。私もそろそろ——』文章はそこで途切れている。",
+      "category": "LORE"
+    },
+    {
+      "id": "chemical_reagent",
+      "name": "謎の試薬",
+      "description": "琥珀色の液体が入った小瓶。ラベルには『腐食剤-Xα　取扱注意　鶴見研究室』と書かれている。金属を溶かす作用があるようだ。",
+      "category": "TOOL"
+    }
+  ],
+
+  "spots": [
+    {
+      "id": "entrance_hall",
+      "name": "エントランスホール",
+      "description": "白鷺総合病院の正面玄関ホール。天井の蛍光灯は割れ、非常灯の赤い光だけがぼんやりと空間を照らしている。受付カウンターの上には埃が厚く積もり、壁に掛かった時計は3時17分で止まっている。正面入口は完全に崩落しており、外に出ることはできない。右手に廊下への扉が見える。",
+      "category": "OTHER",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "非常灯のかすかな電子音と、どこか遠くで水が滴る音",
+        "temperature": "COLD",
+        "smell": "消毒液と埃が混ざった、長く閉ざされた場所特有の匂い"
+      },
+      "interior": {
+        "sub_locations": [
+          {
+            "id": "reception_counter",
+            "name": "受付カウンター",
+            "description": "分厚い埃に覆われた受付カウンター。引き出しが幾つかある。古い院内案内図がカウンターの上に貼り付けてある。",
+            "accessible_object_ids": ["reception_desk", "hospital_map"],
+            "is_hidden": false
+          },
+          {
+            "id": "waiting_area",
+            "name": "待合スペース",
+            "description": "プラスチック製の椅子が並んでいたが、大半は倒れている。壁のポスターは変色して読めない。隅にある観葉植物は黒く枯れ果てている。",
+            "accessible_object_ids": ["vending_machine", "old_magazine_rack"],
+            "is_hidden": false
+          }
+        ],
+        "objects": [
+          {
+            "id": "reception_desk",
+            "name": "受付の引き出し",
+            "description": "金属製の引き出しが3段。上2段は空だが、最下段は少し固い。",
+            "object_type": "CHEST",
+            "state": {"searched": false},
+            "interactions": [
+              {
+                "action_name": "search",
+                "display_label": "引き出しを調べる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "上の2段には何もない。最下段を力を入れて引くと、奥から真鍮の鍵が出てきた。『院長室』と刻まれている。"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "directors_office_key"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "reception_desk", "new_state": {"searched": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "hospital_map",
+            "name": "院内案内図",
+            "description": "色褪せた案内図。1階の間取りが描かれている：エントランス、廊下、手術室、院長室。地下階への矢印が手書きで書き足されているが、上から赤ペンで大きく×印が付けられている。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "案内図をよく見る",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "1階には受付、廊下、手術室、院長室がある。地下への通路も描かれているが、赤い×印で消されている。誰かが「行くな」と鉛筆で書き込んでいる。"}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "vending_machine",
+            "name": "壊れた自動販売機",
+            "description": "ガラスが割れた自動販売機。中の飲料は全て干上がっている。機械の裏側に何かが挟まっているようだ。",
+            "object_type": "OTHER",
+            "state": {"checked_behind": false},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "自販機の裏を覗く",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "自販機の裏側に、色褪せた集合写真が落ちていた。白衣の人々が写っている。"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "faded_photograph"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "vending_machine", "new_state": {"checked_behind": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "old_magazine_rack",
+            "name": "古い雑誌ラック",
+            "description": "待合室の雑誌ラック。中には変色した週刊誌が数冊残っている。日付はどれも1987年のものだ。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "雑誌を読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "1987年11月号の週刊誌。見出しに『地方病院で不審死相次ぐ——白鷺総合病院に疑惑の目』という記事がある。記事は途中で破り取られている。"}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          }
+        ],
+        "discoverable_items": [
+          {
+            "item_spec": "patient_wristband",
+            "description": "カウンターの下に落ちていた患者用腕輪。名前の部分が塗りつぶされている。",
+            "discovery_condition": {
+              "condition_type": "SEARCH_COUNT",
+              "required_search_count": 2
+            }
+          }
+        ]
+      }
+    },
+
+    {
+      "id": "dim_corridor",
+      "name": "薄暗い廊下",
+      "description": "病院の中央廊下。壁の白いペンキは剥がれ、下からコンクリートが露出している。ストレッチャーが一台、廊下の中央に放置されている。床には何かを引きずったような長い擦り傷がある。左手に手術室、右手に院長室、奥に非常階段への扉がある。足元に注意しないと、散乱した医療器具を踏んでしまいそうだ。",
+      "category": "OTHER",
+      "atmosphere": {
+        "lighting": "DARK",
+        "sound_ambient": "自分の足音が反響する。時折、天井裏から何かが這うような音が聞こえる",
+        "temperature": "COLD",
+        "smell": "錆と古い血のような鉄の匂い"
+      },
+      "interior": {
+        "sub_locations": [
+          {
+            "id": "nurse_station_remains",
+            "name": "ナースステーション跡",
+            "description": "廊下の中程にあるナースステーションの残骸。デスクの上に書類が散乱している。",
+            "accessible_object_ids": ["nurse_desk", "broken_monitor"],
+            "is_hidden": false
+          }
+        ],
+        "objects": [
+          {
+            "id": "nurse_desk",
+            "name": "ナースステーションのデスク",
+            "description": "引き出しが開けっ放しのデスク。書類が散乱しているが、一冊のファイルだけが丁寧に閉じられている。",
+            "object_type": "CHEST",
+            "state": {"searched": false},
+            "interactions": [
+              {
+                "action_name": "search",
+                "display_label": "デスクを調べる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "散乱した書類の中から、丁寧に綴じられたファイルを見つけた。表紙には『手術記録簿——極秘』と赤いスタンプが押されている。"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "surgery_log"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "nurse_desk", "new_state": {"searched": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "broken_monitor",
+            "name": "壊れた監視モニター",
+            "description": "ブラウン管の監視モニター。画面は割れているが、電源ランプだけがかすかに点滅している。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "モニターを調べる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "画面は割れて映らない。しかし本体の側面に小さなメモが貼ってある：『深夜の地下カメラ——記録テープ紛失。院長に報告済。院長は「気にするな」と。1987.10.28』"}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "abandoned_stretcher",
+            "name": "放置されたストレッチャー",
+            "description": "廊下の中央に斜めに放置されたストレッチャー。シーツには黒ずんだ染みが広がっている。車輪が一つ外れている。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "ストレッチャーを調べる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "シーツの下に何かある。——割れた注射器の破片だ。内壁に黒ずんだ液体の跡が残っている。嗅ぐと異様に甘い匂いがする。"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "broken_syringe"}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          }
+        ],
+        "discoverable_items": [
+          {
+            "item_spec": "nurse_memo",
+            "description": "ナースステーションの引き出しの二重底から見つかった、看護師のメモ。",
+            "discovery_condition": {
+              "condition_type": "SEARCH_COUNT",
+              "required_search_count": 3
+            }
+          }
+        ]
+      }
+    },
+
+    {
+      "id": "operating_room",
+      "name": "手術室",
+      "description": "かつての手術室。無影灯は傾き、手術台の上には革製の拘束ベルトが付いたままだ——通常の手術台には無いはずのものだ。壁のタイルは一部が剥落し、器具棚には錆びた手術器具が並んでいる。排水溝から冷たい空気が吹き上がっている。この部屋の下に何かがあるようだ。",
+      "category": "OTHER",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "排水溝から吹き上がる風の音。金属がかすかに共鳴する",
+        "temperature": "COLD",
+        "smell": "薬品と消毒液の刺激臭。かすかに甘い異臭が混じる"
+      },
+      "interior": {
+        "sub_locations": [],
+        "objects": [
+          {
+            "id": "operating_table",
+            "name": "手術台",
+            "description": "ステンレス製の手術台。革の拘束ベルトが腕と脚の位置に取り付けられている。台の表面には深い引っ掻き傷が無数にある。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "手術台を調べる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "拘束ベルトの革は内側からえぐられている。爪痕だ。台の端にアルファベットで『NO7』と彫り込まれている。"}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "instrument_shelf",
+            "name": "器具棚",
+            "description": "ガラス扉の器具棚。中には錆びた手術器具が整然と並んでいる。一番上の段の奥が暗くてよく見えない。",
+            "object_type": "CHEST",
+            "state": {"searched": false},
+            "interactions": [
+              {
+                "action_name": "search",
+                "display_label": "器具棚の奥を探る",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "棚の奥に手を伸ばすと、まだ鋭さを残した外科用メスに指先が触れた。柄に『鶴見』の刻印がある。"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "rusty_scalpel"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "instrument_shelf", "new_state": {"searched": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "chemical_cabinet",
+            "name": "薬品キャビネット",
+            "description": "施錠されていない薬品棚。大半の瓶は空だが、奥に琥珀色の液体が入った小瓶が一つ残っている。",
+            "object_type": "CHEST",
+            "state": {"taken": false},
+            "interactions": [
+              {
+                "action_name": "take",
+                "display_label": "小瓶を取る",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "小瓶を手に取る。ラベルには『腐食剤-Xα　取扱注意　鶴見研究室』と書かれている。金属を腐食させる薬品のようだ。"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "chemical_reagent"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "chemical_cabinet", "new_state": {"taken": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "floor_drain",
+            "name": "床の排水溝",
+            "description": "手術室の隅にある大きな排水溝。格子蓋の隙間から冷たい空気が吹き上がっている。下に空間があるようだ。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "排水溝を覗き込む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "格子の下は暗くて何も見えない。しかし確かに空気が流れている。この下に部屋があるのは間違いない。別の経路で行くしかなさそうだ。"}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          }
+        ],
+        "discoverable_items": []
+      }
+    },
+
+    {
+      "id": "directors_office",
+      "name": "院長室",
+      "description": "白鷺総合病院院長・鶴見博士の執務室。重厚な書斎机と革張りの椅子。壁一面の本棚には医学書に混じって、異様なタイトルの書物が並んでいる——『不死の研究』『生体実験と倫理の狭間』。机の上にはペン立てと革表紙の日記帳。部屋の隅には大型の金庫がどっしりと構えている。",
+      "category": "OTHER",
+      "atmosphere": {
+        "lighting": "DARK",
+        "sound_ambient": "完全な静寂。ただ、本棚の木が軋む音だけが時折響く",
+        "temperature": "COLD",
+        "smell": "古い紙と革の匂い。かすかにタバコの残り香"
+      },
+      "interior": {
+        "sub_locations": [],
+        "objects": [
+          {
+            "id": "directors_desk",
+            "name": "院長の書斎机",
+            "description": "マホガニーの大きな書斎机。引き出しには鍵がかかっているが、机の上に日記帳が開いたまま置かれている。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "机の上を調べる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "机の上には革表紙の日記帳が開いたまま置かれている。最後のページには震える字で書かれている：『研究は成功に近い。犠牲は必要だった。金庫の番号は私の研究が始まった年だ。忘れるな。全ては1987年に始まった。』"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "directors_diary"}
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {"flag_name": "read_diary"}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "bookshelf",
+            "name": "本棚",
+            "description": "壁一面を覆う本棚。医学書の間に不穏なタイトルの蔵書が混じっている。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "本棚を調べる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "『延命治療の最前線』『実験的薬物療法』……そして手書きの背表紙：『被験体経過記録 No.1-No.7』。中を開くと、詳細な身体データとともに『投与後の変化』が克明に記録されている。No.7のページには大きく『成功？？？』と赤字で書かれている。"}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "office_safe",
+            "name": "金庫",
+            "description": "部屋の隅にある大型金庫。4桁のダイヤル錠がついている。重厚で、力ずくでは開きそうにない。",
+            "object_type": "CHEST",
+            "state": {"locked": true},
+            "interactions": [
+              {
+                "action_name": "open",
+                "display_label": "金庫を開ける（暗証番号: 1987）",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_SET",
+                    "flag_name": "read_diary",
+                    "failure_message": "暗証番号がわからない。何か手がかりが必要だ。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "surgery_log",
+                    "failure_message": "番号のヒントがまだ足りない。他にも手がかりがあるはずだ。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "日記の記述と手術記録の数字を合わせる——1987。ダイヤルを回すと、重い金属音とともに金庫が開いた。中には頑丈な鉄製の鍵が一本。そして、一枚のメモ：『非常口は地下からも行ける。だが、あの通路を使う者はいない。壁の向こうに何があるか知っているからだ。——鶴見』"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "emergency_exit_key"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "office_safe", "new_state": {"locked": false}}
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {"flag_name": "safe_opened"}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          }
+        ],
+        "discoverable_items": []
+      }
+    },
+
+    {
+      "id": "basement",
+      "name": "地下室",
+      "description": "湿った階段を降りた先に広がる地下空間。コンクリートの壁には水染みが広がり、天井の配管から水滴が絶え間なく落ちている。中央に古い実験台が置かれ、その上には割れたフラスコやビーカーが散乱している。壁の一箇所にひび割れた亀裂があり、そこから微かに風が漏れている。この先に何かがあるようだが、亀裂は人が通るには狭すぎる。",
+      "category": "DUNGEON",
+      "atmosphere": {
+        "lighting": "PITCH_BLACK",
+        "sound_ambient": "水滴が落ちる音が反響する。時折、壁の奥から低い唸りのような音が聞こえる",
+        "temperature": "FREEZING",
+        "smell": "湿った土と腐敗の混じった重い匂い。かすかに薬品の甘い匂いも"
+      },
+      "interior": {
+        "sub_locations": [],
+        "objects": [
+          {
+            "id": "experiment_table",
+            "name": "実験台",
+            "description": "古びた木製の実験台。表面は薬品で焼けた跡が無数にある。引き出しから資料が飛び出している。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "実験台を調べる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "散乱した資料の中に、被験体の経過観察チャートがある。心拍数、脳波、瞳孔反応……そして『再生速度』という異様な項目。No.7のチャートだけが赤い枠で囲まれ、『覚醒——制御不能』と走り書きされている。"}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "power_panel",
+            "name": "配電盤",
+            "description": "壁に設置された古い配電盤。ほとんどのブレーカーが落ちているが、一つだけ『B3-実験区画』と書かれたブレーカーが入ったままだ。",
+            "object_type": "SWITCH",
+            "state": {"power_on": true},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "配電盤を調べる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "ほとんどのブレーカーは落ちている。唯一『B3-実験区画』のブレーカーだけが上がっている。何十年も電力が供給され続けていたのか？ ブレーカーの横に手書きで『絶対に切るな——生命維持装置稼働中』と書かれている。日付は1987年。"}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "wall_crack",
+            "name": "壁の亀裂",
+            "description": "コンクリート壁に走る大きな亀裂。隙間から空気が流れてきている。人が通るには狭いが、何か鋭いもので広げられるかもしれない。",
+            "object_type": "DOOR",
+            "state": {"opened": false},
+            "interactions": [
+              {
+                "action_name": "cut_open",
+                "display_label": "メスで亀裂を広げる",
+                "preconditions": [
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "rusty_scalpel",
+                    "failure_message": "手では広げられない。何か鋭いものが必要だ。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "メスの刃を亀裂に差し込み、慎重に壁を削っていく。脆くなったコンクリートが崩れ、人が一人通れるほどの穴が開いた。向こう側は暗い通路になっている。冷たい空気と共に、かすかに機械の稼働音が聞こえてくる。"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "wall_crack", "new_state": {"opened": true}}
+                  },
+                  {
+                    "effect_type": "CHANGE_CONNECTION_STATE",
+                    "parameters": {"target_connection": "basement_to_hidden_passage", "passable": true}
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {"flag_name": "hidden_passage_opened"}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          }
+        ],
+        "discoverable_items": []
+      }
+    },
+
+    {
+      "id": "hidden_passage",
+      "name": "隠し通路",
+      "description": "壁の向こうに広がる狭い通路。配管が剥き出しの天井は低く、身を屈めて進む必要がある。壁にはチョークで矢印が書かれている——誰かがこの通路を使っていた痕跡だ。奥に向かうにつれて、機械の唸りが大きくなる。通路の途中に、稼働中の古い冷却装置がある。その隣に、鉄の扉が見える。",
+      "category": "DUNGEON",
+      "atmosphere": {
+        "lighting": "PITCH_BLACK",
+        "sound_ambient": "配管の軋み、冷却装置の低い唸り、そして——何かの心拍モニターのような電子音",
+        "temperature": "FREEZING",
+        "smell": "機械油とホルマリンの混じった匂い"
+      },
+      "interior": {
+        "sub_locations": [],
+        "objects": [
+          {
+            "id": "cooling_unit",
+            "name": "稼働中の冷却装置",
+            "description": "通路脇に設置された古い冷却ユニット。数十年間動き続けているとは思えないが、確かに稼働している。表面の計器は正常値を示している。接続されたパイプは壁の奥に続いている。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "冷却装置を調べる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "冷却装置はまだ動いている。温度計は摂氏-4度を示している。パイプの先は壁の向こう——この通路からは見えない区画へ続いている。銘板には『クライオ保存ユニットCR-7号　鶴見研究室』と刻まれている。7号。被験体No.7と同じ番号だ。……この先に何が保存されているのか。知りたいような、知りたくないような。"}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "chalk_arrows",
+            "name": "チョークの矢印",
+            "description": "壁に白いチョークで描かれた矢印。非常口の方向を示しているようだ。矢印の横に小さく文字が書いてある。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "文字を読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "矢印の横に震える字で書かれている：『ここまで来たら出口はすぐ。だが振り返るな。音が聞こえても振り返るな。——看護師 佐伯』。佐伯——あのメモを書いた看護師と同じ名前だ。彼女はここから逃げ出したのだろうか。"}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          }
+        ],
+        "discoverable_items": []
+      }
+    },
+
+    {
+      "id": "emergency_exit",
+      "name": "非常口",
+      "description": "頑丈な鉄の扉が行く手を阻んでいる。扉の上に『非常口 EMERGENCY EXIT』の標識が赤く光っている。扉には重厚な鉄製の錠前がかかっている。この扉の向こうは外のはずだ。錠前さえ開ければ——。",
+      "category": "OTHER",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "扉の向こうから微かに風の音が聞こえる。外だ。",
+        "temperature": "COLD",
+        "smell": "鉄の匂い。そして——扉の隙間から新鮮な外気の匂いが漏れている"
+      },
+      "interior": {
+        "sub_locations": [],
+        "objects": [
+          {
+            "id": "emergency_door",
+            "name": "非常口の扉",
+            "description": "厚い鉄製の扉。大型の錠前がかかっている。力ずくでは開かない。",
+            "object_type": "DOOR",
+            "state": {"locked": true},
+            "interactions": [
+              {
+                "action_name": "unlock",
+                "display_label": "非常口の鍵で開ける",
+                "preconditions": [
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "emergency_exit_key",
+                    "failure_message": "頑丈な錠前がかかっている。合う鍵が必要だ。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "鍵を錠前に差し込む。手ごたえがあり——ガチャリ、と重い音を立てて錠前が外れた。扉を押し開けると、冷たい夜風が吹き込んでくる。外だ。星空が見える。白鷺病院の悪夢はもうすぐ終わる。"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "emergency_door", "new_state": {"locked": false}}
+                  },
+                  {
+                    "effect_type": "CHANGE_CONNECTION_STATE",
+                    "parameters": {"target_connection": "exit_to_outside", "passable": true}
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {"flag_name": "emergency_door_unlocked"}
+                  }
+                ]
+              },
+              {
+                "action_name": "use_reagent",
+                "display_label": "腐食剤を錠前に使う",
+                "preconditions": [
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "chemical_reagent",
+                    "failure_message": "何か錠前を壊せるものがあれば……。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "腐食剤を錠前にかける。シュウ、と音を立てて金属が溶け始める。数分後、錠前は原形をとどめないほど腐食し、ボロリと崩れ落ちた。鶴見博士の研究が、皮肉にも脱出の助けになった。"}
+                  },
+                  {
+                    "effect_type": "REMOVE_ITEM",
+                    "parameters": {"item_spec": "chemical_reagent"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "emergency_door", "new_state": {"locked": false}}
+                  },
+                  {
+                    "effect_type": "CHANGE_CONNECTION_STATE",
+                    "parameters": {"target_connection": "exit_to_outside", "passable": true}
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {"flag_name": "emergency_door_unlocked"}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          }
+        ],
+        "discoverable_items": []
+      }
+    },
+
+    {
+      "id": "outside",
+      "name": "外（脱出成功）",
+      "description": "夜空の下、荒れた病院の敷地に出た。背後の廃病院は月明かりに黒々とそびえている。遠くに街の灯りが見える。あなたは無事に脱出した——しかし、地下で聞こえたあの機械音。冷却装置。被験体No.7。鶴見博士は本当に何かを「成功」させたのだろうか。振り返ると、非常口の扉が風で閉じた。もう戻れない。戻る必要もない——はずだ。",
+      "category": "FIELD",
+      "atmosphere": {
+        "lighting": "DARK",
+        "sound_ambient": "虫の声と風の音。遠くで車が走る音",
+        "temperature": "COLD",
+        "smell": "新鮮な夜気。自由の匂い"
+      },
+      "interior": {
+        "sub_locations": [],
+        "objects": [],
+        "discoverable_items": []
+      }
+    }
+  ],
+
+  "connections": [
+    {
+      "id": "entrance_to_corridor",
+      "from": "entrance_hall",
+      "to": "dim_corridor",
+      "name": "廊下への扉",
+      "description": "重い防火扉。半開きのまま錆びついている。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "sound_permeability": 0.6,
+      "passage_conditions": [],
+      "initially_passable": true
+    },
+    {
+      "id": "corridor_to_operating_room",
+      "from": "dim_corridor",
+      "to": "operating_room",
+      "name": "手術室への扉",
+      "description": "『手術室 Operating Room』と書かれたプレートがある両開きの扉。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "sound_permeability": 0.3,
+      "passage_conditions": [],
+      "initially_passable": true
+    },
+    {
+      "id": "corridor_to_directors_office",
+      "from": "dim_corridor",
+      "to": "directors_office",
+      "name": "院長室への扉",
+      "description": "重厚な木の扉。真鍮のプレートに『院長室』と彫られている。鍵がかかっている。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "sound_permeability": 0.2,
+      "passage_conditions": [
+        {
+          "condition_type": "ITEM_REQUIRED",
+          "required_item": "directors_office_key",
+          "consume_item": false,
+          "failure_message": "扉に鍵がかかっている。真鍮の鍵穴がある。"
+        }
+      ],
+      "initially_passable": true
+    },
+    {
+      "id": "corridor_to_basement",
+      "from": "dim_corridor",
+      "to": "basement",
+      "name": "地下への階段",
+      "description": "廊下の奥にある下り階段。案内板が外されている。階段には埃が積もっている。",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "sound_permeability": 0.4,
+      "passage_conditions": [],
+      "initially_passable": true
+    },
+    {
+      "id": "basement_to_hidden_passage",
+      "from": "basement",
+      "to": "hidden_passage",
+      "name": "壁の亀裂の先",
+      "description": "壁の亀裂を広げた先に続く暗い通路。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "sound_permeability": 0.3,
+      "passage_conditions": [],
+      "initially_passable": false
+    },
+    {
+      "id": "hidden_passage_to_exit",
+      "from": "hidden_passage",
+      "to": "emergency_exit",
+      "name": "非常口への通路",
+      "description": "配管だらけの狭い通路を進んだ先の鉄の扉。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "sound_permeability": 0.5,
+      "passage_conditions": [],
+      "initially_passable": true
+    },
+    {
+      "id": "corridor_to_emergency_exit",
+      "from": "dim_corridor",
+      "to": "emergency_exit",
+      "name": "非常階段への扉",
+      "description": "廊下の突き当たりにある非常階段への扉。頑丈な鉄製。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "sound_permeability": 0.1,
+      "passage_conditions": [],
+      "initially_passable": true
+    },
+    {
+      "id": "exit_to_outside",
+      "from": "emergency_exit",
+      "to": "outside",
+      "name": "非常口の扉",
+      "description": "外への最後の扉。",
+      "travel_ticks": 1,
+      "is_bidirectional": false,
+      "sound_permeability": 0.0,
+      "passage_conditions": [],
+      "initially_passable": false
+    }
+  ],
+
+  "players": [
+    {
+      "id": "explorer_a",
+      "name": "探索者A（ユウキ）",
+      "spawn_spot": "entrance_hall",
+      "initial_items": []
+    },
+    {
+      "id": "explorer_b",
+      "name": "探索者B（マコト）",
+      "spawn_spot": "dim_corridor",
+      "initial_items": []
+    }
+  ],
+
+  "game_end_conditions": {
+    "win": {
+      "type": "ALL_AT_SPOT",
+      "target_spot": "outside",
+      "description": "全員が外に出れば脱出成功"
+    },
+    "lose": {
+      "type": "TICK_LIMIT",
+      "tick_limit": 120,
+      "description": "120ティック以内に脱出できなければ失敗（建物のさらなる崩落により閉じ込められる）"
+    }
+  },
+
+  "initial_flags": []
+}
