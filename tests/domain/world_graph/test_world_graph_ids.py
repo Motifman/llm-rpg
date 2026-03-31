@@ -4,10 +4,14 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     ConnectionIdValidationException,
     EntityIdValidationException,
     SpotGraphIdValidationException,
+    SpotObjectIdValidationException,
+    SubLocationIdValidationException,
 )
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
+from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
 
 
 class TestEntityId:
@@ -45,3 +49,21 @@ class TestSpotGraphId:
     def test_non_positive_raises(self):
         with pytest.raises(SpotGraphIdValidationException):
             SpotGraphId.create(0)
+
+
+class TestSubLocationId:
+    def test_create(self):
+        assert SubLocationId.create(1).value == 1
+
+    def test_invalid(self):
+        with pytest.raises(SubLocationIdValidationException):
+            SubLocationId.create(0)
+
+
+class TestSpotObjectId:
+    def test_create(self):
+        assert SpotObjectId.create(1).value == 1
+
+    def test_invalid(self):
+        with pytest.raises(SpotObjectIdValidationException):
+            SpotObjectId.create(-1)

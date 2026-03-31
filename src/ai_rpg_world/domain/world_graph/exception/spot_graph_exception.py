@@ -66,3 +66,29 @@ class DuplicateConnectionIdException(SpotGraphDomainException, BusinessRuleExcep
 class SpotPresenceInvariantException(SpotGraphDomainException, BusinessRuleException):
     """在席情報の不整合"""
     error_code = "WORLD_GRAPH.PRESENCE_INVARIANT"
+
+
+class SubLocationIdValidationException(SpotGraphDomainException, ValidationException):
+    """サブロケーションIDバリデーション例外"""
+    error_code = "WORLD_GRAPH.SUB_LOCATION_ID_VALIDATION"
+
+
+class SpotObjectIdValidationException(SpotGraphDomainException, ValidationException):
+    """スポットオブジェクトIDバリデーション例外"""
+    error_code = "WORLD_GRAPH.SPOT_OBJECT_ID_VALIDATION"
+
+
+class UnknownSpotObjectException(SpotGraphDomainException, BusinessRuleException):
+    """スポット内に存在しないオブジェクトを参照した"""
+    error_code = "WORLD_GRAPH.UNKNOWN_SPOT_OBJECT"
+
+
+class InteractionNotFoundException(SpotGraphDomainException, BusinessRuleException):
+    """指定した操作名のインタラクションがない"""
+    error_code = "WORLD_GRAPH.INTERACTION_NOT_FOUND"
+
+
+class InteractionNotAllowedException(SpotGraphDomainException, BusinessRuleException):
+    """インタラクションの前提条件を満たしていない"""
+    error_code = "WORLD_GRAPH.INTERACTION_NOT_ALLOWED"
+
