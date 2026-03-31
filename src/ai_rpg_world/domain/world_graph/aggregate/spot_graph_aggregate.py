@@ -88,6 +88,10 @@ class SpotGraphAggregate(AggregateRoot):
                 return c
         return None
 
+    def iter_outgoing_connections_from(self, spot_id: SpotId) -> List[SpotConnection]:
+        """出方向の全接続（通行可否に依らない。音の伝播経路用）。"""
+        return [self._connections_by_id[cid] for cid in self._outgoing.get(spot_id, [])]
+
     def add_spot(self, node: SpotNode) -> None:
         if node.spot_id in self._spots:
             raise DuplicateSpotException(f"Spot already registered: {node.spot_id}")

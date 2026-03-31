@@ -192,9 +192,8 @@ class PlayerObservationFormatter:
             verb = "言った"
         else:
             verb = "叫んだ"
-        prose = f"{speaker_name}が{verb}: 「{event.content}」"
         is_self = event.aggregate_id.value == recipient_id.value
-        structured = {
+        structured_base = {
             "type": "player_spoke",
             "speaker": speaker_name,
             "speaker_player_id": event.aggregate_id.value,
@@ -203,8 +202,65 @@ class PlayerObservationFormatter:
             "role": "self" if is_self else "other",
         }
         category = "self_only" if is_self else "social"
+
+        repo = self._context.spot_graph_repository
+        svc = self._context.sound_propagation_service
+        if repo is not None and svc is not None:
+            from ai_rpg_world.application.world_graph.speech_channel_mapping import (
+                speech_channel_to_sound_volume,
+            )
+            from ai_rpg_world.domain.world_graph.enum.sound_clarity import SoundClarityEnum
+            from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+                EntityNotInGraphException,
+            )
+            from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+
+            graph = repo.find_graph()
+            speaker_eid = EntityId.create(int(event.aggregate_id.value))
+            listener_eid = EntityId.create(int(recipient_id.value))
+            try:
+                graph.get_entity_spot(speaker_eid)
+            except EntityNotInGraphException:
+                pass
+            else:
+                if event.channel == SpeechChannel.WHISPER:
+                    if not is_self:
+                        if (
+                            event.target_player_id is None
+                            or event.target_player_id.value != recipient_id.value
+                        ):
+                            return None
+                    clarity = SoundClarityEnum.CLEAR
+                else:
+                    volume = speech_channel_to_sound_volume(event.channel)
+                    clarity = svc.clarity_for_listener(
+                        speaker_eid, listener_eid, volume, graph
+                    )
+                    if clarity is None:
+                        return None
+
+                if clarity == SoundClarityEnum.CLEAR:
+                    prose = f"{speaker_name}が{verb}: 「{event.content}」"
+                elif clarity == SoundClarityEnum.MUFFLED:
+                    prose = f"{speaker_name}の遠くの声が聞こえる: 「{event.content}」"
+                else:
+                    prose = (
+                        f"{speaker_name}の声がかすかに聞こえるが、内容ははっきりしない。"
+                    )
+
+                structured = dict(structured_base)
+                structured["sound_clarity"] = clarity.value
+                if clarity == SoundClarityEnum.FAINT and not is_self:
+                    structured["content"] = ""
+                return ObservationOutput(
+                    prose=prose, structured=structured, observation_category=category
+                )
+
+        prose = f"{speaker_name}が{verb}: 「{event.content}」"
         return ObservationOutput(
-            prose=prose, structured=structured, observation_category=category
+            prose=prose,
+            structured=structured_base,
+            observation_category=category,
         )
 
     def _format_item_added_to_inventory(

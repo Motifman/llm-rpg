@@ -36,6 +36,9 @@ from ai_rpg_world.application.observation.services.recipient_strategies.skill_re
 from ai_rpg_world.application.observation.services.recipient_strategies.speech_recipient_strategy import (
     SpeechRecipientStrategy,
 )
+from ai_rpg_world.application.observation.services.recipient_strategies.spot_graph_speech_recipient_strategy import (
+    SpotGraphSpeechRecipientStrategy,
+)
 from ai_rpg_world.application.observation.services.recipient_strategies.sns_recipient_strategy import (
     SnsRecipientStrategy,
 )
@@ -53,5 +56,6 @@ __all__ = [
     "CombatRecipientStrategy",
     "SkillRecipientStrategy",
     "SpeechRecipientStrategy",
+    "SpotGraphSpeechRecipientStrategy",
     "SnsRecipientStrategy",
 ]
