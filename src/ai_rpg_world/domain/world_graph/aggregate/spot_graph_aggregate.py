@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Dict, FrozenSet, List, Optional
+from typing import Dict, FrozenSet, List, Optional, Tuple
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -225,3 +225,15 @@ class SpotGraphAggregate(AggregateRoot):
 
     def presence_at(self, spot_id: SpotId) -> SpotPresence:
         return self._presences.get(spot_id, SpotPresence.empty(spot_id))
+
+    def iter_spot_nodes(self) -> Tuple[SpotNode, ...]:
+        """永続化・スナップショット用に登録済みスポットノードを列挙する。"""
+        return tuple(self._spots.values())
+
+    def all_connections(self) -> Tuple[SpotConnection, ...]:
+        """永続化用に接続（双方向は二重エッジのまま）を列挙する。"""
+        return tuple(self._connections_by_id.values())
+
+    def entity_spot_mapping(self) -> Dict[EntityId, SpotId]:
+        """エンティティの所在スポット（永続化用）。"""
+        return dict(self._entity_spot)
