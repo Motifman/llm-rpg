@@ -18,10 +18,14 @@ from ai_rpg_world.application.world_graph.spot_graph_travel_context import (
 from ai_rpg_world.application.world_graph.spot_graph_travel_stage_service import (
     SpotGraphTravelStageService,
 )
+from ai_rpg_world.application.world_graph.spot_graph_simulation_application_service import (
+    SpotGraphSimulationApplicationService,
+)
 from ai_rpg_world.application.world_graph.spot_graph_world_services import (
     SpotGraphWorldServices,
     create_spot_graph_world_services,
 )
+from ai_rpg_world.application.world_graph.spot_graph_world_seed import seed_spot_graph_to_sqlite
 from ai_rpg_world.application.world_graph.spot_interaction_application_service import (
     SpotInteractionApplicationService,
     SpotInteractionResultDto,
@@ -32,6 +36,7 @@ __all__ = [
     "ISpotExplorationProgressStore",
     "InMemorySpotExplorationProgressStore",
     "MutableWorldFlagState",
+    "SpotGraphSimulationApplicationService",
     "SpotExplorationApplicationService",
     "SpotExplorationResultDto",
     "SpotGraphMovementApplicationService",
@@ -42,4 +47,5 @@ __all__ = [
     "SpotInteractionResultDto",
     "SpotTravelTickAdvanceDto",
     "create_spot_graph_world_services",
+    "seed_spot_graph_to_sqlite",
 ]
