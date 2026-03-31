@@ -570,6 +570,7 @@ def _build_observation_stack(
     item_spec_repository: Optional[Any],
     item_repository: Optional[Any],
     skill_spec_repository: Optional[Any],
+    spot_graph_repository: Optional[Any] = None,
 ) -> ObservationEventHandlerRegistry:
     """
     observation_resolver, formatter, handler, registry を構築する。
@@ -603,6 +604,7 @@ def _build_observation_stack(
             monster_repository=monster_repository,
             skill_spec_repository=skill_spec_repository,
             sns_user_repository=sns_user_repository,
+            spot_graph_repository=spot_graph_repository,
         )
     pipeline = ObservationPipeline(
         resolver=observation_resolver,
@@ -770,6 +772,7 @@ def create_llm_agent_wiring(
     skill_deck_progress_repository: Optional[Any] = None,
     skill_spec_repository: Optional[Any] = None,
     sns_user_repository: Optional[Any] = None,
+    spot_graph_repository: Optional[Any] = None,
     quest_command_service: Optional[Any] = None,
     guild_command_service: Optional[Any] = None,
     shop_command_service: Optional[Any] = None,
@@ -1009,6 +1012,7 @@ def create_llm_agent_wiring(
         item_spec_repository=item_spec_repository,
         item_repository=item_repository,
         skill_spec_repository=skill_spec_repository,
+        spot_graph_repository=spot_graph_repository,
     )
     return LlmAgentWiringResult(
         observation_registry=observation_registry,
