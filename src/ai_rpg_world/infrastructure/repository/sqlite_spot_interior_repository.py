@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import sqlite3
+from json import JSONDecodeError
 from typing import Optional
 
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
+from ai_rpg_world.infrastructure.repository.spot_graph_persistence_exceptions import (
+    SpotGraphStateDecodeError,
+)
 from ai_rpg_world.infrastructure.repository.spot_graph_sqlite_schema import init_spot_graph_schema
 from ai_rpg_world.infrastructure.repository.sqlite_world_graph_state_codec import (
     dumps_spot_interior,
@@ -51,7 +55,13 @@ class SqliteSpotInteriorRepository(ISpotInteriorRepository):
         ).fetchone()
         if row is None:
             return None
-        return loads_spot_interior(str(row["payload_json"]))
+        payload = str(row["payload_json"])
+        try:
+            return loads_spot_interior(payload)
+        except (JSONDecodeError, KeyError, TypeError) as exc:
+            raise SpotGraphStateDecodeError(
+                f"spot_graph_interior の payload_json を復元できません: spot_id={int(spot_id.value)}"
+            ) from exc
 
     def save(self, spot_id: SpotId, interior: SpotInterior) -> None:
         self._assert_shared_transaction_active()

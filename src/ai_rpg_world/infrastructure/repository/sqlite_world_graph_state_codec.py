@@ -9,7 +9,10 @@ from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar
 
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
+from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
+    SpotGraphAggregate,
+    SpotGraphConnectionRecord,
+)
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
@@ -37,6 +40,11 @@ from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObje
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
+from ai_rpg_world.infrastructure.repository.spot_graph_persistence_exceptions import (
+    SpotGraphConnectionRecordInvariantError,
+    UnsupportedSpotGraphAggregateSchemaError,
+    UnsupportedSpotInteriorSchemaError,
+)
 
 E = TypeVar("E", bound=Enum)
 
@@ -49,13 +57,13 @@ def _parse_enum(enum_cls: Type[E], name: str) -> E:
     return enum_cls[name]
 
 
-AGGREGATE_SCHEMA_VERSION = 1
+AGGREGATE_SCHEMA_VERSION = 2
 INTERIOR_SCHEMA_VERSION = 1
 
 
 def spot_graph_aggregate_to_json_dict(graph: SpotGraphAggregate) -> dict[str, Any]:
     """SpotGraphAggregate を JSON 互換 dict に変換する（ノードの interior は含めない）。"""
-    connection_records = _encode_connection_records(graph.all_connections())
+    connection_records = _encode_connection_records(graph.iter_connection_records())
     entity_spot = {str(int(eid)): int(sid.value) for eid, sid in graph.entity_spot_mapping().items()}
     spots = sorted(
         (_spot_node_to_dict(replace(n, interior=None)) for n in graph.iter_spot_nodes()),
@@ -73,8 +81,10 @@ def spot_graph_aggregate_to_json_dict(graph: SpotGraphAggregate) -> dict[str, An
 def spot_graph_aggregate_from_json_dict(payload: dict[str, Any]) -> SpotGraphAggregate:
     """JSON dict から SpotGraphAggregate を復元する。"""
     version = int(payload["schema_version"])
-    if version != AGGREGATE_SCHEMA_VERSION:
-        raise ValueError(f"Unsupported spot graph aggregate schema: {version}")
+    if version not in (1, AGGREGATE_SCHEMA_VERSION):
+        raise UnsupportedSpotGraphAggregateSchemaError(
+            f"Unsupported spot graph aggregate schema: {version}"
+        )
 
     graph_id = SpotGraphId.create(int(payload["graph_id"]))
     graph = SpotGraphAggregate.empty(graph_id)
@@ -87,11 +97,22 @@ def spot_graph_aggregate_from_json_dict(payload: dict[str, Any]) -> SpotGraphAgg
             conn = _spot_connection_from_dict(record["conn"])
             graph.add_connection(conn)
         elif record["kind"] == "bidirectional":
-            forward = _spot_connection_from_dict(record["forward"])
+            forward_blob = record.get("conn", record.get("forward"))
+            if forward_blob is None:
+                raise SpotGraphConnectionRecordInvariantError(
+                    "Bidirectional connection record must include conn or forward"
+                )
+            if record.get("reverse_connection_id") is None:
+                raise SpotGraphConnectionRecordInvariantError(
+                    "Bidirectional connection record must include reverse_connection_id"
+                )
+            forward = _spot_connection_from_dict(forward_blob)
             rev_id = ConnectionId.create(int(record["reverse_connection_id"]))
             graph.add_connection(forward, reverse_connection_id=rev_id)
         else:
-            raise ValueError(f"Unknown connection record kind: {record.get('kind')}")
+            raise SpotGraphConnectionRecordInvariantError(
+                f"Unknown connection record kind: {record.get('kind')}"
+            )
 
     for entity_key, spot_int in payload["entity_spot"].items():
         graph.place_entity(EntityId.create(int(entity_key)), SpotId.create(int(spot_int)))
@@ -113,7 +134,9 @@ def spot_interior_to_json_dict(interior: SpotInterior) -> dict[str, Any]:
 def spot_interior_from_json_dict(payload: dict[str, Any]) -> SpotInterior:
     version = int(payload["schema_version"])
     if version != INTERIOR_SCHEMA_VERSION:
-        raise ValueError(f"Unsupported spot interior schema: {version}")
+        raise UnsupportedSpotInteriorSchemaError(
+            f"Unsupported spot interior schema: {version}"
+        )
     return SpotInterior(
         sub_locations=tuple(_sub_location_from_dict(x) for x in payload["sub_locations"]),
         objects=tuple(_spot_object_from_dict(x) for x in payload["objects"]),
@@ -138,47 +161,32 @@ def loads_spot_interior(blob: str) -> SpotInterior:
     return spot_interior_from_json_dict(json.loads(blob))
 
 
-def _encode_connection_records(connections: Tuple[SpotConnection, ...]) -> List[dict[str, Any]]:
-    if not connections:
+def _encode_connection_records(
+    connection_records: Tuple[SpotGraphConnectionRecord, ...],
+) -> List[dict[str, Any]]:
+    if not connection_records:
         return []
-    handled: set[int] = set()
     out: List[dict[str, Any]] = []
-    for conn in connections:
-        cid = int(conn.connection_id.value)
-        if cid in handled:
-            continue
-        if not conn.is_bidirectional:
-            handled.add(cid)
+    for record in connection_records:
+        conn = record.connection
+        if not record.is_bidirectional:
             out.append({"kind": "oneway", "conn": _spot_connection_to_dict(conn)})
             continue
-        rev = next(
-            (
-                c
-                for c in connections
-                if c.from_spot_id == conn.to_spot_id
-                and c.to_spot_id == conn.from_spot_id
-                and c.connection_id != conn.connection_id
-            ),
-            None,
-        )
-        if rev is None:
-            raise ValueError(f"Bidirectional edge missing reverse for connection {conn.connection_id}")
-        handled.add(int(conn.connection_id.value))
-        handled.add(int(rev.connection_id.value))
-        forward, reverse = conn, rev
-        if int(forward.connection_id.value) > int(reverse.connection_id.value):
-            forward, reverse = reverse, forward
+        if record.reverse_connection_id is None:
+            raise SpotGraphConnectionRecordInvariantError(
+                f"Bidirectional record missing reverse ID for connection {conn.connection_id}"
+            )
         out.append(
             {
                 "kind": "bidirectional",
-                "forward": _spot_connection_to_dict(forward),
-                "reverse_connection_id": int(reverse.connection_id.value),
+                "conn": _spot_connection_to_dict(conn),
+                "reverse_connection_id": int(record.reverse_connection_id.value),
             }
         )
     out.sort(
         key=lambda r: (
             r["kind"],
-            r["conn"]["connection_id"] if r["kind"] == "oneway" else r["forward"]["connection_id"],
+            r["conn"]["connection_id"],
         )
     )
     return out

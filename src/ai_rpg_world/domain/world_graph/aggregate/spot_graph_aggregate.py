@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Dict, FrozenSet, List, Optional, Tuple
 
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
@@ -30,6 +30,18 @@ from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraph
 from ai_rpg_world.domain.world_graph.value_object.spot_presence import SpotPresence
 
 
+@dataclass(frozen=True)
+class SpotGraphConnectionRecord:
+    """永続化・スナップショット向けの接続レコード。"""
+
+    connection: SpotConnection
+    reverse_connection_id: Optional[ConnectionId] = None
+
+    @property
+    def is_bidirectional(self) -> bool:
+        return self.reverse_connection_id is not None
+
+
 class SpotGraphAggregate(AggregateRoot):
     """スポットの接続グラフと在席状態を管理する集約"""
 
@@ -41,6 +53,7 @@ class SpotGraphAggregate(AggregateRoot):
         outgoing: Optional[Dict[SpotId, List[ConnectionId]]] = None,
         presences: Optional[Dict[SpotId, SpotPresence]] = None,
         entity_spot: Optional[Dict[EntityId, SpotId]] = None,
+        reverse_connections: Optional[Dict[ConnectionId, ConnectionId]] = None,
     ) -> None:
         super().__init__()
         self._graph_id = graph_id
@@ -51,6 +64,7 @@ class SpotGraphAggregate(AggregateRoot):
         }
         self._presences: Dict[SpotId, SpotPresence] = dict(presences or {})
         self._entity_spot: Dict[EntityId, SpotId] = dict(entity_spot or {})
+        self._reverse_connections: Dict[ConnectionId, ConnectionId] = dict(reverse_connections or {})
         self._navigation = SpotGraphNavigationService()
 
     @property
@@ -125,6 +139,8 @@ class SpotGraphAggregate(AggregateRoot):
                 to_spot_id=conn.from_spot_id,
             )
             self._register_edge(rev)
+            self._reverse_connections[conn.connection_id] = reverse_connection_id
+            self._reverse_connections[reverse_connection_id] = conn.connection_id
 
     def _register_edge(self, conn: SpotConnection) -> None:
         self._connections_by_id[conn.connection_id] = conn
@@ -233,6 +249,46 @@ class SpotGraphAggregate(AggregateRoot):
     def all_connections(self) -> Tuple[SpotConnection, ...]:
         """永続化用に接続（双方向は二重エッジのまま）を列挙する。"""
         return tuple(self._connections_by_id.values())
+
+    def iter_connection_records(self) -> Tuple[SpotGraphConnectionRecord, ...]:
+        """双方向ペアを明示した接続レコードを返す。"""
+        records: List[SpotGraphConnectionRecord] = []
+        handled: set[ConnectionId] = set()
+        for conn in sorted(
+            self._connections_by_id.values(),
+            key=lambda item: int(item.connection_id.value),
+        ):
+            if conn.connection_id in handled:
+                continue
+            reverse_id = self._reverse_connections.get(conn.connection_id)
+            if reverse_id is None:
+                records.append(SpotGraphConnectionRecord(connection=conn))
+                handled.add(conn.connection_id)
+                continue
+
+            reverse_conn = self._connections_by_id.get(reverse_id)
+            if reverse_conn is None:
+                raise SpotPresenceInvariantException(
+                    f"Reverse connection missing for {conn.connection_id}: {reverse_id}"
+                )
+            if self._reverse_connections.get(reverse_id) != conn.connection_id:
+                raise SpotPresenceInvariantException(
+                    f"Reverse connection pair is inconsistent: {conn.connection_id} <-> {reverse_id}"
+                )
+
+            forward = conn
+            backward = reverse_conn
+            if int(forward.connection_id.value) > int(backward.connection_id.value):
+                forward, backward = backward, forward
+            records.append(
+                SpotGraphConnectionRecord(
+                    connection=forward,
+                    reverse_connection_id=backward.connection_id,
+                )
+            )
+            handled.add(forward.connection_id)
+            handled.add(backward.connection_id)
+        return tuple(records)
 
     def entity_spot_mapping(self) -> Dict[EntityId, SpotId]:
         """エンティティの所在スポット（永続化用）。"""
