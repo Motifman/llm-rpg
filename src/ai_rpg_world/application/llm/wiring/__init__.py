@@ -150,6 +150,9 @@ from ai_rpg_world.application.llm.services.executors.trade_executor import (
 from ai_rpg_world.application.llm.services.executors.world_executor import (
     WorldToolExecutor,
 )
+from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
+    SpotGraphToolExecutor,
+)
 from ai_rpg_world.application.llm.services.tool_command_mapper import (
     ToolCommandMapper,
 )
@@ -165,6 +168,7 @@ from ai_rpg_world.application.world.contracts.queries import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.application.llm.services.tool_catalog import (
     register_default_tools,
+    register_spot_graph_tools,
 )
 from ai_rpg_world.application.llm.services.ui_context_builder import (
     DefaultLlmUiContextBuilder,
@@ -287,7 +291,8 @@ class _ToolStackResult(NamedTuple):
 
 def _build_tool_handler_map(
     *,
-    movement_service: Any,
+    include_tile_movement: bool = True,
+    movement_service: Any = None,
     pursuit_command_service: Optional[Any],
     speech_service: Optional[Any],
     interaction_service: Optional[Any],
@@ -321,14 +326,23 @@ def _build_tool_handler_map(
     subagent_runner: Optional[SubagentRunner],
     todo_store: Optional[InMemoryTodoStore],
     working_memory_store: Optional[InMemoryWorkingMemoryStore],
+    spot_graph_tool_executor: Optional[SpotGraphToolExecutor] = None,
 ) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
     """
     Executor 群を組み立て、tool_name → handler の辞書を返す。
-    movement_service は必須。各 service が None の場合は対応するハンドラは登録されない。
+    include_tile_movement が True のとき movement_service は必須。
+    各 service が None の場合は対応するハンドラは登録されない。
     """
-    move_to_destination = getattr(movement_service, "move_to_destination", None)
-    if not callable(move_to_destination):
-        raise TypeError("movement_service must have a callable move_to_destination")
+    if include_tile_movement:
+        move_to_destination = getattr(movement_service, "move_to_destination", None)
+        if not callable(move_to_destination):
+            raise TypeError("movement_service must have a callable move_to_destination")
+        move_tile = getattr(movement_service, "move_tile", None)
+        if not callable(move_tile):
+            raise TypeError("movement_service must have a callable move_tile")
+        cancel_movement = getattr(movement_service, "cancel_movement", None)
+        if not callable(cancel_movement):
+            raise TypeError("movement_service must have a callable cancel_movement")
     if pursuit_command_service is not None:
         if not callable(getattr(pursuit_command_service, "start_pursuit", None)):
             raise TypeError("pursuit_command_service must have a callable start_pursuit")
@@ -347,12 +361,13 @@ def _build_tool_handler_map(
     handler_map.update(
         GuildToolExecutor(guild_service=guild_command_service).get_handlers()
     )
-    handler_map.update(
-        MovementToolExecutor(
-            movement_service=movement_service,
-            pursuit_service=pursuit_command_service,
-        ).get_handlers()
-    )
+    if include_tile_movement:
+        handler_map.update(
+            MovementToolExecutor(
+                movement_service=movement_service,
+                pursuit_service=pursuit_command_service,
+            ).get_handlers()
+        )
     handler_map.update(
         SpeechToolExecutor(speech_service=speech_service).get_handlers()
     )
@@ -407,6 +422,8 @@ def _build_tool_handler_map(
             player_status_repository=player_status_repository,
         ).get_handlers()
     )
+    if spot_graph_tool_executor is not None:
+        handler_map.update(spot_graph_tool_executor.get_handlers())
     return handler_map
 
 
@@ -417,7 +434,8 @@ def _build_tool_stack(
     subagent_runner: SubagentRunner,
     working_memory_store: InMemoryWorkingMemoryStore,
     todo_store: InMemoryTodoStore,
-    movement_service: Any,
+    include_tile_movement: bool = True,
+    movement_service: Any = None,
     pursuit_command_service: Optional[Any],
     speech_service: Optional[Any],
     interaction_service: Optional[Any],
@@ -452,6 +470,7 @@ def _build_tool_stack(
     spot_repository: Optional[Any],
     item_spec_repository: Optional[Any],
     player_profile_repository: PlayerProfileRepository,
+    spot_graph_tool_executor: Optional[SpotGraphToolExecutor] = None,
 ) -> _ToolStackResult:
     """
     register_default_tools, available_tools_provider, tool_command_mapper, tool_argument_resolver を構築する。
@@ -492,9 +511,13 @@ def _build_tool_stack(
         subagent_enabled=True,
         todo_enabled=True,
         working_memory_enabled=True,
+        include_movement_tools=include_tile_movement,
     )
+    if spot_graph_tool_executor is not None:
+        register_spot_graph_tools(game_tool_registry)
     available_tools_provider = DefaultAvailableToolsProvider(game_tool_registry)
     handler_map = _build_tool_handler_map(
+        include_tile_movement=include_tile_movement,
         movement_service=movement_service,
         pursuit_command_service=pursuit_command_service,
         speech_service=speech_service,
@@ -529,6 +552,7 @@ def _build_tool_stack(
         subagent_runner=subagent_runner,
         todo_store=todo_store,
         working_memory_store=working_memory_store,
+        spot_graph_tool_executor=spot_graph_tool_executor,
     )
     tool_command_mapper = ToolCommandMapper(handler_map=handler_map)
     tool_argument_resolver = DefaultToolArgumentResolver(
@@ -588,6 +612,7 @@ def _build_observation_stack(
         skill_loadout_repository=skill_loadout_repository,
         skill_deck_progress_repository=skill_deck_progress_repository,
         sns_user_repository=sns_user_repository,
+        spot_graph_repository=spot_graph_repository,
     )
     formatter = observation_formatter
     if formatter is None:
@@ -1024,4 +1049,6 @@ def create_llm_agent_wiring(
     )
 
 
-__all__ = ["create_llm_agent_wiring", "LlmAgentWiringResult"]
+from ai_rpg_world.application.llm.wiring.spot_graph_wiring import create_spot_graph_wiring
+
+__all__ = ["create_llm_agent_wiring", "create_spot_graph_wiring", "LlmAgentWiringResult"]
