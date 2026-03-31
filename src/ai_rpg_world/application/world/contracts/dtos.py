@@ -1,8 +1,13 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Set, Optional
+from typing import Dict, List, Set, Optional, TYPE_CHECKING
 from datetime import datetime
 
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
+
+if TYPE_CHECKING:
+    from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
+        SpotGraphPlayerSnapshotDto,
+    )
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier, SkillProposalType
 
 
@@ -536,6 +541,7 @@ class PlayerCurrentStateDto:
     trade_my_trades_tab: Optional[str] = None
     trade_page_snapshot_generation: int = 0
     trade_current_page_snapshot_json: Optional[str] = None
+    spot_graph_snapshot: Optional["SpotGraphPlayerSnapshotDto"] = None
 
     def __post_init__(self) -> None:
         active_game_app, is_sns_mode_active, is_trade_mode_active = (
