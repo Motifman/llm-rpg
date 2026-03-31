@@ -316,3 +316,76 @@ class TestConnectionState:
         g = SpotGraphAggregate.empty(SpotGraphId.create(1))
         with pytest.raises(UnknownConnectionException):
             g.set_connection_passable(ConnectionId.create(99), True)
+
+
+class TestConnectionRecords:
+    def test_iter_connection_records_preserves_parallel_edges(self):
+        g = SpotGraphAggregate.empty(SpotGraphId.create(1))
+        g.add_spot(_node(1))
+        g.add_spot(_node(2))
+        g.add_connection(
+            SpotConnection(
+                connection_id=ConnectionId.create(1),
+                from_spot_id=SpotId.create(1),
+                to_spot_id=SpotId.create(2),
+                name="stairs",
+                description="",
+                travel_ticks=3,
+                is_bidirectional=True,
+            ),
+            reverse_connection_id=ConnectionId.create(2),
+        )
+        g.add_connection(
+            SpotConnection(
+                connection_id=ConnectionId.create(3),
+                from_spot_id=SpotId.create(1),
+                to_spot_id=SpotId.create(2),
+                name="vent",
+                description="",
+                travel_ticks=1,
+                is_bidirectional=False,
+                is_passable=False,
+            )
+        )
+        g.add_connection(
+            SpotConnection(
+                connection_id=ConnectionId.create(4),
+                from_spot_id=SpotId.create(1),
+                to_spot_id=SpotId.create(2),
+                name="tunnel",
+                description="",
+                travel_ticks=0,
+                is_bidirectional=True,
+            ),
+            reverse_connection_id=ConnectionId.create(5),
+        )
+
+        records = g.iter_connection_records()
+
+        assert [(int(r.connection.connection_id.value), r.reverse_connection_id.value if r.reverse_connection_id else None) for r in records] == [
+            (1, 2),
+            (3, None),
+            (4, 5),
+        ]
+
+    def test_iter_connection_records_detects_broken_reverse_pair(self):
+        g = SpotGraphAggregate(
+            graph_id=SpotGraphId.create(1),
+            spots={SpotId.create(1): _node(1), SpotId.create(2): _node(2)},
+            connections_by_id={
+                ConnectionId.create(1): SpotConnection(
+                    connection_id=ConnectionId.create(1),
+                    from_spot_id=SpotId.create(1),
+                    to_spot_id=SpotId.create(2),
+                    name="door",
+                    description="",
+                    travel_ticks=1,
+                    is_bidirectional=True,
+                )
+            },
+            outgoing={SpotId.create(1): [ConnectionId.create(1)]},
+            reverse_connections={ConnectionId.create(1): ConnectionId.create(2)},
+        )
+
+        with pytest.raises(SpotPresenceInvariantException, match="Reverse connection missing"):
+            g.iter_connection_records()

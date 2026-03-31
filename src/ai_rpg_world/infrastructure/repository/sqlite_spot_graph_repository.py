@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import sqlite3
+from json import JSONDecodeError
 
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
 from ai_rpg_world.infrastructure.repository.spot_graph_sqlite_schema import init_spot_graph_schema
+from ai_rpg_world.infrastructure.repository.spot_graph_persistence_exceptions import (
+    SpotGraphSnapshotNotInitializedError,
+    SpotGraphStateDecodeError,
+)
 from ai_rpg_world.infrastructure.repository.sqlite_world_graph_state_codec import (
     dumps_spot_graph_aggregate,
     loads_spot_graph_aggregate,
@@ -51,8 +56,16 @@ class SqliteSpotGraphRepository(ISpotGraphRepository):
             "SELECT payload_json FROM spot_graph_snapshot WHERE id = 1"
         ).fetchone()
         if row is None:
-            raise ValueError("spot_graph_snapshot が未初期化です（シードまたは save を先に実行）")
-        return loads_spot_graph_aggregate(str(row["payload_json"]))
+            raise SpotGraphSnapshotNotInitializedError(
+                "spot_graph_snapshot が未初期化です（シードまたは save を先に実行）"
+            )
+        payload = str(row["payload_json"])
+        try:
+            return loads_spot_graph_aggregate(payload)
+        except (JSONDecodeError, KeyError, TypeError) as exc:
+            raise SpotGraphStateDecodeError(
+                "spot_graph_snapshot の payload_json を復元できません"
+            ) from exc
 
     def save(self, graph: SpotGraphAggregate) -> None:
         self._assert_shared_transaction_active()

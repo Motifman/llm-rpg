@@ -73,7 +73,10 @@ class TestHarvestDomainService:
         
         # 検証
         status.consume_stamina.assert_called_once_with(15)
-        inventory.acquire_item.assert_called_once_with(new_item_id)
+        inventory.acquire_item.assert_called_once_with(
+            new_item_id,
+            item_spec_id_value=item_spec.item_spec_id.value,
+        )
         assert item_aggregate is not None
         assert item_aggregate.item_instance_id == new_item_id
         assert item_aggregate.quantity == 2
