@@ -3,7 +3,13 @@
 from __future__ import annotations
 
 from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
+    SpotGraphAtmosphereEntry,
+    SpotGraphConnectionEntry,
+    SpotGraphInteractionEntry,
+    SpotGraphNearbyEntityEntry,
+    SpotGraphObjectEntry,
     SpotGraphPlayerSnapshotDto,
+    SpotGraphSubLocationEntry,
 )
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -48,12 +54,21 @@ class SpotGraphCurrentStateBuilder:
                     f" → 目的地: {graph.get_spot(dest).name}"
                 )
 
+        connections: list[SpotGraphConnectionEntry] = []
         connection_lines: list[str] = []
         for conn in graph.iter_outgoing_connections_from(spot_id):
             dest = graph.get_spot(conn.to_spot_id)
+            connections.append(SpotGraphConnectionEntry(
+                destination_spot_id=conn.to_spot_id.value,
+                connection_name=conn.name,
+                destination_spot_name=dest.name,
+                is_passable=conn.is_passable,
+            ))
             status = "通行可" if conn.is_passable else "通行不可（音は届く可能性あり）"
             connection_lines.append(f"- {conn.name} → {dest.name}（{status}）")
 
+        objects: list[SpotGraphObjectEntry] = []
+        sub_locations: list[SpotGraphSubLocationEntry] = []
         sub_lines: list[str] = []
         obj_lines: list[str] = []
         ground_lines: list[str] = []
@@ -66,17 +81,33 @@ class SpotGraphCurrentStateBuilder:
         )
         if interior is not None:
             for sl in interior.sub_locations:
-                here = (
-                    "（現在ここ）"
-                    if current_sub_id is not None and current_sub_id == sl.sub_location_id
-                    else ""
-                )
+                is_current = current_sub_id is not None and current_sub_id == sl.sub_location_id
+                sub_locations.append(SpotGraphSubLocationEntry(
+                    sub_location_id=sl.sub_location_id.value,
+                    name=sl.name,
+                    is_current=is_current,
+                    is_hidden=sl.is_hidden,
+                ))
+                here = "（現在ここ）" if is_current else ""
                 hidden = "（未発見）" if sl.is_hidden else ""
                 sub_lines.append(f"- {sl.name}{here}{hidden}")
 
             for obj in interior.objects:
                 if not obj.is_visible:
                     continue
+                interactions = tuple(
+                    SpotGraphInteractionEntry(
+                        action_name=i.action_name,
+                        display_label=i.display_label,
+                    )
+                    for i in obj.interactions
+                )
+                objects.append(SpotGraphObjectEntry(
+                    object_id=obj.object_id.value,
+                    name=obj.name,
+                    description=obj.description,
+                    interactions=interactions,
+                ))
                 actions = [i.action_name for i in obj.interactions]
                 act = " / ".join(actions) if actions else "—"
                 obj_lines.append(f"- {obj.name} [ {act} ]")
@@ -84,12 +115,33 @@ class SpotGraphCurrentStateBuilder:
             for gi in interior.ground_items:
                 ground_lines.append(f"- 地面: item_instance={gi.item_instance_id}")
 
+        atmosphere: SpotGraphAtmosphereEntry | None = None
+        if node.atmosphere is not None:
+            a = node.atmosphere
+            atmosphere = SpotGraphAtmosphereEntry(
+                lighting=a.lighting.name,
+                sound_ambient=a.sound_ambient,
+                temperature=a.temperature.name,
+                smell=a.smell,
+            )
+
+        nearby_entities: list[SpotGraphNearbyEntityEntry] = []
+        presence = graph.presence_at(spot_id)
+        for other_eid in presence.present_entity_ids:
+            if other_eid != eid:
+                nearby_entities.append(SpotGraphNearbyEntityEntry(entity_id=int(other_eid)))
+
         return SpotGraphPlayerSnapshotDto(
             current_spot_name=node.name,
             current_spot_description=node.description,
             travel_status_line=travel_line,
+            connections=tuple(connections),
+            objects=tuple(objects),
+            sub_locations=tuple(sub_locations),
+            atmosphere=atmosphere,
+            nearby_entities=tuple(nearby_entities),
+            ground_item_lines=ground_lines,
             connection_lines=connection_lines,
             sub_location_lines=sub_lines,
             object_lines=obj_lines,
-            ground_item_lines=ground_lines,
         )

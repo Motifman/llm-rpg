@@ -198,32 +198,6 @@ class TestExploration:
 class TestObservationUpdates:
     """アクション後の観測が正しく更新されることを検証する。"""
 
-    def test_item_appears_in_observation_after_pickup(self) -> None:
-        runtime = _create_runtime()
-        p1 = PlayerId(runtime.scenario.player_spawns[0].player_id)
-
-        obs_before = runtime.build_observation(p1)
-        assert "院長室の鍵" not in obs_before
-
-        runtime.do_interact(p1, "reception_desk", "search")
-        obs_after = runtime.build_observation(p1)
-        assert "院長室の鍵" in obs_after
-
-    def test_flag_appears_in_observation(self) -> None:
-        runtime = _create_runtime()
-        p1 = PlayerId(runtime.scenario.player_spawns[0].player_id)
-
-        obs_before = runtime.build_observation(p1)
-        assert "read_diary" not in obs_before
-
-        runtime.do_interact(p1, "reception_desk", "search")
-        runtime.do_move(p1, "dim_corridor")
-        runtime.do_move(p1, "directors_office")
-        runtime.do_interact(p1, "directors_desk", "examine")
-
-        obs_after = runtime.build_observation(p1)
-        assert "read_diary" in obs_after
-
     def test_spot_changes_after_move(self) -> None:
         runtime = _create_runtime()
         p1 = PlayerId(runtime.scenario.player_spawns[0].player_id)
@@ -235,3 +209,29 @@ class TestObservationUpdates:
         obs2 = runtime.build_observation(p1)
         assert "薄暗い廊下" in obs2
         assert "エントランスホール" not in obs2.split("\n")[0]
+
+    def test_connection_passability_updates_after_interaction(self) -> None:
+        """亀裂を切り開くと接続先が通行可に変わることを検証する。"""
+        runtime = _create_runtime()
+        p2 = PlayerId(runtime.scenario.player_spawns[1].player_id)
+
+        runtime.do_move(p2, "operating_room")
+        runtime.do_interact(p2, "instrument_shelf", "search")
+        runtime.do_move(p2, "basement")
+
+        obs_before = runtime.build_observation(p2)
+        assert "通行不可" in obs_before
+
+        runtime.do_interact(p2, "wall_crack", "cut_open")
+        obs_after = runtime.build_observation(p2)
+        assert "隠し通路" in obs_after
+
+    def test_label_mapping_contains_ids(self) -> None:
+        """UiContext の targets にラベル→ID マッピングが存在する。"""
+        runtime = _create_runtime()
+        p1 = PlayerId(runtime.scenario.player_spawns[0].player_id)
+        ctx = runtime.build_llm_context(p1)
+        targets = ctx.tool_runtime_context.targets
+        assert len(targets) > 0
+        for label, target in targets.items():
+            assert label == target.label

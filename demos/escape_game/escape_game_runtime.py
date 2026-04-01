@@ -3,23 +3,25 @@
 シナリオ JSON → インメモリリポジトリ → アプリケーションサービス をワイヤリングし、
 プログラム的にアクションを実行できるようにする。
 
-LLM エージェントが受け取る観測テキストと、利用可能なツール一覧を可視化する。
+LLM エージェントが**実際に**受け取る観測テキスト・ツール定義・ラベル解決コンテキストを
+そのまま可視化する。デモ専用の加工は行わない。
 """
 
 from __future__ import annotations
 
+import json
 import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, FrozenSet, List, Optional, Tuple
+from typing import Any, Dict, FrozenSet, List, Optional, Tuple
 
 from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
-from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.item.value_object.max_stack_size import MaxStackSize
 from ai_rpg_world.domain.item.enum.item_enum import ItemType, Rarity
 from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import PlayerInventoryAggregate
 from ai_rpg_world.domain.player.aggregate.player_status_aggregate import PlayerStatusAggregate
+from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.value_object.base_stats import BaseStats
 from ai_rpg_world.domain.player.value_object.stat_growth_factor import StatGrowthFactor
@@ -31,15 +33,13 @@ from ai_rpg_world.domain.player.value_object.stamina import Stamina
 from ai_rpg_world.domain.player.value_object.exp_table import ExpTable
 from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import PlayerSpotNavigationState
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
-from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.service.game_end_condition_evaluator import GameEndConditionEvaluator
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
-from ai_rpg_world.domain.world_graph.value_object.game_end_condition import GameEndCondition
 from ai_rpg_world.domain.world_graph.value_object.game_end_result import GameEndResult
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.world_flag_registry import WorldFlagRegistry
 
+from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 from ai_rpg_world.application.world_graph.spot_exploration_application_service import (
     SpotExplorationApplicationService,
     SpotExplorationResultDto,
@@ -58,12 +58,22 @@ from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFl
 from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
     SpotGraphCurrentStateBuilder,
 )
-from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
-    SpotGraphPlayerSnapshotDto,
-)
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
 )
+
+from ai_rpg_world.application.llm.services.spot_graph_current_state_formatter import (
+    SpotGraphCurrentStateFormatter,
+)
+from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
+    SpotGraphUiContextBuilder,
+)
+from ai_rpg_world.application.llm.contracts.dtos import (
+    LlmUiContextDto,
+    ToolDefinitionDto,
+    ToolRuntimeContextDto,
+)
+from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
 
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import InMemoryItemRepository
@@ -80,17 +90,6 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import (
     PlayerSpawnConfig,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
-
-
-@dataclass
-class ActionRecord:
-    """実行されたアクションの記録。"""
-    tick: int
-    player_name: str
-    action_type: str
-    action_detail: str
-    result_messages: Tuple[str, ...]
-    observation_after: str
 
 
 @dataclass
@@ -111,8 +110,9 @@ class EscapeGameRuntime:
     _exploration_service: SpotExplorationApplicationService
     _state_builder: SpotGraphCurrentStateBuilder
     _game_end_evaluator: GameEndConditionEvaluator
+    _formatter: SpotGraphCurrentStateFormatter
+    _ui_context_builder: SpotGraphUiContextBuilder
     _tick: int = 0
-    history: List[ActionRecord] = field(default_factory=list)
 
     @property
     def id_mapper(self) -> ScenarioIdMapper:
@@ -138,151 +138,69 @@ class EscapeGameRuntime:
         self._tick += 1
         return self._tick
 
-    # ── 観測（LLM が受け取るテキスト）──
+    # ── 後方互換ヘルパー（テスト用） ──
 
     def build_observation(self, player_id: PlayerId) -> str:
-        snap = self._state_builder.build_snapshot(int(player_id))
-        if snap is None:
-            return "(このプレイヤーはまだグラフ上に配置されていません)"
-        return self._format_snapshot(snap, player_id)
-
-    def _format_snapshot(self, snap: SpotGraphPlayerSnapshotDto, player_id: PlayerId) -> str:
-        lines: List[str] = []
-        lines.append(f"現在地: {snap.current_spot_name}")
-        lines.append(f"  {snap.current_spot_description}")
-        if snap.travel_status_line:
-            lines.append(snap.travel_status_line)
-
-        graph = self._spot_graph_repo.find_graph()
-        eid = EntityId.create(int(player_id))
-        spot_id = graph.get_entity_spot(eid)
-        node = graph.get_spot(spot_id)
-        if node.atmosphere:
-            a = node.atmosphere
-            atmo_parts = []
-            atmo_parts.append(f"明るさ: {a.lighting.name}")
-            if a.sound_ambient:
-                atmo_parts.append(f"音: {a.sound_ambient}")
-            atmo_parts.append(f"気温: {a.temperature.name}")
-            if a.smell:
-                atmo_parts.append(f"匂い: {a.smell}")
-            lines.append("雰囲気: " + " / ".join(atmo_parts))
-
-        others = []
-        presence = graph.presence_at(spot_id)
-        for other_eid in presence.present_entity_ids:
-            if other_eid != eid:
-                for p in self.scenario.player_spawns:
-                    if int(other_eid) == p.player_id:
-                        others.append(p.name)
-        if others:
-            lines.append(f"同じスポットにいる人: {', '.join(others)}")
-
-        if snap.sub_location_lines:
-            lines.append("サブロケーション:")
-            lines.extend(f"  {x}" for x in snap.sub_location_lines)
-
-        if snap.object_lines:
-            lines.append("見えるオブジェクト:")
-            lines.extend(f"  {x}" for x in snap.object_lines)
-
-        if snap.ground_item_lines:
-            lines.append("落ちているアイテム:")
-            lines.extend(f"  {x}" for x in snap.ground_item_lines)
-
-        if snap.connection_lines:
-            lines.append("接続先:")
-            lines.extend(f"  {x}" for x in snap.connection_lines)
-
-        inv = self._player_inventory_repo.find_by_id(player_id)
-        if inv:
-            item_names = self._list_inventory_item_names(inv)
-            if item_names:
-                lines.append("所持アイテム:")
-                lines.extend(f"  - {n}" for n in item_names)
-            else:
-                lines.append("所持アイテム: なし")
-
-        flags = self._world_flag_state.as_frozen_set()
-        if flags:
-            lines.append(f"ワールドフラグ: {', '.join(sorted(flags))}")
-
-        lines.append(f"現在ティック: {self._tick}")
-        return "\n".join(lines)
-
-    def _list_inventory_item_names(self, inv: PlayerInventoryAggregate) -> List[str]:
-        from ai_rpg_world.domain.player.value_object.slot_id import SlotId
-        names = []
-        for i in range(inv.max_slots):
-            iid = inv.get_item_instance_id_by_slot(SlotId(i))
-            if iid is None:
-                continue
-            item = self._item_repo.find_by_id(iid)
-            if item:
-                names.append(item.item_spec.name)
-        return names
-
-    # ── 利用可能ツール一覧（LLM が選択肢として受け取る）──
+        """E2E テスト用の簡易観測テキスト。build_llm_context のテキスト部分を返す。"""
+        return self.build_llm_context(player_id).current_state_text
 
     def build_available_tools(self, player_id: PlayerId) -> str:
-        graph = self._spot_graph_repo.find_graph()
-        eid = EntityId.create(int(player_id))
-        spot_id = graph.get_entity_spot(eid)
-        interior = self._spot_interior_repo.find_by_spot_id(spot_id)
-
-        tools: List[str] = []
-        tools.append("=== 利用可能なツール ===")
-
-        passable_conns = [
-            c for c in graph.iter_outgoing_connections_from(spot_id) if c.is_passable
-        ]
-        for conn in passable_conns:
-            dest = graph.get_spot(conn.to_spot_id)
-            dest_str = self.id_mapper.get_str("spot", int(conn.to_spot_id.value))
-            tools.append(
-                f'spot_graph_travel_to(destination_spot_id={int(conn.to_spot_id.value)})  '
-                f'# → {dest.name} ({dest_str})'
-            )
-
-        tools.append(f"spot_graph_explore()  # 現在のスポットを探索する")
-
-        if interior:
-            for obj in interior.objects:
-                if not obj.is_visible:
-                    continue
-                for inter in obj.interactions:
-                    obj_str = self.id_mapper.get_str("object", int(obj.object_id.value))
-                    tools.append(
-                        f'spot_graph_interact(object_id={int(obj.object_id.value)}, '
-                        f'action_name="{inter.action_name}")  '
-                        f'# {obj.name}: {inter.display_label} ({obj_str})'
-                    )
-
-        tools.append('speak(message="...")  # 同じスポットの人に話す')
-        tools.append('shout(message="...")  # 周辺スポットにも届くように叫ぶ')
-
-        return "\n".join(tools)
-
-    # ── LLM システムプロンプト（可視化用）──
+        """E2E テスト用のツール一覧テキスト。"""
+        names = [d.name for d in self.get_tool_definitions()]
+        return ", ".join(names)
 
     def build_system_prompt(self, player_id: PlayerId) -> str:
-        name = self.get_player_name(player_id)
-        return textwrap.dedent(f"""\
-            あなたは「{name}」として廃病院からの脱出ゲームに参加しています。
+        """E2E テスト用のシステムプロンプト概要テキスト。"""
+        m = self.metadata
+        return (
+            f"あなたは「{m.title}」の探索者です。\n"
+            f"テーマ: {m.theme}\n"
+            f"推定ティック: {m.estimated_ticks}\n"
+            f"説明: {m.description}"
+        )
 
-            【シナリオ】
-            {self.metadata.description}
+    # ── 実 LLM パイプラインによる観測構築 ──
 
-            【ルール】
-            - 仲間と協力して廃病院から脱出してください
-            - スポットを探索してアイテムや手がかりを見つけてください
-            - オブジェクトを調べたり操作したりしてパズルを解いてください
-            - 仲間と情報を共有するために speak や shout を使ってください
-            - 制限ティック（{self.scenario.lose_conditions[0].tick_limit}）以内に全員が外に出れば勝利です
+    def build_llm_context(self, player_id: PlayerId) -> LlmUiContextDto:
+        """実際のフォーマッタ + UiContextBuilder を通した LLM 向けコンテキストを構築する。"""
+        snap = self._state_builder.build_snapshot(int(player_id))
+        if snap is None:
+            return LlmUiContextDto(
+                current_state_text="(このプレイヤーはまだグラフ上に配置されていません)",
+                tool_runtime_context=ToolRuntimeContextDto.empty(),
+            )
+        dto = self._build_minimal_player_state_dto(player_id, snap)
+        base_text = self._formatter.format(dto)
+        return self._ui_context_builder.build(base_text, dto)
 
-            【行動指針】
-            毎ターン、現在の状況を確認し、最も有効だと思うアクションを1つ選んでください。
-            アクションは利用可能なツールから選びます。""")
+    def _build_minimal_player_state_dto(
+        self, player_id: PlayerId, snap: Any,
+    ) -> PlayerCurrentStateDto:
+        return PlayerCurrentStateDto(
+            player_id=int(player_id),
+            player_name=self.get_player_name(player_id),
+            current_spot_id=None,
+            current_spot_name=snap.current_spot_name,
+            current_spot_description=snap.current_spot_description,
+            x=None, y=None, z=None,
+            current_player_count=0,
+            current_player_ids=set(),
+            connected_spot_ids=set(),
+            connected_spot_names=set(),
+            weather_type="不明",
+            weather_intensity=0.0,
+            current_terrain_type=None,
+            visible_objects=[],
+            view_distance=0,
+            available_moves=None,
+            total_available_moves=None,
+            attention_level=AttentionLevel.FULL,
+            spot_graph_snapshot=snap,
+        )
+
+    def get_tool_definitions(self) -> List[ToolDefinitionDto]:
+        """LLM に渡されるツール定義（OpenAI tools 形式）を返す。"""
+        return [defn for defn, _ in get_spot_graph_specs()]
 
     # ── アクション実行 ──
 
@@ -293,28 +211,10 @@ class EscapeGameRuntime:
         result = self._interaction_service.execute_interaction(
             player_id, SpotObjectId.create(obj_int), action_name,
         )
-        obs = self.build_observation(player_id)
-        self.history.append(ActionRecord(
-            tick=self._tick,
-            player_name=self.get_player_name(player_id),
-            action_type="interact",
-            action_detail=f"{object_str_id}.{action_name}",
-            result_messages=result.messages,
-            observation_after=obs,
-        ))
         return result
 
     def do_explore(self, player_id: PlayerId) -> SpotExplorationResultDto:
         result = self._exploration_service.explore_once(player_id)
-        obs = self.build_observation(player_id)
-        self.history.append(ActionRecord(
-            tick=self._tick,
-            player_name=self.get_player_name(player_id),
-            action_type="explore",
-            action_detail="explore_spot",
-            result_messages=result.discovery_descriptions,
-            observation_after=obs,
-        ))
         return result
 
     def do_move(self, player_id: PlayerId, dest_spot_str_id: str) -> None:
@@ -325,23 +225,12 @@ class EscapeGameRuntime:
         if inv:
             owned = collect_owned_item_spec_ids_from_inventory(inv, self._item_repo)
         flags = self._world_flag_state.as_frozen_set()
-
         self._movement_service.start_travel_to_spot(player_id, dest_sid, owned, flags)
-
         for _ in range(20):
             adv = self._movement_service.advance_spot_travel_one_tick(player_id, owned, flags)
+            self._tick += 1
             if adv is None:
                 break
-
-        obs = self.build_observation(player_id)
-        self.history.append(ActionRecord(
-            tick=self._tick,
-            player_name=self.get_player_name(player_id),
-            action_type="move",
-            action_detail=f"→ {dest_spot_str_id}",
-            result_messages=(),
-            observation_after=obs,
-        ))
 
     # ── ゲーム終了判定 ──
 
@@ -351,7 +240,6 @@ class EscapeGameRuntime:
         player_ids = self.get_player_ids()
         from ai_rpg_world.domain.common.value_object import WorldTick
         tick = WorldTick(self._tick)
-
         for wc in self.scenario.win_conditions:
             result = self._game_end_evaluator.evaluate(graph, wc, flags, player_ids, tick)
             if result.is_ended:
@@ -472,4 +360,6 @@ def create_escape_game_runtime(scenario_path: Path) -> EscapeGameRuntime:
         _exploration_service=exploration_service,
         _state_builder=state_builder,
         _game_end_evaluator=GameEndConditionEvaluator(),
+        _formatter=SpotGraphCurrentStateFormatter(),
+        _ui_context_builder=SpotGraphUiContextBuilder(),
     )

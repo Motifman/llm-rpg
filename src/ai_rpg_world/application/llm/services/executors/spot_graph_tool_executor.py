@@ -57,7 +57,7 @@ class SpotGraphToolExecutor:
         except (TypeError, ValueError):
             return LlmCommandResultDto(
                 success=False,
-                message="destination_spot_id が不正です。",
+                message="destination_spot_id が不正です（Resolver による解決に失敗した可能性があります）。",
                 error_code="INVALID_ARGUMENT",
                 remediation=get_remediation("INVALID_ARGUMENT"),
             )
