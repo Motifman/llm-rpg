@@ -12,6 +12,7 @@ from ai_rpg_world.application.llm.services._argument_resolvers import (
     GuildShopTradeArgumentResolver,
     MovementArgumentResolver,
     QuestArgumentResolver,
+    SpotGraphArgumentResolver,
     WorldArgumentResolver,
 )
 from ai_rpg_world.application.llm.services.quest_objective_target_resolver import (
@@ -49,6 +50,7 @@ class DefaultToolArgumentResolver(IToolArgumentResolver):
             player_profile_repository=player_profile_repository,
         )
         self._resolvers = [
+            SpotGraphArgumentResolver(),
             MovementArgumentResolver(),
             WorldArgumentResolver(),
             CombatSkillArgumentResolver(),

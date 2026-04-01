@@ -24,21 +24,16 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
         if snap.travel_status_line:
             lines.append(snap.travel_status_line)
 
-        if snap.sub_location_lines:
-            lines.append("サブロケーション:")
-            lines.extend(f"  {x}" for x in snap.sub_location_lines)
-
-        if snap.object_lines:
-            lines.append("見えるオブジェクト:")
-            lines.extend(f"  {x}" for x in snap.object_lines)
-
-        if snap.ground_item_lines:
-            lines.append("落ちているアイテム:")
-            lines.extend(f"  {x}" for x in snap.ground_item_lines)
-
-        if snap.connection_lines:
-            lines.append("接続先:")
-            lines.extend(f"  {x}" for x in snap.connection_lines)
+        if snap.atmosphere is not None:
+            a = snap.atmosphere
+            atmo_parts: List[str] = []
+            atmo_parts.append(f"明るさ: {a.lighting}")
+            if a.sound_ambient:
+                atmo_parts.append(f"音: {a.sound_ambient}")
+            atmo_parts.append(f"気温: {a.temperature}")
+            if a.smell:
+                atmo_parts.append(f"匂い: {a.smell}")
+            lines.append("雰囲気: " + " / ".join(atmo_parts))
 
         if dto.current_game_time_label:
             lines.append(f"現在時刻: {dto.current_game_time_label}")

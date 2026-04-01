@@ -18,28 +18,28 @@ _RESOLVER = SpotGraphToolsAvailabilityResolver()
 
 TRAVEL_TO_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
-    description="スポットグラフ上で、指定したスポット ID へ移動を開始する（経路は最短・通行条件を満たす必要がある）。",
+    description="スポットグラフ上で、指定した接続先ラベルへ移動を開始する（経路は最短・通行条件を満たす必要がある）。",
     parameters={
         "type": "object",
         "properties": {
-            "destination_spot_id": {
-                "type": "integer",
-                "description": "移動先のスポット ID（現在状態の接続先に表示された ID と一致させる）。",
+            "destination_label": {
+                "type": "string",
+                "description": "接続先ラベル（現在の状況に表示された S1, S2 等）。",
             },
         },
-        "required": ["destination_spot_id"],
+        "required": ["destination_label"],
     },
 )
 
 SET_SUB_LOCATION_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
-    description="現在のスポット内のサブロケーションを変更する。省略または 0 で未指定（クリア）扱い。",
+    description="現在のスポット内のサブロケーションを変更する。",
     parameters={
         "type": "object",
         "properties": {
-            "sub_location_id": {
-                "type": "integer",
-                "description": "サブロケーション ID。未設定でクリアする場合は 0 または省略。",
+            "sub_location_label": {
+                "type": "string",
+                "description": "サブロケーションラベル（現在の状況に表示された SL1, SL2 等）。未指定でクリア。",
             },
         },
         "required": [],
@@ -58,16 +58,16 @@ INTERACT_DEFINITION = ToolDefinitionDto(
     parameters={
         "type": "object",
         "properties": {
-            "object_id": {
-                "type": "integer",
-                "description": "スポットオブジェクト ID。",
+            "object_label": {
+                "type": "string",
+                "description": "オブジェクトラベル（現在の状況に表示された OBJ1, OBJ2 等）。",
             },
             "action_name": {
                 "type": "string",
                 "description": "操作名（オブジェクトに定義された action_name）。",
             },
         },
-        "required": ["object_id", "action_name"],
+        "required": ["object_label", "action_name"],
     },
 )
 

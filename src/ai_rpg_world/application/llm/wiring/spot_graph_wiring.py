@@ -199,7 +199,10 @@ def create_spot_graph_wiring(
     action_result_store = (
         action_result_store if action_result_store is not None else DefaultActionResultStore()
     )
-    ui_context_builder = DefaultLlmUiContextBuilder()
+    from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
+        SpotGraphUiContextBuilder,
+    )
+    ui_context_builder = SpotGraphUiContextBuilder()
     recent_events_formatter = DefaultRecentEventsFormatter()
     context_format_strategy = SectionBasedContextFormatStrategy()
     system_prompt_builder = DefaultSystemPromptBuilder()
