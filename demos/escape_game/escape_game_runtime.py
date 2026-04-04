@@ -58,6 +58,9 @@ from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFl
 from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
     SpotGraphCurrentStateBuilder,
 )
+from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
+    SpotGraphInventoryItemEntry,
+)
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
 )
@@ -152,11 +155,19 @@ class EscapeGameRuntime:
     def build_system_prompt(self, player_id: PlayerId) -> str:
         """E2E テスト用のシステムプロンプト概要テキスト。"""
         m = self.metadata
+        my_name = self.get_player_name(player_id)
+        player_lines = []
+        for p in self.scenario.player_spawns:
+            marker = "（あなた）" if p.player_id == int(player_id) else ""
+            player_lines.append(f"  - {p.name}{marker}")
+        players_text = "\n".join(player_lines)
         return (
-            f"あなたは「{m.title}」の探索者です。\n"
+            f"あなたは「{m.title}」の探索者「{my_name}」です。\n"
             f"テーマ: {m.theme}\n"
-            f"推定ティック: {m.estimated_ticks}\n"
-            f"説明: {m.description}"
+            f"制限時間: {m.estimated_ticks}ティック\n"
+            f"説明: {m.description}\n"
+            f"\n参加者一覧:\n{players_text}\n"
+            f"\n仲間と協力して脱出してください。say/whisper ツールで会話できます。"
         )
 
     # ── 実 LLM パイプラインによる観測構築 ──
@@ -176,6 +187,9 @@ class EscapeGameRuntime:
     def _build_minimal_player_state_dto(
         self, player_id: PlayerId, snap: Any,
     ) -> PlayerCurrentStateDto:
+        hours = (self._tick * 5) % (24 * 60)
+        h, m = divmod(hours, 60)
+        time_label = f"深夜 {h}:{m:02d}" if h < 6 else f"{h}:{m:02d}"
         return PlayerCurrentStateDto(
             player_id=int(player_id),
             player_name=self.get_player_name(player_id),
@@ -196,6 +210,7 @@ class EscapeGameRuntime:
             total_available_moves=None,
             attention_level=AttentionLevel.FULL,
             spot_graph_snapshot=snap,
+            current_game_time_label=time_label,
         )
 
     def get_tool_definitions(self) -> List[ToolDefinitionDto]:
@@ -339,10 +354,45 @@ def create_escape_game_runtime(scenario_path: Path) -> EscapeGameRuntime:
         world_flag_state=world_flag_state,
         exploration_progress_store=exploration_progress,
     )
+    player_name_map = {spawn.player_id: spawn.name for spawn in scenario.player_spawns}
+
+    def _resolve_entity_name(entity_id: int) -> str:
+        return player_name_map.get(entity_id, f"プレイヤー({entity_id})")
+
+    def _build_inventory(pid: PlayerId) -> tuple:
+        inv = player_inventory_repo.find_by_id(pid)
+        if inv is None:
+            return ()
+        seen_specs: dict[int, list] = {}
+        for slot_id in range(inv._max_slots):
+            from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+            iid = inv.get_item_instance_id_by_slot(SlotId(slot_id))
+            if iid is None:
+                continue
+            item = item_repo.find_by_id(iid)
+            if item is None:
+                continue
+            sid = item.item_spec.item_spec_id.value
+            if sid not in seen_specs:
+                name = item.item_spec.name
+                seen_specs[sid] = [name, 0]
+            seen_specs[sid][1] += 1
+        return tuple(
+            SpotGraphInventoryItemEntry(item_spec_id=sid, name=info[0], quantity=info[1])
+            for sid, info in seen_specs.items()
+        )
+
+    from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
+    from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
+    current_weather = WeatherState(weather_type=WeatherTypeEnum.FOG, intensity=0.6)
+
     state_builder = SpotGraphCurrentStateBuilder(
         spot_graph_repository=spot_graph_repo,
         spot_interior_repository=spot_interior_repo,
         player_status_repository=player_status_repo,
+        entity_name_resolver=_resolve_entity_name,
+        inventory_builder=_build_inventory,
+        weather_provider=lambda: current_weather,
     )
 
     return EscapeGameRuntime(

@@ -35,6 +35,21 @@ class SpotGraphCurrentStateFormatter(ICurrentStateFormatter):
                 atmo_parts.append(f"匂い: {a.smell}")
             lines.append("雰囲気: " + " / ".join(atmo_parts))
 
+        if snap.weather is not None:
+            w = snap.weather
+            _WEATHER_JP = {
+                "CLEAR": "晴れ", "CLOUDY": "曇り", "RAIN": "雨",
+                "HEAVY_RAIN": "大雨", "SNOW": "雪", "BLIZZARD": "吹雪",
+                "FOG": "霧", "STORM": "嵐",
+            }
+            wname = _WEATHER_JP.get(w.weather_type, w.weather_type)
+            intensity_label = ""
+            if w.weather_intensity < 0.3:
+                intensity_label = "弱い"
+            elif w.weather_intensity > 0.7:
+                intensity_label = "激しい"
+            lines.append(f"天候: {intensity_label}{wname}（屋外）")
+
         if dto.current_game_time_label:
             lines.append(f"現在時刻: {dto.current_game_time_label}")
         else:

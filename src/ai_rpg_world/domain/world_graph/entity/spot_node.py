@@ -21,6 +21,7 @@ class SpotNode:
     parent_id: Optional[SpotId]
     interior: Optional[SpotInterior] = None
     atmosphere: Optional[SpotAtmosphere] = None
+    is_outdoor: bool = False
 
     def __post_init__(self) -> None:
         if not self.name.strip():

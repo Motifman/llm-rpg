@@ -21,6 +21,7 @@ class SpotGraphConnectionEntry:
     connection_name: str
     destination_spot_name: str
     is_passable: bool
+    passage_condition_text: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,14 @@ class SpotGraphSubLocationEntry:
 
 
 @dataclass(frozen=True)
+class SpotGraphWeatherEntry:
+    """天候情報の構造化データ。屋外スポットのみ有効。"""
+    weather_type: str
+    weather_intensity: float
+    is_outdoor: bool
+
+
+@dataclass(frozen=True)
 class SpotGraphAtmosphereEntry:
     """雰囲気情報の構造化データ。"""
     lighting: str
@@ -51,9 +60,18 @@ class SpotGraphAtmosphereEntry:
 
 
 @dataclass(frozen=True)
+class SpotGraphInventoryItemEntry:
+    """所持アイテム1件の構造化データ。"""
+    item_spec_id: int
+    name: str
+    quantity: int
+
+
+@dataclass(frozen=True)
 class SpotGraphNearbyEntityEntry:
     """同スポットにいるエンティティ1件の構造化データ。"""
     entity_id: int
+    display_name: str = ""
 
 
 # --- スナップショット ---
@@ -70,7 +88,9 @@ class SpotGraphPlayerSnapshotDto:
     objects: Tuple[SpotGraphObjectEntry, ...] = ()
     sub_locations: Tuple[SpotGraphSubLocationEntry, ...] = ()
     atmosphere: Optional[SpotGraphAtmosphereEntry] = None
+    weather: Optional[SpotGraphWeatherEntry] = None
     nearby_entities: Tuple[SpotGraphNearbyEntityEntry, ...] = ()
+    inventory_items: Tuple[SpotGraphInventoryItemEntry, ...] = ()
     ground_item_lines: List[str] = field(default_factory=list)
 
     # 後方互換用の文字列行（formatter のフォールバック用）
