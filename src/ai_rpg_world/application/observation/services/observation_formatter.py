@@ -49,6 +49,9 @@ from ai_rpg_world.application.observation.services.formatters.player_formatter i
 from ai_rpg_world.application.observation.services.formatters.pursuit_formatter import (
     PursuitObservationFormatter,
 )
+from ai_rpg_world.application.observation.services.formatters.spot_graph_formatter import (
+    SpotGraphObservationFormatter,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 
@@ -121,6 +124,7 @@ class ObservationFormatter(IObservationFormatter):
             MonsterObservationFormatter(self._context),
             CombatObservationFormatter(self._context),
             SkillObservationFormatter(self._context),
+            SpotGraphObservationFormatter(self._context),
             WorldObservationFormatter(self._context),
             PlayerObservationFormatter(self._context),
             PursuitObservationFormatter(self._context),

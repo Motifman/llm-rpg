@@ -50,6 +50,9 @@ from ai_rpg_world.application.observation.services.recipient_strategies import (
     SnsRecipientStrategy,
     TradeRecipientStrategy,
 )
+from ai_rpg_world.application.observation.services.recipient_strategies.spot_graph_recipient_strategy import (
+    SpotGraphRecipientStrategy,
+)
 from ai_rpg_world.application.observation.services.recipient_strategies.spot_graph_speech_recipient_strategy import (
     SpotGraphSpeechRecipientStrategy,
 )
@@ -172,6 +175,11 @@ def create_observation_recipient_resolver(
         ),
         *(
             (
+                SpotGraphRecipientStrategy(
+                    observed_event_registry=observed_event_registry,
+                    spot_graph_repository=spot_graph_repository,
+                    player_status_repository=player_status_repository,
+                ),
                 SpotGraphSpeechRecipientStrategy(
                     observed_event_registry=observed_event_registry,
                     spot_graph_repository=spot_graph_repository,
