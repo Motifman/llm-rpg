@@ -10,7 +10,9 @@ from typing import List, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     DestinationToolRuntimeTargetDto,
+    InventoryToolRuntimeTargetDto,
     LlmUiContextDto,
+    PlayerToolRuntimeTargetDto,
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
 )
@@ -25,7 +27,8 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
 PREFIX_CONNECTION = "S"
 PREFIX_OBJECT = "OBJ"
 PREFIX_SUB_LOCATION = "SL"
-PREFIX_ENTITY = "E"
+PREFIX_ENTITY = "P"
+PREFIX_INVENTORY = "I"
 
 
 class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
@@ -51,6 +54,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         self._build_object_section(snap, allocator, collector, extra_lines)
         self._build_sub_location_section(snap, allocator, collector, extra_lines)
         self._build_entity_section(snap, allocator, collector, extra_lines)
+        self._build_inventory_section(snap, allocator, collector, extra_lines)
 
         augmented_text = current_state_text
         if extra_lines:
@@ -76,7 +80,12 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         lines.append("接続先ラベル:")
         for entry in snap.connections:
             label = allocator.next(PREFIX_CONNECTION)
-            status = "通行可" if entry.is_passable else "通行不可"
+            if entry.is_passable:
+                status = "通行可"
+            elif entry.passage_condition_text:
+                status = f"通行不可 — {entry.passage_condition_text}"
+            else:
+                status = "通行不可"
             lines.append(
                 f"  {label}: {entry.connection_name} → {entry.destination_spot_name}（{status}）"
             )
@@ -111,7 +120,8 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                 )
                 action_names.append(inter.action_name)
             act_str = " / ".join(interaction_parts) if interaction_parts else "—"
-            lines.append(f"  {label}: {entry.name} [{act_str}]")
+            desc_part = f" — {entry.description}" if entry.description else ""
+            lines.append(f"  {label}: {entry.name}{desc_part} [{act_str}]")
             collector.add(
                 label,
                 ToolRuntimeTargetDto(
@@ -157,16 +167,41 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
     ) -> None:
         if not snap.nearby_entities:
             return
-        lines.append("同じ場所にいる存在:")
+        lines.append("同じ場所にいるプレイヤー:")
         for entry in snap.nearby_entities:
             label = allocator.next(PREFIX_ENTITY)
-            lines.append(f"  {label}: entity_id={entry.entity_id}")
+            name = entry.display_name or f"プレイヤー({entry.entity_id})"
+            lines.append(f"  {label}: {name}")
             collector.add(
                 label,
-                ToolRuntimeTargetDto(
+                PlayerToolRuntimeTargetDto(
                     label=label,
-                    kind="spot_graph_entity",
-                    display_name=f"entity_{entry.entity_id}",
+                    kind="spot_graph_player",
+                    display_name=name,
                     player_id=entry.entity_id,
+                ),
+            )
+
+    def _build_inventory_section(
+        self,
+        snap: SpotGraphPlayerSnapshotDto,
+        allocator: LabelAllocator,
+        collector: RuntimeTargetCollector,
+        lines: List[str],
+    ) -> None:
+        if not snap.inventory_items:
+            return
+        lines.append("所持アイテム:")
+        for entry in snap.inventory_items:
+            label = allocator.next(PREFIX_INVENTORY)
+            qty = f" x{entry.quantity}" if entry.quantity > 1 else ""
+            lines.append(f"  {label}: {entry.name}{qty}")
+            collector.add(
+                label,
+                InventoryToolRuntimeTargetDto(
+                    label=label,
+                    kind="inventory_item",
+                    display_name=entry.name,
+                    item_instance_id=entry.item_spec_id,
                 ),
             )

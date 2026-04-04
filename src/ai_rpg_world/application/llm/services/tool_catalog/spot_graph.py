@@ -8,10 +8,12 @@ from ai_rpg_world.application.llm.services.spot_graph_availability_resolvers imp
     SpotGraphToolsAvailabilityResolver,
 )
 from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_SAY,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+    TOOL_NAME_WHISPER,
 )
 
 _RESOLVER = SpotGraphToolsAvailabilityResolver()
@@ -72,12 +74,49 @@ INTERACT_DEFINITION = ToolDefinitionDto(
 )
 
 
+SAY_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SAY,
+    description="周囲に聞こえるように発言する。同じスポットにいる全員と、音が通る接続先にも届く。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "content": {
+                "type": "string",
+                "description": "発言する内容。",
+            },
+        },
+        "required": ["content"],
+    },
+)
+
+WHISPER_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_WHISPER,
+    description="同じスポットにいる特定のプレイヤーにだけ囁く。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "target_label": {
+                "type": "string",
+                "description": "同じ場所にいるプレイヤーラベル（P1, P2 等）。",
+            },
+            "content": {
+                "type": "string",
+                "description": "囁く内容。",
+            },
+        },
+        "required": ["target_label", "content"],
+    },
+)
+
+
 def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     return [
         (TRAVEL_TO_DEFINITION, _RESOLVER),
         (SET_SUB_LOCATION_DEFINITION, _RESOLVER),
         (EXPLORE_DEFINITION, _RESOLVER),
         (INTERACT_DEFINITION, _RESOLVER),
+        (SAY_DEFINITION, _RESOLVER),
+        (WHISPER_DEFINITION, _RESOLVER),
     ]
 
 
@@ -87,4 +126,6 @@ __all__ = [
     "SET_SUB_LOCATION_DEFINITION",
     "EXPLORE_DEFINITION",
     "INTERACT_DEFINITION",
+    "SAY_DEFINITION",
+    "WHISPER_DEFINITION",
 ]

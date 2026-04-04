@@ -15,6 +15,7 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphObjectEntry,
     SpotGraphPlayerSnapshotDto,
     SpotGraphSubLocationEntry,
+    SpotGraphWeatherEntry,
 )
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 
@@ -45,14 +46,16 @@ def _make_dto(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
     )
 
 
-def test_get_spot_graph_specs_has_four_tools() -> None:
+def test_get_spot_graph_specs_has_six_tools() -> None:
     specs = get_spot_graph_specs()
-    assert len(specs) == 4
+    assert len(specs) == 6
     names = {s[0].name for s in specs}
     assert "spot_graph_travel_to" in names
     assert "spot_graph_set_sub_location" in names
     assert "spot_graph_explore" in names
     assert "spot_graph_interact" in names
+    assert "speech_say" in names
+    assert "speech_whisper" in names
 
 
 def test_spot_graph_specs_use_labels_not_ids() -> None:
@@ -136,6 +139,42 @@ def test_spot_graph_ui_context_builder_adds_labels() -> None:
     assert targets["OBJ1"].world_object_id == 10
     assert "SL1" in targets
     assert targets["SL1"].location_area_id == 5
+
+
+def test_spot_graph_formatter_shows_weather_for_outdoor() -> None:
+    """屋外スポットで天候がある場合、天候行が表示される。"""
+    snap = SpotGraphPlayerSnapshotDto(
+        current_spot_name="外",
+        current_spot_description="外に出た",
+        travel_status_line=None,
+        atmosphere=None,
+        weather=SpotGraphWeatherEntry(
+            weather_type="FOG",
+            weather_intensity=0.6,
+            is_outdoor=True,
+        ),
+    )
+    dto = _make_dto(snap)
+    text = SpotGraphCurrentStateFormatter().format(dto)
+    assert "天候" in text
+    assert "霧" in text
+    assert "屋外" in text
+
+
+def test_spot_graph_formatter_omits_weather_for_indoor() -> None:
+    """屋内スポットでは weather=None のため天候行が出ない。"""
+    snap = SpotGraphPlayerSnapshotDto(
+        current_spot_name="地下室",
+        current_spot_description="暗い",
+        travel_status_line=None,
+        atmosphere=SpotGraphAtmosphereEntry(
+            lighting="DIM", sound_ambient="水滴の音", temperature="COLD", smell="カビ",
+        ),
+        weather=None,
+    )
+    dto = _make_dto(snap)
+    text = SpotGraphCurrentStateFormatter().format(dto)
+    assert "天候" not in text
 
 
 def test_spot_graph_formatter_falls_back_without_snapshot() -> None:

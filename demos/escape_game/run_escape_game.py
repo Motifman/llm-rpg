@@ -83,6 +83,242 @@ def show_result(messages: tuple) -> None:
             print(f"  → {m}")
 
 
+def show_full_prompt_with_memory(runtime: EscapeGameRuntime, player_id: PlayerId) -> None:
+    """本番 DefaultPromptBuilder と同一フォーマットで記憶入りプロンプトを可視化する。
+
+    デモでは DefaultPromptBuilder を直接使えない
+    （WorldQueryService / PlayerProfileRepository 等のリポジトリ依存が必要）ため、
+    各コンポーネントを個別に組み立てて同一の出力を再現する。
+    """
+    from datetime import datetime, timedelta
+    from ai_rpg_world.application.observation.contracts.dtos import (
+        ObservationEntry,
+        ObservationOutput,
+    )
+    from ai_rpg_world.application.llm.contracts.dtos import (
+        ActionResultEntry,
+        EpisodeMemoryEntry,
+    )
+    from ai_rpg_world.application.llm.services.sliding_window_memory import (
+        DefaultSlidingWindowMemory,
+    )
+    from ai_rpg_world.application.llm.services.action_result_store import (
+        DefaultActionResultStore,
+    )
+    from ai_rpg_world.application.llm.services.in_memory_episode_memory_store import (
+        InMemoryEpisodeMemoryStore,
+    )
+    from ai_rpg_world.application.llm.services.in_memory_long_term_memory_store import (
+        InMemoryLongTermMemoryStore,
+    )
+    from ai_rpg_world.application.llm.services.recent_events_formatter import (
+        DefaultRecentEventsFormatter,
+    )
+    from ai_rpg_world.application.llm.services.predictive_memory_retriever import (
+        DefaultPredictiveMemoryRetriever,
+    )
+    from ai_rpg_world.application.llm.services.context_format_strategy import (
+        SectionBasedContextFormatStrategy,
+    )
+
+    now = datetime.now()
+
+    # ── 1. 短期記憶: スライディングウィンドウに観測を注入 ──
+    sliding_window = DefaultSlidingWindowMemory()
+    observations = [
+        ObservationEntry(
+            occurred_at=now - timedelta(minutes=10),
+            output=ObservationOutput(
+                prose="受付の引き出しを調べたところ、院長室の鍵が見つかった。",
+                structured={"type": "item_found", "item_name": "院長室の鍵", "spot_name": "エントランスホール"},
+            ),
+            game_time_label="深夜 0:05",
+        ),
+        ObservationEntry(
+            occurred_at=now - timedelta(minutes=8),
+            output=ObservationOutput(
+                prose="マコトが「2階の手術室に何かありそうだ」と話している。",
+                structured={"type": "speech_heard", "speaker": "マコト", "spot_name": "エントランスホール"},
+            ),
+            game_time_label="深夜 0:10",
+        ),
+        ObservationEntry(
+            occurred_at=now - timedelta(minutes=6),
+            output=ObservationOutput(
+                prose="薄暗い廊下に到着した。消毒液の匂いが漂っている。",
+                structured={"type": "arrived", "spot_name": "薄暗い廊下"},
+            ),
+            game_time_label="深夜 0:20",
+        ),
+        ObservationEntry(
+            occurred_at=now - timedelta(minutes=4),
+            output=ObservationOutput(
+                prose="院長の書斎机から日記を見つけた。地下実験室に関する記述がある。",
+                structured={"type": "item_found", "item_name": "院長の日記", "spot_name": "院長室"},
+            ),
+            game_time_label="深夜 0:35",
+        ),
+        ObservationEntry(
+            occurred_at=now - timedelta(minutes=2),
+            output=ObservationOutput(
+                prose="金庫を開けると、非常口の鍵が入っていた。",
+                structured={"type": "item_found", "item_name": "非常口の鍵", "spot_name": "院長室"},
+            ),
+            game_time_label="深夜 0:40",
+        ),
+    ]
+    sliding_window.append_all(player_id, observations)
+
+    # ── 2. 短期記憶: 行動結果ストアに結果を注入 ──
+    action_store = DefaultActionResultStore()
+    action_results = [
+        ActionResultEntry(
+            occurred_at=now - timedelta(minutes=10),
+            action_summary="spot_graph_interact(受付の引き出し, search)",
+            result_summary="成功: 院長室の鍵を入手した。",
+        ),
+        ActionResultEntry(
+            occurred_at=now - timedelta(minutes=7),
+            action_summary="spot_graph_travel_to(薄暗い廊下)",
+            result_summary="成功: 薄暗い廊下に到着した。",
+        ),
+        ActionResultEntry(
+            occurred_at=now - timedelta(minutes=5),
+            action_summary="spot_graph_interact(院長の書斎机, examine)",
+            result_summary="成功: 院長の日記を入手した。日記にはダイヤル番号のヒントが書かれている。",
+        ),
+        ActionResultEntry(
+            occurred_at=now - timedelta(minutes=3),
+            action_summary="spot_graph_interact(壁埋め込みの金庫, open)",
+            result_summary="成功: 非常口の鍵を入手した。",
+        ),
+    ]
+    for ar in action_results:
+        action_store.append(
+            player_id,
+            action_summary=ar.action_summary,
+            result_summary=ar.result_summary,
+            occurred_at=ar.occurred_at,
+        )
+
+    # ── 3. 長期記憶: エピソードストアに過去の体験を注入 ──
+    episode_store = InMemoryEpisodeMemoryStore()
+    episodes = [
+        EpisodeMemoryEntry(
+            id="ep-001",
+            context_summary="エントランスホールで受付の引き出しを調べた",
+            action_taken="spot_graph_interact(受付の引き出し, search)",
+            outcome_summary="院長室の鍵を入手した",
+            entity_ids=("院長室の鍵", "受付の引き出し"),
+            location_id="エントランスホール",
+            timestamp=now - timedelta(minutes=10),
+            importance="medium",
+            surprise=False,
+            recall_count=1,
+            spot_id_value=1,
+        ),
+        EpisodeMemoryEntry(
+            id="ep-002",
+            context_summary="院長室で書斎机を調べたところ日記を発見。地下実験室について記述あり",
+            action_taken="spot_graph_interact(院長の書斎机, examine)",
+            outcome_summary="院長の日記を入手。ダイヤル番号のヒントが記載されていた",
+            entity_ids=("院長の日記", "院長の書斎机", "地下実験室"),
+            location_id="院長室",
+            timestamp=now - timedelta(minutes=5),
+            importance="high",
+            surprise=False,
+            recall_count=0,
+            spot_id_value=4,
+        ),
+        EpisodeMemoryEntry(
+            id="ep-003",
+            context_summary="院長室の金庫を日記のヒントで開錠した",
+            action_taken="spot_graph_interact(壁埋め込みの金庫, open)",
+            outcome_summary="非常口の鍵を入手した",
+            entity_ids=("非常口の鍵", "壁埋め込みの金庫"),
+            location_id="院長室",
+            timestamp=now - timedelta(minutes=3),
+            importance="high",
+            surprise=False,
+            recall_count=0,
+            spot_id_value=4,
+        ),
+    ]
+    for ep in episodes:
+        episode_store.add(player_id, ep)
+
+    # ── 4. 長期記憶: 事実と法則を注入 ──
+    long_term_store = InMemoryLongTermMemoryStore()
+    long_term_store.add_fact(player_id, "受付の引き出しから院長室の鍵が見つかった")
+    long_term_store.add_fact(player_id, "院長の日記に金庫のダイヤル番号のヒントが書かれていた")
+    long_term_store.add_fact(player_id, "金庫の中に非常口の鍵が入っていた")
+    long_term_store.add_fact(player_id, "鶴見博士は地下で延命研究を行っていた")
+
+    long_term_store.upsert_law(player_id, subject="引き出し", relation="を search すると", target="鍵やアイテムが見つかることがある", delta_strength=2.0)
+    long_term_store.upsert_law(player_id, subject="日記やメモ", relation="を読むと", target="パズルのヒントが得られる", delta_strength=3.0)
+    long_term_store.upsert_law(player_id, subject="金庫", relation="は日記のヒントで", target="開錠できる", delta_strength=1.0)
+
+    # ── 5. 各セクションをフォーマット ──
+    ctx = runtime.build_llm_context(player_id)
+    current_state_text = ctx.current_state_text
+
+    recent_fmt = DefaultRecentEventsFormatter()
+    recent_obs = sliding_window.get_recent(player_id, 20)
+    recent_acts = action_store.get_recent(player_id, 20)
+    recent_events_text = recent_fmt.format(recent_obs, recent_acts)
+
+    retriever = DefaultPredictiveMemoryRetriever(
+        episode_store=episode_store,
+        long_term_store=long_term_store,
+    )
+    relevant_memories_text = retriever.retrieve_for_prediction(
+        player_id,
+        current_state_text,
+        [d.name for d in runtime.get_tool_definitions()],
+    )
+
+    strategy = SectionBasedContextFormatStrategy()
+    user_content = strategy.format(current_state_text, recent_events_text, relevant_memories_text)
+    user_content = user_content.rstrip() + "\n\n利用可能なツールで次の行動を選んでください。"
+
+    # ── 6. 完成した messages を表示 ──
+    print(f"\n{'━' * 72}")
+    print("  記憶入りプロンプトの完全可視化（DefaultPromptBuilder と同一フォーマット）")
+    print(f"{'━' * 72}")
+
+    system_content = runtime.build_system_prompt(player_id)
+    print(f"\n{'=' * 72}")
+    print("[messages[0]] role: system")
+    print(f"{'=' * 72}")
+    print(system_content)
+
+    print(f"\n{'=' * 72}")
+    print("[messages[1]] role: user")
+    print(f"{'=' * 72}")
+    print(user_content)
+
+    print(f"\n{'─' * 72}")
+    print("[参考] 各セクションの構成")
+    print(f"{'─' * 72}")
+    print("user メッセージは以下の 3 セクション + 行動指示で構成:")
+    print("  1. ## 現在の状況      ← SpotGraphCurrentStateFormatter + UiContextBuilder")
+    print("  2. ## 直近の出来事     ← ISlidingWindowMemory + IActionResultStore")
+    print("  3. ## 関連する記憶     ← IPredictiveMemoryRetriever (エピソード + 事実 + 法則)")
+    print("  4. 行動指示           ← 固定テキスト")
+    print()
+    print("[記憶パイプラインのデータフロー]")
+    print("  観測バッファ drain → スライディングウィンドウ append")
+    print("    ├→ get_recent(20件) → 「直近の出来事」セクション")
+    print("    └→ overflow(溢れた古い観測) → RuleBasedMemoryExtractor")
+    print("         └→ EpisodeMemoryEntry に変換 → IEpisodeMemoryStore に保存")
+    print("              └→ リフレクション(定期) → ILongTermMemoryStore に事実・法則として昇格")
+    print("  検索: DefaultPredictiveMemoryRetriever")
+    print("    ├→ IEpisodeMemoryStore から現在地・ツール名で関連エピソード検索")
+    print("    ├→ ILongTermMemoryStore から事実検索")
+    print("    └→ ILongTermMemoryStore から法則検索")
+    print("    → 「関連する記憶」セクションとして user メッセージに追加")
+
+
 def main() -> None:
     print(f"{'━' * 72}")
     print("  廃病院脱出ゲームデモ — 実 LLM パイプライン出力の可視化")
@@ -95,6 +331,16 @@ def main() -> None:
 
     p1 = PlayerId(runtime.scenario.player_spawns[0].player_id)
     p2 = PlayerId(runtime.scenario.player_spawns[1].player_id)
+
+    # ── システムプロンプトの表示 ──
+    print(f"\n{DIVIDER}")
+    print("[SYSTEM PROMPT] 探索者A（ユウキ）")
+    print(DIVIDER)
+    print(runtime.build_system_prompt(p1))
+    print(f"\n{DIVIDER}")
+    print("[SYSTEM PROMPT] 探索者B（マコト）")
+    print(DIVIDER)
+    print(runtime.build_system_prompt(p2))
 
     # ── ツール定義の表示（1回だけ）──
     show_tools(runtime)
@@ -197,30 +443,9 @@ def main() -> None:
     print(f"{'━' * 72}")
 
     # ═══════════════════════════════════════════
-    # 診断: 情報粒度のレビュー
+    # 記憶入りプロンプトの完全可視化
     # ═══════════════════════════════════════════
-    print(f"\n{'━' * 72}")
-    print("  診断: LLM に渡される情報の粒度レビュー")
-    print(f"{'━' * 72}")
-    print("""
-[現在含まれている情報]
-  ✓ 現在地の名前と説明文
-  ✓ 雰囲気（明るさ・音・気温・匂い）
-  ✓ 接続先（ラベル S1 等 + 名前 + 通行可否）
-  ✓ オブジェクト（ラベル OBJ1 等 + 名前 + 操作候補の display_label と action_name）
-  ✓ サブロケーション（ラベル SL1 等 + 名前 + 現在位置マーカー）
-  ✓ 同スポットの他エンティティ（ラベル E1 等）
-  ✓ ツール定義は destination_label / object_label / sub_location_label でラベル指定
-
-[改善候補]
-  △ 所持アイテム: 現在の観測に含まれていない → LLM が「鍵を持っているか」を判断できない
-  △ ワールドフラグ: 読了フラグ等が観測に含まれていない → パズル進行状況がわからない
-  △ エンティティ名: entity_id のみで名前がない → 「マコトがいる」と認識できない
-  △ オブジェクト説明文: 現在はラベル行に名前のみ → 初見で何のオブジェクトか不明
-  △ 接続先の通行条件: 「鍵が必要」等の条件テキストが表示されない
-  △ 移動中の経過ティック表示: do_move 内で自動消化しているが実際は毎ティックの観測が必要
-  △ speak/shout ツール: ツールカタログに未登録（現在は定義のみ）
-""")
+    show_full_prompt_with_memory(runtime, p1)
 
 
 if __name__ == "__main__":

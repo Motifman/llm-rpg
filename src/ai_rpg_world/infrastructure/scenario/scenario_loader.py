@@ -206,6 +206,7 @@ class ScenarioLoader:
                 parent_id=parent_id,
                 interior=None,
                 atmosphere=atmosphere,
+                is_outdoor=bool(spot_raw.get("is_outdoor", False)),
             )
             graph.add_spot(node)
 
