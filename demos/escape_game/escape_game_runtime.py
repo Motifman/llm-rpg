@@ -77,6 +77,17 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolRuntimeContextDto,
 )
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
+from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
+from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
+from ai_rpg_world.application.llm.services.recent_events_formatter import DefaultRecentEventsFormatter
+from ai_rpg_world.application.llm.services.context_format_strategy import SectionBasedContextFormatStrategy
+from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
+from ai_rpg_world.application.observation.services.observation_context_buffer import DefaultObservationContextBuffer
+from ai_rpg_world.application.observation.services.observation_pipeline import ObservationPipeline
+from ai_rpg_world.application.observation.services.observation_formatter import ObservationFormatter
+from ai_rpg_world.application.observation.services.observation_recipient_resolver import ObservationRecipientResolver
+from ai_rpg_world.application.observation.services.observed_event_registry import ObservedEventRegistry
+from ai_rpg_world.application.observation.services.recipient_strategies.spot_graph_recipient_strategy import SpotGraphRecipientStrategy
 
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
 from ai_rpg_world.infrastructure.repository.in_memory_item_repository import InMemoryItemRepository
@@ -115,6 +126,10 @@ class EscapeGameRuntime:
     _game_end_evaluator: GameEndConditionEvaluator
     _formatter: SpotGraphCurrentStateFormatter
     _ui_context_builder: SpotGraphUiContextBuilder
+    _obs_pipeline: ObservationPipeline
+    _obs_buffer: DefaultObservationContextBuffer
+    _sliding_window: DefaultSlidingWindowMemory
+    _action_result_store: DefaultActionResultStore
     _tick: int = 0
 
     @property
@@ -217,19 +232,117 @@ class EscapeGameRuntime:
         """LLM に渡されるツール定義（OpenAI tools 形式）を返す。"""
         return [defn for defn, _ in get_spot_graph_specs()]
 
+    # ── 観測パイプライン: イベントを処理して各プレイヤーに配信 ──
+
+    def _process_graph_events(self) -> None:
+        """グラフ集約からイベントを収集し、観測パイプラインを通して各プレイヤーに配信する。"""
+        from datetime import datetime
+        graph = self._spot_graph_repo.find_graph()
+        events = graph.get_events()
+        graph.clear_events()
+        now = datetime.now()
+        hours = (self._tick * 5) % (24 * 60)
+        h, m = divmod(hours, 60)
+        time_label = f"深夜 {h}:{m:02d}" if h < 6 else f"{h}:{m:02d}"
+        for event in events:
+            items = self._obs_pipeline.run(event)
+            for pid, output in items:
+                entry = ObservationEntry(
+                    occurred_at=now,
+                    output=output,
+                    game_time_label=time_label,
+                )
+                self._obs_buffer.append(pid, entry)
+
+    def _record_action_result(
+        self, player_id: PlayerId, action_summary: str, result_summary: str,
+    ) -> None:
+        from datetime import datetime
+        self._action_result_store.append(
+            player_id,
+            action_summary=action_summary,
+            result_summary=result_summary,
+            occurred_at=datetime.now(),
+        )
+
+    def _drain_buffer_to_sliding_window(self, player_id: PlayerId) -> None:
+        """観測バッファをスライディングウィンドウに移す（プロンプト構築前に呼ぶ）。"""
+        drained = self._obs_buffer.drain(player_id)
+        if drained:
+            self._sliding_window.append_all(player_id, drained)
+
+    # ── 完全プロンプト構築 ──
+
+    def build_full_prompt(self, player_id: PlayerId) -> dict:
+        """各プレイヤーが LLM ターンで実際に受け取る完全なプロンプトを構築する。"""
+        self._drain_buffer_to_sliding_window(player_id)
+
+        ctx = self.build_llm_context(player_id)
+        current_state_text = ctx.current_state_text
+
+        recent_obs = self._sliding_window.get_recent(player_id, 20)
+        recent_acts = self._action_result_store.get_recent(player_id, 20)
+        recent_fmt = DefaultRecentEventsFormatter()
+        recent_events_text = recent_fmt.format(recent_obs, recent_acts)
+
+        strategy = SectionBasedContextFormatStrategy()
+        user_content = strategy.format(current_state_text, recent_events_text, "")
+        user_content = user_content.rstrip() + "\n\n利用可能なツールで次の行動を選んでください。"
+
+        system_content = self.build_system_prompt(player_id)
+        return {
+            "system": system_content,
+            "user": user_content,
+            "tools": [d.name for d in self.get_tool_definitions()],
+            "tool_runtime_context": ctx.tool_runtime_context,
+        }
+
     # ── アクション実行 ──
 
     def do_interact(
         self, player_id: PlayerId, object_str_id: str, action_name: str,
     ) -> SpotInteractionResultDto:
+        from ai_rpg_world.domain.world_graph.event.spot_graph_event import SpotObjectInteractedEvent
         obj_int = self.id_mapper.get_int("object", object_str_id)
+        obj_id = SpotObjectId.create(obj_int)
+        graph = self._spot_graph_repo.find_graph()
+        eid = EntityId.create(int(player_id))
+        spot_id = graph.get_entity_spot(eid)
         result = self._interaction_service.execute_interaction(
-            player_id, SpotObjectId.create(obj_int), action_name,
+            player_id, obj_id, action_name,
         )
+        result_text = "; ".join(result.messages) if result.messages else "完了"
+        graph = self._spot_graph_repo.find_graph()
+        graph.add_event(SpotObjectInteractedEvent.create(
+            aggregate_id=graph._graph_id,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=eid,
+            spot_id=spot_id,
+            object_id=obj_id,
+            action_name=action_name,
+            result_message=result_text,
+        ))
+        self._process_graph_events()
+        self._record_action_result(player_id, f"interact({object_str_id}, {action_name})", result_text)
         return result
 
     def do_explore(self, player_id: PlayerId) -> SpotExplorationResultDto:
+        from ai_rpg_world.domain.world_graph.event.spot_graph_event import SpotExploredEvent
+        graph = self._spot_graph_repo.find_graph()
+        eid = EntityId.create(int(player_id))
+        spot_id = graph.get_entity_spot(eid)
         result = self._exploration_service.explore_once(player_id)
+        graph = self._spot_graph_repo.find_graph()
+        graph.add_event(SpotExploredEvent.create(
+            aggregate_id=graph._graph_id,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=eid,
+            spot_id=spot_id,
+            discoveries=result.discovery_descriptions,
+        ))
+        self._process_graph_events()
+        result_text = f"発見: {', '.join(result.discovery_descriptions)}" if result.discovery_descriptions else "新しい発見はなかった"
+        self._record_action_result(player_id, "explore_sub_locations()", result_text)
         return result
 
     def do_move(self, player_id: PlayerId, dest_spot_str_id: str) -> None:
@@ -246,6 +359,9 @@ class EscapeGameRuntime:
             self._tick += 1
             if adv is None:
                 break
+        self._process_graph_events()
+        dest_name = self._spot_graph_repo.find_graph().get_spot(dest_sid).name
+        self._record_action_result(player_id, f"travel_to({dest_spot_str_id})", f"{dest_name}に到着した")
 
     # ── ゲーム終了判定 ──
 
@@ -395,6 +511,29 @@ def create_escape_game_runtime(scenario_path: Path) -> EscapeGameRuntime:
         weather_provider=lambda: current_weather,
     )
 
+    # ── 観測パイプライン構築 ──
+    registry = ObservedEventRegistry()
+    spot_graph_strategy = SpotGraphRecipientStrategy(
+        observed_event_registry=registry,
+        spot_graph_repository=spot_graph_repo,
+        player_status_repository=player_status_repo,
+    )
+    obs_resolver = ObservationRecipientResolver(strategies=[spot_graph_strategy])
+
+    obs_formatter = ObservationFormatter(spot_graph_repository=spot_graph_repo)
+    obs_formatter._name_resolver.player_name = lambda pid: player_name_map.get(  # type: ignore[assignment]
+        pid.value, f"プレイヤー({pid.value})"
+    )
+
+    obs_pipeline = ObservationPipeline(
+        resolver=obs_resolver,
+        formatter=obs_formatter,
+        player_status_repository=player_status_repo,
+    )
+    obs_buffer = DefaultObservationContextBuffer()
+    sliding_window = DefaultSlidingWindowMemory()
+    action_result_store = DefaultActionResultStore()
+
     return EscapeGameRuntime(
         scenario=scenario,
         _spot_graph_repo=spot_graph_repo,
@@ -412,4 +551,8 @@ def create_escape_game_runtime(scenario_path: Path) -> EscapeGameRuntime:
         _game_end_evaluator=GameEndConditionEvaluator(),
         _formatter=SpotGraphCurrentStateFormatter(),
         _ui_context_builder=SpotGraphUiContextBuilder(),
+        _obs_pipeline=obs_pipeline,
+        _obs_buffer=obs_buffer,
+        _sliding_window=sliding_window,
+        _action_result_store=action_result_store,
     )
