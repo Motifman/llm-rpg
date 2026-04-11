@@ -1,0 +1,509 @@
+/* Title screen — derived from Stitch export "Title Screen - The Fractured Aristocrat" */
+
+/* 館イラスト: ごく弱いチラつき（opacity / brightness のみ、周期は長め） */
+@keyframes ts-bg-breathe {
+  0%,
+  100% {
+    opacity: 0.56;
+    filter: blur(2px) brightness(0.98);
+  }
+  35% {
+    opacity: 0.62;
+    filter: blur(2px) brightness(1.02);
+  }
+  70% {
+    opacity: 0.58;
+    filter: blur(2px) brightness(1);
+  }
+}
+
+.ts-root {
+  --ts-bg: #10141a;
+  --ts-bg-lowest: #0a0e14;
+  --ts-on-surface: #dfe2eb;
+  --ts-primary: #f4bd67;
+  --ts-secondary: #ffb4ac;
+  --ts-outline-variant: #45474b;
+  --ts-surface-container: #1c2026;
+  --ts-secondary-container: #960711;
+  --ts-btn-radius: 6px;
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  color: var(--ts-on-surface);
+  background: var(--ts-bg-lowest);
+  min-height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+
+.ts-root * {
+  box-sizing: border-box;
+}
+
+.ts-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+.ts-bg-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(2px);
+  opacity: 0.6;
+  transform: scale(1.05);
+}
+
+.ts-bg-img--breathe {
+  animation: ts-bg-breathe 5.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ts-bg-img--breathe {
+    animation: none;
+    opacity: 0.6;
+    filter: blur(2px) brightness(1);
+  }
+
+  .ts-gauge-fill {
+    animation: none;
+    transform: scaleX(0.55);
+  }
+
+  .ts-hud-line--enter {
+    animation: none;
+  }
+}
+
+.ts-bg-fade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    var(--ts-bg-lowest) 0%,
+    transparent 50%,
+    transparent 100%
+  );
+  opacity: 0.9;
+}
+
+/* 四隅をやわらかく落とす（実ブラーではなく暗部ビネットで「端がにじむ」感じ） */
+.ts-corner-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 58% 48% at 0% 0%, rgba(10, 14, 20, 0.52), transparent 70%),
+    radial-gradient(ellipse 58% 48% at 100% 0%, rgba(10, 14, 20, 0.52), transparent 70%),
+    radial-gradient(ellipse 58% 48% at 0% 100%, rgba(10, 14, 20, 0.58), transparent 72%),
+    radial-gradient(ellipse 58% 48% at 100% 100%, rgba(10, 14, 20, 0.58), transparent 72%);
+  opacity: 0.9;
+}
+
+.ts-scanline-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 50%, rgba(0, 0, 0, 0.1) 50%);
+  background-size: 100% 4px;
+  pointer-events: none;
+}
+
+.ts-grain {
+  position: absolute;
+  inset: 0;
+  background-image: url("/assets/title/grain.png");
+  background-repeat: repeat;
+  opacity: 0.05;
+  pointer-events: none;
+}
+
+.ts-shell {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.ts-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  min-height: 100vh;
+  padding: 0 1.5rem 4.5rem;
+}
+
+@media (min-width: 768px) {
+  .ts-main {
+    padding-left: 6rem;
+    padding-right: 6rem;
+  }
+}
+
+/* 視覚的な重心をやや上へ（真ん中より少し上）
+   タイトルは左、ナビは従来どおり中央（max-width 56rem） */
+.ts-main-stack {
+  width: 100%;
+  margin: 0;
+  transform: translateY(-7vh);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-height: min(65vh, 40rem);
+}
+
+.ts-hero-wrap {
+  align-self: flex-start;
+  width: auto;
+  max-width: 56rem;
+  margin-top: 15vh;
+}
+
+.ts-hero-title {
+  margin: 0;
+  font-family: "Noto Serif JP", "Noto Serif", Georgia, serif;
+  font-size: clamp(3rem, 10vw, 7rem);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--ts-on-surface);
+}
+
+.ts-hero-meta {
+  margin-top: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(244, 189, 103, 0.4);
+}
+
+.ts-meta-line {
+  height: 1px;
+  width: 3rem;
+  background: rgba(69, 71, 75, 0.3);
+}
+
+.ts-nav {
+  align-self: center;
+  width: 100%;
+  max-width: 56rem;
+  margin-top: auto;
+  padding-top: 2.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: stretch;
+}
+
+@media (min-width: 768px) {
+  .ts-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
+.ts-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 1rem;
+  padding: 0.75rem 2rem;
+  border: none;
+  background: rgba(10, 14, 20, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-left: 4px solid transparent;
+  color: rgba(244, 189, 103, 0.6);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.125rem;
+  letter-spacing: 0.15rem;
+  cursor: pointer;
+  border-radius: var(--ts-btn-radius);
+  transition:
+    color 0.3s,
+    border-color 0.3s,
+    background 0.3s,
+    transform 0.15s;
+  text-align: left;
+}
+
+.ts-btn:hover {
+  background: rgba(150, 7, 17, 0.2);
+  color: var(--ts-secondary);
+  border-left-color: var(--ts-secondary);
+}
+
+.ts-btn:active {
+  transform: scale(0.98);
+}
+
+.ts-btn--primary {
+  border-left-color: var(--ts-primary);
+  color: var(--ts-primary);
+  font-weight: 700;
+}
+
+.ts-btn-icon {
+  font-family: "Material Symbols Outlined";
+  font-size: 1.25rem;
+  font-variation-settings: "FILL" 0, "wght" 400;
+}
+
+.ts-btn-hint {
+  position: absolute;
+  right: -1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 9px;
+  color: rgba(255, 180, 172, 0.4);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+.ts-btn:hover .ts-btn-hint {
+  opacity: 1;
+}
+
+.ts-hud {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  text-align: right;
+  pointer-events: none;
+  z-index: 15;
+}
+
+.ts-hud-log {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+}
+
+.ts-hud-gauges {
+  position: fixed;
+  bottom: 2rem;
+  left: 2rem;
+  z-index: 15;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+}
+
+.ts-gauge-track {
+  width: 5.75rem;
+  height: 3px;
+  background: rgba(69, 71, 75, 0.4);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.ts-gauge-fill {
+  width: 100%;
+  height: 100%;
+  transform-origin: left center;
+  background: linear-gradient(
+    90deg,
+    rgba(244, 189, 103, 0.45),
+    rgba(255, 180, 172, 0.72)
+  );
+  animation: ts-gauge-a 4.1s ease-in-out infinite;
+}
+
+.ts-gauge-fill--b {
+  animation-name: ts-gauge-b;
+  animation-duration: 5.3s;
+  animation-delay: -1.1s;
+}
+
+.ts-gauge-fill--c {
+  animation-name: ts-gauge-c;
+  animation-duration: 3.6s;
+  animation-delay: -0.6s;
+}
+
+@keyframes ts-gauge-a {
+  0%,
+  100% {
+    transform: scaleX(0.28);
+  }
+  45% {
+    transform: scaleX(0.94);
+  }
+  70% {
+    transform: scaleX(0.52);
+  }
+}
+
+@keyframes ts-gauge-b {
+  0%,
+  100% {
+    transform: scaleX(0.55);
+  }
+  35% {
+    transform: scaleX(0.22);
+  }
+  60% {
+    transform: scaleX(0.88);
+  }
+}
+
+@keyframes ts-gauge-c {
+  0%,
+  100% {
+    transform: scaleX(0.72);
+  }
+  40% {
+    transform: scaleX(0.3);
+  }
+  55% {
+    transform: scaleX(0.98);
+  }
+}
+
+@keyframes ts-hud-line-enter {
+  from {
+    opacity: 0.35;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ts-hud-line--enter {
+  animation: ts-hud-line-enter 0.42s ease-out;
+}
+
+.ts-hud-line {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 0;
+  max-width: min(70vw, 22rem);
+  line-height: 1.35;
+}
+
+.ts-hud-line--dim {
+  color: rgba(244, 189, 103, 0.4);
+}
+
+.ts-hud-line--sec {
+  color: rgba(255, 180, 172, 0.6);
+}
+
+.ts-border-v {
+  position: fixed;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  background: var(--ts-outline-variant);
+  opacity: 0.15;
+  pointer-events: none;
+  z-index: 12;
+}
+
+.ts-border-v--l {
+  left: 0;
+}
+
+.ts-border-v--r {
+  right: 0;
+}
+
+.ts-fx {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+}
+
+.ts-fx-line {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 1px;
+}
+
+.ts-fx-line--1 {
+  top: 25%;
+  background: rgba(255, 180, 172, 0.1);
+  opacity: 0.2;
+}
+
+.ts-fx-line--2 {
+  top: 66%;
+  background: rgba(244, 189, 103, 0.1);
+  opacity: 0.2;
+}
+
+.ts-fx-frame {
+  position: absolute;
+  inset: 0;
+  border: 24px solid rgba(10, 14, 20, 0.4);
+}
+
+/* Settings modal */
+.ts-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(10, 14, 20, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.ts-modal {
+  max-width: 420px;
+  width: 100%;
+  padding: 1.5rem 2rem;
+  background: var(--ts-surface-container);
+  border: 1px solid var(--ts-outline-variant);
+  color: var(--ts-on-surface);
+}
+
+.ts-modal h3 {
+  margin: 0 0 0.75rem;
+  font-family: "Noto Serif JP", "Noto Serif", serif;
+  font-size: 1.25rem;
+  color: var(--ts-primary);
+}
+
+.ts-modal p {
+  margin: 0 0 1.25rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: rgba(223, 226, 235, 0.85);
+}
+
+.ts-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ts-modal-actions button {
+  padding: 0.5rem 1.25rem;
+  background: rgba(244, 189, 103, 0.15);
+  border: 1px solid var(--ts-primary);
+  border-radius: var(--ts-btn-radius);
+  color: var(--ts-primary);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ts-modal-actions button:hover {
+  background: rgba(244, 189, 103, 0.25);
+}
