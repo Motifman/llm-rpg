@@ -103,6 +103,6 @@ While we lean into horror aesthetics, the `on_surface` (Cold White) must maintai
 
 - **トークン:** `frontend/src/title/TitleScreen.css` の `--ts-*`（`--ts-btn-radius: 6px` を含む）。
 - **タイトル:** 同ファイル（Stitch 由来ヒーロー＋`.ts-btn` ナビ）。
-- **プロローグ:** `frontend/src/prologue/PrologueScreen.css` — テキストパネルはガラス（背景のみ透過、`blur(12px)`）、本文は Noto Serif・`on_surface` 相当で不透明度 1。上部操作はタイトルと同型の `.prologue-ts-btn`。
+- **プロローグ:** `frontend/src/prologue/PrologueScreen.css` — テキストパネルはガラス（背景のみ透過、`blur(12px)`）、本文は長文可読性のため **Segoe UI / system-ui 系サンセリフ**（`on_surface` 相当・不透明度 1）。ヒント・操作は Space Grotesk。上部はタイトルと同型の `.prologue-ts-btn`。
 
 本ファイル（`DESIGN.md`）がデザインストラテジーの正本。索引は [README.md](./README.md)。

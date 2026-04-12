@@ -1,14 +1,22 @@
-import type { PrologueScene } from "./prologueTypes";
+import type { PrologueCharacterLayer, PrologueScene } from "./prologueTypes";
 
-const BG1 = "/assets/prologue/placeholder-scene-1.svg";
-const BG2 = "/assets/prologue/placeholder-scene-2.svg";
-const BG3 = "/assets/prologue/placeholder-scene-3.svg";
-const BG4 = "/assets/prologue/placeholder-scene-4.svg";
-const BG5 = "/assets/prologue/placeholder-scene-5.svg";
-const BG6 = "/assets/prologue/placeholder-scene-6.svg";
+const BG1 = "/assets/prologue/prologue-bg-1.png";
+const BG2 = "/assets/prologue/prologue-bg-2.png";
+const BG3 = "/assets/prologue/prologue-bg-3.png";
+/** タイトル画面と同じ荘園外観（`TitleScreen` の背景と共有） */
+const BG4 = "/assets/title/title_background_instancia.png";
+const BG5 = "/assets/prologue/prologue-bg-5.png";
+const BG6 = "/assets/prologue/prologue-bg-6.png";
+
+/** 門前の少女・BG6 後半シーン用（シーンごとに visible を切り替え可能） */
+const GATE_GIRL_STANDING: PrologueCharacterLayer = {
+  src: "/assets/prologue/gate_girl.png",
+  visible: true,
+  tintPreset: "neutral",
+};
 
 /**
- * 本編プロローグ。背景は仮置き SVG（章ごとに色分け）。
+ * 本編プロローグ。背景画像は `public/assets/prologue/`（BG4 はタイトル背景を参照）。
  */
 export const PROLOGUE_SCENES: PrologueScene[] = [
   {
@@ -93,30 +101,35 @@ export const PROLOGUE_SCENES: PrologueScene[] = [
     id: "prologue-s5-02",
     backgroundSrc: BG5,
     body:
-      "目が合う。\n彼女の瞳に映ったのは、驚きではなく――まるで「待ちわびていた」かのような、深い諦念。",
+      "目が合う。\n彼女は一瞬、何かを見たてのように目を見開き、すぐにまばたきを挟んだ。戸惑いと、隠しきれない警戒が瞳の奥にあった。",
   },
   {
     id: "prologue-s5-03",
     backgroundSrc: BG5,
+    /** 直接セリフが主体のシーン（キャラシート: docs/game/characters/gate_girl.md） */
+    speaker: "門前の少女",
     body:
-      "彼女がゆっくりと唇を動かす。\n「……また、新しい『お客様』？ それとも……」",
+      "かすれた声で、彼女は言った。\n「……誰？　霧の向こうに、気配だけはあった。でも、こんなふうに姿を識別したのは、初めて」",
   },
   {
     id: "prologue-s6-01",
     backgroundSrc: BG6,
     body:
-      "「――いいえ。あなたは、私たちが呼びかけた『希望』であってほしい」",
+      "荘園を包んでいた霧が、視界の奥から薄れていく。\nそれは消え失せることではなく、門と庭と空の境界が、ようやく同じ景深に重なり始めたのだと感じた。",
   },
   {
     id: "prologue-s6-02",
     backgroundSrc: BG6,
+    character: { ...GATE_GIRL_STANDING },
     body:
-      "彼女の手が、私の意識を現実から引き剥がすように伸びてくる。",
+      "門の前の少女が、霧の向こうの幻影ではなく、はっきりと線を持って見えた。\n濡れた石畳と、鉄の門の冷たさまで、色が違って感じられる。",
   },
   {
     id: "prologue-s6-03",
     backgroundSrc: BG6,
+    character: { ...GATE_GIRL_STANDING },
+    speaker: "門前の少女",
     body:
-      "脳の深部で、機械的なビープ音が鳴り響いた。\nInitializing... Instance Connection Established.",
+      "彼女は、こちらを見て、短く言った。\n「……聞こえてる。ちゃんと」",
   },
 ];

@@ -24,9 +24,16 @@
 | [story_concept.md](./story_concept.md) | ストーリー概念 |
 | [story_concept_consultation_brief.md](./story_concept_consultation_brief.md) | 外部相談用ブリーフ |
 
+## キャラクター（物語用シート）
+
+| 文書 | 内容 |
+|------|------|
+| [characters/CHARACTER_SHEET_TEMPLATE.md](./characters/CHARACTER_SHEET_TEMPLATE.md) | キャラクター設定のテンプレート |
+| [characters/gate_girl.md](./characters/gate_girl.md) | 門前の少女（仮）— 儀式・視点・天の声・外見指針 |
+
 ## キャラクター・設定の参照先
 
-キャラクター設計や荘園・脱出ワールドの設定は、主に [virtual_world_game_design_plan.md](./virtual_world_game_design_plan.md) の「世界観とストーリー」「キャラクター設計」にまとまっている。個別の深掘み文書を増やす場合は本ディレクトリ配下に `characters/` などを切って、この README からリンクを追加する。
+キャラクター設計や荘園・脱出ワールドの設定は、主に [virtual_world_game_design_plan.md](./virtual_world_game_design_plan.md) の「世界観とストーリー」「キャラクター設計」にまとまっている。物語上の個別人物は [characters/](./characters/) のシートで追補する。
 
 ## プロローグ（実装）
 
