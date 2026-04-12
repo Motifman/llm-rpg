@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { PROLOGUE_SCENES } from "./prologueData";
 import "./PrologueScreen.css";
+import { resolveCharacterTintFilter } from "./prologueCharacterPresets";
 import { LibraryTypewriterText } from "./LibraryTypewriterText";
 import type { PrologueScene } from "./prologueTypes";
 
@@ -57,6 +58,14 @@ export function PrologueScreen({
     return null;
   }
 
+  const character = scene.character;
+  const showCharacter = character != null && character.visible !== false;
+  const characterTint = showCharacter
+    ? resolveCharacterTintFilter(character.tintPreset, character.tintFilter)
+    : undefined;
+  const speakerLabel = scene.speaker?.trim();
+  const showSpeakerTab = Boolean(speakerLabel);
+
   return (
     <div className="prologue-root" lang="ja">
       <div className="prologue-bg-wrap" aria-hidden>
@@ -68,8 +77,19 @@ export function PrologueScreen({
           src={scene.backgroundSrc}
         />
         <div className="prologue-bg-dim" />
-        <div className="prologue-grain" />
       </div>
+
+      {showCharacter ? (
+        <div className="prologue-character-layer" aria-hidden>
+          <img
+            alt=""
+            className="prologue-character-img"
+            decoding="async"
+            src={character.src}
+            style={characterTint != null ? { filter: characterTint } : undefined}
+          />
+        </div>
+      ) : null}
 
       <div className="prologue-chrome">
         {onBack ? (
@@ -95,28 +115,47 @@ export function PrologueScreen({
         type="button"
         aria-label={lineDone ? (isLast ? "プロローグを終了" : "次のシーンへ") : "表示を完了"}
       >
-        <div className="prologue-text-panel">
-          {scene.speaker ? (
-            <div className="prologue-speaker">
-              <span className="prologue-speaker-name">{scene.speaker}</span>
+        <div
+          className={
+            showSpeakerTab
+              ? "prologue-text-panel-shell"
+              : "prologue-text-panel-shell prologue-text-panel-shell--no-speaker"
+          }
+        >
+          {showSpeakerTab ? (
+            <div className="prologue-panel-titlebar">
+              <span className="prologue-panel-title">{speakerLabel}</span>
+              <span className="prologue-panel-window-controls" aria-hidden>
+                <span className="prologue-window-dot prologue-window-dot-minimize" />
+                <span className="prologue-window-dot prologue-window-dot-close" />
+              </span>
             </div>
           ) : null}
-          <div className="prologue-body">
-            <LibraryTypewriterText
-              key={scene.id}
-              className="prologue-body-text"
-              instant={instant}
-              sceneKey={scene.id}
-              text={scene.body}
-              onTypingComplete={onTypingComplete}
-            />
-          </div>
-          <div className="prologue-hint">
-            {lineDone
-              ? isLast
-                ? "クリックで次へ（終了）"
-                : "クリックで次のシーン"
-              : "クリックで全文表示"}
+          <div className="prologue-text-panel">
+            <div className="prologue-panel-body">
+              <div className="prologue-terminal-mark" aria-hidden>
+                <span className="prologue-terminal-icon material-symbols-outlined">
+                  terminal
+                </span>
+              </div>
+              <div className="prologue-body">
+                <LibraryTypewriterText
+                  key={scene.id}
+                  className="prologue-body-text"
+                  instant={instant}
+                  sceneKey={scene.id}
+                  text={scene.body}
+                  onTypingComplete={onTypingComplete}
+                />
+              </div>
+            </div>
+            <div className="prologue-hint">
+              {lineDone
+                ? isLast
+                  ? "クリックで次へ（終了）"
+                  : "クリックで次のシーン"
+                : "クリックで全文表示"}
+            </div>
           </div>
         </div>
       </button>

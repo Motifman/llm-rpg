@@ -25,6 +25,45 @@
   z-index: 0;
 }
 
+/**
+ * 立ち絵（全身画像を枠でトリミングし、主に上半身が入るようにする）
+ * 調整しやすいよう CSS 変数でまとめている。
+ * --prologue-char-max-width: 立ち絵の最大横幅（横長の髪が画面外に出すぎないときの上限）
+ * --prologue-char-height: クリップ枠の高さ（下側は overflow で隠す）
+ * --prologue-char-bottom: 画面下端からのオフセット（テキストパネルとの距離）
+ * --prologue-char-img-scale: 基準高さに対する倍率（拡大は transform ではなく height で行い、横の髪が左右で切れにくい）
+ */
+.prologue-character-layer {
+  --prologue-char-max-width: min(100vw, 100%);
+  --prologue-char-height: 70vh;
+  --prologue-char-bottom: 11rem;
+  --prologue-char-img-scale: 1.8;
+
+  position: absolute;
+  left: 50%;
+  bottom: var(--prologue-char-bottom);
+  z-index: 1;
+  width: var(--prologue-char-max-width);
+  height: var(--prologue-char-height);
+  transform: translateX(-50%);
+  overflow: hidden;
+  pointer-events: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.prologue-character-img {
+  display: block;
+  box-sizing: border-box;
+  width: auto;
+  height: auto;
+  max-width: var(--prologue-char-max-width);
+  max-height: calc(100% * var(--prologue-char-img-scale));
+  object-fit: contain;
+  object-position: top center;
+}
+
 .prologue-bg {
   width: 100%;
   height: 100%;
@@ -55,18 +94,9 @@
   pointer-events: none;
 }
 
-.prologue-grain {
-  position: absolute;
-  inset: 0;
-  background-image: url("/assets/title/grain.png");
-  background-repeat: repeat;
-  opacity: 0.05;
-  pointer-events: none;
-}
-
 .prologue-chrome {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -137,7 +167,7 @@
 
 .prologue-stage {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   display: block;
   width: 100%;
   min-height: calc(100vh - 3.5rem);
@@ -151,45 +181,127 @@
   font: inherit;
 }
 
-/* ガラス：パネルだけ透過。本文・ヒントは不透明度 1（子で明示） */
-.prologue-text-panel {
+/* タブは shell 基準で上に突き出す（内側パネルの overflow で切れないようにする） */
+.prologue-text-panel-shell {
   position: absolute;
   left: 1rem;
   right: 1rem;
   bottom: 1.25rem;
   max-width: 56rem;
   margin: 0 auto;
-  padding: 1.1rem 1.25rem 0.95rem;
-  border-radius: var(--ts-btn-radius);
-  background: rgba(28, 32, 38, 0.42);
-  border: 1px solid rgba(69, 71, 75, 0.22);
-  box-shadow: 0 20px 50px rgba(10, 14, 20, 0.55);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  padding: 0;
 }
 
-.prologue-speaker {
-  margin-bottom: 0.5rem;
+/* 話者なし：左上タブなし。本枠は四隅丸＋上辺ボーダーを復帰 */
+.prologue-text-panel-shell--no-speaker .prologue-text-panel {
+  border-radius: 8px;
+  border-top: 1px solid rgba(69, 71, 75, 0.45);
 }
 
-.prologue-speaker-name {
-  display: inline-block;
-  padding: 0.15rem 0.55rem;
-  border-radius: var(--ts-btn-radius);
-  font-family: "Space Grotesk", sans-serif;
-  font-size: 0.72rem;
-  letter-spacing: 0.12rem;
-  text-transform: uppercase;
-  background: rgba(244, 189, 103, 0.1);
-  border: 1px solid rgba(244, 189, 103, 0.35);
+/* システム／端末ログ枠：左上タブ＋ダーク本枠 */
+.prologue-text-panel {
+  position: relative;
+  padding: 0;
+  border-radius: 0 8px 8px 8px;
+  overflow: hidden;
+  background: rgba(16, 20, 26, 0.92);
+  border: 1px solid rgba(69, 71, 75, 0.45);
+  border-top: none;
+  box-shadow:
+    0 4px 0 rgba(10, 14, 20, 0.35),
+    0 24px 56px rgba(10, 14, 20, 0.65);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.prologue-panel-titlebar {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: min(22rem, calc(100% - 1.5rem));
+  min-height: 2.1rem;
+  margin-bottom: -1px;
+  padding: 0.32rem 0.55rem 0.32rem 0.75rem;
+  box-sizing: border-box;
+  background: linear-gradient(180deg, #ebe9e4 0%, #e2dfda 100%);
+  border: 1px solid rgba(45, 48, 54, 0.1);
+  border-bottom: none;
+  border-radius: 7px 9px 0 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.prologue-panel-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: #4a4d52;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prologue-panel-window-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.prologue-window-dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.prologue-window-dot-minimize {
+  background: linear-gradient(180deg, #ffda62 0%, #f5c02e 100%);
+}
+
+.prologue-window-dot-close {
+  background: linear-gradient(180deg, #ff8a7a 0%, #e85d4c 100%);
+}
+
+.prologue-panel-body {
+  position: relative;
+  padding: 0.85rem 1.15rem 0.65rem;
+  background: rgba(22, 26, 32, 0.55);
+}
+
+.prologue-terminal-mark {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.65rem;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.42;
   color: var(--ts-primary);
-  opacity: 1;
+}
+
+.prologue-terminal-icon {
+  font-family: "Material Symbols Outlined";
+  font-size: 1.35rem;
+  font-variation-settings: "FILL" 0, "wght" 300;
+  line-height: 1;
+  display: block;
 }
 
 .prologue-body {
-  font-family: "Noto Serif JP", "Noto Serif", Georgia, serif;
-  font-size: 1.05rem;
-  line-height: 1.8;
+  position: relative;
+  z-index: 0;
+  padding-right: 2rem;
+  font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 1.02rem;
+  line-height: 1.75;
   min-height: 4.5rem;
   color: var(--ts-on-surface);
   opacity: 1;
@@ -202,13 +314,16 @@
 }
 
 .prologue-hint {
-  margin-top: 0.7rem;
+  margin: 0;
+  padding: 0.5rem 1.15rem 0.85rem;
   font-family: "Space Grotesk", sans-serif;
   font-size: 0.68rem;
   letter-spacing: 0.14rem;
   text-transform: uppercase;
   color: rgba(244, 189, 103, 0.45);
   opacity: 1;
+  background: rgba(10, 14, 20, 0.25);
+  border-top: 1px solid rgba(69, 71, 75, 0.25);
 }
 
 .prologue-cursor {
