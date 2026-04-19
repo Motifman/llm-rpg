@@ -192,20 +192,20 @@
   padding: 0;
 }
 
-/* 話者なし：左上タブなし。本枠は四隅丸＋上辺ボーダーを復帰 */
+/* 話者なし：左上タブなし。本枠は四隅丸＋上辺ゴースト境界（DESIGN.md） */
 .prologue-text-panel-shell--no-speaker .prologue-text-panel {
-  border-radius: 8px;
-  border-top: 1px solid rgba(69, 71, 75, 0.45);
+  border-radius: var(--ts-btn-radius);
+  border-top: 1px solid rgba(69, 71, 75, 0.15);
 }
 
-/* システム／端末ログ枠：左上タブ＋ダーク本枠 */
+/* システム／端末ログ枠：話者チップ＋本枠（ガラス・層のトーン差、DESIGN.md） */
 .prologue-text-panel {
   position: relative;
   padding: 0;
-  border-radius: 0 8px 8px 8px;
+  border-radius: 0 var(--ts-btn-radius) var(--ts-btn-radius) var(--ts-btn-radius);
   overflow: hidden;
   background: rgba(16, 20, 26, 0.92);
-  border: 1px solid rgba(69, 71, 75, 0.45);
+  border: 1px solid rgba(69, 71, 75, 0.15);
   border-top: none;
   box-shadow:
     0 4px 0 rgba(10, 14, 20, 0.35),
@@ -214,6 +214,7 @@
   -webkit-backdrop-filter: blur(14px);
 }
 
+/* 話者チップ：タイトル .prologue-ts-btn と同型（ガラス＋左4pxアクセント、明るい擬似ウィンドウ帯は使わない） */
 .prologue-panel-titlebar {
   position: absolute;
   left: 0;
@@ -221,54 +222,32 @@
   z-index: 2;
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
   max-width: min(22rem, calc(100% - 1.5rem));
-  min-height: 2.1rem;
+  min-height: 2.05rem;
   margin-bottom: -1px;
-  padding: 0.32rem 0.55rem 0.32rem 0.75rem;
+  padding: 0.38rem 0.95rem 0.38rem 0.7rem;
   box-sizing: border-box;
-  background: linear-gradient(180deg, #ebe9e4 0%, #e2dfda 100%);
-  border: 1px solid rgba(45, 48, 54, 0.1);
+  background: rgba(10, 14, 20, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(69, 71, 75, 0.15);
   border-bottom: none;
-  border-radius: 7px 9px 0 0;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  border-radius: var(--ts-btn-radius) var(--ts-btn-radius) 0 0;
+  border-left: 4px solid rgba(244, 189, 103, 0.55);
+  box-shadow: none;
 }
 
 .prologue-panel-title {
   flex: 1 1 auto;
   min-width: 0;
   font-family: "Space Grotesk", system-ui, sans-serif;
-  font-size: 0.74rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  color: #4a4d52;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.05rem;
+  color: rgba(244, 189, 103, 0.82);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.prologue-panel-window-controls {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  flex-shrink: 0;
-}
-
-.prologue-window-dot {
-  display: block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
-}
-
-.prologue-window-dot-minimize {
-  background: linear-gradient(180deg, #ffda62 0%, #f5c02e 100%);
-}
-
-.prologue-window-dot-close {
-  background: linear-gradient(180deg, #ff8a7a 0%, #e85d4c 100%);
 }
 
 .prologue-panel-body {

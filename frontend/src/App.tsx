@@ -2,12 +2,13 @@ import { useState } from "react";
 
 import { PrologueScreen } from "./prologue/PrologueScreen";
 import { TitleScreen } from "./title/TitleScreen";
+import { WorldSelectScreen } from "./worldSelect/WorldSelectScreen";
 
 type AppPhase = "title" | "prologue" | "main";
 
 /**
- * タイトル → プロローグ（試験）→ メイン（未接続）の遷移。
- * 「つづきから」はプロローグを挟まずメインへ。
+ * タイトル → プロローグ（試験）→ ワールド選択 → … の遷移。
+ * 「つづきから」はプロローグを挟まずメイン（ワールド選択）へ。
  */
 function quitFromTitle(): void {
   window.close();
@@ -30,12 +31,12 @@ export function App() {
 
   if (phase === "main") {
     return (
-      <div className="app-placeholder-main">
-        <p>メイン画面（ワールド選択・GameShell 接続は今後ここへ）</p>
-        <button onClick={() => setPhase("title")} type="button">
-          タイトルへ戻る
-        </button>
-      </div>
+      <WorldSelectScreen
+        onBack={() => setPhase("title")}
+        onPickWorld={() => {
+          /* キャラ選択・導入ノベルは今後ここへ */
+        }}
+      />
     );
   }
 
