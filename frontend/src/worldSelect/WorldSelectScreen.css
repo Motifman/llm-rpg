@@ -101,7 +101,7 @@
   right: calc(clamp(0.75rem, 4vw, 3.75rem) - var(--ws-content-shift));
   left: auto;
   bottom: var(--ws-char-bottom);
-  /* ws-main(2) < ここ(3) < ws-dialogue(5) … ヘッダーは ws-chrome(4) */
+  /* ws-main(4) の背後に置き、リール全体より手前・対話 ws-dialogue(5) より奥 */
   z-index: 3;
   width: var(--ws-char-max-width);
   height: var(--ws-char-height);
@@ -110,6 +110,56 @@
   display: flex;
   align-items: flex-start;
   justify-content: flex-end;
+}
+
+.ws-character-hit {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  width: 100%;
+  height: 100%;
+  /* ボタン全体ではなく、実際に見えている立ち絵 img だけがクリックを拾う。
+     これで右矢印など背面の要素を覆い隠さずに済む。 */
+  pointer-events: none;
+  animation: ws-char-in 0.9s ease-out both;
+}
+
+.ws-character-hit:focus-visible {
+  outline: 2px solid rgba(244, 189, 103, 0.55);
+  outline-offset: 6px;
+  border-radius: 4px;
+}
+
+.ws-character-stack {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* 二重レイヤで高さが潰れないよう、通常の立ち絵でボックスを確保 */
+.ws-character-img--measure {
+  visibility: hidden;
+  pointer-events: none;
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: calc(100% * var(--ws-char-img-scale));
+  object-fit: contain;
+  object-position: top right;
+}
+
+.ws-character-layers {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  pointer-events: none;
 }
 
 .ws-character-img {
@@ -121,9 +171,34 @@
   max-height: calc(100% * var(--ws-char-img-scale));
   object-fit: contain;
   object-position: top right;
-  opacity: 0.92;
   filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.55));
-  animation: ws-char-in 0.9s ease-out both;
+}
+
+.ws-character-img--layer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  opacity: 0.92;
+  /* 実画像（矩形）だけがクリックを受ける。 */
+  pointer-events: auto;
+  cursor: pointer;
+  transition:
+    opacity 0.55s ease,
+    filter 0.55s ease;
+}
+
+.ws-character-hitbox-debug {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px dashed rgba(255, 90, 90, 0.85);
+  background: rgba(255, 90, 90, 0.18);
+  color: rgba(255, 220, 220, 0.95);
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  padding: 2px 4px;
+  pointer-events: none;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
 }
 
 @media (max-width: 959px) {
@@ -153,7 +228,7 @@
 
 .ws-chrome {
   position: relative;
-  z-index: 4;
+  z-index: 5;
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -178,9 +253,18 @@
 
 /* === Main: カードリールのみ（立ち絵は固定レイヤー） ===================== */
 
+/*
+ * .ws-character-layer (z-index:3) と兄弟のため、.ws-main が 3 未満だと
+ * リール内の .ws-reel-nav に z-index を足しても親のスタックでは main 丸ごとが
+ * 立ち絵より下になり、img の hit が矢印を奪う。main を立ち絵より上げる。
+ * そのままだと main が全面で立ち絵タップを奪うので、main / .ws-reel は
+ * pointer-events: none とし、矢印・ステージだけ auto でヒットを限定する。
+ * ヘッダー .ws-chrome は 5 に上げ、main(4) より前面を維持する。
+ */
 .ws-main {
   position: relative;
-  z-index: 2;
+  z-index: 4;
+  pointer-events: none;
   flex: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -217,6 +301,7 @@
   margin-right: auto;
   padding-bottom: 2rem;
   box-sizing: border-box;
+  pointer-events: none;
 }
 
 .ws-reel-stage {
@@ -226,6 +311,7 @@
   flex-direction: row;
   align-items: stretch;
   gap: var(--ws-side-peek-gap);
+  pointer-events: auto;
 }
 
 .ws-side-peek {
@@ -348,6 +434,10 @@
   border: none;
   border-radius: var(--ts-btn-radius);
   background: rgba(10, 14, 20, 0.6);
+  /* 親 .ws-main (z-index:4) 内でカードより手前に出す（立ち絵より上は main のスタックで担保） */
+  position: relative;
+  z-index: 4;
+  pointer-events: auto;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   color: rgba(244, 189, 103, 0.78);
@@ -698,6 +788,24 @@
   animation: ws-card-copy-enter 0.52s ease 0.16s both;
 }
 
+/* タップ時セリフ：くっきり切り替えを避け、やわらかく重ねる */
+@keyframes ws-dialogue-moment-soft {
+  from {
+    opacity: 0;
+    filter: blur(5px);
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+
+.ws-dialogue-line--moment {
+  animation: ws-dialogue-moment-soft 0.72s ease 0.12s both;
+}
+
 .ws-dialogue-actions {
   display: flex;
   align-items: center;
@@ -786,13 +894,19 @@
   .ws-card,
   .ws-card-scene,
   .ws-character-img,
+  .ws-character-hit,
   .ws-btn-primary,
   .ws-btn-tertiary,
   .ws-reel-nav,
   .ws-card--active .ws-card-strip,
   .ws-card--active .ws-card-info,
-  .ws-dialogue-line--enter {
+  .ws-dialogue-line--enter,
+  .ws-dialogue-line--moment {
     animation: none !important;
+    transition: none !important;
+  }
+
+  .ws-character-img--layer {
     transition: none !important;
   }
 }

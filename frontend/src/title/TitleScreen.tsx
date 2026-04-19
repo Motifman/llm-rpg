@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { AmbientMonitoringLayer } from "../ambient/AmbientMonitoringLayer";
 import "./TitleScreen.css";
 import { pickTitleHudLine, TITLE_HUD_LINES, TITLE_HUD_TICK_MS } from "./titleHudLines";
 
@@ -71,6 +72,8 @@ export function TitleScreen({ onStart, onContinue, onQuit }: TitleScreenProps) {
         <div className="ts-scanline-overlay" />
         <div className="ts-grain" />
       </div>
+
+      <AmbientMonitoringLayer variant="title" />
 
       <div className="ts-shell">
         <main className="ts-main">
