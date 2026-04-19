@@ -2,10 +2,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AmbientMonitoringLayer } from "../ambient/AmbientMonitoringLayer";
 import "../prologue/PrologueScreen.css";
+import {
+  DEFAULT_GATE_GIRL_SRC,
+  GATE_GIRL_MOMENTS,
+  GATE_GIRL_MOMENT_MS,
+  GATE_GIRL_SPECIAL_MOMENTS,
+  SHOW_GATE_GIRL_HIT_AREAS,
+  type GateGirlMoment,
+} from "./gateGirlMoments";
 import { WORLDS, type WorldSummary } from "./worldSelectData";
 import "./WorldSelectScreen.css";
 
-const GATE_GIRL_SRC = "/assets/prologue/gate_girl.png";
 const SCENE_INTERVAL_MS = 5200;
 
 export type WorldSelectScreenProps = {
@@ -18,13 +25,161 @@ export type WorldSelectScreenProps = {
  * 実験（脱出ワールド）選択画面。
  *
  * - カードはやや左寄せ。横に前後ワールドのスリバー（多少覗き見）。
- * - 立ち絵：固定レイヤー＋下クリップ。重なり順は カード < キャラ < 対話パネル。
+ * - 立ち絵：固定レイヤー＋下クリップ。スタックは CSS（カード／矢印は main 側でキャラより手前）。
  * - 全面背景：選択中ワールドの画像をぼんやり敷く。
  * - 下：Prologue 流用の対話バー＋ CTA。
  */
 export function WorldSelectScreen({ onBack, onPickWorld }: WorldSelectScreenProps) {
   const [index, setIndex] = useState(0);
   const selected: WorldSummary | undefined = WORLDS[index];
+
+  const [charLayers, setCharLayers] = useState<[string, string]>([
+    DEFAULT_GATE_GIRL_SRC,
+    DEFAULT_GATE_GIRL_SRC,
+  ]);
+  const [charVisible, setCharVisible] = useState<0 | 1>(0);
+  const charVisibleRef = useRef<0 | 1>(0);
+  charVisibleRef.current = charVisible;
+
+  const [pendingCharFade, setPendingCharFade] = useState<0 | 1 | null>(null);
+  const [gateMoment, setGateMoment] = useState<GateGirlMoment | null>(null);
+  const [dialogueTick, setDialogueTick] = useState(0);
+  const gateMomentTimerRef = useRef<number | null>(null);
+
+  const clearGateMomentTimer = useCallback(() => {
+    if (gateMomentTimerRef.current != null) {
+      window.clearTimeout(gateMomentTimerRef.current);
+      gateMomentTimerRef.current = null;
+    }
+  }, []);
+
+  const applyCharacterSrc = useCallback((targetSrc: string) => {
+    setCharLayers((prev) => {
+      const v = charVisibleRef.current;
+      if (prev[v] === targetSrc) {
+        return prev;
+      }
+      const hidden = (1 - v) as 0 | 1;
+      const next: [string, string] = [prev[0], prev[1]];
+      next[hidden] = targetSrc;
+      queueMicrotask(() => {
+        setPendingCharFade(hidden);
+      });
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (pendingCharFade === null) {
+      return;
+    }
+    const id = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        setCharVisible(pendingCharFade);
+        charVisibleRef.current = pendingCharFade;
+        setPendingCharFade(null);
+      });
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [pendingCharFade]);
+
+  useEffect(() => {
+    const target = gateMoment?.imageSrc ?? DEFAULT_GATE_GIRL_SRC;
+    applyCharacterSrc(target);
+  }, [gateMoment, applyCharacterSrc]);
+
+  useEffect(() => {
+    clearGateMomentTimer();
+    setGateMoment(null);
+  }, [selected?.id, clearGateMomentTimer]);
+
+  useEffect(() => {
+    return () => clearGateMomentTimer();
+  }, [clearGateMomentTimer]);
+
+  const measureImgRef = useRef<HTMLImageElement | null>(null);
+  const layerImgRefs = useRef<[HTMLImageElement | null, HTMLImageElement | null]>([
+    null,
+    null,
+  ]);
+  const [visibleImgBox, setVisibleImgBox] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
+
+  // 表示中の立ち絵 img の位置/サイズ（stack 内座標）を追跡し、
+  // クリック判定とデバッグ枠の基準として使う。
+  useEffect(() => {
+    const img = layerImgRefs.current[charVisible];
+    if (!img) return;
+    const update = () => {
+      setVisibleImgBox({
+        left: img.offsetLeft,
+        top: img.offsetTop,
+        width: img.offsetWidth,
+        height: img.offsetHeight,
+      });
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(img);
+    window.addEventListener("resize", update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [charVisible, charLayers]);
+
+  const triggerGateMoment = useCallback(
+    (pick: GateGirlMoment) => {
+      clearGateMomentTimer();
+      setGateMoment(pick);
+      setDialogueTick((t) => t + 1);
+      gateMomentTimerRef.current = window.setTimeout(() => {
+        setGateMoment(null);
+        setDialogueTick((t) => t + 1);
+        gateMomentTimerRef.current = null;
+      }, GATE_GIRL_MOMENT_MS);
+    },
+    [clearGateMomentTimer],
+  );
+
+  const onGateGirlClick = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      const img = layerImgRefs.current[charVisible] ?? measureImgRef.current;
+      if (img) {
+        const rect = img.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          const px = ((e.clientX - rect.left) / rect.width) * 100;
+          const py = ((e.clientY - rect.top) / rect.height) * 100;
+          if (SHOW_GATE_GIRL_HIT_AREAS) {
+            // 判定領域の調整用ログ
+            // eslint-disable-next-line no-console
+            console.log(
+              `[gate-girl] click @ ${px.toFixed(1)}%, ${py.toFixed(1)}%`,
+            );
+          }
+          const hit = GATE_GIRL_SPECIAL_MOMENTS.find(
+            (m) =>
+              px >= m.hitArea.x &&
+              px <= m.hitArea.x + m.hitArea.w &&
+              py >= m.hitArea.y &&
+              py <= m.hitArea.y + m.hitArea.h,
+          );
+          if (hit) {
+            triggerGateMoment(hit);
+            return;
+          }
+        }
+      }
+      const pick =
+        GATE_GIRL_MOMENTS[Math.floor(Math.random() * GATE_GIRL_MOMENTS.length)]!;
+      triggerGateMoment(pick);
+    },
+    [triggerGateMoment, charVisible],
+  );
 
   const goPrev = useCallback(() => {
     setIndex((i) => (i - 1 + WORLDS.length) % WORLDS.length);
@@ -139,18 +294,73 @@ export function WorldSelectScreen({ onBack, onPickWorld }: WorldSelectScreenProp
           </section>
         </main>
 
-        <div className="ws-character-layer" aria-hidden>
-          <img
-            alt=""
-            className="ws-character-img"
-            decoding="async"
-            src={GATE_GIRL_SRC}
-          />
+        <div className="ws-character-layer">
+          <button
+            type="button"
+            className="ws-character-hit"
+            onClick={onGateGirlClick}
+            aria-label="門前の少女に話しかける"
+          >
+            <span className="ws-character-stack" aria-hidden>
+              <img
+                alt=""
+                className="ws-character-img ws-character-img--measure"
+                decoding="async"
+                src={DEFAULT_GATE_GIRL_SRC}
+                ref={measureImgRef}
+              />
+              <span className="ws-character-layers">
+                <img
+                  alt=""
+                  className="ws-character-img ws-character-img--layer"
+                  decoding="async"
+                  src={charLayers[0]}
+                  style={{ opacity: charVisible === 0 ? 1 : 0 }}
+                  ref={(el) => {
+                    layerImgRefs.current[0] = el;
+                  }}
+                />
+                <img
+                  alt=""
+                  className="ws-character-img ws-character-img--layer"
+                  decoding="async"
+                  src={charLayers[1]}
+                  style={{ opacity: charVisible === 1 ? 1 : 0 }}
+                  ref={(el) => {
+                    layerImgRefs.current[1] = el;
+                  }}
+                />
+              </span>
+              {SHOW_GATE_GIRL_HIT_AREAS && visibleImgBox
+                ? GATE_GIRL_SPECIAL_MOMENTS.map((m) => (
+                    <span
+                      key={m.id}
+                      className="ws-character-hitbox-debug"
+                      style={{
+                        left: `${
+                          visibleImgBox.left +
+                          (visibleImgBox.width * m.hitArea.x) / 100
+                        }px`,
+                        top: `${
+                          visibleImgBox.top +
+                          (visibleImgBox.height * m.hitArea.y) / 100
+                        }px`,
+                        width: `${(visibleImgBox.width * m.hitArea.w) / 100}px`,
+                        height: `${(visibleImgBox.height * m.hitArea.h) / 100}px`,
+                      }}
+                    >
+                      {m.id}
+                    </span>
+                  ))
+                : null}
+            </span>
+          </button>
         </div>
 
         <DialogueBar
-          contentKey={selected.id}
-          line={selected.guideLine}
+          contentKey={`${selected.id}-${dialogueTick}-${gateMoment ? "m" : "g"}`}
+          line={gateMoment?.line ?? selected.guideLine}
+          lineVariant={gateMoment ? "moment" : "guide"}
           onStart={onPickWorld ? handleStart : undefined}
         />
       </div>
@@ -340,10 +550,16 @@ type DialogueBarProps = {
   /** ワールド切替時に本文フェードを再実行するためのキー */
   contentKey: string;
   line: string;
+  /** タップ時セリフはやわらかいクロスフェード風 */
+  lineVariant?: "guide" | "moment";
   onStart?: () => void;
 };
 
-function DialogueBar({ contentKey, line, onStart }: DialogueBarProps) {
+function DialogueBar({ contentKey, line, lineVariant = "guide", onStart }: DialogueBarProps) {
+  const lineClass =
+    lineVariant === "moment"
+      ? "ws-dialogue-line ws-dialogue-line--moment"
+      : "ws-dialogue-line ws-dialogue-line--enter";
   return (
     <div className="ws-dialogue">
       <div className="ws-dialogue-shell prologue-text-panel-shell">
@@ -358,7 +574,7 @@ function DialogueBar({ contentKey, line, onStart }: DialogueBarProps) {
               </span>
             </div>
             <div className="prologue-body">
-              <p className="ws-dialogue-line ws-dialogue-line--enter" key={contentKey}>
+              <p className={lineClass} key={contentKey}>
                 {line}
               </p>
             </div>

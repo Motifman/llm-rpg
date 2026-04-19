@@ -286,3 +286,30 @@ h2 {
   background: rgba(18, 28, 23, 0.9);
   color: #f5edd8;
 }
+
+/* dev のみ: App が ?ambientPreview=1 のときの AmbientMonitoringLayer 単体プレビュー */
+.ambient-dev-preview {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  background: #0a0e14;
+}
+
+.ambient-dev-preview-hint {
+  position: fixed;
+  bottom: 0.75rem;
+  left: 0.75rem;
+  right: 0.75rem;
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgba(223, 226, 235, 0.5);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.ambient-dev-preview-hint code {
+  font-size: 10px;
+  color: rgba(244, 189, 103, 0.55);
+}
