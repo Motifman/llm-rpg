@@ -125,10 +125,6 @@ export function PrologueScreen({
           {showSpeakerTab ? (
             <div className="prologue-panel-titlebar">
               <span className="prologue-panel-title">{speakerLabel}</span>
-              <span className="prologue-panel-window-controls" aria-hidden>
-                <span className="prologue-window-dot prologue-window-dot-minimize" />
-                <span className="prologue-window-dot prologue-window-dot-close" />
-              </span>
             </div>
           ) : null}
           <div className="prologue-text-panel">
