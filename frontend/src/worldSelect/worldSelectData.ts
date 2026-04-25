@@ -38,8 +38,7 @@ export const WORLDS: WorldSummary[] = [
       "記憶治療で知られた総合病院の廃墟。違和感を捲るほど、閉鎖の夜と旧友への選択が浮かび上がる。",
     themeTags: ["記憶", "選択", "心理ホラー"],
     difficultyLabel: "中",
-    // タイトル画面と同じ荘園外観をひとまず流用（実イラスト差し替え予定のプレースホルダ）
-    imageSrc: "/assets/title/title_background_instancia.png",
+    imageSrc: "/assets/worldSelect/abandoned-hospital-hero.png",
     guideLine:
       "……忘れていいって、誰が決めるんだろう。\nここは、消し残された夜を選び直す場所。",
   },
