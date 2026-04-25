@@ -228,12 +228,14 @@ export function CharacterSelectScreen({
                   >
                     {member ? (
                       <>
-                        <img
-                          alt=""
-                          className="cs-party-thumb"
-                          decoding="async"
-                          src={member.thumbnailSrc ?? member.imageSrc}
-                        />
+                        <span className="cs-party-thumb-frame" aria-hidden>
+                          <img
+                            alt=""
+                            className="cs-party-thumb"
+                            decoding="async"
+                            src={member.thumbnailSrc ?? member.imageSrc}
+                          />
+                        </span>
                         <div className="cs-party-copy">
                           <span className="cs-party-index">
                             {String(slotIndex + 1).padStart(2, "0")} / LINKED

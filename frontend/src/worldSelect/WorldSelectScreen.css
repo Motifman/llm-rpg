@@ -8,36 +8,36 @@
  */
 
 .ws-root {
-  --ts-bg: #10141a;
-  --ts-bg-lowest: #0a0e14;
-  --ts-on-surface: #dfe2eb;
-  --ts-primary: #f4bd67;
-  --ts-secondary: #ffb4ac;
-  --ts-outline-variant: #45474b;
-  --ts-surface-container: #1c2026;
-  --ts-surface-container-high: #252a32;
+  --ts-bg: var(--game-bg);
+  --ts-bg-lowest: var(--game-bg-lowest);
+  --ts-on-surface: var(--game-on-surface);
+  --ts-primary: var(--game-primary);
+  --ts-secondary: var(--game-secondary);
+  --ts-outline-variant: var(--game-outline);
+  --ts-surface-container: var(--game-surface-low);
+  --ts-surface-container-high: var(--game-surface-high);
   --ts-secondary-container: #960711;
-  --ts-btn-radius: 6px;
+  --ts-btn-radius: 2px;
 
   /* 背景ヒーローのぼかし量（px）。数値を下げるほど輪郭が残る */
   --ws-bg-blur: 10px;
 
   /* カード寸法 */
-  --ws-card-w: clamp(420px, 70vw, 760px);
-  --ws-card-h: clamp(480px, 50vh, 760px);
+  --ws-card-w: clamp(520px, 54vw, 960px);
+  --ws-card-h: clamp(500px, 61vh, 710px);
   /* 次カードを上端帯ぶんだけ覗かせる量（step は帯の高さに合わせる） */
   --ws-card-strip-h: 4.35rem;
-  --ws-side-peek-w: clamp(40px, 5.5vw, 72px);
+  --ws-side-peek-w: clamp(46px, 4vw, 78px);
   --ws-side-peek-gap: 0.65rem;
   --ws-card-gap: 14px;
   /* 横並びカード列の 1 ステップ幅（translateX / 各スロットの left 間隔） */
   --ws-card-slide-step: calc(var(--ws-card-w) + var(--ws-card-gap));
 
   /* 立ち絵レイヤ（Prologue: 70vh / scale 1.8 よりやや控えめ） */
-  --ws-char-max-width: min(100%, 28rem);
-  --ws-char-height: 60vh;
-  --ws-char-bottom: 11rem;
-  --ws-char-img-scale: 1.55;
+  --ws-char-max-width: min(35vw, 34rem);
+  --ws-char-height: 74vh;
+  --ws-char-bottom: 7.8rem;
+  --ws-char-img-scale: 1.62;
 
   /* スリバー追加で左に偏った分、テキストボックス以外をほんの少し右へ */
   --ws-content-shift: clamp(0.35rem, 1.5vw, 1.1rem);
@@ -49,6 +49,31 @@
   background: var(--ts-bg-lowest);
   color: var(--ts-on-surface);
   font-family: "Space Grotesk", system-ui, sans-serif;
+}
+
+.ws-root::before,
+.ws-root::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.ws-root::before {
+  background:
+    linear-gradient(90deg, rgba(244, 189, 103, 0.07) 0 1px, transparent 1px) 1.5rem 1.7rem / calc(100% - 3rem) calc(100% - 3.4rem) no-repeat,
+    url("/assets/ui/character-select-ui-atlas.png") center / cover;
+  opacity: 0.055;
+  mix-blend-mode: screen;
+}
+
+.ws-root::after {
+  background:
+    linear-gradient(90deg, rgba(255, 80, 105, 0.74), rgba(99, 191, 255, 0.74)) 7.2% 91.5% / 0.42rem 0.18rem no-repeat,
+    linear-gradient(90deg, rgba(244, 189, 103, 0.32), transparent 58%) 1.65rem 95.6% / 16rem 1px no-repeat,
+    linear-gradient(90deg, transparent, rgba(244, 189, 103, 0.24), transparent) 49% 6.1% / 36rem 1px no-repeat,
+    linear-gradient(180deg, rgba(244, 189, 103, 0.32), transparent 46%) 97.6% 1.8rem / 1px 5.5rem no-repeat;
 }
 
 /* === Atmospheric background ============================================ */
@@ -82,6 +107,7 @@
   inset: 0;
   background:
     radial-gradient(ellipse 70% 55% at 22% 30%, rgba(28, 32, 38, 0.5), transparent 60%),
+    radial-gradient(ellipse 48% 66% at 84% 55%, rgba(150, 7, 17, 0.12), transparent 68%),
     radial-gradient(ellipse 70% 50% at 88% 78%, rgba(21, 27, 36, 0.5), transparent 50%),
     linear-gradient(165deg, rgba(10, 14, 20, 0.7) 0%, rgba(14, 18, 24, 0.5) 45%, rgba(10, 14, 20, 0.92) 100%);
 }
@@ -211,7 +237,7 @@
 
 .ws-shell {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -228,7 +254,7 @@
 
 .ws-chrome {
   position: relative;
-  z-index: 5;
+  z-index: 8;
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -238,6 +264,23 @@
 }
 
 .ws-chrome-fill { flex: 1; min-width: 0; }
+
+.ws-back-button {
+  min-width: clamp(8.5rem, 9vw, 10.5rem);
+  min-height: 3.05rem;
+  justify-content: center;
+  border-radius: 1px;
+  outline: 1px solid rgba(244, 189, 103, 0.24);
+  background: rgba(6, 8, 12, 0.68);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.ws-back-button .game-button-label {
+  font-family: var(--game-font-display);
+  font-size: 1.02rem;
+  letter-spacing: 0.16em;
+  color: rgba(255, 238, 206, 0.95);
+}
 
 .ws-telemetry {
   flex-shrink: 0;
@@ -263,7 +306,7 @@
  */
 .ws-main {
   position: relative;
-  z-index: 4;
+  z-index: 5;
   pointer-events: none;
   flex: 1;
   display: grid;
@@ -299,7 +342,7 @@
       2 * var(--ws-side-peek-gap)
   );
   margin-right: auto;
-  padding-bottom: 2rem;
+  padding-bottom: 2.1rem;
   box-sizing: border-box;
   pointer-events: none;
 }
@@ -428,33 +471,47 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.4rem;
-  height: 2.4rem;
+  width: 3.7rem;
+  height: 3.7rem;
   align-self: center;
   border: none;
-  border-radius: var(--ts-btn-radius);
-  background: rgba(10, 14, 20, 0.6);
+  border-radius: 1px;
+  background:
+    linear-gradient(135deg, rgba(244, 189, 103, 0.16), transparent 45%),
+    rgba(6, 8, 12, 0.64);
   /* 親 .ws-main (z-index:4) 内でカードより手前に出す（立ち絵より上は main のスタックで担保） */
   position: relative;
   z-index: 4;
   pointer-events: auto;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  color: rgba(244, 189, 103, 0.78);
+  color: rgba(255, 221, 153, 0.88);
   cursor: pointer;
+  outline: 1px solid rgba(244, 189, 103, 0.34);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
   transition: background 0.2s, color 0.2s, transform 0.15s;
 }
 
 .ws-reel-nav:hover {
-  background: rgba(150, 7, 17, 0.25);
+  background:
+    linear-gradient(135deg, rgba(255, 180, 172, 0.18), transparent 45%),
+    rgba(150, 7, 17, 0.25);
   color: var(--ts-secondary);
 }
 
 .ws-reel-nav:active { transform: scale(0.95); }
 
+.ws-reel-nav--prev:hover:not(:disabled) {
+  transform: translateX(-3px);
+}
+
+.ws-reel-nav--next:hover:not(:disabled) {
+  transform: translateX(3px);
+}
+
 .ws-reel-nav .material-symbols-outlined {
   font-family: "Material Symbols Outlined";
-  font-size: 1.5rem;
+  font-size: 1.85rem;
   font-variation-settings: "FILL" 0, "wght" 300;
   line-height: 1;
 }
@@ -521,6 +578,20 @@
   border-left: 4px solid var(--ts-primary);
   pointer-events: none;
   z-index: 4;
+}
+
+.ws-card--active::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(244, 189, 103, 0.2), transparent 9rem) 1rem 1rem / calc(100% - 2rem) 1px no-repeat,
+    linear-gradient(180deg, rgba(244, 189, 103, 0.2), transparent 5rem) 1rem 1rem / 1px calc(100% - 2rem) no-repeat,
+    url("/assets/ui/character-select-ui-atlas.png") center / 140% auto;
+  opacity: 0.12;
+  mix-blend-mode: screen;
 }
 
 /* --- Card media (scene cycler) --------------------------------------- */
@@ -693,7 +764,7 @@
   font-family: "Space Grotesk", sans-serif;
   font-size: 0.66rem;
   letter-spacing: 0.06em;
-  border-radius: var(--ts-btn-radius);
+  border-radius: 2px;
   background: rgba(28, 32, 38, 0.78);
   color: rgba(223, 226, 235, 0.88);
   position: relative;
@@ -753,7 +824,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 5;
+  z-index: 7;
   pointer-events: none;
   padding: 0 clamp(1.25rem, 5vw, 4rem) 1rem;
 }
@@ -770,9 +841,20 @@
   left: auto;
   right: auto;
   bottom: auto;
-  max-width: 64rem;
+  max-width: min(88rem, calc(100vw - 3rem));
   margin: 0 auto;
   pointer-events: auto;
+}
+
+.ws-dialogue .prologue-text-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  min-height: 9.2rem;
+}
+
+.ws-dialogue .prologue-panel-body {
+  min-width: 0;
 }
 
 .ws-dialogue-line {
@@ -810,83 +892,125 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.65rem;
-  padding: 0.6rem 1.15rem 0.85rem;
-  background: rgba(10, 14, 20, 0.25);
-  border-top: 1px solid rgba(69, 71, 75, 0.25);
+  gap: 0.85rem;
+  min-width: min(38vw, 36rem);
+  padding: 1rem 1.35rem 1rem 1rem;
+  background:
+    linear-gradient(90deg, rgba(10, 14, 20, 0), rgba(10, 14, 20, 0.56)),
+    rgba(10, 14, 20, 0.18);
+  border-left: 1px solid rgba(244, 189, 103, 0.16);
 }
 
 /* === Buttons ========================================================== */
 
-.ws-btn-primary {
-  position: relative;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
+.ws-btn-secondary.game-button--ghost {
+  min-width: clamp(10.5rem, 12vw, 13rem);
+  min-height: 4rem;
   justify-content: center;
-  gap: 0.05rem;
-  padding: 0.55rem 1.2rem;
-  border: none;
-  border-radius: var(--ts-btn-radius);
-  border-left: 4px solid var(--ts-primary);
-  font-family: "Space Grotesk", sans-serif;
-  cursor: pointer;
-  color: #432c00;
-  background: linear-gradient(105deg, var(--ts-primary) 0%, #a07323 100%);
-  transition: transform 0.15s, filter 0.2s, background 0.3s;
-  text-align: left;
+  border-radius: 1px;
+  color: rgba(255, 238, 206, 0.94);
+  background:
+    linear-gradient(90deg, rgba(244, 189, 103, 0.08), rgba(6, 8, 12, 0.78)),
+    url("/assets/ui/character-select-ui-atlas.png") center / 145% auto,
+    rgba(6, 8, 12, 0.68);
+  outline: 1px solid rgba(244, 189, 103, 0.28);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 14px 30px rgba(0, 0, 0, 0.34);
 }
 
-.ws-btn-primary:hover:not(:disabled) {
-  filter: brightness(1.06);
-  transform: translateX(2px);
-  background: linear-gradient(
-    105deg,
-    var(--ts-primary) 0%,
-    var(--ts-secondary) 50%,
-    #a07323 100%
-  );
+.ws-btn-secondary.game-button--ghost .game-button-label {
+  font-family: var(--game-font-display);
+  font-size: 1rem;
+  letter-spacing: 0.12em;
 }
 
-.ws-btn-primary:active:not(:disabled) {
-  transform: scale(0.98) translateX(0);
+.ws-btn-secondary.game-button--ghost .game-button-sublabel {
+  color: rgba(244, 189, 103, 0.62);
 }
 
-.ws-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.ws-btn-primary-jp {
-  font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 0.92rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
+.ws-btn-primary.game-protocol-button {
+  min-width: clamp(16rem, 20vw, 22rem);
+  min-height: 4.15rem;
 }
 
-.ws-btn-primary-en {
-  font-size: 0.62rem;
-  letter-spacing: 0.22em;
-  opacity: 0.8;
+@media (max-width: 1180px) {
+  .ws-root {
+    --ws-card-w: clamp(420px, 58vw, 720px);
+    --ws-card-h: clamp(470px, 58vh, 640px);
+    --ws-char-max-width: min(34vw, 27rem);
+    --ws-char-bottom: 8.6rem;
+  }
+
+  .ws-dialogue-actions {
+    min-width: 22rem;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ws-btn-primary.game-protocol-button,
+  .ws-btn-secondary.game-button--ghost {
+    width: 100%;
+    min-width: 0;
+  }
 }
 
-.ws-btn-tertiary {
-  background: none;
-  border: none;
-  color: rgba(244, 189, 103, 0.85);
-  font-family: "Space Grotesk", sans-serif;
-  font-size: 0.78rem;
-  letter-spacing: 0.14em;
-  cursor: pointer;
-  padding: 0.35rem 0.6rem;
-  border-bottom: 1px dashed rgba(244, 189, 103, 0.45);
-  border-radius: 0;
-  transition: color 0.2s, border-color 0.2s, transform 0.15s;
+@media (max-width: 959px) {
+  .ws-dialogue .prologue-text-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .ws-dialogue-actions {
+    min-width: 0;
+    flex-direction: row;
+    border-left: none;
+    border-top: 1px solid rgba(244, 189, 103, 0.16);
+  }
 }
 
-.ws-btn-tertiary:hover {
-  color: var(--ts-secondary);
-  border-bottom-color: var(--ts-secondary);
-}
+@media (max-width: 720px) {
+  .ws-root {
+    --ws-card-w: min(92vw, 420px);
+    --ws-card-h: min(56vh, 520px);
+  }
 
-.ws-btn-tertiary:active { transform: scale(0.98); }
+  .ws-shell {
+    padding-inline: 1rem;
+  }
+
+  .ws-chrome {
+    margin-left: 0;
+  }
+
+  .ws-telemetry {
+    width: 100%;
+    max-width: none;
+    text-align: left;
+    font-size: 0.58rem;
+  }
+
+  .ws-main {
+    margin-left: 0;
+    justify-items: center;
+    padding-bottom: 18rem;
+  }
+
+  .ws-reel-nav {
+    width: 3rem;
+    height: 3rem;
+  }
+
+  .ws-dialogue {
+    padding-inline: 0.75rem;
+    padding-bottom: 0.75rem;
+  }
+
+  .ws-dialogue-actions {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0.8rem;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .ws-bg-img,
