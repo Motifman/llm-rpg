@@ -12,6 +12,18 @@
     "tags": ["psychological_horror", "escape", "memory", "moral_choice", "narrative"]
   },
 
+  "environment": {
+    "weather": {
+      "enabled": true,
+      "initial": {
+        "weather_type": "FOG",
+        "intensity": 0.6
+      },
+      "update_interval_ticks": 8,
+      "announce_changes": true
+    }
+  },
+
   "item_specs": [
     {
       "id": "evidence_suture_photos",
@@ -220,6 +232,12 @@
             "description": "色褪せた退院記念写真が複数枚。皆、微笑んでいる。ただ、光の加減だろうか、こめかみのあたりに何か線のようなものが見える写真が多い。",
             "object_type": "OTHER",
             "state": {"examined": false},
+            "description_variants": [
+              {
+                "required_state": {"examined": true},
+                "description": "掲示写真の一部は剥がされ、側頭部の縫合痕だけがやけに目に残る。偶然ではない位置の一致だ。"
+              }
+            ],
             "interactions": [
               {
                 "action_name": "examine",
@@ -229,6 +247,10 @@
                   {
                     "effect_type": "SHOW_MESSAGE",
                     "parameters": {"message": "複数人の側頭部に、同じ位置の古い縫合痕がある。偶然にしては、あまりにも一致しすぎている。"}
+                  },
+                  {
+                    "effect_type": "REVEAL_OBJECT",
+                    "parameters": {"target_object": "suture_pattern_detail"}
                   },
                   {
                     "effect_type": "GIVE_ITEM",
@@ -242,6 +264,31 @@
               }
             ],
             "is_visible": true
+          },
+          {
+            "id": "suture_pattern_detail",
+            "name": "縫合痕の一致",
+            "description": "写真の患者たちは、年齢も退院時期も違う。それでも側頭部の縫合痕だけが同じ位置にある。",
+            "object_type": "OTHER",
+            "state": {"recorded": false},
+            "interactions": [
+              {
+                "action_name": "record",
+                "display_label": "縫合痕の一致を記録する",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "縫合痕の位置を記録した。処置は個別の事故ではなく、同じ手順として繰り返されていた可能性が高い。"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "suture_pattern_detail", "state_updates": {"recorded": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": false
           }
         ],
         "discoverable_items": []
@@ -266,7 +313,7 @@
             "name": "主人公デスク",
             "description": "職員デスクのひとつ。引き出しには日記、机には埃だらけの写真立て。任意の収集物が集まっている場所。",
             "accessible_object_ids": ["desk_drawer", "dusty_frame", "old_shift_memo"],
-            "is_hidden": false
+            "is_hidden": true
           }
         ],
         "objects": [
@@ -276,6 +323,12 @@
             "description": "積まれたカルテ束。主訴欄がすべて同筆跡で『不明』と書かれている。",
             "object_type": "OTHER",
             "state": {"examined": false},
+            "description_variants": [
+              {
+                "required_state": {"examined": true},
+                "description": "一度めくったカルテ束。主訴欄の『不明』は同じ筆跡で、空白の担当医欄が意図的な匿名化に見えてくる。"
+              }
+            ],
             "interactions": [
               {
                 "action_name": "examine",
@@ -318,6 +371,10 @@
                   {
                     "effect_type": "SET_FLAG",
                     "parameters": {"flag_name": "flashback_1_completed"}
+                  },
+                  {
+                    "effect_type": "REVEAL_SUB_LOCATION",
+                    "parameters": {"target_sub_location": "protagonist_desk"}
                   },
                   {
                     "effect_type": "GIVE_ITEM",
@@ -448,6 +505,12 @@
             "description": "大半の薬瓶は撤去されているが、棚板にラベルの跡が残っている。",
             "object_type": "OTHER",
             "state": {"examined": false},
+            "description_variants": [
+              {
+                "required_state": {"examined": true},
+                "description": "ラベル跡を読んだ後では、空の薬品棚全体が証拠隠滅の跡に見える。R-7、パーサ-9、リコール-β──通常の病院にはない名だ。"
+              }
+            ],
             "interactions": [
               {
                 "action_name": "examine",
@@ -897,6 +960,16 @@
             "description": "部屋の隅の大型金庫。4桁のダイヤル錠。",
             "object_type": "CHEST",
             "state": {"locked": true},
+            "description_variants": [
+              {
+                "required_state": {"locked": false},
+                "description": "開いた金庫。中身を取り出した後も、ダイヤルの 0307 だけが強く記憶に残る。"
+              },
+              {
+                "required_flag": "read_protocol",
+                "description": "大型金庫。プロトコルの採番規則を読んだ今なら、0307 という数字がただの番号ではないと分かる。"
+              }
+            ],
             "interactions": [
               {
                 "action_name": "open",
@@ -1485,6 +1558,64 @@
         }
       ],
       "initially_passable": true
+    }
+  ],
+
+  "scenario_events": [
+    {
+      "id": "emergency_lights_flicker",
+      "trigger": "ON_TICK",
+      "once": true,
+      "observation": {
+        "category": "environment",
+        "recipients": "all_players",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        { "condition_type": "TICK_AT_LEAST", "tick": 12 },
+        { "condition_type": "FLAG_NOT_SET", "flag_name": "event_emergency_lights_flicker_done" }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": { "message": "遠くで非常灯が一度だけ強く明滅し、廊下の影が揺れた。" }
+        },
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": { "flag_name": "event_emergency_lights_flicker_done" }
+        }
+      ]
+    },
+    {
+      "id": "rear_exit_route_revealed",
+      "trigger": "ON_TICK",
+      "once": true,
+      "observation": {
+        "category": "environment",
+        "recipients": "players_at_spot",
+        "target_spot": "final_room",
+        "schedules_turn": true,
+        "breaks_movement": true
+      },
+      "conditions": [
+        { "condition_type": "FLAG_SET", "flag_name": "ending_chosen" },
+        { "condition_type": "FLAG_NOT_SET", "flag_name": "event_rear_exit_route_revealed" }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": { "message": "最終選択の後、奥で錆びた非常ドアが静かに解錠された音が響く。" }
+        },
+        {
+          "effect_type": "CHANGE_CONNECTION_STATE",
+          "parameters": { "target_connection": "final_to_rear_exit", "is_passable": true }
+        },
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": { "flag_name": "event_rear_exit_route_revealed" }
+        }
+      ]
     }
   ],
 

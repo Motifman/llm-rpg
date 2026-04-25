@@ -26,6 +26,17 @@ class _RecordingTravelStage:
         self.ticks.append(current_tick)
 
 
+class _RecordingStage:
+    def __init__(self, label: str, order: list[str]) -> None:
+        self.label = label
+        self.order = order
+        self.ticks: list[WorldTick] = []
+
+    def run(self, current_tick: WorldTick) -> None:
+        self.order.append(self.label)
+        self.ticks.append(current_tick)
+
+
 class _DomainFailingTravelStage:
     def run(self, current_tick: WorldTick) -> None:
         raise DomainException(f"domain failed at {current_tick.value}")
@@ -115,6 +126,23 @@ def test_spot_graph_simulation_runs_post_tick_hooks() -> None:
     assert tick.value == 3
     assert llm_turn_trigger.calls == 1
     assert [t.value for t in reflection_runner.ticks] == [3]
+
+
+def test_spot_graph_simulation_runs_travel_event_environment_in_order() -> None:
+    order: list[str] = []
+    travel_stage = _RecordingStage("travel", order)
+    scenario_stage = _RecordingStage("scenario_event", order)
+    environment_stage = _RecordingStage("environment", order)
+    sim = SpotGraphSimulationApplicationService(
+        time_provider=InMemoryGameTimeProvider(initial_tick=4),
+        unit_of_work=InMemoryUnitOfWork(),
+        travel_stage=travel_stage,  # type: ignore[arg-type]
+        scenario_event_stage=scenario_stage,  # type: ignore[arg-type]
+        environment_stage=environment_stage,  # type: ignore[arg-type]
+    )
+    tick = sim.tick()
+    assert tick.value == 5
+    assert order == ["travel", "scenario_event", "environment"]
 
 
 def test_spot_graph_simulation_wraps_domain_exception() -> None:

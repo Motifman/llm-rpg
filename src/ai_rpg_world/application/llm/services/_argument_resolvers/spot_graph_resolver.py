@@ -17,6 +17,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+    TOOL_NAME_SPOT_GRAPH_WAIT,
 )
 
 _SPOT_GRAPH_TOOLS = frozenset({
@@ -24,6 +25,7 @@ _SPOT_GRAPH_TOOLS = frozenset({
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
+    TOOL_NAME_SPOT_GRAPH_WAIT,
 })
 
 
@@ -44,6 +46,8 @@ class SpotGraphArgumentResolver:
             return self._resolve_set_sub_location(args, runtime_context)
         if tool_name == TOOL_NAME_SPOT_GRAPH_EXPLORE:
             return {}
+        if tool_name == TOOL_NAME_SPOT_GRAPH_WAIT:
+            return {"reason": str(args.get("reason", "")).strip()}
         if tool_name == TOOL_NAME_SPOT_GRAPH_INTERACT:
             return self._resolve_interact(args, runtime_context)
         return None

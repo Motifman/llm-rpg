@@ -10,10 +10,10 @@ LLM エージェントが**実際に**受け取る観測テキスト・ツール
 from __future__ import annotations
 
 import json
-import textwrap
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, FrozenSet, List, Optional, Tuple
+from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple
 
 from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -54,6 +54,24 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
 from ai_rpg_world.application.world_graph.spot_graph_movement_application_service import (
     SpotGraphMovementApplicationService,
 )
+from ai_rpg_world.application.world_graph.spot_graph_environment_stage_service import (
+    SpotGraphEnvironmentStageService,
+)
+from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
+    InMemorySpotGraphScenarioEventProgressStore,
+)
+from ai_rpg_world.application.world_graph.spot_graph_scenario_event_stage_service import (
+    SpotGraphScenarioEventStageService,
+)
+from ai_rpg_world.application.world_graph.spot_graph_simulation_application_service import (
+    SpotGraphSimulationApplicationService,
+)
+from ai_rpg_world.application.world_graph.spot_graph_travel_context import (
+    SpotGraphTravelContextProvider,
+)
+from ai_rpg_world.application.world_graph.spot_graph_travel_stage_service import (
+    SpotGraphTravelStageService,
+)
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
     SpotGraphCurrentStateBuilder,
@@ -72,16 +90,41 @@ from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import 
     SpotGraphUiContextBuilder,
 )
 from ai_rpg_world.application.llm.contracts.dtos import (
+    LlmCommandResultDto,
     LlmUiContextDto,
     ToolDefinitionDto,
     ToolRuntimeContextDto,
 )
 from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
+from ai_rpg_world.application.llm.services.tool_catalog.memory import get_memory_specs
 from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
 from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
 from ai_rpg_world.application.llm.services.recent_events_formatter import DefaultRecentEventsFormatter
-from ai_rpg_world.application.llm.services.context_format_strategy import SectionBasedContextFormatStrategy
-from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
+from ai_rpg_world.application.llm.services.memory_extractor import RuleBasedMemoryExtractor
+from ai_rpg_world.application.llm.services.memory_query_executor import MemoryQueryExecutor
+from ai_rpg_world.application.llm.services.in_memory_episode_memory_store import (
+    InMemoryEpisodeMemoryStore,
+)
+from ai_rpg_world.application.llm.services.in_memory_long_term_memory_store import (
+    InMemoryLongTermMemoryStore,
+)
+from ai_rpg_world.application.llm.services.in_memory_working_memory_store import (
+    InMemoryWorkingMemoryStore,
+)
+from ai_rpg_world.application.llm.services.in_memory_todo_store import InMemoryTodoStore
+from ai_rpg_world.application.llm.services.handle_store import InMemoryHandleStore
+from ai_rpg_world.application.llm.services.executors.memory_executor import MemoryToolExecutor
+from ai_rpg_world.application.llm.services.executors.todo_executor import TodoToolExecutor
+from ai_rpg_world.application.llm.services.escape_llm_prompt import (
+    EscapeCharacterPromptInput,
+    build_escape_system_prompt,
+    build_persona_block_from_escape_character,
+    format_episode_snippets_for_prompt,
+    format_working_memory_for_prompt,
+    safe_world_intro_text,
+    suggest_next_actions_from_targets,
+)
+from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
 from ai_rpg_world.application.observation.services.observation_context_buffer import DefaultObservationContextBuffer
 from ai_rpg_world.application.observation.services.observation_pipeline import ObservationPipeline
 from ai_rpg_world.application.observation.services.observation_formatter import ObservationFormatter
@@ -104,6 +147,13 @@ from ai_rpg_world.infrastructure.scenario.scenario_loader import (
     PlayerSpawnConfig,
 )
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMapper
+from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import ScenarioEventDef
+from ai_rpg_world.infrastructure.services.in_memory_game_time_provider import (
+    InMemoryGameTimeProvider,
+)
+from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
+    InMemoryUnitOfWork,
+)
 
 
 @dataclass
@@ -130,7 +180,35 @@ class EscapeGameRuntime:
     _obs_buffer: DefaultObservationContextBuffer
     _sliding_window: DefaultSlidingWindowMemory
     _action_result_store: DefaultActionResultStore
+    _time_provider: InMemoryGameTimeProvider
+    _simulation_service: SpotGraphSimulationApplicationService
+    _scenario_event_stage: SpotGraphScenarioEventStageService
+    _scenario_event_progress: InMemorySpotGraphScenarioEventProgressStore
+    _environment_stage: SpotGraphEnvironmentStageService
+    _current_weather: Any
     _tick: int = 0
+    # LLM 脱出用（セッション単位で構築）
+    _escape_llm_system_prompt: str = field(default="", repr=False)
+    _memory_overflow_for_next_commit: Dict[int, List[ObservationEntry]] = field(
+        default_factory=dict, repr=False
+    )
+    _episode_memory_store: InMemoryEpisodeMemoryStore = field(
+        default_factory=InMemoryEpisodeMemoryStore, repr=False
+    )
+    _long_term_memory_store: InMemoryLongTermMemoryStore = field(
+        default_factory=InMemoryLongTermMemoryStore, repr=False
+    )
+    _working_memory_store: InMemoryWorkingMemoryStore = field(
+        default_factory=InMemoryWorkingMemoryStore, repr=False
+    )
+    _todo_store: InMemoryTodoStore = field(default_factory=InMemoryTodoStore, repr=False)
+    _handle_store: InMemoryHandleStore = field(default_factory=InMemoryHandleStore, repr=False)
+    _memory_query_executor: Optional[MemoryQueryExecutor] = field(default=None, repr=False)
+    _memory_tool_executor: Optional[MemoryToolExecutor] = field(default=None, repr=False)
+    _todo_tool_executor: Optional[TodoToolExecutor] = field(default=None, repr=False)
+    _memory_extractor: RuleBasedMemoryExtractor = field(
+        default_factory=RuleBasedMemoryExtractor, repr=False
+    )
 
     @property
     def id_mapper(self) -> ScenarioIdMapper:
@@ -150,11 +228,12 @@ class EscapeGameRuntime:
         return f"Player-{int(player_id)}"
 
     def current_tick(self) -> int:
-        return self._tick
+        return self._time_provider.get_current_tick().value
 
     def advance_tick(self) -> int:
-        self._tick += 1
-        return self._tick
+        tick = self._simulation_service.tick()
+        self._tick = tick.value
+        return tick.value
 
     # ── 後方互換ヘルパー（テスト用） ──
 
@@ -168,22 +247,9 @@ class EscapeGameRuntime:
         return ", ".join(names)
 
     def build_system_prompt(self, player_id: PlayerId) -> str:
-        """E2E テスト用のシステムプロンプト概要テキスト。"""
-        m = self.metadata
-        my_name = self.get_player_name(player_id)
-        player_lines = []
-        for p in self.scenario.player_spawns:
-            marker = "（あなた）" if p.player_id == int(player_id) else ""
-            player_lines.append(f"  - {p.name}{marker}")
-        players_text = "\n".join(player_lines)
-        return (
-            f"あなたは「{m.title}」の探索者「{my_name}」です。\n"
-            f"テーマ: {m.theme}\n"
-            f"制限時間: {m.estimated_ticks}ティック\n"
-            f"説明: {m.description}\n"
-            f"\n参加者一覧:\n{players_text}\n"
-            f"\n仲間と協力して脱出してください。say/whisper ツールで会話できます。"
-        )
+        """LLM に渡すシステムプロンプト（キャラクター・ルール固定。player_id は互換のため残す）。"""
+        del player_id  # 現状は全プレイヤー同一システム文面
+        return self._escape_llm_system_prompt
 
     # ── 実 LLM パイプラインによる観測構築 ──
 
@@ -230,7 +296,17 @@ class EscapeGameRuntime:
 
     def get_tool_definitions(self) -> List[ToolDefinitionDto]:
         """LLM に渡されるツール定義（OpenAI tools 形式）を返す。"""
-        return [defn for defn, _ in get_spot_graph_specs()]
+        spot = [defn for defn, _ in get_spot_graph_specs()]
+        memory = [
+            defn
+            for defn, _ in get_memory_specs(
+                memory_query_enabled=True,
+                subagent_enabled=False,
+                todo_enabled=True,
+                working_memory_enabled=True,
+            )
+        ]
+        return spot + memory
 
     # ── 観測パイプライン: イベントを処理して各プレイヤーに配信 ──
 
@@ -264,18 +340,111 @@ class EscapeGameRuntime:
             result_summary=result_summary,
             occurred_at=datetime.now(),
         )
+        self._maybe_extract_episode(player_id, action_summary, result_summary)
 
-    def _drain_buffer_to_sliding_window(self, player_id: PlayerId) -> None:
-        """観測バッファをスライディングウィンドウに移す（プロンプト構築前に呼ぶ）。"""
+    def _drain_buffer_to_sliding_window(self, player_id: PlayerId) -> List[ObservationEntry]:
+        """観測バッファをスライディングウィンドウに移す。溢れた観測を返す。"""
         drained = self._obs_buffer.drain(player_id)
-        if drained:
-            self._sliding_window.append_all(player_id, drained)
+        if not drained:
+            return []
+        return self._sliding_window.append_all(player_id, drained)
+
+    def _wire_memory_stack(self) -> None:
+        """MemoryQueryExecutor とツール実行器を遅延初期化する。"""
+        if self._memory_query_executor is not None:
+            return
+
+        recent_fmt = DefaultRecentEventsFormatter()
+
+        def state_provider(pid: PlayerId) -> str:
+            return self.build_llm_context(pid).current_state_text
+
+        self._memory_query_executor = MemoryQueryExecutor(
+            episode_store=self._episode_memory_store,
+            long_term_store=self._long_term_memory_store,
+            sliding_window=self._sliding_window,
+            action_result_store=self._action_result_store,
+            working_memory_store=self._working_memory_store,
+            state_provider=state_provider,
+            recent_events_formatter=recent_fmt,
+            handle_store=self._handle_store,
+        )
+        self._memory_tool_executor = MemoryToolExecutor(
+            memory_query_executor=self._memory_query_executor,
+            subagent_runner=None,
+            working_memory_store=self._working_memory_store,
+        )
+        self._todo_tool_executor = TodoToolExecutor(self._todo_store)
+
+    def run_llm_auxiliary_tool(
+        self, player_id: PlayerId, name: str, arguments: Dict[str, Any]
+    ) -> LlmCommandResultDto:
+        """memory_query / working_memory_append / TODO 系ツールを実行する。"""
+        self._wire_memory_stack()
+        assert self._memory_tool_executor is not None
+        assert self._todo_tool_executor is not None
+        handlers: Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]] = {}
+        handlers.update(self._memory_tool_executor.get_handlers())
+        handlers.update(self._todo_tool_executor.get_handlers())
+        handler = handlers.get(name)
+        if handler is None:
+            return LlmCommandResultDto(
+                success=False,
+                message=f"未対応のツールです: {name}",
+                error_code="UNSUPPORTED_TOOL",
+            )
+        return handler(int(player_id), arguments)
+
+    def _format_inventory_evidence(self, player_id: PlayerId) -> str:
+        inv = self._player_inventory_repo.find_by_id(player_id)
+        if inv is None:
+            return "（なし）"
+        lines: List[str] = []
+        from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+
+        for slot_idx in range(inv._max_slots):
+            iid = inv.get_item_instance_id_by_slot(SlotId(slot_idx))
+            if iid is None:
+                continue
+            item = self._item_repo.find_by_id(iid)
+            if item is None:
+                continue
+            name = item.item_spec.name
+            desc = (item.item_spec.description or "").strip()
+            if desc:
+                lines.append(f"- {name}（{desc[:120]}…）" if len(desc) > 120 else f"- {name}（{desc}）")
+            else:
+                lines.append(f"- {name}")
+        return "\n".join(lines) if lines else "（なし）"
+
+    def _format_long_term_snippets(self, player_id: PlayerId, keyword: str) -> str:
+        kws = [keyword] if keyword.strip() else None
+        facts = self._long_term_memory_store.search_facts(player_id, keywords=kws, limit=5)
+        if not facts:
+            return "（長期メモに登録された事実はまだ少ない）"
+        return "\n".join(f"- {f.content[:200]}" for f in facts)
+
+    def _maybe_extract_episode(
+        self,
+        player_id: PlayerId,
+        action_summary: str,
+        result_summary: str,
+    ) -> None:
+        overflow = self._memory_overflow_for_next_commit.pop(player_id.value, [])
+        episodes = self._memory_extractor.extract(
+            player_id, overflow, action_summary, result_summary
+        )
+        if not episodes:
+            return
+        self._episode_memory_store.add_many(player_id, episodes)
 
     # ── 完全プロンプト構築 ──
 
     def build_full_prompt(self, player_id: PlayerId) -> dict:
         """各プレイヤーが LLM ターンで実際に受け取る完全なプロンプトを構築する。"""
-        self._drain_buffer_to_sliding_window(player_id)
+        self._wire_memory_stack()
+        evicted = self._drain_buffer_to_sliding_window(player_id)
+        self._memory_overflow_for_next_commit[player_id.value] = evicted
 
         ctx = self.build_llm_context(player_id)
         current_state_text = ctx.current_state_text
@@ -285,9 +454,48 @@ class EscapeGameRuntime:
         recent_fmt = DefaultRecentEventsFormatter()
         recent_events_text = recent_fmt.format(recent_obs, recent_acts)
 
-        strategy = SectionBasedContextFormatStrategy()
-        user_content = strategy.format(current_state_text, recent_events_text, "")
-        user_content = user_content.rstrip() + "\n\n利用可能なツールで次の行動を選んでください。"
+        snap = self._state_builder.build_snapshot(int(player_id))
+        spot_kw = (snap.current_spot_name or "").strip() if snap is not None else ""
+
+        episodes = self._episode_memory_store.get_recent(player_id, 8)
+        related_mem = format_episode_snippets_for_prompt(episodes, limit=5)
+        wm_texts = self._working_memory_store.get_recent(player_id, 12)
+        hypothesis_block = format_working_memory_for_prompt(wm_texts, limit=8)
+        long_term_block = self._format_long_term_snippets(player_id, spot_kw)
+        targets = getattr(ctx.tool_runtime_context, "targets", {}) or {}
+        next_hints = suggest_next_actions_from_targets(targets)
+        inventory_block = self._format_inventory_evidence(player_id)
+
+        user_content = "\n".join(
+            [
+                "【現在の目的】",
+                "- この廃墟から外へ脱出する。",
+                "- 必要なら手がかり（物証・記録）を集め、判断材料にする。",
+                "",
+                "【現在地と周囲】",
+                current_state_text.strip() or "（情報なし）",
+                "",
+                "【直近の出来事】",
+                recent_events_text.strip() or "（なし）",
+                "",
+                "【発見済み証拠（所持・判明した物証）】",
+                inventory_block,
+                "",
+                "【未解決の仮説・作業メモ】",
+                hypothesis_block,
+                "",
+                "【長期メモ（事実の抜粋）】",
+                long_term_block,
+                "",
+                "【関連する記憶（想起）】",
+                related_mem,
+                "",
+                "【次に試せそうなこと（候補）】",
+                next_hints,
+                "",
+                "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。",
+            ]
+        )
 
         system_content = self.build_system_prompt(player_id)
         return {
@@ -354,14 +562,80 @@ class EscapeGameRuntime:
             owned = collect_owned_item_spec_ids_from_inventory(inv, self._item_repo)
         flags = self._world_flag_state.as_frozen_set()
         self._movement_service.start_travel_to_spot(player_id, dest_sid, owned, flags)
-        for _ in range(20):
-            adv = self._movement_service.advance_spot_travel_one_tick(player_id, owned, flags)
-            self._tick += 1
-            if adv is None:
+        for _ in range(200):
+            self.advance_tick()
+            status = self._player_status_repo.find_by_id(player_id)
+            if status is None or status.spot_navigation_state is None:
+                break
+            if not status.spot_navigation_state.is_traveling:
                 break
         self._process_graph_events()
         dest_name = self._spot_graph_repo.find_graph().get_spot(dest_sid).name
         self._record_action_result(player_id, f"travel_to({dest_spot_str_id})", f"{dest_name}に到着した")
+
+    def do_wait(self, player_id: PlayerId, reason: str = "") -> int:
+        tick = self.advance_tick()
+        note = f"wait({reason})" if reason else "wait()"
+        self._record_action_result(player_id, note, f"時間が進んだ（tick={tick}）")
+        return tick
+
+    def _append_scenario_event_observation(self, event: ScenarioEventDef, message: str) -> None:
+        recipients = self._scenario_event_recipients(event)
+        time_label = self._time_label()
+        for player_id in recipients:
+            self._obs_buffer.append(
+                player_id,
+                ObservationEntry(
+                    occurred_at=datetime.now(),
+                    output=ObservationOutput(
+                        prose=message,
+                        structured={
+                            "type": "scenario_event",
+                            "event_id": event.event_id,
+                            "message": message,
+                        },
+                        observation_category=event.observation_category,  # type: ignore[arg-type]
+                        schedules_turn=event.schedules_turn,
+                        breaks_movement=event.breaks_movement,
+                    ),
+                    game_time_label=time_label,
+                ),
+            )
+
+    def _scenario_event_recipients(self, event: ScenarioEventDef) -> List[PlayerId]:
+        if event.recipients == "players_at_spot" and event.target_spot_id is not None:
+            graph = self._spot_graph_repo.find_graph()
+            presence = graph.presence_at(SpotId.create(event.target_spot_id))
+            return [PlayerId(int(eid)) for eid in presence.present_entity_ids]
+        return self.get_player_ids()
+
+    def _time_label(self) -> str:
+        tick = self.current_tick()
+        hours = (tick * 5) % (24 * 60)
+        h, m = divmod(hours, 60)
+        return f"深夜 {h}:{m:02d}" if h < 6 else f"{h}:{m:02d}"
+
+    def _append_weather_observation(self, weather_state: Any) -> None:
+        message = f"外の天候が変わった: {weather_state.weather_type.value}（強度 {weather_state.intensity:.1f}）"
+        for player_id in self.get_player_ids():
+            self._obs_buffer.append(
+                player_id,
+                ObservationEntry(
+                    occurred_at=datetime.now(),
+                    output=ObservationOutput(
+                        prose=message,
+                        structured={
+                            "type": "weather_changed",
+                            "weather_type": weather_state.weather_type.value,
+                            "intensity": weather_state.intensity,
+                        },
+                        observation_category="environment",
+                        schedules_turn=True,
+                        breaks_movement=False,
+                    ),
+                    game_time_label=self._time_label(),
+                ),
+            )
 
     # ── ゲーム終了判定 ──
 
@@ -388,10 +662,30 @@ class EscapeGameRuntime:
         return graph.get_spot(spot_id).name
 
 
-def create_escape_game_runtime(scenario_path: Path) -> EscapeGameRuntime:
+def create_escape_game_runtime(
+    scenario_path: Path,
+    *,
+    escape_character: Optional[EscapeCharacterPromptInput] = None,
+) -> EscapeGameRuntime:
     """シナリオ JSON からゲームランタイムを構築する。"""
     loader = ScenarioLoader()
     scenario = loader.load_from_file(scenario_path)
+
+    fallback_name = (
+        scenario.player_spawns[0].name if scenario.player_spawns else "探索者"
+    )
+    persona_block = build_persona_block_from_escape_character(
+        escape_character,
+        fallback_display_name=fallback_name,
+    )
+    safe_intro = safe_world_intro_text(scenario.metadata)
+    participants = tuple(s.name for s in scenario.player_spawns)
+    system_prompt_text = build_escape_system_prompt(
+        world_title=scenario.metadata.title,
+        persona_block=persona_block,
+        safe_intro=safe_intro,
+        participant_names=participants,
+    )
 
     data_store = InMemoryDataStore()
 
@@ -500,7 +794,15 @@ def create_escape_game_runtime(scenario_path: Path) -> EscapeGameRuntime:
 
     from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
     from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
-    current_weather = WeatherState(weather_type=WeatherTypeEnum.FOG, intensity=0.6)
+
+    weather_config = scenario.weather_config
+    weather_holder = {
+        "state": (
+            weather_config.initial_state
+            if weather_config is not None and weather_config.enabled
+            else WeatherState(weather_type=WeatherTypeEnum.FOG, intensity=0.6)
+        )
+    }
 
     state_builder = SpotGraphCurrentStateBuilder(
         spot_graph_repository=spot_graph_repo,
@@ -508,7 +810,8 @@ def create_escape_game_runtime(scenario_path: Path) -> EscapeGameRuntime:
         player_status_repository=player_status_repo,
         entity_name_resolver=_resolve_entity_name,
         inventory_builder=_build_inventory,
-        weather_provider=lambda: current_weather,
+        weather_provider=lambda: weather_holder["state"],
+        world_flags_provider=world_flag_state.as_frozen_set,
     )
 
     # ── 観測パイプライン構築 ──
@@ -534,7 +837,68 @@ def create_escape_game_runtime(scenario_path: Path) -> EscapeGameRuntime:
     sliding_window = DefaultSlidingWindowMemory()
     action_result_store = DefaultActionResultStore()
 
-    return EscapeGameRuntime(
+    class _RuntimeTravelContext(SpotGraphTravelContextProvider):
+        def __init__(
+            self,
+            player_inventory_repository: InMemoryPlayerInventoryRepository,
+            item_repository: InMemoryItemRepository,
+            world_flag_state: MutableWorldFlagState,
+        ) -> None:
+            self._player_inventory_repository = player_inventory_repository
+            self._item_repository = item_repository
+            self._world_flag_state = world_flag_state
+
+        def owned_item_spec_ids_for(self, player_id: PlayerId) -> FrozenSet[ItemSpecId]:
+            inv = self._player_inventory_repository.find_by_id(player_id)
+            if inv is None:
+                return frozenset()
+            return collect_owned_item_spec_ids_from_inventory(inv, self._item_repository)
+
+        def world_flags(self) -> FrozenSet[str]:
+            return self._world_flag_state.as_frozen_set()
+
+    travel_context = _RuntimeTravelContext(
+        player_inventory_repository=player_inventory_repo,
+        item_repository=item_repo,
+        world_flag_state=world_flag_state,
+    )
+    travel_stage = SpotGraphTravelStageService(
+        player_status_repository=player_status_repo,
+        movement_service=movement_service,
+        travel_context=travel_context,
+    )
+    scenario_event_progress = InMemorySpotGraphScenarioEventProgressStore()
+    scenario_event_stage = SpotGraphScenarioEventStageService(
+        scenario_events=scenario.scenario_events,
+        spot_graph_repository=spot_graph_repo,
+        spot_interior_repository=spot_interior_repo,
+        player_status_repository=player_status_repo,
+        player_inventory_repository=player_inventory_repo,
+        item_repository=item_repo,
+        item_spec_repository=item_spec_repo,
+        world_flag_state=world_flag_state,
+        progress_store=scenario_event_progress,
+    )
+    environment_stage = SpotGraphEnvironmentStageService(
+        weather_state_provider=lambda: weather_holder["state"],
+        weather_state_setter=lambda s: weather_holder.__setitem__("state", s),
+        update_interval_ticks=(
+            weather_config.update_interval_ticks
+            if weather_config is not None and weather_config.enabled
+            else 6
+        ),
+        on_weather_changed=None,
+    )
+    time_provider = InMemoryGameTimeProvider(initial_tick=0)
+    simulation_service = SpotGraphSimulationApplicationService(
+        time_provider=time_provider,
+        unit_of_work=InMemoryUnitOfWork(),
+        travel_stage=travel_stage,
+        scenario_event_stage=scenario_event_stage,
+        environment_stage=environment_stage,
+    )
+
+    runtime = EscapeGameRuntime(
         scenario=scenario,
         _spot_graph_repo=spot_graph_repo,
         _spot_interior_repo=spot_interior_repo,
@@ -555,4 +919,17 @@ def create_escape_game_runtime(scenario_path: Path) -> EscapeGameRuntime:
         _obs_buffer=obs_buffer,
         _sliding_window=sliding_window,
         _action_result_store=action_result_store,
+        _time_provider=time_provider,
+        _simulation_service=simulation_service,
+        _scenario_event_stage=scenario_event_stage,
+        _scenario_event_progress=scenario_event_progress,
+        _environment_stage=environment_stage,
+        _current_weather=weather_holder,
+        _escape_llm_system_prompt=system_prompt_text,
     )
+    scenario_event_stage.set_message_callback(
+        runtime._append_scenario_event_observation
+    )
+    if weather_config is None or weather_config.announce_changes:
+        environment_stage.set_weather_changed_callback(runtime._append_weather_observation)
+    return runtime

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, FrozenSet, List, Optional, Tuple
+from typing import FrozenSet, Optional, Tuple
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
@@ -12,17 +12,20 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     InteractionNotFoundException,
     UnknownSpotObjectException,
 )
-from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.interaction_condition import InteractionCondition
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
-from ai_rpg_world.domain.world_graph.value_object.interaction_effect import InteractionEffect
 from ai_rpg_world.domain.world_graph.value_object.interaction_execution_result import InteractionExecutionResult
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
-from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
+from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
+    WorldGraphEffectService,
+)
 
 
 class SpotInteractionService:
     """スポット内オブジェクト操作（リポジトリ非依存）"""
+
+    def __init__(self, effect_service: Optional[WorldGraphEffectService] = None) -> None:
+        self._effect_service = effect_service or WorldGraphEffectService()
 
     def find_interaction(self, spot_object: SpotObject, action_name: str) -> Optional[InteractionDef]:
         for idef in spot_object.interactions:
@@ -92,125 +95,17 @@ class SpotInteractionService:
         if not ok:
             raise InteractionNotAllowedException(reason or "Interaction not allowed")
 
-        flags: set[str] = set(world_flags)
-        messages: List[str] = []
-        grant: List[ItemSpecId] = []
-        remove: List[ItemSpecId] = []
-        conn_updates: List[Tuple[ConnectionId, bool]] = []
-        current_interior = interior
-        current_obj = obj
-
-        for effect in idef.effects:
-            current_interior, current_obj, flags, grant, remove, conn_updates, messages = (
-                self._apply_effect(
-                    current_interior,
-                    current_obj,
-                    effect,
-                    flags,
-                    grant,
-                    remove,
-                    conn_updates,
-                    messages,
-                )
-            )
-        return InteractionExecutionResult(
-            new_interior=current_interior,
-            new_flags=frozenset(flags),
-            messages=tuple(messages),
-            item_spec_ids_to_grant=tuple(grant),
-            item_spec_ids_to_remove=tuple(remove),
-            connection_passability_updates=tuple(conn_updates),
+        effect_result = self._effect_service.apply_effects(
+            interior=interior,
+            acting_object=obj,
+            effects=idef.effects,
+            world_flags=world_flags,
         )
-
-    def _apply_effect(
-        self,
-        interior: SpotInterior,
-        spot_object: SpotObject,
-        effect: InteractionEffect,
-        flags: set[str],
-        grant: List[ItemSpecId],
-        remove: List[ItemSpecId],
-        conn_updates: List[Tuple[ConnectionId, bool]],
-        messages: List[str],
-    ) -> Tuple[SpotInterior, SpotObject, set[str], List[ItemSpecId], List[ItemSpecId], List[Tuple[ConnectionId, bool]], List[str]]:
-        p = effect.parameters
-        et = effect.effect_type
-
-        if et == InteractionEffectTypeEnum.SET_FLAG:
-            name = p.get("flag_name")
-            if isinstance(name, str):
-                flags.add(name)
-            return interior, spot_object, flags, grant, remove, conn_updates, messages
-
-        if et == InteractionEffectTypeEnum.SHOW_MESSAGE:
-            msg = p.get("message")
-            if isinstance(msg, str):
-                messages.append(msg)
-            return interior, spot_object, flags, grant, remove, conn_updates, messages
-
-        if et == InteractionEffectTypeEnum.GIVE_ITEM:
-            sid = self._item_spec_from_param(p.get("item_spec_id"))
-            grant.append(sid)
-            return interior, spot_object, flags, grant, remove, conn_updates, messages
-
-        if et == InteractionEffectTypeEnum.REMOVE_ITEM:
-            sid = self._item_spec_from_param(p.get("item_spec_id"))
-            remove.append(sid)
-            return interior, spot_object, flags, grant, remove, conn_updates, messages
-
-        if et == InteractionEffectTypeEnum.CHANGE_OBJECT_STATE:
-            updates = p.get("state_updates")
-            if isinstance(updates, dict):
-                new_state = dict(spot_object.state)
-                for k, v in updates.items():
-                    new_state[str(k)] = v
-                new_obj = spot_object.with_state(new_state)
-                interior = interior.replace_object(new_obj)
-                return interior, new_obj, flags, grant, remove, conn_updates, messages
-            return interior, spot_object, flags, grant, remove, conn_updates, messages
-
-        if et == InteractionEffectTypeEnum.REVEAL_OBJECT:
-            oid = self._spot_object_id_from_param(p.get("object_id"))
-            target = interior.get_object(oid)
-            if target is not None:
-                revealed = target.with_visible(True)
-                interior = interior.replace_object(revealed)
-                if revealed.object_id == spot_object.object_id:
-                    spot_object = revealed
-            return interior, spot_object, flags, grant, remove, conn_updates, messages
-
-        if et == InteractionEffectTypeEnum.REVEAL_SUB_LOCATION:
-            slid = self._sub_location_id_from_param(p.get("sub_location_id"))
-            for sl in interior.sub_locations:
-                if sl.sub_location_id == slid:
-                    interior = interior.replace_sub_location(sl.revealed())
-                    break
-            return interior, spot_object, flags, grant, remove, conn_updates, messages
-
-        if et == InteractionEffectTypeEnum.CHANGE_CONNECTION_STATE:
-            cid_raw = p.get("connection_id")
-            is_passable = bool(p.get("is_passable", True))
-            if cid_raw is not None:
-                cid = ConnectionId.create(cid_raw)
-                conn_updates.append((cid, is_passable))
-            return interior, spot_object, flags, grant, remove, conn_updates, messages
-
-        return interior, spot_object, flags, grant, remove, conn_updates, messages
-
-    @staticmethod
-    def _item_spec_from_param(val: Any) -> ItemSpecId:
-        if isinstance(val, ItemSpecId):
-            return val
-        return ItemSpecId.create(val)
-
-    @staticmethod
-    def _spot_object_id_from_param(val: Any) -> SpotObjectId:
-        if isinstance(val, SpotObjectId):
-            return val
-        return SpotObjectId.create(val)
-
-    @staticmethod
-    def _sub_location_id_from_param(val: Any) -> SubLocationId:
-        if isinstance(val, SubLocationId):
-            return val
-        return SubLocationId.create(val)
+        return InteractionExecutionResult(
+            new_interior=effect_result.new_interior,
+            new_flags=effect_result.new_flags,
+            messages=effect_result.messages,
+            item_spec_ids_to_grant=effect_result.item_spec_ids_to_grant,
+            item_spec_ids_to_remove=effect_result.item_spec_ids_to_remove,
+            connection_passability_updates=effect_result.connection_passability_updates,
+        )

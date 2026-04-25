@@ -38,7 +38,14 @@ class _FakeRuntime:
 
     def do_explore(self, player_id: PlayerId) -> _ExploreResult:
         self.explore_calls.append(player_id.value)
-        return _ExploreResult()
+        result = _ExploreResult()
+        desc = " / ".join(result.discovery_descriptions)
+        self._record_action_result(
+            player_id,
+            "explore_sub_locations()",
+            f"発見: {desc}" if desc else "新しい発見はなかった",
+        )
+        return result
 
     def _record_action_result(
         self,
@@ -73,7 +80,7 @@ def test_escape_game_llm_turn_executes_returned_tool() -> None:
 
     assert runtime.explore_calls == [1]
     assert runtime.action_results
-    assert "古いメモ" in runtime.action_results[0][2]
+    assert any("古いメモ" in r[2] for r in runtime.action_results)
 
 
 def test_escape_game_llm_turn_handles_missing_tool_call_as_no_op() -> None:

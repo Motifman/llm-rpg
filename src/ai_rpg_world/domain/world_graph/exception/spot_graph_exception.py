@@ -93,6 +93,11 @@ class InteractionNotAllowedException(SpotGraphDomainException, BusinessRuleExcep
     error_code = "WORLD_GRAPH.INTERACTION_NOT_ALLOWED"
 
 
+class UnsupportedInteractionEffectException(SpotGraphDomainException, BusinessRuleException):
+    """未対応の interaction effect が指定された"""
+    error_code = "WORLD_GRAPH.UNSUPPORTED_INTERACTION_EFFECT"
+
+
 class SpotTravelUnreachableException(SpotGraphDomainException, BusinessRuleException):
     """指定スポットへの経路が存在しない（または到達不能）"""
     error_code = "WORLD_GRAPH.SPOT_TRAVEL_UNREACHABLE"

@@ -20,6 +20,14 @@ from ai_rpg_world.application.observation.services.observation_appender import (
     ObservationAppender,
 )
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.services.escape_llm_prompt import (
+    EscapeCharacterPromptInput,
+)
+from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_SPOT_GRAPH_EXPLORE,
+    TOOL_NAME_SPOT_GRAPH_INTERACT,
+    TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+)
 from ai_rpg_world.application.llm.wiring._llm_client_factory import (
     create_llm_client_from_env,
 )
@@ -54,6 +62,26 @@ from ai_rpg_world.presentation.spot_graph_game.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _character_to_escape_prompt_input(
+    character: Optional[CharacterDetailResponse],
+) -> Optional[EscapeCharacterPromptInput]:
+    if character is None:
+        return None
+    return EscapeCharacterPromptInput(
+        character_id=character.id,
+        name=character.name,
+        first_person=character.first_person or "私",
+        personality_tags=tuple(character.personality_tags or ()),
+        appearance=character.appearance or "",
+        speech_samples=tuple(character.speech_samples or ()),
+        fragmented_memory=character.fragmented_memory or "",
+        values=character.values or "",
+        strengths=character.strengths or "",
+        weaknesses=character.weaknesses or "",
+        interpersonal_tendency=character.interpersonal_tendency or "",
+    )
 
 
 def _utcnow_iso() -> str:
@@ -186,11 +214,17 @@ class _EscapeGameLlmWiring:
                 error_code="LLM_TOOL_EXECUTION_FAILED",
                 remediation="現在の状況に表示されたラベルと利用可能な action_name を確認してください。",
             )
-        self.runtime._record_action_result(
-            player_id,
-            f"{name}({json.dumps(arguments, ensure_ascii=False)})",
-            result.message,
+        skip_duplicate_action_log = result.success and name in (
+            TOOL_NAME_SPOT_GRAPH_EXPLORE,
+            TOOL_NAME_SPOT_GRAPH_INTERACT,
+            TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
         )
+        if not skip_duplicate_action_log:
+            self.runtime._record_action_result(
+                player_id,
+                f"{name}({json.dumps(arguments, ensure_ascii=False)})",
+                result.message,
+            )
         return result
 
     def _coerce_arguments(self, raw_arguments: Any) -> dict[str, Any]:
@@ -212,12 +246,18 @@ class _EscapeGameLlmWiring:
         runtime_context: Any,
     ) -> LlmCommandResultDto:
         from ai_rpg_world.application.llm.tool_constants import (
+            TOOL_NAME_MEMORY_QUERY,
             TOOL_NAME_SAY,
             TOOL_NAME_SPOT_GRAPH_EXPLORE,
             TOOL_NAME_SPOT_GRAPH_INTERACT,
             TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
             TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+            TOOL_NAME_SPOT_GRAPH_WAIT,
+            TOOL_NAME_TODO_ADD,
+            TOOL_NAME_TODO_COMPLETE,
+            TOOL_NAME_TODO_LIST,
             TOOL_NAME_WHISPER,
+            TOOL_NAME_WORKING_MEMORY_APPEND,
         )
 
         targets = getattr(runtime_context, "targets", {})
@@ -265,6 +305,15 @@ class _EscapeGameLlmWiring:
                 message="; ".join(result.messages) if result.messages else "完了",
             )
 
+        if name == TOOL_NAME_SPOT_GRAPH_WAIT:
+            reason = str(arguments.get("reason", "")).strip()
+            tick = self.runtime.do_wait(player_id, reason=reason)
+            suffix = f"（理由: {reason}）" if reason else ""
+            return LlmCommandResultDto(
+                success=True,
+                message=f"待機して時間が進んだ: tick={tick}{suffix}",
+            )
+
         if name == TOOL_NAME_SAY:
             content = str(arguments.get("content", "")).strip()
             if not content:
@@ -299,6 +348,15 @@ class _EscapeGameLlmWiring:
                 message="サブロケーション変更は脱出ランタイムでは未対応です。",
                 error_code="UNSUPPORTED_TOOL",
             )
+
+        if name in (
+            TOOL_NAME_MEMORY_QUERY,
+            TOOL_NAME_WORKING_MEMORY_APPEND,
+            TOOL_NAME_TODO_ADD,
+            TOOL_NAME_TODO_LIST,
+            TOOL_NAME_TODO_COMPLETE,
+        ):
+            return self.runtime.run_llm_auxiliary_tool(player_id, name, arguments)
 
         return LlmCommandResultDto(
             success=False,
@@ -558,7 +616,14 @@ class GameRuntimeManager:
             create_escape_game_runtime,
         )
 
-        runtime = create_escape_game_runtime(scenario_path)
+        escape_character = None
+        if request.character_ids:
+            detail = self.get_character(request.character_ids[0])
+            escape_character = _character_to_escape_prompt_input(detail)
+
+        runtime = create_escape_game_runtime(
+            scenario_path, escape_character=escape_character
+        )
         llm_wiring = _EscapeGameLlmWiring(runtime=runtime, observation_buffer=runtime._obs_buffer)
 
         sid = uuid.uuid4().hex[:12]
