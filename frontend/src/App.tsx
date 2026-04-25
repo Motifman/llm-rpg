@@ -1,11 +1,13 @@
 import { useState } from "react";
 
 import { AmbientMonitoringLayer } from "./ambient/AmbientMonitoringLayer";
+import { CharacterSelectScreen } from "./characterSelect/CharacterSelectScreen";
+import { GameShell } from "./GameShell";
 import { PrologueScreen } from "./prologue/PrologueScreen";
 import { TitleScreen } from "./title/TitleScreen";
 import { WorldSelectScreen } from "./worldSelect/WorldSelectScreen";
 
-type AppPhase = "title" | "prologue" | "main";
+type AppPhase = "title" | "prologue" | "worldSelect" | "characterSelect" | "game";
 
 /**
  * 開発時のみ: 背景モニタリングレイヤ単体のプレビュー。
@@ -22,6 +24,23 @@ function readDevAmbientPreviewVariant(): "title" | "world" | null {
     return null;
   }
   return q.get("variant") === "title" ? "title" : "world";
+}
+
+function readDevInitialPhase(): AppPhase {
+  if (!import.meta.env.DEV || typeof window === "undefined") {
+    return "title";
+  }
+  const phase = new URLSearchParams(window.location.search).get("phase");
+  if (
+    phase === "title" ||
+    phase === "prologue" ||
+    phase === "worldSelect" ||
+    phase === "characterSelect" ||
+    phase === "game"
+  ) {
+    return phase;
+  }
+  return "title";
 }
 
 function AmbientDevPreviewShell({ variant }: { variant: "title" | "world" }) {
@@ -54,7 +73,8 @@ function quitFromTitle(): void {
 }
 
 export function App() {
-  const [phase, setPhase] = useState<AppPhase>("title");
+  const [phase, setPhase] = useState<AppPhase>(() => readDevInitialPhase());
+  const [selectedWorldId, setSelectedWorldId] = useState("abandoned_hospital");
   const ambientPreview = readDevAmbientPreviewVariant();
   if (ambientPreview) {
     return <AmbientDevPreviewShell variant={ambientPreview} />;
@@ -64,25 +84,40 @@ export function App() {
     return (
       <PrologueScreen
         onBack={() => setPhase("title")}
-        onExit={() => setPhase("main")}
+        onExit={() => setPhase("worldSelect")}
       />
     );
   }
 
-  if (phase === "main") {
+  if (phase === "worldSelect") {
     return (
       <WorldSelectScreen
         onBack={() => setPhase("title")}
-        onPickWorld={() => {
-          /* キャラ選択・導入ノベルは今後ここへ */
+        onPickWorld={(worldId) => {
+          setSelectedWorldId(worldId);
+          setPhase("characterSelect");
         }}
       />
     );
   }
 
+  if (phase === "characterSelect") {
+    return (
+      <CharacterSelectScreen
+        worldId={selectedWorldId}
+        onBack={() => setPhase("worldSelect")}
+        onTransfer={() => setPhase("game")}
+      />
+    );
+  }
+
+  if (phase === "game") {
+    return <GameShell />;
+  }
+
   return (
     <TitleScreen
-      onContinue={() => setPhase("main")}
+      onContinue={() => setPhase("worldSelect")}
       onQuit={quitFromTitle}
       onStart={() => setPhase("prologue")}
     />

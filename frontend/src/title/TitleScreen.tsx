@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { AmbientMonitoringLayer } from "../ambient/AmbientMonitoringLayer";
 import "./TitleScreen.css";
+import { TitleDisconnectOverlay } from "./TitleDisconnectOverlay";
 import { pickTitleHudLine, TITLE_HUD_LINES, TITLE_HUD_TICK_MS } from "./titleHudLines";
 
 export type TitleScreenProps = {
@@ -28,6 +29,7 @@ function initialHudLines(): [string, string, string] {
 
 export function TitleScreen({ onStart, onContinue, onQuit }: TitleScreenProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [hudLines, setHudLines] = useState<[string, string, string]>(initialHudLines);
 
   useEffect(() => {
@@ -113,7 +115,7 @@ export function TitleScreen({ onStart, onContinue, onQuit }: TitleScreenProps) {
                 <span>せってい</span>
                 <span className="ts-btn-hint">SYS_CONFIG_OVERRIDE</span>
               </button>
-              <button className="ts-btn" onClick={onQuit} type="button">
+              <button className="ts-btn" onClick={() => setDisconnectOpen(true)} type="button">
                 <span className="ts-btn-icon" aria-hidden>
                   power_settings_new
                 </span>
@@ -180,6 +182,15 @@ export function TitleScreen({ onStart, onContinue, onQuit }: TitleScreenProps) {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {disconnectOpen ? (
+        <TitleDisconnectOverlay
+          onComplete={() => {
+            setDisconnectOpen(false);
+            onQuit();
+          }}
+        />
       ) : null}
     </div>
   );

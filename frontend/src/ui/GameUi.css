@@ -1,0 +1,528 @@
+.game-screen {
+  --game-bg: #10141a;
+  --game-bg-lowest: #0a0e14;
+  --game-on-surface: #dfe2eb;
+  --game-primary: #f4bd67;
+  --game-secondary: #ffb4ac;
+  --game-outline: #45474b;
+  --game-surface-low: #1c2026;
+  --game-surface-high: #252a32;
+  --game-surface-highest: #303640;
+  --game-radius: 6px;
+  --game-font-display: "Noto Serif JP", "Noto Serif", Georgia, serif;
+  --game-font-ui: "Space Grotesk", system-ui, sans-serif;
+  --game-font-body: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+
+  color: var(--game-on-surface);
+  background: var(--game-bg-lowest);
+  font-family: var(--game-font-ui);
+}
+
+.game-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background: var(--game-bg-lowest);
+}
+
+.game-bg-img {
+  position: absolute;
+  inset: -4%;
+  width: 108%;
+  height: 108%;
+  object-fit: cover;
+  opacity: 0.42;
+  filter: blur(9px) saturate(0.74) brightness(0.78);
+  transform: scale(1.02);
+}
+
+.game-bg-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 68% 62% at 26% 44%, rgba(37, 42, 50, 0.36), transparent 64%),
+    radial-gradient(ellipse 46% 54% at 88% 50%, rgba(150, 7, 17, 0.12), transparent 62%),
+    linear-gradient(105deg, rgba(10, 14, 20, 0.56) 0%, rgba(10, 14, 20, 0.32) 45%, rgba(10, 14, 20, 0.94) 100%);
+}
+
+.game-bg-watermark {
+  position: absolute;
+  left: clamp(1rem, 4vw, 4rem);
+  top: clamp(5.5rem, 14vh, 9rem);
+  max-width: min(40rem, 48vw);
+  opacity: 0.11;
+  filter: blur(0.2px);
+  transform: rotate(-1deg);
+}
+
+.game-bg-watermark span,
+.game-bg-watermark strong {
+  display: block;
+}
+
+.game-bg-watermark span {
+  font-family: var(--game-font-ui);
+  font-size: clamp(0.8rem, 1.8vw, 1.5rem);
+  letter-spacing: 0.28em;
+  color: rgba(244, 189, 103, 0.8);
+}
+
+.game-bg-watermark strong {
+  margin-top: 0.4rem;
+  max-width: 12em;
+  font-family: var(--game-font-display);
+  font-size: clamp(3rem, 8vw, 7rem);
+  font-weight: 900;
+  line-height: 0.98;
+  color: rgba(223, 226, 235, 0.72);
+}
+
+.game-bg-noise {
+  position: absolute;
+  inset: 0;
+  background-image: url("/assets/title/grain.png");
+  background-repeat: repeat;
+  opacity: 0.055;
+}
+
+.game-bg-scanline {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 50%, rgba(0, 0, 0, 0.08) 50%);
+  background-size: 100% 4px;
+  opacity: 0.58;
+}
+
+.game-chrome {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  min-height: 3.4rem;
+}
+
+.game-chrome-title {
+  min-width: 0;
+}
+
+.game-chrome-title h1 {
+  margin: 0;
+  font-family: var(--game-font-display);
+  font-size: clamp(1.45rem, 2.5vw, 2.55rem);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.05;
+  color: var(--game-on-surface);
+  text-shadow:
+    1px 0 rgba(255, 180, 172, 0.38),
+    -1px 0 rgba(244, 189, 103, 0.26),
+    0 12px 28px rgba(0, 0, 0, 0.58);
+}
+
+.game-chrome-fill {
+  flex: 1;
+  min-width: 0;
+}
+
+.game-kicker {
+  margin: 0;
+  font-family: var(--game-font-ui);
+  font-size: 0.62rem;
+  letter-spacing: 0.22em;
+  color: rgba(244, 189, 103, 0.72);
+  text-transform: uppercase;
+}
+
+.game-telemetry {
+  flex-shrink: 0;
+  text-align: right;
+  font-family: var(--game-font-ui);
+  font-size: 0.65rem;
+  letter-spacing: 0.14em;
+  line-height: 1.5;
+  color: rgba(223, 226, 235, 0.46);
+  max-width: min(44vw, 20rem);
+}
+
+.game-telemetry span {
+  color: rgba(244, 189, 103, 0.45);
+}
+
+.game-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.78rem;
+  min-height: 2.65rem;
+  border: none;
+  border-radius: var(--game-radius);
+  font: inherit;
+  text-align: left;
+  overflow: hidden;
+  transition: transform 0.15s, filter 0.2s, background 0.3s, opacity 0.2s;
+}
+
+.game-button::before,
+.game-button::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.game-button--primary {
+  min-width: 11.5rem;
+  padding: 0.62rem 1.35rem;
+  border-left: 4px solid var(--game-primary);
+  color: #432c00;
+  background:
+    linear-gradient(90deg, rgba(255, 238, 190, 0.36), transparent 18%),
+    linear-gradient(105deg, var(--game-primary) 0%, #a07323 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 245, 204, 0.12),
+    0 14px 36px rgba(0, 0, 0, 0.34);
+}
+
+.game-button--primary::after {
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(67, 44, 0, 0.05) 2px,
+    rgba(67, 44, 0, 0.05) 4px
+  );
+}
+
+.game-button--primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateX(2px);
+  background:
+    linear-gradient(90deg, rgba(255, 238, 190, 0.42), transparent 18%),
+    linear-gradient(105deg, var(--game-primary) 0%, var(--game-secondary) 50%, #a07323 100%);
+}
+
+.game-button--ghost {
+  min-width: auto;
+  padding: 0.55rem 0.9rem;
+  color: rgba(244, 189, 103, 0.92);
+  background: rgba(10, 14, 20, 0.58);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  outline: 1px solid rgba(69, 71, 75, 0.12);
+}
+
+.game-button--ghost:hover:not(:disabled) {
+  color: var(--game-secondary);
+  background: rgba(150, 7, 17, 0.2);
+  transform: translateX(-2px);
+}
+
+.game-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+  filter: saturate(0.55);
+}
+
+.game-button-icon {
+  font-family: "Material Symbols Outlined";
+  font-size: 1.25rem;
+  font-variation-settings: "FILL" 0, "wght" 300;
+  line-height: 1;
+}
+
+.game-button-copy {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.03rem;
+}
+
+.game-button-label {
+  font-family: var(--game-font-body);
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  line-height: 1.25;
+}
+
+.game-button-sublabel {
+  font-family: var(--game-font-ui);
+  font-size: 0.62rem;
+  letter-spacing: 0.22em;
+  line-height: 1.25;
+  opacity: 0.82;
+}
+
+.game-frame-button {
+  width: 3rem;
+  height: 3rem;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--game-radius);
+  color: rgba(244, 189, 103, 0.82);
+  background:
+    linear-gradient(135deg, rgba(244, 189, 103, 0.12), transparent 45%),
+    rgba(10, 14, 20, 0.62);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  outline: 1px solid rgba(69, 71, 75, 0.14);
+  transition: background 0.2s, color 0.2s, transform 0.15s, opacity 0.2s;
+}
+
+.game-frame-button:hover:not(:disabled) {
+  background:
+    linear-gradient(135deg, rgba(255, 180, 172, 0.18), transparent 45%),
+    rgba(150, 7, 17, 0.25);
+  color: var(--game-secondary);
+}
+
+.game-frame-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.32;
+}
+
+.game-frame-button .material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-size: 1.75rem;
+  font-variation-settings: "FILL" 0, "wght" 300;
+  line-height: 1;
+}
+
+.game-protocol-button {
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr) 1px 3.2rem;
+  align-items: center;
+  min-width: clamp(16rem, 23vw, 25rem);
+  min-height: 4.15rem;
+  padding: 0.45rem 0.55rem 0.45rem 1.8rem;
+  border: none;
+  border-radius: 2px;
+  color: #fff3d4;
+  text-align: left;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(255, 236, 177, 0.38), rgba(153, 97, 27, 0.68)),
+    url("/assets/ui/character-select-ui-atlas.png") center / 145% auto,
+    linear-gradient(100deg, #c78a33 0%, #6c471d 100%);
+  box-shadow:
+    0 0 0 1px rgba(255, 218, 132, 0.62),
+    inset 0 0 0 1px rgba(255, 248, 214, 0.22),
+    inset 0 0 32px rgba(255, 202, 86, 0.24),
+    0 18px 44px rgba(0, 0, 0, 0.48);
+  transition: filter 0.2s, transform 0.15s, opacity 0.2s;
+}
+
+.game-protocol-button::before,
+.game-protocol-button::after {
+  content: "";
+  position: absolute;
+  inset: 0.45rem;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(255, 239, 191, 0.75) 0 1px, transparent 1px) left top / 2.3rem 1px no-repeat,
+    linear-gradient(180deg, rgba(255, 239, 191, 0.75) 0 1px, transparent 1px) left top / 1px 1.35rem no-repeat,
+    linear-gradient(270deg, rgba(255, 239, 191, 0.75) 0 1px, transparent 1px) right top / 2.3rem 1px no-repeat,
+    linear-gradient(180deg, rgba(255, 239, 191, 0.75) 0 1px, transparent 1px) right top / 1px 1.35rem no-repeat,
+    linear-gradient(90deg, rgba(255, 239, 191, 0.75) 0 1px, transparent 1px) left bottom / 2.3rem 1px no-repeat,
+    linear-gradient(0deg, rgba(255, 239, 191, 0.75) 0 1px, transparent 1px) left bottom / 1px 1.35rem no-repeat,
+    linear-gradient(270deg, rgba(255, 239, 191, 0.75) 0 1px, transparent 1px) right bottom / 2.3rem 1px no-repeat,
+    linear-gradient(0deg, rgba(255, 239, 191, 0.75) 0 1px, transparent 1px) right bottom / 1px 1.35rem no-repeat;
+}
+
+.game-protocol-button::after {
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 3px,
+      rgba(38, 22, 0, 0.09) 3px,
+      rgba(38, 22, 0, 0.09) 5px
+    ),
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+  opacity: 0.74;
+  mix-blend-mode: multiply;
+}
+
+.game-protocol-button-copy {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.game-protocol-button-label {
+  font-family: var(--game-font-display);
+  font-size: clamp(1.15rem, 2vw, 1.75rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.06em;
+  color: rgba(255, 246, 221, 0.95);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+}
+
+.game-protocol-button-sublabel {
+  font-family: var(--game-font-ui);
+  font-size: 0.62rem;
+  letter-spacing: 0.26em;
+  color: rgba(57, 33, 4, 0.78);
+}
+
+.game-protocol-button-divider {
+  position: relative;
+  z-index: 1;
+  height: 2.7rem;
+  background: rgba(255, 231, 164, 0.38);
+  box-shadow: 1px 0 rgba(76, 45, 4, 0.35);
+}
+
+.game-protocol-button-arrow {
+  position: relative;
+  z-index: 1;
+  justify-self: center;
+  font-family: "Material Symbols Outlined";
+  font-size: 2rem;
+  font-variation-settings: "FILL" 0, "wght" 300;
+  line-height: 1;
+}
+
+.game-protocol-button:hover:not(:disabled) {
+  filter: brightness(1.08) saturate(1.08);
+  transform: translateX(2px);
+}
+
+.game-protocol-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  filter: grayscale(0.35) brightness(0.78);
+}
+
+.game-panel {
+  position: relative;
+  border-radius: var(--game-radius);
+  outline: 1px solid rgba(69, 71, 75, 0.15);
+  background:
+    linear-gradient(180deg, rgba(37, 42, 50, 0.78), rgba(28, 32, 38, 0.72)),
+    rgba(10, 14, 20, 0.54);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.game-panel::before,
+.game-panel::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.game-panel::before {
+  inset: 0;
+  border-left: 4px solid rgba(244, 189, 103, 0.3);
+  opacity: 0.62;
+}
+
+.game-panel::after {
+  left: 1rem;
+  right: 1rem;
+  top: 0.8rem;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(244, 189, 103, 0.28), transparent);
+  opacity: 0.7;
+}
+
+.game-world-badge {
+  position: relative;
+  width: min(36rem, 48vw);
+  min-height: 6rem;
+  border-radius: var(--game-radius);
+  overflow: hidden;
+  background: rgba(10, 14, 20, 0.52);
+  outline: 1px solid rgba(69, 71, 75, 0.13);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+.game-world-badge-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.34;
+  filter: saturate(0.72) brightness(0.8);
+}
+
+.game-world-badge-veil {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(10, 14, 20, 0.86), rgba(10, 14, 20, 0.42)),
+    linear-gradient(180deg, rgba(10, 14, 20, 0.24), rgba(10, 14, 20, 0.68));
+}
+
+.game-world-badge-copy {
+  position: relative;
+  z-index: 1;
+  padding: 0.8rem 1rem 0.9rem;
+  border-left: 4px solid rgba(244, 189, 103, 0.72);
+}
+
+.game-world-badge-copy p,
+.game-world-badge-copy span {
+  margin: 0;
+  font-family: var(--game-font-ui);
+  color: rgba(244, 189, 103, 0.72);
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.game-world-badge-copy h2 {
+  margin: 0.24rem 0;
+  max-width: 26rem;
+  font-family: var(--game-font-display);
+  font-size: clamp(1.05rem, 2.1vw, 1.7rem);
+  font-weight: 700;
+  line-height: 1.25;
+  color: rgba(223, 226, 235, 0.94);
+}
+
+@media (max-width: 680px) {
+  .game-chrome {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .game-chrome-title {
+    order: 3;
+    width: 100%;
+  }
+
+  .game-telemetry {
+    max-width: 100%;
+    text-align: left;
+    font-size: 0.6rem;
+  }
+
+  .game-world-badge {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-button,
+  .game-frame-button {
+    transition: none !important;
+  }
+}

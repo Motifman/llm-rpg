@@ -10,6 +10,9 @@ export const GATE_GIRL_SHY_SRC = "/assets/prologue/gate_girl_shy.png";
 /** 怒って腕を組んでいる立ち絵（透過 PNG） */
 export const GATE_GIRL_ANGRY_SRC = "/assets/prologue/gate_girl_angry.png";
 
+/** 少し微笑んでいる立ち絵（透過 PNG） */
+export const GATE_GIRL_SMILE_SRC = "/assets/prologue/gate_girl_smile.png";
+
 export type GateGirlMoment = {
   readonly line: string;
   readonly imageSrc: string;
@@ -54,6 +57,10 @@ export const GATE_GIRL_SPECIAL_MOMENTS: readonly GateGirlSpecialMoment[] = [
 export const SHOW_GATE_GIRL_HIT_AREAS = false;
 
 export const GATE_GIRL_MOMENTS: readonly GateGirlMoment[] = [
+  {
+    line: "照れちゃうな……でも、悪い気はしないかな。",
+    imageSrc: GATE_GIRL_SMILE_SRC,
+  },
   {
     line: "……そんなに何度も触らないで。さすがに、恥ずかしいから。",
     imageSrc: GATE_GIRL_SHY_SRC,
