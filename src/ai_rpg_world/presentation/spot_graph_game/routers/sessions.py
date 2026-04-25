@@ -71,3 +71,13 @@ async def change_speed(session_id: str, request: SpeedChangeRequest) -> Response
             status_code=404, detail=f"Session not found: {session_id}"
         )
     return Response(status_code=204)
+
+
+@router.post("/{session_id}/llm-turns")
+async def run_scheduled_llm_turns(session_id: str) -> Response:
+    manager = get_runtime_manager()
+    if not manager.run_scheduled_llm_turns(session_id):
+        raise HTTPException(
+            status_code=404, detail=f"Session or LLM wiring not found: {session_id}"
+        )
+    return Response(status_code=204)

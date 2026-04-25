@@ -31,17 +31,17 @@ export type WorldSummary = {
 export const WORLDS: WorldSummary[] = [
   {
     id: "abandoned_hospital",
-    title: "廃病院からの脱出 ―― 白鷺病院の記憶",
-    subtitle: "SHIRASAGI HOSPITAL // MEMORY-FRAGMENT 01",
+    title: "廃病院からの脱出 ―― 消し残された夜",
+    subtitle: "SHIZUHARA HOSPITAL // MEMORY-FRAGMENT 01",
     protocolCode: "PROTOCOL.01",
     shortDescription:
-      "気づけば朽ちた病院の中。非常灯だけが規則的に点滅し、廊下の先には出口の標識がかすかに見える。",
-    themeTags: ["ホラー", "協力", "推理"],
+      "記憶治療で知られた総合病院の廃墟。違和感を捲るほど、閉鎖の夜と旧友への選択が浮かび上がる。",
+    themeTags: ["記憶", "選択", "心理ホラー"],
     difficultyLabel: "中",
     // タイトル画面と同じ荘園外観をひとまず流用（実イラスト差し替え予定のプレースホルダ）
     imageSrc: "/assets/title/title_background_instancia.png",
     guideLine:
-      "……ここから始めよう。\n出口は、見えてる。振り返らずに進めば、たぶん、大丈夫。",
+      "……忘れていいって、誰が決めるんだろう。\nここは、消し残された夜を選び直す場所。",
   },
   {
     id: "snowbound_station",
