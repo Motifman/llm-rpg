@@ -13,6 +13,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+    TOOL_NAME_SPOT_GRAPH_WAIT,
     TOOL_NAME_WHISPER,
 )
 
@@ -73,6 +74,21 @@ INTERACT_DEFINITION = ToolDefinitionDto(
     },
 )
 
+WAIT_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_WAIT,
+    description="その場で短く待機し、時間経過に伴う環境変化や出来事を観測する。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "reason": {
+                "type": "string",
+                "description": "待機する理由（任意）。",
+            },
+        },
+        "required": [],
+    },
+)
+
 
 SAY_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SAY,
@@ -115,6 +131,7 @@ def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolve
         (SET_SUB_LOCATION_DEFINITION, _RESOLVER),
         (EXPLORE_DEFINITION, _RESOLVER),
         (INTERACT_DEFINITION, _RESOLVER),
+        (WAIT_DEFINITION, _RESOLVER),
         (SAY_DEFINITION, _RESOLVER),
         (WHISPER_DEFINITION, _RESOLVER),
     ]
@@ -126,6 +143,7 @@ __all__ = [
     "SET_SUB_LOCATION_DEFINITION",
     "EXPLORE_DEFINITION",
     "INTERACT_DEFINITION",
+    "WAIT_DEFINITION",
     "SAY_DEFINITION",
     "WHISPER_DEFINITION",
 ]

@@ -26,6 +26,9 @@ from ai_rpg_world.application.world_graph.spot_graph_travel_context import (
 from ai_rpg_world.application.world_graph.spot_graph_travel_stage_service import (
     SpotGraphTravelStageService,
 )
+from ai_rpg_world.application.world_graph.spot_graph_simulation_application_service import (
+    SpotGraphSimulationApplicationService,
+)
 from ai_rpg_world.application.world_graph.spot_interaction_application_service import (
     SpotInteractionApplicationService,
 )
@@ -54,6 +57,7 @@ class SpotGraphWorldServices:
     exploration_progress: ISpotExplorationProgressStore
     movement: Optional[SpotGraphMovementApplicationService] = None
     travel_stage: Optional[SpotGraphTravelStageService] = None
+    simulation: Optional[SpotGraphSimulationApplicationService] = None
 
 
 def create_spot_graph_world_services(
@@ -69,6 +73,7 @@ def create_spot_graph_world_services(
     movement_service: Optional[SpotGraphMovementApplicationService] = None,
     travel_context: Optional[SpotGraphTravelContextProvider] = None,
     travel_stage: Optional[SpotGraphTravelStageService] = None,
+    simulation_service: Optional[SpotGraphSimulationApplicationService] = None,
 ) -> SpotGraphWorldServices:
     """スポットグラフ用サービス束を組み立てる。
 
@@ -114,4 +119,5 @@ def create_spot_graph_world_services(
         exploration_progress=progress,
         movement=movement_service,
         travel_stage=resolved_travel_stage,
+        simulation=simulation_service,
     )

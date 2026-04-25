@@ -12,7 +12,9 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world.enum.world_enum import SpotCategoryEnum
+from ai_rpg_world.domain.world.enum.weather_enum import WeatherTypeEnum
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import SpotGraphAggregate
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
@@ -35,6 +37,13 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_condition import I
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import InteractionEffect
 from ai_rpg_world.domain.world_graph.value_object.passage_condition import PassageCondition
+from ai_rpg_world.domain.world_graph.value_object.object_description_variant import (
+    ObjectDescriptionVariant,
+)
+from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition import (
+    ScenarioEventCondition,
+)
+from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import ScenarioEventDef
 from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import SpotAtmosphere
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
@@ -82,6 +91,16 @@ class PlayerSpawnConfig:
 
 
 @dataclass(frozen=True)
+class ScenarioWeatherConfig:
+    """Spot Graph シナリオ用の軽量天候設定。"""
+
+    enabled: bool
+    initial_state: WeatherState
+    update_interval_ticks: int
+    announce_changes: bool
+
+
+@dataclass(frozen=True)
 class ScenarioLoadResult:
     graph: SpotGraphAggregate
     interiors: Dict[SpotId, SpotInterior]
@@ -92,6 +111,8 @@ class ScenarioLoadResult:
     id_mapper: ScenarioIdMapper
     metadata: ScenarioMetadata
     initial_flags: Tuple[str, ...]
+    scenario_events: Tuple[ScenarioEventDef, ...] = ()
+    weather_config: Optional[ScenarioWeatherConfig] = None
 
 
 class ScenarioLoader:
@@ -121,6 +142,8 @@ class ScenarioLoader:
         win_conds = self._parse_end_conditions(raw.get("game_end_conditions", {}).get("win", []), mapper)
         lose_conds = self._parse_end_conditions(raw.get("game_end_conditions", {}).get("lose", []), mapper)
         initial_flags = tuple(raw.get("initial_flags", []))
+        scenario_events = self._parse_scenario_events(raw.get("scenario_events", []), mapper)
+        weather_config = self._parse_weather_config(raw.get("environment", {}))
 
         return ScenarioLoadResult(
             graph=graph,
@@ -132,6 +155,8 @@ class ScenarioLoader:
             id_mapper=mapper,
             metadata=metadata,
             initial_flags=initial_flags,
+            scenario_events=scenario_events,
+            weather_config=weather_config,
         )
 
     def _parse_metadata(self, raw: Dict[str, Any]) -> ScenarioMetadata:
@@ -272,6 +297,14 @@ class ScenarioLoader:
         interactions = tuple(
             self._parse_interaction_def(i, mapper) for i in raw.get("interactions", [])
         )
+        variants = tuple(
+            ObjectDescriptionVariant(
+                description=str(v.get("description", "")),
+                required_state=v.get("required_state"),
+                required_flag=v.get("required_flag"),
+            )
+            for v in raw.get("description_variants", [])
+        )
         return SpotObject(
             object_id=SpotObjectId.create(oid),
             name=raw["name"],
@@ -279,6 +312,7 @@ class ScenarioLoader:
             object_type=SpotObjectTypeEnum[raw.get("object_type", "OTHER")],
             state=dict(raw.get("state", {})),
             interactions=interactions,
+            description_variants=variants,
             is_visible=bool(raw.get("is_visible", True)),
         )
 
@@ -313,10 +347,16 @@ class ScenarioLoader:
 
     def _parse_interaction_effect(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> InteractionEffect:
         params = dict(raw.get("parameters", {}))
+        # CHANGE_OBJECT_STATE は state_updates を正式名とする。
+        # 過去シナリオ互換で new_state が来た場合は正規化して受け入れる。
+        if "state_updates" not in params and "new_state" in params:
+            params["state_updates"] = params.pop("new_state")
         if "item_spec" in params:
             params["item_spec_id"] = mapper.get_int("item_spec", params.pop("item_spec"))
         if "target_object" in params:
             params["object_id"] = mapper.get_int("object", params.pop("target_object"))
+        if "target_sub_location" in params:
+            params["sub_location_id"] = mapper.get_int("sub_location", params.pop("target_sub_location"))
         if "target_connection" in params:
             params["connection_id"] = mapper.get_int("connection", params.pop("target_connection"))
         if "target_spot" in params:
@@ -324,6 +364,88 @@ class ScenarioLoader:
         return InteractionEffect(
             effect_type=InteractionEffectTypeEnum[raw["effect_type"]],
             parameters=params,
+        )
+
+    def _parse_scenario_events(
+        self,
+        events_raw: Sequence[Dict[str, Any]],
+        mapper: ScenarioIdMapper,
+    ) -> Tuple[ScenarioEventDef, ...]:
+        parsed: list[ScenarioEventDef] = []
+        for raw in events_raw:
+            observation = raw.get("observation", {})
+            if not isinstance(observation, dict):
+                observation = {}
+            conditions = tuple(
+                self._parse_scenario_event_condition(c, mapper)
+                for c in raw.get("conditions", [])
+            )
+            effects = tuple(
+                self._parse_interaction_effect(e, mapper)
+                for e in raw.get("effects", [])
+            )
+            parsed.append(
+                ScenarioEventDef(
+                    event_id=str(raw["id"]),
+                    trigger=str(raw.get("trigger", "ON_TICK")),
+                    once=bool(raw.get("once", True)),
+                    conditions=conditions,
+                    effects=effects,
+                    observation_category=str(observation.get("category", "environment")),
+                    recipients=str(observation.get("recipients", "all_players")),
+                    target_spot_id=self._optional_spot_id(observation.get("target_spot"), mapper),
+                    schedules_turn=bool(observation.get("schedules_turn", True)),
+                    breaks_movement=bool(observation.get("breaks_movement", False)),
+                )
+            )
+        return tuple(parsed)
+
+    def _optional_spot_id(self, value: Any, mapper: ScenarioIdMapper) -> Optional[int]:
+        if not value:
+            return None
+        return mapper.get_int("spot", str(value))
+
+    def _parse_scenario_event_condition(
+        self,
+        raw: Dict[str, Any],
+        mapper: ScenarioIdMapper,
+    ) -> ScenarioEventCondition:
+        spot_id = None
+        if raw.get("target_spot"):
+            spot_id = mapper.get_int("spot", raw["target_spot"])
+        object_id = None
+        if raw.get("target_object"):
+            object_id = mapper.get_int("object", raw["target_object"])
+        item_spec_id = None
+        if raw.get("required_item"):
+            item_spec_id = mapper.get_int("item_spec", raw["required_item"])
+        return ScenarioEventCondition(
+            condition_type=str(raw["condition_type"]),
+            tick=raw.get("tick"),
+            tick_start=raw.get("tick_start"),
+            tick_end=raw.get("tick_end"),
+            flag_name=raw.get("flag_name"),
+            spot_id=spot_id,
+            object_id=object_id,
+            required_state=raw.get("required_state"),
+            item_spec_id=item_spec_id,
+        )
+
+    def _parse_weather_config(self, raw: Dict[str, Any]) -> Optional[ScenarioWeatherConfig]:
+        weather = raw.get("weather") if isinstance(raw, dict) else None
+        if not isinstance(weather, dict):
+            return None
+        enabled = bool(weather.get("enabled", False))
+        initial = weather.get("initial", {})
+        if not isinstance(initial, dict):
+            initial = {}
+        weather_type = WeatherTypeEnum[str(initial.get("weather_type", "FOG"))]
+        intensity = float(initial.get("intensity", 0.6))
+        return ScenarioWeatherConfig(
+            enabled=enabled,
+            initial_state=WeatherState(weather_type=weather_type, intensity=intensity),
+            update_interval_ticks=int(weather.get("update_interval_ticks", 6)),
+            announce_changes=bool(weather.get("announce_changes", True)),
         )
 
     def _parse_discoverable_item(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> DiscoverableItem:

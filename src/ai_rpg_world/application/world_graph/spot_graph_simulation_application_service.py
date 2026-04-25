@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, Protocol, TYPE_CHECKING
 
 from ai_rpg_world.application.common.exceptions import ApplicationException, SystemErrorException
 from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
@@ -28,12 +28,16 @@ class SpotGraphSimulationApplicationService:
         time_provider: GameTimeProvider,
         unit_of_work: UnitOfWork,
         travel_stage: Optional[SpotGraphTravelStageService] = None,
+        scenario_event_stage: Optional["_SpotGraphTickStage"] = None,
+        environment_stage: Optional["_SpotGraphTickStage"] = None,
         llm_turn_trigger: Optional["ILlmTurnTrigger"] = None,
         reflection_runner: Optional["IReflectionRunner"] = None,
     ) -> None:
         self._time_provider = time_provider
         self._unit_of_work = unit_of_work
         self._travel_stage = travel_stage
+        self._scenario_event_stage = scenario_event_stage
+        self._environment_stage = environment_stage
         self._llm_turn_trigger = llm_turn_trigger
         self._reflection_runner = reflection_runner
         self._logger = logging.getLogger(self.__class__.__name__)
@@ -50,6 +54,10 @@ class SpotGraphSimulationApplicationService:
             current_tick = self._time_provider.advance_tick()
             if self._travel_stage is not None:
                 self._travel_stage.run(current_tick)
+            if self._scenario_event_stage is not None:
+                self._scenario_event_stage.run(current_tick)
+            if self._environment_stage is not None:
+                self._environment_stage.run(current_tick)
         self._run_post_tick_hooks(current_tick)
         return current_tick
 
@@ -100,3 +108,7 @@ class SpotGraphSimulationApplicationService:
 
 
 __all__ = ["SpotGraphSimulationApplicationService"]
+
+
+class _SpotGraphTickStage(Protocol):
+    def run(self, current_tick: WorldTick) -> None: ...

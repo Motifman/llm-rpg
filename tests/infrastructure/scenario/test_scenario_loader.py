@@ -35,6 +35,14 @@ def _minimal_scenario() -> dict:
         "item_specs": [
             {"id": "key", "name": "鍵", "description": "ドアの鍵", "category": "KEY_ITEM"},
         ],
+        "environment": {
+            "weather": {
+                "enabled": True,
+                "initial": {"weather_type": "FOG", "intensity": 0.5},
+                "update_interval_ticks": 4,
+                "announce_changes": True,
+            }
+        },
         "spots": [
             {
                 "id": "room_a",
@@ -56,6 +64,10 @@ def _minimal_scenario() -> dict:
                                     "display_label": "開ける",
                                     "preconditions": [],
                                     "effects": [
+                                        {
+                                            "effect_type": "CHANGE_OBJECT_STATE",
+                                            "parameters": {"new_state": {"opened": True}},
+                                        },
                                         {
                                             "effect_type": "GIVE_ITEM",
                                             "parameters": {"item_spec": "key"},
@@ -99,6 +111,27 @@ def _minimal_scenario() -> dict:
             "lose": {"type": "TICK_LIMIT", "tick_limit": 50},
         },
         "initial_flags": [],
+        "scenario_events": [
+            {
+                "id": "tick_event",
+                "trigger": "ON_TICK",
+                "once": True,
+                "conditions": [{"condition_type": "TICK_AT_LEAST", "tick": 3}],
+                "observation": {
+                    "category": "environment",
+                    "recipients": "players_at_spot",
+                    "target_spot": "room_a",
+                    "schedules_turn": True,
+                    "breaks_movement": False,
+                },
+                "effects": [
+                    {
+                        "effect_type": "SET_FLAG",
+                        "parameters": {"flag_name": "tick_event_done"},
+                    }
+                ],
+            }
+        ],
     }
 
 
@@ -167,8 +200,28 @@ class TestScenarioLoaderMinimal:
                 assert obj.name == "箱"
                 assert len(obj.interactions) == 1
                 assert obj.interactions[0].action_name == "open"
+                effect = obj.interactions[0].effects[0]
+                assert effect.parameters["state_updates"] == {"opened": True}
                 return
         pytest.fail("No interior with objects found")
+
+    def test_parses_scenario_events(self) -> None:
+        result = ScenarioLoader().load_from_dict(_minimal_scenario())
+        assert len(result.scenario_events) == 1
+        ev = result.scenario_events[0]
+        assert ev.event_id == "tick_event"
+        assert ev.conditions[0].condition_type == "TICK_AT_LEAST"
+        assert ev.observation_category == "environment"
+        assert ev.recipients == "players_at_spot"
+        assert ev.target_spot_id == result.id_mapper.get_int("spot", "room_a")
+
+    def test_parses_weather_config(self) -> None:
+        result = ScenarioLoader().load_from_dict(_minimal_scenario())
+        assert result.weather_config is not None
+        assert result.weather_config.enabled is True
+        assert result.weather_config.initial_state.weather_type.value == "FOG"
+        assert result.weather_config.initial_state.intensity == 0.5
+        assert result.weather_config.update_interval_ticks == 4
 
     def test_unsupported_version_raises(self) -> None:
         raw = _minimal_scenario()
@@ -192,7 +245,7 @@ class TestScenarioLoaderHospital:
 
     def test_loads_all_spots(self, result) -> None:
         nodes = list(result.graph.iter_spot_nodes())
-        assert len(nodes) == 8
+        assert len(nodes) == 16
 
     def test_all_spots_have_interiors(self, result) -> None:
         for node in result.graph.iter_spot_nodes():
@@ -200,17 +253,17 @@ class TestScenarioLoaderHospital:
 
     def test_locked_connections_exist(self, result) -> None:
         locked = [c for c in result.graph.all_connections() if not c.is_passable]
-        assert len(locked) >= 2  # directors_office, hidden_passage, exit_to_outside (+ reverses)
+        assert any(c.name == "裏口への通路" for c in locked)
 
     def test_items_count(self, result) -> None:
-        assert len(result.item_spec_definitions) == 10
+        assert len(result.item_spec_definitions) == 24
 
     def test_lore_items_exist(self, result) -> None:
         lore_items = [i for i in result.item_spec_definitions if i.category == "LORE"]
         assert len(lore_items) >= 3
 
     def test_two_players(self, result) -> None:
-        assert len(result.player_spawns) == 2
+        assert len(result.player_spawns) == 1
 
     def test_win_condition_is_all_at_outside(self, result) -> None:
         assert len(result.win_conditions) == 1
@@ -222,17 +275,24 @@ class TestScenarioLoaderHospital:
 
     def test_lose_condition_is_tick_limit(self, result) -> None:
         assert len(result.lose_conditions) == 1
-        assert result.lose_conditions[0].tick_limit == 120
+        assert result.lose_conditions[0].tick_limit == 150
 
-    def test_discoverable_items_in_entrance(self, result) -> None:
-        entrance_id_int = result.id_mapper.get_int("spot", "entrance_hall")
+    def test_revealed_detail_object_starts_hidden(self, result) -> None:
+        reception_id_int = result.id_mapper.get_int("spot", "ward_reception")
         from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-        interior = result.interiors[SpotId.create(entrance_id_int)]
-        assert len(interior.discoverable_items) == 1
+        interior = result.interiors[SpotId.create(reception_id_int)]
+        detail_id = result.id_mapper.get_int("object", "suture_pattern_detail")
+        detail = next(
+            obj for obj in interior.objects if obj.object_id.value == detail_id
+        )
+        assert detail.is_visible is False
 
-    def test_multiple_interactions_on_emergency_door(self, result) -> None:
-        exit_id_int = result.id_mapper.get_int("spot", "emergency_exit")
-        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
-        interior = result.interiors[SpotId.create(exit_id_int)]
-        door = interior.objects[0]
-        assert len(door.interactions) == 2  # unlock + use_reagent
+    def test_hospital_weather_and_scenario_event_metadata(self, result) -> None:
+        assert result.weather_config is not None
+        assert result.weather_config.initial_state.weather_type.value == "FOG"
+        assert result.weather_config.update_interval_ticks == 8
+        rear_exit_event = next(
+            ev for ev in result.scenario_events if ev.event_id == "rear_exit_route_revealed"
+        )
+        assert rear_exit_event.recipients == "players_at_spot"
+        assert rear_exit_event.breaks_movement is True

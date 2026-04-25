@@ -27,6 +27,7 @@ from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 
 EntityNameResolver = Callable[[int], str]
 WeatherProvider = Callable[[], Optional[WeatherState]]
+WorldFlagsProvider = Callable[[], frozenset[str]]
 
 
 class SpotGraphCurrentStateBuilder:
@@ -41,6 +42,7 @@ class SpotGraphCurrentStateBuilder:
         entity_name_resolver: Optional[EntityNameResolver] = None,
         inventory_builder: Optional[Callable[[PlayerId], tuple]] = None,
         weather_provider: Optional[WeatherProvider] = None,
+        world_flags_provider: Optional[WorldFlagsProvider] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -48,6 +50,7 @@ class SpotGraphCurrentStateBuilder:
         self._entity_name_resolver = entity_name_resolver
         self._inventory_builder = inventory_builder
         self._weather_provider = weather_provider
+        self._world_flags_provider = world_flags_provider
 
     def build_snapshot(self, player_id: int) -> SpotGraphPlayerSnapshotDto | None:
         """プレイヤーがグラフに載っていない場合は None。"""
@@ -104,6 +107,9 @@ class SpotGraphCurrentStateBuilder:
             else None
         )
         if interior is not None:
+            world_flags = (
+                self._world_flags_provider() if self._world_flags_provider is not None else frozenset()
+            )
             for sl in interior.sub_locations:
                 is_current = current_sub_id is not None and current_sub_id == sl.sub_location_id
                 sub_locations.append(SpotGraphSubLocationEntry(
@@ -129,7 +135,7 @@ class SpotGraphCurrentStateBuilder:
                 objects.append(SpotGraphObjectEntry(
                     object_id=obj.object_id.value,
                     name=obj.name,
-                    description=obj.description,
+                    description=obj.resolved_description(world_flags),
                     interactions=interactions,
                 ))
                 actions = [i.action_name for i in obj.interactions]

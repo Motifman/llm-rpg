@@ -12,6 +12,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_INTERACT,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+    TOOL_NAME_SPOT_GRAPH_WAIT,
 )
 from ai_rpg_world.application.world_graph.spot_graph_world_services import SpotGraphWorldServices
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
@@ -48,6 +49,7 @@ class SpotGraphToolExecutor:
             TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION: self._set_sub_location,
             TOOL_NAME_SPOT_GRAPH_EXPLORE: self._explore,
             TOOL_NAME_SPOT_GRAPH_INTERACT: self._interact,
+            TOOL_NAME_SPOT_GRAPH_WAIT: self._wait,
         }
 
     def _travel_to(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
@@ -122,5 +124,24 @@ class SpotGraphToolExecutor:
             )
             msg = "\n".join(out.messages) if out.messages else "操作を実行しました。"
             return LlmCommandResultDto(success=True, message=msg)
+        except Exception as e:
+            return exception_result(e)
+
+    def _wait(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        del player_id
+        reason = str(args.get("reason", "")).strip()
+        if self._svc.simulation is None:
+            return LlmCommandResultDto(
+                success=False,
+                message="wait は現在のワイヤリングでは未対応です。",
+                error_code="UNSUPPORTED_TOOL",
+            )
+        try:
+            tick = self._svc.simulation.tick()
+            suffix = f"（理由: {reason}）" if reason else ""
+            return LlmCommandResultDto(
+                success=True,
+                message=f"待機して時間が進んだ: tick={tick.value}{suffix}",
+            )
         except Exception as e:
             return exception_result(e)

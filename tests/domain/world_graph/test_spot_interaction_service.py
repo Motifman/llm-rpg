@@ -145,3 +145,48 @@ class TestSpotInteractionService:
         )
         assert "power_on" in r.new_flags
         assert r.connection_passability_updates == ((ConnectionId.create(5), True),)
+
+    def test_change_object_state_can_target_other_object(self):
+        switch = SpotObject(
+            object_id=SpotObjectId.create(10),
+            name="Switch",
+            description="",
+            object_type=SpotObjectTypeEnum.SWITCH,
+            state={"on": False},
+            interactions=(
+                InteractionDef(
+                    action_name="toggle",
+                    display_label="切り替える",
+                    preconditions=(InteractionCondition(condition_type=InteractionConditionTypeEnum.ALWAYS),),
+                    effects=(
+                        InteractionEffect(
+                            effect_type=InteractionEffectTypeEnum.CHANGE_OBJECT_STATE,
+                            parameters={
+                                "object_id": 11,
+                                "state_updates": {"open": True},
+                            },
+                        ),
+                    ),
+                ),
+            ),
+        )
+        door = SpotObject(
+            object_id=SpotObjectId.create(11),
+            name="Door",
+            description="",
+            object_type=SpotObjectTypeEnum.DOOR,
+            state={"open": False},
+            interactions=(),
+        )
+        interior = SpotInterior((), (switch, door), (), ())
+        svc = SpotInteractionService()
+        result = svc.execute_interaction(
+            interior,
+            SpotObjectId.create(10),
+            "toggle",
+            frozenset(),
+            frozenset(),
+        )
+        updated_door = result.new_interior.get_object(SpotObjectId.create(11))
+        assert updated_door is not None
+        assert updated_door.state["open"] is True
