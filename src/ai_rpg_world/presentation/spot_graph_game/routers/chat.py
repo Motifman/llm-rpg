@@ -18,7 +18,10 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 async def send_message(request: ChatSendRequest) -> ChatMessageResponse:
     """Send a message as the 'voice from beyond' to a character or scope."""
     manager = get_runtime_manager()
-    return manager.send_chat_message(request)
+    try:
+        return manager.send_chat_message(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get(

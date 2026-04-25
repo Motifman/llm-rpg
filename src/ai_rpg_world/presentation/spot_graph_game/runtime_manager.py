@@ -15,6 +15,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
+from ai_rpg_world.application.observation.services.observation_appender import (
+    ObservationAppender,
+)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.infrastructure.scenario.scenario_id_mapper import ScenarioIdMappingError
 from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
 from ai_rpg_world.presentation.spot_graph_game.schemas import (
@@ -71,6 +76,30 @@ def _read_scenario_metadata(path: Path) -> Optional[Dict[str, Any]]:
 
 
 @dataclass
+class _QueuedTurnTrigger:
+    """Minimal turn scheduler used until the API runtime is wired to real LLM turns."""
+
+    pending_player_ids: set[int] = field(default_factory=set)
+
+    def schedule_turn(self, player_id: PlayerId) -> None:
+        self.pending_player_ids.add(player_id.value)
+
+    def run_scheduled_turns(self) -> None:
+        self.pending_player_ids.clear()
+
+
+@dataclass
+class _ObservationOnlyLlmWiring:
+    """Session-local bridge for chat intervention into the observation buffer."""
+
+    observation_buffer: Any
+    llm_turn_trigger: _QueuedTurnTrigger = field(default_factory=_QueuedTurnTrigger)
+
+    def __post_init__(self) -> None:
+        self.observation_appender = ObservationAppender(self.observation_buffer)
+
+
+@dataclass
 class _SessionState:
     """Lightweight bookkeeping for a running game session."""
 
@@ -83,6 +112,8 @@ class _SessionState:
     speed_multiplier: float = 1.0
 
     runtime: Any = field(default=None, repr=False)
+    llm_wiring: Any = field(default=None, repr=False)
+    pending_llm_turns: set[int] = field(default_factory=set, repr=False)
 
 
 @dataclass
@@ -95,6 +126,9 @@ class GameRuntimeManager:
         default_factory=dict, repr=False
     )
     _sessions: Dict[str, _SessionState] = field(
+        default_factory=dict, repr=False
+    )
+    _chat_histories: Dict[str, list[ChatMessageResponse]] = field(
         default_factory=dict, repr=False
     )
 
@@ -196,6 +230,7 @@ class GameRuntimeManager:
         )
 
         runtime = create_escape_game_runtime(scenario_path)
+        llm_wiring = _ObservationOnlyLlmWiring(runtime._obs_buffer)
 
         sid = uuid.uuid4().hex[:12]
         title = runtime.metadata.title
@@ -207,6 +242,7 @@ class GameRuntimeManager:
             status="running",
             created_at=_utcnow_iso(),
             runtime=runtime,
+            llm_wiring=llm_wiring,
         )
         self._sessions[sid] = state
         logger.info("Session %s created for world %s", sid, request.world_id)
@@ -430,17 +466,78 @@ class GameRuntimeManager:
     def send_chat_message(
         self, request: ChatSendRequest
     ) -> ChatMessageResponse:
-        return ChatMessageResponse(
+        if request.scope != "individual":
+            raise ValueError("Only individual chat scope is currently supported")
+
+        state = self._sessions.get(request.session_id)
+        if state is None:
+            raise ValueError(f"Session not found: {request.session_id}")
+        if state.runtime is None:
+            raise ValueError(f"Session has no active runtime: {request.session_id}")
+
+        runtime = state.runtime
+
+        try:
+            target_player_int = runtime.id_mapper.get_int(
+                "player", request.target_character_id
+            )
+        except (ScenarioIdMappingError, KeyError) as exc:
+            raise ValueError(
+                f"Character not found in session: {request.target_character_id}"
+            ) from exc
+
+        target_player_id = PlayerId(target_player_int)
+        now = datetime.now(timezone.utc)
+        tick = runtime.current_tick() if callable(getattr(runtime, "current_tick", None)) else 0
+        hours = (tick * 5) % (24 * 60)
+        h, m = divmod(hours, 60)
+        time_label = f"深夜 {h}:{m:02d}" if h < 6 else f"{h}:{m:02d}"
+
+        output = ObservationOutput(
+            prose=f"どこからか、あなたに向けた声が届いた: 「{request.message}」",
+            structured={
+                "type": "user_directed_speech",
+                "speaker": "user",
+                "target_character_id": request.target_character_id,
+                "content": request.message,
+                "channel": "direct",
+            },
+            observation_category="social",
+            schedules_turn=True,
+            breaks_movement=False,
+        )
+
+        appender = getattr(state.llm_wiring, "observation_appender", None)
+        if appender is None:
+            buffer = getattr(runtime, "_obs_buffer", None)
+            if buffer is None:
+                raise ValueError("Session runtime does not expose an observation buffer")
+            appender = ObservationAppender(buffer)
+        appender.append(target_player_id, output, now, time_label)
+
+        turn_trigger = getattr(state.llm_wiring, "llm_turn_trigger", None)
+        if turn_trigger is not None:
+            turn_trigger.schedule_turn(target_player_id)
+        else:
+            state.pending_llm_turns.add(target_player_id.value)
+
+        message = ChatMessageResponse(
             sender="player",
             message=request.message,
             timestamp=_utcnow_iso(),
             is_player=True,
         )
+        key = f"{request.session_id}:{request.target_character_id}"
+        self._chat_histories.setdefault(key, []).append(message)
+        self._chat_histories.setdefault(request.target_character_id, []).append(message)
+        return message
 
     def get_chat_history(
         self, character_id: str
     ) -> Optional[ChatHistoryResponse]:
-        return None
+        return ChatHistoryResponse(
+            messages=list(self._chat_histories.get(character_id, []))
+        )
 
     # ── Results (stub) ──
 

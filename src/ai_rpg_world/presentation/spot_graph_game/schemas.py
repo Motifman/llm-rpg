@@ -193,8 +193,9 @@ class EventLogResponse(BaseModel):
 
 
 class ChatSendRequest(BaseModel):
+    session_id: str = Field(..., min_length=1)
     message: str = Field(..., min_length=1, max_length=2000)
-    target_character_id: Optional[str] = None
+    target_character_id: str = Field(..., min_length=1)
     scope: str = Field(default="individual", pattern=r"^(individual|spot|world)$")
 
 

@@ -71,6 +71,7 @@ class SystemPromptPlayerInfoDto:
     race: str
     element: str
     game_description: str
+    persona_block: str = ""
 
     def __post_init__(self) -> None:
         if not isinstance(self.player_name, str):
@@ -83,6 +84,8 @@ class SystemPromptPlayerInfoDto:
             raise TypeError("element must be str")
         if not isinstance(self.game_description, str):
             raise TypeError("game_description must be str")
+        if not isinstance(self.persona_block, str):
+            raise TypeError("persona_block must be str")
 
 
 @dataclass(frozen=True)

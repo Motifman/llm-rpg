@@ -117,6 +117,13 @@ from ai_rpg_world.application.llm.services.recent_events_formatter import (
 from ai_rpg_world.application.llm.services.system_prompt_builder import (
     DefaultSystemPromptBuilder,
 )
+from ai_rpg_world.application.llm.contracts.persona import (
+    AgentPersonaDto,
+    PersonaPromptPolicy,
+)
+from ai_rpg_world.application.llm.services.persona_prompt_fragment_builder import (
+    PersonaPromptFragmentBuilder,
+)
 from ai_rpg_world.application.llm.services.sliding_window_memory import (
     DefaultSlidingWindowMemory,
 )
@@ -678,6 +685,7 @@ def _build_prompt_stack(
     episode_memory_store: IEpisodeMemoryStore,
     long_term_memory_store: ILongTermMemoryStore,
     tile_map_view_distance: int,
+    persona_block_provider: Optional[Callable[[PlayerId], str]] = None,
 ) -> DefaultPromptBuilder:
     """
     predictive_retriever と prompt_builder を構築する。
@@ -699,8 +707,34 @@ def _build_prompt_stack(
         available_tools_provider=available_tools_provider,
         ui_context_builder=ui_context_builder,
         predictive_memory_retriever=predictive_retriever,
+        persona_block_provider=persona_block_provider,
         tile_map_view_distance=tile_map_view_distance,
     )
+
+
+def _build_persona_block_provider(
+    persona_store: Optional[Any],
+    persona_prompt_policy: Optional[PersonaPromptPolicy],
+) -> Optional[Callable[[PlayerId], str]]:
+    if persona_store is None:
+        return None
+    fragment_builder = PersonaPromptFragmentBuilder(persona_prompt_policy)
+
+    def _provider(player_id: PlayerId) -> str:
+        persona = None
+        if callable(persona_store):
+            persona = persona_store(player_id)
+        elif callable(getattr(persona_store, "get_persona", None)):
+            persona = persona_store.get_persona(player_id)
+        elif callable(getattr(persona_store, "find_by_id", None)):
+            persona = persona_store.find_by_id(player_id)
+        if persona is None:
+            return ""
+        if not isinstance(persona, AgentPersonaDto):
+            raise TypeError("persona_store must return AgentPersonaDto or None")
+        return fragment_builder.build(persona)
+
+    return _provider
 
 
 def _build_memory_stack(
@@ -747,6 +781,8 @@ class LlmAgentWiringResult:
         observation_registry: "ObservationEventHandlerRegistry",
         llm_turn_trigger: ILlmTurnTrigger,
         reflection_runner: Optional[IReflectionRunner] = None,
+        observation_buffer: Optional[IObservationContextBuffer] = None,
+        observation_appender: Optional[ObservationAppender] = None,
         sns_mode_session: Optional[Any] = None,
         sns_page_session: Optional[Any] = None,
         trade_page_session: Optional[Any] = None,
@@ -754,6 +790,13 @@ class LlmAgentWiringResult:
         self.observation_registry = observation_registry
         self.llm_turn_trigger = llm_turn_trigger
         self.reflection_runner = reflection_runner
+        self.observation_buffer = observation_buffer
+        if observation_appender is not None:
+            self.observation_appender = observation_appender
+        elif observation_buffer is not None:
+            self.observation_appender = ObservationAppender(observation_buffer)
+        else:
+            self.observation_appender = None
         self.sns_mode_session = sns_mode_session
         self.sns_page_session = sns_page_session
         self.trade_page_session = trade_page_session
@@ -826,6 +869,9 @@ def create_llm_agent_wiring(
     llm_player_resolver: Optional[ILLMPlayerResolver] = None,
     max_turns: int = 5,
     llm_view_distance: Optional[int] = None,
+    system_prompt_template: Optional[str] = None,
+    persona_store: Optional[Any] = None,
+    persona_prompt_policy: Optional[PersonaPromptPolicy] = None,
 ) -> "LlmAgentWiringResult":
     """
     LLM エージェント用の観測ハンドラ登録用 Registry と LlmTurnTrigger を組み立てて返す。
@@ -859,8 +905,15 @@ def create_llm_agent_wiring(
     ui_context_builder = DefaultLlmUiContextBuilder()
     recent_events_formatter = DefaultRecentEventsFormatter()
     context_format_strategy = SectionBasedContextFormatStrategy()
-    system_prompt_builder = DefaultSystemPromptBuilder()
+    system_prompt_builder = (
+        DefaultSystemPromptBuilder(template=system_prompt_template)
+        if system_prompt_template is not None
+        else DefaultSystemPromptBuilder()
+    )
     game_tool_registry = DefaultGameToolRegistry()
+    persona_block_provider = _build_persona_block_provider(
+        persona_store, persona_prompt_policy
+    )
 
     if llm_view_distance is not None:
         effective_view_distance = llm_view_distance
@@ -992,6 +1045,7 @@ def create_llm_agent_wiring(
         episode_memory_store=episode_memory_store,
         long_term_memory_store=long_term_memory_store,
         tile_map_view_distance=effective_view_distance,
+        persona_block_provider=persona_block_provider,
     )
     orchestrator = LlmAgentOrchestrator(
         prompt_builder=prompt_builder,
@@ -1043,6 +1097,8 @@ def create_llm_agent_wiring(
         observation_registry=observation_registry,
         llm_turn_trigger=llm_turn_trigger,
         reflection_runner=reflection_runner,
+        observation_buffer=buffer,
+        observation_appender=ObservationAppender(buffer),
         sns_mode_session=sns_mode_session,
         sns_page_session=sns_page_session,
         trade_page_session=trade_page_session,
