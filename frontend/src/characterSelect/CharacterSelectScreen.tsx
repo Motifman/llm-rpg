@@ -90,12 +90,6 @@ export function CharacterSelectScreen({
     <div className="cs-root game-screen" lang="ja">
       <GameScreenBackground
         imageSrc={world.imageSrc}
-        watermark={
-          <>
-            <span>{world.protocolCode}</span>
-            <strong>{world.title}</strong>
-          </>
-        }
       />
       <AmbientMonitoringLayer variant="world" />
 
