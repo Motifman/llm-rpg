@@ -3,6 +3,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AmbientMonitoringLayer } from "../ambient/AmbientMonitoringLayer";
 import "../prologue/PrologueScreen.css";
 import {
+  GameButton,
+  GameFrameButton,
+  GameProtocolButton,
+} from "../ui/GameUi";
+import {
   DEFAULT_GATE_GIRL_SRC,
   GATE_GIRL_MOMENTS,
   GATE_GIRL_MOMENT_MS,
@@ -226,18 +231,21 @@ export function WorldSelectScreen({ onBack, onPickWorld }: WorldSelectScreenProp
   const nextWorld = WORLDS[(index + 1) % worldCount];
 
   return (
-    <div className="ws-root" lang="ja">
+    <div className="ws-root game-screen" lang="ja">
       <BackgroundLayer world={selected} />
       <AmbientMonitoringLayer variant="world" />
 
       <div className="ws-shell">
         <header className="ws-chrome">
-          <button className="prologue-ts-btn" onClick={onBack} type="button">
-            <span className="prologue-ts-btn-icon" aria-hidden>
-              arrow_back
-            </span>
-            <span className="prologue-ts-btn-label">もどる</span>
-          </button>
+          <GameButton
+            aria-label="もどる"
+            className="ws-back-button"
+            icon="arrow_back"
+            label="もどる"
+            onClick={onBack}
+            type="button"
+            variant="ghost"
+          />
           <div className="ws-chrome-fill" aria-hidden />
           <div className="ws-telemetry" aria-hidden>
             <div>
@@ -260,16 +268,13 @@ export function WorldSelectScreen({ onBack, onPickWorld }: WorldSelectScreenProp
             aria-label="実験ワールドカード"
             onWheel={onWheel}
           >
-            <button
-              type="button"
-              className="ws-reel-nav ws-reel-nav--prev"
-              onClick={goPrev}
+            <GameFrameButton
               aria-label="前のワールドへ"
-            >
-              <span className="material-symbols-outlined" aria-hidden>
-                chevron_left
-              </span>
-            </button>
+              className="ws-reel-nav ws-reel-nav--prev"
+              icon="chevron_left"
+              onClick={goPrev}
+              type="button"
+            />
 
             <div className="ws-reel-stage">
               <SidePeek world={prevWorld} dir="prev" />
@@ -281,16 +286,13 @@ export function WorldSelectScreen({ onBack, onPickWorld }: WorldSelectScreenProp
               </div>
             </div>
 
-            <button
-              type="button"
-              className="ws-reel-nav ws-reel-nav--next"
-              onClick={goNext}
+            <GameFrameButton
               aria-label="次のワールドへ"
-            >
-              <span className="material-symbols-outlined" aria-hidden>
-                chevron_right
-              </span>
-            </button>
+              className="ws-reel-nav ws-reel-nav--next"
+              icon="chevron_right"
+              onClick={goNext}
+              type="button"
+            />
           </section>
         </main>
 
@@ -580,24 +582,25 @@ function DialogueBar({ contentKey, line, lineVariant = "guide", onStart }: Dialo
             </div>
           </div>
           <div className="ws-dialogue-actions">
-            <button
+            <GameButton
               type="button"
-              className="ws-btn-tertiary"
+              className="ws-btn-secondary"
+              icon="more_horiz"
+              label="もう少し考える"
+              sublabel="RECONSIDER"
+              variant="ghost"
               onClick={() => {
                 /* もう少し考える */
               }}
-            >
-              もう少し考える
-            </button>
-            <button
-              type="button"
+            />
+            <GameProtocolButton
               className="ws-btn-primary"
-              onClick={onStart}
               disabled={!onStart}
-            >
-              <span className="ws-btn-primary-jp">実験を開始する</span>
-              <span className="ws-btn-primary-en">INITIATE EXPERIMENT</span>
-            </button>
+              label="実験を開始する"
+              onClick={onStart}
+              sublabel="INITIATE EXPERIMENT"
+              type="button"
+            />
           </div>
         </div>
       </div>
