@@ -287,15 +287,19 @@
   position: absolute;
   z-index: 8;
   top: 70%;
-  width: 4.2rem;
-  height: 4.2rem;
+  width: 4.8rem;
+  height: 4.8rem;
   border-radius: 1px;
   color: rgba(255, 221, 153, 0.88);
-  background:
-    linear-gradient(135deg, rgba(244, 189, 103, 0.16), transparent 45%),
-    rgba(6, 8, 12, 0.64);
-  outline-color: rgba(244, 189, 103, 0.34);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
+  background: transparent;
+  outline: none;
+  box-shadow: none;
+  text-shadow: 0 0 18px rgba(244, 189, 103, 0.35);
+}
+
+.cs-arrow .material-symbols-outlined {
+  font-size: 2.9rem;
+  font-variation-settings: "FILL" 0, "wght" 200;
 }
 
 .cs-arrow--prev {
