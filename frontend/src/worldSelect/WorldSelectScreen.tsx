@@ -262,6 +262,11 @@ export function WorldSelectScreen({ onBack, onPickWorld }: WorldSelectScreenProp
           </div>
         </header>
 
+        <section className="ws-title-block" aria-label="画面タイトル">
+          <h1>WORLD SELECT</h1>
+          <p>ワールドを選択して下さい</p>
+        </section>
+
         <main className="ws-main">
           <section
             className="ws-reel"
@@ -565,9 +570,6 @@ function DialogueBar({ contentKey, line, lineVariant = "guide", onStart }: Dialo
   return (
     <div className="ws-dialogue">
       <div className="ws-dialogue-shell prologue-text-panel-shell">
-        <div className="prologue-panel-titlebar">
-          <span className="prologue-panel-title">門前の少女</span>
-        </div>
         <div className="prologue-text-panel">
           <div className="prologue-panel-body">
             <div className="prologue-terminal-mark" aria-hidden>
@@ -576,6 +578,7 @@ function DialogueBar({ contentKey, line, lineVariant = "guide", onStart }: Dialo
               </span>
             </div>
             <div className="prologue-body">
+              <span className="ws-dialogue-speaker">門前の少女</span>
               <p className={lineClass} key={contentKey}>
                 {line}
               </p>
