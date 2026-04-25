@@ -17,6 +17,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ISlidingWindowMemory,
     IActionResultStore,
 )
+from ai_rpg_world.application.llm.contracts.persona import PersonaPromptPolicy
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
     SpotGraphToolExecutor,
 )
@@ -120,6 +121,9 @@ def create_spot_graph_wiring(
     llm_player_resolver: Optional[ILLMPlayerResolver] = None,
     max_turns: int = 5,
     llm_view_distance: Optional[int] = None,
+    system_prompt_template: Optional[str] = None,
+    persona_store: Optional[Any] = None,
+    persona_prompt_policy: Optional[PersonaPromptPolicy] = None,
 ) -> "LlmAgentWiringResult":
     """スポットグラフ用に LLM 観測・ツール・プロンプトを組み立てる（タイル移動なし）。"""
     # 遅延 import: wiring/__init__.py の循環を避ける
@@ -129,6 +133,7 @@ def create_spot_graph_wiring(
         _ENV_LLM_VIEW_DISTANCE,
         _build_memory_stack,
         _build_observation_stack,
+        _build_persona_block_provider,
         _build_prompt_stack,
         _build_reflection_stack,
         _build_tool_stack,
@@ -164,6 +169,9 @@ def create_spot_graph_wiring(
     from ai_rpg_world.application.llm.services.ui_context_builder import DefaultLlmUiContextBuilder
     from ai_rpg_world.application.observation.services.observation_context_buffer import (
         DefaultObservationContextBuffer,
+    )
+    from ai_rpg_world.application.observation.services.observation_appender import (
+        ObservationAppender,
     )
     from ai_rpg_world.application.observation.services.observation_formatter import (
         ObservationFormatter,
@@ -205,8 +213,15 @@ def create_spot_graph_wiring(
     ui_context_builder = SpotGraphUiContextBuilder()
     recent_events_formatter = DefaultRecentEventsFormatter()
     context_format_strategy = SectionBasedContextFormatStrategy()
-    system_prompt_builder = DefaultSystemPromptBuilder()
+    system_prompt_builder = (
+        DefaultSystemPromptBuilder(template=system_prompt_template)
+        if system_prompt_template is not None
+        else DefaultSystemPromptBuilder()
+    )
     game_tool_registry = DefaultGameToolRegistry()
+    persona_block_provider = _build_persona_block_provider(
+        persona_store, persona_prompt_policy
+    )
 
     if llm_view_distance is not None:
         effective_view_distance = llm_view_distance
@@ -347,6 +362,7 @@ def create_spot_graph_wiring(
         episode_memory_store=episode_memory_store,
         long_term_memory_store=long_term_memory_store,
         tile_map_view_distance=effective_view_distance,
+        persona_block_provider=persona_block_provider,
     )
     orchestrator = LlmAgentOrchestrator(
         prompt_builder=prompt_builder,
@@ -413,6 +429,8 @@ def create_spot_graph_wiring(
         observation_registry=observation_registry,
         llm_turn_trigger=llm_turn_trigger,
         reflection_runner=reflection_runner,
+        observation_buffer=buffer,
+        observation_appender=ObservationAppender(buffer),
         sns_mode_session=sns_mode_session,
         sns_page_session=sns_page_session,
         trade_page_session=trade_page_session,

@@ -1,7 +1,7 @@
 """1 ターン分のプロンプト組み立てのデフォルト実装"""
 
 from importlib import import_module
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import SystemPromptPlayerInfoDto
 from ai_rpg_world.application.llm.contracts.interfaces import (
@@ -55,6 +55,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         available_tools_provider: IAvailableToolsProvider,
         ui_context_builder: Optional[ILlmUiContextBuilder] = None,
         predictive_memory_retriever: Optional[IPredictiveMemoryRetriever] = None,
+        persona_block_provider: Optional[Callable[[PlayerId], str]] = None,
         recent_observations_limit: int = DEFAULT_RECENT_OBSERVATIONS_LIMIT,
         recent_actions_limit: int = DEFAULT_RECENT_ACTIONS_LIMIT,
         default_action_instruction: str = DEFAULT_ACTION_INSTRUCTION,
@@ -90,6 +91,8 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError(
                 "predictive_memory_retriever must be IPredictiveMemoryRetriever or None"
             )
+        if persona_block_provider is not None and not callable(persona_block_provider):
+            raise TypeError("persona_block_provider must be callable or None")
         if recent_observations_limit < 0:
             raise ValueError("recent_observations_limit must be 0 or greater")
         if recent_actions_limit < 0:
@@ -117,6 +120,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             )
             self._ui_context_builder = builder_module.DefaultLlmUiContextBuilder()
         self._predictive_memory_retriever = predictive_memory_retriever
+        self._persona_block_provider = persona_block_provider
         self._recent_observations_limit = recent_observations_limit
         self._recent_actions_limit = recent_actions_limit
         self._default_action_instruction = default_action_instruction
@@ -142,6 +146,11 @@ class DefaultPromptBuilder(IPromptBuilder):
             race=profile.race.value,
             element=profile.element.value,
             game_description="",
+            persona_block=(
+                self._persona_block_provider(player_id)
+                if self._persona_block_provider is not None
+                else ""
+            ),
         )
 
         # 2. drain してスライディングウィンドウに append（溢れは記憶抽出用に返す）
