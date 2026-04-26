@@ -63,9 +63,9 @@ class TestEscapeGameScenarioLoad:
         p1 = PlayerId(runtime.scenario.player_spawns[0].player_id)
         full = runtime.build_full_prompt(p1)
         assert "【現在の目的】" in full["user"]
-        assert "【発見済み証拠" in full["user"]
-        assert "【未解決の仮説" in full["user"]
-        assert "【関連する記憶" in full["user"]
+        assert "【所持・判明した物証】" in full["user"]
+        assert "【仮説・作業メモ（未確定）】" in full["user"]
+        assert "【関連する思い出（エピソード）】" in full["user"]
 
     def test_tick_limit_yields_lose(self) -> None:
         runtime = _create_runtime()

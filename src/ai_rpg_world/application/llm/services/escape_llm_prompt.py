@@ -217,6 +217,10 @@ def build_escape_system_prompt(
 - working_memory_append: 仮説や気づきを作業メモに残す。
 - todo_add / todo_list / todo_complete: 次に試す行動を TODO として整理する。
 - spot_graph_wait: その場で短く待機し、時間経過による変化を観測する。
+
+【文脈と履歴の限界】
+- 続く user 文面には、直近の観測・行動・抜粋されたメモしか載らない（全履歴の写しではない）。
+- 本文に現れない古い事実や、省略された経緯を辿る必要があるときは memory_query（例: recent_events, episodic, facts）で取りにいく。
 """
     if enable_string_seed_of_thought:
         return body.rstrip() + "\n\n" + _ESCAPE_STRING_SEED_OF_THOUGHT_BLOCK + "\n"
@@ -236,11 +240,11 @@ def format_episode_snippets_for_prompt(entries: list, limit: int = 5) -> str:
         )
         if one.strip():
             lines.append(f"- {one.strip()}")
-    return "\n".join(lines) if lines else "（まだ関連する想起は少ない）"
+    return "\n".join(lines) if lines else "（まだ関連する思い出は少ない）"
 
 
 def format_working_memory_for_prompt(texts: list[str], limit: int = 8) -> str:
-    """作業メモを「未解決の仮説」欄向けに整形。"""
+    """作業メモを「仮説・作業メモ（未確定）」欄向けに整形。"""
     if not texts:
         return "（未記録。必要なら working_memory_append で仮説を残す）"
     out: list[str] = []
@@ -249,14 +253,3 @@ def format_working_memory_for_prompt(texts: list[str], limit: int = 8) -> str:
         if s:
             out.append(f"- {s[:200]}")
     return "\n".join(out) if out else "（未記録）"
-
-
-def suggest_next_actions_from_targets(targets: dict) -> str:
-    """ツール解決用ラベルから、次に試せそうな行動のヒントを列挙する。"""
-    if not targets:
-        return "（状況表示から接続・オブジェクトを確認する）"
-    lines: list[str] = []
-    for label, t in list(targets.items())[:12]:
-        desc = getattr(t, "display_name", None) or getattr(t, "label", str(label))
-        lines.append(f"- [{label}] {desc}")
-    return "\n".join(lines)

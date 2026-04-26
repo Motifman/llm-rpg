@@ -107,6 +107,8 @@ def test_escape_system_prompt_mentions_user_message_semantics() -> None:
     assert "inner_thought" in system
     assert "【ペルソナ】の口調" in system or "口調に揃え" in system
     assert "String Seed of Thought" not in system
+    assert "文脈と履歴の限界" in system
+    assert "memory_query" in system
 
 
 def test_escape_system_prompt_includes_ssot_when_enabled() -> None:

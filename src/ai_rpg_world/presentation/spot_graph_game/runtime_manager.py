@@ -20,6 +20,9 @@ from ai_rpg_world.application.observation.services.observation_appender import (
     ObservationAppender,
 )
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.services.tool_executor_helpers import (
+    with_inner_thought_empty_warning,
+)
 from ai_rpg_world.application.llm.services.escape_llm_prompt import (
     EscapeCharacterPromptInput,
 )
@@ -269,7 +272,9 @@ class _EscapeGameLlmWiring:
                 if not result.discovery_descriptions
                 else "発見: " + " / ".join(result.discovery_descriptions)
             )
-            return LlmCommandResultDto(success=True, message=message)
+            return with_inner_thought_empty_warning(
+                name, arguments, LlmCommandResultDto(success=True, message=message)
+            )
 
         if name == TOOL_NAME_SPOT_GRAPH_TRAVEL_TO:
             label = str(arguments.get("destination_label", ""))
@@ -283,9 +288,13 @@ class _EscapeGameLlmWiring:
                 )
             destination_id = self.runtime.id_mapper.get_str("spot", target.spot_id)
             self.runtime.do_move(player_id, destination_id)
-            return LlmCommandResultDto(
-                success=True,
-                message=f"{target.display_name}へ移動しました。",
+            return with_inner_thought_empty_warning(
+                name,
+                arguments,
+                LlmCommandResultDto(
+                    success=True,
+                    message=f"{target.display_name}へ移動しました。",
+                ),
             )
 
         if name == TOOL_NAME_SPOT_GRAPH_INTERACT:
@@ -301,18 +310,26 @@ class _EscapeGameLlmWiring:
                 )
             object_id = self.runtime.id_mapper.get_str("object", target.world_object_id)
             result = self.runtime.do_interact(player_id, object_id, action_name)
-            return LlmCommandResultDto(
-                success=True,
-                message="; ".join(result.messages) if result.messages else "完了",
+            return with_inner_thought_empty_warning(
+                name,
+                arguments,
+                LlmCommandResultDto(
+                    success=True,
+                    message="; ".join(result.messages) if result.messages else "完了",
+                ),
             )
 
         if name == TOOL_NAME_SPOT_GRAPH_WAIT:
             reason = str(arguments.get("reason", "")).strip()
             tick = self.runtime.do_wait(player_id, reason=reason)
             suffix = f"（理由: {reason}）" if reason else ""
-            return LlmCommandResultDto(
-                success=True,
-                message=f"待機して時間が進んだ: tick={tick}{suffix}",
+            return with_inner_thought_empty_warning(
+                name,
+                arguments,
+                LlmCommandResultDto(
+                    success=True,
+                    message=f"待機して時間が進んだ: tick={tick}{suffix}",
+                ),
             )
 
         if name == TOOL_NAME_SAY:
