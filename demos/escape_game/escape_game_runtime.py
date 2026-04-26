@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -125,7 +124,6 @@ from ai_rpg_world.application.llm.services.escape_llm_prompt import (
     format_episode_snippets_for_prompt,
     format_working_memory_for_prompt,
     safe_world_intro_text,
-    suggest_next_actions_from_targets,
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
 from ai_rpg_world.application.observation.services.observation_context_buffer import DefaultObservationContextBuffer
@@ -523,8 +521,6 @@ class EscapeGameRuntime:
         wm_texts = self._working_memory_store.get_recent(player_id, 12)
         hypothesis_block = format_working_memory_for_prompt(wm_texts, limit=8)
         long_term_block = self._format_long_term_snippets(player_id, spot_kw)
-        targets = getattr(ctx.tool_runtime_context, "targets", {}) or {}
-        next_hints = suggest_next_actions_from_targets(targets)
         inventory_block = self._format_inventory_evidence(player_id)
 
         user_content = "\n".join(
@@ -537,143 +533,21 @@ class EscapeGameRuntime:
                 current_state_text.strip() or "（情報なし）",
                 "",
                 "【直近の出来事】",
+                "観測（世界から届いた事象）と、あなた自身の行動の結果が時系列に並びます。",
+                "古い行動や本文に含まれない事実を辿る必要がある場合は memory_query（例: recent_events, episodic, facts）を使ってください。",
                 recent_events_text.strip() or "（なし）",
                 "",
-                "【発見済み証拠（所持・判明した物証）】",
+                "【所持・判明した物証】",
                 inventory_block,
                 "",
-                "【未解決の仮説・作業メモ】",
+                "【仮説・作業メモ（未確定）】",
                 hypothesis_block,
                 "",
-                "【長期メモ（事実の抜粋）】",
+                "【確定した事実（長期メモの抜粋）】",
                 long_term_block,
                 "",
-                "【関連する記憶（想起）】",
+                "【関連する思い出（エピソード）】",
                 related_mem,
-                "",
-                "【次に試せそうなこと（候補）】",
-                next_hints,
-                "",
-                "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。",
-            ]
-        )
-
-        system_content = self.build_system_prompt(player_id)
-        return {
-            "system": system_content,
-            "user": user_content,
-            "tools": [d.name for d in self.get_tool_definitions()],
-            "tool_runtime_context": ctx.tool_runtime_context,
-        }
-
-    @staticmethod
-    def format_action_log_for_prompt(
-        action_log_entries: Sequence[Mapping[str, Any]],
-        *,
-        limit: int = 12,
-    ) -> str:
-        """行動履歴（呼び出し側が集約する辞書列）を user 用テキストにする。
-
-        想定するキー: ``when``, ``where``, ``what``, ``result``。欠けたキーは空扱い。
-        観測（スライド窩）とは切り分け、ここはエージェント操作の辿りやすい要約用。
-        """
-        if not action_log_entries:
-            return "（まだ行動の記録はありません）"
-        lines: List[str] = []
-        for entry in list(action_log_entries)[-limit:]:
-            when = entry.get("when", "")
-            where = entry.get("where", "")
-            what = entry.get("what", "")
-            result = entry.get("result", "")
-            lines.append(
-                "- "
-                f"時刻: {when} / "
-                f"場所: {where} / "
-                f"行動: {what} / "
-                f"結果: {result}"
-            )
-        return "\n".join(lines)
-
-    def build_full_prompt_with_action_log(
-        self,
-        player_id: PlayerId,
-        action_log_entries: Sequence[Mapping[str, Any]] = (),
-        *,
-        action_log_limit: int = 12,
-    ) -> dict:
-        """LLM 向け user を組む（:meth:`build_full_prompt` 相当＋行動履歴の切り出し）。
-
-        * **観測** — スライド窩の ``ObservationEntry`` のみ
-          :class:`DefaultRecentEventsFormatter`（行動ストアに渡さないため、
-          エンジン観測と呼び出し側の行動行の二重出しにしない）
-        * **行動** — 引数 ``action_log_entries``（時刻・場所・行動・結果）を
-          :meth:`format_action_log_for_prompt` で整形
-
-        本番 `run_escape_game` 既定の :meth:`build_full_prompt`（観測＋行動ストアを
-        1 本にマージ）の代替ではなく、**オーケストラ層が行動行を自前集約**するとき用。
-        """
-        self._wire_memory_stack()
-        evicted = self._drain_buffer_to_sliding_window(player_id)
-        self._memory_overflow_for_next_commit[player_id.value] = evicted
-
-        ctx = self.build_llm_context(player_id)
-        current_state_text = ctx.current_state_text
-
-        recent_fmt = DefaultRecentEventsFormatter()
-        recent_obs = self._sliding_window.get_recent(player_id, 20)
-        if not recent_obs:
-            observation_text = "（観測の記録はまだありません）"
-        else:
-            observation_text = (
-                recent_fmt.format(recent_obs, []).strip() or "（観測の記録はまだありません）"
-            )
-        action_text = self.format_action_log_for_prompt(
-            action_log_entries, limit=action_log_limit
-        )
-
-        snap = self._state_builder.build_snapshot(int(player_id))
-        spot_kw = (snap.current_spot_name or "").strip() if snap is not None else ""
-
-        episodes = self._episode_memory_store.get_recent(player_id, 8)
-        related_mem = format_episode_snippets_for_prompt(episodes, limit=5)
-        wm_texts = self._working_memory_store.get_recent(player_id, 12)
-        hypothesis_block = format_working_memory_for_prompt(wm_texts, limit=8)
-        long_term_block = self._format_long_term_snippets(player_id, spot_kw)
-        targets = getattr(ctx.tool_runtime_context, "targets", {}) or {}
-        next_hints = suggest_next_actions_from_targets(targets)
-        inventory_block = self._format_inventory_evidence(player_id)
-
-        user_content = "\n".join(
-            [
-                "【現在の目的】",
-                "- この廃墟から外へ脱出する。",
-                "- 必要なら手がかり（物証・記録）を集め、判断材料にする。",
-                "",
-                "【現在地と周囲】",
-                current_state_text.strip() or "（情報なし）",
-                "",
-                "【直近の出来事：観測】",
-                "世界から届いた事象（天候の変化・他者の発話の観測・シナリオの通知など）です。",
-                observation_text,
-                "",
-                "【直近の出来事：行動（時刻・場所・行動・結果）】",
-                "あなた（エージェント）が前のステップまでに取った操作の要約です。",
-                action_text,
-                "",
-                "【発見済み証拠（所持・判明した物証）】",
-                inventory_block,
-                "",
-                "【未解決の仮説・作業メモ】",
-                hypothesis_block,
-                "",
-                "【長期メモ（事実の抜粋）】",
-                long_term_block,
-                "",
-                "【関連する記憶（想起）】",
-                related_mem,
-                "",
-                "【次に試せそうなこと（候補）】",
-                next_hints,
                 "",
                 "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。",
             ]
@@ -689,6 +563,41 @@ class EscapeGameRuntime:
 
     # ── アクション実行 ──
 
+    @staticmethod
+    def _interaction_action_label_ja(action_name: str) -> str:
+        key = (action_name or "").strip().lower()
+        known = {
+            "open": "開く",
+            "close": "閉じる",
+            "examine": "調べる",
+            "search": "探す",
+            "read": "読む",
+            "use": "使う",
+            "take": "取る",
+            "push": "押す",
+            "pull": "引く",
+        }
+        return known.get(key, action_name or "操作")
+
+    def _object_display_name_at_player_spot(
+        self, player_id: PlayerId, object_str_id: str,
+    ) -> str:
+        try:
+            obj_int = self.id_mapper.get_int("object", object_str_id)
+            oid = SpotObjectId.create(obj_int)
+            graph = self._spot_graph_repo.find_graph()
+            eid = EntityId.create(int(player_id))
+            spot_id = graph.get_entity_spot(eid)
+            interior = self._spot_interior_repo.find_by_spot_id(spot_id)
+            if interior is None:
+                return object_str_id
+            obj = interior.get_object(oid)
+            if obj is None:
+                return object_str_id
+            return obj.name.strip() or object_str_id
+        except Exception:
+            return object_str_id
+
     def do_interact(
         self, player_id: PlayerId, object_str_id: str, action_name: str,
     ) -> SpotInteractionResultDto:
@@ -698,6 +607,8 @@ class EscapeGameRuntime:
         graph = self._spot_graph_repo.find_graph()
         eid = EntityId.create(int(player_id))
         spot_id = graph.get_entity_spot(eid)
+        obj_label = self._object_display_name_at_player_spot(player_id, object_str_id)
+        action_ja = self._interaction_action_label_ja(action_name)
         result = self._interaction_service.execute_interaction(
             player_id, obj_id, action_name,
         )
@@ -713,7 +624,11 @@ class EscapeGameRuntime:
             result_message=result_text,
         ))
         self._process_graph_events()
-        self._record_action_result(player_id, f"interact({object_str_id}, {action_name})", result_text)
+        self._record_action_result(
+            player_id,
+            f"「{obj_label}」に対して{action_ja}を行った",
+            result_text,
+        )
         return result
 
     def do_explore(self, player_id: PlayerId) -> SpotExplorationResultDto:
@@ -721,6 +636,7 @@ class EscapeGameRuntime:
         graph = self._spot_graph_repo.find_graph()
         eid = EntityId.create(int(player_id))
         spot_id = graph.get_entity_spot(eid)
+        spot_name = self.get_player_spot_name(player_id)
         result = self._exploration_service.explore_once(player_id)
         graph = self._spot_graph_repo.find_graph()
         graph.add_event(SpotExploredEvent.create(
@@ -731,11 +647,19 @@ class EscapeGameRuntime:
             discoveries=result.discovery_descriptions,
         ))
         self._process_graph_events()
-        result_text = f"発見: {', '.join(result.discovery_descriptions)}" if result.discovery_descriptions else "新しい発見はなかった"
-        self._record_action_result(player_id, "explore_sub_locations()", result_text)
+        if result.discovery_descriptions:
+            result_text = f"新たに分かったこと: {', '.join(result.discovery_descriptions)}"
+        else:
+            result_text = "目立った発見はなかった"
+        self._record_action_result(
+            player_id,
+            f"「{spot_name}」の周辺を探索した",
+            result_text,
+        )
         return result
 
     def do_move(self, player_id: PlayerId, dest_spot_str_id: str) -> None:
+        from_name = self.get_player_spot_name(player_id)
         dest_int = self.id_mapper.get_int("spot", dest_spot_str_id)
         dest_sid = SpotId.create(dest_int)
         inv = self._player_inventory_repo.find_by_id(player_id)
@@ -753,12 +677,27 @@ class EscapeGameRuntime:
                 break
         self._process_graph_events()
         dest_name = self._spot_graph_repo.find_graph().get_spot(dest_sid).name
-        self._record_action_result(player_id, f"travel_to({dest_spot_str_id})", f"{dest_name}に到着した")
+        self._record_action_result(
+            player_id,
+            f"「{from_name}」から「{dest_name}」へ移動した",
+            f"「{dest_name}」に到着した",
+        )
 
     def do_wait(self, player_id: PlayerId, reason: str = "") -> int:
         tick = self.advance_tick()
-        note = f"wait({reason})" if reason else "wait()"
-        self._record_action_result(player_id, note, f"時間が進んだ（tick={tick}）")
+        r = (reason or "").strip()
+        if r:
+            self._record_action_result(
+                player_id,
+                f"待機した（理由: {r}）",
+                f"時間が進んだ（tick={tick}）",
+            )
+        else:
+            self._record_action_result(
+                player_id,
+                "短く待機した",
+                f"時間が進んだ（tick={tick}）",
+            )
         return tick
 
     def _append_scenario_event_observation(self, event: ScenarioEventDef, message: str) -> None:
