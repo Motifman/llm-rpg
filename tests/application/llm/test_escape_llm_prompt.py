@@ -87,3 +87,18 @@ def test_escape_system_prompt_mentions_user_message_semantics() -> None:
     assert "1名しかいない" in system or "他者" in system
     assert "inner_thought" in system
     assert "【ペルソナ】の口調" in system or "口調に揃え" in system
+    assert "String Seed of Thought" not in system
+
+
+def test_escape_system_prompt_includes_ssot_when_enabled() -> None:
+    system = build_escape_system_prompt(
+        world_title="テスト廃墟",
+        persona_block="【ペルソナ】\n- 名前: X",
+        safe_intro="廃墟から出る。",
+        participant_names=("X",),
+        enable_string_seed_of_thought=True,
+    )
+    assert "String Seed of Thought" in system
+    assert "SSoT" in system
+    assert "辞書順" in system
+    assert "割った余り" in system

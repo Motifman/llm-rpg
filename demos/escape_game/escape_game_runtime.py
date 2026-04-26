@@ -10,6 +10,7 @@ LLM エージェントが**実際に**受け取る観測テキスト・ツール
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -662,6 +663,12 @@ class EscapeGameRuntime:
         return graph.get_spot(spot_id).name
 
 
+def _escape_llm_ssot_enabled_from_env() -> bool:
+    """環境変数 ESCAPE_LLM_SSOT が 1/true/yes/on のいずれかなら SSoT を有効にする。"""
+    v = os.environ.get("ESCAPE_LLM_SSOT", "").strip().lower()
+    return v in ("1", "true", "yes", "on")
+
+
 def create_escape_game_runtime(
     scenario_path: Path,
     *,
@@ -685,6 +692,7 @@ def create_escape_game_runtime(
         persona_block=persona_block,
         safe_intro=safe_intro,
         participant_names=participants,
+        enable_string_seed_of_thought=_escape_llm_ssot_enabled_from_env(),
     )
 
     data_store = InMemoryDataStore()

@@ -130,6 +130,18 @@ def build_persona_block_from_escape_character(
     return builder.build(persona)
 
 
+# 論文由来の String Seed of Thought（mod でツールインデックスを決める）。
+# n は「当該リクエストの function calling で渡される全ツール名を辞書順に並べたときの件数」とする。
+_ESCAPE_STRING_SEED_OF_THOUGHT_BLOCK = """
+【String Seed of Thought（SSoT）— 本ターンのツール選択】
+- ステップ1: 推論の冒頭で、英数字を混ぜたランダム文字列を十分な長さ（最低24文字）で生成する（説明に書いてもよい）。
+- ステップ2: その文字列から整数を得る（例: 各文字の Unicode コードポイントの合計）。
+- ステップ3: このリクエストで function calling として渡されている**全ツール（関数）の名前**を、辞書順（昇順）で並べ、先頭から 0,1,…,n-1 とインデックスを振る（n はその個数）。
+- ステップ4: ステップ2の整数を n で割った余りを r とし、インデックス r に対応する名前のツールを、必ず1回だけ呼び出す。他のツールは選ばない。
+- 外部の乱数APIや Python の random は使わない。上記手順のみで選ぶ。
+""".strip()
+
+
 def _fallback_persona_block(display_name: str) -> str:
     persona = AgentPersonaDto(
         character_id="anonymous",
@@ -156,8 +168,14 @@ def build_escape_system_prompt(
     persona_block: str,
     safe_intro: str,
     participant_names: tuple[str, ...],
+    enable_string_seed_of_thought: bool = False,
 ) -> str:
-    """脱出ゲーム用システムプロンプト（1ターン1ツール・文面の意味づけ）。"""
+    """脱出ゲーム用システムプロンプト（1ターン1ツール・文面の意味づけ）。
+
+    enable_string_seed_of_thought:
+        True のとき、ツール選択に String Seed of Thought（ランダム文字列の操作結果を n で割った余りで
+        辞書順ツール列のインデックスを決める）を追記する。n は当該リクエストで渡される全ツール数。
+    """
     participants = "\n".join(f"  - {n}" for n in participant_names) or "  - （この局面の探索者・1名）"
     time_pressure = limited_action_and_time_pressure_text()
     solo_line = (
@@ -165,7 +183,7 @@ def build_escape_system_prompt(
         if len(participant_names) <= 1
         else "- 上記の名は、同局面に同席する他の探索者である（シナリオに応じて複数）。"
     )
-    return f"""あなたは次のペルソナとして行動するキャラクターである。
+    body = f"""あなたは次のペルソナとして行動するキャラクターである。
 
 {persona_block}
 
@@ -199,6 +217,9 @@ def build_escape_system_prompt(
 - todo_add / todo_list / todo_complete: 次に試す行動を TODO として整理する。
 - spot_graph_wait: その場で短く待機し、時間経過による変化を観測する。
 """
+    if enable_string_seed_of_thought:
+        return body.rstrip() + "\n\n" + _ESCAPE_STRING_SEED_OF_THOUGHT_BLOCK + "\n"
+    return body
 
 
 def format_episode_snippets_for_prompt(entries: list, limit: int = 5) -> str:
