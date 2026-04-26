@@ -81,6 +81,7 @@ def _character_to_escape_prompt_input(
         strengths=character.strengths or "",
         weaknesses=character.weaknesses or "",
         interpersonal_tendency=character.interpersonal_tendency or "",
+        behavioral_rules=tuple(character.behavioral_rules or ()),
     )
 
 
@@ -583,6 +584,7 @@ class GameRuntimeManager:
             strengths=request.strengths,
             weaknesses=request.weaknesses,
             interpersonal_tendency=request.interpersonal_tendency,
+            behavioral_rules=list(request.behavioral_rules or ()),
         )
         self._characters[cid] = character
         self._save_characters()

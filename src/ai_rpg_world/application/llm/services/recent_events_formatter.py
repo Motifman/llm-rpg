@@ -7,6 +7,18 @@ from ai_rpg_world.application.llm.contracts.interfaces import IRecentEventsForma
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 
 
+def _format_action_result_line(entry: ActionResultEntry) -> str:
+    if entry.success:
+        return f"[行動] {entry.action_summary} → [結果] {entry.result_summary}"
+    parts = [f"[行動] {entry.action_summary} → [失敗]", f"error_code={entry.error_code or '不明'}"]
+    if entry.tool_name:
+        parts.append(f"tool={entry.tool_name}")
+    if entry.should_reschedule:
+        parts.append("次tick再試行の可能性あり")
+    parts.append(entry.result_summary)
+    return " | ".join(parts)
+
+
 def _merge_by_time(
     observations: List[ObservationEntry],
     action_results: List[ActionResultEntry],
@@ -24,7 +36,7 @@ def _merge_by_time(
             text = f"[{e.game_time_label}] {text}"
         merged.append((e.occurred_at, "observation", text))
     for e in action_results:
-        text = f"[行動] {e.action_summary} → [結果] {e.result_summary}"
+        text = _format_action_result_line(e)
         merged.append((e.occurred_at, "action_result", text))
     merged.sort(key=lambda x: x[0], reverse=False)
     return merged

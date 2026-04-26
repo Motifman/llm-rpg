@@ -6,7 +6,10 @@ from typing import Any, Callable, Dict
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
-from ai_rpg_world.application.llm.services.tool_executor_helpers import exception_result
+from ai_rpg_world.application.llm.services.tool_executor_helpers import (
+    append_inner_thought_to_message,
+    exception_result,
+)
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
@@ -77,7 +80,10 @@ class SpotGraphToolExecutor:
                 owned,
                 flags,
             )
-            return LlmCommandResultDto(success=True, message=f"スポット {dest} への移動を開始しました。")
+            base = f"スポット {dest} への移動を開始しました。"
+            return LlmCommandResultDto(
+                success=True, message=append_inner_thought_to_message(base, args)
+            )
         except Exception as e:
             return exception_result(e)
 
@@ -93,7 +99,12 @@ class SpotGraphToolExecutor:
             return LlmCommandResultDto(success=False, message="sub_location_id が不正です。")
         try:
             self._svc.movement.move_to_sub_location(PlayerId(player_id), sub)
-            return LlmCommandResultDto(success=True, message="サブロケーションを更新しました。")
+            return LlmCommandResultDto(
+                success=True,
+                message=append_inner_thought_to_message(
+                    "サブロケーションを更新しました。", args
+                ),
+            )
         except Exception as e:
             return exception_result(e)
 
@@ -104,7 +115,9 @@ class SpotGraphToolExecutor:
             if result.item_spec_ids_granted:
                 parts.append(f"アイテム付与: {len(result.item_spec_ids_granted)} 種")
             msg = "\n".join(parts) if parts else "特に新しい発見はありませんでした。"
-            return LlmCommandResultDto(success=True, message=msg)
+            return LlmCommandResultDto(
+                success=True, message=append_inner_thought_to_message(msg, args)
+            )
         except Exception as e:
             return exception_result(e)
 
@@ -123,7 +136,9 @@ class SpotGraphToolExecutor:
                 action,
             )
             msg = "\n".join(out.messages) if out.messages else "操作を実行しました。"
-            return LlmCommandResultDto(success=True, message=msg)
+            return LlmCommandResultDto(
+                success=True, message=append_inner_thought_to_message(msg, args)
+            )
         except Exception as e:
             return exception_result(e)
 
@@ -139,9 +154,10 @@ class SpotGraphToolExecutor:
         try:
             tick = self._svc.simulation.tick()
             suffix = f"（理由: {reason}）" if reason else ""
+            base = f"待機して時間が進んだ: tick={tick.value}{suffix}"
             return LlmCommandResultDto(
                 success=True,
-                message=f"待機して時間が進んだ: tick={tick.value}{suffix}",
+                message=append_inner_thought_to_message(base, args),
             )
         except Exception as e:
             return exception_result(e)

@@ -27,6 +27,8 @@ class EscapeCharacterPromptInput:
     strengths: str = ""
     weaknesses: str = ""
     interpersonal_tendency: str = ""
+    # LLM 行動上の自責ルール（短い箇条書き）。非空のときのみペルソナブロックに「行動ルール」として載る。
+    behavioral_rules: tuple[str, ...] = ()
 
 # シナリオ metadata.description はネタバレを含み得るため、LLM 初期文脈では使わず
 # world id に紐づく「公開レイヤー」のみを渡す。
@@ -104,6 +106,10 @@ def build_persona_block_from_escape_character(
     if appearance:
         bg_parts.append(f"外見: {appearance[:500]}")
 
+    brules = [
+        s.strip() for s in character.behavioral_rules if isinstance(s, str) and s.strip()
+    ][:6]
+
     persona = AgentPersonaDto(
         character_id=character.character_id,
         display_name=character.name,
@@ -115,10 +121,11 @@ def build_persona_block_from_escape_character(
         taboos=tuple(taboo_parts[:6]) if taboo_parts else (),
         background_summary=" ".join(bg_parts).strip(),
         fragmented_memories=fragmented,
-        behavioral_rules=(),
+        behavioral_rules=tuple(brules),
         relationship_hints=(),
     )
-    policy = policy or PersonaPromptPolicy(include_behavioral_rules=False)
+    # 空なら「行動ルール」節は出ない（FragmentBuilder は非空のときだけ列挙する）。
+    policy = policy or PersonaPromptPolicy(include_behavioral_rules=True)
     builder = PersonaPromptFragmentBuilder(policy)
     return builder.build(persona)
 
@@ -139,7 +146,7 @@ def _fallback_persona_block(display_name: str) -> str:
         relationship_hints=(),
     )
     return PersonaPromptFragmentBuilder(
-        PersonaPromptPolicy(include_behavioral_rules=False)
+        PersonaPromptPolicy(include_behavioral_rules=True)
     ).build(persona)
 
 
@@ -178,6 +185,7 @@ def build_escape_system_prompt(
 
 【行動ルール（全キャラクター共通）】
 - 世界と相互作用する唯一の手段は、LLM への tool calling（関数呼び出し）である。
+- 各ツール呼び出しでは `inner_thought` に、上記【ペルソナ】の口調に揃えた短い文を必ず含める。観測者向け表示用。未発見の事実を知った体で書かない（厳密な定義は各ツールの `inner_thought` 引数の説明に従う）。
 - 1回の応答で選べるのは 1 つのツールだけとする（サーバーは先頭の tool_call だけを実行しうる。必ず 1 つに絞る）。
 - ラベル（接続先・オブジェクト・相手プレイヤー等）は、続きの文面内の「現在地と周囲」等に表示されたものだけを使う。
 - 未発見の事実を、すでに知っているかのように断言しない。

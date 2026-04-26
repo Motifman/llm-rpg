@@ -71,7 +71,10 @@ def test_escape_game_llm_turn_executes_returned_tool() -> None:
         runtime=runtime,
         observation_buffer=runtime._obs_buffer,
         llm_client=StubLlmClient(
-            {"name": "spot_graph_explore", "arguments": {}}
+            {
+                "name": "spot_graph_explore",
+                "arguments": {"inner_thought": "足元の砂埃に気をつけながら、部屋の隅々まで見回す。"},
+            }
         ),
     )
 

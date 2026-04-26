@@ -88,13 +88,17 @@ class TestLlmAgentOrchestratorRunTurn:
         assert prompt_builder._return_value["messages"]  # build が使われた結果 request が組立てられている
 
     def test_run_turn_appends_to_action_result_store(self, orchestrator, action_result_store):
-        """run_turn 後に store に 1 件 append される"""
+        """run_turn 後に store に 1 件 append され、成功メタとツール名が記録される"""
         player_id = PlayerId(1)
         orchestrator.run_turn(player_id)
         recent = action_result_store.get_recent(player_id, 5)
         assert len(recent) == 1
         assert "world_no_op" in recent[0].action_summary or "no_op" in recent[0].action_summary
         assert recent[0].result_summary
+        assert recent[0].success is True
+        assert recent[0].tool_name == TOOL_NAME_NO_OP
+        assert recent[0].argument_fingerprint == "{}"
+        assert recent[0].error_code is None
 
     def test_run_turn_returns_llm_command_result_dto(self, orchestrator):
         """run_turn の戻り値は LlmCommandResultDto"""
@@ -140,6 +144,8 @@ class TestLlmAgentOrchestratorRunTurn:
         recent = action_result_store.get_recent(PlayerId(1), 5)
         assert len(recent) == 1
         assert "選択されませんでした" in recent[0].action_summary or "ツール" in recent[0].action_summary
+        assert recent[0].success is False
+        assert recent[0].error_code == "NO_TOOL_CALL"
 
     def test_run_turn_player_id_not_player_id_raises_type_error(self, orchestrator):
         """player_id が PlayerId でないとき TypeError"""

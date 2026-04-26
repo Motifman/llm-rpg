@@ -68,6 +68,16 @@ def test_spot_graph_specs_use_labels_not_ids() -> None:
         assert "sub_location_id" not in props, f"{defn.name} should not expose raw IDs"
 
 
+def test_spot_graph_specs_require_inner_thought() -> None:
+    """全ツールに inner_thought があり、required に含まれる。"""
+    specs = get_spot_graph_specs()
+    for defn, _ in specs:
+        req = defn.parameters.get("required") or []
+        props = defn.parameters.get("properties") or {}
+        assert "inner_thought" in props, defn.name
+        assert "inner_thought" in req, defn.name
+
+
 def test_spot_graph_formatter_outputs_base_info() -> None:
     """フォーマッタは場所・雰囲気・時刻のベーステキストのみを出力する。"""
     snap = SpotGraphPlayerSnapshotDto(

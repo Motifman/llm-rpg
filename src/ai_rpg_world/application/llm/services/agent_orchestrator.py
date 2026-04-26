@@ -24,6 +24,9 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IToolArgumentResolver,
 )
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
+from ai_rpg_world.application.llm.llm_argument_fingerprint import (
+    build_argument_fingerprint,
+)
 from ai_rpg_world.application.llm.result_summary_builder import build_result_summary
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.services.tool_command_mapper import ToolCommandMapper
@@ -44,6 +47,30 @@ def _format_action_summary(tool_name: str, arguments: Optional[Dict[str, Any]] =
     except (TypeError, ValueError):
         args_str = str(arguments)
     return f"{tool_name}({args_str}) を実行しました。"
+
+
+def _append_to_action_store(
+    store: IActionResultStore,
+    player_id: PlayerId,
+    result_dto: LlmCommandResultDto,
+    action_summary: str,
+    result_summary: str,
+    *,
+    tool_name: Optional[str] = None,
+    fingerprint_args: Optional[Dict[str, Any]] = None,
+) -> None:
+    """行動結果を IActionResultStore に記録する（失敗メタ・引数フィンガープリント付き）。"""
+    fp = build_argument_fingerprint(fingerprint_args) if fingerprint_args is not None else None
+    store.append(
+        player_id,
+        action_summary,
+        result_summary,
+        success=result_dto.success,
+        error_code=result_dto.error_code,
+        tool_name=tool_name,
+        argument_fingerprint=fp,
+        should_reschedule=result_dto.should_reschedule,
+    )
 
 
 class LlmAgentOrchestrator:
@@ -138,7 +165,13 @@ class LlmAgentOrchestrator:
                 should_reschedule=is_reschedulable_error_code(e.error_code),
             )
             result_summary = build_result_summary(result_dto)
-            self._action_result_store.append(player_id, action_summary, result_summary)
+            _append_to_action_store(
+                self._action_result_store,
+                player_id,
+                result_dto,
+                action_summary,
+                result_summary,
+            )
             self._run_memory_extraction(
                 player_id,
                 request.get("overflow", []),
@@ -157,7 +190,13 @@ class LlmAgentOrchestrator:
                 should_reschedule=True,
             )
             result_summary = build_result_summary(result_dto)
-            self._action_result_store.append(player_id, action_summary, result_summary)
+            _append_to_action_store(
+                self._action_result_store,
+                player_id,
+                result_dto,
+                action_summary,
+                result_summary,
+            )
             self._run_memory_extraction(
                 player_id,
                 request.get("overflow", []),
@@ -192,7 +231,15 @@ class LlmAgentOrchestrator:
             )
             action_summary = _format_action_summary(name, arguments)
             result_summary = build_result_summary(result_dto)
-            self._action_result_store.append(player_id, action_summary, result_summary)
+            _append_to_action_store(
+                self._action_result_store,
+                player_id,
+                result_dto,
+                action_summary,
+                result_summary,
+                tool_name=name or None,
+                fingerprint_args=arguments,
+            )
             self._run_memory_extraction(
                 player_id,
                 request.get("overflow", []),
@@ -208,7 +255,15 @@ class LlmAgentOrchestrator:
         )
         action_summary = _format_action_summary(name, arguments)
         result_summary = build_result_summary(result_dto)
-        self._action_result_store.append(player_id, action_summary, result_summary)
+        _append_to_action_store(
+            self._action_result_store,
+            player_id,
+            result_dto,
+            action_summary,
+            result_summary,
+            tool_name=name or None,
+            fingerprint_args=canonical_arguments,
+        )
         self._run_memory_extraction(
             player_id,
             request.get("overflow", []),

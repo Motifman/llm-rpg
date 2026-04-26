@@ -95,6 +95,11 @@ class ActionResultEntry:
     occurred_at: datetime
     action_summary: str
     result_summary: str
+    success: bool = True
+    error_code: Optional[str] = None
+    tool_name: Optional[str] = None
+    argument_fingerprint: Optional[str] = None
+    should_reschedule: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.occurred_at, datetime):
@@ -103,6 +108,18 @@ class ActionResultEntry:
             raise TypeError("action_summary must be str")
         if not isinstance(self.result_summary, str):
             raise TypeError("result_summary must be str")
+        if not isinstance(self.success, bool):
+            raise TypeError("success must be bool")
+        if self.error_code is not None and not isinstance(self.error_code, str):
+            raise TypeError("error_code must be str or None")
+        if self.tool_name is not None and not isinstance(self.tool_name, str):
+            raise TypeError("tool_name must be str or None")
+        if self.argument_fingerprint is not None and not isinstance(
+            self.argument_fingerprint, str
+        ):
+            raise TypeError("argument_fingerprint must be str or None")
+        if not isinstance(self.should_reschedule, bool):
+            raise TypeError("should_reschedule must be bool")
 
 
 @dataclass(frozen=True)

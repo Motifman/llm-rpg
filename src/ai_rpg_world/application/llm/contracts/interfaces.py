@@ -262,8 +262,18 @@ class IActionResultStore(ABC):
         action_summary: str,
         result_summary: str,
         occurred_at: Optional[datetime] = None,
+        *,
+        success: bool = True,
+        error_code: Optional[str] = None,
+        tool_name: Optional[str] = None,
+        argument_fingerprint: Optional[str] = None,
+        should_reschedule: bool = False,
     ) -> None:
-        """1 件の行動結果を追加する。occurred_at は省略時は現在時刻。"""
+        """1 件の行動結果を追加する。occurred_at は省略時は現在時刻。
+
+        success / error_code / tool_name 等は失敗時の次ターン補正・連続失敗検知用。
+        既存呼び出しはキーワード省略で success=True として互換。
+        """
         pass
 
     @abstractmethod
