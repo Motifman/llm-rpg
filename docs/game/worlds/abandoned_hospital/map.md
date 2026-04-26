@@ -12,7 +12,7 @@
 |---|---|---|---|
 | `entrance_hall` | エントランスホール | OTHER | 開幕。正面入口は崩落で閉塞 |
 | `ward_reception` | 病棟受付 | OTHER | `evidence_suture_photos`（掲示写真の縫合痕） |
-| `nurse_station_1f` | 1F ナースステーション | OTHER | 中央ハブの一つ。`evidence_unified_charts`。POI: **主人公デスク**（思い出系証拠の集積点）。追体験シーン 1 の入口 |
+| `nurse_station_1f` | 1F ナースステーション | OTHER | 中央ハブの一つ。`evidence_unified_charts`。POI: **職員デスク**（記憶の欠落を示す任意証拠の集積点）。追体験シーン 1 の入口 |
 | `pharmacy` | 薬剤室 | OTHER | `evidence_r7_label`。処置室の鍵を持つ薬剤師ロッカーあり |
 | `rehab_room` | リハビリ室 | OTHER | `evidence_mirror_tape`。追体験シーン 2 の入口 |
 
@@ -30,7 +30,7 @@
 
 | ID | 名称 | 種別 | 役割 |
 |---|---|---|---|
-| `isolation_corridor` | 番号管理の廊下 | DUNGEON | `evidence_numbered_rooms` |
+| `isolation_corridor` | 3F 閉鎖病棟廊下 | DUNGEON | `evidence_numbered_rooms` |
 | `isolation_control` | 隔離区管理室 | DUNGEON | `evidence_isolation_map`。処置室への鍵要件 |
 | `treatment_room` | 処置室 | DUNGEON | 追体験シーン 4（過去の自分の判子） |
 | `final_room` | 最終処置室 | DUNGEON | 追体験シーン 6 の舞台（澪の前に立つ） |
@@ -80,7 +80,7 @@ flowchart TB
 
   subgraph F3[3F 第三隔離区]
     direction LR
-    IC[番号管理の廊下]
+    IC[3F 閉鎖病棟廊下]
     ICT[隔離区管理室]
     TR[処置室]
     FR[最終処置室]
@@ -114,7 +114,7 @@ flowchart TB
 |---|---|---|
 | エントランスホール | ロビー / 崩落した正面入口 | 壁の掲示板（閉鎖告知の貼り紙）／ 倒れた案内スタンド |
 | 病棟受付 | カウンター / 待合 | 患者掲示写真 → `evidence_suture_photos` ／ 古い雑誌ラック |
-| 1F ナースステーション | カウンター / **主人公デスク** | カルテ束 → `evidence_unified_charts` ／ 当直表 → 追体験 1 ／ 主人公デスク（後述 §3.1） |
+| 1F ナースステーション | カウンター / **職員デスク** | カルテ束 → `evidence_unified_charts` ／ 当直表 → 追体験 1 ／ 職員デスク（後述 §3.1） |
 | 薬剤室 | 薬品棚 / 薬剤師ロッカー | 薬品ラベル → `evidence_r7_label` ／ ロッカー → 🔑処置室の鍵 |
 | リハビリ室 | 鏡の前 / 機材置き場 | 鏡のテープ → `evidence_mirror_tape` ／ 掲示板に澪の名札（追体験 2 発火） |
 | 2F ナースステーション | カウンター / 申し送りノート棚 | 申し送りノート → `evidence_handover_notes` ／ 追体験 3 |
@@ -122,13 +122,13 @@ flowchart TB
 | 職員休憩室 | ロッカー / テーブル | 空ロッカー → `evidence_staff_lockers` ／ 同僚の書き置き → 追体験 5 |
 | 書類庫 | 焼却痕のある棚 / 未処理の棚 | 選択的焼却痕 → `evidence_selective_burn` |
 | 院長室 | 書斎机 / 金庫 | 机上の指示書 → `evidence_protocol_manual` ／ 金庫（3F の鍵） |
-| 番号管理の廊下 | （区画なし） | 番号プレートのみの病室扉 → `evidence_numbered_rooms` |
+| 3F 閉鎖病棟廊下 | （区画なし） | 病室番号に見える剥がれた扉札 → `evidence_numbered_rooms` |
 | 隔離区管理室 | 制御パネル / 区画図 | 区画図 → `evidence_isolation_map` ／ 最終処置室の鍵 |
 | 処置室 | 処置台 / 器具トレイ | 過去の処置記録 → 追体験 4 ／ 処置完了の判子控え → `evidence_self_signature` |
 | 最終処置室 | 処置台（澪が拘束されている） | 最終選択（手術／逃走／自己消去） |
 | 職員用裏口 | 鉄扉 | 最終選択後に解錠 |
 
-### 3.1 主人公デスク（`nurse_station_1f` 内の POI）
+### 3.1 職員デスク（`nurse_station_1f` 内の POI）
 
 **ストーリー補強用の非違和感系証拠**を集約する場所。進行には必須ではないが、集めると追体験シーンと最終選択のナラティブが厚くなる。
 
@@ -183,7 +183,7 @@ flowchart LR
 ```
 
 - **最終処置室に入るには追体験 1〜5 を全て通過済みであることが必要**。「裏を見ないまま出る」ルートは存在しない。前バージョンのショート/ロング分岐は廃止。
-- 代わりに、**主人公デスクの非違和感系証拠**は収集が任意。集めなくてもクリア可能だが、集めると追体験と最終選択のナラティブが厚くなる（ナラティブ層）。
+- 代わりに、**職員デスクの非違和感系証拠**は収集が任意。集めなくてもクリア可能だが、集めると追体験と C-307 の処置分岐のナラティブが厚くなる（ナラティブ層）。
 - 3 つのエンディングはどれを選んでも `ending_chosen` フラグが立ち、裏口から外に出られる。選択内容が**現代の廃墟の姿**とエピローグ台詞を変える（[flags_items.md §5](./flags_items.md)）。
 
 ## 6. 失敗条件

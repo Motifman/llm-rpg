@@ -49,6 +49,12 @@ class SpotGraphSimulationApplicationService:
             context={"action": "spot_graph_tick"},
         )
 
+    def set_llm_turn_trigger(
+        self, trigger: Optional["ILlmTurnTrigger"]
+    ) -> None:
+        """プレゼン層などから、ティック後に走らせる LLM トリガを差し替える（主に脱出デモ）。"""
+        self._llm_turn_trigger = trigger
+
     def _tick_impl(self) -> WorldTick:
         with self._unit_of_work:
             current_tick = self._time_provider.advance_tick()

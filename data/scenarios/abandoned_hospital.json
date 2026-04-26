@@ -4,12 +4,13 @@
   "metadata": {
     "id": "abandoned_hospital",
     "title": "廃病院からの脱出 ── 消し残された夜",
-    "description": "静原（しずはら）総合病院。重度トラウマ・解離・記憶障害の先進治療で知られた地域中核病院は、ある夜を境に突如閉鎖され、以後は放置されたまま廃墟となった。公称の裏側で、この施設は患者の特定記憶を切除・封鎖・再編する研究を抱えていた。「治療」は苦痛の除去であり、同時に真実の抹消でもあった。あなたは夜勤看護師・志木として、見て見ぬふりで勤めてきた共犯者だった。そして今夜、長く疎遠になっていた旧友・真島澪が自発来訪した瞬間、施設は証拠の完全削除と撤収を決断する──廃墟化の引き金となる一夜。違和感を一つずつ捲り、過去を追体験し、最終処置室で最後の選択を下せ。どれを選んでも、清くはない。",
+    "description": "静原（しずはら）総合病院。重度トラウマ・解離・記憶障害の先進治療で知られた地域中核病院は、ある夜を境に突如閉鎖され、以後は放置されたまま廃墟となった。公称の裏側で、この施設は患者の記憶に関わる何かを扱っていたらしい。あなたは夜勤看護師・志木として、閉鎖前夜の病院を追体験する。違和感を一つずつ拾い、消された夜の輪郭を確かめながら、塞がれた病院から外へ出なければならない。",
     "theme": "psychological_horror",
     "difficulty": "medium",
     "estimated_ticks": 150,
     "author": "ai_rpg_world_demo",
-    "tags": ["psychological_horror", "escape", "memory", "moral_choice", "narrative"]
+    "tags": ["psychological_horror", "escape", "memory", "moral_choice", "narrative"],
+    "llm_public_intro": "静原総合病院の廃墟。正面は塞がれており、院内の別経路から外へ辿り着く必要がある。手がかりは現場の記録や物証に残されているが、何が真実かは自分の目でつなぎ直すこと。過去の出来事は、証拠を辿るうちに断片的に立ち上がることがある（受動的な再構成）。"
   },
 
   "environment": {
@@ -45,8 +46,8 @@
     },
     {
       "id": "evidence_numbered_rooms",
-      "name": "番号プレート",
-      "description": "第三隔離区の廊下で剥がれ落ちた病室番号プレート。名前は書かれていない。部屋はすべて番号のみで管理されていた。",
+      "name": "剥がれた扉札",
+      "description": "第三隔離区の廊下で剥がれ落ちた扉札。病室番号のようにも見えるが、『号室』ではなく C-303 という管理コードだけが印字され、用途表示や診療科名はない。",
       "category": "LORE"
     },
     {
@@ -82,7 +83,7 @@
     {
       "id": "evidence_isolation_map",
       "name": "隔離区区画図",
-      "description": "第三隔離区の区画図。部屋番号と処置段階の対応表が付属している。C-307 は『最終処置室』と記されている。",
+      "description": "第三隔離区の区画図。C-301〜C-306 が段階別の処置室として記され、C-307 は『最終処置室』として赤く囲われている。",
       "category": "DOCUMENT"
     },
     {
@@ -118,13 +119,13 @@
     {
       "id": "keepsake_diary",
       "name": "古い日記",
-      "description": "主人公デスクの引き出しにあった革表紙の日記。友人（真島 澪）との思い出が綴られている。ただし、ところどころページが白く抜けている。抜けた日付は自分にも思い出せない。",
+      "description": "職員デスクの引き出しにあった革表紙の日記。真島 澪の名前が何度も出てくる。ただし、ところどころページが白く抜けている。抜けた日付は自分にも思い出せない。",
       "category": "LORE"
     },
     {
       "id": "dusty_photograph",
       "name": "埃だらけの写真",
-      "description": "額に入った古い写真。自分（志木）と真島澪が二人で笑っている。裏には小さく『またね』の走り書き。",
+      "description": "額に入った古い写真。志木らしき人物と真島澪が二人で笑っている。裏には小さく『またね』の走り書き。",
       "category": "LORE"
     },
     {
@@ -136,7 +137,7 @@
     {
       "id": "shift_memo_old",
       "name": "古い申し送りメモ",
-      "description": "主人公デスクの古い束から出てきたメモ：『真島さんご家族 面会済み／担当Dr 不在』。澪が家族の付き添いで来院していた日の記録。",
+      "description": "職員デスクの古い束から出てきたメモ：『真島さんご家族 面会済み／担当Dr 不在』。澪が家族の付き添いで来院していた日の記録。",
       "category": "LORE"
     },
     {
@@ -298,7 +299,7 @@
     {
       "id": "nurse_station_1f",
       "name": "1F ナースステーション",
-      "description": "1F の中央にあるナースステーション。カウンターの上にはカルテ束と当直表が残されている。奥に職員用のデスクがひとつ──主人公（志木）が毎夜使っていた机。",
+      "description": "1F の中央にあるナースステーション。カウンターの上にはカルテ束と当直表が残されている。奥に職員用のデスクがひとつあり、名札の跡だけが埃の中に残っている。",
       "category": "OTHER",
       "atmosphere": {
         "lighting": "DIM",
@@ -310,7 +311,7 @@
         "sub_locations": [
           {
             "id": "protagonist_desk",
-            "name": "主人公デスク",
+            "name": "職員デスク",
             "description": "職員デスクのひとつ。引き出しには日記、机には埃だらけの写真立て。任意の収集物が集まっている場所。",
             "accessible_object_ids": ["desk_drawer", "dusty_frame", "old_shift_memo"],
             "is_hidden": true
@@ -392,7 +393,7 @@
           {
             "id": "desk_drawer",
             "name": "デスクの引き出し（日記）",
-            "description": "主人公デスクの引き出し。中に古い日記が入っているのが見える。",
+            "description": "職員デスクの引き出し。中に古い日記が入っているのが見える。",
             "object_type": "CHEST",
             "state": {"searched": false},
             "interactions": [
@@ -403,7 +404,7 @@
                 "effects": [
                   {
                     "effect_type": "SHOW_MESSAGE",
-                    "parameters": {"message": "革表紙の日記。友人・真島澪との思い出が綴られている。ただし、ところどころページが白く抜けている。抜けた日付は自分にも思い出せない。栞が一枚挟まれている。"}
+                    "parameters": {"message": "革表紙の日記。真島澪の名前が何度も出てくる。ただし、ところどころページが白く抜けている。抜けた日付は自分にも思い出せない。栞が一枚挟まれている。"}
                   },
                   {
                     "effect_type": "GIVE_ITEM",
@@ -436,7 +437,7 @@
                 "effects": [
                   {
                     "effect_type": "SHOW_MESSAGE",
-                    "parameters": {"message": "埃を払って中を見る。主人公（志木）と、今夜搬送されてきた真島澪が二人で笑っている。裏には小さく『またね』の走り書き。"}
+                    "parameters": {"message": "埃を払って中を見る。志木らしき人物と、今夜搬送されてきた真島澪が二人で笑っている。裏には小さく『またね』の走り書き。"}
                   },
                   {
                     "effect_type": "GIVE_ITEM",
@@ -621,7 +622,7 @@
                 "effects": [
                   {
                     "effect_type": "SHOW_MESSAGE",
-                    "parameters": {"message": "【追体験 2】真島 澪の名札に指が触れた瞬間、視界がにじんだ。──わたしは今夜の搬送受付にいた。救急隊から渡されたカルテの名前を見て、凍りつく。真島 澪。長く疎遠になっていた旧友だった。過去の処置記録と照合済みのスタンプが押されている。彼女は以前、ここで処置を受けていた。（気が付くと、現代の廃墟に戻っている）"}
+                    "parameters": {"message": "【追体験 2】真島 澪の名札に指が触れた瞬間、視界がにじんだ。──わたしは今夜の搬送受付にいた。救急隊から渡されたカルテの名前を見て、凍りつく。真島 澪。見覚えのある名前だった。過去の処置記録と照合済みのスタンプが押されている。彼女は以前、ここで処置を受けていた。（気が付くと、現代の廃墟に戻っている）"}
                   },
                   {
                     "effect_type": "SET_FLAG",
@@ -973,7 +974,7 @@
             "interactions": [
               {
                 "action_name": "open",
-                "display_label": "金庫を開ける（0307）",
+                "display_label": "金庫を開ける",
                 "preconditions": [
                   {
                     "condition_type": "FLAG_SET",
@@ -1006,8 +1007,8 @@
 
     {
       "id": "isolation_corridor",
-      "name": "番号管理の廊下",
-      "description": "3F 第三隔離区の中央廊下。病室の扉には名前がなく、番号のプレートだけが付いている。C-301、C-302、C-303……最奥に C-307。",
+      "name": "3F 閉鎖病棟廊下",
+      "description": "3F 奥の閉鎖病棟へ続く中央廊下。扉は病室のように並んでいるが、廊下側の札は『301号室』ではなく、C-301、C-302、C-303……という記号で統一されている。用途表示も診療科名もなく、最奥の扉には C-307 とだけある。",
       "category": "DUNGEON",
       "atmosphere": {
         "lighting": "DARK",
@@ -1020,8 +1021,8 @@
         "objects": [
           {
             "id": "numbered_door_plate",
-            "name": "番号プレート",
-            "description": "廊下に落ちている番号プレート。C-303。名前は書かれていない。",
+            "name": "剥がれた扉札",
+            "description": "廊下に落ちている扉札。表には『C-303』とだけ印字されている。通常の病室番号なら付いていそうな『号室』や用途表示は見当たらない。",
             "object_type": "OTHER",
             "state": {"examined": false},
             "interactions": [
@@ -1032,7 +1033,7 @@
                 "effects": [
                   {
                     "effect_type": "SHOW_MESSAGE",
-                    "parameters": {"message": "番号プレート『C-303』。この区画の病室はすべて番号だけで管理されていた。患者は人格単位で扱われていなかった。"}
+                    "parameters": {"message": "剥がれた扉札には『C-303』とだけある。病室番号にしては表記が硬く、号室名というより管理コードのように見える。裏面には色分けされた小さなシール跡が残っている。"}
                   },
                   {
                     "effect_type": "GIVE_ITEM",
@@ -1050,7 +1051,7 @@
           {
             "id": "door_c307",
             "name": "C-307 の扉",
-            "description": "廊下の最奥にある病室 C-307 の扉。最終処置室。鍵がかかっている。",
+            "description": "廊下の最奥にある C-307 の扉。他の扉と同じ記号札だが、ここだけ古い電子錠が残っている。",
             "object_type": "DOOR",
             "state": {},
             "interactions": [
@@ -1061,7 +1062,7 @@
                 "effects": [
                   {
                     "effect_type": "SHOW_MESSAGE",
-                    "parameters": {"message": "扉は固く閉ざされている。C-307──『最終処置室』。澪が夢で繰り返し見ていた番号。この扉の向こうに、彼女がいる。"}
+                    "parameters": {"message": "扉は固く閉ざされている。C-307──澪が夢で繰り返し見ていた番号。古い電子錠はまだ生きている。"}
                   }
                 ]
               }
@@ -1101,7 +1102,7 @@
                 "effects": [
                   {
                     "effect_type": "SHOW_MESSAGE",
-                    "parameters": {"message": "C-301〜C-306 は段階別の処置室、C-307 は『最終処置室』。裏に鍵が一本テープで留められていた。"}
+                    "parameters": {"message": "区画図には、C-301〜C-306 が段階別の処置室として記されている。廊下の扉札は病室番号ではなく、処置工程を示す管理コードだった。C-307 だけが『最終処置室』と赤く囲われている。裏に鍵が一本テープで留められていた。"}
                   },
                   {
                     "effect_type": "GIVE_ITEM",
@@ -1180,7 +1181,7 @@
     {
       "id": "final_room",
       "name": "最終処置室 C-307",
-      "description": "3F の最奥、C-307。処置台の上に拘束された真島澪がいる。ここは最後の場所だ。ここで、選ばなければならない。",
+      "description": "3F の最奥、C-307。中央の処置台に真島澪が拘束されている。心拍モニターの電子音だけが、部屋の静けさを刻んでいる。",
       "category": "DUNGEON",
       "atmosphere": {
         "lighting": "DIM",
@@ -1193,14 +1194,14 @@
         "objects": [
           {
             "id": "final_choice",
-            "name": "最終選択",
-            "description": "拘束された澪の前に立つ。選ばなければならない。",
+            "name": "処置台の前",
+            "description": "拘束された澪の前に、処置灯の白い光が落ちている。",
             "object_type": "OTHER",
             "state": {},
             "interactions": [
               {
                 "action_name": "perform_surgery",
-                "display_label": "手術を行う（澪に忘れられる）",
+                "display_label": "処置を完了する",
                 "preconditions": [],
                 "effects": [
                   {
@@ -1223,7 +1224,7 @@
               },
               {
                 "action_name": "let_her_escape",
-                "display_label": "手術をせずに逃がす（自分は裏切り者になる）",
+                "display_label": "拘束を解く",
                 "preconditions": [],
                 "effects": [
                   {
@@ -1246,7 +1247,7 @@
               },
               {
                 "action_name": "erase_self",
-                "display_label": "自分の記憶を消してもらう（全てを無かったことに）",
+                "display_label": "隣の処置台に横たわる",
                 "preconditions": [],
                 "effects": [
                   {
@@ -1296,7 +1297,7 @@
     {
       "id": "outside",
       "name": "外（脱出成功）",
-      "description": "静原総合病院の裏手の空地に出た。夜空の下、廃病院は月明かりに黒くそびえている。何ひとつ解決していない。主人公がこの後どうなったのか、第三隔離区の患者たちが救われたのか、澪が以前目撃したものが何だったのか、透子の治療が何だったのか──何ひとつ確かめていない。ただ、出てきただけだ。それでも、少女はどこか、何かを許せたような顔をしていた。",
+      "description": "静原総合病院の裏手の空地に出た。夜空の下、廃病院は月明かりに黒くそびえている。何ひとつ解決していない。志木がこの後どうなったのか、第三隔離区の患者たちが救われたのか、澪が以前目撃したものが何だったのか、透子の治療が何だったのか──何ひとつ確かめていない。ただ、出てきただけだ。それでも、少女はどこか、何かを許せたような顔をしていた。",
       "category": "FIELD",
       "is_outdoor": true,
       "atmosphere": {
@@ -1528,7 +1529,7 @@
       "from": "final_room",
       "to": "rear_exit",
       "name": "裏口への通路",
-      "description": "最終選択後に開く職員用通路。",
+      "description": "C-307 の奥から職員用通路へ続いている。",
       "travel_ticks": 2,
       "is_bidirectional": false,
       "sound_permeability": 0.1,
@@ -1536,7 +1537,7 @@
         {
           "condition_type": "FLAG_SET",
           "flag_name": "ending_chosen",
-          "failure_message": "まだ選んでいない。"
+          "failure_message": "まだ処置室を離れられない。"
         }
       ],
       "initially_passable": false
@@ -1554,7 +1555,7 @@
         {
           "condition_type": "FLAG_SET",
           "flag_name": "ending_chosen",
-          "failure_message": "まだ選んでいない。"
+          "failure_message": "まだ外へ出られない。"
         }
       ],
       "initially_passable": true
@@ -1605,7 +1606,7 @@
       "effects": [
         {
           "effect_type": "SHOW_MESSAGE",
-          "parameters": { "message": "最終選択の後、奥で錆びた非常ドアが静かに解錠された音が響く。" }
+          "parameters": { "message": "奥で錆びた非常ドアが静かに解錠された音が響く。" }
         },
         {
           "effect_type": "CHANGE_CONNECTION_STATE",

@@ -1,0 +1,68 @@
+{
+  "characters": [
+    {
+      "id": "fd861c34",
+      "name": "門前の少女",
+      "age_image": null,
+      "personality_tags": [
+        "寡黙",
+        "慎重"
+      ],
+      "portrait_url": null,
+      "icon_url": null,
+      "first_person": "わたし",
+      "appearance": "",
+      "speech_samples": [
+        "……聞こえてる。"
+      ],
+      "fragmented_memory": "扉の前で立ち尽くした夜の断片。",
+      "values": "誰かを見捨てないこと",
+      "strengths": "注意深く観察する",
+      "weaknesses": "決断を先延ばしにしがち",
+      "interpersonal_tendency": "距離をとるが、信頼すると一気に近づく"
+    },
+    {
+      "id": "380a005a",
+      "name": "門前の少女",
+      "age_image": null,
+      "personality_tags": [
+        "寡黙",
+        "慎重"
+      ],
+      "portrait_url": null,
+      "icon_url": null,
+      "first_person": "わたし",
+      "appearance": "",
+      "speech_samples": [
+        "……聞こえてる。",
+        "急いだ方がいい。"
+      ],
+      "fragmented_memory": "扉の前で立ち尽くした夜の断片。",
+      "values": "誰かを見捨てないこと",
+      "strengths": "注意深く観察する",
+      "weaknesses": "決断を先延ばしにしがち",
+      "interpersonal_tendency": "距離をとるが、信頼すると一気に近づく"
+    },
+    {
+      "id": "3bf45f74",
+      "name": "門前の少女",
+      "age_image": null,
+      "personality_tags": [
+        "寡黙"
+      ],
+      "portrait_url": null,
+      "icon_url": null,
+      "first_person": "わたし",
+      "appearance": "",
+      "speech_samples": [
+        "……聞こえてる。",
+        "出ないと。"
+      ],
+      "fragmented_memory": "扉の前で。",
+      "values": "x",
+      "strengths": "x",
+      "weaknesses": "x",
+      "interpersonal_tendency": "x"
+    }
+  ]
+}
