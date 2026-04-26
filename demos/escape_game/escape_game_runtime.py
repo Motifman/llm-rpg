@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -64,6 +65,7 @@ from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_sto
 from ai_rpg_world.application.world_graph.spot_graph_scenario_event_stage_service import (
     SpotGraphScenarioEventStageService,
 )
+from ai_rpg_world.application.llm.contracts.interfaces import ILlmTurnTrigger
 from ai_rpg_world.application.world_graph.spot_graph_simulation_application_service import (
     SpotGraphSimulationApplicationService,
 )
@@ -157,6 +159,54 @@ from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
 )
 
 
+class EscapeGameStandaloneNoopLlmTurnTrigger(ILlmTurnTrigger):
+    """単体 `create_escape_game_runtime` 用の ILlmTurnTrigger 実装。
+
+    当ファクトリは LLM オーケストラを内蔵しない。ティック後フック
+    :class:`SpotGraphSimulationApplicationService` 契約を満たすためのプレースホルダ。
+    プレゼンテーション層のセッション生成後は
+    :meth:`EscapeGameRuntime.set_simulation_llm_turn_trigger` で本物の
+    トリガ（例: セッションの ``_EscapeGameLlmTurnTrigger``）に差し替える。
+    """
+
+    def schedule_turn(self, player_id: PlayerId) -> None:  # noqa: ARG002
+        return None
+
+    def run_scheduled_turns(self) -> None:
+        return None
+
+
+def _other_explorer_names_for_escape_system_prompt(
+    spawns: Tuple[PlayerSpawnConfig, ...],
+    escape_character: Optional[EscapeCharacterPromptInput],
+) -> tuple[str, ...]:
+    """【同じ局面にいる者】用の表示名。自身（LLM ペルソナ）に対応するスポーンは含めない。
+
+    シナリオ上の他プレイヤー全員名ではなく、同席する他者のみ述べるため、単体プレイでは空になる。
+    `escape_character` 未指定時は `player_spawns[0]` を操作対象（ペルソナのフォールバック名と同じ扱い）とみなし除外する。
+    """
+    if not spawns:
+        return ()
+    self_spawn: Optional[PlayerSpawnConfig] = None
+    if escape_character is not None:
+        cid = (escape_character.character_id or "").strip()
+        if cid:
+            for s in spawns:
+                if s.string_id == cid:
+                    self_spawn = s
+                    break
+        if self_spawn is None:
+            cname = (escape_character.name or "").strip()
+            if cname:
+                for s in spawns:
+                    if s.name == cname:
+                        self_spawn = s
+                        break
+    if self_spawn is None:
+        self_spawn = spawns[0]
+    return tuple(s.name for s in spawns if s is not self_spawn)
+
+
 @dataclass
 class EscapeGameRuntime:
     """脱出ゲームデモの実行ランタイム（全てインメモリ）。"""
@@ -235,6 +285,16 @@ class EscapeGameRuntime:
         tick = self._simulation_service.tick()
         self._tick = tick.value
         return tick.value
+
+    def set_simulation_llm_turn_trigger(
+        self, trigger: Optional[ILlmTurnTrigger]
+    ) -> None:
+        """ティック後の :meth:`ILlmTurnTrigger.run_scheduled_turns` に使う実装を差し替える。
+
+        プレゼン層の ``_EscapeGameLlmWiring`` など、実際に LLM を起動するトリガに
+        切り替える。単体デモの既定は :class:`EscapeGameStandaloneNoopLlmTurnTrigger`。
+        """
+        self._simulation_service.set_llm_turn_trigger(trigger)
 
     # ── 後方互換ヘルパー（テスト用） ──
 
@@ -506,6 +566,127 @@ class EscapeGameRuntime:
             "tool_runtime_context": ctx.tool_runtime_context,
         }
 
+    @staticmethod
+    def format_action_log_for_prompt(
+        action_log_entries: Sequence[Mapping[str, Any]],
+        *,
+        limit: int = 12,
+    ) -> str:
+        """行動履歴（呼び出し側が集約する辞書列）を user 用テキストにする。
+
+        想定するキー: ``when``, ``where``, ``what``, ``result``。欠けたキーは空扱い。
+        観測（スライド窩）とは切り分け、ここはエージェント操作の辿りやすい要約用。
+        """
+        if not action_log_entries:
+            return "（まだ行動の記録はありません）"
+        lines: List[str] = []
+        for entry in list(action_log_entries)[-limit:]:
+            when = entry.get("when", "")
+            where = entry.get("where", "")
+            what = entry.get("what", "")
+            result = entry.get("result", "")
+            lines.append(
+                "- "
+                f"時刻: {when} / "
+                f"場所: {where} / "
+                f"行動: {what} / "
+                f"結果: {result}"
+            )
+        return "\n".join(lines)
+
+    def build_full_prompt_with_action_log(
+        self,
+        player_id: PlayerId,
+        action_log_entries: Sequence[Mapping[str, Any]] = (),
+        *,
+        action_log_limit: int = 12,
+    ) -> dict:
+        """LLM 向け user を組む（:meth:`build_full_prompt` 相当＋行動履歴の切り出し）。
+
+        * **観測** — スライド窩の ``ObservationEntry`` のみ
+          :class:`DefaultRecentEventsFormatter`（行動ストアに渡さないため、
+          エンジン観測と呼び出し側の行動行の二重出しにしない）
+        * **行動** — 引数 ``action_log_entries``（時刻・場所・行動・結果）を
+          :meth:`format_action_log_for_prompt` で整形
+
+        本番 `run_escape_game` 既定の :meth:`build_full_prompt`（観測＋行動ストアを
+        1 本にマージ）の代替ではなく、**オーケストラ層が行動行を自前集約**するとき用。
+        """
+        self._wire_memory_stack()
+        evicted = self._drain_buffer_to_sliding_window(player_id)
+        self._memory_overflow_for_next_commit[player_id.value] = evicted
+
+        ctx = self.build_llm_context(player_id)
+        current_state_text = ctx.current_state_text
+
+        recent_fmt = DefaultRecentEventsFormatter()
+        recent_obs = self._sliding_window.get_recent(player_id, 20)
+        if not recent_obs:
+            observation_text = "（観測の記録はまだありません）"
+        else:
+            observation_text = (
+                recent_fmt.format(recent_obs, []).strip() or "（観測の記録はまだありません）"
+            )
+        action_text = self.format_action_log_for_prompt(
+            action_log_entries, limit=action_log_limit
+        )
+
+        snap = self._state_builder.build_snapshot(int(player_id))
+        spot_kw = (snap.current_spot_name or "").strip() if snap is not None else ""
+
+        episodes = self._episode_memory_store.get_recent(player_id, 8)
+        related_mem = format_episode_snippets_for_prompt(episodes, limit=5)
+        wm_texts = self._working_memory_store.get_recent(player_id, 12)
+        hypothesis_block = format_working_memory_for_prompt(wm_texts, limit=8)
+        long_term_block = self._format_long_term_snippets(player_id, spot_kw)
+        targets = getattr(ctx.tool_runtime_context, "targets", {}) or {}
+        next_hints = suggest_next_actions_from_targets(targets)
+        inventory_block = self._format_inventory_evidence(player_id)
+
+        user_content = "\n".join(
+            [
+                "【現在の目的】",
+                "- この廃墟から外へ脱出する。",
+                "- 必要なら手がかり（物証・記録）を集め、判断材料にする。",
+                "",
+                "【現在地と周囲】",
+                current_state_text.strip() or "（情報なし）",
+                "",
+                "【直近の出来事：観測】",
+                "世界から届いた事象（天候の変化・他者の発話の観測・シナリオの通知など）です。",
+                observation_text,
+                "",
+                "【直近の出来事：行動（時刻・場所・行動・結果）】",
+                "あなた（エージェント）が前のステップまでに取った操作の要約です。",
+                action_text,
+                "",
+                "【発見済み証拠（所持・判明した物証）】",
+                inventory_block,
+                "",
+                "【未解決の仮説・作業メモ】",
+                hypothesis_block,
+                "",
+                "【長期メモ（事実の抜粋）】",
+                long_term_block,
+                "",
+                "【関連する記憶（想起）】",
+                related_mem,
+                "",
+                "【次に試せそうなこと（候補）】",
+                next_hints,
+                "",
+                "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。",
+            ]
+        )
+
+        system_content = self.build_system_prompt(player_id)
+        return {
+            "system": system_content,
+            "user": user_content,
+            "tools": [d.name for d in self.get_tool_definitions()],
+            "tool_runtime_context": ctx.tool_runtime_context,
+        }
+
     # ── アクション実行 ──
 
     def do_interact(
@@ -673,8 +854,15 @@ def create_escape_game_runtime(
     scenario_path: Path,
     *,
     escape_character: Optional[EscapeCharacterPromptInput] = None,
+    llm_turn_trigger: Optional[ILlmTurnTrigger] = None,
 ) -> EscapeGameRuntime:
-    """シナリオ JSON からゲームランタイムを構築する。"""
+    """シナリオ JSON からゲームランタイムを構築する。
+
+    Args:
+        llm_turn_trigger: 省略時は :class:`EscapeGameStandaloneNoopLlmTurnTrigger`。
+            スポットグラフのティック後フック用。プレゼン層のセッションでは
+            ``runtime.set_simulation_llm_turn_trigger(…)`` で本物に差し替え可能。
+    """
     loader = ScenarioLoader()
     scenario = loader.load_from_file(scenario_path)
 
@@ -686,7 +874,9 @@ def create_escape_game_runtime(
         fallback_display_name=fallback_name,
     )
     safe_intro = safe_world_intro_text(scenario.metadata)
-    participants = tuple(s.name for s in scenario.player_spawns)
+    participants = _other_explorer_names_for_escape_system_prompt(
+        scenario.player_spawns, escape_character
+    )
     system_prompt_text = build_escape_system_prompt(
         world_title=scenario.metadata.title,
         persona_block=persona_block,
@@ -898,12 +1088,18 @@ def create_escape_game_runtime(
         on_weather_changed=None,
     )
     time_provider = InMemoryGameTimeProvider(initial_tick=0)
+    sim_llm_trigger: ILlmTurnTrigger = (
+        llm_turn_trigger
+        if llm_turn_trigger is not None
+        else EscapeGameStandaloneNoopLlmTurnTrigger()
+    )
     simulation_service = SpotGraphSimulationApplicationService(
         time_provider=time_provider,
         unit_of_work=InMemoryUnitOfWork(),
         travel_stage=travel_stage,
         scenario_event_stage=scenario_event_stage,
         environment_stage=environment_stage,
+        llm_turn_trigger=sim_llm_trigger,
     )
 
     runtime = EscapeGameRuntime(

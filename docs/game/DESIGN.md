@@ -104,5 +104,6 @@ While we lean into horror aesthetics, the `on_surface` (Cold White) must maintai
 - **トークン:** `frontend/src/title/TitleScreen.css` の `--ts-*`（`--ts-btn-radius: 6px` を含む）。
 - **タイトル:** 同ファイル（Stitch 由来ヒーロー＋`.ts-btn` ナビ）。
 - **プロローグ:** `frontend/src/prologue/PrologueScreen.css` — テキストパネルはガラス（背景のみ透過、`blur(12px)`）、本文は長文可読性のため **Segoe UI / system-ui 系サンセリフ**（`on_surface` 相当・不透明度 1）。ヒント・操作は Space Grotesk。上部はタイトルと同型の `.prologue-ts-btn`。
+- **共通ゲームUI:** `frontend/src/ui/GameUi.tsx` / `GameUi.css` — 新規画面はまず `GameScreenBackground`, `GameChrome`, `GameButton`, `GameFrameButton`, `GamePanel`, `GameWorldBadge` を使い、背景レイヤ、戻るボタン、テレメトリ、金CTA、ガラスパネル、選択中ワールド表示を画面間で揃える。個別画面CSSは配置と固有演出だけを持つ。
 
 本ファイル（`DESIGN.md`）がデザインストラテジーの正本。索引は [README.md](./README.md)。

@@ -68,6 +68,8 @@ class ScenarioMetadata:
     estimated_ticks: int
     author: str
     tags: Tuple[str, ...]
+    #: LLM 初期文脈用。`description` のネタバレを避け、未プレイ者向けの公開レイヤーだけを書く（任意）。
+    llm_public_intro: str = ""
 
 
 @dataclass(frozen=True)
@@ -169,6 +171,7 @@ class ScenarioLoader:
             estimated_ticks=int(raw.get("estimated_ticks", 100)),
             author=raw.get("author", ""),
             tags=tuple(raw.get("tags", [])),
+            llm_public_intro=str(raw.get("llm_public_intro", "") or "").strip(),
         )
 
     def _pre_register_ids(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> None:

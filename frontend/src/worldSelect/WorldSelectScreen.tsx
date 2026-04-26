@@ -262,12 +262,12 @@ export function WorldSelectScreen({ onBack, onPickWorld }: WorldSelectScreenProp
           </div>
         </header>
 
-        <section className="ws-title-block" aria-label="画面タイトル">
-          <h1>WORLD SELECT</h1>
-          <p>ワールドを選択して下さい</p>
-        </section>
-
         <main className="ws-main">
+          <section className="ws-title-block" aria-label="画面タイトル">
+            <h1>WORLD SELECT</h1>
+            <p>ワールドを選択して下さい</p>
+          </section>
+
           <section
             className="ws-reel"
             aria-label="実験ワールドカード"
@@ -299,6 +299,13 @@ export function WorldSelectScreen({ onBack, onPickWorld }: WorldSelectScreenProp
               type="button"
             />
           </section>
+
+          <DialogueBar
+            contentKey={`${selected.id}-${dialogueTick}-${gateMoment ? "m" : "g"}`}
+            line={gateMoment?.line ?? selected.guideLine}
+            lineVariant={gateMoment ? "moment" : "guide"}
+            onStart={onPickWorld ? handleStart : undefined}
+          />
         </main>
 
         <div className="ws-character-layer">
@@ -363,13 +370,6 @@ export function WorldSelectScreen({ onBack, onPickWorld }: WorldSelectScreenProp
             </span>
           </button>
         </div>
-
-        <DialogueBar
-          contentKey={`${selected.id}-${dialogueTick}-${gateMoment ? "m" : "g"}`}
-          line={gateMoment?.line ?? selected.guideLine}
-          lineVariant={gateMoment ? "moment" : "guide"}
-          onStart={onPickWorld ? handleStart : undefined}
-        />
       </div>
     </div>
   );
@@ -490,11 +490,17 @@ function WorldCard({ world, isActive, onActivate }: WorldCardProps) {
   }, [isActive, scenes.length]);
 
   return (
-    <button
-      type="button"
+    <article
       className={isActive ? "ws-card ws-card--active" : "ws-card"}
       onClick={onActivate}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onActivate();
+        }
+      }}
       aria-current={isActive ? "true" : undefined}
+      role="button"
       tabIndex={isActive ? 0 : -1}
     >
       <div className="ws-card-media" aria-hidden>
@@ -522,15 +528,44 @@ function WorldCard({ world, isActive, onActivate }: WorldCardProps) {
         <div className="ws-card-info">
           <p className="ws-card-subtitle">{world.subtitle}</p>
           <p className="ws-card-desc">{world.shortDescription}</p>
+          <div className="ws-card-stats" aria-label="ワールド情報">
+            <span>想定 {world.playTimeLabel}</span>
+            <span className="ws-danger">
+              危険度
+              <span className="ws-danger-bars" aria-hidden>
+                {Array.from({ length: 5 }, (_, i) => (
+                  <span
+                    key={i}
+                    className={i < world.dangerLevel ? "ws-danger-bar ws-danger-bar--on" : "ws-danger-bar"}
+                  />
+                ))}
+              </span>
+            </span>
+          </div>
           <div className="ws-card-meta">
             {world.themeTags.map((tag) => (
-              <span key={tag} className="ws-chip">
+              <button
+                key={tag}
+                type="button"
+                className="ws-chip"
+                onClick={(e) => {
+                  e.stopPropagation();
+                }}
+                aria-label={`${tag}タグ`}
+              >
                 {tag}
-              </span>
+              </button>
             ))}
-            <span className="ws-chip ws-chip--difficulty">
+            <button
+              type="button"
+              className="ws-chip ws-chip--difficulty"
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
+              aria-label={`難易度 ${world.difficultyLabel}`}
+            >
               難易度 {world.difficultyLabel}
-            </span>
+            </button>
           </div>
 
           {scenes.length > 1 ? (
@@ -547,7 +582,7 @@ function WorldCard({ world, isActive, onActivate }: WorldCardProps) {
           ) : null}
         </div>
       ) : null}
-    </button>
+    </article>
   );
 }
 
@@ -570,13 +605,13 @@ function DialogueBar({ contentKey, line, lineVariant = "guide", onStart }: Dialo
   return (
     <div className="ws-dialogue">
       <div className="ws-dialogue-shell prologue-text-panel-shell">
-        <div className="prologue-text-panel">
+        <div className="ws-dialogue-panel prologue-text-panel">
+          <div className="prologue-terminal-mark ws-dialogue-terminal-mark" aria-hidden>
+            <span className="prologue-terminal-icon material-symbols-outlined">
+              terminal
+            </span>
+          </div>
           <div className="prologue-panel-body">
-            <div className="prologue-terminal-mark" aria-hidden>
-              <span className="prologue-terminal-icon material-symbols-outlined">
-                terminal
-              </span>
-            </div>
             <div className="prologue-body">
               <span className="ws-dialogue-speaker">門前の少女</span>
               <p className={lineClass} key={contentKey}>
@@ -585,23 +620,12 @@ function DialogueBar({ contentKey, line, lineVariant = "guide", onStart }: Dialo
             </div>
           </div>
           <div className="ws-dialogue-actions">
-            <GameButton
-              type="button"
-              className="ws-btn-secondary"
-              icon="more_horiz"
-              label="もう少し考える"
-              sublabel="RECONSIDER"
-              variant="ghost"
-              onClick={() => {
-                /* もう少し考える */
-              }}
-            />
             <GameProtocolButton
               className="ws-btn-primary"
               disabled={!onStart}
               label="実験を開始する"
               onClick={onStart}
-              sublabel="INITIATE EXPERIMENT"
+              sublabel="取り消し不可 / INITIATE"
               type="button"
             />
           </div>

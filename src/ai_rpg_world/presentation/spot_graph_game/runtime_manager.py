@@ -627,6 +627,7 @@ class GameRuntimeManager:
             scenario_path, escape_character=escape_character
         )
         llm_wiring = _EscapeGameLlmWiring(runtime=runtime, observation_buffer=runtime._obs_buffer)
+        runtime.set_simulation_llm_turn_trigger(llm_wiring.llm_turn_trigger)
 
         sid = uuid.uuid4().hex[:12]
         title = runtime.metadata.title

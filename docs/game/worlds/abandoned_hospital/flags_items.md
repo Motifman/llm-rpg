@@ -15,7 +15,7 @@
 | `evidence_suture_photos` | 患者掲示写真（複数人の側頭部縫合痕） | `ward_reception` | 「古い手術痕のある人が偶然多い」 | 「処置部位の一致 = 全員同じ処置を受けた」 |
 | `evidence_unified_charts` | 主訴欄が同筆跡「不明」のカルテ束 | `nurse_station_1f` | 「杜撰な記録」 | 「全員が記憶処置対象」 |
 | `evidence_mirror_tape` | リハビリ室の鏡の「あなたの名前は──」 | `rehab_room` | 「奇妙な貼り紙」 | 「再定着訓練用（患者は自分を忘れる）」 |
-| `evidence_numbered_rooms` | 番号のみ管理の病室扉 | `isolation_corridor` | 「古い病院にはよくある」 | 「患者を人格単位で扱っていない」 |
+| `evidence_numbered_rooms` | 病室番号に見える剥がれた扉札 | `isolation_corridor` | 「閉鎖病棟の部屋番号らしい」 | 「病室番号ではなく処置工程の管理コード」 |
 | `evidence_family_log` | 面会記録「再定着失敗」「再認不能」 | `meeting_record_shelf` | 「暗号めいた記録」 | 「家族が本人を認識できない状態」 |
 | `evidence_selective_burn` | 選択的に焼却された書類棚 | `archive_room` | 「撤収の半端さ」 | 「隠滅対象と非対象の選別」 |
 | `evidence_staff_lockers` | 空の職員ロッカー vs 残された患者私物 | `staff_room` | 「急な退職」 | 「撤収の優先順位＝職員のみ脱出」 |
@@ -26,7 +26,7 @@
 |---|---|---|---|
 | `evidence_r7_label` | 薬品棚の「R-7（想起誘導剤）」「パーサ-9（人格安定補助剤）」「リコール-β（記憶再編剤）」 | `pharmacy` | 記憶再編処置の薬剤群 |
 | `evidence_handover_notes` | 申し送りノート「再燃前に処置完了」「関係者との接触に注意」 | `nurse_station_2f` | 処置が組織的に運用されていた |
-| `evidence_isolation_map` | 区画図、番号と処置段階の対応表 | `isolation_control` | 第三隔離区の実態 |
+| `evidence_isolation_map` | 区画図、管理コードと処置段階の対応表 | `isolation_control` | 第三隔離区の実態 |
 | `evidence_protocol_manual` | 『再編プロトコル 第三版』 | `directors_office` | 処置が標準化されたプロトコルだった |
 
 ### L3: 共犯層（追体験シーンで到達）
@@ -48,14 +48,14 @@
 
 ## 2. ストーリー補強アイテム（ナラティブ層・任意収集）
 
-**主人公デスク**（`nurse_station_1f` の POI）に集約。進行必須ではないが、集めると追体験と最終選択のナラティブが厚くなる。
+**職員デスク**（`nurse_station_1f` の POI）に集約。進行必須ではないが、集めると追体験と C-307 の処置分岐のナラティブが厚くなる。
 
 | ID | カテゴリ | 入手元 | 役割 |
 |---|---|---|---|
-| `keepsake_diary` | LORE | 主人公デスクの引き出し | 友人との思い出。一部ページが白く抜けている（主人公も処置を受けている示唆） |
-| `dusty_photograph` | LORE | 主人公デスクの額 | 澪と二人で笑う写真。裏に「またね」の走り書き |
+| `keepsake_diary` | LORE | 職員デスクの引き出し | 真島 澪の名前が何度も出てくる日記。一部ページが白く抜けている |
+| `dusty_photograph` | LORE | 職員デスクの額 | 志木らしき人物と澪が二人で笑う写真。裏に「またね」の走り書き |
 | `handmade_bookmark` | LORE | 日記に挟まれた栞 | 澪からもらった栞 |
-| `shift_memo_old` | LORE | 主人公デスクの古い束 | 「真島さんご家族 面会済み／担当Dr 不在」 |
+| `shift_memo_old` | LORE | 職員デスクの古い束 | 「真島さんご家族 面会済み／担当Dr 不在」 |
 | `friend_family_record` | LORE | `meeting_record_shelf` の古い来院記録 | 姉・真島 透子の来院記録。主治医欄黒塗り、診療科欄「先進治療」 |
 
 ## 3. 鍵・進行アイテム
@@ -67,7 +67,7 @@
 | `treatment_room_key` | KEY_ITEM | `pharmacy` の薬剤師ロッカー | `treatment_room` 入室 |
 | `final_room_key` | KEY_ITEM | `isolation_control` の区画図裏 | `final_room` 入室（ただしフラグ要件もあり） |
 
-> 金庫の暗証番号は `evidence_protocol_manual` に示された症例番号（例: `0307` = C-307）。澪が夢で見ていた病室番号と一致する、という**プレイヤー側の気付き**を設計する。
+> 金庫の暗証番号は `evidence_protocol_manual` に示された症例番号（例: `0307` = C-307）。澪が夢で見ていた記号が、病室番号ではなく処置工程の管理コードだったと分かる、という**プレイヤー側の気付き**を設計する。
 
 ## 4. フラグ
 
@@ -162,5 +162,5 @@ flowchart TD
 ## 7. 監査メモ
 
 - ショートカットルート（金庫を飛ばす／裏を見ずに脱出）は**意図的に存在しない**。全プレイヤーが L1〜L3 と追体験を経てから最終選択に至る。
-- 主人公デスクのナラティブ アイテムは**任意収集**で、進行に影響しない。集めると最終選択時のテキストが差し替わる（エンディング分岐は変えない）。
+- 職員デスクのナラティブ アイテムは**任意収集**で、進行に影響しない。集めると C-307 の処置分岐後のテキストが差し替わる（エンディング分岐は変えない）。
 - 超自然要素は使わない。追体験の視点切替は「記述技法」として表現する（[lore.md §6](./lore.md)）。
