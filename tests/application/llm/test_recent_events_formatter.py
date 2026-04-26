@@ -86,6 +86,23 @@ class TestDefaultRecentEventsFormatter:
         assert "[結果]" in text
         assert "スポットAに到着しました。" in text
 
+    def test_format_action_failure_includes_error_code(self, formatter):
+        """失敗行動は error_code とツール名を含む行になる"""
+        failed = ActionResultEntry(
+            occurred_at=datetime.now(),
+            action_summary='x({"a":1}) を実行しました。',
+            result_summary="失敗。理由 対処: 直せ",
+            success=False,
+            error_code="BAD_ARG",
+            tool_name="foo_tool",
+            should_reschedule=True,
+        )
+        text = formatter.format([], [failed])
+        assert "[失敗]" in text
+        assert "error_code=BAD_ARG" in text
+        assert "tool=foo_tool" in text
+        assert "次tick再試行の可能性あり" in text
+
     def test_format_merges_observations_and_action_results(
         self, formatter, sample_observation, sample_action_result
     ):

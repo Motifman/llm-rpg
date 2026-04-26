@@ -17,6 +17,9 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ISystemPromptBuilder,
 )
 from ai_rpg_world.application.llm.exceptions import PlayerProfileNotFoundForPromptException
+from ai_rpg_world.application.llm.services.failure_feedback_for_prompt import (
+    build_pre_turn_failure_section,
+)
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
@@ -222,10 +225,17 @@ class DefaultPromptBuilder(IPromptBuilder):
             current_state_text, recent_events_text, relevant_memories_text
         )
 
+        # 6b. 直前ターン失敗時の補正（user 先頭に差し込み、次の 1 ツール向け）
+        failure_block = build_pre_turn_failure_section(action_results[:2])
+        if failure_block:
+            user_context_body = "\n\n".join([failure_block, context.rstrip()])
+        else:
+            user_context_body = context.rstrip()
+
         # 7. システムプロンプト・ユーザーメッセージ
         system_content = self._system_prompt_builder.build(player_info)
         instruction = action_instruction or self._default_action_instruction
-        user_content = context.rstrip() + "\n\n" + instruction
+        user_content = user_context_body + "\n\n" + instruction
 
         result: Dict[str, Any] = {
             "messages": [

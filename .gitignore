@@ -94,3 +94,6 @@ plans/
 
 # システム実装詳細ドキュメント
 docs/system_implementations/
+
+# ローカル専用の実験スクリプト（vLLM・プロンプト試行等、リポジトリにコミットしない）
+local_experiments/

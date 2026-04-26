@@ -58,6 +58,21 @@ def test_persona_block_from_escape_character_contains_name() -> None:
     assert "……。" in block
 
 
+def test_persona_block_includes_behavioral_rules_when_set() -> None:
+    ch = EscapeCharacterPromptInput(
+        character_id="r1",
+        name="試験",
+        first_person="私",
+        behavioral_rules=("未確認の戸口には手を入れない", "一人で奥へ踏み込まない"),
+    )
+    block = build_persona_block_from_escape_character(
+        ch, fallback_display_name="fallback"
+    )
+    assert "行動ルール" in block
+    assert "未確認の戸口" in block
+    assert "踏み込まない" in block
+
+
 def test_escape_system_prompt_mentions_user_message_semantics() -> None:
     system = build_escape_system_prompt(
         world_title="テスト廃墟",
@@ -70,3 +85,5 @@ def test_escape_system_prompt_mentions_user_message_semantics() -> None:
     assert "観測" in system
     assert "user:" not in system.lower()
     assert "1名しかいない" in system or "他者" in system
+    assert "inner_thought" in system
+    assert "【ペルソナ】の口調" in system or "口調に揃え" in system

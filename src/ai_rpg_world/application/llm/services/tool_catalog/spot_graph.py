@@ -7,6 +7,9 @@ from ai_rpg_world.application.llm.contracts.interfaces import IAvailabilityResol
 from ai_rpg_world.application.llm.services.spot_graph_availability_resolvers import (
     SpotGraphToolsAvailabilityResolver,
 )
+from ai_rpg_world.application.llm.services.tool_catalog.inner_thought import (
+    inner_thought_property,
+)
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SAY,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
@@ -18,6 +21,7 @@ from ai_rpg_world.application.llm.tool_constants import (
 )
 
 _RESOLVER = SpotGraphToolsAvailabilityResolver()
+_IT = inner_thought_property()
 
 TRAVEL_TO_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
@@ -29,8 +33,9 @@ TRAVEL_TO_DEFINITION = ToolDefinitionDto(
                 "type": "string",
                 "description": "接続先ラベル（現在の状況に表示された S1, S2 等）。",
             },
+            "inner_thought": _IT,
         },
-        "required": ["destination_label"],
+        "required": ["destination_label", "inner_thought"],
     },
 )
 
@@ -44,15 +49,22 @@ SET_SUB_LOCATION_DEFINITION = ToolDefinitionDto(
                 "type": "string",
                 "description": "サブロケーションラベル（現在の状況に表示された SL1, SL2 等）。未指定でクリア。",
             },
+            "inner_thought": _IT,
         },
-        "required": [],
+        "required": ["inner_thought"],
     },
 )
 
 EXPLORE_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_EXPLORE,
     description="現在のスポットを探索する（発見・ドロップ等はシナリオ依存）。",
-    parameters={"type": "object", "properties": {}, "required": []},
+    parameters={
+        "type": "object",
+        "properties": {
+            "inner_thought": _IT,
+        },
+        "required": ["inner_thought"],
+    },
 )
 
 INTERACT_DEFINITION = ToolDefinitionDto(
@@ -69,8 +81,9 @@ INTERACT_DEFINITION = ToolDefinitionDto(
                 "type": "string",
                 "description": "操作名（オブジェクトに定義された action_name）。",
             },
+            "inner_thought": _IT,
         },
-        "required": ["object_label", "action_name"],
+        "required": ["object_label", "action_name", "inner_thought"],
     },
 )
 
@@ -84,8 +97,9 @@ WAIT_DEFINITION = ToolDefinitionDto(
                 "type": "string",
                 "description": "待機する理由（任意）。",
             },
+            "inner_thought": _IT,
         },
-        "required": [],
+        "required": ["inner_thought"],
     },
 )
 
@@ -100,8 +114,9 @@ SAY_DEFINITION = ToolDefinitionDto(
                 "type": "string",
                 "description": "発言する内容。",
             },
+            "inner_thought": _IT,
         },
-        "required": ["content"],
+        "required": ["content", "inner_thought"],
     },
 )
 
@@ -119,8 +134,9 @@ WHISPER_DEFINITION = ToolDefinitionDto(
                 "type": "string",
                 "description": "囁く内容。",
             },
+            "inner_thought": _IT,
         },
-        "required": ["target_label", "content"],
+        "required": ["target_label", "content", "inner_thought"],
     },
 )
 
