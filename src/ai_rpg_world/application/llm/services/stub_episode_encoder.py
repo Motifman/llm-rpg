@@ -118,6 +118,7 @@ class StubEpisodeEncoder(IEpisodeEncoder):
             last_recalled_at=None,
             reflections=(),
             reconsolidation_history=(),
+            memory_reflection_journal=(),
             confidence="medium",
             candidate_id=candidate.candidate_id,
         )

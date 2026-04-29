@@ -1,7 +1,7 @@
 """Episode encoding（Phase 3）の結合・LLM JSON パース・ストアのテスト。"""
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -104,17 +104,25 @@ def _processor(
     encoder: IEpisodeEncoder,
     *,
     max_retries: int = 2,
+    max_queue_retries: int = 0,
+    encoding_backoff_base_seconds: float = 2.0,
+    utc_now=None,
 ) -> EpisodeEncodingProcessor:
     resolver = ExperienceTraceBundleResolver(action_store, observation_store)
     ctx = EpisodeEncodingContextDto(current_beliefs="room is dark")
-    return EpisodeEncodingProcessor(
+    kwargs = dict(
         candidate_store=candidate_store,
         trace_resolver=resolver,
         subjective_episode_store=episode_store,
         encoder=encoder,
         context_provider=lambda _pid: ctx,
         max_retries=max_retries,
+        max_queue_retries=max_queue_retries,
+        encoding_backoff_base_seconds=encoding_backoff_base_seconds,
     )
+    if utc_now is not None:
+        kwargs["utc_now"] = utc_now
+    return EpisodeEncodingProcessor(**kwargs)
 
 
 def test_resolver_restores_action_and_observation_in_order() -> None:
@@ -241,14 +249,62 @@ def test_processor_encoder_failure_marks_encoding_failed() -> None:
     astore.append(pid, _action_trace("tid"))
     cstore.add(pid, _candidate("c1", ("action:tid",)))
     proc = _processor(
-        cstore, astore, ostore, estate, _AlwaysFailingEncoder(), max_retries=2
+        cstore,
+        astore,
+        ostore,
+        estate,
+        _AlwaysFailingEncoder(),
+        max_retries=2,
+        max_queue_retries=0,
     )
     assert proc.process_pending(pid) == 0
     after = cstore.get_by_candidate_id(pid, "c1")
     assert after is not None and after.status == "encoding_failed"
 
 
-def test_llm_json_encoder_valid_json() -> None:
+def test_processor_encoder_transient_failure_backoff_then_permanent() -> None:
+    pid = PlayerId(1)
+    cstore = InMemoryEpisodeCandidateStore()
+    astore = InMemoryActionExperienceTraceStore()
+    ostore = InMemoryObservationExperienceTraceStore()
+    estate = InMemorySubjectiveEpisodeStore()
+    astore.append(pid, _action_trace("tid"))
+    cstore.add(pid, _candidate("c1", ("action:tid",)))
+    t0 = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    clock = {"now": t0}
+
+    def utc_now():
+        return clock["now"]
+
+    proc = _processor(
+        cstore,
+        astore,
+        ostore,
+        estate,
+        _AlwaysFailingEncoder(),
+        max_retries=1,
+        max_queue_retries=2,
+        encoding_backoff_base_seconds=10.0,
+        utc_now=utc_now,
+    )
+    assert proc.process_pending(pid) == 0
+    mid = cstore.get_by_candidate_id(pid, "c1")
+    assert mid is not None and mid.status == "pending_encoding"
+    assert mid.encoding_retry_count == 1
+    assert mid.last_encoding_failure_at == t0
+
+    assert proc.process_pending(pid) == 0
+    assert cstore.get_by_candidate_id(pid, "c1") == mid
+
+    clock["now"] = t0 + timedelta(seconds=15)
+    assert proc.process_pending(pid) == 0
+    mid2 = cstore.get_by_candidate_id(pid, "c1")
+    assert mid2 is not None and mid2.encoding_retry_count == 2
+
+    clock["now"] = t0 + timedelta(seconds=40)
+    assert proc.process_pending(pid) == 0
+    final = cstore.get_by_candidate_id(pid, "c1")
+    assert final is not None and final.status == "encoding_failed"
     pid = PlayerId(1)
     payload = {
         "observed": "見えた。",

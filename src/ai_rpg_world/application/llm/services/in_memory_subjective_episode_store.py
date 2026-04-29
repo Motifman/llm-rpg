@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import datetime
+from threading import RLock
 from typing import Dict, List
 
 from ai_rpg_world.application.llm.contracts.dtos import SubjectiveEpisode
@@ -18,6 +19,7 @@ class InMemorySubjectiveEpisodeStore(ISubjectiveEpisodeStore):
         self._max_entries = max_entries_per_player
         self._by_player: Dict[int, List[SubjectiveEpisode]] = {}
         self._index: Dict[int, Dict[str, SubjectiveEpisode]] = {}
+        self._lock = RLock()
 
     def _key(self, player_id: PlayerId) -> int:
         return player_id.value
@@ -29,19 +31,20 @@ class InMemorySubjectiveEpisodeStore(ISubjectiveEpisodeStore):
             raise TypeError("episode must be SubjectiveEpisode")
         if episode.agent_id != player_id.value:
             raise ValueError("episode.agent_id must match player_id")
-        key = self._key(player_id)
-        if key not in self._by_player:
-            self._by_player[key] = []
-            self._index[key] = {}
-        self._index[key][episode.episode_id] = episode
-        lst = self._by_player[key]
-        lst[:] = [e for e in lst if e.episode_id != episode.episode_id]
-        lst.append(episode)
-        if len(lst) > self._max_entries:
-            removed = lst[:-self._max_entries]
-            self._by_player[key] = lst[-self._max_entries :]
-            for old in removed:
-                self._index[key].pop(old.episode_id, None)
+        with self._lock:
+            key = self._key(player_id)
+            if key not in self._by_player:
+                self._by_player[key] = []
+                self._index[key] = {}
+            self._index[key][episode.episode_id] = episode
+            lst = self._by_player[key]
+            lst[:] = [e for e in lst if e.episode_id != episode.episode_id]
+            lst.append(episode)
+            if len(lst) > self._max_entries:
+                removed = lst[:-self._max_entries]
+                self._by_player[key] = lst[-self._max_entries :]
+                for old in removed:
+                    self._index[key].pop(old.episode_id, None)
 
     def get_by_episode_id(
         self, player_id: PlayerId, episode_id: str
@@ -50,7 +53,8 @@ class InMemorySubjectiveEpisodeStore(ISubjectiveEpisodeStore):
             raise TypeError("player_id must be PlayerId")
         if not isinstance(episode_id, str):
             raise TypeError("episode_id must be str")
-        return self._index.get(self._key(player_id), {}).get(episode_id)
+        with self._lock:
+            return self._index.get(self._key(player_id), {}).get(episode_id)
 
     def list_recent(self, player_id: PlayerId, limit: int) -> List[SubjectiveEpisode]:
         if not isinstance(player_id, PlayerId):
@@ -59,10 +63,11 @@ class InMemorySubjectiveEpisodeStore(ISubjectiveEpisodeStore):
             raise ValueError("limit must be 0 or greater")
         if limit == 0:
             return []
-        key = self._key(player_id)
-        entries = self._by_player.get(key, [])
-        sorted_entries = sorted(entries, key=lambda e: e.created_at, reverse=True)
-        return sorted_entries[:limit]
+        with self._lock:
+            key = self._key(player_id)
+            entries = self._by_player.get(key, [])
+            sorted_entries = sorted(entries, key=lambda e: e.created_at, reverse=True)
+            return sorted_entries[:limit]
 
     def record_passive_recall(self, player_id: PlayerId, episode_id: str) -> None:
         if not isinstance(player_id, PlayerId):
