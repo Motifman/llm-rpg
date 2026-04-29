@@ -63,6 +63,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ILongTermMemoryStore,
     IObservationExperienceTraceStore,
     ILlmTurnTrigger,
+    IPassiveSubjectiveRecallComposer,
     IReflectionRunner,
     IReflectionStatePort,
     ISlidingWindowMemory,
@@ -110,6 +111,9 @@ from ai_rpg_world.application.llm.services.experience_trace_bundle_resolver impo
     ExperienceTraceBundleResolver,
 )
 from ai_rpg_world.application.llm.wiring.episode_encoder_factory import build_episode_encoder
+from ai_rpg_world.application.llm.wiring.passive_subjective_recall_factory import (
+    build_passive_subjective_recall_composer,
+)
 from ai_rpg_world.application.llm.services.in_memory_working_memory_store import (
     InMemoryWorkingMemoryStore,
 )
@@ -719,6 +723,7 @@ def _build_prompt_stack(
     long_term_memory_store: ILongTermMemoryStore,
     tile_map_view_distance: int,
     persona_block_provider: Optional[Callable[[PlayerId], str]] = None,
+    passive_subjective_recall: Optional[IPassiveSubjectiveRecallComposer] = None,
 ) -> DefaultPromptBuilder:
     """
     predictive_retriever と prompt_builder を構築する。
@@ -741,6 +746,7 @@ def _build_prompt_stack(
         ui_context_builder=ui_context_builder,
         predictive_memory_retriever=predictive_retriever,
         persona_block_provider=persona_block_provider,
+        passive_subjective_recall=passive_subjective_recall,
         tile_map_view_distance=tile_map_view_distance,
     )
 
@@ -1044,6 +1050,9 @@ def create_llm_agent_wiring(
         max_retries=2,
     )
     episode_encoding_runner = EpisodeEncodingRunner(episode_encoding_processor)
+    passive_recall_composer = build_passive_subjective_recall_composer(
+        subjective_episode_store
+    )
     subagent_invoke_text = create_subagent_invoke_text(client)
     subagent_runner = SubagentRunner(
         memory_query_executor=memory_query_executor,
@@ -1126,6 +1135,7 @@ def create_llm_agent_wiring(
         long_term_memory_store=long_term_memory_store,
         tile_map_view_distance=effective_view_distance,
         persona_block_provider=persona_block_provider,
+        passive_subjective_recall=passive_recall_composer,
     )
     orchestrator = LlmAgentOrchestrator(
         prompt_builder=prompt_builder,

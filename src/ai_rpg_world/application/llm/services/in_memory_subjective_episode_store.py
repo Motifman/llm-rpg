@@ -1,5 +1,7 @@
 """SubjectiveEpisode（v2）の in-memory 実装。"""
 
+from dataclasses import replace
+from datetime import datetime
 from typing import Dict, List
 
 from ai_rpg_world.application.llm.contracts.dtos import SubjectiveEpisode
@@ -61,3 +63,18 @@ class InMemorySubjectiveEpisodeStore(ISubjectiveEpisodeStore):
         entries = self._by_player.get(key, [])
         sorted_entries = sorted(entries, key=lambda e: e.created_at, reverse=True)
         return sorted_entries[:limit]
+
+    def record_passive_recall(self, player_id: PlayerId, episode_id: str) -> None:
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
+        if not isinstance(episode_id, str):
+            raise TypeError("episode_id must be str")
+        ep = self.get_by_episode_id(player_id, episode_id)
+        if ep is None:
+            return
+        updated = replace(
+            ep,
+            recall_count=ep.recall_count + 1,
+            last_recalled_at=datetime.now(),
+        )
+        self.put(player_id, updated)

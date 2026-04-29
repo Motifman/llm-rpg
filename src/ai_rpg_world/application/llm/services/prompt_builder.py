@@ -10,6 +10,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IContextFormatStrategy,
     ICurrentStateFormatter,
     ILlmUiContextBuilder,
+    IPassiveSubjectiveRecallComposer,
     IPredictiveMemoryRetriever,
     IPromptBuilder,
     IRecentEventsFormatter,
@@ -59,6 +60,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         ui_context_builder: Optional[ILlmUiContextBuilder] = None,
         predictive_memory_retriever: Optional[IPredictiveMemoryRetriever] = None,
         persona_block_provider: Optional[Callable[[PlayerId], str]] = None,
+        passive_subjective_recall: Optional[IPassiveSubjectiveRecallComposer] = None,
         recent_observations_limit: int = DEFAULT_RECENT_OBSERVATIONS_LIMIT,
         recent_actions_limit: int = DEFAULT_RECENT_ACTIONS_LIMIT,
         default_action_instruction: str = DEFAULT_ACTION_INSTRUCTION,
@@ -96,6 +98,12 @@ class DefaultPromptBuilder(IPromptBuilder):
             )
         if persona_block_provider is not None and not callable(persona_block_provider):
             raise TypeError("persona_block_provider must be callable or None")
+        if passive_subjective_recall is not None and not isinstance(
+            passive_subjective_recall, IPassiveSubjectiveRecallComposer
+        ):
+            raise TypeError(
+                "passive_subjective_recall must be IPassiveSubjectiveRecallComposer or None"
+            )
         if recent_observations_limit < 0:
             raise ValueError("recent_observations_limit must be 0 or greater")
         if recent_actions_limit < 0:
@@ -124,6 +132,7 @@ class DefaultPromptBuilder(IPromptBuilder):
             self._ui_context_builder = builder_module.DefaultLlmUiContextBuilder()
         self._predictive_memory_retriever = predictive_memory_retriever
         self._persona_block_provider = persona_block_provider
+        self._passive_subjective_recall = passive_subjective_recall
         self._recent_observations_limit = recent_observations_limit
         self._recent_actions_limit = recent_actions_limit
         self._default_action_instruction = default_action_instruction
@@ -227,10 +236,24 @@ class DefaultPromptBuilder(IPromptBuilder):
 
         # 6b. 直前ターン失敗時の補正（user 先頭に差し込み、次の 1 ツール向け）
         failure_block = build_pre_turn_failure_section(action_results[:2])
+        recall_block = ""
+        if self._passive_subjective_recall is not None:
+            situation_for_recall = (
+                current_state_text.rstrip() + "\n" + recent_events_text.rstrip()
+            ).strip()
+            recall_block = self._passive_subjective_recall.compose_user_block(
+                player_id,
+                situation_text=situation_for_recall,
+                current_goals_hint="",
+            ).strip()
+
+        body_parts: list[str] = []
         if failure_block:
-            user_context_body = "\n\n".join([failure_block, context.rstrip()])
-        else:
-            user_context_body = context.rstrip()
+            body_parts.append(failure_block)
+        if recall_block:
+            body_parts.append(recall_block)
+        body_parts.append(context.rstrip())
+        user_context_body = "\n\n".join(body_parts)
 
         # 7. システムプロンプト・ユーザーメッセージ
         system_content = self._system_prompt_builder.build(player_info)
