@@ -390,6 +390,26 @@ class ISubjectiveEpisodeStore(ABC):
         """created_at の新しい順で最大 limit 件。"""
         pass
 
+    @abstractmethod
+    def record_passive_recall(self, player_id: PlayerId, episode_id: str) -> None:
+        """Passive Recall で採用したエピソードの recall_count を 1 増やす。無ければ何もしない。"""
+        pass
+
+
+class IPassiveSubjectiveRecallComposer(ABC):
+    """v2 SubjectiveEpisode から user prompt 用の想起ブロックを組み立てる。"""
+
+    @abstractmethod
+    def compose_user_block(
+        self,
+        player_id: PlayerId,
+        *,
+        situation_text: str,
+        current_goals_hint: str,
+    ) -> str:
+        """【ふと思い出したこと】相当。未ヒット時は空文字。"""
+        pass
+
 
 ExperienceTraceUnion = Union[ActionExperienceTrace, ObservationExperienceTrace]
 
