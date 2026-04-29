@@ -56,6 +56,7 @@ from ai_rpg_world.application.llm.wiring._llm_client_factory import (
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionExperienceTraceStore,
     IActionResultStore,
+    IEpisodeCandidateStore,
     IEpisodeMemoryStore,
     ILLMClient,
     ILLMPlayerResolver,
@@ -91,6 +92,10 @@ from ai_rpg_world.application.llm.services.in_memory_action_experience_trace_sto
 from ai_rpg_world.application.llm.services.in_memory_observation_experience_trace_store import (
     InMemoryObservationExperienceTraceStore,
 )
+from ai_rpg_world.application.llm.services.in_memory_episode_candidate_store import (
+    InMemoryEpisodeCandidateStore,
+)
+from ai_rpg_world.application.llm.services.episode_chunker import RuleBasedEpisodeChunker
 from ai_rpg_world.application.llm.services.in_memory_working_memory_store import (
     InMemoryWorkingMemoryStore,
 )
@@ -799,6 +804,7 @@ class LlmAgentWiringResult:
         observation_appender: Optional[ObservationAppender] = None,
         action_experience_trace_store: Optional[IActionExperienceTraceStore] = None,
         observation_experience_trace_store: Optional[IObservationExperienceTraceStore] = None,
+        episode_candidate_store: Optional[IEpisodeCandidateStore] = None,
         sns_mode_session: Optional[Any] = None,
         sns_page_session: Optional[Any] = None,
         trade_page_session: Optional[Any] = None,
@@ -815,6 +821,7 @@ class LlmAgentWiringResult:
             self.observation_appender = None
         self.action_experience_trace_store = action_experience_trace_store
         self.observation_experience_trace_store = observation_experience_trace_store
+        self.episode_candidate_store = episode_candidate_store
         self.sns_mode_session = sns_mode_session
         self.sns_page_session = sns_page_session
         self.trade_page_session = trade_page_session
@@ -937,6 +944,12 @@ def create_llm_agent_wiring(
         action_experience_trace_store
         if action_experience_trace_store is not None
         else InMemoryActionExperienceTraceStore()
+    )
+    episode_candidate_store = InMemoryEpisodeCandidateStore()
+    episode_chunker = RuleBasedEpisodeChunker(
+        action_trace_store=action_experience_trace_store,
+        observation_trace_store=observation_experience_trace_store,
+        candidate_store=episode_candidate_store,
     )
     ui_context_builder = DefaultLlmUiContextBuilder()
     recent_events_formatter = DefaultRecentEventsFormatter()
@@ -1093,6 +1106,7 @@ def create_llm_agent_wiring(
         episode_memory_store=episode_memory_store,
         action_experience_trace_store=action_experience_trace_store,
         handle_store=handle_store,
+        episode_chunker=episode_chunker,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,
@@ -1138,6 +1152,7 @@ def create_llm_agent_wiring(
         observation_appender=ObservationAppender(buffer),
         action_experience_trace_store=action_experience_trace_store,
         observation_experience_trace_store=observation_experience_trace_store,
+        episode_candidate_store=episode_candidate_store,
         sns_mode_session=sns_mode_session,
         sns_page_session=sns_page_session,
         trade_page_session=trade_page_session,

@@ -787,7 +787,10 @@ flowchart LR
 - [x] Phase 1B: ObservationExperienceTrace と append 時 recorder 経路
   - 実装コミット: `5aae6c68` (`feat: add experience trace capture for episodic memory`)
   - 内容: `ObservationExperienceTrace` DTO / store、`ObservationTraceRecorder`、`ObservationTraceRecordingBuffer`、通常 wiring / spot_graph wiring での append 時 trace 保存。
-- [ ] Phase 2: Chunker
+- [x] Phase 2: Chunker
+  - 実装コミット: `5208181a`
+  - 内容: `EpisodeCandidate` DTO / in-memory store、`RuleBasedEpisodeChunker`、`IEpisodeChunkCoordinator`、hard limit 5 件、失敗・高 salience 観測・自己介入・強感情・場所文脈変化・活動変化による境界 score。`create_llm_agent_wiring` / `create_spot_graph_wiring` で chunker を生成し、`LlmAgentOrchestrator.run_turn` の終了時（`finally`、正常・LLM 失敗を問わず）に `create_candidate_if_ready` を 1 回呼ぶ。`LlmAgentWiringResult.episode_candidate_store` で pending 候補を参照可能。
+  - 現時点では LLM は導入していない。Phase 2 の Chunker はルールベースのみである。
 - [ ] Phase 3: LLM Episode Encoder
 - [ ] Phase 4: Passive Recall + Memory Reflection
 - [ ] Phase 5: Active Recall
@@ -837,6 +840,21 @@ flowchart LR
 - 未処理 trace buffer を管理する。
 - N traces + boundary score で episode candidate を作る。
 - boundary score は location / activity / goal / prediction_error / emotion / interaction / salient event を見る。
+- `LlmAgentOrchestrator` でターン終了時に `create_candidate_if_ready(player_id)` を呼ぶ（テスト・診断用に `evaluate` も直接呼べる）。
+- 現時点では LLM は使わない。`RuleBasedEpisodeChunker` は名前通りルールベース実装であり、LLM Chunker は将来の拡張候補に留める。
+- hard limit は 5 trace。
+- `EpisodeCandidate` は in-memory store に保存する。
+- candidate 作成済みの source trace は重複して candidate 化しない。
+- Phase 2 では Episode Encoding は行わない。
+
+#### Phase 2 テスト方針
+
+- trace がない場合は candidate を作らないことを確認する。
+- hard limit 5 件に達したら古い順に 5 trace を `EpisodeCandidate` にすることを確認する。
+- 作成済み source trace が重複して candidate 化されないことを確認する。
+- high salience observation / failed action が hard limit 前でも chunk boundary になることを確認する。
+- 低 salience の短い trace 群では candidate を作らないことを確認する。
+- `episode_chunker` 指定時、`run_turn` ごとに `create_candidate_if_ready` が少なくとも 1 回呼ばれることを確認する（LLM 失敗経路を含む）。
 
 ### Phase 3: LLM Episode Encoder
 
@@ -893,7 +911,8 @@ flowchart LR
 5. Semantic Memory と Identity Memory の境界。
    - Semantic は「世界・他者・行動の内部モデル」、Identity は「自分が何者として何を背負っているか」を優先する。
 6. Chunker を LLM 化する時期。
-   - 初期はルールベース。LLM 化するなら軽量モードで境界判定に限定する。
+   - 初期実装済みの Phase 2 Chunker は LLM 不使用のルールベース。
+   - LLM 化するなら将来の拡張として、軽量モードで境界判定に限定する。
 7. ObservationExperienceTrace の実装タイミングと observation_kind の最終 enum。
    - Phase 1B で append 時保存を実装済み。
    - 初期 enum は `world_event`, `other_agent_action`, `speech`, `environment_change`, `intervention_to_self`, `system_notice` とする。

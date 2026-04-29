@@ -13,6 +13,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
     ActionExperienceTrace,
     EpisodeMemoryEntry,
+    EpisodeCandidate,
     LlmUiContextDto,
     LongTermFactEntry,
     MemoryLawEntry,
@@ -313,6 +314,37 @@ class IObservationExperienceTraceStore(ABC):
         self, player_id: PlayerId, limit: int
     ) -> List[ObservationExperienceTrace]:
         """指定プレイヤーの直近 limit 件の observation trace を新しい順で返す。"""
+        pass
+
+
+class IEpisodeCandidateStore(ABC):
+    """EpisodeCandidate の格納・取得。"""
+
+    @abstractmethod
+    def add(self, player_id: PlayerId, candidate: EpisodeCandidate) -> None:
+        """1 件の episode candidate を追加する。"""
+        pass
+
+    @abstractmethod
+    def get_recent(self, player_id: PlayerId, limit: int) -> List[EpisodeCandidate]:
+        """指定プレイヤーの直近 limit 件の candidate を新しい順で返す。"""
+        pass
+
+    @abstractmethod
+    def contains_source_trace(self, player_id: PlayerId, source_trace_id: str) -> bool:
+        """source trace が既存 candidate に含まれているかを返す。"""
+        pass
+
+
+class IEpisodeChunkCoordinator(ABC):
+    """run_turn 終了時に未処理 ExperienceTrace から EpisodeCandidate を切り出す。"""
+
+    @abstractmethod
+    def create_candidate_if_ready(self, player_id: PlayerId) -> Optional[EpisodeCandidate]:
+        """
+        区切り条件を満たせば candidate を保存して返す。満たさなければ None。
+        同一プレイヤーについて run_turn のすべての出口で最大 1 回呼ぶ想定。
+        """
         pass
 
 
