@@ -859,10 +859,55 @@ flowchart LR
 ### Phase 3: LLM Episode Encoder
 
 - Episode Encoder port を定義する。
+- LLM は **呼び出し先を抽象化**する（例: 本番は vLLM / Gemma 系、テストはスタブ）。失敗時リトライはアプリケーション層のポリシーとして定義する。
 - LLM prompt と JSON schema を作る。
 - persona / identity snapshot / current character state / beliefs / goals / traces を入力する。
-- `SubjectiveEpisode` を生成する。
-- validator で source trace にない事実を抑制する。
+- **`SubjectiveEpisode`（v2 DTO）と永続化先は既存 `EpisodeMemoryEntry` / 既存 episode store とは分離**する。
+- `EpisodeCandidate`（`pending_encoding`）を入力に取り、source trace を解決して主観 episode を生成する。
+- validator で source trace にない事実を抑制する（ルールは段階的に厳格化してよい）。
+- エンコード成功後の **candidate の扱い**（`status` 更新・削除・冪等キー）を実装し、**同一 candidate の二重エンコードを防ぐ**。
+
+#### Phase 3 完了条件チェックリスト
+
+以下をすべて満たしたら Phase 3 完了とする。実装順は **3.1 → 3.2 → 3.3 → 3.4** を推奨（前段が緑になるまで次へ進まない）。
+
+**3.1 ポート・DTO・ストア**
+
+- [ ] `SubjectiveEpisode`（計画 §8 の v2 スキーマに沿った DTO。少なくとも `episode_id`, `agent_id`, `source_trace_ids`, `observed`, `interpreted`, `felt`, `intended`, `expected`, `prediction_error` を含む）
+- [ ] `SubjectiveEpisode` 専用の `ISubjectiveEpisodeStore`（または同等）と in-memory 実装
+- [ ] `IEpisodeEncoder`（または同等の名前）: 入力に `EpisodeCandidate` + 解決済み `ExperienceTrace` 群 + encoding 用コンテキスト（persona / goals / beliefs / identity スナップショット等）、出力に `SubjectiveEpisode`
+- [ ] Encoder から参照する **LLM 呼び出し**は、`ILLMClient` とは別レイヤでもよいが **インターフェース越し**に差し替え可能であること（vLLM・スタブ・他プロバイダ）
+
+**3.2 スタブによるパイプライン結線**
+
+- [ ] `StubEpisodeEncoder`（固定または決定的な `SubjectiveEpisode` を返す）で、`pending` candidate → store に保存まで **エンドツーエンド**が通る
+- [ ] 「どのタイミングで encoder を起動するか」（例: 別スレッド、ターン後バッチ、明示ジョブ）は **1 方式に決めて**実装され、ドキュメントかコードコメントで根拠が分かる
+
+**3.3 LLM Episode Encoder（本体）**
+
+- [ ] プロンプト・**JSON schema**（または同等の構造化出力契約）で LLM 出力を束ねる
+- [ ] `belief_update_candidates` / `relationship_deltas` / `cue_keys` 等、計画 §6・§8 にある **拡張フィールドを生成**する（初期は空や省略可だが、スキーマ上の枠は揃える）
+- [ ] 入力に **Action / Observation の両 trace** が混在する candidate を正しく扱う
+- [ ] 失敗時（タイムアウト・5xx・不正 JSON・スキーマ不一致）の **リトライ方針**がコードまたは設定で明示されている（例: 最大回数、バックオフ、再試行対象エラー）。**`pending` のまま再試行可能**であること
+
+**3.4 バリデーション・candidate ライフサイクル**
+
+- [ ] 出力に対する **schema 検証**（必須）
+- [ ] `observed` が source trace に無い事実を含まないよう **ルールまたは軽量チェック**がある（段階的厳格化可）
+- [ ] エンコード成功後: **二重処理防止**（`candidate_id` または `source_trace_ids` 集合での idempotency）
+- [ ] エンコード成功後: **candidate の退去方針**が実装されている（`encoded` 遷移、アーカイブ、削除のいずれか。監査用に candidate_id → episode_id の対応が追えること）
+
+**Phase 3 全体の受け入れ（UAT 相当）**
+
+- [ ] 実際の `EpisodeCandidate`（Phase 2 で生成）から **1 件以上** `SubjectiveEpisode` が生成され、store から読み戻せる
+- [ ] `pytest` で上記のうち **回帰に効く項目**（スタブ E2E、schema 失敗、冪等性）がテストされている
+
+#### Phase 3 テスト方針（最低限）
+
+- スタブ encoder で candidate → `SubjectiveEpisode` が 1 件保存されること。
+- LLM encoder（またはモック LLM）でスキーマ適合出力が保存され、破損 JSON は拒否またはリトライパスに乗ること。
+- 同一 `candidate_id` に対する二回目の encode が **新規 episode を増やさない**（または設計どおりエラーになる）こと。
+- `source_trace_ids` が空・不整合の candidate をどう扱うかが定義され、テストまたは明文化されていること。
 
 ### Phase 4: Passive Recall + Memory Reflection
 
