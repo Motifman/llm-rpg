@@ -131,6 +131,22 @@ def create_spot_graph_wiring(
 ) -> "LlmAgentWiringResult":
     """スポットグラフ用に LLM 観測・ツール・プロンプトを組み立てる（タイル移動なし）。"""
     # 遅延 import: wiring/__init__.py の循環を避ける
+    from ai_rpg_world.application.llm.contracts.dtos import EpisodeEncodingContextDto
+    from ai_rpg_world.application.llm.services.episode_encoding_processor import (
+        EpisodeEncodingProcessor,
+    )
+    from ai_rpg_world.application.llm.services.episode_encoding_runner import (
+        EpisodeEncodingRunner,
+    )
+    from ai_rpg_world.application.llm.services.experience_trace_bundle_resolver import (
+        ExperienceTraceBundleResolver,
+    )
+    from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
+        InMemorySubjectiveEpisodeStore,
+    )
+    from ai_rpg_world.application.llm.wiring.episode_encoder_factory import (
+        build_episode_encoder,
+    )
     from ai_rpg_world.application.llm.wiring import (
         LlmAgentWiringResult,
         _DEFAULT_LLM_VIEW_DISTANCE,
@@ -249,6 +265,11 @@ def create_spot_graph_wiring(
         observation_trace_store=observation_experience_trace_store,
         candidate_store=episode_candidate_store,
     )
+    subjective_episode_store = InMemorySubjectiveEpisodeStore()
+    trace_bundle_resolver = ExperienceTraceBundleResolver(
+        action_experience_trace_store,
+        observation_experience_trace_store,
+    )
     from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
         SpotGraphUiContextBuilder,
     )
@@ -314,6 +335,16 @@ def create_spot_graph_wiring(
         handle_store=handle_store,
     )
     client = llm_client if llm_client is not None else create_llm_client_from_env()
+    episode_encoder = build_episode_encoder(client)
+    episode_encoding_processor = EpisodeEncodingProcessor(
+        candidate_store=episode_candidate_store,
+        trace_resolver=trace_bundle_resolver,
+        subjective_episode_store=subjective_episode_store,
+        encoder=episode_encoder,
+        context_provider=lambda _pid: EpisodeEncodingContextDto(),
+        max_retries=2,
+    )
+    episode_encoding_runner = EpisodeEncodingRunner(episode_encoding_processor)
     subagent_invoke_text = create_subagent_invoke_text(client)
     subagent_runner = SubagentRunner(
         memory_query_executor=memory_query_executor,
@@ -417,6 +448,7 @@ def create_spot_graph_wiring(
         action_experience_trace_store=action_experience_trace_store,
         handle_store=handle_store,
         episode_chunker=episode_chunker,
+        episode_encoding_runner=episode_encoding_runner,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,
@@ -478,6 +510,7 @@ def create_spot_graph_wiring(
         action_experience_trace_store=action_experience_trace_store,
         observation_experience_trace_store=observation_experience_trace_store,
         episode_candidate_store=episode_candidate_store,
+        subjective_episode_store=subjective_episode_store,
         sns_mode_session=sns_mode_session,
         sns_page_session=sns_page_session,
         trade_page_session=trade_page_session,

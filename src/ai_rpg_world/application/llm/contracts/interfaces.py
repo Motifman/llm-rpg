@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.common.value_object import WorldTick
@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
     ActionExperienceTrace,
+    EpisodeEncodingContextDto,
     EpisodeMemoryEntry,
     EpisodeCandidate,
     LlmUiContextDto,
@@ -19,6 +20,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     MemoryLawEntry,
     MemoryRetrievalQueryDto,
     ObservationExperienceTrace,
+    SubjectiveEpisode,
     SystemPromptPlayerInfoDto,
     ToolDefinitionDto,
     ToolRuntimeContextDto,
@@ -300,6 +302,13 @@ class IActionExperienceTraceStore(ABC):
         """指定プレイヤーの直近 limit 件の action trace を新しい順で返す。"""
         pass
 
+    @abstractmethod
+    def find_by_trace_id(
+        self, player_id: PlayerId, trace_id: str
+    ) -> Optional[ActionExperienceTrace]:
+        """trace_id に一致する 1 件を返す。無ければ None。"""
+        pass
+
 
 class IObservationExperienceTraceStore(ABC):
     """ObservationExperienceTrace の格納・取得。"""
@@ -314,6 +323,13 @@ class IObservationExperienceTraceStore(ABC):
         self, player_id: PlayerId, limit: int
     ) -> List[ObservationExperienceTrace]:
         """指定プレイヤーの直近 limit 件の observation trace を新しい順で返す。"""
+        pass
+
+    @abstractmethod
+    def find_by_trace_id(
+        self, player_id: PlayerId, trace_id: str
+    ) -> Optional[ObservationExperienceTrace]:
+        """trace_id に一致する 1 件を返す。無ければ None。"""
         pass
 
 
@@ -333,6 +349,88 @@ class IEpisodeCandidateStore(ABC):
     @abstractmethod
     def contains_source_trace(self, player_id: PlayerId, source_trace_id: str) -> bool:
         """source trace が既存 candidate に含まれているかを返す。"""
+        pass
+
+    @abstractmethod
+    def list_pending_encoding(
+        self, player_id: PlayerId, limit: int
+    ) -> List[EpisodeCandidate]:
+        """status が pending_encoding の候補を created_at の古い順で最大 limit 件返す。"""
+        pass
+
+    @abstractmethod
+    def get_by_candidate_id(
+        self, player_id: PlayerId, candidate_id: str
+    ) -> Optional[EpisodeCandidate]:
+        """candidate_id で 1 件取得。無ければ None。"""
+        pass
+
+    @abstractmethod
+    def replace_candidate(self, player_id: PlayerId, candidate: EpisodeCandidate) -> None:
+        """同一 candidate_id の要素を置換する。無ければ ValueError。"""
+        pass
+
+
+class ISubjectiveEpisodeStore(ABC):
+    """SubjectiveEpisode（v2）の格納・取得。既存 EpisodeMemoryStore とは独立。"""
+
+    @abstractmethod
+    def put(self, player_id: PlayerId, episode: SubjectiveEpisode) -> None:
+        """エピソードを保存する（同一 episode_id は上書き）。"""
+        pass
+
+    @abstractmethod
+    def get_by_episode_id(
+        self, player_id: PlayerId, episode_id: str
+    ) -> Optional[SubjectiveEpisode]:
+        pass
+
+    @abstractmethod
+    def list_recent(self, player_id: PlayerId, limit: int) -> List[SubjectiveEpisode]:
+        """created_at の新しい順で最大 limit 件。"""
+        pass
+
+
+ExperienceTraceUnion = Union[ActionExperienceTrace, ObservationExperienceTrace]
+
+
+class IEpisodeEncoder(ABC):
+    """ExperienceTrace 群と候補から SubjectiveEpisode を生成する。"""
+
+    @abstractmethod
+    def encode(
+        self,
+        context: EpisodeEncodingContextDto,
+        candidate: EpisodeCandidate,
+        traces: Tuple[ExperienceTraceUnion, ...],
+    ) -> SubjectiveEpisode:
+        """source_trace_ids と同じ順序で traces を渡すこと。"""
+        pass
+
+
+class IEpisodeEncodingLlmPort(ABC):
+    """Episode Encoder 用のテキスト補完（JSON を返す想定）。実装は vLLM / OpenAI 互換など。"""
+
+    @abstractmethod
+    def complete(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        response_format: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """モデル生出力。JSON オブジェクトを含む文字列を返す。
+
+        response_format は OpenAI / vLLM 互換の structured output 用（省略時は通常生成）。
+        """
+        pass
+
+
+class IEpisodeEncodingRunner(ABC):
+    """ターン終了後に未処理 candidate をエンコードするトリガ。"""
+
+    @abstractmethod
+    def run_after_turn(self, player_id: PlayerId) -> None:
         pass
 
 

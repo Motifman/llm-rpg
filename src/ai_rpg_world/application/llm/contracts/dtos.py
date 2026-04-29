@@ -149,7 +149,7 @@ ObservationTraceKind = Literal[
     "system_notice",
 ]
 
-EpisodeCandidateStatus = Literal["pending_encoding"]
+EpisodeCandidateStatus = Literal["pending_encoding", "encoded", "encoding_failed"]
 
 
 EMOTION_HINT_VALUES: Tuple[str, ...] = (
@@ -348,6 +348,8 @@ class EpisodeCandidate:
     boundary_score: int
     boundary_reasons: Tuple[str, ...]
     status: EpisodeCandidateStatus = "pending_encoding"
+    subjective_episode_id: Optional[str] = None
+    encoding_error: Optional[str] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.candidate_id, str):
@@ -380,8 +382,218 @@ class EpisodeCandidate:
             raise TypeError("boundary_reasons must be tuple")
         if not all(isinstance(item, str) for item in self.boundary_reasons):
             raise TypeError("boundary_reasons must contain only str")
-        if self.status != "pending_encoding":
-            raise ValueError("status must be pending_encoding")
+        if self.status not in ("pending_encoding", "encoded", "encoding_failed"):
+            raise ValueError("status must be pending_encoding, encoded, or encoding_failed")
+        if self.subjective_episode_id is not None and not isinstance(
+            self.subjective_episode_id, str
+        ):
+            raise TypeError("subjective_episode_id must be str or None")
+        if self.encoding_error is not None and not isinstance(self.encoding_error, str):
+            raise TypeError("encoding_error must be str or None")
+        if self.status == "encoded":
+            if (
+                not self.subjective_episode_id
+                or not str(self.subjective_episode_id).strip()
+            ):
+                raise ValueError("encoded candidate must have non-empty subjective_episode_id")
+            if self.encoding_error is not None:
+                raise ValueError("encoded candidate must have encoding_error None")
+        if self.status == "pending_encoding":
+            if self.subjective_episode_id is not None:
+                raise ValueError("pending_encoding candidate must have subjective_episode_id None")
+            if self.encoding_error is not None:
+                raise ValueError("pending_encoding candidate must have encoding_error None")
+        if self.status == "encoding_failed":
+            if self.subjective_episode_id is not None:
+                raise ValueError("encoding_failed candidate must have subjective_episode_id None")
+            if not self.encoding_error or not self.encoding_error.strip():
+                raise ValueError("encoding_failed candidate must have non-empty encoding_error")
+
+
+PredictionErrorLevel = Literal["none", "small", "medium", "large"]
+SubjectiveImportance = Literal["low", "medium", "high"]
+
+
+@dataclass(frozen=True)
+class SubjectiveFelt:
+    """主観エピソード上の感情表現。"""
+
+    primary_emotion: str
+    secondary_emotions: Tuple[str, ...] = ()
+    emotion_note: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.primary_emotion, str):
+            raise TypeError("primary_emotion must be str")
+        if not self.primary_emotion.strip():
+            raise ValueError("primary_emotion must not be empty")
+        if not isinstance(self.secondary_emotions, tuple):
+            raise TypeError("secondary_emotions must be tuple")
+        if not all(isinstance(item, str) for item in self.secondary_emotions):
+            raise TypeError("secondary_emotions must contain only str")
+        if not isinstance(self.emotion_note, str):
+            raise TypeError("emotion_note must be str")
+
+
+@dataclass(frozen=True)
+class SubjectivePredictionError:
+    level: PredictionErrorLevel
+    reason: str = ""
+
+    def __post_init__(self) -> None:
+        if self.level not in ("none", "small", "medium", "large"):
+            raise ValueError("level must be none, small, medium, or large")
+        if not isinstance(self.reason, str):
+            raise TypeError("reason must be str")
+
+
+@dataclass(frozen=True)
+class BeliefUpdateCandidateEntry:
+    summary: str
+    confidence: SubjectiveImportance = "medium"
+    note: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.summary, str):
+            raise TypeError("summary must be str")
+        if not self.summary.strip():
+            raise ValueError("summary must not be empty")
+        if self.confidence not in ("low", "medium", "high"):
+            raise ValueError("confidence must be low, medium, or high")
+        if not isinstance(self.note, str):
+            raise TypeError("note must be str")
+
+
+@dataclass(frozen=True)
+class RelationshipDeltaEntry:
+    target: str
+    delta_summary: str
+    confidence: SubjectiveImportance = "medium"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.target, str):
+            raise TypeError("target must be str")
+        if not self.target.strip():
+            raise ValueError("target must not be empty")
+        if not isinstance(self.delta_summary, str):
+            raise TypeError("delta_summary must be str")
+        if not self.delta_summary.strip():
+            raise ValueError("delta_summary must not be empty")
+        if self.confidence not in ("low", "medium", "high"):
+            raise ValueError("confidence must be low, medium, or high")
+
+
+@dataclass(frozen=True)
+class EpisodeEncodingContextDto:
+    """Episode Encoder に渡すエージェント文脈（Phase 3 はプロンプト由来の薄い文字列から組み立て可能）。"""
+
+    persona_summary: str = ""
+    current_goals: str = ""
+    current_beliefs: str = ""
+    identity_summary: str = ""
+
+    def __post_init__(self) -> None:
+        for name in (
+            "persona_summary",
+            "current_goals",
+            "current_beliefs",
+            "identity_summary",
+        ):
+            if not isinstance(getattr(self, name), str):
+                raise TypeError(f"{name} must be str")
+
+
+@dataclass(frozen=True)
+class SubjectiveEpisode:
+    """主観的エピソード（v2）。既存 EpisodeMemoryEntry とは独立した DTO。"""
+
+    episode_id: str
+    agent_id: int
+    created_at: datetime
+    started_at_tick: Optional[int]
+    ended_at_tick: Optional[int]
+    source_trace_ids: Tuple[str, ...]
+    observed: str
+    interpreted: str
+    felt: SubjectiveFelt
+    intended: str
+    expected: str
+    prediction_error: SubjectivePredictionError
+    belief_at_encoding: str = ""
+    belief_update_candidates: Tuple[BeliefUpdateCandidateEntry, ...] = ()
+    relationship_deltas: Tuple[RelationshipDeltaEntry, ...] = ()
+    cue_keys: Tuple[str, ...] = ()
+    importance: SubjectiveImportance = "medium"
+    salience_reasons: Tuple[str, ...] = ()
+    recall_count: int = 0
+    last_recalled_at: Optional[datetime] = None
+    reflections: Tuple[str, ...] = ()
+    reconsolidation_history: Tuple[str, ...] = ()
+    confidence: SubjectiveImportance = "medium"
+    candidate_id: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.episode_id, str):
+            raise TypeError("episode_id must be str")
+        if not self.episode_id.strip():
+            raise ValueError("episode_id must not be empty")
+        if not isinstance(self.agent_id, int):
+            raise TypeError("agent_id must be int")
+        if not isinstance(self.created_at, datetime):
+            raise TypeError("created_at must be datetime")
+        if self.started_at_tick is not None and not isinstance(self.started_at_tick, int):
+            raise TypeError("started_at_tick must be int or None")
+        if self.ended_at_tick is not None and not isinstance(self.ended_at_tick, int):
+            raise TypeError("ended_at_tick must be int or None")
+        if not isinstance(self.source_trace_ids, tuple):
+            raise TypeError("source_trace_ids must be tuple")
+        if not self.source_trace_ids:
+            raise ValueError("source_trace_ids must not be empty")
+        if not all(isinstance(s, str) for s in self.source_trace_ids):
+            raise TypeError("source_trace_ids must contain only str")
+        for name in ("observed", "interpreted", "intended", "expected", "belief_at_encoding"):
+            if not isinstance(getattr(self, name), str):
+                raise TypeError(f"{name} must be str")
+        if not isinstance(self.felt, SubjectiveFelt):
+            raise TypeError("felt must be SubjectiveFelt")
+        if not isinstance(self.prediction_error, SubjectivePredictionError):
+            raise TypeError("prediction_error must be SubjectivePredictionError")
+        if not isinstance(self.belief_update_candidates, tuple):
+            raise TypeError("belief_update_candidates must be tuple")
+        if not all(isinstance(x, BeliefUpdateCandidateEntry) for x in self.belief_update_candidates):
+            raise TypeError("belief_update_candidates must contain BeliefUpdateCandidateEntry")
+        if not isinstance(self.relationship_deltas, tuple):
+            raise TypeError("relationship_deltas must be tuple")
+        if not all(isinstance(x, RelationshipDeltaEntry) for x in self.relationship_deltas):
+            raise TypeError("relationship_deltas must contain RelationshipDeltaEntry")
+        if not isinstance(self.cue_keys, tuple):
+            raise TypeError("cue_keys must be tuple")
+        if not all(isinstance(x, str) for x in self.cue_keys):
+            raise TypeError("cue_keys must contain only str")
+        if self.importance not in ("low", "medium", "high"):
+            raise ValueError("importance must be low, medium, or high")
+        if not isinstance(self.salience_reasons, tuple):
+            raise TypeError("salience_reasons must be tuple")
+        if not all(isinstance(x, str) for x in self.salience_reasons):
+            raise TypeError("salience_reasons must contain only str")
+        if not isinstance(self.recall_count, int) or self.recall_count < 0:
+            raise TypeError("recall_count must be a non-negative int")
+        if self.last_recalled_at is not None and not isinstance(
+            self.last_recalled_at, datetime
+        ):
+            raise TypeError("last_recalled_at must be datetime or None")
+        if not isinstance(self.reflections, tuple):
+            raise TypeError("reflections must be tuple")
+        if not all(isinstance(x, str) for x in self.reflections):
+            raise TypeError("reflections must contain only str")
+        if not isinstance(self.reconsolidation_history, tuple):
+            raise TypeError("reconsolidation_history must be tuple")
+        if not all(isinstance(x, str) for x in self.reconsolidation_history):
+            raise TypeError("reconsolidation_history must contain only str")
+        if self.confidence not in ("low", "medium", "high"):
+            raise ValueError("confidence must be low, medium, or high")
+        if not isinstance(self.candidate_id, str):
+            raise TypeError("candidate_id must be str")
 
 
 @dataclass(frozen=True)

@@ -89,3 +89,25 @@ class SubagentInvocationException(LlmApplicationException):
             **context,
         )
         self.cause = cause
+
+
+class EpisodeEncodingException(LlmApplicationException):
+    """Episode Encoder が主観エピソードを生成できない場合（JSON 破損・検証失敗など）。"""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        candidate_id: Optional[str] = None,
+        cause: Optional[Exception] = None,
+        **context,
+    ):
+        super().__init__(
+            message,
+            cause=cause,
+            error_code="EPISODE_ENCODING_FAILED",
+            candidate_id=candidate_id,
+            **context,
+        )
+        self.candidate_id = candidate_id
+        self.cause = cause

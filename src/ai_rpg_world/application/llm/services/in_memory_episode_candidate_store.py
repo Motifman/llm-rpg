@@ -1,6 +1,6 @@
 """EpisodeCandidate の in-memory 実装。"""
 
-from typing import Dict, List, Set
+from typing import Dict, List, Optional, Set
 
 from ai_rpg_world.application.llm.contracts.dtos import EpisodeCandidate
 from ai_rpg_world.application.llm.contracts.interfaces import IEpisodeCandidateStore
@@ -60,3 +60,51 @@ class InMemoryEpisodeCandidateStore(IEpisodeCandidateStore):
             raise TypeError("source_trace_id must be str")
         key = self._key(player_id)
         return source_trace_id in self._source_index.get(key, set())
+
+    def _rebuild_source_index(self, player_id: PlayerId) -> None:
+        key = self._key(player_id)
+        acc: Set[str] = set()
+        for c in self._store.get(key, []):
+            acc.update(c.source_trace_ids)
+        self._source_index[key] = acc
+
+    def list_pending_encoding(self, player_id: PlayerId, limit: int) -> List[EpisodeCandidate]:
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
+        if limit < 0:
+            raise ValueError("limit must be 0 or greater")
+        if limit == 0:
+            return []
+        key = self._key(player_id)
+        pending = [c for c in self._store.get(key, []) if c.status == "pending_encoding"]
+        pending.sort(key=lambda e: e.created_at)
+        return pending[:limit]
+
+    def get_by_candidate_id(
+        self, player_id: PlayerId, candidate_id: str
+    ) -> Optional[EpisodeCandidate]:
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
+        if not isinstance(candidate_id, str):
+            raise TypeError("candidate_id must be str")
+        key = self._key(player_id)
+        for c in self._store.get(key, []):
+            if c.candidate_id == candidate_id:
+                return c
+        return None
+
+    def replace_candidate(self, player_id: PlayerId, candidate: EpisodeCandidate) -> None:
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
+        if not isinstance(candidate, EpisodeCandidate):
+            raise TypeError("candidate must be EpisodeCandidate")
+        if candidate.agent_id != player_id.value:
+            raise ValueError("candidate.agent_id must match player_id")
+        key = self._key(player_id)
+        lst = self._store.get(key, [])
+        for i, old in enumerate(lst):
+            if old.candidate_id == candidate.candidate_id:
+                lst[i] = candidate
+                self._rebuild_source_index(player_id)
+                return
+        raise ValueError(f"candidate_id not found: {candidate.candidate_id!r}")

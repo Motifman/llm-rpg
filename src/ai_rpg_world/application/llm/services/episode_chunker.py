@@ -1,7 +1,10 @@
 """ExperienceTrace 群から EpisodeCandidate を作るルールベース chunker。
 
-現時点の Phase 2 実装では LLM を使わない。境界判定は件数・失敗・salience
-などのルールベース score のみで行う。
+現時点の Phase 2 実装では **LLM を使わない**（system prompt も JSON 生成もない）。
+境界判定は件数・失敗・salience などの **決定的な score** のみ。
+出力は常に `EpisodeCandidate` / `EpisodeChunkDecision` の dataclass（LLM の JSON ではない）。
+
+将来 LLM chunker を足す場合も、本クラスはベースラインとして残す想定。
 """
 
 from __future__ import annotations
