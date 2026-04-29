@@ -165,6 +165,10 @@ def create_spot_graph_wiring(
     from ai_rpg_world.application.llm.services.in_memory_observation_experience_trace_store import (
         InMemoryObservationExperienceTraceStore,
     )
+    from ai_rpg_world.application.llm.services.in_memory_episode_candidate_store import (
+        InMemoryEpisodeCandidateStore,
+    )
+    from ai_rpg_world.application.llm.services.episode_chunker import RuleBasedEpisodeChunker
     from ai_rpg_world.application.llm.services.llm_agent_turn_runner import LlmAgentTurnRunner
     from ai_rpg_world.application.llm.services.llm_player_resolver import ProfileBasedLlmPlayerResolver
     from ai_rpg_world.application.llm.services.llm_turn_trigger import DefaultLlmTurnTrigger
@@ -238,6 +242,12 @@ def create_spot_graph_wiring(
         action_experience_trace_store
         if action_experience_trace_store is not None
         else InMemoryActionExperienceTraceStore()
+    )
+    episode_candidate_store = InMemoryEpisodeCandidateStore()
+    episode_chunker = RuleBasedEpisodeChunker(
+        action_trace_store=action_experience_trace_store,
+        observation_trace_store=observation_experience_trace_store,
+        candidate_store=episode_candidate_store,
     )
     from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
         SpotGraphUiContextBuilder,
@@ -406,6 +416,7 @@ def create_spot_graph_wiring(
         episode_memory_store=episode_memory_store,
         action_experience_trace_store=action_experience_trace_store,
         handle_store=handle_store,
+        episode_chunker=episode_chunker,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,
@@ -466,6 +477,7 @@ def create_spot_graph_wiring(
         observation_appender=ObservationAppender(buffer),
         action_experience_trace_store=action_experience_trace_store,
         observation_experience_trace_store=observation_experience_trace_store,
+        episode_candidate_store=episode_candidate_store,
         sns_mode_session=sns_mode_session,
         sns_page_session=sns_page_session,
         trade_page_session=trade_page_session,

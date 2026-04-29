@@ -1,5 +1,7 @@
 """LlmAgentOrchestrator のテスト（正常・例外・ツール未選択・記憶連携）"""
 
+from typing import List
+
 from unittest.mock import MagicMock
 
 import pytest
@@ -10,6 +12,7 @@ from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IPromptBuilder,
     IToolArgumentResolver,
+    IEpisodeChunkCoordinator,
 )
 from ai_rpg_world.application.llm.services.action_result_store import (
     DefaultActionResultStore,
@@ -54,6 +57,19 @@ class _RecordingResolver(IToolArgumentResolver):
     def resolve(self, tool_name, arguments, runtime_context):
         self.calls.append((tool_name, arguments, runtime_context))
         return arguments or {}
+
+
+class _RecordingEpisodeChunkCoordinator(IEpisodeChunkCoordinator):
+    """create_candidate_if_ready 呼び出しを記録する。"""
+
+    def __init__(self) -> None:
+        self.calls: List[PlayerId] = []
+
+    def create_candidate_if_ready(self, player_id: PlayerId):
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
+        self.calls.append(player_id)
+        return None
 
 
 class TestLlmAgentOrchestratorRunTurn:
@@ -113,6 +129,39 @@ class TestLlmAgentOrchestratorRunTurn:
         result = orchestrator.run_turn(PlayerId(1))
         assert isinstance(result, LlmCommandResultDto)
         assert result.success is True
+
+    def test_run_turn_invokes_episode_chunker_once(self, prompt_builder, action_result_store, mapper):
+        """episode_chunker 指定時、ターン終了時に create_candidate_if_ready が 1 回呼ばれる"""
+        chunker = _RecordingEpisodeChunkCoordinator()
+        llm_client = StubLlmClient(tool_call_to_return={"name": TOOL_NAME_NO_OP, "arguments": {}})
+        orchestrator = LlmAgentOrchestrator(
+            prompt_builder=prompt_builder,
+            llm_client=llm_client,
+            tool_command_mapper=mapper,
+            action_result_store=action_result_store,
+            episode_chunker=chunker,
+        )
+        player_id = PlayerId(1)
+        orchestrator.run_turn(player_id)
+        assert chunker.calls == [player_id]
+
+    def test_run_turn_invokes_episode_chunker_on_llm_failure(
+        self, prompt_builder, action_result_store, mapper
+    ):
+        """LLM 失敗時も finally で chunker が呼ばれる"""
+        chunker = _RecordingEpisodeChunkCoordinator()
+        llm_client = StubLlmClient(
+            exception_to_raise=LlmApiCallException("Rate limit", error_code="LLM_RATE_LIMIT")
+        )
+        orchestrator = LlmAgentOrchestrator(
+            prompt_builder=prompt_builder,
+            llm_client=llm_client,
+            tool_command_mapper=mapper,
+            action_result_store=action_result_store,
+            episode_chunker=chunker,
+        )
+        orchestrator.run_turn(PlayerId(1))
+        assert len(chunker.calls) == 1
 
     def test_run_turn_passes_runtime_context_to_argument_resolver(self, prompt_builder, action_result_store, mapper):
         resolver = _RecordingResolver()
@@ -385,6 +434,19 @@ class TestLlmAgentOrchestratorInit:
                 llm_client=None,  # type: ignore[arg-type]
                 tool_command_mapper=_create_tool_command_mapper(movement_service=MagicMock()),
                 action_result_store=DefaultActionResultStore(),
+            )
+
+    def test_init_episode_chunker_not_iepisode_chunk_coordinator_raises_type_error(self):
+        """episode_chunker が IEpisodeChunkCoordinator でないとき TypeError"""
+        with pytest.raises(TypeError, match="episode_chunker must be IEpisodeChunkCoordinator"):
+            LlmAgentOrchestrator(
+                prompt_builder=_StubPromptBuilder(
+                    return_value={"messages": [], "tools": [], "tool_choice": "required"}
+                ),
+                llm_client=StubLlmClient(),
+                tool_command_mapper=_create_tool_command_mapper(movement_service=MagicMock()),
+                action_result_store=DefaultActionResultStore(),
+                episode_chunker=object(),  # type: ignore[arg-type]
             )
 
     def test_init_memory_extractor_only_raises_value_error(self):

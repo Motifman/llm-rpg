@@ -149,6 +149,8 @@ ObservationTraceKind = Literal[
     "system_notice",
 ]
 
+EpisodeCandidateStatus = Literal["pending_encoding"]
+
 
 EMOTION_HINT_VALUES: Tuple[str, ...] = (
     "curiosity",
@@ -306,6 +308,80 @@ class ObservationExperienceTrace:
                 raise TypeError(f"{field_name} must be tuple")
             if not all(isinstance(item, str) for item in value):
                 raise TypeError(f"{field_name} must contain only str")
+
+
+@dataclass(frozen=True)
+class EpisodeChunkDecision:
+    """未処理 trace 群を今 episode candidate として切るべきかの判定結果。"""
+
+    should_create_candidate: bool
+    boundary_score: int
+    boundary_reasons: Tuple[str, ...]
+    source_trace_ids: Tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.should_create_candidate, bool):
+            raise TypeError("should_create_candidate must be bool")
+        if not isinstance(self.boundary_score, int):
+            raise TypeError("boundary_score must be int")
+        if not isinstance(self.boundary_reasons, tuple):
+            raise TypeError("boundary_reasons must be tuple")
+        if not all(isinstance(item, str) for item in self.boundary_reasons):
+            raise TypeError("boundary_reasons must contain only str")
+        if not isinstance(self.source_trace_ids, tuple):
+            raise TypeError("source_trace_ids must be tuple")
+        if not all(isinstance(item, str) for item in self.source_trace_ids):
+            raise TypeError("source_trace_ids must contain only str")
+
+
+@dataclass(frozen=True)
+class EpisodeCandidate:
+    """Episode Encoder に渡す前の trace chunk。"""
+
+    candidate_id: str
+    agent_id: int
+    created_at: datetime
+    source_trace_ids: Tuple[str, ...]
+    started_at: datetime
+    ended_at: datetime
+    trace_count: int
+    boundary_score: int
+    boundary_reasons: Tuple[str, ...]
+    status: EpisodeCandidateStatus = "pending_encoding"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.candidate_id, str):
+            raise TypeError("candidate_id must be str")
+        if not isinstance(self.agent_id, int):
+            raise TypeError("agent_id must be int")
+        if not isinstance(self.created_at, datetime):
+            raise TypeError("created_at must be datetime")
+        if not isinstance(self.source_trace_ids, tuple):
+            raise TypeError("source_trace_ids must be tuple")
+        if not self.source_trace_ids:
+            raise ValueError("source_trace_ids must not be empty")
+        if not all(isinstance(item, str) for item in self.source_trace_ids):
+            raise TypeError("source_trace_ids must contain only str")
+        if not isinstance(self.started_at, datetime):
+            raise TypeError("started_at must be datetime")
+        if not isinstance(self.ended_at, datetime):
+            raise TypeError("ended_at must be datetime")
+        if self.ended_at < self.started_at:
+            raise ValueError("ended_at must be greater than or equal to started_at")
+        if not isinstance(self.trace_count, int):
+            raise TypeError("trace_count must be int")
+        if self.trace_count <= 0:
+            raise ValueError("trace_count must be greater than 0")
+        if self.trace_count != len(self.source_trace_ids):
+            raise ValueError("trace_count must match source_trace_ids length")
+        if not isinstance(self.boundary_score, int):
+            raise TypeError("boundary_score must be int")
+        if not isinstance(self.boundary_reasons, tuple):
+            raise TypeError("boundary_reasons must be tuple")
+        if not all(isinstance(item, str) for item in self.boundary_reasons):
+            raise TypeError("boundary_reasons must contain only str")
+        if self.status != "pending_encoding":
+            raise ValueError("status must be pending_encoding")
 
 
 @dataclass(frozen=True)
