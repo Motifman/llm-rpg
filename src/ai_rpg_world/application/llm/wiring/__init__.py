@@ -107,10 +107,16 @@ from ai_rpg_world.application.llm.services.episode_encoding_processor import (
 from ai_rpg_world.application.llm.services.episode_encoding_runner import (
     EpisodeEncodingRunner,
 )
+from ai_rpg_world.application.llm.services.episode_encoding_context_provider import (
+    build_episode_encoding_context_provider,
+)
 from ai_rpg_world.application.llm.services.experience_trace_bundle_resolver import (
     ExperienceTraceBundleResolver,
 )
 from ai_rpg_world.application.llm.wiring.episode_encoder_factory import build_episode_encoder
+from ai_rpg_world.application.llm.wiring.memory_reflection_factory import (
+    build_same_process_memory_reflection,
+)
 from ai_rpg_world.application.llm.wiring.passive_subjective_recall_factory import (
     build_passive_subjective_recall_composer,
 )
@@ -724,6 +730,9 @@ def _build_prompt_stack(
     tile_map_view_distance: int,
     persona_block_provider: Optional[Callable[[PlayerId], str]] = None,
     passive_subjective_recall: Optional[IPassiveSubjectiveRecallComposer] = None,
+    episode_encoding_context_provider: Optional[
+        Callable[[PlayerId], EpisodeEncodingContextDto]
+    ] = None,
 ) -> DefaultPromptBuilder:
     """
     predictive_retriever と prompt_builder を構築する。
@@ -747,6 +756,7 @@ def _build_prompt_stack(
         predictive_memory_retriever=predictive_retriever,
         persona_block_provider=persona_block_provider,
         passive_subjective_recall=passive_subjective_recall,
+        episode_encoding_context_provider=episode_encoding_context_provider,
         tile_map_view_distance=tile_map_view_distance,
     )
 
@@ -1039,15 +1049,27 @@ def create_llm_agent_wiring(
         recent_events_formatter=recent_events_formatter,
         handle_store=handle_store,
     )
+    episode_encoding_ctx_provider = build_episode_encoding_context_provider(
+        player_profile_repository=player_profile_repository,
+        long_term_memory_store=long_term_memory_store,
+        working_memory_store=working_memory_store,
+        persona_block_provider=persona_block_provider,
+    )
     client = llm_client if llm_client is not None else create_llm_client_from_env()
+    _, memory_reflection_after_encode = build_same_process_memory_reflection(
+        llm_client=client,
+        subjective_episode_store=subjective_episode_store,
+        context_provider=episode_encoding_ctx_provider,
+    )
     episode_encoder = build_episode_encoder(client)
     episode_encoding_processor = EpisodeEncodingProcessor(
         candidate_store=episode_candidate_store,
         trace_resolver=trace_bundle_resolver,
         subjective_episode_store=subjective_episode_store,
         encoder=episode_encoder,
-        context_provider=lambda _pid: EpisodeEncodingContextDto(),
+        context_provider=episode_encoding_ctx_provider,
         max_retries=2,
+        on_subjective_episode_encoded=memory_reflection_after_encode,
     )
     episode_encoding_runner = EpisodeEncodingRunner(episode_encoding_processor)
     passive_recall_composer = build_passive_subjective_recall_composer(
@@ -1136,6 +1158,7 @@ def create_llm_agent_wiring(
         tile_map_view_distance=effective_view_distance,
         persona_block_provider=persona_block_provider,
         passive_subjective_recall=passive_recall_composer,
+        episode_encoding_context_provider=episode_encoding_ctx_provider,
     )
     orchestrator = LlmAgentOrchestrator(
         prompt_builder=prompt_builder,

@@ -446,6 +446,20 @@ class IEpisodeEncodingLlmPort(ABC):
         pass
 
 
+class IMemoryReflectionLlmPort(ABC):
+    """Memory Reflection（主観エピソード再解釈）用のテキスト補完。JSON 1 オブジェクトを返す想定。"""
+
+    @abstractmethod
+    def complete(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        response_format: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        pass
+
+
 class IEpisodeEncodingRunner(ABC):
     """ターン終了後に未処理 candidate をエンコードするトリガ。"""
 

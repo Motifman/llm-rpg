@@ -325,6 +325,7 @@ def subjective_episode_from_llm_dict(
         last_recalled_at=None,
         reflections=(),
         reconsolidation_history=(),
+        memory_reflection_journal=(),
         confidence=conf,  # type: ignore[arg-type]
         candidate_id=candidate.candidate_id,
     )

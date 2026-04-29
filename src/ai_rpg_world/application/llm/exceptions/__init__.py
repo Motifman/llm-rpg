@@ -111,3 +111,28 @@ class EpisodeEncodingException(LlmApplicationException):
         )
         self.candidate_id = candidate_id
         self.cause = cause
+
+
+class MemoryReflectionException(LlmApplicationException):
+    """Memory Reflection（主観エピソードの再解釈）が失敗した場合。"""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        episode_id: Optional[str] = None,
+        correlation_id: Optional[str] = None,
+        cause: Optional[Exception] = None,
+        **context,
+    ):
+        super().__init__(
+            message,
+            cause=cause,
+            error_code="MEMORY_REFLECTION_FAILED",
+            episode_id=episode_id,
+            correlation_id=correlation_id,
+            **context,
+        )
+        self.episode_id = episode_id
+        self.correlation_id = correlation_id
+        self.cause = cause

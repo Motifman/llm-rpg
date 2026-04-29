@@ -350,6 +350,8 @@ class EpisodeCandidate:
     status: EpisodeCandidateStatus = "pending_encoding"
     subjective_episode_id: Optional[str] = None
     encoding_error: Optional[str] = None
+    encoding_retry_count: int = 0
+    last_encoding_failure_at: Optional[datetime] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.candidate_id, str):
@@ -390,6 +392,14 @@ class EpisodeCandidate:
             raise TypeError("subjective_episode_id must be str or None")
         if self.encoding_error is not None and not isinstance(self.encoding_error, str):
             raise TypeError("encoding_error must be str or None")
+        if not isinstance(self.encoding_retry_count, int):
+            raise TypeError("encoding_retry_count must be int")
+        if self.encoding_retry_count < 0:
+            raise ValueError("encoding_retry_count must be non-negative")
+        if self.last_encoding_failure_at is not None and not isinstance(
+            self.last_encoding_failure_at, datetime
+        ):
+            raise TypeError("last_encoding_failure_at must be datetime or None")
         if self.status == "encoded":
             if (
                 not self.subjective_episode_id
@@ -445,6 +455,97 @@ class SubjectivePredictionError:
             raise ValueError("level must be none, small, medium, or large")
         if not isinstance(self.reason, str):
             raise TypeError("reason must be str")
+
+
+@dataclass(frozen=True)
+class MemoryReflectionEpisodePatchDto:
+    """Memory Reflection がエピソードに追記する差分（§10 episode_patch）。"""
+
+    emphasized: str = ""
+    faded: str = ""
+    new_meaning: str = ""
+    emotional_tone_shift: str = ""
+
+    def __post_init__(self) -> None:
+        for n in ("emphasized", "faded", "new_meaning", "emotional_tone_shift"):
+            if not isinstance(getattr(self, n), str):
+                raise TypeError(f"{n} must be str")
+
+
+@dataclass(frozen=True)
+class MemoryReflectionSemanticCandidateDto:
+    summary: str
+    note: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.summary, str):
+            raise TypeError("summary must be str")
+        if not isinstance(self.note, str):
+            raise TypeError("note must be str")
+
+
+@dataclass(frozen=True)
+class MemoryReflectionIdentityCandidateDto:
+    summary: str
+    note: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.summary, str):
+            raise TypeError("summary must be str")
+        if not isinstance(self.note, str):
+            raise TypeError("note must be str")
+
+
+@dataclass(frozen=True)
+class MemoryReflectionJournalEntry:
+    """エピソードへの Memory Reflection 結果の追記レコード（元 encoding / source trace は変更しない）。"""
+
+    entry_id: str
+    created_at: datetime
+    correlation_id: str
+    trigger: str
+    recall_trigger: str
+    current_interpretation: str
+    effect_on_decision: str
+    episode_patch: MemoryReflectionEpisodePatchDto
+    semantic_update_candidates: Tuple[MemoryReflectionSemanticCandidateDto, ...] = ()
+    identity_update_candidates: Tuple[MemoryReflectionIdentityCandidateDto, ...] = ()
+    raw_payload_digest: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.entry_id, str) or not self.entry_id.strip():
+            raise ValueError("entry_id must be non-empty str")
+        if not isinstance(self.created_at, datetime):
+            raise TypeError("created_at must be datetime")
+        if not isinstance(self.correlation_id, str):
+            raise TypeError("correlation_id must be str")
+        if not isinstance(self.trigger, str) or not self.trigger.strip():
+            raise ValueError("trigger must be non-empty str")
+        for n in ("recall_trigger", "current_interpretation", "effect_on_decision"):
+            if not isinstance(getattr(self, n), str):
+                raise TypeError(f"{n} must be str")
+        if not isinstance(self.episode_patch, MemoryReflectionEpisodePatchDto):
+            raise TypeError("episode_patch must be MemoryReflectionEpisodePatchDto")
+        if not isinstance(self.semantic_update_candidates, tuple):
+            raise TypeError("semantic_update_candidates must be tuple")
+        if not all(
+            isinstance(x, MemoryReflectionSemanticCandidateDto)
+            for x in self.semantic_update_candidates
+        ):
+            raise TypeError(
+                "semantic_update_candidates must contain MemoryReflectionSemanticCandidateDto"
+            )
+        if not isinstance(self.identity_update_candidates, tuple):
+            raise TypeError("identity_update_candidates must be tuple")
+        if not all(
+            isinstance(x, MemoryReflectionIdentityCandidateDto)
+            for x in self.identity_update_candidates
+        ):
+            raise TypeError(
+                "identity_update_candidates must contain MemoryReflectionIdentityCandidateDto"
+            )
+        if not isinstance(self.raw_payload_digest, str):
+            raise TypeError("raw_payload_digest must be str")
 
 
 @dataclass(frozen=True)
@@ -529,6 +630,7 @@ class SubjectiveEpisode:
     last_recalled_at: Optional[datetime] = None
     reflections: Tuple[str, ...] = ()
     reconsolidation_history: Tuple[str, ...] = ()
+    memory_reflection_journal: Tuple[MemoryReflectionJournalEntry, ...] = ()
     confidence: SubjectiveImportance = "medium"
     candidate_id: str = ""
 
@@ -590,6 +692,15 @@ class SubjectiveEpisode:
             raise TypeError("reconsolidation_history must be tuple")
         if not all(isinstance(x, str) for x in self.reconsolidation_history):
             raise TypeError("reconsolidation_history must contain only str")
+        if not isinstance(self.memory_reflection_journal, tuple):
+            raise TypeError("memory_reflection_journal must be tuple")
+        if not all(
+            isinstance(x, MemoryReflectionJournalEntry)
+            for x in self.memory_reflection_journal
+        ):
+            raise TypeError(
+                "memory_reflection_journal must contain MemoryReflectionJournalEntry"
+            )
         if self.confidence not in ("low", "medium", "high"):
             raise ValueError("confidence must be low, medium, or high")
         if not isinstance(self.candidate_id, str):
