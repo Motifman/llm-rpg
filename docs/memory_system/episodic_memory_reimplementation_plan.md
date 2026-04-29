@@ -794,19 +794,22 @@ flowchart LR
 - [x] Phase 3: LLM Episode Encoder
   - 内容: `SubjectiveEpisode`（v2）/`ISubjectiveEpisodeStore`（in-memory）/`IEpisodeEncoder` / `IEpisodeEncodingLlmPort`、`ExperienceTraceBundleResolver`（`action:{trace_id}` / `observation:{trace_id}`）、`StubEpisodeEncoder`、`LlmJsonEpisodeEncoder`、`EpisodeEncodingProcessor`（encoder 失敗時は同一呼び出し内で `max_retries`；**キュー側**は `max_queue_retries`・指数バックオフで `pending_encoding` に戻し再試行）、`EpisodeEncodingRunner`。`EpisodeCandidate` に `encoded` / `encoding_failed`、`subjective_episode_id`、`encoding_error`、`encoding_retry_count`、`last_encoding_failure_at`。Encoder 用文脈は `build_episode_encoding_context_provider`（プロフィール・作業メモ・長期事実・ペルソナ断片）。`DefaultPromptBuilder` は同一プロバイダから Passive Recall の `current_goals_hint` / snapshot を供給。`LlmAgentOrchestrator.run_turn` の `finally` で `create_candidate_if_ready` の直後に `episode_encoding_runner.run_after_turn`。`create_llm_agent_wiring` / `create_spot_graph_wiring` で chunker と同梱配線。回帰テスト: `tests/application/llm/test_episode_encoding.py`。
   - 代表コミット: （マージ後にここへ追記）
-- [ ] Phase 4: Passive Recall + Memory Reflection（**部分完了**）
+- [x] Phase 4: Passive Recall + Memory Reflection（**主経路まで完了**）
   - [x] Passive Recall（v2 のみ・ルールベース `PassiveSubjectiveRecallComposer`、user prompt 挿入）。Encoding 文脈との goals 同期は上記 `episode_encoding_context_provider`。
-  - [x] **Memory Reflection（§10）— encoding 直後ジョブ（同一プロセス）**:
-    - トリガ: `after_subjective_encode`（**主観エピソードがストアに載った後**のみ `EpisodeEncodingProcessor` のフックからキュー）。
-    - 実装: `SubjectiveMemoryReflectionProcessor`、`SameProcessMemoryReflectionScheduler`（daemon スレ + `queue.Queue`）、`IMemoryReflectionLlmPort` / `LiteLlmMemoryReflectionLlmPort`、`llm_json_memory_reflection`（schema・パース）、`SubjectiveEpisode.memory_reflection_journal`（追記専用・初回 encoding / source_trace は不変）。
-    - 冪等: 同一 `(player_id, episode_id, trigger)` の enqueue 重複抑止、`after_subjective_encode` はジャーナル既存ならスキップ。
-    - 失敗: LLM 一時障害は指数バックオフ再試行（デッドレター時は構造化ログ）。
-    - ストア: `InMemorySubjectiveEpisodeStore` に `RLock`（ワーカーとメインスレッド）。
-    - 配線: `build_same_process_memory_reflection`（**StubLlmClient 時は無効**、LiteLLM 時のみ有効）。環境変数: `MEMORY_REFLECTION`（既定 ON）、`MEMORY_REFLECTION_JSON_SCHEMA`、`MEMORY_REFLECTION_AFTER_ENCODE`（`high` | `all`）。
+  - [x] **Memory Reflection（§10）— 同一プロセススケジューラ**（引き続き有効）:
+    - **主トリガ（2026-04-30）**: **`passive_recall`**。Passive で採用した `episode_id` を `PassiveRecallComposeResult` で返し、`LlmAgentOrchestrator.run_turn` の **`finally`**（chunker・`episode_encoding_runner` の後）で `maybe_enqueue_passive_recall` によりキュー。状況文は当ターンの `current_state + recent_events` 由来（プロンプト組み立てと同じ）。
+    - **副・オプション**トリガ: `after_subjective_encode`。環境変数 **`MEMORY_REFLECTION_AFTER_ENCODE`** の既定は **`off`**。`high` / `all` を明示したときのみ encoding 直後にキュー（従来挙動の再有効化）。
+    - クールダウン: **`MEMORY_REFLECTION_PASSIVE_COOLDOWN_SECONDS`**（既定 300 秒、`0` で無効）。同一エピソードに対する `passive_recall` の過密 LLM 呼び出しを抑制。
+    - 実装: `SubjectiveMemoryReflectionProcessor`、`SameProcessMemoryReflectionScheduler`、`IMemoryReflectionLlmPort` / `LiteLlmMemoryReflectionLlmPort`、`llm_json_memory_reflection`、`SubjectiveEpisode.memory_reflection_journal`。
+    - 冪等: enqueue キーは `(player_id, episode_id, trigger)`。`after_subjective_encode` は同一 trigger のジャーナル既存ならスキップ（`passive_recall` はクールダウンで抑制）。
     - **未反映**: semantic / identity への本採用は **Consolidation（Phase 6）**。ジャーナルに候補を載せるのみ（§346）。
-  - [ ] Phase 4 残: **Passive Recall 経由**の Memory Reflection（高重要候補のみ LLM 等）、Recall と Reflection の役割分担のさらなる仕様どおりの細分化。
-- [ ] Phase 5: Active Recall
+  - [ ] Phase 4 任意改善: 想起スコアと Reflection の重要度フィルタのさらなる細分化（仕様どおりの「高重要のみ」等）。
+- [ ] Phase 5: Active Recall（**部分完了**）
+  - [x] **主観ストア専用ツール** `memory_recall_subjective`（`TOOL_NAME_MEMORY_RECALL_SUBJECTIVE`）。`memory_query`（DSL）とは **別登録・別実装**（`SubjectiveMemoryRecallExecutor`）。**スポットグラフ配線**（`create_spot_graph_wiring`）で有効。通常 `create_llm_agent_wiring` では未登録。
+  - [ ] 残: `memory_query` 出力への主観フィールド統合（§Phase 5 本文）や、自然言語中心の `recall_memory` 相当の拡張が必要なら別途。
 - [ ] Phase 6: Consolidation
+  - [x] **準備（2026-04-30）**: `IIdentityMemoryStore` / `InMemoryIdentityMemoryStore`（長期事実ストアと別経路）。`ISubjectiveEpisodeStore.count_reflection_journal_entries`（N 件閾値用）。スポットグラフ `LlmAgentWiringResult.identity_memory_store` に in-memory インスタンスを載せる。
+  - [ ] 本実装: ジャーナル候補 → 長期 / Identity への反映、ジョブトリガ（例: ジャーナル合計 N 件、ゲーム内日付区切り等）。
 - [ ] Phase 7: Evaluation
 
 ### Phase 1: Trace と共通 Tool Schema
@@ -931,7 +934,7 @@ flowchart LR
 
 ### Phase 4: Passive Recall + Memory Reflection
 
-（**進捗**: Passive Recall と **encoding 直後の Memory Reflection ジョブ**は実装済み。下記「Phase 4 実装方針」は継続有効。）
+（**進捗（2026-04-30）**: Passive Recall と **Passive 想起経由の Memory Reflection**（`passive_recall` トリガ）を実装済み。encoding 直後の Reflection は **既定 OFF**（`MEMORY_REFLECTION_AFTER_ENCODE=off`）。下記「Phase 4 実装方針」は継続有効。代表コミット: `8ea24c07`。）
 
 - cue index を episode に保存する（`SubjectiveEpisode.cue_keys` を **タグ**として扱う。正規化階層は初期不要）。
 - current situation から cue overlap / salience / recency / goal relevance で **v2 `SubjectiveEpisode` のみ**を検索する（従来 `EpisodeMemoryEntry` 経路は Passive Recall のソースにしない）。
@@ -951,8 +954,8 @@ flowchart LR
 
 ### Phase 5: Active Recall
 
-- `memory_query` の episodic 出力に主観フィールドを含める。
-- 可能なら `recall_memory` tool を追加し、自然言語 query + current context で subjective recall を返す。
+- **実装済み（一部）**: **`memory_recall_subjective`** で v2 `SubjectiveEpisode` をキーワード検索（`memory_query` DSL とは独立）。スポットグラフ wiring のみ。
+- **残作業**: `memory_query` の episodic 出力に主観フィールドを含める（必要なら）。自然言語 query + current context 専用の `recall_memory` 相当を追加するかはプロダクト次第。
 
 ### Phase 6: Consolidation
 
@@ -961,6 +964,7 @@ flowchart LR
 - 重要 episode の初期フィルタリングはルールで行う。
 - LLM に update policy を任せ、semantic memory / identity memory を更新する。
 - prompt 用 identity summary を生成する。
+- **準備済み**: `IIdentityMemoryStore`、`count_reflection_journal_entries`（N 件閾値トリガの土台）。**未接続**: ジャーナルからの自動書き込み・本番トリガ。
 
 ### Phase 7: Evaluation
 
@@ -974,12 +978,13 @@ flowchart LR
 
 ### 14.1 次にやるべきこと（優先度目安）
 
-1. **Phase 4 残**: Passive Recall で採用した高重要エピソードから **別トリガ**で Memory Reflection ジョブを積む（§9.3 の「重要候補だけ LLM」に沿う）。`after_subjective_encode` との二重実行は **trigger / 冪等ポリシー**で整理する。
-2. **Phase 5**: Active Recall（`memory_query` / `recall_memory` の主観出力、§9.4）。
-3. **Phase 6**: Consolidation — `memory_reflection_journal` 内の **semantic_update_candidates / identity_update_candidates** を読み、長期・Identity ストアへ **Update Policy** 付きで反映。
+1. **Phase 6（本体）**: Consolidation ジョブを実装する。入力は `memory_reflection_journal` の **semantic_update_candidates / identity_update_candidates**（および必要なら episode 本文）。出力は長期メモリ + 既存の **`IIdentityMemoryStore`**。トリガは **ジャーナル合計 N 件**（`count_reflection_journal_entries`）と/or **ゲーム内日付・節目**など、プロダクトで確定した条件に合わせる（現実時間のみは採用しない方針なら避ける）。
+2. **Phase 5 残**: 必要なら `memory_query` と主観ストアの統合・自然言語 recall の有無。現状は **`memory_recall_subjective` のみ**（スポットグラフ）。
+3. **プロンプト文脈**: `build_episode_encoding_context_provider` やシステムプロンプトに **Identity ストア**の要約を載せる（Consolidation と連動）。
 4. **`reconsolidation_history` と `memory_reflection_journal`**: 現状はジャーナルが構造化の正。必要ならレガシー文字列履歴との関係をドキュメント化または統合する。
-5. **永続化**: `ISubjectiveEpisodeStore` / ジャーナルの SQLite 化（本番・プロセス再起動後のキュー復元は別途）。
-6. **評価**: §14 チェックリスト Phase 7 項目に沿ったシナリオテスト。
+5. **永続化**: `ISubjectiveEpisodeStore` / ジャーナル / Identity の SQLite 化（本番・プロセス再起動後のキュー復元は別途）。
+6. **評価（Phase 7）**: §14 チェックリスト Phase 7 項目に沿ったシナリオテスト。
+7. **Phase 4 任意**: 想起スコアに応じた Reflection の間引き、および `MEMORY_REFLECTION_AFTER_ENCODE` を本番で使うかの運用方針の固定。
 
 ## 15. 決定事項と調整方針
 
