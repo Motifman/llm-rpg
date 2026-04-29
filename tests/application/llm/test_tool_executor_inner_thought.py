@@ -1,4 +1,4 @@
-"""tool_executor_helpers のテスト。"""
+"""tool_executor_helpers（心の声・警告）のテスト。"""
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (

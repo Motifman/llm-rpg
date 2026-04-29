@@ -59,6 +59,15 @@ class LiteLLMClient(ILLMClient):
             self._api_key = (os.environ.get(api_key_env_var) or "").strip()
         self._logger = logging.getLogger(self.__class__.__name__)
 
+    def completion_base_kwargs(self) -> Dict[str, Any]:
+        """ツール無しの chat completion 用（Episode Encoder 等）。api_key 未設定時は例外。"""
+        if not self._api_key:
+            raise LlmApiCallException(
+                f"API key is not set. Set {self._api_key_env_var} or pass api_key to the client.",
+                error_code="LLM_API_KEY_MISSING",
+            )
+        return {"model": self._model, "api_key": self._api_key}
+
     def invoke(
         self,
         messages: List[Dict[str, Any]],

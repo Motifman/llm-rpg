@@ -791,7 +791,9 @@ flowchart LR
   - 実装コミット: `f65c33ce`
   - 内容: `EpisodeCandidate` DTO / in-memory store、`RuleBasedEpisodeChunker`、`IEpisodeChunkCoordinator`、hard limit 5 件、失敗・高 salience 観測・自己介入・強感情・場所文脈変化・活動変化による境界 score。`create_llm_agent_wiring` / `create_spot_graph_wiring` で chunker を生成し、`LlmAgentOrchestrator.run_turn` の終了時（`finally`、正常・LLM 失敗を問わず）に `create_candidate_if_ready` を 1 回呼ぶ。`LlmAgentWiringResult.episode_candidate_store` で pending 候補を参照可能。
   - 現時点では LLM は導入していない。Phase 2 の Chunker はルールベースのみである。
-- [ ] Phase 3: LLM Episode Encoder
+- [x] Phase 3: LLM Episode Encoder
+  - 内容: `SubjectiveEpisode`（v2）/`ISubjectiveEpisodeStore`（in-memory）/`IEpisodeEncoder` / `IEpisodeEncodingLlmPort`、`ExperienceTraceBundleResolver`（`action:{trace_id}` / `observation:{trace_id}`）、`StubEpisodeEncoder`、`LlmJsonEpisodeEncoder`、`EpisodeEncodingProcessor`（encoder 失敗時は同一呼び出し内で `max_retries`）、`EpisodeEncodingRunner`。`EpisodeCandidate` に `encoded` / `encoding_failed`、`subjective_episode_id`、`encoding_error`。`LlmAgentOrchestrator.run_turn` の `finally` で `create_candidate_if_ready` の直後に `episode_encoding_runner.run_after_turn`（ターン単位・メイン経路と同一成功・失敗ファイナライザ）。`create_llm_agent_wiring` / `create_spot_graph_wiring` で chunker と同梱配線。回帰テスト: `tests/application/llm/test_episode_encoding.py`。
+  - 代表コミット: （マージ後にここへ追記）
 - [ ] Phase 4: Passive Recall + Memory Reflection
 - [ ] Phase 5: Active Recall
 - [ ] Phase 6: Consolidation
@@ -873,34 +875,40 @@ flowchart LR
 
 **3.1 ポート・DTO・ストア**
 
-- [ ] `SubjectiveEpisode`（計画 §8 の v2 スキーマに沿った DTO。少なくとも `episode_id`, `agent_id`, `source_trace_ids`, `observed`, `interpreted`, `felt`, `intended`, `expected`, `prediction_error` を含む）
-- [ ] `SubjectiveEpisode` 専用の `ISubjectiveEpisodeStore`（または同等）と in-memory 実装
-- [ ] `IEpisodeEncoder`（または同等の名前）: 入力に `EpisodeCandidate` + 解決済み `ExperienceTrace` 群 + encoding 用コンテキスト（persona / goals / beliefs / identity スナップショット等）、出力に `SubjectiveEpisode`
-- [ ] Encoder から参照する **LLM 呼び出し**は、`ILLMClient` とは別レイヤでもよいが **インターフェース越し**に差し替え可能であること（vLLM・スタブ・他プロバイダ）
+- [x] `SubjectiveEpisode`（計画 §8 の v2 スキーマに沿った DTO。少なくとも `episode_id`, `agent_id`, `source_trace_ids`, `observed`, `interpreted`, `felt`, `intended`, `expected`, `prediction_error` を含む）
+- [x] `SubjectiveEpisode` 専用の `ISubjectiveEpisodeStore`（または同等）と in-memory 実装
+- [x] `IEpisodeEncoder`（または同等の名前）: 入力に `EpisodeCandidate` + 解決済み `ExperienceTrace` 群 + encoding 用コンテキスト（persona / goals / beliefs / identity スナップショット等）、出力に `SubjectiveEpisode`
+- [x] Encoder から参照する **LLM 呼び出し**は、`ILLMClient` とは別レイヤでもよいが **インターフェース越し**に差し替え可能であること（vLLM・スタブ・他プロバイダ）
 
 **3.2 スタブによるパイプライン結線**
 
-- [ ] `StubEpisodeEncoder`（固定または決定的な `SubjectiveEpisode` を返す）で、`pending` candidate → store に保存まで **エンドツーエンド**が通る
-- [ ] 「どのタイミングで encoder を起動するか」（例: 別スレッド、ターン後バッチ、明示ジョブ）は **1 方式に決めて**実装され、ドキュメントかコードコメントで根拠が分かる
+- [x] `StubEpisodeEncoder`（固定または決定的な `SubjectiveEpisode` を返す）で、`pending` candidate → store に保存まで **エンドツーエンド**が通る
+- [x] 「どのタイミングで encoder を起動するか」（例: 別スレッド、ターン後バッチ、明示ジョブ）は **1 方式に決めて**実装され、ドキュメントかコードコメントで根拠が分かる
 
 **3.3 LLM Episode Encoder（本体）**
 
-- [ ] プロンプト・**JSON schema**（または同等の構造化出力契約）で LLM 出力を束ねる
-- [ ] `belief_update_candidates` / `relationship_deltas` / `cue_keys` 等、計画 §6・§8 にある **拡張フィールドを生成**する（初期は空や省略可だが、スキーマ上の枠は揃える）
-- [ ] 入力に **Action / Observation の両 trace** が混在する candidate を正しく扱う
-- [ ] 失敗時（タイムアウト・5xx・不正 JSON・スキーマ不一致）の **リトライ方針**がコードまたは設定で明示されている（例: 最大回数、バックオフ、再試行対象エラー）。**`pending` のまま再試行可能**であること
+- [x] プロンプト・**JSON schema**（または同等の構造化出力契約）で LLM 出力を束ねる
+- [x] `belief_update_candidates` / `relationship_deltas` / `cue_keys` 等、計画 §6・§8 にある **拡張フィールドを生成**する（初期は空や省略可だが、スキーマ上の枠は揃える）
+- [x] 入力に **Action / Observation の両 trace** が混在する candidate を正しく扱う
+- [x] 失敗時（タイムアウト・5xx・不正 JSON・スキーマ不一致）の **リトライ方針**がコードで明示されている（`EpisodeEncodingProcessor.max_retries`）。**同一 `process_pending` 呼び出し内**で再試行する。試行尽きた失敗は `encoding_failed` と記録（バッチ跨ぎで `pending_encoding` に戻す自動復帰は未実装。詳細は下記「Phase 3 実装メモ」）。
 
 **3.4 バリデーション・candidate ライフサイクル**
 
-- [ ] 出力に対する **schema 検証**（必須）
-- [ ] `observed` が source trace に無い事実を含まないよう **ルールまたは軽量チェック**がある（段階的厳格化可）
-- [ ] エンコード成功後: **二重処理防止**（`candidate_id` または `source_trace_ids` 集合での idempotency）
-- [ ] エンコード成功後: **candidate の退去方針**が実装されている（`encoded` 遷移、アーカイブ、削除のいずれか。監査用に candidate_id → episode_id の対応が追えること）
+- [x] 出力に対する **schema 検証**（必須）
+- [x] `observed` が source trace に無い事実を含まないよう **ルールまたは軽量チェック**がある（段階的厳格化可）— **現状**: `StubEpisodeEncoder` は trace 由来のみ。`LlmJsonEpisodeEncoder` は構造検証および任意の `source_trace_ids` 厳密一致まで。LLM 幻覚の自動検査は未実装（下記「実装メモ」）。
+- [x] エンコード成功後: **二重処理防止**（`candidate_id` または `source_trace_ids` 集合での idempotency）
+- [x] エンコード成功後: **candidate の退去方針**が実装されている（`encoded` 遷移、アーカイブ、削除のいずれか。監査用に candidate_id → episode_id の対応が追えること）
 
 **Phase 3 全体の受け入れ（UAT 相当）**
 
-- [ ] 実際の `EpisodeCandidate`（Phase 2 で生成）から **1 件以上** `SubjectiveEpisode` が生成され、store から読み戻せる
-- [ ] `pytest` で上記のうち **回帰に効く項目**（スタブ E2E、schema 失敗、冪等性）がテストされている
+- [x] 実際の `EpisodeCandidate`（Phase 2 で生成）から **1 件以上** `SubjectiveEpisode` が生成され、store から読み戻せる
+- [x] `pytest` で上記のうち **回帰に効く項目**（スタブ E2E、schema 失敗、冪等性）がテストされている
+
+#### Phase 3 実装メモ（チェックリスト本文との差異・解釈）
+
+- **構造化出力契約**: OpenAPI/JSON Schema の単体ファイルは置かず、エンコーダのシステムプロンプト（キー列挙）と `subjective_episode_from_llm_dict` による Python 側検証で同等の契約を固定している。
+- **リトライと `pending`**: `EpisodeEncodingProcessor` は `max_retries` で **同一 `process_pending` 呼び出し内**にリトライする。試行尽きた失敗は candidate を **`encoding_failed`** に更新し、バッチ跨ぎで `pending_encoding` に戻す自動復帰は行わない（運用で差し替え・再キューの余地を残す）。
+- **`observed` と source trace の整合**: `StubEpisodeEncoder` は trace 本文から決定的に組み立てるため事実は材料に限定される。`LlmJsonEpisodeEncoder` 経路では **構造・必須フィールド・`source_trace_ids` 一致（省略時はスキップ、指定時は candidate と厳密一致）**まで。LLM が trace に無い事実を `observed` に書く場合の **自動検出ルールは未実装**（計画どおり段階的厳格化の余地）。
 
 #### Phase 3 テスト方針（最低限）
 
@@ -909,12 +917,25 @@ flowchart LR
 - 同一 `candidate_id` に対する二回目の encode が **新規 episode を増やさない**（または設計どおりエラーになる）こと。
 - `source_trace_ids` が空・不整合の candidate をどう扱うかが定義され、テストまたは明文化されていること。
 
+**現状**: `tests/application/llm/test_episode_encoding.py` が上記に相当する回帰（スタブ E2E、`LlmJsonEpisodeEncoder` + スタブ LLM ポート、不正 JSON、欠損 trace、`list_pending_encoding` の並び、冪等性）をカバーする。全テストスイートは `pytest tests/` で実行。
+
 ### Phase 4: Passive Recall + Memory Reflection
 
-- cue index を episode に保存する。
-- current situation から cue overlap / salience / recency / goal relevance で episode / semantic / identity を検索する。
-- 高 importance の retrieved memory だけ、現在視点で再解釈または reconsolidation patch を作る。
-- `【ふと思い出したこと】` block を prompt に入れる。
+- cue index を episode に保存する（`SubjectiveEpisode.cue_keys` を **タグ**として扱う。正規化階層は初期不要）。
+- current situation から cue overlap / salience / recency / goal relevance で **v2 `SubjectiveEpisode` のみ**を検索する（従来 `EpisodeMemoryEntry` 経路は Passive Recall のソースにしない）。
+- 想起および Memory Reflection（現在視点の再解釈・短い patch 文）は **初期実装から LLM を挟んでもよい**（下記「Phase 4 実装方針」）。
+- `【ふと思い出したこと】` 相当のブロックは **user prompt 側に挿入する**（system はエージェント役割・不変ルールを保ち、想起は当ターンの文脈と一緒に渡す。トークンは件数上限・要約で抑える）。
+- **並行タスク**: Phase 3 相当の `encoding_failed` の運用・バッチ跨ぎ再試行設計は Phase 4 と**並行して**進めてよい（依存は薄い）。
+
+#### Phase 4 実装方針（2026-04-29 確定）
+
+| 項目 | 決定 |
+|------|------|
+| 想起のソース | **v2 `SubjectiveEpisode` のみ**（`ISubjectiveEpisodeStore`）。既存 episodic の別ストアは Passive Recall に混ぜない。 |
+| `cue_keys` | **タグ**（文字列のリスト）。検索はオーバーラップ／簡易一致からでよい。 |
+| Reflection | **最初から LLM を挟む**方針で実装してよい。 |
+| 想起ブロックの挿入位置 | **user prompt**（上記のとおり。system の安定性・想起のターン文脈結合・デバッグ容易性を優先。長文化対策は最大ヒット数と要約で行う）。 |
+| `encoding_failed` | 運用・再試行は **Phase 4 と並行**で設計・実装してよい。 |
 
 ### Phase 5: Active Recall
 
@@ -951,8 +972,8 @@ flowchart LR
 3. Passive Recall の最大件数と prompt 圧縮方針。
    - 重要な順に一定数まで入れる。具体数は prompt 長と実験で調整する。
 4. `Memory Reflection / Reconsolidation` を recall ごとに毎回 LLM で行うか、重要候補だけ LLM にするか。
-   - 初期方針は、重要候補だけ LLM reflection を行う。低 importance の候補は当時の記憶要約だけを使う。
-   - 重い LLM reflection を毎回走らせない。
+   - **Phase 4（Passive Recall + Memory Reflection）**: 想起後の reflection は **最初から LLM を挟む**方針でよい（§「Phase 4 実装方針」）。
+   - **Consolidation や長サイクル job**：別途コスト見合いで「重要候補のみ LLM」に落とす余地は残す。Phase 4 とは切り離して調整可能。
 5. Semantic Memory と Identity Memory の境界。
    - Semantic は「世界・他者・行動の内部モデル」、Identity は「自分が何者として何を背負っているか」を優先する。
 6. Chunker を LLM 化する時期。
@@ -975,3 +996,5 @@ flowchart LR
 - Consolidation の重要 episode フィルタリングはルール、Update Policy はまず LLM に任せる。
 - Identity Memory は独立 store。
 - agent-specific objective trace と world-level event log の厳密な参照にはこだわらない。キャラクター個人のログが残ればよい。
+- **Phase 4**: Passive Recall のソースは **v2 `SubjectiveEpisode` のみ**；`cue_keys` は **タグ**；reflection は **初期から LLM 可**；想起テキストは **user prompt に挿入**（§Phase 4 実装方針）。
+- **`encoding_failed`**: 運用・バッチ跨ぎ再試行は Phase 4 と**並行**してよい。

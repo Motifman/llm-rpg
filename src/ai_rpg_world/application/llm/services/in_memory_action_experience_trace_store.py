@@ -1,6 +1,6 @@
 """ActionExperienceTrace の in-memory 実装。"""
 
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import ActionExperienceTrace
 from ai_rpg_world.application.llm.contracts.interfaces import IActionExperienceTraceStore
@@ -46,3 +46,16 @@ class InMemoryActionExperienceTraceStore(IActionExperienceTraceStore):
         entries = self._store.get(key, [])
         sorted_entries = sorted(entries, key=lambda e: e.occurred_at, reverse=True)
         return sorted_entries[:limit]
+
+    def find_by_trace_id(
+        self, player_id: PlayerId, trace_id: str
+    ) -> Optional[ActionExperienceTrace]:
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
+        if not isinstance(trace_id, str):
+            raise TypeError("trace_id must be str")
+        key = self._key(player_id)
+        for trace in self._store.get(key, []):
+            if trace.trace_id == trace_id:
+                return trace
+        return None

@@ -47,7 +47,7 @@ EventHandlerComposition のインスタンス化）は**呼び出し元（外部
 import os
 from typing import Any, Callable, Dict, NamedTuple, Optional
 
-from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
+from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto, EpisodeEncodingContextDto
 
 from ai_rpg_world.application.llm.wiring._llm_client_factory import (
     create_llm_client_from_env,
@@ -66,6 +66,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IReflectionRunner,
     IReflectionStatePort,
     ISlidingWindowMemory,
+    ISubjectiveEpisodeStore,
 )
 from ai_rpg_world.application.llm.services.action_result_store import (
     DefaultActionResultStore,
@@ -95,7 +96,20 @@ from ai_rpg_world.application.llm.services.in_memory_observation_experience_trac
 from ai_rpg_world.application.llm.services.in_memory_episode_candidate_store import (
     InMemoryEpisodeCandidateStore,
 )
+from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
+    InMemorySubjectiveEpisodeStore,
+)
 from ai_rpg_world.application.llm.services.episode_chunker import RuleBasedEpisodeChunker
+from ai_rpg_world.application.llm.services.episode_encoding_processor import (
+    EpisodeEncodingProcessor,
+)
+from ai_rpg_world.application.llm.services.episode_encoding_runner import (
+    EpisodeEncodingRunner,
+)
+from ai_rpg_world.application.llm.services.experience_trace_bundle_resolver import (
+    ExperienceTraceBundleResolver,
+)
+from ai_rpg_world.application.llm.wiring.episode_encoder_factory import build_episode_encoder
 from ai_rpg_world.application.llm.services.in_memory_working_memory_store import (
     InMemoryWorkingMemoryStore,
 )
@@ -805,6 +819,7 @@ class LlmAgentWiringResult:
         action_experience_trace_store: Optional[IActionExperienceTraceStore] = None,
         observation_experience_trace_store: Optional[IObservationExperienceTraceStore] = None,
         episode_candidate_store: Optional[IEpisodeCandidateStore] = None,
+        subjective_episode_store: Optional[ISubjectiveEpisodeStore] = None,
         sns_mode_session: Optional[Any] = None,
         sns_page_session: Optional[Any] = None,
         trade_page_session: Optional[Any] = None,
@@ -822,6 +837,7 @@ class LlmAgentWiringResult:
         self.action_experience_trace_store = action_experience_trace_store
         self.observation_experience_trace_store = observation_experience_trace_store
         self.episode_candidate_store = episode_candidate_store
+        self.subjective_episode_store = subjective_episode_store
         self.sns_mode_session = sns_mode_session
         self.sns_page_session = sns_page_session
         self.trade_page_session = trade_page_session
@@ -951,6 +967,11 @@ def create_llm_agent_wiring(
         observation_trace_store=observation_experience_trace_store,
         candidate_store=episode_candidate_store,
     )
+    subjective_episode_store = InMemorySubjectiveEpisodeStore()
+    trace_bundle_resolver = ExperienceTraceBundleResolver(
+        action_experience_trace_store,
+        observation_experience_trace_store,
+    )
     ui_context_builder = DefaultLlmUiContextBuilder()
     recent_events_formatter = DefaultRecentEventsFormatter()
     context_format_strategy = SectionBasedContextFormatStrategy()
@@ -1013,6 +1034,16 @@ def create_llm_agent_wiring(
         handle_store=handle_store,
     )
     client = llm_client if llm_client is not None else create_llm_client_from_env()
+    episode_encoder = build_episode_encoder(client)
+    episode_encoding_processor = EpisodeEncodingProcessor(
+        candidate_store=episode_candidate_store,
+        trace_resolver=trace_bundle_resolver,
+        subjective_episode_store=subjective_episode_store,
+        encoder=episode_encoder,
+        context_provider=lambda _pid: EpisodeEncodingContextDto(),
+        max_retries=2,
+    )
+    episode_encoding_runner = EpisodeEncodingRunner(episode_encoding_processor)
     subagent_invoke_text = create_subagent_invoke_text(client)
     subagent_runner = SubagentRunner(
         memory_query_executor=memory_query_executor,
@@ -1107,6 +1138,7 @@ def create_llm_agent_wiring(
         action_experience_trace_store=action_experience_trace_store,
         handle_store=handle_store,
         episode_chunker=episode_chunker,
+        episode_encoding_runner=episode_encoding_runner,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,
@@ -1153,6 +1185,7 @@ def create_llm_agent_wiring(
         action_experience_trace_store=action_experience_trace_store,
         observation_experience_trace_store=observation_experience_trace_store,
         episode_candidate_store=episode_candidate_store,
+        subjective_episode_store=subjective_episode_store,
         sns_mode_session=sns_mode_session,
         sns_page_session=sns_page_session,
         trade_page_session=trade_page_session,

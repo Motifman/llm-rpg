@@ -24,6 +24,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     IActionExperienceTraceStore,
     IEpisodeChunkCoordinator,
+    IEpisodeEncodingRunner,
     IEpisodeMemoryStore,
     IHandleStore,
     ILLMClient,
@@ -142,6 +143,7 @@ class LlmAgentOrchestrator:
         action_experience_trace_store: Optional[IActionExperienceTraceStore] = None,
         handle_store: Optional[IHandleStore] = None,
         episode_chunker: Optional[IEpisodeChunkCoordinator] = None,
+        episode_encoding_runner: Optional[IEpisodeEncodingRunner] = None,
     ) -> None:
         if not isinstance(prompt_builder, IPromptBuilder):
             raise TypeError("prompt_builder must be IPromptBuilder")
@@ -185,6 +187,12 @@ class LlmAgentOrchestrator:
             raise TypeError(
                 "episode_chunker must be IEpisodeChunkCoordinator or None"
             )
+        if episode_encoding_runner is not None and not isinstance(
+            episode_encoding_runner, IEpisodeEncodingRunner
+        ):
+            raise TypeError(
+                "episode_encoding_runner must be IEpisodeEncodingRunner or None"
+            )
         self._prompt_builder = prompt_builder
         self._llm_client = llm_client
         self._tool_command_mapper = tool_command_mapper
@@ -199,14 +207,15 @@ class LlmAgentOrchestrator:
         self._action_experience_trace_store = action_experience_trace_store
         self._handle_store = handle_store
         self._episode_chunker = episode_chunker
+        self._episode_encoding_runner = episode_encoding_runner
 
     def run_turn(self, player_id: PlayerId) -> LlmCommandResultDto:
         """
         1 ターン実行: プロンプト組み立て → LLM 呼び出し → tool_call を実行 → 結果を store に記録。
         戻り値はそのターンの実行結果（LlmCommandResultDto）。
         tool_call が無い場合は「ツール未選択」として store に記録し、対応する DTO を返す。
-        episode_chunker があれば、ターン終了時（すべての return 前）に 1 回
-        create_candidate_if_ready を呼ぶ。
+        episode_chunker があれば、ターン終了時に create_candidate_if_ready を 1 回呼ぶ。
+        episode_encoding_runner があれば、その後に run_after_turn で pending candidate のエンコードを試みる。
         """
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
@@ -219,6 +228,8 @@ class LlmAgentOrchestrator:
         finally:
             if self._episode_chunker is not None:
                 self._episode_chunker.create_candidate_if_ready(player_id)
+            if self._episode_encoding_runner is not None:
+                self._episode_encoding_runner.run_after_turn(player_id)
 
     def _run_turn_core(self, player_id: PlayerId) -> LlmCommandResultDto:
         request = self._prompt_builder.build(player_id)
