@@ -788,7 +788,7 @@ flowchart LR
   - 実装コミット: `5aae6c68` (`feat: add experience trace capture for episodic memory`)
   - 内容: `ObservationExperienceTrace` DTO / store、`ObservationTraceRecorder`、`ObservationTraceRecordingBuffer`、通常 wiring / spot_graph wiring での append 時 trace 保存。
 - [x] Phase 2: Chunker
-  - 実装コミット: `5208181a`
+  - 実装コミット: `f65c33ce`
   - 内容: `EpisodeCandidate` DTO / in-memory store、`RuleBasedEpisodeChunker`、`IEpisodeChunkCoordinator`、hard limit 5 件、失敗・高 salience 観測・自己介入・強感情・場所文脈変化・活動変化による境界 score。`create_llm_agent_wiring` / `create_spot_graph_wiring` で chunker を生成し、`LlmAgentOrchestrator.run_turn` の終了時（`finally`、正常・LLM 失敗を問わず）に `create_candidate_if_ready` を 1 回呼ぶ。`LlmAgentWiringResult.episode_candidate_store` で pending 候補を参照可能。
   - 現時点では LLM は導入していない。Phase 2 の Chunker はルールベースのみである。
 - [ ] Phase 3: LLM Episode Encoder
