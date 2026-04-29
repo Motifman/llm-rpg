@@ -247,4 +247,10 @@ class DefaultPromptBuilder(IPromptBuilder):
         }
         result["overflow"] = overflow
         result["tool_runtime_context"] = ui_context.tool_runtime_context
+        result["current_state_snapshot"] = current_state_text
+        result["current_goals_snapshot"] = ""
+        result["current_beliefs_snapshot"] = relevant_memories_text
+        result["identity_snapshot"] = ""
+        result["persona_snapshot"] = player_info.persona_block
+        result["working_memory_snapshot"] = ()
         return result
