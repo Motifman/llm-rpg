@@ -779,6 +779,21 @@ flowchart LR
 
 ## 14. 実装計画案
 
+### 14.0 進捗チェックリスト
+
+- [x] Phase 1A: ActionExperienceTrace と世界作用 tool の主観 schema / hard validation
+  - 実装コミット: `5aae6c68` (`feat: add experience trace capture for episodic memory`)
+  - 内容: `ActionExperienceTrace` DTO / store、世界へ作用する tool への `intention` / `expected_result` / `attention` / `emotion_hint` 付与、メタ系 tool 除外、orchestrator での hard validation と trace 保存。
+- [x] Phase 1B: ObservationExperienceTrace と append 時 recorder 経路
+  - 実装コミット: `5aae6c68` (`feat: add experience trace capture for episodic memory`)
+  - 内容: `ObservationExperienceTrace` DTO / store、`ObservationTraceRecorder`、`ObservationTraceRecordingBuffer`、通常 wiring / spot_graph wiring での append 時 trace 保存。
+- [ ] Phase 2: Chunker
+- [ ] Phase 3: LLM Episode Encoder
+- [ ] Phase 4: Passive Recall + Memory Reflection
+- [ ] Phase 5: Active Recall
+- [ ] Phase 6: Consolidation
+- [ ] Phase 7: Evaluation
+
 ### Phase 1: Trace と共通 Tool Schema
 
 - 世界へ作用する tool schema に `intention`, `expected_result`, `attention`, `emotion_hint` を追加する。
@@ -799,7 +814,23 @@ flowchart LR
 - `LlmAgentOrchestrator.run_turn()` が world action tool の成功結果を `ActionExperienceTrace` として保存することを確認する。
 - trace には、行動前主観、tool 名、canonical arguments、tool result summary、success / error_code、薄い current state / persona / working memory snapshot が入ることを確認する。
 - メタ系・補助系 tool 実行では `ActionExperienceTrace` が作成されないことを確認する。
-- Phase 1 では `ObservationExperienceTrace` は仕様のみ定義し、実装テスト対象にしない。
+
+### Phase 1B: ObservationExperienceTrace
+
+- `ObservationExperienceTrace` DTO / store を追加する。
+- `ObservationTraceRecorder` を追加し、`ObservationEntry` から observation trace を作る。
+- `ObservationTraceRecordingBuffer` を追加し、既存 buffer に委譲しつつ append 時に recorder を呼ぶ。
+- 最初は全 `ObservationEntry` を保存する。
+- `emotion_hint` は受動観測には持たせない。振り返り時の `felt` は Episode Encoder / Reflection 側で付与する。
+- `observation_kind` は `ObservationOutput.structured["type"]` と `observation_category` から粗分類する。
+- 元イベント型は現状 `ObservationEntry` に残っていないため Phase 1B では使わない。より正確な分類が必要になったら、`ObservationOutput` または `ObservationEntry` に `source_event_type` などの metadata を追加する。
+
+#### Phase 1B テスト方針
+
+- `ObservationExperienceTrace` store が保存・新しい順取得・agent_id 不一致拒否を行うことを確認する。
+- `ObservationTraceRecorder` が structured type / category から `speech`, `environment_change`, `other_agent_action`, `intervention_to_self`, `world_event` を分類できることを確認する。
+- recorder が world event refs / visible agents / salience を trace に反映することを確認する。
+- `ObservationTraceRecordingBuffer.append()` が既存 buffer 動作を保ちつつ trace を保存することを確認する。
 
 ### Phase 2: Chunker
 
@@ -845,24 +876,28 @@ flowchart LR
 - Domain Events 由来の観測が、自分の tool result 以外の体験として episode に入るか。
 - 同じ episode の再想起で reconsolidation history が増えすぎず、意味ある変化だけが残るか。
 
-## 15. 未確定事項
+## 15. 決定事項と調整方針
 
-今後さらに詰めたい点。
+この節は未確定事項ではなく、実装を進める上での決定済み方針と、実験後に調整するパラメータをまとめる。
 
 1. Chunk boundary score の初期重み。
-   - 最初は妥当な値で始め、実験ログから調整する。
+   - 初期はルールベースで妥当な値から始め、実験ログから調整する。
+   - 調整対象であり、Chunker 自体を後回しにする理由にはしない。
 2. `belief_update` と `relationship_delta` の confidence 表現。
    - confidence は更新候補の採用しやすさ。低 confidence は「単発の仮説」として保持し、Consolidation で慎重に扱う。
 3. Passive Recall の最大件数と prompt 圧縮方針。
-   - 重要な順に一定数まで入れる。具体数は prompt 長と実験で決める。
+   - 重要な順に一定数まで入れる。具体数は prompt 長と実験で調整する。
 4. `Memory Reflection / Reconsolidation` を recall ごとに毎回 LLM で行うか、重要候補だけ LLM にするか。
-   - 未決。重い LLM reflection を毎回走らせるとコストと遅延が大きい。
+   - 初期方針は、重要候補だけ LLM reflection を行う。低 importance の候補は当時の記憶要約だけを使う。
+   - 重い LLM reflection を毎回走らせない。
 5. Semantic Memory と Identity Memory の境界。
    - Semantic は「世界・他者・行動の内部モデル」、Identity は「自分が何者として何を背負っているか」を優先する。
 6. Chunker を LLM 化する時期。
    - 初期はルールベース。LLM 化するなら軽量モードで境界判定に限定する。
 7. ObservationExperienceTrace の実装タイミングと observation_kind の最終 enum。
-   - ActionExperienceTrace の実験ログを確認してから、Observation pipeline 側の保存契約を別途固める。
+   - Phase 1B で append 時保存を実装済み。
+   - 初期 enum は `world_event`, `other_agent_action`, `speech`, `environment_change`, `intervention_to_self`, `system_notice` とする。
+   - 分類は `ObservationOutput.structured["type"]` と `observation_category` を使う。元イベント型は現状 trace に残っていないため、必要になったら `source_event_type` metadata を追加する。
 
 決定済み:
 
@@ -870,7 +905,8 @@ flowchart LR
 - `expected_result` は世界へ作用する tool で必須。メタ系・補助系 tool には主観フィールドを適用しない。
 - 主観フィールド欠落時は hard validation で失敗させる。移行期間は設けない。
 - `ExperienceTrace` は総称であり、まず `ActionExperienceTrace` と `ObservationExperienceTrace` を分ける。
-- Phase 1 では `ActionExperienceTrace` の in-memory 実装から始める。
+- Phase 1A では `ActionExperienceTrace` の in-memory 実装から始める。
+- Phase 1B では `ObservationExperienceTrace` を append 時に全件保存する。
 - Episode Encoder には persona / identity / 現在のキャラクター情報を入れる。
 - Consolidation の重要 episode フィルタリングはルール、Update Policy はまず LLM に任せる。
 - Identity Memory は独立 store。
