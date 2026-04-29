@@ -20,6 +20,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     MemoryLawEntry,
     MemoryRetrievalQueryDto,
     ObservationExperienceTrace,
+    PassiveRecallComposeResult,
     SubjectiveEpisode,
     SystemPromptPlayerInfoDto,
     ToolDefinitionDto,
@@ -395,6 +396,27 @@ class ISubjectiveEpisodeStore(ABC):
         """Passive Recall で採用したエピソードの recall_count を 1 増やす。無ければ何もしない。"""
         pass
 
+    @abstractmethod
+    def count_reflection_journal_entries(self, player_id: PlayerId) -> int:
+        """当該プレイヤーの全主観エピソードに付いた memory_reflection_journal 件数の合計。"""
+        pass
+
+
+class IIdentityMemoryStore(ABC):
+    """Consolidation 先の Identity（自己像・信念の長期層）。長期事実ストアとは別経路。"""
+
+    @abstractmethod
+    def append_statement(
+        self, player_id: PlayerId, text: str, *, source_note: str = ""
+    ) -> None:
+        """1 行の identity 文を追記する。"""
+        pass
+
+    @abstractmethod
+    def list_statements(self, player_id: PlayerId, limit: int) -> Tuple[str, ...]:
+        """新しい順に最大 limit 件。"""
+        pass
+
 
 class IPassiveSubjectiveRecallComposer(ABC):
     """v2 SubjectiveEpisode から user prompt 用の想起ブロックを組み立てる。"""
@@ -406,8 +428,8 @@ class IPassiveSubjectiveRecallComposer(ABC):
         *,
         situation_text: str,
         current_goals_hint: str,
-    ) -> str:
-        """【ふと思い出したこと】相当。未ヒット時は空文字。"""
+    ) -> PassiveRecallComposeResult:
+        """【ふと思い出したこと】相当。未ヒット時は user_block が空。"""
         pass
 
 

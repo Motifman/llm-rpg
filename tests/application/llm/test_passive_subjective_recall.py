@@ -82,9 +82,10 @@ def test_compose_user_block_includes_header_and_bumps_recall() -> None:
         situation_text="広場の鐘が聞こえる。",
         current_goals_hint="",
     )
-    assert "【ふと思い出したこと】" in block
-    assert "鐘が鳴った記憶" in block
-    assert "[medium]" in block
+    assert "【ふと思い出したこと】" in block.user_block
+    assert "鐘が鳴った記憶" in block.user_block
+    assert "[medium]" in block.user_block
+    assert block.episode_ids_for_reflection == ("subjective-episode-fixture",)
     updated = store.get_by_episode_id(pid, "subjective-episode-fixture")
     assert updated is not None
     assert updated.recall_count == 1
@@ -106,7 +107,7 @@ def test_compose_returns_empty_when_no_match() -> None:
         situation_text="まったく無関係な状況だけが続く。",
         current_goals_hint="",
     )
-    assert block == ""
+    assert block.user_block == ""
 
 
 def test_record_passive_recall_noop_when_missing() -> None:

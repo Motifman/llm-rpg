@@ -16,7 +16,9 @@ from ai_rpg_world.application.llm.exceptions import (
 from ai_rpg_world.application.llm.services.memory_reflection_processor import (
     AFTER_SUBJECTIVE_ENCODE_TRIGGER,
     DEFAULT_SITUATION_AFTER_ENCODE,
+    DEFAULT_SITUATION_PASSIVE,
     MemoryReflectionJob,
+    PASSIVE_RECALL_TRIGGER,
     SubjectiveMemoryReflectionProcessor,
 )
 from ai_rpg_world.application.llm.contracts.dtos import SubjectiveEpisode
@@ -121,6 +123,28 @@ class SameProcessMemoryReflectionScheduler:
             trigger=AFTER_SUBJECTIVE_ENCODE_TRIGGER,
             correlation_id=correlation_id,
             situation_text=situation_text or DEFAULT_SITUATION_AFTER_ENCODE,
+        )
+        return self.enqueue(job)
+
+    def maybe_enqueue_passive_recall(
+        self,
+        player_id: PlayerId,
+        episode_id: str,
+        *,
+        situation_text: str = "",
+    ) -> bool:
+        """Passive Recall で想起されたエピソードに対し、Reflection ジョブをキューする。"""
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
+        if not isinstance(episode_id, str) or not episode_id.strip():
+            raise ValueError("episode_id must be non-empty str")
+        correlation_id = uuid.uuid4().hex
+        job = MemoryReflectionJob(
+            player_id=player_id,
+            episode_id=episode_id,
+            trigger=PASSIVE_RECALL_TRIGGER,
+            correlation_id=correlation_id,
+            situation_text=situation_text.strip() or DEFAULT_SITUATION_PASSIVE,
         )
         return self.enqueue(job)
 

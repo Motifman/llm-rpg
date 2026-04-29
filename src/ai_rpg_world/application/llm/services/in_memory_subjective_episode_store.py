@@ -74,7 +74,8 @@ class InMemorySubjectiveEpisodeStore(ISubjectiveEpisodeStore):
             raise TypeError("player_id must be PlayerId")
         if not isinstance(episode_id, str):
             raise TypeError("episode_id must be str")
-        ep = self.get_by_episode_id(player_id, episode_id)
+        with self._lock:
+            ep = self._index.get(self._key(player_id), {}).get(episode_id)
         if ep is None:
             return
         updated = replace(
@@ -83,3 +84,12 @@ class InMemorySubjectiveEpisodeStore(ISubjectiveEpisodeStore):
             last_recalled_at=datetime.now(),
         )
         self.put(player_id, updated)
+
+    def count_reflection_journal_entries(self, player_id: PlayerId) -> int:
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
+        with self._lock:
+            total = 0
+            for ep in self._by_player.get(self._key(player_id), []):
+                total += len(ep.memory_reflection_journal)
+            return total

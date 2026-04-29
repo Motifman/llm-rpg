@@ -42,8 +42,11 @@ def memory_reflection_structured_output_from_env() -> bool:
 
 
 def memory_reflection_after_encode_filter_from_env() -> str:
-    """`high`（既定）| `all`。encoding 直後にキューする主観エピソードの範囲。"""
-    return (os.environ.get("MEMORY_REFLECTION_AFTER_ENCODE") or "high").strip().lower()
+    """`off`（既定）| `high` | `all`。encoding 直後に Reflection をキューするか。
+
+    主経路は Passive Recall 経由のため、既定では encoding 後はキューしない。
+    """
+    return (os.environ.get("MEMORY_REFLECTION_AFTER_ENCODE") or "off").strip().lower()
 
 
 def build_same_process_memory_reflection(
@@ -79,4 +82,10 @@ def build_same_process_memory_reflection(
         if mode == "all" or (mode == "high" and episode.importance == "high"):
             scheduler.maybe_enqueue_after_subjective_encode(player_id, episode)
 
-    return scheduler, after_subjective_episode_encoded
+    hook: Optional[Callable[[PlayerId, SubjectiveEpisode], None]]
+    if mode == "off":
+        hook = None
+    else:
+        hook = after_subjective_episode_encoded
+
+    return scheduler, hook

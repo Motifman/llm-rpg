@@ -69,6 +69,7 @@ def register_default_tools(
     inspect_item_enabled: bool = False,
     inspect_target_enabled: bool = False,
     memory_query_enabled: bool = False,
+    recall_subjective_enabled: bool = False,
     subagent_enabled: bool = False,
     todo_enabled: bool = False,
     working_memory_enabled: bool = False,
@@ -127,6 +128,7 @@ def register_default_tools(
         registry,
         get_memory_specs(
             memory_query_enabled=memory_query_enabled,
+            recall_subjective_enabled=recall_subjective_enabled,
             subagent_enabled=subagent_enabled,
             todo_enabled=todo_enabled,
             working_memory_enabled=working_memory_enabled,

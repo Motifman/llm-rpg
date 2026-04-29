@@ -1,5 +1,5 @@
 """
-Memory ツール（memory_query, subagent, working_memory_append）の実行。
+Memory ツール（memory_query, memory_recall_subjective, subagent, working_memory_append）の実行。
 
 ToolCommandMapper のサブマッパーとして、Memory 関連のツール実行のみを担当する。
 """
@@ -14,6 +14,9 @@ from ai_rpg_world.application.llm.exceptions import (
 )
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.services.memory_query_executor import MemoryQueryExecutor
+from ai_rpg_world.application.llm.services.subjective_memory_recall_executor import (
+    SubjectiveMemoryRecallExecutor,
+)
 from ai_rpg_world.application.llm.services.subagent_runner import SubagentRunner
 from ai_rpg_world.application.llm.services.tool_executor_helpers import (
     exception_result,
@@ -21,6 +24,7 @@ from ai_rpg_world.application.llm.services.tool_executor_helpers import (
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_QUERY,
+    TOOL_NAME_MEMORY_RECALL_SUBJECTIVE,
     TOOL_NAME_SUBAGENT,
     TOOL_NAME_WORKING_MEMORY_APPEND,
 )
@@ -38,10 +42,12 @@ class MemoryToolExecutor:
     def __init__(
         self,
         memory_query_executor: Optional[MemoryQueryExecutor] = None,
+        subjective_recall_executor: Optional[SubjectiveMemoryRecallExecutor] = None,
         subagent_runner: Optional[SubagentRunner] = None,
         working_memory_store: Optional[Any] = None,
     ) -> None:
         self._memory_query_executor = memory_query_executor
+        self._subjective_recall_executor = subjective_recall_executor
         self._subagent_runner = subagent_runner
         self._working_memory_store = working_memory_store
 
@@ -50,6 +56,8 @@ class MemoryToolExecutor:
         result: Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]] = {}
         if self._memory_query_executor is not None:
             result[TOOL_NAME_MEMORY_QUERY] = self._execute_memory_query
+        if self._subjective_recall_executor is not None:
+            result[TOOL_NAME_MEMORY_RECALL_SUBJECTIVE] = self._execute_recall_subjective
         if self._subagent_runner is not None:
             result[TOOL_NAME_SUBAGENT] = self._execute_subagent
         if self._working_memory_store is not None:
@@ -86,6 +94,27 @@ class MemoryToolExecutor:
             return LlmCommandResultDto(success=True, message=str(msg))
         except (DslParseException, DslEvaluationException, InvalidOutputModeException) as e:
             return exception_result(e)
+        except Exception as e:
+            return exception_result(e)
+
+    def _execute_recall_subjective(
+        self, player_id: int, args: Dict[str, Any]
+    ) -> LlmCommandResultDto:
+        if self._subjective_recall_executor is None:
+            return unknown_tool("memory_recall_subjective ツールはまだ利用できません。")
+        try:
+            raw_limit = args.get("limit", 10)
+            try:
+                limit = int(raw_limit) if raw_limit is not None else 10
+            except (TypeError, ValueError):
+                limit = 10
+            keywords = str(args.get("keywords") or "")
+            text = self._subjective_recall_executor.execute(
+                PlayerId(player_id),
+                keywords=keywords,
+                limit=limit,
+            )
+            return LlmCommandResultDto(success=True, message=text)
         except Exception as e:
             return exception_result(e)
 

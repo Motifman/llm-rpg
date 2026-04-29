@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -26,9 +27,25 @@ from ai_rpg_world.application.llm.services.llm_json_memory_reflection import (
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 AFTER_SUBJECTIVE_ENCODE_TRIGGER = "after_subjective_encode"
+PASSIVE_RECALL_TRIGGER = "passive_recall"
 DEFAULT_SITUATION_AFTER_ENCODE = (
     "主観エピソード encoding 直後。当該ターンの文脈は current_agent_context に含まれる。"
 )
+DEFAULT_SITUATION_PASSIVE = (
+    "ターン中にルールベースの Passive Recall で関連エピソードが想起された直後。"
+    " situation_text に当該ターンの状況が含まれる。"
+)
+
+_ENV_PASSIVE_COOLDOWN = "MEMORY_REFLECTION_PASSIVE_COOLDOWN_SECONDS"
+
+
+def _passive_cooldown_seconds() -> float:
+    raw = (os.environ.get(_ENV_PASSIVE_COOLDOWN) or "300").strip()
+    try:
+        v = float(raw)
+    except ValueError:
+        return 300.0
+    return max(0.0, v)
 
 
 def _default_utc_now() -> datetime:
@@ -105,12 +122,39 @@ class SubjectiveMemoryReflectionProcessor:
             )
             return False
 
+        if job.trigger == PASSIVE_RECALL_TRIGGER:
+            cooldown = _passive_cooldown_seconds()
+            if cooldown > 0:
+                last_passive: Optional[datetime] = None
+                for e in reversed(episode.memory_reflection_journal):
+                    if e.trigger == PASSIVE_RECALL_TRIGGER:
+                        last_passive = e.created_at
+                        break
+                if last_passive is not None:
+                    now = self._utc_now()
+                    delta = (now - last_passive).total_seconds()
+                    if delta < cooldown:
+                        self._logger.info(
+                            "memory_reflection_skip_passive_cooldown",
+                            extra={
+                                **base_extra,
+                                "phase": "skipped_passive_cooldown",
+                                "cooldown_seconds": cooldown,
+                                "elapsed_seconds": delta,
+                            },
+                        )
+                        return False
+
         ctx = self._context_provider(player_id)
         if not isinstance(ctx, EpisodeEncodingContextDto):
             raise TypeError("context_provider must return EpisodeEncodingContextDto")
 
+        if job.trigger == PASSIVE_RECALL_TRIGGER:
+            default_situation = DEFAULT_SITUATION_PASSIVE
+        else:
+            default_situation = DEFAULT_SITUATION_AFTER_ENCODE
         situation = (
-            job.situation_text if job.situation_text.strip() else DEFAULT_SITUATION_AFTER_ENCODE
+            job.situation_text if job.situation_text.strip() else default_situation
         )
         user_prompt = build_memory_reflection_user_prompt(
             episode, ctx, situation_text=situation
