@@ -376,6 +376,7 @@ def _build_tool_handler_map(
     subagent_runner: Optional[SubagentRunner],
     todo_store: Optional[InMemoryTodoStore],
     working_memory_store: Optional[InMemoryWorkingMemoryStore],
+    subjective_recall_executor: Optional[Any] = None,
     spot_graph_tool_executor: Optional[SpotGraphToolExecutor] = None,
 ) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
     """
@@ -424,6 +425,7 @@ def _build_tool_handler_map(
     handler_map.update(
         MemoryToolExecutor(
             memory_query_executor=memory_query_executor,
+            subjective_recall_executor=subjective_recall_executor,
             subagent_runner=subagent_runner,
             working_memory_store=working_memory_store,
         ).get_handlers()
@@ -484,6 +486,7 @@ def _build_tool_stack(
     subagent_runner: SubagentRunner,
     working_memory_store: InMemoryWorkingMemoryStore,
     todo_store: InMemoryTodoStore,
+    subjective_recall_executor: Optional[Any] = None,
     include_tile_movement: bool = True,
     movement_service: Any = None,
     pursuit_command_service: Optional[Any],
@@ -558,6 +561,7 @@ def _build_tool_stack(
             and player_status_repository is not None
         ),
         memory_query_enabled=True,
+        recall_subjective_enabled=subjective_recall_executor is not None,
         subagent_enabled=True,
         todo_enabled=True,
         working_memory_enabled=True,
@@ -602,6 +606,7 @@ def _build_tool_stack(
         subagent_runner=subagent_runner,
         todo_store=todo_store,
         working_memory_store=working_memory_store,
+        subjective_recall_executor=subjective_recall_executor,
         spot_graph_tool_executor=spot_graph_tool_executor,
     )
     tool_command_mapper = ToolCommandMapper(handler_map=handler_map)
@@ -836,6 +841,7 @@ class LlmAgentWiringResult:
         observation_experience_trace_store: Optional[IObservationExperienceTraceStore] = None,
         episode_candidate_store: Optional[IEpisodeCandidateStore] = None,
         subjective_episode_store: Optional[ISubjectiveEpisodeStore] = None,
+        identity_memory_store: Optional[Any] = None,
         sns_mode_session: Optional[Any] = None,
         sns_page_session: Optional[Any] = None,
         trade_page_session: Optional[Any] = None,
@@ -854,6 +860,7 @@ class LlmAgentWiringResult:
         self.observation_experience_trace_store = observation_experience_trace_store
         self.episode_candidate_store = episode_candidate_store
         self.subjective_episode_store = subjective_episode_store
+        self.identity_memory_store = identity_memory_store
         self.sns_mode_session = sns_mode_session
         self.sns_page_session = sns_page_session
         self.trade_page_session = trade_page_session
@@ -1088,6 +1095,7 @@ def create_llm_agent_wiring(
         subagent_runner=subagent_runner,
         working_memory_store=working_memory_store,
         todo_store=todo_store,
+        subjective_recall_executor=None,
         movement_service=movement_service,
         pursuit_command_service=pursuit_command_service,
         speech_service=speech_service,

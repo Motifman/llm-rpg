@@ -264,11 +264,17 @@ class DefaultPromptBuilder(IPromptBuilder):
             situation_for_recall = (
                 current_state_text.rstrip() + "\n" + recent_events_text.rstrip()
             ).strip()
-            recall_block = self._passive_subjective_recall.compose_user_block(
+            recall = self._passive_subjective_recall.compose_user_block(
                 player_id,
                 situation_text=situation_for_recall,
                 current_goals_hint=goals_snapshot,
-            ).strip()
+            )
+            recall_block = recall.user_block.strip()
+            passive_recall_episode_ids = recall.episode_ids_for_reflection
+            passive_recall_situation_text = situation_for_recall
+        else:
+            passive_recall_episode_ids = ()
+            passive_recall_situation_text = ""
 
         body_parts: list[str] = []
         if failure_block:
@@ -299,4 +305,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         result["identity_snapshot"] = identity_snapshot
         result["persona_snapshot"] = player_info.persona_block
         result["working_memory_snapshot"] = ()
+        result["passive_recall_reflection_episode_ids"] = passive_recall_episode_ids
+        result["passive_recall_situation_text"] = passive_recall_situation_text
         return result

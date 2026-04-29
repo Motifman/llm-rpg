@@ -149,6 +149,9 @@ def create_spot_graph_wiring(
     from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
         InMemorySubjectiveEpisodeStore,
     )
+    from ai_rpg_world.application.llm.services.in_memory_identity_memory_store import (
+        InMemoryIdentityMemoryStore,
+    )
     from ai_rpg_world.application.llm.wiring.episode_encoder_factory import (
         build_episode_encoder,
     )
@@ -198,6 +201,9 @@ def create_spot_graph_wiring(
     from ai_rpg_world.application.llm.services.llm_turn_trigger import DefaultLlmTurnTrigger
     from ai_rpg_world.application.llm.services.memory_extractor import RuleBasedMemoryExtractor
     from ai_rpg_world.application.llm.services.memory_query_executor import MemoryQueryExecutor
+    from ai_rpg_world.application.llm.services.subjective_memory_recall_executor import (
+        SubjectiveMemoryRecallExecutor,
+    )
     from ai_rpg_world.application.llm.services.observation_trace_recorder import (
         ObservationTraceRecorder,
     )
@@ -274,6 +280,7 @@ def create_spot_graph_wiring(
         candidate_store=episode_candidate_store,
     )
     subjective_episode_store = InMemorySubjectiveEpisodeStore()
+    identity_memory_store = InMemoryIdentityMemoryStore()
     trace_bundle_resolver = ExperienceTraceBundleResolver(
         action_experience_trace_store,
         observation_experience_trace_store,
@@ -350,10 +357,12 @@ def create_spot_graph_wiring(
         handle_store=handle_store,
     )
     client = llm_client if llm_client is not None else create_llm_client_from_env()
-    _, memory_reflection_after_encode = build_same_process_memory_reflection(
-        llm_client=client,
-        subjective_episode_store=subjective_episode_store,
-        context_provider=episode_encoding_ctx_provider,
+    memory_reflection_scheduler, memory_reflection_after_encode = (
+        build_same_process_memory_reflection(
+            llm_client=client,
+            subjective_episode_store=subjective_episode_store,
+            context_provider=episode_encoding_ctx_provider,
+        )
     )
     episode_encoder = build_episode_encoder(client)
     episode_encoding_processor = EpisodeEncodingProcessor(
@@ -375,6 +384,9 @@ def create_spot_graph_wiring(
         invoke_text=subagent_invoke_text,
         handle_store=handle_store,
     )
+    subjective_recall_executor = SubjectiveMemoryRecallExecutor(
+        subjective_episode_store=subjective_episode_store,
+    )
 
     spot_graph_tool_executor = SpotGraphToolExecutor(
         spot_graph_world_services=spot_graph_world_services,
@@ -389,6 +401,7 @@ def create_spot_graph_wiring(
         subagent_runner=subagent_runner,
         working_memory_store=working_memory_store,
         todo_store=todo_store,
+        subjective_recall_executor=subjective_recall_executor,
         include_tile_movement=False,
         movement_service=None,
         pursuit_command_service=pursuit_command_service,
@@ -463,6 +476,19 @@ def create_spot_graph_wiring(
         passive_subjective_recall=passive_recall_composer,
         episode_encoding_context_provider=episode_encoding_ctx_provider,
     )
+
+    def _enqueue_passive_memory_reflection(
+        pid: PlayerId,
+        episode_ids: tuple[str, ...],
+        situation: str,
+    ) -> None:
+        if memory_reflection_scheduler is None:
+            return
+        for eid in episode_ids:
+            memory_reflection_scheduler.maybe_enqueue_passive_recall(
+                pid, eid, situation_text=situation
+            )
+
     orchestrator = LlmAgentOrchestrator(
         prompt_builder=prompt_builder,
         llm_client=client,
@@ -475,6 +501,11 @@ def create_spot_graph_wiring(
         handle_store=handle_store,
         episode_chunker=episode_chunker,
         episode_encoding_runner=episode_encoding_runner,
+        passive_memory_reflection_hook=(
+            _enqueue_passive_memory_reflection
+            if memory_reflection_scheduler is not None
+            else None
+        ),
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,
@@ -537,6 +568,7 @@ def create_spot_graph_wiring(
         observation_experience_trace_store=observation_experience_trace_store,
         episode_candidate_store=episode_candidate_store,
         subjective_episode_store=subjective_episode_store,
+        identity_memory_store=identity_memory_store,
         sns_mode_session=sns_mode_session,
         sns_page_session=sns_page_session,
         trade_page_session=trade_page_session,

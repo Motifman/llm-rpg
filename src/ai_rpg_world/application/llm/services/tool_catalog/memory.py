@@ -14,6 +14,7 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_MEMORY_QUERY,
+    TOOL_NAME_MEMORY_RECALL_SUBJECTIVE,
     TOOL_NAME_SUBAGENT,
     TOOL_NAME_TODO_ADD,
     TOOL_NAME_TODO_COMPLETE,
@@ -40,6 +41,29 @@ MEMORY_QUERY_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_MEMORY_QUERY,
     description="メモリ変数（episodic, facts, laws, recent_events, state, working_memory）を DSL 式で検索します。",
     parameters=MEMORY_QUERY_PARAMETERS,
+)
+
+RECALL_SUBJECTIVE_PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "keywords": {
+            "type": "string",
+            "description": "観察文・解釈・手がかりタグに対する部分一致（小文字化して比較）。空なら新しい順に limit 件。",
+        },
+        "limit": {
+            "type": "integer",
+            "description": "最大件数（1〜50、既定 10）。",
+        },
+    },
+    "required": [],
+}
+RECALL_SUBJECTIVE_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_MEMORY_RECALL_SUBJECTIVE,
+    description=(
+        "v2 主観エピソード（SubjectiveEpisode）を検索します。"
+        " memory_query（DSL）とは独立した経路です。"
+    ),
+    parameters=RECALL_SUBJECTIVE_PARAMETERS,
 )
 
 SUBAGENT_PARAMETERS = {
@@ -113,6 +137,11 @@ def get_memory_query_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResol
     return [(MEMORY_QUERY_DEFINITION, MemoryQueryAvailabilityResolver())]
 
 
+def get_recall_subjective_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
+    """memory_recall_subjective ツールの (definition, resolver) 一覧を返す。"""
+    return [(RECALL_SUBJECTIVE_DEFINITION, MemoryQueryAvailabilityResolver())]
+
+
 def get_subagent_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     """subagent ツールの (definition, resolver) 一覧を返す。"""
     return [(SUBAGENT_DEFINITION, SubagentAvailabilityResolver())]
@@ -137,6 +166,7 @@ def get_working_memory_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityRes
 def get_memory_specs(
     *,
     memory_query_enabled: bool = False,
+    recall_subjective_enabled: bool = False,
     subagent_enabled: bool = False,
     todo_enabled: bool = False,
     working_memory_enabled: bool = False,
@@ -145,6 +175,8 @@ def get_memory_specs(
     specs: List[Tuple[ToolDefinitionDto, IAvailabilityResolver]] = []
     if memory_query_enabled:
         specs.extend(get_memory_query_specs())
+    if recall_subjective_enabled:
+        specs.extend(get_recall_subjective_specs())
     if subagent_enabled:
         specs.extend(get_subagent_specs())
     if todo_enabled:
@@ -157,6 +189,7 @@ def get_memory_specs(
 __all__ = [
     "get_memory_specs",
     "get_memory_query_specs",
+    "get_recall_subjective_specs",
     "get_subagent_specs",
     "get_todo_specs",
     "get_working_memory_specs",

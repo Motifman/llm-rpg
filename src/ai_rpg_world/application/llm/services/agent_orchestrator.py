@@ -10,7 +10,7 @@ ExperienceTrace から EpisodeCandidate を切り出す処理を 1 回呼ぶ。
 
 import json
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from ai_rpg_world.application.llm.contracts.dtos import (
@@ -49,6 +49,8 @@ from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+_TurnPassiveReflectionEnqueue = Optional[Tuple[Tuple[str, ...], str]]
 
 
 def _format_action_summary(tool_name: str, arguments: Optional[Dict[str, Any]] = None) -> str:
@@ -144,6 +146,9 @@ class LlmAgentOrchestrator:
         handle_store: Optional[IHandleStore] = None,
         episode_chunker: Optional[IEpisodeChunkCoordinator] = None,
         episode_encoding_runner: Optional[IEpisodeEncodingRunner] = None,
+        passive_memory_reflection_hook: Optional[
+            Callable[[PlayerId, Tuple[str, ...], str], None]
+        ] = None,
     ) -> None:
         if not isinstance(prompt_builder, IPromptBuilder):
             raise TypeError("prompt_builder must be IPromptBuilder")
@@ -193,6 +198,12 @@ class LlmAgentOrchestrator:
             raise TypeError(
                 "episode_encoding_runner must be IEpisodeEncodingRunner or None"
             )
+        if passive_memory_reflection_hook is not None and not callable(
+            passive_memory_reflection_hook
+        ):
+            raise TypeError(
+                "passive_memory_reflection_hook must be callable or None"
+            )
         self._prompt_builder = prompt_builder
         self._llm_client = llm_client
         self._tool_command_mapper = tool_command_mapper
@@ -208,6 +219,7 @@ class LlmAgentOrchestrator:
         self._handle_store = handle_store
         self._episode_chunker = episode_chunker
         self._episode_encoding_runner = episode_encoding_runner
+        self._passive_memory_reflection_hook = passive_memory_reflection_hook
 
     def run_turn(self, player_id: PlayerId) -> LlmCommandResultDto:
         """
@@ -223,20 +235,40 @@ class LlmAgentOrchestrator:
         if self._handle_store is not None:
             self._handle_store.clear_player(player_id)
 
+        passive_enqueue: _TurnPassiveReflectionEnqueue = None
         try:
-            return self._run_turn_core(player_id)
+            dto, passive_enqueue = self._run_turn_core(player_id)
+            return dto
         finally:
             if self._episode_chunker is not None:
                 self._episode_chunker.create_candidate_if_ready(player_id)
             if self._episode_encoding_runner is not None:
                 self._episode_encoding_runner.run_after_turn(player_id)
+            if (
+                self._passive_memory_reflection_hook is not None
+                and passive_enqueue is not None
+            ):
+                ids, situation = passive_enqueue
+                if ids:
+                    self._passive_memory_reflection_hook(
+                        player_id, ids, situation
+                    )
 
-    def _run_turn_core(self, player_id: PlayerId) -> LlmCommandResultDto:
+    def _run_turn_core(
+        self, player_id: PlayerId
+    ) -> Tuple[LlmCommandResultDto, _TurnPassiveReflectionEnqueue]:
         request = self._prompt_builder.build(player_id)
         messages = request["messages"]
         tools = request["tools"]
         tool_choice = request.get("tool_choice", "required")
         runtime_context = request.get("tool_runtime_context")
+        episode_ids = request.get("passive_recall_reflection_episode_ids") or ()
+        if not isinstance(episode_ids, tuple):
+            episode_ids = tuple(episode_ids) if isinstance(episode_ids, list) else ()
+        situation_text = str(request.get("passive_recall_situation_text") or "")
+        passive_enqueue = (
+            (episode_ids, situation_text) if episode_ids else None
+        )
         if not isinstance(runtime_context, ToolRuntimeContextDto):
             runtime_context = ToolRuntimeContextDto.empty()
 
@@ -265,7 +297,7 @@ class LlmAgentOrchestrator:
                 action_summary,
                 result_summary,
             )
-            return result_dto
+            return result_dto, passive_enqueue
 
         if tool_call is None:
             action_summary = "ツールが選択されませんでした。"
@@ -290,7 +322,7 @@ class LlmAgentOrchestrator:
                 action_summary,
                 result_summary,
             )
-            return result_dto
+            return result_dto, passive_enqueue
 
         name = tool_call.get("name", "")
         raw_args = tool_call.get("arguments")
@@ -321,7 +353,7 @@ class LlmAgentOrchestrator:
                 action_summary,
                 result_summary,
             )
-            return validation_error
+            return validation_error, passive_enqueue
 
         try:
             canonical_arguments = self._tool_argument_resolver.resolve(
@@ -354,7 +386,7 @@ class LlmAgentOrchestrator:
                 action_summary,
                 result_summary,
             )
-            return result_dto
+            return result_dto, passive_enqueue
 
         result_dto = self._tool_command_mapper.execute(
             player_id.value,
@@ -387,7 +419,7 @@ class LlmAgentOrchestrator:
             result_summary=result_summary,
             request=request,
         )
-        return result_dto
+        return result_dto, passive_enqueue
 
     def _append_action_experience_trace(
         self,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+import pytest
 from datetime import datetime, timezone
 
 from ai_rpg_world.application.llm.contracts.dtos import (
@@ -35,6 +36,7 @@ from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store im
 from ai_rpg_world.application.llm.services.memory_reflection_processor import (
     AFTER_SUBJECTIVE_ENCODE_TRIGGER,
     MemoryReflectionJob,
+    PASSIVE_RECALL_TRIGGER,
     SubjectiveMemoryReflectionProcessor,
 )
 from ai_rpg_world.application.llm.services.same_process_memory_reflection_scheduler import (
@@ -209,6 +211,67 @@ def test_scheduler_enqueue_deduplicates_same_key() -> None:
     fin = store.get_by_episode_id(pid, ep.episode_id)
     assert fin is not None
     assert len(fin.memory_reflection_journal) == 1
+
+
+def test_passive_reflection_processor_appends_when_cooldown_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MEMORY_REFLECTION_PASSIVE_COOLDOWN_SECONDS", "0")
+    pid = PlayerId(1)
+    store = InMemorySubjectiveEpisodeStore()
+    ep = _episode_stub(1, "ep-passive")
+    store.put(pid, ep)
+    port = StubMemoryReflectionLlmPort(_minimal_reflection_json())
+    proc = SubjectiveMemoryReflectionProcessor(
+        subjective_episode_store=store,
+        llm_port=port,
+        context_provider=lambda _p: EpisodeEncodingContextDto(current_beliefs="x"),
+        structured_json_output=False,
+        utc_now=lambda: datetime(2026, 4, 29, 12, 0, 0, tzinfo=timezone.utc),
+    )
+    job = MemoryReflectionJob(
+        player_id=pid,
+        episode_id=ep.episode_id,
+        trigger=PASSIVE_RECALL_TRIGGER,
+        correlation_id="corr-p",
+        situation_text="鐘の音がする広場にいる。",
+    )
+    assert proc.run_once(job) is True
+    loaded = store.get_by_episode_id(pid, ep.episode_id)
+    assert loaded is not None
+    assert len(loaded.memory_reflection_journal) == 1
+    assert loaded.memory_reflection_journal[0].trigger == PASSIVE_RECALL_TRIGGER
+
+
+def test_scheduler_maybe_enqueue_passive_recall() -> None:
+    pid = PlayerId(1)
+    store = InMemorySubjectiveEpisodeStore()
+    ep = _episode_stub(1, "ep-sch-passive")
+    store.put(pid, ep)
+    port = StubMemoryReflectionLlmPort(_minimal_reflection_json())
+    proc = SubjectiveMemoryReflectionProcessor(
+        subjective_episode_store=store,
+        llm_port=port,
+        context_provider=lambda _p: EpisodeEncodingContextDto(),
+        structured_json_output=False,
+    )
+    sched = SameProcessMemoryReflectionScheduler(proc, max_attempts=1)
+    assert (
+        sched.maybe_enqueue_passive_recall(
+            pid, ep.episode_id, situation_text="状況A"
+        )
+        is True
+    )
+    for _ in range(200):
+        got = store.get_by_episode_id(pid, ep.episode_id)
+        if got and got.memory_reflection_journal:
+            break
+        time.sleep(0.01)
+    sched.shutdown(wait=True, timeout=3.0)
+    fin = store.get_by_episode_id(pid, ep.episode_id)
+    assert fin is not None
+    assert len(fin.memory_reflection_journal) == 1
+    assert fin.memory_reflection_journal[0].trigger == PASSIVE_RECALL_TRIGGER
 
 
 def test_episode_encoding_processor_calls_after_encode_hook() -> None:

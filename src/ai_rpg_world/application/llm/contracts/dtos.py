@@ -549,6 +549,25 @@ class MemoryReflectionJournalEntry:
 
 
 @dataclass(frozen=True)
+class PassiveRecallComposeResult:
+    """Passive Subjective Recall の user ブロックと、Memory Reflection 投入用の episode_id 一覧。"""
+
+    user_block: str
+    episode_ids_for_reflection: Tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.user_block, str):
+            raise TypeError("user_block must be str")
+        if not isinstance(self.episode_ids_for_reflection, tuple):
+            raise TypeError("episode_ids_for_reflection must be tuple")
+        for eid in self.episode_ids_for_reflection:
+            if not isinstance(eid, str) or not eid.strip():
+                raise ValueError(
+                    "episode_ids_for_reflection must contain non-empty str"
+                )
+
+
+@dataclass(frozen=True)
 class BeliefUpdateCandidateEntry:
     summary: str
     confidence: SubjectiveImportance = "medium"

@@ -11,7 +11,10 @@ import re
 from datetime import datetime
 from typing import List, Set, Tuple
 
-from ai_rpg_world.application.llm.contracts.dtos import SubjectiveEpisode
+from ai_rpg_world.application.llm.contracts.dtos import (
+    PassiveRecallComposeResult,
+    SubjectiveEpisode,
+)
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IPassiveSubjectiveRecallComposer,
     ISubjectiveEpisodeStore,
@@ -128,7 +131,7 @@ class PassiveSubjectiveRecallComposer(IPassiveSubjectiveRecallComposer):
         *,
         situation_text: str,
         current_goals_hint: str,
-    ) -> str:
+    ) -> PassiveRecallComposeResult:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         if not isinstance(situation_text, str):
@@ -140,7 +143,7 @@ class PassiveSubjectiveRecallComposer(IPassiveSubjectiveRecallComposer):
         now = datetime.now()
         episodes = self._store.list_recent(player_id, self._max_scan)
         if not episodes:
-            return ""
+            return PassiveRecallComposeResult(user_block="")
         scored: List[Tuple[float, SubjectiveEpisode]] = []
         for ep in episodes:
             s = score_episode_for_recall(
@@ -154,14 +157,19 @@ class PassiveSubjectiveRecallComposer(IPassiveSubjectiveRecallComposer):
         scored.sort(key=lambda x: x[0], reverse=True)
         picked = [ep for _, ep in scored[: self._max_hits]]
         if not picked:
-            return ""
+            return PassiveRecallComposeResult(user_block="")
         lines: List[str] = []
+        episode_ids: List[str] = []
         for ep in picked:
             line = _format_recall_line(ep)
             if line:
                 lines.append(line)
+            episode_ids.append(ep.episode_id)
             self._store.record_passive_recall(player_id, ep.episode_id)
         if not lines:
-            return ""
+            return PassiveRecallComposeResult(user_block="")
         body = "\n".join(f"- {ln}" for ln in lines)
-        return f"{_RECALL_HEADER}\n{body}"
+        return PassiveRecallComposeResult(
+            user_block=f"{_RECALL_HEADER}\n{body}",
+            episode_ids_for_reflection=tuple(episode_ids),
+        )
