@@ -54,11 +54,13 @@ from ai_rpg_world.application.llm.wiring._llm_client_factory import (
     create_subagent_invoke_text,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
+    IActionExperienceTraceStore,
     IActionResultStore,
     IEpisodeMemoryStore,
     ILLMClient,
     ILLMPlayerResolver,
     ILongTermMemoryStore,
+    IObservationExperienceTraceStore,
     ILlmTurnTrigger,
     IReflectionRunner,
     IReflectionStatePort,
@@ -83,8 +85,20 @@ from ai_rpg_world.application.llm.services.game_tool_registry import (
 from ai_rpg_world.application.llm.services.in_memory_todo_store import (
     InMemoryTodoStore,
 )
+from ai_rpg_world.application.llm.services.in_memory_action_experience_trace_store import (
+    InMemoryActionExperienceTraceStore,
+)
+from ai_rpg_world.application.llm.services.in_memory_observation_experience_trace_store import (
+    InMemoryObservationExperienceTraceStore,
+)
 from ai_rpg_world.application.llm.services.in_memory_working_memory_store import (
     InMemoryWorkingMemoryStore,
+)
+from ai_rpg_world.application.llm.services.observation_trace_recorder import (
+    ObservationTraceRecorder,
+)
+from ai_rpg_world.application.llm.services.observation_trace_recording_buffer import (
+    ObservationTraceRecordingBuffer,
 )
 from ai_rpg_world.application.llm.services.handle_store import InMemoryHandleStore
 from ai_rpg_world.application.llm.services.memory_query_executor import (
@@ -783,6 +797,8 @@ class LlmAgentWiringResult:
         reflection_runner: Optional[IReflectionRunner] = None,
         observation_buffer: Optional[IObservationContextBuffer] = None,
         observation_appender: Optional[ObservationAppender] = None,
+        action_experience_trace_store: Optional[IActionExperienceTraceStore] = None,
+        observation_experience_trace_store: Optional[IObservationExperienceTraceStore] = None,
         sns_mode_session: Optional[Any] = None,
         sns_page_session: Optional[Any] = None,
         trade_page_session: Optional[Any] = None,
@@ -797,6 +813,8 @@ class LlmAgentWiringResult:
             self.observation_appender = ObservationAppender(observation_buffer)
         else:
             self.observation_appender = None
+        self.action_experience_trace_store = action_experience_trace_store
+        self.observation_experience_trace_store = observation_experience_trace_store
         self.sns_mode_session = sns_mode_session
         self.sns_page_session = sns_page_session
         self.trade_page_session = trade_page_session
@@ -866,6 +884,8 @@ def create_llm_agent_wiring(
     reflection_state_port: Optional[Any] = None,
     action_result_store: Optional[IActionResultStore] = None,
     sliding_window_memory: Optional[ISlidingWindowMemory] = None,
+    action_experience_trace_store: Optional[IActionExperienceTraceStore] = None,
+    observation_experience_trace_store: Optional[IObservationExperienceTraceStore] = None,
     llm_player_resolver: Optional[ILLMPlayerResolver] = None,
     max_turns: int = 5,
     llm_view_distance: Optional[int] = None,
@@ -889,7 +909,18 @@ def create_llm_agent_wiring(
     if unit_of_work_factory is None:
         raise TypeError("unit_of_work_factory must not be None")
 
-    buffer = observation_buffer if observation_buffer is not None else DefaultObservationContextBuffer()
+    base_buffer = (
+        observation_buffer if observation_buffer is not None else DefaultObservationContextBuffer()
+    )
+    observation_experience_trace_store = (
+        observation_experience_trace_store
+        if observation_experience_trace_store is not None
+        else InMemoryObservationExperienceTraceStore()
+    )
+    buffer = ObservationTraceRecordingBuffer(
+        inner=base_buffer,
+        recorder=ObservationTraceRecorder(observation_experience_trace_store),
+    )
     current_state_formatter = DefaultCurrentStateFormatter()
 
     sliding_window = (
@@ -901,6 +932,11 @@ def create_llm_agent_wiring(
         action_result_store
         if action_result_store is not None
         else DefaultActionResultStore()
+    )
+    action_experience_trace_store = (
+        action_experience_trace_store
+        if action_experience_trace_store is not None
+        else InMemoryActionExperienceTraceStore()
     )
     ui_context_builder = DefaultLlmUiContextBuilder()
     recent_events_formatter = DefaultRecentEventsFormatter()
@@ -1055,6 +1091,7 @@ def create_llm_agent_wiring(
         tool_argument_resolver=tool_argument_resolver,
         memory_extractor=memory_extractor,
         episode_memory_store=episode_memory_store,
+        action_experience_trace_store=action_experience_trace_store,
         handle_store=handle_store,
     )
     turn_runner = LlmAgentTurnRunner(
@@ -1099,6 +1136,8 @@ def create_llm_agent_wiring(
         reflection_runner=reflection_runner,
         observation_buffer=buffer,
         observation_appender=ObservationAppender(buffer),
+        action_experience_trace_store=action_experience_trace_store,
+        observation_experience_trace_store=observation_experience_trace_store,
         sns_mode_session=sns_mode_session,
         sns_page_session=sns_page_session,
         trade_page_session=trade_page_session,

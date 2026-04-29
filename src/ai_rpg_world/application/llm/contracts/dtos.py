@@ -122,6 +122,192 @@ class ActionResultEntry:
             raise TypeError("should_reschedule must be bool")
 
 
+EmotionHint = Literal[
+    "curiosity",
+    "caution",
+    "fear",
+    "anxiety",
+    "urgency",
+    "relief",
+    "hope",
+    "frustration",
+    "confusion",
+    "trust",
+    "distrust",
+    "determination",
+    "regret",
+    "surprise",
+    "neutral",
+]
+
+ObservationTraceKind = Literal[
+    "world_event",
+    "other_agent_action",
+    "speech",
+    "environment_change",
+    "intervention_to_self",
+    "system_notice",
+]
+
+
+EMOTION_HINT_VALUES: Tuple[str, ...] = (
+    "curiosity",
+    "caution",
+    "fear",
+    "anxiety",
+    "urgency",
+    "relief",
+    "hope",
+    "frustration",
+    "confusion",
+    "trust",
+    "distrust",
+    "determination",
+    "regret",
+    "surprise",
+    "neutral",
+)
+
+
+@dataclass(frozen=True)
+class ActionExperienceTrace:
+    """能動的な tool 実行から作る、主観的 episode 生成前の体験材料。"""
+
+    trace_id: str
+    agent_id: int
+    occurred_at: datetime
+    tool_name: str
+    tool_args: Dict[str, Any]
+    inner_thought: str
+    intention: str
+    expected_result: str
+    attention: str
+    emotion_hint: EmotionHint
+    tool_result: str
+    result_success: bool
+    error_code: Optional[str] = None
+    current_state_snapshot: str = ""
+    current_goals_snapshot: str = ""
+    current_beliefs_snapshot: str = ""
+    identity_snapshot: str = ""
+    persona_snapshot: str = ""
+    working_memory_snapshot: Tuple[str, ...] = ()
+    action_result_ref: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.trace_id, str):
+            raise TypeError("trace_id must be str")
+        if not isinstance(self.agent_id, int):
+            raise TypeError("agent_id must be int")
+        if not isinstance(self.occurred_at, datetime):
+            raise TypeError("occurred_at must be datetime")
+        if not isinstance(self.tool_name, str):
+            raise TypeError("tool_name must be str")
+        if not isinstance(self.tool_args, dict):
+            raise TypeError("tool_args must be dict")
+        for field_name in (
+            "inner_thought",
+            "intention",
+            "expected_result",
+            "attention",
+        ):
+            value = getattr(self, field_name)
+            if not isinstance(value, str):
+                raise TypeError(f"{field_name} must be str")
+            if not value.strip():
+                raise ValueError(f"{field_name} must not be empty")
+        if self.emotion_hint not in EMOTION_HINT_VALUES:
+            raise ValueError("emotion_hint must be one of EMOTION_HINT_VALUES")
+        if not isinstance(self.tool_result, str):
+            raise TypeError("tool_result must be str")
+        if not isinstance(self.result_success, bool):
+            raise TypeError("result_success must be bool")
+        if self.error_code is not None and not isinstance(self.error_code, str):
+            raise TypeError("error_code must be str or None")
+        for field_name in (
+            "current_state_snapshot",
+            "current_goals_snapshot",
+            "current_beliefs_snapshot",
+            "identity_snapshot",
+            "persona_snapshot",
+        ):
+            if not isinstance(getattr(self, field_name), str):
+                raise TypeError(f"{field_name} must be str")
+        if not isinstance(self.working_memory_snapshot, tuple):
+            raise TypeError("working_memory_snapshot must be tuple")
+        if not all(isinstance(item, str) for item in self.working_memory_snapshot):
+            raise TypeError("working_memory_snapshot must contain only str")
+        if self.action_result_ref is not None and not isinstance(
+            self.action_result_ref, str
+        ):
+            raise TypeError("action_result_ref must be str or None")
+
+
+@dataclass(frozen=True)
+class ObservationExperienceTrace:
+    """Observation pipeline 由来の受動観測から作る体験材料。"""
+
+    trace_id: str
+    agent_id: int
+    occurred_at: datetime
+    observation_summary: str
+    observation_kind: ObservationTraceKind
+    structured: Dict[str, Any]
+    game_time_label: Optional[str] = None
+    location_snapshot: str = ""
+    visible_context_summary: str = ""
+    attention_context: str = ""
+    perceived_salience: str = "normal"
+    source_observation_ids: Tuple[str, ...] = ()
+    world_event_refs: Tuple[str, ...] = ()
+    visible_agents: Tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.trace_id, str):
+            raise TypeError("trace_id must be str")
+        if not isinstance(self.agent_id, int):
+            raise TypeError("agent_id must be int")
+        if not isinstance(self.occurred_at, datetime):
+            raise TypeError("occurred_at must be datetime")
+        if not isinstance(self.observation_summary, str):
+            raise TypeError("observation_summary must be str")
+        if not self.observation_summary.strip():
+            raise ValueError("observation_summary must not be empty")
+        if self.observation_kind not in (
+            "world_event",
+            "other_agent_action",
+            "speech",
+            "environment_change",
+            "intervention_to_self",
+            "system_notice",
+        ):
+            raise ValueError("observation_kind must be a known observation trace kind")
+        if not isinstance(self.structured, dict):
+            raise TypeError("structured must be dict")
+        if self.game_time_label is not None and not isinstance(
+            self.game_time_label, str
+        ):
+            raise TypeError("game_time_label must be str or None")
+        for field_name in (
+            "location_snapshot",
+            "visible_context_summary",
+            "attention_context",
+            "perceived_salience",
+        ):
+            if not isinstance(getattr(self, field_name), str):
+                raise TypeError(f"{field_name} must be str")
+        for field_name in (
+            "source_observation_ids",
+            "world_event_refs",
+            "visible_agents",
+        ):
+            value = getattr(self, field_name)
+            if not isinstance(value, tuple):
+                raise TypeError(f"{field_name} must be tuple")
+            if not all(isinstance(item, str) for item in value):
+                raise TypeError(f"{field_name} must contain only str")
+
+
 @dataclass(frozen=True)
 class ToolDefinitionDto:
     """1 つのツール定義（OpenAI tools 形式の name / description / parameters 用）。"""

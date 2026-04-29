@@ -11,11 +11,13 @@ if TYPE_CHECKING:
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
+    ActionExperienceTrace,
     EpisodeMemoryEntry,
     LlmUiContextDto,
     LongTermFactEntry,
     MemoryLawEntry,
     MemoryRetrievalQueryDto,
+    ObservationExperienceTrace,
     SystemPromptPlayerInfoDto,
     ToolDefinitionDto,
     ToolRuntimeContextDto,
@@ -279,6 +281,38 @@ class IActionResultStore(ABC):
     @abstractmethod
     def get_recent(self, player_id: PlayerId, limit: int) -> List[ActionResultEntry]:
         """指定プレイヤーの直近 limit 件の行動結果を新しい順で返す。"""
+        pass
+
+
+class IActionExperienceTraceStore(ABC):
+    """ActionExperienceTrace の格納・取得。"""
+
+    @abstractmethod
+    def append(self, player_id: PlayerId, trace: ActionExperienceTrace) -> None:
+        """1 件の action trace を追加する。"""
+        pass
+
+    @abstractmethod
+    def get_recent(
+        self, player_id: PlayerId, limit: int
+    ) -> List[ActionExperienceTrace]:
+        """指定プレイヤーの直近 limit 件の action trace を新しい順で返す。"""
+        pass
+
+
+class IObservationExperienceTraceStore(ABC):
+    """ObservationExperienceTrace の格納・取得。"""
+
+    @abstractmethod
+    def append(self, player_id: PlayerId, trace: ObservationExperienceTrace) -> None:
+        """1 件の observation trace を追加する。"""
+        pass
+
+    @abstractmethod
+    def get_recent(
+        self, player_id: PlayerId, limit: int
+    ) -> List[ObservationExperienceTrace]:
+        """指定プレイヤーの直近 limit 件の observation trace を新しい順で返す。"""
         pass
 
 

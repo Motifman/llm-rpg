@@ -20,12 +20,20 @@ from ai_rpg_world.application.llm.services.agent_orchestrator import (
 from ai_rpg_world.application.llm.services.in_memory_episode_memory_store import (
     InMemoryEpisodeMemoryStore,
 )
+from ai_rpg_world.application.llm.services.in_memory_action_experience_trace_store import (
+    InMemoryActionExperienceTraceStore,
+)
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
 from ai_rpg_world.application.llm.services.memory_extractor import (
     RuleBasedMemoryExtractor,
 )
+from ai_rpg_world.application.llm.services.tool_command_mapper import ToolCommandMapper
 from tests.application.llm.conftest import _create_tool_command_mapper
-from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_NO_OP
+from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_MEMORY_QUERY,
+    TOOL_NAME_MOVE_TO_DESTINATION,
+    TOOL_NAME_NO_OP,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -151,6 +159,165 @@ class TestLlmAgentOrchestratorRunTurn:
         """player_id が PlayerId でないとき TypeError"""
         with pytest.raises(TypeError, match="player_id must be PlayerId"):
             orchestrator.run_turn(1)  # type: ignore[arg-type]
+
+    def test_run_turn_hard_validates_subjective_fields_for_world_action(
+        self, prompt_builder, action_result_store
+    ):
+        mapper = ToolCommandMapper(
+            handler_map={
+                TOOL_NAME_MOVE_TO_DESTINATION: lambda player_id, args: LlmCommandResultDto(
+                    success=True,
+                    message="移動しました。",
+                )
+            }
+        )
+        llm_client = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_MOVE_TO_DESTINATION,
+                "arguments": {"destination_label": "S1"},
+            }
+        )
+        orchestrator = LlmAgentOrchestrator(
+            prompt_builder=prompt_builder,
+            llm_client=llm_client,
+            tool_command_mapper=mapper,
+            action_result_store=action_result_store,
+            tool_argument_resolver=_RecordingResolver(),
+        )
+
+        result = orchestrator.run_turn(PlayerId(1))
+
+        assert result.success is False
+        assert result.error_code == "MISSING_SUBJECTIVE_ACTION_FIELD"
+        assert action_result_store.get_recent(PlayerId(1), 1)[0].success is False
+
+    def test_run_turn_rejects_unknown_emotion_hint_for_world_action(
+        self, prompt_builder, action_result_store
+    ):
+        mapper = ToolCommandMapper(
+            handler_map={
+                TOOL_NAME_MOVE_TO_DESTINATION: lambda player_id, args: LlmCommandResultDto(
+                    success=True,
+                    message="移動しました。",
+                )
+            }
+        )
+        args = {
+            "destination_label": "S1",
+            "inner_thought": "奥を見てみよう。",
+            "intention": "隣の部屋へ移動する。",
+            "expected_result": "隣の部屋の様子が分かる。",
+            "attention": "扉の先",
+            "emotion_hint": "excited",
+        }
+        llm_client = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_MOVE_TO_DESTINATION,
+                "arguments": args,
+            }
+        )
+        orchestrator = LlmAgentOrchestrator(
+            prompt_builder=prompt_builder,
+            llm_client=llm_client,
+            tool_command_mapper=mapper,
+            action_result_store=action_result_store,
+            tool_argument_resolver=_RecordingResolver(),
+        )
+
+        result = orchestrator.run_turn(PlayerId(1))
+
+        assert result.success is False
+        assert result.error_code == "INVALID_EMOTION_HINT"
+
+    def test_run_turn_saves_action_experience_trace_for_world_action(
+        self, prompt_builder, action_result_store
+    ):
+        trace_store = InMemoryActionExperienceTraceStore()
+        mapper = ToolCommandMapper(
+            handler_map={
+                TOOL_NAME_MOVE_TO_DESTINATION: lambda player_id, args: LlmCommandResultDto(
+                    success=True,
+                    message="移動しました。",
+                )
+            }
+        )
+        prompt_builder._return_value["current_state_snapshot"] = "現在地: 玄関"
+        prompt_builder._return_value["current_beliefs_snapshot"] = "扉は危険かもしれない。"
+        prompt_builder._return_value["persona_snapshot"] = "慎重な探索者"
+        prompt_builder._return_value["working_memory_snapshot"] = ("鍵を探している。",)
+        args = {
+            "destination_label": "S1",
+            "inner_thought": "奥を見てみよう。",
+            "intention": "隣の部屋へ移動する。",
+            "expected_result": "隣の部屋の様子が分かる。",
+            "attention": "扉の先",
+            "emotion_hint": "curiosity",
+        }
+        llm_client = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_MOVE_TO_DESTINATION,
+                "arguments": args,
+            }
+        )
+        orchestrator = LlmAgentOrchestrator(
+            prompt_builder=prompt_builder,
+            llm_client=llm_client,
+            tool_command_mapper=mapper,
+            action_result_store=action_result_store,
+            tool_argument_resolver=_RecordingResolver(),
+            action_experience_trace_store=trace_store,
+        )
+
+        result = orchestrator.run_turn(PlayerId(1))
+
+        assert result.success is True
+        traces = trace_store.get_recent(PlayerId(1), 10)
+        assert len(traces) == 1
+        trace = traces[0]
+        assert trace.tool_name == TOOL_NAME_MOVE_TO_DESTINATION
+        assert trace.tool_args == args
+        assert trace.inner_thought == "奥を見てみよう。"
+        assert trace.intention == "隣の部屋へ移動する。"
+        assert trace.expected_result == "隣の部屋の様子が分かる。"
+        assert trace.attention == "扉の先"
+        assert trace.emotion_hint == "curiosity"
+        assert trace.tool_result == "移動しました。"
+        assert trace.current_state_snapshot == "現在地: 玄関"
+        assert trace.current_beliefs_snapshot == "扉は危険かもしれない。"
+        assert trace.persona_snapshot == "慎重な探索者"
+        assert trace.working_memory_snapshot == ("鍵を探している。",)
+
+    def test_run_turn_does_not_save_trace_for_meta_tool(
+        self, prompt_builder, action_result_store
+    ):
+        trace_store = InMemoryActionExperienceTraceStore()
+        mapper = ToolCommandMapper(
+            handler_map={
+                TOOL_NAME_MEMORY_QUERY: lambda player_id, args: LlmCommandResultDto(
+                    success=True,
+                    message="[]",
+                )
+            }
+        )
+        llm_client = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_MEMORY_QUERY,
+                "arguments": {"expr": "episodic.take(1)"},
+            }
+        )
+        orchestrator = LlmAgentOrchestrator(
+            prompt_builder=prompt_builder,
+            llm_client=llm_client,
+            tool_command_mapper=mapper,
+            action_result_store=action_result_store,
+            tool_argument_resolver=_RecordingResolver(),
+            action_experience_trace_store=trace_store,
+        )
+
+        result = orchestrator.run_turn(PlayerId(1))
+
+        assert result.success is True
+        assert trace_store.get_recent(PlayerId(1), 10) == []
 
     def test_run_turn_llm_api_call_exception_reschedulable_returns_dto(
         self, prompt_builder, action_result_store, mapper

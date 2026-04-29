@@ -11,11 +11,13 @@ import os
 from typing import Any, Optional
 
 from ai_rpg_world.application.llm.contracts.interfaces import (
+    IActionExperienceTraceStore,
+    IActionResultStore,
     IEpisodeMemoryStore,
     ILLMClient,
     ILLMPlayerResolver,
+    IObservationExperienceTraceStore,
     ISlidingWindowMemory,
-    IActionResultStore,
 )
 from ai_rpg_world.application.llm.contracts.persona import PersonaPromptPolicy
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
@@ -118,6 +120,8 @@ def create_spot_graph_wiring(
     reflection_state_port: Optional[Any] = None,
     action_result_store: Optional[IActionResultStore] = None,
     sliding_window_memory: Optional[ISlidingWindowMemory] = None,
+    action_experience_trace_store: Optional[IActionExperienceTraceStore] = None,
+    observation_experience_trace_store: Optional[IObservationExperienceTraceStore] = None,
     llm_player_resolver: Optional[ILLMPlayerResolver] = None,
     max_turns: int = 5,
     llm_view_distance: Optional[int] = None,
@@ -155,11 +159,23 @@ def create_spot_graph_wiring(
     from ai_rpg_world.application.llm.services.in_memory_working_memory_store import (
         InMemoryWorkingMemoryStore,
     )
+    from ai_rpg_world.application.llm.services.in_memory_action_experience_trace_store import (
+        InMemoryActionExperienceTraceStore,
+    )
+    from ai_rpg_world.application.llm.services.in_memory_observation_experience_trace_store import (
+        InMemoryObservationExperienceTraceStore,
+    )
     from ai_rpg_world.application.llm.services.llm_agent_turn_runner import LlmAgentTurnRunner
     from ai_rpg_world.application.llm.services.llm_player_resolver import ProfileBasedLlmPlayerResolver
     from ai_rpg_world.application.llm.services.llm_turn_trigger import DefaultLlmTurnTrigger
     from ai_rpg_world.application.llm.services.memory_extractor import RuleBasedMemoryExtractor
     from ai_rpg_world.application.llm.services.memory_query_executor import MemoryQueryExecutor
+    from ai_rpg_world.application.llm.services.observation_trace_recorder import (
+        ObservationTraceRecorder,
+    )
+    from ai_rpg_world.application.llm.services.observation_trace_recording_buffer import (
+        ObservationTraceRecordingBuffer,
+    )
     from ai_rpg_world.application.llm.services.recent_events_formatter import (
         DefaultRecentEventsFormatter,
     )
@@ -188,7 +204,18 @@ def create_spot_graph_wiring(
     if unit_of_work_factory is None:
         raise TypeError("unit_of_work_factory must not be None")
 
-    buffer = observation_buffer if observation_buffer is not None else DefaultObservationContextBuffer()
+    base_buffer = (
+        observation_buffer if observation_buffer is not None else DefaultObservationContextBuffer()
+    )
+    observation_experience_trace_store = (
+        observation_experience_trace_store
+        if observation_experience_trace_store is not None
+        else InMemoryObservationExperienceTraceStore()
+    )
+    buffer = ObservationTraceRecordingBuffer(
+        inner=base_buffer,
+        recorder=ObservationTraceRecorder(observation_experience_trace_store),
+    )
 
     sg_builder = SpotGraphCurrentStateBuilder(
         spot_graph_repository=spot_graph_repository,
@@ -206,6 +233,11 @@ def create_spot_graph_wiring(
     )
     action_result_store = (
         action_result_store if action_result_store is not None else DefaultActionResultStore()
+    )
+    action_experience_trace_store = (
+        action_experience_trace_store
+        if action_experience_trace_store is not None
+        else InMemoryActionExperienceTraceStore()
     )
     from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
         SpotGraphUiContextBuilder,
@@ -372,6 +404,7 @@ def create_spot_graph_wiring(
         tool_argument_resolver=tool_argument_resolver,
         memory_extractor=memory_extractor,
         episode_memory_store=episode_memory_store,
+        action_experience_trace_store=action_experience_trace_store,
         handle_store=handle_store,
     )
     turn_runner = LlmAgentTurnRunner(
@@ -431,6 +464,8 @@ def create_spot_graph_wiring(
         reflection_runner=reflection_runner,
         observation_buffer=buffer,
         observation_appender=ObservationAppender(buffer),
+        action_experience_trace_store=action_experience_trace_store,
+        observation_experience_trace_store=observation_experience_trace_store,
         sns_mode_session=sns_mode_session,
         sns_page_session=sns_page_session,
         trade_page_session=trade_page_session,
