@@ -795,6 +795,7 @@ flowchart LR
   - 内容: `SubjectiveEpisode`（v2）/`ISubjectiveEpisodeStore`（in-memory）/`IEpisodeEncoder` / `IEpisodeEncodingLlmPort`、`ExperienceTraceBundleResolver`（`action:{trace_id}` / `observation:{trace_id}`）、`StubEpisodeEncoder`、`LlmJsonEpisodeEncoder`、`EpisodeEncodingProcessor`（encoder 失敗時は同一呼び出し内で `max_retries`）、`EpisodeEncodingRunner`。`EpisodeCandidate` に `encoded` / `encoding_failed`、`subjective_episode_id`、`encoding_error`。`LlmAgentOrchestrator.run_turn` の `finally` で `create_candidate_if_ready` の直後に `episode_encoding_runner.run_after_turn`（ターン単位・メイン経路と同一成功・失敗ファイナライザ）。`create_llm_agent_wiring` / `create_spot_graph_wiring` で chunker と同梱配線。回帰テスト: `tests/application/llm/test_episode_encoding.py`。
   - 代表コミット: （マージ後にここへ追記）
 - [ ] Phase 4: Passive Recall + Memory Reflection
+  - [x] 実装方針の確定（2026-04-29）: 想起は v2 `SubjectiveEpisode` のみ、`cue_keys` はタグ、reflection は初期から LLM 可、想起文は **user prompt** に挿入。`encoding_failed` 運用・再試行は本 Phase と並行でよい（§Phase 4 実装方針）。
 - [ ] Phase 5: Active Recall
 - [ ] Phase 6: Consolidation
 - [ ] Phase 7: Evaluation
