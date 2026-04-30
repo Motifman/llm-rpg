@@ -163,6 +163,49 @@ class TestLlmAgentOrchestratorRunTurn:
         orchestrator.run_turn(PlayerId(1))
         assert len(chunker.calls) == 1
 
+    def test_run_turn_invokes_memory_consolidation_hook_in_finally(
+        self, prompt_builder, action_result_store, mapper
+    ):
+        calls: List[PlayerId] = []
+
+        def hook(pid: PlayerId) -> None:
+            calls.append(pid)
+
+        llm_client = StubLlmClient(
+            tool_call_to_return={"name": TOOL_NAME_NO_OP, "arguments": {}}
+        )
+        orchestrator = LlmAgentOrchestrator(
+            prompt_builder=prompt_builder,
+            llm_client=llm_client,
+            tool_command_mapper=mapper,
+            action_result_store=action_result_store,
+            memory_consolidation_hook=hook,
+        )
+        player_id = PlayerId(1)
+        orchestrator.run_turn(player_id)
+        assert calls == [player_id]
+
+    def test_run_turn_memory_consolidation_hook_on_llm_failure(
+        self, prompt_builder, action_result_store, mapper
+    ):
+        calls: List[PlayerId] = []
+
+        def hook(pid: PlayerId) -> None:
+            calls.append(pid)
+
+        llm_client = StubLlmClient(
+            exception_to_raise=LlmApiCallException("Rate limit", error_code="LLM_RATE_LIMIT")
+        )
+        orchestrator = LlmAgentOrchestrator(
+            prompt_builder=prompt_builder,
+            llm_client=llm_client,
+            tool_command_mapper=mapper,
+            action_result_store=action_result_store,
+            memory_consolidation_hook=hook,
+        )
+        orchestrator.run_turn(PlayerId(7))
+        assert calls == [PlayerId(7)]
+
     def test_run_turn_passes_runtime_context_to_argument_resolver(self, prompt_builder, action_result_store, mapper):
         resolver = _RecordingResolver()
         prompt_builder._return_value["tool_runtime_context"] = ToolRuntimeContextDto.empty()

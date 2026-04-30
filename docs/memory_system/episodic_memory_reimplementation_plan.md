@@ -809,7 +809,8 @@ flowchart LR
   - [ ] 残: `memory_query` 出力への主観フィールド統合（§Phase 5 本文）や、自然言語中心の `recall_memory` 相当の拡張が必要なら別途。
 - [ ] Phase 6: Consolidation
   - [x] **準備（2026-04-30）**: `IIdentityMemoryStore` / `InMemoryIdentityMemoryStore`（長期事実ストアと別経路）。`ISubjectiveEpisodeStore.count_reflection_journal_entries`（N 件閾値用）。スポットグラフ `LlmAgentWiringResult.identity_memory_store` に in-memory インスタンスを載せる。
-  - [ ] 本実装: ジャーナル候補 → 長期 / Identity への反映、ジョブトリガ（例: ジャーナル合計 N 件、ゲーム内日付区切り等）。
+  - [x] **本実装（2026-04-29）**: `MemoryConsolidationRunner` が全エピソードの `memory_reflection_journal` を走査し、未処理 `entry_id` について `semantic_update_candidates` → `ILongTermMemoryStore.add_fact`（`[consolidation:semantic]` プレフィックス）、`identity_update_candidates` → `IIdentityMemoryStore.append_statement`。初回ゲートは `count_reflection_journal_entries >= MEMORY_CONSOLIDATION_JOURNAL_THRESHOLD`（既定 **8**、**0 以下で無効**）。適用済みは `InMemoryConsolidationCheckpoint` で冪等化。`LlmAgentOrchestrator.run_turn` の `finally` で Passive Reflection enqueue の **後**に `memory_consolidation_hook`。`build_episode_encoding_context_provider(..., identity_memory_store=...)` で Identity 追記を `identity_summary` に反映。テスト: `tests/application/llm/test_memory_consolidation.py`。
+  - [ ] ゲーム内日付・節目トリガ、SQLite 永続化チェックポイント等は未着手。
 - [ ] Phase 7: Evaluation
 
 ### Phase 1: Trace と共通 Tool Schema
@@ -959,12 +960,12 @@ flowchart LR
 
 ### Phase 6: Consolidation
 
-- 日次・節目・高想起時に consolidation job を走らせる。
+- 日次・節目・高想起時に consolidation job を走らせる（**現状**: ターン終了時フックでジャーナル走査型のルールベース採用まで実装。ゲーム内日付トリガは未接続）。
 - episode / reflections / belief candidates を入力する。
 - 重要 episode の初期フィルタリングはルールで行う。
-- LLM に update policy を任せ、semantic memory / identity memory を更新する。
-- prompt 用 identity summary を生成する。
-- **準備済み**: `IIdentityMemoryStore`、`count_reflection_journal_entries`（N 件閾値トリガの土台）。**未接続**: ジャーナルからの自動書き込み・本番トリガ。
+- **MVP**: LLM なしで `memory_reflection_journal` の semantic / identity 候補を長期事実・`IIdentityMemoryStore` に反映。将来の update policy を LLM に委ねる余地は残す。
+- prompt 用 identity summary を生成する（`build_episode_encoding_context_provider` が Identity ストアの追記を読み込む）。
+- **環境変数**: `MEMORY_CONSOLIDATION_JOURNAL_THRESHOLD`（既定 8、`0` で無効）。
 
 ### Phase 7: Evaluation
 
@@ -978,7 +979,7 @@ flowchart LR
 
 ### 14.1 次にやるべきこと（優先度目安）
 
-1. **Phase 6（本体）**: Consolidation ジョブを実装する。入力は `memory_reflection_journal` の **semantic_update_candidates / identity_update_candidates**（および必要なら episode 本文）。出力は長期メモリ + 既存の **`IIdentityMemoryStore`**。トリガは **ジャーナル合計 N 件**（`count_reflection_journal_entries`）と/or **ゲーム内日付・節目**など、プロダクトで確定した条件に合わせる（現実時間のみは採用しない方針なら避ける）。
+1. **Phase 6（本体）**: [x] **MVP 完了**（2026-04-29）— `MemoryConsolidationRunner`・ターン終了フック・Encoding 文脈への Identity 反映・`tests/application/llm/test_memory_consolidation.py`。残: ゲーム内節目トリガ、LLM update policy、SQLite チェックポイント等。
 2. **Phase 5 残**: 必要なら `memory_query` と主観ストアの統合・自然言語 recall の有無。現状は **`memory_recall_subjective` のみ**（スポットグラフ）。
 3. **プロンプト文脈**: `build_episode_encoding_context_provider` やシステムプロンプトに **Identity ストア**の要約を載せる（Consolidation と連動）。
 4. **`reconsolidation_history` と `memory_reflection_journal`**: 現状はジャーナルが構造化の正。必要ならレガシー文字列履歴との関係をドキュメント化または統合する。

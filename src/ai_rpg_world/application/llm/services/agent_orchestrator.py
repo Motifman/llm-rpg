@@ -149,6 +149,7 @@ class LlmAgentOrchestrator:
         passive_memory_reflection_hook: Optional[
             Callable[[PlayerId, Tuple[str, ...], str], None]
         ] = None,
+        memory_consolidation_hook: Optional[Callable[[PlayerId], None]] = None,
     ) -> None:
         if not isinstance(prompt_builder, IPromptBuilder):
             raise TypeError("prompt_builder must be IPromptBuilder")
@@ -204,6 +205,10 @@ class LlmAgentOrchestrator:
             raise TypeError(
                 "passive_memory_reflection_hook must be callable or None"
             )
+        if memory_consolidation_hook is not None and not callable(
+            memory_consolidation_hook
+        ):
+            raise TypeError("memory_consolidation_hook must be callable or None")
         self._prompt_builder = prompt_builder
         self._llm_client = llm_client
         self._tool_command_mapper = tool_command_mapper
@@ -220,6 +225,7 @@ class LlmAgentOrchestrator:
         self._episode_chunker = episode_chunker
         self._episode_encoding_runner = episode_encoding_runner
         self._passive_memory_reflection_hook = passive_memory_reflection_hook
+        self._memory_consolidation_hook = memory_consolidation_hook
 
     def run_turn(self, player_id: PlayerId) -> LlmCommandResultDto:
         """
@@ -253,6 +259,8 @@ class LlmAgentOrchestrator:
                     self._passive_memory_reflection_hook(
                         player_id, ids, situation
                     )
+            if self._memory_consolidation_hook is not None:
+                self._memory_consolidation_hook(player_id)
 
     def _run_turn_core(
         self, player_id: PlayerId
