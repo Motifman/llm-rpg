@@ -137,6 +137,14 @@ def create_spot_graph_wiring(
     from ai_rpg_world.application.llm.wiring.memory_reflection_factory import (
         build_same_process_memory_reflection,
     )
+    from ai_rpg_world.application.llm.services.memory_consolidation_runner import (
+        InMemoryConsolidationCheckpoint,
+        MemoryConsolidationRunner,
+    )
+    from ai_rpg_world.application.llm.wiring.memory_consolidation_factory import (
+        build_memory_consolidation_hook,
+        consolidation_journal_threshold_from_env,
+    )
     from ai_rpg_world.application.llm.services.episode_encoding_processor import (
         EpisodeEncodingProcessor,
     )
@@ -333,6 +341,7 @@ def create_spot_graph_wiring(
         long_term_memory_store=long_term_memory_store,
         working_memory_store=working_memory_store,
         persona_block_provider=persona_block_provider,
+        identity_memory_store=identity_memory_store,
     )
 
     def _state_provider(pid: PlayerId) -> str:
@@ -489,6 +498,18 @@ def create_spot_graph_wiring(
                 pid, eid, situation_text=situation
             )
 
+    consolidation_checkpoint = InMemoryConsolidationCheckpoint()
+    consolidation_runner = MemoryConsolidationRunner(
+        subjective_episode_store=subjective_episode_store,
+        long_term_memory_store=long_term_memory_store,
+        identity_memory_store=identity_memory_store,
+        checkpoint=consolidation_checkpoint,
+        journal_threshold=consolidation_journal_threshold_from_env(),
+    )
+    memory_consolidation_hook = build_memory_consolidation_hook(
+        runner=consolidation_runner
+    )
+
     orchestrator = LlmAgentOrchestrator(
         prompt_builder=prompt_builder,
         llm_client=client,
@@ -506,6 +527,7 @@ def create_spot_graph_wiring(
             if memory_reflection_scheduler is not None
             else None
         ),
+        memory_consolidation_hook=memory_consolidation_hook,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,

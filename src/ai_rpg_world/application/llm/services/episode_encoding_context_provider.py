@@ -6,6 +6,7 @@ from typing import Callable, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import EpisodeEncodingContextDto
 from ai_rpg_world.application.llm.contracts.interfaces import (
+    IIdentityMemoryStore,
     ILongTermMemoryStore,
     IWorkingMemoryStore,
 )
@@ -21,9 +22,11 @@ def build_episode_encoding_context_provider(
     long_term_memory_store: ILongTermMemoryStore,
     working_memory_store: IWorkingMemoryStore,
     persona_block_provider: Optional[Callable[[PlayerId], str]] = None,
+    identity_memory_store: Optional[IIdentityMemoryStore] = None,
     beliefs_fact_limit: int = 12,
     working_memory_limit: int = 8,
     max_chars_per_field: int = 2000,
+    identity_statement_limit: int = 12,
 ) -> Callable[[PlayerId], EpisodeEncodingContextDto]:
     """プロフィール・作業メモ・長期事実・ペルソナ断片から `EpisodeEncodingContextDto` を返す。"""
     if not isinstance(player_profile_repository, PlayerProfileRepository):
@@ -34,12 +37,18 @@ def build_episode_encoding_context_provider(
         raise TypeError("working_memory_store must be IWorkingMemoryStore")
     if persona_block_provider is not None and not callable(persona_block_provider):
         raise TypeError("persona_block_provider must be callable or None")
+    if identity_memory_store is not None and not isinstance(
+        identity_memory_store, IIdentityMemoryStore
+    ):
+        raise TypeError("identity_memory_store must be IIdentityMemoryStore or None")
     if beliefs_fact_limit < 0:
         raise ValueError("beliefs_fact_limit must be 0 or greater")
     if working_memory_limit < 0:
         raise ValueError("working_memory_limit must be 0 or greater")
     if max_chars_per_field < 1:
         raise ValueError("max_chars_per_field must be 1 or greater")
+    if identity_statement_limit < 0:
+        raise ValueError("identity_statement_limit must be 0 or greater")
 
     def _truncate(s: str) -> str:
         s = s.strip()
@@ -52,11 +61,20 @@ def build_episode_encoding_context_provider(
             raise TypeError("player_id must be PlayerId")
         profile = player_profile_repository.find_by_id(player_id)
         if profile is None:
+            identity_only = ""
+            if identity_memory_store is not None and identity_statement_limit > 0:
+                ist = identity_memory_store.list_statements(
+                    player_id, identity_statement_limit
+                )
+                if ist:
+                    identity_only = _truncate(
+                        "Identity（追記のみ）:\n" + "\n".join(reversed(ist))
+                    )
             return EpisodeEncodingContextDto(
                 persona_summary="（プレイヤープロフィール未取得）",
                 current_goals="",
                 current_beliefs="",
-                identity_summary="",
+                identity_summary=identity_only,
             )
         role = profile.role.value
         race = profile.race.value
@@ -74,6 +92,15 @@ def build_episode_encoding_context_provider(
         identity_summary = _truncate(
             f"自己位置づけ（プロフィール要約）: {role} の {race}。属性は {element}。"
         )
+        if identity_memory_store is not None and identity_statement_limit > 0:
+            ist = identity_memory_store.list_statements(
+                player_id, identity_statement_limit
+            )
+            if ist:
+                extra = "\n".join(reversed(ist))
+                identity_summary = _truncate(
+                    f"{identity_summary}\nIdentity（追記）:\n{extra}"
+                )
         wm_lines = working_memory_store.get_recent(player_id, working_memory_limit)
         current_goals = _truncate(" / ".join(wm_lines)) if wm_lines else ""
         facts = long_term_memory_store.search_facts(

@@ -69,6 +69,15 @@ class InMemorySubjectiveEpisodeStore(ISubjectiveEpisodeStore):
             sorted_entries = sorted(entries, key=lambda e: e.created_at, reverse=True)
             return sorted_entries[:limit]
 
+    def list_all_episodes(self, player_id: PlayerId) -> List[SubjectiveEpisode]:
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
+        with self._lock:
+            key = self._key(player_id)
+            entries = list(self._by_player.get(key, []))
+        entries.sort(key=lambda e: (e.created_at, e.episode_id))
+        return entries
+
     def record_passive_recall(self, player_id: PlayerId, episode_id: str) -> None:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")

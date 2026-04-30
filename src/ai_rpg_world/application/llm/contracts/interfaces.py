@@ -392,6 +392,11 @@ class ISubjectiveEpisodeStore(ABC):
         pass
 
     @abstractmethod
+    def list_all_episodes(self, player_id: PlayerId) -> List[SubjectiveEpisode]:
+        """当該プレイヤーの主観エピソードをすべて返す（順序は実装依存・走査用）。"""
+        pass
+
+    @abstractmethod
     def record_passive_recall(self, player_id: PlayerId, episode_id: str) -> None:
         """Passive Recall で採用したエピソードの recall_count を 1 増やす。無ければ何もしない。"""
         pass

@@ -100,6 +100,9 @@ from ai_rpg_world.application.llm.services.in_memory_episode_candidate_store imp
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
     InMemorySubjectiveEpisodeStore,
 )
+from ai_rpg_world.application.llm.services.in_memory_identity_memory_store import (
+    InMemoryIdentityMemoryStore,
+)
 from ai_rpg_world.application.llm.services.episode_chunker import RuleBasedEpisodeChunker
 from ai_rpg_world.application.llm.services.episode_encoding_processor import (
     EpisodeEncodingProcessor,
@@ -116,6 +119,14 @@ from ai_rpg_world.application.llm.services.experience_trace_bundle_resolver impo
 from ai_rpg_world.application.llm.wiring.episode_encoder_factory import build_episode_encoder
 from ai_rpg_world.application.llm.wiring.memory_reflection_factory import (
     build_same_process_memory_reflection,
+)
+from ai_rpg_world.application.llm.wiring.memory_consolidation_factory import (
+    build_memory_consolidation_hook,
+    consolidation_journal_threshold_from_env,
+)
+from ai_rpg_world.application.llm.services.memory_consolidation_runner import (
+    InMemoryConsolidationCheckpoint,
+    MemoryConsolidationRunner,
 )
 from ai_rpg_world.application.llm.wiring.passive_subjective_recall_factory import (
     build_passive_subjective_recall_composer,
@@ -991,6 +1002,7 @@ def create_llm_agent_wiring(
         candidate_store=episode_candidate_store,
     )
     subjective_episode_store = InMemorySubjectiveEpisodeStore()
+    identity_memory_store = InMemoryIdentityMemoryStore()
     trace_bundle_resolver = ExperienceTraceBundleResolver(
         action_experience_trace_store,
         observation_experience_trace_store,
@@ -1061,6 +1073,7 @@ def create_llm_agent_wiring(
         long_term_memory_store=long_term_memory_store,
         working_memory_store=working_memory_store,
         persona_block_provider=persona_block_provider,
+        identity_memory_store=identity_memory_store,
     )
     client = llm_client if llm_client is not None else create_llm_client_from_env()
     _, memory_reflection_after_encode = build_same_process_memory_reflection(
@@ -1168,6 +1181,17 @@ def create_llm_agent_wiring(
         passive_subjective_recall=passive_recall_composer,
         episode_encoding_context_provider=episode_encoding_ctx_provider,
     )
+    consolidation_checkpoint = InMemoryConsolidationCheckpoint()
+    consolidation_runner = MemoryConsolidationRunner(
+        subjective_episode_store=subjective_episode_store,
+        long_term_memory_store=long_term_memory_store,
+        identity_memory_store=identity_memory_store,
+        checkpoint=consolidation_checkpoint,
+        journal_threshold=consolidation_journal_threshold_from_env(),
+    )
+    memory_consolidation_hook = build_memory_consolidation_hook(
+        runner=consolidation_runner
+    )
     orchestrator = LlmAgentOrchestrator(
         prompt_builder=prompt_builder,
         llm_client=client,
@@ -1180,6 +1204,7 @@ def create_llm_agent_wiring(
         handle_store=handle_store,
         episode_chunker=episode_chunker,
         episode_encoding_runner=episode_encoding_runner,
+        memory_consolidation_hook=memory_consolidation_hook,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,
@@ -1227,6 +1252,7 @@ def create_llm_agent_wiring(
         observation_experience_trace_store=observation_experience_trace_store,
         episode_candidate_store=episode_candidate_store,
         subjective_episode_store=subjective_episode_store,
+        identity_memory_store=identity_memory_store,
         sns_mode_session=sns_mode_session,
         sns_page_session=sns_page_session,
         trade_page_session=trade_page_session,
