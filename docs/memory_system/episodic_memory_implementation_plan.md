@@ -2,7 +2,7 @@
 
 本文書は [episodic_memory_system_spec.md](./episodic_memory_system_spec.md) の仕様を、**既存コードに載せるための移行・実装順序**に落としたものである。詳細な Tool 引数設計や Chunker の議論のフルテキストは、必要に応じて [episodic_memory_reimplementation_plan.md](./episodic_memory_reimplementation_plan.md) を参照する。
 
-**作業手続き（Git・レビュー・ブロッキング・worktree）**は [memory_feature_workflow.md](./memory_feature_workflow.md) に分離した。記憶関連の実装・マージでは**毎回そちらを開いてから**着手する。
+**作業手続き（Git・レビュー・ブロッキング・worktree）**は [memory_feature_workflow.md](./memory_feature_workflow.md) に分離した。記憶関連の実装・マージでは**毎回そちらを開いてから**着手する。**フェーズ完了時は同ファイル §5 に従い、本計画（査読表・各 P セクション等）を更新したうえでコミットする**。
 
 ## 1. 目的と非目標
 
@@ -13,7 +13,7 @@
 
 | 領域 | 主なモジュール |
 |------|----------------|
-| v2 主観エピソード | `SubjectiveEpisode`, `InMemorySubjectiveEpisodeStore`, `llm_json_episode_encoder.py` |
+| v2 主観エピソード | `SubjectiveEpisode`, `InMemorySubjectiveEpisodeStore`, **`SqliteSubjectiveEpisodeStore`**（`episode_cues` / `memory_links`）, `llm_json_episode_encoder.py` |
 | Trace | `ActionExperienceTrace`, `ObservationExperienceTrace`, `agent_orchestrator._append_action_experience_trace` |
 | Passive Recall | `passive_subjective_recall_composer.py`（軸別スコアは `passive_subjective_recall_retrieval.py`、状況文と索引キー交差 + recency + 任意 `pick_debug`） |
 | エンコーディング文脈 | `episode_encoding_context_provider.py`（`current_goals` ← Working Memory） |
@@ -87,7 +87,7 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 | LLM 生成の `SubjectiveEpisode.cue_keys` | deprecated（目標） | `cues`（ルール）。索引は `subjective_episode_index_strings` から `cues` 主軸へ |
 | フィールド `cue_keys`（DTO） | active（互換） | 上記フェーズ完了まで残す → 最終 removed または内部のみ |
 | レガシー `EpisodeMemoryEntry` / `PredictiveMemoryRetriever` | deprecated（方針） | v2 `SubjectiveEpisode` + Passive Recall。削減順は別タスクで行を追加 |
-| in-memory only の v2 store（本番寄り運用時） | deprecated（方針） | P4 の SQLite 本線へ |
+| in-memory only の v2 store（本番寄り運用時） | deprecated（方針） | **`SqliteSubjectiveEpisodeStore` が main に存在**。既定配線は当面 `InMemorySubjectiveEpisodeStore`（`wiring`）。本番で SQLite に切り替えるときは同 I/F で注入 |
 
 ---
 
@@ -120,7 +120,7 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 | trace への構造化位置コピー | **一部対応**（2026、`ActionExperienceTrace.context_*`・`ObservationExperienceTrace.context_*`、orchestrator / `spot_id_value`） |
 | ルールベース cue + validator 主導 | **一部対応**（2026、`episodic_cue_extraction`・エンコード時 `cues`・LLM `cue_keys` 廃止） |
 | 軸別 Passive Recall | **一部対応**（2026、`passive_subjective_recall_retrieval`・軸別 breakdown・`PassiveRecallPickDebug`・canonical `axis:value` の値が状況文/トークンと交差すれば cue ヒット） |
-| `episode_cues` / `memory_links` | 未着手 |
+| `episode_cues` / `memory_links` | **対応済み**（2026、`SqliteSubjectiveEpisodeStore`, `subjective_episode_sqlite_codec.py`, `tests/.../test_sqlite_subjective_episode_store.py`） |
 | v2 と `PredictiveMemoryRetriever` の統合方針 | **ユーザ判断**（段階廃止 / 併存期間） |
 
 ---
@@ -195,9 +195,22 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 
 **タスク**
 
-1. 仕様 §2.5 のテーブル相当を **SQLite で実装**する（`agent_id` スコープ）。検証用の in-memory は短命のフィクスチャに留める。
-2. SubjectiveEpisode 保存時に index を更新。全件走査禁止（cue → episode_id 限定制）。
-3. リンク種: 初期は `temporal`, `spatial`（cue 重なり）, `co_recalled` 程度。
+1. ✅ 仕様 §2.5 のテーブル相当を **SQLite で実装**（`agent_id` = `PlayerId.value` スコープ）。マイグレーション namespace: `subjective-episode-v2`。レガシー `episode_memories` とは別系統。
+2. ✅ `put` 時に `episode_cues` を `subjective_episode_index_strings` で整合更新。候補取得は **cue → episode_id の逆引き**に限定（全件スキャン禁止の意図に沿う）。
+3. ✅ リンク種: `temporal`, `spatial`（cue 重なり）, `co_recalled`。保存時に局所スコアで上位のみ `memory_links` へ。
+
+**実施済み（2026）**
+
+- 実装: `src/ai_rpg_world/infrastructure/llm/sqlite_subjective_episode_store.py`, `subjective_episode_sqlite_codec.py`
+- テスト: `tests/application/llm/test_sqlite_subjective_episode_store.py`（マルチ `agent_id` 分離・索引・リンク・掃除を含む）
+
+**残り・任意**
+
+- アプリ配線（`create_llm_agent_wiring` / `spot_graph_wiring`）での **`SqliteSubjectiveEpisodeStore` 既定化**や DB パス設定（環境変数等）は未。必要になったときに注入で差し替え。
+
+**受け入れ条件**
+
+- SQLite 上で put → cue 逆引き → 期待リンク、および `ISubjectiveEpisodeStore` 契約を満たす。✅（テスト・コード）
 
 ---
 
@@ -231,6 +244,7 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 - P0 + P1 trace が完了し、spot graph で spot id が **trace に残る**状態を M1 の完了とする。
 - P2 で代表シナリオ（罠箱・移動）に対し決定論的 cue が得られる。
 - P3 で軸別候補マージが入り、従来より説明可能な想起になる。
+- **P4** で v2 主観エピソードの SQLite（`episode_cues` / `memory_links`）が **main に存在**し、マルチ `agent_id` で分離検証済み。✅（2026）
 
 ---
 
@@ -242,7 +256,7 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 2. **型付き cue**: `EpisodicCue` + `SubjectiveEpisode.cues`。索引マージは `subjective_episode_index_strings`。単一 `cue_keys` への統合は行わない。
 3. **空間系 prefix 語彙**（例: `tile_area:` / `sub_loc:`）: **主に空間軸**の名前空間。全 cue の唯一の総称規約ではない（仕様 §2.3）。
 4. **v2 優先**: 新機能・想起の主対象は **`SubjectiveEpisode`**。レガシー episodic は段階縮小。
-5. **P4 永続化**: 本番寄りの永続化をすぐやるなら **SQLite を最初から本線**にする。
+5. **P4 永続化**: **`SqliteSubjectiveEpisodeStore` を main に導入済み**（レガシー `episode_memories` とは別 schema）。既定配線の差し替えは別タスク。
 6. **Git 運用**: **小分けコミット・機能単位ブランチ・メッセージに「なぜ」**（巨大ブランチは一度まとめてマージ push 後に転換）。手続きの詳細は **[memory_feature_workflow.md](./memory_feature_workflow.md)**。
 
 **残論点**
@@ -253,6 +267,6 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 
 ## 10. 参照
 
-- 作業手続き（Git・レビュー・ブロッキング）: [memory_feature_workflow.md](./memory_feature_workflow.md)
+- 作業手続き・完了後の計画更新（Git・レビュー・ブロッキング・§5）: [memory_feature_workflow.md](./memory_feature_workflow.md)
 - 仕様: [episodic_memory_system_spec.md](./episodic_memory_system_spec.md)
 - 詳細議事録・Tool schema 長文: [episodic_memory_reimplementation_plan.md](./episodic_memory_reimplementation_plan.md)
