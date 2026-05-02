@@ -404,6 +404,7 @@ class EpisodeCandidate:
     encoding_error: Optional[str] = None
     encoding_retry_count: int = 0
     last_encoding_failure_at: Optional[datetime] = None
+    encoding_runtime_snapshot: Optional["ToolRuntimeContextDto"] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.candidate_id, str):
@@ -452,6 +453,12 @@ class EpisodeCandidate:
             self.last_encoding_failure_at, datetime
         ):
             raise TypeError("last_encoding_failure_at must be datetime or None")
+        if self.encoding_runtime_snapshot is not None and not isinstance(
+            self.encoding_runtime_snapshot, ToolRuntimeContextDto
+        ):
+            raise TypeError(
+                "encoding_runtime_snapshot must be ToolRuntimeContextDto or None"
+            )
         if self.status == "encoded":
             if (
                 not self.subjective_episode_id

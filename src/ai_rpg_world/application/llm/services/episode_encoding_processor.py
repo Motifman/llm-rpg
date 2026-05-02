@@ -110,7 +110,12 @@ class EpisodeEncodingProcessor:
             last_err: Optional[str] = None
             for _ in range(self._max_retries):
                 try:
-                    episode = self._encoder.encode(ctx, cand, traces)
+                    episode = self._encoder.encode(
+                        ctx,
+                        cand,
+                        traces,
+                        encoding_runtime=cand.encoding_runtime_snapshot,
+                    )
                     break
                 except EpisodeEncodingException as e:
                     last_err = str(e)

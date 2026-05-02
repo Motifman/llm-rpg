@@ -257,12 +257,16 @@ class LlmAgentOrchestrator:
             self._handle_store.clear_player(player_id)
 
         passive_enqueue: _TurnPassiveReflectionEnqueue = None
+        encoding_runtime: Optional[ToolRuntimeContextDto] = None
         try:
-            dto, passive_enqueue = self._run_turn_core(player_id)
+            dto, passive_enqueue, encoding_runtime = self._run_turn_core(player_id)
             return dto
         finally:
             if self._episode_chunker is not None:
-                self._episode_chunker.create_candidate_if_ready(player_id)
+                self._episode_chunker.create_candidate_if_ready(
+                    player_id,
+                    encoding_runtime_snapshot=encoding_runtime,
+                )
             if self._episode_encoding_runner is not None:
                 self._episode_encoding_runner.run_after_turn(player_id)
             if (
@@ -279,7 +283,7 @@ class LlmAgentOrchestrator:
 
     def _run_turn_core(
         self, player_id: PlayerId
-    ) -> Tuple[LlmCommandResultDto, _TurnPassiveReflectionEnqueue]:
+    ) -> Tuple[LlmCommandResultDto, _TurnPassiveReflectionEnqueue, ToolRuntimeContextDto]:
         request = self._prompt_builder.build(player_id)
         messages = request["messages"]
         tools = request["tools"]
@@ -320,7 +324,7 @@ class LlmAgentOrchestrator:
                 action_summary,
                 result_summary,
             )
-            return result_dto, passive_enqueue
+            return result_dto, passive_enqueue, runtime_context
 
         if tool_call is None:
             action_summary = "ツールが選択されませんでした。"
@@ -345,7 +349,7 @@ class LlmAgentOrchestrator:
                 action_summary,
                 result_summary,
             )
-            return result_dto, passive_enqueue
+            return result_dto, passive_enqueue, runtime_context
 
         name = tool_call.get("name", "")
         raw_args = tool_call.get("arguments")
@@ -376,7 +380,7 @@ class LlmAgentOrchestrator:
                 action_summary,
                 result_summary,
             )
-            return validation_error, passive_enqueue
+            return validation_error, passive_enqueue, runtime_context
 
         try:
             canonical_arguments = self._tool_argument_resolver.resolve(
@@ -409,7 +413,7 @@ class LlmAgentOrchestrator:
                 action_summary,
                 result_summary,
             )
-            return result_dto, passive_enqueue
+            return result_dto, passive_enqueue, runtime_context
 
         result_dto = self._tool_command_mapper.execute(
             player_id.value,
@@ -442,7 +446,7 @@ class LlmAgentOrchestrator:
             result_summary=result_summary,
             request=request,
         )
-        return result_dto, passive_enqueue
+        return result_dto, passive_enqueue, runtime_context
 
     def _append_action_experience_trace(
         self,

@@ -10,6 +10,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     EpisodeCandidate,
     EpisodeEncodingContextDto,
     ObservationExperienceTrace,
+    ToolRuntimeContextDto,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import IEpisodeEncoder
 from ai_rpg_world.application.llm.exceptions import EpisodeEncodingException
@@ -78,6 +79,7 @@ def _candidate(
     status: str = "pending_encoding",
     subjective_episode_id: str | None = None,
     encoding_error: str | None = None,
+    encoding_runtime_snapshot: ToolRuntimeContextDto | None = None,
 ) -> EpisodeCandidate:
     t0 = created_at or datetime.now()
     return EpisodeCandidate(
@@ -93,6 +95,7 @@ def _candidate(
         status=status,  # type: ignore[arg-type]
         subjective_episode_id=subjective_episode_id,
         encoding_error=encoding_error,
+        encoding_runtime_snapshot=encoding_runtime_snapshot,
     )
 
 
@@ -235,9 +238,73 @@ def test_processor_missing_trace_marks_encoding_failed() -> None:
     assert after.encoding_error
 
 
+def test_processor_stub_encoding_runtime_merges_current_spot_into_cues() -> None:
+    """観測のみチャンクは trace 単体では place_spot が無い。候補に付いた snapshot で補完する。"""
+    pid = PlayerId(1)
+    cstore = InMemoryEpisodeCandidateStore()
+    astore = InMemoryActionExperienceTraceStore()
+    ostore = InMemoryObservationExperienceTraceStore()
+    estate = InMemorySubjectiveEpisodeStore()
+    ostore.append(pid, _observation_trace("o1"))
+    rtc = ToolRuntimeContextDto(targets={}, current_spot_id=90909)
+    cstore.add(pid, _candidate("c-rtc", ("observation:o1",), encoding_runtime_snapshot=rtc))
+    proc = _processor(cstore, astore, ostore, estate, StubEpisodeEncoder())
+    assert proc.process_pending(pid) == 1
+    after = cstore.get_by_candidate_id(pid, "c-rtc")
+    assert after is not None and after.subjective_episode_id
+    ep = estate.get_by_episode_id(pid, after.subjective_episode_id)
+    assert ep is not None
+    assert any(c.axis == "place_spot" and c.value == "90909" for c in ep.cues)
+
+
+def test_processor_stub_without_encoding_runtime_snapshot_observation_has_no_place_spot() -> None:
+    pid = PlayerId(1)
+    cstore = InMemoryEpisodeCandidateStore()
+    astore = InMemoryActionExperienceTraceStore()
+    ostore = InMemoryObservationExperienceTraceStore()
+    estate = InMemorySubjectiveEpisodeStore()
+    ostore.append(pid, _observation_trace("o1"))
+    cstore.add(pid, _candidate("c-no-rtc", ("observation:o1",)))
+    proc = _processor(cstore, astore, ostore, estate, StubEpisodeEncoder())
+    assert proc.process_pending(pid) == 1
+    after = cstore.get_by_candidate_id(pid, "c-no-rtc")
+    assert after is not None
+    ep = estate.get_by_episode_id(pid, after.subjective_episode_id)
+    assert ep is not None
+    assert not any(c.axis == "place_spot" for c in ep.cues)
+
+
 class _AlwaysFailingEncoder(IEpisodeEncoder):
-    def encode(self, context, candidate, traces):
+    def encode(self, context, candidate, traces, *, encoding_runtime=None):
         raise EpisodeEncodingException("fail", candidate_id=candidate.candidate_id)
+
+
+def test_processor_preserves_encoding_runtime_snapshot_when_queued_for_retry() -> None:
+    pid = PlayerId(1)
+    cstore = InMemoryEpisodeCandidateStore()
+    astore = InMemoryActionExperienceTraceStore()
+    ostore = InMemoryObservationExperienceTraceStore()
+    estate = InMemorySubjectiveEpisodeStore()
+    astore.append(pid, _action_trace("tid"))
+    rtc = ToolRuntimeContextDto(targets={}, current_spot_id=777)
+    cstore.add(
+        pid,
+        _candidate("c-retry-snap", ("action:tid",), encoding_runtime_snapshot=rtc),
+    )
+    proc = _processor(
+        cstore,
+        astore,
+        ostore,
+        estate,
+        _AlwaysFailingEncoder(),
+        max_retries=1,
+        max_queue_retries=2,
+    )
+    assert proc.process_pending(pid) == 0
+    mid = cstore.get_by_candidate_id(pid, "c-retry-snap")
+    assert mid is not None and mid.status == "pending_encoding"
+    assert mid.encoding_runtime_snapshot is not None
+    assert mid.encoding_runtime_snapshot.current_spot_id == 777
 
 
 def test_processor_encoder_failure_marks_encoding_failed() -> None:

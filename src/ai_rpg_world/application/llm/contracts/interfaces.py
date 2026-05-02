@@ -451,8 +451,17 @@ class IEpisodeEncoder(ABC):
         context: EpisodeEncodingContextDto,
         candidate: EpisodeCandidate,
         traces: Tuple[ExperienceTraceUnion, ...],
+        *,
+        encoding_runtime: Optional[ToolRuntimeContextDto] = None,
     ) -> SubjectiveEpisode:
-        """source_trace_ids と同じ順序で traces を渡すこと。"""
+        """source_trace_ids と同じ順序で traces を渡すこと。
+
+        encoding_runtime: `episodic_cues_from_traces(..., runtime=)` へ渡す断片。
+        本線では `EpisodeCandidate.encoding_runtime_snapshot` を EpisodeEncodingProcessor が渡す。
+        オーケストレータはチャンク確定時に snapshot を候補へ保存するため、pending 複数件・
+        跨ターンのキュー再試行でも「当該候補のターン」の current_* とズレない。
+        省略時・None 時は trace のみからルール cue を組み立てる。
+        """
         pass
 
 
@@ -500,10 +509,18 @@ class IEpisodeChunkCoordinator(ABC):
     """run_turn 終了時に未処理 ExperienceTrace から EpisodeCandidate を切り出す。"""
 
     @abstractmethod
-    def create_candidate_if_ready(self, player_id: PlayerId) -> Optional[EpisodeCandidate]:
+    def create_candidate_if_ready(
+        self,
+        player_id: PlayerId,
+        *,
+        encoding_runtime_snapshot: Optional[ToolRuntimeContextDto] = None,
+    ) -> Optional[EpisodeCandidate]:
         """
         区切り条件を満たせば candidate を保存して返す。満たさなければ None。
         同一プレイヤーについて run_turn のすべての出口で最大 1 回呼ぶ想定。
+
+        encoding_runtime_snapshot: 候補作成（チャンク確定）時点の ToolRuntimeContextDto。
+        EpisodeCandidate に保存され、後続のエンコード（別ターンの再試行含む）で cues 補完に使われる。
         """
         pass
 
