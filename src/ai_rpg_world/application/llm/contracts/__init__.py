@@ -1,5 +1,6 @@
 """LLM 向け表示・記憶層の契約"""
 
+from ai_rpg_world.application.llm.contracts.memory_context_pack import MemoryContextPack
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
     EpisodeMemoryEntry,
@@ -40,6 +41,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
 )
 
 __all__ = [
+    "MemoryContextPack",
     "ActionResultEntry",
     "EpisodeMemoryEntry",
     "LlmCommandResultDto",
