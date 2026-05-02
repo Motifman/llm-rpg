@@ -1,8 +1,9 @@
 """バッファへの観測追加と game_time_label 付与を行うサービス"""
 
 from datetime import datetime
-from typing import Optional
+from typing import Callable, Optional
 
+from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
     ObservationOutput,
@@ -19,8 +20,17 @@ class ObservationAppender:
     occurred_at と game_time_label を付与した ObservationEntry を作成して buffer に渡す。
     """
 
-    def __init__(self, buffer: IObservationContextBuffer) -> None:
+    def __init__(
+        self,
+        buffer: IObservationContextBuffer,
+        runtime_context_provider: Optional[
+            Callable[[PlayerId], Optional[ToolRuntimeContextDto]]
+        ] = None,
+    ) -> None:
         self._buffer = buffer
+        self._runtime_context_provider = runtime_context_provider
+        if runtime_context_provider is not None and not callable(runtime_context_provider):
+            raise TypeError("runtime_context_provider must be callable or None")
 
     def append(
         self,
@@ -38,4 +48,9 @@ class ObservationAppender:
             output=output,
             game_time_label=game_time_label,
         )
-        self._buffer.append(player_id, entry)
+        rtc = (
+            self._runtime_context_provider(player_id)
+            if self._runtime_context_provider is not None
+            else None
+        )
+        self._buffer.append(player_id, entry, runtime_context=rtc)
