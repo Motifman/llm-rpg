@@ -174,3 +174,17 @@ def episodic_cues_from_traces(
     for t in traces:
         parts.append(episodic_cues_from_trace(t))
     return validate_episodic_cues(merge_episodic_cues(*parts))
+
+
+def passive_recall_situation_cues(
+    *,
+    runtime: Optional[ToolRuntimeContextDto] = None,
+) -> Tuple[EpisodicCue, ...]:
+    """Passive Recall 状況側のルールベース cue（P2 と同型）。
+
+    ``ToolRuntimeContextDto`` 由来の空間・target 索引のみ。状況テキスト本体からの
+    ルール抽出は別途（チャットの自然言語はここに載せない）。
+    """
+    if runtime is None:
+        return ()
+    return validate_episodic_cues(episodic_cues_from_tool_runtime_context(runtime))

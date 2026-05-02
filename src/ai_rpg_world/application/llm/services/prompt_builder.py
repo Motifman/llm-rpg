@@ -268,6 +268,7 @@ class DefaultPromptBuilder(IPromptBuilder):
                 player_id,
                 situation_text=situation_for_recall,
                 current_goals_hint=goals_snapshot,
+                runtime_context=ui_context.tool_runtime_context,
             )
             recall_block = recall.user_block.strip()
             passive_recall_episode_ids = recall.episode_ids_for_reflection
