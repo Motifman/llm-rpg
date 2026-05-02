@@ -1,7 +1,8 @@
 """Observation append 時に trace recorder を呼ぶ IObservationContextBuffer ラッパー。"""
 
-from typing import List
+from typing import List, Optional
 
+from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.llm.services.observation_trace_recorder import (
     ObservationTraceRecorder,
 )
@@ -31,13 +32,23 @@ class ObservationTraceRecordingBuffer(IObservationContextBuffer):
     def inner(self) -> IObservationContextBuffer:
         return self._inner
 
-    def append(self, player_id: PlayerId, entry: ObservationEntry) -> None:
+    def append(
+        self,
+        player_id: PlayerId,
+        entry: ObservationEntry,
+        *,
+        runtime_context: Optional[ToolRuntimeContextDto] = None,
+    ) -> None:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         if not isinstance(entry, ObservationEntry):
             raise TypeError("entry must be ObservationEntry")
-        self._inner.append(player_id, entry)
-        self._recorder.record(player_id, entry)
+        if runtime_context is not None and not isinstance(
+            runtime_context, ToolRuntimeContextDto
+        ):
+            raise TypeError("runtime_context must be ToolRuntimeContextDto or None")
+        self._inner.append(player_id, entry, runtime_context=runtime_context)
+        self._recorder.record(player_id, entry, runtime_context=runtime_context)
 
     def get_observations(self, player_id: PlayerId) -> List[ObservationEntry]:
         return self._inner.get_observations(player_id)
