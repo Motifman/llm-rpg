@@ -601,11 +601,30 @@ class MemoryReflectionJournalEntry:
 
 
 @dataclass(frozen=True)
+class PassiveRecallPickDebug:
+    """P3: 採用エピソードごとの軸別寄与（ログ・テスト可視化用）。"""
+
+    episode_id: str
+    total: float
+    temporal_recency: float
+    temporal_list_position: float
+    cue_hits: int
+    cue_weighted: float
+    importance: int
+    goal_weighted: float
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.episode_id, str) or not self.episode_id.strip():
+            raise ValueError("episode_id must be non-empty str")
+
+
+@dataclass(frozen=True)
 class PassiveRecallComposeResult:
     """Passive Subjective Recall の user ブロックと、Memory Reflection 投入用の episode_id 一覧。"""
 
     user_block: str
     episode_ids_for_reflection: Tuple[str, ...] = ()
+    pick_debug: Tuple[PassiveRecallPickDebug, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.user_block, str):
@@ -617,6 +636,11 @@ class PassiveRecallComposeResult:
                 raise ValueError(
                     "episode_ids_for_reflection must contain non-empty str"
                 )
+        if not isinstance(self.pick_debug, tuple):
+            raise TypeError("pick_debug must be tuple")
+        for row in self.pick_debug:
+            if not isinstance(row, PassiveRecallPickDebug):
+                raise TypeError("pick_debug must contain only PassiveRecallPickDebug")
 
 
 @dataclass(frozen=True)
