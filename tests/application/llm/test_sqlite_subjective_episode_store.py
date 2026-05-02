@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     EpisodicCue,
+    MemoryReflectionEpisodePatchDto,
+    MemoryReflectionJournalEntry,
     SubjectiveEpisode,
     SubjectiveFelt,
     SubjectivePredictionError,
@@ -26,6 +28,7 @@ def _episode(
     cue_keys: tuple[str, ...] = (),
     cues: tuple[EpisodicCue, ...] = (),
     created_at: datetime | None = None,
+    memory_reflection_journal: tuple[MemoryReflectionJournalEntry, ...] = (),
 ) -> SubjectiveEpisode:
     t0 = created_at or datetime.now()
     return SubjectiveEpisode(
@@ -46,6 +49,7 @@ def _episode(
         importance="medium",
         salience_reasons=(),
         candidate_id="cand-1",
+        memory_reflection_journal=memory_reflection_journal,
     )
 
 
@@ -113,9 +117,29 @@ def test_memory_link_spatial_on_cue_overlap(db_path: str) -> None:
     )
     links = store.list_memory_links_from(pid, "e-b")
     types = {row["link_type"] for row in links}
-    assert "spatial" in types or "co_recalled" in types
+    assert "spatial" in types
     target_ids = {row["target_id"] for row in links}
     assert "e-a" in target_ids
+
+
+def test_memory_link_temporal_without_shared_cue(db_path: str) -> None:
+    store = SqliteSubjectiveEpisodeStore(db_path, max_links_per_episode=5)
+    pid = PlayerId(1)
+    t0 = datetime(2026, 5, 10, 10, 0, 0)
+    store.put(
+        pid,
+        _episode(episode_id="e-first", cue_keys=("only:a",), created_at=t0),
+    )
+    store.put(
+        pid,
+        _episode(
+            episode_id="e-second",
+            cue_keys=("other:b",),
+            created_at=t0 + timedelta(hours=2),
+        ),
+    )
+    links = store.list_memory_links_from(pid, "e-second")
+    assert any(r["link_type"] == "temporal" and r["target_id"] == "e-first" for r in links)
 
 
 def test_memory_link_co_recalled_when_target_recalled_before(db_path: str) -> None:
@@ -158,6 +182,39 @@ def test_max_entries_eviction(db_path: str) -> None:
     all_ids = {ep.episode_id for ep in store.list_all_episodes(pid)}
     assert all_ids == {"second", "third"}
     assert store.get_by_episode_id(pid, "first") is None
+
+
+def test_count_reflection_journal_entries_uses_json_not_full_decode(db_path: str) -> None:
+    store = SqliteSubjectiveEpisodeStore(db_path)
+    pid = PlayerId(1)
+    entry = MemoryReflectionJournalEntry(
+        entry_id="j1",
+        created_at=datetime.now(timezone.utc),
+        correlation_id="c",
+        trigger="t",
+        recall_trigger="r",
+        current_interpretation="i",
+        effect_on_decision="d",
+        episode_patch=MemoryReflectionEpisodePatchDto(),
+    )
+    store.put(
+        pid,
+        _episode(
+            episode_id="e-j",
+            cue_keys=("k:1",),
+            memory_reflection_journal=(entry,),
+        ),
+    )
+    assert store.count_reflection_journal_entries(pid) == 1
+    store.put(
+        pid,
+        _episode(
+            episode_id="e-j2",
+            cue_keys=("k:2",),
+            memory_reflection_journal=(),
+        ),
+    )
+    assert store.count_reflection_journal_entries(pid) == 1
 
 
 def test_list_recent_order(db_path: str) -> None:

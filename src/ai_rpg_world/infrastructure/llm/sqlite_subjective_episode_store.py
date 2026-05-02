@@ -223,8 +223,6 @@ class SqliteSubjectiveEpisodeStore(ISubjectiveEpisodeStore):
             (agent_id, *keys, ep.episode_id, self._max_cue_candidates),
         )
         candidate_ids = [str(r[0]) for r in cur.fetchall()]
-        if not candidate_ids:
-            return
 
         scored: List[Tuple[float, str, str, int]] = []
         for oid in candidate_ids:
@@ -322,8 +320,10 @@ class SqliteSubjectiveEpisodeStore(ISubjectiveEpisodeStore):
                         "chronological_prior",
                     ),
                 )
+                rows_written += 1
 
     def _evict_excess(self, conn: sqlite3.Connection, agent_id: int) -> None:
+        """max_entries 超過時は created_at が古い順に削除（リンク・cue は FK CASCADE）。"""
         cur = conn.execute(
             "SELECT COUNT(*) AS n FROM subjective_episodes WHERE agent_id = ?",
             (agent_id,),
@@ -412,11 +412,13 @@ class SqliteSubjectiveEpisodeStore(ISubjectiveEpisodeStore):
             raise TypeError("episode_id must be str")
         conn = self._conn()
         try:
+            conn.execute("BEGIN")
             row = conn.execute(
                 "SELECT payload_json FROM subjective_episodes WHERE agent_id = ? AND episode_id = ?",
                 (player_id.value, episode_id),
             ).fetchone()
             if row is None:
+                conn.commit()
                 return
             ep = subjective_episode_from_json(str(row["payload_json"]))
             now = datetime.now()
@@ -441,23 +443,37 @@ class SqliteSubjectiveEpisodeStore(ISubjectiveEpisodeStore):
                 ),
             )
             conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
         finally:
             conn.close()
 
     def count_reflection_journal_entries(self, player_id: PlayerId) -> int:
+        """ジャーナル件数のみ集計。payload 全体を Python デシリアライズしない（SQLite JSON1）。"""
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         conn = self._conn()
         try:
-            cur = conn.execute(
-                "SELECT payload_json FROM subjective_episodes WHERE agent_id = ?",
+            row = conn.execute(
+                """
+                SELECT COALESCE(SUM(
+                    COALESCE(
+                        json_array_length(
+                            json_extract(payload_json, '$.episode.memory_reflection_journal')
+                        ),
+                        json_array_length(
+                            json_extract(payload_json, '$.memory_reflection_journal')
+                        ),
+                        0
+                    )
+                ), 0) AS n
+                FROM subjective_episodes
+                WHERE agent_id = ?
+                """,
                 (player_id.value,),
-            )
-            total = 0
-            for row in cur.fetchall():
-                ep = subjective_episode_from_json(str(row["payload_json"]))
-                total += len(ep.memory_reflection_journal)
-            return total
+            ).fetchone()
+            return int(row["n"]) if row is not None else 0
         finally:
             conn.close()
 
@@ -492,6 +508,10 @@ class SqliteSubjectiveEpisodeStore(ISubjectiveEpisodeStore):
         self, player_id: PlayerId, source_episode_id: str
     ) -> List[dict]:
         """テスト・デバッグ用: source_episode_id 起点の memory_links。"""
+        if not isinstance(player_id, PlayerId):
+            raise TypeError("player_id must be PlayerId")
+        if not isinstance(source_episode_id, str):
+            raise TypeError("source_episode_id must be str")
         conn = self._conn()
         try:
             cur = conn.execute(
