@@ -31,6 +31,19 @@ PREFIX_ENTITY = "P"
 PREFIX_INVENTORY = "I"
 
 
+def _current_sub_location_id_from_snapshot(
+    snap: SpotGraphPlayerSnapshotDto,
+) -> Optional[int]:
+    """sub_locations のうち is_current の最初の sub_location_id を返す。
+
+    ドメイン上は is_current は高々 1 件の想定。複数 True の場合は **先頭を採用**（仕様固定。バリデーションは別途検討）。
+    """
+    for entry in snap.sub_locations:
+        if entry.is_current:
+            return entry.sub_location_id
+    return None
+
+
 class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
     """スポットグラフのスナップショットにラベルを付与する UiContextBuilder。"""
 
@@ -65,6 +78,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             tool_runtime_context=ToolRuntimeContextDto(
                 targets=collector.get_targets(),
                 current_spot_id=snap.current_spot_id,
+                current_sub_location_id=_current_sub_location_id_from_snapshot(snap),
             ),
         )
 

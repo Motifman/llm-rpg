@@ -337,6 +337,15 @@ class TestLlmAgentOrchestratorRunTurn:
         prompt_builder._return_value["current_beliefs_snapshot"] = "扉は危険かもしれない。"
         prompt_builder._return_value["persona_snapshot"] = "慎重な探索者"
         prompt_builder._return_value["working_memory_snapshot"] = ("鍵を探している。",)
+        prompt_builder._return_value["tool_runtime_context"] = ToolRuntimeContextDto(
+            targets={},
+            current_spot_id=99,
+            current_sub_location_id=5,
+            current_area_ids=(7, 8),
+            current_x=10,
+            current_y=20,
+            current_z=0,
+        )
         args = {
             "destination_label": "S1",
             "inner_thought": "奥を見てみよう。",
@@ -378,6 +387,109 @@ class TestLlmAgentOrchestratorRunTurn:
         assert trace.current_beliefs_snapshot == "扉は危険かもしれない。"
         assert trace.persona_snapshot == "慎重な探索者"
         assert trace.working_memory_snapshot == ("鍵を探している。",)
+        assert trace.context_spot_id == 99
+        assert trace.context_sub_location_id == 5
+        assert trace.context_tile_area_ids == (7, 8)
+        assert trace.context_x == 10
+        assert trace.context_y == 20
+        assert trace.context_z == 0
+
+    def test_run_turn_action_trace_spatial_fields_none_when_tool_runtime_context_not_dto(
+        self, prompt_builder, action_result_store
+    ):
+        """prompt が ToolRuntimeContextDto 以外を渡したとき、trace の context_* はすべて None（型無視で黙って値を拾わない）。"""
+        trace_store = InMemoryActionExperienceTraceStore()
+        mapper = ToolCommandMapper(
+            handler_map={
+                TOOL_NAME_MOVE_TO_DESTINATION: lambda player_id, args: LlmCommandResultDto(
+                    success=True,
+                    message="移動しました。",
+                )
+            }
+        )
+        prompt_builder._return_value["current_state_snapshot"] = ""
+        prompt_builder._return_value["current_beliefs_snapshot"] = ""
+        prompt_builder._return_value["persona_snapshot"] = ""
+        prompt_builder._return_value["working_memory_snapshot"] = ()
+        prompt_builder._return_value["tool_runtime_context"] = {
+            "current_spot_id": 1,
+        }
+        args = {
+            "destination_label": "S1",
+            "inner_thought": "t",
+            "intention": "i",
+            "expected_result": "e",
+            "attention": "a",
+            "emotion_hint": "curiosity",
+        }
+        llm_client = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_MOVE_TO_DESTINATION,
+                "arguments": args,
+            }
+        )
+        orchestrator = LlmAgentOrchestrator(
+            prompt_builder=prompt_builder,
+            llm_client=llm_client,
+            tool_command_mapper=mapper,
+            action_result_store=action_result_store,
+            tool_argument_resolver=_RecordingResolver(),
+            action_experience_trace_store=trace_store,
+        )
+
+        assert orchestrator.run_turn(PlayerId(1)).success is True
+        trace = trace_store.get_recent(PlayerId(1), 1)[0]
+        assert trace.context_spot_id is None
+        assert trace.context_sub_location_id is None
+        assert trace.context_tile_area_ids is None
+        assert trace.context_x is None
+        assert trace.context_y is None
+        assert trace.context_z is None
+
+    def test_run_turn_action_trace_spatial_fields_none_when_tool_runtime_context_omitted(
+        self, prompt_builder, action_result_store
+    ):
+        """tool_runtime_context キーが無いときも context_* は未設定。"""
+        trace_store = InMemoryActionExperienceTraceStore()
+        mapper = ToolCommandMapper(
+            handler_map={
+                TOOL_NAME_MOVE_TO_DESTINATION: lambda player_id, args: LlmCommandResultDto(
+                    success=True,
+                    message="移動しました。",
+                )
+            }
+        )
+        prompt_builder._return_value.pop("tool_runtime_context", None)
+        prompt_builder._return_value["current_state_snapshot"] = ""
+        prompt_builder._return_value["current_beliefs_snapshot"] = ""
+        prompt_builder._return_value["persona_snapshot"] = ""
+        prompt_builder._return_value["working_memory_snapshot"] = ()
+        args = {
+            "destination_label": "S1",
+            "inner_thought": "t",
+            "intention": "i",
+            "expected_result": "e",
+            "attention": "a",
+            "emotion_hint": "curiosity",
+        }
+        llm_client = StubLlmClient(
+            tool_call_to_return={
+                "name": TOOL_NAME_MOVE_TO_DESTINATION,
+                "arguments": args,
+            }
+        )
+        orchestrator = LlmAgentOrchestrator(
+            prompt_builder=prompt_builder,
+            llm_client=llm_client,
+            tool_command_mapper=mapper,
+            action_result_store=action_result_store,
+            tool_argument_resolver=_RecordingResolver(),
+            action_experience_trace_store=trace_store,
+        )
+
+        assert orchestrator.run_turn(PlayerId(1)).success is True
+        trace = trace_store.get_recent(PlayerId(1), 1)[0]
+        assert trace.context_spot_id is None
 
     def test_run_turn_does_not_save_trace_for_meta_tool(
         self, prompt_builder, action_result_store
