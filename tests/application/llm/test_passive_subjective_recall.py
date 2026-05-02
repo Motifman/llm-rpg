@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 
 from ai_rpg_world.application.llm.contracts.dtos import (
+    EpisodicCue,
     SubjectiveEpisode,
     SubjectiveFelt,
     SubjectivePredictionError,
@@ -14,6 +15,9 @@ from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store im
 from ai_rpg_world.application.llm.services.passive_subjective_recall_composer import (
     PassiveSubjectiveRecallComposer,
     score_episode_for_recall,
+)
+from ai_rpg_world.application.llm.services.passive_subjective_recall_retrieval import (
+    count_cue_axis_hits,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -64,6 +68,97 @@ def test_score_episode_prefers_cue_overlap() -> None:
     assert s >= 26.0
 
 
+def test_score_episode_includes_goal_axis_overlap() -> None:
+    """目標トークンが本文にあれば goal 軸が加算される（状況文との cue 交差なし）。"""
+    now = datetime(2026, 4, 29, 15, 0, 0)
+    ep = _episode(
+        episode_id="e-goal",
+        cue_keys=(),
+        observed="ずっと宝を探していた。",
+        created_at=now - timedelta(days=10),
+    )
+    baseline = score_episode_for_recall(
+        ep,
+        situation_text="何の変哲もない通路。",
+        goal_tokens=set(),
+        now=now,
+    )
+    with_goal = score_episode_for_recall(
+        ep,
+        situation_text="何の変哲もない通路。",
+        goal_tokens={"宝"},
+        now=now,
+    )
+    assert with_goal == baseline + 8.0
+
+
+def test_count_cue_axis_hits_matches_canonical_value_in_situation() -> None:
+    """`place_spot:12` は cue_keys に無くても、状況文の数値トークンと交差すればヒットする。"""
+    now = datetime(2026, 4, 29, 15, 0, 0)
+    ep = _episode(
+        episode_id="e-spot",
+        cue_keys=(),
+        observed="あのときのこと",
+        created_at=now,
+    )
+    ep = replace(
+        ep,
+        cues=(EpisodicCue(axis="place_spot", value="12", source="rule"),),
+    )
+    assert count_cue_axis_hits(ep, situation_text="いまはスポット12の手前だ。") == 1
+
+
+def test_score_episode_place_spot_canonical_without_cue_keys() -> None:
+    now = datetime(2026, 4, 29, 15, 0, 0)
+    ep = _episode(
+        episode_id="e-spot",
+        cue_keys=(),
+        created_at=now - timedelta(days=10),
+    )
+    ep = replace(
+        ep,
+        cues=(EpisodicCue(axis="place_spot", value="12", source="rule"),),
+    )
+    s = score_episode_for_recall(
+        ep,
+        situation_text="スポット12付近で物音がした。",
+        goal_tokens=set(),
+        now=now,
+    )
+    assert s >= 26.0
+
+
+def test_compose_include_pick_debug_exposes_axis_breakdown() -> None:
+    store = InMemorySubjectiveEpisodeStore()
+    pid = PlayerId(1)
+    now = datetime(2026, 4, 29, 15, 0, 0)
+    ep = _episode(
+        episode_id="ep-pick-dbg",
+        cue_keys=("鐘",),
+        observed="鐘の音を覚えている。",
+        created_at=now,
+    )
+    store.put(pid, ep)
+    composer = PassiveSubjectiveRecallComposer(
+        subjective_episode_store=store,
+        min_score=0.0,
+        max_hits=1,
+        include_pick_debug=True,
+    )
+    block = composer.compose_user_block(
+        pid,
+        situation_text="広場の鐘が鳴る。",
+        current_goals_hint="",
+    )
+    assert block.user_block
+    assert len(block.pick_debug) == 1
+    row = block.pick_debug[0]
+    assert row.episode_id == "ep-pick-dbg"
+    assert row.cue_hits >= 1
+    assert row.cue_weighted == float(row.cue_hits) * 44.0
+    assert row.total >= row.cue_weighted
+
+
 def test_compose_user_block_includes_header_and_bumps_recall() -> None:
     store = InMemorySubjectiveEpisodeStore()
     pid = PlayerId(1)
@@ -87,6 +182,7 @@ def test_compose_user_block_includes_header_and_bumps_recall() -> None:
     assert "鐘が鳴った記憶" in block.user_block
     assert "[medium]" in block.user_block
     assert block.episode_ids_for_reflection == ("subjective-episode-fixture",)
+    assert block.pick_debug == ()
     updated = store.get_by_episode_id(pid, "subjective-episode-fixture")
     assert updated is not None
     assert updated.recall_count == 1
