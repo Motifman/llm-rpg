@@ -35,7 +35,7 @@ P5 Memory Context Pack 型の導入（Reflection/Recall の入力統一）
 
 ### 3.1 作業手続き・Git・レビュー・ブランチ（参照）
 
-ブランチ運用・コミット規約・**サブエージェントレビュー（見過ごせない変更がある場合は Approve 禁止）**・**ブロッキングとブランチの見方**・worktree・並列戦略は **[memory_feature_workflow.md](./memory_feature_workflow.md)** に集約した。
+ブランチ運用・コミット規約・**GitHub CLI（`gh`）による PR 必須**・**サブエージェントレビュー（見過ごせない変更がある場合は Approve 禁止）**・**ブロッキングとブランチの見方**・worktree・並列戦略は **[memory_feature_workflow.md](./memory_feature_workflow.md)** に集約した。
 
 ---
 
@@ -160,7 +160,7 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 
 **残り（参考）**
 
-- ✅ `IEpisodeEncoder.encode(..., *, encoding_runtime=Optional[ToolRuntimeContextDto])` — trace に無い `current_*` を `episodic_cues_from_traces(..., runtime=)` に合流。値は **`EpisodeCandidate.encoding_runtime_snapshot`**（チャンク確定ターンの `tool_runtime_context` を `create_candidate_if_ready(..., encoding_runtime_snapshot=)` で保存）をプロセッサが渡し、pending 複数・跨ターン再試行でも「その候補のターン」とズレない。省略時は従来どおり trace のみ。
+- `IEpisodeEncoder.encode` に `ToolRuntimeContextDto` を渡す拡張で、trace に無い `current_*` を常時マージしやすくする。
 - **Passive Recall** は現状 `situation_text` への部分一致が中心のため、エピソード側が **`cues` の canonical（`axis:value`）** 中心になると、日本語のみの旧 `cue_keys` より状況文との一致が取りにくい場合がある。**P3** の SituationCueSet（同一抽出器）で揃える想定。
 
 **受け入れ条件**
