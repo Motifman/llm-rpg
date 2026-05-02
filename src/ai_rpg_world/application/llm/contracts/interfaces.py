@@ -450,8 +450,15 @@ class IEpisodeEncoder(ABC):
         context: EpisodeEncodingContextDto,
         candidate: EpisodeCandidate,
         traces: Tuple[ExperienceTraceUnion, ...],
+        *,
+        encoding_runtime: Optional[ToolRuntimeContextDto] = None,
     ) -> SubjectiveEpisode:
-        """source_trace_ids と同じ順序で traces を渡すこと。"""
+        """source_trace_ids と同じ順序で traces を渡すこと。
+
+        encoding_runtime: エンコード実行時点の UI / ツール解決コンテキスト断片。
+        trace に無い current_* を `episodic_cues_from_traces(..., runtime=)` と整合させて cues に載せる用途。
+        省略時は従来どおり trace のみからルール cue を組み立てる。
+        """
         pass
 
 
@@ -491,7 +498,13 @@ class IEpisodeEncodingRunner(ABC):
     """ターン終了後に未処理 candidate をエンコードするトリガ。"""
 
     @abstractmethod
-    def run_after_turn(self, player_id: PlayerId) -> None:
+    def run_after_turn(
+        self,
+        player_id: PlayerId,
+        *,
+        encoding_runtime: Optional[ToolRuntimeContextDto] = None,
+    ) -> None:
+        """encoding_runtime: 当該ターン終了時点の ToolRuntimeContextDto（エンコードの cues 補完用）。"""
         pass
 
 

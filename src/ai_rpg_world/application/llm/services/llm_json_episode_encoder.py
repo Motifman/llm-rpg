@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from datetime import datetime
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from ai_rpg_world.application.llm.contracts.dtos import (
@@ -18,6 +18,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     SubjectiveEpisode,
     SubjectiveFelt,
     SubjectivePredictionError,
+    ToolRuntimeContextDto,
 )
 from ai_rpg_world.application.llm.contracts.subjective_emotion_label import (
     SubjectiveEmotionLabel,
@@ -373,6 +374,8 @@ class LlmJsonEpisodeEncoder(IEpisodeEncoder):
         context: EpisodeEncodingContextDto,
         candidate: EpisodeCandidate,
         traces: Tuple[ExperienceTraceUnion, ...],
+        *,
+        encoding_runtime: Optional[ToolRuntimeContextDto] = None,
     ) -> SubjectiveEpisode:
         if not isinstance(context, EpisodeEncodingContextDto):
             raise TypeError("context must be EpisodeEncodingContextDto")
@@ -414,9 +417,9 @@ class LlmJsonEpisodeEncoder(IEpisodeEncoder):
             ) from e
         try:
             episode = subjective_episode_from_llm_dict(data, candidate)
-            # `IEpisodeEncoder.encode` は traces のみを受け取る。runtime 断片が要る場合は
-            # I/F 拡張で `episodic_cues_from_traces(..., runtime=ctx)` に渡す。
-            rule_cues = episodic_cues_from_traces(traces)
+            rule_cues = episodic_cues_from_traces(
+                traces, runtime=encoding_runtime
+            )
             return replace(episode, cue_keys=(), cues=rule_cues)
         except EpisodeEncodingException:
             raise
