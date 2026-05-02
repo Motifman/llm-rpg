@@ -64,7 +64,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
             current_state_text=augmented_text,
             tool_runtime_context=ToolRuntimeContextDto(
                 targets=collector.get_targets(),
-                current_spot_id=None,
+                current_spot_id=snap.current_spot_id,
             ),
         )
 
@@ -154,7 +154,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                     label=label,
                     kind="spot_graph_sub_location",
                     display_name=entry.name,
-                    location_area_id=entry.sub_location_id,
+                    sub_location_id=entry.sub_location_id,
                 ),
             )
 
