@@ -80,6 +80,7 @@ class SpotGraphNearbyEntityEntry:
 class SpotGraphPlayerSnapshotDto:
     """スポットグラフ上のプレイヤー周辺の読み取り専用スナップショット。"""
 
+    current_spot_id: int
     current_spot_name: str
     current_spot_description: str
     travel_status_line: Optional[str]
