@@ -153,6 +153,7 @@ def test_spot_graph_ui_context_builder_adds_labels() -> None:
     assert "SL1" in targets
     assert targets["SL1"].sub_location_id == 5
     assert result.tool_runtime_context.current_spot_id == 1
+    assert result.tool_runtime_context.current_sub_location_id == 5
 
 
 def test_spot_graph_formatter_shows_weather_for_outdoor() -> None:
