@@ -127,6 +127,21 @@ def _validate_subjective_action_arguments(
     return None
 
 
+def _spatial_context_kwargs_from_request(request: Dict[str, Any]) -> Dict[str, Any]:
+    """Prompt request 内の ToolRuntimeContext から、trace 用の空間スナップショット欄へ写す値だけを返す。"""
+    rtc = request.get("tool_runtime_context")
+    if not isinstance(rtc, ToolRuntimeContextDto):
+        return {}
+    return {
+        "context_spot_id": rtc.current_spot_id,
+        "context_tile_area_ids": rtc.current_area_ids,
+        "context_sub_location_id": rtc.current_sub_location_id,
+        "context_x": rtc.current_x,
+        "context_y": rtc.current_y,
+        "context_z": rtc.current_z,
+    }
+
+
 class LlmAgentOrchestrator:
     """
     1 ターン分の流れ: プロンプト build → LLM 呼び出し → tool_call に従いコマンド実行
@@ -466,6 +481,7 @@ class LlmAgentOrchestrator:
             identity_snapshot=str(request.get("identity_snapshot") or ""),
             persona_snapshot=str(request.get("persona_snapshot") or ""),
             working_memory_snapshot=tuple(request.get("working_memory_snapshot") or ()),
+            **_spatial_context_kwargs_from_request(request),
             action_result_ref=build_argument_fingerprint(canonical_arguments),
         )
         self._action_experience_trace_store.append(player_id, trace)
