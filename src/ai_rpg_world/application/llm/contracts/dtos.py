@@ -194,6 +194,12 @@ class ActionExperienceTrace:
     identity_snapshot: str = ""
     persona_snapshot: str = ""
     working_memory_snapshot: Tuple[str, ...] = ()
+    context_spot_id: Optional[int] = None
+    context_tile_area_ids: Optional[Tuple[int, ...]] = None
+    context_sub_location_id: Optional[int] = None
+    context_x: Optional[int] = None
+    context_y: Optional[int] = None
+    context_z: Optional[int] = None
     action_result_ref: Optional[str] = None
 
     def __post_init__(self) -> None:
@@ -239,6 +245,22 @@ class ActionExperienceTrace:
             raise TypeError("working_memory_snapshot must be tuple")
         if not all(isinstance(item, str) for item in self.working_memory_snapshot):
             raise TypeError("working_memory_snapshot must contain only str")
+        for name in (
+            "context_spot_id",
+            "context_sub_location_id",
+            "context_x",
+            "context_y",
+            "context_z",
+        ):
+            val = getattr(self, name)
+            if val is not None and not isinstance(val, int):
+                raise TypeError(f"{name} must be int or None")
+        if self.context_tile_area_ids is not None:
+            if not isinstance(self.context_tile_area_ids, tuple):
+                raise TypeError("context_tile_area_ids must be tuple or None")
+            for item in self.context_tile_area_ids:
+                if not isinstance(item, int):
+                    raise TypeError("context_tile_area_ids must contain only int")
         if self.action_result_ref is not None and not isinstance(
             self.action_result_ref, str
         ):
@@ -263,6 +285,12 @@ class ObservationExperienceTrace:
     source_observation_ids: Tuple[str, ...] = ()
     world_event_refs: Tuple[str, ...] = ()
     visible_agents: Tuple[str, ...] = ()
+    context_spot_id: Optional[int] = None
+    context_tile_area_ids: Optional[Tuple[int, ...]] = None
+    context_sub_location_id: Optional[int] = None
+    context_x: Optional[int] = None
+    context_y: Optional[int] = None
+    context_z: Optional[int] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.trace_id, str):
@@ -308,6 +336,22 @@ class ObservationExperienceTrace:
                 raise TypeError(f"{field_name} must be tuple")
             if not all(isinstance(item, str) for item in value):
                 raise TypeError(f"{field_name} must contain only str")
+        for name in (
+            "context_spot_id",
+            "context_sub_location_id",
+            "context_x",
+            "context_y",
+            "context_z",
+        ):
+            val = getattr(self, name)
+            if val is not None and not isinstance(val, int):
+                raise TypeError(f"{name} must be int or None")
+        if self.context_tile_area_ids is not None:
+            if not isinstance(self.context_tile_area_ids, tuple):
+                raise TypeError("context_tile_area_ids must be tuple or None")
+            for item in self.context_tile_area_ids:
+                if not isinstance(item, int):
+                    raise TypeError("context_tile_area_ids must contain only int")
 
 
 @dataclass(frozen=True)
@@ -1043,6 +1087,7 @@ class ToolRuntimeContextDto:
     current_y: Optional[int] = None
     current_z: Optional[int] = None
     current_spot_id: Optional[int] = None
+    current_sub_location_id: Optional[int] = None
     current_area_ids: Optional[Tuple[int, ...]] = None
 
     def __post_init__(self) -> None:
@@ -1058,6 +1103,7 @@ class ToolRuntimeContextDto:
             ("current_y", self.current_y),
             ("current_z", self.current_z),
             ("current_spot_id", self.current_spot_id),
+            ("current_sub_location_id", self.current_sub_location_id),
         ):
             if value is not None and not isinstance(value, int):
                 raise TypeError(f"{name} must be int or None")
