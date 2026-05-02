@@ -173,7 +173,11 @@ EMOTION_HINT_VALUES: Tuple[str, ...] = (
 
 @dataclass(frozen=True)
 class ActionExperienceTrace:
-    """能動的な tool 実行から作る、主観的 episode 生成前の体験材料。"""
+    """能動的な tool 実行から作る、主観的 episode 生成前の体験材料。
+
+    `context_*` は **当該ツール実行時点**の `ToolRuntimeContextDto` 由来の空間スナップショット。
+    ランタイム DTO の `current_*` は「いまのターンのコンテキスト」、`context_*` は trace に固定されたコピー。
+    """
 
     trace_id: str
     agent_id: int
@@ -269,7 +273,11 @@ class ActionExperienceTrace:
 
 @dataclass(frozen=True)
 class ObservationExperienceTrace:
-    """Observation pipeline 由来の受動観測から作る体験材料。"""
+    """Observation pipeline 由来の受動観測から作る体験材料。
+
+    P1 では観測経路に `ToolRuntimeContextDto` が無いため、`context_spot_id` は structured の
+    `spot_id_value` からのみ埋まる。その他の `context_*` は None（将来 recorder へ runtime を渡す拡張で揃える）。
+    """
 
     trace_id: str
     agent_id: int

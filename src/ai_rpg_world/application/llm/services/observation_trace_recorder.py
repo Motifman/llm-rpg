@@ -168,6 +168,8 @@ class ObservationTraceRecorder:
             perceived_salience=_perceived_salience(entry),
             world_event_refs=_extract_world_event_refs(entry),
             visible_agents=_extract_visible_agents(entry),
+            # world_event_refs にも "spot_id_value:N" があるが、あちらは文字列の束ね用。
+            # context_spot_id は型付き int で索引・P2 のルール cue 入力用。
             context_spot_id=_optional_int_coerce(entry.output.structured.get("spot_id_value")),
         )
         self._store.append(player_id, trace)
