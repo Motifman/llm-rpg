@@ -134,10 +134,7 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 - `ToolRuntimeTargetDto`: **`tile_location_area_id`**（タイル）と **`sub_location_id`**（グラフ区画）に分離。スポットグラフ／タイル経路は各フィールドへ設定。
 - `SubjectiveEpisode`: **`cues: Tuple[EpisodicCue, ...]`** を追加。`EpisodicCue(axis, value, source)` は `to_canonical()` で `axis:value` に変換。想起・重複判定は **`subjective_episode_index_strings(ep)`** で `cue_keys` とマージ。
 - **移行方針**: レガシー文字列索引は当面 `cue_keys` のまま残し、ルール生成は `cues` に載せて統合関数で一本化する。
-
-**オープン（P1）**
-
-- `ToolRuntimeContextDto` に **`current_sub_location_id`**（任意）を追加するかは、trace コピー要件とあわせて判断する。
+- `ToolRuntimeContextDto.current_sub_location_id`（任意）は **P1 で追加済み**（スポットグラフ UI が `is_current` のサブロケーションから設定）。
 
 **受け入れ条件**
 
@@ -154,7 +151,7 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 |------|------|
 | P0: DTO 空間フィールド分離 + `EpisodicCue` | **対応済み**（2026） |
 | `SpotGraphPlayerSnapshotDto.current_spot_id` + runtime への伝播 | **対応済み**（2026、P1 の一部） |
-| trace への構造化位置コピー | 未着手 |
+| trace への構造化位置コピー | **一部対応**（2026、`ActionExperienceTrace.context_*`・`ObservationExperienceTrace.context_*`、orchestrator / `spot_id_value`） |
 | ルールベース cue + validator 主導 | 未着手（Plan §3.2–3.3 に沿い LLM `cue_keys` を外していく） |
 | 軸別 Passive Recall | 未着手 |
 | `episode_cues` / `memory_links` | 未着手 |
@@ -164,21 +161,23 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 
 ## P1 — 構造化位置と `current_spot_id`
 
-**問題（残件）**: 記憶 cue や trace 永続化のため、`ToolRuntimeContextDto` 由来の id を **ExperienceTrace にコピー**する処理がまだない。
+**問題（残件）**: 記憶 cue や trace 永続化のため、`ToolRuntimeContextDto` 由来の id を **ExperienceTrace にコピー**する。文字列 `*_snapshot` だけでは索引・デバッグで id が失われる。
 
 **進捗**
 
 1. ✅ `SpotGraphPlayerSnapshotDto` に **`current_spot_id: int`** を追加。`SpotGraphCurrentStateBuilder` が設定。`SpotGraphUiContextBuilder` が `ToolRuntimeContextDto.current_spot_id` に渡す。
+2. ✅ `ToolRuntimeContextDto.current_sub_location_id`（任意）。スナップショットの `sub_locations` で **is_current** の id を UI ビルダが設定。
+3. ✅ `ActionExperienceTrace` / `ObservationExperienceTrace` に **`context_spot_id` / `context_tile_area_ids` / `context_sub_location_id` / `context_x|y|z`** を追加。観測側は **structured の `spot_id_value`** から最低限 `context_spot_id` を埋める。
 
 **タスク（残り）**
 
-2. `ActionExperienceTrace` / `ObservationExperienceTrace` に、仕様 §2.4 の構造化 location フィールドを**段階的に追加**（文字列 snapshot は維持）。
-3. trace 保存処理（例: `agent_orchestrator._append_action_experience_trace`）で `tool_runtime_context` からコピーする。
+- SQLite / 長期 store のシリアライズで新フィールドを欠かさない（該当ストア実装を確認）。
+- 観測 trace へランタイムを直接渡す経路（バッファからの `ToolRuntimeContextDto`）は未検討。必要なら `ObservationTraceRecorder.record` の引数拡張。
 
 **受け入れ条件**
 
 - スポットグラフ run で `ToolRuntimeContextDto.current_spot_id` が非 null（該当セッションで spot が決まる場合）。✅
-- 単体テストで trace に期待する spot / sub_loc / area が残る。（trace 改修後に要求）
+- 単体テストで trace に期待する spot / sub_loc / area が残る。✅（オーケストレータ・UI・観測 recorder の代表ケース）
 
 ---
 
