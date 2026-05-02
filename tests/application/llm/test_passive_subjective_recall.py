@@ -41,6 +41,7 @@ def _episode(
         expected="手がかり",
         prediction_error=SubjectivePredictionError(level="none", reason="x"),
         cue_keys=cue_keys,
+        cues=(),
         importance=importance,  # type: ignore[arg-type]
         salience_reasons=(),
         candidate_id="cand-1",
