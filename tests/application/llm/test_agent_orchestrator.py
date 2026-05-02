@@ -337,6 +337,15 @@ class TestLlmAgentOrchestratorRunTurn:
         prompt_builder._return_value["current_beliefs_snapshot"] = "扉は危険かもしれない。"
         prompt_builder._return_value["persona_snapshot"] = "慎重な探索者"
         prompt_builder._return_value["working_memory_snapshot"] = ("鍵を探している。",)
+        prompt_builder._return_value["tool_runtime_context"] = ToolRuntimeContextDto(
+            targets={},
+            current_spot_id=99,
+            current_sub_location_id=5,
+            current_area_ids=(7, 8),
+            current_x=10,
+            current_y=20,
+            current_z=0,
+        )
         args = {
             "destination_label": "S1",
             "inner_thought": "奥を見てみよう。",
@@ -378,6 +387,12 @@ class TestLlmAgentOrchestratorRunTurn:
         assert trace.current_beliefs_snapshot == "扉は危険かもしれない。"
         assert trace.persona_snapshot == "慎重な探索者"
         assert trace.working_memory_snapshot == ("鍵を探している。",)
+        assert trace.context_spot_id == 99
+        assert trace.context_sub_location_id == 5
+        assert trace.context_tile_area_ids == (7, 8)
+        assert trace.context_x == 10
+        assert trace.context_y == 20
+        assert trace.context_z == 0
 
     def test_run_turn_does_not_save_trace_for_meta_tool(
         self, prompt_builder, action_result_store
