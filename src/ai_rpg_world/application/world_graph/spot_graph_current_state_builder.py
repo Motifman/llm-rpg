@@ -185,6 +185,7 @@ class SpotGraphCurrentStateBuilder:
                 )
 
         return SpotGraphPlayerSnapshotDto(
+            current_spot_id=spot_id.value,
             current_spot_name=node.name,
             current_spot_description=node.description,
             travel_status_line=travel_line,
