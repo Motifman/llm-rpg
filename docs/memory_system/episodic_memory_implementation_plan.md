@@ -208,7 +208,7 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 
 **残り・任意**
 
-- アプリ配線（`create_llm_agent_wiring` / `spot_graph_wiring`）での **`SqliteSubjectiveEpisodeStore` 既定化**や DB パス設定（環境変数等）は未。必要になったときに注入で差し替え。
+- ✅ **オプトイン配線（2026）**: `create_llm_agent_wiring` / `create_spot_graph_wiring` は既定のまま `InMemorySubjectiveEpisodeStore`。環境変数 `SUBJECTIVE_EPISODE_DB_PATH` または引数 `subjective_episode_sqlite_path` / `subjective_episode_store` で `SqliteSubjectiveEpisodeStore` に切り替え可能（`.env.example`・`wiring/__init__.py` モジュールドキュメント参照）。**既定を SQLite に変える変更はしない**（本番での明示設定が前提）。
 
 **受け入れ条件**
 
@@ -264,7 +264,7 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 2. **型付き cue**: `EpisodicCue` + `SubjectiveEpisode.cues`。索引マージは `subjective_episode_index_strings`。単一 `cue_keys` への統合は行わない。
 3. **空間系 prefix 語彙**（例: `tile_area:` / `sub_loc:`）: **主に空間軸**の名前空間。全 cue の唯一の総称規約ではない（仕様 §2.3）。
 4. **v2 優先**: 新機能・想起の主対象は **`SubjectiveEpisode`**。レガシー episodic は段階縮小。
-5. **P4 永続化**: **`SqliteSubjectiveEpisodeStore` を main に導入済み**（レガシー `episode_memories` とは別 schema）。既定配線の差し替えは別タスク。
+5. **P4 永続化**: **`SqliteSubjectiveEpisodeStore` を main に導入済み**（レガシー `episode_memories` とは別 schema）。既定配線は `InMemorySubjectiveEpisodeStore`；**オプトイン**で `SUBJECTIVE_EPISODE_DB_PATH` 等により SQLite へ切替可能。
 6. **Git 運用**: **小分けコミット・機能単位ブランチ・メッセージに「なぜ」**（巨大ブランチは一度まとめてマージ push 後に転換）。手続きの詳細は **[memory_feature_workflow.md](./memory_feature_workflow.md)**。
 
 **残論点**

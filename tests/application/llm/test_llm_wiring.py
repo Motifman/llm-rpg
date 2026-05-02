@@ -465,3 +465,59 @@ class TestCreateLlmAgentWiringSkillTools:
         trigger = result.llm_turn_trigger
         episode_store = trigger._turn_runner._orchestrator._episode_memory_store
         assert isinstance(episode_store, SqliteEpisodeMemoryStore)
+
+
+class TestSubjectiveEpisodeStoreWiring:
+    """create_llm_agent_wiring の主観エピソードストア（既定インメモリ・SQLite オプトイン）"""
+
+    def test_default_uses_in_memory_store(self):
+        from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
+            InMemorySubjectiveEpisodeStore,
+        )
+
+        deps = _minimal_wiring_deps()
+        result = create_llm_agent_wiring(**deps)
+        assert isinstance(result.subjective_episode_store, InMemorySubjectiveEpisodeStore)
+
+    def test_subjective_episode_sqlite_path_uses_sqlite_store(self, tmp_path):
+        from ai_rpg_world.infrastructure.llm.sqlite_subjective_episode_store import (
+            SqliteSubjectiveEpisodeStore,
+        )
+
+        db_path = tmp_path / "subjective_episodes_wiring.db"
+        deps = _minimal_wiring_deps()
+        result = create_llm_agent_wiring(
+            **deps,
+            subjective_episode_sqlite_path=str(db_path),
+        )
+        assert isinstance(result.subjective_episode_store, SqliteSubjectiveEpisodeStore)
+        assert result.subjective_episode_store._db_path == str(db_path)
+
+    def test_env_subjective_episode_db_path_uses_sqlite(self, tmp_path, monkeypatch):
+        from ai_rpg_world.application.llm.wiring.subjective_episode_store_factory import (
+            ENV_SUBJECTIVE_EPISODE_DB_PATH,
+        )
+        from ai_rpg_world.infrastructure.llm.sqlite_subjective_episode_store import (
+            SqliteSubjectiveEpisodeStore,
+        )
+
+        db_path = tmp_path / "subjective_from_env.db"
+        monkeypatch.setenv(ENV_SUBJECTIVE_EPISODE_DB_PATH, str(db_path))
+        deps = _minimal_wiring_deps()
+        result = create_llm_agent_wiring(**deps)
+        assert isinstance(result.subjective_episode_store, SqliteSubjectiveEpisodeStore)
+
+    def test_subjective_episode_store_kwarg_wins_over_sqlite_path(self, tmp_path):
+        from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
+            InMemorySubjectiveEpisodeStore,
+        )
+
+        mem = InMemorySubjectiveEpisodeStore()
+        db_path = tmp_path / "ignored_subjective.db"
+        deps = _minimal_wiring_deps()
+        result = create_llm_agent_wiring(
+            **deps,
+            subjective_episode_store=mem,
+            subjective_episode_sqlite_path=str(db_path),
+        )
+        assert result.subjective_episode_store is mem
