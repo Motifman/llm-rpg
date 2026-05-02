@@ -97,3 +97,6 @@ docs/system_implementations/
 
 # ローカル専用の実験スクリプト（vLLM・プロンプト試行等、リポジトリにコミットしない）
 local_experiments/
+
+# ローカル git worktree 用（誤コミット防止・memory_feature_workflow.md §4.3）
+worktrees/
