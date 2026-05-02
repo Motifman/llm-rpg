@@ -1,7 +1,8 @@
 """P3: Passive Subjective Recall 用の軸別スコアの合成（temporal / cue / importance / goal）。
 
 `PassiveSubjectiveRecallComposer` から切り出し、テストと説明可能性（どの軸が効いたか）を
-取りやすくする。cue 軸は `subjective_episode_index_strings` と状況文の交差を数える。
+取りやすくする。cue 軸は `subjective_episode_index_strings` と、状況文の交差および
+`episodic_cue_extraction.passive_recall_situation_cues(runtime=…)` の canonical の和集合で数える。
 importance 軸は `SubjectiveEpisode.importance` から段階ボーナス。
 goal 軸は目標ヒントのトークンが observed/interpreted に含まれる件数×重み。
 `axis:value` 形（P2 の `to_canonical`）は、値部分が状況文またはトークンに含まれれば一致とみなす。
@@ -12,11 +13,15 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Set
+from typing import FrozenSet, Optional, Set
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     SubjectiveEpisode,
+    ToolRuntimeContextDto,
     subjective_episode_index_strings,
+)
+from ai_rpg_world.application.llm.services.episodic_cue_extraction import (
+    passive_recall_situation_cues,
 )
 
 
@@ -49,13 +54,30 @@ def episode_index_key_matches_situation(
     return False
 
 
-def count_cue_axis_hits(ep: SubjectiveEpisode, *, situation_text: str) -> int:
-    """エピソードの索引キー列と状況文の一致本数（重複キーは 1 回ずつ）。"""
+def situation_passive_recall_canonical_keys(
+    *,
+    runtime: Optional[ToolRuntimeContextDto] = None,
+) -> FrozenSet[str]:
+    """状況側（現状は runtime のみ）の索引キー正規形（lower・strip 済み canonical）。"""
+    return frozenset(
+        c.to_canonical().strip().lower()
+        for c in passive_recall_situation_cues(runtime=runtime)
+    )
+
+
+def count_cue_axis_hits(
+    ep: SubjectiveEpisode,
+    *,
+    situation_text: str,
+    runtime: Optional[ToolRuntimeContextDto] = None,
+) -> int:
+    """エピソード索引キーが状況文または状況側 canonical（runtime cue）と一致する本数。"""
     trimmed = situation_text.strip()
-    if not trimmed:
+    situation_keys = situation_passive_recall_canonical_keys(runtime=runtime)
+    if not trimmed and not situation_keys:
         return 0
-    blob = trimmed.lower()
-    tokens = tokenize_passive_recall_text(trimmed)
+    blob = trimmed.lower() if trimmed else ""
+    tokens = tokenize_passive_recall_text(trimmed) if trimmed else set()
     n = 0
     seen: Set[str] = set()
     for raw in subjective_episode_index_strings(ep):
@@ -63,7 +85,10 @@ def count_cue_axis_hits(ep: SubjectiveEpisode, *, situation_text: str) -> int:
         if not k or k in seen:
             continue
         seen.add(k)
-        if episode_index_key_matches_situation(
+        if k in situation_keys:
+            n += 1
+            continue
+        if trimmed and episode_index_key_matches_situation(
             k, situation_lower=blob, situation_tokens=tokens
         ):
             n += 1
@@ -123,11 +148,14 @@ def compute_passive_recall_score_breakdown(
     list_index: int,
     max_scan: int,
     cue_hit_weight: float = 44.0,
+    runtime: Optional[ToolRuntimeContextDto] = None,
 ) -> PassiveRecallScoreBreakdown:
     """軸別に分解したスコア。total は composer のしきい値 `min_score` と互換のスケール。"""
     tr = temporal_recency_bonus(ep, now=now)
     tl = temporal_list_position_bonus(list_index=list_index, max_scan=max_scan)
-    cue_hits = count_cue_axis_hits(ep, situation_text=situation_text)
+    cue_hits = count_cue_axis_hits(
+        ep, situation_text=situation_text, runtime=runtime
+    )
     cw = float(cue_hits) * cue_hit_weight
     imp = importance_bonus(ep)
     gw = float(goal_axis_overlap_score(ep, goal_tokens))
