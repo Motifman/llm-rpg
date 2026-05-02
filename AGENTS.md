@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-Core code lives under `src/ai_rpg_world/` with a layered layout: `domain/` for entities, value objects, and repository interfaces, `application/` for use cases and DTOs, `infrastructure/` for repository and LLM adapters, and `presentation/` for UI-facing entry points. Tests mirror that structure under `tests/`, for example `tests/domain/guild/` and `tests/domain/combat/`. Design notes and implementation plans are in `docs/`; **episodic memory work** also follows `docs/memory_system/memory_feature_workflow.md` (**`gh pr create` で PR 必須**、サブエージェントレビュー、ブロッキング、worktree). Runnable examples and experiments live in `demos/`, `data/`, `memo/`, and `plans/`.
+Core code lives under `src/ai_rpg_world/` with a layered layout: `domain/` for entities, value objects, and repository interfaces, `application/` for use cases and DTOs, `infrastructure/` for repository and LLM adapters, and `presentation/` for UI-facing entry points. Tests mirror that structure under `tests/`, for example `tests/domain/guild/` and `tests/domain/combat/`. Design notes and implementation plans are in `docs/`; **episodic memory work** also follows `docs/memory_system/memory_feature_workflow.md` (**`gh pr create` で PR 必須**、**サブエージェントは Composer 2 で許可を求めず起動**、サブエージェントレビュー、ブロッキング、worktree). Runnable examples and experiments live in `demos/`, `data/`, `memo/`, and `plans/`.
 
 ## Build, Test, and Development Commands
 Use Python 3.10+ in a virtual environment.

@@ -35,7 +35,7 @@ P5 Memory Context Pack 型の導入（Reflection/Recall の入力統一）
 
 ### 3.1 作業手続き・Git・レビュー・ブランチ（参照）
 
-ブランチ運用・コミット規約・**GitHub CLI（`gh`）による PR 必須**・**サブエージェントレビュー（見過ごせない変更がある場合は Approve 禁止）**・**ブロッキングとブランチの見方**・worktree・並列戦略は **[memory_feature_workflow.md](./memory_feature_workflow.md)** に集約した。
+ブランチ運用・コミット規約・**GitHub CLI（`gh`）による PR 必須**・**サブエージェントレビュー（Composer 2・利用者の実行許可を待たず起動／見過ごせない変更がある場合は Approve 禁止）**・**ブロッキングとブランチの見方**・worktree・並列戦略は **[memory_feature_workflow.md](./memory_feature_workflow.md)** に集約した。
 
 ---
 
