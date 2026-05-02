@@ -287,6 +287,7 @@ def test_sqlite_web_runtime_snapshot_current_tick_advances_without_scene_version
             manual_player_ids=(1,),
             initial_tick=100,
             tick_interval_ms=20,
+            simulate_monsters_on_tick=False,
         )
     )
     try:
