@@ -433,6 +433,7 @@ class IPassiveSubjectiveRecallComposer(ABC):
         *,
         situation_text: str,
         current_goals_hint: str,
+        runtime_context: Optional[ToolRuntimeContextDto] = None,
     ) -> PassiveRecallComposeResult:
         """【ふと思い出したこと】相当。未ヒット時は user_block が空。"""
         pass

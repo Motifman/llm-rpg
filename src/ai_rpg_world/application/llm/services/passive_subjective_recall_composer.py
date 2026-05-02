@@ -5,6 +5,7 @@
 後者はプロンプト組み立てのクリティカルパスに載せず、非同期ジョブ等で行う想定。
 
 P3 では temporal / cue / goal の軸別寄与を `passive_subjective_recall_retrieval` に切り出し、
+cue 軸は状況文に加え `ToolRuntimeContextDto` 由来の `episodic_cue_extraction` と突合する。
 必要時に `pick_debug` で説明可能にする。
 """
 
@@ -17,6 +18,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     PassiveRecallComposeResult,
     PassiveRecallPickDebug,
     SubjectiveEpisode,
+    ToolRuntimeContextDto,
     subjective_episode_index_strings,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
@@ -38,6 +40,7 @@ def score_episode_for_recall(
     situation_text: str,
     goal_tokens: set[str],
     now: datetime,
+    runtime: ToolRuntimeContextDto | None = None,
 ) -> float:
     """デバッグ·テスト用に公開したスコア関数（list 位置ボーナスなしで旧呼び出し互換）。"""
     b = compute_passive_recall_score_breakdown(
@@ -47,6 +50,7 @@ def score_episode_for_recall(
         now=now,
         list_index=0,
         max_scan=1,
+        runtime=runtime,
     )
     return b.total - b.temporal_list_position
 
@@ -103,6 +107,7 @@ class PassiveSubjectiveRecallComposer(IPassiveSubjectiveRecallComposer):
         *,
         situation_text: str,
         current_goals_hint: str,
+        runtime_context: ToolRuntimeContextDto | None = None,
     ) -> PassiveRecallComposeResult:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
@@ -110,6 +115,10 @@ class PassiveSubjectiveRecallComposer(IPassiveSubjectiveRecallComposer):
             raise TypeError("situation_text must be str")
         if not isinstance(current_goals_hint, str):
             raise TypeError("current_goals_hint must be str")
+        if runtime_context is not None and not isinstance(
+            runtime_context, ToolRuntimeContextDto
+        ):
+            raise TypeError("runtime_context must be ToolRuntimeContextDto or None")
         trimmed = situation_text[: self._max_situation_chars]
         goal_tokens = tokenize_passive_recall_text(current_goals_hint)
         now = datetime.now()
@@ -125,6 +134,7 @@ class PassiveSubjectiveRecallComposer(IPassiveSubjectiveRecallComposer):
                 now=now,
                 list_index=idx,
                 max_scan=self._max_scan,
+                runtime=runtime_context,
             )
             if breakdown.total >= self._min_score:
                 dbg = PassiveRecallPickDebug(
