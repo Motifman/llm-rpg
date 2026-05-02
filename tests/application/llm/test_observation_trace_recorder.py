@@ -84,3 +84,16 @@ def test_record_saves_observation_trace_with_refs_and_salience() -> None:
     assert "Alice" in trace.visible_agents
     assert "type:entity_entered_spot" in trace.world_event_refs
     assert "spot_id_value:10" in trace.world_event_refs
+    assert trace.context_spot_id == 10
+
+
+def test_record_context_spot_id_none_when_spot_id_value_not_coercible() -> None:
+    store = InMemoryObservationExperienceTraceStore()
+    recorder = ObservationTraceRecorder(store)
+    entry = _entry(
+        "entity_entered_spot",
+        structured_extra={"spot_id_value": "not-an-int"},
+    )
+    trace = recorder.record(PlayerId(1), entry)
+    assert trace.context_spot_id is None
+    assert "spot_id_value:not-an-int" in trace.world_event_refs

@@ -333,6 +333,10 @@ def subjective_episode_from_llm_dict(
 
 
 def _traces_digest(traces: Tuple[ExperienceTraceUnion, ...]) -> str:
+    """LLM プロンプト用の trace 要約（現状はツール名・結果/要約のみ）。
+
+    trace の `context_*` はここでは使わない。P2 でルールベース cue 化するまでの蓄積フェーズ（_encoder 外で消費）。
+    """
     lines: List[str] = []
     for t in traces:
         if isinstance(t, ActionExperienceTrace):
