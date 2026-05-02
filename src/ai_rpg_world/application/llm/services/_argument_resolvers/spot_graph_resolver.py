@@ -107,13 +107,13 @@ class SpotGraphArgumentResolver:
             "サブロケーションラベル",
             invalid_label_code="INVALID_TARGET_LABEL",
         )
-        if target.location_area_id is None:
+        if target.sub_location_id is None:
             raise ToolArgumentResolutionException(
                 f"サブロケーションとして解決できないラベルです: {label}",
                 "INVALID_TARGET_KIND",
             )
         return _with_inner_thought(
-            {"sub_location_id": target.location_area_id}, args
+            {"sub_location_id": target.sub_location_id}, args
         )
 
     def _resolve_interact(

@@ -85,7 +85,7 @@ class MovementArgumentResolver:
         result: Dict[str, Any] = {
             "destination_type": target.destination_type or "spot",
             "target_spot_id": spot_id,
-            "target_location_area_id": target.location_area_id,
+            "target_location_area_id": target.tile_location_area_id,
         }
         if target.destination_type == "object" and target.world_object_id is not None:
             result["target_world_object_id"] = target.world_object_id

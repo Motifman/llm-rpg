@@ -501,7 +501,7 @@ class DefaultLlmUiContextBuilder(ILlmUiContextBuilder):
                         kind="destination",
                         display_name=loc.name,
                         spot_id=world_state.current_spot_id,
-                        location_area_id=loc.location_area_id,
+                        tile_location_area_id=loc.location_area_id,
                         destination_type="location",
                     ),
                 )
