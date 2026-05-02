@@ -19,6 +19,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ILLMPlayerResolver,
     IObservationExperienceTraceStore,
     ISlidingWindowMemory,
+    ISubjectiveEpisodeStore,
 )
 from ai_rpg_world.application.llm.contracts.persona import PersonaPromptPolicy
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
@@ -129,6 +130,8 @@ def create_spot_graph_wiring(
     system_prompt_template: Optional[str] = None,
     persona_store: Optional[Any] = None,
     persona_prompt_policy: Optional[PersonaPromptPolicy] = None,
+    subjective_episode_store: Optional[ISubjectiveEpisodeStore] = None,
+    subjective_episode_sqlite_path: Optional[str] = None,
 ) -> "LlmAgentWiringResult":
     """スポットグラフ用に LLM 観測・ツール・プロンプトを組み立てる（タイル移動なし）。"""
     # 遅延 import: wiring/__init__.py の循環を避ける
@@ -155,8 +158,8 @@ def create_spot_graph_wiring(
     from ai_rpg_world.application.llm.services.experience_trace_bundle_resolver import (
         ExperienceTraceBundleResolver,
     )
-    from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
-        InMemorySubjectiveEpisodeStore,
+    from ai_rpg_world.application.llm.wiring.subjective_episode_store_factory import (
+        create_subjective_episode_store_for_wiring,
     )
     from ai_rpg_world.application.llm.services.in_memory_identity_memory_store import (
         InMemoryIdentityMemoryStore,
@@ -288,7 +291,10 @@ def create_spot_graph_wiring(
         observation_trace_store=observation_experience_trace_store,
         candidate_store=episode_candidate_store,
     )
-    subjective_episode_store = InMemorySubjectiveEpisodeStore()
+    subjective_episode_store = create_subjective_episode_store_for_wiring(
+        subjective_episode_store=subjective_episode_store,
+        sqlite_path=subjective_episode_sqlite_path,
+    )
     identity_memory_store = InMemoryIdentityMemoryStore()
     trace_bundle_resolver = ExperienceTraceBundleResolver(
         action_experience_trace_store,
