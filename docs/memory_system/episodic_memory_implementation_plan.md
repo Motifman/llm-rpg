@@ -16,7 +16,7 @@
 | Trace          | `ActionExperienceTrace`, `ObservationExperienceTrace`, `agent_orchestrator._append_action_experience_trace` |
 | Passive Recall | `passive_subjective_recall_composer.py`（cue を状況テキストに部分一致＋ recency）                                          |
 | エンコーディング文脈     | `episode_encoding_context_provider.py`（`current_goals` ← Working Memory）                                    |
-| UI / 現在地       | `ui_context_builder.py`（タイル）, `spot_graph_ui_context_builder.py`（`**current_spot_id` ← snapshot**）          |
+| UI / 現在地       | `ui_context_builder.py`（タイル）, `spot_graph_ui_context_builder.py`（**`current_spot_id` ← snapshot**）          |
 | レガシー episodic  | `RuleBasedMemoryExtractor`, `EpisodeMemoryEntry`, `DefaultPredictiveMemoryRetriever`                        |
 
 
@@ -50,7 +50,7 @@ P5 Memory Context Pack 型の導入（Reflection/Recall の入力統一）
 **ルール**
 
 1. **マージ / push の前に**、Cursor の **サブエージェント**（親チャットとは別コンテキストのレビュアー）へ依頼する。実装を済ませたエージェントと同一視点だけで main に入れない。
-2. 依頼文には **PR の説明欄に書く量**を入れる: **目的（なぜ）**、ブランチ名、`**main..ブランチ` のコミット一覧**（`git log`）、**変更の要約**（ファイル単位でよい）、**レビュー観点**（正しさ・境界条件・テスト不足・永続化・命名・層の責務など。プロジェクトの DDD ルールに触れてよい）。
+2. 依頼文には **PR の説明欄に書く量**を入れる: **目的（なぜ）**、ブランチ名、**`main..ブランチ` のコミット一覧**（`git log`）、**変更の要約**（ファイル単位でよい）、**レビュー観点**（正しさ・境界条件・テスト不足・永続化・命名・層の責務など。プロジェクトの DDD ルールに触れてよい）。
 3. **サブエージェントの結論（Approve / 要修正）と指摘リスト**を待ち、**指摘を反映するか、意図的に採用しない理由を短く残してから** `merge`・`push` する。レビュー待ちのまま無言でマージしない。
 4. 指摘対応は **小分けコミット**（§3.1 項 3・4）で積む。
 
@@ -77,7 +77,7 @@ P5 Memory Context Pack 型の導入（Reflection/Recall の入力統一）
 
 - **同時成立**: 同一エピソードに `tile_area` と `sub_loc` が両方載ってよい（二系統ワールドの切り替え・ハイブリッドに対応）。想起は **いずれかと交差**すれば候補に入る、など P3 で調整する。
 - **座標 `coord:`** は、タイルで「区画より細かい一致」が要る場合のみ**後追し**で足す。初期は `tile_area` + `place_spot` で足りることが多い。
-- `**to_canonical()`** は既存どおり `axis:value`。prefix の見た目より **axis 列と値の意味**をソース・オブ・トゥルースにする。
+- **`to_canonical()`** は既存どおり `axis:value`。prefix の見た目より **axis 列と値の意味**をソース・オブ・トゥルースにする。
 
 **やらない方がいいこと**
 
@@ -92,8 +92,8 @@ P5 Memory Context Pack 型の導入（Reflection/Recall の入力統一）
 
 **フェーズ案（コードと一緒にトラッキング表を更新）**
 
-1. **今**: Passive/Recall は `subjective_episode_index_strings` で `**cue_keys` ∪ `cues`**。既存データ用に `cue_keys` はフィールドとして残す。
-2. **直後**: `LlmJsonEpisodeEncoder` / reflection JSON から `**cue_keys` の生成要求を外す**（プロンプト・schema から削除または deprecated コメント）。空配列で保存してよい。
+1. **今**: Passive/Recall は `subjective_episode_index_strings` で **`cue_keys` ∪ `cues`**。既存データ用に `cue_keys` はフィールドとして残す。
+2. **直後**: `LlmJsonEpisodeEncoder` / reflection JSON から **`cue_keys` の生成要求を外す**（プロンプト・schema から削除または deprecated コメント）。空配列で保存してよい。
 3. **移行後**: ルール抽出が揃ったら、**新規保存は `cues` のみ**を正とし、`cue_keys` は読み取り互換のためだけに残す期間を設ける。
 4. **最終**: 永続層・API で `cue_keys` を削除するか、内部のシリアライズ専用に閉じる（表に「廃止済み」と書く）。
 
@@ -155,8 +155,8 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 
 **実施済み（2026）**
 
-- `ToolRuntimeTargetDto`: `**tile_location_area_id`**（タイル）と `**sub_location_id**`（グラフ区画）に分離。スポットグラフ／タイル経路は各フィールドへ設定。
-- `SubjectiveEpisode`: `**cues: Tuple[EpisodicCue, ...]**` を追加。`EpisodicCue(axis, value, source)` は `to_canonical()` で `axis:value` に変換。想起・重複判定は `**subjective_episode_index_strings(ep)**` で `cue_keys` とマージ。
+- `ToolRuntimeTargetDto`: **`tile_location_area_id`**（タイル）と **`sub_location_id`**（グラフ区画）に分離。スポットグラフ／タイル経路は各フィールドへ設定。
+- `SubjectiveEpisode`: **`cues: Tuple[EpisodicCue, ...]`** を追加。`EpisodicCue(axis, value, source)` は `to_canonical()` で `axis:value` に変換。想起・重複判定は **`subjective_episode_index_strings(ep)`** で `cue_keys` とマージ。
 - **移行方針**: レガシー文字列索引は当面 `cue_keys` のまま残し、ルール生成は `cues` に載せて統合関数で一本化する。
 - `ToolRuntimeContextDto.current_sub_location_id`（任意）は **P1 で追加済み**（スポットグラフ UI が `is_current` のサブロケーションから設定）。
 
@@ -191,10 +191,10 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 
 **進捗**
 
-1. ✅ `SpotGraphPlayerSnapshotDto` に `**current_spot_id: int`** を追加。`SpotGraphCurrentStateBuilder` が設定。`SpotGraphUiContextBuilder` が `ToolRuntimeContextDto.current_spot_id` に渡す。
+1. ✅ `SpotGraphPlayerSnapshotDto` に **`current_spot_id: int`** を追加。`SpotGraphCurrentStateBuilder` が設定。`SpotGraphUiContextBuilder` が `ToolRuntimeContextDto.current_spot_id` に渡す。
 2. ✅ `ToolRuntimeContextDto.current_sub_location_id`（任意）。スナップショットの `sub_locations` で **is_current** の id を UI ビルダが設定。
-3. ✅ `ActionExperienceTrace` / `ObservationExperienceTrace` に `**context_spot_id` / `context_tile_area_ids` / `context_sub_location_id` / `context_x|y|z`** を追加。観測側は **structured の `spot_id_value`** から最低限 `context_spot_id` を埋める。
-4. **観測 vs 行動の非対称（P1 スコープ）**: 観測経路は `ToolRuntimeContextDto` を持たないため、`ObservationExperienceTrace` の `**context_spot_id` 以外の `context_*` は None**。`tile_area` / `sub_loc` / 座標を観測 trace に載せるには recorder へ runtime を渡す等の**別タスク**（上記「残り」参照）。
+3. ✅ `ActionExperienceTrace` / `ObservationExperienceTrace` に **`context_spot_id` / `context_tile_area_ids` / `context_sub_location_id` / `context_x|y|z`** を追加。観測側は **structured の `spot_id_value`** から最低限 `context_spot_id` を埋める。
+4. **観測 vs 行動の非対称（P1 スコープ）**: 観測経路は `ToolRuntimeContextDto` を持たないため、`ObservationExperienceTrace` の **`context_spot_id` 以外の `context_*` は None**。`tile_area` / `sub_loc` / 座標を観測 trace に載せるには recorder へ runtime を渡す等の**別タスク**（上記「残り」参照）。
 
 **タスク（残り）**
 
@@ -214,10 +214,10 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 
 1. 新モジュール（例: `application/llm/services/episodic_cue_extraction.py`）に集約:
   - 入力: `ActionExperienceTrace` | `ObservationExperienceTrace` | 現在の `ToolRuntimeContextDto` 断片
-  - 出力: `**EpisodicCue` の列**（保存時は `SubjectiveEpisode.cues`）。必要なら移行期に併せて正規化 `tuple[str, ...]` を `cue_keys` にも複写する。
+  - 出力: **`EpisodicCue` の列**（保存時は `SubjectiveEpisode.cues`）。必要なら移行期に併せて正規化 `tuple[str, ...]` を `cue_keys` にも複写する。
 2. ドメインから取れる **object 型・カテゴリ**（`SpotObject` 等）を可能な範囲で `object_category:` / `object_type:` に載せる。
 3. `LlmJsonEpisodeEncoder` / reflection: **索引用 `cue_keys` を LLM に書かせない**（Plan §3.3）。空間 cue は §3.2 の axis だけルールが埋める。
-4. **エンコードプロンプト**: 現状 `_traces_digest` は `tool_name` と結果要約のみで、`**context_*` は含めない**（短文化）。蓄積した空間 id は **P2 のルール抽出器**で `EpisodicCue`（例 `place_spot` / `tile_area`）に変換して初めてエンコード入力に効かせる。
+4. **エンコードプロンプト**: 現状 `_traces_digest` は `tool_name` と結果要約のみで、**`context_*` は含めない**（短文化）。蓄積した空間 id は **P2 のルール抽出器**で `EpisodicCue`（例 `place_spot` / `tile_area`）に変換して初めてエンコード入力に効かせる。
 
 **受け入れ条件**
 
@@ -291,10 +291,10 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 
 **整理済み（2026）**
 
-1. `**ToolRuntimeTargetDto` の空間 id**: `tile_location_area_id` と `sub_location_id` に分離済み。
+1. **`ToolRuntimeTargetDto` の空間 id**: `tile_location_area_id` と `sub_location_id` に分離済み。
 2. **型付き cue**: `EpisodicCue` + `SubjectiveEpisode.cues`。索引マージは `subjective_episode_index_strings`。単一 `cue_keys` への統合は行わない。
 3. **空間系 prefix 語彙**（例: `tile_area:` / `sub_loc:`）: **主に空間軸**の名前空間。全 cue の唯一の総称規約ではない（仕様 §2.3）。
-4. **v2 優先**: 新機能・想起の主対象は `**SubjectiveEpisode`**。レガシー episodic は段階縮小。
+4. **v2 優先**: 新機能・想起の主対象は **`SubjectiveEpisode`**。レガシー episodic は段階縮小。
 5. **P4 永続化**: 本番寄りの永続化をすぐやるなら **SQLite を最初から本線**にする。
 6. **Git 運用**: **小分けコミット・機能単位ブランチ・メッセージに「なぜ」**（巨大ブランチは一度まとめてマージ push 後に転換）。**個人作業時のマージ前レビューは §3.1a**。詳細は **§3.1 / §3.1a / §3.5**。
 
