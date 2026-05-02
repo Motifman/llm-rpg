@@ -19,6 +19,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ExperienceTraceUnion,
     IEpisodeEncoder,
 )
+from ai_rpg_world.application.llm.services.episodic_cue_extraction import episodic_cues_from_traces
 
 
 class StubEpisodeEncoder(IEpisodeEncoder):
@@ -88,14 +89,9 @@ class StubEpisodeEncoder(IEpisodeEncoder):
         salience = tuple(candidate.boundary_reasons)
         importance = "high" if candidate.boundary_score >= 100 or "action_failure" in salience else "medium"
 
-        narrative_cues: list[str] = []
-        if last_action:
-            narrative_cues.append(last_action.tool_name)
-        for t in traces:
-            if isinstance(t, ObservationExperienceTrace):
-                narrative_cues.append(t.observation_kind)
+        narrative_cues = episodic_cues_from_traces(traces)
 
-        return SubjectiveEpisode(
+        episode = SubjectiveEpisode(
             episode_id=f"subjective-episode-{uuid4().hex}",
             agent_id=candidate.agent_id,
             created_at=datetime.now(),
@@ -111,8 +107,8 @@ class StubEpisodeEncoder(IEpisodeEncoder):
             belief_at_encoding=context.current_beliefs.strip(),
             belief_update_candidates=(),
             relationship_deltas=(),
-            cue_keys=tuple(dict.fromkeys(narrative_cues)),
-            cues=(),
+            cue_keys=(),
+            cues=narrative_cues,
             importance=importance,
             salience_reasons=salience,
             recall_count=0,
@@ -123,3 +119,4 @@ class StubEpisodeEncoder(IEpisodeEncoder):
             confidence="medium",
             candidate_id=candidate.candidate_id,
         )
+        return episode
