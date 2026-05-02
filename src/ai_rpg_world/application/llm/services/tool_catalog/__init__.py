@@ -28,6 +28,7 @@ from ai_rpg_world.application.llm.services.tool_catalog.trade import (
     get_trade_specs,
     get_trade_virtual_page_specs,
 )
+from ai_rpg_world.application.llm.services.tool_catalog.spot_graph import get_spot_graph_specs
 from ai_rpg_world.application.llm.services.tool_catalog.world import get_world_specs
 
 
@@ -38,6 +39,11 @@ def _register_specs(
     """(definition, resolver) のリストをレジストリに登録する。"""
     for definition, resolver in specs:
         registry.register(definition, resolver)
+
+
+def register_spot_graph_tools(registry: IGameToolRegistry) -> None:
+    """スポットグラフ用ツール（spot_graph_*）をレジストリに登録する。"""
+    _register_specs(registry, get_spot_graph_specs())
 
 
 def register_default_tools(
@@ -63,11 +69,15 @@ def register_default_tools(
     inspect_item_enabled: bool = False,
     inspect_target_enabled: bool = False,
     memory_query_enabled: bool = False,
+    recall_subjective_enabled: bool = False,
     subagent_enabled: bool = False,
     todo_enabled: bool = False,
     working_memory_enabled: bool = False,
+    include_movement_tools: bool = True,
 ) -> None:
     """標準ツール群を登録し、依存サービスがあるカテゴリだけ追加する。
+
+    `include_movement_tools=False` のときタイル移動系（move_*）は登録しない（スポットグラフ専用ランタイム用）。
 
     取引所（Trade）カタログは `trade_enabled` のみで登録され、`sns_enabled` には依存しない。
     プロダクト設定で SNS と取引の両方を有効にした場合は、SNS 系と取引系が**別カタログとして**並ぶ
@@ -77,7 +87,8 @@ def register_default_tools(
     if not isinstance(registry, IGameToolRegistry):
         raise TypeError("registry must be IGameToolRegistry")
 
-    _register_specs(registry, get_movement_specs())
+    if include_movement_tools:
+        _register_specs(registry, get_movement_specs())
 
     if pursuit_enabled:
         _register_specs(registry, get_pursuit_specs())
@@ -117,6 +128,7 @@ def register_default_tools(
         registry,
         get_memory_specs(
             memory_query_enabled=memory_query_enabled,
+            recall_subjective_enabled=recall_subjective_enabled,
             subagent_enabled=subagent_enabled,
             todo_enabled=todo_enabled,
             working_memory_enabled=working_memory_enabled,
@@ -124,4 +136,4 @@ def register_default_tools(
     )
 
 
-__all__ = ["register_default_tools"]
+__all__ = ["register_default_tools", "register_spot_graph_tools"]

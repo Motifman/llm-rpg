@@ -44,6 +44,7 @@ from ai_rpg_world.domain.player.exception import (
     PursuitStateRequiredException,
     PursuitTargetMismatchException,
     SpeechValidationException,
+    SpotNavigationStateInvalidException,
 )
 from ai_rpg_world.domain.player.enum.player_enum import SpeechChannel
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
@@ -67,6 +68,10 @@ from ai_rpg_world.domain.player.value_object.player_navigation_state import (
 from ai_rpg_world.domain.player.value_object.player_pursuit_state import (
     PlayerPursuitState,
 )
+from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import (
+    PlayerSpotNavigationState,
+)
+from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
 
 
 class PlayerStatusAggregate(AggregateRoot):
@@ -88,6 +93,7 @@ class PlayerStatusAggregate(AggregateRoot):
         active_effects: List[StatusEffect] = None,
         attention_level: Optional[AttentionLevel] = None,
         pursuit_state: Optional[PlayerPursuitState] = None,
+        spot_navigation_state: Optional[PlayerSpotNavigationState] = None,
     ):
         super().__init__()
         self._player_id = player_id
@@ -108,6 +114,7 @@ class PlayerStatusAggregate(AggregateRoot):
         self._pursuit_state = (
             pursuit_state if pursuit_state is not None else PlayerPursuitState.empty()
         )
+        self._spot_navigation_state = spot_navigation_state
 
     @property
     def attention_level(self) -> AttentionLevel:
@@ -219,6 +226,11 @@ class PlayerStatusAggregate(AggregateRoot):
         return self._pursuit_state.pursuit
 
     @property
+    def spot_navigation_state(self) -> Optional[PlayerSpotNavigationState]:
+        """スポットグラフ上の移動状態（未使用のワールドでは None）。"""
+        return self._spot_navigation_state
+
+    @property
     def has_active_pursuit(self) -> bool:
         """追跡中かどうか。"""
         return self._pursuit_state.has_active_pursuit
@@ -250,6 +262,21 @@ class PlayerStatusAggregate(AggregateRoot):
     def clear_path(self) -> None:
         """経路と目標情報をクリアする"""
         self._navigation_state = self._navigation_state.cleared()
+
+    def set_spot_navigation_state(self, state: Optional[PlayerSpotNavigationState]) -> None:
+        """スポットグラフ用の移動状態を設定する（None で未使用に戻す）。"""
+        self._spot_navigation_state = state
+
+    def ensure_spot_navigation_at_rest(self, spot_id: SpotId) -> None:
+        """スポットグラフ位置が未設定なら、指定スポットに滞在している状態で初期化する。"""
+        if self._spot_navigation_state is None:
+            self._spot_navigation_state = PlayerSpotNavigationState.at_rest(spot_id)
+
+    def set_spot_sub_location(self, sub_location_id: Optional[SubLocationId]) -> None:
+        """同一スポット内のサブロケーションを変更する（スポットグラフモード時）。"""
+        if self._spot_navigation_state is None:
+            raise SpotNavigationStateInvalidException("スポットグラフ上の位置が未初期化です")
+        self._spot_navigation_state = self._spot_navigation_state.with_sub_location(sub_location_id)
 
     def start_pursuit(
         self,

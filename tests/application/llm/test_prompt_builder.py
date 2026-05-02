@@ -156,6 +156,29 @@ class TestDefaultPromptBuilder:
             role=Role.CITIZEN,
         )
 
+    def test_build_prepends_failure_feedback_when_last_action_failed(
+        self, setup_prompt_builder
+    ):
+        """直前行動が失敗のとき、user 先頭に補正セクションが付く"""
+        prompt_builder, profile_repo, *_ = setup_prompt_builder
+        profile_repo.save(self._create_profile(1, "Alice"))
+        store = prompt_builder._action_result_store
+        pid = PlayerId(1)
+        store.append(
+            pid,
+            "move({}) を実行しました。",
+            "失敗。ドアに鍵 対処: 別の経路を",
+            success=False,
+            error_code="GATE_LOCKED",
+            tool_name="spot_graph_travel",
+            argument_fingerprint='{"destination_label": "東"}',
+        )
+        result = prompt_builder.build(pid)
+        user = result["messages"][1]["content"]
+        assert user.startswith("## 前ターンの行動は失敗")
+        assert "GATE_LOCKED" in user
+        assert "spot_graph_travel" in user
+
     def test_build_returns_messages_and_tools_structure(
         self, setup_prompt_builder
     ):

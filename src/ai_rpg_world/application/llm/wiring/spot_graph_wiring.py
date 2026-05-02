@@ -1,0 +1,600 @@
+"""
+スポットグラフ専用の LLM エージェント配線。
+
+タイル移動ツールは登録せず、spot_graph_* ツールと SpotGraphCurrentStateFormatter を用いる。
+create_llm_agent_wiring は変更せず、本関数で別経路を提供する。
+"""
+
+from __future__ import annotations
+
+import os
+from typing import Any, Optional
+
+from ai_rpg_world.application.llm.contracts.interfaces import (
+    IActionExperienceTraceStore,
+    IActionResultStore,
+    IEpisodeMemoryStore,
+    ILLMClient,
+    ILLMPlayerResolver,
+    IObservationExperienceTraceStore,
+    ISlidingWindowMemory,
+)
+from ai_rpg_world.application.llm.contracts.persona import PersonaPromptPolicy
+from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
+    SpotGraphToolExecutor,
+)
+from ai_rpg_world.application.llm.services.spot_graph_current_state_formatter import (
+    SpotGraphCurrentStateFormatter,
+)
+from ai_rpg_world.application.observation.contracts.interfaces import (
+    IObservationContextBuffer,
+    IObservationFormatter,
+)
+from ai_rpg_world.application.world.contracts.queries import GetPlayerCurrentStateQuery
+from ai_rpg_world.application.world.services.world_query_service import WorldQueryService
+from ai_rpg_world.application.world_graph.spot_graph_augmenting_world_query import (
+    SpotGraphAugmentingWorldQueryService,
+)
+from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
+    SpotGraphCurrentStateBuilder,
+)
+from ai_rpg_world.application.world_graph.spot_graph_no_op_movement_service import (
+    SpotGraphNoOpMovementService,
+)
+from ai_rpg_world.application.world_graph.spot_graph_world_services import (
+    SpotGraphWorldServices,
+)
+from ai_rpg_world.domain.common.unit_of_work_factory import UnitOfWorkFactory
+from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
+from ai_rpg_world.domain.player.repository.player_inventory_repository import (
+    PlayerInventoryRepository,
+)
+from ai_rpg_world.domain.player.repository.player_profile_repository import PlayerProfileRepository
+from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
+from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
+from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
+
+
+def create_spot_graph_wiring(
+    *,
+    player_status_repository: PlayerStatusRepository,
+    physical_map_repository: PhysicalMapRepository,
+    world_query_service: WorldQueryService,
+    spot_graph_world_services: SpotGraphWorldServices,
+    spot_graph_repository: ISpotGraphRepository,
+    spot_interior_repository: ISpotInteriorRepository,
+    player_inventory_repository: PlayerInventoryRepository,
+    item_repository: ItemRepository,
+    item_spec_repository: ItemSpecRepository,
+    player_profile_repository: PlayerProfileRepository,
+    unit_of_work_factory: UnitOfWorkFactory,
+    pursuit_command_service: Optional[Any] = None,
+    speech_service: Optional[Any] = None,
+    interaction_service: Optional[Any] = None,
+    harvest_service: Optional[Any] = None,
+    attention_service: Optional[Any] = None,
+    conversation_service: Optional[Any] = None,
+    place_object_service: Optional[Any] = None,
+    drop_item_service: Optional[Any] = None,
+    chest_service: Optional[Any] = None,
+    skill_tool_service: Optional[Any] = None,
+    observation_buffer: Optional[IObservationContextBuffer] = None,
+    observation_formatter: Optional[IObservationFormatter] = None,
+    spot_repository: Optional[Any] = None,
+    monster_template_repository: Optional[Any] = None,
+    quest_repository: Optional[Any] = None,
+    shop_repository: Optional[Any] = None,
+    trade_repository: Optional[Any] = None,
+    guild_repository: Optional[Any] = None,
+    monster_repository: Optional[Any] = None,
+    hit_box_repository: Optional[Any] = None,
+    skill_loadout_repository: Optional[Any] = None,
+    skill_deck_progress_repository: Optional[Any] = None,
+    skill_spec_repository: Optional[Any] = None,
+    sns_user_repository: Optional[Any] = None,
+    quest_command_service: Optional[Any] = None,
+    guild_command_service: Optional[Any] = None,
+    shop_command_service: Optional[Any] = None,
+    trade_command_service: Optional[Any] = None,
+    post_service: Optional[Any] = None,
+    reply_service: Optional[Any] = None,
+    user_command_service: Optional[Any] = None,
+    notification_command_service: Optional[Any] = None,
+    sns_mode_session: Optional[Any] = None,
+    sns_page_session: Optional[Any] = None,
+    post_query_service: Optional[Any] = None,
+    sns_page_query_service: Optional[Any] = None,
+    trade_page_session: Optional[Any] = None,
+    trade_page_query_service: Optional[Any] = None,
+    reply_query_service: Optional[Any] = None,
+    notification_query_service: Optional[Any] = None,
+    llm_client: Optional[ILLMClient] = None,
+    game_time_provider: Optional[Any] = None,
+    world_time_config_service: Optional[Any] = None,
+    memory_db_path: Optional[str] = None,
+    episode_memory_store: Optional[IEpisodeMemoryStore] = None,
+    long_term_memory_store: Optional[Any] = None,
+    reflection_state_port: Optional[Any] = None,
+    action_result_store: Optional[IActionResultStore] = None,
+    sliding_window_memory: Optional[ISlidingWindowMemory] = None,
+    action_experience_trace_store: Optional[IActionExperienceTraceStore] = None,
+    observation_experience_trace_store: Optional[IObservationExperienceTraceStore] = None,
+    llm_player_resolver: Optional[ILLMPlayerResolver] = None,
+    max_turns: int = 5,
+    llm_view_distance: Optional[int] = None,
+    system_prompt_template: Optional[str] = None,
+    persona_store: Optional[Any] = None,
+    persona_prompt_policy: Optional[PersonaPromptPolicy] = None,
+) -> "LlmAgentWiringResult":
+    """スポットグラフ用に LLM 観測・ツール・プロンプトを組み立てる（タイル移動なし）。"""
+    # 遅延 import: wiring/__init__.py の循環を避ける
+    from ai_rpg_world.application.llm.services.episode_encoding_context_provider import (
+        build_episode_encoding_context_provider,
+    )
+    from ai_rpg_world.application.llm.wiring.memory_reflection_factory import (
+        build_same_process_memory_reflection,
+    )
+    from ai_rpg_world.application.llm.services.memory_consolidation_runner import (
+        InMemoryConsolidationCheckpoint,
+        MemoryConsolidationRunner,
+    )
+    from ai_rpg_world.application.llm.wiring.memory_consolidation_factory import (
+        build_memory_consolidation_hook,
+        consolidation_journal_threshold_from_env,
+    )
+    from ai_rpg_world.application.llm.services.episode_encoding_processor import (
+        EpisodeEncodingProcessor,
+    )
+    from ai_rpg_world.application.llm.services.episode_encoding_runner import (
+        EpisodeEncodingRunner,
+    )
+    from ai_rpg_world.application.llm.services.experience_trace_bundle_resolver import (
+        ExperienceTraceBundleResolver,
+    )
+    from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
+        InMemorySubjectiveEpisodeStore,
+    )
+    from ai_rpg_world.application.llm.services.in_memory_identity_memory_store import (
+        InMemoryIdentityMemoryStore,
+    )
+    from ai_rpg_world.application.llm.wiring.episode_encoder_factory import (
+        build_episode_encoder,
+    )
+    from ai_rpg_world.application.llm.wiring.passive_subjective_recall_factory import (
+        build_passive_subjective_recall_composer,
+    )
+    from ai_rpg_world.application.llm.wiring import (
+        LlmAgentWiringResult,
+        _DEFAULT_LLM_VIEW_DISTANCE,
+        _ENV_LLM_VIEW_DISTANCE,
+        _build_memory_stack,
+        _build_observation_stack,
+        _build_persona_block_provider,
+        _build_prompt_stack,
+        _build_reflection_stack,
+        _build_tool_stack,
+    )
+    from ai_rpg_world.application.llm.wiring._llm_client_factory import (
+        create_llm_client_from_env,
+        create_subagent_invoke_text,
+    )
+    from ai_rpg_world.application.llm.services.action_result_store import (
+        DefaultActionResultStore,
+    )
+    from ai_rpg_world.application.llm.services.agent_orchestrator import LlmAgentOrchestrator
+    from ai_rpg_world.application.llm.services.context_format_strategy import (
+        SectionBasedContextFormatStrategy,
+    )
+    from ai_rpg_world.application.llm.services.game_tool_registry import DefaultGameToolRegistry
+    from ai_rpg_world.application.llm.services.handle_store import InMemoryHandleStore
+    from ai_rpg_world.application.llm.services.in_memory_todo_store import InMemoryTodoStore
+    from ai_rpg_world.application.llm.services.in_memory_working_memory_store import (
+        InMemoryWorkingMemoryStore,
+    )
+    from ai_rpg_world.application.llm.services.in_memory_action_experience_trace_store import (
+        InMemoryActionExperienceTraceStore,
+    )
+    from ai_rpg_world.application.llm.services.in_memory_observation_experience_trace_store import (
+        InMemoryObservationExperienceTraceStore,
+    )
+    from ai_rpg_world.application.llm.services.in_memory_episode_candidate_store import (
+        InMemoryEpisodeCandidateStore,
+    )
+    from ai_rpg_world.application.llm.services.episode_chunker import RuleBasedEpisodeChunker
+    from ai_rpg_world.application.llm.services.llm_agent_turn_runner import LlmAgentTurnRunner
+    from ai_rpg_world.application.llm.services.llm_player_resolver import ProfileBasedLlmPlayerResolver
+    from ai_rpg_world.application.llm.services.llm_turn_trigger import DefaultLlmTurnTrigger
+    from ai_rpg_world.application.llm.services.memory_extractor import RuleBasedMemoryExtractor
+    from ai_rpg_world.application.llm.services.memory_query_executor import MemoryQueryExecutor
+    from ai_rpg_world.application.llm.services.subjective_memory_recall_executor import (
+        SubjectiveMemoryRecallExecutor,
+    )
+    from ai_rpg_world.application.llm.services.observation_trace_recorder import (
+        ObservationTraceRecorder,
+    )
+    from ai_rpg_world.application.llm.services.observation_trace_recording_buffer import (
+        ObservationTraceRecordingBuffer,
+    )
+    from ai_rpg_world.application.llm.services.recent_events_formatter import (
+        DefaultRecentEventsFormatter,
+    )
+    from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
+    from ai_rpg_world.application.llm.services.subagent_runner import SubagentRunner
+    from ai_rpg_world.application.llm.services.system_prompt_builder import DefaultSystemPromptBuilder
+    from ai_rpg_world.application.llm.services.ui_context_builder import DefaultLlmUiContextBuilder
+    from ai_rpg_world.application.observation.services.observation_context_buffer import (
+        DefaultObservationContextBuffer,
+    )
+    from ai_rpg_world.application.observation.services.observation_appender import (
+        ObservationAppender,
+    )
+    from ai_rpg_world.application.observation.services.observation_formatter import (
+        ObservationFormatter,
+    )
+
+    if player_status_repository is None:
+        raise TypeError("player_status_repository must not be None")
+    if physical_map_repository is None:
+        raise TypeError("physical_map_repository must not be None")
+    if world_query_service is None:
+        raise TypeError("world_query_service must not be None")
+    if player_profile_repository is None:
+        raise TypeError("player_profile_repository must not be None")
+    if unit_of_work_factory is None:
+        raise TypeError("unit_of_work_factory must not be None")
+
+    base_buffer = (
+        observation_buffer if observation_buffer is not None else DefaultObservationContextBuffer()
+    )
+    observation_experience_trace_store = (
+        observation_experience_trace_store
+        if observation_experience_trace_store is not None
+        else InMemoryObservationExperienceTraceStore()
+    )
+    buffer = ObservationTraceRecordingBuffer(
+        inner=base_buffer,
+        recorder=ObservationTraceRecorder(observation_experience_trace_store),
+    )
+
+    sg_builder = SpotGraphCurrentStateBuilder(
+        spot_graph_repository=spot_graph_repository,
+        spot_interior_repository=spot_interior_repository,
+        player_status_repository=player_status_repository,
+    )
+    augmented_world_query = SpotGraphAugmentingWorldQueryService(
+        inner=world_query_service,
+        spot_graph_builder=sg_builder,
+    )
+    current_state_formatter = SpotGraphCurrentStateFormatter()
+
+    sliding_window = (
+        sliding_window_memory if sliding_window_memory is not None else DefaultSlidingWindowMemory()
+    )
+    action_result_store = (
+        action_result_store if action_result_store is not None else DefaultActionResultStore()
+    )
+    action_experience_trace_store = (
+        action_experience_trace_store
+        if action_experience_trace_store is not None
+        else InMemoryActionExperienceTraceStore()
+    )
+    episode_candidate_store = InMemoryEpisodeCandidateStore()
+    episode_chunker = RuleBasedEpisodeChunker(
+        action_trace_store=action_experience_trace_store,
+        observation_trace_store=observation_experience_trace_store,
+        candidate_store=episode_candidate_store,
+    )
+    subjective_episode_store = InMemorySubjectiveEpisodeStore()
+    identity_memory_store = InMemoryIdentityMemoryStore()
+    trace_bundle_resolver = ExperienceTraceBundleResolver(
+        action_experience_trace_store,
+        observation_experience_trace_store,
+    )
+    from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
+        SpotGraphUiContextBuilder,
+    )
+    ui_context_builder = SpotGraphUiContextBuilder()
+    recent_events_formatter = DefaultRecentEventsFormatter()
+    context_format_strategy = SectionBasedContextFormatStrategy()
+    system_prompt_builder = (
+        DefaultSystemPromptBuilder(template=system_prompt_template)
+        if system_prompt_template is not None
+        else DefaultSystemPromptBuilder()
+    )
+    game_tool_registry = DefaultGameToolRegistry()
+    persona_block_provider = _build_persona_block_provider(
+        persona_store, persona_prompt_policy
+    )
+
+    if llm_view_distance is not None:
+        effective_view_distance = llm_view_distance
+    else:
+        raw = (os.environ.get(_ENV_LLM_VIEW_DISTANCE) or "").strip()
+        if raw:
+            try:
+                effective_view_distance = int(raw)
+                if effective_view_distance < 0:
+                    effective_view_distance = _DEFAULT_LLM_VIEW_DISTANCE
+            except ValueError:
+                effective_view_distance = _DEFAULT_LLM_VIEW_DISTANCE
+        else:
+            effective_view_distance = _DEFAULT_LLM_VIEW_DISTANCE
+
+    memory_stack = _build_memory_stack(
+        memory_db_path=memory_db_path,
+        episode_memory_store=episode_memory_store,
+        long_term_memory_store=long_term_memory_store,
+        reflection_state_port=reflection_state_port,
+    )
+    episode_memory_store = memory_stack.episode_memory_store
+    long_term_memory_store = memory_stack.long_term_memory_store
+    reflection_state_port = memory_stack.reflection_state_port
+    working_memory_store = memory_stack.working_memory_store
+    todo_store = memory_stack.todo_store
+    handle_store = memory_stack.handle_store
+
+    episode_encoding_ctx_provider = build_episode_encoding_context_provider(
+        player_profile_repository=player_profile_repository,
+        long_term_memory_store=long_term_memory_store,
+        working_memory_store=working_memory_store,
+        persona_block_provider=persona_block_provider,
+        identity_memory_store=identity_memory_store,
+    )
+
+    def _state_provider(pid: PlayerId) -> str:
+        dto = augmented_world_query.get_player_current_state(
+            GetPlayerCurrentStateQuery(
+                player_id=pid.value,
+                view_distance=effective_view_distance,
+            )
+        )
+        if dto is None:
+            return "（情報なし）"
+        return current_state_formatter.format(dto)
+
+    memory_query_executor = MemoryQueryExecutor(
+        episode_store=episode_memory_store,
+        long_term_store=long_term_memory_store,
+        sliding_window=sliding_window,
+        action_result_store=action_result_store,
+        working_memory_store=working_memory_store,
+        state_provider=_state_provider,
+        recent_events_formatter=recent_events_formatter,
+        handle_store=handle_store,
+    )
+    client = llm_client if llm_client is not None else create_llm_client_from_env()
+    memory_reflection_scheduler, memory_reflection_after_encode = (
+        build_same_process_memory_reflection(
+            llm_client=client,
+            subjective_episode_store=subjective_episode_store,
+            context_provider=episode_encoding_ctx_provider,
+        )
+    )
+    episode_encoder = build_episode_encoder(client)
+    episode_encoding_processor = EpisodeEncodingProcessor(
+        candidate_store=episode_candidate_store,
+        trace_resolver=trace_bundle_resolver,
+        subjective_episode_store=subjective_episode_store,
+        encoder=episode_encoder,
+        context_provider=episode_encoding_ctx_provider,
+        max_retries=2,
+        on_subjective_episode_encoded=memory_reflection_after_encode,
+    )
+    episode_encoding_runner = EpisodeEncodingRunner(episode_encoding_processor)
+    passive_recall_composer = build_passive_subjective_recall_composer(
+        subjective_episode_store
+    )
+    subagent_invoke_text = create_subagent_invoke_text(client)
+    subagent_runner = SubagentRunner(
+        memory_query_executor=memory_query_executor,
+        invoke_text=subagent_invoke_text,
+        handle_store=handle_store,
+    )
+    subjective_recall_executor = SubjectiveMemoryRecallExecutor(
+        subjective_episode_store=subjective_episode_store,
+    )
+
+    spot_graph_tool_executor = SpotGraphToolExecutor(
+        spot_graph_world_services=spot_graph_world_services,
+        player_inventory_repository=player_inventory_repository,
+        item_repository=item_repository,
+    )
+    no_op_movement = SpotGraphNoOpMovementService()
+
+    tool_stack = _build_tool_stack(
+        game_tool_registry=game_tool_registry,
+        memory_query_executor=memory_query_executor,
+        subagent_runner=subagent_runner,
+        working_memory_store=working_memory_store,
+        todo_store=todo_store,
+        subjective_recall_executor=subjective_recall_executor,
+        include_tile_movement=False,
+        movement_service=None,
+        pursuit_command_service=pursuit_command_service,
+        speech_service=speech_service,
+        interaction_service=interaction_service,
+        harvest_service=harvest_service,
+        attention_service=attention_service,
+        conversation_service=conversation_service,
+        place_object_service=place_object_service,
+        drop_item_service=drop_item_service,
+        chest_service=chest_service,
+        skill_tool_service=skill_tool_service,
+        quest_command_service=quest_command_service,
+        guild_command_service=guild_command_service,
+        shop_command_service=shop_command_service,
+        trade_command_service=trade_command_service,
+        post_service=post_service,
+        reply_service=reply_service,
+        user_command_service=user_command_service,
+        notification_command_service=notification_command_service,
+        sns_mode_session=sns_mode_session,
+        sns_page_session=sns_page_session,
+        post_query_service=post_query_service,
+        sns_page_query_service=sns_page_query_service,
+        trade_page_session=trade_page_session,
+        trade_page_query_service=trade_page_query_service,
+        reply_query_service=reply_query_service,
+        notification_query_service=notification_query_service,
+        item_repository=item_repository,
+        monster_repository=monster_repository,
+        physical_map_repository=physical_map_repository,
+        player_status_repository=player_status_repository,
+        monster_template_repository=monster_template_repository,
+        spot_repository=spot_repository,
+        item_spec_repository=item_spec_repository,
+        player_profile_repository=player_profile_repository,
+        spot_graph_tool_executor=spot_graph_tool_executor,
+    )
+    available_tools_provider = tool_stack.available_tools_provider
+    tool_command_mapper = tool_stack.tool_command_mapper
+    tool_argument_resolver = tool_stack.tool_argument_resolver
+
+    memory_extractor = RuleBasedMemoryExtractor()
+    if llm_player_resolver is None:
+        llm_player_resolver = ProfileBasedLlmPlayerResolver(
+            player_profile_repository=player_profile_repository,
+        )
+    reflection_service, reflection_runner = _build_reflection_stack(
+        episode_memory_store=episode_memory_store,
+        long_term_memory_store=long_term_memory_store,
+        reflection_state_port=reflection_state_port,
+        player_status_repository=player_status_repository,
+        llm_player_resolver=llm_player_resolver,
+        world_time_config_service=world_time_config_service,
+    )
+    prompt_builder = _build_prompt_stack(
+        buffer=buffer,
+        sliding_window=sliding_window,
+        action_result_store=action_result_store,
+        world_query_service=augmented_world_query,
+        player_profile_repository=player_profile_repository,
+        current_state_formatter=current_state_formatter,
+        recent_events_formatter=recent_events_formatter,
+        context_format_strategy=context_format_strategy,
+        system_prompt_builder=system_prompt_builder,
+        available_tools_provider=available_tools_provider,
+        ui_context_builder=ui_context_builder,
+        episode_memory_store=episode_memory_store,
+        long_term_memory_store=long_term_memory_store,
+        tile_map_view_distance=effective_view_distance,
+        persona_block_provider=persona_block_provider,
+        passive_subjective_recall=passive_recall_composer,
+        episode_encoding_context_provider=episode_encoding_ctx_provider,
+    )
+
+    def _enqueue_passive_memory_reflection(
+        pid: PlayerId,
+        episode_ids: tuple[str, ...],
+        situation: str,
+    ) -> None:
+        if memory_reflection_scheduler is None:
+            return
+        for eid in episode_ids:
+            memory_reflection_scheduler.maybe_enqueue_passive_recall(
+                pid, eid, situation_text=situation
+            )
+
+    consolidation_checkpoint = InMemoryConsolidationCheckpoint()
+    consolidation_runner = MemoryConsolidationRunner(
+        subjective_episode_store=subjective_episode_store,
+        long_term_memory_store=long_term_memory_store,
+        identity_memory_store=identity_memory_store,
+        checkpoint=consolidation_checkpoint,
+        journal_threshold=consolidation_journal_threshold_from_env(),
+    )
+    memory_consolidation_hook = build_memory_consolidation_hook(
+        runner=consolidation_runner
+    )
+
+    orchestrator = LlmAgentOrchestrator(
+        prompt_builder=prompt_builder,
+        llm_client=client,
+        tool_command_mapper=tool_command_mapper,
+        action_result_store=action_result_store,
+        tool_argument_resolver=tool_argument_resolver,
+        memory_extractor=memory_extractor,
+        episode_memory_store=episode_memory_store,
+        action_experience_trace_store=action_experience_trace_store,
+        handle_store=handle_store,
+        episode_chunker=episode_chunker,
+        episode_encoding_runner=episode_encoding_runner,
+        passive_memory_reflection_hook=(
+            _enqueue_passive_memory_reflection
+            if memory_reflection_scheduler is not None
+            else None
+        ),
+        memory_consolidation_hook=memory_consolidation_hook,
+    )
+    turn_runner = LlmAgentTurnRunner(
+        observation_buffer=buffer,
+        world_query_service=augmented_world_query,
+        movement_service=no_op_movement,
+        action_result_store=action_result_store,
+        orchestrator=orchestrator,
+    )
+    llm_turn_trigger = DefaultLlmTurnTrigger(turn_runner=turn_runner, max_turns=max_turns)
+
+    formatter = observation_formatter
+    if formatter is None:
+        formatter = ObservationFormatter(
+            spot_repository=spot_repository,
+            player_profile_repository=player_profile_repository,
+            item_spec_repository=item_spec_repository,
+            item_repository=item_repository,
+            shop_repository=shop_repository,
+            guild_repository=guild_repository,
+            monster_repository=monster_repository,
+            skill_spec_repository=skill_spec_repository,
+            sns_user_repository=sns_user_repository,
+            spot_graph_repository=spot_graph_repository,
+        )
+
+    observation_registry = _build_observation_stack(
+        player_status_repository=player_status_repository,
+        physical_map_repository=physical_map_repository,
+        player_profile_repository=player_profile_repository,
+        quest_repository=quest_repository,
+        guild_repository=guild_repository,
+        shop_repository=shop_repository,
+        trade_repository=trade_repository,
+        monster_repository=monster_repository,
+        hit_box_repository=hit_box_repository,
+        skill_loadout_repository=skill_loadout_repository,
+        skill_deck_progress_repository=skill_deck_progress_repository,
+        sns_user_repository=sns_user_repository,
+        buffer=buffer,
+        unit_of_work_factory=unit_of_work_factory,
+        llm_turn_trigger=llm_turn_trigger,
+        llm_player_resolver=llm_player_resolver,
+        movement_service=no_op_movement,
+        game_time_provider=game_time_provider,
+        world_time_config_service=world_time_config_service,
+        observation_formatter=formatter,
+        spot_repository=spot_repository,
+        item_spec_repository=item_spec_repository,
+        item_repository=item_repository,
+        skill_spec_repository=skill_spec_repository,
+        spot_graph_repository=spot_graph_repository,
+    )
+    return LlmAgentWiringResult(
+        observation_registry=observation_registry,
+        llm_turn_trigger=llm_turn_trigger,
+        reflection_runner=reflection_runner,
+        observation_buffer=buffer,
+        observation_appender=ObservationAppender(buffer),
+        action_experience_trace_store=action_experience_trace_store,
+        observation_experience_trace_store=observation_experience_trace_store,
+        episode_candidate_store=episode_candidate_store,
+        subjective_episode_store=subjective_episode_store,
+        identity_memory_store=identity_memory_store,
+        sns_mode_session=sns_mode_session,
+        sns_page_session=sns_page_session,
+        trade_page_session=trade_page_session,
+    )
+
+
+__all__ = ["create_spot_graph_wiring"]

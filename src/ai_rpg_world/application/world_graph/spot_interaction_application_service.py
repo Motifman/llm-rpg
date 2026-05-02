@@ -1,0 +1,113 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Tuple
+
+from ai_rpg_world.application.common.exceptions import ApplicationException
+from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
+    collect_owned_item_spec_ids_from_inventory,
+    grant_item_specs_to_inventory,
+    remove_one_item_of_spec_from_inventory,
+)
+from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
+from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
+from ai_rpg_world.domain.player.repository.player_inventory_repository import (
+    PlayerInventoryRepository,
+)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
+from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
+from ai_rpg_world.domain.world_graph.service.spot_interaction_service import SpotInteractionService
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+
+
+@dataclass(frozen=True)
+class SpotInteractionResultDto:
+    messages: Tuple[str, ...]
+
+
+class SpotInteractionApplicationService:
+    """スポット内オブジェクト操作（ドメインサービス + 永続化・フラグ・アイテム・接続状態）。"""
+
+    def __init__(
+        self,
+        spot_graph_repository: ISpotGraphRepository,
+        spot_interior_repository: ISpotInteriorRepository,
+        player_inventory_repository: PlayerInventoryRepository,
+        item_repository: ItemRepository,
+        item_spec_repository: ItemSpecRepository,
+        world_flag_state: MutableWorldFlagState,
+        spot_interaction_service: SpotInteractionService | None = None,
+    ) -> None:
+        self._spot_graph_repository = spot_graph_repository
+        self._spot_interior_repository = spot_interior_repository
+        self._player_inventory_repository = player_inventory_repository
+        self._item_repository = item_repository
+        self._item_spec_repository = item_spec_repository
+        self._world_flag_state = world_flag_state
+        self._interaction = spot_interaction_service or SpotInteractionService()
+
+    def execute_interaction(
+        self,
+        player_id: PlayerId,
+        object_id: SpotObjectId,
+        action_name: str,
+    ) -> SpotInteractionResultDto:
+        graph = self._spot_graph_repository.find_graph()
+        entity_id = EntityId.create(int(player_id))
+        spot_id = graph.get_entity_spot(entity_id)
+
+        interior = self._spot_interior_repository.find_by_spot_id(spot_id)
+        if interior is None:
+            raise ApplicationException(
+                f"スポット内部データがありません: {spot_id}",
+                spot_id=int(spot_id),
+            )
+
+        inv = self._player_inventory_repository.find_by_id(player_id)
+        if inv is None:
+            raise ApplicationException(
+                f"インベントリが見つかりません: {player_id}",
+                player_id=int(player_id),
+            )
+
+        owned = collect_owned_item_spec_ids_from_inventory(inv, self._item_repository)
+        world_flags = self._world_flag_state.as_frozen_set()
+
+        result = self._interaction.execute_interaction(
+            interior,
+            object_id,
+            action_name,
+            owned,
+            world_flags,
+        )
+
+        self._world_flag_state.replace_from_interaction(result.new_flags)
+
+        new_interior = result.new_interior
+        self._spot_interior_repository.save(spot_id, new_interior)
+
+        for cid, is_passable in result.connection_passability_updates:
+            graph.set_connection_passable(cid, is_passable)
+
+        if result.item_spec_ids_to_grant:
+            grant_item_specs_to_inventory(
+                player_id,
+                tuple(result.item_spec_ids_to_grant),
+                self._item_repository,
+                self._item_spec_repository,
+                self._player_inventory_repository,
+            )
+
+        inv2 = self._player_inventory_repository.find_by_id(player_id)
+        if inv2 is not None:
+            for spec_id in result.item_spec_ids_to_remove:
+                remove_one_item_of_spec_from_inventory(
+                    inv2, spec_id, self._item_repository
+                )
+            self._player_inventory_repository.save(inv2)
+
+        self._spot_graph_repository.save(graph)
+        return SpotInteractionResultDto(messages=result.messages)

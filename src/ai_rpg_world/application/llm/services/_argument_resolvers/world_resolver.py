@@ -49,9 +49,16 @@ class WorldArgumentResolver:
         if tool_name == TOOL_NAME_WHISPER:
             return self._resolve_whisper(args, runtime_context)
         if tool_name == TOOL_NAME_SAY:
+            raw_it = args.get("inner_thought", "")
+            inner = (
+                raw_it.strip()
+                if isinstance(raw_it, str)
+                else (str(raw_it) if raw_it is not None else "")
+            )
             return {
                 "content": args.get("content", ""),
                 "channel": SpeechChannel.SAY,
+                "inner_thought": inner,
             }
         if tool_name == TOOL_NAME_INSPECT_ITEM:
             return self._resolve_inspect_item(args, runtime_context)
@@ -103,10 +110,17 @@ class WorldArgumentResolver:
                 f"囁きはプレイヤー宛てにのみ送れます: {label}",
                 "INVALID_TARGET_KIND",
             )
+        raw_it = args.get("inner_thought", "")
+        inner = (
+            raw_it.strip()
+            if isinstance(raw_it, str)
+            else (str(raw_it) if raw_it is not None else "")
+        )
         return {
             "content": args.get("content", ""),
             "channel": SpeechChannel.WHISPER,
             "target_player_id": target.player_id,
+            "inner_thought": inner,
         }
 
     def _resolve_interact_world_object(

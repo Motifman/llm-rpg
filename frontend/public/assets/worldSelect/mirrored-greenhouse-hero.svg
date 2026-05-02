@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title id="title">·n)§</title>
+  <desc id="desc">·5än)§·œ`QLWUFh≈íWfDã</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0c1a18"/>
+      <stop offset="100%" style="stop-color:#070e0c"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a2a26" stop-opacity="0.6"/>
+      <stop offset="100%" style="stop-color:#0a0e14" stop-opacity="0.95"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="540" fill="url(#bg)"/>
+  <!-- )§n®D -->
+  <g stroke="#2a3a36" stroke-width="1.5" fill="none" opacity="0.85">
+    <path d="M120 480 L120 220 L480 80 L840 220 L840 480"/>
+    <line x1="120" y1="220" x2="840" y2="220"/>
+    <line x1="120" y1="350" x2="840" y2="350"/>
+    <line x1="300" y1="480" x2="300" y2="150"/>
+    <line x1="480" y1="480" x2="480" y2="80"/>
+    <line x1="660" y1="480" x2="660" y2="150"/>
+  </g>
+  <!-- ¨Èπ—ÕÎ -->
+  <path fill="url(#glass)" opacity="0.7" d="M120 220 L480 80 L840 220 L840 480 L120 480 Z"/>
+  <!-- iq -->
+  <path fill="#0a1410" opacity="0.8" d="M180 480 Q220 360 260 480 Z"/>
+  <path fill="#0a1410" opacity="0.85" d="M380 480 Q440 320 500 480 Z"/>
+  <path fill="#0a1410" opacity="0.8" d="M620 480 Q680 380 740 480 Z"/>
+  <!-- ·bn∫qÊÛg≈KkUF	 -->
+  <ellipse cx="420" cy="400" rx="14" ry="36" fill="#dfe2eb" opacity="0.18"/>
+  <ellipse cx="540" cy="404" rx="14" ry="34" fill="#ffb4ac" opacity="0.16"/>
+  <!-- I -->
+  <circle cx="480" cy="120" r="22" fill="#dfe2eb" opacity="0.08"/>
+</svg>

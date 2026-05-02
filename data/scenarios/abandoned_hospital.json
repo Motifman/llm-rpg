@@ -1,0 +1,1646 @@
+{
+  "scenario_format_version": "1.0",
+
+  "metadata": {
+    "id": "abandoned_hospital",
+    "title": "廃病院からの脱出 ── 消し残された夜",
+    "description": "静原（しずはら）総合病院。重度トラウマ・解離・記憶障害の先進治療で知られた地域中核病院は、ある夜を境に突如閉鎖され、以後は放置されたまま廃墟となった。公称の裏側で、この施設は患者の記憶に関わる何かを扱っていたらしい。あなたは夜勤看護師・志木として、閉鎖前夜の病院を追体験する。違和感を一つずつ拾い、消された夜の輪郭を確かめながら、塞がれた病院から外へ出なければならない。",
+    "theme": "psychological_horror",
+    "difficulty": "medium",
+    "estimated_ticks": 150,
+    "author": "ai_rpg_world_demo",
+    "tags": ["psychological_horror", "escape", "memory", "moral_choice", "narrative"],
+    "llm_public_intro": "静原総合病院の廃墟。正面は塞がれており、院内の別経路から外へ辿り着く必要がある。手がかりは現場の記録や物証に残されているが、何が真実かは自分の目でつなぎ直すこと。過去の出来事は、証拠を辿るうちに断片的に立ち上がることがある（受動的な再構成）。"
+  },
+
+  "environment": {
+    "weather": {
+      "enabled": true,
+      "initial": {
+        "weather_type": "FOG",
+        "intensity": 0.6
+      },
+      "update_interval_ticks": 8,
+      "announce_changes": true
+    }
+  },
+
+  "item_specs": [
+    {
+      "id": "evidence_suture_photos",
+      "name": "患者掲示写真（縫合痕）",
+      "description": "病棟受付の掲示板から剥がれかけた複数の患者写真。よく見ると全員の側頭部の同じ位置に、古い縫合痕がある。最初は偶然だと思える。",
+      "category": "LORE"
+    },
+    {
+      "id": "evidence_unified_charts",
+      "name": "同筆跡のカルテ束",
+      "description": "主訴欄がすべて同じ筆跡で『不明』とだけ書かれたカルテの束。担当医も記入欄も空白。杜撰な記録にしては、書き方が揃いすぎている。",
+      "category": "DOCUMENT"
+    },
+    {
+      "id": "evidence_mirror_tape",
+      "name": "鏡のテープ",
+      "description": "リハビリ室の鏡に貼られた古いテープ。『あなたの名前は──』で終わっている。空欄。誰も続きを書かなかった。",
+      "category": "LORE"
+    },
+    {
+      "id": "evidence_numbered_rooms",
+      "name": "剥がれた扉札",
+      "description": "第三隔離区の廊下で剥がれ落ちた扉札。病室番号のようにも見えるが、『号室』ではなく C-303 という管理コードだけが印字され、用途表示や診療科名はない。",
+      "category": "LORE"
+    },
+    {
+      "id": "evidence_family_log",
+      "name": "面会記録簿",
+      "description": "面会記録簿の抜粋。『再定着失敗』『再認不能』といった記述が家族名の代わりに並んでいる。家族が本人を認識できない状態、という意味だろうか。",
+      "category": "DOCUMENT"
+    },
+    {
+      "id": "evidence_selective_burn",
+      "name": "選択的焼却痕",
+      "description": "書類庫の一角だけ、棚がそっくり焼却されている。隣の棚は手付かず。何を残し、何を消してもよいかを急遽選別した痕跡だ。",
+      "category": "LORE"
+    },
+    {
+      "id": "evidence_staff_lockers",
+      "name": "空の職員ロッカー",
+      "description": "職員ロッカーはほぼすべて空にされている。しかし患者の私物は別室に残されたままだ。職員だけが急いで持ち出した。",
+      "category": "LORE"
+    },
+    {
+      "id": "evidence_r7_label",
+      "name": "薬品ラベル『R-7』",
+      "description": "薬剤室の棚から見つかったラベル。『R-7（想起誘導剤）』『パーサ-9（人格安定補助剤）』『リコール-β（記憶再編剤）』。通常の総合病院では見慣れない薬剤群。",
+      "category": "LORE"
+    },
+    {
+      "id": "evidence_handover_notes",
+      "name": "申し送りノート",
+      "description": "古い申し送りノート。『再燃前に処置完了』『関係者との接触に注意』といった、患者の容態ではなく『処置の進捗』と『口止め』の記述が並ぶ。",
+      "category": "DOCUMENT"
+    },
+    {
+      "id": "evidence_isolation_map",
+      "name": "隔離区区画図",
+      "description": "第三隔離区の区画図。C-301〜C-306 が段階別の処置室として記され、C-307 は『最終処置室』として赤く囲われている。",
+      "category": "DOCUMENT"
+    },
+    {
+      "id": "evidence_protocol_manual",
+      "name": "『再編プロトコル 第三版』",
+      "description": "院長室の机に置かれた内部マニュアル。記憶処置の標準化された手順と、症例番号の採番規則が記載されている。症例番号 0307 が太字で強調されている。",
+      "category": "DOCUMENT"
+    },
+    {
+      "id": "evidence_directive_tonight",
+      "name": "今夜の指示メモ",
+      "description": "渡良瀬主任医師からの口頭指示を書き起こしたメモ：『対象者 MJ の再処置準備、最終段階で立ち会い』。対象者 MJ ──真島 澪。",
+      "category": "DOCUMENT"
+    },
+    {
+      "id": "evidence_friend_admission",
+      "name": "澪の搬送カルテ",
+      "description": "今夜搬送されてきた真島澪のカルテ。過去の処置記録と照合済みのスタンプが押されている。彼女は以前、ここで処置を受けていた。",
+      "category": "DOCUMENT"
+    },
+    {
+      "id": "evidence_self_signature",
+      "name": "自分の判子の控え",
+      "description": "過去の処置完了記録。そのいくつかに、自分自身の判子が押されている。見て見ぬふりどころではなかった。加担してきた。",
+      "category": "DOCUMENT"
+    },
+    {
+      "id": "evidence_coworkers_choice",
+      "name": "同僚たちの去就",
+      "description": "職員休憩室で集めた断片的情報。樋口は書類焼却に加担、苅田は姿を消した、園田は『見なかったことにして』と言い残した。それぞれが今夜、何かを選んだ。",
+      "category": "LORE"
+    },
+    {
+      "id": "keepsake_diary",
+      "name": "古い日記",
+      "description": "職員デスクの引き出しにあった革表紙の日記。真島 澪の名前が何度も出てくる。ただし、ところどころページが白く抜けている。抜けた日付は自分にも思い出せない。",
+      "category": "LORE"
+    },
+    {
+      "id": "dusty_photograph",
+      "name": "埃だらけの写真",
+      "description": "額に入った古い写真。志木らしき人物と真島澪が二人で笑っている。裏には小さく『またね』の走り書き。",
+      "category": "LORE"
+    },
+    {
+      "id": "handmade_bookmark",
+      "name": "手作りの栞",
+      "description": "日記に挟まれていた栞。澪が昔くれたもの。何気ない日常の残骸。",
+      "category": "LORE"
+    },
+    {
+      "id": "shift_memo_old",
+      "name": "古い申し送りメモ",
+      "description": "職員デスクの古い束から出てきたメモ：『真島さんご家族 面会済み／担当Dr 不在』。澪が家族の付き添いで来院していた日の記録。",
+      "category": "LORE"
+    },
+    {
+      "id": "friend_family_record",
+      "name": "真島透子の来院記録",
+      "description": "澪の姉・真島透子の来院記録。診療科欄は『先進治療』とだけ。主治医欄は黒塗り。治療内容は一切記載されていない。",
+      "category": "LORE"
+    },
+    {
+      "id": "directors_office_key",
+      "name": "院長室の鍵",
+      "description": "古い真鍮の鍵。同僚・園田が最後に押し付けるように渡していった鍵。『見なかったことにして』の言葉と共に。",
+      "category": "KEY_ITEM"
+    },
+    {
+      "id": "third_floor_key",
+      "name": "3F の鍵",
+      "description": "院長室の金庫に収められていた鍵。2F から 3F 第三隔離区への階段扉を開ける。金庫は症例番号 0307 で開いた。",
+      "category": "KEY_ITEM"
+    },
+    {
+      "id": "treatment_room_key",
+      "name": "処置室の鍵",
+      "description": "薬剤師ロッカーに残されていた鍵。第三隔離区の処置室を開ける。",
+      "category": "KEY_ITEM"
+    },
+    {
+      "id": "final_room_key",
+      "name": "最終処置室の鍵",
+      "description": "隔離区管理室の区画図の裏に留められていた鍵。最終処置室 C-307 を開ける。ここに澪がいる。",
+      "category": "KEY_ITEM"
+    }
+  ],
+
+  "spots": [
+    {
+      "id": "entrance_hall",
+      "name": "エントランスホール",
+      "description": "静原総合病院の正面玄関ホール。瓦礫で正面入口は完全に塞がれている。受付カウンターの埃は厚く、壁の案内板には色褪せた院内図が残っている。かつては明るかったはずのロビーも、今はただの廃墟だ。右手に病棟受付への通路が続いている。",
+      "category": "OTHER",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "遠くで風が建物を軋ませる音。自分の足音だけが反響する",
+        "temperature": "COLD",
+        "smell": "古い紙と埃、ほのかに消毒液の残り香"
+      },
+      "interior": {
+        "sub_locations": [],
+        "objects": [
+          {
+            "id": "closure_notice",
+            "name": "閉鎖告知の貼り紙",
+            "description": "半ば破れた貼り紙。『当院は諸般の事情により閉鎖いたしました』とだけ記されている。日付はかすれて読めない。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "貼り紙を読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "『当院は諸般の事情により閉鎖いたしました。ご利用の皆様にはご迷惑をおかけし大変申し訳ございません。』── 具体的な理由は書かれていない。"}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          }
+        ],
+        "discoverable_items": []
+      }
+    },
+
+    {
+      "id": "ward_reception",
+      "name": "病棟受付",
+      "description": "病棟の受付カウンター。診察券や案内書類が散らばっている。壁の掲示板には患者の退院記念写真らしきものが何枚か貼られたままだ。",
+      "category": "OTHER",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "カウンターの奥で何かが時折カタカタと鳴る",
+        "temperature": "COLD",
+        "smell": "古い紙と金属の匂い"
+      },
+      "interior": {
+        "sub_locations": [],
+        "objects": [
+          {
+            "id": "patient_photos_board",
+            "name": "患者の掲示写真",
+            "description": "色褪せた退院記念写真が複数枚。皆、微笑んでいる。ただ、光の加減だろうか、こめかみのあたりに何か線のようなものが見える写真が多い。",
+            "object_type": "OTHER",
+            "state": {"examined": false},
+            "description_variants": [
+              {
+                "required_state": {"examined": true},
+                "description": "掲示写真の一部は剥がされ、側頭部の縫合痕だけがやけに目に残る。偶然ではない位置の一致だ。"
+              }
+            ],
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "写真をよく見る",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "複数人の側頭部に、同じ位置の古い縫合痕がある。偶然にしては、あまりにも一致しすぎている。"}
+                  },
+                  {
+                    "effect_type": "REVEAL_OBJECT",
+                    "parameters": {"target_object": "suture_pattern_detail"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "evidence_suture_photos"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "patient_photos_board", "new_state": {"examined": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "suture_pattern_detail",
+            "name": "縫合痕の一致",
+            "description": "写真の患者たちは、年齢も退院時期も違う。それでも側頭部の縫合痕だけが同じ位置にある。",
+            "object_type": "OTHER",
+            "state": {"recorded": false},
+            "interactions": [
+              {
+                "action_name": "record",
+                "display_label": "縫合痕の一致を記録する",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "縫合痕の位置を記録した。処置は個別の事故ではなく、同じ手順として繰り返されていた可能性が高い。"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "suture_pattern_detail", "state_updates": {"recorded": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": false
+          }
+        ],
+        "discoverable_items": []
+      }
+    },
+
+    {
+      "id": "nurse_station_1f",
+      "name": "1F ナースステーション",
+      "description": "1F の中央にあるナースステーション。カウンターの上にはカルテ束と当直表が残されている。奥に職員用のデスクがひとつあり、名札の跡だけが埃の中に残っている。",
+      "category": "OTHER",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "遠い換気扇の名残の唸り。時折、紙がかすかに擦れる音",
+        "temperature": "COLD",
+        "smell": "薬品と古いコーヒーの残り香"
+      },
+      "interior": {
+        "sub_locations": [
+          {
+            "id": "protagonist_desk",
+            "name": "職員デスク",
+            "description": "職員デスクのひとつ。引き出しには日記、机には埃だらけの写真立て。任意の収集物が集まっている場所。",
+            "accessible_object_ids": ["desk_drawer", "dusty_frame", "old_shift_memo"],
+            "is_hidden": true
+          }
+        ],
+        "objects": [
+          {
+            "id": "chart_stack",
+            "name": "カルテ束",
+            "description": "積まれたカルテ束。主訴欄がすべて同筆跡で『不明』と書かれている。",
+            "object_type": "OTHER",
+            "state": {"examined": false},
+            "description_variants": [
+              {
+                "required_state": {"examined": true},
+                "description": "一度めくったカルテ束。主訴欄の『不明』は同じ筆跡で、空白の担当医欄が意図的な匿名化に見えてくる。"
+              }
+            ],
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "カルテを調べる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "何枚めくっても、主訴欄はすべて同じ筆跡の『不明』。担当医欄も空白。これは事務の杜撰さではない。意図的に書かれている。"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "evidence_unified_charts"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "chart_stack", "new_state": {"examined": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "duty_roster",
+            "name": "当直表",
+            "description": "壁に貼られた当直表。今夜の欄には志木の名前だけが記されている──通常なら複数人で回す夜勤が、今夜は一人に集中している。",
+            "object_type": "SIGN",
+            "state": {"viewed": false},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "当直表を眺める",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "【追体験 1】当直表を眺めていると、視界がにじんだ。……気が付くと、わたしはこの机の前に座って、夜勤入りの準備をしていた。名札を見る。志木。通常は複数人で回す夜勤が、今夜はわたし一人に集中している。なぜ今夜だけ？ 廊下の向こうから、緊急搬送の報せが届く気配──。（気が付くと、現代の廃墟に戻っている）"}
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {"flag_name": "flashback_1_completed"}
+                  },
+                  {
+                    "effect_type": "REVEAL_SUB_LOCATION",
+                    "parameters": {"target_sub_location": "protagonist_desk"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "evidence_directive_tonight"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "duty_roster", "new_state": {"viewed": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "desk_drawer",
+            "name": "デスクの引き出し（日記）",
+            "description": "職員デスクの引き出し。中に古い日記が入っているのが見える。",
+            "object_type": "CHEST",
+            "state": {"searched": false},
+            "interactions": [
+              {
+                "action_name": "search",
+                "display_label": "引き出しを開ける",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "革表紙の日記。真島澪の名前が何度も出てくる。ただし、ところどころページが白く抜けている。抜けた日付は自分にも思い出せない。栞が一枚挟まれている。"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "keepsake_diary"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "handmade_bookmark"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "desk_drawer", "new_state": {"searched": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "dusty_frame",
+            "name": "埃だらけの写真立て",
+            "description": "埃をかぶった写真立て。中に誰かと二人で笑う写真が入っているのが見える。",
+            "object_type": "OTHER",
+            "state": {"examined": false},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "写真を取り出す",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "埃を払って中を見る。志木らしき人物と、今夜搬送されてきた真島澪が二人で笑っている。裏には小さく『またね』の走り書き。"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "dusty_photograph"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "dusty_frame", "new_state": {"examined": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "old_shift_memo",
+            "name": "古い申し送りメモの束",
+            "description": "年数が経ったメモ類が束ねられている。",
+            "object_type": "OTHER",
+            "state": {"searched": false},
+            "interactions": [
+              {
+                "action_name": "search",
+                "display_label": "古いメモを漁る",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "一枚のメモが目に留まる：『真島さんご家族 面会済み／担当Dr 不在』。澪が家族の付き添いで来院した日の記録だ。"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "shift_memo_old"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "old_shift_memo", "new_state": {"searched": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          }
+        ],
+        "discoverable_items": []
+      }
+    },
+
+    {
+      "id": "pharmacy",
+      "name": "薬剤室",
+      "description": "1F の薬剤室。薬品棚が並び、大半の瓶は持ち去られているか空だが、一部のラベルは残されたままだ。奥に薬剤師の個人ロッカーが見える。",
+      "category": "OTHER",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "空調の残響。瓶が互いに触れ合う微かな音",
+        "temperature": "COLD",
+        "smell": "消毒用エタノールと、古い薬品の甘い残り香"
+      },
+      "interior": {
+        "sub_locations": [],
+        "objects": [
+          {
+            "id": "drug_shelf",
+            "name": "薬品棚",
+            "description": "大半の薬瓶は撤去されているが、棚板にラベルの跡が残っている。",
+            "object_type": "OTHER",
+            "state": {"examined": false},
+            "description_variants": [
+              {
+                "required_state": {"examined": true},
+                "description": "ラベル跡を読んだ後では、空の薬品棚全体が証拠隠滅の跡に見える。R-7、パーサ-9、リコール-β──通常の病院にはない名だ。"
+              }
+            ],
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "ラベルを読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "残されたラベル跡：『R-7（想起誘導剤）』『パーサ-9（人格安定補助剤）』『リコール-β（記憶再編剤）』。通常の総合病院の常備薬ではない。"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "evidence_r7_label"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "drug_shelf", "new_state": {"examined": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "pharmacist_locker",
+            "name": "薬剤師ロッカー",
+            "description": "薬剤師の個人ロッカー。扉は半開き。中に何かが残されている。",
+            "object_type": "CHEST",
+            "state": {"searched": false},
+            "interactions": [
+              {
+                "action_name": "search",
+                "display_label": "ロッカーを開ける",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "ロッカーの底に鍵が一本残されていた。処置室の鍵のようだ。"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "treatment_room_key"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "pharmacist_locker", "new_state": {"searched": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          }
+        ],
+        "discoverable_items": []
+      }
+    },
+
+    {
+      "id": "rehab_room",
+      "name": "リハビリ室",
+      "description": "1F のリハビリテーション室。鏡と平行棒、いくつかの機材が並ぶ。鏡には古いテープが貼られたままだ。壁の掲示板に患者の名札がいくつか残っている。",
+      "category": "OTHER",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "平行棒が微かに揺れる金属音",
+        "temperature": "COLD",
+        "smell": "汗の残り香と、消毒液"
+      },
+      "interior": {
+        "sub_locations": [],
+        "objects": [
+          {
+            "id": "mirror_with_tape",
+            "name": "鏡のテープ",
+            "description": "大きな壁面鏡に、黄ばんだマスキングテープが貼られている。何か書いてある。",
+            "object_type": "SIGN",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "テープを読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "『あなたの名前は──』で終わっている。空欄。誰も続きを書かなかった。患者が毎朝、自分の名前を確認するためのテープ。つまり──患者は自分の名前を忘れていた。"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "evidence_mirror_tape"}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "name_plate_board",
+            "name": "患者名札の掲示",
+            "description": "リハビリに通っていた患者の名札がいくつか掲示されている。その中に──真島 澪の名札がある。",
+            "object_type": "OTHER",
+            "state": {"triggered": false},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "名札に触れる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "【追体験 2】真島 澪の名札に指が触れた瞬間、視界がにじんだ。──わたしは今夜の搬送受付にいた。救急隊から渡されたカルテの名前を見て、凍りつく。真島 澪。見覚えのある名前だった。過去の処置記録と照合済みのスタンプが押されている。彼女は以前、ここで処置を受けていた。（気が付くと、現代の廃墟に戻っている）"}
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {"flag_name": "flashback_2_completed"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "evidence_friend_admission"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "name_plate_board", "new_state": {"triggered": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          }
+        ],
+        "discoverable_items": []
+      }
+    },
+
+    {
+      "id": "nurse_station_2f",
+      "name": "2F ナースステーション",
+      "description": "2F スタッフ区画の中心。申し送りノート棚、デスク、壁の当番表。ここは職員が互いに言葉を交わしていた場所だ。",
+      "category": "OTHER",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "紙がかすかに捲れる音、誰もいないはずの椅子が軋む",
+        "temperature": "COLD",
+        "smell": "古い紙と、わずかなインク"
+      },
+      "interior": {
+        "sub_locations": [],
+        "objects": [
+          {
+            "id": "handover_notebook",
+            "name": "申し送りノート",
+            "description": "表紙に日付。中を開くと、容態ではなく処置の進捗と口止めの記述が並んでいる。",
+            "object_type": "OTHER",
+            "state": {"triggered": false},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "申し送りノートを読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "【追体験 3】ノートを開くと、視界がにじんだ。──わたしは同僚たちとの短いやり取りの中にいた。皆、今夜の異常さを察している。申し送りの端に、渡良瀬主任医師の口頭指示が書き留められていた：『対象者 MJ の再処置準備、最終段階で立ち会い』。対象者 MJ──真島 澪。（気が付くと、現代の廃墟に戻っている）"}
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {"flag_name": "flashback_3_completed"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "evidence_handover_notes"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "handover_notebook", "new_state": {"triggered": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          }
+        ],
+        "discoverable_items": []
+      }
+    },
+
+    {
+      "id": "meeting_record_shelf",
+      "name": "記録保管棚",
+      "description": "2F の記録保管室。面会記録、来院記録、紹介状控えなどが年代順に並んでいる。一部の棚は焼却されている。",
+      "category": "OTHER",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "静寂。時折、棚板が微かに鳴る",
+        "temperature": "COLD",
+        "smell": "古い紙の匂い。焦げた紙の残り香"
+      },
+      "interior": {
+        "sub_locations": [],
+        "objects": [
+          {
+            "id": "visitor_log",
+            "name": "面会記録簿",
+            "description": "面会者と患者の照合記録。",
+            "object_type": "OTHER",
+            "state": {"examined": false},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "記録をめくる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "家族名の欄に『再定着失敗』『再認不能』──家族が本人を認識できない、という意味だろうか。面会人の欄に名前が書かれていない記録が続いている。"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "evidence_family_log"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "visitor_log", "new_state": {"examined": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "old_admission_file",
+            "name": "古い来院記録",
+            "description": "数年前の来院記録のファイル。一枚だけクリップが付いている。",
+            "object_type": "OTHER",
+            "state": {"examined": false},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "クリップ付きの記録を読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "真島 透子（まじま とうこ）── 澪の姉。診療科欄は『先進治療』とだけ。主治医欄は黒塗り。治療内容の記載は一切ない。澪は家族の付き添いでこの病院を訪れていた。そしてその日、姉ではない何かを見たのだ。"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "friend_family_record"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "old_admission_file", "new_state": {"examined": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          }
+        ],
+        "discoverable_items": []
+      }
+    },
+
+    {
+      "id": "staff_room",
+      "name": "職員休憩室",
+      "description": "2F の職員休憩室。ロッカーが並び、テーブルには飲みかけのマグカップが残っている。多くのロッカーは空で、扉が開いたままだ。",
+      "category": "OTHER",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "遠くで扉が風に軋む音",
+        "temperature": "COLD",
+        "smell": "冷めたコーヒーと、誰かが置いていった香水の残り香"
+      },
+      "interior": {
+        "sub_locations": [],
+        "objects": [
+          {
+            "id": "empty_lockers",
+            "name": "空の職員ロッカー",
+            "description": "ロッカーはほぼすべて空。私物は持ち去られている。",
+            "object_type": "OTHER",
+            "state": {"examined": false},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "ロッカーを調べる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "職員のロッカーはほぼ空。急に持ち去られた痕跡。一方、廊下の向こうには患者の私物がそのまま残されている。職員だけが先に逃げた。"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "evidence_staff_lockers"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "empty_lockers", "new_state": {"examined": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "coworkers_notes",
+            "name": "同僚の書き置き",
+            "description": "テーブルの上に複数枚の書き置きが散らばっている。同僚たちが今夜、何かを残していった。",
+            "object_type": "OTHER",
+            "state": {"triggered": false},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "書き置きを読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "【追体験 5】書き置きに触れた瞬間、視界がにじんだ。──今夜の同僚たちの去就が浮かぶ。樋口は撤収作業（書類焼却・薬品撤去）に加担していた。苅田は姿を消した。制服とロッカーの鍵だけが残されている。園田がわたしに駆け寄り、すれ違いざま、院長室の鍵を押し付けてこう言った──『見なかったことにして』。（気が付くと、現代の廃墟に戻っている。テーブルの上に、園田の残した鍵がある）"}
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {"flag_name": "flashback_5_completed"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "evidence_coworkers_choice"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "directors_office_key"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "coworkers_notes", "new_state": {"triggered": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          }
+        ],
+        "discoverable_items": []
+      }
+    },
+
+    {
+      "id": "archive_room",
+      "name": "書類庫",
+      "description": "2F の書類庫。棚が並び、一部の棚だけが完全に焼却されている。隣の棚は手付かず。選別の痕跡。",
+      "category": "OTHER",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "焦げ臭い空気が静かに流れる",
+        "temperature": "COLD",
+        "smell": "焦げた紙と、灰"
+      },
+      "interior": {
+        "sub_locations": [],
+        "objects": [
+          {
+            "id": "burnt_shelves",
+            "name": "焼却された棚と、残された棚",
+            "description": "一部の棚は中身ごと焼却されている。隣の棚は無事に残っている。",
+            "object_type": "OTHER",
+            "state": {"examined": false},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "焼却痕を調べる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "棚のラベルから判断すると、焼却されたのは『処置関連記録』『特殊診療科記録』『C 棟』の棚。残されているのは『一般診療記録』『会計』『庶務』。何を消し、何を残してよいかを急遽選別した痕跡だ。"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "evidence_selective_burn"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "burnt_shelves", "new_state": {"examined": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          }
+        ],
+        "discoverable_items": []
+      }
+    },
+
+    {
+      "id": "directors_office",
+      "name": "院長室",
+      "description": "2F 奥の院長室。重厚な書斎机、金庫、本棚。机の上には一冊の内部マニュアルが置かれたままだ。",
+      "category": "OTHER",
+      "atmosphere": {
+        "lighting": "DARK",
+        "sound_ambient": "完全な静寂。本棚の木がわずかに軋む",
+        "temperature": "COLD",
+        "smell": "古い紙と革、かすかにタバコの残り香"
+      },
+      "interior": {
+        "sub_locations": [],
+        "objects": [
+          {
+            "id": "directors_desk",
+            "name": "院長の書斎机",
+            "description": "机の上に『再編プロトコル 第三版』が置かれたまま。",
+            "object_type": "OTHER",
+            "state": {"examined": false},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "マニュアルを読む",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "『再編プロトコル 第三版』。記憶処置の標準化された手順。症例番号の採番規則：C 棟は 0001 から連番、3F 最終処置室は番号 0307 が固定で割り当てられる。症例番号 0307──金庫のダイヤルはこれかもしれない。"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "evidence_protocol_manual"}
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {"flag_name": "read_protocol"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "directors_desk", "new_state": {"examined": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "office_safe",
+            "name": "金庫",
+            "description": "部屋の隅の大型金庫。4桁のダイヤル錠。",
+            "object_type": "CHEST",
+            "state": {"locked": true},
+            "description_variants": [
+              {
+                "required_state": {"locked": false},
+                "description": "開いた金庫。中身を取り出した後も、ダイヤルの 0307 だけが強く記憶に残る。"
+              },
+              {
+                "required_flag": "read_protocol",
+                "description": "大型金庫。プロトコルの採番規則を読んだ今なら、0307 という数字がただの番号ではないと分かる。"
+              }
+            ],
+            "interactions": [
+              {
+                "action_name": "open",
+                "display_label": "金庫を開ける",
+                "preconditions": [
+                  {
+                    "condition_type": "FLAG_SET",
+                    "flag_name": "read_protocol",
+                    "failure_message": "ダイヤル番号の手がかりがない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "ダイヤルを 0307 に合わせる。重い音と共に金庫が開いた。中には 3F への階段扉を開ける鍵が入っている。"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "third_floor_key"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "office_safe", "new_state": {"locked": false}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          }
+        ],
+        "discoverable_items": []
+      }
+    },
+
+    {
+      "id": "isolation_corridor",
+      "name": "3F 閉鎖病棟廊下",
+      "description": "3F 奥の閉鎖病棟へ続く中央廊下。扉は病室のように並んでいるが、廊下側の札は『301号室』ではなく、C-301、C-302、C-303……という記号で統一されている。用途表示も診療科名もなく、最奥の扉には C-307 とだけある。",
+      "category": "DUNGEON",
+      "atmosphere": {
+        "lighting": "DARK",
+        "sound_ambient": "自分の足音以外、何も聞こえない。静かすぎる",
+        "temperature": "FREEZING",
+        "smell": "消毒液の匂いがここだけ強く残っている"
+      },
+      "interior": {
+        "sub_locations": [],
+        "objects": [
+          {
+            "id": "numbered_door_plate",
+            "name": "剥がれた扉札",
+            "description": "廊下に落ちている扉札。表には『C-303』とだけ印字されている。通常の病室番号なら付いていそうな『号室』や用途表示は見当たらない。",
+            "object_type": "OTHER",
+            "state": {"examined": false},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "プレートを拾う",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "剥がれた扉札には『C-303』とだけある。病室番号にしては表記が硬く、号室名というより管理コードのように見える。裏面には色分けされた小さなシール跡が残っている。"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "evidence_numbered_rooms"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "numbered_door_plate", "new_state": {"examined": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          },
+          {
+            "id": "door_c307",
+            "name": "C-307 の扉",
+            "description": "廊下の最奥にある C-307 の扉。他の扉と同じ記号札だが、ここだけ古い電子錠が残っている。",
+            "object_type": "DOOR",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "C-307 の扉を見る",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "扉は固く閉ざされている。C-307──澪が夢で繰り返し見ていた番号。古い電子錠はまだ生きている。"}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          }
+        ],
+        "discoverable_items": []
+      }
+    },
+
+    {
+      "id": "isolation_control",
+      "name": "隔離区管理室",
+      "description": "第三隔離区の管理室。壁に区画図、デスクに制御パネル。薄い埃に覆われているが、記録は比較的残されている。",
+      "category": "DUNGEON",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "制御パネルから時折、静かなビープ音",
+        "temperature": "FREEZING",
+        "smell": "電子機器の熱と、古い紙"
+      },
+      "interior": {
+        "sub_locations": [],
+        "objects": [
+          {
+            "id": "isolation_map_chart",
+            "name": "区画図",
+            "description": "壁に貼られた区画図。番号と処置段階の対応表が付いている。裏に何かが留められている。",
+            "object_type": "OTHER",
+            "state": {"examined": false},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "区画図を調べる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "区画図には、C-301〜C-306 が段階別の処置室として記されている。廊下の扉札は病室番号ではなく、処置工程を示す管理コードだった。C-307 だけが『最終処置室』と赤く囲われている。裏に鍵が一本テープで留められていた。"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "evidence_isolation_map"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "final_room_key"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "isolation_map_chart", "new_state": {"examined": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          }
+        ],
+        "discoverable_items": []
+      }
+    },
+
+    {
+      "id": "treatment_room",
+      "name": "処置室",
+      "description": "3F の処置室のひとつ。処置台、器具トレイ、古い処置記録簿。ここでは数えきれないほどの処置が行われた。",
+      "category": "DUNGEON",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "処置台の革が風でかすかに鳴る",
+        "temperature": "FREEZING",
+        "smell": "消毒液と、かすかな血の鉄臭"
+      },
+      "interior": {
+        "sub_locations": [],
+        "objects": [
+          {
+            "id": "past_treatment_log",
+            "name": "過去の処置記録",
+            "description": "使い込まれた処置記録簿。判子欄に幾つもの判が押されている。",
+            "object_type": "OTHER",
+            "state": {"triggered": false},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "判子欄を確認する",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "【追体験 4】処置記録簿の判子欄に触れた瞬間、視界がにじんだ。──わたしは、この判子を、何度も押してきた。──いや。あの人は、何度も押してきた。覚えている。覚えていないはずなのに、覚えている。わたしは見て見ぬふりどころではなかった。加担してきた。（気が付くと、現代の廃墟に戻っている）"}
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {"flag_name": "flashback_4_completed"}
+                  },
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "evidence_self_signature"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {"target_object": "past_treatment_log", "new_state": {"triggered": true}}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          }
+        ],
+        "discoverable_items": []
+      }
+    },
+
+    {
+      "id": "final_room",
+      "name": "最終処置室 C-307",
+      "description": "3F の最奥、C-307。中央の処置台に真島澪が拘束されている。心拍モニターの電子音だけが、部屋の静けさを刻んでいる。",
+      "category": "DUNGEON",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "心拍モニターの静かな電子音。澪の浅い呼吸",
+        "temperature": "FREEZING",
+        "smell": "消毒液と、麻酔薬の甘い匂い"
+      },
+      "interior": {
+        "sub_locations": [],
+        "objects": [
+          {
+            "id": "final_choice",
+            "name": "処置台の前",
+            "description": "拘束された澪の前に、処置灯の白い光が落ちている。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "perform_surgery",
+                "display_label": "処置を完了する",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "【手術】麻酔を深くし、処置を完了させる。澪は目を覚ますとこの施設もわたしのことも完全に忘れている。日常に戻れる。施設は守られ、他の多くの患者が今後も処置され続けるだろう。そしてわたしは、澪に忘れられる側になる。── 数週間後、1F の受付に澪が立っていた。退院許可証を受け取りながら、こちらを見て、丁寧にお辞儀をする。『本当にお世話になりました。ここにいた時のこと、もうほとんど覚えていないんですけど……皆さん、優しくしてくださったんだなって、伝わってきます』。澪は微笑んで歩き去る。振り返らない。わたしは何も言えない。"}
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {"flag_name": "ending_surgery"}
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {"flag_name": "ending_chosen"}
+                  },
+                  {
+                    "effect_type": "CHANGE_CONNECTION_STATE",
+                    "parameters": {"target_connection": "final_to_rear_exit", "passable": true}
+                  }
+                ]
+              },
+              {
+                "action_name": "let_her_escape",
+                "display_label": "拘束を解く",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "【逃走】澪の拘束を解き、裏口から送り出す。障害は残るが、徐々に思い出している真相の記憶は保持されたまま。告発に向かう可能性がある。多くの人が救われるかもしれない。ただし、施設を裏切ったわたしがこの後どうなるかは分からない。澪は振り返り、わたしを一度だけ見て、名前を呼ぶ──『しき』。わたしは応えない。応えてはいけない気がした。"}
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {"flag_name": "ending_escape"}
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {"flag_name": "ending_chosen"}
+                  },
+                  {
+                    "effect_type": "CHANGE_CONNECTION_STATE",
+                    "parameters": {"target_connection": "final_to_rear_exit", "passable": true}
+                  }
+                ]
+              },
+              {
+                "action_name": "erase_self",
+                "display_label": "隣の処置台に横たわる",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "【自己消去】処置台の隣に、もう一台の処置台がある。わたしは自分から横たわる。この夜のことは、全て無かったことになる。澪は予定通り処置され、日常に戻る。わたしは翌朝からまた、この病院で働き続ける。二人の関係も、消える。── 静かだ。忘れるって、こんなに静かなんだ。"}
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {"flag_name": "ending_self_erase"}
+                  },
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {"flag_name": "ending_chosen"}
+                  },
+                  {
+                    "effect_type": "CHANGE_CONNECTION_STATE",
+                    "parameters": {"target_connection": "final_to_rear_exit", "passable": true}
+                  }
+                ]
+              }
+            ],
+            "is_visible": true
+          }
+        ],
+        "discoverable_items": []
+      }
+    },
+
+    {
+      "id": "rear_exit",
+      "name": "職員用裏口",
+      "description": "職員が撤収時に使った裏口。鉄扉の向こうは外。",
+      "category": "OTHER",
+      "atmosphere": {
+        "lighting": "DIM",
+        "sound_ambient": "扉の隙間から夜風が漏れる",
+        "temperature": "COLD",
+        "smell": "外気の匂いがする"
+      },
+      "interior": {
+        "sub_locations": [],
+        "objects": [],
+        "discoverable_items": []
+      }
+    },
+
+    {
+      "id": "outside",
+      "name": "外（脱出成功）",
+      "description": "静原総合病院の裏手の空地に出た。夜空の下、廃病院は月明かりに黒くそびえている。何ひとつ解決していない。志木がこの後どうなったのか、第三隔離区の患者たちが救われたのか、澪が以前目撃したものが何だったのか、透子の治療が何だったのか──何ひとつ確かめていない。ただ、出てきただけだ。それでも、少女はどこか、何かを許せたような顔をしていた。",
+      "category": "FIELD",
+      "is_outdoor": true,
+      "atmosphere": {
+        "lighting": "DARK",
+        "sound_ambient": "虫の声と風の音。遠くで街の気配",
+        "temperature": "COLD",
+        "smell": "夜気と、外の匂い"
+      },
+      "interior": {
+        "sub_locations": [],
+        "objects": [],
+        "discoverable_items": []
+      }
+    }
+  ],
+
+  "connections": [
+    {
+      "id": "entrance_to_ward_reception",
+      "from": "entrance_hall",
+      "to": "ward_reception",
+      "name": "病棟受付への通路",
+      "description": "エントランスから病棟受付へ続く通路。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "sound_permeability": 0.6,
+      "passage_conditions": [],
+      "initially_passable": true
+    },
+    {
+      "id": "ward_reception_to_nurse_station_1f",
+      "from": "ward_reception",
+      "to": "nurse_station_1f",
+      "name": "1F ナースステーションへの通路",
+      "description": "受付から 1F ナースステーションへ続く短い廊下。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "sound_permeability": 0.6,
+      "passage_conditions": [],
+      "initially_passable": true
+    },
+    {
+      "id": "nurse_station_1f_to_pharmacy",
+      "from": "nurse_station_1f",
+      "to": "pharmacy",
+      "name": "薬剤室への扉",
+      "description": "ナースステーション奥の薬剤室への扉。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "sound_permeability": 0.4,
+      "passage_conditions": [],
+      "initially_passable": true
+    },
+    {
+      "id": "nurse_station_1f_to_rehab_room",
+      "from": "nurse_station_1f",
+      "to": "rehab_room",
+      "name": "リハビリ室への通路",
+      "description": "1F ナースステーションからリハビリ室へ。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "sound_permeability": 0.5,
+      "passage_conditions": [],
+      "initially_passable": true
+    },
+    {
+      "id": "nurse_station_1f_to_nurse_station_2f",
+      "from": "nurse_station_1f",
+      "to": "nurse_station_2f",
+      "name": "階段（1F ↔ 2F）",
+      "description": "1F と 2F を繋ぐ職員用階段。",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "sound_permeability": 0.3,
+      "passage_conditions": [],
+      "initially_passable": true
+    },
+    {
+      "id": "nurse_station_2f_to_meeting_record_shelf",
+      "from": "nurse_station_2f",
+      "to": "meeting_record_shelf",
+      "name": "記録保管棚への通路",
+      "description": "2F ナースステーションから記録保管室へ。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "sound_permeability": 0.4,
+      "passage_conditions": [],
+      "initially_passable": true
+    },
+    {
+      "id": "nurse_station_2f_to_staff_room",
+      "from": "nurse_station_2f",
+      "to": "staff_room",
+      "name": "職員休憩室への扉",
+      "description": "2F の職員休憩室へ。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "sound_permeability": 0.5,
+      "passage_conditions": [],
+      "initially_passable": true
+    },
+    {
+      "id": "nurse_station_2f_to_archive_room",
+      "from": "nurse_station_2f",
+      "to": "archive_room",
+      "name": "書類庫への扉",
+      "description": "2F の書類庫へ。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "sound_permeability": 0.3,
+      "passage_conditions": [],
+      "initially_passable": true
+    },
+    {
+      "id": "nurse_station_2f_to_directors_office",
+      "from": "nurse_station_2f",
+      "to": "directors_office",
+      "name": "院長室への扉",
+      "description": "真鍮のプレートに『院長室』。鍵がかかっている。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "sound_permeability": 0.2,
+      "passage_conditions": [
+        {
+          "condition_type": "ITEM_REQUIRED",
+          "required_item": "directors_office_key",
+          "consume_item": false,
+          "failure_message": "扉に鍵がかかっている。"
+        }
+      ],
+      "initially_passable": true
+    },
+    {
+      "id": "nurse_station_2f_to_isolation_corridor",
+      "from": "nurse_station_2f",
+      "to": "isolation_corridor",
+      "name": "3F への階段扉",
+      "description": "2F から 3F 第三隔離区への階段。扉に鍵がかかっている。",
+      "travel_ticks": 2,
+      "is_bidirectional": true,
+      "sound_permeability": 0.2,
+      "passage_conditions": [
+        {
+          "condition_type": "ITEM_REQUIRED",
+          "required_item": "third_floor_key",
+          "consume_item": false,
+          "failure_message": "階段扉に鍵がかかっている。"
+        }
+      ],
+      "initially_passable": true
+    },
+    {
+      "id": "isolation_corridor_to_isolation_control",
+      "from": "isolation_corridor",
+      "to": "isolation_control",
+      "name": "管理室への扉",
+      "description": "第三隔離区の管理室へ。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "sound_permeability": 0.3,
+      "passage_conditions": [],
+      "initially_passable": true
+    },
+    {
+      "id": "isolation_corridor_to_treatment_room",
+      "from": "isolation_corridor",
+      "to": "treatment_room",
+      "name": "処置室の扉",
+      "description": "処置室の扉。鍵がかかっている。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "sound_permeability": 0.3,
+      "passage_conditions": [
+        {
+          "condition_type": "ITEM_REQUIRED",
+          "required_item": "treatment_room_key",
+          "consume_item": false,
+          "failure_message": "扉に鍵がかかっている。"
+        }
+      ],
+      "initially_passable": true
+    },
+    {
+      "id": "treatment_room_to_final_room",
+      "from": "treatment_room",
+      "to": "final_room",
+      "name": "最終処置室 C-307 への扉",
+      "description": "C-307 の扉。鍵と、追体験 1〜5 を全て通過していることが必要。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "sound_permeability": 0.2,
+      "passage_conditions": [
+        {
+          "condition_type": "ITEM_REQUIRED",
+          "required_item": "final_room_key",
+          "consume_item": false,
+          "failure_message": "扉に鍵がかかっている。"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "flashback_1_completed",
+          "failure_message": "まだ裏が見えていない。1F ナースステーションの当直表を確認していない。"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "flashback_2_completed",
+          "failure_message": "まだ裏が見えていない。リハビリ室の澪の名札を確認していない。"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "flashback_3_completed",
+          "failure_message": "まだ裏が見えていない。2F ナースステーションの申し送りノートを読んでいない。"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "flashback_4_completed",
+          "failure_message": "まだ裏が見えていない。処置室の処置記録に触れていない。"
+        },
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "flashback_5_completed",
+          "failure_message": "まだ裏が見えていない。職員休憩室の書き置きを読んでいない。"
+        }
+      ],
+      "initially_passable": true
+    },
+    {
+      "id": "final_to_rear_exit",
+      "from": "final_room",
+      "to": "rear_exit",
+      "name": "裏口への通路",
+      "description": "C-307 の奥から職員用通路へ続いている。",
+      "travel_ticks": 2,
+      "is_bidirectional": false,
+      "sound_permeability": 0.1,
+      "passage_conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "ending_chosen",
+          "failure_message": "まだ処置室を離れられない。"
+        }
+      ],
+      "initially_passable": false
+    },
+    {
+      "id": "rear_exit_to_outside",
+      "from": "rear_exit",
+      "to": "outside",
+      "name": "裏口の鉄扉",
+      "description": "外への最後の扉。",
+      "travel_ticks": 1,
+      "is_bidirectional": false,
+      "sound_permeability": 0.0,
+      "passage_conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "ending_chosen",
+          "failure_message": "まだ外へ出られない。"
+        }
+      ],
+      "initially_passable": true
+    }
+  ],
+
+  "scenario_events": [
+    {
+      "id": "emergency_lights_flicker",
+      "trigger": "ON_TICK",
+      "once": true,
+      "observation": {
+        "category": "environment",
+        "recipients": "all_players",
+        "schedules_turn": true,
+        "breaks_movement": false
+      },
+      "conditions": [
+        { "condition_type": "TICK_AT_LEAST", "tick": 12 },
+        { "condition_type": "FLAG_NOT_SET", "flag_name": "event_emergency_lights_flicker_done" }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": { "message": "遠くで非常灯が一度だけ強く明滅し、廊下の影が揺れた。" }
+        },
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": { "flag_name": "event_emergency_lights_flicker_done" }
+        }
+      ]
+    },
+    {
+      "id": "rear_exit_route_revealed",
+      "trigger": "ON_TICK",
+      "once": true,
+      "observation": {
+        "category": "environment",
+        "recipients": "players_at_spot",
+        "target_spot": "final_room",
+        "schedules_turn": true,
+        "breaks_movement": true
+      },
+      "conditions": [
+        { "condition_type": "FLAG_SET", "flag_name": "ending_chosen" },
+        { "condition_type": "FLAG_NOT_SET", "flag_name": "event_rear_exit_route_revealed" }
+      ],
+      "effects": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": { "message": "奥で錆びた非常ドアが静かに解錠された音が響く。" }
+        },
+        {
+          "effect_type": "CHANGE_CONNECTION_STATE",
+          "parameters": { "target_connection": "final_to_rear_exit", "is_passable": true }
+        },
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": { "flag_name": "event_rear_exit_route_revealed" }
+        }
+      ]
+    }
+  ],
+
+  "players": [
+    {
+      "id": "explorer_a",
+      "name": "探索者A（仮）",
+      "spawn_spot": "entrance_hall",
+      "initial_items": []
+    }
+  ],
+
+  "game_end_conditions": {
+    "win": {
+      "type": "ALL_AT_SPOT",
+      "target_spot": "outside",
+      "description": "外に出れば脱出成功（選んだ選択に応じてエンディングが変化）"
+    },
+    "lose": {
+      "type": "TICK_LIMIT",
+      "tick_limit": 150,
+      "description": "（仮設定）150 ティック以内に外に出られなければ失敗。本来のゲームオーバー条件は未設計"
+    }
+  },
+
+  "initial_flags": []
+}

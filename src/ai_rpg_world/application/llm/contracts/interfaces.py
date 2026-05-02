@@ -4,18 +4,24 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.common.value_object import WorldTick
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     ActionResultEntry,
+    ActionExperienceTrace,
+    EpisodeEncodingContextDto,
     EpisodeMemoryEntry,
+    EpisodeCandidate,
     LlmUiContextDto,
     LongTermFactEntry,
     MemoryLawEntry,
     MemoryRetrievalQueryDto,
+    ObservationExperienceTrace,
+    PassiveRecallComposeResult,
+    SubjectiveEpisode,
     SystemPromptPlayerInfoDto,
     ToolDefinitionDto,
     ToolRuntimeContextDto,
@@ -262,13 +268,242 @@ class IActionResultStore(ABC):
         action_summary: str,
         result_summary: str,
         occurred_at: Optional[datetime] = None,
+        *,
+        success: bool = True,
+        error_code: Optional[str] = None,
+        tool_name: Optional[str] = None,
+        argument_fingerprint: Optional[str] = None,
+        should_reschedule: bool = False,
     ) -> None:
-        """1 件の行動結果を追加する。occurred_at は省略時は現在時刻。"""
+        """1 件の行動結果を追加する。occurred_at は省略時は現在時刻。
+
+        success / error_code / tool_name 等は失敗時の次ターン補正・連続失敗検知用。
+        既存呼び出しはキーワード省略で success=True として互換。
+        """
         pass
 
     @abstractmethod
     def get_recent(self, player_id: PlayerId, limit: int) -> List[ActionResultEntry]:
         """指定プレイヤーの直近 limit 件の行動結果を新しい順で返す。"""
+        pass
+
+
+class IActionExperienceTraceStore(ABC):
+    """ActionExperienceTrace の格納・取得。"""
+
+    @abstractmethod
+    def append(self, player_id: PlayerId, trace: ActionExperienceTrace) -> None:
+        """1 件の action trace を追加する。"""
+        pass
+
+    @abstractmethod
+    def get_recent(
+        self, player_id: PlayerId, limit: int
+    ) -> List[ActionExperienceTrace]:
+        """指定プレイヤーの直近 limit 件の action trace を新しい順で返す。"""
+        pass
+
+    @abstractmethod
+    def find_by_trace_id(
+        self, player_id: PlayerId, trace_id: str
+    ) -> Optional[ActionExperienceTrace]:
+        """trace_id に一致する 1 件を返す。無ければ None。"""
+        pass
+
+
+class IObservationExperienceTraceStore(ABC):
+    """ObservationExperienceTrace の格納・取得。"""
+
+    @abstractmethod
+    def append(self, player_id: PlayerId, trace: ObservationExperienceTrace) -> None:
+        """1 件の observation trace を追加する。"""
+        pass
+
+    @abstractmethod
+    def get_recent(
+        self, player_id: PlayerId, limit: int
+    ) -> List[ObservationExperienceTrace]:
+        """指定プレイヤーの直近 limit 件の observation trace を新しい順で返す。"""
+        pass
+
+    @abstractmethod
+    def find_by_trace_id(
+        self, player_id: PlayerId, trace_id: str
+    ) -> Optional[ObservationExperienceTrace]:
+        """trace_id に一致する 1 件を返す。無ければ None。"""
+        pass
+
+
+class IEpisodeCandidateStore(ABC):
+    """EpisodeCandidate の格納・取得。"""
+
+    @abstractmethod
+    def add(self, player_id: PlayerId, candidate: EpisodeCandidate) -> None:
+        """1 件の episode candidate を追加する。"""
+        pass
+
+    @abstractmethod
+    def get_recent(self, player_id: PlayerId, limit: int) -> List[EpisodeCandidate]:
+        """指定プレイヤーの直近 limit 件の candidate を新しい順で返す。"""
+        pass
+
+    @abstractmethod
+    def contains_source_trace(self, player_id: PlayerId, source_trace_id: str) -> bool:
+        """source trace が既存 candidate に含まれているかを返す。"""
+        pass
+
+    @abstractmethod
+    def list_pending_encoding(
+        self, player_id: PlayerId, limit: int
+    ) -> List[EpisodeCandidate]:
+        """status が pending_encoding の候補を created_at の古い順で最大 limit 件返す。"""
+        pass
+
+    @abstractmethod
+    def get_by_candidate_id(
+        self, player_id: PlayerId, candidate_id: str
+    ) -> Optional[EpisodeCandidate]:
+        """candidate_id で 1 件取得。無ければ None。"""
+        pass
+
+    @abstractmethod
+    def replace_candidate(self, player_id: PlayerId, candidate: EpisodeCandidate) -> None:
+        """同一 candidate_id の要素を置換する。無ければ ValueError。"""
+        pass
+
+
+class ISubjectiveEpisodeStore(ABC):
+    """SubjectiveEpisode（v2）の格納・取得。既存 EpisodeMemoryStore とは独立。"""
+
+    @abstractmethod
+    def put(self, player_id: PlayerId, episode: SubjectiveEpisode) -> None:
+        """エピソードを保存する（同一 episode_id は上書き）。"""
+        pass
+
+    @abstractmethod
+    def get_by_episode_id(
+        self, player_id: PlayerId, episode_id: str
+    ) -> Optional[SubjectiveEpisode]:
+        pass
+
+    @abstractmethod
+    def list_recent(self, player_id: PlayerId, limit: int) -> List[SubjectiveEpisode]:
+        """created_at の新しい順で最大 limit 件。"""
+        pass
+
+    @abstractmethod
+    def list_all_episodes(self, player_id: PlayerId) -> List[SubjectiveEpisode]:
+        """当該プレイヤーの主観エピソードをすべて返す（順序は実装依存・走査用）。"""
+        pass
+
+    @abstractmethod
+    def record_passive_recall(self, player_id: PlayerId, episode_id: str) -> None:
+        """Passive Recall で採用したエピソードの recall_count を 1 増やす。無ければ何もしない。"""
+        pass
+
+    @abstractmethod
+    def count_reflection_journal_entries(self, player_id: PlayerId) -> int:
+        """当該プレイヤーの全主観エピソードに付いた memory_reflection_journal 件数の合計。"""
+        pass
+
+
+class IIdentityMemoryStore(ABC):
+    """Consolidation 先の Identity（自己像・信念の長期層）。長期事実ストアとは別経路。"""
+
+    @abstractmethod
+    def append_statement(
+        self, player_id: PlayerId, text: str, *, source_note: str = ""
+    ) -> None:
+        """1 行の identity 文を追記する。"""
+        pass
+
+    @abstractmethod
+    def list_statements(self, player_id: PlayerId, limit: int) -> Tuple[str, ...]:
+        """新しい順に最大 limit 件。"""
+        pass
+
+
+class IPassiveSubjectiveRecallComposer(ABC):
+    """v2 SubjectiveEpisode から user prompt 用の想起ブロックを組み立てる。"""
+
+    @abstractmethod
+    def compose_user_block(
+        self,
+        player_id: PlayerId,
+        *,
+        situation_text: str,
+        current_goals_hint: str,
+    ) -> PassiveRecallComposeResult:
+        """【ふと思い出したこと】相当。未ヒット時は user_block が空。"""
+        pass
+
+
+ExperienceTraceUnion = Union[ActionExperienceTrace, ObservationExperienceTrace]
+
+
+class IEpisodeEncoder(ABC):
+    """ExperienceTrace 群と候補から SubjectiveEpisode を生成する。"""
+
+    @abstractmethod
+    def encode(
+        self,
+        context: EpisodeEncodingContextDto,
+        candidate: EpisodeCandidate,
+        traces: Tuple[ExperienceTraceUnion, ...],
+    ) -> SubjectiveEpisode:
+        """source_trace_ids と同じ順序で traces を渡すこと。"""
+        pass
+
+
+class IEpisodeEncodingLlmPort(ABC):
+    """Episode Encoder 用のテキスト補完（JSON を返す想定）。実装は vLLM / OpenAI 互換など。"""
+
+    @abstractmethod
+    def complete(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        response_format: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """モデル生出力。JSON オブジェクトを含む文字列を返す。
+
+        response_format は OpenAI / vLLM 互換の structured output 用（省略時は通常生成）。
+        """
+        pass
+
+
+class IMemoryReflectionLlmPort(ABC):
+    """Memory Reflection（主観エピソード再解釈）用のテキスト補完。JSON 1 オブジェクトを返す想定。"""
+
+    @abstractmethod
+    def complete(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        response_format: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        pass
+
+
+class IEpisodeEncodingRunner(ABC):
+    """ターン終了後に未処理 candidate をエンコードするトリガ。"""
+
+    @abstractmethod
+    def run_after_turn(self, player_id: PlayerId) -> None:
+        pass
+
+
+class IEpisodeChunkCoordinator(ABC):
+    """run_turn 終了時に未処理 ExperienceTrace から EpisodeCandidate を切り出す。"""
+
+    @abstractmethod
+    def create_candidate_if_ready(self, player_id: PlayerId) -> Optional[EpisodeCandidate]:
+        """
+        区切り条件を満たせば candidate を保存して返す。満たさなければ None。
+        同一プレイヤーについて run_turn のすべての出口で最大 1 回呼ぶ想定。
+        """
         pass
 
 

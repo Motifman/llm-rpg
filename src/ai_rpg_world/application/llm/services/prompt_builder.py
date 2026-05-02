@@ -1,15 +1,19 @@
 """1 ターン分のプロンプト組み立てのデフォルト実装"""
 
 from importlib import import_module
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
-from ai_rpg_world.application.llm.contracts.dtos import SystemPromptPlayerInfoDto
+from ai_rpg_world.application.llm.contracts.dtos import (
+    EpisodeEncodingContextDto,
+    SystemPromptPlayerInfoDto,
+)
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     IAvailableToolsProvider,
     IContextFormatStrategy,
     ICurrentStateFormatter,
     ILlmUiContextBuilder,
+    IPassiveSubjectiveRecallComposer,
     IPredictiveMemoryRetriever,
     IPromptBuilder,
     IRecentEventsFormatter,
@@ -17,6 +21,9 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ISystemPromptBuilder,
 )
 from ai_rpg_world.application.llm.exceptions import PlayerProfileNotFoundForPromptException
+from ai_rpg_world.application.llm.services.failure_feedback_for_prompt import (
+    build_pre_turn_failure_section,
+)
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
@@ -55,6 +62,11 @@ class DefaultPromptBuilder(IPromptBuilder):
         available_tools_provider: IAvailableToolsProvider,
         ui_context_builder: Optional[ILlmUiContextBuilder] = None,
         predictive_memory_retriever: Optional[IPredictiveMemoryRetriever] = None,
+        persona_block_provider: Optional[Callable[[PlayerId], str]] = None,
+        passive_subjective_recall: Optional[IPassiveSubjectiveRecallComposer] = None,
+        episode_encoding_context_provider: Optional[
+            Callable[[PlayerId], EpisodeEncodingContextDto]
+        ] = None,
         recent_observations_limit: int = DEFAULT_RECENT_OBSERVATIONS_LIMIT,
         recent_actions_limit: int = DEFAULT_RECENT_ACTIONS_LIMIT,
         default_action_instruction: str = DEFAULT_ACTION_INSTRUCTION,
@@ -90,6 +102,20 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise TypeError(
                 "predictive_memory_retriever must be IPredictiveMemoryRetriever or None"
             )
+        if persona_block_provider is not None and not callable(persona_block_provider):
+            raise TypeError("persona_block_provider must be callable or None")
+        if passive_subjective_recall is not None and not isinstance(
+            passive_subjective_recall, IPassiveSubjectiveRecallComposer
+        ):
+            raise TypeError(
+                "passive_subjective_recall must be IPassiveSubjectiveRecallComposer or None"
+            )
+        if episode_encoding_context_provider is not None and not callable(
+            episode_encoding_context_provider
+        ):
+            raise TypeError(
+                "episode_encoding_context_provider must be callable or None"
+            )
         if recent_observations_limit < 0:
             raise ValueError("recent_observations_limit must be 0 or greater")
         if recent_actions_limit < 0:
@@ -117,6 +143,9 @@ class DefaultPromptBuilder(IPromptBuilder):
             )
             self._ui_context_builder = builder_module.DefaultLlmUiContextBuilder()
         self._predictive_memory_retriever = predictive_memory_retriever
+        self._persona_block_provider = persona_block_provider
+        self._passive_subjective_recall = passive_subjective_recall
+        self._episode_encoding_context_provider = episode_encoding_context_provider
         self._recent_observations_limit = recent_observations_limit
         self._recent_actions_limit = recent_actions_limit
         self._default_action_instruction = default_action_instruction
@@ -142,6 +171,11 @@ class DefaultPromptBuilder(IPromptBuilder):
             race=profile.race.value,
             element=profile.element.value,
             game_description="",
+            persona_block=(
+                self._persona_block_provider(player_id)
+                if self._persona_block_provider is not None
+                else ""
+            ),
         )
 
         # 2. drain してスライディングウィンドウに append（溢れは記憶抽出用に返す）
@@ -213,10 +247,47 @@ class DefaultPromptBuilder(IPromptBuilder):
             current_state_text, recent_events_text, relevant_memories_text
         )
 
+        # 6b. 直前ターン失敗時の補正（user 先頭に差し込み、次の 1 ツール向け）
+        failure_block = build_pre_turn_failure_section(action_results[:2])
+        recall_block = ""
+        goals_snapshot = ""
+        identity_snapshot = ""
+        if self._episode_encoding_context_provider is not None:
+            enc_ctx = self._episode_encoding_context_provider(player_id)
+            if not isinstance(enc_ctx, EpisodeEncodingContextDto):
+                raise TypeError(
+                    "episode_encoding_context_provider must return EpisodeEncodingContextDto"
+                )
+            goals_snapshot = enc_ctx.current_goals or ""
+            identity_snapshot = enc_ctx.identity_summary or ""
+        if self._passive_subjective_recall is not None:
+            situation_for_recall = (
+                current_state_text.rstrip() + "\n" + recent_events_text.rstrip()
+            ).strip()
+            recall = self._passive_subjective_recall.compose_user_block(
+                player_id,
+                situation_text=situation_for_recall,
+                current_goals_hint=goals_snapshot,
+            )
+            recall_block = recall.user_block.strip()
+            passive_recall_episode_ids = recall.episode_ids_for_reflection
+            passive_recall_situation_text = situation_for_recall
+        else:
+            passive_recall_episode_ids = ()
+            passive_recall_situation_text = ""
+
+        body_parts: list[str] = []
+        if failure_block:
+            body_parts.append(failure_block)
+        if recall_block:
+            body_parts.append(recall_block)
+        body_parts.append(context.rstrip())
+        user_context_body = "\n\n".join(body_parts)
+
         # 7. システムプロンプト・ユーザーメッセージ
         system_content = self._system_prompt_builder.build(player_info)
         instruction = action_instruction or self._default_action_instruction
-        user_content = context.rstrip() + "\n\n" + instruction
+        user_content = user_context_body + "\n\n" + instruction
 
         result: Dict[str, Any] = {
             "messages": [
@@ -228,4 +299,12 @@ class DefaultPromptBuilder(IPromptBuilder):
         }
         result["overflow"] = overflow
         result["tool_runtime_context"] = ui_context.tool_runtime_context
+        result["current_state_snapshot"] = current_state_text
+        result["current_goals_snapshot"] = goals_snapshot
+        result["current_beliefs_snapshot"] = relevant_memories_text
+        result["identity_snapshot"] = identity_snapshot
+        result["persona_snapshot"] = player_info.persona_block
+        result["working_memory_snapshot"] = ()
+        result["passive_recall_reflection_episode_ids"] = passive_recall_episode_ids
+        result["passive_recall_situation_text"] = passive_recall_situation_text
         return result

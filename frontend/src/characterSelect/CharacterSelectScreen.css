@@ -1,0 +1,843 @@
+.cs-root {
+  position: relative;
+  height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  background: #05070b;
+}
+
+.cs-root .game-bg-img {
+  inset: -1.2%;
+  width: 102.4%;
+  height: 102.4%;
+  opacity: 0.72;
+  filter: saturate(0.68) brightness(0.5) contrast(1.1);
+  transform: none;
+}
+
+.cs-root .game-bg-shade {
+  background:
+    linear-gradient(90deg, rgba(5, 8, 12, 0.8) 0%, rgba(8, 12, 16, 0.38) 36%, rgba(6, 8, 12, 0.9) 70%, rgba(5, 7, 11, 0.98) 100%),
+    radial-gradient(ellipse 38% 74% at 32% 52%, rgba(58, 72, 80, 0.26), transparent 72%),
+    radial-gradient(ellipse 24% 42% at 83% 50%, rgba(126, 53, 53, 0.15), transparent 72%);
+}
+
+.cs-root .game-bg-watermark {
+  display: none;
+}
+
+.cs-root .game-bg-watermark strong {
+  font-size: clamp(5.5rem, 12vw, 13rem);
+  line-height: 0.9;
+}
+
+.cs-root::before,
+.cs-root::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.cs-root::before {
+  background:
+    linear-gradient(90deg, rgba(244, 189, 103, 0.07) 0 1px, transparent 1px) 1.5rem 1.7rem / calc(100% - 3rem) calc(100% - 3.4rem) no-repeat,
+    url("/assets/ui/character-select-ui-atlas.png") center / cover;
+  opacity: 0.055;
+  mix-blend-mode: screen;
+}
+
+.cs-root::after {
+  background:
+    linear-gradient(90deg, rgba(255, 80, 105, 0.8), rgba(99, 191, 255, 0.8)) 7.2% 91.5% / 0.42rem 0.18rem no-repeat,
+    linear-gradient(90deg, rgba(244, 189, 103, 0.34), transparent 58%) 1.65rem 95.6% / 16rem 1px no-repeat,
+    linear-gradient(90deg, transparent, rgba(244, 189, 103, 0.25), transparent) 49% 6.1% / 36rem 1px no-repeat,
+    linear-gradient(180deg, rgba(244, 189, 103, 0.35), transparent 46%) 97.6% 1.8rem / 1px 5.5rem no-repeat;
+}
+
+.cs-shell {
+  position: relative;
+  z-index: 3;
+  min-height: 100vh;
+  container-type: inline-size;
+}
+
+.cs-kicker {
+  margin: 0;
+  font-family: var(--game-font-ui);
+  font-size: 0.66rem;
+  letter-spacing: 0.36em;
+  color: rgba(244, 189, 103, 0.78);
+  text-transform: uppercase;
+}
+
+.cs-back-button {
+  position: absolute;
+  z-index: 10;
+  left: clamp(1.25rem, 2.7vw, 3rem);
+  top: clamp(1.15rem, 2.5vh, 1.85rem);
+  min-width: clamp(9rem, 10vw, 11rem);
+  min-height: 3.2rem;
+  justify-content: center;
+  border-radius: 1px;
+  outline: 1px solid rgba(244, 189, 103, 0.24);
+  background: rgba(6, 8, 12, 0.68);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.cs-back-button .game-button-label {
+  font-family: var(--game-font-display);
+  font-size: 1.08rem;
+  letter-spacing: 0.16em;
+  color: rgba(255, 238, 206, 0.95);
+}
+
+.cs-title-block {
+  position: absolute;
+  z-index: 8;
+  top: clamp(1.55rem, 3.8vh, 2.35rem);
+  left: 50%;
+  width: min(42rem, 48vw);
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+.cs-title-block::before,
+.cs-title-block::after {
+  content: "";
+  position: absolute;
+  top: 2.2rem;
+  width: min(9rem, 11vw);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(244, 189, 103, 0.56));
+}
+
+.cs-title-block::before {
+  right: calc(100% - 3rem);
+}
+
+.cs-title-block::after {
+  left: calc(100% - 3rem);
+  transform: scaleX(-1);
+}
+
+.cs-title-block h1 {
+  margin: 0;
+  font-family: var(--game-font-display);
+  font-size: clamp(2.15rem, 3.8vw, 4rem);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  line-height: 1.02;
+  color: rgba(255, 246, 235, 0.96);
+  text-shadow:
+    2px 0 rgba(255, 82, 94, 0.5),
+    -2px 0 rgba(72, 188, 255, 0.42),
+    0 14px 28px rgba(0, 0, 0, 0.74);
+}
+
+.cs-title-block p {
+  margin: 0.7rem 0 0;
+  font-family: var(--game-font-display);
+  font-size: clamp(0.76rem, 1.05vw, 1rem);
+  letter-spacing: 0.42em;
+  color: rgba(229, 221, 211, 0.72);
+}
+
+.cs-telemetry {
+  position: absolute;
+  z-index: 9;
+  right: clamp(1.4rem, 4vw, 4.2rem);
+  top: clamp(1.15rem, 3vh, 2rem);
+  min-width: 20rem;
+  padding: 0.85rem 1rem 0.8rem 1.35rem;
+  color: rgba(223, 226, 235, 0.48);
+  font-family: var(--game-font-ui);
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  line-height: 1.55;
+  text-align: left;
+  background:
+    linear-gradient(90deg, rgba(244, 189, 103, 0.2), transparent 0.35rem) left top / 100% 1px no-repeat,
+    linear-gradient(180deg, rgba(244, 189, 103, 0.2), transparent 4.25rem) left top / 1px 100% no-repeat,
+    rgba(5, 7, 11, 0.12);
+}
+
+.cs-telemetry span {
+  display: inline-block;
+  min-width: 5.5rem;
+  color: rgba(244, 189, 103, 0.55);
+}
+
+.cs-world-brief {
+  position: absolute;
+  z-index: 7;
+  left: clamp(1.6rem, 3vw, 3.3rem);
+  top: clamp(7.2rem, 16vh, 9.8rem);
+  width: min(20rem, 23vw);
+  color: rgba(255, 248, 236, 0.9);
+}
+
+.cs-world-brief p,
+.cs-world-brief span {
+  display: block;
+  margin: 0;
+  font-family: var(--game-font-ui);
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  color: rgba(244, 189, 103, 0.72);
+  text-transform: uppercase;
+}
+
+.cs-world-brief h2 {
+  margin: 0.55rem 0 0.7rem;
+  font-family: var(--game-font-display);
+  font-size: clamp(1.55rem, 2.35vw, 2.65rem);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: 0.08em;
+  color: rgba(255, 246, 235, 0.98);
+  text-shadow:
+    2px 0 rgba(255, 82, 94, 0.5),
+    -2px 0 rgba(72, 188, 255, 0.42),
+    0 14px 28px rgba(0, 0, 0, 0.74);
+}
+
+.cs-world-brief h2 span {
+  display: block;
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  text-transform: none;
+}
+
+.cs-main {
+  position: relative;
+  min-height: 100vh;
+}
+
+.cs-character-stage {
+  position: absolute;
+  z-index: 5;
+  left: clamp(7.8rem, 12.5vw, 17.5rem);
+  top: clamp(4.8rem, 8.6vh, 6.5rem);
+  width: min(36vw, 42rem);
+  height: min(92vh, 58rem);
+}
+
+.cs-portrait-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.cs-portrait-wrap::before {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: 1%;
+  height: 14%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(0, 0, 0, 0.64), transparent 70%);
+  filter: blur(10px);
+}
+
+.cs-portrait {
+  position: relative;
+  z-index: 1;
+  display: block;
+  max-width: min(112%, 38rem);
+  max-height: min(98vh, 62rem);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  object-position: bottom center;
+  transform: translateY(5.5vh);
+  filter:
+    drop-shadow(0 24px 36px rgba(0, 0, 0, 0.66))
+    drop-shadow(0 0 10px rgba(244, 189, 103, 0.1));
+  animation: cs-portrait-in 0.75s ease both;
+}
+
+.cs-portrait-placeholder {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: min(70%, 25rem);
+  height: min(68vh, 42rem);
+  margin-bottom: 9vh;
+  color: rgba(223, 226, 235, 0.16);
+  font-family: var(--game-font-ui);
+  font-size: clamp(5rem, 10vw, 9rem);
+  letter-spacing: 0.06em;
+  background:
+    linear-gradient(135deg, transparent 48%, rgba(223, 226, 235, 0.08) 49%, rgba(223, 226, 235, 0.08) 51%, transparent 52%),
+    linear-gradient(45deg, transparent 48%, rgba(223, 226, 235, 0.06) 49%, rgba(223, 226, 235, 0.06) 51%, transparent 52%),
+    radial-gradient(ellipse at center, rgba(244, 189, 103, 0.08), transparent 64%);
+  outline: 1px solid rgba(244, 189, 103, 0.16);
+  box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.42);
+}
+
+.cs-arrow {
+  position: absolute;
+  z-index: 8;
+  top: 70%;
+  width: 4.8rem;
+  height: 4.8rem;
+  border-radius: 1px;
+  color: rgba(255, 221, 153, 0.88);
+  background: transparent;
+  outline: none;
+  box-shadow: none;
+  text-shadow: 0 0 18px rgba(244, 189, 103, 0.35);
+}
+
+.cs-arrow .material-symbols-outlined {
+  font-size: 2.9rem;
+  font-variation-settings: "FILL" 0, "wght" 200;
+}
+
+.cs-arrow--prev {
+  left: clamp(-2.4rem, -2.4vw, -2.6rem);
+}
+
+.cs-arrow--next {
+  right: -1.8rem;
+}
+
+.cs-arrow--prev:hover:not(:disabled) {
+  transform: translateX(-3px);
+}
+
+.cs-arrow--next:hover:not(:disabled) {
+  transform: translateX(3px);
+}
+
+.cs-arrow:disabled {
+  opacity: 0.6;
+  filter: saturate(0.8);
+}
+
+.cs-character-dossier {
+  position: absolute;
+  z-index: 7;
+  left: clamp(27.5rem, 44vw, 52rem);
+  top: clamp(14.8rem, 28vh, 20rem);
+  width: min(16rem, 16vw);
+  color: rgba(255, 248, 236, 0.92);
+}
+
+.cs-character-dossier::before,
+.cs-character-dossier::after {
+  content: "";
+  display: block;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(244, 189, 103, 0.42), transparent);
+}
+
+.cs-character-dossier::before {
+  margin: 0.75rem 0 1rem;
+}
+
+.cs-character-dossier::after {
+  margin: 1.1rem 0 0;
+}
+
+.cs-character-dossier h2 {
+  margin: 0.18rem 0 1rem;
+  font-family: var(--game-font-display);
+  font-size: clamp(1.8rem, 2.4vw, 3.0rem);
+  font-weight: 500;
+  line-height: 1.06;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  text-shadow: 0 14px 28px rgba(0, 0, 0, 0.62);
+}
+
+.cs-character-description {
+  max-width: 16rem;
+  margin: 0;
+  font-family: var(--game-font-display);
+  font-size: clamp(0.86rem, 1.05vw, 1.05rem);
+  line-height: 1.9;
+  letter-spacing: 0.08em;
+  color: rgba(255, 248, 236, 0.78);
+}
+
+.cs-character-dossier dl {
+  display: grid;
+  gap: 0.34rem;
+  margin: 1.8rem 0 0;
+  font-family: var(--game-font-ui);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  line-height: 1.45;
+  color: rgba(226, 224, 218, 0.72);
+}
+
+.cs-character-dossier dl div {
+  display: grid;
+  grid-template-columns: 6rem minmax(0, 1fr);
+  gap: 0.5rem;
+}
+
+.cs-character-dossier dt {
+  color: rgba(244, 189, 103, 0.58);
+}
+
+.cs-character-dossier dd {
+  margin: 0;
+}
+
+.cs-select-row {
+  position: absolute;
+  z-index: 9;
+  left: clamp(7.8rem, 12.5vw, 17.5rem);
+  bottom: clamp(1.55rem, 3vh, 3rem);
+  width: min(36vw, 42rem);
+  display: flex;
+  justify-content: center;
+}
+
+.cs-select-row .game-button--primary {
+  min-width: clamp(13rem, 15vw, 17rem);
+  min-height: 4.1rem;
+  border-left: none;
+  border-radius: 1px;
+  color: rgba(255, 248, 229, 0.94);
+  background:
+    linear-gradient(90deg, rgba(255, 227, 164, 0.22), rgba(122, 80, 23, 0.72)),
+    url("/assets/ui/character-select-ui-atlas.png") center / 140% auto,
+    linear-gradient(100deg, #a76f26 0%, #59411d 100%);
+  outline: 1px solid rgba(244, 189, 103, 0.55);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 246, 205, 0.12),
+    0 16px 34px rgba(0, 0, 0, 0.5);
+}
+
+.cs-select-row .game-button--primary .game-button-label {
+  font-family: var(--game-font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+}
+
+.cs-select-row .game-button--primary .game-button-sublabel {
+  color: rgba(255, 234, 177, 0.72);
+}
+
+.cs-party-panel {
+  position: absolute;
+  z-index: 8;
+  right: clamp(1.9rem, 4.2vw, 5rem);
+  top: clamp(8.3rem, 16.2vh, 10rem);
+  width: clamp(22rem, 33vw, 39rem);
+  height: min(78vh, 47rem);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 1.25rem;
+  padding: clamp(1.1rem, 1.45vw, 1.7rem);
+  color: rgba(223, 226, 235, 0.9);
+  background:
+    linear-gradient(180deg, rgba(35, 39, 47, 0.8), rgba(14, 18, 24, 0.85)),
+    url("/assets/ui/character-select-ui-atlas.png") center / 150% auto;
+  background-blend-mode: normal, soft-light;
+  border-radius: 2px;
+  outline: 1px solid rgba(244, 189, 103, 0.16);
+  box-shadow:
+    -4px 0 rgba(157, 112, 59, 0.52),
+    0 28px 72px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.cs-party-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(244, 189, 103, 0.36), transparent 9rem) 1.2rem 1.2rem / calc(100% - 2.4rem) 1px no-repeat,
+    radial-gradient(ellipse at 76% 22%, rgba(255, 255, 255, 0.04), transparent 50%);
+}
+
+.cs-party-head {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.2rem;
+}
+
+.cs-party-head span {
+  min-width: 5.8rem;
+  color: rgba(223, 226, 235, 0.58);
+  font-family: var(--game-font-ui);
+  font-size: 0.92rem;
+  letter-spacing: 0.18em;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.cs-slot-list {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+  min-height: 0;
+}
+
+.cs-party-slot {
+  position: relative;
+  display: grid;
+  grid-template-columns: clamp(4.7rem, 5.8vw, 6rem) minmax(0, 1fr);
+  align-items: start;
+  gap: 1.65rem;
+  min-height: clamp(5.6rem, 10vh, 7.8rem);
+  padding: 0.5rem 1.25rem 1.1rem 0.95rem;
+  border-radius: 2px;
+  background:
+    linear-gradient(90deg, rgba(244, 189, 103, 0.05), transparent 46%),
+    rgba(6, 9, 14, 0.56);
+  outline: 1px solid rgba(223, 226, 235, 0.06);
+  overflow: hidden;
+}
+
+.cs-party-slot::before,
+.cs-party-slot::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.cs-party-slot::before {
+  inset: 0.55rem;
+  background:
+    linear-gradient(90deg, rgba(244, 189, 103, 0.34), transparent 1.6rem) left top / 2.4rem 1px no-repeat,
+    linear-gradient(180deg, rgba(244, 189, 103, 0.34), transparent 1.6rem) left top / 1px 2.4rem no-repeat,
+    linear-gradient(270deg, rgba(244, 189, 103, 0.24), transparent 1.6rem) right top / 2.4rem 1px no-repeat,
+    linear-gradient(180deg, rgba(244, 189, 103, 0.24), transparent 1.6rem) right top / 1px 2.4rem no-repeat;
+}
+
+.cs-party-slot--filled {
+  background:
+    linear-gradient(90deg, rgba(244, 189, 103, 0.16), transparent 48%),
+    rgba(6, 9, 14, 0.78);
+  outline-color: rgba(244, 189, 103, 0.38);
+}
+
+.cs-party-thumb-frame {
+  display: block;
+  width: 100%;
+  height: clamp(4.2rem, 5.9vw, 5.55rem);
+  overflow: hidden;
+  border-radius: 1px;
+  background: rgba(28, 32, 38, 0.9);
+}
+
+.cs-party-thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 0%;
+  transform: scale(2.85) translateX(-2%) translateY(3%);
+  transform-origin: 50% 6%;
+}
+
+.cs-empty-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: clamp(4.2rem, 5.9vw, 5.55rem);
+  color: rgba(223, 226, 235, 0.12);
+  font-family: var(--game-font-ui);
+  font-size: clamp(2rem, 3vw, 3rem);
+  letter-spacing: 0.04em;
+  border-radius: 1px;
+  background:
+    linear-gradient(135deg, transparent 48%, rgba(223, 226, 235, 0.08) 49%, rgba(223, 226, 235, 0.08) 51%, transparent 52%),
+    linear-gradient(45deg, transparent 48%, rgba(223, 226, 235, 0.06) 49%, rgba(223, 226, 235, 0.06) 51%, transparent 52%),
+    rgba(28, 32, 38, 0.28);
+}
+
+.cs-party-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  font-family: var(--game-font-ui);
+  padding-top: 0.1rem;
+}
+
+.cs-party-copy strong {
+  color: rgba(235, 237, 244, 0.9);
+  font-size: clamp(1rem, 1.35vw, 1.38rem);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.05em;
+}
+
+.cs-party-index,
+.cs-party-role,
+.cs-party-status {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  color: rgba(244, 189, 103, 0.72);
+}
+
+.cs-party-status {
+  color: rgba(223, 226, 235, 0.48);
+}
+
+.cs-party-role {
+  color: rgba(223, 226, 235, 0.58);
+}
+
+.cs-transfer-console {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) minmax(0, 21rem);
+  align-items: end;
+  gap: 1rem;
+  margin-top: 0.25rem;
+}
+
+.cs-transfer-status {
+  align-self: stretch;
+  padding: 0.65rem 0 0.45rem;
+  border-top: 1px solid rgba(244, 189, 103, 0.28);
+  font-family: var(--game-font-ui);
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  line-height: 1.6;
+  color: rgba(223, 226, 235, 0.52);
+}
+
+.cs-transfer-status p {
+  margin: 0 0 0.35rem;
+  color: rgba(244, 189, 103, 0.58);
+}
+
+.cs-transfer-status span {
+  display: block;
+}
+
+.cs-transfer-btn {
+  justify-self: end;
+  width: 100%;
+  min-width: 0;
+}
+
+.cs-empty-state {
+  position: absolute;
+  left: 38%;
+  top: 44%;
+  padding: 1rem 1.25rem;
+  border-radius: 2px;
+  background: rgba(10, 14, 20, 0.5);
+  backdrop-filter: blur(12px);
+}
+
+.cs-empty-state h2 {
+  margin: 0.3rem 0 0;
+  font-family: var(--game-font-display);
+  font-size: clamp(1.3rem, 3vw, 2.2rem);
+}
+
+@keyframes cs-portrait-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(5.5vh + 12px));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(5.5vh);
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1180px) {
+  .cs-world-brief {
+    width: 17rem;
+  }
+
+  .cs-world-brief h2 {
+    font-size: clamp(1.45rem, 2.35vw, 1.75rem);
+    line-height: 1.1;
+  }
+
+  .cs-character-dossier {
+    left: clamp(27.75rem, 46vw, 30.5rem);
+    top: clamp(12.6rem, 28vh, 16rem);
+    width: 7.4rem;
+  }
+
+  .cs-character-dossier h2 {
+    font-size: clamp(1.32rem, 1.85vw, 1.48rem);
+    line-height: 1.12;
+  }
+
+  .cs-character-description {
+    max-width: 7.4rem;
+    font-size: 0.72rem;
+    line-height: 1.72;
+  }
+
+  .cs-character-dossier dl {
+    display: none;
+  }
+
+  .cs-party-panel {
+    right: 1.3rem;
+    width: clamp(21rem, 34vw, 23rem);
+  }
+}
+
+@media (max-width: 900px) {
+  .cs-root {
+    overflow-y: auto;
+  }
+
+  .cs-shell {
+    min-height: 100vh;
+    padding: 1rem;
+  }
+
+  .cs-back-button,
+  .cs-title-block,
+  .cs-telemetry,
+  .cs-world-brief,
+  .cs-character-stage,
+  .cs-character-dossier,
+  .cs-select-row,
+  .cs-party-panel {
+    position: relative;
+    inset: auto;
+    left: auto;
+    right: auto;
+    top: auto;
+    bottom: auto;
+    transform: none;
+  }
+
+  .cs-title-block {
+    width: 100%;
+    margin: 5.2rem auto 1.6rem;
+  }
+
+  .cs-title-block::before,
+  .cs-title-block::after {
+    display: none;
+  }
+
+  .cs-telemetry {
+    margin-left: auto;
+    max-width: 24rem;
+  }
+
+  .cs-world-brief {
+    width: min(34rem, 100%);
+    margin: 1.2rem 0;
+  }
+
+  .cs-main {
+    display: grid;
+    gap: 1.2rem;
+    min-height: auto;
+  }
+
+  .cs-character-stage {
+    width: 100%;
+    height: min(64vh, 42rem);
+  }
+
+  .cs-arrow {
+    top: 48%;
+  }
+
+  .cs-arrow--prev {
+    left: 0.6rem;
+  }
+
+  .cs-arrow--next {
+    right: 0.6rem;
+  }
+
+  .cs-character-dossier,
+  .cs-party-panel {
+    width: 100%;
+  }
+
+  .cs-select-row {
+    justify-self: center;
+  }
+
+  .cs-party-panel {
+    height: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .cs-title-block h1 {
+    font-size: 2rem;
+  }
+
+  .cs-title-block p {
+    letter-spacing: 0.2em;
+  }
+
+  .cs-back-button {
+    min-width: 8rem;
+  }
+
+  .cs-telemetry {
+    min-width: 0;
+    width: 100%;
+    font-size: 0.58rem;
+  }
+
+  .cs-character-stage {
+    height: 32rem;
+  }
+
+  .cs-portrait {
+    max-height: 31rem;
+  }
+
+  .cs-character-dossier h2 {
+    font-size: 2.3rem;
+  }
+
+  .cs-party-slot {
+    grid-template-columns: 4.5rem minmax(0, 1fr);
+  }
+
+  .cs-transfer-console {
+    grid-template-columns: 1fr;
+  }
+
+  .cs-transfer-btn {
+    justify-self: stretch;
+    min-width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-portrait,
+  .cs-transfer-btn {
+    animation: none !important;
+    transition: none !important;
+  }
+}

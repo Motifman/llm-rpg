@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title id="title">4bnø«</title>
+  <desc id="desc">ºËŽµn4MLWZd
+L‹ø«</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a121a"/>
+      <stop offset="100%" style="stop-color:#06222e"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0d3a4a" stop-opacity="0.45"/>
+      <stop offset="100%" style="stop-color:#072028" stop-opacity="0.85"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="540" fill="url(#bg)"/>
+  <!-- ,Ú -->
+  <g opacity="0.9">
+    <rect x="80"  y="120" width="80" height="280" fill="#0a0e14"/>
+    <rect x="200" y="100" width="80" height="300" fill="#0a0e14"/>
+    <rect x="320" y="110" width="80" height="290" fill="#0a0e14"/>
+    <rect x="560" y="100" width="80" height="300" fill="#0a0e14"/>
+    <rect x="680" y="120" width="80" height="280" fill="#0a0e14"/>
+    <rect x="800" y="110" width="80" height="290" fill="#0a0e14"/>
+  </g>
+  <!-- ,nÌ -->
+  <g opacity="0.7">
+    <rect x="86"  y="140" width="8" height="40" fill="#5c1a1f"/>
+    <rect x="98"  y="140" width="8" height="40" fill="#a07323"/>
+    <rect x="110" y="140" width="8" height="40" fill="#3a2a1a"/>
+    <rect x="122" y="140" width="8" height="40" fill="#5c1a1f"/>
+    <rect x="206" y="120" width="8" height="50" fill="#a07323"/>
+    <rect x="218" y="120" width="8" height="50" fill="#3a2a1a"/>
+    <rect x="566" y="130" width="8" height="40" fill="#5c1a1f"/>
+    <rect x="578" y="130" width="8" height="40" fill="#a07323"/>
+    <rect x="806" y="140" width="8" height="40" fill="#3a2a1a"/>
+  </g>
+  <!-- 4b -->
+  <rect x="0" y="340" width="960" height="200" fill="url(#water)"/>
+  <line x1="0" y1="340" x2="960" y2="340" stroke="#f4bd67" stroke-width="0.5" opacity="0.2"/>
+  <!-- F, -->
+  <rect x="430" y="332" width="36" height="6" fill="#a07323" opacity="0.8" transform="rotate(-4 448 335)"/>
+  <rect x="520" y="334" width="40" height="6" fill="#5c1a1f" opacity="0.7" transform="rotate(3 540 337)"/>
+</svg>

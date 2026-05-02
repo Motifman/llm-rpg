@@ -28,6 +28,27 @@ class TestDefaultActionResultStore:
         assert len(got) == 1
         assert got[0].action_summary == "move_to を実行"
         assert got[0].result_summary == "スポットAに到着しました。"
+        assert got[0].success is True
+        assert got[0].error_code is None
+
+    def test_append_with_failure_metadata(self, store):
+        """失敗メタ付きで append し get_recent で取り出せる"""
+        store.append(
+            PlayerId(1),
+            "a",
+            "失敗。x",
+            success=False,
+            error_code="E1",
+            tool_name="t1",
+            argument_fingerprint="{}",
+            should_reschedule=True,
+        )
+        got = store.get_recent(PlayerId(1), 1)
+        assert got[0].success is False
+        assert got[0].error_code == "E1"
+        assert got[0].tool_name == "t1"
+        assert got[0].argument_fingerprint == "{}"
+        assert got[0].should_reschedule is True
 
     def test_get_recent_empty_for_unknown_player(self, store):
         """未登録プレイヤーでは get_recent が空リストを返す"""

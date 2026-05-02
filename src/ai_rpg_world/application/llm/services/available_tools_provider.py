@@ -6,11 +6,15 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IAvailableToolsProvider,
     IGameToolRegistry,
 )
+from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import (
+    with_subjective_action_schema,
+)
 from ai_rpg_world.application.world.contracts.dtos import PlayerCurrentStateDto
 
 
 def _to_openai_tool(definition: Any) -> Dict[str, Any]:
     """ToolDefinitionDto を OpenAI の tools 要素の形式に変換する。"""
+    definition = with_subjective_action_schema(definition)
     return {
         "type": "function",
         "function": {

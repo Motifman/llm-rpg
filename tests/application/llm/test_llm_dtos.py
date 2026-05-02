@@ -151,6 +151,35 @@ class TestActionResultEntry:
                 result_summary=None,  # type: ignore[arg-type]
             )
 
+    def test_failure_fields_optional(self):
+        """失敗用フィールドを指定して保持できる"""
+        now = datetime.now()
+        e = ActionResultEntry(
+            occurred_at=now,
+            action_summary="a",
+            result_summary="b",
+            success=False,
+            error_code="X",
+            tool_name="t",
+            argument_fingerprint="{}",
+            should_reschedule=True,
+        )
+        assert e.success is False
+        assert e.error_code == "X"
+        assert e.tool_name == "t"
+        assert e.argument_fingerprint == "{}"
+        assert e.should_reschedule is True
+
+    def test_success_not_bool_raises_type_error(self):
+        """success が bool でない場合 TypeError"""
+        with pytest.raises(TypeError, match="success must be bool"):
+            ActionResultEntry(
+                occurred_at=datetime.now(),
+                action_summary="a",
+                result_summary="b",
+                success=1,  # type: ignore[arg-type]
+            )
+
 
 class TestLlmCommandResultDto:
     """LlmCommandResultDto の正常・例外ケース"""
