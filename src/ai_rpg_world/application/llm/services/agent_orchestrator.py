@@ -263,11 +263,12 @@ class LlmAgentOrchestrator:
             return dto
         finally:
             if self._episode_chunker is not None:
-                self._episode_chunker.create_candidate_if_ready(player_id)
-            if self._episode_encoding_runner is not None:
-                self._episode_encoding_runner.run_after_turn(
-                    player_id, encoding_runtime=encoding_runtime
+                self._episode_chunker.create_candidate_if_ready(
+                    player_id,
+                    encoding_runtime_snapshot=encoding_runtime,
                 )
+            if self._episode_encoding_runner is not None:
+                self._episode_encoding_runner.run_after_turn(player_id)
             if (
                 self._passive_memory_reflection_hook is not None
                 and passive_enqueue is not None

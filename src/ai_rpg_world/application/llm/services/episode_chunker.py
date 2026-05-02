@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Tuple
+from typing import Optional, Tuple
 from uuid import uuid4
 
 from ai_rpg_world.application.llm.contracts.dtos import (
@@ -19,6 +19,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     EpisodeCandidate,
     EpisodeChunkDecision,
     ObservationExperienceTrace,
+    ToolRuntimeContextDto,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionExperienceTraceStore,
@@ -103,10 +104,21 @@ class RuleBasedEpisodeChunker(IEpisodeChunkCoordinator):
             source_trace_ids=source_ids,
         )
 
-    def create_candidate_if_ready(self, player_id: PlayerId) -> EpisodeCandidate | None:
+    def create_candidate_if_ready(
+        self,
+        player_id: PlayerId,
+        *,
+        encoding_runtime_snapshot: Optional[ToolRuntimeContextDto] = None,
+    ) -> EpisodeCandidate | None:
         """区切り時なら EpisodeCandidate を作成して保存する。"""
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
+        if encoding_runtime_snapshot is not None and not isinstance(
+            encoding_runtime_snapshot, ToolRuntimeContextDto
+        ):
+            raise TypeError(
+                "encoding_runtime_snapshot must be ToolRuntimeContextDto or None"
+            )
         traces = self._collect_unprocessed_traces(player_id)
         if not traces:
             return None
@@ -125,6 +137,7 @@ class RuleBasedEpisodeChunker(IEpisodeChunkCoordinator):
             trace_count=len(selected),
             boundary_score=score,
             boundary_reasons=reasons,
+            encoding_runtime_snapshot=encoding_runtime_snapshot,
         )
         self._candidate_store.add(player_id, candidate)
         return candidate

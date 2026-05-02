@@ -206,3 +206,19 @@ def test_low_salience_short_trace_sequence_is_not_ready() -> None:
 
     assert decision.should_create_candidate is False
     assert candidate is None
+
+
+def test_create_candidate_if_ready_persists_encoding_runtime_snapshot() -> None:
+    from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
+
+    chunker, action_store, _, _ = _chunker()
+    player_id = PlayerId(1)
+    now = datetime.now()
+    action_store.append(player_id, _action_trace("a1", now, success=False))
+    rtc = ToolRuntimeContextDto(targets={}, current_spot_id=55)
+    candidate = chunker.create_candidate_if_ready(
+        player_id, encoding_runtime_snapshot=rtc
+    )
+    assert candidate is not None
+    assert candidate.encoding_runtime_snapshot is not None
+    assert candidate.encoding_runtime_snapshot.current_spot_id == 55

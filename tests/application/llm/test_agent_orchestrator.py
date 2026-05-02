@@ -65,7 +65,7 @@ class _RecordingEpisodeChunkCoordinator(IEpisodeChunkCoordinator):
     def __init__(self) -> None:
         self.calls: List[PlayerId] = []
 
-    def create_candidate_if_ready(self, player_id: PlayerId):
+    def create_candidate_if_ready(self, player_id: PlayerId, **kwargs):
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         self.calls.append(player_id)
