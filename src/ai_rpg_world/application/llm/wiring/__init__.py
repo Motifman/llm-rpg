@@ -42,6 +42,12 @@ EventHandlerComposition のインスタンス化）は**呼び出し元（外部
   （または `create_trade_query_service_for_app` / `create_trade_read_model_repositories_bundle_for_app`）で得たリポジトリを
   `TradeQueryService`・`TradePageQueryService`・`TradeEventHandler` 等に**同一インスタンスで**
   渡す（`.env.example` 参照）。
+
+【v2 主観エピソード（SubjectiveEpisode）のストア】
+- 既定は `InMemorySubjectiveEpisodeStore`。本番寄りで SQLite にする場合は環境変数 `SUBJECTIVE_EPISODE_DB_PATH`
+  にファイルパスを設定する（`create_llm_agent_wiring` / `create_spot_graph_wiring` が参照）。未設定時は従来どおりインメモリ。
+- プログラムからは `subjective_episode_sqlite_path` でパスを直接渡せる（テスト・デモ用。環境変数より優先）。
+- さらに `subjective_episode_store` に `ISubjectiveEpisodeStore` を渡せば、上記より優先して注入される。
 """
 
 import os
@@ -117,6 +123,9 @@ from ai_rpg_world.application.llm.services.experience_trace_bundle_resolver impo
     ExperienceTraceBundleResolver,
 )
 from ai_rpg_world.application.llm.wiring.episode_encoder_factory import build_episode_encoder
+from ai_rpg_world.application.llm.wiring.subjective_episode_store_factory import (
+    create_subjective_episode_store_for_wiring,
+)
 from ai_rpg_world.application.llm.wiring.memory_reflection_factory import (
     build_same_process_memory_reflection,
 )
@@ -949,6 +958,8 @@ def create_llm_agent_wiring(
     system_prompt_template: Optional[str] = None,
     persona_store: Optional[Any] = None,
     persona_prompt_policy: Optional[PersonaPromptPolicy] = None,
+    subjective_episode_store: Optional[ISubjectiveEpisodeStore] = None,
+    subjective_episode_sqlite_path: Optional[str] = None,
 ) -> "LlmAgentWiringResult":
     """
     LLM エージェント用の観測ハンドラ登録用 Registry と LlmTurnTrigger を組み立てて返す。
@@ -1001,7 +1012,10 @@ def create_llm_agent_wiring(
         observation_trace_store=observation_experience_trace_store,
         candidate_store=episode_candidate_store,
     )
-    subjective_episode_store = InMemorySubjectiveEpisodeStore()
+    subjective_episode_store = create_subjective_episode_store_for_wiring(
+        subjective_episode_store=subjective_episode_store,
+        sqlite_path=subjective_episode_sqlite_path,
+    )
     identity_memory_store = InMemoryIdentityMemoryStore()
     trace_bundle_resolver = ExperienceTraceBundleResolver(
         action_experience_trace_store,
