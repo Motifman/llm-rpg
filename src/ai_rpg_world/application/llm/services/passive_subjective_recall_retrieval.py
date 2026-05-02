@@ -1,7 +1,9 @@
-"""P3: Passive Subjective Recall 用の軸別スコア（temporal / cue / goal）の合成。
+"""P3: Passive Subjective Recall 用の軸別スコアの合成（temporal / cue / importance / goal）。
 
 `PassiveSubjectiveRecallComposer` から切り出し、テストと説明可能性（どの軸が効いたか）を
 取りやすくする。cue 軸は `subjective_episode_index_strings` と状況文の交差を数える。
+importance 軸は `SubjectiveEpisode.importance` から段階ボーナス。
+goal 軸は目標ヒントのトークンが observed/interpreted に含まれる件数×重み。
 `axis:value` 形（P2 の `to_canonical`）は、値部分が状況文またはトークンに含まれれば一致とみなす。
 """
 
