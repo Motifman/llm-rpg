@@ -8,6 +8,7 @@ from uuid import uuid4
 from ai_rpg_world.application.llm.contracts.dtos import (
     ObservationExperienceTrace,
     ObservationTraceKind,
+    ToolRuntimeContextDto,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IObservationExperienceTraceStore,
@@ -142,6 +143,48 @@ def _optional_int_coerce(value: Any) -> Optional[int]:
         return None
 
 
+def _observation_trace_spatial_from_entry_and_runtime(
+    entry: ObservationEntry,
+    runtime_context: Optional[ToolRuntimeContextDto],
+) -> tuple[
+    Optional[int],
+    Optional[Tuple[int, ...]],
+    Optional[int],
+    Optional[int],
+    Optional[int],
+    Optional[int],
+]:
+    """structured と ToolRuntimeContextDto から ObservationExperienceTrace の context_* を決める。
+
+    context_spot_id は structured の spot_id_value を優先し、欠けるときだけ runtime.current_spot_id。
+    sub_loc / 座標は runtime のみ（観測 structured に無い前提）。
+
+    context_tile_area_ids は P1 では観測 trace に載せない（current_area_ids を写さない）。
+    """
+    spot_from_struct = _optional_int_coerce(entry.output.structured.get("spot_id_value"))
+    context_spot_id = spot_from_struct
+    context_tile_area_ids: Optional[Tuple[int, ...]] = None
+    context_sub_location_id: Optional[int] = None
+    context_x: Optional[int] = None
+    context_y: Optional[int] = None
+    context_z: Optional[int] = None
+    if runtime_context is not None:
+        if context_spot_id is None:
+            context_spot_id = runtime_context.current_spot_id
+        context_sub_location_id = runtime_context.current_sub_location_id
+        context_x = runtime_context.current_x
+        context_y = runtime_context.current_y
+        context_z = runtime_context.current_z
+    return (
+        context_spot_id,
+        context_tile_area_ids,
+        context_sub_location_id,
+        context_x,
+        context_y,
+        context_z,
+    )
+
+
 class ObservationTraceRecorder:
     """append された ObservationEntry を observation trace として別 store に保存する。"""
 
@@ -150,11 +193,30 @@ class ObservationTraceRecorder:
             raise TypeError("store must be IObservationExperienceTraceStore")
         self._store = store
 
-    def record(self, player_id: PlayerId, entry: ObservationEntry) -> ObservationExperienceTrace:
+    def record(
+        self,
+        player_id: PlayerId,
+        entry: ObservationEntry,
+        *,
+        runtime_context: Optional[ToolRuntimeContextDto] = None,
+    ) -> ObservationExperienceTrace:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
         if not isinstance(entry, ObservationEntry):
             raise TypeError("entry must be ObservationEntry")
+        if runtime_context is not None and not isinstance(
+            runtime_context, ToolRuntimeContextDto
+        ):
+            raise TypeError("runtime_context must be ToolRuntimeContextDto or None")
+
+        (
+            context_spot_id,
+            context_tile_area_ids,
+            context_sub_location_id,
+            context_x,
+            context_y,
+            context_z,
+        ) = _observation_trace_spatial_from_entry_and_runtime(entry, runtime_context)
 
         trace = ObservationExperienceTrace(
             trace_id=f"observation-trace-{uuid4().hex}",
@@ -168,9 +230,12 @@ class ObservationTraceRecorder:
             perceived_salience=_perceived_salience(entry),
             world_event_refs=_extract_world_event_refs(entry),
             visible_agents=_extract_visible_agents(entry),
-            # world_event_refs にも "spot_id_value:N" があるが、あちらは文字列の束ね用。
-            # context_spot_id は型付き int で索引・P2 のルール cue 入力用。
-            context_spot_id=_optional_int_coerce(entry.output.structured.get("spot_id_value")),
+            context_spot_id=context_spot_id,
+            context_tile_area_ids=context_tile_area_ids,
+            context_sub_location_id=context_sub_location_id,
+            context_x=context_x,
+            context_y=context_y,
+            context_z=context_z,
         )
         self._store.append(player_id, trace)
         return trace
