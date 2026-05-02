@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import datetime
 from typing import Any, Dict, List, Tuple
 from uuid import uuid4
@@ -28,6 +29,9 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IEpisodeEncodingLlmPort,
 )
 from ai_rpg_world.application.llm.exceptions import EpisodeEncodingException
+from ai_rpg_world.application.llm.services.episodic_cue_extraction import (
+    episodic_cues_from_traces,
+)
 
 _EMOTION_VALUES_PROMPT = ", ".join(subjective_emotion_label_values())
 
@@ -45,7 +49,7 @@ _SYSTEM = f"""あなたは Episode Encoder である。入力 JSON の traces_di
 - prediction_error: expected と実結果（tool_result / observation 要約）を比較し、level は none|small|medium|large、reason は日本語可。
 - belief_update_candidates: 信念の**更新候補**（まだ確定事実ではない）。各 summary / note は簡潔に。confidence は low|medium|high。
 - relationship_deltas: **他者・団体など、trace または context に名前・呼称・役割として現れた具体的な相手**に対する「印象・関係の変化候補」だけ。抽象的な存在や雰囲気のみ（例: 霧の向こうの気配、不明な何か、世界全体）を target にしない。該当する相手がいなければ空配列 []。
-- cue_keys: **想起・検索インデックス用**の短いキー。検索が日本語クエリ中心なら **短い日本語の名詞句**（例: 鍵穴, 鐘の音, 蝋燭）を混ぜてよい。ツール名・安定IDは **ASCII snake_case**（例: spot_graph_look）も併用可。3〜12 個を目安に、場所・物体・行動・他者・異常フラグなど**少なくとも 2 タイプ**を含める。1 キー 1 概念。**felt の enum 名（curiosity 等）をキーに載せない**（感情は felt に任せる）。セリフ全文や長い説明文は避ける。
+- cue_keys: **廃止（P2）**。索引用の安定キーはシステムが traces の `context_*` 等からルール抽出する。**常に空配列 [] を返すか、フィールドを省略する**（互換のためスキーマ上は任意）。
 - importance / confidence: low|medium|high
 - source_trace_ids: 省略可。出す場合は入力の source_trace_ids と**同じ順・同じ値**。
 
@@ -55,7 +59,7 @@ felt: {{primary_emotion, secondary_emotions: string[], emotion_note}}
 prediction_error: {{level: none|small|medium|large, reason}}
 belief_update_candidates: [{{summary, confidence: low|medium|high, note}}]
 relationship_deltas: [{{target, delta_summary, confidence: low|medium|high}}]
-cue_keys: string[]
+cue_keys: string[] （任意・空でよい）
 importance, confidence: low|medium|high
 """
 
@@ -129,7 +133,6 @@ def episode_encoder_llm_output_json_schema() -> Dict[str, Any]:
             "prediction_error",
             "belief_update_candidates",
             "relationship_deltas",
-            "cue_keys",
             "importance",
             "confidence",
         ],
@@ -282,10 +285,11 @@ def subjective_episode_from_llm_dict(
     pred = _dict_to_prediction_error(
         data.get("prediction_error") or {"level": "none", "reason": ""}
     )
-    cue_raw = data.get("cue_keys") or []
-    if not isinstance(cue_raw, list):
-        raise EpisodeEncodingException("cue_keys must be list")
-    cue_keys = tuple(str(x) for x in cue_raw if isinstance(x, str))
+    cue_raw = data.get("cue_keys")
+    if cue_raw is not None and not isinstance(cue_raw, list):
+        raise EpisodeEncodingException("cue_keys must be list if present")
+    # P2: 索引用 cue は LLM に任せず、encode 後にルール抽出で上書きする。
+    cue_keys: Tuple[str, ...] = ()
 
     imp = str(data.get("importance") or "medium")
     if imp not in ("low", "medium", "high"):
@@ -409,7 +413,11 @@ class LlmJsonEpisodeEncoder(IEpisodeEncoder):
                 cause=e,
             ) from e
         try:
-            return subjective_episode_from_llm_dict(data, candidate)
+            episode = subjective_episode_from_llm_dict(data, candidate)
+            # `IEpisodeEncoder.encode` は traces のみを受け取る。runtime 断片が要る場合は
+            # I/F 拡張で `episodic_cues_from_traces(..., runtime=ctx)` に渡す。
+            rule_cues = episodic_cues_from_traces(traces)
+            return replace(episode, cue_keys=(), cues=rule_cues)
         except EpisodeEncodingException:
             raise
         except (TypeError, ValueError) as e:

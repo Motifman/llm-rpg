@@ -9,16 +9,14 @@
 
 ## 2. 現状コードの要点（2026 時点）
 
-
-| 領域             | 主なモジュール                                                                                                     |
-| -------------- | ----------------------------------------------------------------------------------------------------------- |
-| v2 主観エピソード     | `SubjectiveEpisode`, `InMemorySubjectiveEpisodeStore`, `llm_json_episode_encoder.py`                        |
-| Trace          | `ActionExperienceTrace`, `ObservationExperienceTrace`, `agent_orchestrator._append_action_experience_trace` |
-| Passive Recall | `passive_subjective_recall_composer.py`（cue を状況テキストに部分一致＋ recency）                                          |
-| エンコーディング文脈     | `episode_encoding_context_provider.py`（`current_goals` ← Working Memory）                                    |
-| UI / 現在地       | `ui_context_builder.py`（タイル）, `spot_graph_ui_context_builder.py`（**`current_spot_id` ← snapshot**）          |
-| レガシー episodic  | `RuleBasedMemoryExtractor`, `EpisodeMemoryEntry`, `DefaultPredictiveMemoryRetriever`                        |
-
+| 領域 | 主なモジュール |
+|------|----------------|
+| v2 主観エピソード | `SubjectiveEpisode`, `InMemorySubjectiveEpisodeStore`, `llm_json_episode_encoder.py` |
+| Trace | `ActionExperienceTrace`, `ObservationExperienceTrace`, `agent_orchestrator._append_action_experience_trace` |
+| Passive Recall | `passive_subjective_recall_composer.py`（軸別スコアは `passive_subjective_recall_retrieval.py`、状況文と索引キー交差 + recency + 任意 `pick_debug`） |
+| エンコーディング文脈 | `episode_encoding_context_provider.py`（`current_goals` ← Working Memory） |
+| UI / 現在地 | `ui_context_builder.py`（タイル）, `spot_graph_ui_context_builder.py`（**`current_spot_id` ← snapshot**） |
+| レガシー episodic | `RuleBasedMemoryExtractor`, `EpisodeMemoryEntry`, `DefaultPredictiveMemoryRetriever` |
 
 ## 3. フェーズ概要
 
@@ -49,10 +47,12 @@ P5 Memory Context Pack 型の導入（Reflection/Recall の入力統一）
 
 **ルール**
 
-1. **マージ / push の前に**、Cursor の **サブエージェント**（親チャットとは別コンテキストのレビュアー）へ依頼する。実装を済ませたエージェントと同一視点だけで main に入れない。
+1. **マージ / push の前に**、Cursor の **サブエージェント**（親チャットとは別コンテキストのレビュアー）へ依頼する。実装を済ませたエージェントと同一視点だけで main に入れない。**依頼は利用者の明示指示を待たず、実装側エージェントが起動する**（コンテキストを渡した上で公平な視点を確保するため）。
 2. 依頼文には **PR の説明欄に書く量**を入れる: **目的（なぜ）**、ブランチ名、**`main..ブランチ` のコミット一覧**（`git log`）、**変更の要約**（ファイル単位でよい）、**レビュー観点**（正しさ・境界条件・テスト不足・永続化・命名・層の責務など。プロジェクトの DDD ルールに触れてよい）。
-3. **サブエージェントの結論（Approve / 要修正）と指摘リスト**を待ち、**指摘を反映するか、意図的に採用しない理由を短く残してから** `merge`・`push` する。レビュー待ちのまま無言でマージしない。
-4. 指摘対応は **小分けコミット**（§3.1 項 3・4）で積む。
+3. **サブエージェントの結論（Approve / 要修正）と指摘リストが返るまで後続のマージ判断に進まない**（結果を待たずに同一ターンで merge だけ完了させない）。
+4. 結論を踏まえた次の動き: **要修正**なら指摘の反映に取り組む。**プロダクト判断・アーキ採否など利用者の決裁が必要な場合はそこで停止**し、ブロッキングがない変更・テスト・コミットだけは実装側で進めてよい。**Approve か対応完了後**、残タスクがなければ **`main` へのマージ・push を実装側が実行**する（§3.1 のコミット規約に従う）。
+5. **指摘を反映するか、意図的に採用しない理由を短く残してから** `merge`・`push` する。レビュー待ちのまま無言でマージしない。
+6. 指摘対応は **小分けコミット**（§3.1 項 3・4）で積む。
 
 **補足**
 
@@ -67,13 +67,11 @@ P5 Memory Context Pack 型の導入（Reflection/Recall の入力統一）
 
 **推奨する axis（canonical 文字列・全体で固定）**
 
-
-| axis         | 意味         | value の中身               | 主な入力元（ルール側）                                               |
-| ------------ | ---------- | ----------------------- | --------------------------------------------------------- |
-| `place_spot` | スポットノード    | 十進文字列の `spot_id`        | `ToolRuntimeContextDto.current_spot_id`、trace コピー後は trace |
-| `tile_area`  | タイル世界の区画   | 十進文字列の `LocationAreaId` | `current_area_ids` / `tile_location_area_id` 系            |
-| `sub_loc`    | スポットグラフ内区画 | 十進文字列の `SubLocationId`  | `sub_location_id`、`current_sub_location_id`（導入時）          |
-
+| axis | 意味 | value の中身 | 主な入力元（ルール側） |
+|------|------|----------------|------------------------|
+| `place_spot` | スポットノード | 十進文字列の `spot_id` | `ToolRuntimeContextDto.current_spot_id`、trace コピー後は trace |
+| `tile_area` | タイル世界の区画 | 十進文字列の `LocationAreaId` | `current_area_ids` / `tile_location_area_id` 系 |
+| `sub_loc` | スポットグラフ内区画 | 十進文字列の `SubLocationId` | `sub_location_id`、`current_sub_location_id`（導入時） |
 
 - **同時成立**: 同一エピソードに `tile_area` と `sub_loc` が両方載ってよい（二系統ワールドの切り替え・ハイブリッドに対応）。想起は **いずれかと交差**すれば候補に入る、など P3 で調整する。
 - **座標 `coord:`** は、タイルで「区画より細かい一致」が要る場合のみ**後追し**で足す。初期は `tile_area` + `place_spot` で足りることが多い。
@@ -105,15 +103,13 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 
 「いつ消すか分からなくなる」のを防ぐため、**削ったらこの表を更新する**。状態: `active` / `deprecated` / `removed`。
 
-
-| 対象                                                      | 状態             | 置換・注意                                                            |
-| ------------------------------------------------------- | -------------- | ---------------------------------------------------------------- |
-| `ToolRuntimeTargetDto.location_area_id`（旧）              | removed（コード上）  | `tile_location_area_id` / `sub_location_id`                      |
-| LLM 生成の `SubjectiveEpisode.cue_keys`                    | deprecated（目標） | `cues`（ルール）。索引は `subjective_episode_index_strings` から `cues` 主軸へ |
-| フィールド `cue_keys`（DTO）                                   | active（互換）     | 上記フェーズ完了まで残す → 最終 removed または内部のみ                                |
-| レガシー `EpisodeMemoryEntry` / `PredictiveMemoryRetriever` | deprecated（方針） | v2 `SubjectiveEpisode` + Passive Recall。削減順は別タスクで行を追加            |
-| in-memory only の v2 store（本番寄り運用時）                      | deprecated（方針） | P4 の SQLite 本線へ                                                  |
-
+| 対象 | 状態 | 置換・注意 |
+|------|------|------------|
+| `ToolRuntimeTargetDto.location_area_id`（旧） | removed（コード上） | `tile_location_area_id` / `sub_location_id` |
+| LLM 生成の `SubjectiveEpisode.cue_keys` | deprecated（目標） | `cues`（ルール）。索引は `subjective_episode_index_strings` から `cues` 主軸へ |
+| フィールド `cue_keys`（DTO） | active（互換） | 上記フェーズ完了まで残す → 最終 removed または内部のみ |
+| レガシー `EpisodeMemoryEntry` / `PredictiveMemoryRetriever` | deprecated（方針） | v2 `SubjectiveEpisode` + Passive Recall。削減順は別タスクで行を追加 |
+| in-memory only の v2 store（本番寄り運用時） | deprecated（方針） | P4 の SQLite 本線へ |
 
 ---
 
@@ -123,13 +119,11 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 
 **ブランチの切り方（例・優先順は M1 / Plan の P1→P2 に追随）**
 
-
-| ブランチの単位（例）                       | 含めるものの目安              | マージの仕方              |
-| -------------------------------- | --------------------- | ------------------- |
-| `feature/episodic-trace-spatial` | Trace に構造化位置をコピー（P1）  | main へ 1 PR。完了後に次へ。 |
-| `feature/episodic-rule-cues`     | ルール抽出 → `cues` のみ（P2） | 同上。P1 と干渉しなければ並列可。  |
-| `feature/episodic-sqlite-index`  | P4 の store・schema     | P2 と別ワークツリーなら並列検討可。 |
-
+| ブランチの単位（例） | 含めるものの目安 | マージの仕方 |
+|---------------------|------------------|--------------|
+| `feature/episodic-trace-spatial` | Trace に構造化位置をコピー（P1） | main へ 1 PR。完了後に次へ。 |
+| `feature/episodic-rule-cues` | ルール抽出 → `cues` のみ（P2） | 同上。P1 と干渉しなければ並列可。 |
+| `feature/episodic-sqlite-index` | P4 の store・schema | P2 と別ワークツリーなら並列検討可。 |
 
 **並列化の条件**
 
@@ -171,17 +165,15 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 
 中立査読で洗い出した主なギャップ（**ドキュメントに「既にある」と読めないよう注意**）:
 
-
-| 項目                                                          | 状態                                                                                                                     |
-| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| P0: DTO 空間フィールド分離 + `EpisodicCue`                           | **対応済み**（2026）                                                                                                         |
-| `SpotGraphPlayerSnapshotDto.current_spot_id` + runtime への伝播 | **対応済み**（2026、P1 の一部）                                                                                                  |
-| trace への構造化位置コピー                                            | **一部対応**（2026、`ActionExperienceTrace.context_*`・`ObservationExperienceTrace.context_*`、orchestrator / `spot_id_value`） |
-| ルールベース cue + validator 主導                                   | 未着手（Plan §3.2–3.3 に沿い LLM `cue_keys` を外していく）                                                                           |
-| 軸別 Passive Recall                                           | 未着手                                                                                                                    |
-| `episode_cues` / `memory_links`                             | 未着手                                                                                                                    |
-| v2 と `PredictiveMemoryRetriever` の統合方針                      | **ユーザ判断**（段階廃止 / 併存期間）                                                                                                 |
-
+| 項目 | 状態 |
+|------|------|
+| P0: DTO 空間フィールド分離 + `EpisodicCue` | **対応済み**（2026） |
+| `SpotGraphPlayerSnapshotDto.current_spot_id` + runtime への伝播 | **対応済み**（2026、P1 の一部） |
+| trace への構造化位置コピー | **一部対応**（2026、`ActionExperienceTrace.context_*`・`ObservationExperienceTrace.context_*`、orchestrator / `spot_id_value`） |
+| ルールベース cue + validator 主導 | **一部対応**（2026、`episodic_cue_extraction`・エンコード時 `cues`・LLM `cue_keys` 廃止） |
+| 軸別 Passive Recall | **一部対応**（2026、`passive_subjective_recall_retrieval`・軸別 breakdown・`PassiveRecallPickDebug`・canonical `axis:value` の値が状況文/トークンと交差すれば cue ヒット） |
+| `episode_cues` / `memory_links` | 未着手 |
+| v2 と `PredictiveMemoryRetriever` の統合方針 | **ユーザ判断**（段階廃止 / 併存期間） |
 
 ---
 
@@ -212,17 +204,24 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 
 **タスク**
 
-1. 新モジュール（例: `application/llm/services/episodic_cue_extraction.py`）に集約:
-  - 入力: `ActionExperienceTrace` | `ObservationExperienceTrace` | 現在の `ToolRuntimeContextDto` 断片
-  - 出力: **`EpisodicCue` の列**（保存時は `SubjectiveEpisode.cues`）。必要なら移行期に併せて正規化 `tuple[str, ...]` を `cue_keys` にも複写する。
-2. ドメインから取れる **object 型・カテゴリ**（`SpotObject` 等）を可能な範囲で `object_category:` / `object_type:` に載せる。
-3. `LlmJsonEpisodeEncoder` / reflection: **索引用 `cue_keys` を LLM に書かせない**（Plan §3.3）。空間 cue は §3.2 の axis だけルールが埋める。
-4. **エンコードプロンプト**: 現状 `_traces_digest` は `tool_name` と結果要約のみで、**`context_*` は含めない**（短文化）。蓄積した空間 id は **P2 のルール抽出器**で `EpisodicCue`（例 `place_spot` / `tile_area`）に変換して初めてエンコード入力に効かせる。
+1. ✅ モジュール `application/llm/services/episodic_cue_extraction.py`：入力 `ActionExperienceTrace` | `ObservationExperienceTrace` | 任意の `ToolRuntimeContextDto` 断片（`episodic_cues_from_traces(..., runtime=)`）。出力 **`EpisodicCue` の列**（長さ・件数上限）。空間軸 `place_spot` / `tile_area` / `sub_loc`、`action`（ツール名）、観測の `observation_kind`、structured の id、`object_type` / `object_category`（runtime target）など。
+2. ✅ ドメイン由来 id の範囲で object 系・空間系をルール化（P1 の trace `context_*` と整合）。
+3. ✅ `LlmJsonEpisodeEncoder`：索引用 **`cue_keys` を LLM に要求しない**（JSON schema では任意）。**保存時 `cue_keys` は空・`cues` は encode 直後にルールで上書き**。
+4. ✅ `_traces_digest` は現状どおり要約のみ（`context_*` 非掲載）。空間 id は trace 本体の `context_*` から抽出器が読む。
+
+**残り（参考）**
+
+- `IEpisodeEncoder.encode` に `ToolRuntimeContextDto` を渡す拡張で、trace に無い `current_*` を常時マージしやすくする。
+- **Passive Recall** は現状 `situation_text` への部分一致が中心のため、エピソード側が **`cues` の canonical（`axis:value`）** 中心になると、日本語のみの旧 `cue_keys` より状況文との一致が取りにくい場合がある。**P3** の SituationCueSet（同一抽出器）で揃える想定。
 
 **受け入れ条件**
 
-- 同一 trace から決定論的に同じ cue 列が得られる（テストで固定）。
-- Validator（prefix・長さ上限・個数上限）を通す。
+- 同一 trace から決定論的に同じ cue 列が得られる（テストで固定）。✅
+- Validator（長さ上限・個数上限）を通す。✅
+
+**Stub / テスト**
+
+- ✅ `StubEpisodeEncoder` も同じ `episodic_cues_from_traces` で `cues` を付与（`cue_keys` は空）。
 
 ---
 
@@ -231,16 +230,16 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 **タスク**
 
 1. `PassiveSubjectiveRecallComposer` を分割:
-  - **TemporalRetriever**: `list_recent` + tick 窓（利用可能なら）
-  - **CueOverlapRetriever**: 現在状況から生成した **SituationCueSet**（P2 と同じ抽出器）と episode の cue 交差
-  - **GoalOverlapRetriever**: 現状のトークン一致を維持しつつ、将来的に `goal:` key へ
-2. 各 retriever が id 集合を返し、**和集合 → 重複カウントまたは二次スコア**で並べ替え。
-3. `situation_text` への cue の生文字列依存を弱める（可能なら）。
+   - ✅ **軸別スコア**は `passive_subjective_recall_retrieval.py` に切り出し（temporal / cue / importance / goal）。`list_recent` 順は temporal 補正に反映。
+   - ⏳ **SituationCueSet**（P2 の `episodic_cue_extraction` 由来）と episode の **型付き cue 集合の和集合検索**は未。現状は状況文テキストと `subjective_episode_index_strings` の交差で cue 軸を計算。
+   - ✅ **Goal 軸**: 現行の目標トークンと本文一致を維持（将来 `goal:` 接頭辞へ）。
+2. ⏳ 複数 retriever が episode_id 集合を返すパイプは未。現状は **線形スキャン + 合成スコア**で並べ替え。
+3. ✅ canonical `axis:value` の **値部分**が状況に含まれれば cue ヒット（日本語 `cue_keys` だけに依存しない）。
 
 **受け入れ条件**
 
-- 既存テストを更新・追加し、回 regress しない。
-- デバッグ用に「どの軸が候補に効いたか」をログまたはテストで見える化（任意だが推奨）。
+- 既存テストを更新・追加し、回 regress しない。✅
+- デバッグ用に軸別寄与を見える化: `PassiveRecallPickDebug` + `include_pick_debug=True`。✅
 
 ---
 
@@ -308,4 +307,3 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 
 - 仕様: [episodic_memory_system_spec.md](./episodic_memory_system_spec.md)
 - 詳細議事録・Tool schema 長文: [episodic_memory_reimplementation_plan.md](./episodic_memory_reimplementation_plan.md)
-
