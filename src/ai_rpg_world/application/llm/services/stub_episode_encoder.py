@@ -112,6 +112,7 @@ class StubEpisodeEncoder(IEpisodeEncoder):
             belief_update_candidates=(),
             relationship_deltas=(),
             cue_keys=tuple(dict.fromkeys(narrative_cues)),
+            cues=(),
             importance=importance,
             salience_reasons=salience,
             recall_count=0,

@@ -124,6 +124,10 @@ def build_memory_reflection_user_prompt(
         },
         "importance": episode.importance,
         "cue_keys": list(episode.cue_keys),
+        "cues": [
+            {"axis": c.axis, "value": c.value, "source": c.source}
+            for c in episode.cues
+        ],
         "source_trace_ids": list(episode.source_trace_ids),
     }
     ctx_payload = {
