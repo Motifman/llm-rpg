@@ -82,7 +82,7 @@ def _make_context() -> ToolRuntimeContextDto:
                 kind="destination",
                 display_name="ギルドエリア",
                 spot_id=1,
-                location_area_id=10,
+                tile_location_area_id=10,
                 destination_type="location",
             ),
             "D1": DestinationToolRuntimeTargetDto(

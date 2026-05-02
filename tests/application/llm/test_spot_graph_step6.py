@@ -24,7 +24,7 @@ def _make_dto(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
     return PlayerCurrentStateDto(
         player_id=1,
         player_name="P",
-        current_spot_id=1,
+        current_spot_id=snap.current_spot_id,
         current_spot_name=snap.current_spot_name,
         current_spot_description=snap.current_spot_description,
         x=None,
@@ -81,6 +81,7 @@ def test_spot_graph_specs_require_inner_thought() -> None:
 def test_spot_graph_formatter_outputs_base_info() -> None:
     """フォーマッタは場所・雰囲気・時刻のベーステキストのみを出力する。"""
     snap = SpotGraphPlayerSnapshotDto(
+        current_spot_id=1,
         current_spot_name="地下室",
         current_spot_description="暗い",
         travel_status_line=None,
@@ -101,6 +102,7 @@ def test_spot_graph_formatter_outputs_base_info() -> None:
 def test_spot_graph_ui_context_builder_adds_labels() -> None:
     """UiContextBuilder が接続先・オブジェクト・サブロケーションにラベルを付与する。"""
     snap = SpotGraphPlayerSnapshotDto(
+        current_spot_id=1,
         current_spot_name="地下室",
         current_spot_description="暗い",
         travel_status_line=None,
@@ -149,12 +151,14 @@ def test_spot_graph_ui_context_builder_adds_labels() -> None:
     assert "OBJ1" in targets
     assert targets["OBJ1"].world_object_id == 10
     assert "SL1" in targets
-    assert targets["SL1"].location_area_id == 5
+    assert targets["SL1"].sub_location_id == 5
+    assert result.tool_runtime_context.current_spot_id == 1
 
 
 def test_spot_graph_formatter_shows_weather_for_outdoor() -> None:
     """屋外スポットで天候がある場合、天候行が表示される。"""
     snap = SpotGraphPlayerSnapshotDto(
+        current_spot_id=3,
         current_spot_name="外",
         current_spot_description="外に出た",
         travel_status_line=None,
@@ -175,6 +179,7 @@ def test_spot_graph_formatter_shows_weather_for_outdoor() -> None:
 def test_spot_graph_formatter_omits_weather_for_indoor() -> None:
     """屋内スポットでは weather=None のため天候行が出ない。"""
     snap = SpotGraphPlayerSnapshotDto(
+        current_spot_id=1,
         current_spot_name="地下室",
         current_spot_description="暗い",
         travel_status_line=None,

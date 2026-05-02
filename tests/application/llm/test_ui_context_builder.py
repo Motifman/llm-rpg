@@ -395,7 +395,7 @@ class TestDefaultLlmUiContextBuilder:
         assert "LA2" in result.tool_runtime_context.targets
         target_l1 = result.tool_runtime_context.targets["LA1"]
         assert target_l1.destination_type == "location"
-        assert target_l1.location_area_id == 10
+        assert target_l1.tile_location_area_id == 10
         assert target_l1.spot_id == 1
         assert target_l1.display_name == "ギルドエリア"
 
