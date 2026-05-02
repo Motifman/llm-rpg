@@ -29,6 +29,7 @@ def _episode(
     cues: tuple[EpisodicCue, ...] = (),
     created_at: datetime | None = None,
     memory_reflection_journal: tuple[MemoryReflectionJournalEntry, ...] = (),
+    observed: str = "obs",
 ) -> SubjectiveEpisode:
     t0 = created_at or datetime.now()
     return SubjectiveEpisode(
@@ -38,7 +39,7 @@ def _episode(
         started_at_tick=None,
         ended_at_tick=None,
         source_trace_ids=("action:a1",),
-        observed="obs",
+        observed=observed,
         interpreted="interp",
         felt=SubjectiveFelt(primary_emotion="neutral", secondary_emotions=(), emotion_note=""),
         intended="i",
@@ -226,3 +227,165 @@ def test_list_recent_order(db_path: str) -> None:
     recent = store.list_recent(pid, 1)
     assert len(recent) == 1
     assert recent[0].episode_id == "newer"
+
+
+def test_agent_id_isolation_same_episode_id_different_players(db_path: str) -> None:
+    """同一 episode_id 文字列でも agent_id が違えば別行として保存され、取得が混ざらない。"""
+    store = SqliteSubjectiveEpisodeStore(db_path)
+    p1 = PlayerId(1)
+    p2 = PlayerId(2)
+    t0 = datetime(2026, 7, 1, 0, 0, 0)
+    store.put(
+        p1,
+        _episode(
+            episode_id="dup-id",
+            agent_id=1,
+            cue_keys=("spot:1",),
+            observed="player1",
+            created_at=t0,
+        ),
+    )
+    store.put(
+        p2,
+        _episode(
+            episode_id="dup-id",
+            agent_id=2,
+            cue_keys=("spot:1",),
+            observed="player2",
+            created_at=t0 + timedelta(minutes=1),
+        ),
+    )
+    g1 = store.get_by_episode_id(p1, "dup-id")
+    g2 = store.get_by_episode_id(p2, "dup-id")
+    assert g1 is not None and g1.observed == "player1" and g1.agent_id == 1
+    assert g2 is not None and g2.observed == "player2" and g2.agent_id == 2
+    assert {e.agent_id for e in store.list_all_episodes(p1)} == {1}
+    assert {e.agent_id for e in store.list_all_episodes(p2)} == {2}
+
+
+def test_agent_id_isolation_cue_reverse_lookup(db_path: str) -> None:
+    """episode_cues の逆引きは agent_id でスコープされ、他プレイヤーの id が返らない。"""
+    store = SqliteSubjectiveEpisodeStore(db_path)
+    p1 = PlayerId(1)
+    p2 = PlayerId(2)
+    t0 = datetime(2026, 7, 2, 0, 0, 0)
+    store.put(
+        p1,
+        _episode(episode_id="e-p1", agent_id=1, cue_keys=("shared_cue:x",), created_at=t0),
+    )
+    store.put(
+        p2,
+        _episode(episode_id="e-p2", agent_id=2, cue_keys=("shared_cue:x",), created_at=t0),
+    )
+    ids1 = store.list_episode_ids_by_cue_keys(p1, ("shared_cue:x",))
+    ids2 = store.list_episode_ids_by_cue_keys(p2, ("shared_cue:x",))
+    assert ids1 == ["e-p1"]
+    assert ids2 == ["e-p2"]
+    assert "e-p2" not in ids1
+    assert "e-p1" not in ids2
+
+
+def test_agent_id_isolation_memory_links(db_path: str) -> None:
+    """memory_links は同一 agent 内の episode_id のみを指す。"""
+    store = SqliteSubjectiveEpisodeStore(db_path, max_links_per_episode=5)
+    p1 = PlayerId(1)
+    p2 = PlayerId(2)
+    t0 = datetime(2026, 7, 3, 0, 0, 0)
+    store.put(
+        p1,
+        _episode(episode_id="alpha-1", agent_id=1, cue_keys=("tile:99",), created_at=t0),
+    )
+    store.put(
+        p1,
+        _episode(
+            episode_id="beta-1",
+            agent_id=1,
+            cue_keys=("tile:99",),
+            created_at=t0 + timedelta(hours=1),
+        ),
+    )
+    store.put(
+        p2,
+        _episode(episode_id="alpha-2", agent_id=2, cue_keys=("tile:99",), created_at=t0),
+    )
+    store.put(
+        p2,
+        _episode(
+            episode_id="beta-2",
+            agent_id=2,
+            cue_keys=("tile:99",),
+            created_at=t0 + timedelta(hours=1),
+        ),
+    )
+    targets_p1 = {r["target_id"] for r in store.list_memory_links_from(p1, "beta-1")}
+    targets_p2 = {r["target_id"] for r in store.list_memory_links_from(p2, "beta-2")}
+    assert "alpha-1" in targets_p1
+    assert "alpha-2" not in targets_p1
+    assert "alpha-2" in targets_p2
+    assert "alpha-1" not in targets_p2
+    assert "beta-2" not in targets_p1
+
+
+def test_agent_id_isolation_eviction_does_not_touch_other_player(db_path: str) -> None:
+    """max_entries の掃除は当該 agent の行だけ。他プレイヤーのエピソードは残る。"""
+    store = SqliteSubjectiveEpisodeStore(db_path, max_entries_per_player=2)
+    p1 = PlayerId(1)
+    p2 = PlayerId(2)
+    t0 = datetime(2026, 7, 4, 0, 0, 0)
+    store.put(
+        p1,
+        _episode(episode_id="p1-old", agent_id=1, cue_keys=("a:1",), created_at=t0),
+    )
+    store.put(
+        p1,
+        _episode(episode_id="p1-mid", agent_id=1, cue_keys=("a:2",), created_at=t0 + timedelta(days=1)),
+    )
+    store.put(
+        p1,
+        _episode(episode_id="p1-new", agent_id=1, cue_keys=("a:3",), created_at=t0 + timedelta(days=2)),
+    )
+    store.put(
+        p2,
+        _episode(episode_id="p2-only", agent_id=2, cue_keys=("b:1",), created_at=t0),
+    )
+    assert store.get_by_episode_id(p1, "p1-old") is None
+    assert {e.episode_id for e in store.list_all_episodes(p1)} == {"p1-mid", "p1-new"}
+    assert store.get_by_episode_id(p2, "p2-only") is not None
+
+
+def test_agent_id_isolation_recall_and_journal_count(db_path: str) -> None:
+    """Passive recall 加算とジャーナル件数集計が agent_id 境界を越えない。"""
+    store = SqliteSubjectiveEpisodeStore(db_path)
+    p1 = PlayerId(1)
+    p2 = PlayerId(2)
+    entry = MemoryReflectionJournalEntry(
+        entry_id="jx",
+        created_at=datetime.now(timezone.utc),
+        correlation_id="c",
+        trigger="t",
+        recall_trigger="r",
+        current_interpretation="i",
+        effect_on_decision="d",
+        episode_patch=MemoryReflectionEpisodePatchDto(),
+    )
+    store.put(
+        p1,
+        _episode(
+            episode_id="ep1",
+            agent_id=1,
+            cue_keys=("z:1",),
+            memory_reflection_journal=(entry,),
+        ),
+    )
+    store.put(
+        p2,
+        _episode(episode_id="ep2", agent_id=2, cue_keys=("z:2",)),
+    )
+    store.record_passive_recall(p1, "ep1")
+    g1_after = store.get_by_episode_id(p1, "ep1")
+    assert g1_after is not None and g1_after.recall_count == 1
+    store.record_passive_recall(p2, "nonexistent-should-noop")
+    g2 = store.get_by_episode_id(p2, "ep2")
+    assert g2 is not None and g2.recall_count == 0
+    assert store.count_reflection_journal_entries(p1) == 1
+    assert store.count_reflection_journal_entries(p2) == 0
