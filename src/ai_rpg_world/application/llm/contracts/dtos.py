@@ -603,6 +603,31 @@ class RelationshipDeltaEntry:
             raise ValueError("confidence must be low, medium, or high")
 
 
+EpisodicCueSource = Literal["rule", "llm", "hybrid"]
+
+
+@dataclass(frozen=True)
+class EpisodicCue:
+    """想起 index 用の型付き cue。`to_canonical()` で従来の `cue_keys` 文字列と同型のキーにできる。"""
+
+    axis: str
+    value: str
+    source: EpisodicCueSource = "rule"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.axis, str) or not self.axis.strip():
+            raise ValueError("EpisodicCue.axis must be non-empty str")
+        if not isinstance(self.value, str) or not self.value.strip():
+            raise ValueError("EpisodicCue.value must be non-empty str")
+        if self.source not in ("rule", "llm", "hybrid"):
+            raise ValueError("EpisodicCue.source must be rule, llm, or hybrid")
+
+    def to_canonical(self) -> str:
+        ax = self.axis.strip()
+        val = self.value.strip()
+        return f"{ax}:{val}"
+
+
 @dataclass(frozen=True)
 class EpisodeEncodingContextDto:
     """Episode Encoder に渡すエージェント文脈（Phase 3 はプロンプト由来の薄い文字列から組み立て可能）。"""
@@ -643,6 +668,7 @@ class SubjectiveEpisode:
     belief_update_candidates: Tuple[BeliefUpdateCandidateEntry, ...] = ()
     relationship_deltas: Tuple[RelationshipDeltaEntry, ...] = ()
     cue_keys: Tuple[str, ...] = ()
+    cues: Tuple[EpisodicCue, ...] = ()
     importance: SubjectiveImportance = "medium"
     salience_reasons: Tuple[str, ...] = ()
     recall_count: int = 0
@@ -691,6 +717,10 @@ class SubjectiveEpisode:
             raise TypeError("cue_keys must be tuple")
         if not all(isinstance(x, str) for x in self.cue_keys):
             raise TypeError("cue_keys must contain only str")
+        if not isinstance(self.cues, tuple):
+            raise TypeError("cues must be tuple")
+        if not all(isinstance(x, EpisodicCue) for x in self.cues):
+            raise TypeError("cues must contain only EpisodicCue")
         if self.importance not in ("low", "medium", "high"):
             raise ValueError("importance must be low, medium, or high")
         if not isinstance(self.salience_reasons, tuple):
@@ -726,6 +756,12 @@ class SubjectiveEpisode:
             raise TypeError("candidate_id must be str")
 
 
+def subjective_episode_index_strings(ep: SubjectiveEpisode) -> Tuple[str, ...]:
+    """`cue_keys`（LLM・レガシー）と型付き `cues` をマージした索引キー（重複除去・先勝ち）。"""
+    from_cues = tuple(c.to_canonical() for c in ep.cues)
+    return tuple(dict.fromkeys((*ep.cue_keys, *from_cues)))
+
+
 @dataclass(frozen=True)
 class ToolDefinitionDto:
     """1 つのツール定義（OpenAI tools 形式の name / description / parameters 用）。"""
@@ -745,7 +781,10 @@ class ToolDefinitionDto:
 
 @dataclass(frozen=True)
 class ToolRuntimeTargetDto:
-    """一時ラベルから内部IDへ解決するためのターゲット情報。"""
+    """一時ラベルから内部IDへ解決するためのターゲット情報。
+
+    物理マップのロケーションエリアIDとスポットグラフのサブロケーションIDは別物のためフィールドを分離する。
+    """
 
     label: str
     kind: str
@@ -753,7 +792,8 @@ class ToolRuntimeTargetDto:
     player_id: Optional[int] = None
     world_object_id: Optional[int] = None
     spot_id: Optional[int] = None
-    location_area_id: Optional[int] = None
+    tile_location_area_id: Optional[int] = None
+    sub_location_id: Optional[int] = None
     destination_type: Optional[str] = None
     distance: Optional[int] = None
     direction: Optional[str] = None
@@ -797,8 +837,12 @@ class ToolRuntimeTargetDto:
             raise TypeError("world_object_id must be int or None")
         if self.spot_id is not None and not isinstance(self.spot_id, int):
             raise TypeError("spot_id must be int or None")
-        if self.location_area_id is not None and not isinstance(self.location_area_id, int):
-            raise TypeError("location_area_id must be int or None")
+        if self.tile_location_area_id is not None and not isinstance(
+            self.tile_location_area_id, int
+        ):
+            raise TypeError("tile_location_area_id must be int or None")
+        if self.sub_location_id is not None and not isinstance(self.sub_location_id, int):
+            raise TypeError("sub_location_id must be int or None")
         if self.destination_type is not None and not isinstance(self.destination_type, str):
             raise TypeError("destination_type must be str or None")
         if self.distance is not None and not isinstance(self.distance, int):
