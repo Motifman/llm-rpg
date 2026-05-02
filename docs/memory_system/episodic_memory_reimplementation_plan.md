@@ -1,5 +1,12 @@
 # Episodic Memory System Reimplementation Plan
 
+> **正本の分割（2026）**  
+> - **仕様（想起軸・cue・空間・goal 等）**: [episodic_memory_system_spec.md](./episodic_memory_system_spec.md)  
+> - **実装フェーズ・タスク順**: [episodic_memory_implementation_plan.md](./episodic_memory_implementation_plan.md)  
+> 本文書は、Tool 共通 schema・Chunker・長文の設計メモを含む**補助・歴史リファレンス**として残す。新規読者は上記2件から入るとよい。
+
+---
+
 この文書は、LLM エージェントに「人間のような体験の連続性」を持たせるための記憶システム再設計案である。
 
 まだ実装前の議論用ドキュメントであり、既存コードを確認した上で、現在の `sliding window / episodic memory / long term memory / memory_query / reflection` をどう発展させるかをまとめる。現在の記憶システムのアーキテクチャの変更も考えている。
