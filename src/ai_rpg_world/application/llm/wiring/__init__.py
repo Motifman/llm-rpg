@@ -103,9 +103,6 @@ from ai_rpg_world.application.llm.services.in_memory_observation_experience_trac
 from ai_rpg_world.application.llm.services.in_memory_episode_candidate_store import (
     InMemoryEpisodeCandidateStore,
 )
-from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
-    InMemorySubjectiveEpisodeStore,
-)
 from ai_rpg_world.application.llm.services.in_memory_identity_memory_store import (
     InMemoryIdentityMemoryStore,
 )
