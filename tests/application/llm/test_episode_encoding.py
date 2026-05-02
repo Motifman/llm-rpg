@@ -305,7 +305,9 @@ def test_processor_encoder_transient_failure_backoff_then_permanent() -> None:
     assert proc.process_pending(pid) == 0
     final = cstore.get_by_candidate_id(pid, "c1")
     assert final is not None and final.status == "encoding_failed"
-    pid = PlayerId(1)
+
+
+def test_llm_json_encoder_applies_rule_cues() -> None:
     payload = {
         "observed": "見えた。",
         "interpreted": "危ない。",
@@ -327,6 +329,8 @@ def test_processor_encoder_transient_failure_backoff_then_permanent() -> None:
     ep = encoder.encode(ctx, cand, (trace,))
     assert ep.observed == "見えた。"
     assert ep.felt.primary_emotion == "fear"
+    assert ep.cue_keys == ()
+    assert any(c.to_canonical() == "action:spot_graph_look" for c in ep.cues)
     assert llm.calls
 
 
@@ -378,4 +382,42 @@ def test_subjective_episode_from_llm_dict_rejects_invalid_emotion_label() -> Non
         "confidence": "medium",
     }
     with pytest.raises(EpisodeEncodingException, match="felt.primary_emotion"):
+        subjective_episode_from_llm_dict(bad, cand)
+
+
+def test_subjective_episode_from_llm_dict_ignores_llm_cue_keys() -> None:
+    cand = _candidate("x", ("action:a1",))
+    data = {
+        "observed": "見えた。",
+        "interpreted": "危ない。",
+        "intended": "下がる。",
+        "expected": "安全。",
+        "felt": {"primary_emotion": "fear", "secondary_emotions": [], "emotion_note": ""},
+        "prediction_error": {"level": "medium", "reason": "勘違い"},
+        "belief_update_candidates": [],
+        "relationship_deltas": [],
+        "cue_keys": ["llm_should_not_be_used"],
+        "importance": "high",
+        "confidence": "low",
+    }
+    ep = subjective_episode_from_llm_dict(data, cand)
+    assert ep.cue_keys == ()
+
+
+def test_subjective_episode_from_llm_dict_cue_keys_wrong_type_raises() -> None:
+    cand = _candidate("x", ("action:a1",))
+    bad = {
+        "observed": "a",
+        "interpreted": "b",
+        "intended": "c",
+        "expected": "d",
+        "felt": {"primary_emotion": "neutral", "secondary_emotions": [], "emotion_note": ""},
+        "prediction_error": {"level": "none", "reason": ""},
+        "belief_update_candidates": [],
+        "relationship_deltas": [],
+        "cue_keys": "not-a-list",
+        "importance": "medium",
+        "confidence": "medium",
+    }
+    with pytest.raises(EpisodeEncodingException, match="cue_keys must be list"):
         subjective_episode_from_llm_dict(bad, cand)
