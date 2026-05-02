@@ -4,6 +4,7 @@ import pytest
 from datetime import datetime
 from unittest.mock import MagicMock
 
+from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
     ObservationOutput,
@@ -93,6 +94,33 @@ class TestObservationAppenderNormal:
         entries = buffer.get_observations(player_id)
         assert len(entries) == 3
         assert [e.output.structured["index"] for e in entries] == [0, 1, 2]
+
+    def test_runtime_context_provider_passed_to_buffer(self) -> None:
+        """runtime_context_provider が戻した値が buffer.append に渡る"""
+        calls = []
+
+        def provider(pid: PlayerId) -> ToolRuntimeContextDto:
+            assert pid.value == 1
+            return ToolRuntimeContextDto(targets={}, current_spot_id=12)
+
+        class CaptureBuffer(IObservationContextBuffer):
+            def append(self, player_id, entry, *, runtime_context=None):
+                calls.append((player_id, entry, runtime_context))
+
+            def get_observations(self, player_id):
+                return []
+
+            def drain(self, player_id):
+                return []
+
+        cap = CaptureBuffer()
+        appender = ObservationAppender(
+            buffer=cap, runtime_context_provider=provider
+        )
+        out = ObservationOutput(prose="x", structured={"type": "t"})
+        appender.append(PlayerId(1), out, datetime.now(), None)
+        assert len(calls) == 1
+        assert calls[0][2] is not None and calls[0][2].current_spot_id == 12
 
 
 class TestObservationAppenderExceptions:
