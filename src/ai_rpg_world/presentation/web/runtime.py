@@ -69,6 +69,8 @@ class SqliteWebAppConfig:
     viewport_height: int = 540
     initial_tick: int = 0
     tick_interval_ms: int = 60
+    # False: timer still advances simulation.current_tick without SqliteMonsterBehaviorWorldPort.advance_tick.
+    simulate_monsters_on_tick: bool = True
 
 
 class SqliteWebRuntime:
@@ -164,12 +166,15 @@ def create_sqlite_web_runtime(config: SqliteWebAppConfig) -> SqliteWebRuntime:
         time_provider=time_provider,
         db_lock=db_lock,
     )
+    tick_advanced_callback = (
+        monster_behavior_port.advance_tick if config.simulate_monsters_on_tick else None
+    )
     simulation_runtime_control = InProcessSimulationRuntimeControlPort(
         time_provider=time_provider,
         projection=projection,
         broker=broker,
         tick_interval_ms=config.tick_interval_ms,
-        tick_advanced_callback=monster_behavior_port.advance_tick,
+        tick_advanced_callback=tick_advanced_callback,
     )
     simulation_control = SimulationControlService(
         projection,
