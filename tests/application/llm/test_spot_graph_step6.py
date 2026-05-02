@@ -156,6 +156,33 @@ def test_spot_graph_ui_context_builder_adds_labels() -> None:
     assert result.tool_runtime_context.current_sub_location_id == 5
 
 
+def test_spot_graph_ui_context_first_is_current_wins_when_multiple_marked_current() -> None:
+    """is_current が複数 True のとき先頭の sub_location_id を採用する（仕様固定）。"""
+    snap = SpotGraphPlayerSnapshotDto(
+        current_spot_id=1,
+        current_spot_name="地下室",
+        current_spot_description="暗い",
+        travel_status_line=None,
+        sub_locations=(
+            SpotGraphSubLocationEntry(
+                sub_location_id=5,
+                name="北",
+                is_current=True,
+                is_hidden=False,
+            ),
+            SpotGraphSubLocationEntry(
+                sub_location_id=9,
+                name="南",
+                is_current=True,
+                is_hidden=False,
+            ),
+        ),
+    )
+    dto = _make_dto(snap)
+    result = SpotGraphUiContextBuilder().build("現在地: 地下室", dto)
+    assert result.tool_runtime_context.current_sub_location_id == 5
+
+
 def test_spot_graph_formatter_shows_weather_for_outdoor() -> None:
     """屋外スポットで天候がある場合、天候行が表示される。"""
     snap = SpotGraphPlayerSnapshotDto(
