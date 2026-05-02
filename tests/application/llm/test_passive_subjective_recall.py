@@ -8,6 +8,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     SubjectiveEpisode,
     SubjectiveFelt,
     SubjectivePredictionError,
+    ToolRuntimeContextDto,
 )
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
     InMemorySubjectiveEpisodeStore,
@@ -106,6 +107,55 @@ def test_count_cue_axis_hits_matches_canonical_value_in_situation() -> None:
         cues=(EpisodicCue(axis="place_spot", value="12", source="rule"),),
     )
     assert count_cue_axis_hits(ep, situation_text="いまはスポット12の手前だ。") == 1
+
+
+def test_count_cue_axis_hits_matches_runtime_spot_without_digit_in_text() -> None:
+    """状況文に spot id が無くても ToolRuntimeContext の place_spot と一致する。"""
+    now = datetime(2026, 4, 29, 15, 0, 0)
+    ep = _episode(
+        episode_id="e-rtc-spot",
+        cue_keys=(),
+        observed="過去の記憶",
+        created_at=now,
+    )
+    ep = replace(
+        ep,
+        cues=(EpisodicCue(axis="place_spot", value="12", source="rule"),),
+    )
+    rtc = ToolRuntimeContextDto(targets={}, current_spot_id=12)
+    assert count_cue_axis_hits(ep, situation_text="霧だけがかった広場。", runtime=rtc) == 1
+
+
+def test_compose_user_block_hits_episode_via_runtime_spot() -> None:
+    """状況文に id が無くても runtime の current_spot_id でエピソードの place_spot と突合される。"""
+    store = InMemorySubjectiveEpisodeStore()
+    pid = PlayerId(1)
+    now = datetime(2026, 4, 29, 15, 0, 0)
+    base = _episode(
+        episode_id="ep-compose-rtc",
+        cue_keys=(),
+        observed="鐘の音が気になった。",
+        created_at=now,
+    )
+    ep = replace(
+        base,
+        cues=(EpisodicCue(axis="place_spot", value="5", source="rule"),),
+    )
+    store.put(pid, ep)
+    composer = PassiveSubjectiveRecallComposer(
+        subjective_episode_store=store,
+        min_score=0.0,
+        max_hits=1,
+    )
+    rtc = ToolRuntimeContextDto(targets={}, current_spot_id=5)
+    block = composer.compose_user_block(
+        pid,
+        situation_text="冷たい風だけが吹いている。",
+        current_goals_hint="",
+        runtime_context=rtc,
+    )
+    assert "【ふと思い出したこと】" in block.user_block
+    assert "鐘の音が気になった" in block.user_block
 
 
 def test_score_episode_place_spot_canonical_without_cue_keys() -> None:
