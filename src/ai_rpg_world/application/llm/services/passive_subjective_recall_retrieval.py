@@ -6,6 +6,8 @@
 importance 軸は `SubjectiveEpisode.importance` から段階ボーナス。
 goal 軸は目標ヒントのトークンが observed/interpreted に含まれる件数×重み。
 `axis:value` 形（P2 の `to_canonical`）は、値部分が状況文またはトークンに含まれれば一致とみなす。
+加えて `ToolRuntimeContextDto` 由来の状況側 canonical（`passive_recall_situation_cues`）と
+エピソード索引文字列が一致すればヒットする。
 """
 
 from __future__ import annotations

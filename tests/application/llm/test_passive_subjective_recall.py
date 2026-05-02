@@ -126,6 +126,30 @@ def test_count_cue_axis_hits_matches_runtime_spot_without_digit_in_text() -> Non
     assert count_cue_axis_hits(ep, situation_text="霧だけがかった広場。", runtime=rtc) == 1
 
 
+def test_count_cue_axis_hits_does_not_double_count_text_and_runtime() -> None:
+    """同じ canonical が文面と runtime の両方で満たされても 1 ヒット。"""
+    now = datetime(2026, 4, 29, 15, 0, 0)
+    ep = _episode(
+        episode_id="e-double",
+        cue_keys=(),
+        observed="記憶",
+        created_at=now,
+    )
+    ep = replace(
+        ep,
+        cues=(EpisodicCue(axis="place_spot", value="12", source="rule"),),
+    )
+    rtc = ToolRuntimeContextDto(targets={}, current_spot_id=12)
+    assert (
+        count_cue_axis_hits(
+            ep,
+            situation_text="スポット12に立っている。",
+            runtime=rtc,
+        )
+        == 1
+    )
+
+
 def test_compose_user_block_hits_episode_via_runtime_spot() -> None:
     """状況文に id が無くても runtime の current_spot_id でエピソードの place_spot と突合される。"""
     store = InMemorySubjectiveEpisodeStore()
