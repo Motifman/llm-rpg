@@ -120,7 +120,7 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 | trace への構造化位置コピー | **一部対応**（2026、`ActionExperienceTrace.context_*`・`ObservationExperienceTrace.context_*`、orchestrator / `spot_id_value`） |
 | ルールベース cue + validator 主導 | **一部対応**（2026、`episodic_cue_extraction`・エンコード時 `cues`・LLM `cue_keys` 廃止） |
 | 軸別 Passive Recall | **一部対応**（2026、状況文／トークン交差 + **`ToolRuntimeContextDto` 由来の canonical** とエピソード索引の突合・`compose_user_block(runtime_context=)`） |
-| `episode_cues` / `memory_links` | **対応済み**（2026、`SqliteSubjectiveEpisodeStore`, `subjective_episode_sqlite_codec.py`, `tests/.../test_sqlite_subjective_episode_store.py`） |
+| `episode_cues` / `memory_links` | **対応済み（main マージ済み・利用者確認済み）**（2026、`SqliteSubjectiveEpisodeStore`, `subjective_episode_sqlite_codec.py`, `tests/.../test_sqlite_subjective_episode_store.py`） |
 | v2 と `PredictiveMemoryRetriever` の統合方針 | **ユーザ判断**（段階廃止 / 併存期間） |
 
 ---
@@ -194,6 +194,8 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 
 ## P4 — `episode_cues` / `memory_links`
 
+**状態**: コードは **main にマージ済み**（SQLite 本線実装・利用者確認済み）。以下は完了内容の記録。
+
 **タスク**
 
 1. ✅ 仕様 §2.5 のテーブル相当を **SQLite で実装**（`agent_id` = `PlayerId.value` スコープ）。マイグレーション namespace: `subjective-episode-v2`。レガシー `episode_memories` とは別系統。
@@ -219,9 +221,11 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 
 **タスク**
 
-1. `MemoryContextPack` dataclass（保存しない）を `application/llm/contracts` に追加。
+1. ✅ `MemoryContextPack` dataclass（保存しない）を `application/llm/contracts/memory_context_pack.py` に追加。`contracts/__init__.py` から再エクスポート。
+   - §2.7 で型が固まっている範囲: `current_situation` / `current_goals` / `current_attention`、`focus_episode`、`temporal_neighbors` / `associative_neighbors`、`co_recalled_memories`、`identity_context`、`contradictions`、および `semantic_context` に相当する **`semantic_facts`（`LongTermFactEntry`）と `semantic_laws`（`MemoryLawEntry`）**。
+   - **意図的にまだ載せない**: 仕様の `current_emotional_state`（身体状態との連動拡張）は、観測・DTO の契約が固まるまで Pack に含めない。
 2. Passive Recall / Memory Reflection の入力を、可能な範囲で Pack 組み立てに寄せる。
-3. 仕様 §2.7 のフィールドを段階的に埋める。
+3. 仕様 §2.7 の残り（上記 `current_emotional_state` など）を段階的に埋める。
 
 ---
 
