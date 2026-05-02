@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Tuple
+from typing import Optional, Tuple
 from uuid import uuid4
 
 from ai_rpg_world.application.llm.contracts.dtos import (
@@ -14,6 +14,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     SubjectiveEpisode,
     SubjectiveFelt,
     SubjectivePredictionError,
+    ToolRuntimeContextDto,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
     ExperienceTraceUnion,
@@ -30,6 +31,8 @@ class StubEpisodeEncoder(IEpisodeEncoder):
         context: EpisodeEncodingContextDto,
         candidate: EpisodeCandidate,
         traces: Tuple[ExperienceTraceUnion, ...],
+        *,
+        encoding_runtime: Optional[ToolRuntimeContextDto] = None,
     ) -> SubjectiveEpisode:
         if not isinstance(context, EpisodeEncodingContextDto):
             raise TypeError("context must be EpisodeEncodingContextDto")
@@ -89,7 +92,9 @@ class StubEpisodeEncoder(IEpisodeEncoder):
         salience = tuple(candidate.boundary_reasons)
         importance = "high" if candidate.boundary_score >= 100 or "action_failure" in salience else "medium"
 
-        narrative_cues = episodic_cues_from_traces(traces)
+        narrative_cues = episodic_cues_from_traces(
+            traces, runtime=encoding_runtime
+        )
 
         episode = SubjectiveEpisode(
             episode_id=f"subjective-episode-{uuid4().hex}",
