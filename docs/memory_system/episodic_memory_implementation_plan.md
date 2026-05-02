@@ -159,7 +159,7 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 
 **残り（参考）**
 
-- `IEpisodeEncoder.encode` に `ToolRuntimeContextDto` を渡す拡張で、trace に無い `current_*` を常時マージしやすくする。
+- ✅ `IEpisodeEncoder.encode(..., *, encoding_runtime=Optional[ToolRuntimeContextDto])` — trace に無い `current_*` をエンコード時点で `episodic_cues_from_traces(..., runtime=)` に合流（後方互換のため省略時は従来どおり）。オーケストレータはターン終了時の `tool_runtime_context` を `run_after_turn`→`process_pending` 経由で渡す。
 - **Passive Recall** は現状 `situation_text` への部分一致が中心のため、エピソード側が **`cues` の canonical（`axis:value`）** 中心になると、日本語のみの旧 `cue_keys` より状況文との一致が取りにくい場合がある。**P3** の SituationCueSet（同一抽出器）で揃える想定。
 
 **受け入れ条件**
