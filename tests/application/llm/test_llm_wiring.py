@@ -170,12 +170,18 @@ class TestCreateLlmAgentWiringReturnValues:
         assert isinstance(trigger, ILlmTurnTrigger)
 
     def test_accepts_optional_observation_buffer(self):
-        """observation_buffer を渡した場合、そのバッファが使われる"""
+        """observation_buffer を渡した場合、trace recording wrapper の内側で使われる"""
+        from ai_rpg_world.application.llm.services.observation_trace_recording_buffer import (
+            ObservationTraceRecordingBuffer,
+        )
+
         custom_buffer = MagicMock(spec=IObservationContextBuffer)
         deps = _minimal_wiring_deps()
         deps["observation_buffer"] = custom_buffer
         registry, _ = create_llm_agent_wiring(**deps)
-        assert registry._handler._appender._buffer is custom_buffer
+        buffer = registry._handler._appender._buffer
+        assert isinstance(buffer, ObservationTraceRecordingBuffer)
+        assert buffer.inner is custom_buffer
 
     def test_accepts_optional_observation_formatter(self):
         """observation_formatter を渡した場合、そのフォーマッタがハンドラに渡される"""

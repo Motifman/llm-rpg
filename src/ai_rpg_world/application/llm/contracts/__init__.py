@@ -11,6 +11,10 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolDefinitionDto,
     TodoEntry,
 )
+from ai_rpg_world.application.llm.contracts.persona import (
+    AgentPersonaDto,
+    PersonaPromptPolicy,
+)
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     IAvailabilityResolver,
@@ -45,6 +49,8 @@ __all__ = [
     "SystemPromptPlayerInfoDto",
     "ToolDefinitionDto",
     "TodoEntry",
+    "AgentPersonaDto",
+    "PersonaPromptPolicy",
     "IActionResultStore",
     "IAvailabilityResolver",
     "IAvailableToolsProvider",

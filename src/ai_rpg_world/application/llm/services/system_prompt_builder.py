@@ -10,6 +10,8 @@ DEFAULT_SYSTEM_PROMPT_TEMPLATE = """あなたはMMO RPGの冒険者「{{player_n
 【基本情報】
 役職: {{role}} / 種族: {{race}} / 属性: {{element}}
 
+{{persona_block}}
+
 【ルール】
 - ゲーム世界と相互作用する唯一の手段は、提供されるツール（関数）の呼び出しです。必ずいずれか1つのツールを呼び出して行動してください。
 - 現在の状況と直近の出来事を踏まえ、次に取る行動を1つ選び、対応するツールを呼び出してください。
@@ -53,4 +55,6 @@ class DefaultSystemPromptBuilder(ISystemPromptBuilder):
             "{{game_description}}", player_info.game_description or ""
         ).replace("{{role}}", player_info.role).replace(
             "{{race}}", player_info.race
-        ).replace("{{element}}", player_info.element)
+        ).replace("{{element}}", player_info.element).replace(
+            "{{persona_block}}", player_info.persona_block or ""
+        )

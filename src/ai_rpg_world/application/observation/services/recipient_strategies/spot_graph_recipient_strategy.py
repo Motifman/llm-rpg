@@ -1,0 +1,127 @@
+"""スポットグラフ固有イベントの観測配信先解決。
+
+方針:
+- 行為者本人は配信先から除外する（ツール結果で十分）
+- 同一スポットの他プレイヤーに social として配信する
+- 環境変化（Connection/ObjectState）は影響スポットの全プレイヤーに配信する
+"""
+
+from typing import Any, List, Set
+
+from ai_rpg_world.application.observation.contracts.interfaces import (
+    IRecipientResolutionStrategy,
+)
+from ai_rpg_world.application.observation.services.observed_event_registry import (
+    ObservedEventRegistry,
+)
+from ai_rpg_world.domain.player.repository.player_status_repository import (
+    PlayerStatusRepository,
+)
+from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    ConnectionStateChangedEvent,
+    EntityEnteredSpotEvent,
+    EntityLeftSpotEvent,
+    SpotExploredEvent,
+    SpotObjectInteractedEvent,
+    SpotObjectStateChangedEvent,
+)
+from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
+    ISpotGraphRepository,
+)
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+
+
+class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
+    """スポットグラフ固有イベントの配信先解決。
+
+    行為者は配信先から除外し、同一スポットの他プレイヤーのみに配信する。
+    """
+
+    _STRATEGY_KEY = "spot_graph"
+
+    def __init__(
+        self,
+        observed_event_registry: ObservedEventRegistry,
+        spot_graph_repository: ISpotGraphRepository,
+        player_status_repository: PlayerStatusRepository,
+    ) -> None:
+        self._registry = observed_event_registry
+        self._spot_graph_repository = spot_graph_repository
+        self._player_status_repository = player_status_repository
+
+    def supports(self, event: Any) -> bool:
+        return self._registry.get_strategy_for_event(event) == self._STRATEGY_KEY
+
+    def resolve(self, event: Any) -> List[PlayerId]:
+        result: List[PlayerId] = []
+        seen: Set[int] = set()
+
+        def add(pid: PlayerId) -> None:
+            if pid.value in seen:
+                return
+            seen.add(pid.value)
+            result.append(pid)
+
+        if isinstance(event, EntityEnteredSpotEvent):
+            self._resolve_entity_entered(event, add)
+        elif isinstance(event, EntityLeftSpotEvent):
+            self._resolve_entity_left(event, add)
+        elif isinstance(event, SpotObjectInteractedEvent):
+            self._resolve_at_spot_excluding_actor(
+                event.spot_id, event.entity_id, add
+            )
+        elif isinstance(event, SpotExploredEvent):
+            self._resolve_at_spot_excluding_actor(
+                event.spot_id, event.entity_id, add
+            )
+        elif isinstance(event, ConnectionStateChangedEvent):
+            self._resolve_connection_changed(event, add)
+        elif isinstance(event, SpotObjectStateChangedEvent):
+            self._resolve_all_at_spot(event.spot_id, add)
+
+        return result
+
+    def _players_at_spot_on_graph(self, spot_id: SpotId) -> List[PlayerId]:
+        """グラフ上の指定スポットにいるプレイヤーの一覧を返す。"""
+        graph = self._spot_graph_repository.find_graph()
+        entity_spot = graph.entity_spot_mapping()
+        known_player_ids: Set[int] = {
+            s.player_id.value
+            for s in self._player_status_repository.find_all()
+        }
+        return [
+            PlayerId(eid.value)
+            for eid, sid in entity_spot.items()
+            if sid == spot_id and eid.value in known_player_ids
+        ]
+
+    def _resolve_entity_entered(self, event: EntityEnteredSpotEvent, add) -> None:
+        for pid in self._players_at_spot_on_graph(event.spot_id):
+            if pid.value != event.entity_id.value:
+                add(pid)
+
+    def _resolve_entity_left(self, event: EntityLeftSpotEvent, add) -> None:
+        for pid in self._players_at_spot_on_graph(event.spot_id):
+            if pid.value != event.entity_id.value:
+                add(pid)
+
+    def _resolve_at_spot_excluding_actor(
+        self, spot_id: SpotId, actor_entity_id: EntityId, add
+    ) -> None:
+        for pid in self._players_at_spot_on_graph(spot_id):
+            if pid.value != actor_entity_id.value:
+                add(pid)
+
+    def _resolve_connection_changed(
+        self, event: ConnectionStateChangedEvent, add
+    ) -> None:
+        for pid in self._players_at_spot_on_graph(event.from_spot_id):
+            add(pid)
+        for pid in self._players_at_spot_on_graph(event.to_spot_id):
+            add(pid)
+
+    def _resolve_all_at_spot(self, spot_id: SpotId, add) -> None:
+        for pid in self._players_at_spot_on_graph(spot_id):
+            add(pid)

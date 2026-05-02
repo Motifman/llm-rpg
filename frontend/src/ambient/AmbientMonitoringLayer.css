@@ -1,0 +1,606 @@
+/* タイトル / ワールド選択の背後に置く、低コントラストのモニタリング風レイヤー */
+
+.ambient-root {
+  --ambient-fg: rgba(244, 189, 103, 0.42);
+  --ambient-fg-dim: rgba(244, 189, 103, 0.22);
+  --ambient-accent: rgba(255, 180, 172, 0.38);
+  --ambient-opacity: 0.2;
+
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: var(--ambient-opacity);
+}
+
+.ambient-root--title {
+  --ambient-opacity: 0.16;
+}
+
+/* タイトル既存の右下 HUD ログと干渉しないようチャートをやや上へ */
+.ambient-root--title .ambient-charts--br {
+  bottom: clamp(8rem, 24vh, 13rem);
+}
+
+.ambient-root--title .ambient-monitor--tr {
+  top: clamp(5rem, 14vh, 8rem);
+}
+
+.ambient-root--world {
+  --ambient-opacity: 0.22;
+}
+
+.ambient-root--static .ambient-log-track,
+.ambient-root--static .ambient-pie-ring,
+.ambient-root--static .ambient-bar,
+.ambient-root--static .ambient-ecg-path,
+.ambient-root--static .ambient-gauge-fill,
+.ambient-root--static .ambient-monitor-scan {
+  animation: none !important;
+}
+
+.ambient-grid {
+  position: absolute;
+  inset: -1px;
+  background-image:
+    linear-gradient(rgba(69, 71, 75, 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(69, 71, 75, 0.07) 1px, transparent 1px);
+  background-size: 48px 48px;
+  opacity: 0.45;
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, black 10%, transparent 72%);
+}
+
+/* === 左：ログリボン ===================================================== */
+
+.ambient-log-ribbon {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: min(38vw, 26rem);
+  display: flex;
+  gap: 0.65rem;
+  padding: 0.75rem 0.5rem 5.5rem 0.85rem;
+  box-sizing: border-box;
+}
+
+.ambient-log-col {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black 10%,
+    black 88%,
+    transparent
+  );
+}
+
+.ambient-log-track {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  will-change: transform;
+}
+
+.ambient-log-col--a .ambient-log-track {
+  animation: ambient-log-scroll-a 52s linear infinite;
+}
+
+.ambient-log-col--b .ambient-log-track {
+  animation: ambient-log-scroll-b 71s linear infinite reverse;
+}
+
+@keyframes ambient-log-scroll-a {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-50%);
+  }
+}
+
+@keyframes ambient-log-scroll-b {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-50%);
+  }
+}
+
+.ambient-log-line {
+  font-family: ui-monospace, "SF Mono", "Menlo", Consolas, monospace;
+  font-size: clamp(9px, 1.05vw, 12px);
+  line-height: 1.35;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ambient-fg-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ambient-log-line--col-b {
+  color: rgba(255, 180, 172, 0.26);
+}
+
+/* タイトル系セカンダリに寄せたダスティローズ（ERROR 行・断続的ハイライト） */
+.ambient-log-line--alert {
+  color: rgba(224, 108, 118, 0.62);
+  text-shadow: 0 0 12px rgba(150, 7, 17, 0.22);
+}
+
+/* === 右上：シルエットモニター ========================================= */
+
+.ambient-monitor {
+  position: absolute;
+  width: clamp(9.5rem, 17vw, 14rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.ambient-monitor--tr {
+  top: clamp(4.5rem, 12vh, 7rem);
+  right: clamp(0.75rem, 3vw, 2rem);
+}
+
+.ambient-monitor-chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid rgba(69, 71, 75, 0.35);
+  border-bottom: none;
+  background: rgba(10, 14, 20, 0.35);
+}
+
+.ambient-monitor-dots {
+  display: flex;
+  gap: 3px;
+}
+
+.ambient-monitor-dots span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(244, 189, 103, 0.35);
+}
+
+.ambient-monitor-dots span:nth-child(2) {
+  background: rgba(255, 180, 172, 0.45);
+}
+
+.ambient-monitor-dots span:nth-child(3) {
+  background: rgba(69, 71, 75, 0.6);
+}
+
+.ambient-monitor-label {
+  font-size: 6px;
+  letter-spacing: 0.12em;
+  color: var(--ambient-fg-dim);
+  white-space: nowrap;
+}
+
+.ambient-monitor-body {
+  position: relative;
+  height: clamp(5.5rem, 11vw, 8rem);
+  border: 1px solid rgba(69, 71, 75, 0.4);
+  background: radial-gradient(
+    ellipse 80% 90% at 50% 100%,
+    rgba(28, 32, 38, 0.55),
+    rgba(10, 14, 20, 0.85)
+  );
+  overflow: hidden;
+}
+
+.ambient-monitor-silhouette {
+  position: absolute;
+  right: -12%;
+  bottom: -8%;
+  height: 118%;
+  width: auto;
+  max-width: none;
+  object-fit: contain;
+  object-position: top right;
+  filter: brightness(0) contrast(1.05);
+  opacity: 0.55;
+}
+
+.ambient-monitor-scan {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(244, 189, 103, 0.06) 50%,
+    transparent 100%
+  );
+  background-size: 100% 120%;
+  animation: ambient-monitor-scan 4.2s linear infinite;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+@keyframes ambient-monitor-scan {
+  from {
+    background-position: 0 -40%;
+  }
+  to {
+    background-position: 0 140%;
+  }
+}
+
+.ambient-monitor-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  justify-content: flex-end;
+}
+
+.ambient-monitor-tag {
+  font-size: 5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 180, 172, 0.35);
+}
+
+/* === 右下：チャート群 =================================================== */
+
+.ambient-charts {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.6rem;
+  width: min(100%, clamp(12rem, 28vw, 21rem));
+}
+
+.ambient-charts--br {
+  right: clamp(0.5rem, 2vw, 1.5rem);
+  bottom: clamp(6rem, 18vh, 11rem);
+}
+
+.ambient-chart-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: flex-end;
+  width: 100%;
+  gap: 0.65rem;
+}
+
+.ambient-chart-row--pies .ambient-chart--pie {
+  flex: 1;
+  min-width: 0;
+}
+
+.ambient-chart {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  border: 1px solid rgba(69, 71, 75, 0.28);
+  background: rgba(10, 14, 20, 0.28);
+  box-sizing: border-box;
+}
+
+.ambient-chart-cap {
+  position: absolute;
+  top: 0.15rem;
+  left: 0.25rem;
+  font-size: 5px;
+  letter-spacing: 0.16em;
+  color: var(--ambient-fg-dim);
+}
+
+/* 円グラフ（2系統） */
+.ambient-chart--pie {
+  width: clamp(4rem, 7.5vw, 5.75rem);
+  height: clamp(4rem, 7.5vw, 5.75rem);
+  padding: 0.4rem;
+}
+
+.ambient-pie-ring {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  mask: radial-gradient(circle, transparent 52%, black 53%);
+  -webkit-mask: radial-gradient(circle, transparent 52%, black 53%);
+}
+
+.ambient-pie-ring--a {
+  background: conic-gradient(
+    var(--ambient-fg) 0% 32%,
+    rgba(69, 71, 75, 0.35) 32% 54%,
+    var(--ambient-accent) 54% 78%,
+    rgba(69, 71, 75, 0.25) 78% 100%
+  );
+  animation: ambient-pie-drift 11s ease-in-out infinite;
+}
+
+.ambient-pie-ring--b {
+  background: conic-gradient(
+    rgba(255, 180, 172, 0.5) 0% 18%,
+    rgba(69, 71, 75, 0.32) 18% 38%,
+    var(--ambient-fg) 38% 62%,
+    rgba(150, 7, 17, 0.45) 62% 82%,
+    rgba(69, 71, 75, 0.28) 82% 100%
+  );
+  animation: ambient-pie-drift-b 8.5s ease-in-out infinite;
+}
+
+@keyframes ambient-pie-drift {
+  0%,
+  100% {
+    transform: rotate(0deg) scale(1);
+    filter: hue-rotate(0deg);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.04);
+    filter: hue-rotate(-12deg);
+  }
+}
+
+@keyframes ambient-pie-drift-b {
+  0%,
+  100% {
+    transform: rotate(-8deg) scale(1);
+    filter: hue-rotate(0deg);
+  }
+  50% {
+    transform: rotate(172deg) scale(1.06);
+    filter: hue-rotate(8deg);
+  }
+}
+
+/* タイトル画面と同型の横スケールゲージ（複数本） */
+.ambient-chart--title-gauges {
+  display: flex;
+  width: 100%;
+  max-width: clamp(11rem, 24vw, 19rem);
+  min-height: 4.25rem;
+  padding: 1.05rem 0.5rem 0.4rem;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-end;
+}
+
+.ambient-title-gauges {
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+}
+
+.ambient-gauge-track {
+  width: 100%;
+  height: 3px;
+  background: rgba(69, 71, 75, 0.38);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.ambient-gauge-fill {
+  width: 100%;
+  height: 100%;
+  transform-origin: left center;
+  background: linear-gradient(
+    90deg,
+    rgba(244, 189, 103, 0.42),
+    rgba(255, 180, 172, 0.68)
+  );
+  animation: ambient-gauge-k0 4.1s ease-in-out infinite;
+}
+
+.ambient-gauge-fill--1 {
+  animation-name: ambient-gauge-k1;
+  animation-duration: 5.3s;
+  animation-delay: -1.1s;
+}
+
+.ambient-gauge-fill--2 {
+  animation-name: ambient-gauge-k2;
+  animation-duration: 3.6s;
+  animation-delay: -0.6s;
+}
+
+.ambient-gauge-fill--3 {
+  animation-name: ambient-gauge-k3;
+  animation-duration: 4.7s;
+  animation-delay: -2s;
+}
+
+@keyframes ambient-gauge-k0 {
+  0%,
+  100% {
+    transform: scaleX(0.28);
+  }
+  45% {
+    transform: scaleX(0.94);
+  }
+  70% {
+    transform: scaleX(0.52);
+  }
+}
+
+@keyframes ambient-gauge-k1 {
+  0%,
+  100% {
+    transform: scaleX(0.55);
+  }
+  35% {
+    transform: scaleX(0.22);
+  }
+  60% {
+    transform: scaleX(0.88);
+  }
+}
+
+@keyframes ambient-gauge-k2 {
+  0%,
+  100% {
+    transform: scaleX(0.72);
+  }
+  40% {
+    transform: scaleX(0.3);
+  }
+  55% {
+    transform: scaleX(0.98);
+  }
+}
+
+@keyframes ambient-gauge-k3 {
+  0%,
+  100% {
+    transform: scaleX(0.4);
+  }
+  30% {
+    transform: scaleX(0.78);
+  }
+  65% {
+    transform: scaleX(0.36);
+  }
+  85% {
+    transform: scaleX(0.91);
+  }
+}
+
+/* 縦棒グラフ */
+.ambient-chart--bars {
+  width: 100%;
+  max-width: clamp(8.5rem, 18vw, 13rem);
+  height: clamp(3rem, 5.5vw, 4rem);
+  padding: 1.15rem 0.45rem 0.4rem;
+  gap: 4px;
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.ambient-bar {
+  flex: 1;
+  min-width: 2px;
+  border-radius: 1px;
+  background: linear-gradient(
+    to top,
+    rgba(244, 189, 103, 0.15),
+    rgba(244, 189, 103, 0.55)
+  );
+  transform-origin: bottom center;
+  animation: ambient-bar-wave 2.8s ease-in-out infinite;
+}
+
+.ambient-bar--0 {
+  animation-duration: 2.4s;
+  animation-delay: -0.2s;
+}
+.ambient-bar--1 {
+  animation-duration: 3.1s;
+  animation-delay: -0.7s;
+}
+.ambient-bar--2 {
+  animation-duration: 2.7s;
+  animation-delay: -1.1s;
+}
+.ambient-bar--3 {
+  animation-duration: 3.4s;
+  animation-delay: -0.4s;
+}
+.ambient-bar--4 {
+  animation-duration: 2.9s;
+  animation-delay: -1.5s;
+}
+.ambient-bar--5 {
+  animation-duration: 3.2s;
+  animation-delay: -0.9s;
+}
+
+@keyframes ambient-bar-wave {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+/* 心電図（2系統） */
+.ambient-chart--ecg {
+  width: 100%;
+  max-width: clamp(10rem, 20vw, 15rem);
+  height: clamp(2.5rem, 4.5vw, 3.35rem);
+  padding: 1.05rem 0.35rem 0.3rem;
+}
+
+.ambient-chart--ecg-b {
+  opacity: 0.92;
+}
+
+.ambient-ecg-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+
+.ambient-ecg-path--a {
+  stroke-dasharray: 40 320;
+  animation: ambient-ecg-march 2.1s linear infinite;
+}
+
+.ambient-ecg-path--b {
+  stroke-dasharray: 52 300;
+  animation: ambient-ecg-march-b 2.65s linear infinite;
+}
+
+@keyframes ambient-ecg-march {
+  to {
+    stroke-dashoffset: -360;
+  }
+}
+
+@keyframes ambient-ecg-march-b {
+  to {
+    stroke-dashoffset: -352;
+  }
+}
+
+@media (max-width: 639px) {
+  .ambient-log-ribbon {
+    width: min(46vw, 100%);
+    opacity: 0.85;
+  }
+
+  .ambient-monitor--tr {
+    top: clamp(3.5rem, 10vh, 5.5rem);
+    width: clamp(6rem, 28vw, 8rem);
+  }
+
+  .ambient-charts--br {
+    bottom: clamp(5rem, 22vh, 9rem);
+    transform: scale(0.92);
+    transform-origin: bottom right;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient-root {
+    --ambient-opacity: 0.12;
+  }
+
+  .ambient-log-track,
+  .ambient-pie-ring,
+  .ambient-bar,
+  .ambient-ecg-path,
+  .ambient-gauge-fill,
+  .ambient-monitor-scan {
+    animation: none !important;
+  }
+}

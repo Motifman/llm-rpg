@@ -7,6 +7,8 @@ EventHandlerComposition および WorldSimulationApplicationService に渡した
 """
 
 import json
+from typing import Any
+
 import pytest
 import unittest.mock as mock
 from unittest.mock import MagicMock, patch
@@ -36,6 +38,22 @@ from ai_rpg_world.infrastructure.events.observation_event_handler_registry impor
 from ai_rpg_world.infrastructure.unit_of_work.in_memory_unit_of_work import (
     InMemoryUnitOfWork,
 )
+from ai_rpg_world.application.llm.services.observation_trace_recording_buffer import (
+    ObservationTraceRecordingBuffer,
+)
+
+
+def _e2e_tool_arguments_json(**tool_specific: Any) -> str:
+    """主観アクション検証を通すため、世界作用ツール用の共通フィールドを付与する。"""
+    payload = {
+        "inner_thought": "E2E 用の心の声。",
+        "intention": "行動する。",
+        "expected_result": "結果が得られる。",
+        "attention": "状況全体",
+        "emotion_hint": "neutral",
+    }
+    payload.update(tool_specific)
+    return json.dumps(payload)
 
 
 def _minimal_wiring_deps():
@@ -486,12 +504,14 @@ class TestBootstrapContractReturnValues:
         assert registry._handler._pipeline._formatter is custom_formatter
 
     def test_optional_observation_buffer_injected_into_handler(self):
-        """observation_buffer を渡した場合、返された registry のハンドラがそのバッファを保持する（正常）"""
+        """observation_buffer を渡した場合、TraceRecording の内側バッファとして渡される（正常）"""
         custom_buffer = MagicMock(spec=IObservationContextBuffer)
         deps = _minimal_wiring_deps()
         deps["observation_buffer"] = custom_buffer
         registry, _ = create_llm_agent_wiring(**deps)
-        assert registry._handler._appender._buffer is custom_buffer
+        wrapped = registry._handler._appender._buffer
+        assert isinstance(wrapped, ObservationTraceRecordingBuffer)
+        assert wrapped.inner is custom_buffer
 
 
 # ---------------------------------------------------------------------------
@@ -1318,7 +1338,7 @@ class TestEventToWorldSideEffectE2E:
         stub_client = StubLlmClient(
             tool_call_to_return={
                 "name": TOOL_NAME_MOVE_TO_DESTINATION,
-                "arguments": json.dumps({"destination_label": "S1"}),
+                "arguments": _e2e_tool_arguments_json(destination_label="S1"),
             }
         )
 
@@ -1483,7 +1503,7 @@ class TestEventToWorldSideEffectE2E:
         stub_client = StubLlmClient(
             tool_call_to_return={
                 "name": TOOL_NAME_MOVE_TO_DESTINATION,
-                "arguments": json.dumps({"destination_label": "LA1"}),
+                "arguments": _e2e_tool_arguments_json(destination_label="LA1"),
             }
         )
 
@@ -1658,7 +1678,7 @@ class TestEventToWorldSideEffectE2E:
         stub_client = StubLlmClient(
             tool_call_to_return={
                 "name": TOOL_NAME_MOVE_TO_DESTINATION,
-                "arguments": json.dumps({"destination_label": "D1"}),
+                "arguments": _e2e_tool_arguments_json(destination_label="D1"),
             }
         )
 
@@ -1829,7 +1849,7 @@ class TestEventToWorldSideEffectE2E:
         stub_client = StubLlmClient(
             tool_call_to_return={
                 "name": TOOL_NAME_PURSUIT_START,
-                "arguments": json.dumps({"target_label": "P1"}),
+                "arguments": _e2e_tool_arguments_json(target_label="P1"),
             }
         )
 

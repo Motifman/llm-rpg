@@ -29,6 +29,11 @@ class PlayerIdValidationException(PlayerDomainException, ValidationException):
     error_code = "PLAYER.ID_VALIDATION"
 
 
+class SpotNavigationStateInvalidException(PlayerDomainException, ValidationException):
+    """スポットグラフ用ナビゲーション状態の不整合・不正な操作"""
+    error_code = "PLAYER.SPOT_NAVIGATION_STATE_INVALID"
+
+
 class HpValidationException(PlayerDomainException, ValidationException):
     """HPバリデーション例外"""
     error_code = "PLAYER.HP_VALIDATION"

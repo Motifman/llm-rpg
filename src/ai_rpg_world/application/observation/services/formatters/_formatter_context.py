@@ -9,6 +9,12 @@ from ai_rpg_world.application.observation.services.formatters.name_resolver impo
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
+    from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
+        ISpotGraphRepository,
+    )
+    from ai_rpg_world.domain.world_graph.service.sound_propagation_service import (
+        SoundPropagationService,
+    )
 
 
 @dataclass(frozen=True)
@@ -20,3 +26,5 @@ class ObservationFormatterContext:
 
     name_resolver: ObservationNameResolver
     item_repository: Optional["ItemRepository"]
+    spot_graph_repository: Optional["ISpotGraphRepository"] = None
+    sound_propagation_service: Optional["SoundPropagationService"] = None

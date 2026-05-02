@@ -8,7 +8,12 @@ from ai_rpg_world.application.llm.services.availability_resolvers import (
     SayAvailabilityResolver,
     WhisperAvailabilityResolver,
 )
+from ai_rpg_world.application.llm.services.tool_catalog.inner_thought import (
+    inner_thought_property,
+)
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SAY, TOOL_NAME_WHISPER
+
+_it = inner_thought_property()
 
 WHISPER_PARAMETERS = {
     "type": "object",
@@ -21,8 +26,9 @@ WHISPER_PARAMETERS = {
             "type": "string",
             "description": "囁く内容。",
         },
+        "inner_thought": _it,
     },
-    "required": ["target_label", "content"],
+    "required": ["target_label", "content", "inner_thought"],
 }
 
 WHISPER_DEFINITION = ToolDefinitionDto(
@@ -38,8 +44,9 @@ SAY_PARAMETERS = {
             "type": "string",
             "description": "周囲に向けて発言する内容。",
         },
+        "inner_thought": _it,
     },
-    "required": ["content"],
+    "required": ["content", "inner_thought"],
 }
 
 SAY_DEFINITION = ToolDefinitionDto(

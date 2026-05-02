@@ -26,6 +26,12 @@ class DefaultActionResultStore(IActionResultStore):
         action_summary: str,
         result_summary: str,
         occurred_at: Optional[datetime] = None,
+        *,
+        success: bool = True,
+        error_code: Optional[str] = None,
+        tool_name: Optional[str] = None,
+        argument_fingerprint: Optional[str] = None,
+        should_reschedule: bool = False,
     ) -> None:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
@@ -35,11 +41,28 @@ class DefaultActionResultStore(IActionResultStore):
             raise TypeError("result_summary must be str")
         if occurred_at is not None and not isinstance(occurred_at, datetime):
             raise TypeError("occurred_at must be datetime or None")
+        if not isinstance(success, bool):
+            raise TypeError("success must be bool")
+        if error_code is not None and not isinstance(error_code, str):
+            raise TypeError("error_code must be str or None")
+        if tool_name is not None and not isinstance(tool_name, str):
+            raise TypeError("tool_name must be str or None")
+        if argument_fingerprint is not None and not isinstance(
+            argument_fingerprint, str
+        ):
+            raise TypeError("argument_fingerprint must be str or None")
+        if not isinstance(should_reschedule, bool):
+            raise TypeError("should_reschedule must be bool")
         at = occurred_at if occurred_at is not None else datetime.now()
         entry = ActionResultEntry(
             occurred_at=at,
             action_summary=action_summary,
             result_summary=result_summary,
+            success=success,
+            error_code=error_code,
+            tool_name=tool_name,
+            argument_fingerprint=argument_fingerprint,
+            should_reschedule=should_reschedule,
         )
         key = self._key(player_id)
         if key not in self._store:

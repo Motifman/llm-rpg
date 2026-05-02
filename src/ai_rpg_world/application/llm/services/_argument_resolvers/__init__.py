@@ -12,6 +12,9 @@ from ai_rpg_world.application.llm.services._argument_resolvers.movement_resolver
 from ai_rpg_world.application.llm.services._argument_resolvers.quest_resolver import (
     QuestArgumentResolver,
 )
+from ai_rpg_world.application.llm.services._argument_resolvers.spot_graph_resolver import (
+    SpotGraphArgumentResolver,
+)
 from ai_rpg_world.application.llm.services._argument_resolvers.world_resolver import (
     WorldArgumentResolver,
 )
@@ -22,4 +25,5 @@ __all__ = [
     "CombatSkillArgumentResolver",
     "QuestArgumentResolver",
     "GuildShopTradeArgumentResolver",
+    "SpotGraphArgumentResolver",
 ]

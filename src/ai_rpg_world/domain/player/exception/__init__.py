@@ -29,6 +29,7 @@ from .player_exceptions import (
     PursuitStateRequiredException,
     PursuitTargetMismatchException,
     SpeechValidationException,
+    SpotNavigationStateInvalidException,
     StatGrowthFactorValidationException,
     StaminaValidationException,
 )
@@ -58,6 +59,7 @@ __all__ = [
     "PursuitStateRequiredException",
     "PursuitTargetMismatchException",
     "SpeechValidationException",
+    "SpotNavigationStateInvalidException",
     "StatGrowthFactorValidationException",
     "StaminaValidationException",
 ]

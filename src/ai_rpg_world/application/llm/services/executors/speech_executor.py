@@ -8,7 +8,10 @@ from typing import Any, Callable, Dict, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
-from ai_rpg_world.application.llm.services.tool_executor_helpers import exception_result
+from ai_rpg_world.application.llm.services.tool_executor_helpers import (
+    append_inner_thought_to_message,
+    exception_result,
+)
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_SAY, TOOL_NAME_WHISPER
 from ai_rpg_world.application.speech.contracts.commands import SpeakCommand
 from ai_rpg_world.application.speech.services.player_speech_service import (
@@ -68,7 +71,7 @@ class SpeechToolExecutor:
             )
             return LlmCommandResultDto(
                 success=True,
-                message="囁きを送信しました。",
+                message=append_inner_thought_to_message("囁きを送信しました。", args),
             )
         except Exception as e:
             error_code = getattr(e, "error_code", "SYSTEM_ERROR")
@@ -102,7 +105,7 @@ class SpeechToolExecutor:
             )
             return LlmCommandResultDto(
                 success=True,
-                message="発言しました。",
+                message=append_inner_thought_to_message("発言しました。", args),
             )
         except Exception as e:
             return exception_result(e)

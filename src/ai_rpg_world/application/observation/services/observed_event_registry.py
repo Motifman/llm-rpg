@@ -125,6 +125,14 @@ from ai_rpg_world.domain.world.event.map_events import (
     SpotWeatherChangedEvent,
     WorldObjectInteractedEvent,
 )
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    ConnectionStateChangedEvent,
+    EntityEnteredSpotEvent,
+    EntityLeftSpotEvent,
+    SpotExploredEvent,
+    SpotObjectInteractedEvent,
+    SpotObjectStateChangedEvent,
+)
 
 
 def _build_event_to_strategy_mapping() -> Dict[Type[Any], str]:
@@ -273,6 +281,17 @@ def _build_event_to_strategy_mapping() -> Dict[Type[Any], str]:
         InventorySlotOverflowEvent,
     ):
         mapping[ev] = "default"
+
+    # spot_graph
+    for ev in (
+        EntityEnteredSpotEvent,
+        EntityLeftSpotEvent,
+        SpotObjectInteractedEvent,
+        SpotExploredEvent,
+        ConnectionStateChangedEvent,
+        SpotObjectStateChangedEvent,
+    ):
+        mapping[ev] = "spot_graph"
 
     return mapping
 

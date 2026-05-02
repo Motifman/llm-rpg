@@ -7,6 +7,7 @@ from ai_rpg_world.domain.player.event.status_events import PlayerLocationChanged
 from ai_rpg_world.domain.world.event.map_events import (
     GatewayTriggeredEvent,
     SpotWeatherChangedEvent,
+    WorldObjectInteractedEvent,
     WorldObjectMovedEvent,
 )
 from ai_rpg_world.infrastructure.events.ui_event_handler_registry import (
@@ -22,11 +23,12 @@ def test_register_handlers_registers_expected_event_types():
     registry.register_handlers(event_publisher)
 
     calls = event_publisher.register_handler.call_args_list
-    assert len(calls) == 4
+    assert len(calls) == 5
     registered = {call.args[0] for call in calls}
     assert registered == {
         PlayerLocationChangedEvent,
         WorldObjectMovedEvent,
+        WorldObjectInteractedEvent,
         GatewayTriggeredEvent,
         SpotWeatherChangedEvent,
     }

@@ -50,6 +50,18 @@ from ai_rpg_world.application.observation.services.recipient_strategies import (
     SnsRecipientStrategy,
     TradeRecipientStrategy,
 )
+from ai_rpg_world.application.observation.services.recipient_strategies.spot_graph_recipient_strategy import (
+    SpotGraphRecipientStrategy,
+)
+from ai_rpg_world.application.observation.services.recipient_strategies.spot_graph_speech_recipient_strategy import (
+    SpotGraphSpeechRecipientStrategy,
+)
+from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
+    ISpotGraphRepository,
+)
+from ai_rpg_world.domain.world_graph.service.sound_propagation_service import (
+    SoundPropagationService,
+)
 
 
 class ObservationRecipientResolver(IObservationRecipientResolver):
@@ -97,6 +109,7 @@ def create_observation_recipient_resolver(
     skill_loadout_repository: Optional[SkillLoadoutRepository] = None,
     skill_deck_progress_repository: Optional[SkillDeckProgressRepository] = None,
     sns_user_repository: Optional["UserRepository"] = None,
+    spot_graph_repository: Optional[ISpotGraphRepository] = None,
 ) -> IObservationRecipientResolver:
     """
     既存と同様の振る舞いになる Resolver を組み立てる。
@@ -159,6 +172,23 @@ def create_observation_recipient_resolver(
             observed_event_registry=observed_event_registry,
             skill_loadout_repository=skill_loadout_repository,
             skill_deck_progress_repository=skill_deck_progress_repository,
+        ),
+        *(
+            (
+                SpotGraphRecipientStrategy(
+                    observed_event_registry=observed_event_registry,
+                    spot_graph_repository=spot_graph_repository,
+                    player_status_repository=player_status_repository,
+                ),
+                SpotGraphSpeechRecipientStrategy(
+                    observed_event_registry=observed_event_registry,
+                    spot_graph_repository=spot_graph_repository,
+                    player_status_repository=player_status_repository,
+                    sound_propagation_service=SoundPropagationService(),
+                ),
+            )
+            if spot_graph_repository is not None
+            else ()
         ),
         SpeechRecipientStrategy(
             observed_event_registry=observed_event_registry,

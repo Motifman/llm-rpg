@@ -49,6 +49,9 @@ from ai_rpg_world.application.observation.services.formatters.player_formatter i
 from ai_rpg_world.application.observation.services.formatters.pursuit_formatter import (
     PursuitObservationFormatter,
 )
+from ai_rpg_world.application.observation.services.formatters.spot_graph_formatter import (
+    SpotGraphObservationFormatter,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 
@@ -62,6 +65,9 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.guild.repository.guild_repository import GuildRepository
     from ai_rpg_world.domain.monster.repository.monster_repository import MonsterRepository
     from ai_rpg_world.domain.skill.repository.skill_repository import SkillSpecRepository
+    from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
+        ISpotGraphRepository,
+    )
 
 
 class ObservationFormatter(IObservationFormatter):
@@ -81,6 +87,7 @@ class ObservationFormatter(IObservationFormatter):
         monster_repository: Optional["MonsterRepository"] = None,
         skill_spec_repository: Optional["SkillSpecRepository"] = None,
         sns_user_repository: Optional["UserRepository"] = None,
+        spot_graph_repository: Optional["ISpotGraphRepository"] = None,
     ) -> None:
         self._name_resolver = ObservationNameResolver(
             spot_repository=spot_repository,
@@ -93,9 +100,18 @@ class ObservationFormatter(IObservationFormatter):
             skill_spec_repository=skill_spec_repository,
             sns_user_repository=sns_user_repository,
         )
+        sound_propagation_service = None
+        if spot_graph_repository is not None:
+            from ai_rpg_world.domain.world_graph.service.sound_propagation_service import (
+                SoundPropagationService,
+            )
+
+            sound_propagation_service = SoundPropagationService()
         self._context = ObservationFormatterContext(
             name_resolver=self._name_resolver,
             item_repository=item_repository,
+            spot_graph_repository=spot_graph_repository,
+            sound_propagation_service=sound_propagation_service,
         )
         self._formatters = [
             ConversationObservationFormatter(self._context),
@@ -108,6 +124,7 @@ class ObservationFormatter(IObservationFormatter):
             MonsterObservationFormatter(self._context),
             CombatObservationFormatter(self._context),
             SkillObservationFormatter(self._context),
+            SpotGraphObservationFormatter(self._context),
             WorldObservationFormatter(self._context),
             PlayerObservationFormatter(self._context),
             PursuitObservationFormatter(self._context),
