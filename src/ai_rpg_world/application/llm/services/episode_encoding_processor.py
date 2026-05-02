@@ -9,7 +9,6 @@ from typing import Callable, Optional
 from ai_rpg_world.application.llm.contracts.dtos import (
     EpisodeEncodingContextDto,
     SubjectiveEpisode,
-    ToolRuntimeContextDto,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IEpisodeCandidateStore,
@@ -87,12 +86,7 @@ class EpisodeEncodingProcessor:
         self._utc_now = utc_now
         self._on_subjective_episode_encoded = on_subjective_episode_encoded
 
-    def process_pending(
-        self,
-        player_id: PlayerId,
-        *,
-        encoding_runtime: Optional[ToolRuntimeContextDto] = None,
-    ) -> int:
+    def process_pending(self, player_id: PlayerId) -> int:
         """pending_encoding の候補を処理し、新規保存した SubjectiveEpisode の件数を返す。"""
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
@@ -120,7 +114,7 @@ class EpisodeEncodingProcessor:
                         ctx,
                         cand,
                         traces,
-                        encoding_runtime=encoding_runtime,
+                        encoding_runtime=cand.encoding_runtime_snapshot,
                     )
                     break
                 except EpisodeEncodingException as e:
