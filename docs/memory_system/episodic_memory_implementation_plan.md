@@ -15,7 +15,7 @@
 |------|----------------|
 | v2 主観エピソード | `SubjectiveEpisode`, `InMemorySubjectiveEpisodeStore`, **`SqliteSubjectiveEpisodeStore`**（`episode_cues` / `memory_links`）, `llm_json_episode_encoder.py` |
 | Trace | `ActionExperienceTrace`, `ObservationExperienceTrace`, `agent_orchestrator._append_action_experience_trace` |
-| Passive Recall | `passive_subjective_recall_composer.py`（軸別スコアは `passive_subjective_recall_retrieval.py`、状況文と索引キー交差 + recency + 任意 `pick_debug`） |
+| Passive Recall | `passive_subjective_recall_composer.py`＋`passive_subjective_recall_retrieval.py`（状況文・**runtime canonical**・エピソード索引の和集合、`pick_debug` 任意） |
 | エンコーディング文脈 | `episode_encoding_context_provider.py`（`current_goals` ← Working Memory） |
 | UI / 現在地 | `ui_context_builder.py`（タイル）, `spot_graph_ui_context_builder.py`（**`current_spot_id` ← snapshot**） |
 | レガシー episodic | `RuleBasedMemoryExtractor`, `EpisodeMemoryEntry`, `DefaultPredictiveMemoryRetriever` |
@@ -119,7 +119,7 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 | `SpotGraphPlayerSnapshotDto.current_spot_id` + runtime への伝播 | **対応済み**（2026、P1 の一部） |
 | trace への構造化位置コピー | **一部対応**（2026、`ActionExperienceTrace.context_*`・`ObservationExperienceTrace.context_*`、orchestrator / `spot_id_value`） |
 | ルールベース cue + validator 主導 | **一部対応**（2026、`episodic_cue_extraction`・エンコード時 `cues`・LLM `cue_keys` 廃止） |
-| 軸別 Passive Recall | **一部対応**（2026、`passive_subjective_recall_retrieval`・軸別 breakdown・`PassiveRecallPickDebug`・canonical `axis:value` の値が状況文/トークンと交差すれば cue ヒット） |
+| 軸別 Passive Recall | **一部対応**（2026、状況文／トークン交差 + **`ToolRuntimeContextDto` 由来の canonical** とエピソード索引の突合・`compose_user_block(runtime_context=)`） |
 | `episode_cues` / `memory_links` | **対応済み**（2026、`SqliteSubjectiveEpisodeStore`, `subjective_episode_sqlite_codec.py`, `tests/.../test_sqlite_subjective_episode_store.py`） |
 | v2 と `PredictiveMemoryRetriever` の統合方針 | **ユーザ判断**（段階廃止 / 併存期間） |
 
@@ -179,7 +179,8 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 
 1. `PassiveSubjectiveRecallComposer` を分割:
    - ✅ **軸別スコア**は `passive_subjective_recall_retrieval.py` に切り出し（temporal / cue / importance / goal）。`list_recent` 順は temporal 補正に反映。
-   - ⏳ **SituationCueSet**（P2 の `episodic_cue_extraction` 由来）と episode の **型付き cue 集合の和集合検索**は未。現状は状況文テキストと `subjective_episode_index_strings` の交差で cue 軸を計算。
+   - ⏳ **SituationCueSet**（状況テキストのみからのルール抽出）は未。
+   - ✅ **Situation 側 canonical（runtime）**: `passive_recall_situation_cues` と `compose_user_block(..., runtime_context=)`。`DefaultPromptBuilder` が `LlmUiContextDto.tool_runtime_context` を渡す。エピソード索引との交差は従来の状況文マッチと**和集合**。
    - ✅ **Goal 軸**: 現行の目標トークンと本文一致を維持（将来 `goal:` 接頭辞へ）。
 2. ⏳ 複数 retriever が episode_id 集合を返すパイプは未。現状は **線形スキャン + 合成スコア**で並べ替え。
 3. ✅ canonical `axis:value` の **値部分**が状況に含まれれば cue ヒット（日本語 `cue_keys` だけに依存しない）。
