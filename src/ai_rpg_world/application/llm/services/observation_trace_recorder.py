@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Tuple
+from typing import Any, Iterable, Optional, Tuple
 from uuid import uuid4
 
 from ai_rpg_world.application.llm.contracts.dtos import (
@@ -133,6 +133,15 @@ def _perceived_salience(entry: ObservationEntry) -> str:
     return "normal"
 
 
+def _optional_int_coerce(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 class ObservationTraceRecorder:
     """append された ObservationEntry を observation trace として別 store に保存する。"""
 
@@ -159,6 +168,7 @@ class ObservationTraceRecorder:
             perceived_salience=_perceived_salience(entry),
             world_event_refs=_extract_world_event_refs(entry),
             visible_agents=_extract_visible_agents(entry),
+            context_spot_id=_optional_int_coerce(entry.output.structured.get("spot_id_value")),
         )
         self._store.append(player_id, trace)
         return trace
