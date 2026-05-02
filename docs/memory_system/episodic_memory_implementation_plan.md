@@ -119,8 +119,9 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 | `SpotGraphPlayerSnapshotDto.current_spot_id` + runtime への伝播 | **対応済み**（2026、P1 の一部） |
 | trace への構造化位置コピー | **一部対応**（2026、`ActionExperienceTrace.context_*`・`ObservationExperienceTrace.context_*`、orchestrator / `spot_id_value`） |
 | ルールベース cue + validator 主導 | **一部対応**（2026、`episodic_cue_extraction`・エンコード時 `cues`・LLM `cue_keys` 廃止） |
-| 軸別 Passive Recall | **一部対応**（2026、状況文／トークン交差 + **`ToolRuntimeContextDto` 由来の canonical** とエピソード索引の突合・`compose_user_block(runtime_context=)`） |
+| 軸別 Passive Recall | **一部対応**（2026、上記 + **`ToolRuntimeContextDto` 由来の状況側 canonical** とエピソード索引の突合・`compose_user_block(runtime_context=)`） |
 | `episode_cues` / `memory_links` | **対応済み**（2026、`SqliteSubjectiveEpisodeStore`, `subjective_episode_sqlite_codec.py`, `tests/.../test_sqlite_subjective_episode_store.py`） |
+| Memory Context Pack（§2.7 契約） | **一部**（2026、`MemoryContextPack` + recall 用最小 assembly + テスト） |
 | v2 と `PredictiveMemoryRetriever` の統合方針 | **ユーザ判断**（段階廃止 / 併存期間） |
 
 ---
@@ -180,7 +181,7 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 1. `PassiveSubjectiveRecallComposer` を分割:
    - ✅ **軸別スコア**は `passive_subjective_recall_retrieval.py` に切り出し（temporal / cue / importance / goal）。`list_recent` 順は temporal 補正に反映。
    - ⏳ **SituationCueSet**（状況テキストのみからのルール抽出）は未。
-   - ✅ **Situation 側 canonical（runtime）**: `passive_recall_situation_cues` と `compose_user_block(..., runtime_context=)`。`DefaultPromptBuilder` が `LlmUiContextDto.tool_runtime_context` を渡す。エピソード索引との交差は従来の状況文マッチと**和集合**。
+   - ✅ **Situation 側 canonical（runtime）**: `passive_recall_situation_cues` と `IPassiveSubjectiveRecallComposer.compose_user_block(..., runtime_context=)`。`DefaultPromptBuilder` が `LlmUiContextDto.tool_runtime_context` を渡す。エピソード索引との交差は従来の状況文マッチと**和集合**。
    - ✅ **Goal 軸**: 現行の目標トークンと本文一致を維持（将来 `goal:` 接頭辞へ）。
 2. ⏳ 複数 retriever が episode_id 集合を返すパイプは未。現状は **線形スキャン + 合成スコア**で並べ替え。
 3. ✅ canonical `axis:value` の **値部分**が状況に含まれれば cue ヒット（日本語 `cue_keys` だけに依存しない）。
@@ -219,9 +220,15 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 
 **タスク**
 
-1. `MemoryContextPack` dataclass（保存しない）を `application/llm/contracts` に追加。
-2. Passive Recall / Memory Reflection の入力を、可能な範囲で Pack 組み立てに寄せる。
-3. 仕様 §2.7 のフィールドを段階的に埋める。
+1. ✅ `MemoryContextPack` dataclass（保存しない）を `application/llm/contracts/memory_context_pack.py` に追加。§2.7 相当フィールド＋`__post_init__` 検証。v1 は近傍・共想起を **episode_id 列**で表現。
+2. ⏳ Passive Recall / Memory Reflection の **プロンプト経路への Pack 注入**は未。当面は `memory_context_pack_assembly.assemble_memory_context_pack_for_recall_turn` で既存断片から組み立て可能。
+3. ⏳ temporal / associative のリンク解決・semantic / identity の実データは段階的に拡張。
+
+**参照実装（2026）**
+
+- 型: `memory_context_pack.py`
+- 組み立て: `application/llm/services/memory_context_pack_assembly.py`
+- テスト: `tests/application/llm/test_memory_context_pack.py`
 
 ---
 
