@@ -15,6 +15,7 @@ from ai_rpg_world.application.llm.contracts.persona import (
     AgentPersonaDto,
     PersonaPromptPolicy,
 )
+from ai_rpg_world.application.llm.contracts.memory_context_pack import MemoryContextPack
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     IAvailabilityResolver,
@@ -43,6 +44,7 @@ __all__ = [
     "ActionResultEntry",
     "EpisodeMemoryEntry",
     "LlmCommandResultDto",
+    "MemoryContextPack",
     "LongTermFactEntry",
     "MemoryLawEntry",
     "MemoryRetrievalQueryDto",
