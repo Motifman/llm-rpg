@@ -2,7 +2,7 @@
 
 この文書は、LLM エージェントに「人間らしい連続性のある記憶」を持たせるための、エピソード記憶システム仕様の叩き台である。
 
-**関連**: 実装フェーズとコード移行順は [episodic_memory_implementation_plan.md](./episodic_memory_implementation_plan.md)。長文の補足・Tool schema 詳細は [episodic_memory_reimplementation_plan.md](./episodic_memory_reimplementation_plan.md)。
+**関連**: 実装フェーズとコード移行順は [episodic_memory_implementation_plan.md](./episodic_memory_implementation_plan.md)。**Git・レビュー・ブランチの進め方**は [memory_feature_workflow.md](./memory_feature_workflow.md)。長文の補足・Tool schema 詳細は [episodic_memory_reimplementation_plan.md](./episodic_memory_reimplementation_plan.md)。
 
 目的は、過去ログを検索できるようにすることではない。過去の体験が、現在の注意、予測、感情、行動選択、他者理解、自己物語に影響する状態を作ることである。
 

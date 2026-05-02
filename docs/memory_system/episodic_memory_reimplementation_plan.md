@@ -3,7 +3,8 @@
 > **正本の分割（2026）**  
 > - **仕様（想起軸・cue・空間・goal 等）**: [episodic_memory_system_spec.md](./episodic_memory_system_spec.md)  
 > - **実装フェーズ・タスク順**: [episodic_memory_implementation_plan.md](./episodic_memory_implementation_plan.md)  
-> 本文書は、Tool 共通 schema・Chunker・長文の設計メモを含む**補助・歴史リファレンス**として残す。新規読者は上記2件から入るとよい。
+> - **Git・レビュー・ブロッキング・worktree**: [memory_feature_workflow.md](./memory_feature_workflow.md)  
+> 本文書は、Tool 共通 schema・Chunker・長文の設計メモを含む**補助・歴史リファレンス**として残す。新規読者は上記から入るとよい。
 
 ---
 
