@@ -68,6 +68,30 @@ def test_score_episode_prefers_cue_overlap() -> None:
     assert s >= 26.0
 
 
+def test_score_episode_includes_goal_axis_overlap() -> None:
+    """目標トークンが本文にあれば goal 軸が加算される（状況文との cue 交差なし）。"""
+    now = datetime(2026, 4, 29, 15, 0, 0)
+    ep = _episode(
+        episode_id="e-goal",
+        cue_keys=(),
+        observed="ずっと宝を探していた。",
+        created_at=now - timedelta(days=10),
+    )
+    baseline = score_episode_for_recall(
+        ep,
+        situation_text="何の変哲もない通路。",
+        goal_tokens=set(),
+        now=now,
+    )
+    with_goal = score_episode_for_recall(
+        ep,
+        situation_text="何の変哲もない通路。",
+        goal_tokens={"宝"},
+        now=now,
+    )
+    assert with_goal == baseline + 8.0
+
+
 def test_count_cue_axis_hits_matches_canonical_value_in_situation() -> None:
     """`place_spot:12` は cue_keys に無くても、状況文の数値トークンと交差すればヒットする。"""
     now = datetime(2026, 4, 29, 15, 0, 0)
