@@ -47,7 +47,11 @@ EventHandlerComposition のインスタンス化）は**呼び出し元（外部
 import os
 from typing import Any, Callable, Dict, NamedTuple, Optional
 
-from ai_rpg_world.application.llm.contracts.dtos import LlmCommandResultDto, EpisodeEncodingContextDto
+from ai_rpg_world.application.llm.contracts.dtos import (
+    EpisodeEncodingContextDto,
+    LlmCommandResultDto,
+    ToolRuntimeContextDto,
+)
 
 from ai_rpg_world.application.llm.wiring._llm_client_factory import (
     create_llm_client_from_env,
@@ -661,6 +665,7 @@ def _build_observation_stack(
     item_repository: Optional[Any],
     skill_spec_repository: Optional[Any],
     spot_graph_repository: Optional[Any] = None,
+    observation_appender: Optional["ObservationAppender"] = None,
 ) -> ObservationEventHandlerRegistry:
     """
     observation_resolver, formatter, handler, registry を構築する。
@@ -702,7 +707,7 @@ def _build_observation_stack(
         formatter=formatter,
         player_status_repository=player_status_repository,
     )
-    appender = ObservationAppender(buffer=buffer)
+    appender = observation_appender or ObservationAppender(buffer=buffer)
     timestamp_resolver = ObservationTimestampResolver(
         game_time_provider=game_time_provider,
         world_time_config=world_time_config_service,
@@ -1215,6 +1220,22 @@ def create_llm_agent_wiring(
     )
     llm_turn_trigger = DefaultLlmTurnTrigger(turn_runner=turn_runner, max_turns=max_turns)
 
+    def _observation_trace_runtime(pid: PlayerId) -> Optional[ToolRuntimeContextDto]:
+        dto = world_query_service.get_player_current_state(
+            GetPlayerCurrentStateQuery(
+                player_id=pid.value,
+                view_distance=effective_view_distance,
+            )
+        )
+        if dto is None:
+            return None
+        return ui_context_builder.build("", dto).tool_runtime_context
+
+    observation_appender = ObservationAppender(
+        buffer,
+        runtime_context_provider=_observation_trace_runtime,
+    )
+
     observation_registry = _build_observation_stack(
         player_status_repository=player_status_repository,
         physical_map_repository=physical_map_repository,
@@ -1241,13 +1262,14 @@ def create_llm_agent_wiring(
         item_repository=item_repository,
         skill_spec_repository=skill_spec_repository,
         spot_graph_repository=spot_graph_repository,
+        observation_appender=observation_appender,
     )
     return LlmAgentWiringResult(
         observation_registry=observation_registry,
         llm_turn_trigger=llm_turn_trigger,
         reflection_runner=reflection_runner,
         observation_buffer=buffer,
-        observation_appender=ObservationAppender(buffer),
+        observation_appender=observation_appender,
         action_experience_trace_store=action_experience_trace_store,
         observation_experience_trace_store=observation_experience_trace_store,
         episode_candidate_store=episode_candidate_store,

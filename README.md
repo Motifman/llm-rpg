@@ -196,4 +196,6 @@ town_center.add_connection("北", "school")
 
 ## 📝 開発ノート
 
-このシステムは、LLMが自然に理解できるテキストRPGの実現を目指して設計されています。階層的な場所管理により、複雑な建物構造でも直感的に移動できるようになっています。 
+このシステムは、LLMが自然に理解できるテキストRPGの実現を目指して設計されています。階層的な場所管理により、複雑な建物構造でも直感的に移動できるようになっています。
+
+並列ブランチの注意: `feature/observation-trace-runtime-context`（観測 trace / `application/llm/wiring`）と `LlmJsonEpisodeEncoder` 周りを同時に触る場合は、`wiring/__init__.py` の競合を避けるため **観測 trace 側を先にマージ**してから Encoder ブランチを進めるとよい。 

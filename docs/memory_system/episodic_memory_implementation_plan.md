@@ -135,12 +135,12 @@ LLM に残してよいのは **主観フィールド**（`interpreted` 等）に
 1. ✅ `SpotGraphPlayerSnapshotDto` に **`current_spot_id: int`** を追加。`SpotGraphCurrentStateBuilder` が設定。`SpotGraphUiContextBuilder` が `ToolRuntimeContextDto.current_spot_id` に渡す。
 2. ✅ `ToolRuntimeContextDto.current_sub_location_id`（任意）。スナップショットの `sub_locations` で **is_current** の id を UI ビルダが設定。
 3. ✅ `ActionExperienceTrace` / `ObservationExperienceTrace` に **`context_spot_id` / `context_tile_area_ids` / `context_sub_location_id` / `context_x|y|z`** を追加。観測側は **structured の `spot_id_value`** から最低限 `context_spot_id` を埋める。
-4. **観測 vs 行動の非対称（P1 スコープ）**: 観測経路は `ToolRuntimeContextDto` を持たないため、`ObservationExperienceTrace` の **`context_spot_id` 以外の `context_*` は None**。`tile_area` / `sub_loc` / 座標を観測 trace に載せるには recorder へ runtime を渡す等の**別タスク**（上記「残り」参照）。
+4. ✅ **観測 vs 行動の非対称（P1）**: `ObservationTraceRecorder.record(..., runtime_context=)` と `IObservationContextBuffer.append(..., runtime_context=)` を追加。`create_llm_agent_wiring` / `create_spot_graph_wiring` は `ObservationAppender(runtime_context_provider=...)` で **UI ビルダと同系の** `ToolRuntimeContextDto` を観測時に供給。`context_spot_id` は structured 優先、無ければ runtime。`context_sub_location_id` / 座標は runtime 由来。**`context_tile_area_ids` は観測 trace にまだ載せない**（`current_area_ids` はコピーしない）。
 
 **タスク（残り）**
 
 - SQLite / 長期 store のシリアライズで新フィールドを欠かさない（該当ストア実装を確認）。
-- 観測 trace へランタイムを直接渡す経路（バッファからの `ToolRuntimeContextDto`）は未検討。必要なら `ObservationTraceRecorder.record` の引数拡張。
+- 観測 trace の **`context_tile_area_ids`**: 意図的に未設定（タイル `current_area_ids` を観測に載せる要件が決まり次第）。
 
 **受け入れ条件**
 

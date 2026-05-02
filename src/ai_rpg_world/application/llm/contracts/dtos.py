@@ -275,8 +275,12 @@ class ActionExperienceTrace:
 class ObservationExperienceTrace:
     """Observation pipeline 由来の受動観測から作る体験材料。
 
-    P1 では観測経路に `ToolRuntimeContextDto` が無いため、`context_spot_id` は structured の
-    `spot_id_value` からのみ埋まる。その他の `context_*` は None（将来 recorder へ runtime を渡す拡張で揃える）。
+    `context_spot_id` は structured の spot_id_value を優先し、無いときは
+    `ObservationTraceRecorder.record(..., runtime_context=)` で渡した
+    `ToolRuntimeContextDto.current_spot_id` で補う。
+
+    `context_sub_location_id` / `context_x|y|z` は runtime 断片から補う（観測 structured に無い前提）。
+    `context_tile_area_ids` は現状観測 trace にコピーしない（`current_area_ids` は未使用。タイル索引は別タスクで載せる）。
     """
 
     trace_id: str

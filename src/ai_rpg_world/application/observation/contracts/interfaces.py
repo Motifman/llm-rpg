@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Any, List, Optional
 
 from ai_rpg_world.application.common.interfaces import IPlayerAudienceQueryPort
+from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.observation.contracts.dtos import (
     ObservationEntry,
     ObservationOutput,
@@ -77,8 +78,18 @@ class IObservationContextBuffer(ABC):
     """プレイヤーごとの観測を蓄積・取得するポート"""
 
     @abstractmethod
-    def append(self, player_id: PlayerId, entry: ObservationEntry) -> None:
-        """指定プレイヤーの観測を1件追加する。"""
+    def append(
+        self,
+        player_id: PlayerId,
+        entry: ObservationEntry,
+        *,
+        runtime_context: Optional[ToolRuntimeContextDto] = None,
+    ) -> None:
+        """指定プレイヤーの観測を1件追加する。
+
+        runtime_context は観測時点の ToolRuntime 断片。trace 記録のみが利用し、
+        既定の in-memory バッファ実装は無視する。
+        """
         pass
 
     @abstractmethod

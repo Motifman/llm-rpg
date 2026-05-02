@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 from typing import Any, Optional
 
+from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionExperienceTraceStore,
     IActionResultStore,
@@ -538,6 +539,22 @@ def create_spot_graph_wiring(
     )
     llm_turn_trigger = DefaultLlmTurnTrigger(turn_runner=turn_runner, max_turns=max_turns)
 
+    def _observation_trace_runtime(pid: PlayerId) -> Optional[ToolRuntimeContextDto]:
+        dto = augmented_world_query.get_player_current_state(
+            GetPlayerCurrentStateQuery(
+                player_id=pid.value,
+                view_distance=effective_view_distance,
+            )
+        )
+        if dto is None:
+            return None
+        return ui_context_builder.build("", dto).tool_runtime_context
+
+    observation_appender = ObservationAppender(
+        buffer,
+        runtime_context_provider=_observation_trace_runtime,
+    )
+
     formatter = observation_formatter
     if formatter is None:
         formatter = ObservationFormatter(
@@ -579,13 +596,14 @@ def create_spot_graph_wiring(
         item_repository=item_repository,
         skill_spec_repository=skill_spec_repository,
         spot_graph_repository=spot_graph_repository,
+        observation_appender=observation_appender,
     )
     return LlmAgentWiringResult(
         observation_registry=observation_registry,
         llm_turn_trigger=llm_turn_trigger,
         reflection_runner=reflection_runner,
         observation_buffer=buffer,
-        observation_appender=ObservationAppender(buffer),
+        observation_appender=observation_appender,
         action_experience_trace_store=action_experience_trace_store,
         observation_experience_trace_store=observation_experience_trace_store,
         episode_candidate_store=episode_candidate_store,

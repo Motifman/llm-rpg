@@ -2,6 +2,7 @@
 
 from datetime import datetime
 
+from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.llm.services.in_memory_observation_experience_trace_store import (
     InMemoryObservationExperienceTraceStore,
 )
@@ -97,3 +98,37 @@ def test_record_context_spot_id_none_when_spot_id_value_not_coercible() -> None:
     trace = recorder.record(PlayerId(1), entry)
     assert trace.context_spot_id is None
     assert "spot_id_value:not-an-int" in trace.world_event_refs
+
+
+def test_record_fills_spatial_from_runtime_when_struct_spot_missing() -> None:
+    store = InMemoryObservationExperienceTraceStore()
+    recorder = ObservationTraceRecorder(store)
+    entry = _entry("weather_changed", category="environment")
+    rtc = ToolRuntimeContextDto(
+        targets={},
+        current_spot_id=7,
+        current_sub_location_id=42,
+        current_x=1,
+        current_y=2,
+        current_z=3,
+        current_area_ids=(99, 100),
+    )
+    trace = recorder.record(PlayerId(1), entry, runtime_context=rtc)
+    assert trace.context_spot_id == 7
+    assert trace.context_sub_location_id == 42
+    assert trace.context_x == 1
+    assert trace.context_y == 2
+    assert trace.context_z == 3
+    assert trace.context_tile_area_ids is None
+
+
+def test_record_structured_spot_id_takes_precedence_over_runtime() -> None:
+    store = InMemoryObservationExperienceTraceStore()
+    recorder = ObservationTraceRecorder(store)
+    entry = _entry(
+        "entity_entered_spot",
+        structured_extra={"spot_id_value": 10},
+    )
+    rtc = ToolRuntimeContextDto(targets={}, current_spot_id=999)
+    trace = recorder.record(PlayerId(1), entry, runtime_context=rtc)
+    assert trace.context_spot_id == 10
