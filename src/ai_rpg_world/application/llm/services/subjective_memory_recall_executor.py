@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import List
 
-from ai_rpg_world.application.llm.contracts.dtos import SubjectiveEpisode
+from ai_rpg_world.application.llm.contracts.dtos import (
+    SubjectiveEpisode,
+    subjective_episode_index_strings,
+)
 from ai_rpg_world.application.llm.contracts.interfaces import ISubjectiveEpisodeStore
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
@@ -52,7 +55,7 @@ class SubjectiveMemoryRecallExecutor:
         else:
             for ep in episodes:
                 blob = (
-                    " ".join(ep.cue_keys)
+                    " ".join(subjective_episode_index_strings(ep))
                     + "\n"
                     + ep.observed
                     + "\n"
@@ -66,7 +69,8 @@ class SubjectiveMemoryRecallExecutor:
             return f"（キーワード「{keywords.strip()}」に合致する主観エピソードはありません）"
         lines: List[str] = []
         for ep in picked:
-            cue = " / ".join(ep.cue_keys[:4]) if ep.cue_keys else "—"
+            keys = subjective_episode_index_strings(ep)
+            cue = " / ".join(keys[:4]) if keys else "—"
             obs = ep.observed.strip().replace("\n", " ")[:140]
             lines.append(
                 f"- id={ep.episode_id} importance={ep.importance} cues={cue} | {obs}"

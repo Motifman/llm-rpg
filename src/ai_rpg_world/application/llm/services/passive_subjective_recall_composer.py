@@ -14,6 +14,7 @@ from typing import List, Set, Tuple
 from ai_rpg_world.application.llm.contracts.dtos import (
     PassiveRecallComposeResult,
     SubjectiveEpisode,
+    subjective_episode_index_strings,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IPassiveSubjectiveRecallComposer,
@@ -33,7 +34,7 @@ def _tokenize_cues(text: str) -> Set[str]:
 
 
 def _normalized_episode_cues(ep: SubjectiveEpisode) -> Set[str]:
-    return {k.strip().lower() for k in ep.cue_keys if k.strip()}
+    return {k.strip().lower() for k in subjective_episode_index_strings(ep) if k.strip()}
 
 
 def _recency_bonus(ep: SubjectiveEpisode, *, now: datetime) -> float:
@@ -90,7 +91,8 @@ def _one_line(text: str, max_len: int) -> str:
 
 
 def _format_recall_line(ep: SubjectiveEpisode) -> str:
-    tags = " / ".join(ep.cue_keys[:5]) if ep.cue_keys else "—"
+    idx = subjective_episode_index_strings(ep)
+    tags = " / ".join(idx[:5]) if idx else "—"
     obs = _one_line(ep.observed, 130)
     interp = _one_line(ep.interpreted, 72) if ep.interpreted.strip() else ""
     imp = ep.importance

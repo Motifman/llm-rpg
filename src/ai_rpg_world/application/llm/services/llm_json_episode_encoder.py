@@ -319,6 +319,7 @@ def subjective_episode_from_llm_dict(
         belief_update_candidates=_belief_list(data.get("belief_update_candidates")),
         relationship_deltas=_relationship_list(data.get("relationship_deltas")),
         cue_keys=cue_keys,
+        cues=(),
         importance=imp,  # type: ignore[arg-type]
         salience_reasons=salience,
         recall_count=0,
