@@ -151,7 +151,6 @@ class SubjectiveEpisode:
     prediction_error: str | None
     felt: str | None
     interpreted: str | None
-    intended_next: str | None
     cues: Tuple[EpisodicCue, ...]
     recall_text: str
 
@@ -191,7 +190,6 @@ class SubjectiveEpisode:
         object.__setattr__(self, "prediction_error", _optional_non_blank("prediction_error", self.prediction_error))
         object.__setattr__(self, "felt", _optional_non_blank("felt", self.felt))
         object.__setattr__(self, "interpreted", _optional_non_blank("interpreted", self.interpreted))
-        object.__setattr__(self, "intended_next", _optional_non_blank("intended_next", self.intended_next))
         object.__setattr__(self, "recall_text", _reject_blank("recall_text", self.recall_text))
 
         if self.game_time_label is not None:

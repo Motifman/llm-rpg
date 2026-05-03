@@ -32,7 +32,6 @@ def _minimal_episode(**overrides):
         prediction_error="安全だと思ったが罠だった",
         felt="caution",
         interpreted=None,
-        intended_next=None,
         cues=(
             EpisodicCue(
                 axis="place_spot",
@@ -125,7 +124,6 @@ class TestInterpretedOptional:
     """LLM 主観フィールドが無くてもエピソードが成立する"""
 
     def test_llm_subjective_fields_can_be_none(self) -> None:
-        """interpreted / intended_next が None でも構築できる（決定論パスの土台）。"""
-        ep = _minimal_episode(interpreted=None, intended_next=None)
+        """interpreted が None でも構築できる（決定論パスの土台）。"""
+        ep = _minimal_episode(interpreted=None)
         assert ep.interpreted is None
-        assert ep.intended_next is None
