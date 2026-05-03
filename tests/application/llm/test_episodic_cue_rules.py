@@ -179,3 +179,29 @@ class TestDedupeAndCaps:
             command_result=LlmCommandResultDto(success=True, message=""),
         )
         assert len(cues) <= MAX_EPISODIC_CUES
+
+    def test_massive_tile_areas_do_not_drop_action_or_outcome(self) -> None:
+        """
+        current_area_ids が極端に多くても、先頭の action / outcome が
+        MAX_EPISODIC_CUES 打ち切りで欠落しない（旧実装のレビューブロッカー回帰）。
+        """
+        areas = tuple(range(MAX_EPISODIC_CUES + 10))
+        rt = ToolRuntimeContextDto(
+            targets={},
+            current_spot_id=1,
+            current_sub_location_id=2,
+            current_area_ids=areas,
+        )
+        cues = build_episodic_cues_for_tool_turn(
+            tool_name="spot_graph_heavy_scan",
+            canonical_arguments=None,
+            runtime_context=rt,
+            command_result=LlmCommandResultDto(
+                success=False,
+                message="ng",
+                error_code="AREA_OVERFLOW",
+            ),
+        )
+        canon = {c.to_canonical() for c in cues}
+        assert "action:spot_graph_heavy_scan" in canon
+        assert "outcome:failure_area_overflow" in canon
