@@ -19,7 +19,6 @@ from ai_rpg_world.application.llm.contracts.chunk_encoding import (
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 
 # 第1版の固定閾値（テストが同一定数を参照して期待値を固定する）
-MIN_ACTION_RESULTS_FOR_EPISODE = 1
 OBSERVATION_COUNT_CLOSE_THRESHOLD = 3
 
 
@@ -55,11 +54,18 @@ def _structured_key_fingerprint(structured: Mapping[str, Any]) -> frozenset[str]
 def summarize_observation_boundary_hints(
     observations: Sequence[ObservationEntry],
 ) -> ObservationBoundaryHints:
-    """ObservationEntry の列から境界ヒントを決定論的に集約する。"""
+    """
+    ObservationEntry の列から境界ヒントを決定論的に集約する。
+
+    入力タプルの並びは不定でもよい。カテゴリ遷移・structured キー変化は
+    `occurred_at` 昇順（同一時刻は元の相対順を安定ソートで保持）の隣接比較とする。
+    """
     obs_list = list(observations)
     for i, o in enumerate(obs_list):
         if not isinstance(o, ObservationEntry):
             raise TypeError(f"observations[{i}] must be ObservationEntry")
+
+    obs_list.sort(key=lambda e: e.occurred_at)
 
     n = len(obs_list)
     any_breaks = any(o.output.breaks_movement for o in obs_list)
@@ -89,6 +95,7 @@ def summarize_observation_boundary_hints(
 class ChunkBoundaryReason(str, Enum):
     """閉じる／閉じないの理由（カーソル説明用）。"""
 
+    # chunk_encoding_episode_generation_allowed と同義: 区間内 ActionResult が 0 件
     INSUFFICIENT_ACTIONS = "insufficient_actions"
     SEGMENT_EXPLICIT = "segment_explicit"
     OBSERVATION_COUNT_THRESHOLD = "observation_count_threshold"
@@ -129,6 +136,8 @@ def decide_chunk_boundary(
     """
     if not isinstance(inp, ChunkEncodingInput):
         raise TypeError("inp must be ChunkEncodingInput")
+    if hints is not None and not isinstance(hints, ObservationBoundaryHints):
+        raise TypeError("hints must be ObservationBoundaryHints or None")
     if not isinstance(explicit_segment_close, bool):
         raise TypeError("explicit_segment_close must be bool")
 

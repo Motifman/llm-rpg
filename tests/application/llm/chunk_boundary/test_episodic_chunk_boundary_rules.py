@@ -8,12 +8,14 @@ from ai_rpg_world.application.llm.chunk_boundary.rules import (
     OBSERVATION_COUNT_CLOSE_THRESHOLD,
     ChunkBoundaryDecision,
     ChunkBoundaryReason,
-    MIN_ACTION_RESULTS_FOR_EPISODE,
     ObservationBoundaryHints,
     decide_chunk_boundary,
     summarize_observation_boundary_hints,
 )
-from ai_rpg_world.application.llm.contracts.chunk_encoding import build_chunk_encoding_input
+from ai_rpg_world.application.llm.contracts.chunk_encoding import (
+    build_chunk_encoding_input,
+    chunk_encoding_episode_generation_allowed,
+)
 from ai_rpg_world.application.llm.contracts.dtos import ActionResultEntry
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
@@ -77,8 +79,26 @@ class TestSummarizeObservationBoundaryHints:
         h = summarize_observation_boundary_hints([a, b])
         assert h.has_category_transition is True
 
-    def test_structured_keys_change(self):
-        """連続観測で structured のキー集合が変われば真"""
+    def test_tuple_order_irrelevant_category_follows_occurred_at(self):
+        """並びが時系列と逆でも occurred_at 昇順で遷移を検知する"""
+        later_first_in_tuple = _make_obs(
+            category="social", at=datetime(2026, 5, 4, 12, 0, 2)
+        )
+        earlier_second_in_tuple = _make_obs(
+            category="self_only", at=datetime(2026, 5, 4, 12, 0, 1)
+        )
+        h = summarize_observation_boundary_hints([later_first_in_tuple, earlier_second_in_tuple])
+        assert h.has_category_transition is True
+
+    def test_same_structured_keys_different_values_no_key_change(self):
+        """キー集合が同じなら structured 変化とみなさない"""
+        a = _make_obs(structured={"a": 1}, at=datetime(2026, 5, 4, 12, 0, 0))
+        b = _make_obs(structured={"a": 99}, at=datetime(2026, 5, 4, 12, 0, 1))
+        h = summarize_observation_boundary_hints([a, b])
+        assert h.has_structured_keys_change is False
+
+    def test_structured_keys_change_between_two(self):
+        """連続観測（時系列順）で structured のキー集合が変われば真"""
         a = _make_obs(structured={"type": "a"}, at=datetime(2026, 5, 4, 12, 0, 0))
         b = _make_obs(structured={"kind": "b"}, at=datetime(2026, 5, 4, 12, 0, 1))
         h = summarize_observation_boundary_hints([a, b])
@@ -104,9 +124,11 @@ class TestDecideChunkBoundary:
             reason=ChunkBoundaryReason.INSUFFICIENT_ACTIONS,
         )
 
-    def test_min_action_constant_matches_first_version(self):
-        """第1版は1件以上の行動が必要（定数と仕様の整合）"""
-        assert MIN_ACTION_RESULTS_FOR_EPISODE == 1
+    def test_chunk_encoding_gate_zero_actions(self):
+        """第1版のエンコード可否は chunk_encoding のゲートに委譲（0件は不可）"""
+        pid = PlayerId(1)
+        inp = build_chunk_encoding_input(pid, [], [])
+        assert chunk_encoding_episode_generation_allowed(inp) is False
 
     def test_explicit_close_wins_over_hints(self):
         """行動あり・明示区切りなら SEGMENT_EXPLICIT（観測なしでも可）"""
@@ -126,6 +148,16 @@ class TestDecideChunkBoundary:
         d = decide_chunk_boundary(inp)
         assert d.reason is ChunkBoundaryReason.OBSERVATION_COUNT_THRESHOLD
         assert d.should_close_chunk is True
+
+    def test_observation_count_below_threshold_holds(self):
+        """観測が閾値未満で他ヒントがなければ HOLD（閾値=3）"""
+        assert OBSERVATION_COUNT_CLOSE_THRESHOLD == 3
+        pid = PlayerId(1)
+        obs = [_make_obs(at=datetime(2026, 5, 4, 12, 0, i)) for i in range(2)]
+        inp = build_chunk_encoding_input(pid, obs, [_action()])
+        d = decide_chunk_boundary(inp)
+        assert d.reason is ChunkBoundaryReason.HOLD_ACCUMULATING
+        assert d.should_close_chunk is False
 
     def test_salient_observation_before_category_in_priority(self):
         """salient 観測はカテゴリ遷移より先に評価される（理由が SALIENT になる）"""
@@ -193,3 +225,9 @@ class TestDecideChunkBoundary:
     def test_invalid_chunk_encoding_input_type(self):
         with pytest.raises(TypeError, match="ChunkEncodingInput"):
             decide_chunk_boundary("nope")  # type: ignore[arg-type]
+
+    def test_hints_wrong_type(self):
+        pid = PlayerId(1)
+        inp = build_chunk_encoding_input(pid, [], [_action()])
+        with pytest.raises(TypeError, match="ObservationBoundaryHints"):
+            decide_chunk_boundary(inp, hints="x")  # type: ignore[arg-type]
