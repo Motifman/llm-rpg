@@ -480,7 +480,6 @@ def scenario_defs() -> List[Dict[str, Any]]:
         prediction_error=None,
         felt="anxiety",
         interpreted=None,
-        intended_next=None,
         cues=(
             EpisodicCue(
                 axis="entity",
