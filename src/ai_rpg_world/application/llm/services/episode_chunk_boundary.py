@@ -61,6 +61,10 @@ class EpisodeChunkBoundaryPolicy:
             raise TypeError("max_observations_in_chunk_before_close must be int")
         if self.max_observations_in_chunk_before_close < 0:
             raise ValueError("max_observations_in_chunk_before_close must be >= 0")
+        if not isinstance(self.close_on_observation_category_shift, bool):
+            raise TypeError("close_on_observation_category_shift must be bool")
+        if not isinstance(self.close_on_structured_keys_shift, bool):
+            raise TypeError("close_on_structured_keys_shift must be bool")
         if not isinstance(self.close_when_allowed_without_observation_boundary_signal, bool):
             raise TypeError("close_when_allowed_without_observation_boundary_signal must be bool")
 
