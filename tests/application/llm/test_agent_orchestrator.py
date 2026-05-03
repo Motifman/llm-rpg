@@ -1,6 +1,12 @@
 """LlmAgentOrchestrator のエピソード保存境界（tool 実行後にチャンク協調が保存する）の検証。"""
 
 from typing import Any, Dict
+from unittest.mock import patch
+
+from ai_rpg_world.application.llm.chunk_boundary.rules import (
+    ChunkBoundaryDecision,
+    ChunkBoundaryReason,
+)
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     LlmCommandResultDto,
@@ -106,8 +112,14 @@ def _orchestrator_with_episode(
 class TestOrchestratorEpisodicActionCapture:
     """tool_command_mapper.execute 通過後にチャンク経由で主観エピソードが保存されること。"""
 
+    _CLOSE_CHUNK = ChunkBoundaryDecision(
+        should_close_chunk=True,
+        episode_generation_allowed_if_closed=True,
+        reason=ChunkBoundaryReason.SEGMENT_EXPLICIT,
+    )
+
     def test_tool_success_persists_episode(self) -> None:
-        """成功した tool 結果がエピソードストアに 1 件入る。"""
+        """成功した tool 結果が、チャンク閉鎖時にエピソードストアに 1 件入る。"""
         mapper = ToolCommandMapper(
             handler_map={
                 TOOL_NAME_NO_OP: lambda pid, a: LlmCommandResultDto(
@@ -121,7 +133,11 @@ class TestOrchestratorEpisodicActionCapture:
             ),
             mapper=mapper,
         )
-        orch.run_turn(PlayerId(7))
+        with patch(
+            "ai_rpg_world.application.llm.services.episodic_chunk_coordinator.decide_chunk_boundary",
+            return_value=self._CLOSE_CHUNK,
+        ):
+            orch.run_turn(PlayerId(7))
         recent = store.list_recent(7, 10)
         assert len(recent) == 1
         assert recent[0].player_id == 7
@@ -145,7 +161,11 @@ class TestOrchestratorEpisodicActionCapture:
             ),
             mapper=mapper,
         )
-        orch.run_turn(PlayerId(2))
+        with patch(
+            "ai_rpg_world.application.llm.services.episodic_chunk_coordinator.decide_chunk_boundary",
+            return_value=self._CLOSE_CHUNK,
+        ):
+            orch.run_turn(PlayerId(2))
         assert len(store.list_recent(2, 10)) == 1
         ep = store.list_recent(2, 10)[0]
         assert "失敗" in ep.outcome

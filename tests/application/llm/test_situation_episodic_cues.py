@@ -1,6 +1,10 @@
-"""現在局面（runtime + 直近観測 structured）からの situation cue 生成の検証。"""
+"""現在局面（runtime + 直近観測 structured + 任意で直近行動）からの situation cue 生成の検証。"""
+
+from datetime import datetime, timezone
 
 from ai_rpg_world.application.llm.contracts.dtos import (
+    ActionResultEntry,
+    LlmCommandResultDto,
     ToolRuntimeContextDto,
     WorldObjectToolRuntimeTargetDto,
 )
@@ -71,8 +75,8 @@ class TestSituationCueVocabulary:
         )
         assert situation == tool_turn_equivalent
 
-    def test_never_contains_action_or_outcome_axes(self) -> None:
-        """局面入力のみでは action / outcome 軸を付与しない（§0.2 の action 補強は別経路）。"""
+    def test_without_latest_action_no_action_or_outcome_axes(self) -> None:
+        """latest_action を渡さないときは action / outcome 軸を付与しない。"""
         rt = ToolRuntimeContextDto(targets={}, current_spot_id=1)
         cues = build_situation_episodic_cues(
             runtime_context=rt,
@@ -81,6 +85,37 @@ class TestSituationCueVocabulary:
         axes = {c.axis for c in cues}
         assert "action" not in axes
         assert "outcome" not in axes
+
+    def test_latest_action_aligns_with_tool_turn_prefix(self) -> None:
+        """§0.2: 直近行動を渡すと tool ターン先頭の action/outcome と同一正規化になる。"""
+        rt = ToolRuntimeContextDto(targets={}, current_spot_id=1)
+        obs = {"spot_id_value": 1}
+        occurred = datetime(2026, 5, 3, 1, 2, 3, tzinfo=timezone.utc)
+        entry = ActionResultEntry(
+            occurred_at=occurred,
+            action_summary="x",
+            result_summary="y",
+            success=False,
+            error_code="NO_TOOL_CALL",
+            tool_name="world_move_to",
+        )
+        situation = build_situation_episodic_cues(
+            runtime_context=rt,
+            observation_structured=obs,
+            latest_action=entry,
+        )
+        tool_with_outcome = build_episodic_cues_for_tool_turn(
+            tool_name="world_move_to",
+            canonical_arguments=None,
+            runtime_context=rt,
+            command_result=LlmCommandResultDto(
+                success=False,
+                message="m",
+                error_code="NO_TOOL_CALL",
+            ),
+            observation_structured=obs,
+        )
+        assert situation == tool_with_outcome
 
     def test_runtime_place_and_observation_structured_fields(self) -> None:
         """spot / sub_loc / tile_area / entity / object が tool_turn と同じ canonical になる。"""
