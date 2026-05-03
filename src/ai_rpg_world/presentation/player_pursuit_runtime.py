@@ -17,7 +17,6 @@ from ai_rpg_world.application.llm.wiring import (
 
 if TYPE_CHECKING:
     from ai_rpg_world.application.llm.contracts.interfaces import (
-        IReflectionRunner,
         ILlmTurnTrigger,
     )
     from ai_rpg_world.infrastructure.events.observation_event_handler_registry import (
@@ -50,10 +49,6 @@ class PlayerPursuitRuntimeResult:
     @property
     def llm_turn_trigger(self) -> "ILlmTurnTrigger":
         return self.wiring_result.llm_turn_trigger
-
-    @property
-    def reflection_runner(self) -> Optional["IReflectionRunner"]:
-        return self.wiring_result.reflection_runner
 
     @property
     def pursuit_enabled(self) -> bool:
@@ -109,7 +104,7 @@ def compose_player_pursuit_runtime(
         Callable[["ObservationEventHandlerRegistry"], Any]
     ] = None,
     service_builder: Optional[
-        Callable[[Any, "ILlmTurnTrigger", Optional["IReflectionRunner"]], Any]
+        Callable[[Any, "ILlmTurnTrigger"], Any]
     ] = None,
     **wiring_kwargs: Any,
 ) -> PlayerPursuitRuntimeResult:
@@ -139,7 +134,6 @@ def compose_player_pursuit_runtime(
         service = service_builder(
             pursuit_continuation_service,
             wiring_result.llm_turn_trigger,
-            wiring_result.reflection_runner,
         )
 
     result = PlayerPursuitRuntimeResult(

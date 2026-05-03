@@ -1,3 +1,138 @@
+# Episodic Memory — 再実装計画
+
+この文書は [episodic_memory_system_spec.md](./episodic_memory_system_spec.md) を、既存のレガシー記憶実装に載せるのではなく、削除後の空き地から再実装するための計画である。
+
+## 0. 現在の前提
+
+2026-05-03 時点で、プロンプトに入る過去文脈は `SlidingWindowMemory` の直近観測と `IActionResultStore` の直近行動結果だけに戻した。
+
+削除済みのもの:
+
+- レガシー `EpisodeMemoryEntry` / `PredictiveMemoryRetriever`
+- `memory_query` / `memory_recall_subjective` / `subagent` / `working_memory_append`
+- 長期 facts / laws / reflection runner
+- v2 `SubjectiveEpisode` store / SQLite schema / passive recall / context pack
+- `ActionExperienceTrace` / `ObservationExperienceTrace` / episode encoding / cue extraction
+
+ここから先は後方互換や段階的併存を前提にしない。必要な概念だけを spec から再導入し、古い API 名や store 契約へ無理に合わせない。
+
+## 1. 再実装の原則
+
+- **Prompt 入口は 1 つ**: `PromptBuilder` へ渡す記憶ブロックは、最終的に `MemoryInfluenceBlock` のような短い影響テキストへ一本化する。複数の retriever が個別に prompt へ差し込まない。
+- **検索 DB ではなく主観システム**: 保存物は「検索用タグ」ではなく、行動前予測、結果、予測誤差、感情、注意の変化を残す。
+- **cue はゲーム由来構造から作る**: prompt 文字列や LLM 自由タグから索引を作らない。runtime context、tool args、観測イベント、stable id を入力にする。
+- **全件走査しない**: 想起候補は軸ごとの index lookup で取り、和集合をスコアリングする。
+- **最初から長期記憶へ飛ばない**: semantic / identity / schema は episode と reflection が成立してから導入する。
+
+## 2. フェーズ
+
+### P0 — 空き地の維持と回帰防止
+
+目的: SlidingWindow 以外の記憶経路が復活しない状態をテストで固定する。
+
+実装:
+
+- `PromptBuilder` の user prompt に `memory_query` / passive recall / long-term facts が入らないことを検証する。
+- tool catalog に想起系ツールが登録されないことを検証する。
+- `src/ai_rpg_world/application/llm` に削除済みの記憶 DTO / store / executor 名が戻っていないことを軽い import テストで見る。
+
+完了条件:
+
+- LLM ターンは SlidingWindow と直近行動結果だけで動く。
+- TODO ツールは残るが、記憶検索・作業メモ・長期記憶ツールは存在しない。
+
+### P1 — Trace Capture を最小再導入
+
+目的: episode 化前の根拠を、prompt や store とは独立した一次材料として残す。
+
+設計:
+
+- `ActionExperienceTrace`: 主観 tool 入力、tool args、tool result、success/error、runtime context snapshot。
+- `ObservationExperienceTrace`: その agent が知覚した観測、発話、環境変化、visible context。
+- trace store はまず in-memory でよい。ただし interface 名は古い `IActionExperienceTraceStore` を復活させず、新しい責務名で定義する。
+
+完了条件:
+
+- 世界へ作用する tool 実行から action trace が作られる。
+- 観測 append 時に observation trace が作られる。
+- trace は prompt へ直接入らない。
+
+### P2 — Subjective Episode Encoding
+
+目的: 複数 trace から主観 episode を作る。
+
+設計:
+
+- `SubjectiveEpisode` は `observed` / `interpreted` / `felt` / `intended` / `expected` / `prediction_error` / `source_trace_ids` を中核にする。
+- `observed` と `source_trace_ids` は不変。
+- LLM は主観化に使ってよいが、`observed` に trace 外の事実を混ぜることを validator で拒否する。
+
+完了条件:
+
+- 代表シナリオ 1 つで trace から episode が生成される。
+- LLM なしの stub encoder でも同じ契約を満たす。
+
+### P3 — Cue Index と局所リンク
+
+目的: 想起の候補取得を全件走査ではなく、軸別 index lookup にする。
+
+設計:
+
+- cue 軸: entity / place / object / action / outcome / schema_hint。
+- 空間 cue は `place_spot` / `tile_area` / `sub_loc` のように二系統を混同しない。
+- link は `temporal` / `entity` / `spatial` / `goal` / `co_recalled` から最小導入する。
+
+完了条件:
+
+- episode 保存時に cue index と局所 link が更新される。
+- 新規 episode 追加時に既存 episode 全件を比較しない。
+
+### P4 — Passive Recall と Memory Influence Block
+
+目的: 現在状況から自然に想起される episode を選び、prompt へ短く影響として渡す。
+
+設計:
+
+- 現在 runtime context から situation cues を作る。
+- cue / temporal / link / goal 軸ごとに候補 ID を取り、和集合を二次スコアする。
+- prompt には episode 全文ではなく「なぜ今思い出したか」「注意・予測へどう影響するか」を入れる。
+
+完了条件:
+
+- 罠箱などの代表ケースで、過去の失敗が `attention` / `expected_result` を慎重に傾ける。
+- 想起ブロックは件数・文字数上限を持つ。
+
+### P5 — Reflection / Consolidation
+
+目的: 想起された episode を現在文脈から再解釈し、semantic / schema / identity 候補を作る。
+
+設計:
+
+- reflection は source episode を破壊しない journal として保存する。
+- consolidation は日次・章区切り・高 importance 後などに限定する。
+- semantic / identity は「世界の真実」ではなく agent の安定しつつある理解として扱う。
+
+完了条件:
+
+- 同じ episode が再想起された時に reflection journal が増える。
+- 複数 episode から semantic / identity 候補を作れる。
+
+## 3. 最初にやらないこと
+
+- 旧 `memory_query` DSL の復活。
+- 旧 `EpisodeMemoryEntry` / facts / laws store への再接続。
+- embedding 類似検索。
+- graph DB 導入。
+- prompt 文字列からの cue 抽出。
+
+## 4. 最初の実装ブランチ候補
+
+- `refactor/remove-legacy-memory-system`: 現在の削除と P0 回帰テスト。
+- `feature/episodic-trace-capture`: P1。
+- `feature/episodic-subjective-encoding`: P2。
+- `feature/episodic-cue-index`: P3。
+
+記憶まわりの PR 作成・レビュー手順は [memory_feature_workflow.md](./memory_feature_workflow.md) に従う。ただし本計画では、旧実装との併存や移行互換を前提にしない。
 # Episodic Memory — 実装計画
 
 本文書は [episodic_memory_system_spec.md](./episodic_memory_system_spec.md) の仕様を、**既存コードに載せるための移行・実装順序**に落としたものである。詳細な Tool 引数設計や Chunker の議論のフルテキストは、必要に応じて [episodic_memory_reimplementation_plan.md](./episodic_memory_reimplementation_plan.md) を参照する。

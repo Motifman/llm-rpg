@@ -727,20 +727,6 @@ class TradeCancelTradePageAvailabilityResolver(IAvailabilityResolver):
         return False
 
 
-class MemoryQueryAvailabilityResolver(IAvailabilityResolver):
-    """memory_query は現在状態が取得できているときに利用可能。"""
-
-    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return context is not None
-
-
-class SubagentAvailabilityResolver(IAvailabilityResolver):
-    """subagent は現在状態が取得できているときに利用可能。"""
-
-    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return context is not None
-
-
 class TodoAddAvailabilityResolver(IAvailabilityResolver):
     """TODO 追加は常に利用可能。"""
 
@@ -762,8 +748,3 @@ class TodoCompleteAvailabilityResolver(IAvailabilityResolver):
         return True
 
 
-class WorkingMemoryAppendAvailabilityResolver(IAvailabilityResolver):
-    """作業メモ追加は常に利用可能。"""
-
-    def is_available(self, context: Optional[PlayerCurrentStateDto]) -> bool:
-        return True

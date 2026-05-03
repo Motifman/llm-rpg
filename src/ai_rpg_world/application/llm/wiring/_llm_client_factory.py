@@ -1,7 +1,6 @@
-"""LLM クライアントと subagent 用 invoke のファクトリ。"""
+"""LLM クライアントのファクトリ。"""
 
 import os
-from typing import Callable
 
 from ai_rpg_world.application.llm.contracts.interfaces import ILLMClient
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
@@ -22,31 +21,3 @@ def create_llm_client_from_env() -> ILLMClient:
         from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
         return LiteLLMClient()
     return StubLlmClient()
-
-
-def create_subagent_invoke_text(client: ILLMClient) -> Callable[[str, str], str]:
-    """subagent 用のテキスト完了呼び出しを返す。"""
-    if client is None or isinstance(client, StubLlmClient):
-        return lambda _sys, _user: "（subagent はスタブです。実 LLM 設定時に要約が返ります。）"
-
-    try:
-        from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
-        if isinstance(client, LiteLLMClient):
-            import litellm
-            def _invoke(system: str, user: str) -> str:
-                r = litellm.completion(
-                    model=client._model,
-                    messages=[
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user},
-                    ],
-                    api_key=client._api_key,
-                )
-                if r and r.choices:
-                    content = getattr(r.choices[0].message, "content", None)
-                    return (content or "").strip()
-                return ""
-            return _invoke
-    except ImportError:
-        pass
-    return lambda _sys, _user: "（subagent は未対応のクライアントです）"

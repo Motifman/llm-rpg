@@ -43,41 +43,25 @@ EventHandlerComposition のインスタンス化）は**呼び出し元（外部
   `TradeQueryService`・`TradePageQueryService`・`TradeEventHandler` 等に**同一インスタンスで**
   渡す（`.env.example` 参照）。
 
-【v2 主観エピソード（SubjectiveEpisode）のストア】
-- 既定は `InMemorySubjectiveEpisodeStore`。本番寄りで SQLite にする場合は環境変数 `SUBJECTIVE_EPISODE_DB_PATH`
-  にファイルパスを設定する（`create_llm_agent_wiring` / `create_spot_graph_wiring` が参照）。未設定時は従来どおりインメモリ。
-- プログラムからは `subjective_episode_sqlite_path` でパスを直接渡せる（テスト・デモ用。環境変数より優先）。
-- さらに `subjective_episode_store` に `ISubjectiveEpisodeStore` を渡せば、上記より優先して注入される。
 """
 
 import os
 from typing import Any, Callable, Dict, NamedTuple, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
-    EpisodeEncodingContextDto,
     LlmCommandResultDto,
     ToolRuntimeContextDto,
 )
 
 from ai_rpg_world.application.llm.wiring._llm_client_factory import (
     create_llm_client_from_env,
-    create_subagent_invoke_text,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
-    IActionExperienceTraceStore,
     IActionResultStore,
-    IEpisodeCandidateStore,
-    IEpisodeMemoryStore,
     ILLMClient,
     ILLMPlayerResolver,
-    ILongTermMemoryStore,
-    IObservationExperienceTraceStore,
     ILlmTurnTrigger,
-    IPassiveSubjectiveRecallComposer,
-    IReflectionRunner,
-    IReflectionStatePort,
     ISlidingWindowMemory,
-    ISubjectiveEpisodeStore,
 )
 from ai_rpg_world.application.llm.services.action_result_store import (
     DefaultActionResultStore,
@@ -98,77 +82,8 @@ from ai_rpg_world.application.llm.services.game_tool_registry import (
 from ai_rpg_world.application.llm.services.in_memory_todo_store import (
     InMemoryTodoStore,
 )
-from ai_rpg_world.application.llm.services.in_memory_action_experience_trace_store import (
-    InMemoryActionExperienceTraceStore,
-)
-from ai_rpg_world.application.llm.services.in_memory_observation_experience_trace_store import (
-    InMemoryObservationExperienceTraceStore,
-)
-from ai_rpg_world.application.llm.services.in_memory_episode_candidate_store import (
-    InMemoryEpisodeCandidateStore,
-)
-from ai_rpg_world.application.llm.services.in_memory_identity_memory_store import (
-    InMemoryIdentityMemoryStore,
-)
-from ai_rpg_world.application.llm.services.episode_chunker import RuleBasedEpisodeChunker
-from ai_rpg_world.application.llm.services.episode_encoding_processor import (
-    EpisodeEncodingProcessor,
-)
-from ai_rpg_world.application.llm.services.episode_encoding_runner import (
-    EpisodeEncodingRunner,
-)
-from ai_rpg_world.application.llm.services.episode_encoding_context_provider import (
-    build_episode_encoding_context_provider,
-)
-from ai_rpg_world.application.llm.services.experience_trace_bundle_resolver import (
-    ExperienceTraceBundleResolver,
-)
-from ai_rpg_world.application.llm.wiring.episode_encoder_factory import build_episode_encoder
-from ai_rpg_world.application.llm.wiring.subjective_episode_store_factory import (
-    create_subjective_episode_store_for_wiring,
-)
-from ai_rpg_world.application.llm.wiring.memory_reflection_factory import (
-    build_same_process_memory_reflection,
-)
-from ai_rpg_world.application.llm.wiring.memory_consolidation_factory import (
-    build_memory_consolidation_hook,
-    consolidation_journal_threshold_from_env,
-)
-from ai_rpg_world.application.llm.services.memory_consolidation_runner import (
-    InMemoryConsolidationCheckpoint,
-    MemoryConsolidationRunner,
-)
-from ai_rpg_world.application.llm.wiring.passive_subjective_recall_factory import (
-    build_passive_subjective_recall_composer,
-)
-from ai_rpg_world.application.llm.services.in_memory_working_memory_store import (
-    InMemoryWorkingMemoryStore,
-)
-from ai_rpg_world.application.llm.services.observation_trace_recorder import (
-    ObservationTraceRecorder,
-)
-from ai_rpg_world.application.llm.services.observation_trace_recording_buffer import (
-    ObservationTraceRecordingBuffer,
-)
-from ai_rpg_world.application.llm.services.handle_store import InMemoryHandleStore
-from ai_rpg_world.application.llm.services.memory_query_executor import (
-    MemoryQueryExecutor,
-)
-from ai_rpg_world.application.llm.services.subagent_runner import SubagentRunner
 from ai_rpg_world.application.llm.services.llm_agent_turn_runner import (
     LlmAgentTurnRunner,
-)
-from ai_rpg_world.application.llm.services.memory_extractor import (
-    RuleBasedMemoryExtractor,
-)
-from ai_rpg_world.application.llm.services.predictive_memory_retriever import (
-    DefaultPredictiveMemoryRetriever,
-)
-from ai_rpg_world.application.llm.services.reflection_runner import (
-    DefaultReflectionRunner,
-)
-from ai_rpg_world.application.llm.services.reflection_service import (
-    RuleBasedReflectionService,
 )
 from ai_rpg_world.application.llm.services.llm_player_resolver import (
     ProfileBasedLlmPlayerResolver,
@@ -193,9 +108,6 @@ from ai_rpg_world.application.llm.services.sliding_window_memory import (
 )
 from ai_rpg_world.application.llm.services.executors.guild_executor import (
     GuildToolExecutor,
-)
-from ai_rpg_world.application.llm.services.executors.memory_executor import (
-    MemoryToolExecutor,
 )
 from ai_rpg_world.application.llm.services.executors.movement_executor import (
     MovementToolExecutor,
@@ -288,68 +200,16 @@ from ai_rpg_world.domain.world.repository.physical_map_repository import (
 from ai_rpg_world.infrastructure.events.observation_event_handler_registry import (
     ObservationEventHandlerRegistry,
 )
-from ai_rpg_world.infrastructure.llm._memory_store_factory import (
-    create_episode_memory_store,
-    create_long_term_memory_store,
-    create_reflection_state_port,
-)
 
 _ENV_LLM_VIEW_DISTANCE = "LLM_VIEW_DISTANCE"
 _DEFAULT_LLM_VIEW_DISTANCE = 5
 
 
-class _MemoryStackResult(NamedTuple):
-    """_build_memory_stack の返り値。episode / long_term / reflection / working / todo / handle の構築結果。"""
+class _RuntimeToolState(NamedTuple):
+    """LLM ツール用の軽量状態。記憶系は持たず TODO のみ保持する。"""
 
-    episode_memory_store: IEpisodeMemoryStore
-    long_term_memory_store: ILongTermMemoryStore
-    reflection_state_port: Optional[IReflectionStatePort]
-    working_memory_store: InMemoryWorkingMemoryStore
     todo_store: InMemoryTodoStore
-    handle_store: InMemoryHandleStore
 
-
-class _ReflectionStackResult(NamedTuple):
-    """_build_reflection_stack の返り値。reflection_service と reflection_runner の構築結果。"""
-
-    reflection_service: RuleBasedReflectionService
-    reflection_runner: Optional[IReflectionRunner]
-
-
-def _build_reflection_stack(
-    *,
-    episode_memory_store: IEpisodeMemoryStore,
-    long_term_memory_store: ILongTermMemoryStore,
-    reflection_state_port: Optional[IReflectionStatePort],
-    player_status_repository: PlayerStatusRepository,
-    llm_player_resolver: ILLMPlayerResolver,
-    world_time_config_service: Optional[WorldTimeConfigService] = None,
-) -> _ReflectionStackResult:
-    """
-    RuleBasedReflectionService と DefaultReflectionRunner を構築する。
-
-    world_time_config_service が WorldTimeConfigService のインスタンスの場合のみ
-    reflection_runner を作成し、それ以外の場合は None を返す。
-    """
-    reflection_service = RuleBasedReflectionService(
-        episode_store=episode_memory_store,
-        long_term_store=long_term_memory_store,
-    )
-    reflection_runner: Optional[IReflectionRunner] = None
-    if world_time_config_service is not None and isinstance(
-        world_time_config_service, WorldTimeConfigService
-    ):
-        reflection_runner = DefaultReflectionRunner(
-            reflection_service=reflection_service,
-            player_status_repository=player_status_repository,
-            llm_player_resolver=llm_player_resolver,
-            world_time_config=world_time_config_service,
-            state_port=reflection_state_port,
-        )
-    return _ReflectionStackResult(
-        reflection_service=reflection_service,
-        reflection_runner=reflection_runner,
-    )
 
 
 class _ToolStackResult(NamedTuple):
@@ -393,11 +253,7 @@ def _build_tool_handler_map(
     monster_repository: Optional[Any],
     physical_map_repository: PhysicalMapRepository,
     player_status_repository: PlayerStatusRepository,
-    memory_query_executor: Optional[MemoryQueryExecutor],
-    subagent_runner: Optional[SubagentRunner],
     todo_store: Optional[InMemoryTodoStore],
-    working_memory_store: Optional[InMemoryWorkingMemoryStore],
-    subjective_recall_executor: Optional[Any] = None,
     spot_graph_tool_executor: Optional[SpotGraphToolExecutor] = None,
 ) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
     """
@@ -442,14 +298,6 @@ def _build_tool_handler_map(
         )
     handler_map.update(
         SpeechToolExecutor(speech_service=speech_service).get_handlers()
-    )
-    handler_map.update(
-        MemoryToolExecutor(
-            memory_query_executor=memory_query_executor,
-            subjective_recall_executor=subjective_recall_executor,
-            subagent_runner=subagent_runner,
-            working_memory_store=working_memory_store,
-        ).get_handlers()
     )
     handler_map.update(TodoToolExecutor(todo_store).get_handlers())
     handler_map.update(
@@ -503,11 +351,7 @@ def _build_tool_handler_map(
 def _build_tool_stack(
     *,
     game_tool_registry: DefaultGameToolRegistry,
-    memory_query_executor: MemoryQueryExecutor,
-    subagent_runner: SubagentRunner,
-    working_memory_store: InMemoryWorkingMemoryStore,
     todo_store: InMemoryTodoStore,
-    subjective_recall_executor: Optional[Any] = None,
     include_tile_movement: bool = True,
     movement_service: Any = None,
     pursuit_command_service: Optional[Any],
@@ -581,11 +425,7 @@ def _build_tool_stack(
             and physical_map_repository is not None
             and player_status_repository is not None
         ),
-        memory_query_enabled=True,
-        recall_subjective_enabled=subjective_recall_executor is not None,
-        subagent_enabled=True,
         todo_enabled=True,
-        working_memory_enabled=True,
         include_movement_tools=include_tile_movement,
     )
     if spot_graph_tool_executor is not None:
@@ -623,11 +463,7 @@ def _build_tool_stack(
         monster_repository=monster_repository,
         physical_map_repository=physical_map_repository,
         player_status_repository=player_status_repository,
-        memory_query_executor=memory_query_executor,
-        subagent_runner=subagent_runner,
         todo_store=todo_store,
-        working_memory_store=working_memory_store,
-        subjective_recall_executor=subjective_recall_executor,
         spot_graph_tool_executor=spot_graph_tool_executor,
     )
     tool_command_mapper = ToolCommandMapper(handler_map=handler_map)
@@ -752,22 +588,12 @@ def _build_prompt_stack(
     system_prompt_builder: "DefaultSystemPromptBuilder",
     available_tools_provider: "DefaultAvailableToolsProvider",
     ui_context_builder: "DefaultLlmUiContextBuilder",
-    episode_memory_store: IEpisodeMemoryStore,
-    long_term_memory_store: ILongTermMemoryStore,
     tile_map_view_distance: int,
     persona_block_provider: Optional[Callable[[PlayerId], str]] = None,
-    passive_subjective_recall: Optional[IPassiveSubjectiveRecallComposer] = None,
-    episode_encoding_context_provider: Optional[
-        Callable[[PlayerId], EpisodeEncodingContextDto]
-    ] = None,
 ) -> DefaultPromptBuilder:
     """
     predictive_retriever と prompt_builder を構築する。
     """
-    predictive_retriever = DefaultPredictiveMemoryRetriever(
-        episode_store=episode_memory_store,
-        long_term_store=long_term_memory_store,
-    )
     return DefaultPromptBuilder(
         observation_buffer=buffer,
         sliding_window_memory=sliding_window,
@@ -780,10 +606,7 @@ def _build_prompt_stack(
         system_prompt_builder=system_prompt_builder,
         available_tools_provider=available_tools_provider,
         ui_context_builder=ui_context_builder,
-        predictive_memory_retriever=predictive_retriever,
         persona_block_provider=persona_block_provider,
-        passive_subjective_recall=passive_subjective_recall,
-        episode_encoding_context_provider=episode_encoding_context_provider,
         tile_map_view_distance=tile_map_view_distance,
     )
 
@@ -813,40 +636,8 @@ def _build_persona_block_provider(
     return _provider
 
 
-def _build_memory_stack(
-    *,
-    memory_db_path: Optional[str] = None,
-    episode_memory_store: Optional[IEpisodeMemoryStore] = None,
-    long_term_memory_store: Optional[ILongTermMemoryStore] = None,
-    reflection_state_port: Optional[IReflectionStatePort] = None,
-) -> _MemoryStackResult:
-    """
-    episode / long_term / reflection / working / todo / handle を構築する。
-
-    memory_db_path または環境変数 LLM_MEMORY_DB_PATH により永続化の有無が決まる。
-    引数で渡された store/port がある場合はそのまま使用し、None の場合のみファクトリで生成する。
-    """
-    if episode_memory_store is None:
-        episode_memory_store = create_episode_memory_store(memory_db_path=memory_db_path)
-    if long_term_memory_store is None:
-        long_term_memory_store = create_long_term_memory_store(
-            memory_db_path=memory_db_path
-        )
-    working_memory_store = InMemoryWorkingMemoryStore()
-    todo_store = InMemoryTodoStore()
-    handle_store = InMemoryHandleStore()
-    if reflection_state_port is None:
-        reflection_state_port = create_reflection_state_port(
-            memory_db_path=memory_db_path
-        )
-    return _MemoryStackResult(
-        episode_memory_store=episode_memory_store,
-        long_term_memory_store=long_term_memory_store,
-        reflection_state_port=reflection_state_port,
-        working_memory_store=working_memory_store,
-        todo_store=todo_store,
-        handle_store=handle_store,
-    )
+def _build_runtime_tool_state() -> _RuntimeToolState:
+    return _RuntimeToolState(todo_store=InMemoryTodoStore())
 
 
 class LlmAgentWiringResult:
@@ -856,21 +647,14 @@ class LlmAgentWiringResult:
         self,
         observation_registry: "ObservationEventHandlerRegistry",
         llm_turn_trigger: ILlmTurnTrigger,
-        reflection_runner: Optional[IReflectionRunner] = None,
         observation_buffer: Optional[IObservationContextBuffer] = None,
         observation_appender: Optional[ObservationAppender] = None,
-        action_experience_trace_store: Optional[IActionExperienceTraceStore] = None,
-        observation_experience_trace_store: Optional[IObservationExperienceTraceStore] = None,
-        episode_candidate_store: Optional[IEpisodeCandidateStore] = None,
-        subjective_episode_store: Optional[ISubjectiveEpisodeStore] = None,
-        identity_memory_store: Optional[Any] = None,
         sns_mode_session: Optional[Any] = None,
         sns_page_session: Optional[Any] = None,
         trade_page_session: Optional[Any] = None,
     ) -> None:
         self.observation_registry = observation_registry
         self.llm_turn_trigger = llm_turn_trigger
-        self.reflection_runner = reflection_runner
         self.observation_buffer = observation_buffer
         if observation_appender is not None:
             self.observation_appender = observation_appender
@@ -878,11 +662,6 @@ class LlmAgentWiringResult:
             self.observation_appender = ObservationAppender(observation_buffer)
         else:
             self.observation_appender = None
-        self.action_experience_trace_store = action_experience_trace_store
-        self.observation_experience_trace_store = observation_experience_trace_store
-        self.episode_candidate_store = episode_candidate_store
-        self.subjective_episode_store = subjective_episode_store
-        self.identity_memory_store = identity_memory_store
         self.sns_mode_session = sns_mode_session
         self.sns_page_session = sns_page_session
         self.trade_page_session = trade_page_session
@@ -946,22 +725,14 @@ def create_llm_agent_wiring(
     llm_client: Optional[ILLMClient] = None,
     game_time_provider: Optional[Any] = None,
     world_time_config_service: Optional[Any] = None,
-    memory_db_path: Optional[str] = None,
-    episode_memory_store: Optional[IEpisodeMemoryStore] = None,
-    long_term_memory_store: Optional[Any] = None,
-    reflection_state_port: Optional[Any] = None,
     action_result_store: Optional[IActionResultStore] = None,
     sliding_window_memory: Optional[ISlidingWindowMemory] = None,
-    action_experience_trace_store: Optional[IActionExperienceTraceStore] = None,
-    observation_experience_trace_store: Optional[IObservationExperienceTraceStore] = None,
     llm_player_resolver: Optional[ILLMPlayerResolver] = None,
     max_turns: int = 5,
     llm_view_distance: Optional[int] = None,
     system_prompt_template: Optional[str] = None,
     persona_store: Optional[Any] = None,
     persona_prompt_policy: Optional[PersonaPromptPolicy] = None,
-    subjective_episode_store: Optional[ISubjectiveEpisodeStore] = None,
-    subjective_episode_sqlite_path: Optional[str] = None,
 ) -> "LlmAgentWiringResult":
     """
     LLM エージェント用の観測ハンドラ登録用 Registry と LlmTurnTrigger を組み立てて返す。
@@ -979,17 +750,8 @@ def create_llm_agent_wiring(
     if unit_of_work_factory is None:
         raise TypeError("unit_of_work_factory must not be None")
 
-    base_buffer = (
+    buffer = (
         observation_buffer if observation_buffer is not None else DefaultObservationContextBuffer()
-    )
-    observation_experience_trace_store = (
-        observation_experience_trace_store
-        if observation_experience_trace_store is not None
-        else InMemoryObservationExperienceTraceStore()
-    )
-    buffer = ObservationTraceRecordingBuffer(
-        inner=base_buffer,
-        recorder=ObservationTraceRecorder(observation_experience_trace_store),
     )
     current_state_formatter = DefaultCurrentStateFormatter()
 
@@ -1002,26 +764,6 @@ def create_llm_agent_wiring(
         action_result_store
         if action_result_store is not None
         else DefaultActionResultStore()
-    )
-    action_experience_trace_store = (
-        action_experience_trace_store
-        if action_experience_trace_store is not None
-        else InMemoryActionExperienceTraceStore()
-    )
-    episode_candidate_store = InMemoryEpisodeCandidateStore()
-    episode_chunker = RuleBasedEpisodeChunker(
-        action_trace_store=action_experience_trace_store,
-        observation_trace_store=observation_experience_trace_store,
-        candidate_store=episode_candidate_store,
-    )
-    subjective_episode_store = create_subjective_episode_store_for_wiring(
-        subjective_episode_store=subjective_episode_store,
-        sqlite_path=subjective_episode_sqlite_path,
-    )
-    identity_memory_store = InMemoryIdentityMemoryStore()
-    trace_bundle_resolver = ExperienceTraceBundleResolver(
-        action_experience_trace_store,
-        observation_experience_trace_store,
     )
     ui_context_builder = DefaultLlmUiContextBuilder()
     recent_events_formatter = DefaultRecentEventsFormatter()
@@ -1050,81 +792,13 @@ def create_llm_agent_wiring(
         else:
             effective_view_distance = _DEFAULT_LLM_VIEW_DISTANCE
 
-    memory_stack = _build_memory_stack(
-        memory_db_path=memory_db_path,
-        episode_memory_store=episode_memory_store,
-        long_term_memory_store=long_term_memory_store,
-        reflection_state_port=reflection_state_port,
-    )
-    episode_memory_store = memory_stack.episode_memory_store
-    long_term_memory_store = memory_stack.long_term_memory_store
-    reflection_state_port = memory_stack.reflection_state_port
-    working_memory_store = memory_stack.working_memory_store
-    todo_store = memory_stack.todo_store
-    handle_store = memory_stack.handle_store
+    runtime_tool_state = _build_runtime_tool_state()
+    todo_store = runtime_tool_state.todo_store
 
-    def _state_provider(pid: PlayerId) -> str:
-        dto = world_query_service.get_player_current_state(
-            GetPlayerCurrentStateQuery(
-                player_id=pid.value,
-                view_distance=effective_view_distance,
-            )
-        )
-        if dto is None:
-            return "（情報なし）"
-        return current_state_formatter.format(dto)
-
-    memory_query_executor = MemoryQueryExecutor(
-        episode_store=episode_memory_store,
-        long_term_store=long_term_memory_store,
-        sliding_window=sliding_window,
-        action_result_store=action_result_store,
-        working_memory_store=working_memory_store,
-        state_provider=_state_provider,
-        recent_events_formatter=recent_events_formatter,
-        handle_store=handle_store,
-    )
-    episode_encoding_ctx_provider = build_episode_encoding_context_provider(
-        player_profile_repository=player_profile_repository,
-        long_term_memory_store=long_term_memory_store,
-        working_memory_store=working_memory_store,
-        persona_block_provider=persona_block_provider,
-        identity_memory_store=identity_memory_store,
-    )
     client = llm_client if llm_client is not None else create_llm_client_from_env()
-    _, memory_reflection_after_encode = build_same_process_memory_reflection(
-        llm_client=client,
-        subjective_episode_store=subjective_episode_store,
-        context_provider=episode_encoding_ctx_provider,
-    )
-    episode_encoder = build_episode_encoder(client)
-    episode_encoding_processor = EpisodeEncodingProcessor(
-        candidate_store=episode_candidate_store,
-        trace_resolver=trace_bundle_resolver,
-        subjective_episode_store=subjective_episode_store,
-        encoder=episode_encoder,
-        context_provider=episode_encoding_ctx_provider,
-        max_retries=2,
-        on_subjective_episode_encoded=memory_reflection_after_encode,
-    )
-    episode_encoding_runner = EpisodeEncodingRunner(episode_encoding_processor)
-    passive_recall_composer = build_passive_subjective_recall_composer(
-        subjective_episode_store
-    )
-    subagent_invoke_text = create_subagent_invoke_text(client)
-    subagent_runner = SubagentRunner(
-        memory_query_executor=memory_query_executor,
-        invoke_text=subagent_invoke_text,
-        handle_store=handle_store,
-    )
-
     tool_stack = _build_tool_stack(
         game_tool_registry=game_tool_registry,
-        memory_query_executor=memory_query_executor,
-        subagent_runner=subagent_runner,
-        working_memory_store=working_memory_store,
         todo_store=todo_store,
-        subjective_recall_executor=None,
         movement_service=movement_service,
         pursuit_command_service=pursuit_command_service,
         speech_service=speech_service,
@@ -1165,19 +839,10 @@ def create_llm_agent_wiring(
     tool_command_mapper = tool_stack.tool_command_mapper
     tool_argument_resolver = tool_stack.tool_argument_resolver
 
-    memory_extractor = RuleBasedMemoryExtractor()
     if llm_player_resolver is None:
         llm_player_resolver = ProfileBasedLlmPlayerResolver(
             player_profile_repository=player_profile_repository,
         )
-    reflection_service, reflection_runner = _build_reflection_stack(
-        episode_memory_store=episode_memory_store,
-        long_term_memory_store=long_term_memory_store,
-        reflection_state_port=reflection_state_port,
-        player_status_repository=player_status_repository,
-        llm_player_resolver=llm_player_resolver,
-        world_time_config_service=world_time_config_service,
-    )
     prompt_builder = _build_prompt_stack(
         buffer=buffer,
         sliding_window=sliding_window,
@@ -1190,23 +855,8 @@ def create_llm_agent_wiring(
         system_prompt_builder=system_prompt_builder,
         available_tools_provider=available_tools_provider,
         ui_context_builder=ui_context_builder,
-        episode_memory_store=episode_memory_store,
-        long_term_memory_store=long_term_memory_store,
         tile_map_view_distance=effective_view_distance,
         persona_block_provider=persona_block_provider,
-        passive_subjective_recall=passive_recall_composer,
-        episode_encoding_context_provider=episode_encoding_ctx_provider,
-    )
-    consolidation_checkpoint = InMemoryConsolidationCheckpoint()
-    consolidation_runner = MemoryConsolidationRunner(
-        subjective_episode_store=subjective_episode_store,
-        long_term_memory_store=long_term_memory_store,
-        identity_memory_store=identity_memory_store,
-        checkpoint=consolidation_checkpoint,
-        journal_threshold=consolidation_journal_threshold_from_env(),
-    )
-    memory_consolidation_hook = build_memory_consolidation_hook(
-        runner=consolidation_runner
     )
     orchestrator = LlmAgentOrchestrator(
         prompt_builder=prompt_builder,
@@ -1214,13 +864,6 @@ def create_llm_agent_wiring(
         tool_command_mapper=tool_command_mapper,
         action_result_store=action_result_store,
         tool_argument_resolver=tool_argument_resolver,
-        memory_extractor=memory_extractor,
-        episode_memory_store=episode_memory_store,
-        action_experience_trace_store=action_experience_trace_store,
-        handle_store=handle_store,
-        episode_chunker=episode_chunker,
-        episode_encoding_runner=episode_encoding_runner,
-        memory_consolidation_hook=memory_consolidation_hook,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,
@@ -1231,21 +874,7 @@ def create_llm_agent_wiring(
     )
     llm_turn_trigger = DefaultLlmTurnTrigger(turn_runner=turn_runner, max_turns=max_turns)
 
-    def _observation_trace_runtime(pid: PlayerId) -> Optional[ToolRuntimeContextDto]:
-        dto = world_query_service.get_player_current_state(
-            GetPlayerCurrentStateQuery(
-                player_id=pid.value,
-                view_distance=effective_view_distance,
-            )
-        )
-        if dto is None:
-            return None
-        return ui_context_builder.build("", dto).tool_runtime_context
-
-    observation_appender = ObservationAppender(
-        buffer,
-        runtime_context_provider=_observation_trace_runtime,
-    )
+    observation_appender = ObservationAppender(buffer)
 
     observation_registry = _build_observation_stack(
         player_status_repository=player_status_repository,
@@ -1278,14 +907,8 @@ def create_llm_agent_wiring(
     return LlmAgentWiringResult(
         observation_registry=observation_registry,
         llm_turn_trigger=llm_turn_trigger,
-        reflection_runner=reflection_runner,
         observation_buffer=buffer,
         observation_appender=observation_appender,
-        action_experience_trace_store=action_experience_trace_store,
-        observation_experience_trace_store=observation_experience_trace_store,
-        episode_candidate_store=episode_candidate_store,
-        subjective_episode_store=subjective_episode_store,
-        identity_memory_store=identity_memory_store,
         sns_mode_session=sns_mode_session,
         sns_page_session=sns_page_session,
         trade_page_session=trade_page_session,
