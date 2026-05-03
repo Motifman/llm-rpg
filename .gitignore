@@ -95,8 +95,9 @@ plans/
 # システム実装詳細ドキュメント
 docs/system_implementations/
 
-# ローカル専用の実験スクリプト（vLLM・プロンプト試行等、リポジトリにコミットしない）
-local_experiments/
+# ローカル専用の実験スクリプト（vLLM・プロンプト試行等、既定はコミットしない）
+local_experiments/*
+!local_experiments/subjective_episode_mvp_vllm_experiment.py
 
 # ローカル git worktree 用（誤コミット防止・memory_feature_workflow.md §4.3）
 worktrees/
