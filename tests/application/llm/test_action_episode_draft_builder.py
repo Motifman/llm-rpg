@@ -57,7 +57,6 @@ class TestActionEpisodeDraftBuilderHappyPath:
         assert "成功" in res.outcome
         assert res.prediction_error is None
         assert res.interpreted is None
-        assert res.intended_next is None
         assert res.cues == ()
         assert "entity:monster:99" in res.who
 

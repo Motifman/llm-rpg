@@ -44,7 +44,6 @@ def _episode(
         prediction_error=None,
         felt=None,
         interpreted=None,
-        intended_next=None,
         cues=cues,
         recall_text="r",
     )
