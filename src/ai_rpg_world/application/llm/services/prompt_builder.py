@@ -18,6 +18,11 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ISystemPromptBuilder,
 )
 from ai_rpg_world.application.llm.exceptions import PlayerProfileNotFoundForPromptException
+from ai_rpg_world.application.llm.services.episodic_cue_rules import build_situation_episodic_cues
+from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
+    EpisodicPassiveRecallCandidate,
+    EpisodicPassiveRecallRetrievalService,
+)
 from ai_rpg_world.application.llm.services.failure_feedback_for_prompt import (
     build_pre_turn_failure_section,
 )
@@ -36,7 +41,19 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 DEFAULT_ACTION_INSTRUCTION = "利用可能なツールで次の行動を選んでください。"
 DEFAULT_RECENT_OBSERVATIONS_LIMIT = 20
 DEFAULT_RECENT_ACTIONS_LIMIT = 20
+DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS = 10
+DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES = 10
 MESSAGE_WHEN_PLAYER_NOT_PLACED = "現在地: 未配置。ゲームに参加するまで待機しています。"
+
+
+def _join_passive_recall_texts(candidates: tuple[EpisodicPassiveRecallCandidate, ...]) -> str:
+    """retrieve の候補順のまま、空でない recall_text を改行で連結する。"""
+    parts: list[str] = []
+    for cand in candidates:
+        text = cand.episode.recall_text.strip()
+        if text:
+            parts.append(text)
+    return "\n".join(parts)
 
 
 class DefaultPromptBuilder(IPromptBuilder):
@@ -63,6 +80,9 @@ class DefaultPromptBuilder(IPromptBuilder):
         recent_actions_limit: int = DEFAULT_RECENT_ACTIONS_LIMIT,
         default_action_instruction: str = DEFAULT_ACTION_INSTRUCTION,
         tile_map_view_distance: int = 5,
+        episodic_passive_recall: Optional[EpisodicPassiveRecallRetrievalService] = None,
+        episodic_passive_recall_limit_per_axis: int = DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS,
+        episodic_passive_recall_max_candidates: int = DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES,
     ) -> None:
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
@@ -98,6 +118,16 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise ValueError("tile_map_view_distance must be 0 or greater")
         if not isinstance(default_action_instruction, str):
             raise TypeError("default_action_instruction must be str")
+        if episodic_passive_recall is not None and not isinstance(
+            episodic_passive_recall, EpisodicPassiveRecallRetrievalService
+        ):
+            raise TypeError(
+                "episodic_passive_recall must be EpisodicPassiveRecallRetrievalService or None"
+            )
+        if episodic_passive_recall_limit_per_axis < 0:
+            raise ValueError("episodic_passive_recall_limit_per_axis must be 0 or greater")
+        if episodic_passive_recall_max_candidates < 0:
+            raise ValueError("episodic_passive_recall_max_candidates must be 0 or greater")
 
         self._observation_buffer = observation_buffer
         self._sliding_window = sliding_window_memory
@@ -121,6 +151,9 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._recent_actions_limit = recent_actions_limit
         self._default_action_instruction = default_action_instruction
         self._tile_map_view_distance = tile_map_view_distance
+        self._episodic_passive_recall = episodic_passive_recall
+        self._episodic_passive_recall_limit_per_axis = episodic_passive_recall_limit_per_axis
+        self._episodic_passive_recall_max_candidates = episodic_passive_recall_max_candidates
 
     def build(
         self,
@@ -186,8 +219,24 @@ class DefaultPromptBuilder(IPromptBuilder):
         # 5. 利用可能ツール取得
         tools = self._available_tools_provider.get_available_tools(current_state_dto)
 
-        # 6. Prompt に入れる過去文脈は SlidingWindow の直近観測・行動結果だけに限定する。
+        # 6. 受動想起（任意注入）: runtime + 直近観測 structured から situation_cues → recall_text を連結
         relevant_memories_text = ""
+        if self._episodic_passive_recall is not None:
+            observation_structured = None
+            if observations:
+                observation_structured = observations[0].output.structured
+            situation_cues = build_situation_episodic_cues(
+                runtime_context=ui_context.tool_runtime_context,
+                observation_structured=observation_structured,
+            )
+            recall_result = self._episodic_passive_recall.retrieve(
+                player_id=player_id.value,
+                situation_cues=situation_cues,
+                limit_per_axis=self._episodic_passive_recall_limit_per_axis,
+                max_candidates=self._episodic_passive_recall_max_candidates,
+            )
+            relevant_memories_text = _join_passive_recall_texts(recall_result.candidates)
+
         context = self._context_format_strategy.format(
             current_state_text, recent_events_text, relevant_memories_text
         )
