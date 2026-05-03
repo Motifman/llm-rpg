@@ -76,6 +76,8 @@ class TestEpisodeSourceAndValidation:
             _minimal_episode(expected="")
         with pytest.raises(ValueError, match="interpreted"):
             _minimal_episode(interpreted="\t")
+        with pytest.raises(ValueError, match="recall_text"):
+            _minimal_episode(recall_text="  ")
 
 
 class TestEpisodicCueCanonical:
@@ -124,6 +126,7 @@ class TestInterpretedOptional:
     """LLM 主観フィールドが無くてもエピソードが成立する"""
 
     def test_llm_subjective_fields_can_be_none(self) -> None:
-        """interpreted が None でも構築できる（決定論パスの土台）。"""
-        ep = _minimal_episode(interpreted=None)
+        """interpreted / recall_text が None でも構築できる（決定論・チャンク草案の土台）。"""
+        ep = _minimal_episode(interpreted=None, recall_text=None)
         assert ep.interpreted is None
+        assert ep.recall_text is None
