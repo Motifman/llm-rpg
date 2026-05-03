@@ -7,6 +7,9 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolDefinitionDto,
     TodoEntry,
 )
+from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
+    IEpisodicEpisodeStore,
+)
 from ai_rpg_world.application.llm.contracts.episodic_memory import (
     EpisodicCue,
     EpisodicCueSource,
@@ -37,6 +40,7 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
 )
 
 __all__ = [
+    "IEpisodicEpisodeStore",
     "EpisodicCue",
     "EpisodicCueSource",
     "EpisodeAction",
