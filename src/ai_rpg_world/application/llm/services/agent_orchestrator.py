@@ -5,6 +5,7 @@ LLM エージェントの 1 ターン実行を統合するオーケストレー�
 """
 
 import json
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
@@ -12,6 +13,9 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     LlmCommandResultDto,
     ToolRuntimeContextDto,
     is_reschedulable_error_code,
+)
+from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
+    IEpisodicEpisodeStore,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
@@ -25,6 +29,9 @@ from ai_rpg_world.application.llm.llm_argument_fingerprint import (
 )
 from ai_rpg_world.application.llm.result_summary_builder import build_result_summary
 from ai_rpg_world.application.llm.remediation_mapping import get_remediation
+from ai_rpg_world.application.llm.services.action_episode_draft_builder import (
+    ActionEpisodeDraftBuilder,
+)
 from ai_rpg_world.application.llm.services.tool_command_mapper import ToolCommandMapper
 from ai_rpg_world.application.llm.services.tool_argument_resolver import (
     DefaultToolArgumentResolver,
@@ -111,6 +118,35 @@ def _validate_subjective_action_arguments(
     return None
 
 
+def _persist_subjective_episode_after_tool_command(
+    *,
+    episodic_episode_store: Optional[IEpisodicEpisodeStore],
+    action_episode_draft_builder: Optional[ActionEpisodeDraftBuilder],
+    player_id: PlayerId,
+    tool_name: str,
+    canonical_arguments: Dict[str, Any],
+    runtime_context: ToolRuntimeContextDto,
+    result_dto: LlmCommandResultDto,
+    action_summary: str,
+    result_summary: str,
+) -> None:
+    """tool 実行結果確定後に SubjectiveEpisode を保存する。ストアとビルダーの両方が無い場合は何もしない。"""
+    if episodic_episode_store is None or action_episode_draft_builder is None:
+        return
+    episode = action_episode_draft_builder.build(
+        player_id=player_id.value,
+        occurred_at=datetime.now(timezone.utc),
+        tool_name=tool_name,
+        canonical_arguments=canonical_arguments,
+        runtime_context=runtime_context,
+        command_result=result_dto,
+        action_summary=action_summary,
+        result_summary=result_summary,
+        recent_observation=None,
+    )
+    episodic_episode_store.put(episode)
+
+
 class LlmAgentOrchestrator:
     """
     1 ターン分の流れ: プロンプト build → LLM 呼び出し → tool_call に従いコマンド実行
@@ -124,6 +160,8 @@ class LlmAgentOrchestrator:
         tool_command_mapper: ToolCommandMapper,
         action_result_store: IActionResultStore,
         tool_argument_resolver: Optional[IToolArgumentResolver] = None,
+        episodic_episode_store: Optional[IEpisodicEpisodeStore] = None,
+        action_episode_draft_builder: Optional[ActionEpisodeDraftBuilder] = None,
     ) -> None:
         if not isinstance(prompt_builder, IPromptBuilder):
             raise TypeError("prompt_builder must be IPromptBuilder")
@@ -139,6 +177,16 @@ class LlmAgentOrchestrator:
             raise TypeError(
                 "tool_argument_resolver must be IToolArgumentResolver or None"
             )
+        if episodic_episode_store is not None and not isinstance(
+            episodic_episode_store, IEpisodicEpisodeStore
+        ):
+            raise TypeError("episodic_episode_store must be IEpisodicEpisodeStore or None")
+        if action_episode_draft_builder is not None and not isinstance(
+            action_episode_draft_builder, ActionEpisodeDraftBuilder
+        ):
+            raise TypeError(
+                "action_episode_draft_builder must be ActionEpisodeDraftBuilder or None"
+            )
         self._prompt_builder = prompt_builder
         self._llm_client = llm_client
         self._tool_command_mapper = tool_command_mapper
@@ -148,6 +196,8 @@ class LlmAgentOrchestrator:
             if tool_argument_resolver is not None
             else DefaultToolArgumentResolver()
         )
+        self._episodic_episode_store = episodic_episode_store
+        self._action_episode_draft_builder = action_episode_draft_builder
 
     def run_turn(self, player_id: PlayerId) -> LlmCommandResultDto:
         """
@@ -276,5 +326,16 @@ class LlmAgentOrchestrator:
             result_summary,
             tool_name=name or None,
             fingerprint_args=canonical_arguments,
+        )
+        _persist_subjective_episode_after_tool_command(
+            episodic_episode_store=self._episodic_episode_store,
+            action_episode_draft_builder=self._action_episode_draft_builder,
+            player_id=player_id,
+            tool_name=name,
+            canonical_arguments=canonical_arguments,
+            runtime_context=runtime_context,
+            result_dto=result_dto,
+            action_summary=action_summary,
+            result_summary=result_summary,
         )
         return result_dto
