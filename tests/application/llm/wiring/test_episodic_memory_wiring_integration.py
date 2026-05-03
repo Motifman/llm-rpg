@@ -126,7 +126,10 @@ class TestEpisodicMemoryWiringIntegration:
         assert out["current_beliefs_snapshot"] == recall_phrase
 
     def test_injected_store_is_shared(self) -> None:
-        """episodic_episode_store を明示注入した場合もオーケストレータと一致する。"""
+        """
+        episodic_episode_store を明示注入した場合もオーケスト
+        レータ・受動想起が同一ストアを参照し、build で recall できる。
+        """
         from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
             InMemorySubjectiveEpisodeStore,
         )
@@ -136,4 +139,10 @@ class TestEpisodicMemoryWiringIntegration:
         result = create_llm_agent_wiring(**base, episodic_episode_store=custom)
         assert result.episodic_episode_store is custom
         turn_runner = result.llm_turn_trigger._turn_runner  # noqa: SLF001
-        assert turn_runner._orchestrator._episodic_episode_store is custom  # noqa: SLF001
+        orch = turn_runner._orchestrator  # noqa: SLF001
+        assert orch._episodic_episode_store is custom  # noqa: SLF001
+
+        recall_phrase = "injected_store_recall"
+        custom.put(_minimal_episode(player_id=1, recall_text=recall_phrase))
+        out = orch._prompt_builder.build(PlayerId(1))  # noqa: SLF001
+        assert recall_phrase in out["messages"][1]["content"]

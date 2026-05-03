@@ -46,7 +46,8 @@ EventHandlerComposition のインスタンス化）は**呼び出し元（外部
 【エピソード記憶（MVP in-memory）】
 - 既定でプロセス内に `InMemorySubjectiveEpisodeStore` を1つ生成し、`LlmAgentOrchestrator`（tool 後の保存）と
   `DefaultPromptBuilder` 内の `EpisodicPassiveRecallRetrievalService`（受動想起）に**同一インスタンス**を渡す。
-- テスト等でストアを差し替える場合は `episodic_episode_store=` を指定する。
+- エピソード本文の組み立ては既定で `ActionEpisodeDraftBuilder()`。テスト等では `action_episode_draft_builder=` で差し替え可能。
+- テスト等でストアだけ差し替える場合は `episodic_episode_store=` を指定する（ストアと retrieval・orchestrator で共有される）。
 
 """
 
@@ -759,6 +760,9 @@ def create_llm_agent_wiring(
 ) -> "LlmAgentWiringResult":
     """
     LLM エージェント用の観測ハンドラ登録用 Registry と LlmTurnTrigger を組み立てて返す。
+
+    既定では共有 in-memory エピソードストアにより、tool 実行後の episode 保存と
+    プロンプト上の受動想起が有効になる（従来よりプロンプトに関連記憶欄が埋まる場合がある）。
     """
     if player_status_repository is None:
         raise TypeError("player_status_repository must not be None")
