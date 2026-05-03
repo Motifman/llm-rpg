@@ -44,10 +44,11 @@ EventHandlerComposition のインスタンス化）は**呼び出し元（外部
   渡す（`.env.example` 参照）。
 
 【エピソード記憶（MVP in-memory）】
-- 既定でプロセス内に `InMemorySubjectiveEpisodeStore` を1つ生成し、`LlmAgentOrchestrator`（tool 後の保存）と
-  `DefaultPromptBuilder` 内の `EpisodicPassiveRecallRetrievalService`（受動想起）に**同一インスタンス**を渡す。
-- エピソード本文の組み立ては既定で `ActionEpisodeDraftBuilder()`。テスト等では `action_episode_draft_builder=` で差し替え可能。
-- テスト等でストアだけ差し替える場合は `episodic_episode_store=` を指定する（ストアと retrieval・orchestrator で共有される）。
+- 既定でプロセス内に `InMemorySubjectiveEpisodeStore` を1つ生成し、`EpisodicChunkCoordinator`（チャンク境界で保存）経由で
+  `LlmAgentOrchestrator` と `DefaultPromptBuilder` 内の `EpisodicPassiveRecallRetrievalService`（受動想起）に**同一インスタンス**を渡す。
+- チャンク草案は既定で `ChunkEpisodeDraftBuilder()`。テスト等では `chunk_episode_draft_builder=` で差し替え可能。
+- テスト等でストアだけ差し替える場合は `episodic_episode_store=` を指定する（ストアと retrieval・coordinator で共有される）。
+- 協調全体を差し替える場合は `episodic_chunk_coordinator=` を渡す（未指定時は上記ポートから組み立てる）。
 - `create_spot_graph_wiring` も同方針で既定配線する（スポットグラフ専用のツール・画面組み立てのみが異なる）。
 
 """
@@ -76,10 +77,13 @@ from ai_rpg_world.application.llm.services.action_result_store import (
 from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
     IEpisodicEpisodeStore,
 )
-from ai_rpg_world.application.llm.services.action_episode_draft_builder import (
-    ActionEpisodeDraftBuilder,
-)
 from ai_rpg_world.application.llm.services.agent_orchestrator import LlmAgentOrchestrator
+from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
+    ChunkEpisodeDraftBuilder,
+)
+from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import (
+    EpisodicChunkCoordinator,
+)
 from ai_rpg_world.application.llm.services.available_tools_provider import (
     DefaultAvailableToolsProvider,
 )
@@ -108,7 +112,11 @@ from ai_rpg_world.application.llm.services.llm_player_resolver import (
     ProfileBasedLlmPlayerResolver,
 )
 from ai_rpg_world.application.llm.services.llm_turn_trigger import DefaultLlmTurnTrigger
-from ai_rpg_world.application.llm.services.prompt_builder import DefaultPromptBuilder
+from ai_rpg_world.application.llm.services.prompt_builder import (
+    DEFAULT_RECENT_ACTIONS_LIMIT,
+    DEFAULT_RECENT_OBSERVATIONS_LIMIT,
+    DefaultPromptBuilder,
+)
 from ai_rpg_world.application.llm.services.recent_events_formatter import (
     DefaultRecentEventsFormatter,
 )
@@ -757,13 +765,14 @@ def create_llm_agent_wiring(
     persona_store: Optional[Any] = None,
     persona_prompt_policy: Optional[PersonaPromptPolicy] = None,
     episodic_episode_store: Optional[IEpisodicEpisodeStore] = None,
-    action_episode_draft_builder: Optional[ActionEpisodeDraftBuilder] = None,
+    chunk_episode_draft_builder: Optional[ChunkEpisodeDraftBuilder] = None,
+    episodic_chunk_coordinator: Optional[EpisodicChunkCoordinator] = None,
 ) -> "LlmAgentWiringResult":
     """
     LLM エージェント用の観測ハンドラ登録用 Registry と LlmTurnTrigger を組み立てて返す。
 
-    既定では共有 in-memory エピソードストアにより、tool 実行後の episode 保存と
-    プロンプト上の受動想起が有効になる（従来よりプロンプトに関連記憶欄が埋まる場合がある）。
+    既定では共有 in-memory エピソードストアと EpisodicChunkCoordinator により、
+    チャンク境界での episode 保存とプロンプト上の受動想起が有効になる。
     """
     if player_status_repository is None:
         raise TypeError("player_status_repository must not be None")
@@ -876,10 +885,19 @@ def create_llm_agent_wiring(
         if episodic_episode_store is not None
         else InMemorySubjectiveEpisodeStore()
     )
-    episode_draft_builder = (
-        action_episode_draft_builder
-        if action_episode_draft_builder is not None
-        else ActionEpisodeDraftBuilder()
+    chunk_builder = (
+        chunk_episode_draft_builder
+        if chunk_episode_draft_builder is not None
+        else ChunkEpisodeDraftBuilder()
+    )
+    episodic_coord = episodic_chunk_coordinator or EpisodicChunkCoordinator(
+        observation_buffer=buffer,
+        sliding_window_memory=sliding_window,
+        action_result_store=action_result_store,
+        episodic_episode_store=shared_episode_store,
+        chunk_episode_draft_builder=chunk_builder,
+        recent_observations_limit=DEFAULT_RECENT_OBSERVATIONS_LIMIT,
+        recent_actions_limit=DEFAULT_RECENT_ACTIONS_LIMIT,
     )
     episodic_passive_recall = EpisodicPassiveRecallRetrievalService(shared_episode_store)
     prompt_builder = _build_prompt_stack(
@@ -904,8 +922,7 @@ def create_llm_agent_wiring(
         tool_command_mapper=tool_command_mapper,
         action_result_store=action_result_store,
         tool_argument_resolver=tool_argument_resolver,
-        episodic_episode_store=shared_episode_store,
-        action_episode_draft_builder=episode_draft_builder,
+        episodic_chunk_coordinator=episodic_coord,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,

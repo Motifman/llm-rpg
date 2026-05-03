@@ -11,6 +11,8 @@ from ai_rpg_world.application.llm.contracts.episodic_memory import (
     EpisodeSource,
     SubjectiveEpisode,
 )
+from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_NO_OP
 from ai_rpg_world.application.llm.wiring import create_llm_agent_wiring
 from ai_rpg_world.application.world.services.movement_service import (
     MovementApplicationService,
@@ -103,7 +105,8 @@ class TestEpisodicMemoryWiringIntegration:
         turn_runner = result.llm_turn_trigger._turn_runner  # noqa: SLF001
         orch = turn_runner._orchestrator  # noqa: SLF001
         assert result.episodic_episode_store is not None
-        assert orch._episodic_episode_store is result.episodic_episode_store  # noqa: SLF001
+        assert orch._episodic_chunk_coordinator is not None
+        assert orch._episodic_chunk_coordinator._episodic_episode_store is result.episodic_episode_store  # noqa: SLF001
 
     def test_prompt_builder_recalls_from_same_store_instance(self) -> None:
         """
@@ -141,7 +144,8 @@ class TestEpisodicMemoryWiringIntegration:
         assert result.episodic_episode_store is custom
         turn_runner = result.llm_turn_trigger._turn_runner  # noqa: SLF001
         orch = turn_runner._orchestrator  # noqa: SLF001
-        assert orch._episodic_episode_store is custom  # noqa: SLF001
+        assert orch._episodic_chunk_coordinator is not None
+        assert orch._episodic_chunk_coordinator._episodic_episode_store is custom  # noqa: SLF001
 
         recall_phrase = "injected_store_recall"
         custom.put(_minimal_episode(player_id=1, recall_text=recall_phrase))
@@ -149,3 +153,29 @@ class TestEpisodicMemoryWiringIntegration:
         user_content = out["messages"][1]["content"]
         assert "## 関連する記憶" in user_content
         assert recall_phrase in user_content.split("## 関連する記憶", 1)[1]
+
+
+class TestEpisodicChunkWiringIntegration:
+    """チャンク協調と wiring 既定配線でエピソードが保存されることの結合検証。"""
+
+    def test_stub_turn_persists_chunk_built_episode(self) -> None:
+        """Stub LLM で 1 ターン成功させ、チャンク由来の SubjectiveEpisode が共有ストアに載る。"""
+        result = create_llm_agent_wiring(
+            **_deps_with_profile(player_id=1),
+            llm_client=StubLlmClient(
+                tool_call_to_return={"name": TOOL_NAME_NO_OP, "arguments": {}},
+            ),
+        )
+        store = result.episodic_episode_store
+        assert store is not None
+        turn_runner = result.llm_turn_trigger._turn_runner  # noqa: SLF001
+        turn_runner.run_turn(PlayerId(1))
+        recent = store.list_recent(1, 5)
+        assert len(recent) == 1
+        ep = recent[0]
+        assert ep.player_id == 1
+        assert ep.interpreted is None
+        assert ep.recall_text is None
+        assert ep.action is not None
+        assert TOOL_NAME_NO_OP in (ep.action.tool_name or "")
+        assert "- " in ep.observed
