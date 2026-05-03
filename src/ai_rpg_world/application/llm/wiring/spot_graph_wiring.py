@@ -131,12 +131,10 @@ def create_spot_graph_wiring(
         _build_observation_stack,
         _build_persona_block_provider,
         _build_prompt_stack,
-        _build_reflection_stack,
         _build_tool_stack,
     )
     from ai_rpg_world.application.llm.wiring._llm_client_factory import (
         create_llm_client_from_env,
-        create_subagent_invoke_text,
     )
     from ai_rpg_world.application.llm.services.action_result_store import (
         DefaultActionResultStore,

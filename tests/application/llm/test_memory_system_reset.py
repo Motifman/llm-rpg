@@ -53,8 +53,10 @@ def test_default_tools_register_todo_without_memory_tools() -> None:
     [
         "ai_rpg_world.application.llm.services.predictive_memory_retriever",
         "ai_rpg_world.application.llm.services.memory_query_executor",
+        "ai_rpg_world.application.llm.services.dsl_evaluator",
         "ai_rpg_world.application.llm.services.passive_subjective_recall_composer",
         "ai_rpg_world.application.llm.services.in_memory_long_term_memory_store",
+        "ai_rpg_world.application.llm.services.subagent_runner",
         "ai_rpg_world.infrastructure.llm.sqlite_subjective_episode_store",
     ],
 )
