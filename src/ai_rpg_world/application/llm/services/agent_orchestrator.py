@@ -289,8 +289,10 @@ class LlmAgentOrchestrator:
             fingerprint_args=canonical_arguments,
         )
         if self._episodic_chunk_coordinator is not None:
+            # 既定は False。True に固定すると毎ツール成功のたびに即セグメント閉鎖となり、
+            # chunk_boundary（観測ヒント等）による HOLD が実質使えなくなるため。
             self._episodic_chunk_coordinator.after_action_recorded(
                 player_id,
-                explicit_segment_close=True,
+                explicit_segment_close=False,
             )
         return result_dto
