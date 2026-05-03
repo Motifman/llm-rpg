@@ -1,0 +1,268 @@
+"""
+ツール実行ターン向けの決定論的 EpisodicCue 生成。
+
+LLM・プロンプト文字列・旧 cue_keys に依存しない。runtime / tool メタ /
+canonical_arguments / LlmCommandResultDto / 観測 structured のみを入力とする。
+"""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Mapping
+from typing import Any, Iterable
+
+from ai_rpg_world.application.llm.contracts.dtos import (
+    EMOTION_HINT_VALUES,
+    LlmCommandResultDto,
+    ToolRuntimeContextDto,
+    ToolRuntimeTargetDto,
+)
+from ai_rpg_world.application.llm.contracts.episodic_memory import EpisodicCue, EpisodicCueSource
+
+_EMOTION_HINT_SET = frozenset(EMOTION_HINT_VALUES)
+_SAFE_SEGMENT_RE = re.compile(r"[^a-z0-9_]+")
+
+# 1 episode あたりの cue 上限（索引肥大・暴走防止）
+MAX_EPISODIC_CUES = 32
+# value は索引キーとして短く保つ（canonical は axis:value のため value 側のみが対象）
+MAX_CUE_VALUE_CHARS = 96
+
+
+def build_episodic_cues_for_tool_turn(
+    *,
+    tool_name: str,
+    canonical_arguments: Mapping[str, Any] | None,
+    runtime_context: ToolRuntimeContextDto | None,
+    command_result: LlmCommandResultDto | None,
+    observation_structured: Mapping[str, Any] | None = None,
+) -> tuple[EpisodicCue, ...]:
+    """
+    同一入力から常に同じ cue 列を返す（挿入順も固定）。
+
+    None のコンテキストや未知フィールドは黙って無視する。
+    """
+    collected: list[EpisodicCue] = []
+
+    rt = runtime_context
+    if rt is not None:
+        collected.extend(_cues_from_runtime(rt))
+
+    tn = _optional_str(tool_name)
+    if tn is not None:
+        seg = _sanitize_tool_segment(tn)
+        if seg is not None:
+            collected.append(EpisodicCue(axis="action", value=seg, source=EpisodicCueSource.TOOL))
+
+    args = canonical_arguments
+    if args is not None:
+        collected.extend(_cues_from_canonical_arguments(args))
+
+    res = command_result
+    if res is not None:
+        oc = _outcome_cue_from_result(res)
+        if oc is not None:
+            collected.append(oc)
+
+    obs = observation_structured
+    if obs is not None:
+        collected.extend(_cues_from_observation_structured(obs))
+
+    if rt is not None:
+        collected.extend(_cues_from_runtime_targets(rt.targets))
+
+    validated = _validate_and_dedupe(collected)
+    return tuple(validated)
+
+
+def _optional_str(raw: object | None) -> str | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        return None
+    s = raw.strip()
+    return s if s else None
+
+
+def _sanitize_tool_segment(name: str) -> str | None:
+    """tool 名を cue value として安全な単一段に落とす。"""
+    lowered = name.strip().lower()
+    if not lowered:
+        return None
+    cleaned = _SAFE_SEGMENT_RE.sub("_", lowered).strip("_")
+    return _truncate_value(cleaned) if cleaned else None
+
+
+def _sanitize_id_segment(prefix: str, raw_id: int) -> str:
+    body = str(int(raw_id))
+    seg = f"{prefix}_{body}" if prefix else body
+    out = _truncate_value(seg)
+    return out
+
+
+def _truncate_value(value: str) -> str:
+    if len(value) <= MAX_CUE_VALUE_CHARS:
+        return value
+    return value[:MAX_CUE_VALUE_CHARS]
+
+
+def _normalize_error_code(code: str) -> str | None:
+    s = code.strip().lower()
+    if not s:
+        return None
+    cleaned = _SAFE_SEGMENT_RE.sub("_", s).strip("_")
+    if not cleaned:
+        return None
+    return _truncate_value(cleaned)
+
+
+def _outcome_cue_from_result(res: LlmCommandResultDto) -> EpisodicCue | None:
+    if res.success:
+        value = "success"
+    else:
+        ec = res.error_code
+        if isinstance(ec, str) and ec.strip():
+            norm = _normalize_error_code(ec)
+            value = f"failure_{norm}" if norm else "failure"
+        else:
+            value = "failure"
+    safe = _truncate_value(value)
+    if not safe:
+        return None
+    return EpisodicCue(axis="outcome", value=safe, source=EpisodicCueSource.TOOL)
+
+
+def _cues_from_runtime(rt: ToolRuntimeContextDto) -> list[EpisodicCue]:
+    out: list[EpisodicCue] = []
+    src = EpisodicCueSource.RUNTIME_CONTEXT
+    sid = rt.current_spot_id
+    if isinstance(sid, int):
+        out.append(EpisodicCue(axis="place_spot", value=str(sid), source=src))
+    sub = rt.current_sub_location_id
+    if isinstance(sub, int):
+        out.append(EpisodicCue(axis="sub_loc", value=str(sub), source=src))
+    areas = rt.current_area_ids
+    if isinstance(areas, tuple):
+        for aid in sorted(set(a for a in areas if isinstance(a, int))):
+            out.append(EpisodicCue(axis="tile_area", value=str(aid), source=src))
+    return out
+
+
+def _kind_slug(kind: str) -> str:
+    k = kind.strip().lower()
+    if not k:
+        return "target"
+    cleaned = _SAFE_SEGMENT_RE.sub("_", k).strip("_")
+    return cleaned if cleaned else "target"
+
+
+def _cues_from_runtime_targets(targets: Mapping[str, ToolRuntimeTargetDto]) -> list[EpisodicCue]:
+    out: list[EpisodicCue] = []
+    src = EpisodicCueSource.RUNTIME_CONTEXT
+    for label in sorted(targets.keys()):
+        t = targets[label]
+        if not isinstance(t, ToolRuntimeTargetDto):
+            continue
+        pid = t.player_id
+        if isinstance(pid, int):
+            slug = _kind_slug(t.kind)
+            val = _sanitize_id_segment(slug, pid)
+            out.append(EpisodicCue(axis="entity", value=val, source=src))
+        woid = t.world_object_id
+        if isinstance(woid, int):
+            val = _sanitize_id_segment("world_object", woid)
+            out.append(EpisodicCue(axis="object", value=val, source=src))
+        iid = t.item_instance_id
+        if isinstance(iid, int):
+            val = _sanitize_id_segment("item_instance", iid)
+            out.append(EpisodicCue(axis="object", value=val, source=src))
+        cid = t.chest_world_object_id
+        if isinstance(cid, int):
+            val = _sanitize_id_segment("chest_world_object", cid)
+            out.append(EpisodicCue(axis="object", value=val, source=src))
+    return out
+
+
+def _cues_from_canonical_arguments(args: Mapping[str, Any]) -> list[EpisodicCue]:
+    out: list[EpisodicCue] = []
+    hint = args.get("emotion_hint")
+    if isinstance(hint, str):
+        h = hint.strip().lower()
+        if h in _EMOTION_HINT_SET:
+            hv = _truncate_value(h)
+            out.append(EpisodicCue(axis="emotion", value=hv, source=EpisodicCueSource.TOOL))
+    woid = args.get("world_object_id")
+    if isinstance(woid, int):
+        val = _sanitize_id_segment("world_object", woid)
+        out.append(EpisodicCue(axis="object", value=val, source=EpisodicCueSource.TOOL))
+    return out
+
+
+def _coerce_positive_int(raw: Any) -> int | None:
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, float):
+        if raw.is_integer():
+            return int(raw)
+        return None
+    if isinstance(raw, str):
+        s = raw.strip()
+        if not s or not s.isdigit():
+            return None
+        try:
+            return int(s)
+        except ValueError:
+            return None
+    return None
+
+
+def _coerce_actor_entity(raw: Any) -> str | None:
+    x = _coerce_positive_int(raw)
+    if x is not None:
+        return _sanitize_id_segment("actor", x)
+    if isinstance(raw, str):
+        slug = _sanitize_tool_segment(raw)
+        if slug is None:
+            return None
+        return _truncate_value(f"actor_{slug}")
+    return None
+
+
+def _cues_from_observation_structured(structured: Mapping[str, Any]) -> list[EpisodicCue]:
+    out: list[EpisodicCue] = []
+    src = EpisodicCueSource.OBSERVATION_STRUCTURED
+    spot = structured.get("spot_id_value")
+    si = _coerce_positive_int(spot)
+    if si is not None:
+        out.append(EpisodicCue(axis="place_spot", value=str(si), source=src))
+    wov = structured.get("world_object_id_value")
+    wi = _coerce_positive_int(wov)
+    if wi is not None:
+        val = _sanitize_id_segment("world_object", wi)
+        out.append(EpisodicCue(axis="object", value=val, source=src))
+    actor = structured.get("actor")
+    av = _coerce_actor_entity(actor)
+    if av is not None:
+        out.append(EpisodicCue(axis="entity", value=av, source=src))
+    return out
+
+
+def _validate_and_dedupe(cues: Iterable[EpisodicCue]) -> list[EpisodicCue]:
+    """canonical 単位で重複除去し、件数・値長を守る。"""
+    seen: set[str] = set()
+    ordered: list[EpisodicCue] = []
+    for c in cues:
+        if not isinstance(c, EpisodicCue):
+            continue
+        val = c.value
+        if len(val) > MAX_CUE_VALUE_CHARS:
+            continue
+        key = c.to_canonical()
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(c)
+        if len(ordered) >= MAX_EPISODIC_CUES:
+            break
+    return ordered
