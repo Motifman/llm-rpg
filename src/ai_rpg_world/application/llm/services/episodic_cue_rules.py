@@ -2,7 +2,7 @@
 ツール実行ターン向けの決定論的 EpisodicCue 生成。
 
 LLM・プロンプト文字列・旧 cue_keys に依存しない。runtime / tool メタ /
-canonical_arguments / LlmCommandResultDto / 観測 structured のみを入力とする。
+canonical_arguments / LlmCommandResultDto / ActionResultEntry / 観測 structured のみを入力とする。
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from typing import Any, Iterable, Sequence
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     EMOTION_HINT_VALUES,
+    ActionResultEntry,
     LlmCommandResultDto,
     ToolRuntimeContextDto,
     ToolRuntimeTargetDto,
@@ -58,7 +59,7 @@ def build_episodic_cues_for_tool_turn(
 
     res = command_result
     if res is not None:
-        oc = _outcome_cue_from_result(res)
+        oc = _outcome_cue_from_success_and_error(success=res.success, error_code=res.error_code)
         if oc is not None:
             collected.append(oc)
 
@@ -92,19 +93,25 @@ def build_situation_episodic_cues(
     *,
     runtime_context: ToolRuntimeContextDto | None,
     observation_structured: Mapping[str, Any] | None = None,
+    latest_action: ActionResultEntry | None = None,
 ) -> tuple[EpisodicCue, ...]:
     """
     受動想起用の「現在局面」に相当する cue 列を、保存時 `build_episodic_cues_for_tool_turn` と
     同じ軸・語彙・正規化で返す（挿入順も固定）。
 
-    MVP 範囲の入力は `ToolRuntimeContextDto` と直近観測の structured のみとする。
-    tool 名・実行結果・canonical args（action / outcome / tool 由来の object 等）は含めない。
+    `ToolRuntimeContextDto` と直近観測 structured に加え、`latest_action` があれば
+    直近ツール名・成否（§0.2）を action / outcome 軸で足し、チャンク保存側の cue と揃えて想起しやすくする。
 
     None の入力や未知フィールドは黙って無視する。
     """
-    collected = _collect_situation_episodic_cues(
-        runtime_context=runtime_context,
-        observation_structured=observation_structured,
+    collected: list[EpisodicCue] = []
+    if latest_action is not None:
+        collected.extend(_cues_from_latest_action_entry(latest_action))
+    collected.extend(
+        _collect_situation_episodic_cues(
+            runtime_context=runtime_context,
+            observation_structured=observation_structured,
+        )
     )
     validated = _validate_and_dedupe(collected)
     return tuple(validated)
@@ -129,6 +136,20 @@ def _collect_situation_episodic_cues(
         out.extend(_cues_from_runtime_targets(rt.targets))
         out.extend(_cues_from_runtime_tile_areas(rt))
 
+    return out
+
+
+def _cues_from_latest_action_entry(entry: ActionResultEntry) -> list[EpisodicCue]:
+    """IActionResultStore の最新行動から action / outcome cue を付与（tool ターンと同一正規化）。"""
+    out: list[EpisodicCue] = []
+    tn = _optional_str(entry.tool_name)
+    if tn is not None:
+        seg = _sanitize_tool_segment(tn)
+        if seg is not None:
+            out.append(EpisodicCue(axis="action", value=seg, source=EpisodicCueSource.TOOL))
+    oc = _outcome_cue_from_success_and_error(success=entry.success, error_code=entry.error_code)
+    if oc is not None:
+        out.append(oc)
     return out
 
 
@@ -173,11 +194,13 @@ def _normalize_error_code(code: str) -> str | None:
     return _truncate_value(cleaned)
 
 
-def _outcome_cue_from_result(res: LlmCommandResultDto) -> EpisodicCue | None:
-    if res.success:
+def _outcome_cue_from_success_and_error(
+    *, success: bool, error_code: str | None
+) -> EpisodicCue | None:
+    if success:
         value = "success"
     else:
-        ec = res.error_code
+        ec = error_code
         if isinstance(ec, str) and ec.strip():
             norm = _normalize_error_code(ec)
             value = f"failure_{norm}" if norm else "failure"

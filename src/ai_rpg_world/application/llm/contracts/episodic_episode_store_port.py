@@ -10,7 +10,7 @@ from ai_rpg_world.application.llm.contracts.episodic_memory import EpisodicCue, 
 class IEpisodicEpisodeStore(ABC):
     """
     SubjectiveEpisode をプレイヤー単位で保持する最小ストア。
-    永続化は含まない（in-memory 実装を想定）。
+    既定実装はインメモリ; `SUBJECTIVE_EPISODE_DB_PATH` 指定時は SQLite 実装を配線する。
     """
 
     @abstractmethod
