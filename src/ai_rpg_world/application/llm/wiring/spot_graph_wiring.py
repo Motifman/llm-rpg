@@ -12,8 +12,8 @@ import os
 from typing import Any, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
-from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
-    IEpisodicEpisodeStore,
+from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
+    IEpisodicChunkSubjectiveCompletionPort,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
@@ -143,6 +143,7 @@ def create_spot_graph_wiring(
     episodic_episode_store: Optional[IEpisodicEpisodeStore] = None,
     chunk_episode_draft_builder: Optional[ChunkEpisodeDraftBuilder] = None,
     episodic_chunk_coordinator: Optional[EpisodicChunkCoordinator] = None,
+    episodic_chunk_subjective_completion: Optional[IEpisodicChunkSubjectiveCompletionPort] = None,
 ) -> "LlmAgentWiringResult":
     """スポットグラフ用に LLM 観測・ツール・プロンプトを組み立てる（タイル移動なし）。
 
@@ -160,6 +161,7 @@ def create_spot_graph_wiring(
         _build_prompt_stack,
         _build_runtime_tool_state,
         _build_tool_stack,
+        _optional_episodic_chunk_subjective_fields_service,
     )
     from ai_rpg_world.application.llm.wiring._llm_client_factory import (
         create_llm_client_from_env,
@@ -324,6 +326,10 @@ def create_spot_graph_wiring(
         if chunk_episode_draft_builder is not None
         else ChunkEpisodeDraftBuilder()
     )
+    chunk_subjective_service = _optional_episodic_chunk_subjective_fields_service(
+        client,
+        episodic_chunk_subjective_completion,
+    )
     episodic_coord = episodic_chunk_coordinator or EpisodicChunkCoordinator(
         observation_buffer=buffer,
         sliding_window_memory=sliding_window,
@@ -332,6 +338,10 @@ def create_spot_graph_wiring(
         chunk_episode_draft_builder=chunk_builder,
         recent_observations_limit=DEFAULT_RECENT_OBSERVATIONS_LIMIT,
         recent_actions_limit=DEFAULT_RECENT_ACTIONS_LIMIT,
+        chunk_subjective_fields_service=chunk_subjective_service,
+        persona_block_provider=persona_block_provider
+        if chunk_subjective_service is not None
+        else None,
     )
     episodic_passive_recall = EpisodicPassiveRecallRetrievalService(shared_episode_store)
     prompt_builder = _build_prompt_stack(

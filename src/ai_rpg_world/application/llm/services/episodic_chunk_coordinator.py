@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List
 
 from ai_rpg_world.application.llm.chunk_boundary.rules import (
     decide_chunk_boundary,
@@ -24,6 +24,9 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
 )
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
     ChunkEpisodeDraftBuilder,
+)
+from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+    EpisodicChunkSubjectiveFieldsService,
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.observation.contracts.interfaces import (
@@ -54,6 +57,8 @@ class EpisodicChunkCoordinator:
         *,
         recent_observations_limit: int = 20,
         recent_actions_limit: int = 20,
+        chunk_subjective_fields_service: EpisodicChunkSubjectiveFieldsService | None = None,
+        persona_block_provider: Callable[[PlayerId], str] | None = None,
     ) -> None:
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
@@ -65,6 +70,14 @@ class EpisodicChunkCoordinator:
             raise TypeError("episodic_episode_store must be IEpisodicEpisodeStore")
         if not isinstance(chunk_episode_draft_builder, ChunkEpisodeDraftBuilder):
             raise TypeError("chunk_episode_draft_builder must be ChunkEpisodeDraftBuilder")
+        if chunk_subjective_fields_service is not None and not isinstance(
+            chunk_subjective_fields_service, EpisodicChunkSubjectiveFieldsService
+        ):
+            raise TypeError(
+                "chunk_subjective_fields_service must be EpisodicChunkSubjectiveFieldsService or None"
+            )
+        if persona_block_provider is not None and not callable(persona_block_provider):
+            raise TypeError("persona_block_provider must be callable or None")
         if recent_observations_limit < 0:
             raise ValueError("recent_observations_limit must be 0 or greater")
         if recent_actions_limit < 0:
@@ -75,6 +88,8 @@ class EpisodicChunkCoordinator:
         self._action_result_store = action_result_store
         self._episodic_episode_store = episodic_episode_store
         self._chunk_episode_draft_builder = chunk_episode_draft_builder
+        self._chunk_subjective_fields_service = chunk_subjective_fields_service
+        self._persona_block_provider = persona_block_provider
         self._recent_observations_limit = recent_observations_limit
         self._recent_actions_limit = recent_actions_limit
         self._chunk_actions: Dict[int, List[ActionResultEntry]] = {}
@@ -141,5 +156,16 @@ class EpisodicChunkCoordinator:
             return
 
         episode = self._chunk_episode_draft_builder.build(encoding_input)
+        if self._chunk_subjective_fields_service is not None:
+            persona_block = (
+                self._persona_block_provider(player_id)
+                if self._persona_block_provider is not None
+                else ""
+            )
+            episode = self._chunk_subjective_fields_service.merge_llm_subjective_fields(
+                episode,
+                persona_text=persona_block,
+                encoding_input=encoding_input,
+            )
         self._episodic_episode_store.put(episode)
         self._chunk_actions[key] = []

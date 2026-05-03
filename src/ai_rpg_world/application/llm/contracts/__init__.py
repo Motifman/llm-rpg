@@ -10,6 +10,9 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
     IEpisodicEpisodeStore,
 )
+from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
+    IEpisodicChunkSubjectiveCompletionPort,
+)
 from ai_rpg_world.application.llm.contracts.chunk_encoding import (
     ChunkEncodingInput,
     UnifiedRecentEventLine,
@@ -55,6 +58,7 @@ __all__ = [
     "format_unified_timeline_as_recent_events_bullets",
     "merge_observations_and_action_results_to_unified_timeline",
     "IEpisodicEpisodeStore",
+    "IEpisodicChunkSubjectiveCompletionPort",
     "EpisodicCue",
     "EpisodicCueSource",
     "EpisodeAction",
