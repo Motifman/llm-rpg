@@ -73,6 +73,22 @@ class TestInMemorySubjectiveEpisodeStoreBasics:
         assert store.list_recent(7, 0) == []
         assert store.list_recent(7, -1) == []
 
+    def test_list_recent_sorts_naive_and_aware_occurred_at_without_error(self) -> None:
+        """naive と aware の occurred_at が混在してもソートで TypeError にしない（naive は UTC 相当）。"""
+        store = InMemorySubjectiveEpisodeStore()
+        naive_later = _episode(
+            episode_id="naive",
+            occurred_at=datetime(2026, 5, 4, 12, 0),
+        )
+        aware_earlier = _episode(
+            episode_id="aware",
+            occurred_at=datetime(2026, 5, 3, 12, 0, tzinfo=timezone.utc),
+        )
+        store.put(aware_earlier)
+        store.put(naive_later)
+        ordered = store.list_recent(7, 10)
+        assert [e.episode_id for e in ordered] == ["naive", "aware"]
+
 
 class TestInMemorySubjectiveEpisodeStorePlayerScope:
     """player_id でデータが混線しないこと"""
@@ -157,6 +173,13 @@ class TestInMemorySubjectiveEpisodeStoreCueIndex:
         store.put(_episode(episode_id="p10", player_id=10, cues=c))
         q = EpisodicCue(axis="x", value="1", source=EpisodicCueSource.TOOL)
         assert store.list_by_cue(99, q, 10) == []
+
+    def test_list_by_cue_non_positive_limit_empty(self) -> None:
+        """list_by_cue も limit が 0 以下なら空リスト。"""
+        store = InMemorySubjectiveEpisodeStore()
+        cue = EpisodicCue(axis="z", value="9", source=EpisodicCueSource.TOOL)
+        store.put(_episode(cues=(cue,)))
+        assert store.list_by_cue(7, cue, 0) == []
 
     def test_list_by_cue_sorted_like_recent(self) -> None:
         """list_by_cue も occurred_at 降順・同一時刻は episode_id 降順。"""
