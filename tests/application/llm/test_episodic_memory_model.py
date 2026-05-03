@@ -54,6 +54,11 @@ class TestEpisodeSourceAndValidation:
         with pytest.raises(ValueError, match="event_ids"):
             EpisodeSource(event_ids=("ok", "  "))
 
+    def test_episode_source_requires_at_least_one_id(self) -> None:
+        """追跡可能性のため event_ids が空タプルでは構築できない。"""
+        with pytest.raises(ValueError, match="at least one"):
+            EpisodeSource(event_ids=())
+
     def test_subjective_episode_rejects_blank_episode_id(self) -> None:
         """episode_id が空白のみのとき構築できない。"""
         with pytest.raises(ValueError, match="episode_id"):
