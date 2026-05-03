@@ -20,20 +20,7 @@
 | UI / 現在地 | `ui_context_builder.py`（タイル）, `spot_graph_ui_context_builder.py`（**`current_spot_id` ← snapshot**） |
 | レガシー episodic | `RuleBasedMemoryExtractor`, `EpisodeMemoryEntry`, `DefaultPredictiveMemoryRetriever` |
 
-## 3. フェーズ概要
-
-```text
-P0 命名・DTO（空間・target フィールド）の是正
-P1 trace / runtime context に構造化位置・spot id を確実に載せる
-P2 ルールベース cue 抽出 + `SubjectiveEpisode.cues` / `cue_keys` の統合（索引は `subjective_episode_index_strings`）
-P3 Passive Recall の軸別候補（和集合 + 二次スコア）
-P4 memory_links + episode_cues の永続化（**すぐ SQLite を本線にするなら in-memory 迂回せず SQLite 実装から始める**）
-P5 Memory Context Pack 型の導入（Reflection/Recall の入力統一）
-```
-
-並行してよいもの: レガシー `EpisodeMemoryEntry` / `PredictiveMemoryRetriever` は**段階的に縮小**し、Passive/Active 想起とエンコードの**真のソースは v2 `SubjectiveEpisode`** とする（レガシー schema の SQLite は別系統のまま）。
-
-### 2.2 仕様 §8（想起軸・和集合）と現実装の乖離（重要）
+## 2.1 仕様 §8（想起軸・和集合）と現実装の乖離（重要）
 
 [episodic_memory_system_spec.md §8](./episodic_memory_system_spec.md#8-想起軸recall-axisと索引キー) の方針は次である。
 
@@ -52,6 +39,19 @@ P5 Memory Context Pack 型の導入（Reflection/Recall の入力統一）
 したがって **「list_recent で候補を先に絞る」こと自体が仕様の和集合方針に反する**（ユーザ指摘どおり）。次の実装フェーズでは **Passive 専用の候補集約**（各軸 K 件 → 和集合 → スコア）へ差し替える。
 
 **能動想起**（`SubjectiveMemoryRecallExecutor` 等）は **本ロードマップでは後回し**（別途スコープ）。現状こちらも `list_recent` ベースである点は Passive と同型の制限がある。
+
+## 3. フェーズ概要
+
+```text
+P0 命名・DTO（空間・target フィールド）の是正
+P1 trace / runtime context に構造化位置・spot id を確実に載せる
+P2 ルールベース cue 抽出 + `SubjectiveEpisode.cues` / `cue_keys` の統合（索引は `subjective_episode_index_strings`）
+P3 Passive Recall の軸別候補（和集合 + 二次スコア）
+P4 memory_links + episode_cues の永続化（**すぐ SQLite を本線にするなら in-memory 迂回せず SQLite 実装から始める**）
+P5 Memory Context Pack 型の導入（Reflection/Recall の入力統一）
+```
+
+並行してよいもの: レガシー `EpisodeMemoryEntry` / `PredictiveMemoryRetriever` は**段階的に縮小**し、Passive/Active 想起とエンコードの**真のソースは v2 `SubjectiveEpisode`** とする（レガシー schema の SQLite は別系統のまま）。
 
 ### 3.1 作業手続き・Git・レビュー・ブランチ（参照）
 
