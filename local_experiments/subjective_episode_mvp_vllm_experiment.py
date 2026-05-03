@@ -9,8 +9,16 @@ MVP `SubjectiveEpisode` 向け: vLLM が `interpreted` / `recall_text` だけを
 - `intended_next` を復活させず、cue を LLM に生成させない。
 
 入力:
-  - `ActionEpisodeDraftBuilder` 等で組んだ決定論ドラフト（`SubjectiveEpisode`）
+  - **正式キャラクター（`data/characters.json`）のペルソナ** — `interpreted` / `recall_text` の主観・語り口にのみ使用。事実の根拠にはしない。
+  - `ActionEpisodeDraftBuilder` 等で組んだ決定論ドラフト（`SubjectiveEpisode`）と **その時点の状況**（`current_situation`）
   - source facts（ドラフトから抽出した文字列集合・ハルシネーション簡易チェック用）
+  - 任意: `SUBJECTIVE_EPISODE_VLLM_PERSONA` は実験メモ／追加指示（override ではなく補足）
+
+キャラ選択:
+  - `SUBJECTIVE_EPISODE_VLLM_CHARACTER_ID` があればその id を優先。
+  - なければ `SUBJECTIVE_EPISODE_VLLM_CHARACTER_NAME`（既定: 門前の少女）で複数候補から最も情報量が多いエントリを採用。
+  - `SUBJECTIVE_EPISODE_VLLM_CHARACTERS_PATH` で JSON パスを上書き可能（主にテスト用）。
+  - 読み込み失敗時は **短いフォールバックにせず終了**する。
 
 出力:
   - `local_experiments/runs/subjective_episode_mvp_vllm_<timestamp>.md`
@@ -19,6 +27,13 @@ MVP `SubjectiveEpisode` 向け: vLLM が `interpreted` / `recall_text` だけを
 Dry-run（vLLM 不要）:
   SUBJECTIVE_EPISODE_VLLM_DRY_RUN=1 python .../subjective_episode_mvp_vllm_experiment.py
   または `--dry-run`
+
+SSH 先で vLLM を動かす場合のよくあるミス:
+  - 実験コマンドを打つマシンから **その URL に TCP で届く**こと（別 PC で ssh しているだけでは、
+    エージェントや別シェルの `127.0.0.1` はトンネルと共有されないことがある）。
+  - `VLLM_BASE_URL` は OpenAI 互換エンドポイントの **ベース（末尾 `/v1`）**。`http://host:8001` だけの場合は
+    このスクリプトが `/v1` を補うが、明示して `http://host:8001/v1` とするのが確実。
+  - Gemma 4 + vLLM で接続がすぐ切れるときは **`SUBJECTIVE_EPISODE_VLLM_USE_JSON_SCHEMA=0`**（structured output が不安定な場合）を試す。
 
 vLLM 実行例:
   source venv/bin/activate
@@ -64,12 +79,18 @@ from ai_rpg_world.application.llm.services.action_episode_draft_builder import (
 
 RUNS_DIR = _ROOT / "local_experiments" / "runs"
 
+DEFAULT_CHARACTER_DISPLAY_NAME = "門前の少女"
+
 MAX_INTERPRETED_CHARS = 160
 MAX_RECALL_CHARS = 240
 
 SYSTEM_PROMPT_JA = """あなたはロールプレイングゲームの「主観記憶」生成の一部だけを担当する。
-ユーザーが渡す JSON には、すでに確定した事実（who / 場所 / 観測 observed / 結果 outcome / cue / ソース）が含まれる。
-あなたはその事実を書き換えてはならず、次の 2 フィールドだけを JSON で返す。
+ユーザーが渡す JSON には、すでに確定した事実（immutable_episode_context の who / 場所 / observed / outcome / cue / source）と、その時の状況（current_situation）、およびキャラクター設定（character_persona）が含まれる。
+
+character_persona は、そのエージェントがその出来事をどう味わい・どう言葉にするか（interpreted / recall_text のトーン・語彙・関心の向け方）を整えるためのものである。
+確定した地理・対象・結果・索引は immutable_episode_context と source_facts にのみ従い、ペルソナでそれらを上書きしたり、入力にない事実や cue を捏造したりしてはならない。
+
+あなたは次の 2 フィールドだけを JSON で返す。
 
 - interpreted: 当時その出来事をどう意味づけたか。1 文。入力にない人物・場所・物体名を新たに足さない。不要なら null。
 - recall_text: 後から prompt に差し込む短い想起文。最大 2 文程度。入力にない固有名を足さない。
@@ -180,12 +201,107 @@ def _json_safe(obj: Any) -> Any:
     return obj
 
 
+def _characters_json_path() -> Path:
+    raw = (os.environ.get("SUBJECTIVE_EPISODE_VLLM_CHARACTERS_PATH") or "").strip()
+    if raw:
+        return Path(raw)
+    return _ROOT / "data" / "characters.json"
+
+
+def load_character_persona_for_experiment() -> Dict[str, Any]:
+    """
+    `data/characters.json`（または `SUBJECTIVE_EPISODE_VLLM_CHARACTERS_PATH`）から
+    実験用キャラクター辞書を読み込む。失敗時は RuntimeError（短文フォールバックしない）。
+    """
+    path = _characters_json_path()
+    if not path.is_file():
+        raise RuntimeError(f"characters JSON が見つかりません: {path}")
+    with path.open(encoding="utf-8") as f:
+        raw = json.load(f)
+    chars = raw.get("characters")
+    if not isinstance(chars, list) or not chars:
+        raise RuntimeError(f"{path} に 'characters' 配列がありません")
+
+    cid = (os.environ.get("SUBJECTIVE_EPISODE_VLLM_CHARACTER_ID") or "").strip()
+    if cid:
+        matches = [c for c in chars if isinstance(c, dict) and str(c.get("id") or "") == cid]
+        if not matches:
+            raise RuntimeError(
+                f"{path} に character id={cid!r} がありません。"
+                " SUBJECTIVE_EPISODE_VLLM_CHARACTER_ID を確認してください。"
+            )
+        chosen = matches[0]
+    else:
+        name = (
+            os.environ.get("SUBJECTIVE_EPISODE_VLLM_CHARACTER_NAME") or DEFAULT_CHARACTER_DISPLAY_NAME
+        ).strip()
+        matches = [c for c in chars if isinstance(c, dict) and c.get("name") == name]
+        if not matches:
+            raise RuntimeError(
+                f"{path} に name={name!r} のキャラクターがありません。"
+                " SUBJECTIVE_EPISODE_VLLM_CHARACTER_NAME または"
+                " SUBJECTIVE_EPISODE_VLLM_CHARACTER_ID を確認してください。"
+            )
+        chosen = max(matches, key=lambda item: len(json.dumps(item, ensure_ascii=False)))
+
+    display_name = str(chosen.get("name") or "").strip()
+    first_person = str(chosen.get("first_person") or "").strip()
+    if not display_name or not first_person:
+        raise RuntimeError(
+            "選ばれたキャラクターの name または first_person が空です。"
+            f" character_id={chosen.get('id')!r}"
+        )
+
+    out: Dict[str, Any] = {
+        "character_id": str(chosen.get("id") or ""),
+        "name": display_name,
+        "first_person": first_person,
+        "personality_tags": list(chosen.get("personality_tags") or []),
+        "speech_samples": list(chosen.get("speech_samples") or []),
+        "values": str(chosen.get("values") or ""),
+        "strengths": str(chosen.get("strengths") or ""),
+        "weaknesses": str(chosen.get("weaknesses") or ""),
+        "interpersonal_tendency": str(chosen.get("interpersonal_tendency") or ""),
+        "behavioral_rules": list(chosen.get("behavioral_rules") or []),
+    }
+    fm = chosen.get("fragmented_memory")
+    if isinstance(fm, str) and fm.strip():
+        out["fragmented_memory"] = fm.strip()
+    app = chosen.get("appearance")
+    if isinstance(app, str) and app.strip():
+        out["appearance"] = app.strip()
+    return out
+
+
+def build_current_situation(draft: SubjectiveEpisode) -> Dict[str, Any]:
+    """そのときの状況（ドラフト由来のコンテキスト）。LLM は事実追加なく主観表現にのみ使う。"""
+    return {
+        "occurred_at": draft.occurred_at.isoformat(),
+        "game_time_label": draft.game_time_label,
+        "felt": draft.felt,
+        "location": _json_safe(draft.location),
+        "lines": {
+            "what": draft.what,
+            "observed": draft.observed,
+            "outcome": draft.outcome,
+            "prediction_error": draft.prediction_error,
+        },
+    }
+
+
+def _optional_experiment_persona_notes() -> str | None:
+    """実験用の追加メモ（任意）。未設定なら None。"""
+    raw = (os.environ.get("SUBJECTIVE_EPISODE_VLLM_PERSONA") or "").strip()
+    return raw if raw else None
+
+
 def build_user_prompt_payload(
     *,
     draft: SubjectiveEpisode,
-    persona_hint: str,
+    character_persona: Mapping[str, Any],
+    experiment_persona_notes: str | None,
 ) -> Dict[str, Any]:
-    """LLM user メッセージ用 JSON（ドラフトのうち事実固定部分＋生成対象のプレースホルダ説明）。"""
+    """LLM user メッセージ用 JSON（正式ペルソナ・状況・事実ドラフト）。"""
     locked_context = {
         "episode_id": draft.episode_id,
         "player_id": draft.player_id,
@@ -206,15 +322,24 @@ def build_user_prompt_payload(
         "interpreted_before_llm": draft.interpreted,
         "recall_text_template_before_llm": draft.recall_text,
     }
-    return {
-        "persona_hint": persona_hint,
+    payload: Dict[str, Any] = {
+        "persona_usage_policy": (
+            "character_persona は interpreted / recall_text の言い回し・主観のトーンにのみ使う。"
+            " 確定した who / 場所 / observed / outcome / cues / source は immutable_episode_context にしたがい、"
+            " ペルソナで上書きしたり、入力にない事実や cue を生成したりしない。"
+        ),
+        "character_persona": dict(character_persona),
+        "current_situation": build_current_situation(draft),
         "immutable_episode_context": locked_context,
         "source_facts": source_fact_strings(draft),
         "task": (
-            "interpreted と recall_text だけを生成し JSON で返す。"
+            "interpreted と recall_text だけを JSON で返す。"
             " immutable_episode_context の事実は変更しない（出力に繰り返し書かない）。"
         ),
     }
+    if experiment_persona_notes:
+        payload["experiment_persona_notes"] = experiment_persona_notes
+    return payload
 
 
 def validate_llm_pair(
@@ -504,26 +629,32 @@ def scenario_defs() -> List[Dict[str, Any]]:
     ]
 
 
-def _persona_from_env() -> str:
-    return (
-        os.environ.get("SUBJECTIVE_EPISODE_VLLM_PERSONA") or (
-            "一人称の主観で短く。入力 facts にない固有名詞や新しい登場人物を足さない。"
-        )
-    ).strip()
-
-
 def _use_json_schema_from_env() -> bool:
     raw = (os.environ.get("SUBJECTIVE_EPISODE_VLLM_USE_JSON_SCHEMA") or "1").strip().lower()
     return raw not in ("0", "false", "no", "off")
 
 
+def _normalize_openai_base_url(raw: str) -> str:
+    """
+    vLLM の chat completions は .../v1/chat/completions。
+    `http://host:8001` のように /v1 が無いと 404 やプロキシ切断の原因になることがある。
+    """
+    s = raw.strip().rstrip("/")
+    host_and_path = s.split("://", 1)[-1] if "://" in s else s
+    if "/v1" not in host_and_path:
+        return s + "/v1"
+    return s
+
+
 def _vllm_meta(enable_thinking: bool) -> Tuple[str, str, int, float, Dict[str, Any]]:
-    base = (os.environ.get("VLLM_BASE_URL") or "http://127.0.0.1:8001/v1").rstrip("/")
+    raw_base = os.environ.get("VLLM_BASE_URL") or "http://127.0.0.1:8001/v1"
+    base = _normalize_openai_base_url(raw_base).rstrip("/")
     model = os.environ.get("VLLM_MODEL") or "gemma-4-31b-it-nvfp4"
     max_tokens = int(os.environ.get("VLLM_MAX_THINKING_TOKENS") or os.environ.get("VLLM_MAX_TOKENS") or "512")
     temperature = float(os.environ.get("VLLM_TEMPERATURE") or "0.2")
     meta = {
         "base_url": base,
+        "vllm_base_url_raw": raw_base,
         "model": model,
         "max_tokens": max_tokens,
         "temperature": temperature,
@@ -540,12 +671,17 @@ def _enable_thinking_from_env() -> bool:
 def run_one_case_vllm(
     *,
     draft: SubjectiveEpisode,
-    persona: str,
+    character_persona: Mapping[str, Any],
+    experiment_persona_notes: str | None,
     use_json_schema: bool,
     dry_run: bool,
 ) -> Dict[str, Any]:
     """1 ケース分の実行メタ＋結果を dict で返す。"""
-    payload = build_user_prompt_payload(draft=draft, persona_hint=persona)
+    payload = build_user_prompt_payload(
+        draft=draft,
+        character_persona=character_persona,
+        experiment_persona_notes=experiment_persona_notes,
+    )
     user_prompt = json.dumps(payload, ensure_ascii=False, indent=2)
     facts = source_fact_strings(draft)
     snap_before = immutable_snapshot(draft)
@@ -580,44 +716,60 @@ def run_one_case_vllm(
         if use_json_schema:
             body["response_format"] = openai_subjective_llm_response_format()
         t0 = time.perf_counter()
-        with httpx.Client(timeout=httpx.Timeout(300.0)) as client:
-            response = client.post(
-                f"{base}/chat/completions",
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": "Bearer EMPTY",
-                },
-                json=body,
-            )
-        latency_ms = (time.perf_counter() - t0) * 1000.0
-        http_status = response.status_code
         try:
-            rj = response.json()
-        except json.JSONDecodeError:
-            raw_content = response.text
-            interpreted, recall_text, parse_errs = None, "", ["invalid HTTP JSON body"]
-        else:
-            choices = rj.get("choices") or []
-            if http_status != 200:
-                raw_content = json.dumps(rj, ensure_ascii=False)
-                interpreted, recall_text, parse_errs = (
-                    None,
-                    "",
-                    [f"HTTP status {http_status}"],
+            with httpx.Client(timeout=httpx.Timeout(300.0)) as client:
+                response = client.post(
+                    f"{base}/chat/completions",
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer EMPTY",
+                    },
+                    json=body,
                 )
-            elif not choices:
-                raw_content = json.dumps(rj, ensure_ascii=False)
-                interpreted, recall_text, parse_errs = None, "", ["no choices in response"]
+        except httpx.HTTPError as e:
+            latency_ms = (time.perf_counter() - t0) * 1000.0
+            http_status = 0
+            raw_content = ""
+            interpreted, recall_text, parse_errs = (
+                None,
+                "",
+                [
+                    f"HTTP transport error: {e!s}. "
+                    "SSH 先で vLLM を動かしている場合、このマシンから `VLLM_BASE_URL` に届いているか"
+                    "（ポートフォワード・ファイアウォール）、末尾 `/v1`、`VLLM_MODEL`、"
+                    "`SUBJECTIVE_EPISODE_VLLM_USE_JSON_SCHEMA=0` を確認。"
+                ],
+            )
+        else:
+            latency_ms = (time.perf_counter() - t0) * 1000.0
+            http_status = response.status_code
+            try:
+                rj = response.json()
+            except json.JSONDecodeError:
+                raw_content = response.text
+                interpreted, recall_text, parse_errs = None, "", ["invalid HTTP JSON body"]
             else:
-                msg = choices[0].get("message") or {}
-                raw_content = str(msg.get("content") or "")
-                extracted = _extract_first_json_object(raw_content)
-                try:
-                    data = json.loads(extracted)
-                except json.JSONDecodeError as e:
-                    interpreted, recall_text, parse_errs = None, "", [f"json decode: {e}"]
+                choices = rj.get("choices") or []
+                if http_status != 200:
+                    raw_content = json.dumps(rj, ensure_ascii=False)
+                    interpreted, recall_text, parse_errs = (
+                        None,
+                        "",
+                        [f"HTTP status {http_status}"],
+                    )
+                elif not choices:
+                    raw_content = json.dumps(rj, ensure_ascii=False)
+                    interpreted, recall_text, parse_errs = None, "", ["no choices in response"]
                 else:
-                    interpreted, recall_text, parse_errs = parse_llm_object(data)
+                    msg = choices[0].get("message") or {}
+                    raw_content = str(msg.get("content") or "")
+                    extracted = _extract_first_json_object(raw_content)
+                    try:
+                        data = json.loads(extracted)
+                    except json.JSONDecodeError as e:
+                        interpreted, recall_text, parse_errs = None, "", [f"json decode: {e}"]
+                    else:
+                        interpreted, recall_text, parse_errs = parse_llm_object(data)
 
     merged_errs = list(parse_errs)
     merged: SubjectiveEpisode | None = None
@@ -688,7 +840,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     argv = argv if argv is not None else sys.argv[1:]
     dry = _dry_run_from_env(argv)
 
-    persona = _persona_from_env()
+    try:
+        character_persona = load_character_persona_for_experiment()
+    except RuntimeError as e:
+        print(f"エラー: {e}", file=sys.stderr)
+        return 2
+
+    experiment_persona_notes = _optional_experiment_persona_notes()
     use_schema = _use_json_schema_from_env()
     scenarios = scenario_defs()
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
@@ -698,6 +856,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     print("=== SubjectiveEpisode MVP vLLM experiment ===")
     print(f"dry_run={dry}  use_json_schema={use_schema}  runs={RUNS_DIR}")
+    print(
+        f"character={character_persona.get('name')!r} id={character_persona.get('character_id')!r} "
+        f"json={_characters_json_path()}"
+    )
 
     rows: List[Dict[str, Any]] = []
     md_lines: List[str] = [
@@ -706,6 +868,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"- 実行時刻: {datetime.now().isoformat(timespec='seconds')}",
         f"- dry_run: **{dry}**（`--dry-run` または `SUBJECTIVE_EPISODE_VLLM_DRY_RUN=1`）",
         f"- `response_format` JSON Schema: **{use_schema}**",
+        f"- characters JSON: `{_characters_json_path()}`",
+        "",
+        "## character_persona（各リクエスト user JSON に同梱）",
+        "",
+        "```json",
+        json.dumps(character_persona, ensure_ascii=False, indent=2),
+        "```",
         "",
         "## System prompt",
         "",
@@ -723,7 +892,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"--- case {cid}: {title} ---")
         row = run_one_case_vllm(
             draft=ep,
-            persona=persona,
+            character_persona=character_persona,
+            experiment_persona_notes=experiment_persona_notes,
             use_json_schema=use_schema,
             dry_run=dry,
         )
@@ -780,6 +950,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "dry_run": dry,
         "use_json_schema": use_schema,
+        "characters_json_path": str(_characters_json_path()),
+        "character_persona": character_persona,
+        "experiment_persona_notes": experiment_persona_notes,
         "cases": rows,
     }
     out_json.write_text(json.dumps(bundle, ensure_ascii=False, indent=2), encoding="utf-8")
