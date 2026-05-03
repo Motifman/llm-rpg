@@ -43,8 +43,9 @@ EventHandlerComposition のインスタンス化）は**呼び出し元（外部
   `TradeQueryService`・`TradePageQueryService`・`TradeEventHandler` 等に**同一インスタンスで**
   渡す（`.env.example` 参照）。
 
-【エピソード記憶（MVP in-memory）】
-- 既定でプロセス内に `InMemorySubjectiveEpisodeStore` を1つ生成し、`EpisodicChunkCoordinator`（チャンク境界で保存）経由で
+【エピソード記憶（MVP）】
+- 既定はプロセス内の `InMemorySubjectiveEpisodeStore`。環境変数 `SUBJECTIVE_EPISODE_DB_PATH` に SQLite ファイルパスを
+  指定すると永続化ストアを1つ生成し、`EpisodicChunkCoordinator`（チャンク境界で保存）経由で
   `LlmAgentOrchestrator` と `DefaultPromptBuilder` 内の `EpisodicPassiveRecallRetrievalService`（受動想起）に**同一インスタンス**を渡す。
 - チャンク草案は既定で `ChunkEpisodeDraftBuilder()`。テスト等では `chunk_episode_draft_builder=` で差し替え可能。
 - テスト等でストアだけ差し替える場合は `episodic_episode_store=` を指定する（ストアと retrieval・coordinator で共有される）。
@@ -106,8 +107,8 @@ from ai_rpg_world.application.llm.services.current_state_formatter import (
 from ai_rpg_world.application.llm.services.game_tool_registry import (
     DefaultGameToolRegistry,
 )
-from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
-    InMemorySubjectiveEpisodeStore,
+from ai_rpg_world.application.llm.wiring._default_episodic_episode_store import (
+    resolve_default_episodic_episode_store,
 )
 from ai_rpg_world.application.llm.services.in_memory_todo_store import (
     InMemoryTodoStore,
@@ -906,11 +907,7 @@ def create_llm_agent_wiring(
         llm_player_resolver = ProfileBasedLlmPlayerResolver(
             player_profile_repository=player_profile_repository,
         )
-    shared_episode_store = (
-        episodic_episode_store
-        if episodic_episode_store is not None
-        else InMemorySubjectiveEpisodeStore()
-    )
+    shared_episode_store = resolve_default_episodic_episode_store(episodic_episode_store)
     chunk_builder = (
         chunk_episode_draft_builder
         if chunk_episode_draft_builder is not None
