@@ -20,25 +20,27 @@
 - 旧 v2 `SubjectiveEpisode` store / SQLite schema / passive recall / context pack
 - 旧 `ActionExperienceTrace` / `ObservationExperienceTrace` / episode encoding / cue extraction
 
-### 0.1 進捗チェックリスト（本ブランチ時点）
+### 0.1 進捗チェックリスト（main スナップショット）
 
-`git fetch --all --prune` 後のベースと closed PR を基準にした進捗である。フェーズ完了時に更新する。
+`git fetch --all --prune` 後の `origin/main` とマージ済み PR を基準にした進捗である。フェーズ完了時に更新する。
+
+**スナップショット**: 2026-05-03 時点。`main` 先端マージコミット `b7562bbd`（PR #34 `feature/episodic-memory-wiring`）まで反映済み。表中の **根拠コミット** は各 PR の **マージコミット短縮 SHA**（例: `git log main --merges --grep='#21' -1 --format='%h'`）であり、日付は Git が記録するマージ時刻（`%ci`）に従う。
 
 | 項目 | 状態 | 根拠 | 次の扱い |
 |---|---|---|---|
-| 旧記憶システム削除 | 完了 | PR #20 `refactor/remove-legacy-memory-system` | 旧系統は復活させない |
-| MVP 契約 `SubjectiveEpisode` / value object | 完了 | PR #21 | 破壊的変更は別 PR |
-| `intended_next` 除去 | 完了 | PR #27 | MVP DTO から除外 |
-| in-memory episode store | 完了 | PR #23 | SQLite 永続化は MVP 外 |
-| 決定論的 cue ルール | 完了 | PR #25 | LLM 自由生成 cue は MVP 外 |
-| action draft builder | 完了 | PR #24 | 追加入力は builder 側 |
-| tool 実行後の episode 保存 | 完了 | PR #29 | 任意注入（wiring 次第） |
-| 受動想起候補取得（時間軸 + cue 軸） | 完了 | PR #28 | prompt 注入・標準 wiring は本ラインで完了 |
-| vLLM 生成実験スクリプト | 完了 | PR #30 | 本番配線なし |
-| 受動想起の prompt 注入 | 完了 | `DefaultPromptBuilder` + `EpisodicPassiveRecallRetrievalService`（wiring 既定で注入） | SQLite 等は後段 |
-| 現在状況からの situation cue 生成（MVP 範囲） | 完了 | `build_situation_episodic_cues`（runtime + 直近観測 structured） | §0.2 補強は別 PR |
+| 旧記憶システム削除 | 完了 | PR #20・マージ `8f2e3b02`（2026-05-03）`refactor/remove-legacy-memory-system` | 旧系統は復活させない |
+| MVP 契約 `SubjectiveEpisode` / value object | 完了 | PR #21・マージ `f01ed4df`（2026-05-03） | 破壊的変更は別 PR |
+| `intended_next` 除去 | 完了 | PR #27・マージ `70818a7c`（2026-05-03） | MVP DTO から除外 |
+| in-memory episode store | 完了 | PR #23・マージ `f872bb93`（2026-05-03） | SQLite 永続化は MVP 外 |
+| 決定論的 cue ルール | 完了 | PR #25・マージ `3fd29414`（2026-05-03） | LLM 自由生成 cue は MVP 外 |
+| action draft builder | 完了 | PR #24・マージ `9b4a98ef`（2026-05-03） | 追加入力は builder 側 |
+| tool 実行後の episode 保存 | 完了 | PR #29・マージ `b311e1c9`（2026-05-03） | 任意注入（wiring 次第） |
+| 受動想起候補取得（時間軸 + cue 軸） | 完了 | PR #28・マージ `1e4d0cbb`（2026-05-03） | prompt 注入・共有ストア wiring は PR #33/#34 で完了 |
+| vLLM 生成実験スクリプト | 完了 | PR #30・マージ `35a2e6f4`（2026-05-03） | 本番配線なし |
+| 受動想起の prompt 注入 | 完了 | PR #33・マージ `df0b287a`（2026-05-03）`DefaultPromptBuilder` / `EpisodicPassiveRecallRetrievalService`；共有ストアで orchestrator と結ぶのは PR #34・`b7562bbd` | SQLite 等は後段 |
+| 現在状況からの situation cue 生成（MVP 範囲） | 完了 | PR #32・マージ `2d4515a1`（2026-05-03）`build_situation_episodic_cues`（runtime + 直近観測 structured） | §0.2 補強は別 PR |
 | situation cue の行動・感情・結果軸の補強 | MVP 外・次工程 | 局面だけでは cue が薄い軸がある | 下記 §0.2。本 PR ラインでは実装しない |
-| episode store / builder の標準 wiring | 完了 | `create_llm_agent_wiring` / `create_spot_graph_wiring` が共有 `InMemorySubjectiveEpisodeStore` を orchestrator / prompt に渡す | SQLite は MVP 外 |
+| episode store / builder の標準 wiring | 完了 | PR #34・マージ `b7562bbd`（2026-05-03）`create_llm_agent_wiring` / `create_spot_graph_wiring` が共有 `InMemorySubjectiveEpisodeStore` を orchestrator / prompt に渡す | SQLite は MVP 外 |
 | observation-only episode | 未着手 | 計画上 MVP 後段 | MVP 外 |
 | SQLite 永続化 / reflection / consolidation | 未着手 | 計画上 MVP 外 | MVP 外 |
 
