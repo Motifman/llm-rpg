@@ -3,7 +3,7 @@
 
 タイル移動ツールは登録せず、spot_graph_* ツールと SpotGraphCurrentStateFormatter を用いる。
 その他の LLM 観測・ツール枠は create_llm_agent_wiring と別経路だが、エピソード記憶（共有
-in-memory ストア・tool 後保存・受動想起）は既定で**同じ方針**で配線する。
+in-memory ストア・チャンク境界での保存・受動想起）は既定で**同じ方針**で配線する。
 """
 
 from __future__ import annotations
@@ -22,8 +22,15 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ISlidingWindowMemory,
 )
 from ai_rpg_world.application.llm.contracts.persona import PersonaPromptPolicy
-from ai_rpg_world.application.llm.services.action_episode_draft_builder import (
-    ActionEpisodeDraftBuilder,
+from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
+    ChunkEpisodeDraftBuilder,
+)
+from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import (
+    EpisodicChunkCoordinator,
+)
+from ai_rpg_world.application.llm.services.prompt_builder import (
+    DEFAULT_RECENT_ACTIONS_LIMIT,
+    DEFAULT_RECENT_OBSERVATIONS_LIMIT,
 )
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallRetrievalService,
@@ -134,13 +141,14 @@ def create_spot_graph_wiring(
     persona_store: Optional[Any] = None,
     persona_prompt_policy: Optional[PersonaPromptPolicy] = None,
     episodic_episode_store: Optional[IEpisodicEpisodeStore] = None,
-    action_episode_draft_builder: Optional[ActionEpisodeDraftBuilder] = None,
+    chunk_episode_draft_builder: Optional[ChunkEpisodeDraftBuilder] = None,
+    episodic_chunk_coordinator: Optional[EpisodicChunkCoordinator] = None,
 ) -> "LlmAgentWiringResult":
     """スポットグラフ用に LLM 観測・ツール・プロンプトを組み立てる（タイル移動なし）。
 
     エピソード記憶は create_llm_agent_wiring と同様、既定で共有 in-memory ストアを
     オーケストレータと受動想起に渡す。上書きは `episodic_episode_store` /
-    `action_episode_draft_builder`。
+    `chunk_episode_draft_builder` / `episodic_chunk_coordinator`。
     """
     # 遅延 import: wiring/__init__.py の循環を避ける
     from ai_rpg_world.application.llm.wiring import (
@@ -311,10 +319,19 @@ def create_spot_graph_wiring(
         if episodic_episode_store is not None
         else InMemorySubjectiveEpisodeStore()
     )
-    episode_draft_builder = (
-        action_episode_draft_builder
-        if action_episode_draft_builder is not None
-        else ActionEpisodeDraftBuilder()
+    chunk_builder = (
+        chunk_episode_draft_builder
+        if chunk_episode_draft_builder is not None
+        else ChunkEpisodeDraftBuilder()
+    )
+    episodic_coord = episodic_chunk_coordinator or EpisodicChunkCoordinator(
+        observation_buffer=buffer,
+        sliding_window_memory=sliding_window,
+        action_result_store=action_result_store,
+        episodic_episode_store=shared_episode_store,
+        chunk_episode_draft_builder=chunk_builder,
+        recent_observations_limit=DEFAULT_RECENT_OBSERVATIONS_LIMIT,
+        recent_actions_limit=DEFAULT_RECENT_ACTIONS_LIMIT,
     )
     episodic_passive_recall = EpisodicPassiveRecallRetrievalService(shared_episode_store)
     prompt_builder = _build_prompt_stack(
@@ -340,8 +357,7 @@ def create_spot_graph_wiring(
         tool_command_mapper=tool_command_mapper,
         action_result_store=action_result_store,
         tool_argument_resolver=tool_argument_resolver,
-        episodic_episode_store=shared_episode_store,
-        action_episode_draft_builder=episode_draft_builder,
+        episodic_chunk_coordinator=episodic_coord,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,
