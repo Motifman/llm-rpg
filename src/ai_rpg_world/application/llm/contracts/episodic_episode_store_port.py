@@ -27,6 +27,7 @@ class IEpisodicEpisodeStore(ABC):
         occurred_at の新しい順で最大 limit 件を返す。
         同一タイムスタンプでは episode_id の降順で安定化する。
         limit が 0 以下のときは空リスト。
+        naive の datetime はソート比較のみ UTC 固定オフセットとして扱う（本体は変更しない）。
         """
 
     @abstractmethod
@@ -35,4 +36,5 @@ class IEpisodicEpisodeStore(ABC):
         cue.to_canonical() に一致する cue を少なくとも 1 つ含むエピソードを返す。
         並びは list_recent と同じ（occurred_at 降順、同一時刻は episode_id 降順）。
         limit が 0 以下のときは空リスト。
+        naive datetime の扱いは list_recent に同じ。
         """

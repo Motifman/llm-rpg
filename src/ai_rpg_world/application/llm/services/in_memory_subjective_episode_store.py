@@ -2,12 +2,24 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import IEpisodicEpisodeStore
 from ai_rpg_world.application.llm.contracts.episodic_memory import EpisodicCue, SubjectiveEpisode
 
 
-def _occurrence_sort_key(ep: SubjectiveEpisode) -> tuple:
-    return (ep.occurred_at, ep.episode_id)
+def _occurrence_sort_key(ep: SubjectiveEpisode) -> tuple[datetime, str]:
+    """
+    occurred_at が naive のときは UTC として解釈し、aware は UTC に寄せて比較可能にする。
+    保存オブジェクトは変更しない（並び替え用キーのみ正規化）。
+    """
+
+    dt = ep.occurred_at
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return (dt, ep.episode_id)
 
 
 class InMemorySubjectiveEpisodeStore(IEpisodicEpisodeStore):
