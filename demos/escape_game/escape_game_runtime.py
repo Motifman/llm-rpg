@@ -14,7 +14,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple
+from typing import Any, Dict, FrozenSet, List, Optional, Tuple
 
 from ai_rpg_world.domain.item.read_model.item_spec_read_model import ItemSpecReadModel
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -102,27 +102,12 @@ from ai_rpg_world.application.llm.services.tool_catalog.memory import get_memory
 from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
 from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
 from ai_rpg_world.application.llm.services.recent_events_formatter import DefaultRecentEventsFormatter
-from ai_rpg_world.application.llm.services.memory_extractor import RuleBasedMemoryExtractor
-from ai_rpg_world.application.llm.services.memory_query_executor import MemoryQueryExecutor
-from ai_rpg_world.application.llm.services.in_memory_episode_memory_store import (
-    InMemoryEpisodeMemoryStore,
-)
-from ai_rpg_world.application.llm.services.in_memory_long_term_memory_store import (
-    InMemoryLongTermMemoryStore,
-)
-from ai_rpg_world.application.llm.services.in_memory_working_memory_store import (
-    InMemoryWorkingMemoryStore,
-)
 from ai_rpg_world.application.llm.services.in_memory_todo_store import InMemoryTodoStore
-from ai_rpg_world.application.llm.services.handle_store import InMemoryHandleStore
-from ai_rpg_world.application.llm.services.executors.memory_executor import MemoryToolExecutor
 from ai_rpg_world.application.llm.services.executors.todo_executor import TodoToolExecutor
 from ai_rpg_world.application.llm.services.escape_llm_prompt import (
     EscapeCharacterPromptInput,
     build_escape_system_prompt,
     build_persona_block_from_escape_character,
-    format_episode_snippets_for_prompt,
-    format_working_memory_for_prompt,
     safe_world_intro_text,
 )
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry, ObservationOutput
@@ -238,26 +223,8 @@ class EscapeGameRuntime:
     _tick: int = 0
     # LLM 脱出用（セッション単位で構築）
     _escape_llm_system_prompt: str = field(default="", repr=False)
-    _memory_overflow_for_next_commit: Dict[int, List[ObservationEntry]] = field(
-        default_factory=dict, repr=False
-    )
-    _episode_memory_store: InMemoryEpisodeMemoryStore = field(
-        default_factory=InMemoryEpisodeMemoryStore, repr=False
-    )
-    _long_term_memory_store: InMemoryLongTermMemoryStore = field(
-        default_factory=InMemoryLongTermMemoryStore, repr=False
-    )
-    _working_memory_store: InMemoryWorkingMemoryStore = field(
-        default_factory=InMemoryWorkingMemoryStore, repr=False
-    )
     _todo_store: InMemoryTodoStore = field(default_factory=InMemoryTodoStore, repr=False)
-    _handle_store: InMemoryHandleStore = field(default_factory=InMemoryHandleStore, repr=False)
-    _memory_query_executor: Optional[MemoryQueryExecutor] = field(default=None, repr=False)
-    _memory_tool_executor: Optional[MemoryToolExecutor] = field(default=None, repr=False)
     _todo_tool_executor: Optional[TodoToolExecutor] = field(default=None, repr=False)
-    _memory_extractor: RuleBasedMemoryExtractor = field(
-        default_factory=RuleBasedMemoryExtractor, repr=False
-    )
 
     @property
     def id_mapper(self) -> ScenarioIdMapper:
@@ -356,16 +323,8 @@ class EscapeGameRuntime:
     def get_tool_definitions(self) -> List[ToolDefinitionDto]:
         """LLM に渡されるツール定義（OpenAI tools 形式）を返す。"""
         spot = [defn for defn, _ in get_spot_graph_specs()]
-        memory = [
-            defn
-            for defn, _ in get_memory_specs(
-                memory_query_enabled=True,
-                subagent_enabled=False,
-                todo_enabled=True,
-                working_memory_enabled=True,
-            )
-        ]
-        return spot + memory
+        todo = [defn for defn, _ in get_memory_specs(todo_enabled=True)]
+        return spot + todo
 
     # ── 観測パイプライン: イベントを処理して各プレイヤーに配信 ──
 
@@ -399,7 +358,6 @@ class EscapeGameRuntime:
             result_summary=result_summary,
             occurred_at=datetime.now(),
         )
-        self._maybe_extract_episode(player_id, action_summary, result_summary)
 
     def _drain_buffer_to_sliding_window(self, player_id: PlayerId) -> List[ObservationEntry]:
         """観測バッファをスライディングウィンドウに移す。溢れた観測を返す。"""
@@ -408,43 +366,19 @@ class EscapeGameRuntime:
             return []
         return self._sliding_window.append_all(player_id, drained)
 
-    def _wire_memory_stack(self) -> None:
-        """MemoryQueryExecutor とツール実行器を遅延初期化する。"""
-        if self._memory_query_executor is not None:
+    def _wire_auxiliary_tool_stack(self) -> None:
+        """TODO ツール実行器を遅延初期化する。"""
+        if self._todo_tool_executor is not None:
             return
-
-        recent_fmt = DefaultRecentEventsFormatter()
-
-        def state_provider(pid: PlayerId) -> str:
-            return self.build_llm_context(pid).current_state_text
-
-        self._memory_query_executor = MemoryQueryExecutor(
-            episode_store=self._episode_memory_store,
-            long_term_store=self._long_term_memory_store,
-            sliding_window=self._sliding_window,
-            action_result_store=self._action_result_store,
-            working_memory_store=self._working_memory_store,
-            state_provider=state_provider,
-            recent_events_formatter=recent_fmt,
-            handle_store=self._handle_store,
-        )
-        self._memory_tool_executor = MemoryToolExecutor(
-            memory_query_executor=self._memory_query_executor,
-            subagent_runner=None,
-            working_memory_store=self._working_memory_store,
-        )
         self._todo_tool_executor = TodoToolExecutor(self._todo_store)
 
     def run_llm_auxiliary_tool(
         self, player_id: PlayerId, name: str, arguments: Dict[str, Any]
     ) -> LlmCommandResultDto:
-        """memory_query / working_memory_append / TODO 系ツールを実行する。"""
-        self._wire_memory_stack()
-        assert self._memory_tool_executor is not None
+        """TODO 系ツールを実行する。"""
+        self._wire_auxiliary_tool_stack()
         assert self._todo_tool_executor is not None
-        handlers: Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]] = {}
-        handlers.update(self._memory_tool_executor.get_handlers())
-        handlers.update(self._todo_tool_executor.get_handlers())
+        handlers = self._todo_tool_executor.get_handlers()
         handler = handlers.get(name)
         if handler is None:
             return LlmCommandResultDto(
@@ -476,34 +410,12 @@ class EscapeGameRuntime:
                 lines.append(f"- {name}")
         return "\n".join(lines) if lines else "（なし）"
 
-    def _format_long_term_snippets(self, player_id: PlayerId, keyword: str) -> str:
-        kws = [keyword] if keyword.strip() else None
-        facts = self._long_term_memory_store.search_facts(player_id, keywords=kws, limit=5)
-        if not facts:
-            return "（長期メモに登録された事実はまだ少ない）"
-        return "\n".join(f"- {f.content[:200]}" for f in facts)
-
-    def _maybe_extract_episode(
-        self,
-        player_id: PlayerId,
-        action_summary: str,
-        result_summary: str,
-    ) -> None:
-        overflow = self._memory_overflow_for_next_commit.pop(player_id.value, [])
-        episodes = self._memory_extractor.extract(
-            player_id, overflow, action_summary, result_summary
-        )
-        if not episodes:
-            return
-        self._episode_memory_store.add_many(player_id, episodes)
-
     # ── 完全プロンプト構築 ──
 
     def build_full_prompt(self, player_id: PlayerId) -> dict:
         """各プレイヤーが LLM ターンで実際に受け取る完全なプロンプトを構築する。"""
-        self._wire_memory_stack()
-        evicted = self._drain_buffer_to_sliding_window(player_id)
-        self._memory_overflow_for_next_commit[player_id.value] = evicted
+        self._wire_auxiliary_tool_stack()
+        self._drain_buffer_to_sliding_window(player_id)
 
         ctx = self.build_llm_context(player_id)
         current_state_text = ctx.current_state_text
@@ -513,14 +425,6 @@ class EscapeGameRuntime:
         recent_fmt = DefaultRecentEventsFormatter()
         recent_events_text = recent_fmt.format(recent_obs, recent_acts)
 
-        snap = self._state_builder.build_snapshot(int(player_id))
-        spot_kw = (snap.current_spot_name or "").strip() if snap is not None else ""
-
-        episodes = self._episode_memory_store.get_recent(player_id, 8)
-        related_mem = format_episode_snippets_for_prompt(episodes, limit=5)
-        wm_texts = self._working_memory_store.get_recent(player_id, 12)
-        hypothesis_block = format_working_memory_for_prompt(wm_texts, limit=8)
-        long_term_block = self._format_long_term_snippets(player_id, spot_kw)
         inventory_block = self._format_inventory_evidence(player_id)
 
         user_content = "\n".join(
@@ -534,20 +438,10 @@ class EscapeGameRuntime:
                 "",
                 "【直近の出来事】",
                 "観測（世界から届いた事象）と、あなた自身の行動の結果が時系列に並びます。",
-                "古い行動や本文に含まれない事実を辿る必要がある場合は memory_query（例: recent_events, episodic, facts）を使ってください。",
                 recent_events_text.strip() or "（なし）",
                 "",
                 "【所持・判明した物証】",
                 inventory_block,
-                "",
-                "【仮説・作業メモ（未確定）】",
-                hypothesis_block,
-                "",
-                "【確定した事実（長期メモの抜粋）】",
-                long_term_block,
-                "",
-                "【関連する思い出（エピソード）】",
-                related_mem,
                 "",
                 "利用可能なツールから、次に取るべき 1 つの行動だけを選んでください。",
             ]
