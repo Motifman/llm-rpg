@@ -1,4 +1,4 @@
-"""LlmAgentOrchestrator のエピソード保存境界（tool 実行後のみ保存）の検証。"""
+"""LlmAgentOrchestrator のエピソード保存境界（tool 実行後にチャンク協調が保存する）の検証。"""
 
 from typing import Any, Dict
 
@@ -11,20 +11,27 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IToolArgumentResolver,
 )
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
-from ai_rpg_world.application.llm.services.action_episode_draft_builder import (
-    ActionEpisodeDraftBuilder,
-)
 from ai_rpg_world.application.llm.services.action_result_store import DefaultActionResultStore
 from ai_rpg_world.application.llm.services.agent_orchestrator import LlmAgentOrchestrator
+from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
+    ChunkEpisodeDraftBuilder,
+)
+from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import (
+    EpisodicChunkCoordinator,
+)
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
     InMemorySubjectiveEpisodeStore,
 )
 from ai_rpg_world.application.llm.services.llm_client_stub import StubLlmClient
+from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
 from ai_rpg_world.application.llm.services.tool_argument_resolver import (
     ToolArgumentResolutionException,
 )
 from ai_rpg_world.application.llm.services.tool_command_mapper import ToolCommandMapper
 from ai_rpg_world.application.llm.tool_constants import TOOL_NAME_NO_OP
+from ai_rpg_world.application.observation.services.observation_context_buffer import (
+    DefaultObservationContextBuffer,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 
 
@@ -75,20 +82,29 @@ def _orchestrator_with_episode(
     resolver: IToolArgumentResolver | None = None,
 ) -> tuple[LlmAgentOrchestrator, InMemorySubjectiveEpisodeStore]:
     episode_store = InMemorySubjectiveEpisodeStore()
+    buffer = DefaultObservationContextBuffer()
+    sliding = DefaultSlidingWindowMemory(max_entries_per_player=10)
+    action_store = DefaultActionResultStore(max_entries_per_player=10)
+    coordinator = EpisodicChunkCoordinator(
+        observation_buffer=buffer,
+        sliding_window_memory=sliding,
+        action_result_store=action_store,
+        episodic_episode_store=episode_store,
+        chunk_episode_draft_builder=ChunkEpisodeDraftBuilder(),
+    )
     orch = LlmAgentOrchestrator(
         prompt_builder=_StubPromptBuilder(),
         llm_client=llm_client,
         tool_command_mapper=mapper,
-        action_result_store=DefaultActionResultStore(max_entries_per_player=10),
+        action_result_store=action_store,
         tool_argument_resolver=resolver,
-        episodic_episode_store=episode_store,
-        action_episode_draft_builder=ActionEpisodeDraftBuilder(),
+        episodic_chunk_coordinator=coordinator,
     )
     return orch, episode_store
 
 
 class TestOrchestratorEpisodicActionCapture:
-    """tool_command_mapper.execute 通過後のみ主観エピソードが保存されること。"""
+    """tool_command_mapper.execute 通過後にチャンク経由で主観エピソードが保存されること。"""
 
     def test_tool_success_persists_episode(self) -> None:
         """成功した tool 結果がエピソードストアに 1 件入る。"""
@@ -133,7 +149,7 @@ class TestOrchestratorEpisodicActionCapture:
         assert len(store.list_recent(2, 10)) == 1
         ep = store.list_recent(2, 10)[0]
         assert "失敗" in ep.outcome
-        assert "TRAP_TRIGGERED" in ep.outcome
+        assert "罠が発動した" in ep.outcome
 
     def test_llm_api_failure_does_not_persist_episode(self) -> None:
         """LLM API 失敗では execute に至らないためエピソードは増えない。"""
@@ -198,8 +214,8 @@ class TestOrchestratorEpisodicActionCapture:
         orch.run_turn(PlayerId(6))
         assert store.list_recent(6, 10) == []
 
-    def test_episode_deps_partial_injection_is_noop(self) -> None:
-        """ストアだけ／ビルダーだけ注入では保存しない（クラッシュもしない）。"""
+    def test_episodic_coordinator_none_is_noop(self) -> None:
+        """チャンク協調を注入しない場合はエピソードを増やさない（クラッシュもしない）。"""
         mapper = ToolCommandMapper(
             handler_map={
                 TOOL_NAME_NO_OP: lambda pid, a: LlmCommandResultDto(
@@ -207,29 +223,15 @@ class TestOrchestratorEpisodicActionCapture:
                 )
             }
         )
-        store_only = InMemorySubjectiveEpisodeStore()
-        orch_store_only = LlmAgentOrchestrator(
+        episode_store = InMemorySubjectiveEpisodeStore()
+        orch = LlmAgentOrchestrator(
             prompt_builder=_StubPromptBuilder(),
             llm_client=StubLlmClient(
                 tool_call_to_return={"name": TOOL_NAME_NO_OP, "arguments": {}}
             ),
             tool_command_mapper=mapper,
             action_result_store=DefaultActionResultStore(max_entries_per_player=10),
-            episodic_episode_store=store_only,
-            action_episode_draft_builder=None,
+            episodic_chunk_coordinator=None,
         )
-        orch_store_only.run_turn(PlayerId(8))
-        assert store_only.list_recent(8, 10) == []
-
-        builder_only = ActionEpisodeDraftBuilder()
-        orch_builder_only = LlmAgentOrchestrator(
-            prompt_builder=_StubPromptBuilder(),
-            llm_client=StubLlmClient(
-                tool_call_to_return={"name": TOOL_NAME_NO_OP, "arguments": {}}
-            ),
-            tool_command_mapper=mapper,
-            action_result_store=DefaultActionResultStore(max_entries_per_player=10),
-            episodic_episode_store=None,
-            action_episode_draft_builder=builder_only,
-        )
-        orch_builder_only.run_turn(PlayerId(9))
+        orch.run_turn(PlayerId(8))
+        assert episode_store.list_recent(8, 10) == []
