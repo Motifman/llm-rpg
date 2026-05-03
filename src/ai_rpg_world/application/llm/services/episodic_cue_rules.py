@@ -62,20 +62,59 @@ def build_episodic_cues_for_tool_turn(
         if oc is not None:
             collected.append(oc)
 
-    rt = runtime_context
-    if rt is not None:
-        collected.extend(_cues_from_runtime_place(rt))
-
-    obs = observation_structured
-    if obs is not None:
-        collected.extend(_cues_from_observation_structured(obs))
-
-    if rt is not None:
-        collected.extend(_cues_from_runtime_targets(rt.targets))
-        collected.extend(_cues_from_runtime_tile_areas(rt))
+    collected.extend(
+        _collect_situation_episodic_cues(
+            runtime_context=runtime_context,
+            observation_structured=observation_structured,
+        )
+    )
 
     validated = _validate_and_dedupe(collected)
     return tuple(validated)
+
+
+def build_situation_episodic_cues(
+    *,
+    runtime_context: ToolRuntimeContextDto | None,
+    observation_structured: Mapping[str, Any] | None = None,
+) -> tuple[EpisodicCue, ...]:
+    """
+    受動想起用の「現在局面」に相当する cue 列を、保存時 `build_episodic_cues_for_tool_turn` と
+    同じ軸・語彙・正規化で返す（挿入順も固定）。
+
+    MVP 範囲の入力は `ToolRuntimeContextDto` と直近観測の structured のみとする。
+    tool 名・実行結果・canonical args（action / outcome / tool 由来の object 等）は含めない。
+
+    None の入力や未知フィールドは黙って無視する。
+    """
+    collected = _collect_situation_episodic_cues(
+        runtime_context=runtime_context,
+        observation_structured=observation_structured,
+    )
+    validated = _validate_and_dedupe(collected)
+    return tuple(validated)
+
+
+def _collect_situation_episodic_cues(
+    *,
+    runtime_context: ToolRuntimeContextDto | None,
+    observation_structured: Mapping[str, Any] | None,
+) -> list[EpisodicCue]:
+    """runtime と観測 structured から局面 cue を組み立てる（重複除去・件数上限は呼び出し側）。"""
+    out: list[EpisodicCue] = []
+    rt = runtime_context
+    if rt is not None:
+        out.extend(_cues_from_runtime_place(rt))
+
+    obs = observation_structured
+    if obs is not None:
+        out.extend(_cues_from_observation_structured(obs))
+
+    if rt is not None:
+        out.extend(_cues_from_runtime_targets(rt.targets))
+        out.extend(_cues_from_runtime_tile_areas(rt))
+
+    return out
 
 
 def _optional_str(raw: object | None) -> str | None:
