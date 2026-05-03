@@ -36,10 +36,22 @@
 | 受動想起候補取得（時間軸 + cue 軸） | 完了 | PR #28 | prompt 注入は未実装 |
 | vLLM 生成実験スクリプト | 完了 | PR #30 | 本番配線なし |
 | 受動想起の prompt 注入 | 未着手 | `EpisodicPassiveRecallRetrievalService` はあるが `DefaultPromptBuilder` 連携なし | 未実装 |
-| 現在状況からの situation cue 生成 | 未着手 | retrieval は `situation_cues` を受け取るのみ | 未実装 |
+| 現在状況からの situation cue 生成（MVP 範囲） | 未着手 | retrieval は `situation_cues` を受け取るのみ | `ToolRuntimeContextDto` と直近観測の structured から決定論的に生成する。保存側 cue ルールと語彙を揃える |
+| situation cue の行動・感情・結果軸の補強 | MVP 外・次工程 | 局面だけでは cue が薄い軸がある | 下記 §0.2。本 PR ラインでは実装しない |
 | episode store / builder の標準 wiring | 未着手 | `LlmAgentOrchestrator` は任意注入対応のみ | 未実装 |
 | observation-only episode | 未着手 | 計画上 MVP 後段 | MVP 外 |
 | SQLite 永続化 / reflection / consolidation | 未着手 | 計画上 MVP 外 | MVP 外 |
+
+### 0.2 MVP 範囲外として切り出したタスク（situation_cues 補強）
+
+受動想起の cue 軸では、**時間的近傍は `list_recent` が別腕で扱う**ため `situation_cues` に含めなくてよい。一方、**連想側（cue 軸）**では「いまの局面にその情報が無いと、その軸では過去エピソードが引けない」。
+
+MVP の situation_cues は **runtime（空間・対象）と直近観測 structured（骨格イベント等）**までを対象とし、次の補強は **MVP 完了後の別タスク**とする。
+
+- **直近 tool 名などからの `action:` 相当**（例: `IActionResultStore` の直近行動から取る）。いま動いていない tool が無い局面では action cue が欠けうるため。
+- **局面のみから outcome / emotion を無理に付与する**ことはしない（その場にシグナルが無いと薄くなるのは許容）。補強する場合は別タスクで入力源とルールを明示する。
+
+本タスクは **§7 の「次に回す」一覧**にも記載する。
 
 ## 1. MVP の目的
 
@@ -61,6 +73,7 @@ MVP でまだやらないこと:
 - graph DB。
 - 旧 `memory_query` 形式の能動想起。
 - LLM による cue key の自由生成。
+- **situation_cues の行動・感情・結果軸の補強**（直近行動ストア等との統合）。§0.2・§7 参照。
 
 ## 2. 最初の問い
 
@@ -86,7 +99,7 @@ MVP でまだやらないこと:
 | `felt` | 感情 | tool args の `emotion_hint` | enum 値のみ |
 | `interpreted` | 当時の意味づけ | LLM 生成候補 | 入力事実から 1 文だけ |
 | `cues` | 想起 key | runtime / tool / observation structured | ルール生成のみ |
-| `recall_text` | prompt に入れる短文 | template or LLM 生成 | MVP は template、LLM 版は実験 |
+| `recall_text` | prompt に入れる短文 | template or LLM 生成 | MVP 検証は template で可。本番は `interpreted` / `recall_text` を LLM で埋める方針（配線は後段） |
 | `source_event_ids` | 元材料参照 | action event / observation event ID | MVP では内部 ID |
 
 `observed` と `source_event_ids` は不変にする。後で再解釈する場合も、元事実を書き換えない。
@@ -409,12 +422,13 @@ VLLM_BASE_URL=http://127.0.0.1:8001/v1 VLLM_MODEL=gemma-4-31b-it-nvfp4 \
 依存:
 
 - PR 5, PR 6。
-- LLM 生成 `recall_text` は PR 7 の結果を見て採否判断。
+- 本番で LLM が `interpreted` / `recall_text` を埋めるのは最終方針だが、**このラインではプロンプトに決定論の `recall_text` が載ることの検証で十分**（LLM 本番配線は後段）。
 
 進捗:
 
 - PR #28 で「episode store から時間軸 + cue 軸の和集合候補を取る」部分は完了済み。
-- 未完了なのは、現在状況から `situation_cues` を作る処理、`DefaultPromptBuilder` への想起文注入、wiring での store / builder / retrieval service 有効化である。
+- 未完了なのは、**MVP 範囲の** `situation_cues` 生成（runtime + 直近観測 structured）、`DefaultPromptBuilder` への想起文注入、wiring での store / episode 保存 / retrieval の有効化である。
+- **§0.2 の situation_cues 補強**は本 MVP ラインに含めない（別 PR）。
 
 ## 6. MVP 完了条件
 
@@ -423,9 +437,10 @@ MVP 完了は次で判定する。
 - 1 回の tool 実行から `SubjectiveEpisode` が保存される。
 - 5W1H の情報源がコード上で説明できる。
 - LLM なしでも episode が成立する。
-- LLM を使う場合も生成対象は `interpreted` / `recall_text` のみ（最大 2 フィールド）。
+- LLM を使う場合も生成対象は `interpreted` / `recall_text` のみ（最大 2 フィールド）（本番方針。MVP 検証フェーズでは recall は決定論でもよい）。
 - cue はゲーム由来構造から作られる。
-- 受動的想起で、現在地・対象・行動・結果に関連する過去 episode の `recall_text` が prompt に入る。
+- 受動的想起で、**時間軸（recent）と、MVP 範囲の situation_cues（空間・対象・観測骨格に対応する cue）**に基づき、過去 episode の `recall_text`（決定論で生成されたものでよい）が prompt の「関連する記憶」に入る。
+- **行動・感情・結果軸を situation だけで完全にカバーすることは MVP では要求しない**（§0.2 を別タスクとする）。
 - vLLM 実験で、代表ケースの JSON 安定性とハルシネーション傾向を確認済み。
 
 ## 7. 放置防止
@@ -438,10 +453,11 @@ MVP 後に必ず再評価するもの:
 
 - 観測だけの episode。
 - 複数 event chunk。
-- LLM `recall_text` の本番採用。
+- LLM `interpreted` / `recall_text` の本番配線（自由記述は本番で必須方針。MVP はプロンプトへの載せ確認まで）。
 - SQLite 永続化。
 - reflection / consolidation。
 - semantic / identity 候補。
+- **situation_cues の補強**（直近 `IActionResultStore` 等による `action:` 等、§0.2）。
 
 ## 8. 参照
 
@@ -449,3 +465,16 @@ MVP 後に必ず再評価するもの:
 - 作業手続き: [memory_feature_workflow.md](./memory_feature_workflow.md)
 - 詳細議事録・旧ロードマップ長文: [episodic_memory_reimplementation_plan.md](./episodic_memory_reimplementation_plan.md)
 - 旧 vLLM 実験例: `local_experiments/episode_encoding_vllm_gemma_experiment.py`（旧 DTO 依存のため設計は流用しない。vLLM 呼び出し方法のみ参考）
+
+## 9. 並列委任のすみ分け（参考）
+
+`memory_feature_workflow.md` §4 に従い、**1 エージェント 1 worktree 1 ブランチ**。オーケストレーターは `git worktree add` で専用ディレクトリを作ってから委任する。委任文には必ず **worktree の絶対パス・ベースブランチ（直近 `main`）・触れてよいパス・合流条件（`pytest` コマンド）** を書く。PR 前に **Task（サブエージェント・モデル Composer 2）** でレビュー → `gh pr create`。手順は `memory_feature_workflow.md` §2。
+
+| スロット | ブランチ名の例 | 主な作業 | 他スロットとの衝突 |
+|----------|----------------|----------|--------------------|
+| A | `feature/episodic-situation-cue-generation` | `ToolRuntimeContextDto` + 直近観測 structured から `EpisodicCue` 列を返す純関数（`episodic_cue_rules` 拡張 or 専用モジュール）。ユニットテスト。 | 低（cue ルール） |
+| B | `feature/episodic-prompt-passive-recall` | `DefaultPromptBuilder` に `EpisodicPassiveRecallRetrievalService` 等を**コンストラクタ注入**（`build` シグネチャ不変）。`relevant_memories_text` 整形。件数・文字数はテストで固定値。 | 中（`prompt_builder.py` 専用推奨） |
+| C | `feature/episodic-memory-wiring` | `create_llm_agent_wiring` 等で `InMemorySubjectiveEpisodeStore` を1つ生成し **orchestrator と prompt 側に共有**。 | 高（`wiring` / orchestrator 直列化推奨：A→B マージ後に C が安全） |
+| D | `docs/` または `test:` 直列 | 計画・進捗表の更新、E2E／結合テストのみ | 任意 |
+
+**推奨合流順**: A（situation cue）→ B（prompt）→ C（wiring）がコンフリクトを最小化する。D はどの段でも追随可能。
