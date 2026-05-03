@@ -43,6 +43,11 @@ EventHandlerComposition のインスタンス化）は**呼び出し元（外部
   `TradeQueryService`・`TradePageQueryService`・`TradeEventHandler` 等に**同一インスタンスで**
   渡す（`.env.example` 参照）。
 
+【エピソード記憶（MVP in-memory）】
+- 既定でプロセス内に `InMemorySubjectiveEpisodeStore` を1つ生成し、`LlmAgentOrchestrator`（tool 後の保存）と
+  `DefaultPromptBuilder` 内の `EpisodicPassiveRecallRetrievalService`（受動想起）に**同一インスタンス**を渡す。
+- テスト等でストアを差し替える場合は `episodic_episode_store=` を指定する。
+
 """
 
 import os
@@ -66,6 +71,12 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
 from ai_rpg_world.application.llm.services.action_result_store import (
     DefaultActionResultStore,
 )
+from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
+    IEpisodicEpisodeStore,
+)
+from ai_rpg_world.application.llm.services.action_episode_draft_builder import (
+    ActionEpisodeDraftBuilder,
+)
 from ai_rpg_world.application.llm.services.agent_orchestrator import LlmAgentOrchestrator
 from ai_rpg_world.application.llm.services.available_tools_provider import (
     DefaultAvailableToolsProvider,
@@ -73,11 +84,17 @@ from ai_rpg_world.application.llm.services.available_tools_provider import (
 from ai_rpg_world.application.llm.services.context_format_strategy import (
     SectionBasedContextFormatStrategy,
 )
+from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
+    EpisodicPassiveRecallRetrievalService,
+)
 from ai_rpg_world.application.llm.services.current_state_formatter import (
     DefaultCurrentStateFormatter,
 )
 from ai_rpg_world.application.llm.services.game_tool_registry import (
     DefaultGameToolRegistry,
+)
+from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
+    InMemorySubjectiveEpisodeStore,
 )
 from ai_rpg_world.application.llm.services.in_memory_todo_store import (
     InMemoryTodoStore,
@@ -590,6 +607,7 @@ def _build_prompt_stack(
     ui_context_builder: "DefaultLlmUiContextBuilder",
     tile_map_view_distance: int,
     persona_block_provider: Optional[Callable[[PlayerId], str]] = None,
+    episodic_passive_recall: Optional[EpisodicPassiveRecallRetrievalService] = None,
 ) -> DefaultPromptBuilder:
     """
     predictive_retriever と prompt_builder を構築する。
@@ -608,6 +626,7 @@ def _build_prompt_stack(
         ui_context_builder=ui_context_builder,
         persona_block_provider=persona_block_provider,
         tile_map_view_distance=tile_map_view_distance,
+        episodic_passive_recall=episodic_passive_recall,
     )
 
 
@@ -652,6 +671,7 @@ class LlmAgentWiringResult:
         sns_mode_session: Optional[Any] = None,
         sns_page_session: Optional[Any] = None,
         trade_page_session: Optional[Any] = None,
+        episodic_episode_store: Optional[IEpisodicEpisodeStore] = None,
     ) -> None:
         self.observation_registry = observation_registry
         self.llm_turn_trigger = llm_turn_trigger
@@ -665,6 +685,7 @@ class LlmAgentWiringResult:
         self.sns_mode_session = sns_mode_session
         self.sns_page_session = sns_page_session
         self.trade_page_session = trade_page_session
+        self.episodic_episode_store = episodic_episode_store
 
     def __iter__(self) -> Any:
         yield self.observation_registry
@@ -733,6 +754,8 @@ def create_llm_agent_wiring(
     system_prompt_template: Optional[str] = None,
     persona_store: Optional[Any] = None,
     persona_prompt_policy: Optional[PersonaPromptPolicy] = None,
+    episodic_episode_store: Optional[IEpisodicEpisodeStore] = None,
+    action_episode_draft_builder: Optional[ActionEpisodeDraftBuilder] = None,
 ) -> "LlmAgentWiringResult":
     """
     LLM エージェント用の観測ハンドラ登録用 Registry と LlmTurnTrigger を組み立てて返す。
@@ -843,6 +866,17 @@ def create_llm_agent_wiring(
         llm_player_resolver = ProfileBasedLlmPlayerResolver(
             player_profile_repository=player_profile_repository,
         )
+    shared_episode_store = (
+        episodic_episode_store
+        if episodic_episode_store is not None
+        else InMemorySubjectiveEpisodeStore()
+    )
+    episode_draft_builder = (
+        action_episode_draft_builder
+        if action_episode_draft_builder is not None
+        else ActionEpisodeDraftBuilder()
+    )
+    episodic_passive_recall = EpisodicPassiveRecallRetrievalService(shared_episode_store)
     prompt_builder = _build_prompt_stack(
         buffer=buffer,
         sliding_window=sliding_window,
@@ -857,6 +891,7 @@ def create_llm_agent_wiring(
         ui_context_builder=ui_context_builder,
         tile_map_view_distance=effective_view_distance,
         persona_block_provider=persona_block_provider,
+        episodic_passive_recall=episodic_passive_recall,
     )
     orchestrator = LlmAgentOrchestrator(
         prompt_builder=prompt_builder,
@@ -864,6 +899,8 @@ def create_llm_agent_wiring(
         tool_command_mapper=tool_command_mapper,
         action_result_store=action_result_store,
         tool_argument_resolver=tool_argument_resolver,
+        episodic_episode_store=shared_episode_store,
+        action_episode_draft_builder=episode_draft_builder,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,
@@ -912,6 +949,7 @@ def create_llm_agent_wiring(
         sns_mode_session=sns_mode_session,
         sns_page_session=sns_page_session,
         trade_page_session=trade_page_session,
+        episodic_episode_store=shared_episode_store,
     )
 
 
