@@ -129,7 +129,7 @@ def decide_chunk_boundary(
     """
     チャンクを閉じてエピソード生成へ進むべきかを返す。
 
-    - 区間内に ActionResultEntry が MIN 未満なら生成不可かつ閉じない。
+    - `chunk_encoding_episode_generation_allowed` が偽なら（第 1 版: 行動ゼロ等）生成不可かつ閉じない。
     - 生成可能なとき、`explicit_segment_close` が最優先で閉じる（協調層からの区切り信号）。
     - それ以外は観測ヒントが閾値・顕在性・カテゴリ遷移・structured キー変化のいずれかで閉じる。
     - ヒントが発火せず明示もない場合は HOLD（材料は蓄積継続）。
