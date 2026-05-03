@@ -209,12 +209,12 @@ def _default_episodic_cues(
     command_result: LlmCommandResultDto,
     recent_observation: ObservationEntry | None,
 ) -> tuple[EpisodicCue, ...]:
-    """`episodic_cue_rules` がリポジトリにあれば決定論的 cue を載せる。無ければ空（後統合）。"""
+    """`episodic_cue_rules` が import できれば決定論的 cue を載せる。それ以外は空（cue-rules 未マージと整合）。"""
     try:
         from ai_rpg_world.application.llm.services.episodic_cue_rules import (
             build_episodic_cues_for_tool_turn,
         )
-    except ModuleNotFoundError:
+    except ImportError:
         return ()
 
     structured = (
