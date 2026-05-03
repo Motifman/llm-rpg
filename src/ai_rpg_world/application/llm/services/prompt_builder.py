@@ -226,9 +226,11 @@ class DefaultPromptBuilder(IPromptBuilder):
             observation_structured = None
             if observations:
                 observation_structured = observations[0].output.structured
+            latest_action = action_results[0] if action_results else None
             situation_cues = build_situation_episodic_cues(
                 runtime_context=ui_context.tool_runtime_context,
                 observation_structured=observation_structured,
+                latest_action=latest_action,
             )
             recall_result = self._episodic_passive_recall.retrieve(
                 player_id=player_id.value,
