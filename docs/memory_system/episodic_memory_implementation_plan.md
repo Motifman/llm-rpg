@@ -1,464 +1,425 @@
-# Episodic Memory — 再実装計画
+# Episodic Memory — MVP 再実装計画
 
-この文書は [episodic_memory_system_spec.md](./episodic_memory_system_spec.md) を、既存のレガシー記憶実装に載せるのではなく、削除後の空き地から再実装するための計画である。
+この文書は [episodic_memory_system_spec.md](./episodic_memory_system_spec.md) を、削除後の空き地から再実装するための計画である。
+
+旧 `EpisodeMemoryEntry`、旧 `SubjectiveEpisode`、旧 trace / chunker / encoder / recall / SQLite store / reflection 実装は **使わない**。名前・インターフェース・永続化 schema も、必要性を再確認しない限り戻さない。git 履歴には残っているが、本計画の設計入力にはしない。
+
+歴史的なフェーズ表・査読メモの長文は本ファイルには載せない。[episodic_memory_reimplementation_plan.md](./episodic_memory_reimplementation_plan.md) に譲り、ここでは MVP の共有契約と PR 分割だけを単一ソースとする。
+
+作業手続き、PR、サブエージェントレビュー、ブロッキング確認は [memory_feature_workflow.md](./memory_feature_workflow.md) に従う。レビュー用サブエージェントは **必ず Composer 2** で起動する。
 
 ## 0. 現在の前提
 
-2026-05-03 時点で、プロンプトに入る過去文脈は `SlidingWindowMemory` の直近観測と `IActionResultStore` の直近行動結果だけに戻した。
+2026-05-03 時点で、プロンプトに入る過去文脈は `SlidingWindowMemory` の直近観測と `IActionResultStore` の直近行動結果だけである。
 
 削除済みのもの:
 
 - レガシー `EpisodeMemoryEntry` / `PredictiveMemoryRetriever`
 - `memory_query` / `memory_recall_subjective` / `subagent` / `working_memory_append`
 - 長期 facts / laws / reflection runner
-- v2 `SubjectiveEpisode` store / SQLite schema / passive recall / context pack
-- `ActionExperienceTrace` / `ObservationExperienceTrace` / episode encoding / cue extraction
+- 旧 v2 `SubjectiveEpisode` store / SQLite schema / passive recall / context pack
+- 旧 `ActionExperienceTrace` / `ObservationExperienceTrace` / episode encoding / cue extraction
 
-ここから先は後方互換や段階的併存を前提にしない。必要な概念だけを spec から再導入し、古い API 名や store 契約へ無理に合わせない。
+## 1. MVP の目的
 
-## 1. 再実装の原則
+MVP の目的は「過去ログ検索」ではなく、ゲーム内で起きた出来事を **自分視点の体験**として保存し、後で受動的想起に使える最小単位を作ることである。
 
-- **Prompt 入口は 1 つ**: `PromptBuilder` へ渡す記憶ブロックは、最終的に `MemoryInfluenceBlock` のような短い影響テキストへ一本化する。複数の retriever が個別に prompt へ差し込まない。
-- **検索 DB ではなく主観システム**: 保存物は「検索用タグ」ではなく、行動前予測、結果、予測誤差、感情、注意の変化を残す。
-- **cue はゲーム由来構造から作る**: prompt 文字列や LLM 自由タグから索引を作らない。runtime context、tool args、観測イベント、stable id を入力にする。
-- **全件走査しない**: 想起候補は軸ごとの index lookup で取り、和集合をスコアリングする。
-- **最初から長期記憶へ飛ばない**: semantic / identity / schema は episode と reflection が成立してから導入する。
+最初のゴール:
 
-## 2. フェーズ
+- tool 実行や観測から、5W1H を持つ `SubjectiveEpisode` を作れる。
+- 保存される情報が、イベント・tool result・runtime context・観測に実在する情報から来ていることを検証できる。
+- LLM 生成は少数の主観フィールドだけに限定し、事実・索引・ID を生成させない。
+- vLLM 実験で、LLM 生成部分が過剰生成・ハルシネーション・遅延を起こさないか確認できる。
 
-### P0 — 空き地の維持と回帰防止
+MVP でまだやらないこと:
 
-目的: SlidingWindow 以外の記憶経路が復活しない状態をテストで固定する。
-
-実装:
-
-- `PromptBuilder` の user prompt に `memory_query` / passive recall / long-term facts が入らないことを検証する。
-- tool catalog に想起系ツールが登録されないことを検証する。
-- `src/ai_rpg_world/application/llm` に削除済みの記憶 DTO / store / executor 名が戻っていないことを軽い import テストで見る。
-
-完了条件:
-
-- LLM ターンは SlidingWindow と直近行動結果だけで動く。
-- TODO ツールは残るが、記憶検索・作業メモ・長期記憶ツールは存在しない。
-
-### P1 — Trace Capture を最小再導入
-
-目的: episode 化前の根拠を、prompt や store とは独立した一次材料として残す。
-
-設計:
-
-- `ActionExperienceTrace`: 主観 tool 入力、tool args、tool result、success/error、runtime context snapshot。
-- `ObservationExperienceTrace`: その agent が知覚した観測、発話、環境変化、visible context。
-- trace store はまず in-memory でよい。ただし interface 名は古い `IActionExperienceTraceStore` を復活させず、新しい責務名で定義する。
-
-完了条件:
-
-- 世界へ作用する tool 実行から action trace が作られる。
-- 観測 append 時に observation trace が作られる。
-- trace は prompt へ直接入らない。
-
-### P2 — Subjective Episode Encoding
-
-目的: 複数 trace から主観 episode を作る。
-
-設計:
-
-- `SubjectiveEpisode` は `observed` / `interpreted` / `felt` / `intended` / `expected` / `prediction_error` / `source_trace_ids` を中核にする。
-- `observed` と `source_trace_ids` は不変。
-- LLM は主観化に使ってよいが、`observed` に trace 外の事実を混ぜることを validator で拒否する。
-
-完了条件:
-
-- 代表シナリオ 1 つで trace から episode が生成される。
-- LLM なしの stub encoder でも同じ契約を満たす。
-
-### P3 — Cue Index と局所リンク
-
-目的: 想起の候補取得を全件走査ではなく、軸別 index lookup にする。
-
-設計:
-
-- cue 軸: entity / place / object / action / outcome / schema_hint。
-- 空間 cue は `place_spot` / `tile_area` / `sub_loc` のように二系統を混同しない。
-- link は `temporal` / `entity` / `spatial` / `goal` / `co_recalled` から最小導入する。
-
-完了条件:
-
-- episode 保存時に cue index と局所 link が更新される。
-- 新規 episode 追加時に既存 episode 全件を比較しない。
-
-### P4 — Passive Recall と Memory Influence Block
-
-目的: 現在状況から自然に想起される episode を選び、prompt へ短く影響として渡す。
-
-設計:
-
-- 現在 runtime context から situation cues を作る。
-- cue / temporal / link / goal 軸ごとに候補 ID を取り、和集合を二次スコアする。
-- prompt には episode 全文ではなく「なぜ今思い出したか」「注意・予測へどう影響するか」を入れる。
-
-完了条件:
-
-- 罠箱などの代表ケースで、過去の失敗が `attention` / `expected_result` を慎重に傾ける。
-- 想起ブロックは件数・文字数上限を持つ。
-
-### P5 — Reflection / Consolidation
-
-目的: 想起された episode を現在文脈から再解釈し、semantic / schema / identity 候補を作る。
-
-設計:
-
-- reflection は source episode を破壊しない journal として保存する。
-- consolidation は日次・章区切り・高 importance 後などに限定する。
-- semantic / identity は「世界の真実」ではなく agent の安定しつつある理解として扱う。
-
-完了条件:
-
-- 同じ episode が再想起された時に reflection journal が増える。
-- 複数 episode から semantic / identity 候補を作れる。
-
-## 3. 最初にやらないこと
-
-- 旧 `memory_query` DSL の復活。
-- 旧 `EpisodeMemoryEntry` / facts / laws store への再接続。
+- 複雑な chunker。
+- reflection / consolidation。
+- semantic memory / identity memory / laws / facts。
 - embedding 類似検索。
-- graph DB 導入。
-- prompt 文字列からの cue 抽出。
+- graph DB。
+- 旧 `memory_query` 形式の能動想起。
+- LLM による cue key の自由生成。
 
-## 4. 最初の実装ブランチ候補
+## 2. 最初の問い
 
-- `refactor/remove-legacy-memory-system`: 現在の削除と P0 回帰テスト。
-- `feature/episodic-trace-capture`: P1。
-- `feature/episodic-subjective-encoding`: P2。
-- `feature/episodic-cue-index`: P3。
+### 2.1 何を保存するか
 
-記憶まわりの PR 作成・レビュー手順は [memory_feature_workflow.md](./memory_feature_workflow.md) に従う。ただし本計画では、旧実装との併存や移行互換を前提にしない。
-# Episodic Memory — 実装計画
+`SubjectiveEpisode` は、最小でも次を持つ。
 
-本文書は [episodic_memory_system_spec.md](./episodic_memory_system_spec.md) の仕様を、**既存コードに載せるための移行・実装順序**に落としたものである。詳細な Tool 引数設計や Chunker の議論のフルテキストは、必要に応じて [episodic_memory_reimplementation_plan.md](./episodic_memory_reimplementation_plan.md) を参照する。
+| フィールド | 意味 | 主な情報源 | MVP 方針 |
+|---|---|---|---|
+| `episode_id` | 保存単位の ID | store 採番 or UUID | ルール生成 |
+| `player_id` | 体験した agent | `LlmAgentOrchestrator.run_turn(player_id)` / 観測 recipient | ルール生成 |
+| `occurred_at` | 実時間 | `ActionResultEntry.occurred_at` / `ObservationEntry.occurred_at` | ルール生成 |
+| `game_time_label` | ゲーム内時刻表示 | `ObservationEntry.game_time_label`、将来 runtime provider | 取れなければ `None` |
+| `who` | 関係者 | tool args / `ToolRuntimeContextDto.targets` / `ObservationOutput.structured` | stable id 優先、なければ表示名 |
+| `where` | 場所 | `ToolRuntimeContextDto.current_spot_id`, `current_area_ids`, `current_sub_location_id`, `current_x/y/z` | ID 優先 |
+| `what` | 何が起きたか | tool name + result message / observation prose | 事実ベース |
+| `why` | なぜそうしたか | tool args の `intention` | LLM 生成しない |
+| `how` | どう行動したか | tool name / canonical args | ルール生成 |
+| `observed` | 実際に知覚・確認したこと | result message / observation prose | 不変、LLM で盛らない |
+| `expected` | 事前予測 | tool args の `expected_result` | なければ `None` |
+| `outcome` | 結果 | `LlmCommandResultDto.success`, `error_code`, result summary | ルール生成 |
+| `prediction_error` | 予測との差 | `expected_result` と result の差 | MVP は単純テンプレート |
+| `felt` | 感情 | tool args の `emotion_hint` | enum 値のみ |
+| `interpreted` | 当時の意味づけ | LLM 生成候補 | 入力事実から 1 文だけ |
+| `cues` | 想起 key | runtime / tool / observation structured | ルール生成のみ |
+| `recall_text` | prompt に入れる短文 | template or LLM 生成 | MVP は template、LLM 版は実験 |
+| `source_event_ids` | 元材料参照 | action event / observation event ID | MVP では内部 ID |
 
-**作業手続き（Git・レビュー・ブロッキング・worktree）**は [memory_feature_workflow.md](./memory_feature_workflow.md) に分離した。記憶関連の実装・マージでは**毎回そちらを開いてから**着手する。**フェーズ完了時は同ファイル §5 に従い、本計画（査読表・各 P セクション等）を更新したうえでコミットする**。
+`observed` と `source_event_ids` は不変にする。後で再解釈する場合も、元事実を書き換えない。
 
-## 1. 目的と非目標
+### 2.2 LLM に生成させてよいもの
 
-- **目標**: 型付き cue・想起軸・（将来）リンク store により、Passive/Active 想起が **ゲーム由来 id** で安定し、Memory Context Pack へ拡張しやすい土台にする。
-- **非目標（初期）**: グラフ DB、embedding 類似検索、全ペアリンク更新。
+LLM に任せてよいのは、事実ではなく **短い主観化**だけである。
 
-## 2. 現状コードの要点（2026 時点）
+MVP の LLM 生成候補:
 
-| 領域 | 主なモジュール |
-|------|----------------|
-| v2 主観エピソード | `SubjectiveEpisode`, `InMemorySubjectiveEpisodeStore`, **`SqliteSubjectiveEpisodeStore`**（`episode_cues` / `memory_links`）, `llm_json_episode_encoder.py` |
-| Trace | `ActionExperienceTrace`, `ObservationExperienceTrace`, `agent_orchestrator._append_action_experience_trace` |
-| Passive Recall | `passive_subjective_recall_composer.py`＋`passive_subjective_recall_retrieval.py`。**スコア軸**（temporal / cue / goal / importance）は実装済みだが、**候補エピソード集合は `list_recent(max_scan)` のみ**（仕様 §8 の「軸ごとに候補を取り和集合」**未達**）。`pick_debug` で軸寄与を可視化可能。 |
-| エンコーディング文脈 | `episode_encoding_context_provider.py`（`current_goals` ← Working Memory） |
-| UI / 現在地 | `ui_context_builder.py`（タイル）, `spot_graph_ui_context_builder.py`（**`current_spot_id` ← snapshot**） |
-| レガシー episodic | `RuleBasedMemoryExtractor`, `EpisodeMemoryEntry`, `DefaultPredictiveMemoryRetriever` |
+- `interpreted`: 「この出来事を当時どう意味づけたか」1 文。
+- `recall_text`: 想起時に prompt へ入れる短い文。最大 2 文。
 
-## 2.1 仕様 §8（想起軸・和集合）と現実装の乖離（重要）
+**`intended_next`（次に注意を向けそうなこと）は MVP の契約に含めない。** 並列実装で「次ターンの意図・注意」と役割が重なり、`intention` / `attention` / passive recall 側との境界が曖昧になりやすいため、DTO と後続タスクを細く保ぐ。必要になれば想起パイプラインや次ターン入力の設計とあわせて別名・別工程で再検討する。
 
-[episodic_memory_system_spec.md §8](./episodic_memory_system_spec.md#8-想起軸recall-axisと索引キー) の方針は次である。
+LLM に生成させないもの:
 
-- **想起軸**（個体一致・型、空間、**時間的近傍**、骨格 event、目的…）は **同等に並列**で扱う想定。
-- 各軸で **一定件数の候補エピソード ID を取得**し、**和集合にマージ**したうえで、必要なら **二次スコア**で並べ替える。
+- `who`, `where`, `when`。
+- stable id。
+- cue。
+- success / failure。
+- error code。
+- tool result の事実。
+- 存在しない人物・場所・物体。
+- 長い内省文、教訓、世界法則。
 
-**現状コード（v2 初期実装に引きずられた部分）**はこれと一致していない。
+LLM 生成は、1 episode あたり最大 **2** フィールド（上記候補のうち埋めるもの）に抑える。10 個以上の自由生成フィールドは作らない。JSON schema を使い、文字数上限と「入力にない事実を足さない」検証を入れる。
 
-| 仕様の意図 | 現状 |
-|------------|------|
-| 軸ごとに別ソースから候補 ID を取る | **単一ソース**: `ISubjectiveEpisodeStore.list_recent(player_id, max_scan)` のみ。時間軸は **「このリストの順位・`created_at` からのスコア項」**として扱われ、**別軸の候補集合としては分離されていない**。 |
-| cue 逆引き（`episode_cues`） | `SqliteSubjectiveEpisodeStore` に **逆引き API**（`list_episode_ids_by_cue_keys`）とテーブルがあるが、**Passive 本線からは未使用**（テストでのみ使用）。 |
-| リンク（`memory_links`）による近傍 | **保存・テストはあるが**、Passive が **リンクを読んで候補を広げる**処理は未配線。 |
-| InMemory store | **`ISubjectiveEpisodeStore` 契約に cue 逆引きはない**。InMemory 実装にも **cue→episode_id の索引はない**。 |
+### 2.3 どこから情報を取るか
 
-したがって **「list_recent で候補を先に絞る」こと自体が仕様の和集合方針に反する**（ユーザ指摘どおり）。次の実装フェーズでは **Passive 専用の候補集約**（各軸 K 件 → 和集合 → スコア）へ差し替える。
+コード上の一次情報源は次に固定する。
 
-**能動想起**（`SubjectiveMemoryRecallExecutor` 等）は **本ロードマップでは後回し**（別途スコープ）。現状こちらも `list_recent` ベースである点は Passive と同型の制限がある。
+| 情報 | 取得元 |
+|---|---|
+| LLM が選んだ tool 名 | `LlmAgentOrchestrator._run_turn_core` の `name` |
+| LLM が出した tool args | 同 `arguments` / `canonical_arguments` |
+| 主観入力 | subjective action schema の `inner_thought`, `intention`, `expected_result`, `attention`, `emotion_hint` |
+| tool 実行結果 | `LlmCommandResultDto` |
+| action summary / result summary | `_format_action_summary` / `build_result_summary` |
+| 場所・対象 label 解決 | `ToolRuntimeContextDto` |
+| 直近観測 | `ObservationEntry` |
+| 観測の構造化情報 | `ObservationOutput.structured` |
+| 観測カテゴリ | `ObservationOutput.observation_category` |
 
-## 3. フェーズ概要
+prompt 文字列から cue や事実を抽出しない。prompt は表示物であり、索引や episode の source of truth にしない。
 
-```text
-P0 命名・DTO（空間・target フィールド）の是正
-P1 trace / runtime context に構造化位置・spot id を確実に載せる
-P2 ルールベース cue 抽出 + `SubjectiveEpisode.cues` / `cue_keys` の統合（索引は `subjective_episode_index_strings`）
-P3 Passive Recall の軸別候補（和集合 + 二次スコア）
-P4 memory_links + episode_cues の永続化（**すぐ SQLite を本線にするなら in-memory 迂回せず SQLite 実装から始める**）
-P5 Memory Context Pack 型の導入（Reflection/Recall の入力統一）
+### 2.4 どこで区切るか
+
+MVP では `1 LLM turn / 1 tool result = 1 chunk` とする。
+
+理由:
+
+- `LlmAgentOrchestrator` に tool 名、args、runtime context、result が同時に揃う。
+- 行動前予測と結果の対応が取りやすい。
+- 複数出来事 chunker を先に作ると、保存単位・source trace・LLM 入力が曖昧になる。
+
+観測だけで episode を作る経路は後段に回す。ただし `ObservationEntry` は action episode の周辺文脈として参照できるようにする。
+
+### 2.5 いつ保存するか
+
+MVP では tool 実行結果が確定し、`IActionResultStore.append` へ記録されるのと同じタイミングの直後に episode 材料を作る。
+
+保存順:
+
+1. LLM が tool call を返す。
+2. args を解決する。
+3. tool を実行する。
+4. `LlmCommandResultDto` を得る。
+5. `IActionResultStore` に直近行動結果を保存する。
+6. 同じ材料から `SubjectiveEpisode` を作る。
+7. episode store に保存する。
+
+失敗した tool call も episode にできる。むしろ `expected_result` と失敗結果の差は記憶として重要である。
+
+## 3. MVP のクラス設計
+
+### 3.1 Value Objects / DTO
+
+最初に作る型:
+
+- `SubjectiveEpisode`
+- `EpisodeLocation`
+- `EpisodeAction`
+- `EpisodicCue`
+- `EpisodeSource`
+
+配置候補:
+
+- `src/ai_rpg_world/application/llm/contracts/episodic_memory.py`
+
+ドメイン層ではなく application/llm contracts に置く。理由は、現段階では LLM agent の体験記録であり、ゲーム世界そのもののルールではないため。
+
+### 3.2 最小 `SubjectiveEpisode`
+
+```python
+@dataclass(frozen=True)
+class SubjectiveEpisode:
+    episode_id: str
+    player_id: int
+    occurred_at: datetime
+    game_time_label: str | None
+    source: EpisodeSource
+    location: EpisodeLocation
+    action: EpisodeAction | None
+    who: tuple[str, ...]
+    what: str
+    why: str | None
+    observed: str
+    expected: str | None
+    outcome: str
+    prediction_error: str | None
+    felt: str | None
+    interpreted: str | None
+    cues: tuple[EpisodicCue, ...]
+    recall_text: str
 ```
 
-並行してよいもの: レガシー `EpisodeMemoryEntry` / `PredictiveMemoryRetriever` は**段階的に縮小**し、Passive/Active 想起とエンコードの**真のソースは v2 `SubjectiveEpisode`** とする（レガシー schema の SQLite は別系統のまま）。
+削る候補:
 
-### 3.1 作業手続き・Git・レビュー・ブランチ（参照）
+- `importance`: MVP では後回し。全部 0.5 などにするくらいなら持たない。
+- `salience_reasons`: 後回し。保存理由が必要になったら追加。
+- `memory_reflection_journal`: 後回し。
+- `cue_keys`: 旧実装の形なので戻さない。
 
-ブランチ運用・コミット規約・**GitHub CLI（`gh`）による PR 必須**・**サブエージェントレビュー（Composer 2・利用者の実行許可を待たず起動／見過ごせない変更がある場合は Approve 禁止）**・**ブロッキングとブランチの見方**・worktree・並列戦略は **[memory_feature_workflow.md](./memory_feature_workflow.md)** に集約した。
+### 3.3 必要十分性の検証
 
----
+各フィールドについて、次のどちらかを満たさない場合は MVP から外す。
 
-### 3.2 空間系 cue の推奨案（LLM や旧仕様に引っ張られない）
+- イベント・tool・runtime・観測から決定的に取れる。
+- LLM 生成する価値があり、入力事実だけを使った短文として検証できる。
 
-**方針**: 空間の索引は **ゲーム由来 id のみ**、**ルールが `EpisodicCue` に書く**。LLM の自由記述や `place_label:` 類は **索引にしない**（観測テキスト・プロンプト用にとどめる）。
+曖昧なものは削る。特に `importance`, `belief_delta`, `identity_delta`, `lesson`, `semantic_candidate` は MVP には入れない。
 
-**推奨する axis（canonical 文字列・全体で固定）**
+## 4. LLM 生成検証
 
-| axis | 意味 | value の中身 | 主な入力元（ルール側） |
-|------|------|----------------|------------------------|
-| `place_spot` | スポットノード | 十進文字列の `spot_id` | `ToolRuntimeContextDto.current_spot_id`、trace コピー後は trace |
-| `tile_area` | タイル世界の区画 | 十進文字列の `LocationAreaId` | `current_area_ids` / `tile_location_area_id` 系 |
-| `sub_loc` | スポットグラフ内区画 | 十進文字列の `SubLocationId` | `sub_location_id`、`current_sub_location_id`（導入時） |
+### 4.1 unittest
 
-- **同時成立**: 同一エピソードに `tile_area` と `sub_loc` が両方載ってよい（二系統ワールドの切り替え・ハイブリッドに対応）。想起は **いずれかと交差**すれば候補に入る、など P3 で調整する。
-- **座標 `coord:`** は、タイルで「区画より細かい一致」が要る場合のみ**後追し**で足す。初期は `tile_area` + `place_spot` で足りることが多い。
-- **`to_canonical()`** は既存どおり `axis:value`。prefix の見た目より **axis 列と値の意味**をソース・オブ・トゥルースにする。
+unit test では、LLM なしの deterministic encoder を先に固定する。
 
-**やらない方がいいこと**
+確認すること:
 
-- LLM に「場所の cue を JSON で返させる」こと（表記ゆれと id 欠落の両方が出る）。
-- 索引に **自然言語ラベル**（地下倉庫、北の広場）だけを載せること。ラベルは `observed` や UI 向けに残し、マッチは id 軸で行う。
+- tool result から `SubjectiveEpisode` が作れる。
+- 5W1H のうち、情報源があるものだけが埋まる。
+- `observed` に入力外の事実が混ざらない。
+- cue は runtime / tool / observation structured からだけ作る。
+- LLM 生成フィールドが `None` でも episode として成立する。
 
----
+### 4.2 vLLM local experiment
 
-### 3.3 `cue_keys` と LLM：段階的にやめる
+`local_experiments/episode_encoding_vllm_gemma_experiment.py` は旧 DTO に依存しているため、そのまま復活させない。新しい MVP に合わせて、別スクリプトを作る。
 
-旧仕様の「`schema_hint` 補助だけ LLM」より一段はっきりさせる。**本線の索引は `cues`（ルール＋将来の検証済み hybrid）**とする。
+候補:
 
-**フェーズ案（コードと一緒にトラッキング表を更新）**
+- `local_experiments/subjective_episode_mvp_vllm_experiment.py`
 
-1. **今**: Passive/Recall は `subjective_episode_index_strings` で **`cue_keys` ∪ `cues`**。既存データ用に `cue_keys` はフィールドとして残す。
-2. **直後**: `LlmJsonEpisodeEncoder` / reflection JSON から **`cue_keys` の生成要求を外す**（プロンプト・schema から削除または deprecated コメント）。空配列で保存してよい。
-3. **移行後**: ルール抽出が揃ったら、**新規保存は `cues` のみ**を正とし、`cue_keys` は読み取り互換のためだけに残す期間を設ける。
-4. **最終**: 永続層・API で `cue_keys` を削除するか、内部のシリアライズ専用に閉じる（表に「廃止済み」と書く）。
+実験の目的:
 
-LLM に残してよいのは **主観フィールド**（`interpreted` 等）に限定し、「検索キー生成」は担当させない。
+- LLM が `interpreted`, `recall_text` だけを生成できるか。
+- 入力にない人物・場所・物体を足さないか。
+- JSON schema と低温度で安定するか。
+- 1 episode あたりの生成遅延が許容範囲か。
+- 少数の自由生成フィールドで足りる設計か。
 
----
+入力:
 
-### 3.4 廃止・置換の一覧（生きた表）
+- deterministic encoder が作った episode draft。
+- source event の facts。
+- persona block は短く入れる。ただし persona で事実を上書きしない。
 
-「いつ消すか分からなくなる」のを防ぐため、**削ったらこの表を更新する**。状態: `active` / `deprecated` / `removed`。
+出力 schema:
 
-| 対象 | 状態 | 置換・注意 |
-|------|------|------------|
-| `ToolRuntimeTargetDto.location_area_id`（旧） | removed（コード上） | `tile_location_area_id` / `sub_location_id` |
-| LLM 生成の `SubjectiveEpisode.cue_keys` | deprecated（目標） | `cues`（ルール）。索引は `subjective_episode_index_strings` から `cues` 主軸へ |
-| フィールド `cue_keys`（DTO） | active（互換） | 上記フェーズ完了まで残す → 最終 removed または内部のみ |
-| レガシー `EpisodeMemoryEntry` / `PredictiveMemoryRetriever` | deprecated（方針） | v2 `SubjectiveEpisode` + Passive Recall。削減順は別タスクで行を追加 |
-| in-memory only の v2 store（本番寄り運用時） | deprecated（方針） | **`SqliteSubjectiveEpisodeStore` が main に存在**。既定配線は当面 `InMemorySubjectiveEpisodeStore`（`wiring`）。本番で SQLite に切り替えるときは同 I/F で注入 |
+```json
+{
+  "interpreted": "string <= 160 chars or null",
+  "recall_text": "string <= 240 chars"
+}
+```
 
----
+検証:
 
-## P0 — 空間まわりの命名・DTO リファクタ
+- JSON parse できる。
+- 各フィールドが上限文字数以内。
+- `observed`, `who`, `where`, `outcome`, `cues` を変更しない。
+- 入力 source facts にない固有名詞を追加していないかを簡易チェックする。
+- 代表 5 ケースを保存し、Markdown と JSON に出力する。
 
-**問題**: `ToolRuntimeTargetDto.location_area_id` がスポットグラフでは `sub_location_id` を指していた。`LocationAreaId`（タイル）と混同する。
+vLLM 実行例は既存実験に合わせる。
 
-**実施済み（2026）**
+```bash
+source venv/bin/activate
+VLLM_BASE_URL=http://127.0.0.1:8001/v1 VLLM_MODEL=gemma-4-31b-it-nvfp4 \
+  VLLM_TEMPERATURE=0.2 python local_experiments/subjective_episode_mvp_vllm_experiment.py
+```
 
-- `ToolRuntimeTargetDto`: **`tile_location_area_id`**（タイル）と **`sub_location_id`**（グラフ区画）に分離。スポットグラフ／タイル経路は各フィールドへ設定。
-- `SubjectiveEpisode`: **`cues: Tuple[EpisodicCue, ...]`** を追加。`EpisodicCue(axis, value, source)` は `to_canonical()` で `axis:value` に変換。想起・重複判定は **`subjective_episode_index_strings(ep)`** で `cue_keys` とマージ。
-- **移行方針**: レガシー文字列索引は当面 `cue_keys` のまま残し、ルール生成は `cues` に載せて統合関数で一本化する。
-- `ToolRuntimeContextDto.current_sub_location_id`（任意）は **P1 で追加済み**（スポットグラフ UI が `is_current` のサブロケーションから設定）。
+## 5. 作業分割
 
-**受け入れ条件**
+小さい PR に分ける。
 
-- スポットグラフ／タイルのどちらでも「今いる区画 id」が型と名前で区別できる。✅
-- `spot_graph_resolver` / movement / UI context builder / 関連テストが通過。✅
+### PR 1: `docs/episodic-memory-mvp-plan`
 
----
+目的:
 
-## 2.2 査読サマリ（仕様・計画 vs コード）
+- 旧計画を使わないことを明文化する。
+- MVP の保存フィールド、情報源、LLM 生成範囲、検証方針を決める。
 
-中立査読で洗い出した主なギャップ（**ドキュメントに「既にある」と読めないよう注意**）:
+成果物:
 
-| 項目 | 状態 |
-|------|------|
-| P0: DTO 空間フィールド分離 + `EpisodicCue` | **対応済み**（2026） |
-| `SpotGraphPlayerSnapshotDto.current_spot_id` + runtime への伝播 | **対応済み**（2026、P1 の一部） |
-| trace への構造化位置コピー | **一部対応**（2026、`ActionExperienceTrace.context_*`・`ObservationExperienceTrace.context_*`、orchestrator / `spot_id_value`） |
-| ルールベース cue + validator 主導 | **一部対応**（2026、`episodic_cue_extraction`・エンコード時 `cues`・LLM `cue_keys` 廃止） |
-| 軸別 Passive Recall（§8・和集合） | **未達**（2026）。**スコア軸**は `passive_subjective_recall_retrieval` にあるが、**候補集合は `list_recent` のみ**。cue 逆引き・リンク近傍・「時間軸＝別候補ソース」は **未分離**。 |
-| `episode_cues` / `memory_links` | **対応済み**（2026、`SqliteSubjectiveEpisodeStore`, `subjective_episode_sqlite_codec.py`, `tests/.../test_sqlite_subjective_episode_store.py`） |
-| Memory Context Pack（§2.7 契約） | **一部**（2026、`MemoryContextPack` + recall 用最小 assembly + テスト） |
-| v2 と `PredictiveMemoryRetriever` の統合方針 | **ユーザ判断**（段階廃止 / 併存期間） |
+- この計画ファイル。
 
----
+### PR 2: `feature/episodic-episode-model`
 
-## P1 — 構造化位置と `current_spot_id`
+目的:
 
-**問題（残件）**: 記憶 cue や trace 永続化のため、`ToolRuntimeContextDto` 由来の id を **ExperienceTrace にコピー**する。文字列 `*_snapshot` だけでは索引・デバッグで id が失われる。
+- `SubjectiveEpisode` と周辺 value object だけを作る。
 
-**進捗**
+成果物:
 
-1. ✅ `SpotGraphPlayerSnapshotDto` に **`current_spot_id: int`** を追加。`SpotGraphCurrentStateBuilder` が設定。`SpotGraphUiContextBuilder` が `ToolRuntimeContextDto.current_spot_id` に渡す。
-2. ✅ `ToolRuntimeContextDto.current_sub_location_id`（任意）。スナップショットの `sub_locations` で **is_current** の id を UI ビルダが設定。
-3. ✅ `ActionExperienceTrace` / `ObservationExperienceTrace` に **`context_spot_id` / `context_tile_area_ids` / `context_sub_location_id` / `context_x|y|z`** を追加。観測側は **structured の `spot_id_value`** から最低限 `context_spot_id` を埋める。
-4. **観測 vs 行動の非対称（P1 スコープ）**: 観測経路は `ToolRuntimeContextDto` を持たないため、`ObservationExperienceTrace` の **`context_spot_id` 以外の `context_*` は None**。`tile_area` / `sub_loc` / 座標を観測 trace に載せるには recorder へ runtime を渡す等の**別タスク**（上記「残り」参照）。
+- dataclass。
+- `__post_init__` validation。
+- フィールドごとの情報源テスト。
 
-**タスク（残り）**
+並列性:
 
-- SQLite / 長期 store のシリアライズで新フィールドを欠かさない（該当ストア実装を確認）。
-- **観測 trace への runtime**: `ObservationTraceRecordingBuffer` / `ObservationAppender`（`runtime_context_provider`）/`ObservationTraceRecorder.record(..., runtime_context=)` は **実装済み**。計画本文の「未検討」は **旧記述**。**残るのは「全ゲーム経路で provider が常に付くか」の網羅確認**（テストで担保するなら本項を ✅ に更新する）。
+- ここは基礎なので単独で先に入れる。
 
-**受け入れ条件**
+### PR 3: `feature/episodic-action-draft-encoder`
 
-- スポットグラフ run で `ToolRuntimeContextDto.current_spot_id` が非 null（該当セッションで spot が決まる場合）。✅
-- 単体テストで trace に期待する spot / sub_loc / area が残る。✅（オーケストレータ・UI・観測 recorder の代表ケース）
+目的:
 
----
+- 1 tool result から episode draft を作る。
+- LLM なしで episode として成立することを保証する。
 
-## P2 — ルールベース cue 抽出
+成果物:
 
-**タスク**
+- `ActionEpisodeDraftBuilder` などの deterministic builder。
+- `LlmAgentOrchestrator` にはまだ接続しないか、接続は feature flag / 明示注入にする。
 
-1. ✅ モジュール `application/llm/services/episodic_cue_extraction.py`：入力 `ActionExperienceTrace` | `ObservationExperienceTrace` | 任意の `ToolRuntimeContextDto` 断片（`episodic_cues_from_traces(..., runtime=)`）。出力 **`EpisodicCue` の列**（長さ・件数上限）。空間軸 `place_spot` / `tile_area` / `sub_loc`、`action`（ツール名）、観測の `observation_kind`、structured の id、`object_type` / `object_category`（runtime target）など。
-2. ✅ ドメイン由来 id の範囲で object 系・空間系をルール化（P1 の trace `context_*` と整合）。
-3. ✅ `LlmJsonEpisodeEncoder`：索引用 **`cue_keys` を LLM に要求しない**（JSON schema では任意）。**保存時 `cue_keys` は空・`cues` は encode 直後にルールで上書き**。
-4. ✅ `_traces_digest` は現状どおり要約のみ（`context_*` 非掲載）。空間 id は trace 本体の `context_*` から抽出器が読む。
+並列性:
 
-**残り（参考）**
+- PR 2 の型に依存。
+- PR 4 の cue ルールと並行しやすい。
 
-- `IEpisodeEncoder.encode` に `encoding_runtime` を渡す拡張は **実施済み**（`EpisodeEncodingProcessor` が `encoding_runtime_snapshot` を渡す）。
-- **Passive と状況テキスト**: cue **ヒット判定**は `episode_index_key_matches_situation` 等で、状況・目標文から **トークン化**（英数字識別子＋**日本語連続文字**）し、エピソード索引文字列と照合する。**索引側**は `subjective_episode_index_strings`＝**`cue_keys` の各要素**と **`cues` の `to_canonical()`** の和集合。`cue_keys` は **「日本語専用」ではない**（仕様 §2.3 のとおり **`entity:alice` / `object:old_box`** のような **正規化キー**が想定。LLM が長文や表記ゆれで入れたレガシー行はマッチしにくい）。**SituationCueSet**（状況用ルール cue）が未だと、**状況がプレーン日本語だけ・runtime canonical が弱いターン**では **cue 軸が弱くなり得る**。別案として「状況を無理に文章トークンに頼らず、**構造化オブジェクトから canonical cue だけを増やす**」のは仕様「Prompt 生成元オブジェクトからの Cue 生成」と整合。**全文を embedding に丸ごと載せ替える**話は仕様 §8.3 と同趣旨で、**cue の役割（検証可能なゲーム由来索引）とトレードオフ**があるため、計画では **まず構造化→canonical** を優先し、ベクトル類似は **非目標**（§1）としておく。
+### PR 4: `feature/episodic-cue-rules`
 
-**受け入れ条件**
+目的:
 
-- 同一 trace から決定論的に同じ cue 列が得られる（テストで固定）。✅
-- Validator（長さ上限・個数上限）を通す。✅
+- cue を runtime / tool / observation structured から決定論的に作る。
 
-**Stub / テスト**
+成果物:
 
-- ✅ `StubEpisodeEncoder` も同じ `episodic_cues_from_traces` で `cues` を付与（`cue_keys` は空）。
+- `EpisodicCue` 生成関数。
+- `place`, `action`, `object`, `entity`, `outcome`, `emotion` の最小ルール。
 
----
+並列性:
 
-## P3 — Passive Recall: 軸別候補（仕様 §8 整合へ再定義）
+- PR 2 後、PR 3 と並行可能。
 
-**現状（2026）**
+### PR 5: `feature/episodic-in-memory-store`
 
-- **軸別スコア**（temporal / cue / importance / goal）は `passive_subjective_recall_retrieval.py` に実装済み。
-- **候補エピソード集合**は **`list_recent(max_scan)` の単一窓のみ**であり、仕様 §8 の **「軸ごとに候補を取り、和集合にマージ」** とは **一致しない**（§2.2 参照）。**時間的近傍**は「別軸の候補ソース」ではなく **スコア内の temporal 項**に留まっている。
+目的:
 
-**タスク（これから）**
+- episode を保存・取得できるようにする。
 
-1. **候補集合の再設計（最優先）**
-   - **時間軸**: 例）`created_at` 順の上位 **K_t** 件（専用取得。`list_recent` に名を借りず、同じ並びでも **軸独立**として扱う）。
-   - **cue 軸**: 状況＋ runtime から得た canonical key 集合で **`episode_cues` 逆引き**（Sqlite。InMemory には **同契約の索引メソッド追加**か、Passive 専用アダプタで **読み取り時に線形スキャン**の暫定を許容するかを決める）。
-   - **リンク軸**（任意・段階）: `memory_links` から **近傍 episode_id** を **K_l** 件。
-   - 上記 ID を **和集合**し、上限 `max_candidates` で切ってから、既存の **二次スコア**（または軽量化）を適用。
-2. ⏳ **SituationCueSet**（状況テキスト＋構造化入力からのルール cue）：未。P2 で拡張した抽出器と共有する。
-3. ✅ **Runtime 側 canonical**（`passive_recall_situation_cues`）、`compose_user_block(..., runtime_context=)` は既存。
+成果物:
 
-**受け入れ条件（更新）**
+- in-memory store（`IEpisodicEpisodeStore` / `InMemorySubjectiveEpisodeStore`。SQLite・Passive Recall・オーケストレータ配線なし）。
+- player ごとの分離。
+- recent（`occurred_at` 降順、同一時刻は `episode_id` 降順）/ cue canonical 逆引きの最小取得。同一 `(player_id, episode_id)` の再 `put` は upsert。
 
-- 和集合ベースの候補生成の **単体テスト**（各軸が少なくとも「この軸だけなら古いエピソードが拾える」ことを再現）。
-- 既存 regress。✅
-- `PassiveRecallPickDebug`（可視化）継続。✅
+並列性:
 
-**受動想起の可視化（把握用）**
+- PR 2 後に実装可能。
+- PR 3 / PR 4 と並行可能だが、統合は後。
 
-- **`include_pick_debug=True`** の `PassiveRecallComposeResult.pick_debug` で、各採用行の **軸寄与**を見られる。
-- 追加で「候補集合がどの軸から何件来たか」をログ／demo に出すのは **次コミット**で可（本ドキュメント更新のみのコミットでは触れない）。
+### PR 6: `feature/episodic-action-capture`
 
----
+目的:
 
-## 12. レガシー経路の縮小ロードマップ（エピソード記憶／プロンプト）
+- `LlmAgentOrchestrator` の tool result 後に episode を保存する。
 
-**方針**: 本実装計画の **v2 主観エピソード＋§8 和集合 Passive** 以外の **エピソード記憶をプロンプトへ載せる経路**は段階で外す。削除は **専用ブランチ**で行い、**git 履歴に残る**（revert 可能）。**消していいか不明なモジュールは削除前に確認**する。
+成果物:
 
-| 段階 | 内容 | 備考 |
-|------|------|------|
-| **0** | 本更新（乖離の文書化）＋ **`PassiveRecallPickDebug` 運用**で実態把握 | コード削除なし。**実装変更用ブランチ例**: `refactor/episodic-passive-recall-union`（命名は任意・PR 小さく） |
-| **1** | Passive の **候補＝和集合** 実装（§2.2 / P3） | InMemory／Sqlite の I/F 調整を含む |
-| **2** | **`DefaultPromptBuilder` から `IPredictiveMemoryRetriever` をオフ可能**にする（設定 or 削除）。`current_beliefs` 相当のレガシー episodic 流入を止める | 長期事実・法律など **非エピソード**は別判断 |
-| **3** | **`memory_query` の `episodic` 変数**の縮小／無効化（ツール全体は別用途があれば維持） | 能動想起ツールは **後回し**（ユーザ方針） |
-| **4** | P5：`MemoryContextPack` → **プロンプトへの短いブロック変換**の一本化 | reflection 経路と共有 |
+- action-centered episode capture。
+- prompt にはまだ出さない。
+- 代表 tool success / failure テスト。
 
-**能動想起**（`SubjectiveMemoryRecallExecutor` 等）の拡張は **本ロードマップではスコープ外**（後日）。
+依存:
 
----
+- PR 2, PR 3, PR 4, PR 5。
 
-## P4 — `episode_cues` / `memory_links`
+### PR 7: `feature/episodic-vllm-generation-experiment`
 
-**タスク**
+目的:
 
-1. ✅ 仕様 §2.5 のテーブル相当を **SQLite で実装**（`agent_id` = `PlayerId.value` スコープ）。マイグレーション namespace: `subjective-episode-v2`。レガシー `episode_memories` とは別系統。
-2. ✅ `put` 時に `episode_cues` を `subjective_episode_index_strings` で整合更新。候補取得は **cue → episode_id の逆引き**に限定（全件スキャン禁止の意図に沿う）。
-3. ✅ リンク種: `temporal`, `spatial`（cue 重なり）, `co_recalled`。保存時に局所スコアで上位のみ `memory_links` へ。
+- LLM 生成部分の妥当性を vLLM で検証する。
 
-**実施済み（2026）**
+成果物:
 
-- 実装: `src/ai_rpg_world/infrastructure/llm/sqlite_subjective_episode_store.py`, `subjective_episode_sqlite_codec.py`
-- テスト: `tests/application/llm/test_sqlite_subjective_episode_store.py`（マルチ `agent_id` 分離・索引・リンク・掃除を含む）
+- `local_experiments/subjective_episode_mvp_vllm_experiment.py`
+- runs 出力のサンプル。
+- hallucination / latency / JSON stability の観察メモ。
 
-**残り・任意**
+並列性:
 
-- アプリ配線（`create_llm_agent_wiring` / `spot_graph_wiring`）での **`SqliteSubjectiveEpisodeStore` 既定化**や DB パス設定（環境変数等）は未。必要になったときに注入で差し替え。
+- PR 2 と PR 3 が入れば開始可能。
+- 本番配線とは独立。
 
-**受け入れ条件**
+### PR 8: `feature/episodic-passive-recall-mvp`
 
-- SQLite 上で put → cue 逆引き → 期待リンク、および `ISubjectiveEpisodeStore` 契約を満たす。✅（テスト・コード）
+目的:
 
----
+- 現在状況から cue を作り、episode store から候補を取り、`recall_text` を prompt に入れる。
 
-## P5 — Memory Context Pack
+成果物:
 
-**意図**（仕様 §2.7）: **想起・再解釈・能動検索のたびに、その場で組み立てる作業用パッケージ**（永続化しない）。`focus`・近傍・`co_recalled`・状況・目標などを **Reflection / プロンプト組み立ての入力をそろえる**ための束ね。現状は **契約＋最小 assembly のみ**；**プロンプトへの文字列化は未配線**（`assemble_memory_context_pack_for_recall_turn` は未使用）。
+- 軸別候補の和集合。
+- prompt 入口は 1 箇所。
+- 件数・文字数上限。
 
-**タスク**
+依存:
 
-1. ✅ `MemoryContextPack` dataclass（保存しない）を `application/llm/contracts/memory_context_pack.py` に追加。§2.7 相当フィールド＋`__post_init__` 検証。v1 は近傍・共想起を **episode_id 列**で表現。
-2. ⏳ Passive Recall / Memory Reflection の **プロンプト経路への Pack 注入**は未。当面は `memory_context_pack_assembly.assemble_memory_context_pack_for_recall_turn` で既存断片から組み立て可能。
-3. ⏳ temporal / associative のリンク解決・semantic / identity の実データは段階的に拡張。
+- PR 5, PR 6。
+- LLM 生成 `recall_text` は PR 7 の結果を見て採否判断。
 
-**参照実装（2026）**
+## 6. MVP 完了条件
 
-- 型: `memory_context_pack.py`
-- 組み立て: `application/llm/services/memory_context_pack_assembly.py`
-- テスト: `tests/application/llm/test_memory_context_pack.py`
+MVP 完了は次で判定する。
 
----
+- 1 回の tool 実行から `SubjectiveEpisode` が保存される。
+- 5W1H の情報源がコード上で説明できる。
+- LLM なしでも episode が成立する。
+- LLM を使う場合も生成対象は `interpreted` / `recall_text` のみ（最大 2 フィールド）。
+- cue はゲーム由来構造から作られる。
+- 受動的想起で、現在地・対象・行動・結果に関連する過去 episode の `recall_text` が prompt に入る。
+- vLLM 実験で、代表ケースの JSON 安定性とハルシネーション傾向を確認済み。
 
-## 7. 能動想起（スコープ外・後回し）
+## 7. 放置防止
 
-- ユーザ方針: **能動想起は一旦後回し**。既存 `memory_query` / `SubjectiveMemoryRecallExecutor` 等は **本計画の直近スコープに含めない**（§12 の段階 3 は **エピソード変数の縮小**が主目的。ツール全体の再設計は別タスク）。
+MVP のまま放置しないため、各 PR の説明に必ず「省いたもの」を書く。
 
----
+省いたものはこの計画の該当 PR に追記し、次に回すか捨てるかを明示する。
 
-## 8. リスク・依存
+MVP 後に必ず再評価するもの:
 
-- **二世界（タイル / スポットグラフ）**: cue の prefix を混ぜないこと（P0/P1）。
-- **Working Memory の質**: goal 軸は WM が貧しいと弱い → 将来、TODO/quest からの `goal:` 供給を検討。
+- 観測だけの episode。
+- 複数 event chunk。
+- LLM `recall_text` の本番採用。
+- SQLite 永続化。
+- reflection / consolidation。
+- semantic / identity 候補。
 
----
+## 8. 参照
 
-## 9. 完了の定義（マイルストーン M1）
-
-- **P1（runtime）**: スポットグラフで `ToolRuntimeContextDto.current_spot_id` がスナップショットと一致する。✅（2026）
-- **P1（trace）**: spot / sub_loc / area が `ActionExperienceTrace` 等に**永続**される。
-- P0 + P1 trace が完了し、spot graph で spot id が **trace に残る**状態を M1 の完了とする。
-- P2 で代表シナリオ（罠箱・移動）に対し決定論的 cue が得られる。
-- P3 で **§8 和集合ベースの候補生成** が入り、説明可能な想起になる（**現状は未達**）。
-- **P4** で v2 主観エピソードの SQLite（`episode_cues` / `memory_links`）が **main に存在**し、マルチ `agent_id` で分離検証済み。✅（2026）
-
----
-
-## 11. 設計のフォーク（整理済み／残論点）
-
-**整理済み（2026）**
-
-1. **`ToolRuntimeTargetDto` の空間 id**: `tile_location_area_id` と `sub_location_id` に分離済み。
-2. **型付き cue**: `EpisodicCue` + `SubjectiveEpisode.cues`。索引マージは `subjective_episode_index_strings`。単一 `cue_keys` への統合は行わない。
-3. **空間系 prefix 語彙**（例: `tile_area:` / `sub_loc:`）: **主に空間軸**の名前空間。全 cue の唯一の総称規約ではない（仕様 §2.3）。
-4. **v2 優先**: 新機能・想起の主対象は **`SubjectiveEpisode`**。レガシー episodic は段階縮小。
-5. **P4 永続化**: **`SqliteSubjectiveEpisodeStore` を main に導入済み**（レガシー `episode_memories` とは別 schema）。既定配線の差し替えは別タスク。
-6. **Git 運用**: **小分けコミット・機能単位ブランチ・メッセージに「なぜ」**（巨大ブランチは一度まとめてマージ push 後に転換）。手続きの詳細は **[memory_feature_workflow.md](./memory_feature_workflow.md)**。
-
-**残論点**
-
-- `PredictiveMemoryRetriever` の**具体的な廃止順序・併存期間**（利用箇所の置換見積もり）。
-
----
-
-## 10. 参照
-
-- 作業手続き・完了後の計画更新（Git・レビュー・ブロッキング・§5）: [memory_feature_workflow.md](./memory_feature_workflow.md)
 - 仕様: [episodic_memory_system_spec.md](./episodic_memory_system_spec.md)
-- 詳細議事録・Tool schema 長文: [episodic_memory_reimplementation_plan.md](./episodic_memory_reimplementation_plan.md)
+- 作業手続き: [memory_feature_workflow.md](./memory_feature_workflow.md)
+- 詳細議事録・旧ロードマップ長文: [episodic_memory_reimplementation_plan.md](./episodic_memory_reimplementation_plan.md)
+- 旧 vLLM 実験例: `local_experiments/episode_encoding_vllm_gemma_experiment.py`（旧 DTO 依存のため設計は流用しない。vLLM 呼び出し方法のみ参考）
