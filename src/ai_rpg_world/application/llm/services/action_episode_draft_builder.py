@@ -347,7 +347,6 @@ class ActionEpisodeDraftBuilder:
             prediction_error=prediction_error,
             felt=felt,
             interpreted=None,
-            intended_next=None,
             cues=cues_resolved,
             recall_text=_recall_text(tn, command_result, action_summary, recall_rs),
         )
