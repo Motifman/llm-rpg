@@ -1,8 +1,12 @@
 """create_llm_agent_wiring によるエピソードストア共有（保存側・受動想起側）の結合検証。"""
 
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
+from ai_rpg_world.application.llm.chunk_boundary.rules import (
+    ChunkBoundaryDecision,
+    ChunkBoundaryReason,
+)
 from ai_rpg_world.application.llm.contracts.episodic_memory import (
     EpisodicCue,
     EpisodicCueSource,
@@ -179,3 +183,42 @@ class TestEpisodicChunkWiringIntegration:
         assert ep.action is not None
         assert TOOL_NAME_NO_OP in (ep.action.tool_name or "")
         assert "- " in ep.observed
+
+    def test_mock_chunk_boundary_hold_then_close_accumulates_one_episode(self) -> None:
+        """
+        decide_chunk_boundary をモックし、1 ターン目は HOLD・2 ターン目で閉鎖したときだけ
+        共有ストアにエピソードが 1 件載る（チャンク経路の境界依存を明示する）。
+        """
+        hold = ChunkBoundaryDecision(
+            should_close_chunk=False,
+            episode_generation_allowed_if_closed=True,
+            reason=ChunkBoundaryReason.HOLD_ACCUMULATING,
+        )
+        close = ChunkBoundaryDecision(
+            should_close_chunk=True,
+            episode_generation_allowed_if_closed=True,
+            reason=ChunkBoundaryReason.SEGMENT_EXPLICIT,
+        )
+        patch_path = (
+            "ai_rpg_world.application.llm.services.episodic_chunk_coordinator."
+            "decide_chunk_boundary"
+        )
+        with patch(patch_path, side_effect=[hold, close]):
+            result = create_llm_agent_wiring(
+                **_deps_with_profile(player_id=1),
+                llm_client=StubLlmClient(
+                    tool_call_to_return={
+                        "name": TOOL_NAME_NO_OP,
+                        "arguments": {},
+                    },
+                ),
+            )
+            store = result.episodic_episode_store
+            assert store is not None
+            turn_runner = result.llm_turn_trigger._turn_runner  # noqa: SLF001
+            turn_runner.run_turn(PlayerId(1))
+            assert store.list_recent(1, 5) == []
+            turn_runner.run_turn(PlayerId(1))
+            recent = store.list_recent(1, 5)
+            assert len(recent) == 1
+            assert recent[0].player_id == 1
