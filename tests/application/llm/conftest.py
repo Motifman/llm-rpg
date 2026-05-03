@@ -49,10 +49,7 @@ def _create_tool_command_mapper(
     monster_repository: Optional[Any] = None,
     physical_map_repository: Optional[Any] = None,
     player_status_repository: Optional[Any] = None,
-    memory_query_executor: Optional[Any] = None,
-    subagent_runner: Optional[Any] = None,
     todo_store: Optional[Any] = None,
-    working_memory_store: Optional[Any] = None,
 ) -> ToolCommandMapper:
     """
     テスト用: サービス群から handler map を組み立て、ToolCommandMapper を返す。
@@ -93,9 +90,6 @@ def _create_tool_command_mapper(
         monster_repository=monster_repository,
         physical_map_repository=physical_map_repository,
         player_status_repository=player_status_repository,
-        memory_query_executor=memory_query_executor,
-        subagent_runner=subagent_runner,
         todo_store=todo_store,
-        working_memory_store=working_memory_store,
     )
     return ToolCommandMapper(handler_map=handler_map)

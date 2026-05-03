@@ -68,11 +68,7 @@ def register_default_tools(
     trade_virtual_pages_enabled: bool = False,
     inspect_item_enabled: bool = False,
     inspect_target_enabled: bool = False,
-    memory_query_enabled: bool = False,
-    recall_subjective_enabled: bool = False,
-    subagent_enabled: bool = False,
     todo_enabled: bool = False,
-    working_memory_enabled: bool = False,
     include_movement_tools: bool = True,
 ) -> None:
     """標準ツール群を登録し、依存サービスがあるカテゴリだけ追加する。
@@ -127,11 +123,7 @@ def register_default_tools(
     _register_specs(
         registry,
         get_memory_specs(
-            memory_query_enabled=memory_query_enabled,
-            recall_subjective_enabled=recall_subjective_enabled,
-            subagent_enabled=subagent_enabled,
             todo_enabled=todo_enabled,
-            working_memory_enabled=working_memory_enabled,
         ),
     )
 

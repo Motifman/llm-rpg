@@ -2,19 +2,12 @@
 LLM エージェントの 1 ターン実行を統合するオーケストレータ。
 
 プロンプト組み立て → LLM 呼び出し → tool_call 取得 → コマンド実行 → 結果を IActionResultStore に記録。
-オプションで記憶抽出（IMemoryExtractor）とエピソードストア（IEpisodeMemoryStore）を渡すと、
-ターン末尾で溢れ＋行動結果からエピソードを抽出して保存する。
-オプションで IEpisodeChunkCoordinator を渡すと、ターン末尾（正常・失敗を問わず）に
-ExperienceTrace から EpisodeCandidate を切り出す処理を 1 回呼ぶ。
 """
 
 import json
-from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Tuple
-from uuid import uuid4
+from typing import Any, Dict, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
-    ActionExperienceTrace,
     EMOTION_HINT_VALUES,
     LlmCommandResultDto,
     ToolRuntimeContextDto,
@@ -22,13 +15,7 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
-    IActionExperienceTraceStore,
-    IEpisodeChunkCoordinator,
-    IEpisodeEncodingRunner,
-    IEpisodeMemoryStore,
-    IHandleStore,
     ILLMClient,
-    IMemoryExtractor,
     IPromptBuilder,
     IToolArgumentResolver,
 )
@@ -47,10 +34,7 @@ from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import
     SUBJECTIVE_ACTION_TEXT_FIELDS,
     is_subjective_action_tool,
 )
-from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
-
-_TurnPassiveReflectionEnqueue = Optional[Tuple[Tuple[str, ...], str]]
 
 
 def _format_action_summary(tool_name: str, arguments: Optional[Dict[str, Any]] = None) -> str:
@@ -127,21 +111,6 @@ def _validate_subjective_action_arguments(
     return None
 
 
-def _spatial_context_kwargs_from_request(request: Dict[str, Any]) -> Dict[str, Any]:
-    """Prompt request 内の ToolRuntimeContext から、trace 用の空間スナップショット欄へ写す値だけを返す。"""
-    rtc = request.get("tool_runtime_context")
-    if not isinstance(rtc, ToolRuntimeContextDto):
-        return {}
-    return {
-        "context_spot_id": rtc.current_spot_id,
-        "context_tile_area_ids": rtc.current_area_ids,
-        "context_sub_location_id": rtc.current_sub_location_id,
-        "context_x": rtc.current_x,
-        "context_y": rtc.current_y,
-        "context_z": rtc.current_z,
-    }
-
-
 class LlmAgentOrchestrator:
     """
     1 ターン分の流れ: プロンプト build → LLM 呼び出し → tool_call に従いコマンド実行
@@ -155,16 +124,6 @@ class LlmAgentOrchestrator:
         tool_command_mapper: ToolCommandMapper,
         action_result_store: IActionResultStore,
         tool_argument_resolver: Optional[IToolArgumentResolver] = None,
-        memory_extractor: Optional[IMemoryExtractor] = None,
-        episode_memory_store: Optional[IEpisodeMemoryStore] = None,
-        action_experience_trace_store: Optional[IActionExperienceTraceStore] = None,
-        handle_store: Optional[IHandleStore] = None,
-        episode_chunker: Optional[IEpisodeChunkCoordinator] = None,
-        episode_encoding_runner: Optional[IEpisodeEncodingRunner] = None,
-        passive_memory_reflection_hook: Optional[
-            Callable[[PlayerId, Tuple[str, ...], str], None]
-        ] = None,
-        memory_consolidation_hook: Optional[Callable[[PlayerId], None]] = None,
     ) -> None:
         if not isinstance(prompt_builder, IPromptBuilder):
             raise TypeError("prompt_builder must be IPromptBuilder")
@@ -180,50 +139,6 @@ class LlmAgentOrchestrator:
             raise TypeError(
                 "tool_argument_resolver must be IToolArgumentResolver or None"
             )
-        if memory_extractor is not None and not isinstance(
-            memory_extractor, IMemoryExtractor
-        ):
-            raise TypeError("memory_extractor must be IMemoryExtractor or None")
-        if episode_memory_store is not None and not isinstance(
-            episode_memory_store, IEpisodeMemoryStore
-        ):
-            raise TypeError(
-                "episode_memory_store must be IEpisodeMemoryStore or None"
-            )
-        if (memory_extractor is None) != (episode_memory_store is None):
-            raise ValueError(
-                "memory_extractor and episode_memory_store must be both set or both None"
-            )
-        if action_experience_trace_store is not None and not isinstance(
-            action_experience_trace_store, IActionExperienceTraceStore
-        ):
-            raise TypeError(
-                "action_experience_trace_store must be IActionExperienceTraceStore or None"
-            )
-        if handle_store is not None and not isinstance(handle_store, IHandleStore):
-            raise TypeError("handle_store must be IHandleStore or None")
-        if episode_chunker is not None and not isinstance(
-            episode_chunker, IEpisodeChunkCoordinator
-        ):
-            raise TypeError(
-                "episode_chunker must be IEpisodeChunkCoordinator or None"
-            )
-        if episode_encoding_runner is not None and not isinstance(
-            episode_encoding_runner, IEpisodeEncodingRunner
-        ):
-            raise TypeError(
-                "episode_encoding_runner must be IEpisodeEncodingRunner or None"
-            )
-        if passive_memory_reflection_hook is not None and not callable(
-            passive_memory_reflection_hook
-        ):
-            raise TypeError(
-                "passive_memory_reflection_hook must be callable or None"
-            )
-        if memory_consolidation_hook is not None and not callable(
-            memory_consolidation_hook
-        ):
-            raise TypeError("memory_consolidation_hook must be callable or None")
         self._prompt_builder = prompt_builder
         self._llm_client = llm_client
         self._tool_command_mapper = tool_command_mapper
@@ -233,69 +148,24 @@ class LlmAgentOrchestrator:
             if tool_argument_resolver is not None
             else DefaultToolArgumentResolver()
         )
-        self._memory_extractor = memory_extractor
-        self._episode_memory_store = episode_memory_store
-        self._action_experience_trace_store = action_experience_trace_store
-        self._handle_store = handle_store
-        self._episode_chunker = episode_chunker
-        self._episode_encoding_runner = episode_encoding_runner
-        self._passive_memory_reflection_hook = passive_memory_reflection_hook
-        self._memory_consolidation_hook = memory_consolidation_hook
 
     def run_turn(self, player_id: PlayerId) -> LlmCommandResultDto:
         """
         1 ターン実行: プロンプト組み立て → LLM 呼び出し → tool_call を実行 → 結果を store に記録。
         戻り値はそのターンの実行結果（LlmCommandResultDto）。
         tool_call が無い場合は「ツール未選択」として store に記録し、対応する DTO を返す。
-        episode_chunker があれば、ターン終了時に create_candidate_if_ready を 1 回呼ぶ。
-        episode_encoding_runner があれば、その後に run_after_turn で pending candidate のエンコードを試みる。
         """
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
 
-        if self._handle_store is not None:
-            self._handle_store.clear_player(player_id)
+        return self._run_turn_core(player_id)
 
-        passive_enqueue: _TurnPassiveReflectionEnqueue = None
-        encoding_runtime: Optional[ToolRuntimeContextDto] = None
-        try:
-            dto, passive_enqueue, encoding_runtime = self._run_turn_core(player_id)
-            return dto
-        finally:
-            if self._episode_chunker is not None:
-                self._episode_chunker.create_candidate_if_ready(
-                    player_id,
-                    encoding_runtime_snapshot=encoding_runtime,
-                )
-            if self._episode_encoding_runner is not None:
-                self._episode_encoding_runner.run_after_turn(player_id)
-            if (
-                self._passive_memory_reflection_hook is not None
-                and passive_enqueue is not None
-            ):
-                ids, situation = passive_enqueue
-                if ids:
-                    self._passive_memory_reflection_hook(
-                        player_id, ids, situation
-                    )
-            if self._memory_consolidation_hook is not None:
-                self._memory_consolidation_hook(player_id)
-
-    def _run_turn_core(
-        self, player_id: PlayerId
-    ) -> Tuple[LlmCommandResultDto, _TurnPassiveReflectionEnqueue, ToolRuntimeContextDto]:
+    def _run_turn_core(self, player_id: PlayerId) -> LlmCommandResultDto:
         request = self._prompt_builder.build(player_id)
         messages = request["messages"]
         tools = request["tools"]
         tool_choice = request.get("tool_choice", "required")
         runtime_context = request.get("tool_runtime_context")
-        episode_ids = request.get("passive_recall_reflection_episode_ids") or ()
-        if not isinstance(episode_ids, tuple):
-            episode_ids = tuple(episode_ids) if isinstance(episode_ids, list) else ()
-        situation_text = str(request.get("passive_recall_situation_text") or "")
-        passive_enqueue = (
-            (episode_ids, situation_text) if episode_ids else None
-        )
         if not isinstance(runtime_context, ToolRuntimeContextDto):
             runtime_context = ToolRuntimeContextDto.empty()
 
@@ -318,13 +188,7 @@ class LlmAgentOrchestrator:
                 action_summary,
                 result_summary,
             )
-            self._run_memory_extraction(
-                player_id,
-                request.get("overflow", []),
-                action_summary,
-                result_summary,
-            )
-            return result_dto, passive_enqueue, runtime_context
+            return result_dto
 
         if tool_call is None:
             action_summary = "ツールが選択されませんでした。"
@@ -343,13 +207,7 @@ class LlmAgentOrchestrator:
                 action_summary,
                 result_summary,
             )
-            self._run_memory_extraction(
-                player_id,
-                request.get("overflow", []),
-                action_summary,
-                result_summary,
-            )
-            return result_dto, passive_enqueue, runtime_context
+            return result_dto
 
         name = tool_call.get("name", "")
         raw_args = tool_call.get("arguments")
@@ -374,13 +232,7 @@ class LlmAgentOrchestrator:
                 tool_name=name or None,
                 fingerprint_args=arguments,
             )
-            self._run_memory_extraction(
-                player_id,
-                request.get("overflow", []),
-                action_summary,
-                result_summary,
-            )
-            return validation_error, passive_enqueue, runtime_context
+            return validation_error
 
         try:
             canonical_arguments = self._tool_argument_resolver.resolve(
@@ -407,13 +259,7 @@ class LlmAgentOrchestrator:
                 tool_name=name or None,
                 fingerprint_args=arguments,
             )
-            self._run_memory_extraction(
-                player_id,
-                request.get("overflow", []),
-                action_summary,
-                result_summary,
-            )
-            return result_dto, passive_enqueue, runtime_context
+            return result_dto
 
         result_dto = self._tool_command_mapper.execute(
             player_id.value,
@@ -431,77 +277,4 @@ class LlmAgentOrchestrator:
             tool_name=name or None,
             fingerprint_args=canonical_arguments,
         )
-        self._run_memory_extraction(
-            player_id,
-            request.get("overflow", []),
-            action_summary,
-            result_summary,
-        )
-        self._append_action_experience_trace(
-            player_id=player_id,
-            tool_name=name,
-            raw_arguments=arguments,
-            canonical_arguments=canonical_arguments,
-            result_dto=result_dto,
-            result_summary=result_summary,
-            request=request,
-        )
-        return result_dto, passive_enqueue, runtime_context
-
-    def _append_action_experience_trace(
-        self,
-        *,
-        player_id: PlayerId,
-        tool_name: str,
-        raw_arguments: Dict[str, Any],
-        canonical_arguments: Dict[str, Any],
-        result_dto: LlmCommandResultDto,
-        result_summary: str,
-        request: Dict[str, Any],
-    ) -> None:
-        """ActionExperienceTrace を保存する。対象外 tool や store 未設定時は何もしない。"""
-        if self._action_experience_trace_store is None:
-            return
-        if not is_subjective_action_tool(tool_name):
-            return
-
-        trace = ActionExperienceTrace(
-            trace_id=f"action-trace-{uuid4().hex}",
-            agent_id=player_id.value,
-            occurred_at=datetime.now(),
-            tool_name=tool_name,
-            tool_args=dict(canonical_arguments),
-            inner_thought=str(raw_arguments["inner_thought"]).strip(),
-            intention=str(raw_arguments["intention"]).strip(),
-            expected_result=str(raw_arguments["expected_result"]).strip(),
-            attention=str(raw_arguments["attention"]).strip(),
-            emotion_hint=raw_arguments["emotion_hint"],
-            tool_result=result_summary,
-            result_success=result_dto.success,
-            error_code=result_dto.error_code,
-            current_state_snapshot=str(request.get("current_state_snapshot") or ""),
-            current_goals_snapshot=str(request.get("current_goals_snapshot") or ""),
-            current_beliefs_snapshot=str(request.get("current_beliefs_snapshot") or ""),
-            identity_snapshot=str(request.get("identity_snapshot") or ""),
-            persona_snapshot=str(request.get("persona_snapshot") or ""),
-            working_memory_snapshot=tuple(request.get("working_memory_snapshot") or ()),
-            **_spatial_context_kwargs_from_request(request),
-            action_result_ref=build_argument_fingerprint(canonical_arguments),
-        )
-        self._action_experience_trace_store.append(player_id, trace)
-
-    def _run_memory_extraction(
-        self,
-        player_id: PlayerId,
-        overflow: List[ObservationEntry],
-        action_summary: str,
-        result_summary: str,
-    ) -> None:
-        """記憶抽出とエピソード保存。extractor と store が両方設定されているときのみ実行。"""
-        if self._memory_extractor is None or self._episode_memory_store is None:
-            return
-        episodes = self._memory_extractor.extract(
-            player_id, overflow, action_summary, result_summary
-        )
-        if episodes:
-            self._episode_memory_store.add_many(player_id, episodes)
+        return result_dto

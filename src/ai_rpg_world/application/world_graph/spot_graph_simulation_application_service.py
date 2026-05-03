@@ -17,7 +17,7 @@ from ai_rpg_world.domain.common.unit_of_work import UnitOfWork
 from ai_rpg_world.domain.common.value_object import WorldTick
 
 if TYPE_CHECKING:
-    from ai_rpg_world.application.llm.contracts.interfaces import ILlmTurnTrigger, IReflectionRunner
+    from ai_rpg_world.application.llm.contracts.interfaces import ILlmTurnTrigger
 
 
 class SpotGraphSimulationApplicationService:
@@ -31,7 +31,6 @@ class SpotGraphSimulationApplicationService:
         scenario_event_stage: Optional["_SpotGraphTickStage"] = None,
         environment_stage: Optional["_SpotGraphTickStage"] = None,
         llm_turn_trigger: Optional["ILlmTurnTrigger"] = None,
-        reflection_runner: Optional["IReflectionRunner"] = None,
     ) -> None:
         self._time_provider = time_provider
         self._unit_of_work = unit_of_work
@@ -39,7 +38,6 @@ class SpotGraphSimulationApplicationService:
         self._scenario_event_stage = scenario_event_stage
         self._environment_stage = environment_stage
         self._llm_turn_trigger = llm_turn_trigger
-        self._reflection_runner = reflection_runner
         self._logger = logging.getLogger(self.__class__.__name__)
 
     def tick(self) -> WorldTick:
@@ -71,11 +69,6 @@ class SpotGraphSimulationApplicationService:
         failures: list[tuple[str, Exception]] = []
         hooks = (
             ("llm_turn_trigger", self._llm_turn_trigger, lambda hook: hook.run_scheduled_turns()),
-            (
-                "reflection_runner",
-                self._reflection_runner,
-                lambda hook: hook.run_after_tick(current_tick),
-            ),
         )
         for hook_name, hook, runner in hooks:
             if hook is None:
