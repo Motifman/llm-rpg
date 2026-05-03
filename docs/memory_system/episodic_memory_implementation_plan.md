@@ -6,7 +6,7 @@
 
 歴史的なフェーズ表・査読メモの長文は本ファイルには載せない。[episodic_memory_reimplementation_plan.md](./episodic_memory_reimplementation_plan.md) に譲り、ここでは MVP の共有契約と PR 分割だけを単一ソースとする。
 
-作業手続き、PR、サブエージェントレビュー、ブロッキング確認は [memory_feature_workflow.md](./memory_feature_workflow.md) に従う。レビュー用サブエージェントは **必ず Composer 2** で起動する。
+作業手続き、PR、レビュー、ブロッキング確認は [memory_feature_workflow.md](./memory_feature_workflow.md) に従う。
 
 ## 0. 現在の前提
 
@@ -19,6 +19,27 @@
 - 長期 facts / laws / reflection runner
 - 旧 v2 `SubjectiveEpisode` store / SQLite schema / passive recall / context pack
 - 旧 `ActionExperienceTrace` / `ObservationExperienceTrace` / episode encoding / cue extraction
+
+### 0.1 進捗チェックリスト（2026-05-03 / `origin/main` b311e1c9）
+
+`git fetch --all --prune` 後の `origin/main` と closed PR を基準にした進捗である。フェーズ完了時に更新する。
+
+| 項目 | 状態 | 根拠 | 次の扱い |
+|---|---|---|---|
+| 旧記憶システム削除 | 完了 | PR #20 `refactor/remove-legacy-memory-system` | 旧系統は復活させない |
+| MVP 契約 `SubjectiveEpisode` / value object | 完了 | PR #21 | 破壊的変更は別 PR |
+| `intended_next` 除去 | 完了 | PR #27 | MVP DTO から除外 |
+| in-memory episode store | 完了 | PR #23 | SQLite 永続化は MVP 外 |
+| 決定論的 cue ルール | 完了 | PR #25 | LLM 自由生成 cue は MVP 外 |
+| action draft builder | 完了 | PR #24 | 追加入力は builder 側 |
+| tool 実行後の episode 保存 | 完了 | PR #29 | 任意注入（wiring 次第） |
+| 受動想起候補取得（時間軸 + cue 軸） | 完了 | PR #28 | prompt 注入は未実装 |
+| vLLM 生成実験スクリプト | 完了 | PR #30 | 本番配線なし |
+| 受動想起の prompt 注入 | 未着手 | `EpisodicPassiveRecallRetrievalService` はあるが `DefaultPromptBuilder` 連携なし | 未実装 |
+| 現在状況からの situation cue 生成 | 未着手 | retrieval は `situation_cues` を受け取るのみ | 未実装 |
+| episode store / builder の標準 wiring | 未着手 | `LlmAgentOrchestrator` は任意注入対応のみ | 未実装 |
+| observation-only episode | 未着手 | 計画上 MVP 後段 | MVP 外 |
+| SQLite 永続化 / reflection / consolidation | 未着手 | 計画上 MVP 外 | MVP 外 |
 
 ## 1. MVP の目的
 
@@ -389,6 +410,11 @@ VLLM_BASE_URL=http://127.0.0.1:8001/v1 VLLM_MODEL=gemma-4-31b-it-nvfp4 \
 
 - PR 5, PR 6。
 - LLM 生成 `recall_text` は PR 7 の結果を見て採否判断。
+
+進捗:
+
+- PR #28 で「episode store から時間軸 + cue 軸の和集合候補を取る」部分は完了済み。
+- 未完了なのは、現在状況から `situation_cues` を作る処理、`DefaultPromptBuilder` への想起文注入、wiring での store / builder / retrieval service 有効化である。
 
 ## 6. MVP 完了条件
 
