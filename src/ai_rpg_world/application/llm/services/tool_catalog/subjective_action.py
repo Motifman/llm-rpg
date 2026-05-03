@@ -11,7 +11,6 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 )
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_NO_OP,
-    TOOL_NAME_PREFIX_MEMORY,
     TOOL_NAME_PREFIX_TODO,
 )
 
@@ -70,13 +69,11 @@ SUBJECTIVE_ACTION_FIELD_PROPERTIES: Dict[str, Dict[str, Any]] = {
 
 
 def is_subjective_action_tool(tool_name: str) -> bool:
-    """主観入力と ActionExperienceTrace の対象になる tool かどうか。"""
+    """世界へ作用する主観入力付き tool かどうか。"""
 
     if not isinstance(tool_name, str):
         return False
     if tool_name == TOOL_NAME_NO_OP:
-        return False
-    if tool_name.startswith(TOOL_NAME_PREFIX_MEMORY):
         return False
     if tool_name.startswith(TOOL_NAME_PREFIX_TODO):
         return False

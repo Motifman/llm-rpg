@@ -288,15 +288,14 @@ coord:10:4:0
 place_label:地下倉庫
 ```
 
-#### 現状コードとの差分（仕様は目標・実装は移行中）
+#### 現状コードとの差分（仕様は目標・実装は再開始）
 
-以下は査読（コード突合）に基づく **2026 時点の実情**である。仕様の schema は最終形の候補として残す。
+以下は **2026-05-03 のリセット後**の実情である。仕様の schema は最終形の候補として残す。
 
-- `ToolRuntimeContextDto` は **タイル経路**で `current_spot_id` / `current_area_ids` / `current_x|y|z` を保持する。**スポットグラフ経路**では `SpotGraphPlayerSnapshotDto.current_spot_id` を立て、`SpotGraphUiContextBuilder` が `ToolRuntimeContextDto.current_spot_id` に渡す（従来の `None` は是正）。
-- `ActionExperienceTrace` / `ObservationExperienceTrace` への **`context_*` 構造化コピー**は **2026 時点で主要経路は実装済み**（詳細は実装計画 P1）。観測側で runtime を渡せない経路が残る場合は計画で個別追跡する。
-- `SubjectiveEpisode` に **`cues: Tuple[EpisodicCue, ...]`** あり。索引は `subjective_episode_index_strings` で `cue_keys` の canonical とマージ。**ルール抽出**は `episodic_cue_extraction` が本線（Encoder 保存時は `cue_keys` を空にし `cues` を上書きする方針）。validator のさらなる統合は継続タスク。
-- v2 用 **`episode_cues` / `memory_links` は `SqliteSubjectiveEpisodeStore` で実装済み**（レガシー `episode_memories` とは別 schema）。**Passive Recall の候補集合は現状この逆引きを主に使っておらず**、`list_recent` 窓＋スコアに近い（実装計画の P3 再設計を参照）。
-- `DefaultPredictiveMemoryRetriever` は **レガシー `EpisodeMemoryEntry` 経路**。v2 `SubjectiveEpisode` の Passive Recall とは**別経路**である。
+- プロンプトに入る過去文脈は `SlidingWindowMemory` の直近観測と直近行動結果のみ。
+- `ActionExperienceTrace` / `ObservationExperienceTrace` / `SubjectiveEpisode` / passive recall / `episode_cues` / `memory_links` / 長期 facts・laws は削除済み。
+- 旧 `memory_query` / `memory_recall_subjective` / `working_memory_append` / `subagent` は削除済み。
+- 再実装順は [episodic_memory_implementation_plan.md](./episodic_memory_implementation_plan.md) に従い、旧 API への段階移行ではなく spec 起点で作り直す。
 
 実装方針:
 

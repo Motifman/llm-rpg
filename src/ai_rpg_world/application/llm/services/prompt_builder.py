@@ -4,7 +4,6 @@ from importlib import import_module
 from typing import Any, Callable, Dict, List, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import (
-    EpisodeEncodingContextDto,
     SystemPromptPlayerInfoDto,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
@@ -13,8 +12,6 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     IContextFormatStrategy,
     ICurrentStateFormatter,
     ILlmUiContextBuilder,
-    IPassiveSubjectiveRecallComposer,
-    IPredictiveMemoryRetriever,
     IPromptBuilder,
     IRecentEventsFormatter,
     ISlidingWindowMemory,
@@ -61,12 +58,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         system_prompt_builder: ISystemPromptBuilder,
         available_tools_provider: IAvailableToolsProvider,
         ui_context_builder: Optional[ILlmUiContextBuilder] = None,
-        predictive_memory_retriever: Optional[IPredictiveMemoryRetriever] = None,
         persona_block_provider: Optional[Callable[[PlayerId], str]] = None,
-        passive_subjective_recall: Optional[IPassiveSubjectiveRecallComposer] = None,
-        episode_encoding_context_provider: Optional[
-            Callable[[PlayerId], EpisodeEncodingContextDto]
-        ] = None,
         recent_observations_limit: int = DEFAULT_RECENT_OBSERVATIONS_LIMIT,
         recent_actions_limit: int = DEFAULT_RECENT_ACTIONS_LIMIT,
         default_action_instruction: str = DEFAULT_ACTION_INSTRUCTION,
@@ -96,26 +88,8 @@ class DefaultPromptBuilder(IPromptBuilder):
             ui_context_builder, ILlmUiContextBuilder
         ):
             raise TypeError("ui_context_builder must be ILlmUiContextBuilder or None")
-        if predictive_memory_retriever is not None and not isinstance(
-            predictive_memory_retriever, IPredictiveMemoryRetriever
-        ):
-            raise TypeError(
-                "predictive_memory_retriever must be IPredictiveMemoryRetriever or None"
-            )
         if persona_block_provider is not None and not callable(persona_block_provider):
             raise TypeError("persona_block_provider must be callable or None")
-        if passive_subjective_recall is not None and not isinstance(
-            passive_subjective_recall, IPassiveSubjectiveRecallComposer
-        ):
-            raise TypeError(
-                "passive_subjective_recall must be IPassiveSubjectiveRecallComposer or None"
-            )
-        if episode_encoding_context_provider is not None and not callable(
-            episode_encoding_context_provider
-        ):
-            raise TypeError(
-                "episode_encoding_context_provider must be callable or None"
-            )
         if recent_observations_limit < 0:
             raise ValueError("recent_observations_limit must be 0 or greater")
         if recent_actions_limit < 0:
@@ -142,10 +116,7 @@ class DefaultPromptBuilder(IPromptBuilder):
                 "ai_rpg_world.application.llm.services.ui_context_builder"
             )
             self._ui_context_builder = builder_module.DefaultLlmUiContextBuilder()
-        self._predictive_memory_retriever = predictive_memory_retriever
         self._persona_block_provider = persona_block_provider
-        self._passive_subjective_recall = passive_subjective_recall
-        self._episode_encoding_context_provider = episode_encoding_context_provider
         self._recent_observations_limit = recent_observations_limit
         self._recent_actions_limit = recent_actions_limit
         self._default_action_instruction = default_action_instruction
@@ -212,76 +183,21 @@ class DefaultPromptBuilder(IPromptBuilder):
             observations, action_results
         )
 
-        # 5. 利用可能ツール取得（関連記憶の候補行動名と返り値の両方で使用）
+        # 5. 利用可能ツール取得
         tools = self._available_tools_provider.get_available_tools(current_state_dto)
-        tool_names = [
-            t["function"]["name"]
-            for t in tools
-            if t.get("type") == "function" and "function" in t
-        ]
 
-        # 6. 関連する記憶（Retriever が設定されていれば取得）
-        if self._predictive_memory_retriever is not None:
-            from ai_rpg_world.application.llm.services.predictive_memory_retriever import (
-                build_memory_retrieval_query_from_state,
-            )
-
-            query_dto = None
-            if current_state_dto is not None:
-                query_dto = build_memory_retrieval_query_from_state(
-                    current_state_dto,
-                    tool_names,
-                    current_state_summary=base_current_state_text,
-                )
-            relevant_memories_text = (
-                self._predictive_memory_retriever.retrieve_for_prediction(
-                    player_id,
-                    base_current_state_text,
-                    tool_names,
-                    query_dto=query_dto,
-                )
-            )
-        else:
-            relevant_memories_text = ""
+        # 6. Prompt に入れる過去文脈は SlidingWindow の直近観測・行動結果だけに限定する。
+        relevant_memories_text = ""
         context = self._context_format_strategy.format(
             current_state_text, recent_events_text, relevant_memories_text
         )
 
         # 6b. 直前ターン失敗時の補正（user 先頭に差し込み、次の 1 ツール向け）
         failure_block = build_pre_turn_failure_section(action_results[:2])
-        recall_block = ""
-        goals_snapshot = ""
-        identity_snapshot = ""
-        if self._episode_encoding_context_provider is not None:
-            enc_ctx = self._episode_encoding_context_provider(player_id)
-            if not isinstance(enc_ctx, EpisodeEncodingContextDto):
-                raise TypeError(
-                    "episode_encoding_context_provider must return EpisodeEncodingContextDto"
-                )
-            goals_snapshot = enc_ctx.current_goals or ""
-            identity_snapshot = enc_ctx.identity_summary or ""
-        if self._passive_subjective_recall is not None:
-            situation_for_recall = (
-                current_state_text.rstrip() + "\n" + recent_events_text.rstrip()
-            ).strip()
-            recall = self._passive_subjective_recall.compose_user_block(
-                player_id,
-                situation_text=situation_for_recall,
-                current_goals_hint=goals_snapshot,
-                runtime_context=ui_context.tool_runtime_context,
-            )
-            recall_block = recall.user_block.strip()
-            passive_recall_episode_ids = recall.episode_ids_for_reflection
-            passive_recall_situation_text = situation_for_recall
-        else:
-            passive_recall_episode_ids = ()
-            passive_recall_situation_text = ""
 
         body_parts: list[str] = []
         if failure_block:
             body_parts.append(failure_block)
-        if recall_block:
-            body_parts.append(recall_block)
         body_parts.append(context.rstrip())
         user_context_body = "\n\n".join(body_parts)
 
@@ -301,11 +217,6 @@ class DefaultPromptBuilder(IPromptBuilder):
         result["overflow"] = overflow
         result["tool_runtime_context"] = ui_context.tool_runtime_context
         result["current_state_snapshot"] = current_state_text
-        result["current_goals_snapshot"] = goals_snapshot
         result["current_beliefs_snapshot"] = relevant_memories_text
-        result["identity_snapshot"] = identity_snapshot
         result["persona_snapshot"] = player_info.persona_block
-        result["working_memory_snapshot"] = ()
-        result["passive_recall_reflection_episode_ids"] = passive_recall_episode_ids
-        result["passive_recall_situation_text"] = passive_recall_situation_text
         return result
