@@ -173,7 +173,16 @@ class TestEpisodicChunkWiringIntegration:
         store = result.episodic_episode_store
         assert store is not None
         turn_runner = result.llm_turn_trigger._turn_runner  # noqa: SLF001
-        turn_runner.run_turn(PlayerId(1))
+        close = ChunkBoundaryDecision(
+            should_close_chunk=True,
+            episode_generation_allowed_if_closed=True,
+            reason=ChunkBoundaryReason.SEGMENT_EXPLICIT,
+        )
+        with patch(
+            "ai_rpg_world.application.llm.services.episodic_chunk_coordinator.decide_chunk_boundary",
+            return_value=close,
+        ):
+            turn_runner.run_turn(PlayerId(1))
         recent = store.list_recent(1, 5)
         assert len(recent) == 1
         ep = recent[0]
