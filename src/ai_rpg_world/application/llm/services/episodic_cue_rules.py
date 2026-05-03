@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from typing import Any, Iterable
+from typing import Any, Iterable, Sequence
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     EMOTION_HINT_VALUES,
@@ -71,6 +71,21 @@ def build_episodic_cues_for_tool_turn(
 
     validated = _validate_and_dedupe(collected)
     return tuple(validated)
+
+
+def merge_ordered_episodic_cues(
+    ordered_parts: Sequence[tuple[EpisodicCue, ...]],
+) -> tuple[EpisodicCue, ...]:
+    """
+    複数の cue 列を先頭から順に連結し、canonical 単位で重複除去する。
+
+    チャンク境界など、観測由来の局面 cue と複数 tool ターンの cue を束ねるときに使う。
+    先に渡した列の cue が、同一 canonical では後続より優先される（挿入順維持）。
+    """
+    collected: list[EpisodicCue] = []
+    for part in ordered_parts:
+        collected.extend(part)
+    return tuple(_validate_and_dedupe(collected))
 
 
 def build_situation_episodic_cues(

@@ -50,7 +50,8 @@ def _join_passive_recall_texts(candidates: tuple[EpisodicPassiveRecallCandidate,
     """retrieve の候補順のまま、空でない recall_text を改行で連結する。"""
     parts: list[str] = []
     for cand in candidates:
-        text = cand.episode.recall_text.strip()
+        raw = cand.episode.recall_text
+        text = raw.strip() if isinstance(raw, str) else ""
         if text:
             parts.append(text)
     return "\n".join(parts)
