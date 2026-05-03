@@ -10,6 +10,14 @@ from ai_rpg_world.application.llm.contracts.dtos import (
 from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
     IEpisodicEpisodeStore,
 )
+from ai_rpg_world.application.llm.contracts.chunk_encoding import (
+    ChunkEncodingInput,
+    UnifiedRecentEventLine,
+    build_chunk_encoding_input,
+    chunk_encoding_episode_generation_allowed,
+    format_unified_timeline_as_recent_events_bullets,
+    merge_observations_and_action_results_to_unified_timeline,
+)
 from ai_rpg_world.application.llm.contracts.episodic_memory import (
     EpisodicCue,
     EpisodicCueSource,
@@ -40,6 +48,12 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
 )
 
 __all__ = [
+    "ChunkEncodingInput",
+    "UnifiedRecentEventLine",
+    "build_chunk_encoding_input",
+    "chunk_encoding_episode_generation_allowed",
+    "format_unified_timeline_as_recent_events_bullets",
+    "merge_observations_and_action_results_to_unified_timeline",
     "IEpisodicEpisodeStore",
     "EpisodicCue",
     "EpisodicCueSource",
