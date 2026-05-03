@@ -12,14 +12,10 @@ from typing import Any, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.llm.contracts.interfaces import (
-    IActionExperienceTraceStore,
     IActionResultStore,
-    IEpisodeMemoryStore,
     ILLMClient,
     ILLMPlayerResolver,
-    IObservationExperienceTraceStore,
     ISlidingWindowMemory,
-    ISubjectiveEpisodeStore,
 )
 from ai_rpg_world.application.llm.contracts.persona import PersonaPromptPolicy
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
@@ -116,60 +112,17 @@ def create_spot_graph_wiring(
     llm_client: Optional[ILLMClient] = None,
     game_time_provider: Optional[Any] = None,
     world_time_config_service: Optional[Any] = None,
-    memory_db_path: Optional[str] = None,
-    episode_memory_store: Optional[IEpisodeMemoryStore] = None,
-    long_term_memory_store: Optional[Any] = None,
-    reflection_state_port: Optional[Any] = None,
     action_result_store: Optional[IActionResultStore] = None,
     sliding_window_memory: Optional[ISlidingWindowMemory] = None,
-    action_experience_trace_store: Optional[IActionExperienceTraceStore] = None,
-    observation_experience_trace_store: Optional[IObservationExperienceTraceStore] = None,
     llm_player_resolver: Optional[ILLMPlayerResolver] = None,
     max_turns: int = 5,
     llm_view_distance: Optional[int] = None,
     system_prompt_template: Optional[str] = None,
     persona_store: Optional[Any] = None,
     persona_prompt_policy: Optional[PersonaPromptPolicy] = None,
-    subjective_episode_store: Optional[ISubjectiveEpisodeStore] = None,
-    subjective_episode_sqlite_path: Optional[str] = None,
 ) -> "LlmAgentWiringResult":
     """スポットグラフ用に LLM 観測・ツール・プロンプトを組み立てる（タイル移動なし）。"""
     # 遅延 import: wiring/__init__.py の循環を避ける
-    from ai_rpg_world.application.llm.services.episode_encoding_context_provider import (
-        build_episode_encoding_context_provider,
-    )
-    from ai_rpg_world.application.llm.wiring.memory_reflection_factory import (
-        build_same_process_memory_reflection,
-    )
-    from ai_rpg_world.application.llm.services.memory_consolidation_runner import (
-        InMemoryConsolidationCheckpoint,
-        MemoryConsolidationRunner,
-    )
-    from ai_rpg_world.application.llm.wiring.memory_consolidation_factory import (
-        build_memory_consolidation_hook,
-        consolidation_journal_threshold_from_env,
-    )
-    from ai_rpg_world.application.llm.services.episode_encoding_processor import (
-        EpisodeEncodingProcessor,
-    )
-    from ai_rpg_world.application.llm.services.episode_encoding_runner import (
-        EpisodeEncodingRunner,
-    )
-    from ai_rpg_world.application.llm.services.experience_trace_bundle_resolver import (
-        ExperienceTraceBundleResolver,
-    )
-    from ai_rpg_world.application.llm.wiring.subjective_episode_store_factory import (
-        create_subjective_episode_store_for_wiring,
-    )
-    from ai_rpg_world.application.llm.services.in_memory_identity_memory_store import (
-        InMemoryIdentityMemoryStore,
-    )
-    from ai_rpg_world.application.llm.wiring.episode_encoder_factory import (
-        build_episode_encoder,
-    )
-    from ai_rpg_world.application.llm.wiring.passive_subjective_recall_factory import (
-        build_passive_subjective_recall_composer,
-    )
     from ai_rpg_world.application.llm.wiring import (
         LlmAgentWiringResult,
         _DEFAULT_LLM_VIEW_DISTANCE,
@@ -193,40 +146,14 @@ def create_spot_graph_wiring(
         SectionBasedContextFormatStrategy,
     )
     from ai_rpg_world.application.llm.services.game_tool_registry import DefaultGameToolRegistry
-    from ai_rpg_world.application.llm.services.handle_store import InMemoryHandleStore
     from ai_rpg_world.application.llm.services.in_memory_todo_store import InMemoryTodoStore
-    from ai_rpg_world.application.llm.services.in_memory_working_memory_store import (
-        InMemoryWorkingMemoryStore,
-    )
-    from ai_rpg_world.application.llm.services.in_memory_action_experience_trace_store import (
-        InMemoryActionExperienceTraceStore,
-    )
-    from ai_rpg_world.application.llm.services.in_memory_observation_experience_trace_store import (
-        InMemoryObservationExperienceTraceStore,
-    )
-    from ai_rpg_world.application.llm.services.in_memory_episode_candidate_store import (
-        InMemoryEpisodeCandidateStore,
-    )
-    from ai_rpg_world.application.llm.services.episode_chunker import RuleBasedEpisodeChunker
-    from ai_rpg_world.application.llm.services.llm_agent_turn_runner import LlmAgentTurnRunner
     from ai_rpg_world.application.llm.services.llm_player_resolver import ProfileBasedLlmPlayerResolver
     from ai_rpg_world.application.llm.services.llm_turn_trigger import DefaultLlmTurnTrigger
-    from ai_rpg_world.application.llm.services.memory_extractor import RuleBasedMemoryExtractor
-    from ai_rpg_world.application.llm.services.memory_query_executor import MemoryQueryExecutor
-    from ai_rpg_world.application.llm.services.subjective_memory_recall_executor import (
-        SubjectiveMemoryRecallExecutor,
-    )
-    from ai_rpg_world.application.llm.services.observation_trace_recorder import (
-        ObservationTraceRecorder,
-    )
-    from ai_rpg_world.application.llm.services.observation_trace_recording_buffer import (
-        ObservationTraceRecordingBuffer,
-    )
+    from ai_rpg_world.application.llm.services.llm_agent_turn_runner import LlmAgentTurnRunner
     from ai_rpg_world.application.llm.services.recent_events_formatter import (
         DefaultRecentEventsFormatter,
     )
     from ai_rpg_world.application.llm.services.sliding_window_memory import DefaultSlidingWindowMemory
-    from ai_rpg_world.application.llm.services.subagent_runner import SubagentRunner
     from ai_rpg_world.application.llm.services.system_prompt_builder import DefaultSystemPromptBuilder
     from ai_rpg_world.application.llm.services.ui_context_builder import DefaultLlmUiContextBuilder
     from ai_rpg_world.application.observation.services.observation_context_buffer import (
@@ -250,17 +177,8 @@ def create_spot_graph_wiring(
     if unit_of_work_factory is None:
         raise TypeError("unit_of_work_factory must not be None")
 
-    base_buffer = (
+    buffer = (
         observation_buffer if observation_buffer is not None else DefaultObservationContextBuffer()
-    )
-    observation_experience_trace_store = (
-        observation_experience_trace_store
-        if observation_experience_trace_store is not None
-        else InMemoryObservationExperienceTraceStore()
-    )
-    buffer = ObservationTraceRecordingBuffer(
-        inner=base_buffer,
-        recorder=ObservationTraceRecorder(observation_experience_trace_store),
     )
 
     sg_builder = SpotGraphCurrentStateBuilder(
@@ -279,26 +197,6 @@ def create_spot_graph_wiring(
     )
     action_result_store = (
         action_result_store if action_result_store is not None else DefaultActionResultStore()
-    )
-    action_experience_trace_store = (
-        action_experience_trace_store
-        if action_experience_trace_store is not None
-        else InMemoryActionExperienceTraceStore()
-    )
-    episode_candidate_store = InMemoryEpisodeCandidateStore()
-    episode_chunker = RuleBasedEpisodeChunker(
-        action_trace_store=action_experience_trace_store,
-        observation_trace_store=observation_experience_trace_store,
-        candidate_store=episode_candidate_store,
-    )
-    subjective_episode_store = create_subjective_episode_store_for_wiring(
-        subjective_episode_store=subjective_episode_store,
-        sqlite_path=subjective_episode_sqlite_path,
-    )
-    identity_memory_store = InMemoryIdentityMemoryStore()
-    trace_bundle_resolver = ExperienceTraceBundleResolver(
-        action_experience_trace_store,
-        observation_experience_trace_store,
     )
     from ai_rpg_world.application.llm.services.spot_graph_ui_context_builder import (
         SpotGraphUiContextBuilder,
@@ -330,80 +228,10 @@ def create_spot_graph_wiring(
         else:
             effective_view_distance = _DEFAULT_LLM_VIEW_DISTANCE
 
-    memory_stack = _build_memory_stack(
-        memory_db_path=memory_db_path,
-        episode_memory_store=episode_memory_store,
-        long_term_memory_store=long_term_memory_store,
-        reflection_state_port=reflection_state_port,
-    )
-    episode_memory_store = memory_stack.episode_memory_store
-    long_term_memory_store = memory_stack.long_term_memory_store
-    reflection_state_port = memory_stack.reflection_state_port
-    working_memory_store = memory_stack.working_memory_store
-    todo_store = memory_stack.todo_store
-    handle_store = memory_stack.handle_store
+    runtime_tool_state = _build_runtime_tool_state()
+    todo_store = runtime_tool_state.todo_store
 
-    episode_encoding_ctx_provider = build_episode_encoding_context_provider(
-        player_profile_repository=player_profile_repository,
-        long_term_memory_store=long_term_memory_store,
-        working_memory_store=working_memory_store,
-        persona_block_provider=persona_block_provider,
-        identity_memory_store=identity_memory_store,
-    )
-
-    def _state_provider(pid: PlayerId) -> str:
-        dto = augmented_world_query.get_player_current_state(
-            GetPlayerCurrentStateQuery(
-                player_id=pid.value,
-                view_distance=effective_view_distance,
-            )
-        )
-        if dto is None:
-            return "（情報なし）"
-        return current_state_formatter.format(dto)
-
-    memory_query_executor = MemoryQueryExecutor(
-        episode_store=episode_memory_store,
-        long_term_store=long_term_memory_store,
-        sliding_window=sliding_window,
-        action_result_store=action_result_store,
-        working_memory_store=working_memory_store,
-        state_provider=_state_provider,
-        recent_events_formatter=recent_events_formatter,
-        handle_store=handle_store,
-    )
     client = llm_client if llm_client is not None else create_llm_client_from_env()
-    memory_reflection_scheduler, memory_reflection_after_encode = (
-        build_same_process_memory_reflection(
-            llm_client=client,
-            subjective_episode_store=subjective_episode_store,
-            context_provider=episode_encoding_ctx_provider,
-        )
-    )
-    episode_encoder = build_episode_encoder(client)
-    episode_encoding_processor = EpisodeEncodingProcessor(
-        candidate_store=episode_candidate_store,
-        trace_resolver=trace_bundle_resolver,
-        subjective_episode_store=subjective_episode_store,
-        encoder=episode_encoder,
-        context_provider=episode_encoding_ctx_provider,
-        max_retries=2,
-        on_subjective_episode_encoded=memory_reflection_after_encode,
-    )
-    episode_encoding_runner = EpisodeEncodingRunner(episode_encoding_processor)
-    passive_recall_composer = build_passive_subjective_recall_composer(
-        subjective_episode_store
-    )
-    subagent_invoke_text = create_subagent_invoke_text(client)
-    subagent_runner = SubagentRunner(
-        memory_query_executor=memory_query_executor,
-        invoke_text=subagent_invoke_text,
-        handle_store=handle_store,
-    )
-    subjective_recall_executor = SubjectiveMemoryRecallExecutor(
-        subjective_episode_store=subjective_episode_store,
-    )
-
     spot_graph_tool_executor = SpotGraphToolExecutor(
         spot_graph_world_services=spot_graph_world_services,
         player_inventory_repository=player_inventory_repository,
@@ -413,11 +241,7 @@ def create_spot_graph_wiring(
 
     tool_stack = _build_tool_stack(
         game_tool_registry=game_tool_registry,
-        memory_query_executor=memory_query_executor,
-        subagent_runner=subagent_runner,
-        working_memory_store=working_memory_store,
         todo_store=todo_store,
-        subjective_recall_executor=subjective_recall_executor,
         include_tile_movement=False,
         movement_service=None,
         pursuit_command_service=pursuit_command_service,
@@ -460,19 +284,10 @@ def create_spot_graph_wiring(
     tool_command_mapper = tool_stack.tool_command_mapper
     tool_argument_resolver = tool_stack.tool_argument_resolver
 
-    memory_extractor = RuleBasedMemoryExtractor()
     if llm_player_resolver is None:
         llm_player_resolver = ProfileBasedLlmPlayerResolver(
             player_profile_repository=player_profile_repository,
         )
-    reflection_service, reflection_runner = _build_reflection_stack(
-        episode_memory_store=episode_memory_store,
-        long_term_memory_store=long_term_memory_store,
-        reflection_state_port=reflection_state_port,
-        player_status_repository=player_status_repository,
-        llm_player_resolver=llm_player_resolver,
-        world_time_config_service=world_time_config_service,
-    )
     prompt_builder = _build_prompt_stack(
         buffer=buffer,
         sliding_window=sliding_window,
@@ -485,36 +300,8 @@ def create_spot_graph_wiring(
         system_prompt_builder=system_prompt_builder,
         available_tools_provider=available_tools_provider,
         ui_context_builder=ui_context_builder,
-        episode_memory_store=episode_memory_store,
-        long_term_memory_store=long_term_memory_store,
         tile_map_view_distance=effective_view_distance,
         persona_block_provider=persona_block_provider,
-        passive_subjective_recall=passive_recall_composer,
-        episode_encoding_context_provider=episode_encoding_ctx_provider,
-    )
-
-    def _enqueue_passive_memory_reflection(
-        pid: PlayerId,
-        episode_ids: tuple[str, ...],
-        situation: str,
-    ) -> None:
-        if memory_reflection_scheduler is None:
-            return
-        for eid in episode_ids:
-            memory_reflection_scheduler.maybe_enqueue_passive_recall(
-                pid, eid, situation_text=situation
-            )
-
-    consolidation_checkpoint = InMemoryConsolidationCheckpoint()
-    consolidation_runner = MemoryConsolidationRunner(
-        subjective_episode_store=subjective_episode_store,
-        long_term_memory_store=long_term_memory_store,
-        identity_memory_store=identity_memory_store,
-        checkpoint=consolidation_checkpoint,
-        journal_threshold=consolidation_journal_threshold_from_env(),
-    )
-    memory_consolidation_hook = build_memory_consolidation_hook(
-        runner=consolidation_runner
     )
 
     orchestrator = LlmAgentOrchestrator(
@@ -523,18 +310,6 @@ def create_spot_graph_wiring(
         tool_command_mapper=tool_command_mapper,
         action_result_store=action_result_store,
         tool_argument_resolver=tool_argument_resolver,
-        memory_extractor=memory_extractor,
-        episode_memory_store=episode_memory_store,
-        action_experience_trace_store=action_experience_trace_store,
-        handle_store=handle_store,
-        episode_chunker=episode_chunker,
-        episode_encoding_runner=episode_encoding_runner,
-        passive_memory_reflection_hook=(
-            _enqueue_passive_memory_reflection
-            if memory_reflection_scheduler is not None
-            else None
-        ),
-        memory_consolidation_hook=memory_consolidation_hook,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,
@@ -545,21 +320,7 @@ def create_spot_graph_wiring(
     )
     llm_turn_trigger = DefaultLlmTurnTrigger(turn_runner=turn_runner, max_turns=max_turns)
 
-    def _observation_trace_runtime(pid: PlayerId) -> Optional[ToolRuntimeContextDto]:
-        dto = augmented_world_query.get_player_current_state(
-            GetPlayerCurrentStateQuery(
-                player_id=pid.value,
-                view_distance=effective_view_distance,
-            )
-        )
-        if dto is None:
-            return None
-        return ui_context_builder.build("", dto).tool_runtime_context
-
-    observation_appender = ObservationAppender(
-        buffer,
-        runtime_context_provider=_observation_trace_runtime,
-    )
+    observation_appender = ObservationAppender(buffer)
 
     formatter = observation_formatter
     if formatter is None:
@@ -607,14 +368,8 @@ def create_spot_graph_wiring(
     return LlmAgentWiringResult(
         observation_registry=observation_registry,
         llm_turn_trigger=llm_turn_trigger,
-        reflection_runner=reflection_runner,
         observation_buffer=buffer,
         observation_appender=observation_appender,
-        action_experience_trace_store=action_experience_trace_store,
-        observation_experience_trace_store=observation_experience_trace_store,
-        episode_candidate_store=episode_candidate_store,
-        subjective_episode_store=subjective_episode_store,
-        identity_memory_store=identity_memory_store,
         sns_mode_session=sns_mode_session,
         sns_page_session=sns_page_session,
         trade_page_session=trade_page_session,

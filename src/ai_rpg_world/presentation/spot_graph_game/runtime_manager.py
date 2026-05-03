@@ -250,7 +250,6 @@ class _EscapeGameLlmWiring:
         runtime_context: Any,
     ) -> LlmCommandResultDto:
         from ai_rpg_world.application.llm.tool_constants import (
-            TOOL_NAME_MEMORY_QUERY,
             TOOL_NAME_SAY,
             TOOL_NAME_SPOT_GRAPH_EXPLORE,
             TOOL_NAME_SPOT_GRAPH_INTERACT,
@@ -261,7 +260,6 @@ class _EscapeGameLlmWiring:
             TOOL_NAME_TODO_COMPLETE,
             TOOL_NAME_TODO_LIST,
             TOOL_NAME_WHISPER,
-            TOOL_NAME_WORKING_MEMORY_APPEND,
         )
 
         targets = getattr(runtime_context, "targets", {})
@@ -368,8 +366,6 @@ class _EscapeGameLlmWiring:
             )
 
         if name in (
-            TOOL_NAME_MEMORY_QUERY,
-            TOOL_NAME_WORKING_MEMORY_APPEND,
             TOOL_NAME_TODO_ADD,
             TOOL_NAME_TODO_LIST,
             TOOL_NAME_TODO_COMPLETE,
