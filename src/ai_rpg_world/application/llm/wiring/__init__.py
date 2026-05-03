@@ -49,6 +49,7 @@ EventHandlerComposition のインスタンス化）は**呼び出し元（外部
 - チャンク草案は既定で `ChunkEpisodeDraftBuilder()`。テスト等では `chunk_episode_draft_builder=` で差し替え可能。
 - テスト等でストアだけ差し替える場合は `episodic_episode_store=` を指定する（ストアと retrieval・coordinator で共有される）。
 - 協調全体を差し替える場合は `episodic_chunk_coordinator=` を渡す（未指定時は上記ポートから組み立てる）。
+- `LLM_CLIENT=litellm`（`LiteLLMClient`）時はチャンク保存で `interpreted` / `recall_text` を JSON 完了で付与し、失敗時はテンプレへフォールバックする。`episodic_chunk_subjective_completion=` で明示ポート差し替え可。Stub では未付与のまま。
 - `create_spot_graph_wiring` も同方針で既定配線する（スポットグラフ専用のツール・画面組み立てのみが異なる）。
 
 """
@@ -77,12 +78,18 @@ from ai_rpg_world.application.llm.services.action_result_store import (
 from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
     IEpisodicEpisodeStore,
 )
+from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
+    IEpisodicChunkSubjectiveCompletionPort,
+)
 from ai_rpg_world.application.llm.services.agent_orchestrator import LlmAgentOrchestrator
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
     ChunkEpisodeDraftBuilder,
 )
 from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import (
     EpisodicChunkCoordinator,
+)
+from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
+    EpisodicChunkSubjectiveFieldsService,
 )
 from ai_rpg_world.application.llm.services.available_tools_provider import (
     DefaultAvailableToolsProvider,
@@ -640,6 +647,24 @@ def _build_prompt_stack(
     )
 
 
+def _optional_episodic_chunk_subjective_fields_service(
+    llm_client: ILLMClient,
+    episodic_chunk_subjective_completion: Optional[IEpisodicChunkSubjectiveCompletionPort],
+) -> Optional[EpisodicChunkSubjectiveFieldsService]:
+    """
+    LiteLLM 本番クライアント（または明示ポート）があるときだけ主観フィールド付与サービスを返す。
+    """
+    port: Optional[IEpisodicChunkSubjectiveCompletionPort] = episodic_chunk_subjective_completion
+    if port is None:
+        from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
+
+        if isinstance(llm_client, LiteLLMClient):
+            port = llm_client
+    if port is None:
+        return None
+    return EpisodicChunkSubjectiveFieldsService(port)
+
+
 def _build_persona_block_provider(
     persona_store: Optional[Any],
     persona_prompt_policy: Optional[PersonaPromptPolicy],
@@ -767,6 +792,7 @@ def create_llm_agent_wiring(
     episodic_episode_store: Optional[IEpisodicEpisodeStore] = None,
     chunk_episode_draft_builder: Optional[ChunkEpisodeDraftBuilder] = None,
     episodic_chunk_coordinator: Optional[EpisodicChunkCoordinator] = None,
+    episodic_chunk_subjective_completion: Optional[IEpisodicChunkSubjectiveCompletionPort] = None,
 ) -> "LlmAgentWiringResult":
     """
     LLM エージェント用の観測ハンドラ登録用 Registry と LlmTurnTrigger を組み立てて返す。
@@ -890,6 +916,10 @@ def create_llm_agent_wiring(
         if chunk_episode_draft_builder is not None
         else ChunkEpisodeDraftBuilder()
     )
+    chunk_subjective_service = _optional_episodic_chunk_subjective_fields_service(
+        client,
+        episodic_chunk_subjective_completion,
+    )
     episodic_coord = episodic_chunk_coordinator or EpisodicChunkCoordinator(
         observation_buffer=buffer,
         sliding_window_memory=sliding_window,
@@ -898,6 +928,10 @@ def create_llm_agent_wiring(
         chunk_episode_draft_builder=chunk_builder,
         recent_observations_limit=DEFAULT_RECENT_OBSERVATIONS_LIMIT,
         recent_actions_limit=DEFAULT_RECENT_ACTIONS_LIMIT,
+        chunk_subjective_fields_service=chunk_subjective_service,
+        persona_block_provider=persona_block_provider
+        if chunk_subjective_service is not None
+        else None,
     )
     episodic_passive_recall = EpisodicPassiveRecallRetrievalService(shared_episode_store)
     prompt_builder = _build_prompt_stack(
