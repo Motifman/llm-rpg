@@ -3,7 +3,8 @@
 
 タイル移動ツールは登録せず、spot_graph_* ツールと SpotGraphCurrentStateFormatter を用いる。
 その他の LLM 観測・ツール枠は create_llm_agent_wiring と別経路だが、エピソード記憶（共有
-in-memory ストア・チャンク境界での保存・受動想起）は既定で**同じ方針**で配線する。
+ストア・チャンク境界での保存・受動想起）は既定で**同じ方針**で配線する（インメモリまたは
+`SUBJECTIVE_EPISODE_DB_PATH`）。
 """
 
 from __future__ import annotations
@@ -38,8 +39,8 @@ from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval imp
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
     SpotGraphToolExecutor,
 )
-from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
-    InMemorySubjectiveEpisodeStore,
+from ai_rpg_world.application.llm.wiring._default_episodic_episode_store import (
+    resolve_default_episodic_episode_store,
 )
 from ai_rpg_world.application.llm.services.spot_graph_current_state_formatter import (
     SpotGraphCurrentStateFormatter,
@@ -316,11 +317,7 @@ def create_spot_graph_wiring(
         llm_player_resolver = ProfileBasedLlmPlayerResolver(
             player_profile_repository=player_profile_repository,
         )
-    shared_episode_store = (
-        episodic_episode_store
-        if episodic_episode_store is not None
-        else InMemorySubjectiveEpisodeStore()
-    )
+    shared_episode_store = resolve_default_episodic_episode_store(episodic_episode_store)
     chunk_builder = (
         chunk_episode_draft_builder
         if chunk_episode_draft_builder is not None

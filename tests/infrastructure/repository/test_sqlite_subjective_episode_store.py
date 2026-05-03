@@ -1,0 +1,80 @@
+"""SqliteSubjectiveEpisodeStore の契約テスト（InMemory と同等の振る舞いの一部）。"""
+
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+
+from ai_rpg_world.application.llm.contracts.episodic_memory import (
+    EpisodicCue,
+    EpisodicCueSource,
+    EpisodeAction,
+    EpisodeLocation,
+    EpisodeSource,
+    SubjectiveEpisode,
+)
+from ai_rpg_world.infrastructure.repository.sqlite_subjective_episode_store import (
+    SqliteSubjectiveEpisodeStore,
+)
+
+
+def _episode(
+    *,
+    episode_id: str = "ep-1",
+    player_id: int = 7,
+    occurred_at: datetime | None = None,
+    cues: tuple[EpisodicCue, ...] | None = None,
+    recall_text: str = "r",
+) -> SubjectiveEpisode:
+    ts = occurred_at or datetime(2026, 5, 3, 12, 0, tzinfo=timezone.utc)
+    cue_list = cues or (
+        EpisodicCue(axis="place_spot", value="12", source=EpisodicCueSource.RUNTIME_CONTEXT),
+    )
+    return SubjectiveEpisode(
+        episode_id=episode_id,
+        player_id=player_id,
+        occurred_at=ts,
+        game_time_label=None,
+        source=EpisodeSource(event_ids=("evt-a",)),
+        location=EpisodeLocation(),
+        action=EpisodeAction(tool_name="t"),
+        who=("p",),
+        what="w",
+        why=None,
+        observed="o",
+        expected=None,
+        outcome="ok",
+        prediction_error=None,
+        felt=None,
+        interpreted=None,
+        cues=cue_list,
+        recall_text=recall_text,
+    )
+
+
+class TestSqliteSubjectiveEpisodeStoreBasics:
+    def test_put_get_roundtrip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "episodes.db")
+            store = SqliteSubjectiveEpisodeStore.connect(path)
+            ep = _episode()
+            store.put(ep)
+            got = store.get(7, "ep-1")
+            assert got is not None
+            assert got.episode_id == ep.episode_id
+            assert got.player_id == ep.player_id
+            assert got.cues == ep.cues
+            assert got.recall_text == ep.recall_text
+
+    def test_list_by_cue_after_reopen(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "episodes.db")
+            cue = EpisodicCue(
+                axis="place_spot", value="12", source=EpisodicCueSource.RUNTIME_CONTEXT
+            )
+            store = SqliteSubjectiveEpisodeStore.connect(path)
+            store.put(_episode(episode_id="a"))
+            del store
+            store2 = SqliteSubjectiveEpisodeStore.connect(path)
+            found = store2.list_by_cue(7, cue, limit=5)
+            assert len(found) == 1
+            assert found[0].episode_id == "a"
