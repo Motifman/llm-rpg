@@ -13,7 +13,7 @@ Git・レビュー・worktree は [memory_feature_workflow.md](./memory_feature_
 ### 0.2 エピソード作成のきっかけは「チャンク閉鎖＋行動あり」が主
 
 - **`LlmAgentOrchestrator`**: tool 実行が成功し `IActionResultStore` に記録された直後、`EpisodicChunkCoordinator.after_action_recorded(..., explicit_segment_close=True)` を呼ぶ（**即 `put` はしない**）。境界アルゴリズムが HOLD なら同一区間内で行動が蓄積され、閉鎖までは store に載らない。
-- **観測**: `drain` → `SlidingWindowMemory.append_all` で **プロンプトと同一順・同一原材料**に揃えたうえで、区間内観測は **材料・境界ヒント**（`summarize_observation_boundary_hints`）。**観測だけの区間では第 1 版はエピソード生成を起動しない**（`chunk_encoding_episode_generation_allowed` が偽）。
+- **観測**: `drain` → `SlidingWindowMemory.append_all` で **プロンプト build が使うのと同じ手順**に揃えたうえで、区間内観測は **材料・境界ヒント**（`summarize_observation_boundary_hints`）。1 ターン内では `build` が先・tool 後に `after_action_recorded` となるが、いずれも同一バッファ／ウィンドウに対し同順の drain→追記を行う。**観測だけの区間では第 1 版はエピソード生成を起動しない**（`chunk_encoding_episode_generation_allowed` が偽）。
 
 ### 0.3 「観測のみ episode」が指すもの
 
