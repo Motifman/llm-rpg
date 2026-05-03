@@ -7,6 +7,14 @@ from ai_rpg_world.application.llm.contracts.dtos import (
     ToolDefinitionDto,
     TodoEntry,
 )
+from ai_rpg_world.application.llm.contracts.episodic_memory import (
+    EpisodicCue,
+    EpisodicCueSource,
+    EpisodeAction,
+    EpisodeLocation,
+    EpisodeSource,
+    SubjectiveEpisode,
+)
 from ai_rpg_world.application.llm.contracts.persona import (
     AgentPersonaDto,
     PersonaPromptPolicy,
@@ -29,6 +37,12 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
 )
 
 __all__ = [
+    "EpisodicCue",
+    "EpisodicCueSource",
+    "EpisodeAction",
+    "EpisodeLocation",
+    "EpisodeSource",
+    "SubjectiveEpisode",
     "ActionResultEntry",
     "LlmCommandResultDto",
     "SystemPromptPlayerInfoDto",
