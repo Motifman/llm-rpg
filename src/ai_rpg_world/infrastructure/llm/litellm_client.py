@@ -15,6 +15,9 @@ import litellm
 from litellm import AuthenticationError as LitellmAuthenticationError
 from litellm import RateLimitError as LitellmRateLimitError
 
+from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
+    IEpisodicChunkSubjectiveCompletionPort,
+)
 from ai_rpg_world.application.llm.contracts.interfaces import ILLMClient
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 
@@ -31,7 +34,7 @@ def _load_dotenv_if_available() -> None:
         pass
 
 
-class LiteLLMClient(ILLMClient):
+class LiteLLMClient(ILLMClient, IEpisodicChunkSubjectiveCompletionPort):
     """
     LiteLLM の completion API で messages + tools を送り、1 つの tool_call を返す実装。
     tool_choice="required" で 1 ツール必須とする。
@@ -106,6 +109,57 @@ class LiteLLMClient(ILLMClient):
             ) from e
 
         return self._parse_tool_call(response, messages, tools)
+
+    def complete_episode_subjective_json(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        tools 無しで JSON object を強制する chat completion を行いパース済み dict を返す。
+        失敗や不正 JSON ではここでは補完せず LlmApiCallException を送出し、呼び出し元が草案テンプレへフォールバックする。
+        """
+        kwargs = self.completion_base_kwargs()
+        try:
+            response = litellm.completion(
+                messages=messages,
+                response_format={"type": "json_object"},
+                **kwargs,
+            )
+        except Exception as e:
+            self._logger.exception("LiteLLM subjective completion failed: %s", e)
+            error_code = "LLM_API_CALL_FAILED"
+            if isinstance(e, LitellmAuthenticationError):
+                error_code = "LLM_AUTHENTICATION_ERROR"
+            elif isinstance(e, LitellmRateLimitError):
+                error_code = "LLM_RATE_LIMIT"
+            raise LlmApiCallException(
+                f"LLM subjective completion failed: {e}",
+                error_code=error_code,
+                cause=e,
+            ) from e
+        if not response or not getattr(response, "choices", None) or len(response.choices) == 0:
+            raise LlmApiCallException(
+                "Empty response from subjective completion",
+                error_code="LLM_EPISODE_SUBJECTIVE_EMPTY_RESPONSE",
+            )
+        message = response.choices[0].message
+        content = getattr(message, "content", None) if message else None
+        if not isinstance(content, str) or not content.strip():
+            raise LlmApiCallException(
+                "Missing message content from subjective completion",
+                error_code="LLM_EPISODE_SUBJECTIVE_EMPTY_CONTENT",
+            )
+        try:
+            parsed = json.loads(content)
+        except (json.JSONDecodeError, TypeError) as e:
+            raise LlmApiCallException(
+                f"Subjective completion content is not valid JSON: {e}",
+                error_code="LLM_EPISODE_SUBJECTIVE_INVALID_JSON",
+                cause=e,
+            ) from e
+        if not isinstance(parsed, dict):
+            raise LlmApiCallException(
+                "Subjective completion JSON root must be an object",
+                error_code="LLM_EPISODE_SUBJECTIVE_INVALID_JSON",
+            )
+        return parsed
 
     def _parse_tool_call(
         self,
