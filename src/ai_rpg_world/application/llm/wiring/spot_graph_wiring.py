@@ -2,7 +2,8 @@
 スポットグラフ専用の LLM エージェント配線。
 
 タイル移動ツールは登録せず、spot_graph_* ツールと SpotGraphCurrentStateFormatter を用いる。
-create_llm_agent_wiring は変更せず、本関数で別経路を提供する。
+その他の LLM 観測・ツール枠は create_llm_agent_wiring と別経路だが、エピソード記憶（共有
+in-memory ストア・tool 後保存・受動想起）は既定で**同じ方針**で配線する。
 """
 
 from __future__ import annotations
@@ -11,6 +12,9 @@ import os
 from typing import Any, Optional
 
 from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
+from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
+    IEpisodicEpisodeStore,
+)
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     ILLMClient,
@@ -18,8 +22,17 @@ from ai_rpg_world.application.llm.contracts.interfaces import (
     ISlidingWindowMemory,
 )
 from ai_rpg_world.application.llm.contracts.persona import PersonaPromptPolicy
+from ai_rpg_world.application.llm.services.action_episode_draft_builder import (
+    ActionEpisodeDraftBuilder,
+)
+from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
+    EpisodicPassiveRecallRetrievalService,
+)
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
     SpotGraphToolExecutor,
+)
+from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
+    InMemorySubjectiveEpisodeStore,
 )
 from ai_rpg_world.application.llm.services.spot_graph_current_state_formatter import (
     SpotGraphCurrentStateFormatter,
@@ -120,17 +133,24 @@ def create_spot_graph_wiring(
     system_prompt_template: Optional[str] = None,
     persona_store: Optional[Any] = None,
     persona_prompt_policy: Optional[PersonaPromptPolicy] = None,
+    episodic_episode_store: Optional[IEpisodicEpisodeStore] = None,
+    action_episode_draft_builder: Optional[ActionEpisodeDraftBuilder] = None,
 ) -> "LlmAgentWiringResult":
-    """スポットグラフ用に LLM 観測・ツール・プロンプトを組み立てる（タイル移動なし）。"""
+    """スポットグラフ用に LLM 観測・ツール・プロンプトを組み立てる（タイル移動なし）。
+
+    エピソード記憶は create_llm_agent_wiring と同様、既定で共有 in-memory ストアを
+    オーケストレータと受動想起に渡す。上書きは `episodic_episode_store` /
+    `action_episode_draft_builder`。
+    """
     # 遅延 import: wiring/__init__.py の循環を避ける
     from ai_rpg_world.application.llm.wiring import (
         LlmAgentWiringResult,
         _DEFAULT_LLM_VIEW_DISTANCE,
         _ENV_LLM_VIEW_DISTANCE,
-        _build_memory_stack,
         _build_observation_stack,
         _build_persona_block_provider,
         _build_prompt_stack,
+        _build_runtime_tool_state,
         _build_tool_stack,
     )
     from ai_rpg_world.application.llm.wiring._llm_client_factory import (
@@ -286,6 +306,17 @@ def create_spot_graph_wiring(
         llm_player_resolver = ProfileBasedLlmPlayerResolver(
             player_profile_repository=player_profile_repository,
         )
+    shared_episode_store = (
+        episodic_episode_store
+        if episodic_episode_store is not None
+        else InMemorySubjectiveEpisodeStore()
+    )
+    episode_draft_builder = (
+        action_episode_draft_builder
+        if action_episode_draft_builder is not None
+        else ActionEpisodeDraftBuilder()
+    )
+    episodic_passive_recall = EpisodicPassiveRecallRetrievalService(shared_episode_store)
     prompt_builder = _build_prompt_stack(
         buffer=buffer,
         sliding_window=sliding_window,
@@ -300,6 +331,7 @@ def create_spot_graph_wiring(
         ui_context_builder=ui_context_builder,
         tile_map_view_distance=effective_view_distance,
         persona_block_provider=persona_block_provider,
+        episodic_passive_recall=episodic_passive_recall,
     )
 
     orchestrator = LlmAgentOrchestrator(
@@ -308,6 +340,8 @@ def create_spot_graph_wiring(
         tool_command_mapper=tool_command_mapper,
         action_result_store=action_result_store,
         tool_argument_resolver=tool_argument_resolver,
+        episodic_episode_store=shared_episode_store,
+        action_episode_draft_builder=episode_draft_builder,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,
@@ -371,6 +405,7 @@ def create_spot_graph_wiring(
         sns_mode_session=sns_mode_session,
         sns_page_session=sns_page_session,
         trade_page_session=trade_page_session,
+        episodic_episode_store=shared_episode_store,
     )
 
 
