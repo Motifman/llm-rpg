@@ -38,7 +38,7 @@
 | 受動想起の prompt 注入 | 完了 | `DefaultPromptBuilder` + `EpisodicPassiveRecallRetrievalService`（wiring 既定で注入） | SQLite 等は後段 |
 | 現在状況からの situation cue 生成（MVP 範囲） | 完了 | `build_situation_episodic_cues`（runtime + 直近観測 structured） | §0.2 補強は別 PR |
 | situation cue の行動・感情・結果軸の補強 | MVP 外・次工程 | 局面だけでは cue が薄い軸がある | 下記 §0.2。本 PR ラインでは実装しない |
-| episode store / builder の標準 wiring | 完了 | `create_llm_agent_wiring` が共有 `InMemorySubjectiveEpisodeStore` を orchestrator / prompt に渡す | SQLite は MVP 外 |
+| episode store / builder の標準 wiring | 完了 | `create_llm_agent_wiring` / `create_spot_graph_wiring` が共有 `InMemorySubjectiveEpisodeStore` を orchestrator / prompt に渡す | SQLite は MVP 外 |
 | observation-only episode | 未着手 | 計画上 MVP 後段 | MVP 外 |
 | SQLite 永続化 / reflection / consolidation | 未着手 | 計画上 MVP 外 | MVP 外 |
 

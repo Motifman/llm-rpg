@@ -48,6 +48,7 @@ EventHandlerComposition のインスタンス化）は**呼び出し元（外部
   `DefaultPromptBuilder` 内の `EpisodicPassiveRecallRetrievalService`（受動想起）に**同一インスタンス**を渡す。
 - エピソード本文の組み立ては既定で `ActionEpisodeDraftBuilder()`。テスト等では `action_episode_draft_builder=` で差し替え可能。
 - テスト等でストアだけ差し替える場合は `episodic_episode_store=` を指定する（ストアと retrieval・orchestrator で共有される）。
+- `create_spot_graph_wiring` も同方針で既定配線する（スポットグラフ専用のツール・画面組み立てのみが異なる）。
 
 """
 
