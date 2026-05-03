@@ -330,13 +330,12 @@ VLLM_BASE_URL=http://127.0.0.1:8001/v1 VLLM_MODEL=gemma-4-31b-it-nvfp4 \
 
 目的:
 
-- 1 tool result から episode draft を作る。
-- LLM なしで episode として成立することを保証する。
+- 単一の tool result／行動エントリから episode **草案**を組み立てる決定論ロジックを用意する（材料段階）。LLM なしで episode として成立することを保証する。
 
 成果物:
 
-- `ActionEpisodeDraftBuilder` などの deterministic builder。
-- `LlmAgentOrchestrator` にはまだ接続しないか、接続は feature flag / 明示注入にする。
+- `ActionEpisodeDraftBuilder`（単発材料用）および **チャンク統合用**の `ChunkEpisodeDraftBuilder`。現行の保存経路は後者のみ（`EpisodicChunkCoordinator`）。
+- orchestrator への接続は **チャンク協調**経由に統一し、tool 都度の store `put` は行わない。
 
 並列性:
 
@@ -375,21 +374,21 @@ VLLM_BASE_URL=http://127.0.0.1:8001/v1 VLLM_MODEL=gemma-4-31b-it-nvfp4 \
 - PR 2 後に実装可能。
 - PR 3 / PR 4 と並行可能だが、統合は後。
 
-### PR 6: `feature/episodic-action-capture`
+### PR 6: `feature/episodic-action-capture`（履歴名・実体はチャンク経路へ統合済み）
 
-目的:
+目的（現行）:
 
-- `LlmAgentOrchestrator` の tool result 後に episode を保存する。
+- **チャンク閉鎖時のみ** `SubjectiveEpisode` を episode store へ保存する。`LlmAgentOrchestrator` は tool 成功・`IActionResultStore` 記録の直後に `EpisodicChunkCoordinator.after_action_recorded(..., explicit_segment_close=True)` を呼ぶだけで、**ツール都度の即 `put` は廃止**した。
 
-成果物:
+成果物（現行）:
 
-- action-centered episode capture。
-- prompt にはまだ出さない。
-- 代表 tool success / failure テスト。
+- `EpisodicChunkCoordinator` + `ChunkEpisodeDraftBuilder` + 共有 `IEpisodicEpisodeStore`。
+- 区間内に少なくとも 1 件の `ActionResultEntry` があるときだけエンコード許可（`chunk_encoding_episode_generation_allowed`）。
+- 代表 tool success / failure が **チャンク材料**に載り、閉鎖時に 1 エピソード化されることのテスト。
 
 依存:
 
-- PR 2, PR 3, PR 4, PR 5。
+- PR 2, PR 3, PR 4, PR 5（型・cue・store・ドラフト builder）。チャンク境界ルール・契約（`ChunkEncodingInput`）は別 PR 群で拡張。
 
 ### PR 7: `feature/episodic-vllm-generation-experiment`
 
@@ -422,8 +421,8 @@ VLLM_BASE_URL=http://127.0.0.1:8001/v1 VLLM_MODEL=gemma-4-31b-it-nvfp4 \
 
 依存:
 
-- PR 5, PR 6。
-- 本番で LLM が `interpreted` / `recall_text` を埋めるのは最終方針だが、**このラインではプロンプトに決定論の `recall_text` が載ることの検証で十分**（LLM 本番配線は後段）。
+- PR 5, PR 6（**保存はチャンク閉鎖経路**）。
+- 本番で LLM が `interpreted` / `recall_text` を埋めるのは最終方針だが、**このラインではプロンプトに決定論の `recall_text` が載ることの検証で十分**（`EpisodicChunkSubjectiveFieldsService` による本番 LLM マージは別段階で `create_llm_agent_wiring` から注入可能）。
 
 進捗:
 
@@ -435,11 +434,12 @@ VLLM_BASE_URL=http://127.0.0.1:8001/v1 VLLM_MODEL=gemma-4-31b-it-nvfp4 \
 
 MVP 完了は次で判定する。
 
-- 1 回の tool 実行から `SubjectiveEpisode` が保存される。
+- **チャンクが閉じられ**、区間に少なくとも 1 件の `ActionResultEntry` があるとき、**その区間から** `SubjectiveEpisode` が episode store に保存される（**ツール都度の即保存はない**）。
+- 境界のたびに観測一次情報がプロンプトと揃うこと（`IObservationContextBuffer.drain` → `ISlidingWindowMemory.append_all` を **`DefaultPromptBuilder.build` と同順**で `EpisodicChunkCoordinator` が実行）。
 - 5W1H の情報源がコード上で説明できる。
-- LLM なしでも episode が成立する。
+- LLM なしでも episode が成立する（ルール・フィールド＋`interpreted` / `recall_text` が未設定でも可）。
 - LLM を使う場合も生成対象は `interpreted` / `recall_text` のみ（最大 2 フィールド）（本番方針。MVP 検証フェーズでは recall は決定論でもよい）。
-- cue はゲーム由来構造から作られる。
+- cue はゲーム由来構造から作られる（観測 structured・runtime・tool を含む。LLM 自由 cue は不可）。
 - 受動的想起で、**時間軸（recent）と、MVP 範囲の situation_cues（空間・対象・観測骨格に対応する cue）**に基づき、過去 episode の `recall_text`（決定論で生成されたものでよい）が prompt の「関連する記憶」に入る。
 - **行動・感情・結果軸を situation だけで完全にカバーすることは MVP では要求しない**（§0.2 を別タスクとする）。
 - vLLM 実験で、代表ケースの JSON 安定性とハルシネーション傾向を確認済み。
