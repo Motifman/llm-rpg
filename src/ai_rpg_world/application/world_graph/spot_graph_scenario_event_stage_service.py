@@ -68,8 +68,14 @@ class SpotGraphScenarioEventStageService:
     def run(self, current_tick: WorldTick) -> None:
         if not self._scenario_events:
             return
+        events_by_id = {e.event_id: e for e in self._scenario_events}
+
+        # 1. 通常のtick駆動イベント評価（スケジュール済みはスキップ）
         for event in self._scenario_events:
             if event.trigger != "ON_TICK":
+                continue
+            # スケジュール済みイベントはチェーン経由で発火するためスキップ
+            if self._progress_store.is_scheduled(event.event_id):
                 continue
             if event.once and self._progress_store.is_fired(event.event_id):
                 continue
@@ -78,6 +84,31 @@ class SpotGraphScenarioEventStageService:
             self._apply_event(event)
             if event.once:
                 self._progress_store.mark_fired(event.event_id)
+            self._schedule_next_if_chained(event, current_tick)
+
+        # 2. スケジュール済みチェーンイベントの発火
+        for due_id in self._progress_store.due_event_ids(current_tick.value):
+            self._progress_store.unschedule(due_id)
+            chained = events_by_id.get(due_id)
+            if chained is None:
+                continue
+            if chained.once and self._progress_store.is_fired(due_id):
+                continue
+            self._apply_event(chained)
+            if chained.once:
+                self._progress_store.mark_fired(due_id)
+            self._schedule_next_if_chained(chained, current_tick)
+
+    def _schedule_next_if_chained(
+        self, event: ScenarioEventDef, current_tick: WorldTick
+    ) -> None:
+        """イベントにチェーン設定があれば次のイベントをスケジュールする。
+
+        delay_ticks=0 の場合、次の run() 呼び出しで発火する（同一 run() 内では発火しない）。
+        """
+        if event.next_event_id:
+            fire_at = current_tick.value + event.delay_ticks
+            self._progress_store.schedule(event.next_event_id, fire_at)
 
     def _matches_conditions(
         self,
@@ -138,6 +169,13 @@ class SpotGraphScenarioEventStageService:
                         has_item = True
                         break
                 if not has_item:
+                    return False
+                continue
+            if ctype == "TICK_MODULO":
+                if cond.tick_modulo is None or cond.tick_modulo <= 0:
+                    return False
+                phase = cond.tick_phase or 0
+                if current_tick.value % cond.tick_modulo != phase:
                     return False
                 continue
             return False
