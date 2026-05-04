@@ -26,6 +26,17 @@ def _make_tool_call_response(name: str, arguments: dict):
     return response
 
 
+def _make_json_content_response(content: str):
+    """tools なし completion が返す message.content response を組み立てる。"""
+    msg = MagicMock()
+    msg.content = content
+    choice = MagicMock()
+    choice.message = msg
+    response = MagicMock()
+    response.choices = [choice]
+    return response
+
+
 class TestLiteLLMClientInvoke:
     """invoke の正常・境界ケース"""
 
@@ -216,6 +227,38 @@ class TestLiteLLMClientInvokeExceptions:
         assert exc_info.value.error_code == "LLM_API_CALL_FAILED"
         assert exc_info.value.cause is not None
         assert isinstance(exc_info.value.cause, RuntimeError)
+
+
+class TestLiteLLMClientJsonCompletion:
+    """tools なし JSON completion のパース境界。"""
+
+    @pytest.fixture
+    def client(self):
+        return LiteLLMClient(model="openai/gpt-5-mini", api_key="sk-dummy")
+
+    def test_subjective_json_completion_extracts_fenced_json(self, client):
+        """vLLM がコードフェンス付き JSON を返しても object を抽出する。"""
+        content = '```json\n{"interpreted": "意味", "recall_text": "回想"}\n```'
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.completion.return_value = _make_json_content_response(content)
+            result = client.complete_episode_subjective_json(
+                [{"role": "user", "content": "json"}],
+            )
+        assert result == {"interpreted": "意味", "recall_text": "回想"}
+
+    def test_reinterpretation_json_completion_extracts_after_think_tag(self, client):
+        """thinking 系モデルの思考タグ後にある JSON を抽出する。"""
+        content = (
+            "<think>hidden reasoning</think>\n"
+            '{"episode_updates": [{"episode_id": "ep-a", '
+            '"current_interpretation": "意味", "current_recall_text": "回想"}]}'
+        )
+        with patch("ai_rpg_world.infrastructure.llm.litellm_client.litellm") as m_litellm:
+            m_litellm.completion.return_value = _make_json_content_response(content)
+            result = client.complete_episodic_reinterpretation_json(
+                [{"role": "user", "content": "json"}],
+            )
+        assert result["episode_updates"][0]["episode_id"] == "ep-a"
 
 
 class TestLiteLLMClientInit:
