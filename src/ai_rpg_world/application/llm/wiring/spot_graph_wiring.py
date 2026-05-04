@@ -497,6 +497,11 @@ def create_spot_graph_wiring(
             spot_graph_repository=spot_graph_repository,
         )
 
+    # 観測パイプラインを EventPublisher に登録（スポットグラフイベントが観測として配信される）
+    from ai_rpg_world.infrastructure.events.observation_event_handler_registry import (
+        ObservationEventHandlerRegistry,
+    )
+
     observation_registry = _build_observation_stack(
         player_status_repository=player_status_repository,
         physical_map_repository=physical_map_repository,
@@ -525,6 +530,9 @@ def create_spot_graph_wiring(
         spot_graph_repository=spot_graph_repository,
         observation_appender=observation_appender,
     )
+    # 観測ハンドラを EventPublisher に登録
+    ObservationEventHandlerRegistry(observation_registry).register_handlers(event_publisher)
+
     return LlmAgentWiringResult(
         observation_registry=observation_registry,
         llm_turn_trigger=llm_turn_trigger,
