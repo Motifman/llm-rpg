@@ -17,6 +17,14 @@ class MutableWorldFlagState:
     def as_frozen_set(self) -> FrozenSet[str]:
         return self._registry.as_frozen_set()
 
+    def add(self, flag_name: str) -> None:
+        """フラグを1つ追加する。"""
+        self._registry = self._registry.with_added(flag_name)
+
+    def remove(self, flag_name: str) -> None:
+        """フラグを1つ除去する（存在しなくても例外にしない）。"""
+        self._registry = self._registry.with_removed(flag_name)
+
     def replace_from_interaction(self, new_flags: FrozenSet[str]) -> None:
         """ドメインの InteractionExecutionResult.new_flags をそのまま反映する。"""
         self._registry = WorldFlagRegistry.from_frozen_set(new_flags)

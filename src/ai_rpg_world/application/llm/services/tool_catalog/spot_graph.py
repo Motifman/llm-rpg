@@ -14,6 +14,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SAY,
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
+    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_WAIT,
@@ -145,12 +146,30 @@ WHISPER_DEFINITION = ToolDefinitionDto(
 )
 
 
+PREPARE_ACTION_DEFINITION = ToolDefinitionDto(
+    name=TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
+    description="協力アクションの準備をする。他のプレイヤーが対応するアクションを実行できるようになる。例えば、ドアを支える準備をすることで他のプレイヤーがそのドアを通れるようになる。",
+    parameters={
+        "type": "object",
+        "properties": {
+            "action_id": {
+                "type": "string",
+                "description": "準備するアクションID（操作対象に表示される協力アクション名）。",
+            },
+            "inner_thought": _IT,
+        },
+        "required": ["action_id", "inner_thought"],
+    },
+)
+
+
 def get_spot_graph_specs() -> List[Tuple[ToolDefinitionDto, IAvailabilityResolver]]:
     return [
         (TRAVEL_TO_DEFINITION, _RESOLVER),
         (SET_SUB_LOCATION_DEFINITION, _RESOLVER),
         (EXPLORE_DEFINITION, _RESOLVER),
         (INTERACT_DEFINITION, _RESOLVER),
+        (PREPARE_ACTION_DEFINITION, _RESOLVER),
         (WAIT_DEFINITION, _RESOLVER),
         (SAY_DEFINITION, _RESOLVER),
         (WHISPER_DEFINITION, _RESOLVER),
@@ -163,6 +182,7 @@ __all__ = [
     "SET_SUB_LOCATION_DEFINITION",
     "EXPLORE_DEFINITION",
     "INTERACT_DEFINITION",
+    "PREPARE_ACTION_DEFINITION",
     "WAIT_DEFINITION",
     "SAY_DEFINITION",
     "WHISPER_DEFINITION",
