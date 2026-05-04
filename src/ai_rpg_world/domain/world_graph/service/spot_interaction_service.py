@@ -132,6 +132,9 @@ class SpotInteractionService:
         action_name: str,
         owned_item_spec_ids: FrozenSet[ItemSpecId],
         world_flags: FrozenSet[str],
+        *,
+        spot_presence_count: int = 1,
+        interaction_parameters: Optional[dict] = None,
     ) -> InteractionExecutionResult:
         obj = interior.get_object(object_id)
         if obj is None:
@@ -139,7 +142,11 @@ class SpotInteractionService:
         idef = self.find_interaction(obj, action_name)
         if idef is None:
             raise InteractionNotFoundException(f"{action_name} on {object_id}")
-        ok, reason = self.can_interact(idef, obj, owned_item_spec_ids, world_flags)
+        ok, reason = self.can_interact(
+            idef, obj, owned_item_spec_ids, world_flags,
+            spot_presence_count=spot_presence_count,
+            interaction_parameters=interaction_parameters,
+        )
         if not ok:
             raise InteractionNotAllowedException(reason or "Interaction not allowed")
 
