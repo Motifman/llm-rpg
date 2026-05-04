@@ -171,7 +171,6 @@ def create_spot_graph_wiring(
     episodic_chunk_coordinator: Optional[EpisodicChunkCoordinator] = None,
     episodic_chunk_subjective_completion: Optional[IEpisodicChunkSubjectiveCompletionPort] = None,
     event_publisher: Optional[Any] = None,
-    light_source_item_spec_ids: frozenset = frozenset(),
 ) -> "LlmAgentWiringResult":
     """スポットグラフ用に LLM 観測・ツール・プロンプトを組み立てる（タイル移動なし）。
 
@@ -256,6 +255,13 @@ def create_spot_graph_wiring(
         player_status_repository=player_status_repository,
     )
     ConsumableEffectEventHandlerRegistry(consumable_handler).register_handlers(event_publisher)
+
+    # 光源アイテムを自動検出
+    light_source_item_spec_ids = frozenset(
+        rm.item_spec_id
+        for rm in item_spec_repository.find_all()
+        if getattr(rm, "is_light_source", False)
+    )
 
     def _owned_item_spec_ids_provider(entity_id: int) -> frozenset:
         inv = player_inventory_repository.find_by_id(PlayerId(entity_id))
