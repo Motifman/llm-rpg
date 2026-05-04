@@ -79,6 +79,9 @@ from ai_rpg_world.application.llm.services.action_result_store import (
 from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
     IEpisodicEpisodeStore,
 )
+from ai_rpg_world.application.llm.contracts.semantic_memory_store_port import (
+    ISemanticMemoryStore,
+)
 from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
     IEpisodicChunkSubjectiveCompletionPort,
 )
@@ -109,6 +112,15 @@ from ai_rpg_world.application.llm.services.context_format_strategy import (
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallRetrievalService,
 )
+from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
+    EpisodicMemoryLinkApplicationService,
+)
+from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
+    EpisodicSemanticClusterPromotionService,
+)
+from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
+    InMemorySemanticMemoryStore,
+)
 from ai_rpg_world.application.llm.services.current_state_formatter import (
     DefaultCurrentStateFormatter,
 )
@@ -117,6 +129,9 @@ from ai_rpg_world.application.llm.services.game_tool_registry import (
 )
 from ai_rpg_world.application.llm.wiring._default_episodic_episode_store import (
     resolve_default_episodic_episode_store,
+)
+from ai_rpg_world.application.llm.wiring.episodic_memory_link_bundle import (
+    build_episodic_memory_link_bundle,
 )
 from ai_rpg_world.application.llm.services.in_memory_todo_store import (
     InMemoryTodoStore,
@@ -175,6 +190,9 @@ from ai_rpg_world.application.llm.services.executors.trade_executor import (
 )
 from ai_rpg_world.application.llm.services.executors.world_executor import (
     WorldToolExecutor,
+)
+from ai_rpg_world.application.llm.services.executors.episodic_memory_explore_tool_executor import (
+    EpisodicMemoryExploreToolExecutor,
 )
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
     SpotGraphToolExecutor,
@@ -298,6 +316,7 @@ def _build_tool_handler_map(
     player_status_repository: PlayerStatusRepository,
     todo_store: Optional[InMemoryTodoStore],
     spot_graph_tool_executor: Optional[SpotGraphToolExecutor] = None,
+    episodic_memory_explore_executor: Optional[EpisodicMemoryExploreToolExecutor] = None,
 ) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
     """
     Executor 群を組み立て、tool_name → handler の辞書を返す。
@@ -388,6 +407,8 @@ def _build_tool_handler_map(
     )
     if spot_graph_tool_executor is not None:
         handler_map.update(spot_graph_tool_executor.get_handlers())
+    if episodic_memory_explore_executor is not None:
+        handler_map.update(episodic_memory_explore_executor.get_handlers())
     return handler_map
 
 
@@ -432,6 +453,8 @@ def _build_tool_stack(
     item_spec_repository: Optional[Any],
     player_profile_repository: PlayerProfileRepository,
     spot_graph_tool_executor: Optional[SpotGraphToolExecutor] = None,
+    episodic_memory_explore_executor: Optional[EpisodicMemoryExploreToolExecutor] = None,
+    episodic_explore_related_enabled: bool = False,
 ) -> _ToolStackResult:
     """
     register_default_tools, available_tools_provider, tool_command_mapper, tool_argument_resolver を構築する。
@@ -469,6 +492,7 @@ def _build_tool_stack(
             and player_status_repository is not None
         ),
         todo_enabled=True,
+        episodic_explore_related_enabled=episodic_explore_related_enabled,
         include_movement_tools=include_tile_movement,
     )
     if spot_graph_tool_executor is not None:
@@ -508,6 +532,7 @@ def _build_tool_stack(
         player_status_repository=player_status_repository,
         todo_store=todo_store,
         spot_graph_tool_executor=spot_graph_tool_executor,
+        episodic_memory_explore_executor=episodic_memory_explore_executor,
     )
     tool_command_mapper = ToolCommandMapper(handler_map=handler_map)
     tool_argument_resolver = DefaultToolArgumentResolver(
@@ -634,6 +659,7 @@ def _build_prompt_stack(
     tile_map_view_distance: int,
     persona_block_provider: Optional[Callable[[PlayerId], str]] = None,
     episodic_passive_recall: Optional[EpisodicPassiveRecallRetrievalService] = None,
+    episodic_memory_link_service: Optional[EpisodicMemoryLinkApplicationService] = None,
     episodic_recall_buffer_store: Optional[IEpisodicRecallBufferStore] = None,
     episodic_reinterpretation_journal_store: Optional[IEpisodicReinterpretationJournalStore] = None,
     episodic_turn_index_provider: Optional[Callable[[PlayerId], int]] = None,
@@ -656,6 +682,7 @@ def _build_prompt_stack(
         persona_block_provider=persona_block_provider,
         tile_map_view_distance=tile_map_view_distance,
         episodic_passive_recall=episodic_passive_recall,
+        episodic_memory_link_service=episodic_memory_link_service,
         episodic_recall_buffer_store=episodic_recall_buffer_store,
         episodic_reinterpretation_journal_store=episodic_reinterpretation_journal_store,
         episodic_turn_index_provider=episodic_turn_index_provider,
@@ -764,6 +791,7 @@ class LlmAgentWiringResult:
         episodic_reinterpretation_journal_store: Optional[
             IEpisodicReinterpretationJournalStore
         ] = None,
+        semantic_memory_store: Optional[ISemanticMemoryStore] = None,
     ) -> None:
         self.observation_registry = observation_registry
         self.llm_turn_trigger = llm_turn_trigger
@@ -779,9 +807,8 @@ class LlmAgentWiringResult:
         self.trade_page_session = trade_page_session
         self.episodic_episode_store = episodic_episode_store
         self.episodic_recall_buffer_store = episodic_recall_buffer_store
-        self.episodic_reinterpretation_journal_store = (
-            episodic_reinterpretation_journal_store
-        )
+        self.episodic_reinterpretation_journal_store = episodic_reinterpretation_journal_store
+        self.semantic_memory_store = semantic_memory_store
 
     def __iter__(self) -> Any:
         yield self.observation_registry
@@ -927,6 +954,14 @@ def create_llm_agent_wiring(
     todo_store = runtime_tool_state.todo_store
 
     client = llm_client if llm_client is not None else create_llm_client_from_env()
+    shared_episode_store = resolve_default_episodic_episode_store(episodic_episode_store)
+    mem_bundle = build_episodic_memory_link_bundle(shared_episode_store)
+    semantic_memory_store: ISemanticMemoryStore = InMemorySemanticMemoryStore()
+    episodic_semantic_promotion = EpisodicSemanticClusterPromotionService(
+        episode_store=shared_episode_store,
+        link_store=mem_bundle.link_store,
+        semantic_store=semantic_memory_store,
+    )
     tool_stack = _build_tool_stack(
         game_tool_registry=game_tool_registry,
         todo_store=todo_store,
@@ -965,6 +1000,8 @@ def create_llm_agent_wiring(
         spot_repository=spot_repository,
         item_spec_repository=item_spec_repository,
         player_profile_repository=player_profile_repository,
+        episodic_memory_explore_executor=mem_bundle.memory_explore_executor(),
+        episodic_explore_related_enabled=True,
     )
     available_tools_provider = tool_stack.available_tools_provider
     tool_command_mapper = tool_stack.tool_command_mapper
@@ -974,7 +1011,6 @@ def create_llm_agent_wiring(
         llm_player_resolver = ProfileBasedLlmPlayerResolver(
             player_profile_repository=player_profile_repository,
         )
-    shared_episode_store = resolve_default_episodic_episode_store(episodic_episode_store)
     recall_buffer, reinterpretation_journal = _resolve_default_episodic_reinterpretation_stores(
         episodic_recall_buffer_store,
         episodic_reinterpretation_journal_store,
@@ -1015,8 +1051,9 @@ def create_llm_agent_wiring(
         persona_block_provider=persona_block_provider
         if chunk_subjective_service is not None
         else None,
+        episodic_memory_link_service=mem_bundle.link_service,
     )
-    episodic_passive_recall = EpisodicPassiveRecallRetrievalService(shared_episode_store)
+    episodic_passive_recall = mem_bundle.passive_recall
     prompt_builder = _build_prompt_stack(
         buffer=buffer,
         sliding_window=sliding_window,
@@ -1032,6 +1069,7 @@ def create_llm_agent_wiring(
         tile_map_view_distance=effective_view_distance,
         persona_block_provider=persona_block_provider,
         episodic_passive_recall=episodic_passive_recall,
+        episodic_memory_link_service=mem_bundle.link_service,
         episodic_recall_buffer_store=prompt_recall_buffer,
         episodic_reinterpretation_journal_store=reinterpretation_journal,
         episodic_turn_index_provider=reinterpretation_coord.current_turn_index,
@@ -1044,6 +1082,7 @@ def create_llm_agent_wiring(
         tool_argument_resolver=tool_argument_resolver,
         episodic_chunk_coordinator=episodic_coord,
         episodic_reinterpretation_coordinator=reinterpretation_coord,
+        episodic_semantic_promotion=episodic_semantic_promotion,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,
@@ -1095,6 +1134,7 @@ def create_llm_agent_wiring(
         episodic_episode_store=shared_episode_store,
         episodic_recall_buffer_store=recall_buffer,
         episodic_reinterpretation_journal_store=reinterpretation_journal,
+        semantic_memory_store=semantic_memory_store,
     )
 
 

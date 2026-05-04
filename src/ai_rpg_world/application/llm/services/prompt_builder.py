@@ -1,8 +1,8 @@
 """1 ターン分のプロンプト組み立てのデフォルト実装"""
 
+import logging
 from datetime import datetime, timezone
 from importlib import import_module
-import logging
 from typing import Any, Callable, Dict, List, Optional
 from uuid import uuid4
 
@@ -30,6 +30,9 @@ from ai_rpg_world.application.llm.services.episodic_cue_rules import build_situa
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallCandidate,
     EpisodicPassiveRecallRetrievalService,
+)
+from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
+    EpisodicMemoryLinkApplicationService,
 )
 from ai_rpg_world.application.llm.services.failure_feedback_for_prompt import (
     build_pre_turn_failure_section,
@@ -102,6 +105,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         episodic_passive_recall: Optional[EpisodicPassiveRecallRetrievalService] = None,
         episodic_passive_recall_limit_per_axis: int = DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS,
         episodic_passive_recall_max_candidates: int = DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES,
+        episodic_memory_link_service: EpisodicMemoryLinkApplicationService | None = None,
         episodic_recall_buffer_store: Optional[IEpisodicRecallBufferStore] = None,
         episodic_reinterpretation_journal_store: Optional[IEpisodicReinterpretationJournalStore] = None,
         episodic_turn_index_provider: Optional[Callable[[PlayerId], int]] = None,
@@ -150,6 +154,12 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise ValueError("episodic_passive_recall_limit_per_axis must be 0 or greater")
         if episodic_passive_recall_max_candidates < 0:
             raise ValueError("episodic_passive_recall_max_candidates must be 0 or greater")
+        if episodic_memory_link_service is not None and not isinstance(
+            episodic_memory_link_service, EpisodicMemoryLinkApplicationService
+        ):
+            raise TypeError(
+                "episodic_memory_link_service must be EpisodicMemoryLinkApplicationService or None"
+            )
         if episodic_recall_buffer_store is not None and not isinstance(
             episodic_recall_buffer_store, IEpisodicRecallBufferStore
         ):
@@ -194,6 +204,7 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._episodic_passive_recall = episodic_passive_recall
         self._episodic_passive_recall_limit_per_axis = episodic_passive_recall_limit_per_axis
         self._episodic_passive_recall_max_candidates = episodic_passive_recall_max_candidates
+        self._episodic_memory_link_service = episodic_memory_link_service
         self._episodic_recall_buffer_store = episodic_recall_buffer_store
         self._episodic_reinterpretation_journal_store = episodic_reinterpretation_journal_store
         self._episodic_turn_index_provider = episodic_turn_index_provider
@@ -275,17 +286,25 @@ class DefaultPromptBuilder(IPromptBuilder):
                 observation_structured=observation_structured,
                 latest_action=latest_action,
             )
+            recall_now = datetime.now(timezone.utc)
             recall_result = self._episodic_passive_recall.retrieve(
                 player_id=player_id.value,
                 situation_cues=situation_cues,
                 limit_per_axis=self._episodic_passive_recall_limit_per_axis,
                 max_candidates=self._episodic_passive_recall_max_candidates,
+                now=recall_now,
             )
             relevant_memories_text = _join_passive_recall_texts(
                 player_id.value,
                 recall_result.candidates,
                 self._episodic_reinterpretation_journal_store,
             )
+            if self._episodic_memory_link_service is not None and recall_result.candidates:
+                self._episodic_memory_link_service.on_passive_recall_candidates(
+                    player_id.value,
+                    recall_result.candidates,
+                    now=recall_now,
+                )
             if self._episodic_recall_buffer_store is not None:
                 turn_index = (
                     self._episodic_turn_index_provider(player_id)
