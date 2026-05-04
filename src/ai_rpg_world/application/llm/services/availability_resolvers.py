@@ -41,6 +41,16 @@ class NoOpAvailabilityResolver(IAvailabilityResolver):
         return True
 
 
+class MemoryExploreRelatedAvailabilityResolver(IAvailabilityResolver):
+    """エピソード間リンク探索。利用可否は実行時に空結果となり得るが、LLM からは常に呼び出し可能。"""
+
+    def is_available(
+        self,
+        context: Optional[PlayerCurrentStateDto],
+    ) -> bool:
+        return True
+
+
 class SetDestinationAvailabilityResolver(IAvailabilityResolver):
     """目的地設定ツールは、現在地があり利用可能な移動先（スポット・ロケーション）が1件以上あるときに利用可能。"""
 

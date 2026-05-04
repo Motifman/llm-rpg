@@ -28,6 +28,9 @@ from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
 from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
     EpisodicChunkSubjectiveFieldsService,
 )
+from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
+    EpisodicMemoryLinkApplicationService,
+)
 from ai_rpg_world.application.observation.contracts.dtos import ObservationEntry
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IObservationContextBuffer,
@@ -59,6 +62,7 @@ class EpisodicChunkCoordinator:
         recent_actions_limit: int = 20,
         chunk_subjective_fields_service: EpisodicChunkSubjectiveFieldsService | None = None,
         persona_block_provider: Callable[[PlayerId], str] | None = None,
+        episodic_memory_link_service: EpisodicMemoryLinkApplicationService | None = None,
     ) -> None:
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
@@ -78,6 +82,12 @@ class EpisodicChunkCoordinator:
             )
         if persona_block_provider is not None and not callable(persona_block_provider):
             raise TypeError("persona_block_provider must be callable or None")
+        if episodic_memory_link_service is not None and not isinstance(
+            episodic_memory_link_service, EpisodicMemoryLinkApplicationService
+        ):
+            raise TypeError(
+                "episodic_memory_link_service must be EpisodicMemoryLinkApplicationService or None"
+            )
         if recent_observations_limit < 0:
             raise ValueError("recent_observations_limit must be 0 or greater")
         if recent_actions_limit < 0:
@@ -93,6 +103,7 @@ class EpisodicChunkCoordinator:
         self._recent_observations_limit = recent_observations_limit
         self._recent_actions_limit = recent_actions_limit
         self._chunk_actions: Dict[int, List[ActionResultEntry]] = {}
+        self._episodic_memory_link_service = episodic_memory_link_service
 
     def after_action_recorded(
         self,
@@ -168,4 +179,6 @@ class EpisodicChunkCoordinator:
                 encoding_input=encoding_input,
             )
         self._episodic_episode_store.put(episode)
+        if self._episodic_memory_link_service is not None:
+            self._episodic_memory_link_service.on_episode_committed(episode)
         self._chunk_actions[key] = []

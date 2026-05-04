@@ -235,4 +235,6 @@ class ChunkEpisodeDraftBuilder:
             interpreted=None,
             cues=_build_chunk_cues(inp),
             recall_text=None,
+            recall_count=0,
+            last_recalled_at=None,
         )
