@@ -27,6 +27,8 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition impor
     ScenarioEventCondition,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import ScenarioEventDef
+from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
+from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
@@ -204,6 +206,26 @@ class SpotGraphScenarioEventStageService:
             self._spot_interior_repository.save(owner_spot, effect_result.new_interior)
         for cid, is_passable in effect_result.connection_passability_updates:
             graph.set_connection_passable(cid, is_passable)
+
+        for spec in effect_result.destroy_connection_specs:
+            graph.remove_connection(ConnectionId.create(spec.connection_id))
+
+        for spec in effect_result.create_connection_specs:
+            max_id = graph.max_connection_id_value()
+            new_cid = ConnectionId.create(max_id + 1)
+            new_conn = SpotConnection(
+                connection_id=new_cid,
+                from_spot_id=SpotId.create(spec.from_spot_id),
+                to_spot_id=SpotId.create(spec.to_spot_id),
+                name=spec.connection_name,
+                description=spec.description,
+                travel_ticks=spec.travel_ticks,
+                is_bidirectional=spec.is_bidirectional,
+                sound_permeability=spec.sound_permeability,
+            )
+            rev_id = ConnectionId.create(max_id + 2) if spec.is_bidirectional else None
+            graph.add_connection_dynamic(new_conn, reverse_connection_id=rev_id)
+
         self._spot_graph_repository.save(graph)
 
         if effect_result.item_spec_ids_to_grant:

@@ -8,7 +8,9 @@ from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.cross_domain_effect_spec import (
     AtmosphereUpdateSpec,
+    CreateConnectionSpec,
     DamageSpec,
+    DestroyConnectionSpec,
     StatusEffectSpec,
     TeleportSpec,
 )
@@ -29,3 +31,5 @@ class InteractionExecutionResult:
     status_effect_specs: Tuple[StatusEffectSpec, ...] = ()
     teleport_specs: Tuple[TeleportSpec, ...] = ()
     atmosphere_update_specs: Tuple[AtmosphereUpdateSpec, ...] = ()
+    create_connection_specs: Tuple[CreateConnectionSpec, ...] = ()
+    destroy_connection_specs: Tuple[DestroyConnectionSpec, ...] = ()

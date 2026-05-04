@@ -36,3 +36,19 @@ class AtmosphereUpdateSpec:
     temperature: Optional[str] = None
     hazard_level: Optional[int] = None
     hazard_description: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class CreateConnectionSpec:
+    from_spot_id: int
+    to_spot_id: int
+    connection_name: str
+    description: str = ""
+    travel_ticks: int = 1
+    is_bidirectional: bool = False
+    sound_permeability: float = 1.0
+
+
+@dataclass(frozen=True)
+class DestroyConnectionSpec:
+    connection_id: int

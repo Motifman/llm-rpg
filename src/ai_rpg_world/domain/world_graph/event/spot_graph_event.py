@@ -97,3 +97,21 @@ class TrapTriggeredEvent(BaseDomainEvent[SpotGraphId, str]):
     spot_id: SpotId
     trap_id: str
     messages: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ConnectionCreatedEvent(BaseDomainEvent[SpotGraphId, str]):
+    """接続が動的に生成された"""
+
+    connection_id: ConnectionId
+    from_spot_id: SpotId
+    to_spot_id: SpotId
+
+
+@dataclass(frozen=True)
+class ConnectionDestroyedEvent(BaseDomainEvent[SpotGraphId, str]):
+    """接続が動的に破壊された"""
+
+    connection_id: ConnectionId
+    from_spot_id: SpotId
+    to_spot_id: SpotId
