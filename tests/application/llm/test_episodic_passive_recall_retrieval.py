@@ -10,10 +10,15 @@ from ai_rpg_world.application.llm.contracts.episodic_memory import (
     EpisodeSource,
     SubjectiveEpisode,
 )
+from ai_rpg_world.application.llm.passive_recall_cue_families import (
+    PASSIVE_RECALL_PLACE_FAMILY_BUCKET_KEY,
+    PASSIVE_RECALL_PLACE_FAMILY_LABEL,
+)
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     PASSIVE_RECALL_AXIS_TEMPORAL,
     EpisodicPassiveRecallRetrievalService,
     passive_recall_cue_axis_label,
+    _merged_ordered_episodes_for_cue_bucket,
 )
 from ai_rpg_world.application.llm.services.in_memory_subjective_episode_store import (
     InMemorySubjectiveEpisodeStore,
@@ -198,6 +203,76 @@ class TestEpisodicPassiveRecallRetrievalDebugAxes:
         counts = dict(result.debug.final_episode_count_by_source_axis)
         assert counts[PASSIVE_RECALL_AXIS_TEMPORAL] == 2
         assert counts["cue:outcome"] == 1
+
+
+class TestEpisodicPassiveRecallRetrievalPlaceFamily:
+    """場所論理ファミリー（複数軸を 1 本）と粒度優先ソート"""
+
+    def test_place_family_single_round_robin_slot_with_three_place_cues(self) -> None:
+        """place_spot / sub_loc / entity のとき cue 側は場所ファミリー 1 本＋entity の 2 本となり entity が早く枠に入る。"""
+        store = InMemorySubjectiveEpisodeStore()
+        base = datetime(2026, 8, 1, tzinfo=timezone.utc)
+        c_spot = EpisodicCue(axis="place_spot", value="1", source=EpisodicCueSource.RUNTIME_CONTEXT)
+        c_sub = EpisodicCue(axis="sub_loc", value="2", source=EpisodicCueSource.RUNTIME_CONTEXT)
+        c_entity = EpisodicCue(axis="entity", value="alice", source=EpisodicCueSource.TOOL)
+        store.put(_episode(episode_id="f1", occurred_at=base + timedelta(days=10), cues=()))
+        store.put(_episode(episode_id="ep_spot", occurred_at=base, cues=(c_spot,)))
+        store.put(_episode(episode_id="ep_sub", occurred_at=base - timedelta(days=1), cues=(c_sub,)))
+        store.put(_episode(episode_id="ep_e", occurred_at=base - timedelta(days=2), cues=(c_entity,)))
+        svc = EpisodicPassiveRecallRetrievalService(store)
+        result = svc.retrieve(
+            player_id=7,
+            situation_cues=(c_spot, c_sub, c_entity),
+            limit_per_axis=1,
+            max_candidates=3,
+        )
+        raw = dict(result.debug.raw_row_count_by_axis)
+        assert raw[PASSIVE_RECALL_PLACE_FAMILY_LABEL] == 1
+        assert raw["cue:entity"] == 1
+        ids = [c.episode.episode_id for c in result.candidates]
+        assert ids == ["f1", "ep_spot", "ep_e"]
+
+    def test_place_family_prefers_place_spot_over_tile_under_limit_cap(self) -> None:
+        """場所ファミリー統合リストでは place_spot 一致を tile_area 単独一致より先に並べ limit が効く。"""
+        store = InMemorySubjectiveEpisodeStore()
+        ts = datetime(2026, 8, 2, tzinfo=timezone.utc)
+        c_tile = EpisodicCue(axis="tile_area", value="9", source=EpisodicCueSource.RUNTIME_CONTEXT)
+        c_spot = EpisodicCue(axis="place_spot", value="1", source=EpisodicCueSource.RUNTIME_CONTEXT)
+        weaker = EpisodicCue(axis="tile_area", value="9", source=EpisodicCueSource.RUNTIME_CONTEXT)
+        stronger = EpisodicCue(axis="place_spot", value="1", source=EpisodicCueSource.RUNTIME_CONTEXT)
+        store.put(_episode(episode_id="only_tile", occurred_at=ts, cues=(weaker,)))
+        store.put(_episode(episode_id="both", occurred_at=ts, cues=(stronger, weaker)))
+        rr_label, rows, _gran = _merged_ordered_episodes_for_cue_bucket(
+            store,
+            7,
+            bucket=PASSIVE_RECALL_PLACE_FAMILY_BUCKET_KEY,
+            cues=[c_spot, c_tile],
+            limit_per_axis=1,
+        )
+        assert rr_label == PASSIVE_RECALL_PLACE_FAMILY_LABEL
+        assert [e.episode_id for e in rows] == ["both"]
+
+
+class TestEpisodicPassiveRecallRetrievalObjectGranularity:
+    """object 軸の値プレフィックスによる並び優先"""
+
+    def test_item_instance_ranks_above_world_object_when_both_queries(self) -> None:
+        """item_instance と world_object の両クエリがあるとき粒度の高い方が統合並び／limit で先になる。"""
+        store = InMemorySubjectiveEpisodeStore()
+        ts = datetime(2026, 9, 1, tzinfo=timezone.utc)
+        cw = EpisodicCue(axis="object", value="world_object_1", source=EpisodicCueSource.TOOL)
+        ci = EpisodicCue(axis="object", value="item_instance_2", source=EpisodicCueSource.RUNTIME_CONTEXT)
+        store.put(_episode(episode_id="to_wo", occurred_at=ts, cues=(cw,)))
+        store.put(_episode(episode_id="to_item", occurred_at=ts + timedelta(seconds=1), cues=(ci,)))
+        rr_label, rows, _gran = _merged_ordered_episodes_for_cue_bucket(
+            store,
+            7,
+            bucket="object",
+            cues=[cw, ci],
+            limit_per_axis=1,
+        )
+        assert rr_label == "cue:object"
+        assert [e.episode_id for e in rows] == ["to_item"]
 
 
 class TestEpisodicPassiveRecallRetrievalRoundRobinFairness:

@@ -9,6 +9,13 @@ from datetime import datetime, timezone
 
 from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import IEpisodicEpisodeStore
 from ai_rpg_world.application.llm.contracts.episodic_memory import EpisodicCue, SubjectiveEpisode
+from ai_rpg_world.application.llm.passive_recall_cue_families import (
+    PASSIVE_RECALL_PLACE_FAMILY_BUCKET_KEY,
+    PASSIVE_RECALL_PLACE_FAMILY_LABEL,
+    passive_recall_cue_bucket_key,
+    passive_recall_object_value_granularity_weight,
+    passive_recall_place_axis_granularity_weight,
+)
 
 PASSIVE_RECALL_AXIS_TEMPORAL = "temporal"
 
@@ -35,6 +42,68 @@ def passive_recall_cue_axis_source_label(cue: EpisodicCue) -> str:
 def passive_recall_cue_axis_label(cue: EpisodicCue) -> str:
     """後方互換・テスト用エイリアス。`cue:{cue.axis}` と同じ。"""
     return passive_recall_cue_axis_source_label(cue)
+
+
+def _episode_arm_sort_quality(
+    bucket: str,
+    cue_axis: str,
+) -> bool:
+    return bucket == PASSIVE_RECALL_PLACE_FAMILY_BUCKET_KEY or cue_axis == "object"
+
+
+def _merged_ordered_episodes_for_cue_bucket(
+    store: IEpisodicEpisodeStore,
+    player_id: int,
+    *,
+    bucket: str,
+    cues: Sequence[EpisodicCue],
+    limit_per_axis: int,
+) -> tuple[str, list[SubjectiveEpisode], dict[str, frozenset[str]]]:
+    """
+    単一論理バケツ内で list_by_cue を統合する。
+    place ファミリーはラウンドロビン・ラベルが cue:place_family、ソースは cue:{axis} のまま。
+    object および place は粒度の高い一致を arm 内の並びで優先する。
+    """
+
+    rr_label = (
+        PASSIVE_RECALL_PLACE_FAMILY_LABEL
+        if bucket == PASSIVE_RECALL_PLACE_FAMILY_BUCKET_KEY
+        else f"cue:{cues[0].axis}"
+    )
+    cue_axis = cues[0].axis
+    use_quality = _episode_arm_sort_quality(bucket, cue_axis)
+
+    merged: dict[str, SubjectiveEpisode] = {}
+    labels_by_ep: dict[str, set[str]] = defaultdict(set)
+    max_gran: dict[str, float] = defaultdict(float)
+
+    for cue in cues:
+        ax_label = passive_recall_cue_axis_source_label(cue)
+        if bucket == PASSIVE_RECALL_PLACE_FAMILY_BUCKET_KEY:
+            g_weight = passive_recall_place_axis_granularity_weight(cue.axis)
+        elif cue.axis == "object":
+            g_weight = passive_recall_object_value_granularity_weight(cue.value)
+        else:
+            g_weight = 0.0
+
+        for ep in store.list_by_cue(player_id, cue, limit_per_axis):
+            eid = ep.episode_id
+            merged[eid] = ep
+            labels_by_ep[eid].add(ax_label)
+            if use_quality:
+                max_gran[eid] = max(max_gran[eid], g_weight)
+
+    def arm_sort_key(ep: SubjectiveEpisode) -> tuple[float, datetime, str]:
+        gran = max_gran[ep.episode_id] if use_quality else 0.0
+        dt, eid = _occurrence_sort_key(ep)
+        return (gran, dt, eid)
+
+    ordered = sorted(merged.values(), key=arm_sort_key, reverse=True)
+    if limit_per_axis > 0:
+        ordered = ordered[:limit_per_axis]
+
+    labels_frozen = {eid: frozenset(ls) for eid, ls in labels_by_ep.items()}
+    return rr_label, ordered, labels_frozen
 
 
 @dataclass(frozen=True)
@@ -64,9 +133,11 @@ class EpisodicPassiveRecallRetrievalResult:
 
 class EpisodicPassiveRecallRetrievalService:
     """
-    時間軸（list_recent）と cue 軸（list_by_cue、cue.axis 単位でまとめる）から候補を取る。
-    各軸は最大 limit_per_axis 件（軸内は occurred_at / episode_id 降順）。
-    最終採用は全体時刻順ではなく temporal と各 cue:{axis} を同格で round-robin。
+    時間軸（list_recent）と cue 軸（list_by_cue）から候補を取る。
+    situation の場所関連軸は論理ファミリー（place_spot / sub_loc / tile_area）として 1 本の軸ブロックにまとめる。
+    ブロック内は場所粒度・object は value のプレフィックス粒度で並べ替える（細かい一致を先に）。
+    各論理軸ブロックは最大 limit_per_axis 件（適用後）。
+    temporal と cue ブロック群はこれまでどおり同等に round-robin。
     """
 
     def __init__(self, store: IEpisodicEpisodeStore) -> None:
@@ -91,23 +162,25 @@ class EpisodicPassiveRecallRetrievalService:
             if ck in seen_canonical_per_axis[ax]:
                 continue
             seen_canonical_per_axis[ax].add(ck)
-            axis_to_cues[ax].append(cue)
-            if len(axis_to_cues[ax]) == 1:
-                axis_order.append(ax)
+            bucket = passive_recall_cue_bucket_key(ax)
+            axis_to_cues[bucket].append(cue)
+            if len(axis_to_cues[bucket]) == 1:
+                axis_order.append(bucket)
 
-        cue_arms: list[tuple[str, list[SubjectiveEpisode]]] = []
-        for ax in axis_order:
-            merged: dict[str, SubjectiveEpisode] = {}
-            for cue in axis_to_cues[ax]:
-                for ep in self._store.list_by_cue(player_id, cue, limit_per_axis):
-                    merged[ep.episode_id] = ep
-            ordered = sorted(merged.values(), key=_occurrence_sort_key, reverse=True)
-            if limit_per_axis > 0:
-                ordered = ordered[:limit_per_axis]
-            cue_arms.append((f"cue:{ax}", ordered))
+        cue_arms: list[tuple[str, list[SubjectiveEpisode], dict[str, frozenset[str]]]] = []
+        for bucket in axis_order:
+            cues = axis_to_cues[bucket]
+            rr_label, rows, granular = _merged_ordered_episodes_for_cue_bucket(
+                self._store,
+                player_id,
+                bucket=bucket,
+                cues=cues,
+                limit_per_axis=limit_per_axis,
+            )
+            cue_arms.append((rr_label, rows, granular))
 
         raw_counts: list[tuple[str, int]] = [(PASSIVE_RECALL_AXIS_TEMPORAL, len(temporal_rows))]
-        raw_counts.extend((lab, len(rows)) for lab, rows in cue_arms)
+        raw_counts.extend((lab, len(rows)) for lab, rows, _g in cue_arms)
 
         episode_by_id: dict[str, SubjectiveEpisode] = {}
         source_axes_by_episode: dict[str, set[str]] = defaultdict(set)
@@ -116,17 +189,17 @@ class EpisodicPassiveRecallRetrievalService:
             episode_by_id[ep.episode_id] = ep
             source_axes_by_episode[ep.episode_id].add(PASSIVE_RECALL_AXIS_TEMPORAL)
 
-        for label, rows in cue_arms:
+        for _, rows, granular in cue_arms:
             for ep in rows:
-                episode_by_id[ep.episode_id] = ep
-                source_axes_by_episode[ep.episode_id].add(label)
+                eid = ep.episode_id
+                episode_by_id[eid] = ep
+                for ax in granular.get(eid, ()):
+                    source_axes_by_episode[eid].add(ax)
 
         union_before_cap = len(episode_by_id)
 
-        arms: list[tuple[str, list[SubjectiveEpisode]]] = [
-            (PASSIVE_RECALL_AXIS_TEMPORAL, temporal_rows),
-            *cue_arms,
-        ]
+        arms: list[tuple[str, list[SubjectiveEpisode]]] = [(PASSIVE_RECALL_AXIS_TEMPORAL, temporal_rows)]
+        arms.extend((lab, rows) for lab, rows, _g in cue_arms)
 
         capped_ids = _round_robin_pick_episode_ids(arms, max_candidates)
 
