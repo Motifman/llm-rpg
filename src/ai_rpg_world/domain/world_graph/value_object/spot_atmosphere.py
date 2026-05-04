@@ -13,3 +13,6 @@ class SpotAtmosphere:
     sound_ambient: Optional[str] = None
     temperature: TemperatureEnum = TemperatureEnum.NORMAL
     smell: Optional[str] = None
+    # 脱出ゲーム拡張: 環境ハザード
+    hazard_level: int = 0
+    hazard_description: Optional[str] = None
