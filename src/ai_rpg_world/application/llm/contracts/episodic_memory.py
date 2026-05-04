@@ -153,6 +153,8 @@ class SubjectiveEpisode:
     interpreted: str | None
     cues: Tuple[EpisodicCue, ...]
     recall_text: str | None = None
+    recall_count: int = 0
+    last_recalled_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.episode_id, str):
@@ -205,3 +207,8 @@ class SubjectiveEpisode:
         for idx, c in enumerate(self.cues):
             if not isinstance(c, EpisodicCue):
                 raise TypeError(f"cues[{idx}] must be EpisodicCue")
+
+        if not isinstance(self.recall_count, int) or self.recall_count < 0:
+            raise ValueError("recall_count must be int >= 0")
+        if self.last_recalled_at is not None and not isinstance(self.last_recalled_at, datetime):
+            raise TypeError("last_recalled_at must be datetime or None")

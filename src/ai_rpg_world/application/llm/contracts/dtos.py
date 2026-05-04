@@ -1,9 +1,10 @@
 """LLM 向け表示・記憶層の DTO"""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+from ai_rpg_world.application.llm.contracts.tool_category import ToolCategory
 from ai_rpg_world.domain.skill.enum.skill_enum import DeckTier
 
 
@@ -149,6 +150,7 @@ class ToolDefinitionDto:
     name: str
     description: str
     parameters: Dict[str, Any]  # JSON Schema
+    category: ToolCategory = field(default=ToolCategory.WORLD_ACTION)
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str):
@@ -157,6 +159,11 @@ class ToolDefinitionDto:
             raise TypeError("description must be str")
         if not isinstance(self.parameters, dict):
             raise TypeError("parameters must be dict")
+        if not isinstance(self.category, ToolCategory):
+            if isinstance(self.category, str):
+                object.__setattr__(self, "category", ToolCategory(self.category))
+            else:
+                raise TypeError("category must be ToolCategory")
 
 
 @dataclass(frozen=True)
