@@ -80,6 +80,7 @@ class ItemSpecDefinition:
     name: str
     description: str
     category: str
+    is_light_source: bool = False
 
 
 @dataclass(frozen=True)
@@ -207,6 +208,7 @@ class ScenarioLoader:
                 name=item["name"],
                 description=item.get("description", ""),
                 category=item.get("category", "GENERAL"),
+                is_light_source=item.get("is_light_source", False),
             ))
         return defs
 

@@ -737,6 +737,7 @@ def create_escape_game_runtime(
             rarity=Rarity.COMMON,
             description=item_def.description,
             max_stack_size=MaxStackSize(1),
+            is_light_source=item_def.is_light_source,
         )
         item_spec_repo.save(spec)
 
@@ -835,6 +836,13 @@ def create_escape_game_runtime(
         )
     }
 
+    # 光源アイテムを自動検出
+    light_source_item_spec_ids = frozenset(
+        rm.item_spec_id
+        for rm in item_spec_repo.find_all()
+        if getattr(rm, "is_light_source", False)
+    )
+
     def _owned_item_spec_ids_provider(entity_id: int) -> frozenset:
         inv = player_inventory_repo.find_by_id(PlayerId(entity_id))
         if inv is None:
@@ -849,6 +857,7 @@ def create_escape_game_runtime(
         inventory_builder=_build_inventory,
         weather_provider=lambda: weather_holder["state"],
         world_flags_provider=world_flag_state.as_frozen_set,
+        light_source_item_spec_ids=light_source_item_spec_ids,
         owned_item_spec_ids_provider=_owned_item_spec_ids_provider,
     )
 

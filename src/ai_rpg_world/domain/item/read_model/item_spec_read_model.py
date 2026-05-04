@@ -29,6 +29,7 @@ class ItemSpecReadModel:
     is_placeable: bool = False
     placeable_object_type: Optional[str] = None
     consume_effect: Optional["ItemEffect"] = None
+    is_light_source: bool = False
 
     @classmethod
     def create_from_item_spec(
@@ -44,6 +45,7 @@ class ItemSpecReadModel:
         is_placeable: bool = False,
         placeable_object_type: Optional[str] = None,
         consume_effect: Optional["ItemEffect"] = None,
+        is_light_source: bool = False,
     ) -> "ItemSpecReadModel":
         """ItemSpecからReadModelを作成"""
         return cls(
@@ -58,6 +60,7 @@ class ItemSpecReadModel:
             is_placeable=is_placeable,
             placeable_object_type=placeable_object_type,
             consume_effect=consume_effect,
+            is_light_source=is_light_source,
         )
 
     @property
@@ -90,4 +93,5 @@ class ItemSpecReadModel:
             is_placeable=self.is_placeable,
             placeable_object_type=self.placeable_object_type,
             consume_effect=self.consume_effect,
+            is_light_source=self.is_light_source,
         )

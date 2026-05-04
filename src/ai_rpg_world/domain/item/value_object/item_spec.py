@@ -33,6 +33,7 @@ class ItemSpec:
     is_placeable: bool = False
     placeable_object_type: Optional[str] = None
     consume_effect: Optional["ItemEffect"] = None
+    is_light_source: bool = False
 
     def __post_init__(self):
         """バリデーションは__post_init__で実行"""
