@@ -9,6 +9,7 @@
 
 from typing import Any, Dict, Optional, Type, Tuple
 
+from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
 from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxCreatedEvent,
     HitBoxDeactivatedEvent,
@@ -281,6 +282,9 @@ def _build_event_to_strategy_mapping() -> Dict[Type[Any], str]:
         InventorySlotOverflowEvent,
     ):
         mapping[ev] = "default"
+
+    # item_use
+    mapping[ConsumableUsedEvent] = "item_use"
 
     # spot_graph
     for ev in (
