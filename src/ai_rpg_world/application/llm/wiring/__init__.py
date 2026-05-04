@@ -47,6 +47,8 @@ EventHandlerComposition のインスタンス化）は**呼び出し元（外部
 - 既定はプロセス内の `InMemorySubjectiveEpisodeStore`。環境変数 `SUBJECTIVE_EPISODE_DB_PATH` に SQLite ファイルパスを
   指定すると永続化ストアを1つ生成し、`EpisodicChunkCoordinator`（チャンク境界で保存）経由で
   `LlmAgentOrchestrator` と `DefaultPromptBuilder` 内の `EpisodicPassiveRecallRetrievalService`（受動想起）に**同一インスタンス**を渡す。
+  同じファイルに **MemoryLink** と **セマンティック昇格済みエントリ**のテーブルも作成され（マイグレーション namespace `episodic-memory-graph-v1`）、
+  リンクストア・セマンティックストアは SQLite 実装が共有接続で使われる。未設定時はこれらのみインメモリ。
 - チャンク草案は既定で `ChunkEpisodeDraftBuilder()`。テスト等では `chunk_episode_draft_builder=` で差し替え可能。
 - テスト等でストアだけ差し替える場合は `episodic_episode_store=` を指定する（ストアと retrieval・coordinator で共有される）。
 - 協調全体を差し替える場合は `episodic_chunk_coordinator=` を渡す（未指定時は上記ポートから組み立てる）。
@@ -118,9 +120,6 @@ from ai_rpg_world.application.llm.services.episodic_memory_link_application_serv
 from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
     EpisodicSemanticClusterPromotionService,
 )
-from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
-    InMemorySemanticMemoryStore,
-)
 from ai_rpg_world.application.llm.services.current_state_formatter import (
     DefaultCurrentStateFormatter,
 )
@@ -132,6 +131,7 @@ from ai_rpg_world.application.llm.wiring._default_episodic_episode_store import 
 )
 from ai_rpg_world.application.llm.wiring.episodic_memory_link_bundle import (
     build_episodic_memory_link_bundle,
+    default_link_and_semantic_stores_for_episode_store,
 )
 from ai_rpg_world.application.llm.services.in_memory_todo_store import (
     InMemoryTodoStore,
@@ -955,8 +955,13 @@ def create_llm_agent_wiring(
 
     client = llm_client if llm_client is not None else create_llm_client_from_env()
     shared_episode_store = resolve_default_episodic_episode_store(episodic_episode_store)
-    mem_bundle = build_episodic_memory_link_bundle(shared_episode_store)
-    semantic_memory_store: ISemanticMemoryStore = InMemorySemanticMemoryStore()
+    link_store, semantic_memory_store = default_link_and_semantic_stores_for_episode_store(
+        shared_episode_store
+    )
+    mem_bundle = build_episodic_memory_link_bundle(
+        shared_episode_store,
+        link_store=link_store,
+    )
     episodic_semantic_promotion = EpisodicSemanticClusterPromotionService(
         episode_store=shared_episode_store,
         link_store=mem_bundle.link_store,

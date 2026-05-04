@@ -180,6 +180,11 @@ class SqliteSubjectiveEpisodeStore(IEpisodicEpisodeStore):
             migrations=[SqliteMigration(1, _init_schema_v1)],
         )
 
+    @property
+    def connection(self) -> sqlite3.Connection:
+        """MemoryLink / セマンティック等の同じ SQLite ファイルに同居するストア用の接続。"""
+        return self._conn
+
     @classmethod
     def connect(cls, database_path: str) -> SqliteSubjectiveEpisodeStore:
         conn = sqlite3.connect(database_path, check_same_thread=False)

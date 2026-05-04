@@ -24,9 +24,6 @@ from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
     IEpisodicReinterpretationCompletionPort,
     IEpisodicReinterpretationJournalStore,
 )
-from ai_rpg_world.application.llm.contracts.semantic_memory_store_port import (
-    ISemanticMemoryStore,
-)
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     ILLMClient,
@@ -46,9 +43,6 @@ from ai_rpg_world.application.llm.services.prompt_builder import (
 )
 from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
     EpisodicSemanticClusterPromotionService,
-)
-from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
-    InMemorySemanticMemoryStore,
 )
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
     SpotGraphToolExecutor,
@@ -91,6 +85,7 @@ from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISp
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
 from ai_rpg_world.application.llm.wiring.episodic_memory_link_bundle import (
     build_episodic_memory_link_bundle,
+    default_link_and_semantic_stores_for_episode_store,
 )
 
 
@@ -291,8 +286,13 @@ def create_spot_graph_wiring(
 
     client = llm_client if llm_client is not None else create_llm_client_from_env()
     shared_episode_store = resolve_default_episodic_episode_store(episodic_episode_store)
-    mem_bundle = build_episodic_memory_link_bundle(shared_episode_store)
-    semantic_memory_store: ISemanticMemoryStore = InMemorySemanticMemoryStore()
+    link_store, semantic_memory_store = default_link_and_semantic_stores_for_episode_store(
+        shared_episode_store
+    )
+    mem_bundle = build_episodic_memory_link_bundle(
+        shared_episode_store,
+        link_store=link_store,
+    )
     episodic_semantic_promotion = EpisodicSemanticClusterPromotionService(
         episode_store=shared_episode_store,
         link_store=mem_bundle.link_store,
