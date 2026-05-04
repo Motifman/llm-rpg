@@ -23,3 +23,9 @@ class TrapDef:
     is_repeating: bool = False
     disarm_conditions: Tuple[InteractionCondition, ...] = ()
     detection_difficulty: int = 0  # EXPLORE で発見可能（search_count >= この値）
+
+    def __post_init__(self) -> None:
+        if not self.trap_id.strip():
+            raise ValueError("trap_id cannot be empty")
+        if not self.effects:
+            raise ValueError("TrapDef must have at least one effect")

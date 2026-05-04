@@ -24,10 +24,15 @@ class TrapEvaluationService:
         traps: Tuple[TrapDef, ...],
         world_flags: FrozenSet[str],
         owned_item_spec_ids: FrozenSet[ItemSpecId],
-    ) -> Tuple[Tuple[TrapDef, ...], Tuple[InteractionEffect, ...]]:
-        """進入トラップを評価し、(発動したトラップ群, 統合効果リスト) を返す。"""
+    ) -> Tuple[Tuple[TrapDef, ...], Tuple[InteractionEffect, ...], FrozenSet[str]]:
+        """進入トラップを評価し、(発動トラップ群, 統合効果リスト, 追加すべきフラグ) を返す。
+
+        一度きりトラップが発動した場合、``trap_triggered:{trap_id}`` フラグが
+        3番目の要素に含まれる。呼び出し側は WorldFlagRegistry に追加する責務を持つ。
+        """
         triggered: List[TrapDef] = []
         effects: List[InteractionEffect] = []
+        new_flags: set[str] = set()
 
         for trap in traps:
             if trap.trigger_type != TrapTriggerTypeEnum.ON_ENTRY:
@@ -36,21 +41,26 @@ class TrapEvaluationService:
                 continue
             triggered.append(trap)
             effects.extend(trap.effects)
+            if not trap.is_repeating:
+                new_flags.add(f"trap_triggered:{trap.trap_id}")
 
-        return tuple(triggered), tuple(effects)
+        return tuple(triggered), tuple(effects), frozenset(new_flags)
 
     def evaluate_interact_trap(
         self,
         trap: TrapDef,
         world_flags: FrozenSet[str],
         owned_item_spec_ids: FrozenSet[ItemSpecId],
-    ) -> Tuple[InteractionEffect, ...]:
-        """操作トラップを評価し、発動する効果リストを返す。空なら不発。"""
+    ) -> Tuple[Tuple[InteractionEffect, ...], FrozenSet[str]]:
+        """操作トラップを評価し、(効果リスト, 追加すべきフラグ) を返す。効果が空なら不発。"""
         if trap.trigger_type != TrapTriggerTypeEnum.ON_INTERACT:
-            return ()
+            return (), frozenset()
         if not self._should_trigger(trap, world_flags, owned_item_spec_ids):
-            return ()
-        return trap.effects
+            return (), frozenset()
+        new_flags: FrozenSet[str] = frozenset()
+        if not trap.is_repeating:
+            new_flags = frozenset({f"trap_triggered:{trap.trap_id}"})
+        return trap.effects, new_flags
 
     def _should_trigger(
         self,
@@ -91,5 +101,7 @@ class TrapEvaluationService:
                 if not cond.flag_name or cond.flag_name not in world_flags:
                     return False
             else:
-                return False
+                raise NotImplementedError(
+                    f"Unsupported disarm condition type: {t.value}"
+                )
         return True
