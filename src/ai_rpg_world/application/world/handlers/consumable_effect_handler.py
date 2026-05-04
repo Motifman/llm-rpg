@@ -22,10 +22,12 @@ from ai_rpg_world.domain.item.value_object.item_effect import (
     RecoverMpEffect,
     GoldEffect,
     ExpEffect,
+    SatisfyNeedEffect,
     CompositeItemEffect,
     ItemEffect,
 )
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
+from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 
 
 class ConsumableEffectHandler(EventHandler[ConsumableUsedEvent]):
@@ -84,6 +86,15 @@ class ConsumableEffectHandler(EventHandler[ConsumableUsedEvent]):
             player_status.earn_gold(effect.amount)
         elif isinstance(effect, ExpEffect):
             player_status.gain_exp(effect.amount)
+        elif isinstance(effect, SatisfyNeedEffect):
+            try:
+                need_type = NeedType(effect.need_type_name)
+                player_status.satisfy_need(need_type, effect.amount)
+            except ValueError:
+                self._logger.warning(
+                    "Unknown NeedType '%s' in SatisfyNeedEffect, skipping",
+                    effect.need_type_name,
+                )
         elif isinstance(effect, CompositeItemEffect):
             for sub in effect.effects:
                 self._apply_effect_to_status(sub, player_status)
