@@ -2,6 +2,7 @@
 
 from ai_rpg_world.application.observation.handlers.observation_event_handler import ObservationEventHandler
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
+from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
 from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxHitRecordedEvent,
 )
@@ -188,6 +189,8 @@ _OBSERVED_EVENT_TYPES = (
     ItemEquippedEvent,
     ItemUnequippedEvent,
     InventorySlotOverflowEvent,
+    # --- アイテム使用 ---
+    ConsumableUsedEvent,
     # --- 追跡 ---
     PursuitStartedEvent,
     PursuitUpdatedEvent,
