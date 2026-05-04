@@ -40,7 +40,25 @@ from ai_rpg_world.application.llm.services.tool_catalog.subjective_action import
     SUBJECTIVE_ACTION_TEXT_FIELDS,
     is_subjective_action_tool,
 )
+from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
+    EpisodicSemanticClusterPromotionService,
+)
+from ai_rpg_world.application.llm.tool_constants import (
+    TOOL_NAME_MEMORY_EXPLORE_RELATED,
+    TOOL_NAME_TODO_ADD,
+    TOOL_NAME_TODO_COMPLETE,
+    TOOL_NAME_TODO_LIST,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+
+_TOOLS_SKIPPING_EPISODIC_CHUNK: frozenset[str] = frozenset(
+    {
+        TOOL_NAME_TODO_ADD,
+        TOOL_NAME_TODO_LIST,
+        TOOL_NAME_TODO_COMPLETE,
+        TOOL_NAME_MEMORY_EXPLORE_RELATED,
+    }
+)
 
 
 def _format_action_summary(tool_name: str, arguments: Optional[Dict[str, Any]] = None) -> str:
@@ -132,6 +150,7 @@ class LlmAgentOrchestrator:
         tool_argument_resolver: Optional[IToolArgumentResolver] = None,
         episodic_chunk_coordinator: Optional[EpisodicChunkCoordinator] = None,
         episodic_reinterpretation_coordinator: Optional[EpisodicReinterpretationCoordinator] = None,
+        episodic_semantic_promotion: Optional[EpisodicSemanticClusterPromotionService] = None,
     ) -> None:
         if not isinstance(prompt_builder, IPromptBuilder):
             raise TypeError("prompt_builder must be IPromptBuilder")
@@ -161,6 +180,12 @@ class LlmAgentOrchestrator:
                 "episodic_reinterpretation_coordinator must be "
                 "EpisodicReinterpretationCoordinator or None"
             )
+        if episodic_semantic_promotion is not None and not isinstance(
+            episodic_semantic_promotion, EpisodicSemanticClusterPromotionService
+        ):
+            raise TypeError(
+                "episodic_semantic_promotion must be EpisodicSemanticClusterPromotionService or None"
+            )
         self._prompt_builder = prompt_builder
         self._llm_client = llm_client
         self._tool_command_mapper = tool_command_mapper
@@ -172,6 +197,7 @@ class LlmAgentOrchestrator:
         )
         self._episodic_chunk_coordinator = episodic_chunk_coordinator
         self._episodic_reinterpretation_coordinator = episodic_reinterpretation_coordinator
+        self._episodic_semantic_promotion = episodic_semantic_promotion
 
     def run_turn(self, player_id: PlayerId) -> LlmCommandResultDto:
         """
@@ -305,11 +331,13 @@ class LlmAgentOrchestrator:
             tool_name=name or None,
             fingerprint_args=canonical_arguments,
         )
-        if self._episodic_chunk_coordinator is not None:
+        if self._episodic_chunk_coordinator is not None and name not in _TOOLS_SKIPPING_EPISODIC_CHUNK:
             # 既定は False。True に固定すると毎ツール成功のたびに即セグメント閉鎖となり、
             # chunk_boundary（観測ヒント等）による HOLD が実質使えなくなるため。
             self._episodic_chunk_coordinator.after_action_recorded(
                 player_id,
                 explicit_segment_close=False,
             )
+        if self._episodic_semantic_promotion is not None:
+            self._episodic_semantic_promotion.on_after_tool_turn(player_id.value)
         return result_dto

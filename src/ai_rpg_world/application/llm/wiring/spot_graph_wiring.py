@@ -16,10 +16,16 @@ from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
     IEpisodicChunkSubjectiveCompletionPort,
 )
+from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
+    IEpisodicEpisodeStore,
+)
 from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
     IEpisodicRecallBufferStore,
     IEpisodicReinterpretationCompletionPort,
     IEpisodicReinterpretationJournalStore,
+)
+from ai_rpg_world.application.llm.contracts.semantic_memory_store_port import (
+    ISemanticMemoryStore,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
@@ -38,8 +44,11 @@ from ai_rpg_world.application.llm.services.prompt_builder import (
     DEFAULT_RECENT_ACTIONS_LIMIT,
     DEFAULT_RECENT_OBSERVATIONS_LIMIT,
 )
-from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
-    EpisodicPassiveRecallRetrievalService,
+from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
+    EpisodicSemanticClusterPromotionService,
+)
+from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
+    InMemorySemanticMemoryStore,
 )
 from ai_rpg_world.application.llm.services.executors.spot_graph_tool_executor import (
     SpotGraphToolExecutor,
@@ -80,6 +89,9 @@ from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.repository.physical_map_repository import PhysicalMapRepository
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
+from ai_rpg_world.application.llm.wiring.episodic_memory_link_bundle import (
+    build_episodic_memory_link_bundle,
+)
 
 
 def create_spot_graph_wiring(
@@ -178,6 +190,9 @@ def create_spot_graph_wiring(
         _optional_episodic_reinterpretation_completion,
         _resolve_default_episodic_reinterpretation_stores,
     )
+    from ai_rpg_world.application.llm.services.episodic_reinterpretation_coordinator import (
+        EpisodicReinterpretationCoordinator,
+    )
     from ai_rpg_world.application.llm.wiring._llm_client_factory import (
         create_llm_client_from_env,
     )
@@ -193,9 +208,6 @@ def create_spot_graph_wiring(
     from ai_rpg_world.application.llm.services.llm_player_resolver import ProfileBasedLlmPlayerResolver
     from ai_rpg_world.application.llm.services.llm_turn_trigger import DefaultLlmTurnTrigger
     from ai_rpg_world.application.llm.services.llm_agent_turn_runner import LlmAgentTurnRunner
-    from ai_rpg_world.application.llm.services.episodic_reinterpretation_coordinator import (
-        EpisodicReinterpretationCoordinator,
-    )
     from ai_rpg_world.application.llm.services.recent_events_formatter import (
         DefaultRecentEventsFormatter,
     )
@@ -278,6 +290,14 @@ def create_spot_graph_wiring(
     todo_store = runtime_tool_state.todo_store
 
     client = llm_client if llm_client is not None else create_llm_client_from_env()
+    shared_episode_store = resolve_default_episodic_episode_store(episodic_episode_store)
+    mem_bundle = build_episodic_memory_link_bundle(shared_episode_store)
+    semantic_memory_store: ISemanticMemoryStore = InMemorySemanticMemoryStore()
+    episodic_semantic_promotion = EpisodicSemanticClusterPromotionService(
+        episode_store=shared_episode_store,
+        link_store=mem_bundle.link_store,
+        semantic_store=semantic_memory_store,
+    )
     spot_graph_tool_executor = SpotGraphToolExecutor(
         spot_graph_world_services=spot_graph_world_services,
         player_inventory_repository=player_inventory_repository,
@@ -325,6 +345,8 @@ def create_spot_graph_wiring(
         item_spec_repository=item_spec_repository,
         player_profile_repository=player_profile_repository,
         spot_graph_tool_executor=spot_graph_tool_executor,
+        episodic_memory_explore_executor=mem_bundle.memory_explore_executor(),
+        episodic_explore_related_enabled=True,
     )
     available_tools_provider = tool_stack.available_tools_provider
     tool_command_mapper = tool_stack.tool_command_mapper
@@ -334,7 +356,6 @@ def create_spot_graph_wiring(
         llm_player_resolver = ProfileBasedLlmPlayerResolver(
             player_profile_repository=player_profile_repository,
         )
-    shared_episode_store = resolve_default_episodic_episode_store(episodic_episode_store)
     recall_buffer, reinterpretation_journal = _resolve_default_episodic_reinterpretation_stores(
         episodic_recall_buffer_store,
         episodic_reinterpretation_journal_store,
@@ -375,8 +396,9 @@ def create_spot_graph_wiring(
         persona_block_provider=persona_block_provider
         if chunk_subjective_service is not None
         else None,
+        episodic_memory_link_service=mem_bundle.link_service,
     )
-    episodic_passive_recall = EpisodicPassiveRecallRetrievalService(shared_episode_store)
+    episodic_passive_recall = mem_bundle.passive_recall
     prompt_builder = _build_prompt_stack(
         buffer=buffer,
         sliding_window=sliding_window,
@@ -392,6 +414,7 @@ def create_spot_graph_wiring(
         tile_map_view_distance=effective_view_distance,
         persona_block_provider=persona_block_provider,
         episodic_passive_recall=episodic_passive_recall,
+        episodic_memory_link_service=mem_bundle.link_service,
         episodic_recall_buffer_store=prompt_recall_buffer,
         episodic_reinterpretation_journal_store=reinterpretation_journal,
         episodic_turn_index_provider=reinterpretation_coord.current_turn_index,
@@ -405,6 +428,7 @@ def create_spot_graph_wiring(
         tool_argument_resolver=tool_argument_resolver,
         episodic_chunk_coordinator=episodic_coord,
         episodic_reinterpretation_coordinator=reinterpretation_coord,
+        episodic_semantic_promotion=episodic_semantic_promotion,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,
@@ -471,6 +495,7 @@ def create_spot_graph_wiring(
         episodic_episode_store=shared_episode_store,
         episodic_recall_buffer_store=recall_buffer,
         episodic_reinterpretation_journal_store=reinterpretation_journal,
+        semantic_memory_store=semantic_memory_store,
     )
 
 
