@@ -68,6 +68,9 @@ from ai_rpg_world.application.world_graph.spot_graph_augmenting_world_query impo
 from ai_rpg_world.application.world_graph.spot_graph_current_state_builder import (
     SpotGraphCurrentStateBuilder,
 )
+from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
+    collect_owned_item_spec_ids_from_inventory,
+)
 from ai_rpg_world.application.world_graph.spot_graph_no_op_movement_service import (
     SpotGraphNoOpMovementService,
 )
@@ -253,10 +256,25 @@ def create_spot_graph_wiring(
     )
     ConsumableEffectEventHandlerRegistry(consumable_handler).register_handlers(event_publisher)
 
+    # 光源アイテムを自動検出
+    light_source_item_spec_ids = frozenset(
+        rm.item_spec_id
+        for rm in item_spec_repository.find_all()
+        if getattr(rm, "is_light_source", False)
+    )
+
+    def _owned_item_spec_ids_provider(entity_id: int) -> frozenset:
+        inv = player_inventory_repository.find_by_id(PlayerId(entity_id))
+        if inv is None:
+            return frozenset()
+        return collect_owned_item_spec_ids_from_inventory(inv, item_repository)
+
     sg_builder = SpotGraphCurrentStateBuilder(
         spot_graph_repository=spot_graph_repository,
         spot_interior_repository=spot_interior_repository,
         player_status_repository=player_status_repository,
+        light_source_item_spec_ids=light_source_item_spec_ids,
+        owned_item_spec_ids_provider=_owned_item_spec_ids_provider,
     )
     augmented_world_query = SpotGraphAugmentingWorldQueryService(
         inner=world_query_service,
