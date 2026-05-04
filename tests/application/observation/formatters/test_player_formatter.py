@@ -225,6 +225,7 @@ class TestPlayerObservationFormatterItemAddedToInventory:
         item_repo = MagicMock()
         agg = MagicMock()
         agg.item_spec.name = "銅の剣"
+        agg.item_spec.item_spec_id.value = 501
         agg.quantity = 3
         item_repo.find_by_id.return_value = agg
         ctx = _make_context(item_repository=item_repo)
@@ -238,6 +239,27 @@ class TestPlayerObservationFormatterItemAddedToInventory:
         assert out is not None
         assert "銅の剣" in out.prose
         assert "3個" in out.prose
+        assert out.structured.get("item_spec_id_value") == 501
+
+    def test_event_item_spec_id_value_takes_precedence_over_repository(self):
+        """イベントの item_spec_id_value があればリポジトリの spec より優先する。"""
+        item_repo = MagicMock()
+        agg = MagicMock()
+        agg.item_spec.name = "銅の剣"
+        agg.item_spec.item_spec_id.value = 501
+        agg.quantity = 1
+        item_repo.find_by_id.return_value = agg
+        ctx = _make_context(item_repository=item_repo)
+        formatter = PlayerObservationFormatter(ctx)
+        event = ItemAddedToInventoryEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerInventoryAggregate",
+            item_instance_id=ItemInstanceId.create(1),
+            item_spec_id_value=888,
+        )
+        out = formatter.format(event, PlayerId(1))
+        assert out is not None
+        assert out.structured.get("item_spec_id_value") == 888
 
     def test_fallback_when_repository_none(self):
         """item_repository なしのとき「何かのアイテムを入手」"""

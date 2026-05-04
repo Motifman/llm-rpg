@@ -5,6 +5,7 @@ from typing import Any, Optional
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
     ObservationFormatterContext,
+    resolve_item_spec_id_value_for_instance,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.trade.event.trade_event import (
@@ -51,6 +52,11 @@ class TradeObservationFormatter:
                 "item_name": item_name,
                 "requested_gold": event.requested_gold.value,
             }
+            spec_val = resolve_item_spec_id_value_for_instance(
+                self._context.item_repository, event.offered_item_id
+            )
+            if spec_val is not None:
+                structured["item_spec_id_value"] = spec_val
             return ObservationOutput(
                 prose=prose,
                 structured=structured,
@@ -67,6 +73,11 @@ class TradeObservationFormatter:
             "item_name": item_name,
             "requested_gold": event.requested_gold.value,
         }
+        spec_val = resolve_item_spec_id_value_for_instance(
+            self._context.item_repository, event.offered_item_id
+        )
+        if spec_val is not None:
+            structured["item_spec_id_value"] = spec_val
         return ObservationOutput(
             prose=prose,
             structured=structured,

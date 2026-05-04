@@ -1,11 +1,12 @@
 """Sub-formatter 共通の名前解決・リポジトリ参照。親への依存を避けるための基盤。"""
 
 from dataclasses import dataclass
-from typing import Optional, TYPE_CHECKING
+from typing import Any, List, Optional, TYPE_CHECKING
 
 from ai_rpg_world.application.observation.services.formatters.name_resolver import (
     ObservationNameResolver,
 )
+from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 
 if TYPE_CHECKING:
     from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
@@ -15,6 +16,61 @@ if TYPE_CHECKING:
     from ai_rpg_world.domain.world_graph.service.sound_propagation_service import (
         SoundPropagationService,
     )
+
+
+def _coerce_item_spec_id_entry_value(raw: Any) -> Optional[int]:
+    """
+    obtained_items 内 dict の item_spec_id を int に正規化する。
+    `episodic_cue_rules._coerce_non_bool_int` と同じ規則（bool は int とみなさない）。
+    """
+    if type(raw) is int:
+        return raw
+    if isinstance(raw, float):
+        if raw.is_integer():
+            return int(raw)
+        return None
+    if isinstance(raw, str):
+        s = raw.strip()
+        if not s or not s.isdigit():
+            return None
+        try:
+            return int(s)
+        except ValueError:
+            return None
+    return None
+
+
+def resolve_item_spec_id_value_for_instance(
+    item_repository: Optional["ItemRepository"],
+    item_instance_id: ItemInstanceId,
+) -> Optional[int]:
+    """ItemAggregate が取れるとき item_spec_id の数値を返す。"""
+    if item_repository is None:
+        return None
+    agg = item_repository.find_by_id(item_instance_id)
+    if agg is None:
+        return None
+    return agg.item_spec.item_spec_id.value
+
+
+def first_item_spec_id_value_from_obtained_items(
+    obtained_items: List[Any],
+) -> Optional[int]:
+    """
+    ResourceHarvestedEvent.obtained_items などから先頭の item_spec_id を int で返す。
+    複数種ある場合は先頭のみ（局面 cue は 1 件に収めるため）。
+    各要素の item_spec_id は `_coerce_item_spec_id_entry_value` で解釈する。
+    """
+    for entry in obtained_items:
+        if not isinstance(entry, dict):
+            continue
+        spec_id_raw = entry.get("item_spec_id")
+        if spec_id_raw is None:
+            continue
+        coerced = _coerce_item_spec_id_entry_value(spec_id_raw)
+        if coerced is not None:
+            return coerced
+    return None
 
 
 @dataclass(frozen=True)
