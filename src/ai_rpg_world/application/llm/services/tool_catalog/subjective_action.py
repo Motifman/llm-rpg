@@ -101,4 +101,5 @@ def with_subjective_action_schema(definition: ToolDefinitionDto) -> ToolDefiniti
         name=definition.name,
         description=definition.description,
         parameters=parameters,
+        category=definition.category,
     )
