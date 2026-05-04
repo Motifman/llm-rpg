@@ -37,6 +37,16 @@ class IMemoryLinkStore(ABC):
         """episode_id に接続するリンクを返す（件数上限付き）。"""
 
     @abstractmethod
+    def list_all_incident_links(
+        self,
+        player_id: int,
+        episode_id: str,
+        *,
+        now: datetime,
+    ) -> list[MemoryLink]:
+        """episode_id に接続する全リンク（セマンティック昇格の部分グラフ展開用。件数上限なし）。"""
+
+    @abstractmethod
     def count_links_for_episode(self, player_id: int, episode_id: str) -> int:
         """接続リンク数（上限判定用）。"""
 

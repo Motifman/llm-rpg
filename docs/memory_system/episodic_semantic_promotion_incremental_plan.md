@@ -64,11 +64,13 @@
 
 ## 4. 実装タスク（順序）
 
-1. **`IMemoryLinkStore` 拡張**（後方互換に注意）: `list_links_incident(player_id, episode_id) -> Iterable[MemoryLink]` または同等。SQLite 実装ではインデックス必須。
-2. **`PromotionFrontier`（仮）** の蓄積: リンクサービス・受動想起・探索 executor・チャンクからフック（依存が増えるため **最小のイベント経路**から順に）。
-3. **`EpisodicSemanticClusterPromotionService` 改修**: `on_after_tool_turn` でフル `list_all` の代わりにフロンティア駆動パス。オプションで環境変数で旧挙動にフォールバック（デバッグ用、その後削除可）。
-4. **結合テスト**: 小グラフでフルスキャンと増分の結果一致（または許容差を文書化）。
-5. **ドキュメント**: 本ファイルの「フルスキャンとの一致」節を実装結果で更新。
+1. **`IMemoryLinkStore` 拡張**: `list_all_incident_links(player_id, episode_id, *, now)`（全インシデントリンク）。SQLite は既存 `(player_id, episode_id_a)` / `(player_id, episode_id_b)` インデックスでカバー。
+2. **`EpisodicPromotionFrontier`**: リンクサービス・受動想起・能動 `memory_explore_related`（`note_promotion_frontier_episodes`）から蓄積。`on_after_tool_turn` 先頭で `drain`。
+3. **`EpisodicSemanticClusterPromotionService`**: シードあり時は強リンクのみで最大 `expansion_hops`（既定 4）ホップ展開した頂点集合上で隣接表を構築。シード無し時は従来どおり `list_all_links_for_player`。`EPISODIC_PROMOTION_FORCE_FULL_SCAN=1` で常時全域。
+4. **結合テスト**: `tests/application/llm/services/test_episodic_semantic_promotion_incremental.py`（三角グラフの一致・ホップ 0 で見逃し・空フロンティア時のフォールバック）。
+5. **ドキュメント**: 本節および [episodic_memory_implementation_plan.md](./episodic_memory_implementation_plan.md) §0.1 を更新済み。
+
+**差分の注意**: シードがグラフの一部にしか載らないターンでは、展開ホップ内にクラスタ全体が入らない場合に昇格が**そのターンは**検出されない（全域スキャンに比べ遅延しうる）。シード無し時のフォールバックと `EPISODIC_PROMOTION_EXPANSION_HOPS` の調整で緩和する。
 
 ---
 

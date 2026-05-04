@@ -117,6 +117,9 @@ from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval imp
 from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
     EpisodicMemoryLinkApplicationService,
 )
+from ai_rpg_world.application.llm.services.episodic_promotion_frontier import (
+    EpisodicPromotionFrontier,
+)
 from ai_rpg_world.application.llm.services.episodic_semantic_cluster_promotion import (
     EpisodicSemanticClusterPromotionService,
 )
@@ -958,14 +961,17 @@ def create_llm_agent_wiring(
     link_store, semantic_memory_store = default_link_and_semantic_stores_for_episode_store(
         shared_episode_store
     )
+    promotion_frontier = EpisodicPromotionFrontier()
     mem_bundle = build_episodic_memory_link_bundle(
         shared_episode_store,
         link_store=link_store,
+        promotion_frontier=promotion_frontier,
     )
     episodic_semantic_promotion = EpisodicSemanticClusterPromotionService(
         episode_store=shared_episode_store,
         link_store=mem_bundle.link_store,
         semantic_store=semantic_memory_store,
+        promotion_frontier=promotion_frontier,
     )
     tool_stack = _build_tool_stack(
         game_tool_registry=game_tool_registry,
