@@ -47,7 +47,8 @@ Git・レビュー・worktree は [memory_feature_workflow.md](./memory_feature_
 | **W2** | **`recall_text` 長文化**: `SubjectiveEpisode` バリデーション・実験スクリプトの上限・プロンプト指示の更新 | W1 と並列可 |
 | **W3** | **LLM 本番配線（主観フィールドのみ）**: チャンク閉鎖後にエンコーダ／`EpisodicChunkSubjectiveFieldsService` 呼び出し、`interpreted` / `recall_text` をマージして store。失敗時フォールバック | `ChunkEpisodeDraftBuilder`・store・チャンク協調が安定していることが前提 |
 | **W4** | **§0.2 situation_cues 補強**: 直近 `IActionResultStore` 等から `action:` 等 | 受動想起と独立気味で並列しやすい |
-| **W5** | **永続化**: `IEpisodicEpisodeStore` の SQLite 実装・マイグレーション方針 | W3 より後でも可。単体で設計→実装 |
+| **W5** | **永続化**: `IEpisodicEpisodeStore` の SQLite（既存）・**リンク／セマンティック**は別計画 [episodic_memory_link_semantic_sqlite_plan.md](./episodic_memory_link_semantic_sqlite_plan.md) | W3 より後でも可。リンク・セマンティックは **メモリグラフ専用ブランチ**で進める |
+| **W5b** | **セマンティック昇格の増分処理**: [episodic_semantic_promotion_incremental_plan.md](./episodic_semantic_promotion_incremental_plan.md)。推奨で W5 より後 | `list_all_links` スキャン回避。永続化 PR とポート追加の順序に注意 |
 | **W6** | **観測由来エピソード導線**: 観測イベント→草案ビルダ相当→`put`（粒度・重複防止は設計課題） | orchestrator とは別ハンドラになりやすい |
 | **W7** | **デモ整合**: `demo_llm_*` が wiring と同等の記憶挙動になるよう最小修正または注記強化 | W1 と一緒でも可 |
 | **W8** | **テスト**: LLM モックのエンコーダ結合、長文 recall のバリデーション、 sqlite store | W3・W5 に追随 |
