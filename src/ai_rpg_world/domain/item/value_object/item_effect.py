@@ -65,6 +65,21 @@ class ExpEffect(ItemEffect):
 
 
 @dataclass(frozen=True)
+class SatisfyNeedEffect(ItemEffect):
+    """欲求回復効果のデータ。need_type_name は NeedType の値文字列（"HUNGER" / "FATIGUE"）。"""
+
+    need_type_name: str
+    amount: int
+
+    def __post_init__(self) -> None:
+        _validate_non_negative(self.amount, "Satisfy need effect")
+        if not self.need_type_name:
+            raise ItemEffectValidationException(
+                "SatisfyNeedEffect: need_type_name must not be empty"
+            )
+
+
+@dataclass(frozen=True)
 class CompositeItemEffect(ItemEffect):
     """複数効果をまとめたデータ"""
 

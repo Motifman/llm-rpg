@@ -19,6 +19,7 @@ from ai_rpg_world.domain.item.value_object.item_effect import (
     RecoverMpEffect,
     GoldEffect,
     ExpEffect,
+    SatisfyNeedEffect,
     CompositeItemEffect,
     ItemEffect,
 )
@@ -37,6 +38,8 @@ from ai_rpg_world.domain.player.value_object.gold import Gold
 from ai_rpg_world.domain.player.value_object.hp import Hp
 from ai_rpg_world.domain.player.value_object.mp import Mp
 from ai_rpg_world.domain.player.value_object.stamina import Stamina
+from ai_rpg_world.domain.player.value_object.agent_need import AgentNeed, NeedType
+from ai_rpg_world.domain.player.value_object.agent_needs import AgentNeeds
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world.value_object.coordinate import Coordinate
 
@@ -298,6 +301,142 @@ class TestConsumableEffectHandler:
         )
         with pytest.raises(PlayerNotFoundForConsumableEffectException, match="999"):
             handler.handle(event)
+
+    def test_apply_satisfy_need_effect_hunger(self):
+        """SatisfyNeedEffect(HUNGER) でプレイヤーの空腹が回復される"""
+        handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
+        player_id = PlayerId(1)
+        item_spec_id = ItemSpecId(910)
+        spec_rm = ItemSpecReadModel(
+            item_spec_id=item_spec_id,
+            name="パン",
+            item_type=ItemType.CONSUMABLE,
+            rarity=Rarity.COMMON,
+            description="空腹回復",
+            max_stack_size=MaxStackSize(10),
+            consume_effect=SatisfyNeedEffect(need_type_name="HUNGER", amount=50),
+        )
+        item_spec_repo.find_by_id.return_value = spec_rm
+        needs = AgentNeeds((
+            AgentNeed.create(NeedType.HUNGER, 80, 100),
+            AgentNeed.create(NeedType.FATIGUE, 0, 100),
+        ))
+        player_status = _create_player_status()
+        player_status._needs = needs
+        player_status_repo.find_by_id.return_value = player_status
+
+        event = ConsumableUsedEvent.create(
+            aggregate_id=player_id,
+            aggregate_type="PlayerStatusAggregate",
+            item_spec_id=item_spec_id,
+        )
+        handler.handle(event)
+
+        hunger = player_status.needs.get(NeedType.HUNGER)
+        assert hunger is not None
+        assert hunger.value == 30  # 80 - 50
+        player_status_repo.save.assert_called_once_with(player_status)
+
+    def test_apply_satisfy_need_effect_fatigue(self):
+        """SatisfyNeedEffect(FATIGUE) でプレイヤーの疲労が回復される"""
+        handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
+        player_id = PlayerId(1)
+        item_spec_id = ItemSpecId(911)
+        spec_rm = ItemSpecReadModel(
+            item_spec_id=item_spec_id,
+            name="睡眠薬",
+            item_type=ItemType.CONSUMABLE,
+            rarity=Rarity.COMMON,
+            description="疲労回復",
+            max_stack_size=MaxStackSize(10),
+            consume_effect=SatisfyNeedEffect(need_type_name="FATIGUE", amount=40),
+        )
+        item_spec_repo.find_by_id.return_value = spec_rm
+        needs = AgentNeeds((
+            AgentNeed.create(NeedType.HUNGER, 0, 100),
+            AgentNeed.create(NeedType.FATIGUE, 60, 100),
+        ))
+        player_status = _create_player_status()
+        player_status._needs = needs
+        player_status_repo.find_by_id.return_value = player_status
+
+        event = ConsumableUsedEvent.create(
+            aggregate_id=player_id,
+            aggregate_type="PlayerStatusAggregate",
+            item_spec_id=item_spec_id,
+        )
+        handler.handle(event)
+
+        fatigue = player_status.needs.get(NeedType.FATIGUE)
+        assert fatigue is not None
+        assert fatigue.value == 20  # 60 - 40
+        player_status_repo.save.assert_called_once()
+
+    def test_satisfy_need_unknown_type_is_skipped(self):
+        """未知の NeedType 名の場合はスキップされ、エラーにならない"""
+        handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
+        player_id = PlayerId(1)
+        item_spec_id = ItemSpecId(912)
+        spec_rm = ItemSpecReadModel(
+            item_spec_id=item_spec_id,
+            name="不思議な果実",
+            item_type=ItemType.CONSUMABLE,
+            rarity=Rarity.COMMON,
+            description="未知の効果",
+            max_stack_size=MaxStackSize(10),
+            consume_effect=SatisfyNeedEffect(need_type_name="UNKNOWN_NEED", amount=10),
+        )
+        item_spec_repo.find_by_id.return_value = spec_rm
+        player_status = _create_player_status()
+        player_status_repo.find_by_id.return_value = player_status
+
+        event = ConsumableUsedEvent.create(
+            aggregate_id=player_id,
+            aggregate_type="PlayerStatusAggregate",
+            item_spec_id=item_spec_id,
+        )
+        # エラーにならずに正常終了する
+        handler.handle(event)
+        player_status_repo.save.assert_called_once()
+
+    def test_composite_with_satisfy_need(self):
+        """CompositeItemEffect 内の SatisfyNeedEffect も再帰的に適用される"""
+        handler, item_spec_repo, player_status_repo = _create_handler_with_mocks()
+        player_id = PlayerId(1)
+        item_spec_id = ItemSpecId(913)
+        composite = CompositeItemEffect(
+            effects=(HealEffect(amount=20), SatisfyNeedEffect(need_type_name="HUNGER", amount=30))
+        )
+        spec_rm = ItemSpecReadModel(
+            item_spec_id=item_spec_id,
+            name="弁当",
+            item_type=ItemType.CONSUMABLE,
+            rarity=Rarity.COMMON,
+            description="HP回復+空腹回復",
+            max_stack_size=MaxStackSize(5),
+            consume_effect=composite,
+        )
+        item_spec_repo.find_by_id.return_value = spec_rm
+        needs = AgentNeeds((
+            AgentNeed.create(NeedType.HUNGER, 70, 100),
+            AgentNeed.create(NeedType.FATIGUE, 0, 100),
+        ))
+        player_status = _create_player_status(hp_current=50, hp_max=100)
+        player_status._needs = needs
+        player_status_repo.find_by_id.return_value = player_status
+
+        event = ConsumableUsedEvent.create(
+            aggregate_id=player_id,
+            aggregate_type="PlayerStatusAggregate",
+            item_spec_id=item_spec_id,
+        )
+        handler.handle(event)
+
+        assert player_status.hp.value == 70  # 50 + 20
+        hunger = player_status.needs.get(NeedType.HUNGER)
+        assert hunger is not None
+        assert hunger.value == 40  # 70 - 30
+        player_status_repo.save.assert_called_once()
 
     def test_unknown_effect_type_raises_system_error(self):
         """未知の効果タイプの場合は SystemErrorException"""
