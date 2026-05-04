@@ -349,4 +349,6 @@ class ActionEpisodeDraftBuilder:
             interpreted=None,
             cues=cues_resolved,
             recall_text=_recall_text(tn, command_result, action_summary, recall_rs),
+            recall_count=0,
+            last_recalled_at=None,
         )

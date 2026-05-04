@@ -9,6 +9,10 @@ from datetime import datetime, timezone
 
 from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import IEpisodicEpisodeStore
 from ai_rpg_world.application.llm.contracts.episodic_memory import EpisodicCue, SubjectiveEpisode
+from ai_rpg_world.application.llm.contracts.episodic_memory_link_store_port import IMemoryLinkStore
+from ai_rpg_world.application.llm.services.episodic_spreading_activation import (
+    neighbor_priming_scores,
+)
 from ai_rpg_world.application.llm.passive_recall_cue_families import (
     PASSIVE_RECALL_PLACE_FAMILY_BUCKET_KEY,
     PASSIVE_RECALL_PLACE_FAMILY_LABEL,
@@ -18,6 +22,7 @@ from ai_rpg_world.application.llm.passive_recall_cue_families import (
 )
 
 PASSIVE_RECALL_AXIS_TEMPORAL = "temporal"
+PASSIVE_RECALL_AXIS_SPREADING = "spreading"
 
 
 def _occurrence_sort_key(ep: SubjectiveEpisode) -> tuple[datetime, str]:
@@ -140,8 +145,16 @@ class EpisodicPassiveRecallRetrievalService:
     temporal と cue ブロック群はこれまでどおり同等に round-robin。
     """
 
-    def __init__(self, store: IEpisodicEpisodeStore) -> None:
+    def __init__(
+        self,
+        store: IEpisodicEpisodeStore,
+        *,
+        link_store: IMemoryLinkStore | None = None,
+        spreading_max_hops: int = 2,
+    ) -> None:
         self._store = store
+        self._link_store = link_store
+        self._spreading_max_hops = spreading_max_hops
 
     def retrieve(
         self,
@@ -150,6 +163,7 @@ class EpisodicPassiveRecallRetrievalService:
         situation_cues: Sequence[EpisodicCue],
         limit_per_axis: int,
         max_candidates: int,
+        now: datetime | None = None,
     ) -> EpisodicPassiveRecallRetrievalResult:
         temporal_rows = self._store.list_recent(player_id, limit_per_axis)
 
@@ -179,9 +193,6 @@ class EpisodicPassiveRecallRetrievalService:
             )
             cue_arms.append((rr_label, rows, granular))
 
-        raw_counts: list[tuple[str, int]] = [(PASSIVE_RECALL_AXIS_TEMPORAL, len(temporal_rows))]
-        raw_counts.extend((lab, len(rows)) for lab, rows, _g in cue_arms)
-
         episode_by_id: dict[str, SubjectiveEpisode] = {}
         source_axes_by_episode: dict[str, set[str]] = defaultdict(set)
 
@@ -196,10 +207,39 @@ class EpisodicPassiveRecallRetrievalService:
                 for ax in granular.get(eid, ()):
                     source_axes_by_episode[eid].add(ax)
 
+        effective_now = now if now is not None else datetime.now(timezone.utc)
+        spreading_rows: list[SubjectiveEpisode] = []
+        if self._link_store is not None and episode_by_id:
+            seeds = frozenset(episode_by_id.keys())
+            priming = neighbor_priming_scores(
+                player_id=player_id,
+                seed_episode_ids=seeds,
+                link_store=self._link_store,
+                now=effective_now,
+                max_hops=self._spreading_max_hops,
+            )
+            ranked = sorted(priming.items(), key=lambda t: t[1], reverse=True)
+            for eid, _score in ranked[:limit_per_axis]:
+                if eid in episode_by_id:
+                    continue
+                ep = self._store.get(player_id, eid)
+                if ep is None:
+                    continue
+                episode_by_id[eid] = ep
+                source_axes_by_episode[eid].add(PASSIVE_RECALL_AXIS_SPREADING)
+                spreading_rows.append(ep)
+
+        raw_counts: list[tuple[str, int]] = [(PASSIVE_RECALL_AXIS_TEMPORAL, len(temporal_rows))]
+        raw_counts.extend((lab, len(rows)) for lab, rows, _g in cue_arms)
+        if spreading_rows:
+            raw_counts.append((PASSIVE_RECALL_AXIS_SPREADING, len(spreading_rows)))
+
         union_before_cap = len(episode_by_id)
 
         arms: list[tuple[str, list[SubjectiveEpisode]]] = [(PASSIVE_RECALL_AXIS_TEMPORAL, temporal_rows)]
         arms.extend((lab, rows) for lab, rows, _g in cue_arms)
+        if spreading_rows:
+            arms.append((PASSIVE_RECALL_AXIS_SPREADING, spreading_rows))
 
         capped_ids = _round_robin_pick_episode_ids(arms, max_candidates)
 
