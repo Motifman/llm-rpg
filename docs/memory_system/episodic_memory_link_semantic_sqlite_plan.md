@@ -1,5 +1,9 @@
 # MemoryLink / セマンティック記憶の SQLite 永続化 — 実装計画
 
+**実装状況（2026-05-04）**: `SUBJECTIVE_EPISODE_DB_PATH` 指定時に、主観エピソードと同一 SQLite 接続へ `memory_links` / `semantic_memory_entries` / `semantic_cluster_signatures` をマイグレーションし、`default_link_and_semantic_stores_for_episode_store` が `SqliteMemoryLinkStore` と `SqliteSemanticMemoryStore` を注入する。以下は当時の設計メモである。
+
+---
+
 この文書は [episodic_memory_implementation_plan.md](./episodic_memory_implementation_plan.md) §0.1 の「次工程」と [memory_feature_workflow.md](./memory_feature_workflow.md) に従い、**インメモリのみ**の `IMemoryLinkStore` / `ISemanticMemoryStore` を **プロセス外でも再利用できる形で永続化する**ための実装手順を定める。
 
 **推奨ブランチ名の例**: `feature/episodic-memory-link-semantic-sqlite`

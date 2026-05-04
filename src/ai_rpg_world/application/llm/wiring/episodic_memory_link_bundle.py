@@ -10,6 +10,9 @@ from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
 from ai_rpg_world.application.llm.contracts.episodic_memory_link_store_port import (
     IMemoryLinkStore,
 )
+from ai_rpg_world.application.llm.contracts.semantic_memory_store_port import (
+    ISemanticMemoryStore,
+)
 from ai_rpg_world.application.llm.services.episodic_memory_link_application_service import (
     EpisodicMemoryLinkApplicationService,
 )
@@ -21,6 +24,9 @@ from ai_rpg_world.application.llm.services.executors.episodic_memory_explore_too
 )
 from ai_rpg_world.application.llm.services.in_memory_episodic_memory_link_store import (
     InMemoryMemoryLinkStore,
+)
+from ai_rpg_world.application.llm.services.in_memory_semantic_memory_store import (
+    InMemorySemanticMemoryStore,
 )
 
 
@@ -41,18 +47,43 @@ class EpisodicMemoryLinkBundle:
         )
 
 
+def default_link_and_semantic_stores_for_episode_store(
+    episode_store: IEpisodicEpisodeStore,
+) -> tuple[IMemoryLinkStore, ISemanticMemoryStore]:
+    """
+    エピソードストアが SqliteSubjectiveEpisodeStore のとき、同一 DB 接続に
+    MemoryLink / セマンティック表を同居させる。それ以外はインメモリ。
+    """
+    from ai_rpg_world.infrastructure.repository.sqlite_subjective_episode_store import (
+        SqliteSubjectiveEpisodeStore,
+    )
+    from ai_rpg_world.infrastructure.repository.sqlite_memory_link_store import (
+        SqliteMemoryLinkStore,
+    )
+    from ai_rpg_world.infrastructure.repository.sqlite_semantic_memory_store import (
+        SqliteSemanticMemoryStore,
+    )
+
+    if isinstance(episode_store, SqliteSubjectiveEpisodeStore):
+        conn = episode_store.connection
+        return SqliteMemoryLinkStore(conn), SqliteSemanticMemoryStore(conn)
+    return InMemoryMemoryLinkStore(), InMemorySemanticMemoryStore()
+
+
 def build_episodic_memory_link_bundle(
     episode_store: IEpisodicEpisodeStore,
+    *,
+    link_store: IMemoryLinkStore | None = None,
 ) -> EpisodicMemoryLinkBundle:
-    link_store = InMemoryMemoryLinkStore()
-    link_service = EpisodicMemoryLinkApplicationService(episode_store, link_store)
+    ls = link_store if link_store is not None else InMemoryMemoryLinkStore()
+    link_service = EpisodicMemoryLinkApplicationService(episode_store, ls)
     passive_recall = EpisodicPassiveRecallRetrievalService(
         episode_store,
-        link_store=link_store,
+        link_store=ls,
     )
     return EpisodicMemoryLinkBundle(
         episode_store=episode_store,
-        link_store=link_store,
+        link_store=ls,
         link_service=link_service,
         passive_recall=passive_recall,
     )
