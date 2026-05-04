@@ -72,6 +72,10 @@ def _episode_to_payload_dict(ep: SubjectiveEpisode) -> dict[str, Any]:
             {"axis": c.axis, "value": c.value, "source": c.source.value} for c in ep.cues
         ],
         "recall_text": ep.recall_text,
+        "recall_count": ep.recall_count,
+        "last_recalled_at": ep.last_recalled_at.isoformat()
+        if ep.last_recalled_at is not None
+        else None,
     }
 
 
@@ -126,6 +130,12 @@ def _payload_dict_to_episode(data: dict[str, Any]) -> SubjectiveEpisode:
         interpreted=data.get("interpreted"),
         cues=tuple(cues),
         recall_text=data.get("recall_text"),
+        recall_count=int(data.get("recall_count", 0)),
+        last_recalled_at=(
+            datetime.fromisoformat(str(last_raw).replace("Z", "+00:00"))
+            if (last_raw := data.get("last_recalled_at")) not in (None, "")
+            else None
+        ),
     )
 
 
