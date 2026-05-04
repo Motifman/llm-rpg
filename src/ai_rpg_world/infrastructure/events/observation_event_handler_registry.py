@@ -3,6 +3,14 @@
 from ai_rpg_world.application.observation.handlers.observation_event_handler import ObservationEventHandler
 from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    ConnectionStateChangedEvent,
+    EntityEnteredSpotEvent,
+    EntityLeftSpotEvent,
+    SpotExploredEvent,
+    SpotObjectInteractedEvent,
+    SpotObjectStateChangedEvent,
+)
 from ai_rpg_world.domain.combat.event.combat_events import (
     HitBoxHitRecordedEvent,
 )
@@ -196,6 +204,13 @@ _OBSERVED_EVENT_TYPES = (
     PursuitUpdatedEvent,
     PursuitFailedEvent,
     PursuitCancelledEvent,
+    # --- スポットグラフ ---
+    EntityEnteredSpotEvent,
+    EntityLeftSpotEvent,
+    SpotObjectInteractedEvent,
+    SpotExploredEvent,
+    SpotObjectStateChangedEvent,
+    ConnectionStateChangedEvent,
 )
 
 

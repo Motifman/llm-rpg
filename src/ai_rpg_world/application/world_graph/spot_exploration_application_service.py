@@ -19,6 +19,7 @@ from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import SpotExploredEvent
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
 from ai_rpg_world.domain.world_graph.service.spot_exploration_service import SpotExplorationService
@@ -44,6 +45,7 @@ class SpotExplorationApplicationService:
         world_flag_state: MutableWorldFlagState,
         exploration_progress_store: ISpotExplorationProgressStore,
         spot_exploration_service: SpotExplorationService | None = None,
+        event_publisher=None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -53,6 +55,7 @@ class SpotExplorationApplicationService:
         self._world_flag_state = world_flag_state
         self._progress = exploration_progress_store
         self._exploration = spot_exploration_service or SpotExplorationService()
+        self._event_publisher = event_publisher
 
     def explore_once(self, player_id: PlayerId) -> SpotExplorationResultDto:
         graph = self._spot_graph_repository.find_graph()
@@ -94,6 +97,17 @@ class SpotExplorationApplicationService:
                 self._item_spec_repository,
                 self._player_inventory_repository,
             )
+
+        # SpotExploredEvent を発火
+        if self._event_publisher is not None:
+            explored_event = SpotExploredEvent.create(
+                aggregate_id=graph.graph_id,
+                aggregate_type="SpotGraphAggregate",
+                entity_id=entity_id,
+                spot_id=spot_id,
+                discoveries=result.discovery_descriptions,
+            )
+            self._event_publisher.publish(explored_event)
 
         return SpotExplorationResultDto(
             discovery_descriptions=result.discovery_descriptions,
