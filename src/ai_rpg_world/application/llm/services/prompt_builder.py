@@ -1,10 +1,18 @@
 """1 ターン分のプロンプト組み立てのデフォルト実装"""
 
+from datetime import datetime, timezone
 from importlib import import_module
+import logging
 from typing import Any, Callable, Dict, List, Optional
+from uuid import uuid4
 
 from ai_rpg_world.application.llm.contracts.dtos import (
     SystemPromptPlayerInfoDto,
+)
+from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
+    EpisodicRecallObservation,
+    IEpisodicRecallBufferStore,
+    IEpisodicReinterpretationJournalStore,
 )
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
@@ -46,11 +54,21 @@ DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES = 10
 MESSAGE_WHEN_PLAYER_NOT_PLACED = "現在地: 未配置。ゲームに参加するまで待機しています。"
 
 
-def _join_passive_recall_texts(candidates: tuple[EpisodicPassiveRecallCandidate, ...]) -> str:
-    """retrieve の候補順のまま、空でない recall_text を改行で連結する。"""
+def _join_passive_recall_texts(
+    player_id: int,
+    candidates: tuple[EpisodicPassiveRecallCandidate, ...],
+    journal_store: IEpisodicReinterpretationJournalStore | None = None,
+) -> str:
+    """retrieve の候補順のまま、active 再解釈を優先して recall text を改行で連結する。"""
     parts: list[str] = []
     for cand in candidates:
-        raw = cand.episode.recall_text
+        active = None
+        if journal_store is not None:
+            try:
+                active = journal_store.get_active(player_id, cand.episode.episode_id)
+            except Exception:
+                active = None
+        raw = active.current_recall_text if active is not None else cand.episode.recall_text
         text = raw.strip() if isinstance(raw, str) else ""
         if text:
             parts.append(text)
@@ -84,6 +102,9 @@ class DefaultPromptBuilder(IPromptBuilder):
         episodic_passive_recall: Optional[EpisodicPassiveRecallRetrievalService] = None,
         episodic_passive_recall_limit_per_axis: int = DEFAULT_EPISODIC_PASSIVE_RECALL_LIMIT_PER_AXIS,
         episodic_passive_recall_max_candidates: int = DEFAULT_EPISODIC_PASSIVE_RECALL_MAX_CANDIDATES,
+        episodic_recall_buffer_store: Optional[IEpisodicRecallBufferStore] = None,
+        episodic_reinterpretation_journal_store: Optional[IEpisodicReinterpretationJournalStore] = None,
+        episodic_turn_index_provider: Optional[Callable[[PlayerId], int]] = None,
     ) -> None:
         if not isinstance(observation_buffer, IObservationContextBuffer):
             raise TypeError("observation_buffer must be IObservationContextBuffer")
@@ -129,6 +150,24 @@ class DefaultPromptBuilder(IPromptBuilder):
             raise ValueError("episodic_passive_recall_limit_per_axis must be 0 or greater")
         if episodic_passive_recall_max_candidates < 0:
             raise ValueError("episodic_passive_recall_max_candidates must be 0 or greater")
+        if episodic_recall_buffer_store is not None and not isinstance(
+            episodic_recall_buffer_store, IEpisodicRecallBufferStore
+        ):
+            raise TypeError(
+                "episodic_recall_buffer_store must be IEpisodicRecallBufferStore or None"
+            )
+        if episodic_reinterpretation_journal_store is not None and not isinstance(
+            episodic_reinterpretation_journal_store,
+            IEpisodicReinterpretationJournalStore,
+        ):
+            raise TypeError(
+                "episodic_reinterpretation_journal_store must be "
+                "IEpisodicReinterpretationJournalStore or None"
+            )
+        if episodic_turn_index_provider is not None and not callable(
+            episodic_turn_index_provider
+        ):
+            raise TypeError("episodic_turn_index_provider must be callable or None")
 
         self._observation_buffer = observation_buffer
         self._sliding_window = sliding_window_memory
@@ -155,6 +194,10 @@ class DefaultPromptBuilder(IPromptBuilder):
         self._episodic_passive_recall = episodic_passive_recall
         self._episodic_passive_recall_limit_per_axis = episodic_passive_recall_limit_per_axis
         self._episodic_passive_recall_max_candidates = episodic_passive_recall_max_candidates
+        self._episodic_recall_buffer_store = episodic_recall_buffer_store
+        self._episodic_reinterpretation_journal_store = episodic_reinterpretation_journal_store
+        self._episodic_turn_index_provider = episodic_turn_index_provider
+        self._logger = logging.getLogger(self.__class__.__name__)
 
     def build(
         self,
@@ -238,7 +281,40 @@ class DefaultPromptBuilder(IPromptBuilder):
                 limit_per_axis=self._episodic_passive_recall_limit_per_axis,
                 max_candidates=self._episodic_passive_recall_max_candidates,
             )
-            relevant_memories_text = _join_passive_recall_texts(recall_result.candidates)
+            relevant_memories_text = _join_passive_recall_texts(
+                player_id.value,
+                recall_result.candidates,
+                self._episodic_reinterpretation_journal_store,
+            )
+            if self._episodic_recall_buffer_store is not None:
+                turn_index = (
+                    self._episodic_turn_index_provider(player_id)
+                    if self._episodic_turn_index_provider is not None
+                    else 0
+                )
+                situation_cue_keys = tuple(c.to_canonical() for c in situation_cues)
+                for cand in recall_result.candidates:
+                    try:
+                        self._episodic_recall_buffer_store.append(
+                            EpisodicRecallObservation(
+                                recall_id=f"recall-{uuid4().hex}",
+                                player_id=player_id.value,
+                                episode_id=cand.episode.episode_id,
+                                recalled_at=datetime.now(timezone.utc),
+                                source_axes=cand.source_axes,
+                                current_state_snapshot=current_state_text,
+                                recent_events_snapshot=recent_events_text,
+                                persona_snapshot=player_info.persona_block,
+                                situation_cues=situation_cue_keys,
+                                turn_index=turn_index,
+                            )
+                        )
+                    except Exception as e:
+                        self._logger.warning(
+                            "Failed to record episodic recall observation; prompt build continues: %s",
+                            e,
+                            exc_info=True,
+                        )
 
         context = self._context_format_strategy.format(
             current_state_text, recent_events_text, relevant_memories_text

@@ -16,6 +16,11 @@ from ai_rpg_world.application.llm.contracts.dtos import ToolRuntimeContextDto
 from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
     IEpisodicChunkSubjectiveCompletionPort,
 )
+from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
+    IEpisodicRecallBufferStore,
+    IEpisodicReinterpretationCompletionPort,
+    IEpisodicReinterpretationJournalStore,
+)
 from ai_rpg_world.application.llm.contracts.interfaces import (
     IActionResultStore,
     ILLMClient,
@@ -142,6 +147,13 @@ def create_spot_graph_wiring(
     persona_store: Optional[Any] = None,
     persona_prompt_policy: Optional[PersonaPromptPolicy] = None,
     episodic_episode_store: Optional[IEpisodicEpisodeStore] = None,
+    episodic_recall_buffer_store: Optional[IEpisodicRecallBufferStore] = None,
+    episodic_reinterpretation_journal_store: Optional[
+        IEpisodicReinterpretationJournalStore
+    ] = None,
+    episodic_reinterpretation_completion: Optional[
+        IEpisodicReinterpretationCompletionPort
+    ] = None,
     chunk_episode_draft_builder: Optional[ChunkEpisodeDraftBuilder] = None,
     episodic_chunk_coordinator: Optional[EpisodicChunkCoordinator] = None,
     episodic_chunk_subjective_completion: Optional[IEpisodicChunkSubjectiveCompletionPort] = None,
@@ -163,6 +175,8 @@ def create_spot_graph_wiring(
         _build_runtime_tool_state,
         _build_tool_stack,
         _optional_episodic_chunk_subjective_fields_service,
+        _optional_episodic_reinterpretation_completion,
+        _resolve_default_episodic_reinterpretation_stores,
     )
     from ai_rpg_world.application.llm.wiring._llm_client_factory import (
         create_llm_client_from_env,
@@ -179,6 +193,9 @@ def create_spot_graph_wiring(
     from ai_rpg_world.application.llm.services.llm_player_resolver import ProfileBasedLlmPlayerResolver
     from ai_rpg_world.application.llm.services.llm_turn_trigger import DefaultLlmTurnTrigger
     from ai_rpg_world.application.llm.services.llm_agent_turn_runner import LlmAgentTurnRunner
+    from ai_rpg_world.application.llm.services.episodic_reinterpretation_coordinator import (
+        EpisodicReinterpretationCoordinator,
+    )
     from ai_rpg_world.application.llm.services.recent_events_formatter import (
         DefaultRecentEventsFormatter,
     )
@@ -318,6 +335,10 @@ def create_spot_graph_wiring(
             player_profile_repository=player_profile_repository,
         )
     shared_episode_store = resolve_default_episodic_episode_store(episodic_episode_store)
+    recall_buffer, reinterpretation_journal = _resolve_default_episodic_reinterpretation_stores(
+        episodic_recall_buffer_store,
+        episodic_reinterpretation_journal_store,
+    )
     chunk_builder = (
         chunk_episode_draft_builder
         if chunk_episode_draft_builder is not None
@@ -326,6 +347,21 @@ def create_spot_graph_wiring(
     chunk_subjective_service = _optional_episodic_chunk_subjective_fields_service(
         client,
         episodic_chunk_subjective_completion,
+    )
+    reinterpretation_completion = _optional_episodic_reinterpretation_completion(
+        client,
+        episodic_reinterpretation_completion,
+    )
+    reinterpretation_coord = EpisodicReinterpretationCoordinator(
+        episode_store=shared_episode_store,
+        recall_buffer_store=recall_buffer,
+        journal_store=reinterpretation_journal,
+        completion=reinterpretation_completion,
+    )
+    prompt_recall_buffer = (
+        recall_buffer
+        if reinterpretation_completion is not None or episodic_recall_buffer_store is not None
+        else None
     )
     episodic_coord = episodic_chunk_coordinator or EpisodicChunkCoordinator(
         observation_buffer=buffer,
@@ -356,6 +392,9 @@ def create_spot_graph_wiring(
         tile_map_view_distance=effective_view_distance,
         persona_block_provider=persona_block_provider,
         episodic_passive_recall=episodic_passive_recall,
+        episodic_recall_buffer_store=prompt_recall_buffer,
+        episodic_reinterpretation_journal_store=reinterpretation_journal,
+        episodic_turn_index_provider=reinterpretation_coord.current_turn_index,
     )
 
     orchestrator = LlmAgentOrchestrator(
@@ -365,6 +404,7 @@ def create_spot_graph_wiring(
         action_result_store=action_result_store,
         tool_argument_resolver=tool_argument_resolver,
         episodic_chunk_coordinator=episodic_coord,
+        episodic_reinterpretation_coordinator=reinterpretation_coord,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,
@@ -429,6 +469,8 @@ def create_spot_graph_wiring(
         sns_page_session=sns_page_session,
         trade_page_session=trade_page_session,
         episodic_episode_store=shared_episode_store,
+        episodic_recall_buffer_store=recall_buffer,
+        episodic_reinterpretation_journal_store=reinterpretation_journal,
     )
 
 

@@ -29,6 +29,14 @@ from ai_rpg_world.application.llm.contracts.episodic_memory import (
     EpisodeSource,
     SubjectiveEpisode,
 )
+from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
+    EpisodicRecallObservation,
+    EpisodicReinterpretationEntry,
+    EpisodicReinterpretationStatus,
+    IEpisodicRecallBufferStore,
+    IEpisodicReinterpretationCompletionPort,
+    IEpisodicReinterpretationJournalStore,
+)
 from ai_rpg_world.application.llm.contracts.persona import (
     AgentPersonaDto,
     PersonaPromptPolicy,
@@ -65,6 +73,12 @@ __all__ = [
     "EpisodeLocation",
     "EpisodeSource",
     "SubjectiveEpisode",
+    "EpisodicRecallObservation",
+    "EpisodicReinterpretationEntry",
+    "EpisodicReinterpretationStatus",
+    "IEpisodicRecallBufferStore",
+    "IEpisodicReinterpretationCompletionPort",
+    "IEpisodicReinterpretationJournalStore",
     "ActionResultEntry",
     "LlmCommandResultDto",
     "SystemPromptPlayerInfoDto",
