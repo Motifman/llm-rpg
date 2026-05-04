@@ -158,6 +158,23 @@ class TestEpisodicMemoryWiringIntegration:
         assert "## 関連する記憶" in user_content
         assert recall_phrase in user_content.split("## 関連する記憶", 1)[1]
 
+    def test_stub_default_does_not_record_reinterpretation_recall_buffer(self) -> None:
+        """
+        Stub 既定では再解釈 LLM が無効なので、受動想起を prompt に出しても
+        recall buffer は自動蓄積しない（未処理 buffer の無限増加を避ける）。
+        """
+        result = create_llm_agent_wiring(**_deps_with_profile(player_id=1))
+        store = result.episodic_episode_store
+        assert store is not None
+        store.put(_minimal_episode(player_id=1, recall_text="stub_no_record_recall"))
+
+        turn_runner = result.llm_turn_trigger._turn_runner  # noqa: SLF001
+        orch = turn_runner._orchestrator  # noqa: SLF001
+        out = orch._prompt_builder.build(PlayerId(1))  # noqa: SLF001
+        assert "stub_no_record_recall" in out["messages"][1]["content"]
+        assert result.episodic_recall_buffer_store is not None
+        assert result.episodic_recall_buffer_store.pending_count(1) == 0
+
 
 class TestEpisodicChunkWiringIntegration:
     """チャンク協調と wiring 既定配線でエピソードが保存されることの結合検証。"""

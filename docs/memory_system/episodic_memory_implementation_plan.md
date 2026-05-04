@@ -43,7 +43,7 @@
 | situation cue の行動・感情・結果軸の補強 | MVP 外・次工程 | 局面だけでは cue が薄い軸がある | 下記 §0.2。本 PR ラインでは実装しない |
 | episode store / chunk 協調の標準 wiring | 完了 | PR #34・マージ `b7562bbd` を拡張: `create_llm_agent_wiring` / `create_spot_graph_wiring` が共有 `InMemorySubjectiveEpisodeStore` と `EpisodicChunkCoordinator`（既定 `ChunkEpisodeDraftBuilder`）を prompt / orchestrator に渡す | SQLite は MVP 外 |
 | observation-only episode | 未着手 | 計画上 MVP 後段 | MVP 外 |
-| SQLite 永続化 / reflection / consolidation | 未着手 | 計画上 MVP 外 | MVP 外 |
+| SQLite 永続化 / reflection / consolidation | 一部完了 | episode store SQLite は PR #45 系で完了。想起後再解釈は `EpisodicReinterpretationCoordinator` / recall buffer / reinterpretation journal として追加 | consolidation は引き続き後段 |
 
 ### 0.2 MVP 範囲外として切り出したタスク（situation_cues 補強）
 

@@ -18,6 +18,9 @@ from litellm import RateLimitError as LitellmRateLimitError
 from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
     IEpisodicChunkSubjectiveCompletionPort,
 )
+from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
+    IEpisodicReinterpretationCompletionPort,
+)
 from ai_rpg_world.application.llm.contracts.interfaces import ILLMClient
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 
@@ -34,7 +37,11 @@ def _load_dotenv_if_available() -> None:
         pass
 
 
-class LiteLLMClient(ILLMClient, IEpisodicChunkSubjectiveCompletionPort):
+class LiteLLMClient(
+    ILLMClient,
+    IEpisodicChunkSubjectiveCompletionPort,
+    IEpisodicReinterpretationCompletionPort,
+):
     """
     LiteLLM の completion API で messages + tools を送り、1 つの tool_call を返す実装。
     tool_choice="required" で 1 ツール必須とする。
@@ -160,6 +167,13 @@ class LiteLLMClient(ILLMClient, IEpisodicChunkSubjectiveCompletionPort):
                 error_code="LLM_EPISODE_SUBJECTIVE_INVALID_JSON",
             )
         return parsed
+
+    def complete_episodic_reinterpretation_json(
+        self,
+        messages: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """tools 無しで想起後再解釈 JSON object を返す。"""
+        return self.complete_episode_subjective_json(messages)
 
     def _parse_tool_call(
         self,

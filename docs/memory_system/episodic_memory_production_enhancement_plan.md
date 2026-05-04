@@ -32,6 +32,8 @@ Git・レビュー・worktree は [memory_feature_workflow.md](./memory_feature_
 
 - **`recall_text`**: 当面は **やや長め**でよい（上限は後で最適化）。**保存用とプロンプト用に分けない**（問題が出てから検討）。
 - **LLM によるエピソード化**: **チャンク閉鎖後**に限り `interpreted` / `recall_text` をマージ（`EpisodicChunkSubjectiveFieldsService`・`IEpisodicChunkSubjectiveCompletionPort`）。事実・cue・`observed`・who/where/outcome 等はルール側。**コンテキスト整備・プロンプト・バリデーション・実験経路**を先に固め、オーケストレータ配線は `create_llm_agent_wiring` で共有ストア＋協調が既定。
+- **想起後の再解釈**: 受動想起時には LLM を呼ばず、想起 episode と現在状況 snapshot をキャラクター別 buffer に蓄積する。既定では **10 LLM ターンごと**に最大 **8 episode** をまとめて `EpisodicReinterpretationCoordinator` が LLM JSON で再解釈する。結果は `EpisodicReinterpretationEntry` として journal に追記し、通常 prompt 参照では最新 `active` の `current_recall_text` だけを使う。旧 entry は `superseded` として監査用に残すが、通常の関連記憶 prompt へ混ぜない。
+- **主観回想の長さ・声**: 初期 `recall_text` と再解釈後 `current_recall_text` は、短い事実要約ではなく、キャラクター本人の一人称による TRPG リプレイ風の主観回想（目安 250〜450 字、検証上限は 700 字）に寄せる。
 
 ---
 
@@ -49,6 +51,7 @@ Git・レビュー・worktree は [memory_feature_workflow.md](./memory_feature_
 | **W6** | **観測由来エピソード導線**: 観測イベント→草案ビルダ相当→`put`（粒度・重複防止は設計課題） | orchestrator とは別ハンドラになりやすい |
 | **W7** | **デモ整合**: `demo_llm_*` が wiring と同等の記憶挙動になるよう最小修正または注記強化 | W1 と一緒でも可 |
 | **W8** | **テスト**: LLM モックのエンコーダ結合、長文 recall のバリデーション、 sqlite store | W3・W5 に追随 |
+| **W9** | **想起後再解釈**: recall buffer / reinterpretation journal / 10 ターン flush / active recall 優先 prompt / SQLite 永続化 | W3・W5 後。episode 事実・cue は変更しない |
 
 ### 2.1 推奨マージ順（コンフリクト回避）
 
