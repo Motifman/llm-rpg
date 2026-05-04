@@ -28,6 +28,9 @@ from ai_rpg_world.application.llm.remediation_mapping import get_remediation
 from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import (
     EpisodicChunkCoordinator,
 )
+from ai_rpg_world.application.llm.services.episodic_reinterpretation_coordinator import (
+    EpisodicReinterpretationCoordinator,
+)
 from ai_rpg_world.application.llm.services.tool_command_mapper import ToolCommandMapper
 from ai_rpg_world.application.llm.services.tool_argument_resolver import (
     DefaultToolArgumentResolver,
@@ -128,6 +131,7 @@ class LlmAgentOrchestrator:
         action_result_store: IActionResultStore,
         tool_argument_resolver: Optional[IToolArgumentResolver] = None,
         episodic_chunk_coordinator: Optional[EpisodicChunkCoordinator] = None,
+        episodic_reinterpretation_coordinator: Optional[EpisodicReinterpretationCoordinator] = None,
     ) -> None:
         if not isinstance(prompt_builder, IPromptBuilder):
             raise TypeError("prompt_builder must be IPromptBuilder")
@@ -149,6 +153,14 @@ class LlmAgentOrchestrator:
             raise TypeError(
                 "episodic_chunk_coordinator must be EpisodicChunkCoordinator or None"
             )
+        if episodic_reinterpretation_coordinator is not None and not isinstance(
+            episodic_reinterpretation_coordinator,
+            EpisodicReinterpretationCoordinator,
+        ):
+            raise TypeError(
+                "episodic_reinterpretation_coordinator must be "
+                "EpisodicReinterpretationCoordinator or None"
+            )
         self._prompt_builder = prompt_builder
         self._llm_client = llm_client
         self._tool_command_mapper = tool_command_mapper
@@ -159,6 +171,7 @@ class LlmAgentOrchestrator:
             else DefaultToolArgumentResolver()
         )
         self._episodic_chunk_coordinator = episodic_chunk_coordinator
+        self._episodic_reinterpretation_coordinator = episodic_reinterpretation_coordinator
 
     def run_turn(self, player_id: PlayerId) -> LlmCommandResultDto:
         """
@@ -169,7 +182,11 @@ class LlmAgentOrchestrator:
         if not isinstance(player_id, PlayerId):
             raise TypeError("player_id must be PlayerId")
 
-        return self._run_turn_core(player_id)
+        try:
+            return self._run_turn_core(player_id)
+        finally:
+            if self._episodic_reinterpretation_coordinator is not None:
+                self._episodic_reinterpretation_coordinator.after_turn_completed(player_id)
 
     def _run_turn_core(self, player_id: PlayerId) -> LlmCommandResultDto:
         request = self._prompt_builder.build(player_id)
