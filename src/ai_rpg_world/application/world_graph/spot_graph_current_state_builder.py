@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Callable, FrozenSet, Optional
 
 from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphAtmosphereEntry,
@@ -15,12 +15,14 @@ from ai_rpg_world.application.world_graph.spot_graph_current_state_dtos import (
     SpotGraphSubLocationEntry,
     SpotGraphWeatherEntry,
 )
+from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import EntityNotInGraphException
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
+from ai_rpg_world.domain.world_graph.service.spot_perception_service import SpotPerceptionService
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 
 from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
@@ -28,10 +30,17 @@ from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 EntityNameResolver = Callable[[int], str]
 WeatherProvider = Callable[[], Optional[WeatherState]]
 WorldFlagsProvider = Callable[[], frozenset[str]]
+OwnedItemSpecIdsProvider = Callable[[int], FrozenSet[ItemSpecId]]
 
 
 class SpotGraphCurrentStateBuilder:
-    """グラフ・内部データ・プレイヤー状態からスナップショットを組み立てる。"""
+    """グラフ・内部データ・プレイヤー状態からスナップショットを組み立てる。
+
+    知覚フィルタを有効にするには、以下のパラメータをワイヤリング時に渡す:
+    - ``light_source_item_spec_ids``: 光源として扱うアイテムのID集合
+    - ``owned_item_spec_ids_provider``: エンティティIDからアイテム所持を返すコールバック
+    これらが未設定の場合、照明フィルタは無効（全オブジェクト表示）となる。
+    """
 
     def __init__(
         self,
@@ -43,6 +52,8 @@ class SpotGraphCurrentStateBuilder:
         inventory_builder: Optional[Callable[[PlayerId], tuple]] = None,
         weather_provider: Optional[WeatherProvider] = None,
         world_flags_provider: Optional[WorldFlagsProvider] = None,
+        light_source_item_spec_ids: FrozenSet[ItemSpecId] = frozenset(),
+        owned_item_spec_ids_provider: Optional[OwnedItemSpecIdsProvider] = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -51,6 +62,9 @@ class SpotGraphCurrentStateBuilder:
         self._inventory_builder = inventory_builder
         self._weather_provider = weather_provider
         self._world_flags_provider = world_flags_provider
+        self._light_source_item_spec_ids = light_source_item_spec_ids
+        self._owned_item_spec_ids_provider = owned_item_spec_ids_provider
+        self._perception = SpotPerceptionService()
 
     def build_snapshot(self, player_id: int) -> SpotGraphPlayerSnapshotDto | None:
         """プレイヤーがグラフに載っていない場合は None。"""
@@ -100,6 +114,30 @@ class SpotGraphCurrentStateBuilder:
         obj_lines: list[str] = []
         ground_lines: list[str] = []
 
+        # --- 知覚判定: 照明 + 光源 ---
+        presence = graph.presence_at(spot_id)
+        viewer_has_light = self._entity_has_light_source(player_id)
+        spot_has_any_light_bearer = viewer_has_light or any(
+            self._entity_has_light_source(int(other_eid))
+            for other_eid in presence.present_entity_ids
+            if other_eid != eid
+        )
+        effective_lighting = self._perception.compute_effective_lighting(
+            node.atmosphere, spot_has_any_light_bearer
+        )
+        can_see = self._perception.can_see_objects(effective_lighting)
+
+        # 光源持ちの名前を解決（知覚テキスト用）
+        light_bearer_name: str | None = None
+        if not viewer_has_light and spot_has_any_light_bearer and self._entity_name_resolver:
+            for other_eid in presence.present_entity_ids:
+                if other_eid != eid and self._entity_has_light_source(int(other_eid)):
+                    try:
+                        light_bearer_name = self._entity_name_resolver(int(other_eid))
+                    except Exception:
+                        light_bearer_name = None
+                    break
+
         interior = self._spot_interior_repository.find_by_spot_id(spot_id)
         current_sub_id = (
             player.spot_navigation_state.current_sub_location_id
@@ -122,41 +160,48 @@ class SpotGraphCurrentStateBuilder:
                 hidden = "（未発見）" if sl.is_hidden else ""
                 sub_lines.append(f"- {sl.name}{here}{hidden}")
 
-            for obj in interior.objects:
-                if not obj.is_visible:
-                    continue
-                interactions = tuple(
-                    SpotGraphInteractionEntry(
-                        action_name=i.action_name,
-                        display_label=i.display_label,
+            if can_see:
+                for obj in interior.objects:
+                    if not obj.is_visible:
+                        continue
+                    interactions = tuple(
+                        SpotGraphInteractionEntry(
+                            action_name=i.action_name,
+                            display_label=i.display_label,
+                        )
+                        for i in obj.interactions
                     )
-                    for i in obj.interactions
-                )
-                objects.append(SpotGraphObjectEntry(
-                    object_id=obj.object_id.value,
-                    name=obj.name,
-                    description=obj.resolved_description(world_flags),
-                    interactions=interactions,
-                ))
-                actions = [i.action_name for i in obj.interactions]
-                act = " / ".join(actions) if actions else "—"
-                obj_lines.append(f"- {obj.name} [ {act} ]")
+                    objects.append(SpotGraphObjectEntry(
+                        object_id=obj.object_id.value,
+                        name=obj.name,
+                        description=obj.resolved_description(
+                            world_flags, viewer_entity_id=player_id
+                        ),
+                        interactions=interactions,
+                    ))
+                    actions = [i.action_name for i in obj.interactions]
+                    act = " / ".join(actions) if actions else "—"
+                    obj_lines.append(f"- {obj.name} [ {act} ]")
 
-            for gi in interior.ground_items:
-                ground_lines.append(f"- 地面: item_instance={gi.item_instance_id}")
+                for gi in interior.ground_items:
+                    ground_lines.append(f"- 地面: item_instance={gi.item_instance_id}")
 
         atmosphere: SpotGraphAtmosphereEntry | None = None
         if node.atmosphere is not None:
             a = node.atmosphere
+            base_lighting = a.lighting
+            perception_note = self._perception.describe_lighting_perception(
+                base_lighting, effective_lighting, viewer_has_light, light_bearer_name
+            )
             atmosphere = SpotGraphAtmosphereEntry(
-                lighting=a.lighting.name,
+                lighting=effective_lighting.name,
                 sound_ambient=a.sound_ambient,
                 temperature=a.temperature.name,
                 smell=a.smell,
+                perception_note=perception_note,
             )
 
         nearby_entities: list[SpotGraphNearbyEntityEntry] = []
-        presence = graph.presence_at(spot_id)
         for other_eid in presence.present_entity_ids:
             if other_eid != eid:
                 name = ""
@@ -201,3 +246,12 @@ class SpotGraphCurrentStateBuilder:
             sub_location_lines=sub_lines,
             object_lines=obj_lines,
         )
+
+    def _entity_has_light_source(self, entity_id: int) -> bool:
+        """エンティティが光源アイテムを持っているかを判定する。"""
+        if not self._light_source_item_spec_ids:
+            return False
+        if self._owned_item_spec_ids_provider is None:
+            return False
+        owned = self._owned_item_spec_ids_provider(entity_id)
+        return bool(self._light_source_item_spec_ids & owned)

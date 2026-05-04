@@ -26,6 +26,7 @@ class SpotObject:
     is_visible: bool = True
     trap: Optional[TrapDef] = None
     puzzle: Optional[PuzzleState] = None
+    detail_read_by: FrozenSet[int] = frozenset()
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -40,8 +41,25 @@ class SpotObject:
     def with_puzzle(self, puzzle: Optional[PuzzleState]) -> SpotObject:
         return replace(self, puzzle=puzzle)
 
-    def resolved_description(self, world_flags: FrozenSet[str]) -> str:
+    def with_detail_read(self, entity_id: int) -> SpotObject:
+        """エージェントが詳細を「読んだ」ことを記録する。"""
+        return replace(self, detail_read_by=self.detail_read_by | {entity_id})
+
+    def resolved_description(
+        self,
+        world_flags: FrozenSet[str],
+        *,
+        viewer_entity_id: int | None = None,
+    ) -> str:
+        """状態とフラグに応じた説明を返す。
+
+        requires_read=True のバリアントは viewer_entity_id が
+        detail_read_by に含まれる場合のみ適用される。
+        """
         for variant in self.description_variants:
+            if variant.requires_read:
+                if viewer_entity_id is None or viewer_entity_id not in self.detail_read_by:
+                    continue
             if variant.required_flag and variant.required_flag not in world_flags:
                 continue
             if variant.required_state:

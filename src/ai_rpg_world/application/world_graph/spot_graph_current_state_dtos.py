@@ -57,6 +57,7 @@ class SpotGraphAtmosphereEntry:
     sound_ambient: Optional[str]
     temperature: str
     smell: Optional[str]
+    perception_note: Optional[str] = None  # 照明知覚の補足テキスト
 
 
 @dataclass(frozen=True)
