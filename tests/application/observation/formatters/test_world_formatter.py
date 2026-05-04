@@ -196,6 +196,7 @@ class TestWorldObservationFormatterItemTakenFromChest:
         item_repo = MagicMock()
         agg = MagicMock()
         agg.item_spec.name = "銅の剣"
+        agg.item_spec.item_spec_id.value = 7
         item_repo.find_by_id.return_value = agg
         ctx = _make_context(item_repository=item_repo)
         formatter = WorldObservationFormatter(ctx)
@@ -212,6 +213,7 @@ class TestWorldObservationFormatterItemTakenFromChest:
         assert out is not None
         assert "銅の剣" in out.prose
         assert out.structured.get("item_name") == "銅の剣"
+        assert out.structured.get("item_spec_id_value") == 7
 
     def test_uses_fallback_when_repository_none(self):
         """item_repository が None のときフォールバック名。"""
@@ -271,6 +273,7 @@ class TestWorldObservationFormatterResourceHarvested:
         assert out is not None
         assert "銅の鉱石" in out.prose
         assert "2" in out.prose
+        assert out.structured.get("item_spec_id_value") == 10
 
 
 class TestWorldObservationFormatterSpotWeatherChanged:

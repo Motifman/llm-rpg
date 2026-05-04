@@ -5,6 +5,8 @@ from typing import Any, Dict, Optional
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
     ObservationFormatterContext,
+    first_item_spec_id_value_from_obtained_items,
+    resolve_item_spec_id_value_for_instance,
 )
 from ai_rpg_world.application.observation.services.formatters.name_resolver import (
     FALLBACK_ITEM_LABEL,
@@ -136,6 +138,11 @@ class WorldObservationFormatter:
         item_name = self._context.name_resolver.item_instance_name(event.item_instance_id)
         prose = f"チェストから{item_name}を取得しました。"
         structured = {"type": "item_taken_from_chest", "item_name": item_name}
+        spec_val = resolve_item_spec_id_value_for_instance(
+            self._context.item_repository, event.item_instance_id
+        )
+        if spec_val is not None:
+            structured["item_spec_id_value"] = spec_val
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -150,6 +157,11 @@ class WorldObservationFormatter:
         item_name = self._context.name_resolver.item_instance_name(event.item_instance_id)
         prose = f"チェストに{item_name}を収納しました。"
         structured = {"type": "item_stored_in_chest", "item_name": item_name}
+        spec_val = resolve_item_spec_id_value_for_instance(
+            self._context.item_repository, event.item_instance_id
+        )
+        if spec_val is not None:
+            structured["item_spec_id_value"] = spec_val
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -186,6 +198,9 @@ class WorldObservationFormatter:
             item_desc = "、".join(parts)
             prose = f"採集し、{item_desc}入手しました。"
             structured = {"type": "resource_harvested", "items": event.obtained_items}
+        spec_val = first_item_spec_id_value_from_obtained_items(event.obtained_items)
+        if spec_val is not None:
+            structured["item_spec_id_value"] = spec_val
         return ObservationOutput(
             prose=prose,
             structured=structured,
