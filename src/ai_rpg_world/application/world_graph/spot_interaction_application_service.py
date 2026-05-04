@@ -23,6 +23,7 @@ from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISp
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
 from ai_rpg_world.domain.world_graph.service.spot_interaction_service import SpotInteractionService
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import SpotObjectInteractedEvent
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -46,6 +47,7 @@ class SpotInteractionApplicationService:
         world_flag_state: MutableWorldFlagState,
         spot_interaction_service: SpotInteractionService | None = None,
         player_status_repository: PlayerStatusRepository | None = None,
+        event_publisher: Any | None = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -55,6 +57,7 @@ class SpotInteractionApplicationService:
         self._world_flag_state = world_flag_state
         self._interaction = spot_interaction_service or SpotInteractionService()
         self._player_status_repository = player_status_repository
+        self._event_publisher = event_publisher
 
     def execute_interaction(
         self,
@@ -149,7 +152,25 @@ class SpotInteractionApplicationService:
                         pass  # 未知の NeedType は無視
                 self._player_status_repository.save(status)
 
+        # aggregate が貯めたイベント (ConnectionStateChanged 等) を抽出
+        graph_events = list(graph.get_events())
+        graph.clear_events()
+
         self._spot_graph_repository.save(graph)
+
+        # SpotObjectInteractedEvent を明示的に作成して publish
+        if self._event_publisher is not None:
+            interacted_event = SpotObjectInteractedEvent.create(
+                aggregate_id=graph.graph_id,
+                aggregate_type="SpotGraphAggregate",
+                entity_id=entity_id,
+                spot_id=spot_id,
+                object_id=object_id,
+                action_name=action_name,
+                result_message="；".join(result.messages) if result.messages else "",
+            )
+            self._event_publisher.publish_all([*graph_events, interacted_event])
+
         return SpotInteractionResultDto(messages=result.messages)
 
     @staticmethod
