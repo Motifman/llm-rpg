@@ -9,6 +9,7 @@ api_key 未指定時は .env を自動で読み込み、その後に環境変数
 import json
 import logging
 import os
+import re
 from typing import Any, Dict, List, Optional
 
 import litellm
@@ -26,6 +27,43 @@ from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 
 _DEFAULT_MODEL = "openai/gpt-5-mini"
 _ENV_VAR_API_KEY = "OPENAI_API_KEY"
+
+
+def _extract_first_json_object(text: str) -> str:
+    """JSON mode が崩れて前後テキストやコードフェンスを含む応答から JSON object を抜き出す。"""
+    stripped = text.strip()
+    if not stripped:
+        return stripped
+    stripped = re.sub(
+        r"<think>[\s\S]*?</think>",
+        "",
+        stripped,
+        flags=re.IGNORECASE,
+    )
+    stripped = re.sub(
+        r"<redacted_reasoning>[\s\S]*?</redacted_reasoning>",
+        "",
+        stripped,
+        flags=re.IGNORECASE,
+    ).strip()
+    try:
+        obj = json.loads(stripped)
+        return json.dumps(obj, ensure_ascii=False)
+    except (json.JSONDecodeError, TypeError):
+        pass
+    start = stripped.find("{")
+    if start < 0:
+        return stripped
+    depth = 0
+    for idx in range(start, len(stripped)):
+        char = stripped[idx]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return stripped[start : idx + 1]
+    return stripped
 
 
 def _load_dotenv_if_available() -> None:
@@ -153,8 +191,9 @@ class LiteLLMClient(
                 "Missing message content from subjective completion",
                 error_code="LLM_EPISODE_SUBJECTIVE_EMPTY_CONTENT",
             )
+        extracted_content = _extract_first_json_object(content)
         try:
-            parsed = json.loads(content)
+            parsed = json.loads(extracted_content)
         except (json.JSONDecodeError, TypeError) as e:
             raise LlmApiCallException(
                 f"Subjective completion content is not valid JSON: {e}",
