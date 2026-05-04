@@ -74,6 +74,7 @@ def create_spot_graph_world_services(
     travel_context: Optional[SpotGraphTravelContextProvider] = None,
     travel_stage: Optional[SpotGraphTravelStageService] = None,
     simulation_service: Optional[SpotGraphSimulationApplicationService] = None,
+    event_publisher=None,
 ) -> SpotGraphWorldServices:
     """スポットグラフ用サービス束を組み立てる。
 
@@ -93,6 +94,7 @@ def create_spot_graph_world_services(
         item_repository=item_repository,
         item_spec_repository=item_spec_repository,
         world_flag_state=flags,
+        event_publisher=event_publisher,
     )
     exploration = SpotExplorationApplicationService(
         spot_graph_repository=spot_graph_repository,
@@ -102,6 +104,7 @@ def create_spot_graph_world_services(
         item_spec_repository=item_spec_repository,
         world_flag_state=flags,
         exploration_progress_store=progress,
+        event_publisher=event_publisher,
     )
     resolved_travel_stage = travel_stage
     if resolved_travel_stage is None and travel_context is not None and movement_service is not None:
