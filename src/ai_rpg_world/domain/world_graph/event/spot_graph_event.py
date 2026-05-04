@@ -87,3 +87,13 @@ class ItemDiscoveredEvent(BaseDomainEvent[SpotGraphId, str]):
     entity_id: EntityId
     spot_id: SpotId
     item_spec_id: ItemSpecId
+
+
+@dataclass(frozen=True)
+class TrapTriggeredEvent(BaseDomainEvent[SpotGraphId, str]):
+    """トラップが発動した"""
+
+    entity_id: EntityId
+    spot_id: SpotId
+    trap_id: str
+    messages: Tuple[str, ...]
