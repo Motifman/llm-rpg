@@ -95,6 +95,9 @@ class SpotGraphPlayerSnapshotDto:
     inventory_items: Tuple[SpotGraphInventoryItemEntry, ...] = ()
     ground_item_lines: List[str] = field(default_factory=list)
 
+    # エージェントの欲求状態テキスト
+    need_lines: Tuple[str, ...] = ()
+
     # 後方互換用の文字列行（formatter のフォールバック用）
     connection_lines: List[str] = field(default_factory=list)
     sub_location_lines: List[str] = field(default_factory=list)
