@@ -18,6 +18,28 @@ if TYPE_CHECKING:
     )
 
 
+def _coerce_item_spec_id_entry_value(raw: Any) -> Optional[int]:
+    """
+    obtained_items 内 dict の item_spec_id を int に正規化する。
+    `episodic_cue_rules._coerce_non_bool_int` と同じ規則（bool は int とみなさない）。
+    """
+    if type(raw) is int:
+        return raw
+    if isinstance(raw, float):
+        if raw.is_integer():
+            return int(raw)
+        return None
+    if isinstance(raw, str):
+        s = raw.strip()
+        if not s or not s.isdigit():
+            return None
+        try:
+            return int(s)
+        except ValueError:
+            return None
+    return None
+
+
 def resolve_item_spec_id_value_for_instance(
     item_repository: Optional["ItemRepository"],
     item_instance_id: ItemInstanceId,
@@ -37,6 +59,7 @@ def first_item_spec_id_value_from_obtained_items(
     """
     ResourceHarvestedEvent.obtained_items などから先頭の item_spec_id を int で返す。
     複数種ある場合は先頭のみ（局面 cue は 1 件に収めるため）。
+    各要素の item_spec_id は `_coerce_item_spec_id_entry_value` で解釈する。
     """
     for entry in obtained_items:
         if not isinstance(entry, dict):
@@ -44,12 +67,9 @@ def first_item_spec_id_value_from_obtained_items(
         spec_id_raw = entry.get("item_spec_id")
         if spec_id_raw is None:
             continue
-        try:
-            if isinstance(spec_id_raw, int):
-                return spec_id_raw
-            return int(spec_id_raw)
-        except (TypeError, ValueError):
-            continue
+        coerced = _coerce_item_spec_id_entry_value(spec_id_raw)
+        if coerced is not None:
+            return coerced
     return None
 
 

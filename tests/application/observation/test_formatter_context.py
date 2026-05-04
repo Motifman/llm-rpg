@@ -43,6 +43,19 @@ class TestResolveItemSpecHelpers:
         assert first_item_spec_id_value_from_obtained_items([{"item_spec_id": 5}]) == 5
         assert first_item_spec_id_value_from_obtained_items([{"item_spec_id": "9"}]) == 9
 
+    def test_bool_item_spec_id_skipped_then_next_used(self) -> None:
+        """bool は int とみなさない（episodic cue と整合）。"""
+        assert (
+            first_item_spec_id_value_from_obtained_items([{"item_spec_id": True}])
+            is None
+        )
+        assert (
+            first_item_spec_id_value_from_obtained_items(
+                [{"item_spec_id": True}, {"item_spec_id": 12}]
+            )
+            == 12
+        )
+
 
 class TestObservationFormatterContextCreation:
     """ObservationFormatterContext 生成のテスト"""

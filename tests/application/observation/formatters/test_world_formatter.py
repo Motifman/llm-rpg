@@ -233,6 +233,34 @@ class TestWorldObservationFormatterItemTakenFromChest:
         assert "何かのアイテム" in out.prose
 
 
+class TestWorldObservationFormatterItemStoredInChest:
+    """ItemStoredInChestEvent のフォーマットテスト"""
+
+    def test_item_spec_id_value_from_item_repository(self):
+        """チェスト収納時も item_repository から item_spec_id_value を付与する。"""
+        item_repo = MagicMock()
+        agg = MagicMock()
+        agg.item_spec.name = "鉄鉱石"
+        agg.item_spec.item_spec_id.value = 33
+        item_repo.find_by_id.return_value = agg
+        ctx = _make_context(item_repository=item_repo)
+        formatter = WorldObservationFormatter(ctx)
+        event = ItemStoredInChestEvent.create(
+            aggregate_id=SpotId(1),
+            aggregate_type="Chest",
+            spot_id=SpotId(1),
+            chest_id=WorldObjectId(1),
+            actor_id=WorldObjectId(2),
+            item_instance_id=ItemInstanceId.create(50),
+            player_id_value=2,
+        )
+        out = formatter.format(event, PlayerId(2))
+        assert out is not None
+        assert "鉄鉱石" in out.prose
+        assert out.structured.get("type") == "item_stored_in_chest"
+        assert out.structured.get("item_spec_id_value") == 33
+
+
 class TestWorldObservationFormatterResourceHarvested:
     """ResourceHarvestedEvent のフォーマットテスト"""
 
@@ -275,8 +303,34 @@ class TestWorldObservationFormatterResourceHarvested:
         assert "2" in out.prose
         assert out.structured.get("item_spec_id_value") == 10
 
+    def test_multi_obtained_items_first_spec_becomes_item_spec_id_value(self):
+        """複数ドロップ時は structured の item_spec_id_value は先頭エントリのみ（局面 cue 1 件）。"""
+        spec_repo = MagicMock()
 
-class TestWorldObservationFormatterSpotWeatherChanged:
+        def find_by_id(spec_id):
+            sp = MagicMock()
+            sp.name = f"spec{spec_id}"
+            return sp
+
+        spec_repo.find_by_id.side_effect = find_by_id
+        ctx = _make_context(item_spec_repository=spec_repo)
+        formatter = WorldObservationFormatter(ctx)
+        event = ResourceHarvestedEvent.create(
+            aggregate_id=WorldObjectId(1),
+            aggregate_type="WorldObject",
+            object_id=WorldObjectId(1),
+            actor_id=WorldObjectId(2),
+            loot_table_id=LootTableId.create(1),
+            obtained_items=[
+                {"item_spec_id": 10, "quantity": 1},
+                {"item_spec_id": 99, "quantity": 2},
+            ],
+        )
+        out = formatter.format(event, PlayerId(2))
+        assert out is not None
+        assert out.structured.get("item_spec_id_value") == 10
+        assert len(out.structured.get("items", [])) == 2
+
     """SpotWeatherChangedEvent のフォーマットテスト"""
 
     def test_includes_old_and_new_weather(self):
