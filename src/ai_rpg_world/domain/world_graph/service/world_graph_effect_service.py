@@ -12,7 +12,9 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.cross_domain_effect_spec import (
     AtmosphereUpdateSpec,
+    CreateConnectionSpec,
     DamageSpec,
+    DestroyConnectionSpec,
     StatusEffectSpec,
     TeleportSpec,
 )
@@ -44,6 +46,8 @@ class WorldGraphEffectService:
         status_effect_specs: List[StatusEffectSpec] = []
         teleport_specs: List[TeleportSpec] = []
         atmosphere_update_specs: List[AtmosphereUpdateSpec] = []
+        create_connection_specs: List[CreateConnectionSpec] = []
+        destroy_connection_specs: List[DestroyConnectionSpec] = []
         current_interior = interior
         current_object = acting_object
 
@@ -60,6 +64,8 @@ class WorldGraphEffectService:
                 status_effect_specs,
                 teleport_specs,
                 atmosphere_update_specs,
+                create_connection_specs,
+                destroy_connection_specs,
             ) = self._apply_effect(
                 interior=current_interior,
                 acting_object=current_object,
@@ -73,6 +79,8 @@ class WorldGraphEffectService:
                 status_effect_specs=status_effect_specs,
                 teleport_specs=teleport_specs,
                 atmosphere_update_specs=atmosphere_update_specs,
+                create_connection_specs=create_connection_specs,
+                destroy_connection_specs=destroy_connection_specs,
             )
 
         return WorldGraphEffectResult(
@@ -87,6 +95,8 @@ class WorldGraphEffectService:
             status_effect_specs=tuple(status_effect_specs),
             teleport_specs=tuple(teleport_specs),
             atmosphere_update_specs=tuple(atmosphere_update_specs),
+            create_connection_specs=tuple(create_connection_specs),
+            destroy_connection_specs=tuple(destroy_connection_specs),
         )
 
     def _apply_effect(
@@ -104,6 +114,8 @@ class WorldGraphEffectService:
         status_effect_specs: List[StatusEffectSpec],
         teleport_specs: List[TeleportSpec],
         atmosphere_update_specs: List[AtmosphereUpdateSpec],
+        create_connection_specs: List[CreateConnectionSpec],
+        destroy_connection_specs: List[DestroyConnectionSpec],
     ) -> Tuple[
         SpotInterior,
         SpotObject | None,
@@ -116,12 +128,14 @@ class WorldGraphEffectService:
         List[StatusEffectSpec],
         List[TeleportSpec],
         List[AtmosphereUpdateSpec],
+        List[CreateConnectionSpec],
+        List[DestroyConnectionSpec],
     ]:
         p = effect.parameters
         et = effect.effect_type
         _all = (
             interior, acting_object, flags, grant, remove, conn_updates, messages,
-            damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs,
+            damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs,
         )
 
         if et == InteractionEffectTypeEnum.SET_FLAG:
@@ -164,7 +178,7 @@ class WorldGraphEffectService:
                     acting_object = updated_target
                 _all = (
                     interior, acting_object, flags, grant, remove, conn_updates, messages,
-                    damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs,
+                    damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs,
                 )
             return _all
 
@@ -178,7 +192,7 @@ class WorldGraphEffectService:
                     acting_object = revealed
                 _all = (
                     interior, acting_object, flags, grant, remove, conn_updates, messages,
-                    damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs,
+                    damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs,
                 )
             return _all
 
@@ -189,7 +203,7 @@ class WorldGraphEffectService:
                     interior = interior.replace_sub_location(sl.revealed())
                     _all = (
                         interior, acting_object, flags, grant, remove, conn_updates, messages,
-                        damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs,
+                        damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs,
                     )
                     break
             return _all
@@ -252,6 +266,28 @@ class WorldGraphEffectService:
                 remove.append(self._item_spec_from_param(iid))
             if output_id is not None:
                 grant.append(self._item_spec_from_param(output_id))
+            return _all
+
+        if et == InteractionEffectTypeEnum.CREATE_CONNECTION:
+            from_sid = int(p.get("from_spot_id", 0))
+            to_sid = int(p.get("to_spot_id", 0))
+            conn_name = str(p.get("connection_name", ""))
+            if from_sid > 0 and to_sid > 0 and conn_name:
+                create_connection_specs.append(CreateConnectionSpec(
+                    from_spot_id=from_sid,
+                    to_spot_id=to_sid,
+                    connection_name=conn_name,
+                    description=str(p.get("description", "")),
+                    travel_ticks=int(p.get("travel_ticks", 1)),
+                    is_bidirectional=bool(p.get("is_bidirectional", False)),
+                    sound_permeability=float(p.get("sound_permeability", 1.0)),
+                ))
+            return _all
+
+        if et == InteractionEffectTypeEnum.DESTROY_CONNECTION:
+            cid = int(p.get("connection_id", 0))
+            if cid > 0:
+                destroy_connection_specs.append(DestroyConnectionSpec(connection_id=cid))
             return _all
 
         raise UnsupportedInteractionEffectException(f"Unsupported interaction effect: {et.value}")
