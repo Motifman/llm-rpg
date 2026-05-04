@@ -23,3 +23,7 @@ class ScenarioEventDef:
     target_spot_id: Optional[int] = None
     schedules_turn: bool = True
     breaks_movement: bool = False
+    # 脱出ゲーム拡張: イベントチェーン
+    # TODO: Phase 6 — ScenarioEventStageService でチェーン発火ロジックを実装する
+    next_event_id: Optional[str] = None
+    delay_ticks: int = 0
