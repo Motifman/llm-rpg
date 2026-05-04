@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, FrozenSet, Tuple
+from typing import Any, Dict, FrozenSet, Optional, Tuple
 
 from ai_rpg_world.domain.world.exception.map_exception import SpotNameEmptyException
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
@@ -10,6 +10,7 @@ from ai_rpg_world.domain.world_graph.value_object.object_description_variant imp
     ObjectDescriptionVariant,
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+from ai_rpg_world.domain.world_graph.value_object.trap_def import TrapDef
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,7 @@ class SpotObject:
     interactions: Tuple[InteractionDef, ...]
     description_variants: Tuple[ObjectDescriptionVariant, ...] = ()
     is_visible: bool = True
+    trap: Optional[TrapDef] = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -37,6 +39,7 @@ class SpotObject:
             interactions=self.interactions,
             description_variants=self.description_variants,
             is_visible=self.is_visible,
+            trap=self.trap,
         )
 
     def with_visible(self, visible: bool) -> SpotObject:
@@ -49,6 +52,7 @@ class SpotObject:
             interactions=self.interactions,
             description_variants=self.description_variants,
             is_visible=visible,
+            trap=self.trap,
         )
 
     def resolved_description(self, world_flags: FrozenSet[str]) -> str:
