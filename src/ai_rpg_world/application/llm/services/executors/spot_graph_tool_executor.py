@@ -129,11 +129,13 @@ class SpotGraphToolExecutor:
             return LlmCommandResultDto(success=False, message="object_id / action_name が不正です。")
         if oid <= 0 or not action:
             return LlmCommandResultDto(success=False, message="object_id と action_name を指定してください。")
+        interaction_parameters = args.get("parameters")
         try:
             out = self._svc.interaction.execute_interaction(
                 PlayerId(player_id),
                 SpotObjectId.create(oid),
                 action,
+                interaction_parameters=interaction_parameters,
             )
             msg = "\n".join(out.messages) if out.messages else "操作を実行しました。"
             return LlmCommandResultDto(
