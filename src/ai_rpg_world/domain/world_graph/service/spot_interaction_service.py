@@ -169,4 +169,5 @@ class SpotInteractionService:
             atmosphere_update_specs=effect_result.atmosphere_update_specs,
             create_connection_specs=effect_result.create_connection_specs,
             destroy_connection_specs=effect_result.destroy_connection_specs,
+            satisfy_need_specs=effect_result.satisfy_need_specs,
         )
