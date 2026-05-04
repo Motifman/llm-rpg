@@ -13,10 +13,12 @@ from ai_rpg_world.application.llm.services.tool_executor_helpers import (
 from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_EXPLORE,
     TOOL_NAME_SPOT_GRAPH_INTERACT,
+    TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
+from ai_rpg_world.application.world_graph.prepared_action_registry import PreparedActionRegistry
 from ai_rpg_world.application.world_graph.spot_graph_world_services import SpotGraphWorldServices
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
@@ -52,6 +54,7 @@ class SpotGraphToolExecutor:
             TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION: self._set_sub_location,
             TOOL_NAME_SPOT_GRAPH_EXPLORE: self._explore,
             TOOL_NAME_SPOT_GRAPH_INTERACT: self._interact,
+            TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION: self._prepare_action,
             TOOL_NAME_SPOT_GRAPH_WAIT: self._wait,
         }
 
@@ -141,6 +144,23 @@ class SpotGraphToolExecutor:
             return LlmCommandResultDto(
                 success=True, message=append_inner_thought_to_message(msg, args)
             )
+        except Exception as e:
+            return exception_result(e)
+
+    def _prepare_action(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        action_id = str(args.get("action_id", "")).strip()
+        if not action_id:
+            return LlmCommandResultDto(success=False, message="action_id を指定してください。")
+        try:
+            registry = PreparedActionRegistry(self._svc.world_flags)
+            registry.prepare(player_id=player_id, action_id=action_id)
+            base = f"アクション「{action_id}」の準備をした。他のプレイヤーが対応する操作を実行できるようになった。"
+            return LlmCommandResultDto(
+                success=True,
+                message=append_inner_thought_to_message(base, args),
+            )
+        except ValueError as ve:
+            return LlmCommandResultDto(success=False, message=str(ve))
         except Exception as e:
             return exception_result(e)
 
