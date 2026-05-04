@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Dict, FrozenSet, Optional, Tuple
 
 from ai_rpg_world.domain.world.exception.map_exception import SpotNameEmptyException
@@ -9,6 +9,7 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_def import Interac
 from ai_rpg_world.domain.world_graph.value_object.object_description_variant import (
     ObjectDescriptionVariant,
 )
+from ai_rpg_world.domain.world_graph.value_object.puzzle_state import PuzzleState
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.trap_def import TrapDef
 
@@ -24,36 +25,20 @@ class SpotObject:
     description_variants: Tuple[ObjectDescriptionVariant, ...] = ()
     is_visible: bool = True
     trap: Optional[TrapDef] = None
+    puzzle: Optional[PuzzleState] = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():
             raise SpotNameEmptyException("Spot object name cannot be empty")
 
     def with_state(self, new_state: Dict[str, Any]) -> SpotObject:
-        return SpotObject(
-            object_id=self.object_id,
-            name=self.name,
-            description=self.description,
-            object_type=self.object_type,
-            state=dict(new_state),
-            interactions=self.interactions,
-            description_variants=self.description_variants,
-            is_visible=self.is_visible,
-            trap=self.trap,
-        )
+        return replace(self, state=dict(new_state))
 
     def with_visible(self, visible: bool) -> SpotObject:
-        return SpotObject(
-            object_id=self.object_id,
-            name=self.name,
-            description=self.description,
-            object_type=self.object_type,
-            state=dict(self.state),
-            interactions=self.interactions,
-            description_variants=self.description_variants,
-            is_visible=visible,
-            trap=self.trap,
-        )
+        return replace(self, is_visible=visible)
+
+    def with_puzzle(self, puzzle: Optional[PuzzleState]) -> SpotObject:
+        return replace(self, puzzle=puzzle)
 
     def resolved_description(self, world_flags: FrozenSet[str]) -> str:
         for variant in self.description_variants:

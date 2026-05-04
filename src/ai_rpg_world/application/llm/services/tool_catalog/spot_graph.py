@@ -69,7 +69,7 @@ EXPLORE_DEFINITION = ToolDefinitionDto(
 
 INTERACT_DEFINITION = ToolDefinitionDto(
     name=TOOL_NAME_SPOT_GRAPH_INTERACT,
-    description="現在のスポット内のオブジェクトに対し、指定した操作名で相互作用する。",
+    description="現在のスポット内のオブジェクトに対し、指定した操作名で相互作用する。パズル操作の場合はparametersに入力値を指定する。",
     parameters={
         "type": "object",
         "properties": {
@@ -80,6 +80,10 @@ INTERACT_DEFINITION = ToolDefinitionDto(
             "action_name": {
                 "type": "string",
                 "description": "操作名（オブジェクトに定義された action_name）。",
+            },
+            "parameters": {
+                "type": "object",
+                "description": "パズル入力等の追加パラメータ（例: {\"code\": \"1234\"}）。パズルでない操作では省略可。",
             },
             "inner_thought": _IT,
         },

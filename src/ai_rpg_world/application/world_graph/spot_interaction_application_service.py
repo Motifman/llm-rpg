@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
@@ -54,6 +54,8 @@ class SpotInteractionApplicationService:
         player_id: PlayerId,
         object_id: SpotObjectId,
         action_name: str,
+        *,
+        interaction_parameters: Optional[Dict[str, Any]] = None,
     ) -> SpotInteractionResultDto:
         graph = self._spot_graph_repository.find_graph()
         entity_id = EntityId.create(int(player_id))
@@ -82,6 +84,7 @@ class SpotInteractionApplicationService:
             action_name,
             owned,
             world_flags,
+            interaction_parameters=interaction_parameters,
         )
 
         self._world_flag_state.replace_from_interaction(result.new_flags)
