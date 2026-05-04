@@ -52,3 +52,9 @@ class CreateConnectionSpec:
 @dataclass(frozen=True)
 class DestroyConnectionSpec:
     connection_id: int
+
+
+@dataclass(frozen=True)
+class SatisfyNeedSpec:
+    need_type_name: str  # "HUNGER", "FATIGUE" 等
+    amount: int

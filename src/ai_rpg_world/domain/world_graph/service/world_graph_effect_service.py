@@ -15,6 +15,7 @@ from ai_rpg_world.domain.world_graph.value_object.cross_domain_effect_spec impor
     CreateConnectionSpec,
     DamageSpec,
     DestroyConnectionSpec,
+    SatisfyNeedSpec,
     StatusEffectSpec,
     TeleportSpec,
 )
@@ -48,6 +49,7 @@ class WorldGraphEffectService:
         atmosphere_update_specs: List[AtmosphereUpdateSpec] = []
         create_connection_specs: List[CreateConnectionSpec] = []
         destroy_connection_specs: List[DestroyConnectionSpec] = []
+        satisfy_need_specs: List[SatisfyNeedSpec] = []
         current_interior = interior
         current_object = acting_object
 
@@ -66,6 +68,7 @@ class WorldGraphEffectService:
                 atmosphere_update_specs,
                 create_connection_specs,
                 destroy_connection_specs,
+                satisfy_need_specs,
             ) = self._apply_effect(
                 interior=current_interior,
                 acting_object=current_object,
@@ -81,6 +84,7 @@ class WorldGraphEffectService:
                 atmosphere_update_specs=atmosphere_update_specs,
                 create_connection_specs=create_connection_specs,
                 destroy_connection_specs=destroy_connection_specs,
+                satisfy_need_specs=satisfy_need_specs,
             )
 
         return WorldGraphEffectResult(
@@ -97,6 +101,7 @@ class WorldGraphEffectService:
             atmosphere_update_specs=tuple(atmosphere_update_specs),
             create_connection_specs=tuple(create_connection_specs),
             destroy_connection_specs=tuple(destroy_connection_specs),
+            satisfy_need_specs=tuple(satisfy_need_specs),
         )
 
     def _apply_effect(
@@ -116,6 +121,7 @@ class WorldGraphEffectService:
         atmosphere_update_specs: List[AtmosphereUpdateSpec],
         create_connection_specs: List[CreateConnectionSpec],
         destroy_connection_specs: List[DestroyConnectionSpec],
+        satisfy_need_specs: List[SatisfyNeedSpec],
     ) -> Tuple[
         SpotInterior,
         SpotObject | None,
@@ -130,12 +136,13 @@ class WorldGraphEffectService:
         List[AtmosphereUpdateSpec],
         List[CreateConnectionSpec],
         List[DestroyConnectionSpec],
+        List[SatisfyNeedSpec],
     ]:
         p = effect.parameters
         et = effect.effect_type
         _all = (
             interior, acting_object, flags, grant, remove, conn_updates, messages,
-            damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs,
+            damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs,
         )
 
         if et == InteractionEffectTypeEnum.SET_FLAG:
@@ -178,7 +185,7 @@ class WorldGraphEffectService:
                     acting_object = updated_target
                 _all = (
                     interior, acting_object, flags, grant, remove, conn_updates, messages,
-                    damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs,
+                    damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs,
                 )
             return _all
 
@@ -192,7 +199,7 @@ class WorldGraphEffectService:
                     acting_object = revealed
                 _all = (
                     interior, acting_object, flags, grant, remove, conn_updates, messages,
-                    damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs,
+                    damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs,
                 )
             return _all
 
@@ -203,7 +210,7 @@ class WorldGraphEffectService:
                     interior = interior.replace_sub_location(sl.revealed())
                     _all = (
                         interior, acting_object, flags, grant, remove, conn_updates, messages,
-                        damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs,
+                        damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs,
                     )
                     break
             return _all
@@ -288,6 +295,13 @@ class WorldGraphEffectService:
             cid = int(p.get("connection_id", 0))
             if cid > 0:
                 destroy_connection_specs.append(DestroyConnectionSpec(connection_id=cid))
+            return _all
+
+        if et == InteractionEffectTypeEnum.SATISFY_NEED:
+            need_type_name = str(p.get("need_type", ""))
+            amount = int(p.get("amount", 0))
+            if need_type_name and amount > 0:
+                satisfy_need_specs.append(SatisfyNeedSpec(need_type_name=need_type_name, amount=amount))
             return _all
 
         raise UnsupportedInteractionEffectException(f"Unsupported interaction effect: {et.value}")
