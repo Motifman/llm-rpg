@@ -8,6 +8,8 @@ from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    ConnectionCreatedEvent,
+    ConnectionDestroyedEvent,
     ConnectionStateChangedEvent,
     EntityEnteredSpotEvent,
     EntityLeftSpotEvent,
@@ -142,9 +144,52 @@ class SpotGraphAggregate(AggregateRoot):
             self._reverse_connections[conn.connection_id] = reverse_connection_id
             self._reverse_connections[reverse_connection_id] = conn.connection_id
 
-    def _register_edge(self, conn: SpotConnection) -> None:
+    def _register_edge(self, conn: SpotConnection, *, emit_event: bool = False) -> None:
         self._connections_by_id[conn.connection_id] = conn
         self._outgoing.setdefault(conn.from_spot_id, []).append(conn.connection_id)
+        if emit_event:
+            self.add_event(
+                ConnectionCreatedEvent.create(
+                    aggregate_id=self._graph_id,
+                    aggregate_type="SpotGraphAggregate",
+                    connection_id=conn.connection_id,
+                    from_spot_id=conn.from_spot_id,
+                    to_spot_id=conn.to_spot_id,
+                )
+            )
+
+    def add_connection_dynamic(
+        self,
+        conn: SpotConnection,
+        reverse_connection_id: Optional[ConnectionId] = None,
+    ) -> None:
+        """ゲーム中の動的接続追加。ConnectionCreatedEvent を発行する。"""
+        if conn.connection_id in self._connections_by_id:
+            raise DuplicateConnectionIdException(f"Connection ID already used: {conn.connection_id}")
+        if conn.from_spot_id not in self._spots or conn.to_spot_id not in self._spots:
+            raise SpotNotInGraphException("Both endpoints must be registered spots")
+        self._register_edge(conn, emit_event=True)
+        if conn.is_bidirectional:
+            if reverse_connection_id is None:
+                raise ValueError("reverse_connection_id is required when is_bidirectional is True")
+            if reverse_connection_id in self._connections_by_id:
+                raise DuplicateConnectionIdException(f"Reverse connection ID already used: {reverse_connection_id}")
+            from dataclasses import replace as _replace
+            rev = _replace(
+                conn,
+                connection_id=reverse_connection_id,
+                from_spot_id=conn.to_spot_id,
+                to_spot_id=conn.from_spot_id,
+            )
+            self._register_edge(rev, emit_event=True)
+            self._reverse_connections[conn.connection_id] = reverse_connection_id
+            self._reverse_connections[reverse_connection_id] = conn.connection_id
+
+    def max_connection_id_value(self) -> int:
+        """グラフ内の既存接続IDの最大値を返す。接続がなければ0。"""
+        if not self._connections_by_id:
+            return 0
+        return max(cid.value for cid in self._connections_by_id)
 
     def get_connection(self, connection_id: ConnectionId) -> SpotConnection:
         if connection_id not in self._connections_by_id:
@@ -231,6 +276,30 @@ class SpotGraphAggregate(AggregateRoot):
                 from_spot_id=conn.from_spot_id,
                 to_spot_id=conn.to_spot_id,
                 is_passable=passable,
+            )
+        )
+
+    def remove_connection(self, connection_id: ConnectionId) -> None:
+        """接続をグラフから完全に削除する。双方向の場合は逆方向も削除。"""
+        conn = self.get_connection(connection_id)
+        out_list = self._outgoing.get(conn.from_spot_id)
+        if out_list is not None and connection_id in out_list:
+            out_list.remove(connection_id)
+        del self._connections_by_id[connection_id]
+        rev_id = self._reverse_connections.pop(connection_id, None)
+        if rev_id is not None:
+            rev_out = self._outgoing.get(conn.to_spot_id)
+            if rev_out is not None and rev_id in rev_out:
+                rev_out.remove(rev_id)
+            self._connections_by_id.pop(rev_id, None)
+            self._reverse_connections.pop(rev_id, None)
+        self.add_event(
+            ConnectionDestroyedEvent.create(
+                aggregate_id=self._graph_id,
+                aggregate_type="SpotGraphAggregate",
+                connection_id=connection_id,
+                from_spot_id=conn.from_spot_id,
+                to_spot_id=conn.to_spot_id,
             )
         )
 

@@ -16,11 +16,14 @@ from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
 from ai_rpg_world.domain.world_graph.service.spot_interaction_service import SpotInteractionService
+from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
+from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 
 
 @dataclass(frozen=True)
@@ -112,5 +115,28 @@ class SpotInteractionApplicationService:
                 )
             self._player_inventory_repository.save(inv2)
 
+        for spec in result.destroy_connection_specs:
+            graph.remove_connection(ConnectionId.create(spec.connection_id))
+
+        for spec in result.create_connection_specs:
+            new_cid = self._next_connection_id(graph)
+            new_conn = SpotConnection(
+                connection_id=new_cid,
+                from_spot_id=SpotId.create(spec.from_spot_id),
+                to_spot_id=SpotId.create(spec.to_spot_id),
+                name=spec.connection_name,
+                description=spec.description,
+                travel_ticks=spec.travel_ticks,
+                is_bidirectional=spec.is_bidirectional,
+                sound_permeability=spec.sound_permeability,
+            )
+            rev_id = ConnectionId.create(new_cid.value + 1) if spec.is_bidirectional else None
+            graph.add_connection_dynamic(new_conn, reverse_connection_id=rev_id)
+
         self._spot_graph_repository.save(graph)
         return SpotInteractionResultDto(messages=result.messages)
+
+    @staticmethod
+    def _next_connection_id(graph) -> ConnectionId:
+        """グラフ内の既存接続IDの最大値+1を返す。"""
+        return ConnectionId.create(graph.max_connection_id_value() + 1)
