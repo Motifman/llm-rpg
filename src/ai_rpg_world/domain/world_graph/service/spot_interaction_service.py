@@ -39,9 +39,16 @@ class SpotInteractionService:
         spot_object: SpotObject,
         owned_item_spec_ids: FrozenSet[ItemSpecId],
         world_flags: FrozenSet[str],
+        *,
+        spot_presence_count: int = 1,
+        interaction_parameters: Optional[dict] = None,
     ) -> Tuple[bool, Optional[str]]:
         for cond in interaction.preconditions:
-            ok, msg = self._evaluate_condition(cond, spot_object, owned_item_spec_ids, world_flags)
+            ok, msg = self._evaluate_condition(
+                cond, spot_object, owned_item_spec_ids, world_flags,
+                spot_presence_count=spot_presence_count,
+                interaction_parameters=interaction_parameters,
+            )
             if not ok:
                 return False, msg
         return True, None
@@ -52,6 +59,9 @@ class SpotInteractionService:
         spot_object: SpotObject,
         owned_item_spec_ids: FrozenSet[ItemSpecId],
         world_flags: FrozenSet[str],
+        *,
+        spot_presence_count: int = 1,
+        interaction_parameters: Optional[dict] = None,
     ) -> Tuple[bool, Optional[str]]:
         t = cond.condition_type
         if t == InteractionConditionTypeEnum.ALWAYS:
@@ -75,6 +85,44 @@ class SpotInteractionService:
             if cond.flag_name not in world_flags:
                 return False, cond.failure_message or "必要なフラグが立っていません"
             return True, None
+
+        # --- 脱出ゲーム拡張 ---
+
+        if t == InteractionConditionTypeEnum.PLAYERS_AT_SPOT:
+            required = cond.required_player_count if cond.required_player_count is not None else 2
+            if spot_presence_count < required:
+                return False, cond.failure_message or f"このアクションには{required}人以上が必要です"
+            return True, None
+
+        if t == InteractionConditionTypeEnum.PREPARED_ACTION:
+            if not cond.prepared_action_id:
+                return False, cond.failure_message or "準備アクションIDがありません"
+            prefix = f"prepared:{cond.prepared_action_id}:"
+            if not any(f.startswith(prefix) for f in world_flags):
+                return False, cond.failure_message or "他のプレイヤーがまだ準備していません"
+            return True, None
+
+        if t == InteractionConditionTypeEnum.PUZZLE_INPUT_MATCH:
+            if not cond.puzzle_input_key:
+                return False, cond.failure_message or "パズル入力キーがありません"
+            params = interaction_parameters or {}
+            user_input = params.get(cond.puzzle_input_key)
+            expected = cond.required_state or {}
+            if "answer" not in expected:
+                return False, cond.failure_message or "パズル答えが設定されていません"
+            expected_value = expected["answer"]
+            if user_input is None or str(user_input) != str(expected_value):
+                return False, cond.failure_message or "入力が正しくありません"
+            return True, None
+
+        if t == InteractionConditionTypeEnum.HAS_ITEMS:
+            if not cond.required_item_spec_ids:
+                return False, cond.failure_message or "HAS_ITEMS に必要アイテムリストがありません"
+            for item_id in cond.required_item_spec_ids:
+                if item_id not in owned_item_spec_ids:
+                    return False, cond.failure_message or "必要なアイテムが揃っていません"
+            return True, None
+
         return False, cond.failure_message or "未対応の前提条件です"
 
     def execute_interaction(
@@ -108,4 +156,8 @@ class SpotInteractionService:
             item_spec_ids_to_grant=effect_result.item_spec_ids_to_grant,
             item_spec_ids_to_remove=effect_result.item_spec_ids_to_remove,
             connection_passability_updates=effect_result.connection_passability_updates,
+            damage_specs=effect_result.damage_specs,
+            status_effect_specs=effect_result.status_effect_specs,
+            teleport_specs=effect_result.teleport_specs,
+            atmosphere_update_specs=effect_result.atmosphere_update_specs,
         )
