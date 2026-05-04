@@ -229,6 +229,11 @@ class SpotGraphCurrentStateBuilder:
                     is_outdoor=True,
                 )
 
+        # エージェントの欲求状態
+        need_lines: tuple[str, ...] = ()
+        if player is not None:
+            need_lines = player.needs.describe_all()
+
         return SpotGraphPlayerSnapshotDto(
             current_spot_id=spot_id.value,
             current_spot_name=node.name,
@@ -241,6 +246,7 @@ class SpotGraphCurrentStateBuilder:
             weather=weather,
             nearby_entities=tuple(nearby_entities),
             inventory_items=inventory_items,
+            need_lines=need_lines,
             ground_item_lines=ground_lines,
             connection_lines=connection_lines,
             sub_location_lines=sub_lines,
