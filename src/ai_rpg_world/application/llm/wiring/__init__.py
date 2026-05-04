@@ -795,9 +795,11 @@ class LlmAgentWiringResult:
             IEpisodicReinterpretationJournalStore
         ] = None,
         semantic_memory_store: Optional[ISemanticMemoryStore] = None,
+        event_publisher: Optional[Any] = None,
     ) -> None:
         self.observation_registry = observation_registry
         self.llm_turn_trigger = llm_turn_trigger
+        self.event_publisher = event_publisher
         self.observation_buffer = observation_buffer
         if observation_appender is not None:
             self.observation_appender = observation_appender
