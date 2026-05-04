@@ -37,6 +37,9 @@ from ai_rpg_world.application.observation.services.formatters.monster_formatter 
 from ai_rpg_world.application.observation.services.formatters.combat_formatter import (
     CombatObservationFormatter,
 )
+from ai_rpg_world.application.observation.services.formatters.item_use_formatter import (
+    ItemUseObservationFormatter,
+)
 from ai_rpg_world.application.observation.services.formatters.skill_formatter import (
     SkillObservationFormatter,
 )
@@ -125,6 +128,7 @@ class ObservationFormatter(IObservationFormatter):
             CombatObservationFormatter(self._context),
             SkillObservationFormatter(self._context),
             SpotGraphObservationFormatter(self._context),
+            ItemUseObservationFormatter(self._context),
             WorldObservationFormatter(self._context),
             PlayerObservationFormatter(self._context),
             PursuitObservationFormatter(self._context),
