@@ -399,6 +399,8 @@ class ScenarioLoader:
                     target_spot_id=self._optional_spot_id(observation.get("target_spot"), mapper),
                     schedules_turn=bool(observation.get("schedules_turn", True)),
                     breaks_movement=bool(observation.get("breaks_movement", False)),
+                    next_event_id=raw.get("next_event_id"),
+                    delay_ticks=int(raw.get("delay_ticks", 0)),
                 )
             )
         return tuple(parsed)
@@ -432,6 +434,8 @@ class ScenarioLoader:
             object_id=object_id,
             required_state=raw.get("required_state"),
             item_spec_id=item_spec_id,
+            tick_modulo=raw.get("tick_modulo"),
+            tick_phase=raw.get("tick_phase"),
         )
 
     def _parse_weather_config(self, raw: Dict[str, Any]) -> Optional[ScenarioWeatherConfig]:
