@@ -5,6 +5,7 @@ from typing import Any, Optional
 from ai_rpg_world.application.observation.contracts.dtos import ObservationOutput
 from ai_rpg_world.application.observation.services.formatters._formatter_context import (
     ObservationFormatterContext,
+    resolve_item_spec_id_value_for_instance,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.event.status_events import (
@@ -276,6 +277,13 @@ class PlayerObservationFormatter:
         else:
             prose = f"{item_name}を入手しました。"
         structured = {"type": "item_added_to_inventory", "item_name": item_name}
+        spec_val = event.item_spec_id_value
+        if spec_val is None:
+            spec_val = resolve_item_spec_id_value_for_instance(
+                self._context.item_repository, event.item_instance_id
+            )
+        if spec_val is not None:
+            structured["item_spec_id_value"] = spec_val
         return ObservationOutput(
             prose=prose,
             structured=structured,
@@ -289,6 +297,11 @@ class PlayerObservationFormatter:
         item_name = self._context.name_resolver.item_instance_name(event.item_instance_id)
         prose = f"{item_name}を捨てました。"
         structured = {"type": "item_dropped", "item_name": item_name}
+        spec_val = resolve_item_spec_id_value_for_instance(
+            self._context.item_repository, event.item_instance_id
+        )
+        if spec_val is not None:
+            structured["item_spec_id_value"] = spec_val
         return ObservationOutput(
             prose=prose, structured=structured, observation_category="self_only"
         )
@@ -309,6 +322,11 @@ class PlayerObservationFormatter:
         item_name = self._context.name_resolver.item_instance_name(event.item_instance_id)
         prose = f"{item_name}を外しました。"
         structured = {"type": "item_unequipped", "item_name": item_name}
+        spec_val = resolve_item_spec_id_value_for_instance(
+            self._context.item_repository, event.item_instance_id
+        )
+        if spec_val is not None:
+            structured["item_spec_id_value"] = spec_val
         return ObservationOutput(
             prose=prose, structured=structured, observation_category="self_only"
         )
@@ -321,6 +339,11 @@ class PlayerObservationFormatter:
         )
         prose = f"インベントリが満杯で{item_name}が溢れました。"
         structured = {"type": "inventory_overflow", "item_name": item_name}
+        spec_val = resolve_item_spec_id_value_for_instance(
+            self._context.item_repository, event.overflowed_item_instance_id
+        )
+        if spec_val is not None:
+            structured["item_spec_id_value"] = spec_val
         return ObservationOutput(
             prose=prose, structured=structured, observation_category="self_only"
         )

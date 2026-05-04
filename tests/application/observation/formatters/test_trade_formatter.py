@@ -95,8 +95,14 @@ class TestTradeObservationFormatterTradeOffered:
     def formatter(self):
         return TradeObservationFormatter(_make_context())
 
-    def test_seller_sees_offered_message(self, formatter):
+    def test_seller_sees_offered_message(self):
         """出品者は「出品しました」メッセージを見る。"""
+        item_repo = MagicMock()
+        agg = MagicMock()
+        agg.item_spec.item_spec_id.value = 900
+        item_repo.find_by_id.return_value = agg
+        ctx = _make_context(item_repository=item_repo)
+        formatter = TradeObservationFormatter(ctx)
         event = TradeOfferedEvent.create(
             aggregate_id=TradeId(1),
             aggregate_type="TradeAggregate",
@@ -114,6 +120,7 @@ class TestTradeObservationFormatterTradeOffered:
         assert out.structured.get("role") == "seller"
         assert out.structured.get("trade_id_value") == 1
         assert out.structured.get("requested_gold") == 100
+        assert out.structured.get("item_spec_id_value") == 900
         assert out.observation_category == "self_only"
         assert out.schedules_turn is True
 
@@ -123,7 +130,13 @@ class TestTradeObservationFormatterTradeOffered:
         profile = MagicMock()
         profile.name.value = "Alice"
         profile_repo.find_by_id.return_value = profile
-        ctx = _make_context(player_profile_repository=profile_repo)
+        item_repo = MagicMock()
+        agg = MagicMock()
+        agg.item_spec.item_spec_id.value = 901
+        item_repo.find_by_id.return_value = agg
+        ctx = _make_context(
+            player_profile_repository=profile_repo, item_repository=item_repo
+        )
         formatter = TradeObservationFormatter(ctx)
 
         event = TradeOfferedEvent.create(
@@ -142,6 +155,7 @@ class TestTradeObservationFormatterTradeOffered:
         assert "取引提案" in out.prose or "届きました" in out.prose
         assert out.structured.get("role") == "recipient"
         assert out.structured.get("seller") == "Alice"
+        assert out.structured.get("item_spec_id_value") == 901
 
 
 class TestTradeObservationFormatterTradeAccepted:
