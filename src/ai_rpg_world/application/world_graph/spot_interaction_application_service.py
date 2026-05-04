@@ -15,6 +15,8 @@ from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRep
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
 )
+from ai_rpg_world.domain.player.repository.player_status_repository import PlayerStatusRepository
+from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
@@ -43,6 +45,7 @@ class SpotInteractionApplicationService:
         item_spec_repository: ItemSpecRepository,
         world_flag_state: MutableWorldFlagState,
         spot_interaction_service: SpotInteractionService | None = None,
+        player_status_repository: PlayerStatusRepository | None = None,
     ) -> None:
         self._spot_graph_repository = spot_graph_repository
         self._spot_interior_repository = spot_interior_repository
@@ -51,6 +54,7 @@ class SpotInteractionApplicationService:
         self._item_spec_repository = item_spec_repository
         self._world_flag_state = world_flag_state
         self._interaction = spot_interaction_service or SpotInteractionService()
+        self._player_status_repository = player_status_repository
 
     def execute_interaction(
         self,
@@ -132,6 +136,18 @@ class SpotInteractionApplicationService:
             )
             rev_id = ConnectionId.create(new_cid.value + 1) if spec.is_bidirectional else None
             graph.add_connection_dynamic(new_conn, reverse_connection_id=rev_id)
+
+        # 欲求回復
+        if result.satisfy_need_specs and self._player_status_repository is not None:
+            status = self._player_status_repository.find_by_id(player_id)
+            if status is not None:
+                for spec in result.satisfy_need_specs:
+                    try:
+                        need_type = NeedType(spec.need_type_name)
+                        status.satisfy_need(need_type, spec.amount)
+                    except ValueError:
+                        pass  # 未知の NeedType は無視
+                self._player_status_repository.save(status)
 
         self._spot_graph_repository.save(graph)
         return SpotInteractionResultDto(messages=result.messages)
