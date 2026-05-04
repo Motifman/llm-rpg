@@ -69,6 +69,7 @@ def register_default_tools(
     inspect_item_enabled: bool = False,
     inspect_target_enabled: bool = False,
     todo_enabled: bool = False,
+    episodic_explore_related_enabled: bool = False,
     include_movement_tools: bool = True,
 ) -> None:
     """標準ツール群を登録し、依存サービスがあるカテゴリだけ追加する。
@@ -124,6 +125,7 @@ def register_default_tools(
         registry,
         get_memory_specs(
             todo_enabled=todo_enabled,
+            episodic_explore_related_enabled=episodic_explore_related_enabled,
         ),
     )
 
