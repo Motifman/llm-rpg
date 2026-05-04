@@ -30,6 +30,7 @@ class SpotGraphSimulationApplicationService:
         travel_stage: Optional[SpotGraphTravelStageService] = None,
         scenario_event_stage: Optional["_SpotGraphTickStage"] = None,
         environment_stage: Optional["_SpotGraphTickStage"] = None,
+        needs_decay_stage: Optional["_SpotGraphTickStage"] = None,
         llm_turn_trigger: Optional["ILlmTurnTrigger"] = None,
     ) -> None:
         self._time_provider = time_provider
@@ -37,6 +38,7 @@ class SpotGraphSimulationApplicationService:
         self._travel_stage = travel_stage
         self._scenario_event_stage = scenario_event_stage
         self._environment_stage = environment_stage
+        self._needs_decay_stage = needs_decay_stage
         self._llm_turn_trigger = llm_turn_trigger
         self._logger = logging.getLogger(self.__class__.__name__)
 
@@ -62,6 +64,8 @@ class SpotGraphSimulationApplicationService:
                 self._scenario_event_stage.run(current_tick)
             if self._environment_stage is not None:
                 self._environment_stage.run(current_tick)
+            if self._needs_decay_stage is not None:
+                self._needs_decay_stage.run(current_tick)
         self._run_post_tick_hooks(current_tick)
         return current_tick
 
