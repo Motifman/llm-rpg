@@ -18,3 +18,5 @@ class InteractionEffectTypeEnum(Enum):
     # 動的接続
     CREATE_CONNECTION = "CREATE_CONNECTION"
     DESTROY_CONNECTION = "DESTROY_CONNECTION"
+    # 欲求操作
+    SATISFY_NEED = "SATISFY_NEED"
