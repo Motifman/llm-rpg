@@ -46,14 +46,15 @@ def _make_dto(snap: SpotGraphPlayerSnapshotDto) -> PlayerCurrentStateDto:
     )
 
 
-def test_get_spot_graph_specs_has_seven_tools() -> None:
+def test_get_spot_graph_specs_has_eight_tools() -> None:
     specs = get_spot_graph_specs()
-    assert len(specs) == 7
+    assert len(specs) == 8
     names = {s[0].name for s in specs}
     assert "spot_graph_travel_to" in names
     assert "spot_graph_set_sub_location" in names
     assert "spot_graph_explore" in names
     assert "spot_graph_interact" in names
+    assert "spot_graph_prepare_action" in names
     assert "spot_graph_wait" in names
     assert "speech_say" in names
     assert "speech_whisper" in names
