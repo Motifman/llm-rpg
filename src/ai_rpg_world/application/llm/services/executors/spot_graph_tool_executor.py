@@ -16,6 +16,7 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION,
     TOOL_NAME_SPOT_GRAPH_SET_SUB_LOCATION,
     TOOL_NAME_SPOT_GRAPH_TRAVEL_TO,
+    TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
 from ai_rpg_world.application.world_graph.prepared_action_registry import PreparedActionRegistry
@@ -55,6 +56,7 @@ class SpotGraphToolExecutor:
             TOOL_NAME_SPOT_GRAPH_EXPLORE: self._explore,
             TOOL_NAME_SPOT_GRAPH_INTERACT: self._interact,
             TOOL_NAME_SPOT_GRAPH_PREPARE_ACTION: self._prepare_action,
+            TOOL_NAME_SPOT_GRAPH_USE_ITEM: self._use_item,
             TOOL_NAME_SPOT_GRAPH_WAIT: self._wait,
         }
 
@@ -143,6 +145,53 @@ class SpotGraphToolExecutor:
             msg = "\n".join(out.messages) if out.messages else "操作を実行しました。"
             return LlmCommandResultDto(
                 success=True, message=append_inner_thought_to_message(msg, args)
+            )
+        except Exception as e:
+            return exception_result(e)
+
+    def _use_item(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
+        item_spec_id = args.get("item_spec_id")
+        if item_spec_id is None:
+            return LlmCommandResultDto(success=False, message="item_spec_id を指定してください。")
+        try:
+            item_spec_id_int = int(item_spec_id)
+        except (TypeError, ValueError):
+            return LlmCommandResultDto(success=False, message="item_spec_id が不正です。")
+        try:
+            from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId as ISpecId
+            inv = self._player_inventory_repository.find_by_id(PlayerId(player_id))
+            if inv is None:
+                return LlmCommandResultDto(success=False, message="インベントリが見つかりません。")
+            target_spec = ISpecId.create(item_spec_id_int)
+            # インベントリからアイテムインスタンスを探す
+            item_instance = None
+            for slot in inv.slots:
+                if slot.item_instance_id is None:
+                    continue
+                item = self._item_repository.find_by_id(slot.item_instance_id)
+                if item is not None and item.item_spec.item_spec_id == target_spec:
+                    item_instance = item
+                    break
+            if item_instance is None:
+                return LlmCommandResultDto(success=False, message="そのアイテムは持っていません。")
+            from ai_rpg_world.domain.item.enum.item_enum import ItemType
+            if item_instance.item_spec.item_type != ItemType.CONSUMABLE:
+                return LlmCommandResultDto(success=False, message="このアイテムは消費できません。")
+            item_instance.use()
+            if item_instance.quantity == 0:
+                self._item_repository.delete(item_instance.item_instance_id)
+                inv.remove_item_for_placement(slot.slot_id)
+                self._player_inventory_repository.save(inv)
+            else:
+                self._item_repository.save(item_instance)
+            name = item_instance.item_spec.name
+            base = f"{name}を使用した。"
+            # consume_effectがあれば説明を追加
+            if item_instance.item_spec.consume_effect is not None:
+                base += f"（{item_instance.item_spec.consume_effect}）"
+            return LlmCommandResultDto(
+                success=True,
+                message=append_inner_thought_to_message(base, args),
             )
         except Exception as e:
             return exception_result(e)
