@@ -167,6 +167,7 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
                 "game_player_active_effects",
                 "game_player_pursuit_target_snapshots",
                 "game_player_pursuit_last_known",
+                "game_player_needs",
             ):
                 self._conn.execute(f"DELETE FROM {table_name} WHERE player_id = ?", (player_id,))
             self._conn.executemany(
@@ -187,6 +188,12 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
                 self._conn.execute(
                     "INSERT INTO game_player_pursuit_last_known (player_id, target_id, spot_id, x, y, z, observed_at_tick) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (player_id, int(pursuit.last_known.target_id), int(pursuit.last_known.spot_id), pursuit.last_known.coordinate.x, pursuit.last_known.coordinate.y, pursuit.last_known.coordinate.z, None if pursuit.last_known.observed_at_tick is None else pursuit.last_known.observed_at_tick.value),
+                )
+            # 欲求の保存
+            if len(status.needs) > 0:
+                self._conn.executemany(
+                    "INSERT INTO game_player_needs (player_id, need_type, value, max_value) VALUES (?, ?, ?, ?)",
+                    [(player_id, need.need_type.value, need.value, need.max_value) for need in status.needs],
                 )
             if began_local_transaction:
                 self._conn.commit()
@@ -250,12 +257,17 @@ class SqlitePlayerStatusWriteRepository(PlayerStatusRepository):
             "SELECT * FROM game_player_pursuit_last_known WHERE player_id = ?",
             (player_id,),
         ).fetchone()
+        need_rows = self._conn.execute(
+            "SELECT need_type, value, max_value FROM game_player_needs WHERE player_id = ?",
+            (player_id,),
+        ).fetchall()
         return build_player_status(
             row=row,
             path_rows=list(path_rows),
             active_effect_rows=list(active_effect_rows),
             pursuit_target_row=pursuit_target_row,
             pursuit_last_known_row=pursuit_last_known_row,
+            need_rows=list(need_rows),
         )
 
 

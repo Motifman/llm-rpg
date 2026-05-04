@@ -1743,6 +1743,21 @@ def _migration_v20(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migration_v21(connection: sqlite3.Connection) -> None:
+    """エージェント欲求テーブル（空腹・疲労等）。"""
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS game_player_needs (
+            player_id INTEGER NOT NULL,
+            need_type TEXT NOT NULL,
+            value INTEGER NOT NULL DEFAULT 0,
+            max_value INTEGER NOT NULL DEFAULT 100,
+            PRIMARY KEY (player_id, need_type)
+        )
+        """
+    )
+
+
 _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=1, apply=_migration_v1),
     SqliteMigration(version=2, apply=_migration_v2),
@@ -1764,6 +1779,7 @@ _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=18, apply=_migration_v18),
     SqliteMigration(version=19, apply=_migration_v19),
     SqliteMigration(version=20, apply=_migration_v20),
+    SqliteMigration(version=21, apply=_migration_v21),
 )
 
 
