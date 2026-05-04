@@ -72,6 +72,8 @@ from ai_rpg_world.domain.player.value_object.player_spot_navigation_state import
     PlayerSpotNavigationState,
 )
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
+from ai_rpg_world.domain.player.value_object.agent_needs import AgentNeeds
+from ai_rpg_world.domain.player.value_object.agent_need import AgentNeed, NeedType
 
 
 class PlayerStatusAggregate(AggregateRoot):
@@ -94,6 +96,7 @@ class PlayerStatusAggregate(AggregateRoot):
         attention_level: Optional[AttentionLevel] = None,
         pursuit_state: Optional[PlayerPursuitState] = None,
         spot_navigation_state: Optional[PlayerSpotNavigationState] = None,
+        needs: Optional[AgentNeeds] = None,
     ):
         super().__init__()
         self._player_id = player_id
@@ -115,6 +118,7 @@ class PlayerStatusAggregate(AggregateRoot):
             pursuit_state if pursuit_state is not None else PlayerPursuitState.empty()
         )
         self._spot_navigation_state = spot_navigation_state
+        self._needs = needs if needs is not None else AgentNeeds.default()
 
     @property
     def attention_level(self) -> AttentionLevel:
@@ -174,6 +178,23 @@ class PlayerStatusAggregate(AggregateRoot):
     def stamina(self) -> Stamina:
         """スタミナ"""
         return self._stamina
+
+    @property
+    def needs(self) -> AgentNeeds:
+        """エージェントの欲求コレクション"""
+        return self._needs
+
+    def increase_need(self, need_type: NeedType, amount: int) -> None:
+        """欲求を増加させる（tick経過、行動消費等）。"""
+        need = self._needs.get(need_type)
+        if need is not None:
+            self._needs = self._needs.with_updated(need.increase(amount))
+
+    def satisfy_need(self, need_type: NeedType, amount: int) -> None:
+        """欲求を満たす（食事、睡眠等）。"""
+        need = self._needs.get(need_type)
+        if need is not None:
+            self._needs = self._needs.with_updated(need.satisfy(amount))
 
     @property
     def is_down(self) -> bool:

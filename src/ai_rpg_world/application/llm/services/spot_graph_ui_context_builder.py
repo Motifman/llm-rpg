@@ -68,6 +68,7 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
         self._build_sub_location_section(snap, allocator, collector, extra_lines)
         self._build_entity_section(snap, allocator, collector, extra_lines)
         self._build_inventory_section(snap, allocator, collector, extra_lines)
+        self._build_needs_section(snap, extra_lines)
 
         augmented_text = current_state_text
         if extra_lines:
@@ -195,6 +196,17 @@ class SpotGraphUiContextBuilder(ILlmUiContextBuilder):
                     player_id=entry.entity_id,
                 ),
             )
+
+    @staticmethod
+    def _build_needs_section(
+        snap: SpotGraphPlayerSnapshotDto,
+        lines: List[str],
+    ) -> None:
+        if not snap.need_lines:
+            return
+        lines.append("身体の状態:")
+        for line in snap.need_lines:
+            lines.append(f"  {line}")
 
     def _build_inventory_section(
         self,
