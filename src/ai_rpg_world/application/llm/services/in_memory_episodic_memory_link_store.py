@@ -84,6 +84,22 @@ class InMemoryMemoryLinkStore(IMemoryLinkStore):
         )
         return out[:limit]
 
+    def list_all_incident_links(
+        self,
+        player_id: int,
+        episode_id: str,
+        *,
+        now: datetime,
+    ) -> list[MemoryLink]:
+        eid = episode_id.strip()
+        keys = self._by_episode.get(player_id, {}).get(eid, set())
+        out: list[MemoryLink] = []
+        for k in keys:
+            link = self._by_key.get(k)
+            if link is not None:
+                out.append(link)
+        return out
+
     def count_links_for_episode(self, player_id: int, episode_id: str) -> int:
         eid = episode_id.strip()
         return len(self._by_episode.get(player_id, {}).get(eid, set()))

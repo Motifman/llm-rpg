@@ -41,7 +41,7 @@
 | **MemoryLink・拡散想起・能動 `memory_explore_related`** | **完了** | **PR #49** | Hebbian・忘却曲線・リンク自動作成 |
 | **セマンティック記憶への昇格（決定論クラスタ要約 MVP）** | **完了** | **PR #49** | LLM 脱文脈化は未接続時スキップ |
 | **リンクストア・セマンティックストアの SQLite 永続化** | **完了** | `SUBJECTIVE_EPISODE_DB_PATH` 指定時に主観エピソード DB と同一接続で `SqliteMemoryLinkStore` / `SqliteSemanticMemoryStore` | 実装手順は [episodic_memory_link_semantic_sqlite_plan.md](./episodic_memory_link_semantic_sqlite_plan.md)。別ファイル専用パスは未対応（要望があれば計画更新） |
-| **昇格処理の全リンク走査の効率化（イベント駆動・増分）** | **未着手** | `on_after_tool_turn` が毎回 `list_all_links` 相当 | **[episodic_semantic_promotion_incremental_plan.md](./episodic_semantic_promotion_incremental_plan.md)**（ブランチ例: `feature/episodic-semantic-promotion-incremental`）。**推奨マージ順**: 永続化 PR の後 |
+| **昇格処理の全リンク走査の効率化（イベント駆動・増分）** | **完了（MVP）** | `EpisodicPromotionFrontier` + 強リンク BFS 展開 + `list_all_incident_links`。シード無し時は従来どおり全域スキャン。`EPISODIC_PROMOTION_FORCE_FULL_SCAN` で常時全域可 | 詳細・妥協点は [episodic_semantic_promotion_incremental_plan.md](./episodic_semantic_promotion_incremental_plan.md)。永続化（SQLite リンク）PR マージ後に本実装を取り込む想定 |
 | situation cue の行動・感情・結果軸の補強 | MVP 外・次工程 | §0.2 | `IActionResultStore` 等との統合は別 PR |
 | observation-only episode | 未着手 | 計画上 MVP 後段 | MVP 外 |
 | reflection / consolidation（広義） | 未着手 | 計画外に近い | 本ドキュメント §7 参照 |

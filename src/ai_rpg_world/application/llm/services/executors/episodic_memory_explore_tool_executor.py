@@ -68,6 +68,7 @@ class EpisodicMemoryExploreToolExecutor:
             reverse=True,
         )
         rows: list[dict[str, Any]] = []
+        touched: list[str] = [eid]
         for ln in ranked[:top_k]:
             other = other_episode_id(ln, eid)
             ep = self.episode_store.get(player_id, other)
@@ -83,9 +84,11 @@ class EpisodicMemoryExploreToolExecutor:
                     "summary": text[:500],
                 }
             )
+            touched.append(other)
             self.link_service.strengthen_from_meta_exploration(
                 player_id, eid, other, now=now
             )
+        self.link_service.note_promotion_frontier_episodes(player_id, touched)
         payload = {"related_episodes": rows}
         return LlmCommandResultDto(
             success=True,
