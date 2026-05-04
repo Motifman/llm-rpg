@@ -79,6 +79,10 @@ def test_sqlite_memory_link_roundtrip_and_weakest_removal(db_path: Path) -> None
     store2 = SqliteMemoryLinkStore(episode_store2.connection)
     assert store2.get_link(1, "a", "z", MemoryLinkType.TEMPORAL) is not None
 
+    inc_a = store.list_all_incident_links(1, "a", now=now)
+    assert len(inc_a) == 1
+    assert inc_a[0].link_id == ln.link_id
+
 
 def test_default_link_semantic_factory_uses_sqlite_when_episode_is_sqlite(
     db_path: Path,

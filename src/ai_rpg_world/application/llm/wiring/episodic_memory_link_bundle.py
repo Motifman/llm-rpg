@@ -19,6 +19,9 @@ from ai_rpg_world.application.llm.services.episodic_memory_link_application_serv
 from ai_rpg_world.application.llm.services.episodic_passive_recall_retrieval import (
     EpisodicPassiveRecallRetrievalService,
 )
+from ai_rpg_world.application.llm.services.episodic_promotion_frontier import (
+    EpisodicPromotionFrontier,
+)
 from ai_rpg_world.application.llm.services.executors.episodic_memory_explore_tool_executor import (
     EpisodicMemoryExploreToolExecutor,
 )
@@ -74,9 +77,12 @@ def build_episodic_memory_link_bundle(
     episode_store: IEpisodicEpisodeStore,
     *,
     link_store: IMemoryLinkStore | None = None,
+    promotion_frontier: EpisodicPromotionFrontier | None = None,
 ) -> EpisodicMemoryLinkBundle:
     ls = link_store if link_store is not None else InMemoryMemoryLinkStore()
-    link_service = EpisodicMemoryLinkApplicationService(episode_store, ls)
+    link_service = EpisodicMemoryLinkApplicationService(
+        episode_store, ls, promotion_frontier=promotion_frontier
+    )
     passive_recall = EpisodicPassiveRecallRetrievalService(
         episode_store,
         link_store=ls,

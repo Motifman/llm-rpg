@@ -127,6 +127,24 @@ class SqliteMemoryLinkStore(IMemoryLinkStore):
         links.sort(key=lambda ln: effective_link_strength(ln, now), reverse=True)
         return links[:limit]
 
+    def list_all_incident_links(
+        self,
+        player_id: int,
+        episode_id: str,
+        *,
+        now: datetime,
+    ) -> list[MemoryLink]:
+        _ = now
+        eid = episode_id.strip()
+        cur = self._conn.execute(
+            """
+            SELECT * FROM memory_links
+            WHERE player_id = ? AND (episode_id_a = ? OR episode_id_b = ?)
+            """,
+            (player_id, eid, eid),
+        )
+        return [_row_to_link(r) for r in cur.fetchall()]
+
     def count_links_for_episode(self, player_id: int, episode_id: str) -> int:
         eid = episode_id.strip()
         cur = self._conn.execute(
