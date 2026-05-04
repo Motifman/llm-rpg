@@ -42,12 +42,14 @@ class SpotGraphToolExecutor:
         spot_graph_world_services: SpotGraphWorldServices,
         player_inventory_repository: PlayerInventoryRepository,
         item_repository: ItemRepository,
+        event_publisher: Any = None,
     ) -> None:
         if spot_graph_world_services.movement is None:
             raise TypeError("SpotGraphWorldServices.movement が必要です")
         self._svc = spot_graph_world_services
         self._player_inventory_repository = player_inventory_repository
         self._item_repository = item_repository
+        self._event_publisher = event_publisher
 
     def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
         return {
@@ -184,11 +186,24 @@ class SpotGraphToolExecutor:
                 self._player_inventory_repository.save(inv)
             else:
                 self._item_repository.save(item_instance)
+            # EventPublisher 経由で ConsumableUsedEvent を発行
+            # → ConsumableEffectHandler が HP/MP 回復等を適用
+            if (
+                self._event_publisher is not None
+                and item_instance.item_spec.consume_effect is not None
+            ):
+                from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
+                self._event_publisher.publish(
+                    ConsumableUsedEvent.create(
+                        aggregate_id=PlayerId(player_id),
+                        aggregate_type="PlayerStatusAggregate",
+                        item_spec_id=item_instance.item_spec.item_spec_id,
+                    )
+                )
             name = item_instance.item_spec.name
             base = f"{name}を使用した。"
-            # consume_effectがあれば説明を追加
             if item_instance.item_spec.consume_effect is not None:
-                base += f"（{item_instance.item_spec.consume_effect}）"
+                base += f"（効果が適用された）"
             return LlmCommandResultDto(
                 success=True,
                 message=append_inner_thought_to_message(base, args),
