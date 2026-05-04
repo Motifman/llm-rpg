@@ -167,6 +167,7 @@ def create_spot_graph_wiring(
     chunk_episode_draft_builder: Optional[ChunkEpisodeDraftBuilder] = None,
     episodic_chunk_coordinator: Optional[EpisodicChunkCoordinator] = None,
     episodic_chunk_subjective_completion: Optional[IEpisodicChunkSubjectiveCompletionPort] = None,
+    event_publisher: Optional[Any] = None,
 ) -> "LlmAgentWiringResult":
     """スポットグラフ用に LLM 観測・ツール・プロンプトを組み立てる（タイル移動なし）。
 
@@ -236,6 +237,21 @@ def create_spot_graph_wiring(
     buffer = (
         observation_buffer if observation_buffer is not None else DefaultObservationContextBuffer()
     )
+
+    # --- EventPublisher: 渡されなければデフォルトで InMemoryEventPublisher を生成 ---
+    if event_publisher is None:
+        from ai_rpg_world.infrastructure.events.event_publisher_impl import InMemoryEventPublisher
+        event_publisher = InMemoryEventPublisher()
+    # ConsumableEffectHandler を登録（アイテム消費→HP/MP回復等）
+    from ai_rpg_world.application.world.handlers.consumable_effect_handler import ConsumableEffectHandler
+    from ai_rpg_world.infrastructure.events.consumable_effect_event_handler_registry import (
+        ConsumableEffectEventHandlerRegistry,
+    )
+    consumable_handler = ConsumableEffectHandler(
+        item_spec_repository=item_spec_repository,
+        player_status_repository=player_status_repository,
+    )
+    ConsumableEffectEventHandlerRegistry(consumable_handler).register_handlers(event_publisher)
 
     sg_builder = SpotGraphCurrentStateBuilder(
         spot_graph_repository=spot_graph_repository,
@@ -308,6 +324,7 @@ def create_spot_graph_wiring(
         spot_graph_world_services=spot_graph_world_services,
         player_inventory_repository=player_inventory_repository,
         item_repository=item_repository,
+        event_publisher=event_publisher,
     )
     no_op_movement = SpotGraphNoOpMovementService()
 
@@ -502,6 +519,7 @@ def create_spot_graph_wiring(
         episodic_recall_buffer_store=recall_buffer,
         episodic_reinterpretation_journal_store=reinterpretation_journal,
         semantic_memory_store=semantic_memory_store,
+        event_publisher=event_publisher,
     )
 
 
