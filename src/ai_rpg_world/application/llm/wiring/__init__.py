@@ -82,12 +82,20 @@ from ai_rpg_world.application.llm.contracts.episodic_episode_store_port import (
 from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port import (
     IEpisodicChunkSubjectiveCompletionPort,
 )
+from ai_rpg_world.application.llm.contracts.episodic_reinterpretation import (
+    IEpisodicRecallBufferStore,
+    IEpisodicReinterpretationCompletionPort,
+    IEpisodicReinterpretationJournalStore,
+)
 from ai_rpg_world.application.llm.services.agent_orchestrator import LlmAgentOrchestrator
 from ai_rpg_world.application.llm.services.chunk_episode_draft_builder import (
     ChunkEpisodeDraftBuilder,
 )
 from ai_rpg_world.application.llm.services.episodic_chunk_coordinator import (
     EpisodicChunkCoordinator,
+)
+from ai_rpg_world.application.llm.services.episodic_reinterpretation_coordinator import (
+    EpisodicReinterpretationCoordinator,
 )
 from ai_rpg_world.application.llm.services.episodic_chunk_subjective_fields import (
     EpisodicChunkSubjectiveFieldsService,
@@ -626,6 +634,9 @@ def _build_prompt_stack(
     tile_map_view_distance: int,
     persona_block_provider: Optional[Callable[[PlayerId], str]] = None,
     episodic_passive_recall: Optional[EpisodicPassiveRecallRetrievalService] = None,
+    episodic_recall_buffer_store: Optional[IEpisodicRecallBufferStore] = None,
+    episodic_reinterpretation_journal_store: Optional[IEpisodicReinterpretationJournalStore] = None,
+    episodic_turn_index_provider: Optional[Callable[[PlayerId], int]] = None,
 ) -> DefaultPromptBuilder:
     """
     predictive_retriever と prompt_builder を構築する。
@@ -645,6 +656,9 @@ def _build_prompt_stack(
         persona_block_provider=persona_block_provider,
         tile_map_view_distance=tile_map_view_distance,
         episodic_passive_recall=episodic_passive_recall,
+        episodic_recall_buffer_store=episodic_recall_buffer_store,
+        episodic_reinterpretation_journal_store=episodic_reinterpretation_journal_store,
+        episodic_turn_index_provider=episodic_turn_index_provider,
     )
 
 
@@ -664,6 +678,44 @@ def _optional_episodic_chunk_subjective_fields_service(
     if port is None:
         return None
     return EpisodicChunkSubjectiveFieldsService(port)
+
+
+def _optional_episodic_reinterpretation_completion(
+    llm_client: ILLMClient,
+    explicit: Optional[IEpisodicReinterpretationCompletionPort],
+) -> Optional[IEpisodicReinterpretationCompletionPort]:
+    port: Optional[IEpisodicReinterpretationCompletionPort] = explicit
+    if port is None:
+        from ai_rpg_world.infrastructure.llm.litellm_client import LiteLLMClient
+
+        if isinstance(llm_client, LiteLLMClient):
+            port = llm_client
+    return port
+
+
+def _resolve_default_episodic_reinterpretation_stores(
+    recall_buffer_store: Optional[IEpisodicRecallBufferStore],
+    journal_store: Optional[IEpisodicReinterpretationJournalStore],
+) -> tuple[IEpisodicRecallBufferStore, IEpisodicReinterpretationJournalStore]:
+    if recall_buffer_store is not None and journal_store is not None:
+        return recall_buffer_store, journal_store
+    path = os.environ.get("SUBJECTIVE_EPISODE_DB_PATH", "").strip()
+    if path:
+        from ai_rpg_world.infrastructure.repository.sqlite_episodic_reinterpretation_store import (
+            SqliteEpisodicReinterpretationStore,
+        )
+
+        sqlite_store = SqliteEpisodicReinterpretationStore.connect(path)
+        return recall_buffer_store or sqlite_store, journal_store or sqlite_store
+    from ai_rpg_world.application.llm.services.in_memory_episodic_reinterpretation_stores import (
+        InMemoryEpisodicRecallBufferStore,
+        InMemoryEpisodicReinterpretationJournalStore,
+    )
+
+    return (
+        recall_buffer_store or InMemoryEpisodicRecallBufferStore(),
+        journal_store or InMemoryEpisodicReinterpretationJournalStore(),
+    )
 
 
 def _build_persona_block_provider(
@@ -708,6 +760,10 @@ class LlmAgentWiringResult:
         sns_page_session: Optional[Any] = None,
         trade_page_session: Optional[Any] = None,
         episodic_episode_store: Optional[IEpisodicEpisodeStore] = None,
+        episodic_recall_buffer_store: Optional[IEpisodicRecallBufferStore] = None,
+        episodic_reinterpretation_journal_store: Optional[
+            IEpisodicReinterpretationJournalStore
+        ] = None,
     ) -> None:
         self.observation_registry = observation_registry
         self.llm_turn_trigger = llm_turn_trigger
@@ -722,6 +778,10 @@ class LlmAgentWiringResult:
         self.sns_page_session = sns_page_session
         self.trade_page_session = trade_page_session
         self.episodic_episode_store = episodic_episode_store
+        self.episodic_recall_buffer_store = episodic_recall_buffer_store
+        self.episodic_reinterpretation_journal_store = (
+            episodic_reinterpretation_journal_store
+        )
 
     def __iter__(self) -> Any:
         yield self.observation_registry
@@ -791,6 +851,13 @@ def create_llm_agent_wiring(
     persona_store: Optional[Any] = None,
     persona_prompt_policy: Optional[PersonaPromptPolicy] = None,
     episodic_episode_store: Optional[IEpisodicEpisodeStore] = None,
+    episodic_recall_buffer_store: Optional[IEpisodicRecallBufferStore] = None,
+    episodic_reinterpretation_journal_store: Optional[
+        IEpisodicReinterpretationJournalStore
+    ] = None,
+    episodic_reinterpretation_completion: Optional[
+        IEpisodicReinterpretationCompletionPort
+    ] = None,
     chunk_episode_draft_builder: Optional[ChunkEpisodeDraftBuilder] = None,
     episodic_chunk_coordinator: Optional[EpisodicChunkCoordinator] = None,
     episodic_chunk_subjective_completion: Optional[IEpisodicChunkSubjectiveCompletionPort] = None,
@@ -908,6 +975,10 @@ def create_llm_agent_wiring(
             player_profile_repository=player_profile_repository,
         )
     shared_episode_store = resolve_default_episodic_episode_store(episodic_episode_store)
+    recall_buffer, reinterpretation_journal = _resolve_default_episodic_reinterpretation_stores(
+        episodic_recall_buffer_store,
+        episodic_reinterpretation_journal_store,
+    )
     chunk_builder = (
         chunk_episode_draft_builder
         if chunk_episode_draft_builder is not None
@@ -916,6 +987,21 @@ def create_llm_agent_wiring(
     chunk_subjective_service = _optional_episodic_chunk_subjective_fields_service(
         client,
         episodic_chunk_subjective_completion,
+    )
+    reinterpretation_completion = _optional_episodic_reinterpretation_completion(
+        client,
+        episodic_reinterpretation_completion,
+    )
+    reinterpretation_coord = EpisodicReinterpretationCoordinator(
+        episode_store=shared_episode_store,
+        recall_buffer_store=recall_buffer,
+        journal_store=reinterpretation_journal,
+        completion=reinterpretation_completion,
+    )
+    prompt_recall_buffer = (
+        recall_buffer
+        if reinterpretation_completion is not None or episodic_recall_buffer_store is not None
+        else None
     )
     episodic_coord = episodic_chunk_coordinator or EpisodicChunkCoordinator(
         observation_buffer=buffer,
@@ -946,6 +1032,9 @@ def create_llm_agent_wiring(
         tile_map_view_distance=effective_view_distance,
         persona_block_provider=persona_block_provider,
         episodic_passive_recall=episodic_passive_recall,
+        episodic_recall_buffer_store=prompt_recall_buffer,
+        episodic_reinterpretation_journal_store=reinterpretation_journal,
+        episodic_turn_index_provider=reinterpretation_coord.current_turn_index,
     )
     orchestrator = LlmAgentOrchestrator(
         prompt_builder=prompt_builder,
@@ -954,6 +1043,7 @@ def create_llm_agent_wiring(
         action_result_store=action_result_store,
         tool_argument_resolver=tool_argument_resolver,
         episodic_chunk_coordinator=episodic_coord,
+        episodic_reinterpretation_coordinator=reinterpretation_coord,
     )
     turn_runner = LlmAgentTurnRunner(
         observation_buffer=buffer,
@@ -1003,6 +1093,8 @@ def create_llm_agent_wiring(
         sns_page_session=sns_page_session,
         trade_page_session=trade_page_session,
         episodic_episode_store=shared_episode_store,
+        episodic_recall_buffer_store=recall_buffer,
+        episodic_reinterpretation_journal_store=reinterpretation_journal,
     )
 
 

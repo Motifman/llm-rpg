@@ -13,15 +13,16 @@ from ai_rpg_world.application.llm.contracts.episodic_chunk_subjective_llm_port i
 from ai_rpg_world.application.llm.contracts.episodic_memory import SubjectiveEpisode
 from ai_rpg_world.application.llm.exceptions import LlmApiCallException
 
-_SYSTEM_EPISODE_SUBJECTIVE_JSON = """あなたは RPG エージェントの主観記憶を短文で埋める助手です。
+_SYSTEM_EPISODE_SUBJECTIVE_JSON = """あなたは RPG エージェントの主観記憶を埋める助手です。
 入力はルールが組み立てたエピソード草案・人物像・ソース事実のみです。
 出力は JSON オブジェクトのみ（前後に説明文やコードフェンスを付けない）。
 キーは次の 2 つだけ: interpreted, recall_text。
 interpreted は「この出来事を当時どう意味づけたか」の日本語 1 文。
-recall_text は将来のプロンプトに差し込む想起用の日本語短文（最大 2 文）。
+recall_text は将来のプロンプトに差し込む、キャラクター本人の一人称による
+TRPG リプレイ風の主観回想。250〜450 字程度で、当時の感情・見立て・手触りを含める。
 入力に無い人物・場所・アイテム・結果・成否を新たに創作しない。
 キューや observed の事実と矛盾しない表現にする。"""
-_MAX_SUBJECTIVE_FIELD_CHARS = 480
+_MAX_SUBJECTIVE_FIELD_CHARS = 700
 
 
 def _truncate(label: str, raw: str, *, max_chars: int) -> str:
