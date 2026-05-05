@@ -223,6 +223,74 @@ class TestScenarioLoaderMinimal:
         assert result.weather_config.initial_state.intensity == 0.5
         assert result.weather_config.update_interval_ticks == 4
 
+    def test_day_night_cycle_absent_returns_none(self) -> None:
+        result = ScenarioLoader().load_from_dict(_minimal_scenario())
+        assert result.day_night_cycle is None
+
+    def test_day_night_cycle_disabled_returns_none(self) -> None:
+        raw = _minimal_scenario()
+        raw["environment"]["day_night_cycle"] = {
+            "enabled": False,
+            "ticks_per_day": 240,
+            "phases": [{"name": "day", "start_ratio": 0.0}],
+        }
+        result = ScenarioLoader().load_from_dict(raw)
+        assert result.day_night_cycle is None
+
+    def test_day_night_cycle_enabled_parses_phases(self) -> None:
+        raw = _minimal_scenario()
+        raw["environment"]["day_night_cycle"] = {
+            "enabled": True,
+            "ticks_per_day": 240,
+            "starting_tick_in_day": 60,
+            "phases": [
+                {"name": "dawn", "start_ratio": 0.0, "display_text": "夜明け",
+                 "ambient_light": 0.4, "is_dark": False},
+                {"name": "night", "start_ratio": 0.7, "display_text": "夜",
+                 "ambient_light": 0.1, "is_dark": True},
+            ],
+        }
+        result = ScenarioLoader().load_from_dict(raw)
+        cycle = result.day_night_cycle
+        assert cycle is not None
+        assert cycle.ticks_per_day == 240
+        assert cycle.starting_tick_in_day == 60
+        assert len(cycle.phases) == 2
+        assert cycle.phases[0].name == "dawn"
+        assert cycle.phases[1].is_dark is True
+
+    def test_day_night_cycle_invalid_ticks_per_day_rejected(self) -> None:
+        raw = _minimal_scenario()
+        raw["environment"]["day_night_cycle"] = {
+            "enabled": True,
+            "ticks_per_day": 0,
+            "phases": [{"name": "day", "start_ratio": 0.0}],
+        }
+        with pytest.raises(ScenarioLoadError, match="ticks_per_day"):
+            ScenarioLoader().load_from_dict(raw)
+
+    def test_day_night_cycle_empty_phases_rejected(self) -> None:
+        raw = _minimal_scenario()
+        raw["environment"]["day_night_cycle"] = {
+            "enabled": True,
+            "ticks_per_day": 240,
+            "phases": [],
+        }
+        with pytest.raises(ScenarioLoadError, match="phases"):
+            ScenarioLoader().load_from_dict(raw)
+
+    def test_spot_intrinsically_dark_field_loaded(self) -> None:
+        raw = _minimal_scenario()
+        raw["spots"][0]["is_intrinsically_dark"] = True
+        result = ScenarioLoader().load_from_dict(raw)
+        spot = result.graph.get_spot(
+            __import__(
+                "ai_rpg_world.domain.world.value_object.spot_id",
+                fromlist=["SpotId"],
+            ).SpotId.create(result.id_mapper.get_int("spot", "room_a"))
+        )
+        assert spot.is_intrinsically_dark is True
+
     def test_unsupported_version_raises(self) -> None:
         raw = _minimal_scenario()
         raw["scenario_format_version"] = "99.0"

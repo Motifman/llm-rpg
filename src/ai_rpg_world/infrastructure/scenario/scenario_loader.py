@@ -44,6 +44,12 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition impor
     ScenarioEventCondition,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import ScenarioEventDef
+from ai_rpg_world.domain.world_graph.value_object.day_night_cycle_def import (
+    DayNightCycleDef,
+)
+from ai_rpg_world.domain.world_graph.value_object.day_night_phase_def import (
+    DayNightPhaseDef,
+)
 from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import SpotAtmosphere
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
@@ -116,6 +122,7 @@ class ScenarioLoadResult:
     initial_flags: Tuple[str, ...]
     scenario_events: Tuple[ScenarioEventDef, ...] = ()
     weather_config: Optional[ScenarioWeatherConfig] = None
+    day_night_cycle: Optional[DayNightCycleDef] = None
 
 
 class ScenarioLoader:
@@ -147,6 +154,7 @@ class ScenarioLoader:
         initial_flags = tuple(raw.get("initial_flags", []))
         scenario_events = self._parse_scenario_events(raw.get("scenario_events", []), mapper)
         weather_config = self._parse_weather_config(raw.get("environment", {}))
+        day_night_cycle = self._parse_day_night_cycle(raw.get("environment", {}))
 
         return ScenarioLoadResult(
             graph=graph,
@@ -160,6 +168,7 @@ class ScenarioLoader:
             initial_flags=initial_flags,
             scenario_events=scenario_events,
             weather_config=weather_config,
+            day_night_cycle=day_night_cycle,
         )
 
     def _parse_metadata(self, raw: Dict[str, Any]) -> ScenarioMetadata:
@@ -237,6 +246,7 @@ class ScenarioLoader:
                 interior=None,
                 atmosphere=atmosphere,
                 is_outdoor=bool(spot_raw.get("is_outdoor", False)),
+                is_intrinsically_dark=bool(spot_raw.get("is_intrinsically_dark", False)),
             )
             graph.add_spot(node)
 
@@ -438,6 +448,58 @@ class ScenarioLoader:
             item_spec_id=item_spec_id,
             tick_modulo=raw.get("tick_modulo"),
             tick_phase=raw.get("tick_phase"),
+        )
+
+    def _parse_day_night_cycle(self, raw: Dict[str, Any]) -> Optional[DayNightCycleDef]:
+        """environment.day_night_cycle ブロックを DayNightCycleDef に変換する。
+
+        環境にブロックが無い、または enabled=false の場合は None を返す。
+        ON のときは ticks_per_day と phases を必須とする。
+        """
+        cycle = raw.get("day_night_cycle") if isinstance(raw, dict) else None
+        if not isinstance(cycle, dict):
+            return None
+        if not bool(cycle.get("enabled", False)):
+            return None
+
+        ticks_per_day = cycle.get("ticks_per_day")
+        if not isinstance(ticks_per_day, int) or ticks_per_day < 1:
+            raise ScenarioLoadError(
+                "environment.day_night_cycle.ticks_per_day must be a positive integer"
+            )
+
+        starting = cycle.get("starting_tick_in_day", 0)
+        if not isinstance(starting, int):
+            raise ScenarioLoadError(
+                "environment.day_night_cycle.starting_tick_in_day must be an integer"
+            )
+
+        phases_raw = cycle.get("phases", [])
+        if not isinstance(phases_raw, list) or not phases_raw:
+            raise ScenarioLoadError(
+                "environment.day_night_cycle.phases must be a non-empty list"
+            )
+
+        phases: List[DayNightPhaseDef] = []
+        for entry in phases_raw:
+            if not isinstance(entry, dict):
+                raise ScenarioLoadError(
+                    "Each entry in environment.day_night_cycle.phases must be an object"
+                )
+            phases.append(
+                DayNightPhaseDef(
+                    name=str(entry["name"]),
+                    start_ratio=float(entry["start_ratio"]),
+                    display_text=str(entry.get("display_text", entry["name"])),
+                    ambient_light=float(entry.get("ambient_light", 1.0)),
+                    is_dark=bool(entry.get("is_dark", False)),
+                )
+            )
+
+        return DayNightCycleDef(
+            ticks_per_day=ticks_per_day,
+            starting_tick_in_day=starting,
+            phases=tuple(phases),
         )
 
     def _parse_weather_config(self, raw: Dict[str, Any]) -> Optional[ScenarioWeatherConfig]:
