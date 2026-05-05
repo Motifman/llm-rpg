@@ -115,7 +115,10 @@ def _make_service(*, graph, config, **kwargs) -> SpotGraphAmbientSoundStageServi
 
 
 class TestStageGuards:
-    def test_disabled_skips(self):
+    """SpotGraphAmbientSoundStageService.run の早期 return（ガード）挙動。"""
+
+    def test_disabled_skips(self) -> None:
+        """config.enabled=False ならイベントを発火しない。"""
         graph = _build_graph({1: {"ambient_tags": ("wet",)}}, {1: 1})
         service, rec = _make_service(
             graph=graph,
@@ -124,13 +127,15 @@ class TestStageGuards:
         service.run(WorldTick(0))
         assert rec.events == []
 
-    def test_empty_atlas_skips(self):
+    def test_empty_atlas_skips(self) -> None:
+        """atlas が空ならイベントを発火しない。"""
         graph = _build_graph({1: {"ambient_tags": ("wet",)}}, {1: 1})
         service, rec = _make_service(graph=graph, config=_config(defs=()))
         service.run(WorldTick(0))
         assert rec.events == []
 
-    def test_interval_throttles(self):
+    def test_interval_throttles(self) -> None:
+        """update_interval_ticks の倍数 tick だけ走り、それ以外はスキップする。"""
         graph = _build_graph({1: {"ambient_tags": ("wet",)}}, {1: 1})
         service, rec = _make_service(
             graph=graph,
@@ -142,7 +147,8 @@ class TestStageGuards:
         service.run(WorldTick(3))
         assert len(rec.events) == 1
 
-    def test_no_players_skips(self):
+    def test_no_players_skips(self) -> None:
+        """プレイヤーがどのスポットにも居なければ発火しない（無人空間で音は鳴らない）。"""
         graph = _build_graph({1: {"ambient_tags": ("wet",)}}, {})
         service, rec = _make_service(
             graph=graph,
@@ -152,7 +158,8 @@ class TestStageGuards:
         service.run(WorldTick(0))
         assert rec.events == []
 
-    def test_spot_without_tags_skipped(self):
+    def test_spot_without_tags_skipped(self) -> None:
+        """ambient_tags 未設定のスポットからは発火しない。"""
         graph = _build_graph({1: {}, 2: {"ambient_tags": ("wet",)}}, {1: 1, 2: 2})
         service, rec = _make_service(
             graph=graph,
@@ -165,7 +172,10 @@ class TestStageGuards:
 
 
 class TestStageFilters:
-    def test_phase_filter_blocks(self):
+    """各 def の filters（phase / weather / outdoor）による発火可否判定。"""
+
+    def test_phase_filter_blocks(self) -> None:
+        """現在フェーズが filter.phases に含まれない場合は発火しない。"""
         graph = _build_graph({1: {"ambient_tags": ("wet",)}}, {1: 1})
         sound = _drip_def(phases=frozenset({"night"}))
 
@@ -180,7 +190,8 @@ class TestStageFilters:
         service.run(WorldTick(0))
         assert rec.events == []
 
-    def test_phase_filter_allows(self):
+    def test_phase_filter_allows(self) -> None:
+        """現在フェーズが filter.phases に含まれる場合は発火する。"""
         graph = _build_graph({1: {"ambient_tags": ("wet",)}}, {1: 1})
         sound = _drip_def(phases=frozenset({"night"}))
 
@@ -195,7 +206,8 @@ class TestStageFilters:
         service.run(WorldTick(0))
         assert len(rec.events) == 1
 
-    def test_weather_filter_blocks(self):
+    def test_weather_filter_blocks(self) -> None:
+        """現在天候が filter.weather_types に含まれない場合は発火しない。"""
         graph = _build_graph({1: {"ambient_tags": ("wet",)}}, {1: 1})
         sound = _drip_def(weather_types=frozenset({"RAIN"}))
 
@@ -210,7 +222,8 @@ class TestStageFilters:
         service.run(WorldTick(0))
         assert rec.events == []
 
-    def test_indoor_only_blocks_outdoor(self):
+    def test_indoor_only_blocks_outdoor(self) -> None:
+        """indoor_only=True の def は屋外スポットでは発火しない。"""
         graph = _build_graph(
             {1: {"ambient_tags": ("wet",), "is_outdoor": True}},
             {1: 1},
@@ -225,7 +238,10 @@ class TestStageFilters:
 
 
 class TestStageRolling:
-    def test_zero_probability_never_fires(self):
+    """確率ロールとイベント payload の検証。"""
+
+    def test_zero_probability_never_fires(self) -> None:
+        """probability_per_tick=0.0 なら何回 tick を回してもイベントは発火しない。"""
         graph = _build_graph({1: {"ambient_tags": ("wet",)}}, {1: 1})
         service, rec = _make_service(
             graph=graph,
@@ -236,7 +252,8 @@ class TestStageRolling:
             service.run(WorldTick(t))
         assert rec.events == []
 
-    def test_emits_event_with_correct_payload(self):
+    def test_emits_event_with_correct_payload(self) -> None:
+        """発火時に AmbientSoundEmittedEvent の各フィールドが正しく設定される。"""
         graph = _build_graph({1: {"ambient_tags": ("wet",)}}, {1: 1})
         service, rec = _make_service(
             graph=graph,
