@@ -77,7 +77,10 @@ def _make_event() -> DayPhaseChangedEvent:
 
 
 class TestDayPhaseRecipientStrategy:
-    def test_outdoor_player_receives(self):
+    """DayPhaseRecipientStrategy の配信先解決挙動。"""
+
+    def test_outdoor_player_receives(self) -> None:
+        """屋外スポットにいるプレイヤーは DayPhase 変化を観測する。"""
         graph = _build_graph({1: True}, {1: 1})
         repo = MagicMock()
         repo.find_graph.return_value = graph
@@ -90,7 +93,8 @@ class TestDayPhaseRecipientStrategy:
         recipients = strategy.resolve(_make_event())
         assert {p.value for p in recipients} == {1}
 
-    def test_indoor_player_excluded(self):
+    def test_indoor_player_excluded(self) -> None:
+        """屋内スポットにいるプレイヤーは配信先から除外される。"""
         graph = _build_graph({1: False}, {1: 1})
         repo = MagicMock()
         repo.find_graph.return_value = graph
@@ -102,7 +106,8 @@ class TestDayPhaseRecipientStrategy:
 
         assert strategy.resolve(_make_event()) == []
 
-    def test_mixed_indoor_outdoor_filters_correctly(self):
+    def test_mixed_indoor_outdoor_filters_correctly(self) -> None:
+        """屋内屋外が混在しても、屋外スポットにいるプレイヤーのみ抽出される。"""
         graph = _build_graph(
             spots={1: True, 2: False},
             placements={1: 1, 2: 2, 3: 1},
@@ -118,7 +123,8 @@ class TestDayPhaseRecipientStrategy:
         recipients = strategy.resolve(_make_event())
         assert {p.value for p in recipients} == {1, 3}
 
-    def test_supports_only_day_phase_event(self):
+    def test_supports_only_day_phase_event(self) -> None:
+        """supports() は DayPhaseChangedEvent のみ True を返す。"""
         graph = _build_graph({1: True}, {})
         repo = MagicMock()
         repo.find_graph.return_value = graph
@@ -136,7 +142,10 @@ class TestDayPhaseRecipientStrategy:
 
 
 class TestDayPhaseObservationFormatter:
-    def test_formats_day_phase_change(self):
+    """DayPhaseObservationFormatter の出力フォーマット挙動。"""
+
+    def test_formats_day_phase_change(self) -> None:
+        """DayPhaseChangedEvent から environment カテゴリの ObservationOutput を生成する。"""
         ctx = ObservationFormatterContext(
             name_resolver=ObservationNameResolver(),
             item_repository=None,
@@ -153,7 +162,8 @@ class TestDayPhaseObservationFormatter:
         assert out.structured["to_phase"] == "night"
         assert out.structured["is_dark"] is True
 
-    def test_returns_none_for_other_events(self):
+    def test_returns_none_for_other_events(self) -> None:
+        """DayPhaseChangedEvent 以外のイベントには None を返す。"""
         ctx = ObservationFormatterContext(
             name_resolver=ObservationNameResolver(),
             item_repository=None,
