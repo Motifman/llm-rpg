@@ -153,6 +153,40 @@ def test_sqlite_roundtrip_bidirectional() -> None:
     assert spot_graph_aggregate_to_json_dict(loaded) == spot_graph_aggregate_to_json_dict(graph)
 
 
+def test_sqlite_roundtrip_preserves_passage_field() -> None:
+    """SpotConnection.passage が SQLite ラウンドトリップで保持される。"""
+    from ai_rpg_world.domain.world_graph.enum.passage_kind import WallStateEnum
+    from ai_rpg_world.domain.world_graph.value_object.passage import Passage
+
+    g = SpotGraphAggregate.empty(SpotGraphId.create(99))
+    g.add_spot(_node(1))
+    g.add_spot(_node(2))
+    g.add_connection(
+        SpotConnection(
+            connection_id=ConnectionId.create(7),
+            from_spot_id=SpotId.create(1),
+            to_spot_id=SpotId.create(2),
+            name="教室間の壁",
+            description="",
+            travel_ticks=1,
+            is_bidirectional=False,
+            passage=Passage.wall(WallStateEnum.CRACKED),
+        ),
+    )
+    g.place_entity(EntityId.create(1), SpotId.create(1))
+    g.clear_events()
+
+    conn = _memory_connection()
+    seed_spot_graph_to_sqlite(conn, g, None)
+    loaded = SqliteSpotGraphRepository.for_standalone_connection(conn).find_graph()
+    loaded_conn = loaded.get_connection(ConnectionId.create(7))
+    assert loaded_conn.passage is not None
+    assert loaded_conn.passage.kind.value == "WALL"
+    assert loaded_conn.passage.state == "CRACKED"
+    assert loaded_conn.is_passable is False
+    assert loaded_conn.sound_permeability == pytest.approx(0.4)
+
+
 def test_sqlite_roundtrip_parallel_edges_preserves_pairing() -> None:
     graph = _parallel_edge_graph()
     conn = _memory_connection()
