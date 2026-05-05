@@ -58,6 +58,10 @@ from ai_rpg_world.application.world_graph.spot_graph_movement_application_servic
 from ai_rpg_world.application.world_graph.spot_graph_environment_stage_service import (
     SpotGraphEnvironmentStageService,
 )
+from ai_rpg_world.application.world_graph.spot_graph_day_night_stage_service import (
+    DayNightCycleProvider,
+    SpotGraphDayNightStageService,
+)
 from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
     InMemorySpotGraphScenarioEventProgressStore,
 )
@@ -220,6 +224,8 @@ class EscapeGameRuntime:
     _scenario_event_progress: InMemorySpotGraphScenarioEventProgressStore
     _environment_stage: SpotGraphEnvironmentStageService
     _current_weather: Any
+    _day_night_stage: Optional[SpotGraphDayNightStageService] = None
+    _day_night_provider: Optional[DayNightCycleProvider] = None
     _tick: int = 0
     # LLM 脱出用（セッション単位で構築）
     _escape_llm_system_prompt: str = field(default="", repr=False)
@@ -937,6 +943,29 @@ def create_escape_game_runtime(
         on_weather_changed=None,
     )
     time_provider = InMemoryGameTimeProvider(initial_tick=0)
+
+    # 昼夜サイクル: scenario.day_night_cycle が指定されていれば有効化する。
+    day_night_cycle = scenario.day_night_cycle
+    day_night_stage: Optional[SpotGraphDayNightStageService] = None
+    day_night_provider: Optional[DayNightCycleProvider] = None
+    if day_night_cycle is not None:
+        # スポットグラフ集約にイベントを add し、後続の _process_graph_events で
+        # 観測パイプラインに流す。
+        graph_for_id = spot_graph_repo.find_graph()
+
+        def _emit_day_phase(ev) -> None:
+            spot_graph_repo.find_graph().add_event(ev)
+
+        day_night_stage = SpotGraphDayNightStageService(
+            cycle=day_night_cycle,
+            spot_graph_id=graph_for_id._graph_id,
+            emit=_emit_day_phase,
+        )
+        day_night_provider = DayNightCycleProvider(
+            cycle=day_night_cycle,
+            tick_provider=lambda: time_provider.get_current_tick(),
+        )
+
     sim_llm_trigger: ILlmTurnTrigger = (
         llm_turn_trigger
         if llm_turn_trigger is not None
@@ -948,6 +977,7 @@ def create_escape_game_runtime(
         travel_stage=travel_stage,
         scenario_event_stage=scenario_event_stage,
         environment_stage=environment_stage,
+        day_night_stage=day_night_stage,
         llm_turn_trigger=sim_llm_trigger,
     )
 
@@ -978,6 +1008,8 @@ def create_escape_game_runtime(
         _scenario_event_progress=scenario_event_progress,
         _environment_stage=environment_stage,
         _current_weather=weather_holder,
+        _day_night_stage=day_night_stage,
+        _day_night_provider=day_night_provider,
         _escape_llm_system_prompt=system_prompt_text,
     )
     scenario_event_stage.set_message_callback(
