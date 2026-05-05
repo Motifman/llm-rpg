@@ -77,6 +77,31 @@ Key dirs: `application/llm/chunk_boundary/`, `application/llm/contracts/`, `appl
 - Secrets in `.env` only (copy from `.env.example`), never committed
 - LLM client via `litellm` abstraction (supports OpenAI, Anthropic, etc.)
 
+### ドメイン層では組み込み例外ではなくドメイン例外を投げる
+
+`domain/` 配下のバリデーション・不変条件違反では、`ValueError` 等の組み込み例外ではなく、
+そのバウンデッドコンテキストのドメイン例外を投げる。
+
+- 各コンテキストの `domain/<context>/exception/<context>_exception.py` に集約された例外群を使う
+- 既存パターン: `<Context>DomainException` を基底に `ValidationException` / `BusinessRuleException` /
+  `NotFoundException` などのカテゴリと多重継承し、`error_code` 属性を持たせる（例:
+  `WORLD_GRAPH.AMBIENT_SOUND_DEF_VALIDATION`）
+- 新しいエラーケースを追加する場合は、まず既存ファイルに新しい例外クラスを追加してから値オブジェクト・
+  集約側で使用する
+- `application/` 層・`infrastructure/` 層では `ValueError` / `TypeError` 等の組み込み例外も許容する
+  （引数チェックなど）
+
+参考: `src/ai_rpg_world/domain/world_graph/exception/spot_graph_exception.py`
+
+### テストには日本語のドックストリングを付ける
+
+テストクラスとテストメソッドには、何を保証するテストか一目で分かる 1 行の日本語ドックストリングを付ける。
+
+- クラスドックストリング: 対象クラス・対象機能の挙動の概要（例: `"""SpotDarknessQueryService.is_dark の合成判定挙動。"""`）
+- メソッドドックストリング: そのテストが保証する具体的な振る舞いを「〜する／〜される／〜が返る／〜を投げる」形式で記述
+  （例: `"""ticks_per_day が 0 以下なら ValidationException を投げる。"""`）
+- 既存のテストファイル全体の文体（です・ます調 vs 体言止め）に合わせる。新規ファイルは体言止め推奨
+
 ## PR Workflow
 
 - PRs are mandatory before merge (`gh pr create`)
