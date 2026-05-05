@@ -128,6 +128,7 @@ from ai_rpg_world.domain.world.event.map_events import (
 )
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionStateChangedEvent,
+    DayPhaseChangedEvent,
     EntityEnteredSpotEvent,
     EntityLeftSpotEvent,
     SpotExploredEvent,
@@ -296,6 +297,9 @@ def _build_event_to_strategy_mapping() -> Dict[Type[Any], str]:
         SpotObjectStateChangedEvent,
     ):
         mapping[ev] = "spot_graph"
+
+    # day_phase（昼夜サイクル）
+    mapping[DayPhaseChangedEvent] = "day_phase"
 
     return mapping
 
