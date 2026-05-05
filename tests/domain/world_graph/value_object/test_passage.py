@@ -61,6 +61,21 @@ class TestPassageFactories:
         passage = Passage.door(DoorStateEnum.LOCKED)
         assert passage.traversable is False
 
+    def test_door_closed_is_not_traversable_by_default(self) -> None:
+        """DOOR CLOSED の既定は通行不可（明示的に開ける必要がある設計）。"""
+        passage = Passage.door(DoorStateEnum.CLOSED)
+        assert passage.traversable is False
+
+    def test_door_closed_can_be_overridden_to_traversable(self) -> None:
+        """DOOR CLOSED は override で通行可にできる（古典 RPG 風の挙動）。"""
+        passage = Passage.door(DoorStateEnum.CLOSED, traversable=True)
+        assert passage.traversable is True
+
+    def test_open_traversable_can_be_overridden(self) -> None:
+        """OPEN でも traversable=False の override が反映される。"""
+        passage = Passage.open(traversable=False)
+        assert passage.traversable is False
+
     def test_barrier_active_is_not_traversable(self) -> None:
         """BARRIER ACTIVE は通行不可。"""
         passage = Passage.barrier(BarrierStateEnum.ACTIVE)

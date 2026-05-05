@@ -353,3 +353,35 @@ class TestScenarioLoaderPassageBlock:
         scn = self._scenario_with_passage({"kind": "MAGICAL_VOID"})
         with pytest.raises(ScenarioLoadError, match="passage.kind"):
             ScenarioLoader().load_from_dict(scn)
+
+    def test_open_traversable_override_via_scenario(self) -> None:
+        """OPEN でも traversable override がシナリオJSON経由で適用される。"""
+        scn = self._scenario_with_passage(
+            {"kind": "OPEN", "traversable": False, "sound_permeability": 0.5}
+        )
+        result = ScenarioLoader().load_from_dict(scn)
+        conn = next(c for c in result.graph.all_connections() if c.name == "教室間の壁")
+        assert conn.is_passable is False
+        assert conn.sound_permeability == pytest.approx(0.5)
+
+    def test_passage_takes_precedence_over_legacy_fields(self) -> None:
+        """passage と initially_passable/sound_permeability が両方あれば passage が優先される。"""
+        scn = _minimal_scenario()
+        scn["connections"] = [
+            {
+                "id": "a_b_wall",
+                "from": "room_a",
+                "to": "room_b",
+                "name": "教室間の壁",
+                "travel_ticks": 1,
+                "is_bidirectional": True,
+                "initially_passable": True,        # passage に上書きされる想定
+                "sound_permeability": 0.99,        # passage に上書きされる想定
+                "passage": {"kind": "WALL", "state": "INTACT"},
+            }
+        ]
+        result = ScenarioLoader().load_from_dict(scn)
+        conn = next(c for c in result.graph.all_connections() if c.name == "教室間の壁")
+        # passage = WALL/INTACT のデフォルトで上書きされる
+        assert conn.is_passable is False
+        assert conn.sound_permeability == pytest.approx(0.1)
