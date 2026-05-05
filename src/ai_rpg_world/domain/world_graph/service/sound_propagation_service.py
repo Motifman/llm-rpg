@@ -62,7 +62,10 @@ class SoundPropagationService:
                 if h >= max_hops:
                     continue
                 for conn in graph.iter_outgoing_connections_from(spot):
-                    na = accum_to_spot * conn.sound_permeability
+                    # passage がある接続では passage の透過率が source of truth。
+                    # effective_sound_permeability 経由で読むことで、将来の
+                    # 方向性付き/動的変調を 1 箇所に集約できるようにする。
+                    na = accum_to_spot * conn.effective_sound_permeability
                     if na < _MIN_AUDIBLE_ACCUM:
                         continue
                     next_frontier.append((conn.to_spot_id, na))

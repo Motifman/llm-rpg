@@ -114,3 +114,62 @@ class TestSoundPropagationService:
         svc = SoundPropagationService()
         rec = svc.resolve_recipients(EntityId.create(1), SoundVolumeEnum.NORMAL, g)
         assert any(r.entity_id == EntityId.create(2) for r in rec)
+
+
+class TestSoundPropagationViaPassage:
+    """passage ベースの接続を介した音伝播の挙動。"""
+
+    def _make_two_spots(self) -> SpotGraphAggregate:
+        g = SpotGraphAggregate.empty(SpotGraphId.create(1))
+        g.add_spot(_node(1))
+        g.add_spot(_node(2))
+        return g
+
+    def test_intact_wall_makes_neighbor_faint(self) -> None:
+        """INTACT 壁を介すると音は FAINT（透過率0.1で減衰）。"""
+        from ai_rpg_world.domain.world_graph.enum.passage_kind import WallStateEnum
+        from ai_rpg_world.domain.world_graph.value_object.passage import Passage
+
+        g = self._make_two_spots()
+        wall_conn = SpotConnection(
+            connection_id=ConnectionId.create(1),
+            from_spot_id=SpotId.create(1),
+            to_spot_id=SpotId.create(2),
+            name="教室間の壁",
+            description="",
+            travel_ticks=1,
+            is_bidirectional=False,
+            passage=Passage.wall(WallStateEnum.INTACT),
+        )
+        g.add_connection(wall_conn)
+        g.place_entity(EntityId.create(1), SpotId.create(1))
+        g.place_entity(EntityId.create(2), SpotId.create(2))
+        svc = SoundPropagationService()
+        rec = svc.resolve_recipients(EntityId.create(1), SoundVolumeEnum.NORMAL, g)
+        by_eid = {r.entity_id: r.clarity for r in rec}
+        # 透過率0.1 < 0.35 なので FAINT
+        assert by_eid[EntityId.create(2)] == SoundClarityEnum.FAINT
+
+    def test_broken_wall_lets_sound_through_clearly(self) -> None:
+        """BROKEN 壁は音をほぼ素通しさせる（透過率1.0で MUFFLED）。"""
+        from ai_rpg_world.domain.world_graph.enum.passage_kind import WallStateEnum
+        from ai_rpg_world.domain.world_graph.value_object.passage import Passage
+
+        g = self._make_two_spots()
+        broken_wall = SpotConnection(
+            connection_id=ConnectionId.create(1),
+            from_spot_id=SpotId.create(1),
+            to_spot_id=SpotId.create(2),
+            name="教室間の壁",
+            description="",
+            travel_ticks=1,
+            is_bidirectional=False,
+            passage=Passage.wall(WallStateEnum.BROKEN),
+        )
+        g.add_connection(broken_wall)
+        g.place_entity(EntityId.create(1), SpotId.create(1))
+        g.place_entity(EntityId.create(2), SpotId.create(2))
+        svc = SoundPropagationService()
+        rec = svc.resolve_recipients(EntityId.create(1), SoundVolumeEnum.NORMAL, g)
+        by_eid = {r.entity_id: r.clarity for r in rec}
+        assert by_eid[EntityId.create(2)] == SoundClarityEnum.MUFFLED

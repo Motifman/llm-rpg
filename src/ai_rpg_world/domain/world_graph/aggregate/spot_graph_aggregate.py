@@ -92,7 +92,7 @@ class SpotGraphAggregate(AggregateRoot):
         out: List[SpotId] = []
         for cid in self._outgoing.get(spot_id, []):
             c = self._connections_by_id[cid]
-            if c.is_passable:
+            if c.effective_traversable:
                 out.append(c.to_spot_id)
         return out
 
@@ -102,7 +102,7 @@ class SpotGraphAggregate(AggregateRoot):
         """from から出る有向エッジのうち、先が to かつ通行可能な最初の接続。無ければ None。"""
         for cid in self._outgoing.get(from_spot_id, []):
             c = self._connections_by_id[cid]
-            if c.to_spot_id == to_spot_id and c.is_passable:
+            if c.to_spot_id == to_spot_id and c.effective_traversable:
                 return c
         return None
 

@@ -55,3 +55,20 @@ class SpotConnection:
             # frozen dataclass なので object.__setattr__ で上書き。
             object.__setattr__(self, "is_passable", self.passage.traversable)
             object.__setattr__(self, "sound_permeability", self.passage.sound_permeability)
+
+    # 通行可否・音透過率の単一参照口。passage と legacy フィールドが両方
+    # 存在する設計上、読み手は必ずこのプロパティ経由でアクセスする。
+    # 将来の拡張（方向性付き透過率、時間帯変調など）はここに集約する。
+    @property
+    def effective_traversable(self) -> bool:
+        """通行可能か。passage が source of truth。"""
+        if self.passage is not None:
+            return self.passage.traversable
+        return self.is_passable
+
+    @property
+    def effective_sound_permeability(self) -> float:
+        """音透過率 [0.0, 1.0]。passage が source of truth。"""
+        if self.passage is not None:
+            return self.passage.sound_permeability
+        return self.sound_permeability

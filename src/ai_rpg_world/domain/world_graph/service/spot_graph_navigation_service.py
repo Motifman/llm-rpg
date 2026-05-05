@@ -56,7 +56,7 @@ class SpotGraphNavigationService:
         world_flags: FrozenSet[str],
     ) -> Tuple[bool, Optional[str]]:
         """通行条件を評価。通れない場合は理由メッセージを返す。"""
-        if not connection.is_passable:
+        if not connection.effective_traversable:
             return False, "接続が閉鎖されています"
         for cond in connection.passage_conditions:
             ok, msg = self._evaluate_condition(cond, owned_item_spec_ids, world_flags)

@@ -78,3 +78,25 @@ class TestSpotConnectionPassageSync:
         assert conn.passage is None
         assert conn.is_passable is False
         assert conn.sound_permeability == pytest.approx(0.3)
+
+
+class TestSpotConnectionEffectiveAccessors:
+    """effective_traversable / effective_sound_permeability の挙動。"""
+
+    def test_effective_values_match_passage_when_passage_set(self) -> None:
+        """passage 指定時は effective_* が passage の値を返す。"""
+        conn = _make_conn(passage=Passage.wall(WallStateEnum.CRACKED))
+        assert conn.effective_traversable is False
+        assert conn.effective_sound_permeability == pytest.approx(0.4)
+
+    def test_effective_values_fallback_to_legacy_fields(self) -> None:
+        """passage 未指定時は effective_* がレガシーフィールドの値を返す。"""
+        conn = _make_conn(is_passable=True, sound_permeability=0.7)
+        assert conn.effective_traversable is True
+        assert conn.effective_sound_permeability == pytest.approx(0.7)
+
+    def test_effective_values_are_consistent_with_synced_fields(self) -> None:
+        """passage 指定時、effective_* と同期された is_passable/sound_permeability は一致する。"""
+        conn = _make_conn(passage=Passage.door(DoorStateEnum.OPEN))
+        assert conn.effective_traversable == conn.is_passable
+        assert conn.effective_sound_permeability == pytest.approx(conn.sound_permeability)
