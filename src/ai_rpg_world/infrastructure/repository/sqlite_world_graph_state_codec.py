@@ -23,6 +23,7 @@ from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import Inte
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.enum.passage_condition_type import PassageConditionTypeEnum
+from ai_rpg_world.domain.world_graph.enum.passage_kind import PassageKindEnum
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
@@ -33,6 +34,7 @@ from ai_rpg_world.domain.world_graph.value_object.ground_item import GroundItem
 from ai_rpg_world.domain.world_graph.value_object.interaction_condition import InteractionCondition
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import InteractionEffect
+from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 from ai_rpg_world.domain.world_graph.value_object.passage_condition import PassageCondition
 from ai_rpg_world.domain.world_graph.value_object.spot_atmosphere import SpotAtmosphere
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
@@ -238,7 +240,7 @@ def _spot_atmosphere_from_dict(d: dict[str, Any]) -> SpotAtmosphere:
 
 
 def _spot_connection_to_dict(conn: SpotConnection) -> dict[str, Any]:
-    return {
+    out: dict[str, Any] = {
         "connection_id": int(conn.connection_id.value),
         "from_spot_id": int(conn.from_spot_id.value),
         "to_spot_id": int(conn.to_spot_id.value),
@@ -250,10 +252,15 @@ def _spot_connection_to_dict(conn: SpotConnection) -> dict[str, Any]:
         "sound_permeability": conn.sound_permeability,
         "is_passable": conn.is_passable,
     }
+    if conn.passage is not None:
+        out["passage"] = _passage_to_dict(conn.passage)
+    return out
 
 
 def _spot_connection_from_dict(d: dict[str, Any]) -> SpotConnection:
-    return SpotConnection(
+    passage_raw = d.get("passage")
+    passage = _passage_from_dict(passage_raw) if passage_raw else None
+    kwargs: dict[str, Any] = dict(
         connection_id=ConnectionId.create(int(d["connection_id"])),
         from_spot_id=SpotId.create(int(d["from_spot_id"])),
         to_spot_id=SpotId.create(int(d["to_spot_id"])),
@@ -262,8 +269,30 @@ def _spot_connection_from_dict(d: dict[str, Any]) -> SpotConnection:
         travel_ticks=int(d["travel_ticks"]),
         is_bidirectional=bool(d["is_bidirectional"]),
         passage_conditions=[_passage_condition_from_dict(x) for x in d.get("passage_conditions", [])],
-        sound_permeability=float(d.get("sound_permeability", 1.0)),
-        is_passable=bool(d["is_passable"]),
+    )
+    if passage is not None:
+        kwargs["passage"] = passage
+    else:
+        kwargs["sound_permeability"] = float(d.get("sound_permeability", 1.0))
+        kwargs["is_passable"] = bool(d["is_passable"])
+    return SpotConnection(**kwargs)
+
+
+def _passage_to_dict(passage: Passage) -> dict[str, Any]:
+    return {
+        "kind": passage.kind.value,
+        "state": passage.state,
+        "traversable": passage.traversable,
+        "sound_permeability": passage.sound_permeability,
+    }
+
+
+def _passage_from_dict(d: dict[str, Any]) -> Passage:
+    return Passage(
+        kind=PassageKindEnum(d["kind"]),
+        state=str(d["state"]),
+        traversable=bool(d["traversable"]),
+        sound_permeability=float(d["sound_permeability"]),
     )
 
 
