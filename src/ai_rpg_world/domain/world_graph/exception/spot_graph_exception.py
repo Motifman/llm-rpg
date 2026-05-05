@@ -107,3 +107,18 @@ class SpotTravelAlreadyInProgressException(SpotGraphDomainException, BusinessRul
     """既にスポット間移動中のときに再度移動開始しようとした"""
     error_code = "WORLD_GRAPH.SPOT_TRAVEL_ALREADY_IN_PROGRESS"
 
+
+class DayNightPhaseValidationException(SpotGraphDomainException, ValidationException):
+    """昼夜サイクルのフェーズ定義バリデーション例外"""
+    error_code = "WORLD_GRAPH.DAY_NIGHT_PHASE_VALIDATION"
+
+
+class DayNightCycleValidationException(SpotGraphDomainException, ValidationException):
+    """昼夜サイクル定義バリデーション例外"""
+    error_code = "WORLD_GRAPH.DAY_NIGHT_CYCLE_VALIDATION"
+
+
+class TimeOfDayValidationException(SpotGraphDomainException, ValidationException):
+    """TimeOfDay 値オブジェクトのバリデーション例外"""
+    error_code = "WORLD_GRAPH.TIME_OF_DAY_VALIDATION"
+
