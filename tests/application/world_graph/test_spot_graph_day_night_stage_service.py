@@ -41,8 +41,10 @@ class _Recorder:
 
 
 class TestSpotGraphDayNightStageService:
-    def test_first_run_does_not_emit_event(self):
-        """初回 run はフェーズ初期化のみ・イベントは発火しない"""
+    """SpotGraphDayNightStageService.run のフェーズ遷移検知挙動。"""
+
+    def test_first_run_does_not_emit_event(self) -> None:
+        """初回 run はフェーズ初期化のみ・イベントは発火しない。"""
         rec = _Recorder()
         service = SpotGraphDayNightStageService(
             cycle=_make_cycle(),
@@ -52,8 +54,8 @@ class TestSpotGraphDayNightStageService:
         service.run(WorldTick(0))
         assert rec.events == []
 
-    def test_emits_event_on_phase_transition(self):
-        """フェーズ境界を跨ぐと DayPhaseChangedEvent が発火する"""
+    def test_emits_event_on_phase_transition(self) -> None:
+        """フェーズ境界を跨ぐと DayPhaseChangedEvent が発火する。"""
         rec = _Recorder()
         service = SpotGraphDayNightStageService(
             cycle=_make_cycle(),
@@ -71,8 +73,8 @@ class TestSpotGraphDayNightStageService:
         assert ev.to_phase_display_text == "夜"
         assert ev.is_dark is True
 
-    def test_no_event_when_phase_unchanged(self):
-        """フェーズが変わらない tick 経過ではイベントを出さない"""
+    def test_no_event_when_phase_unchanged(self) -> None:
+        """フェーズが変わらない tick 経過ではイベントを出さない。"""
         rec = _Recorder()
         service = SpotGraphDayNightStageService(
             cycle=_make_cycle(),
@@ -84,8 +86,8 @@ class TestSpotGraphDayNightStageService:
         service.run(WorldTick(2))
         assert rec.events == []
 
-    def test_wraparound_emits_back_to_first_phase(self):
-        """1日が一周して最初のフェーズに戻る時もイベントが発火する"""
+    def test_wraparound_emits_back_to_first_phase(self) -> None:
+        """1日が一周して最初のフェーズに戻る時もイベントが発火する。"""
         rec = _Recorder()
         service = SpotGraphDayNightStageService(
             cycle=_make_cycle(),
@@ -97,8 +99,8 @@ class TestSpotGraphDayNightStageService:
         service.run(WorldTick(10))   # → day（次の日）
         assert [e.to_phase_name for e in rec.events] == ["night", "day"]
 
-    def test_current_time_of_day_returns_snapshot(self):
-        """current_time_of_day は副作用なしに TimeOfDay を返す"""
+    def test_current_time_of_day_returns_snapshot(self) -> None:
+        """current_time_of_day は副作用なしに現在の TimeOfDay を返す。"""
         rec = _Recorder()
         service = SpotGraphDayNightStageService(
             cycle=_make_cycle(),
@@ -111,7 +113,10 @@ class TestSpotGraphDayNightStageService:
 
 
 class TestDayNightCycleProvider:
-    def test_provider_returns_current_time_of_day(self):
+    """DayNightCycleProvider.get の挙動。"""
+
+    def test_provider_returns_current_time_of_day(self) -> None:
+        """tick provider が返す tick から TimeOfDay を計算して返す。"""
         cycle = _make_cycle()
         ticks = iter([WorldTick(0), WorldTick(6)])
         provider = DayNightCycleProvider(
