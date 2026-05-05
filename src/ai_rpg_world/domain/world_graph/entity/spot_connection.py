@@ -16,9 +16,17 @@ from ai_rpg_world.domain.world_graph.value_object.passage_condition import Passa
 class SpotConnection:
     """スポット間の接続（有向エッジ）。
 
-    `passage` を指定すると、`is_passable` と `sound_permeability` は
-    `passage` から導出される（同期）。`passage=None` のレガシー接続は
-    従来通り `is_passable` / `sound_permeability` を直接保持する。
+    通行可否と音透過率は次の優先順位で決まる:
+    1. `passage` が指定されていれば、`is_passable` / `sound_permeability`
+       は passage の値で **常に上書きされる**（コンストラクタに直接
+       渡された値があってもサイレントに無視される）。これは passage が
+       接続の単一の真実情報源 (single source of truth) であることを
+       明示するため。
+    2. `passage` が None の場合のみ、レガシーフィールド
+       `is_passable` / `sound_permeability` を直接保持する。
+
+    新規シナリオは passage を使うこと。レガシーフィールドは旧データの
+    後方互換のために残してある。
     """
 
     connection_id: ConnectionId

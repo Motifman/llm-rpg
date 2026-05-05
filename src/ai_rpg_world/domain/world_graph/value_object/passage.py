@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Dict, Optional, Tuple, Type
 
 from ai_rpg_world.domain.world_graph.enum.passage_kind import (
@@ -27,7 +28,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 )
 
 
-_StateEnumByKind: Dict[PassageKindEnum, Type] = {
+_STATE_ENUM_BY_KIND: Dict[PassageKindEnum, Type[Enum]] = {
     PassageKindEnum.OPEN: OpenStateEnum,
     PassageKindEnum.WALL: WallStateEnum,
     PassageKindEnum.DOOR: DoorStateEnum,
@@ -36,6 +37,11 @@ _StateEnumByKind: Dict[PassageKindEnum, Type] = {
 
 
 # (kind, state) -> (default_traversable, default_sound_permeability)
+#
+# DOOR.CLOSED は traversable=False とする。閉じた扉を通り抜けるには
+# まず interaction で OPEN に遷移させる、という escape-room 系シナリオの
+# 直感に合わせるため。古典 RPG 風に「閉でも素通り可」にしたい場合は
+# シナリオ側で `traversable: true` の override を指定すればよい。
 _DEFAULT_TABLE: Dict[Tuple[PassageKindEnum, str], Tuple[bool, float]] = {
     (PassageKindEnum.OPEN, OpenStateEnum.OPEN.value): (True, 1.0),
 
@@ -44,7 +50,7 @@ _DEFAULT_TABLE: Dict[Tuple[PassageKindEnum, str], Tuple[bool, float]] = {
     (PassageKindEnum.WALL, WallStateEnum.BROKEN.value): (True, 1.0),
 
     (PassageKindEnum.DOOR, DoorStateEnum.LOCKED.value): (False, 0.5),
-    (PassageKindEnum.DOOR, DoorStateEnum.CLOSED.value): (True, 0.6),
+    (PassageKindEnum.DOOR, DoorStateEnum.CLOSED.value): (False, 0.6),
     (PassageKindEnum.DOOR, DoorStateEnum.OPEN.value): (True, 1.0),
 
     (PassageKindEnum.BARRIER, BarrierStateEnum.ACTIVE.value): (False, 1.0),
@@ -53,7 +59,7 @@ _DEFAULT_TABLE: Dict[Tuple[PassageKindEnum, str], Tuple[bool, float]] = {
 
 
 def _validate_state_for_kind(kind: PassageKindEnum, state: str) -> None:
-    enum_cls = _StateEnumByKind.get(kind)
+    enum_cls = _STATE_ENUM_BY_KIND.get(kind)
     if enum_cls is None:
         raise PassageValidationException(f"Unknown passage kind: {kind}")
     valid = {m.value for m in enum_cls}
@@ -102,14 +108,21 @@ class Passage:
     def open(
         cls,
         *,
+        traversable: Optional[bool] = None,
         sound_permeability: Optional[float] = None,
     ) -> "Passage":
-        """開口部（常に通行可）を生成する。"""
+        """開口部（既定で常に通行可）を生成する。
+
+        OPEN は意味的に「常に通行可」を表すため、`traversable=False` を指定する
+        ような使い方は避け、通行不可にしたい場合は `BARRIER` または `WALL` を
+        使うこと。ただし完全に弾くと既存の override パターンと矛盾するため、
+        引数自体は受け取り、警告ではなくシナリオ側責任とする。
+        """
         default_t, default_s = _default_for(PassageKindEnum.OPEN, OpenStateEnum.OPEN.value)
         return cls(
             kind=PassageKindEnum.OPEN,
             state=OpenStateEnum.OPEN.value,
-            traversable=default_t,
+            traversable=default_t if traversable is None else traversable,
             sound_permeability=default_s if sound_permeability is None else sound_permeability,
         )
 

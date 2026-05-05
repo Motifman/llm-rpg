@@ -514,7 +514,10 @@ class ScenarioLoader:
         )
 
         if kind is PassageKindEnum.OPEN:
-            return Passage.open(sound_permeability=sound_value)
+            return Passage.open(
+                traversable=traversable_override,
+                sound_permeability=sound_value,
+            )
         if kind is PassageKindEnum.WALL:
             state = WallStateEnum(raw.get("state", WallStateEnum.INTACT.value))
             return Passage.wall(
