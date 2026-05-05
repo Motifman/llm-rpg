@@ -16,6 +16,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     ConnectionNotPassableException,
+    ConnectionPassageMissingException,
     DuplicateConnectionIdException,
     DuplicateSpotException,
     EntityNotAtSpotException,
@@ -27,6 +28,7 @@ from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
 from ai_rpg_world.domain.world_graph.service.spot_graph_navigation_service import SpotGraphNavigationService
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 from ai_rpg_world.domain.world_graph.value_object.spot_presence import SpotPresence
@@ -278,6 +280,57 @@ class SpotGraphAggregate(AggregateRoot):
                 is_passable=passable,
             )
         )
+
+    def set_connection_passage(
+        self, connection_id: ConnectionId, new_passage: Passage
+    ) -> None:
+        """接続の Passage を新しい値に置換する。
+
+        is_passable / sound_permeability は SpotConnection.__post_init__ で
+        passage から自動同期される。通行可否が変化した場合は
+        ConnectionStateChangedEvent も発火する。
+        """
+        conn = self.get_connection(connection_id)
+        prev_passable = conn.is_passable
+        new_conn = replace(conn, passage=new_passage)
+        self._connections_by_id[connection_id] = new_conn
+        if new_conn.is_passable != prev_passable:
+            self.add_event(
+                ConnectionStateChangedEvent.create(
+                    aggregate_id=self._graph_id,
+                    aggregate_type="SpotGraphAggregate",
+                    connection_id=connection_id,
+                    from_spot_id=conn.from_spot_id,
+                    to_spot_id=conn.to_spot_id,
+                    is_passable=new_conn.is_passable,
+                )
+            )
+
+    def set_connection_passage_state(
+        self,
+        connection_id: ConnectionId,
+        new_state: str,
+        *,
+        traversable_override: Optional[bool] = None,
+        sound_permeability_override: Optional[float] = None,
+    ) -> None:
+        """既存の Passage と同じ kind を維持したまま状態だけ遷移させる。
+
+        対象接続に passage が設定されていない場合は LegacyConnection 相当として
+        ConnectionPassageMissingException を投げる（passage を持たない接続には
+        遷移という概念が定義できないため）。
+        """
+        conn = self.get_connection(connection_id)
+        if conn.passage is None:
+            raise ConnectionPassageMissingException(
+                f"Connection {connection_id.value} has no passage; cannot transition state"
+            )
+        new_passage = conn.passage.with_state(
+            new_state,
+            traversable=traversable_override,
+            sound_permeability=sound_permeability_override,
+        )
+        self.set_connection_passage(connection_id, new_passage)
 
     def remove_connection(self, connection_id: ConnectionId) -> None:
         """接続をグラフから完全に削除する。双方向の場合は逆方向も削除。"""
