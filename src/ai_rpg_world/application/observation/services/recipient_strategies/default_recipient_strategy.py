@@ -1,6 +1,6 @@
 """観測対象イベント全体を扱うデフォルト配信先解決戦略（既存ロジックを集約）"""
 
-from typing import Any, List, Set
+from typing import Any, List, Optional, Set
 
 from ai_rpg_world.application.observation.contracts.interfaces import (
     IPlayerAudienceQueryPort,
@@ -36,6 +36,9 @@ from ai_rpg_world.domain.player.event.inventory_events import (
     InventorySlotOverflowEvent,
 )
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
+    ISpotGraphRepository,
+)
 
 
 class DefaultRecipientStrategy(IRecipientResolutionStrategy):
@@ -51,10 +54,12 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
         observed_event_registry: ObservedEventRegistry,
         player_audience_query: IPlayerAudienceQueryPort,
         world_object_to_player_resolver: IWorldObjectToPlayerResolver,
+        spot_graph_repository: Optional[ISpotGraphRepository] = None,
     ) -> None:
         self._registry = observed_event_registry
         self._player_audience_query = player_audience_query
         self._world_object_to_player_resolver = world_object_to_player_resolver
+        self._spot_graph_repository = spot_graph_repository
 
     def supports(self, event: Any) -> bool:
         """観測対象として定義されているイベント型なら True。"""
@@ -156,5 +161,19 @@ class DefaultRecipientStrategy(IRecipientResolutionStrategy):
     def _resolve_spot_weather_changed(
         self, event: SpotWeatherChangedEvent, add
     ) -> None:
+        # 屋内スポットでは天候変化を観測させない（窓があるとは限らない・空が直接見えない前提）。
+        # SpotGraph 上で is_outdoor=False のスポットは配信先から除外する。
+        # SpotGraph リポジトリが未注入の場合や、スポットが SpotGraph に登録されていない
+        # 場合は従来どおり全員に配信する（後方互換）。
+        if self._spot_graph_repository is not None:
+            try:
+                graph = self._spot_graph_repository.find_graph()
+                if graph.contains_spot(event.spot_id):
+                    spot_node = graph.get_spot(event.spot_id)
+                    if not spot_node.is_outdoor:
+                        return
+            except Exception:
+                # リポジトリ参照に失敗した場合は配信を抑制せず従来挙動を維持
+                pass
         for pid in self._player_audience_query.players_at_spot(event.spot_id):
             add(pid)
