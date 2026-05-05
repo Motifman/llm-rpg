@@ -285,16 +285,19 @@ class TestScenarioLoaderMinimal:
             ScenarioLoader().load_from_dict(raw)
 
     def test_ambient_sounds_absent_returns_none(self) -> None:
+        """environment.ambient_sounds が無い場合は None が返る。"""
         result = ScenarioLoader().load_from_dict(_minimal_scenario())
         assert result.ambient_sound_config is None
 
     def test_ambient_sounds_disabled_returns_none(self) -> None:
+        """enabled=False なら他フィールドが揃っていても None が返る。"""
         raw = _minimal_scenario()
         raw["environment"]["ambient_sounds"] = {"enabled": False, "atlas": []}
         result = ScenarioLoader().load_from_dict(raw)
         assert result.ambient_sound_config is None
 
     def test_ambient_sounds_parses_atlas_and_filters(self) -> None:
+        """enabled=True のとき throttle / atlas / filters が AmbientSoundConfig に変換される。"""
         raw = _minimal_scenario()
         raw["environment"]["ambient_sounds"] = {
             "enabled": True,
@@ -329,6 +332,7 @@ class TestScenarioLoaderMinimal:
         assert d.filters.indoor_only is True
 
     def test_ambient_sounds_invalid_interval_rejected(self) -> None:
+        """update_interval_ticks が 0 以下なら ScenarioLoadError を投げる。"""
         raw = _minimal_scenario()
         raw["environment"]["ambient_sounds"] = {
             "enabled": True,
@@ -339,6 +343,7 @@ class TestScenarioLoaderMinimal:
             ScenarioLoader().load_from_dict(raw)
 
     def test_spot_ambient_tags_loaded(self) -> None:
+        """spots[].ambient_tags が SpotNode.ambient_tags に反映される。"""
         raw = _minimal_scenario()
         raw["spots"][0]["ambient_tags"] = ["wet", "abandoned"]
         result = ScenarioLoader().load_from_dict(raw)
