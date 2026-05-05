@@ -18,5 +18,7 @@ class InteractionEffectTypeEnum(Enum):
     # 動的接続
     CREATE_CONNECTION = "CREATE_CONNECTION"
     DESTROY_CONNECTION = "DESTROY_CONNECTION"
+    # passage（壁/扉/障壁）の状態遷移
+    CHANGE_PASSAGE_STATE = "CHANGE_PASSAGE_STATE"
     # 欲求操作
     SATISFY_NEED = "SATISFY_NEED"

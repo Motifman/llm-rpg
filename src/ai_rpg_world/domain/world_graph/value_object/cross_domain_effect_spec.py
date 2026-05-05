@@ -58,3 +58,18 @@ class DestroyConnectionSpec:
 class SatisfyNeedSpec:
     need_type_name: str  # "HUNGER", "FATIGUE" 等
     amount: int
+
+
+@dataclass(frozen=True)
+class PassageStateUpdateSpec:
+    """接続の Passage を新しい状態へ遷移させる指示。
+
+    application 層が `SpotGraphAggregate.set_connection_passage_state` を
+    呼び出して反映する。`traversable_override` / `sound_permeability_override`
+    を指定すると、kind+new_state の既定値を上書きできる。
+    """
+
+    connection_id: int
+    new_state: str  # 対象接続の passage.kind に対応する状態文字列
+    traversable_override: Optional[bool] = None
+    sound_permeability_override: Optional[float] = None
