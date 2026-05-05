@@ -170,4 +170,5 @@ class SpotInteractionService:
             create_connection_specs=effect_result.create_connection_specs,
             destroy_connection_specs=effect_result.destroy_connection_specs,
             satisfy_need_specs=effect_result.satisfy_need_specs,
+            passage_state_updates=effect_result.passage_state_updates,
         )

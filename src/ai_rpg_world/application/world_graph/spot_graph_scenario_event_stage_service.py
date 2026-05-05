@@ -207,6 +207,14 @@ class SpotGraphScenarioEventStageService:
         for cid, is_passable in effect_result.connection_passability_updates:
             graph.set_connection_passable(cid, is_passable)
 
+        for spec in effect_result.passage_state_updates:
+            graph.set_connection_passage_state(
+                ConnectionId.create(spec.connection_id),
+                spec.new_state,
+                traversable_override=spec.traversable_override,
+                sound_permeability_override=spec.sound_permeability_override,
+            )
+
         for spec in effect_result.destroy_connection_specs:
             graph.remove_connection(ConnectionId.create(spec.connection_id))
 
