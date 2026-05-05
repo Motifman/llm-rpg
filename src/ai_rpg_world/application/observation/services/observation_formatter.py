@@ -55,6 +55,9 @@ from ai_rpg_world.application.observation.services.formatters.pursuit_formatter 
 from ai_rpg_world.application.observation.services.formatters.spot_graph_formatter import (
     SpotGraphObservationFormatter,
 )
+from ai_rpg_world.application.observation.services.formatters.day_phase_formatter import (
+    DayPhaseObservationFormatter,
+)
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.player.enum.player_enum import AttentionLevel
 
@@ -128,6 +131,7 @@ class ObservationFormatter(IObservationFormatter):
             CombatObservationFormatter(self._context),
             SkillObservationFormatter(self._context),
             SpotGraphObservationFormatter(self._context),
+            DayPhaseObservationFormatter(self._context),
             ItemUseObservationFormatter(self._context),
             WorldObservationFormatter(self._context),
             PlayerObservationFormatter(self._context),

@@ -115,3 +115,18 @@ class ConnectionDestroyedEvent(BaseDomainEvent[SpotGraphId, str]):
     connection_id: ConnectionId
     from_spot_id: SpotId
     to_spot_id: SpotId
+
+
+@dataclass(frozen=True)
+class DayPhaseChangedEvent(BaseDomainEvent[SpotGraphId, str]):
+    """昼夜サイクルでフェーズが遷移した。
+
+    フェーズ名はシナリオが定義する文字列のため、コードに enum を持たない。
+    観測の formatter は display_text を使って人間可読テキストを生成する。
+    """
+
+    from_phase_name: str
+    to_phase_name: str
+    to_phase_display_text: str
+    ambient_light: float
+    is_dark: bool

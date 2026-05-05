@@ -5,6 +5,7 @@ from ai_rpg_world.domain.common.event_publisher import EventPublisher
 from ai_rpg_world.domain.item.event.item_event import ConsumableUsedEvent
 from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionStateChangedEvent,
+    DayPhaseChangedEvent,
     EntityEnteredSpotEvent,
     EntityLeftSpotEvent,
     SpotExploredEvent,
@@ -211,6 +212,8 @@ _OBSERVED_EVENT_TYPES = (
     SpotExploredEvent,
     SpotObjectStateChangedEvent,
     ConnectionStateChangedEvent,
+    # --- 昼夜サイクル ---
+    DayPhaseChangedEvent,
 )
 
 
