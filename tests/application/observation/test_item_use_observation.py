@@ -182,3 +182,22 @@ class TestItemUseFormatter:
         )
         formatter = ItemUseObservationFormatter(context)
         assert formatter.format("not_an_event", PlayerId(1)) is None
+
+    def test_returns_none_when_recipient_is_actor(self):
+        """使用者本人が受信者の場合は None を返す（ツール結果で完結するため観測対象外）"""
+        name_resolver = ObservationNameResolver()
+        name_resolver.player_name = lambda pid: "太郎"
+        name_resolver.item_name = lambda spec_id: "回復ポーション"
+        context = ObservationFormatterContext(
+            name_resolver=name_resolver,
+            item_repository=None,
+        )
+        formatter = ItemUseObservationFormatter(context)
+
+        event = ConsumableUsedEvent.create(
+            aggregate_id=PlayerId(1),
+            aggregate_type="PlayerStatusAggregate",
+            item_spec_id=ItemSpecId(100),
+        )
+
+        assert formatter.format(event, PlayerId(1)) is None

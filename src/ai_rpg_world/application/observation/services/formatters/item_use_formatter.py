@@ -28,6 +28,12 @@ class ItemUseObservationFormatter:
             return None
 
         actor_id = event.aggregate_id  # PlayerId
+
+        # 使用者本人にはツール結果でアイテム使用が伝わるため、
+        # 観測フィードに三人称テキストを再掲しない（防御的ガード）。
+        if actor_id.value == recipient_player_id.value:
+            return None
+
         item_spec_id = event.item_spec_id
 
         actor_name = self._context.name_resolver.player_name(actor_id)
