@@ -8,6 +8,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    DayNightPhaseValidationException,
+)
+
 
 @dataclass(frozen=True)
 class DayNightPhaseDef:
@@ -31,12 +35,14 @@ class DayNightPhaseDef:
 
     def __post_init__(self) -> None:
         if not self.name:
-            raise ValueError("DayNightPhaseDef.name must not be empty")
+            raise DayNightPhaseValidationException(
+                "DayNightPhaseDef.name must not be empty"
+            )
         if not 0.0 <= self.start_ratio < 1.0:
-            raise ValueError(
+            raise DayNightPhaseValidationException(
                 f"DayNightPhaseDef.start_ratio must be in [0.0, 1.0): {self.start_ratio}"
             )
         if not 0.0 <= self.ambient_light <= 1.0:
-            raise ValueError(
+            raise DayNightPhaseValidationException(
                 f"DayNightPhaseDef.ambient_light must be in [0.0, 1.0]: {self.ambient_light}"
             )
