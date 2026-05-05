@@ -62,6 +62,22 @@ from ai_rpg_world.application.world_graph.spot_graph_day_night_stage_service imp
     DayNightCycleProvider,
     SpotGraphDayNightStageService,
 )
+from ai_rpg_world.application.world_graph.spot_graph_ambient_sound_stage_service import (
+    SpotGraphAmbientSoundStageService,
+)
+from ai_rpg_world.application.observation.handlers.ambient_sound_event_handler import (
+    AmbientSoundEventHandler,
+    CATEGORY_AMBIENT_SOUND,
+)
+from ai_rpg_world.application.observation.services.atmosphere_buffer import (
+    DefaultAtmosphereBuffer,
+)
+from ai_rpg_world.application.observation.contracts.atmosphere_interfaces import (
+    IAtmosphereBuffer,
+)
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    AmbientSoundEmittedEvent,
+)
 from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
     InMemorySpotGraphScenarioEventProgressStore,
 )
@@ -226,6 +242,9 @@ class EscapeGameRuntime:
     _current_weather: Any
     _day_night_stage: Optional[SpotGraphDayNightStageService] = None
     _day_night_provider: Optional[DayNightCycleProvider] = None
+    _ambient_sound_stage: Optional[SpotGraphAmbientSoundStageService] = None
+    _ambient_sound_handler: Optional[AmbientSoundEventHandler] = None
+    _atmosphere_buffer: Optional[IAtmosphereBuffer] = None
     _tick: int = 0
     # LLM 脱出用（セッション単位で構築）
     _escape_llm_system_prompt: str = field(default="", repr=False)
@@ -295,7 +314,34 @@ class EscapeGameRuntime:
             )
         dto = self._build_minimal_player_state_dto(player_id, snap)
         base_text = self._formatter.format(dto)
+        atmosphere_line = self._build_atmosphere_line(player_id)
+        if atmosphere_line:
+            base_text = f"{base_text}\n{atmosphere_line}"
         return self._ui_context_builder.build(base_text, dto)
+
+    def _build_atmosphere_line(self, player_id: PlayerId) -> str:
+        """AtmosphereBuffer の直近エントリを 1 行サマリにする（環境音など）。
+
+        プロンプト・コンテキストを汚さないため、最大 3 件・カテゴリ別 prefix で
+        まとめる。重複 prose は省く。
+        """
+        if self._atmosphere_buffer is None:
+            return ""
+        recent = self._atmosphere_buffer.recent(player_id, max_count=3)
+        if not recent:
+            return ""
+        sounds: List[str] = []
+        seen: set = set()
+        for e in recent:
+            if e.category != CATEGORY_AMBIENT_SOUND:
+                continue
+            if e.prose in seen:
+                continue
+            seen.add(e.prose)
+            sounds.append(e.prose)
+        if not sounds:
+            return ""
+        return f"背景音: {' / '.join(sounds)}"
 
     def _build_minimal_player_state_dto(
         self, player_id: PlayerId, snap: Any,
@@ -345,6 +391,12 @@ class EscapeGameRuntime:
         h, m = divmod(hours, 60)
         time_label = f"深夜 {h}:{m:02d}" if h < 6 else f"{h}:{m:02d}"
         for event in events:
+            # AmbientSoundEmittedEvent は通常の観測フィードに乗せず、
+            # AtmosphereBuffer 経由で 1 行サマリにのみ反映する。
+            if isinstance(event, AmbientSoundEmittedEvent):
+                if self._ambient_sound_handler is not None:
+                    self._ambient_sound_handler.handle(event)
+                continue
             items = self._obs_pipeline.run(event)
             for pid, output in items:
                 entry = ObservationEntry(
@@ -966,6 +1018,37 @@ def create_escape_game_runtime(
             tick_provider=lambda: time_provider.get_current_tick(),
         )
 
+    # 環境音: scenario.ambient_sound_config が指定されていれば有効化する。
+    ambient_sound_config = scenario.ambient_sound_config
+    ambient_sound_stage: Optional[SpotGraphAmbientSoundStageService] = None
+    ambient_sound_handler: Optional[AmbientSoundEventHandler] = None
+    atmosphere_buffer: Optional[IAtmosphereBuffer] = None
+    if ambient_sound_config is not None and ambient_sound_config.enabled:
+        atmosphere_buffer = DefaultAtmosphereBuffer(capacity=8)
+        graph_for_id = spot_graph_repo.find_graph()
+
+        def _emit_ambient(ev) -> None:
+            spot_graph_repo.find_graph().add_event(ev)
+
+        ambient_sound_stage = SpotGraphAmbientSoundStageService(
+            config=ambient_sound_config,
+            spot_graph_repository=spot_graph_repo,
+            spot_graph_id=graph_for_id._graph_id,
+            player_status_repository=player_status_repo,
+            emit=_emit_ambient,
+            time_of_day_provider=(
+                day_night_provider.get if day_night_provider is not None else None
+            ),
+            weather_state_provider=lambda: weather_holder["state"],
+        )
+        ambient_sound_handler = AmbientSoundEventHandler(
+            atmosphere_buffer=atmosphere_buffer,
+            spot_graph_repository=spot_graph_repo,
+            player_status_repository=player_status_repo,
+            throttle=ambient_sound_config.throttle,
+            tick_provider=lambda: time_provider.get_current_tick(),
+        )
+
     sim_llm_trigger: ILlmTurnTrigger = (
         llm_turn_trigger
         if llm_turn_trigger is not None
@@ -978,6 +1061,7 @@ def create_escape_game_runtime(
         scenario_event_stage=scenario_event_stage,
         environment_stage=environment_stage,
         day_night_stage=day_night_stage,
+        ambient_sound_stage=ambient_sound_stage,
         llm_turn_trigger=sim_llm_trigger,
     )
 
@@ -1010,6 +1094,9 @@ def create_escape_game_runtime(
         _current_weather=weather_holder,
         _day_night_stage=day_night_stage,
         _day_night_provider=day_night_provider,
+        _ambient_sound_stage=ambient_sound_stage,
+        _ambient_sound_handler=ambient_sound_handler,
+        _atmosphere_buffer=atmosphere_buffer,
         _escape_llm_system_prompt=system_prompt_text,
     )
     scenario_event_stage.set_message_callback(

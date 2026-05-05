@@ -44,6 +44,17 @@ from ai_rpg_world.domain.world_graph.value_object.scenario_event_condition impor
     ScenarioEventCondition,
 )
 from ai_rpg_world.domain.world_graph.value_object.scenario_event_def import ScenarioEventDef
+from ai_rpg_world.domain.world_graph.value_object.ambient_sound_atlas import (
+    AmbientSoundAtlas,
+    AmbientSoundConfig,
+    AmbientSoundThrottleConfig,
+)
+from ai_rpg_world.domain.world_graph.value_object.ambient_sound_def import (
+    AmbientSoundDef,
+)
+from ai_rpg_world.domain.world_graph.value_object.ambient_sound_filter import (
+    AmbientSoundFilter,
+)
 from ai_rpg_world.domain.world_graph.value_object.day_night_cycle_def import (
     DayNightCycleDef,
 )
@@ -123,6 +134,7 @@ class ScenarioLoadResult:
     scenario_events: Tuple[ScenarioEventDef, ...] = ()
     weather_config: Optional[ScenarioWeatherConfig] = None
     day_night_cycle: Optional[DayNightCycleDef] = None
+    ambient_sound_config: Optional[AmbientSoundConfig] = None
 
 
 class ScenarioLoader:
@@ -155,6 +167,7 @@ class ScenarioLoader:
         scenario_events = self._parse_scenario_events(raw.get("scenario_events", []), mapper)
         weather_config = self._parse_weather_config(raw.get("environment", {}))
         day_night_cycle = self._parse_day_night_cycle(raw.get("environment", {}))
+        ambient_sound_config = self._parse_ambient_sounds(raw.get("environment", {}))
 
         return ScenarioLoadResult(
             graph=graph,
@@ -169,6 +182,7 @@ class ScenarioLoader:
             scenario_events=scenario_events,
             weather_config=weather_config,
             day_night_cycle=day_night_cycle,
+            ambient_sound_config=ambient_sound_config,
         )
 
     def _parse_metadata(self, raw: Dict[str, Any]) -> ScenarioMetadata:
@@ -247,6 +261,7 @@ class ScenarioLoader:
                 atmosphere=atmosphere,
                 is_outdoor=bool(spot_raw.get("is_outdoor", False)),
                 is_intrinsically_dark=bool(spot_raw.get("is_intrinsically_dark", False)),
+                ambient_tags=frozenset(spot_raw.get("ambient_tags", ())),
             )
             graph.add_spot(node)
 
@@ -500,6 +515,72 @@ class ScenarioLoader:
             ticks_per_day=ticks_per_day,
             starting_tick_in_day=starting,
             phases=tuple(phases),
+        )
+
+    def _parse_ambient_sounds(self, raw: Dict[str, Any]) -> Optional[AmbientSoundConfig]:
+        """environment.ambient_sounds ブロックを AmbientSoundConfig に変換する。
+
+        ブロック不在 / enabled=false の場合は None を返す。
+        """
+        block = raw.get("ambient_sounds") if isinstance(raw, dict) else None
+        if not isinstance(block, dict):
+            return None
+        if not bool(block.get("enabled", False)):
+            return None
+
+        update_interval = int(block.get("update_interval_ticks", 1))
+        if update_interval < 1:
+            raise ScenarioLoadError(
+                "environment.ambient_sounds.update_interval_ticks must be >= 1"
+            )
+
+        throttle_raw = block.get("throttle", {})
+        if not isinstance(throttle_raw, dict):
+            throttle_raw = {}
+        throttle = AmbientSoundThrottleConfig(
+            min_gap_ticks_per_player=int(throttle_raw.get("min_gap_ticks_per_player", 4)),
+            dedup_window_size=int(throttle_raw.get("dedup_window_size", 3)),
+        )
+
+        atlas_raw = block.get("atlas", [])
+        if not isinstance(atlas_raw, list):
+            raise ScenarioLoadError(
+                "environment.ambient_sounds.atlas must be a list"
+            )
+        defs: List[AmbientSoundDef] = []
+        for entry in atlas_raw:
+            if not isinstance(entry, dict):
+                raise ScenarioLoadError(
+                    "Each atlas entry must be an object"
+                )
+            defs.append(self._parse_ambient_sound_def(entry))
+
+        return AmbientSoundConfig(
+            enabled=True,
+            update_interval_ticks=update_interval,
+            throttle=throttle,
+            atlas=AmbientSoundAtlas(defs=tuple(defs)),
+        )
+
+    def _parse_ambient_sound_def(self, entry: Dict[str, Any]) -> AmbientSoundDef:
+        filters_raw = entry.get("filters", {}) or {}
+        if not isinstance(filters_raw, dict):
+            filters_raw = {}
+        phases_raw = filters_raw.get("phases")
+        weather_raw = filters_raw.get("weather_types")
+        filters = AmbientSoundFilter(
+            phases=frozenset(phases_raw) if phases_raw else None,
+            weather_types=frozenset(weather_raw) if weather_raw else None,
+            indoor_only=bool(filters_raw.get("indoor_only", False)),
+            outdoor_only=bool(filters_raw.get("outdoor_only", False)),
+        )
+        return AmbientSoundDef(
+            id=str(entry["id"]),
+            tags=frozenset(entry.get("tags", ())),
+            prose=str(entry["prose"]),
+            probability_per_tick=float(entry.get("probability_per_tick", 0.05)),
+            sound_strength=float(entry.get("sound_strength", 0.3)),
+            filters=filters,
         )
 
     def _parse_weather_config(self, raw: Dict[str, Any]) -> Optional[ScenarioWeatherConfig]:
