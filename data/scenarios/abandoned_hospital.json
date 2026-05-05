@@ -22,6 +22,48 @@
       },
       "update_interval_ticks": 8,
       "announce_changes": true
+    },
+    "ambient_sounds": {
+      "enabled": true,
+      "update_interval_ticks": 3,
+      "throttle": {
+        "min_gap_ticks_per_player": 4,
+        "dedup_window_size": 3
+      },
+      "atlas": [
+        {
+          "id": "drip_water",
+          "tags": ["wet", "abandoned"],
+          "prose": "どこかで水滴が落ちる音がする",
+          "probability_per_tick": 0.05,
+          "sound_strength": 0.3,
+          "filters": {"indoor_only": true}
+        },
+        {
+          "id": "creak_floor",
+          "tags": ["abandoned", "wooden"],
+          "prose": "誰もいないはずの方向で床がきしむ音がする",
+          "probability_per_tick": 0.04,
+          "sound_strength": 0.4,
+          "filters": {"indoor_only": true}
+        },
+        {
+          "id": "wind_through_cracks",
+          "tags": ["abandoned"],
+          "prose": "壁の隙間を風が抜ける細い音が聞こえる",
+          "probability_per_tick": 0.03,
+          "sound_strength": 0.2,
+          "filters": {"indoor_only": true}
+        },
+        {
+          "id": "distant_metal_clatter",
+          "tags": ["abandoned", "metal"],
+          "prose": "遠くで金属の何かが落ちるような音がした",
+          "probability_per_tick": 0.02,
+          "sound_strength": 0.5,
+          "filters": {"indoor_only": true}
+        }
+      ]
     }
   },
 
@@ -178,6 +220,7 @@
       "name": "エントランスホール",
       "description": "静原総合病院の正面玄関ホール。瓦礫で正面入口は完全に塞がれている。受付カウンターの埃は厚く、壁の案内板には色褪せた院内図が残っている。かつては明るかったはずのロビーも、今はただの廃墟だ。右手に病棟受付への通路が続いている。",
       "category": "OTHER",
+      "ambient_tags": ["abandoned", "wet"],
       "atmosphere": {
         "lighting": "DIM",
         "sound_ambient": "遠くで風が建物を軋ませる音。自分の足音だけが反響する",
@@ -218,6 +261,7 @@
       "name": "病棟受付",
       "description": "病棟の受付カウンター。診察券や案内書類が散らばっている。壁の掲示板には患者の退院記念写真らしきものが何枚か貼られたままだ。",
       "category": "OTHER",
+      "ambient_tags": ["abandoned", "wooden"],
       "atmosphere": {
         "lighting": "DIM",
         "sound_ambient": "カウンターの奥で何かが時折カタカタと鳴る",

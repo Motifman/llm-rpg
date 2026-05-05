@@ -284,6 +284,75 @@ class TestScenarioLoaderMinimal:
         with pytest.raises(ScenarioLoadError, match="phases"):
             ScenarioLoader().load_from_dict(raw)
 
+    def test_ambient_sounds_absent_returns_none(self) -> None:
+        """environment.ambient_sounds が無い場合は None が返る。"""
+        result = ScenarioLoader().load_from_dict(_minimal_scenario())
+        assert result.ambient_sound_config is None
+
+    def test_ambient_sounds_disabled_returns_none(self) -> None:
+        """enabled=False なら他フィールドが揃っていても None が返る。"""
+        raw = _minimal_scenario()
+        raw["environment"]["ambient_sounds"] = {"enabled": False, "atlas": []}
+        result = ScenarioLoader().load_from_dict(raw)
+        assert result.ambient_sound_config is None
+
+    def test_ambient_sounds_parses_atlas_and_filters(self) -> None:
+        """enabled=True のとき throttle / atlas / filters が AmbientSoundConfig に変換される。"""
+        raw = _minimal_scenario()
+        raw["environment"]["ambient_sounds"] = {
+            "enabled": True,
+            "update_interval_ticks": 3,
+            "throttle": {"min_gap_ticks_per_player": 5, "dedup_window_size": 2},
+            "atlas": [
+                {
+                    "id": "drip",
+                    "tags": ["wet"],
+                    "prose": "水滴の音",
+                    "probability_per_tick": 0.05,
+                    "sound_strength": 0.3,
+                    "filters": {
+                        "phases": ["night"],
+                        "weather_types": ["RAIN"],
+                        "indoor_only": True,
+                    },
+                }
+            ],
+        }
+        result = ScenarioLoader().load_from_dict(raw)
+        cfg = result.ambient_sound_config
+        assert cfg is not None
+        assert cfg.update_interval_ticks == 3
+        assert cfg.throttle.min_gap_ticks_per_player == 5
+        assert len(cfg.atlas.defs) == 1
+        d = cfg.atlas.defs[0]
+        assert d.id == "drip"
+        assert d.tags == frozenset({"wet"})
+        assert d.filters.phases == frozenset({"night"})
+        assert d.filters.weather_types == frozenset({"RAIN"})
+        assert d.filters.indoor_only is True
+
+    def test_ambient_sounds_invalid_interval_rejected(self) -> None:
+        """update_interval_ticks が 0 以下なら ScenarioLoadError を投げる。"""
+        raw = _minimal_scenario()
+        raw["environment"]["ambient_sounds"] = {
+            "enabled": True,
+            "update_interval_ticks": 0,
+            "atlas": [],
+        }
+        with pytest.raises(ScenarioLoadError, match="update_interval_ticks"):
+            ScenarioLoader().load_from_dict(raw)
+
+    def test_spot_ambient_tags_loaded(self) -> None:
+        """spots[].ambient_tags が SpotNode.ambient_tags に反映される。"""
+        raw = _minimal_scenario()
+        raw["spots"][0]["ambient_tags"] = ["wet", "abandoned"]
+        result = ScenarioLoader().load_from_dict(raw)
+        from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+        spot = result.graph.get_spot(
+            SpotId.create(result.id_mapper.get_int("spot", "room_a"))
+        )
+        assert spot.ambient_tags == frozenset({"wet", "abandoned"})
+
     def test_spot_intrinsically_dark_field_loaded(self) -> None:
         """spots[].is_intrinsically_dark が SpotNode に反映される。"""
         raw = _minimal_scenario()
