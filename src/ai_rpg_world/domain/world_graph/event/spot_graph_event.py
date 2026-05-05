@@ -130,3 +130,17 @@ class DayPhaseChangedEvent(BaseDomainEvent[SpotGraphId, str]):
     to_phase_display_text: str
     ambient_light: float
     is_dark: bool
+
+
+@dataclass(frozen=True)
+class AmbientSoundEmittedEvent(BaseDomainEvent[SpotGraphId, str]):
+    """スポットで環境音が発火した。
+
+    観測フィードを汚さないよう observation_category="ambient" として扱われ、
+    Atmosphere バッファ等の専用導線で受信者に届く（PR-G）。
+    """
+
+    source_spot_id: SpotId
+    ambient_sound_id: str
+    prose: str
+    sound_strength: float
