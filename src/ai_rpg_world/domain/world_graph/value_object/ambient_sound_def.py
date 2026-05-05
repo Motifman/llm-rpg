@@ -5,6 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import FrozenSet
 
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    AmbientSoundDefValidationException,
+)
 from ai_rpg_world.domain.world_graph.value_object.ambient_sound_filter import (
     AmbientSoundFilter,
 )
@@ -32,16 +35,20 @@ class AmbientSoundDef:
 
     def __post_init__(self) -> None:
         if not self.id:
-            raise ValueError("AmbientSoundDef.id must not be empty")
+            raise AmbientSoundDefValidationException(
+                "AmbientSoundDef.id must not be empty"
+            )
         if not self.prose:
-            raise ValueError("AmbientSoundDef.prose must not be empty")
+            raise AmbientSoundDefValidationException(
+                "AmbientSoundDef.prose must not be empty"
+            )
         if not 0.0 <= self.probability_per_tick <= 1.0:
-            raise ValueError(
+            raise AmbientSoundDefValidationException(
                 f"AmbientSoundDef.probability_per_tick must be in [0.0, 1.0]: "
                 f"{self.probability_per_tick}"
             )
         if not 0.0 <= self.sound_strength <= 1.0:
-            raise ValueError(
+            raise AmbientSoundDefValidationException(
                 f"AmbientSoundDef.sound_strength must be in [0.0, 1.0]: "
                 f"{self.sound_strength}"
             )

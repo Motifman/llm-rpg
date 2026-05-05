@@ -41,30 +41,34 @@ def service():
 
 
 class TestSpotDarknessQueryService:
-    def test_intrinsically_dark_always_dark(self, service):
+    """SpotDarknessQueryService.is_dark の合成判定挙動。"""
+
+    def test_intrinsically_dark_always_dark(self, service: SpotDarknessQueryService) -> None:
+        """intrinsic dark のスポットは時刻によらず常に暗いと判定される。"""
         spot = _spot(is_outdoor=False, is_intrinsically_dark=True)
         assert service.is_dark(spot, _tod(False)) is True
         assert service.is_dark(spot, _tod(True)) is True
         assert service.is_dark(spot, None) is True
 
-    def test_outdoor_dark_only_when_phase_dark(self, service):
+    def test_outdoor_dark_only_when_phase_dark(self, service: SpotDarknessQueryService) -> None:
+        """屋外スポットはフェーズが暗い時のみ暗いと判定される。"""
         spot = _spot(is_outdoor=True, is_intrinsically_dark=False)
         assert service.is_dark(spot, _tod(False)) is False
         assert service.is_dark(spot, _tod(True)) is True
 
-    def test_outdoor_with_no_cycle_is_not_dark(self, service):
-        """昼夜サイクル無効（time_of_day=None）の屋外は暗くない扱い"""
+    def test_outdoor_with_no_cycle_is_not_dark(self, service: SpotDarknessQueryService) -> None:
+        """昼夜サイクル無効（time_of_day=None）の屋外は暗くない扱いになる。"""
         spot = _spot(is_outdoor=True, is_intrinsically_dark=False)
         assert service.is_dark(spot, None) is False
 
-    def test_indoor_non_intrinsic_dark_is_not_dark(self, service):
-        """屋内・非 intrinsic は本サービスでは暗くない（視覚モデルは atmosphere 側）"""
+    def test_indoor_non_intrinsic_dark_is_not_dark(self, service: SpotDarknessQueryService) -> None:
+        """屋内かつ非 intrinsic のスポットは本サービスでは暗くないと判定される（視覚モデルは atmosphere 側で扱う）。"""
         spot = _spot(is_outdoor=False, is_intrinsically_dark=False)
         assert service.is_dark(spot, _tod(True)) is False
         assert service.is_dark(spot, _tod(False)) is False
         assert service.is_dark(spot, None) is False
 
-    def test_intrinsic_dark_outdoor_is_dark(self, service):
-        """両方 True でも True を返す（明示的な OR）"""
+    def test_intrinsic_dark_outdoor_is_dark(self, service: SpotDarknessQueryService) -> None:
+        """is_intrinsically_dark と屋外条件の両方が成立しても True が返る（OR 合成）。"""
         spot = _spot(is_outdoor=True, is_intrinsically_dark=True)
         assert service.is_dark(spot, _tod(False)) is True

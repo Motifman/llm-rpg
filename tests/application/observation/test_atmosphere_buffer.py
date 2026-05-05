@@ -18,11 +18,15 @@ def _entry(category="ambient_sound", prose="水滴音", tick=0, source_id=None):
 
 
 class TestDefaultAtmosphereBuffer:
-    def test_capacity_must_be_positive(self):
+    """DefaultAtmosphereBuffer の append / recent / clear 挙動。"""
+
+    def test_capacity_must_be_positive(self) -> None:
+        """capacity が 0 以下なら ValueError を投げる（application 層の引数チェック）。"""
         with pytest.raises(ValueError):
             DefaultAtmosphereBuffer(capacity=0)
 
-    def test_append_and_recent_returns_newest_first(self):
+    def test_append_and_recent_returns_newest_first(self) -> None:
+        """append された順を保持し、recent は新しい順で返す。"""
         buf = DefaultAtmosphereBuffer(capacity=5)
         buf.append(PlayerId(1), _entry(prose="A", tick=0))
         buf.append(PlayerId(1), _entry(prose="B", tick=1))
@@ -31,24 +35,28 @@ class TestDefaultAtmosphereBuffer:
         recent = buf.recent(PlayerId(1), max_count=2)
         assert [e.prose for e in recent] == ["C", "B"]
 
-    def test_recent_limits_max_count(self):
+    def test_recent_limits_max_count(self) -> None:
+        """recent は max_count を上限に切り詰めるが、保持件数を超える要求は全件返す。"""
         buf = DefaultAtmosphereBuffer(capacity=5)
         for i in range(5):
             buf.append(PlayerId(1), _entry(tick=i))
         assert len(buf.recent(PlayerId(1), max_count=3)) == 3
         assert len(buf.recent(PlayerId(1), max_count=10)) == 5
 
-    def test_recent_zero_returns_empty(self):
+    def test_recent_zero_returns_empty(self) -> None:
+        """max_count=0 なら空リストを返す。"""
         buf = DefaultAtmosphereBuffer(capacity=5)
         buf.append(PlayerId(1), _entry())
         assert buf.recent(PlayerId(1), max_count=0) == []
 
-    def test_recent_negative_raises(self):
+    def test_recent_negative_raises(self) -> None:
+        """max_count が負の値なら ValueError を投げる。"""
         buf = DefaultAtmosphereBuffer(capacity=5)
         with pytest.raises(ValueError):
             buf.recent(PlayerId(1), max_count=-1)
 
-    def test_capacity_evicts_oldest(self):
+    def test_capacity_evicts_oldest(self) -> None:
+        """capacity を超えると最古のエントリから順に追い出される。"""
         buf = DefaultAtmosphereBuffer(capacity=2)
         buf.append(PlayerId(1), _entry(prose="A", tick=0))
         buf.append(PlayerId(1), _entry(prose="B", tick=1))
@@ -56,14 +64,16 @@ class TestDefaultAtmosphereBuffer:
         all_entries = buf.all(PlayerId(1))
         assert [e.prose for e in all_entries] == ["B", "C"]
 
-    def test_separate_player_isolation(self):
+    def test_separate_player_isolation(self) -> None:
+        """プレイヤーごとに別々のバッファを保持し、互いに影響しない。"""
         buf = DefaultAtmosphereBuffer(capacity=5)
         buf.append(PlayerId(1), _entry(prose="P1"))
         buf.append(PlayerId(2), _entry(prose="P2"))
         assert [e.prose for e in buf.all(PlayerId(1))] == ["P1"]
         assert [e.prose for e in buf.all(PlayerId(2))] == ["P2"]
 
-    def test_clear_empties_player(self):
+    def test_clear_empties_player(self) -> None:
+        """clear は指定プレイヤーのエントリのみ空にする。"""
         buf = DefaultAtmosphereBuffer(capacity=5)
         buf.append(PlayerId(1), _entry())
         buf.clear(PlayerId(1))

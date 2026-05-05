@@ -224,10 +224,12 @@ class TestScenarioLoaderMinimal:
         assert result.weather_config.update_interval_ticks == 4
 
     def test_day_night_cycle_absent_returns_none(self) -> None:
+        """environment.day_night_cycle が無い場合は None が返る。"""
         result = ScenarioLoader().load_from_dict(_minimal_scenario())
         assert result.day_night_cycle is None
 
     def test_day_night_cycle_disabled_returns_none(self) -> None:
+        """enabled=False なら他フィールドが揃っていても None が返る。"""
         raw = _minimal_scenario()
         raw["environment"]["day_night_cycle"] = {
             "enabled": False,
@@ -238,6 +240,7 @@ class TestScenarioLoaderMinimal:
         assert result.day_night_cycle is None
 
     def test_day_night_cycle_enabled_parses_phases(self) -> None:
+        """enabled=True のとき phases / starting_tick_in_day が DayNightCycleDef に変換される。"""
         raw = _minimal_scenario()
         raw["environment"]["day_night_cycle"] = {
             "enabled": True,
@@ -260,6 +263,7 @@ class TestScenarioLoaderMinimal:
         assert cycle.phases[1].is_dark is True
 
     def test_day_night_cycle_invalid_ticks_per_day_rejected(self) -> None:
+        """ticks_per_day が 0 以下の場合は ScenarioLoadError を投げる。"""
         raw = _minimal_scenario()
         raw["environment"]["day_night_cycle"] = {
             "enabled": True,
@@ -270,6 +274,7 @@ class TestScenarioLoaderMinimal:
             ScenarioLoader().load_from_dict(raw)
 
     def test_day_night_cycle_empty_phases_rejected(self) -> None:
+        """phases が空配列の場合は ScenarioLoadError を投げる。"""
         raw = _minimal_scenario()
         raw["environment"]["day_night_cycle"] = {
             "enabled": True,
@@ -344,6 +349,7 @@ class TestScenarioLoaderMinimal:
         assert spot.ambient_tags == frozenset({"wet", "abandoned"})
 
     def test_spot_intrinsically_dark_field_loaded(self) -> None:
+        """spots[].is_intrinsically_dark が SpotNode に反映される。"""
         raw = _minimal_scenario()
         raw["spots"][0]["is_intrinsically_dark"] = True
         result = ScenarioLoader().load_from_dict(raw)

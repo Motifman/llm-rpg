@@ -9,6 +9,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import FrozenSet, Optional
 
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    AmbientSoundFilterValidationException,
+)
+
 
 @dataclass(frozen=True)
 class AmbientSoundFilter:
@@ -30,7 +34,7 @@ class AmbientSoundFilter:
 
     def __post_init__(self) -> None:
         if self.indoor_only and self.outdoor_only:
-            raise ValueError(
+            raise AmbientSoundFilterValidationException(
                 "AmbientSoundFilter cannot have both indoor_only and outdoor_only set"
             )
 

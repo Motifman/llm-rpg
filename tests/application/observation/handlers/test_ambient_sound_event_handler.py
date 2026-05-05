@@ -91,7 +91,10 @@ def _make_handler(
 
 
 class TestAmbientHandlerRecipientResolution:
-    def test_delivers_to_players_at_source_spot(self):
+    """AmbientSoundEventHandler の配信先解決とイベント受け入れ挙動。"""
+
+    def test_delivers_to_players_at_source_spot(self) -> None:
+        """発火スポットに居るプレイヤーにのみ AtmosphereBuffer エントリが追加される。"""
         graph = _build_graph({1: 10, 2: 10, 3: 20})
         handler, buf = _make_handler(graph=graph, known_players=[1, 2, 3])
         handler.handle(_event(spot_id=10))
@@ -99,14 +102,16 @@ class TestAmbientHandlerRecipientResolution:
         assert len(buf.all(PlayerId(2))) == 1
         assert len(buf.all(PlayerId(3))) == 0
 
-    def test_non_event_ignored(self):
+    def test_non_event_ignored(self) -> None:
+        """AmbientSoundEmittedEvent 以外の入力は無視され、バッファに何も追加されない。"""
         graph = _build_graph({1: 10})
         handler, buf = _make_handler(graph=graph, known_players=[1])
         handler.handle("not_an_event")
         handler.handle(None)
         assert buf.all(PlayerId(1)) == []
 
-    def test_appends_correct_entry(self):
+    def test_appends_correct_entry(self) -> None:
+        """イベントの prose / sound_id / 現在 tick が AtmosphereEntry に正しく転写される。"""
         graph = _build_graph({1: 10})
         handler, buf = _make_handler(graph=graph, known_players=[1], tick=42)
         handler.handle(_event(spot_id=10, sound_id="wind", prose="風の音"))
@@ -120,7 +125,10 @@ class TestAmbientHandlerRecipientResolution:
 
 
 class TestAmbientHandlerThrottle:
-    def test_min_gap_blocks_too_soon(self):
+    """per-player throttle（min_gap / dedup_window）による配信抑制挙動。"""
+
+    def test_min_gap_blocks_too_soon(self) -> None:
+        """直前配信から min_gap_ticks_per_player 未満の tick での配信はブロックされる。"""
         graph = _build_graph({1: 10})
         throttle = AmbientSoundThrottleConfig(min_gap_ticks_per_player=4, dedup_window_size=0)
         buf = DefaultAtmosphereBuffer(capacity=10)
@@ -132,7 +140,8 @@ class TestAmbientHandlerThrottle:
         h2.handle(_event(spot_id=10, sound_id="other"))
         assert len(buf.all(PlayerId(1))) == 1
 
-    def test_min_gap_allows_after_gap(self):
+    def test_min_gap_allows_after_gap(self) -> None:
+        """min_gap_ticks_per_player 経過後の配信は通常通り受け付けられる。"""
         graph = _build_graph({1: 10})
         throttle = AmbientSoundThrottleConfig(min_gap_ticks_per_player=4, dedup_window_size=0)
         buf = DefaultAtmosphereBuffer(capacity=10)
@@ -142,7 +151,8 @@ class TestAmbientHandlerThrottle:
         h2.handle(_event(spot_id=10, sound_id="other"))
         assert len(buf.all(PlayerId(1))) == 2
 
-    def test_dedup_window_blocks_same_id(self):
+    def test_dedup_window_blocks_same_id(self) -> None:
+        """直近 dedup_window 件に同じ sound_id があれば再配信をブロックする。"""
         graph = _build_graph({1: 10})
         throttle = AmbientSoundThrottleConfig(min_gap_ticks_per_player=0, dedup_window_size=3)
         buf = DefaultAtmosphereBuffer(capacity=10)
@@ -152,7 +162,8 @@ class TestAmbientHandlerThrottle:
         h2.handle(_event(spot_id=10, sound_id="drip"))  # 重複 → ブロック
         assert len(buf.all(PlayerId(1))) == 1
 
-    def test_dedup_window_allows_different_id(self):
+    def test_dedup_window_allows_different_id(self) -> None:
+        """dedup_window 内に違う sound_id しか無ければ配信を受け付ける。"""
         graph = _build_graph({1: 10})
         throttle = AmbientSoundThrottleConfig(min_gap_ticks_per_player=0, dedup_window_size=3)
         buf = DefaultAtmosphereBuffer(capacity=10)
@@ -162,8 +173,8 @@ class TestAmbientHandlerThrottle:
         h2.handle(_event(spot_id=10, sound_id="wind"))
         assert len(buf.all(PlayerId(1))) == 2
 
-    def test_other_categories_do_not_consume_throttle(self):
-        """別カテゴリ（例: smell）が直前にあっても ambient のスロットルは独立に効く"""
+    def test_other_categories_do_not_consume_throttle(self) -> None:
+        """別カテゴリ（例: smell）が直前にあっても ambient のスロットルは独立に判定される。"""
         graph = _build_graph({1: 10})
         throttle = AmbientSoundThrottleConfig(min_gap_ticks_per_player=4, dedup_window_size=0)
         buf = DefaultAtmosphereBuffer(capacity=10)
