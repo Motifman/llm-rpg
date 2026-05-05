@@ -122,3 +122,23 @@ class TimeOfDayValidationException(SpotGraphDomainException, ValidationException
     """TimeOfDay 値オブジェクトのバリデーション例外"""
     error_code = "WORLD_GRAPH.TIME_OF_DAY_VALIDATION"
 
+
+class AmbientSoundFilterValidationException(SpotGraphDomainException, ValidationException):
+    """環境音フィルタのバリデーション例外"""
+    error_code = "WORLD_GRAPH.AMBIENT_SOUND_FILTER_VALIDATION"
+
+
+class AmbientSoundDefValidationException(SpotGraphDomainException, ValidationException):
+    """環境音定義のバリデーション例外"""
+    error_code = "WORLD_GRAPH.AMBIENT_SOUND_DEF_VALIDATION"
+
+
+class AmbientSoundAtlasValidationException(SpotGraphDomainException, ValidationException):
+    """環境音 atlas のバリデーション例外"""
+    error_code = "WORLD_GRAPH.AMBIENT_SOUND_ATLAS_VALIDATION"
+
+
+class AmbientSoundConfigValidationException(SpotGraphDomainException, ValidationException):
+    """環境音設定のバリデーション例外"""
+    error_code = "WORLD_GRAPH.AMBIENT_SOUND_CONFIG_VALIDATION"
+
