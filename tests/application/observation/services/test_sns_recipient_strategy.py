@@ -21,8 +21,8 @@ from ai_rpg_world.domain.sns.value_object import PostContent, PostId, ReplyId, U
 class TestSnsRecipientStrategyNormal:
     """SnsRecipientStrategy 正常系テスト"""
 
-    def test_post_created_returns_author_only_when_no_extra_ids(self):
-        """SnsPostCreatedEvent: メンション・購読者 ID が空なら著者のみ"""
+    def test_post_created_returns_empty_when_no_mentions_or_subscribers(self):
+        """SnsPostCreatedEvent: 投稿者本人は観測対象外。メンション・購読者が空なら配信先なし。"""
         strategy = SnsRecipientStrategy(
             observed_event_registry=ObservedEventRegistry(),
         )
@@ -34,11 +34,10 @@ class TestSnsRecipientStrategyNormal:
             content=PostContent("テスト投稿"),
         )
         result = strategy.resolve(event)
-        assert len(result) == 1
-        assert result[0].value == 5
+        assert result == []
 
-    def test_post_created_includes_mentioned_and_subscribers_from_event(self):
-        """SnsPostCreatedEvent: イベント上の user_id で配信先を解決する"""
+    def test_post_created_delivers_to_mentioned_and_subscribers_excluding_author(self):
+        """SnsPostCreatedEvent: 投稿者本人は除外し、メンション・購読者のみへ配信する。"""
         strategy = SnsRecipientStrategy(
             observed_event_registry=ObservedEventRegistry(),
         )
@@ -52,7 +51,7 @@ class TestSnsRecipientStrategyNormal:
             subscriber_user_ids=frozenset({UserId(4)}),
         )
         result = strategy.resolve(event)
-        assert {p.value for p in result} == {1, 3, 4}
+        assert {p.value for p in result} == {3, 4}
 
     def test_reply_created_returns_parent_author_only_when_no_mentions(self):
         """SnsReplyCreatedEvent: parent_author_id あり・メンション空なら親作成者のみ"""
@@ -139,7 +138,7 @@ class TestSnsRecipientStrategyExceptions:
     """SnsRecipientStrategy 境界テスト"""
 
     def test_post_created_skips_unknown_mention_ids_not_in_event(self):
-        """SnsPostCreatedEvent: mentioned_user_ids が空なら著者のみ（コマンド側で解決されなかったメンションは載らない）"""
+        """SnsPostCreatedEvent: mentioned_user_ids が空なら配信先なし（コマンド側で解決されなかったメンションは載らない）"""
         strategy = SnsRecipientStrategy(
             observed_event_registry=ObservedEventRegistry(),
         )
@@ -151,11 +150,10 @@ class TestSnsRecipientStrategyExceptions:
             content=PostContent("テスト @unknown"),
         )
         result = strategy.resolve(event)
-        assert len(result) == 1
-        assert result[0].value == 1
+        assert result == []
 
-    def test_post_created_excludes_author_from_mentioned_user_ids(self):
-        """SnsPostCreatedEvent: 著者 ID と同じ mentioned は配信先に重複しない"""
+    def test_post_created_excludes_author_even_if_in_mentioned_user_ids(self):
+        """SnsPostCreatedEvent: 著者 ID が mentioned に混入しても配信先からは除外される"""
         strategy = SnsRecipientStrategy(
             observed_event_registry=ObservedEventRegistry(),
         )
@@ -168,7 +166,7 @@ class TestSnsRecipientStrategyExceptions:
             mentioned_user_ids=frozenset({UserId(1), UserId(2)}),
         )
         result = strategy.resolve(event)
-        assert {p.value for p in result} == {1, 2}
+        assert {p.value for p in result} == {2}
 
 
 class TestSnsRecipientStrategySupports:
