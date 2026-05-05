@@ -206,6 +206,7 @@ def create_observation_recipient_resolver(
             observed_event_registry=observed_event_registry,
             player_audience_query=player_audience_query,
             world_object_to_player_resolver=world_object_resolver,
+            spot_graph_repository=spot_graph_repository,
         ),
     ]
     return ObservationRecipientResolver(strategies=strategies)
