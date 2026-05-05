@@ -30,17 +30,34 @@ DEFAULT_REINTERPRETATION_MAX_CONTEXTS_PER_EPISODE = 3
 MAX_REINTERPRETATION_FIELD_CHARS = 700
 MAX_RECALL_TEXT_FIELD_CHARS = 700
 
-_SYSTEM_REINTERPRETATION_JSON = """あなたは RPG エージェントのエピソード記憶を、現在の状況から再解釈する助手です。
-入力は、過去の episode の不変事実、想起された時点の状況、ペルソナ断片です。
-出力は JSON オブジェクトのみ（説明文やコードフェンス禁止）。
-キーは episode_updates のみ。episode_updates は episode_id, current_interpretation, current_recall_text を持つ配列です。
-current_interpretation は、現在の状況から見た意味づけを日本語で 1〜3 文にしてください。
-current_recall_text は、キャラクター本人の一人称で、TRPG リプレイのような主観回想を必ず 250〜450 字で書いてください。
-実際の目標は 320〜420 字です。250 字未満は不合格なので、短い要約で終えず、十分にふくらませてください。
-当時の身体感覚・感情・見立て・現在の状況で再び浮かんだ含みを含めて、最低でも 5 文以上にしてください。
-ペルソナの一人称、感情、当時の見立て、現在から見た含みを入れてよいです。
-ただし observed / source / cues / 場所 ID / 人物 ID / 成否 / 実際の出来事は絶対に改変しないでください。
-入力に無い人物・場所・アイテム・結果・動機・会話を創作しないでください。"""
+_SYSTEM_REINTERPRETATION_JSON = """あなたは RPG エージェントの「主観的なエピソード記憶」を、いまこの瞬間の状況に置き直して再解釈する助手です。
+
+【入力の意味】
+- episode: 過去にエージェント自身が体験し、そのとき注意を向けた光景だけが言語化された記憶。observed / source / cues / 場所ID / 人物ID / 成否 / 実際の出来事は不変の事実。
+- latest_active_recall_text: 直前まで保持されていた一人称の回想テキスト（あれば）。
+- recall_contexts: その記憶を思い出した瞬間の「いま」の知覚。
+  - current_state: 今そこにある状況
+  - recent_events: 直近に起きた出来事
+  - persona: 本人の現在の性格・心情
+  - situation_cues: 今の場所や対象に紐づく手がかり
+
+【再解釈の構え】
+過去 episode と recall_contexts を、頭の中で**並べて**読み直してください。これは差分を機械的に探す作業ではありません。人間の記憶がそうであるように、
+- 同じ場所に再び立ち、当時のまま変わらない要素を見て懐かしさや確信が湧くこともあれば、
+- 当時注意を向けていた何かが今は失われていたり、違って見えたりすることに、自然と心が引っかかることもあります。
+そうした感覚が「いまの本人」に実際に湧いたと言える場合にだけ、その違和感や懐かしさを current_recall_text / current_interpretation に自然に織り込んでください。何も湧かないなら、現在の意味づけだけを素直に書いて構いません。差分を無理に作ろうとしないでください。
+
+【出力】
+JSON オブジェクトのみ（説明文・コードフェンス禁止）。キーは episode_updates のみ。
+episode_updates は { episode_id, current_interpretation, current_recall_text } を持つ配列。
+
+- current_interpretation: いまの状況から見たこの記憶の意味づけ。日本語 1〜3 文。
+- current_recall_text: キャラクター本人の一人称による回想。TRPG リプレイ風で、当時の身体感覚・感情・見立てに、いまこの場で再び浮かんだ含みを重ねる。日本語 250〜450 字（目安 320〜420 字、最低 5 文）。短い要約で終えず、十分にふくらませてください。
+
+【厳守】
+- observed / source / cues / 場所ID / 人物ID / 成否 / 実際の出来事は絶対に改変しない。
+- 入力に無い人物・場所・アイテム・結果・動機・会話を創作しない。
+- recall_contexts に明示されていない「いまの様子」を勝手に作らない（書かれていない物の有無を断定しない）。"""
 
 
 def _truncate(raw: str, *, max_chars: int) -> str:
