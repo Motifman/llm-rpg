@@ -296,3 +296,60 @@ class TestScenarioLoaderHospital:
         )
         assert rear_exit_event.recipients == "players_at_spot"
         assert rear_exit_event.breaks_movement is True
+
+
+class TestScenarioLoaderPassageBlock:
+    """`connections[].passage` ブロックの解釈挙動。"""
+
+    def _scenario_with_passage(self, passage_dict) -> dict:
+        scn = _minimal_scenario()
+        scn["connections"] = [
+            {
+                "id": "a_b_wall",
+                "from": "room_a",
+                "to": "room_b",
+                "name": "教室間の壁",
+                "travel_ticks": 1,
+                "is_bidirectional": True,
+                "passage": passage_dict,
+            }
+        ]
+        return scn
+
+    def test_wall_intact_passage_yields_impassable_low_sound(self) -> None:
+        """passage.kind=WALL,state=INTACT で接続が通行不可・音透過率0.1になる。"""
+        scn = self._scenario_with_passage({"kind": "WALL", "state": "INTACT"})
+        result = ScenarioLoader().load_from_dict(scn)
+        wall_conn = next(
+            c for c in result.graph.all_connections() if c.name == "教室間の壁"
+        )
+        assert wall_conn.is_passable is False
+        assert wall_conn.sound_permeability == pytest.approx(0.1)
+        assert wall_conn.passage is not None
+        assert wall_conn.passage.kind.value == "WALL"
+        assert wall_conn.passage.state == "INTACT"
+
+    def test_door_open_passage_yields_passable_full_sound(self) -> None:
+        """passage.kind=DOOR,state=OPEN で接続が通行可・音透過率1.0になる。"""
+        scn = self._scenario_with_passage({"kind": "DOOR", "state": "OPEN"})
+        result = ScenarioLoader().load_from_dict(scn)
+        conn = next(c for c in result.graph.all_connections() if c.name == "教室間の壁")
+        assert conn.is_passable is True
+        assert conn.sound_permeability == pytest.approx(1.0)
+
+    def test_passage_overrides_apply(self) -> None:
+        """passage の sound_permeability override が反映される。"""
+        scn = self._scenario_with_passage(
+            {"kind": "WALL", "state": "INTACT", "sound_permeability": 0.25}
+        )
+        result = ScenarioLoader().load_from_dict(scn)
+        conn = next(c for c in result.graph.all_connections() if c.name == "教室間の壁")
+        assert conn.sound_permeability == pytest.approx(0.25)
+
+    def test_unknown_kind_raises_load_error(self) -> None:
+        """未知の passage.kind は ScenarioLoadError になる。"""
+        from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadError
+
+        scn = self._scenario_with_passage({"kind": "MAGICAL_VOID"})
+        with pytest.raises(ScenarioLoadError, match="passage.kind"):
+            ScenarioLoader().load_from_dict(scn)

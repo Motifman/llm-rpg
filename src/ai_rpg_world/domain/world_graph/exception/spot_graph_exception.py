@@ -122,3 +122,13 @@ class TimeOfDayValidationException(SpotGraphDomainException, ValidationException
     """TimeOfDay 値オブジェクトのバリデーション例外"""
     error_code = "WORLD_GRAPH.TIME_OF_DAY_VALIDATION"
 
+
+class PassageValidationException(SpotGraphDomainException, ValidationException):
+    """Passage 値オブジェクトおよび SpotConnection の通過形態関連バリデーション例外"""
+    error_code = "WORLD_GRAPH.PASSAGE_VALIDATION"
+
+
+class SpotConnectionValidationException(SpotGraphDomainException, ValidationException):
+    """SpotConnection エンティティのバリデーション例外"""
+    error_code = "WORLD_GRAPH.SPOT_CONNECTION_VALIDATION"
+
