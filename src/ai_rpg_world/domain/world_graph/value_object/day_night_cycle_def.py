@@ -10,6 +10,9 @@ from dataclasses import dataclass
 from typing import Tuple
 
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    DayNightCycleValidationException,
+)
 from ai_rpg_world.domain.world_graph.value_object.day_night_phase_def import (
     DayNightPhaseDef,
 )
@@ -34,18 +37,20 @@ class DayNightCycleDef:
 
     def __post_init__(self) -> None:
         if self.ticks_per_day < 1:
-            raise ValueError(
+            raise DayNightCycleValidationException(
                 f"DayNightCycleDef.ticks_per_day must be >= 1: {self.ticks_per_day}"
             )
         if not 0 <= self.starting_tick_in_day < self.ticks_per_day:
-            raise ValueError(
+            raise DayNightCycleValidationException(
                 "DayNightCycleDef.starting_tick_in_day must be in "
                 f"[0, ticks_per_day): {self.starting_tick_in_day}"
             )
         if not self.phases:
-            raise ValueError("DayNightCycleDef.phases must not be empty")
+            raise DayNightCycleValidationException(
+                "DayNightCycleDef.phases must not be empty"
+            )
         if self.phases[0].start_ratio != 0.0:
-            raise ValueError(
+            raise DayNightCycleValidationException(
                 "DayNightCycleDef.phases[0].start_ratio must be 0.0; "
                 f"got {self.phases[0].start_ratio}"
             )
@@ -53,10 +58,12 @@ class DayNightCycleDef:
         prev_ratio = -1.0
         for p in self.phases:
             if p.name in names_seen:
-                raise ValueError(f"Duplicate phase name in DayNightCycleDef: {p.name}")
+                raise DayNightCycleValidationException(
+                    f"Duplicate phase name in DayNightCycleDef: {p.name}"
+                )
             names_seen.add(p.name)
             if p.start_ratio <= prev_ratio:
-                raise ValueError(
+                raise DayNightCycleValidationException(
                     "DayNightCycleDef.phases must be sorted by start_ratio strictly ascending"
                 )
             prev_ratio = p.start_ratio
