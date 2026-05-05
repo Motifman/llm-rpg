@@ -13,7 +13,12 @@ from ai_rpg_world.domain.world_graph.value_object.trap_def import TrapDef
 
 @dataclass(frozen=True)
 class SpotNode:
-    """スポットグラフ上の1ノード（メタデータ + 任意で内部構造・雰囲気）"""
+    """スポットグラフ上の1ノード（メタデータ + 任意で内部構造・雰囲気）
+
+    ``is_intrinsically_dark`` は時刻に依存せず常に暗いスポット（地下室・遮光された
+    廃墟内部など）を表す。屋外スポットの「夜だから暗い」は ``is_outdoor`` と
+    昼夜サイクルの組み合わせで判定するため、ここでは含めない。
+    """
 
     spot_id: SpotId
     name: str
@@ -23,6 +28,7 @@ class SpotNode:
     interior: Optional[SpotInterior] = None
     atmosphere: Optional[SpotAtmosphere] = None
     is_outdoor: bool = False
+    is_intrinsically_dark: bool = False
     traps: Tuple[TrapDef, ...] = ()
 
     def __post_init__(self) -> None:
