@@ -172,3 +172,58 @@ class TestMultipleEffectsAccumulate:
         assert len(result.damage_specs) == 1
         assert len(result.teleport_specs) == 1
         assert len(result.messages) == 1
+
+
+class TestChangePassageStateEffect:
+    """CHANGE_PASSAGE_STATE effect が PassageStateUpdateSpec を生成する挙動。"""
+
+    def test_minimal_parameters_generate_spec(self) -> None:
+        """connection_id と new_state のみで spec が生成される。"""
+        svc = WorldGraphEffectService()
+        effect = InteractionEffect(
+            effect_type=InteractionEffectTypeEnum.CHANGE_PASSAGE_STATE,
+            parameters={"connection_id": 7, "new_state": "BROKEN"},
+        )
+        result = svc.apply_effects(
+            interior=_empty_interior(), acting_object=None,
+            effects=[effect], world_flags=frozenset(),
+        )
+        assert len(result.passage_state_updates) == 1
+        spec = result.passage_state_updates[0]
+        assert spec.connection_id == 7
+        assert spec.new_state == "BROKEN"
+        assert spec.traversable_override is None
+        assert spec.sound_permeability_override is None
+
+    def test_overrides_are_propagated_to_spec(self) -> None:
+        """traversable / sound_permeability の override が spec に反映される。"""
+        svc = WorldGraphEffectService()
+        effect = InteractionEffect(
+            effect_type=InteractionEffectTypeEnum.CHANGE_PASSAGE_STATE,
+            parameters={
+                "connection_id": 9,
+                "new_state": "CRACKED",
+                "traversable": False,
+                "sound_permeability": 0.7,
+            },
+        )
+        result = svc.apply_effects(
+            interior=_empty_interior(), acting_object=None,
+            effects=[effect], world_flags=frozenset(),
+        )
+        spec = result.passage_state_updates[0]
+        assert spec.traversable_override is False
+        assert spec.sound_permeability_override == 0.7
+
+    def test_missing_new_state_is_ignored(self) -> None:
+        """new_state が無いと spec は生成されない。"""
+        svc = WorldGraphEffectService()
+        effect = InteractionEffect(
+            effect_type=InteractionEffectTypeEnum.CHANGE_PASSAGE_STATE,
+            parameters={"connection_id": 7},
+        )
+        result = svc.apply_effects(
+            interior=_empty_interior(), acting_object=None,
+            effects=[effect], world_flags=frozenset(),
+        )
+        assert result.passage_state_updates == ()

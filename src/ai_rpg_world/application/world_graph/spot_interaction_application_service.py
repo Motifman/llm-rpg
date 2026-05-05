@@ -105,6 +105,14 @@ class SpotInteractionApplicationService:
         for cid, is_passable in result.connection_passability_updates:
             graph.set_connection_passable(cid, is_passable)
 
+        for spec in result.passage_state_updates:
+            graph.set_connection_passage_state(
+                ConnectionId.create(spec.connection_id),
+                spec.new_state,
+                traversable_override=spec.traversable_override,
+                sound_permeability_override=spec.sound_permeability_override,
+            )
+
         if result.item_spec_ids_to_grant:
             grant_item_specs_to_inventory(
                 player_id,

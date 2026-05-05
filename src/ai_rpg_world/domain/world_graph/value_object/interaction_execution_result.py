@@ -11,6 +11,7 @@ from ai_rpg_world.domain.world_graph.value_object.cross_domain_effect_spec impor
     CreateConnectionSpec,
     DamageSpec,
     DestroyConnectionSpec,
+    PassageStateUpdateSpec,
     SatisfyNeedSpec,
     StatusEffectSpec,
     TeleportSpec,
@@ -35,3 +36,4 @@ class InteractionExecutionResult:
     create_connection_specs: Tuple[CreateConnectionSpec, ...] = ()
     destroy_connection_specs: Tuple[DestroyConnectionSpec, ...] = ()
     satisfy_need_specs: Tuple[SatisfyNeedSpec, ...] = ()
+    passage_state_updates: Tuple[PassageStateUpdateSpec, ...] = ()
