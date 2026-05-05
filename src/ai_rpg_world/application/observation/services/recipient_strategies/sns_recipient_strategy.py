@@ -55,7 +55,9 @@ class SnsRecipientStrategy(IRecipientResolutionStrategy):
         return []
 
     def _resolve_post_created(self, event: SnsPostCreatedEvent) -> List[PlayerId]:
-        result: List[PlayerId] = [self._to_player_id(event.author_user_id)]
+        # 投稿者本人はツール結果で投稿成功を認識できるため、観測フィードへは送らない。
+        # プッシュ通知相当のメンション・購読者にのみ配信する。
+        result: List[PlayerId] = []
 
         for uid in event.mentioned_user_ids:
             if uid.value != event.author_user_id.value:
