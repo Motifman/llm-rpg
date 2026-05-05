@@ -9,6 +9,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, FrozenSet, Iterator, Optional, Tuple
 
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    AmbientSoundAtlasValidationException,
+    AmbientSoundConfigValidationException,
+)
 from ai_rpg_world.domain.world_graph.value_object.ambient_sound_def import (
     AmbientSoundDef,
 )
@@ -28,7 +32,9 @@ class AmbientSoundAtlas:
         ids: set = set()
         for d in self.defs:
             if d.id in ids:
-                raise ValueError(f"Duplicate AmbientSoundDef.id in atlas: {d.id}")
+                raise AmbientSoundAtlasValidationException(
+                    f"Duplicate AmbientSoundDef.id in atlas: {d.id}"
+                )
             ids.add(d.id)
 
     def is_empty(self) -> bool:
@@ -69,11 +75,11 @@ class AmbientSoundThrottleConfig:
 
     def __post_init__(self) -> None:
         if self.min_gap_ticks_per_player < 0:
-            raise ValueError(
+            raise AmbientSoundConfigValidationException(
                 "AmbientSoundThrottleConfig.min_gap_ticks_per_player must be >= 0"
             )
         if self.dedup_window_size < 0:
-            raise ValueError(
+            raise AmbientSoundConfigValidationException(
                 "AmbientSoundThrottleConfig.dedup_window_size must be >= 0"
             )
 
@@ -96,6 +102,6 @@ class AmbientSoundConfig:
 
     def __post_init__(self) -> None:
         if self.update_interval_ticks < 1:
-            raise ValueError(
+            raise AmbientSoundConfigValidationException(
                 "AmbientSoundConfig.update_interval_ticks must be >= 1"
             )

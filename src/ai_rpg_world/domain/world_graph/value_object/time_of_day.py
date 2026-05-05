@@ -8,6 +8,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    TimeOfDayValidationException,
+)
+
 
 @dataclass(frozen=True)
 class TimeOfDay:
@@ -29,8 +33,10 @@ class TimeOfDay:
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.ratio < 1.0:
-            raise ValueError(f"TimeOfDay.ratio must be in [0.0, 1.0): {self.ratio}")
+            raise TimeOfDayValidationException(
+                f"TimeOfDay.ratio must be in [0.0, 1.0): {self.ratio}"
+            )
         if not 0.0 <= self.ambient_light <= 1.0:
-            raise ValueError(
+            raise TimeOfDayValidationException(
                 f"TimeOfDay.ambient_light must be in [0.0, 1.0]: {self.ambient_light}"
             )
