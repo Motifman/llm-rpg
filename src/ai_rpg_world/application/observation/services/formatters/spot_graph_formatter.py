@@ -141,11 +141,13 @@ class SpotGraphObservationFormatter:
         # アクター本人にはツール結果として失敗が返るため、観測は他者にのみ。
         if self._is_self(event.entity_id, recipient_id):
             return None
+        # actor / obj_name は構造化データのコンテキスト情報として保存。
+        # prose 自体はシナリオ作家が書いた observation_message をそのまま
+        # 使う（テンプレ置換はせず、命名済み主語をシナリオに任せる方針）。
+        # 将来テンプレ機能を入れるならここで .format(actor=..., object=...)
+        # に拡張するだけで済む。
         actor = self._resolve_entity_name(event.entity_id)
         obj_name = self._resolve_object_name(event.spot_id, event.object_id)
-        # シナリオ作家がカスタム文を on_failure_observation に書くため、
-        # ここはその文をそのまま prose にする（actor / object のテンプレ
-        # 置換はせず、シナリオ側で命名済みのものを書いてもらう）。
         prose = event.observation_message
         structured = {
             "type": "spot_object_interaction_failed",
