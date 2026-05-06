@@ -593,6 +593,9 @@ class ScenarioLoader:
             weather_type=raw.get("weather_type"),
             state_key=raw.get("state_key"),
             ticks_offset=raw.get("ticks_offset"),
+            # JSON の `true` / `false` 以外（数値の 1 / 文字列 "true" など）は
+            # 暗黙の coercion を避けて作家ミスとして弾く。
+            treat_missing_as_passed=raw.get("treat_missing_as_passed", False) is True,
         )
 
     def _parse_reactive_passage_bindings(

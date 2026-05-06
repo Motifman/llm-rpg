@@ -158,8 +158,11 @@ class ScenarioConditionEvaluator:
         if ctype == "OBJECT_STATE_TICK_AT_LEAST":
             # 「対象 object の state[state_key] が tick 値で、そこから
             # ticks_offset 経過したか」を判定する。state_key の値は int 想定。
-            # state_key が無い / 値が int でない場合は False（=「経過判定不能」
-            # 状態として扱い、predicate は満たされていないとみなす）。
+            # state_key が無い / 値が None の場合は「まだ起きていない」と
+            # 解釈し、`treat_missing_as_passed` フラグで True/False を選ぶ
+            # （default False = 経過判定不能なので fire しない）。
+            # 値が int でも None でもない場合は作家ミスの可能性があるので
+            # 警告ログを出して False。
             if (
                 cond.object_id is None
                 or not cond.state_key
@@ -172,11 +175,16 @@ class ScenarioConditionEvaluator:
             if obj is None:
                 return False
             recorded_tick = obj.state.get(cond.state_key)
+            if recorded_tick is None:
+                # 「まだ起きていない」 sentinel。作家が `treat_missing_as_passed`
+                # で意味を選択する。silent fallback を避けるためフラグを default
+                # False（保守的）にしてある。
+                return bool(cond.treat_missing_as_passed)
             if not isinstance(recorded_tick, int):
-                # シナリオ作家が int 以外（文字列など）を入れていたケース。
-                # silent False のままだとデバッグが困難なので警告を出す。
+                # シナリオ作家が int でも None でもない値（文字列など）を
+                # 入れていたケース。デバッグ困難になるので警告を出す。
                 _logger.warning(
-                    "OBJECT_STATE_TICK_AT_LEAST: state[%r] is not int "
+                    "OBJECT_STATE_TICK_AT_LEAST: state[%r] is not int or None "
                     "(got %s) for object_id=%s",
                     cond.state_key,
                     type(recorded_tick).__name__,
