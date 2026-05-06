@@ -23,7 +23,13 @@ from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISp
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
 from ai_rpg_world.domain.world_graph.service.spot_interaction_service import SpotInteractionService
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
-from ai_rpg_world.domain.world_graph.event.spot_graph_event import SpotObjectInteractedEvent
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    SpotObjectInteractedEvent,
+    SpotObjectInteractionFailedEvent,
+)
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    InteractionNotAllowedException,
+)
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
@@ -88,14 +94,23 @@ class SpotInteractionApplicationService:
         owned = collect_owned_item_spec_ids_from_inventory(inv, self._item_repository)
         world_flags = self._world_flag_state.as_frozen_set()
 
-        result = self._interaction.execute_interaction(
-            interior,
-            object_id,
-            action_name,
-            owned,
-            world_flags,
-            interaction_parameters=interaction_parameters,
-        )
+        try:
+            result = self._interaction.execute_interaction(
+                interior,
+                object_id,
+                action_name,
+                owned,
+                world_flags,
+                interaction_parameters=interaction_parameters,
+            )
+        except InteractionNotAllowedException:
+            # 前提条件で拒否された。InteractionDef.on_failure_observation が
+            # 設定されていれば、同じスポットの他プレイヤー向け観測を出してから
+            # 例外を re-raise する（アクターには tool result としてエラーが返る）。
+            self._maybe_emit_failure_observation(
+                interior, object_id, action_name, entity_id, spot_id, graph,
+            )
+            raise
 
         self._world_flag_state.replace_from_interaction(result.new_flags)
 
@@ -182,3 +197,35 @@ class SpotInteractionApplicationService:
     def _next_connection_id(graph) -> ConnectionId:
         """グラフ内の既存接続IDの最大値+1を返す。"""
         return ConnectionId.create(graph.max_connection_id_value() + 1)
+
+    def _maybe_emit_failure_observation(
+        self,
+        interior,
+        object_id: SpotObjectId,
+        action_name: str,
+        entity_id: EntityId,
+        spot_id: SpotId,
+        graph,
+    ) -> None:
+        """InteractionDef.on_failure_observation が設定されていれば
+        SpotObjectInteractionFailedEvent を publish する。"""
+        if self._event_publisher is None:
+            return
+        obj = interior.get_object(object_id)
+        if obj is None:
+            return
+        idef = next(
+            (i for i in obj.interactions if i.action_name == action_name), None,
+        )
+        if idef is None or not idef.on_failure_observation:
+            return
+        failed_event = SpotObjectInteractionFailedEvent.create(
+            aggregate_id=graph.graph_id,
+            aggregate_type="SpotGraphAggregate",
+            entity_id=entity_id,
+            spot_id=spot_id,
+            object_id=object_id,
+            action_name=action_name,
+            observation_message=idef.on_failure_observation,
+        )
+        self._event_publisher.publish_all([failed_event])
