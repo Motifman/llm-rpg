@@ -43,24 +43,57 @@ class TestReactiveObjectStateBindingValidation:
                 on_false_state_updates=(),
             )
 
-    def test_keys_only_on_true_rejected(self) -> None:
-        """on_true にしかないキーを拒否（False 側で値が固定されないと整合が崩れる）。"""
-        with pytest.raises(ReactiveObjectStateBindingValidationException, match="only in on_true"):
+    def test_asymmetric_keys_allowed_for_one_way_lifecycle(self) -> None:
+        """Phase 2-B: on_true / on_false で異なるキー集合を許容する。
+
+        旧仕様では同じキーを両側に書く必要があったが、一方向 lifecycle
+        （例: 「条件を満たした時だけ phase=ready に遷移、満たさない時は
+        触らない」）を表現するためにこの制約を撤廃した。
+        """
+        b = ReactiveObjectStateBinding(
+            target_object_id=SpotObjectId.create(1),
+            predicate=_flag_pred(),
+            on_true_state_updates=(("phase", "ready"),),
+            on_false_state_updates=(),  # 触らない
+        )
+        assert b.updates_for(True) == {"phase": "ready"}
+        assert b.updates_for(False) == {}
+        # managed_state_keys は両側の和集合
+        assert b.managed_state_keys == ("phase",)
+
+    def test_asymmetric_with_both_sides_disjoint(self) -> None:
+        """両側で別々のキーを書く asymmetric 構成も許容される。"""
+        b = ReactiveObjectStateBinding(
+            target_object_id=SpotObjectId.create(1),
+            predicate=_flag_pred(),
+            on_true_state_updates=(("a", 1),),
+            on_false_state_updates=(("b", 2),),
+        )
+        assert b.updates_for(True) == {"a": 1}
+        assert b.updates_for(False) == {"b": 2}
+        assert set(b.managed_state_keys) == {"a", "b"}
+
+    def test_duplicate_key_within_on_true_rejected(self) -> None:
+        """on_true_state_updates 内で同一キーが重複している場合は拒否。"""
+        with pytest.raises(ReactiveObjectStateBindingValidationException, match="duplicate key"):
             ReactiveObjectStateBinding(
                 target_object_id=SpotObjectId.create(1),
                 predicate=_flag_pred(),
-                on_true_state_updates=(("a", 1), ("b", 2)),
-                on_false_state_updates=(("a", 0),),  # b が抜けている
+                on_true_state_updates=(("a", 1), ("a", 2)),
+                on_false_state_updates=(("a", 0),),
             )
 
-    def test_keys_only_on_false_rejected(self) -> None:
-        """on_false にしかないキーを拒否。"""
-        with pytest.raises(ReactiveObjectStateBindingValidationException, match="only in on_false"):
+    def test_duplicate_key_within_on_false_rejected(self) -> None:
+        """on_false_state_updates 内で同一キーが重複している場合も同じく拒否（対称チェック）。"""
+        with pytest.raises(
+            ReactiveObjectStateBindingValidationException,
+            match="duplicate key.*on_false_state_updates",
+        ):
             ReactiveObjectStateBinding(
                 target_object_id=SpotObjectId.create(1),
                 predicate=_flag_pred(),
                 on_true_state_updates=(("a", 1),),
-                on_false_state_updates=(("a", 0), ("b", 2)),
+                on_false_state_updates=(("a", 0), ("a", 9)),
             )
 
     def test_updates_for_returns_correct_dict(self) -> None:
