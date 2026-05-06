@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import FrozenSet, Optional, Tuple
+from typing import FrozenSet, Mapping, Optional, Tuple
 
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
@@ -43,12 +43,31 @@ class SpotInteractionService:
         *,
         spot_presence_count: int = 1,
         interaction_parameters: Optional[dict] = None,
+        owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
     ) -> Tuple[bool, Optional[str]]:
+        # `owned_item_spec_counts` が渡されない場合は「frozenset から各 1 個」
+        # でフォールバックする（required_quantity=1 の既存挙動と互換）。
+        # ただし precondition のいずれかが required_quantity > 1 を要求する
+        # のに counts が無いと silent wrong answer になるので、その場合は
+        # 早期に明示的なエラーで弾く（pre-release のため後方互換は不要）。
+        if owned_item_spec_counts is None:
+            needs_counts = any(
+                c.required_quantity > 1 for c in interaction.preconditions
+            )
+            if needs_counts:
+                raise ValueError(
+                    "owned_item_spec_counts is required when any precondition has "
+                    "required_quantity > 1; pass count_owned_item_instances_by_spec(...)"
+                )
+            counts: Mapping[ItemSpecId, int] = {sid: 1 for sid in owned_item_spec_ids}
+        else:
+            counts = owned_item_spec_counts
         for cond in interaction.preconditions:
             ok, msg = self._evaluate_condition(
-                cond, spot_object, owned_item_spec_ids, world_flags,
+                cond, spot_object, world_flags,
                 spot_presence_count=spot_presence_count,
                 interaction_parameters=interaction_parameters,
+                owned_item_spec_counts=counts,
             )
             if not ok:
                 return False, msg
@@ -58,11 +77,11 @@ class SpotInteractionService:
         self,
         cond: InteractionCondition,
         spot_object: SpotObject,
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
         world_flags: FrozenSet[str],
         *,
         spot_presence_count: int = 1,
         interaction_parameters: Optional[dict] = None,
+        owned_item_spec_counts: Mapping[ItemSpecId, int],
     ) -> Tuple[bool, Optional[str]]:
         t = cond.condition_type
         if t == InteractionConditionTypeEnum.ALWAYS:
@@ -70,8 +89,14 @@ class SpotInteractionService:
         if t == InteractionConditionTypeEnum.HAS_ITEM:
             if cond.target_item_spec_id is None:
                 return False, cond.failure_message or "HAS_ITEM に target_item_spec_id がありません"
-            if cond.target_item_spec_id not in owned_item_spec_ids:
-                return False, cond.failure_message or "必要なアイテムを持っていません"
+            required = max(1, int(cond.required_quantity))
+            owned = owned_item_spec_counts.get(cond.target_item_spec_id, 0)
+            if owned < required:
+                return False, cond.failure_message or (
+                    f"必要なアイテムが足りません (必要: {required}, 所持: {owned})"
+                    if required > 1
+                    else "必要なアイテムを持っていません"
+                )
             return True, None
         if t == InteractionConditionTypeEnum.OBJECT_STATE:
             if cond.required_state is None:
@@ -119,8 +144,11 @@ class SpotInteractionService:
         if t == InteractionConditionTypeEnum.HAS_ITEMS:
             if not cond.required_item_spec_ids:
                 return False, cond.failure_message or "HAS_ITEMS に必要アイテムリストがありません"
+            # required_quantity は各 spec に同じ値を適用する。
+            # 種別ごとに別々の数量を要求したい場合は HAS_ITEM を複数回列挙する。
+            required = max(1, int(cond.required_quantity))
             for item_id in cond.required_item_spec_ids:
-                if item_id not in owned_item_spec_ids:
+                if owned_item_spec_counts.get(item_id, 0) < required:
                     return False, cond.failure_message or "必要なアイテムが揃っていません"
             return True, None
 
@@ -137,6 +165,7 @@ class SpotInteractionService:
         spot_presence_count: int = 1,
         interaction_parameters: Optional[dict] = None,
         current_tick: Optional[WorldTick] = None,
+        owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
     ) -> InteractionExecutionResult:
         obj = interior.get_object(object_id)
         if obj is None:
@@ -148,6 +177,7 @@ class SpotInteractionService:
             idef, obj, owned_item_spec_ids, world_flags,
             spot_presence_count=spot_presence_count,
             interaction_parameters=interaction_parameters,
+            owned_item_spec_counts=owned_item_spec_counts,
         )
         if not ok:
             raise InteractionNotAllowedException(reason or "Interaction not allowed")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import FrozenSet
+from collections import Counter
+from typing import FrozenSet, Mapping
 
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
@@ -35,6 +36,34 @@ def collect_owned_item_spec_ids_from_inventory(
         if agg is not None:
             out.add(agg.item_spec.item_spec_id)
     return frozenset(out)
+
+
+def count_owned_item_instances_by_spec(
+    inventory: PlayerInventoryAggregate,
+    item_repository: ItemRepository,
+) -> Mapping[ItemSpecId, int]:
+    """「消費可能な」アイテム instance を ItemSpecId 別に重複保持数で数える。
+
+    HAS_ITEM precondition の数量チェック、REMOVE_ITEM の複数消費判定で
+    利用する。`remove_one_item_of_spec_from_inventory` と semantics を
+    揃えるため、装備スロットは含めない（装備中の剣は「消費可能」では
+    ないので、required_quantity チェックの分母にしない）。
+    `collect_owned_item_spec_ids_from_inventory` が装備込みの「所持
+    set」を返すのとは意図的に意味が異なる。
+
+    instance.quantity（同一 instance 内の stack 数）は加算しない。
+    1 instance = 1 個として数える Phase 2-A の方針に従う。
+    """
+    counts: Counter[ItemSpecId] = Counter()
+    for i in range(inventory.max_slots):
+        sid = SlotId(i)
+        iid = inventory.get_item_instance_id_by_slot(sid)
+        if iid is None:
+            continue
+        agg = item_repository.find_by_id(iid)
+        if agg is not None:
+            counts[agg.item_spec.item_spec_id] += 1
+    return dict(counts)
 
 
 def remove_one_item_of_spec_from_inventory(
