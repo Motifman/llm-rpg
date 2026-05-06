@@ -1,0 +1,220 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "herbal_tea_greenhouse_demo",
+    "title": "ハーブ茶の温室 — Phase 2 機能の総合デモ",
+    "description": "プレイヤーは温室の薬草を 3 枚ずつ採取し、抽出器に薬草 3 + 炭 1 を投入して 4 tick 待つことで茶 1 杯を得る。薬草は採取後 6 tick で再生する。Phase 2 で導入した数量セマンティクス (#104) / 非対称 reactive binding (#105) / 合成糖衣 (#106) / null sentinel (#107) を一つのシナリオで全て活用する。",
+    "theme": "crafting",
+    "difficulty": "easy",
+    "estimated_ticks": 40,
+    "author": "demo",
+    "tags": ["crafting", "phase2_showcase", "lifecycle", "quantity", "syntax_sugar", "null_sentinel"]
+  },
+  "item_specs": [
+    {"id": "herb_leaf", "name": "薬草の葉", "description": "ハーブティーの原料。", "category": "MATERIAL"},
+    {"id": "coal", "name": "炭", "description": "抽出器の燃料。", "category": "MATERIAL"},
+    {"id": "tea_cup", "name": "ハーブ茶", "description": "蒸し上がった芳しい茶。", "category": "FOOD"}
+  ],
+  "environment": {
+    "weather": {
+      "enabled": false,
+      "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+      "update_interval_ticks": 100,
+      "announce_changes": false
+    }
+  },
+  "spots": [
+    {
+      "id": "greenhouse",
+      "name": "温室",
+      "description": "硝子越しの陽光と湿度。中央に薬草の planter、奥に金属製の抽出器が据えられている。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "BRIGHT", "temperature": "WARM"},
+      "interior": {
+        "objects": [
+          {
+            "id": "herb_planter",
+            "name": "薬草プランター",
+            "description": "瑞々しいミントとカモミール。摘み取ると新葉が出るまで時間がかかる。",
+            "object_type": "OTHER",
+            "state": {"available": true, "last_harvest_tick": null},
+            "interactions": [
+              {
+                "action_name": "harvest",
+                "display_label": "薬草を 3 枚摘む",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "herb_planter",
+                    "required_state": {"available": true},
+                    "failure_message": "葉はまだ十分に成長していない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "herb_leaf", "quantity": 3}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "herb_planter",
+                      "state_updates": {"available": false}
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "target_object": "herb_planter",
+                      "state_key": "last_harvest_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "薬草を 3 枚摘み取った。茎には残り香が漂う。"}
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "tea_brewer",
+            "name": "ハーブ抽出器",
+            "description": "金属の蓋つき抽出器。素材を入れて熱すると、しばらくして出来上がる。",
+            "object_type": "OTHER",
+            "state": {"phase": "idle", "started_at_tick": null},
+            "interactions": [
+              {
+                "action_name": "infuse",
+                "display_label": "薬草と炭を投入",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "tea_brewer",
+                    "required_state": {"phase": "idle"},
+                    "failure_message": "抽出器は既に動作中。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "herb_leaf",
+                    "required_quantity": 3,
+                    "failure_message": "薬草が 3 枚必要。"
+                  },
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "coal",
+                    "required_quantity": 1,
+                    "failure_message": "炭が 1 個必要。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "REMOVE_ITEM",
+                    "parameters": {"item_spec": "herb_leaf", "quantity": 3}
+                  },
+                  {
+                    "effect_type": "REMOVE_ITEM",
+                    "parameters": {"item_spec": "coal", "quantity": 1}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "tea_brewer",
+                      "state_updates": {"phase": "brewing"}
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "target_object": "tea_brewer",
+                      "state_key": "started_at_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "抽出器に火を入れた。香りが立ち始めた。"}
+                  }
+                ]
+              },
+              {
+                "action_name": "collect_tea",
+                "display_label": "茶を取り出す",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "tea_brewer",
+                    "required_state": {"phase": "ready"},
+                    "failure_message": "まだ蒸らしが終わっていない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "tea_cup", "quantity": 1}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "tea_brewer",
+                      "state_updates": {"phase": "idle"}
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "湯気の立つ茶を取り出した。"}
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "connections": [],
+  "players": [
+    {"id": "player_a", "name": "薬草師見習い", "spawn_spot": "greenhouse", "initial_items": ["coal", "coal"]}
+  ],
+  "game_end_conditions": {
+    "win": [],
+    "lose": [{"type": "TICK_LIMIT", "tick_limit": 80}]
+  },
+  "initial_flags": [],
+  "scenario_events": [],
+  "reactive_bindings": {
+    "objects": [
+      {
+        "target": "herb_planter",
+        "predicate": {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "herb_planter",
+          "state_key": "last_harvest_tick",
+          "ticks_offset": 6,
+          "treat_missing_as_passed": true
+        },
+        "on_true_state_updates": {"available": true},
+        "on_false_state_updates": {}
+      },
+      {
+        "target": "tea_brewer",
+        "predicate": {
+          "all_of": [
+            {
+              "condition_type": "OBJECT_STATE",
+              "target_object": "tea_brewer",
+              "required_state": {"phase": "brewing"}
+            },
+            {
+              "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+              "target_object": "tea_brewer",
+              "state_key": "started_at_tick",
+              "ticks_offset": 4
+            }
+          ]
+        },
+        "on_true_state_updates": {"phase": "ready"},
+        "on_false_state_updates": {}
+      }
+    ]
+  }
+}
