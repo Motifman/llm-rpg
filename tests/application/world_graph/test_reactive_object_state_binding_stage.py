@@ -188,6 +188,65 @@ class TestReactiveObjectStateBindingStage:
         obj = interior_repo.find_by_spot_id(SpotId.create(1)).objects[0]
         assert obj.state == {"available": True, "color": "red", "size": 3}
 
+    def test_asymmetric_one_way_write_only_when_predicate_true(self) -> None:
+        """on_false_state_updates=() の binding は predicate=True のときだけ state を書き、False では何もしない。
+
+        Phase 2-B: 一方向 lifecycle（例: 「条件成立で phase=ready に推移、
+        不成立では phase は触らず作家管理に任せる」）の主要ユースケース。
+        """
+        repo, interior_repo, flags, evaluator = _build_world_with_object(
+            {"phase": "smelting"}
+        )
+        binding = ReactiveObjectStateBinding(
+            target_object_id=SpotObjectId.create(7),
+            predicate=ScenarioEventCondition(condition_type="FLAG_SET", flag_name="ready_signal"),
+            on_true_state_updates=(("phase", "ready"),),
+            on_false_state_updates=(),  # 触らない
+        )
+        stage = ReactiveObjectStateBindingStageService(
+            bindings=(binding,),
+            spot_graph_repository=repo,
+            spot_interior_repository=interior_repo,
+            condition_evaluator=evaluator,
+        )
+        # predicate False: phase は smelting のまま
+        stage.run(WorldTick(1))
+        assert interior_repo.find_by_spot_id(SpotId.create(1)).objects[0].state["phase"] == "smelting"
+        # predicate True に変える
+        flags.add("ready_signal")
+        stage.run(WorldTick(2))
+        assert interior_repo.find_by_spot_id(SpotId.create(1)).objects[0].state["phase"] == "ready"
+
+    def test_asymmetric_no_save_when_updates_empty(self) -> None:
+        """空辞書 updates_for は save をトリガーしない（spurious write を避ける）。"""
+        repo, interior_repo, flags, evaluator = _build_world_with_object(
+            {"phase": "smelting"}
+        )
+        save_count = {"n": 0}
+        original_save = interior_repo.save
+
+        def counting_save(sid, interior):
+            save_count["n"] += 1
+            return original_save(sid, interior)
+
+        interior_repo.save = counting_save  # type: ignore[assignment]
+
+        binding = ReactiveObjectStateBinding(
+            target_object_id=SpotObjectId.create(7),
+            predicate=ScenarioEventCondition(condition_type="FLAG_SET", flag_name="x"),
+            on_true_state_updates=(("phase", "ready"),),
+            on_false_state_updates=(),  # False 時は触らない
+        )
+        stage = ReactiveObjectStateBindingStageService(
+            bindings=(binding,),
+            spot_graph_repository=repo,
+            spot_interior_repository=interior_repo,
+            condition_evaluator=evaluator,
+        )
+        # predicate False (flag が立っていない) → 触らないので save 0 回
+        stage.run(WorldTick(1))
+        assert save_count["n"] == 0
+
     def test_missing_target_object_logs_warning_and_continues(self, caplog) -> None:
         """対象 object が見つからない binding は警告ログを出して他に影響しない。"""
         repo, interior_repo, _, evaluator = _build_world_with_object({"available": False})
