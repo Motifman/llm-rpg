@@ -38,7 +38,7 @@ class ConnectionStateChangedEvent(BaseDomainEvent[SpotGraphId, str]):
     connection_id: ConnectionId
     from_spot_id: SpotId
     to_spot_id: SpotId
-    is_passable: bool
+    traversable: bool
 
 
 @dataclass(frozen=True)

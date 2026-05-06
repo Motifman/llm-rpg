@@ -16,7 +16,6 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
     ConnectionNotPassableException,
-    ConnectionPassageMissingException,
     DuplicateConnectionIdException,
     DuplicateSpotException,
     EntityNotAtSpotException,
@@ -92,7 +91,7 @@ class SpotGraphAggregate(AggregateRoot):
         out: List[SpotId] = []
         for cid in self._outgoing.get(spot_id, []):
             c = self._connections_by_id[cid]
-            if c.is_passable:
+            if c.passage.traversable:
                 out.append(c.to_spot_id)
         return out
 
@@ -102,7 +101,7 @@ class SpotGraphAggregate(AggregateRoot):
         """from から出る有向エッジのうち、先が to かつ通行可能な最初の接続。無ければ None。"""
         for cid in self._outgoing.get(from_spot_id, []):
             c = self._connections_by_id[cid]
-            if c.to_spot_id == to_spot_id and c.is_passable:
+            if c.to_spot_id == to_spot_id and c.passage.traversable:
                 return c
         return None
 
@@ -264,37 +263,18 @@ class SpotGraphAggregate(AggregateRoot):
             )
         )
 
-    def set_connection_passable(self, connection_id: ConnectionId, passable: bool) -> None:
-        conn = self.get_connection(connection_id)
-        if conn.is_passable == passable:
-            return
-        new_conn = replace(conn, is_passable=passable)
-        self._connections_by_id[connection_id] = new_conn
-        self.add_event(
-            ConnectionStateChangedEvent.create(
-                aggregate_id=self._graph_id,
-                aggregate_type="SpotGraphAggregate",
-                connection_id=connection_id,
-                from_spot_id=conn.from_spot_id,
-                to_spot_id=conn.to_spot_id,
-                is_passable=passable,
-            )
-        )
-
     def set_connection_passage(
         self, connection_id: ConnectionId, new_passage: Passage
     ) -> None:
         """接続の Passage を新しい値に置換する。
 
-        is_passable / sound_permeability は SpotConnection.__post_init__ で
-        passage から自動同期される。通行可否が変化した場合は
-        ConnectionStateChangedEvent も発火する。
+        通行可否が変化した場合は ConnectionStateChangedEvent も発火する。
         """
         conn = self.get_connection(connection_id)
-        prev_passable = conn.is_passable
+        prev_traversable = conn.passage.traversable
         new_conn = replace(conn, passage=new_passage)
         self._connections_by_id[connection_id] = new_conn
-        if new_conn.is_passable != prev_passable:
+        if new_conn.passage.traversable != prev_traversable:
             self.add_event(
                 ConnectionStateChangedEvent.create(
                     aggregate_id=self._graph_id,
@@ -302,7 +282,7 @@ class SpotGraphAggregate(AggregateRoot):
                     connection_id=connection_id,
                     from_spot_id=conn.from_spot_id,
                     to_spot_id=conn.to_spot_id,
-                    is_passable=new_conn.is_passable,
+                    traversable=new_conn.passage.traversable,
                 )
             )
 
@@ -314,17 +294,8 @@ class SpotGraphAggregate(AggregateRoot):
         traversable_override: Optional[bool] = None,
         sound_permeability_override: Optional[float] = None,
     ) -> None:
-        """既存の Passage と同じ kind を維持したまま状態だけ遷移させる。
-
-        対象接続に passage が設定されていない場合は LegacyConnection 相当として
-        ConnectionPassageMissingException を投げる（passage を持たない接続には
-        遷移という概念が定義できないため）。
-        """
+        """既存の Passage と同じ kind を維持したまま状態だけ遷移させる。"""
         conn = self.get_connection(connection_id)
-        if conn.passage is None:
-            raise ConnectionPassageMissingException(
-                f"Connection {connection_id.value} has no passage; cannot transition state"
-            )
         new_passage = conn.passage.with_state(
             new_state,
             traversable=traversable_override,

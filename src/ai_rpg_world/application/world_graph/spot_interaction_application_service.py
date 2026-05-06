@@ -102,9 +102,6 @@ class SpotInteractionApplicationService:
         new_interior = result.new_interior
         self._spot_interior_repository.save(spot_id, new_interior)
 
-        for cid, is_passable in result.connection_passability_updates:
-            graph.set_connection_passable(cid, is_passable)
-
         for spec in result.passage_state_updates:
             graph.set_connection_passage_state(
                 ConnectionId.create(spec.connection_id),
@@ -143,7 +140,7 @@ class SpotInteractionApplicationService:
                 description=spec.description,
                 travel_ticks=spec.travel_ticks,
                 is_bidirectional=spec.is_bidirectional,
-                sound_permeability=spec.sound_permeability,
+                passage=spec.passage,
             )
             rev_id = ConnectionId.create(new_cid.value + 1) if spec.is_bidirectional else None
             graph.add_connection_dynamic(new_conn, reverse_connection_id=rev_id)

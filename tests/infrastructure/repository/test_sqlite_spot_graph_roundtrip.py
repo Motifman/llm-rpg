@@ -14,9 +14,11 @@ from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnectio
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_node import SpotNode
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
+from ai_rpg_world.domain.world_graph.enum.passage_kind import DoorStateEnum, WallStateEnum
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import SpotNotInGraphException
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
+from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
@@ -98,7 +100,7 @@ def _parallel_edge_graph() -> SpotGraphAggregate:
             description="oneway",
             travel_ticks=1,
             is_bidirectional=False,
-            is_passable=False,
+            passage=Passage.door(DoorStateEnum.LOCKED),
         )
     )
     g.add_connection(
@@ -155,9 +157,6 @@ def test_sqlite_roundtrip_bidirectional() -> None:
 
 def test_sqlite_roundtrip_preserves_passage_field() -> None:
     """SpotConnection.passage が SQLite ラウンドトリップで保持される。"""
-    from ai_rpg_world.domain.world_graph.enum.passage_kind import WallStateEnum
-    from ai_rpg_world.domain.world_graph.value_object.passage import Passage
-
     g = SpotGraphAggregate.empty(SpotGraphId.create(99))
     g.add_spot(_node(1))
     g.add_spot(_node(2))
@@ -180,11 +179,10 @@ def test_sqlite_roundtrip_preserves_passage_field() -> None:
     seed_spot_graph_to_sqlite(conn, g, None)
     loaded = SqliteSpotGraphRepository.for_standalone_connection(conn).find_graph()
     loaded_conn = loaded.get_connection(ConnectionId.create(7))
-    assert loaded_conn.passage is not None
     assert loaded_conn.passage.kind.value == "WALL"
     assert loaded_conn.passage.state == "CRACKED"
-    assert loaded_conn.is_passable is False
-    assert loaded_conn.sound_permeability == pytest.approx(0.4)
+    assert loaded_conn.passage.traversable is False
+    assert loaded_conn.passage.sound_permeability == pytest.approx(0.4)
 
 
 def test_sqlite_roundtrip_parallel_edges_preserves_pairing() -> None:
@@ -324,8 +322,12 @@ def test_loads_spot_graph_aggregate_rejects_broken_bidirectional_record() -> Non
                     "travel_ticks": 1,
                     "is_bidirectional": True,
                     "passage_conditions": [],
-                    "sound_permeability": 1.0,
-                    "is_passable": True,
+                    "passage": {
+                        "kind": "OPEN",
+                        "state": "OPEN",
+                        "traversable": True,
+                        "sound_permeability": 1.0,
+                    },
                 },
             }
         ],

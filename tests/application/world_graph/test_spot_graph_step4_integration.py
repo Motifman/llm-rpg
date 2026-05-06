@@ -40,6 +40,8 @@ from ai_rpg_world.infrastructure.repository.in_memory_player_inventory_repositor
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
     InMemoryPlayerStatusRepository,
 )
+from ai_rpg_world.domain.world_graph.enum.passage_kind import DoorStateEnum
+from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import InMemorySpotGraphRepository
 from ai_rpg_world.infrastructure.repository.in_memory_spot_interior_repository import (
     InMemorySpotInteriorRepository,
@@ -70,7 +72,7 @@ def _graph_with_locked_connection() -> SpotGraphAggregate:
             description="",
             travel_ticks=1,
             is_bidirectional=False,
-            is_passable=False,
+            passage=Passage.door(DoorStateEnum.LOCKED),
         )
     )
     g.place_entity(EntityId.create(1), SpotId.create(1))
@@ -96,8 +98,8 @@ def _switch_interior() -> SpotInterior:
                         parameters={"flag_name": "power_on"},
                     ),
                     InteractionEffect(
-                        effect_type=InteractionEffectTypeEnum.CHANGE_CONNECTION_STATE,
-                        parameters={"connection_id": 5, "is_passable": True},
+                        effect_type=InteractionEffectTypeEnum.CHANGE_PASSAGE_STATE,
+                        parameters={"connection_id": 5, "new_state": "OPEN"},
                     ),
                 ),
             ),
@@ -144,7 +146,7 @@ def test_interaction_sets_flag_and_unlocks_connection() -> None:
 
     r = svc.execute_interaction(PlayerId(1), SpotObjectId.create(2), "use")
     assert "power_on" in flags.as_frozen_set()
-    assert graph_repo.find_graph().get_connection(ConnectionId.create(5)).is_passable is True
+    assert graph_repo.find_graph().get_connection(ConnectionId.create(5)).passage.traversable is True
     assert r.messages == ()
 
 

@@ -100,7 +100,7 @@ def _minimal_scenario() -> dict:
                         "failure_message": "鍵が必要です",
                     }
                 ],
-                "initially_passable": False,
+                "passage": {"kind": "DOOR", "state": "LOCKED"},
             }
         ],
         "players": [
@@ -169,7 +169,7 @@ class TestScenarioLoaderMinimal:
         for conn in result.graph.all_connections():
             if conn.name == "扉":
                 assert len(conn.passage_conditions) == 1
-                assert conn.is_passable is False
+                assert conn.passage.traversable is False
                 break
         else:
             pytest.fail("Connection '扉' not found")
@@ -252,7 +252,7 @@ class TestScenarioLoaderHospital:
             assert node.spot_id in result.interiors
 
     def test_locked_connections_exist(self, result) -> None:
-        locked = [c for c in result.graph.all_connections() if not c.is_passable]
+        locked = [c for c in result.graph.all_connections() if not c.passage.traversable]
         assert any(c.name == "裏口への通路" for c in locked)
 
     def test_items_count(self, result) -> None:
@@ -323,8 +323,8 @@ class TestScenarioLoaderPassageBlock:
         wall_conn = next(
             c for c in result.graph.all_connections() if c.name == "教室間の壁"
         )
-        assert wall_conn.is_passable is False
-        assert wall_conn.sound_permeability == pytest.approx(0.1)
+        assert wall_conn.passage.traversable is False
+        assert wall_conn.passage.sound_permeability == pytest.approx(0.1)
         assert wall_conn.passage is not None
         assert wall_conn.passage.kind.value == "WALL"
         assert wall_conn.passage.state == "INTACT"
@@ -334,8 +334,8 @@ class TestScenarioLoaderPassageBlock:
         scn = self._scenario_with_passage({"kind": "DOOR", "state": "OPEN"})
         result = ScenarioLoader().load_from_dict(scn)
         conn = next(c for c in result.graph.all_connections() if c.name == "教室間の壁")
-        assert conn.is_passable is True
-        assert conn.sound_permeability == pytest.approx(1.0)
+        assert conn.passage.traversable is True
+        assert conn.passage.sound_permeability == pytest.approx(1.0)
 
     def test_passage_overrides_apply(self) -> None:
         """passage の sound_permeability override が反映される。"""
@@ -344,14 +344,16 @@ class TestScenarioLoaderPassageBlock:
         )
         result = ScenarioLoader().load_from_dict(scn)
         conn = next(c for c in result.graph.all_connections() if c.name == "教室間の壁")
-        assert conn.sound_permeability == pytest.approx(0.25)
+        assert conn.passage.sound_permeability == pytest.approx(0.25)
 
-    def test_unknown_kind_raises_load_error(self) -> None:
-        """未知の passage.kind は ScenarioLoadError になる。"""
-        from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadError
+    def test_unknown_kind_raises_validation(self) -> None:
+        """未知の passage.kind は PassageValidationException になる。"""
+        from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+            PassageValidationException,
+        )
 
         scn = self._scenario_with_passage({"kind": "MAGICAL_VOID"})
-        with pytest.raises(ScenarioLoadError, match="passage.kind"):
+        with pytest.raises(PassageValidationException, match="passage.kind"):
             ScenarioLoader().load_from_dict(scn)
 
     def test_open_traversable_override_via_scenario(self) -> None:
@@ -361,11 +363,13 @@ class TestScenarioLoaderPassageBlock:
         )
         result = ScenarioLoader().load_from_dict(scn)
         conn = next(c for c in result.graph.all_connections() if c.name == "教室間の壁")
-        assert conn.is_passable is False
-        assert conn.sound_permeability == pytest.approx(0.5)
+        assert conn.passage.traversable is False
+        assert conn.passage.sound_permeability == pytest.approx(0.5)
 
-    def test_passage_takes_precedence_over_legacy_fields(self) -> None:
-        """passage と initially_passable/sound_permeability が両方あれば passage が優先される。"""
+    def test_legacy_initially_passable_key_is_rejected(self) -> None:
+        """旧スキーマの `initially_passable` キーが残っていれば作家エラーになる。"""
+        from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadError
+
         scn = _minimal_scenario()
         scn["connections"] = [
             {
@@ -375,13 +379,29 @@ class TestScenarioLoaderPassageBlock:
                 "name": "教室間の壁",
                 "travel_ticks": 1,
                 "is_bidirectional": True,
-                "initially_passable": True,        # passage に上書きされる想定
-                "sound_permeability": 0.99,        # passage に上書きされる想定
-                "passage": {"kind": "WALL", "state": "INTACT"},
+                "initially_passable": True,
+                "passage": {"kind": "OPEN"},
             }
         ]
-        result = ScenarioLoader().load_from_dict(scn)
-        conn = next(c for c in result.graph.all_connections() if c.name == "教室間の壁")
-        # passage = WALL/INTACT のデフォルトで上書きされる
-        assert conn.is_passable is False
-        assert conn.sound_permeability == pytest.approx(0.1)
+        with pytest.raises(ScenarioLoadError, match="initially_passable"):
+            ScenarioLoader().load_from_dict(scn)
+
+    def test_legacy_sound_permeability_top_level_key_is_rejected(self) -> None:
+        """旧スキーマの接続レベル `sound_permeability` キーが残っていれば作家エラーになる。"""
+        from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadError
+
+        scn = _minimal_scenario()
+        scn["connections"] = [
+            {
+                "id": "a_b_wall",
+                "from": "room_a",
+                "to": "room_b",
+                "name": "教室間の壁",
+                "travel_ticks": 1,
+                "is_bidirectional": True,
+                "sound_permeability": 0.5,
+                "passage": {"kind": "OPEN"},
+            }
+        ]
+        with pytest.raises(ScenarioLoadError, match="sound_permeability"):
+            ScenarioLoader().load_from_dict(scn)

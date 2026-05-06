@@ -4,10 +4,10 @@
 （壁なら INTACT/CRACKED/BROKEN 等）を保持し、そこから派生して
 「通行可否」と「音透過率」を表現する。
 
-`SpotConnection.is_passable` / `sound_permeability` の値はこの
-`Passage` から導出される（`SpotConnection` 側でフィールド同期）。
-シナリオ側は `passage` ブロックを宣言することで、レバー一つない壁
-・施錠扉・崖などを統一的に表現できる。
+`SpotConnection` には `passage: Passage` フィールドが必須で、通行可否・
+音透過率を読みたいコードは `conn.passage.traversable` /
+`conn.passage.sound_permeability` を直接参照する。シナリオ側は
+`passage` ブロックを宣言することで、壁・施錠扉・崖などを統一的に表現できる。
 """
 
 from __future__ import annotations
@@ -113,10 +113,12 @@ class Passage:
     ) -> "Passage":
         """開口部（既定で常に通行可）を生成する。
 
-        OPEN は意味的に「常に通行可」を表すため、`traversable=False` を指定する
-        ような使い方は避け、通行不可にしたい場合は `BARRIER` または `WALL` を
-        使うこと。ただし完全に弾くと既存の override パターンと矛盾するため、
-        引数自体は受け取り、警告ではなくシナリオ側責任とする。
+        OPEN は意味的に「常に通り抜けられる構造的な開口部（廊下・出入口）」
+        を表す。「通行不可」「閉じている」「壊せる」など状態を持つ接続を
+        作る場合は `wall` / `door` / `barrier` を使うのが正しい設計。
+        本ファクトリは override パターンの一貫性のため traversable 引数を
+        受け取るが、`Passage.open(traversable=False)` のような呼び出しは
+        kind の意味と矛盾するため避けること（必要なら `barrier` を使う）。
         """
         default_t, default_s = _default_for(PassageKindEnum.OPEN, OpenStateEnum.OPEN.value)
         return cls(
@@ -178,6 +180,64 @@ class Passage:
             traversable=default_t if traversable is None else traversable,
             sound_permeability=default_s if sound_permeability is None else sound_permeability,
         )
+
+    # ---- parsing -----------------------------------------------------
+
+    @classmethod
+    def from_dict(cls, raw: Optional[dict]) -> "Passage":
+        """辞書（シナリオJSON / interaction parameters）から Passage を構築する。
+
+        スキーマ:
+            {"kind": "WALL", "state": "INTACT",
+             "sound_permeability": 0.2, "traversable": false}
+
+        kind が無いか raw が None なら OPEN を返す（暗黙のデフォルト）。
+        traversable / sound_permeability は kind+state のデフォルトを上書き。
+        """
+        if not raw:
+            return cls.open()
+        kind_str = raw.get("kind")
+        if kind_str is None:
+            return cls.open()
+        try:
+            kind = PassageKindEnum(kind_str)
+        except ValueError as exc:
+            raise PassageValidationException(
+                f"Unknown passage.kind: {kind_str}"
+            ) from exc
+
+        traversable_override = raw.get("traversable")
+        sound_override = raw.get("sound_permeability")
+        sound_value: Optional[float] = (
+            float(sound_override) if sound_override is not None else None
+        )
+        if kind is PassageKindEnum.OPEN:
+            return cls.open(
+                traversable=traversable_override,
+                sound_permeability=sound_value,
+            )
+        if kind is PassageKindEnum.WALL:
+            state = WallStateEnum(raw.get("state", WallStateEnum.INTACT.value))
+            return cls.wall(
+                state,
+                traversable=traversable_override,
+                sound_permeability=sound_value,
+            )
+        if kind is PassageKindEnum.DOOR:
+            state = DoorStateEnum(raw.get("state", DoorStateEnum.CLOSED.value))
+            return cls.door(
+                state,
+                traversable=traversable_override,
+                sound_permeability=sound_value,
+            )
+        if kind is PassageKindEnum.BARRIER:
+            state = BarrierStateEnum(raw.get("state", BarrierStateEnum.ACTIVE.value))
+            return cls.barrier(
+                state,
+                traversable=traversable_override,
+                sound_permeability=sound_value,
+            )
+        raise PassageValidationException(f"Unhandled passage kind: {kind}")
 
     # ---- transitions -------------------------------------------------
 

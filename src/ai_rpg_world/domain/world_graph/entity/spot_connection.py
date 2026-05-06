@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List
 
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
@@ -16,17 +16,12 @@ from ai_rpg_world.domain.world_graph.value_object.passage_condition import Passa
 class SpotConnection:
     """スポット間の接続（有向エッジ）。
 
-    通行可否と音透過率は次の優先順位で決まる:
-    1. `passage` が指定されていれば、`is_passable` / `sound_permeability`
-       は passage の値で **常に上書きされる**（コンストラクタに直接
-       渡された値があってもサイレントに無視される）。これは passage が
-       接続の単一の真実情報源 (single source of truth) であることを
-       明示するため。
-    2. `passage` が None の場合のみ、レガシーフィールド
-       `is_passable` / `sound_permeability` を直接保持する。
+    通行可否と音透過率は `passage` （Passage 値オブジェクト）から決まる。
+    `passage` は接続の構造的な状態（壁/扉/開口/障壁）と現在の状態文字列を
+    保持し、そこから traversable と sound_permeability が定まる。
 
-    新規シナリオは passage を使うこと。レガシーフィールドは旧データの
-    後方互換のために残してある。
+    通行可否を読みたいコードは `conn.passage.traversable`、
+    音透過率は `conn.passage.sound_permeability` を直接参照すること。
     """
 
     connection_id: ConnectionId
@@ -37,21 +32,10 @@ class SpotConnection:
     travel_ticks: int
     is_bidirectional: bool
     passage_conditions: List[PassageCondition] = field(default_factory=list)
-    sound_permeability: float = 1.0
-    is_passable: bool = True
-    passage: Optional[Passage] = None
+    passage: Passage = field(default_factory=Passage.open)
 
     def __post_init__(self) -> None:
         if self.travel_ticks < 0:
             raise SpotConnectionValidationException(
                 f"travel_ticks must be non-negative: {self.travel_ticks}"
             )
-        if not (0.0 <= self.sound_permeability <= 1.0):
-            raise SpotConnectionValidationException(
-                f"sound_permeability must be between 0.0 and 1.0: {self.sound_permeability}"
-            )
-        if self.passage is not None:
-            # passage がある場合は is_passable / sound_permeability を同期する。
-            # frozen dataclass なので object.__setattr__ で上書き。
-            object.__setattr__(self, "is_passable", self.passage.traversable)
-            object.__setattr__(self, "sound_permeability", self.passage.sound_permeability)
