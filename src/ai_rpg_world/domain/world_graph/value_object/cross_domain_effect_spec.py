@@ -7,8 +7,10 @@ application 層が PlayerStatusAggregate 等へ適用する。
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
+
+from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 
 
 @dataclass(frozen=True)
@@ -46,7 +48,7 @@ class CreateConnectionSpec:
     description: str = ""
     travel_ticks: int = 1
     is_bidirectional: bool = False
-    sound_permeability: float = 1.0
+    passage: Passage = field(default_factory=Passage.open)
 
 
 @dataclass(frozen=True)

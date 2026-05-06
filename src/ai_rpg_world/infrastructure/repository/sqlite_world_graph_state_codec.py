@@ -240,7 +240,7 @@ def _spot_atmosphere_from_dict(d: dict[str, Any]) -> SpotAtmosphere:
 
 
 def _spot_connection_to_dict(conn: SpotConnection) -> dict[str, Any]:
-    out: dict[str, Any] = {
+    return {
         "connection_id": int(conn.connection_id.value),
         "from_spot_id": int(conn.from_spot_id.value),
         "to_spot_id": int(conn.to_spot_id.value),
@@ -249,18 +249,12 @@ def _spot_connection_to_dict(conn: SpotConnection) -> dict[str, Any]:
         "travel_ticks": conn.travel_ticks,
         "is_bidirectional": conn.is_bidirectional,
         "passage_conditions": [_passage_condition_to_dict(p) for p in conn.passage_conditions],
-        "sound_permeability": conn.sound_permeability,
-        "is_passable": conn.is_passable,
+        "passage": _passage_to_dict(conn.passage),
     }
-    if conn.passage is not None:
-        out["passage"] = _passage_to_dict(conn.passage)
-    return out
 
 
 def _spot_connection_from_dict(d: dict[str, Any]) -> SpotConnection:
-    passage_raw = d.get("passage")
-    passage = _passage_from_dict(passage_raw) if passage_raw else None
-    kwargs: dict[str, Any] = dict(
+    return SpotConnection(
         connection_id=ConnectionId.create(int(d["connection_id"])),
         from_spot_id=SpotId.create(int(d["from_spot_id"])),
         to_spot_id=SpotId.create(int(d["to_spot_id"])),
@@ -269,13 +263,8 @@ def _spot_connection_from_dict(d: dict[str, Any]) -> SpotConnection:
         travel_ticks=int(d["travel_ticks"]),
         is_bidirectional=bool(d["is_bidirectional"]),
         passage_conditions=[_passage_condition_from_dict(x) for x in d.get("passage_conditions", [])],
+        passage=_passage_from_dict(d["passage"]),
     )
-    if passage is not None:
-        kwargs["passage"] = passage
-    else:
-        kwargs["sound_permeability"] = float(d.get("sound_permeability", 1.0))
-        kwargs["is_passable"] = bool(d["is_passable"])
-    return SpotConnection(**kwargs)
 
 
 def _passage_to_dict(passage: Passage) -> dict[str, Any]:

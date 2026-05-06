@@ -132,8 +132,3 @@ class SpotConnectionValidationException(SpotGraphDomainException, ValidationExce
     """SpotConnection エンティティのバリデーション例外"""
     error_code = "WORLD_GRAPH.SPOT_CONNECTION_VALIDATION"
 
-
-class ConnectionPassageMissingException(SpotGraphDomainException, BusinessRuleException):
-    """passage を持たない接続に対して状態遷移を要求した"""
-    error_code = "WORLD_GRAPH.CONNECTION_PASSAGE_MISSING"
-

@@ -161,14 +161,14 @@ class SpotGraphObservationFormatter:
             except Exception:
                 pass
 
-        if event.is_passable:
+        if event.traversable:
             prose = f"{conn_name}が通行可能になった。"
         else:
             prose = f"{conn_name}が通行不能になった。"
         structured = {
             "type": "connection_state_changed",
             "connection_name": conn_name,
-            "is_passable": event.is_passable,
+            "traversable": event.traversable,
         }
         return ObservationOutput(
             prose=prose,

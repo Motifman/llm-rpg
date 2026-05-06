@@ -19,7 +19,6 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     ConnectionStateChangedEvent,
 )
 from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
-    ConnectionPassageMissingException,
     PassageValidationException,
 )
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
@@ -60,16 +59,14 @@ def _graph_with_wall_connection(wall_state: WallStateEnum = WallStateEnum.INTACT
 class TestSetConnectionPassage:
     """SpotGraphAggregate.set_connection_passage の挙動。"""
 
-    def test_replaces_passage_and_syncs_legacy_fields(self) -> None:
-        """passage を置換すると is_passable / sound_permeability も同期される。"""
+    def test_replaces_passage(self) -> None:
+        """passage を置換すると新しい kind+state で通行可否・音透過率が決まる。"""
         g = _graph_with_wall_connection(WallStateEnum.INTACT)
-        new_passage = Passage.wall(WallStateEnum.BROKEN)
-        g.set_connection_passage(ConnectionId.create(7), new_passage)
+        g.set_connection_passage(ConnectionId.create(7), Passage.wall(WallStateEnum.BROKEN))
         conn = g.get_connection(ConnectionId.create(7))
-        assert conn.passage is not None
         assert conn.passage.state == "BROKEN"
-        assert conn.is_passable is True
-        assert conn.sound_permeability == pytest.approx(1.0)
+        assert conn.passage.traversable is True
+        assert conn.passage.sound_permeability == pytest.approx(1.0)
 
     def test_emits_state_changed_event_when_passability_flips(self) -> None:
         """通行可否が変化したときだけ ConnectionStateChangedEvent が発火する。"""
@@ -79,7 +76,7 @@ class TestSetConnectionPassage:
         )
         events = [e for e in g.get_events() if isinstance(e, ConnectionStateChangedEvent)]
         assert len(events) == 1
-        assert events[0].is_passable is True
+        assert events[0].traversable is True
 
     def test_no_event_when_passability_unchanged(self) -> None:
         """通行可否が変わらない遷移（INTACT→CRACKED）ではイベントが出ない。"""
@@ -99,7 +96,6 @@ class TestSetConnectionPassageState:
         g = _graph_with_wall_connection(WallStateEnum.INTACT)
         g.set_connection_passage_state(ConnectionId.create(7), "BROKEN")
         conn = g.get_connection(ConnectionId.create(7))
-        assert conn.passage is not None
         assert conn.passage.kind.value == "WALL"
         assert conn.passage.state == "BROKEN"
 
@@ -112,32 +108,13 @@ class TestSetConnectionPassageState:
             sound_permeability_override=0.55,
         )
         conn = g.get_connection(ConnectionId.create(7))
-        assert conn.sound_permeability == pytest.approx(0.55)
+        assert conn.passage.sound_permeability == pytest.approx(0.55)
 
     def test_rejects_state_of_different_kind(self) -> None:
         """別 kind の state を渡すと PassageValidationException を投げる。"""
         g = _graph_with_wall_connection(WallStateEnum.INTACT)
         with pytest.raises(PassageValidationException):
             g.set_connection_passage_state(ConnectionId.create(7), "LOCKED")
-
-    def test_rejects_connection_without_passage(self) -> None:
-        """passage を持たない接続では ConnectionPassageMissingException を投げる。"""
-        g = SpotGraphAggregate.empty(SpotGraphId.create(2))
-        g.add_spot(_node(1))
-        g.add_spot(_node(2))
-        g.add_connection(
-            SpotConnection(
-                connection_id=ConnectionId.create(8),
-                from_spot_id=SpotId.create(1),
-                to_spot_id=SpotId.create(2),
-                name="legacy",
-                description="",
-                travel_ticks=1,
-                is_bidirectional=False,
-            ),
-        )
-        with pytest.raises(ConnectionPassageMissingException):
-            g.set_connection_passage_state(ConnectionId.create(8), "BROKEN")
 
     def test_door_locked_to_open_transition(self) -> None:
         """LOCKED 扉を OPEN へ遷移させると通行可になる。"""
@@ -159,6 +136,5 @@ class TestSetConnectionPassageState:
         g.clear_events()
         g.set_connection_passage_state(ConnectionId.create(9), "OPEN")
         conn = g.get_connection(ConnectionId.create(9))
-        assert conn.is_passable is True
-        assert conn.passage is not None
+        assert conn.passage.traversable is True
         assert conn.passage.state == "OPEN"

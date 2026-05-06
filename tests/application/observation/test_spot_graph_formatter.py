@@ -244,7 +244,7 @@ class TestConnectionStateChanged:
             connection_id=CONN_1,
             from_spot_id=SPOT_A,
             to_spot_id=SPOT_B,
-            is_passable=True,
+            traversable=True,
         )
         result = formatter.format(event, PLAYER_1)
         assert result is not None
@@ -260,7 +260,7 @@ class TestConnectionStateChanged:
             connection_id=CONN_1,
             from_spot_id=SPOT_A,
             to_spot_id=SPOT_B,
-            is_passable=False,
+            traversable=False,
         )
         result = formatter.format(event, PLAYER_1)
         assert result is not None

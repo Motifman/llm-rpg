@@ -62,7 +62,7 @@ class SoundPropagationService:
                 if h >= max_hops:
                     continue
                 for conn in graph.iter_outgoing_connections_from(spot):
-                    na = accum_to_spot * conn.sound_permeability
+                    na = accum_to_spot * conn.passage.sound_permeability
                     if na < _MIN_AUDIBLE_ACCUM:
                         continue
                     next_frontier.append((conn.to_spot_id, na))

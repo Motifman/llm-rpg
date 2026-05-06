@@ -179,6 +179,64 @@ class Passage:
             sound_permeability=default_s if sound_permeability is None else sound_permeability,
         )
 
+    # ---- parsing -----------------------------------------------------
+
+    @classmethod
+    def from_dict(cls, raw: Optional[dict]) -> "Passage":
+        """辞書（シナリオJSON / interaction parameters）から Passage を構築する。
+
+        スキーマ:
+            {"kind": "WALL", "state": "INTACT",
+             "sound_permeability": 0.2, "traversable": false}
+
+        kind が無いか raw が None なら OPEN を返す（暗黙のデフォルト）。
+        traversable / sound_permeability は kind+state のデフォルトを上書き。
+        """
+        if not raw:
+            return cls.open()
+        kind_str = raw.get("kind")
+        if kind_str is None:
+            return cls.open()
+        try:
+            kind = PassageKindEnum(kind_str)
+        except ValueError as exc:
+            raise PassageValidationException(
+                f"Unknown passage.kind: {kind_str}"
+            ) from exc
+
+        traversable_override = raw.get("traversable")
+        sound_override = raw.get("sound_permeability")
+        sound_value: Optional[float] = (
+            float(sound_override) if sound_override is not None else None
+        )
+        if kind is PassageKindEnum.OPEN:
+            return cls.open(
+                traversable=traversable_override,
+                sound_permeability=sound_value,
+            )
+        if kind is PassageKindEnum.WALL:
+            state = WallStateEnum(raw.get("state", WallStateEnum.INTACT.value))
+            return cls.wall(
+                state,
+                traversable=traversable_override,
+                sound_permeability=sound_value,
+            )
+        if kind is PassageKindEnum.DOOR:
+            state = DoorStateEnum(raw.get("state", DoorStateEnum.CLOSED.value))
+            return cls.door(
+                state,
+                traversable=traversable_override,
+                sound_permeability=sound_value,
+            )
+        if kind is PassageKindEnum.BARRIER:
+            state = BarrierStateEnum(raw.get("state", BarrierStateEnum.ACTIVE.value))
+            return cls.barrier(
+                state,
+                traversable=traversable_override,
+                sound_permeability=sound_value,
+            )
+        raise PassageValidationException(f"Unhandled passage kind: {kind}")
+
     # ---- transitions -------------------------------------------------
 
     def with_state(
