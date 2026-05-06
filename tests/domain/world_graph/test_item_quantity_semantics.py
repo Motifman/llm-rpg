@@ -211,8 +211,10 @@ class TestHasItemRequiredQuantity:
         assert ok is False
         assert msg == "鉱石が 3 個必要です"
 
-    def test_required_quantity_two_with_counts_none_falls_back_to_one_per_spec(self) -> None:
-        """counts=None かつ required_quantity=2 のとき、フォールバックの「各 1 個」では足りず拒否。"""
+    def test_required_quantity_two_with_counts_none_raises(self) -> None:
+        """counts=None かつ required_quantity>1 は silent wrong answer を避けるため早期 ValueError。"""
+        import pytest
+
         svc = SpotInteractionService()
         spec = ItemSpecId.create(7)
         cond = InteractionCondition(
@@ -220,13 +222,79 @@ class TestHasItemRequiredQuantity:
             target_item_spec_id=spec,
             required_quantity=2,
         )
+        with pytest.raises(ValueError, match="owned_item_spec_counts is required"):
+            svc.can_interact(
+                self._interaction(cond), _switch_obj(),
+                owned_item_spec_ids=frozenset({spec}),
+                world_flags=frozenset(),
+                # counts を渡さない
+            )
+
+    def test_required_quantity_one_with_counts_none_passes_via_frozenset_fallback(self) -> None:
+        """required_quantity=1 (default) なら counts=None でも frozenset フォールバックで OK。"""
+        svc = SpotInteractionService()
+        spec = ItemSpecId.create(7)
+        cond = InteractionCondition(
+            condition_type=InteractionConditionTypeEnum.HAS_ITEM,
+            target_item_spec_id=spec,
+            # required_quantity は default の 1
+        )
         ok, _ = svc.can_interact(
             self._interaction(cond), _switch_obj(),
             owned_item_spec_ids=frozenset({spec}),
             world_flags=frozenset(),
-            # counts を渡さない: フォールバックで {spec: 1} とみなされる
+            # counts を渡さない
         )
-        assert ok is False
+        assert ok is True
+
+
+class TestRequiredQuantityScenarioLoader:
+    """scenario_loader 側の required_quantity バリデーション。"""
+
+    def test_negative_required_quantity_rejected(self) -> None:
+        """`required_quantity: 0` は ScenarioLoadError を投げる。"""
+        import pytest
+
+        from ai_rpg_world.infrastructure.scenario.scenario_loader import (
+            ScenarioLoader, ScenarioLoadError,
+        )
+
+        scenario = {
+            "scenario_format_version": "1.0",
+            "metadata": {
+                "id": "x", "title": "x", "description": "x",
+                "theme": "x", "difficulty": "easy", "estimated_ticks": 1, "author": "x", "tags": [],
+            },
+            "item_specs": [
+                {"id": "ore", "name": "鉱石", "description": "d", "category": "MATERIAL"},
+            ],
+            "environment": {
+                "weather": {"enabled": False, "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+                            "update_interval_ticks": 100, "announce_changes": False},
+            },
+            "spots": [{
+                "id": "s", "name": "S", "description": "d", "category": "OTHER",
+                "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+                "interior": {"objects": [{
+                    "id": "o", "name": "O", "description": "d", "object_type": "OTHER",
+                    "state": {},
+                    "interactions": [{
+                        "action_name": "x", "display_label": "X",
+                        "preconditions": [{
+                            "condition_type": "HAS_ITEM",
+                            "required_item": "ore",
+                            "required_quantity": 0,  # 不正
+                        }],
+                        "effects": [],
+                    }],
+                }]},
+            }],
+            "connections": [],
+            "players": [{"id": "p", "name": "P", "spawn_spot": "s", "initial_items": []}],
+            "game_end_conditions": {"win": [], "lose": []},
+        }
+        with pytest.raises(ScenarioLoadError, match="required_quantity"):
+            ScenarioLoader().load_from_dict(scenario)
 
 
 class TestHasItemsRequiredQuantity:
