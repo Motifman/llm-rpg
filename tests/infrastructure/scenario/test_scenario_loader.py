@@ -386,6 +386,39 @@ class TestScenarioLoaderPassageBlock:
         with pytest.raises(ScenarioLoadError, match="initially_passable"):
             ScenarioLoader().load_from_dict(scn)
 
+    def test_change_passage_state_new_state_is_preserved(self) -> None:
+        """CHANGE_PASSAGE_STATE の new_state パラメータは state_updates に正規化されない（regression）。
+
+        以前 _parse_interaction_effect が無条件に new_state→state_updates と
+        書き換えていたため、CHANGE_PASSAGE_STATE 等で new_state が消える
+        既存バグがあった。CHANGE_OBJECT_STATE 限定にしたことで保たれる
+        ことを固定する。
+        """
+        scn = _minimal_scenario()
+        scn["spots"][0]["interior"]["objects"][0]["interactions"] = [
+            {
+                "action_name": "open_gate",
+                "display_label": "ゲートを開ける",
+                "preconditions": [{"condition_type": "ALWAYS"}],
+                "effects": [
+                    {
+                        "effect_type": "CHANGE_PASSAGE_STATE",
+                        "parameters": {"target_connection": "a_to_b", "new_state": "OPEN"},
+                    }
+                ],
+            }
+        ]
+        result = ScenarioLoader().load_from_dict(scn)
+        for sid, interior in result.interiors.items():
+            for obj in interior.objects:
+                for idef in obj.interactions:
+                    if idef.action_name == "open_gate":
+                        params = idef.effects[0].parameters
+                        assert params.get("new_state") == "OPEN"
+                        assert "state_updates" not in params
+                        return
+        pytest.fail("open_gate interaction not found")
+
     def test_legacy_sound_permeability_top_level_key_is_rejected(self) -> None:
         """旧スキーマの接続レベル `sound_permeability` キーが残っていれば作家エラーになる。"""
         from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoadError

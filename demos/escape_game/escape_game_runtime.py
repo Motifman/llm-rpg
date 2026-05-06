@@ -67,6 +67,12 @@ from ai_rpg_world.application.world_graph.reactive_passage_binding_stage_service
 from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
     ScenarioConditionEvaluator,
 )
+from ai_rpg_world.application.world_graph.synchronized_action_registry import (
+    SynchronizedActionRegistry,
+)
+from ai_rpg_world.application.world_graph.synchronized_action_resolver_stage_service import (
+    SynchronizedActionResolverStageService,
+)
 from ai_rpg_world.application.world_graph.spot_graph_scenario_event_stage_service import (
     SpotGraphScenarioEventStageService,
 )
@@ -946,6 +952,14 @@ def create_escape_game_runtime(
         spot_graph_repository=spot_graph_repo,
         condition_evaluator=condition_evaluator,
     )
+    sync_action_registry = SynchronizedActionRegistry(world_flag_state)
+    sync_resolver_stage = SynchronizedActionResolverStageService(
+        groups=scenario.synchronized_action_groups,
+        registry=sync_action_registry,
+        spot_graph_repository=spot_graph_repo,
+        spot_interior_repository=spot_interior_repo,
+        world_flag_state=world_flag_state,
+    )
     environment_stage = SpotGraphEnvironmentStageService(
         weather_state_provider=lambda: weather_holder["state"],
         weather_state_setter=lambda s: weather_holder.__setitem__("state", s),
@@ -968,6 +982,7 @@ def create_escape_game_runtime(
         travel_stage=travel_stage,
         scenario_event_stage=scenario_event_stage,
         reactive_binding_stage=reactive_binding_stage,
+        sync_action_resolver_stage=sync_resolver_stage,
         environment_stage=environment_stage,
         llm_turn_trigger=sim_llm_trigger,
     )
