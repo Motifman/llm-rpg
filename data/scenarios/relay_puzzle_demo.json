@@ -1,0 +1,102 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "relay_puzzle_demo",
+    "title": "役割分担リレー — 最小デモ",
+    "description": "プレイヤー A が制御室の電源スイッチを ON にしている間だけ、廊下の奥の鍵付き扉が開く。A が離れた瞬間に扉は再ロックされる。B はその間に金庫室まで到達せよ。",
+    "theme": "co-op",
+    "difficulty": "easy",
+    "estimated_ticks": 30,
+    "author": "demo",
+    "tags": ["co-op", "relay", "reactive_binding"]
+  },
+  "item_specs": [],
+  "environment": {
+    "weather": {
+      "enabled": false,
+      "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+      "update_interval_ticks": 100,
+      "announce_changes": false
+    }
+  },
+  "spots": [
+    {
+      "id": "control_room",
+      "name": "制御室",
+      "description": "金庫扉を制御する操作盤がある狭い部屋。電源を入れている間、奥の扉のロックが外れる。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+      "interior": {"objects": []}
+    },
+    {
+      "id": "corridor",
+      "name": "中央廊下",
+      "description": "制御室と金庫室を繋ぐ廊下。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+      "interior": {"objects": []}
+    },
+    {
+      "id": "vault",
+      "name": "金庫室",
+      "description": "重厚な扉の奥にある秘密の部屋。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "BRIGHT", "temperature": "NORMAL"},
+      "interior": {"objects": []}
+    }
+  ],
+  "connections": [
+    {
+      "id": "control_to_corridor",
+      "from": "control_room",
+      "to": "corridor",
+      "name": "制御室の扉",
+      "description": "制御室と廊下を繋ぐ常時開放の扉。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {"kind": "OPEN"}
+    },
+    {
+      "id": "corridor_to_vault",
+      "from": "corridor",
+      "to": "vault",
+      "name": "金庫扉",
+      "description": "電子ロック付きの分厚い扉。制御室から電源が入っている間だけ開く。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {"kind": "DOOR", "state": "LOCKED", "sound_permeability": 0.3}
+    }
+  ],
+  "players": [
+    {"id": "player_a", "name": "A（オペレーター）", "spawn_spot": "control_room", "initial_items": []},
+    {"id": "player_b", "name": "B（侵入者）", "spawn_spot": "corridor", "initial_items": []}
+  ],
+  "game_end_conditions": {
+    "win": [{"type": "ALL_AT_SPOT", "target_spot": "vault"}],
+    "lose": [{"type": "TICK_LIMIT", "tick_limit": 50}]
+  },
+  "initial_flags": [],
+  "scenario_events": [],
+  "reactive_bindings": {
+    "passages": [
+      {
+        "target": "corridor_to_vault",
+        "predicate": {
+          "condition_type": "PLAYER_AT_SPOT",
+          "target_spot": "control_room"
+        },
+        "on_true_state": "OPEN",
+        "on_false_state": "LOCKED"
+      },
+      {
+        "target": "corridor_to_vault__reverse",
+        "predicate": {
+          "condition_type": "PLAYER_AT_SPOT",
+          "target_spot": "control_room"
+        },
+        "on_true_state": "OPEN",
+        "on_false_state": "LOCKED"
+      }
+    ]
+  }
+}
