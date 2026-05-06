@@ -7,11 +7,15 @@ scenario_event の発火条件と reactive binding の predicate の両方で
 
 from __future__ import annotations
 
+import logging
 from typing import Callable, Optional
 
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
 )
+
+
+_logger = logging.getLogger(__name__)
 from ai_rpg_world.application.world_graph.spot_object_lookup import find_object_in_graph
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.common.value_object import WorldTick
@@ -23,6 +27,7 @@ from ai_rpg_world.domain.player.repository.player_status_repository import (
     PlayerStatusRepository,
 )
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world.value_object.weather_state import WeatherState
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
     SpotGraphAggregate,
 )
@@ -50,7 +55,7 @@ class ScenarioConditionEvaluator:
         player_status_repository: PlayerStatusRepository,
         player_inventory_repository: PlayerInventoryRepository,
         item_repository: ItemRepository,
-        weather_state_provider: Optional[Callable[[], object]] = None,
+        weather_state_provider: Optional[Callable[[], WeatherState]] = None,
     ) -> None:
         self._world_flag_state = world_flag_state
         self._spot_interior_repository = spot_interior_repository
@@ -145,13 +150,11 @@ class ScenarioConditionEvaluator:
         if ctype == "WEATHER_IS":
             # WEATHER_IS: 現在の天候タイプが weather_type と一致するか判定する。
             # weather_state_provider が None なら常に False（後方互換）。
+            # provider 呼び出しの例外は隠蔽せず caller のバグとして surface する。
             if not cond.weather_type or self._weather_state_provider is None:
                 return False
-            try:
-                state = self._weather_state_provider()
-                return getattr(state.weather_type, "value", None) == cond.weather_type
-            except Exception:
-                return False
+            state = self._weather_state_provider()
+            return state.weather_type.value == cond.weather_type
         if ctype == "OBJECT_STATE_TICK_AT_LEAST":
             # 「対象 object の state[state_key] が tick 値で、そこから
             # ticks_offset 経過したか」を判定する。state_key の値は int 想定。
@@ -170,6 +173,15 @@ class ScenarioConditionEvaluator:
                 return False
             recorded_tick = obj.state.get(cond.state_key)
             if not isinstance(recorded_tick, int):
+                # シナリオ作家が int 以外（文字列など）を入れていたケース。
+                # silent False のままだとデバッグが困難なので警告を出す。
+                _logger.warning(
+                    "OBJECT_STATE_TICK_AT_LEAST: state[%r] is not int "
+                    "(got %s) for object_id=%s",
+                    cond.state_key,
+                    type(recorded_tick).__name__,
+                    cond.object_id,
+                )
                 return False
             return current_tick.value >= recorded_tick + int(cond.ticks_offset)
         # 未知の condition_type は False（既存挙動を維持）
