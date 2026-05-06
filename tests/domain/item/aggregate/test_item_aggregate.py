@@ -554,7 +554,8 @@ class TestItemAggregate:
             "durability_max": None,
             "quantity": 5,
             "current_durability": None,
-            "is_broken": False
+            "is_broken": False,
+            "state": {},
         }
         assert info == expected_info
 
@@ -579,7 +580,8 @@ class TestItemAggregate:
             "durability_max": 100,
             "quantity": 1,
             "current_durability": 100,
-            "is_broken": False
+            "is_broken": False,
+            "state": {},
         }
         assert info == expected_info
 
@@ -604,6 +606,7 @@ class TestItemAggregate:
             "durability_max": 100,
             "quantity": 1,
             "current_durability": 0,
-            "is_broken": True
+            "is_broken": True,
+            "state": {},
         }
         assert info == expected_info
