@@ -483,6 +483,16 @@ class ScenarioLoader:
             return None
         return mapper.get_int("spot", str(value))
 
+    # 合成条件の糖衣記法: ネストの深い `condition_type: AND/OR/NOT + children`
+    # を `all_of` / `any_of` / `not_` のフラットなキーで書けるようにする。
+    # 内部 AST (ScenarioEventCondition) は変更しない — load 時に元の形へ
+    # 正規化して通常経路に流す。
+    _COMPOSITE_SUGAR: Dict[str, str] = {
+        "all_of": "AND",
+        "any_of": "OR",
+        "not_": "NOT",
+    }
+
     def _parse_scenario_event_condition(
         self,
         raw: Dict[str, Any],
@@ -490,6 +500,49 @@ class ScenarioLoader:
         *,
         path: str = "condition",
     ) -> ScenarioEventCondition:
+        # ---- 糖衣記法を従来形に正規化 ----
+        # `all_of: [...]` / `any_of: [...]` / `not_: <cond>` の
+        # いずれかが存在すれば `condition_type` + `children` 形に変換する。
+        # `condition_type` と糖衣記法が同時にあるのは作家ミスとして拒否。
+        sugar_keys = [k for k in self._COMPOSITE_SUGAR if k in raw]
+        if sugar_keys:
+            if len(sugar_keys) > 1:
+                raise ScenarioLoadError(
+                    f"{path}: multiple composite shortcuts found "
+                    f"({sorted(sugar_keys)}); use only one of all_of/any_of/not_"
+                )
+            if "condition_type" in raw:
+                raise ScenarioLoadError(
+                    f"{path}: cannot mix 'condition_type' with composite "
+                    f"shortcut '{sugar_keys[0]}'"
+                )
+            shortcut = sugar_keys[0]
+            target_type = self._COMPOSITE_SUGAR[shortcut]
+            payload = raw[shortcut]
+            if shortcut == "not_":
+                # not_ は単一条件を取る。list で書いても 1 要素まで許容するか
+                # 迷うところだが、AST が 1 child 想定なので明確に dict 限定。
+                if not isinstance(payload, dict):
+                    raise ScenarioLoadError(
+                        f"{path}: not_ must be a single condition object "
+                        f"(got {type(payload).__name__})"
+                    )
+                children_list = [payload]
+            else:
+                if not isinstance(payload, list):
+                    raise ScenarioLoadError(
+                        f"{path}: {shortcut} must be a list "
+                        f"(got {type(payload).__name__})"
+                    )
+                children_list = payload
+            children = tuple(
+                self._parse_scenario_event_condition(
+                    c, mapper, path=f"{path}.{shortcut}[{i}]",
+                )
+                for i, c in enumerate(children_list)
+            )
+            return ScenarioEventCondition(condition_type=target_type, children=children)
+
         ctype = str(raw["condition_type"])
         # 合成条件 (NOT / AND / OR): children を再帰パース
         if ctype in {"NOT", "AND", "OR"}:
