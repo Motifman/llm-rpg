@@ -175,9 +175,13 @@ class TestForagableBushDemoScenario:
     """foragable_bush_demo.json が environment → item の単方向作用を保証する。"""
 
     def test_initial_state_bush_is_available_player_has_no_berry(self, forage) -> None:
-        """初期: 茂みは available=true、プレイヤーは野いちごを持っていない。"""
+        """初期: 茂みは available=true、last_harvest_tick はセンチネル -100、プレイヤーは野いちごを持っていない。"""
         loaded, interior_repo, inventory_repo, item_repo, _, _ = forage
-        assert _bush_state(interior_repo, loaded)["available"] is True
+        s = _bush_state(interior_repo, loaded)
+        assert s["available"] is True
+        # Phase 1 friction #8: 「まだ起きていない」を表す sentinel 値が必要
+        # (-100 は ticks_offset=8 を確実に下回る過去)。null/None 表現が無い。
+        assert s["last_harvest_tick"] == -100
         assert _berry_count(inventory_repo, item_repo, loaded) == 0
 
     def test_harvest_grants_berry_and_depletes_bush(self, forage) -> None:
