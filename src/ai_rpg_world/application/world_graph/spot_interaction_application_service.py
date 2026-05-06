@@ -10,6 +10,7 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     remove_one_item_of_spec_from_inventory,
 )
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
 from ai_rpg_world.domain.item.repository.item_spec_repository import ItemSpecRepository
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
@@ -76,6 +77,7 @@ class SpotInteractionApplicationService:
         action_name: str,
         *,
         interaction_parameters: Optional[Dict[str, Any]] = None,
+        current_tick: Optional[WorldTick] = None,
     ) -> SpotInteractionResultDto:
         graph = self._spot_graph_repository.find_graph()
         entity_id = EntityId.create(int(player_id))
@@ -106,6 +108,7 @@ class SpotInteractionApplicationService:
                 owned,
                 world_flags,
                 interaction_parameters=interaction_parameters,
+                current_tick=current_tick,
             )
         except InteractionNotAllowedException:
             # 前提条件で拒否された。InteractionDef.on_failure_observation が

@@ -175,6 +175,7 @@ class SpotGraphToolExecutor:
                 SpotObjectId.create(oid),
                 action,
                 interaction_parameters=interaction_parameters,
+                current_tick=self._time_provider.get_current_tick(),
             )
             msg = "\n".join(out.messages) if out.messages else "操作を実行しました。"
             return LlmCommandResultDto(
