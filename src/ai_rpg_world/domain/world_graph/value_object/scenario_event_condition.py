@@ -45,6 +45,10 @@ class ScenarioEventCondition:
     # 脱出ゲーム拡張: 周期的イベント
     tick_modulo: Optional[int] = None
     tick_phase: Optional[int] = None
+    # 動的世界系: 天候 / オブジェクト state 経過
+    weather_type: Optional[str] = None  # WEATHER_IS 用 ("RAIN" / "STORM" 等)
+    state_key: Optional[str] = None  # OBJECT_STATE_TICK_AT_LEAST の対象 state キー
+    ticks_offset: Optional[int] = None  # OBJECT_STATE_TICK_AT_LEAST の経過 tick
     # 合成条件用の子条件ツリー
     children: Tuple["ScenarioEventCondition", ...] = field(default_factory=tuple)
 

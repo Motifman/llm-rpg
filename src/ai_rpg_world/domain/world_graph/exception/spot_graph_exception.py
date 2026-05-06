@@ -139,3 +139,10 @@ class SynchronizedActionGroupValidationException(
     """SynchronizedActionGroup のバリデーション例外"""
     error_code = "WORLD_GRAPH.SYNCHRONIZED_ACTION_GROUP_VALIDATION"
 
+
+class ReactiveObjectStateBindingValidationException(
+    SpotGraphDomainException, ValidationException
+):
+    """ReactiveObjectStateBinding のバリデーション例外"""
+    error_code = "WORLD_GRAPH.REACTIVE_OBJECT_STATE_BINDING_VALIDATION"
+

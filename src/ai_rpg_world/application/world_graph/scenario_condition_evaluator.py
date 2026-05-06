@@ -7,6 +7,8 @@ scenario_event の発火条件と reactive binding の predicate の両方で
 
 from __future__ import annotations
 
+from typing import Callable, Optional
+
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
 )
@@ -48,12 +50,17 @@ class ScenarioConditionEvaluator:
         player_status_repository: PlayerStatusRepository,
         player_inventory_repository: PlayerInventoryRepository,
         item_repository: ItemRepository,
+        weather_state_provider: Optional[Callable[[], object]] = None,
     ) -> None:
         self._world_flag_state = world_flag_state
         self._spot_interior_repository = spot_interior_repository
         self._player_status_repository = player_status_repository
         self._player_inventory_repository = player_inventory_repository
         self._item_repository = item_repository
+        # WEATHER_IS 条件の評価に必要。None の場合 WEATHER_IS は常に False。
+        # provider が返すのは WeatherState 互換オブジェクト
+        # (.weather_type.value で天候名が取れる構造)。
+        self._weather_state_provider = weather_state_provider
 
     def evaluate(
         self,
@@ -135,6 +142,36 @@ class ScenarioConditionEvaluator:
                 return False
             phase = cond.tick_phase or 0
             return current_tick.value % cond.tick_modulo == phase
+        if ctype == "WEATHER_IS":
+            # WEATHER_IS: 現在の天候タイプが weather_type と一致するか判定する。
+            # weather_state_provider が None なら常に False（後方互換）。
+            if not cond.weather_type or self._weather_state_provider is None:
+                return False
+            try:
+                state = self._weather_state_provider()
+                return getattr(state.weather_type, "value", None) == cond.weather_type
+            except Exception:
+                return False
+        if ctype == "OBJECT_STATE_TICK_AT_LEAST":
+            # 「対象 object の state[state_key] が tick 値で、そこから
+            # ticks_offset 経過したか」を判定する。state_key の値は int 想定。
+            # state_key が無い / 値が int でない場合は False（=「経過判定不能」
+            # 状態として扱い、predicate は満たされていないとみなす）。
+            if (
+                cond.object_id is None
+                or not cond.state_key
+                or cond.ticks_offset is None
+            ):
+                return False
+            obj = find_object_in_graph(
+                SpotObjectId.create(cond.object_id), graph, self._spot_interior_repository,
+            )
+            if obj is None:
+                return False
+            recorded_tick = obj.state.get(cond.state_key)
+            if not isinstance(recorded_tick, int):
+                return False
+            return current_tick.value >= recorded_tick + int(cond.ticks_offset)
         # 未知の condition_type は False（既存挙動を維持）
         return False
 
