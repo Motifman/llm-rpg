@@ -4,10 +4,10 @@
 （壁なら INTACT/CRACKED/BROKEN 等）を保持し、そこから派生して
 「通行可否」と「音透過率」を表現する。
 
-`SpotConnection.is_passable` / `sound_permeability` の値はこの
-`Passage` から導出される（`SpotConnection` 側でフィールド同期）。
-シナリオ側は `passage` ブロックを宣言することで、レバー一つない壁
-・施錠扉・崖などを統一的に表現できる。
+`SpotConnection` には `passage: Passage` フィールドが必須で、通行可否・
+音透過率を読みたいコードは `conn.passage.traversable` /
+`conn.passage.sound_permeability` を直接参照する。シナリオ側は
+`passage` ブロックを宣言することで、壁・施錠扉・崖などを統一的に表現できる。
 """
 
 from __future__ import annotations
@@ -113,10 +113,12 @@ class Passage:
     ) -> "Passage":
         """開口部（既定で常に通行可）を生成する。
 
-        OPEN は意味的に「常に通行可」を表すため、`traversable=False` を指定する
-        ような使い方は避け、通行不可にしたい場合は `BARRIER` または `WALL` を
-        使うこと。ただし完全に弾くと既存の override パターンと矛盾するため、
-        引数自体は受け取り、警告ではなくシナリオ側責任とする。
+        OPEN は意味的に「常に通り抜けられる構造的な開口部（廊下・出入口）」
+        を表す。「通行不可」「閉じている」「壊せる」など状態を持つ接続を
+        作る場合は `wall` / `door` / `barrier` を使うのが正しい設計。
+        本ファクトリは override パターンの一貫性のため traversable 引数を
+        受け取るが、`Passage.open(traversable=False)` のような呼び出しは
+        kind の意味と矛盾するため避けること（必要なら `barrier` を使う）。
         """
         default_t, default_s = _default_for(PassageKindEnum.OPEN, OpenStateEnum.OPEN.value)
         return cls(

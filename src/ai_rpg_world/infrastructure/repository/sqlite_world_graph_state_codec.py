@@ -44,6 +44,7 @@ from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceI
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.infrastructure.repository.spot_graph_persistence_exceptions import (
     SpotGraphConnectionRecordInvariantError,
+    SpotGraphStateDecodeError,
     UnsupportedSpotGraphAggregateSchemaError,
     UnsupportedSpotInteriorSchemaError,
 )
@@ -277,12 +278,22 @@ def _passage_to_dict(passage: Passage) -> dict[str, Any]:
 
 
 def _passage_from_dict(d: dict[str, Any]) -> Passage:
-    return Passage(
-        kind=PassageKindEnum(d["kind"]),
-        state=str(d["state"]),
-        traversable=bool(d["traversable"]),
-        sound_permeability=float(d["sound_permeability"]),
-    )
+    try:
+        return Passage(
+            kind=PassageKindEnum(d["kind"]),
+            state=str(d["state"]),
+            traversable=bool(d["traversable"]),
+            sound_permeability=float(d["sound_permeability"]),
+        )
+    except KeyError as exc:
+        # legacy フィールド (is_passable / sound_permeability) しか持たない旧スキーマ
+        # の DB を読み込んだ場合などに発生する。pre-release のため、再生成を促す
+        # メッセージで早期に気づけるようにする。
+        raise SpotGraphStateDecodeError(
+            f"接続の passage フィールドが欠落しています (missing key: {exc}). "
+            f"旧スキーマの DB の可能性があります。再生成してください: "
+            f"`make web-demo-db-reset`"
+        ) from exc
 
 
 def _passage_condition_to_dict(p: PassageCondition) -> dict[str, Any]:
