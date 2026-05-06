@@ -132,3 +132,10 @@ class SpotConnectionValidationException(SpotGraphDomainException, ValidationExce
     """SpotConnection エンティティのバリデーション例外"""
     error_code = "WORLD_GRAPH.SPOT_CONNECTION_VALIDATION"
 
+
+class SynchronizedActionGroupValidationException(
+    SpotGraphDomainException, ValidationException
+):
+    """SynchronizedActionGroup のバリデーション例外"""
+    error_code = "WORLD_GRAPH.SYNCHRONIZED_ACTION_GROUP_VALIDATION"
+

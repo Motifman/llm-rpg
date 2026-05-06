@@ -19,7 +19,14 @@ from ai_rpg_world.application.llm.tool_constants import (
     TOOL_NAME_SPOT_GRAPH_USE_ITEM,
     TOOL_NAME_SPOT_GRAPH_WAIT,
 )
+from ai_rpg_world.application.common.services.game_time_provider import GameTimeProvider
 from ai_rpg_world.application.world_graph.prepared_action_registry import PreparedActionRegistry
+from ai_rpg_world.application.world_graph.synchronized_action_registry import (
+    SynchronizedActionRegistry,
+)
+from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
+    ISpotGraphRepository,
+)
 from ai_rpg_world.application.world_graph.spot_graph_world_services import SpotGraphWorldServices
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
@@ -30,8 +37,15 @@ from ai_rpg_world.domain.player.repository.player_inventory_repository import (
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
+    SpotPlayerPreparedActionEvent,
+)
+from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.domain.world_graph.value_object.sub_location_id import SubLocationId
+from ai_rpg_world.domain.world_graph.value_object.synchronized_action_group import (
+    SynchronizedActionGroup,
+)
 
 
 class SpotGraphToolExecutor:
@@ -43,6 +57,11 @@ class SpotGraphToolExecutor:
         player_inventory_repository: PlayerInventoryRepository,
         item_repository: ItemRepository,
         event_publisher: Any = None,
+        *,
+        sync_action_groups: tuple[SynchronizedActionGroup, ...] = (),
+        time_provider: GameTimeProvider | None = None,
+        spot_graph_repository: ISpotGraphRepository | None = None,
+        sync_action_registry: SynchronizedActionRegistry | None = None,
     ) -> None:
         if spot_graph_world_services.movement is None:
             raise TypeError("SpotGraphWorldServices.movement が必要です")
@@ -50,6 +69,19 @@ class SpotGraphToolExecutor:
         self._player_inventory_repository = player_inventory_repository
         self._item_repository = item_repository
         self._event_publisher = event_publisher
+        # 協力ギミック #13 用: 既知の sync group と現在 tick provider。
+        # 渡されない場合は sync 関連の追加処理（observation 発火、tick 記録）
+        # は行わず、従来の prepare 挙動だけになる。
+        self._sync_action_groups = sync_action_groups
+        self._time_provider = time_provider
+        self._spot_graph_repository = spot_graph_repository
+        # resolver stage と同一 instance を共有することで、将来 registry に
+        # 状態（キャッシュ等）が増えても乖離しない。渡されない場合は
+        # 既定で world_flags を使う独立 instance を生成（後方互換）。
+        self._sync_action_registry = (
+            sync_action_registry
+            or SynchronizedActionRegistry(spot_graph_world_services.world_flags)
+        )
 
     def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
         return {
@@ -218,6 +250,9 @@ class SpotGraphToolExecutor:
         try:
             registry = PreparedActionRegistry(self._svc.world_flags)
             registry.prepare(player_id=player_id, action_id=action_id)
+            # 協力ギミック #13: action_id が sync group に属していれば、
+            # tick 付きで SynchronizedActionRegistry にも記録し、観測を出す。
+            self._maybe_register_sync_prepare(player_id, action_id)
             base = f"アクション「{action_id}」の準備をした。他のプレイヤーが対応する操作を実行できるようになった。"
             return LlmCommandResultDto(
                 success=True,
@@ -227,6 +262,58 @@ class SpotGraphToolExecutor:
             return LlmCommandResultDto(success=False, message=str(ve))
         except Exception as e:
             return exception_result(e)
+
+    def _maybe_register_sync_prepare(self, player_id: int, action_id: str) -> None:
+        """action_id が sync group に属していれば tick 付き登録 + 観測発火。"""
+        if not self._sync_action_groups or self._time_provider is None:
+            return
+        matching = [
+            g for g in self._sync_action_groups
+            if action_id in g.required_action_ids
+        ]
+        if not matching:
+            return
+        current_tick = self._time_provider.get_current_tick()
+        sync_registry = self._sync_action_registry
+        # MEDIUM-2: 同 player+action_id が既に登録済みなら観測の重複を避ける。
+        # （tick だけ更新する形で prepare し直し、観測は出さない。）
+        already_prepared_by_same_player = any(
+            e.player_id == player_id
+            for e in sync_registry.entries_for(action_id)
+        )
+        sync_registry.prepare(
+            action_id=action_id,
+            player_id=player_id,
+            current_tick=current_tick.value,
+        )
+        if already_prepared_by_same_player:
+            return
+        # 観測発火: 各 group の on_prepare_observation_message を持つもののみ
+        if self._event_publisher is None or self._spot_graph_repository is None:
+            return
+        # actor のスポット情報を取得
+        try:
+            graph = self._spot_graph_repository.find_graph()
+            spot_id = graph.get_entity_spot(EntityId.create(player_id))
+        except Exception:
+            return
+        events = []
+        for g in matching:
+            if not g.on_prepare_observation_message:
+                continue
+            events.append(
+                SpotPlayerPreparedActionEvent.create(
+                    aggregate_id=graph.graph_id,
+                    aggregate_type="SpotGraphAggregate",
+                    entity_id=EntityId.create(player_id),
+                    spot_id=spot_id,
+                    action_id=action_id,
+                    group_id=g.group_id,
+                    observation_message=g.on_prepare_observation_message,
+                )
+            )
+        if events:
+            self._event_publisher.publish_all(events)
 
     def _wait(self, player_id: int, args: Dict[str, Any]) -> LlmCommandResultDto:
         del player_id
