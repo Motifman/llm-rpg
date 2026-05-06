@@ -1,0 +1,166 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "cauldron_crafting_demo",
+    "title": "炉でのインゴット製錬 — アイテム × 環境の最小デモ",
+    "description": "プレイヤーが鉄鉱石を炉に投入 (stoke) すると、5 tick 後に reactive binding が完成を判定し ready=true になる。collect インタラクションで鉄インゴットを取り出すと、炉は再度空き状態に戻る。新 primitive はゼロ — HAS_ITEM precondition / REMOVE_ITEM / RECORD_OBJECT_STATE_TICK / OBJECT_STATE_TICK_AT_LEAST predicate / ReactiveObjectStateBinding / GIVE_ITEM だけで成立する。本デモは Phase 1 の目的どおり、既存基盤がアイテム × 環境の双方向作用にどこまで耐えるかを実証することを意図している。",
+    "theme": "crafting",
+    "difficulty": "easy",
+    "estimated_ticks": 30,
+    "author": "demo",
+    "tags": ["crafting", "item_environment_interaction", "phase1_baseline"]
+  },
+  "item_specs": [
+    {
+      "id": "iron_ore",
+      "name": "鉄鉱石",
+      "description": "黒く重たい原石。製錬すれば鉄インゴットになる。",
+      "category": "MATERIAL"
+    },
+    {
+      "id": "iron_ingot",
+      "name": "鉄インゴット",
+      "description": "棒状に固められた精錬済みの鉄。",
+      "category": "MATERIAL"
+    }
+  ],
+  "environment": {
+    "weather": {
+      "enabled": false,
+      "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+      "update_interval_ticks": 100,
+      "announce_changes": false
+    }
+  },
+  "spots": [
+    {
+      "id": "smithy",
+      "name": "鍛冶場",
+      "description": "煤で黒ずんだ石造りの炉が中央に据えられている。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "DIM", "temperature": "WARM"},
+      "interior": {
+        "objects": [
+          {
+            "id": "smelting_furnace",
+            "name": "製錬炉",
+            "description": "鉄を溶かすための高炉。",
+            "object_type": "OTHER",
+            "state": {
+              "smelting": false,
+              "started_at_tick": -100,
+              "ready": false
+            },
+            "interactions": [
+              {
+                "action_name": "stoke",
+                "display_label": "鉄鉱石をくべる",
+                "preconditions": [
+                  {
+                    "condition_type": "HAS_ITEM",
+                    "required_item": "iron_ore",
+                    "failure_message": "鉄鉱石を持っていない。"
+                  },
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "smelting_furnace",
+                    "required_state": {"smelting": false},
+                    "failure_message": "炉はすでに製錬中だ。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "REMOVE_ITEM",
+                    "parameters": {"item_spec": "iron_ore"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "smelting_furnace",
+                      "state_updates": {"smelting": true, "ready": false}
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "target_object": "smelting_furnace",
+                      "state_key": "started_at_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "鉄鉱石を炉にくべた。火花が立ち上る。"}
+                  }
+                ]
+              },
+              {
+                "action_name": "collect",
+                "display_label": "インゴットを取り出す",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "smelting_furnace",
+                    "required_state": {"ready": true},
+                    "failure_message": "まだ製錬が終わっていない。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "iron_ingot"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "smelting_furnace",
+                      "state_updates": {"smelting": false, "ready": false}
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "炉から赤熱したインゴットを取り出した。"}
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "connections": [],
+  "players": [
+    {"id": "player_a", "name": "鍛冶見習い", "spawn_spot": "smithy", "initial_items": ["iron_ore", "iron_ore"]}
+  ],
+  "game_end_conditions": {
+    "win": [],
+    "lose": [{"type": "TICK_LIMIT", "tick_limit": 100}]
+  },
+  "initial_flags": [],
+  "scenario_events": [],
+  "reactive_bindings": {
+    "objects": [
+      {
+        "target": "smelting_furnace",
+        "predicate": {
+          "condition_type": "AND",
+          "children": [
+            {
+              "condition_type": "OBJECT_STATE",
+              "target_object": "smelting_furnace",
+              "required_state": {"smelting": true}
+            },
+            {
+              "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+              "target_object": "smelting_furnace",
+              "state_key": "started_at_tick",
+              "ticks_offset": 5
+            }
+          ]
+        },
+        "on_true_state_updates": {"ready": true},
+        "on_false_state_updates": {"ready": false}
+      }
+    ]
+  }
+}
