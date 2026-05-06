@@ -215,6 +215,19 @@ class SpotGraphAggregate(AggregateRoot):
         )
         self.add_event(ev)
 
+    def unplace_entity(self, entity_id: EntityId) -> None:
+        """エンティティをグラフから取り除く。
+
+        テストや管理用途のための逆操作。move_entity と違ってアイテム / フラグ等の
+        通行条件チェックを行わず、イベントも発行しない。本番ロジックでは
+        move_entity を使うこと。
+        """
+        if entity_id not in self._entity_spot:
+            raise EntityNotInGraphException(f"Entity not placed: {entity_id}")
+        spot_id = self._entity_spot.pop(entity_id)
+        pres = self._presences.get(spot_id, SpotPresence.empty(spot_id))
+        self._presences[spot_id] = pres.remove(entity_id)
+
     def move_entity(
         self,
         entity_id: EntityId,
