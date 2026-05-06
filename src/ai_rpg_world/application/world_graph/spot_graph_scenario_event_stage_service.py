@@ -10,6 +10,9 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     grant_item_specs_to_inventory,
     remove_one_item_of_spec_from_inventory,
 )
+from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
+    ScenarioConditionEvaluator,
+)
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
@@ -66,6 +69,13 @@ class SpotGraphScenarioEventStageService:
         self._progress_store = progress_store or InMemorySpotGraphScenarioEventProgressStore()
         self._effect_service = effect_service or WorldGraphEffectService()
         self._on_message = on_message
+        self._condition_evaluator = ScenarioConditionEvaluator(
+            world_flag_state=world_flag_state,
+            spot_interior_repository=spot_interior_repository,
+            player_status_repository=player_status_repository,
+            player_inventory_repository=player_inventory_repository,
+            item_repository=item_repository,
+        )
 
     def set_message_callback(self, callback: Optional[Callable[[ScenarioEventDef, str], None]]) -> None:
         self._on_message = callback
@@ -121,78 +131,8 @@ class SpotGraphScenarioEventStageService:
         current_tick: WorldTick,
     ) -> bool:
         """conditions の全てが真なら True（暗黙の AND）。"""
-        world_flags = self._world_flag_state.as_frozen_set()
         graph = self._spot_graph_repository.find_graph()
-        for cond in conditions:
-            if not self._evaluate_condition(cond, current_tick, world_flags, graph):
-                return False
-        return True
-
-    def _evaluate_condition(
-        self,
-        cond: ScenarioEventCondition,
-        current_tick: WorldTick,
-        world_flags: frozenset[str],
-        graph: SpotGraphAggregate,
-    ) -> bool:
-        """1 つの条件（leaf or 合成）を再帰的に評価する。"""
-        ctype = cond.condition_type
-        # 合成条件
-        if ctype == "NOT":
-            return not self._evaluate_condition(cond.children[0], current_tick, world_flags, graph)
-        if ctype == "AND":
-            return all(
-                self._evaluate_condition(c, current_tick, world_flags, graph) for c in cond.children
-            )
-        if ctype == "OR":
-            if not cond.children:
-                return False
-            return any(
-                self._evaluate_condition(c, current_tick, world_flags, graph) for c in cond.children
-            )
-        # leaf 条件
-        if ctype == "TICK_AT_LEAST":
-            return cond.tick is not None and current_tick.value >= int(cond.tick)
-        if ctype == "TICK_BETWEEN":
-            if cond.tick_start is None or cond.tick_end is None:
-                return False
-            return int(cond.tick_start) <= current_tick.value <= int(cond.tick_end)
-        if ctype == "FLAG_SET":
-            return bool(cond.flag_name) and cond.flag_name in world_flags
-        if ctype == "FLAG_NOT_SET":
-            return bool(cond.flag_name) and cond.flag_name not in world_flags
-        if ctype == "PLAYER_AT_SPOT":
-            if cond.spot_id is None:
-                return False
-            spot_id = SpotId.create(cond.spot_id)
-            presence = graph.presence_at(spot_id)
-            return bool(presence.present_entity_ids)
-        if ctype == "OBJECT_STATE":
-            if cond.object_id is None or cond.required_state is None:
-                return False
-            obj = self._find_object(SpotObjectId.create(cond.object_id))
-            if obj is None:
-                return False
-            return all(obj.state.get(k) == v for k, v in cond.required_state.items())
-        if ctype == "HAS_ITEM":
-            if cond.item_spec_id is None:
-                return False
-            target_spec = cond.item_spec_id
-            for status in self._player_status_repository.find_all():
-                inv = self._player_inventory_repository.find_by_id(status.player_id)
-                if inv is None:
-                    continue
-                owned = collect_owned_item_spec_ids_from_inventory(inv, self._item_repository)
-                if any(spec.value == target_spec for spec in owned):
-                    return True
-            return False
-        if ctype == "TICK_MODULO":
-            if cond.tick_modulo is None or cond.tick_modulo <= 0:
-                return False
-            phase = cond.tick_phase or 0
-            return current_tick.value % cond.tick_modulo == phase
-        # 未知の condition_type は False（既存挙動を維持）
-        return False
+        return self._condition_evaluator.evaluate_all(conditions, current_tick, graph)
 
     def _apply_event(self, event: ScenarioEventDef) -> None:
         acting_object = self._resolve_acting_object(event)
