@@ -121,6 +121,53 @@ class TestSqliteItemWriteRepository:
         item_repo = SqliteItemWriteRepository.for_standalone_connection(sqlite_conn)
         assert item_repo.find_by_owner_id(9999) == []
 
+    def test_save_and_reload_preserves_instance_state(
+        self, sqlite_conn: sqlite3.Connection
+    ) -> None:
+        """Phase 4-A: per-instance state を保存→再読込で復元できる (state_json column)。"""
+        item_repo = SqliteItemWriteRepository.for_standalone_connection(sqlite_conn)
+        agg = _equipment_item(2001, 5001)
+        agg.merge_state({"lit": True, "charges": 5, "tag": "hero_lantern"})
+
+        item_repo.save(agg)
+
+        loaded = item_repo.find_by_id(ItemInstanceId(2001))
+        assert loaded is not None
+        assert loaded.state == {"lit": True, "charges": 5, "tag": "hero_lantern"}
+
+    def test_save_and_reload_with_empty_state_returns_empty_dict(
+        self, sqlite_conn: sqlite3.Connection
+    ) -> None:
+        """state が空のときは NULL に保存され、復元時は空 dict として返る (旧 instance も同様)。"""
+        item_repo = SqliteItemWriteRepository.for_standalone_connection(sqlite_conn)
+        agg = _equipment_item(2002, 5002)  # state は default の空 dict
+
+        item_repo.save(agg)
+
+        loaded = item_repo.find_by_id(ItemInstanceId(2002))
+        assert loaded is not None
+        assert loaded.state == {}
+
+    def test_state_overwrite_is_persisted(
+        self, sqlite_conn: sqlite3.Connection
+    ) -> None:
+        """save 後に state を変えて再 save すると上書きされる。"""
+        item_repo = SqliteItemWriteRepository.for_standalone_connection(sqlite_conn)
+        agg = _equipment_item(2003, 5003)
+        agg.merge_state({"lit": True})
+        item_repo.save(agg)
+
+        # 再読込して state を変更し再 save
+        agg2 = item_repo.find_by_id(ItemInstanceId(2003))
+        assert agg2 is not None
+        agg2.replace_state({"lit": False, "extinguished_at_tick": 42})
+        item_repo.save(agg2)
+
+        # 3 度目に読み直すと最新が見える
+        agg3 = item_repo.find_by_id(ItemInstanceId(2003))
+        assert agg3 is not None
+        assert agg3.state == {"lit": False, "extinguished_at_tick": 42}
+
     def test_inventory_save_rolls_back_when_multi_table_write_fails(
         self, sqlite_conn: sqlite3.Connection
     ) -> None:

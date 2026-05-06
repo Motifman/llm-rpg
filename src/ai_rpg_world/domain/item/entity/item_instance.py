@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Dict, Mapping, Optional
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
 from ai_rpg_world.domain.item.value_object.item_spec import ItemSpec
 from ai_rpg_world.domain.item.value_object.durability import Durability
@@ -20,12 +20,18 @@ class ItemInstance:
         item_instance_id: ItemInstanceId,
         item_spec: ItemSpec,
         durability: Optional[Durability] = None,
-        quantity: int = 1
+        quantity: int = 1,
+        state: Optional[Mapping[str, Any]] = None,
     ):
         self._item_instance_id = item_instance_id
         self._item_spec = item_spec
         self._durability = durability
         self._quantity = quantity
+        # Phase 4-A: per-instance の任意 state。同 spec でも instance ごとに
+        # 違う値（charges_remaining / lit / enchantment 等）を持たせるため。
+        # SpotObject.state と semantics を揃える: 部分マージ可能な flat dict。
+        # 内部で防御的コピーを取り、外部からの直接参照で破壊されないようにする。
+        self._state: Dict[str, Any] = dict(state) if state else {}
 
         self._validate()
 
@@ -86,6 +92,29 @@ class ItemInstance:
         """現在の数量"""
         return self._quantity
 
+    @property
+    def state(self) -> Mapping[str, Any]:
+        """instance ごとの可変 state（read-only view）。
+
+        書き込みは `replace_state` / `merge_state` 経由で行う。
+        外部に露出するのは shallow copy の Mapping view。
+        """
+        # 防御的に dict コピーで返す（呼び出し側で破壊できないように）。
+        return dict(self._state)
+
+    def replace_state(self, new_state: Mapping[str, Any]) -> None:
+        """state 全体を置き換える。"""
+        self._state = dict(new_state)
+
+    def merge_state(self, updates: Mapping[str, Any]) -> None:
+        """state にキー/値をマージする (部分上書き)。
+
+        SpotObject.state と同じく flat dict 想定。同名キーは上書き、
+        新規キーは追加される。
+        """
+        for k, v in updates.items():
+            self._state[k] = v
+
     def use(self) -> bool:
         """アイテムを使用する（副作用あり）
 
@@ -130,6 +159,13 @@ class ItemInstance:
 
         # 耐久度インスタンスが存在する場合はスタックできない
         if self._durability is not None or other._durability is not None:
+            return False
+
+        # Phase 4-A: per-instance state を持つ instance はスタック不可。
+        # 「lit な松明」と「unlit な松明」を 1 スタックにまとめると
+        # state が片方失われる/混じるため、どちらかに非空 state がある時点で
+        # スタック禁止とする（空 state 同士は従来通りスタック可）。
+        if self._state or other._state:
             return False
 
         return (
