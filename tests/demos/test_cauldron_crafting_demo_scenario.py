@@ -29,7 +29,6 @@ from ai_rpg_world.application.world_graph.spot_interaction_application_service i
     SpotInteractionApplicationService,
 )
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
-    collect_owned_item_spec_ids_from_inventory,
     grant_item_specs_to_inventory,
 )
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
@@ -41,7 +40,11 @@ from ai_rpg_world.domain.player.aggregate.player_inventory_aggregate import (
     PlayerInventoryAggregate,
 )
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
+from ai_rpg_world.domain.player.value_object.slot_id import SlotId
 from ai_rpg_world.domain.world.value_object.spot_id import SpotId
+from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
+    InteractionNotAllowedException,
+)
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.spot_object_id import SpotObjectId
 from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemoryDataStore
@@ -167,8 +170,6 @@ def _furnace_state(interior_repo, loaded) -> dict:
 
 def _owned_spec_strs(inventory_repo, item_repo, loaded) -> list[str]:
     """所持アイテム instance を string id 一覧で返す（重複保持）。"""
-    from ai_rpg_world.domain.player.value_object.slot_id import SlotId
-
     spec_int_to_str = {
         loaded.id_mapper.get_int("item_spec", s): s
         for s in ("iron_ore", "iron_ingot")
@@ -212,12 +213,19 @@ class TestCauldronCraftingDemoScenario:
         assert s["ready"] is False
         assert _owned_spec_strs(inventory_repo, item_repo, loaded) == ["iron_ore"]
 
+    def test_stoke_blocked_while_already_smelting(self, cauldron) -> None:
+        """製錬中の炉に再度 stoke しようとすると OBJECT_STATE precondition に弾かれる。"""
+        loaded, _, _, _, app, _ = cauldron
+        app.execute_interaction(
+            _player_id(loaded), _furnace_id(loaded), "stoke", current_tick=WorldTick(2),
+        )
+        with pytest.raises(InteractionNotAllowedException):
+            app.execute_interaction(
+                _player_id(loaded), _furnace_id(loaded), "stoke", current_tick=WorldTick(3),
+            )
+
     def test_collect_blocked_until_ready(self, cauldron) -> None:
         """製錬完了前に collect しようとすると InteractionNotAllowedException で拒否される。"""
-        from ai_rpg_world.domain.world_graph.exception.spot_graph_exception import (
-            InteractionNotAllowedException,
-        )
-
         loaded, _, _, _, app, binding_stage = cauldron
         app.execute_interaction(
             _player_id(loaded), _furnace_id(loaded), "stoke", current_tick=WorldTick(2),
