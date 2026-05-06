@@ -1,0 +1,74 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "weather_cascade_demo",
+    "title": "天候連鎖 — 川渡りの最小デモ",
+    "description": "通常時は浅い川を歩いて渡れるが、嵐になると激流で渡れなくなる。reactive_bindings.passages + WEATHER_IS predicate により、天候が STORM の間だけ川渡りの BARRIER が ACTIVE（通行不可）になる。",
+    "theme": "environment",
+    "difficulty": "easy",
+    "estimated_ticks": 30,
+    "author": "demo",
+    "tags": ["environment", "weather", "reactive_binding", "cascade"]
+  },
+  "item_specs": [],
+  "environment": {
+    "weather": {
+      "enabled": true,
+      "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+      "update_interval_ticks": 100,
+      "announce_changes": true
+    }
+  },
+  "spots": [
+    {
+      "id": "river_bank",
+      "name": "川岸",
+      "description": "浅い川のこちら側の岸。普段は飛び石伝いに渡れる。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "BRIGHT", "temperature": "NORMAL"},
+      "interior": {"objects": []}
+    },
+    {
+      "id": "far_shore",
+      "name": "対岸",
+      "description": "川の向こう岸。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "BRIGHT", "temperature": "NORMAL"},
+      "interior": {"objects": []}
+    }
+  ],
+  "connections": [
+    {
+      "id": "river_crossing",
+      "from": "river_bank",
+      "to": "far_shore",
+      "name": "川渡り",
+      "description": "浅瀬と飛び石の連なり。嵐の日は激流に飲まれて渡れなくなる。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {"kind": "BARRIER", "state": "INACTIVE", "sound_permeability": 1.0}
+    }
+  ],
+  "players": [
+    {"id": "player_a", "name": "旅人", "spawn_spot": "river_bank", "initial_items": []}
+  ],
+  "game_end_conditions": {
+    "win": [{"type": "ALL_AT_SPOT", "target_spot": "far_shore"}],
+    "lose": [{"type": "TICK_LIMIT", "tick_limit": 50}]
+  },
+  "initial_flags": [],
+  "scenario_events": [],
+  "reactive_bindings": {
+    "passages": [
+      {
+        "target": "river_crossing",
+        "predicate": {
+          "condition_type": "WEATHER_IS",
+          "weather_type": "STORM"
+        },
+        "on_true_state": "ACTIVE",
+        "on_false_state": "INACTIVE"
+      }
+    ]
+  }
+}
