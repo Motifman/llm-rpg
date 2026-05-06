@@ -18,6 +18,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotExploredEvent,
     SpotObjectInteractedEvent,
     SpotObjectInteractionFailedEvent,
+    SpotPlayerPreparedActionEvent,
     SpotObjectStateChangedEvent,
 )
 
@@ -46,6 +47,8 @@ class SpotGraphObservationFormatter:
             return self._format_object_interacted(event, recipient_player_id)
         if isinstance(event, SpotObjectInteractionFailedEvent):
             return self._format_interaction_failed(event, recipient_player_id)
+        if isinstance(event, SpotPlayerPreparedActionEvent):
+            return self._format_prepared_action(event, recipient_player_id)
         if isinstance(event, SpotExploredEvent):
             return self._format_explored(event, recipient_player_id)
         if isinstance(event, ConnectionStateChangedEvent):
@@ -130,6 +133,25 @@ class SpotGraphObservationFormatter:
             "actor": actor,
             "object_name": obj_name,
             "action_name": event.action_name,
+        }
+        return ObservationOutput(
+            prose=prose, structured=structured, observation_category="social"
+        )
+
+    def _format_prepared_action(
+        self, event: SpotPlayerPreparedActionEvent, recipient_id: PlayerId
+    ) -> Optional[ObservationOutput]:
+        # アクター本人は自身の prepare 操作結果をツール側で受け取るため除外。
+        if self._is_self(event.entity_id, recipient_id):
+            return None
+        actor = self._resolve_entity_name(event.entity_id)
+        prose = event.observation_message
+        structured = {
+            "type": "spot_player_prepared_action",
+            "actor": actor,
+            "action_id": event.action_id,
+            "group_id": event.group_id,
+            "message": event.observation_message,
         }
         return ObservationOutput(
             prose=prose, structured=structured, observation_category="social"

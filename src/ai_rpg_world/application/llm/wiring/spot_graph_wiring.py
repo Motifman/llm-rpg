@@ -150,6 +150,7 @@ def create_spot_graph_wiring(
     notification_query_service: Optional[Any] = None,
     llm_client: Optional[ILLMClient] = None,
     game_time_provider: Optional[Any] = None,
+    synchronized_action_groups: tuple = (),
     world_time_config_service: Optional[Any] = None,
     action_result_store: Optional[IActionResultStore] = None,
     sliding_window_memory: Optional[ISlidingWindowMemory] = None,
@@ -343,6 +344,9 @@ def create_spot_graph_wiring(
         player_inventory_repository=player_inventory_repository,
         item_repository=item_repository,
         event_publisher=event_publisher,
+        sync_action_groups=synchronized_action_groups,
+        time_provider=game_time_provider,
+        spot_graph_repository=spot_graph_repository,
     )
     no_op_movement = SpotGraphNoOpMovementService()
 

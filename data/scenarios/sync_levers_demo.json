@@ -1,0 +1,105 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "sync_levers_demo",
+    "title": "同時操作パズル — 最小デモ",
+    "description": "A は左レバー、B は右レバーを 2 tick 以内にそれぞれ prepare_action する必要がある。両方が揃うと金庫扉が OPEN になる。窓を超えると勝手に解除されるので、相方に prepare 観測が届いた段階で素早く合わせること。",
+    "theme": "co-op",
+    "difficulty": "medium",
+    "estimated_ticks": 30,
+    "author": "demo",
+    "tags": ["co-op", "sync-action", "puzzle"]
+  },
+  "item_specs": [],
+  "environment": {
+    "weather": {
+      "enabled": false,
+      "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+      "update_interval_ticks": 100,
+      "announce_changes": false
+    }
+  },
+  "spots": [
+    {
+      "id": "lever_room",
+      "name": "レバーの部屋",
+      "description": "壁に左右 2 つのレバーが備え付けられている。両方を同時に引かないと意味がないとされる。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+      "interior": {
+        "objects": [
+          {
+            "id": "lever_left",
+            "name": "左レバー",
+            "description": "壁の左側にある重い金属製レバー。",
+            "object_type": "SWITCH",
+            "state": {},
+            "interactions": []
+          },
+          {
+            "id": "lever_right",
+            "name": "右レバー",
+            "description": "壁の右側にある重い金属製レバー。",
+            "object_type": "SWITCH",
+            "state": {},
+            "interactions": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "vault",
+      "name": "金庫室",
+      "description": "扉の奥にある秘密の部屋。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "BRIGHT", "temperature": "NORMAL"},
+      "interior": {"objects": []}
+    }
+  ],
+  "connections": [
+    {
+      "id": "lever_to_vault",
+      "from": "lever_room",
+      "to": "vault",
+      "name": "金庫扉",
+      "description": "両レバー同時操作で開く電子ロック扉。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {"kind": "DOOR", "state": "LOCKED", "sound_permeability": 0.3}
+    }
+  ],
+  "players": [
+    {"id": "player_a", "name": "A", "spawn_spot": "lever_room", "initial_items": []},
+    {"id": "player_b", "name": "B", "spawn_spot": "lever_room", "initial_items": []}
+  ],
+  "game_end_conditions": {
+    "win": [{"type": "ALL_AT_SPOT", "target_spot": "vault"}],
+    "lose": [{"type": "TICK_LIMIT", "tick_limit": 50}]
+  },
+  "initial_flags": [],
+  "scenario_events": [],
+  "synchronized_action_groups": [
+    {
+      "id": "vault_unlock",
+      "required_action_ids": ["pull_lever_left", "pull_lever_right"],
+      "window_ticks": 2,
+      "on_complete": [
+        {
+          "effect_type": "CHANGE_PASSAGE_STATE",
+          "parameters": {"target_connection": "lever_to_vault", "new_state": "OPEN"}
+        },
+        {
+          "effect_type": "SET_FLAG",
+          "parameters": {"flag_name": "vault_unlocked"}
+        }
+      ],
+      "on_timeout": [
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {"message": "レバーが元の位置に戻る音がした。タイミングを合わせ直す必要がある。"}
+        }
+      ],
+      "on_prepare_observation_message": "相方がレバーに手をかけ、引く準備をしているのが見える。"
+    }
+  ]
+}
