@@ -534,6 +534,15 @@ class ScenarioLoader:
                         f"{path}: {shortcut} must be a list "
                         f"(got {type(payload).__name__})"
                     )
+                # list 内の各要素も dict であることを保証する。null や文字列が
+                # 紛れ込むと再帰呼び出し先で raw KeyError になりエラーが
+                # 不親切になるため、ここで早期に shortcut の path 付きで弾く。
+                for i, item in enumerate(payload):
+                    if not isinstance(item, dict):
+                        raise ScenarioLoadError(
+                            f"{path}.{shortcut}[{i}] must be a condition object "
+                            f"(got {type(item).__name__})"
+                        )
                 children_list = payload
             children = tuple(
                 self._parse_scenario_event_condition(
