@@ -1,0 +1,186 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "info_asymmetry_demo",
+    "title": "情報非対称パズル — 最小デモ",
+    "description": "プレイヤー A は南室の張り紙で暗号の前半『42』を、B は北室の落書きで後半『1』を見つける。中央のキーパッドに正しい4桁の連結（'421'）を入力すれば金庫扉が開く。互いに say/whisper で共有しないと解けない。",
+    "theme": "co-op",
+    "difficulty": "easy",
+    "estimated_ticks": 30,
+    "author": "demo",
+    "tags": ["co-op", "info-asymmetry", "puzzle-input"]
+  },
+  "item_specs": [],
+  "environment": {
+    "weather": {
+      "enabled": false,
+      "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+      "update_interval_ticks": 100,
+      "announce_changes": false
+    }
+  },
+  "spots": [
+    {
+      "id": "south_room",
+      "name": "南の部屋",
+      "description": "古い書類の山が並ぶ部屋。壁に色褪せた張り紙が貼られている。張り紙の一部が読み取れる。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+      "interior": {
+        "objects": [
+          {
+            "id": "south_poster",
+            "name": "色褪せた張り紙",
+            "description": "壁に貼られた古い張り紙。中央に大きな数字『42』が読み取れる。後半は破れて欠けている。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "詳しく調べる",
+                "preconditions": [{"condition_type": "ALWAYS"}],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "張り紙には『コードの前半: 42』と書かれている。"}
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "central_hall",
+      "name": "中央ホール",
+      "description": "南北の部屋を繋ぐホール。中央に金庫の電子キーパッドがある。奥には金庫扉。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "BRIGHT", "temperature": "NORMAL"},
+      "interior": {
+        "objects": [
+          {
+            "id": "vault_keypad",
+            "name": "電子キーパッド",
+            "description": "金庫扉の脇にある電子キーパッド。3桁のコードを入力できる。",
+            "object_type": "SWITCH",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "submit_code",
+                "display_label": "コードを入力する",
+                "preconditions": [
+                  {
+                    "condition_type": "PUZZLE_INPUT_MATCH",
+                    "puzzle_input_key": "code",
+                    "required_state": {"answer": "421"},
+                    "failure_message": "違うコードのようだ。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "SET_FLAG",
+                    "parameters": {"flag_name": "vault_unlocked"}
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "電子音が鳴り、金庫扉のロックが解除された。"}
+                  }
+                ],
+                "on_failure_observation": "キーパッドの誤入力ブザーが小さく響いた。"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "north_room",
+      "name": "北の部屋",
+      "description": "薄暗い倉庫。床に古い落書きが残っている。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+      "interior": {
+        "objects": [
+          {
+            "id": "north_graffiti",
+            "name": "床の落書き",
+            "description": "床にチョークで殴り書きされた数字と矢印。",
+            "object_type": "OTHER",
+            "state": {},
+            "interactions": [
+              {
+                "action_name": "examine",
+                "display_label": "詳しく調べる",
+                "preconditions": [{"condition_type": "ALWAYS"}],
+                "effects": [
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "落書きには『コードの後半: 1』と書かれている。"}
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "vault",
+      "name": "金庫室",
+      "description": "金庫扉の奥にある秘密の部屋。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "BRIGHT", "temperature": "NORMAL"},
+      "interior": {"objects": []}
+    }
+  ],
+  "connections": [
+    {
+      "id": "south_to_central",
+      "from": "south_room",
+      "to": "central_hall",
+      "name": "南通路",
+      "description": "南の部屋と中央ホールを繋ぐ通路。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {"kind": "OPEN"}
+    },
+    {
+      "id": "north_to_central",
+      "from": "north_room",
+      "to": "central_hall",
+      "name": "北通路",
+      "description": "北の部屋と中央ホールを繋ぐ通路。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {"kind": "OPEN"}
+    },
+    {
+      "id": "central_to_vault",
+      "from": "central_hall",
+      "to": "vault",
+      "name": "金庫扉",
+      "description": "電子ロック付きの分厚い扉。",
+      "travel_ticks": 1,
+      "is_bidirectional": true,
+      "passage": {"kind": "DOOR", "state": "LOCKED", "sound_permeability": 0.3},
+      "passage_conditions": [
+        {
+          "condition_type": "FLAG_SET",
+          "flag_name": "vault_unlocked",
+          "failure_message": "金庫扉は施錠されている。"
+        }
+      ]
+    }
+  ],
+  "players": [
+    {"id": "player_a", "name": "A", "spawn_spot": "south_room", "initial_items": []},
+    {"id": "player_b", "name": "B", "spawn_spot": "north_room", "initial_items": []}
+  ],
+  "game_end_conditions": {
+    "win": [{"type": "ALL_AT_SPOT", "target_spot": "vault"}],
+    "lose": [{"type": "TICK_LIMIT", "tick_limit": 50}]
+  },
+  "initial_flags": [],
+  "scenario_events": []
+}

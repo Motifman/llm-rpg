@@ -17,6 +17,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     EntityLeftSpotEvent,
     SpotExploredEvent,
     SpotObjectInteractedEvent,
+    SpotObjectInteractionFailedEvent,
     SpotObjectStateChangedEvent,
 )
 
@@ -43,6 +44,8 @@ class SpotGraphObservationFormatter:
             return self._format_entity_left(event, recipient_player_id)
         if isinstance(event, SpotObjectInteractedEvent):
             return self._format_object_interacted(event, recipient_player_id)
+        if isinstance(event, SpotObjectInteractionFailedEvent):
+            return self._format_interaction_failed(event, recipient_player_id)
         if isinstance(event, SpotExploredEvent):
             return self._format_explored(event, recipient_player_id)
         if isinstance(event, ConnectionStateChangedEvent):
@@ -127,6 +130,29 @@ class SpotGraphObservationFormatter:
             "actor": actor,
             "object_name": obj_name,
             "action_name": event.action_name,
+        }
+        return ObservationOutput(
+            prose=prose, structured=structured, observation_category="social"
+        )
+
+    def _format_interaction_failed(
+        self, event: SpotObjectInteractionFailedEvent, recipient_id: PlayerId
+    ) -> Optional[ObservationOutput]:
+        # アクター本人にはツール結果として失敗が返るため、観測は他者にのみ。
+        if self._is_self(event.entity_id, recipient_id):
+            return None
+        actor = self._resolve_entity_name(event.entity_id)
+        obj_name = self._resolve_object_name(event.spot_id, event.object_id)
+        # シナリオ作家がカスタム文を on_failure_observation に書くため、
+        # ここはその文をそのまま prose にする（actor / object のテンプレ
+        # 置換はせず、シナリオ側で命名済みのものを書いてもらう）。
+        prose = event.observation_message
+        structured = {
+            "type": "spot_object_interaction_failed",
+            "actor": actor,
+            "object_name": obj_name,
+            "action_name": event.action_name,
+            "message": event.observation_message,
         }
         return ObservationOutput(
             prose=prose, structured=structured, observation_category="social"

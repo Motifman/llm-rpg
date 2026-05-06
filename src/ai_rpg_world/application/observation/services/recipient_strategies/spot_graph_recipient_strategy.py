@@ -24,6 +24,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     EntityLeftSpotEvent,
     SpotExploredEvent,
     SpotObjectInteractedEvent,
+    SpotObjectInteractionFailedEvent,
     SpotObjectStateChangedEvent,
 )
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
@@ -69,6 +70,12 @@ class SpotGraphRecipientStrategy(IRecipientResolutionStrategy):
         elif isinstance(event, EntityLeftSpotEvent):
             self._resolve_entity_left(event, add)
         elif isinstance(event, SpotObjectInteractedEvent):
+            self._resolve_at_spot_excluding_actor(
+                event.spot_id, event.entity_id, add
+            )
+        elif isinstance(event, SpotObjectInteractionFailedEvent):
+            # 失敗観測は同じスポットの他プレイヤーにのみ届ける（actor 本人には
+            # ツール結果として個別メッセージが返るので除外）。
             self._resolve_at_spot_excluding_actor(
                 event.spot_id, event.entity_id, add
             )
