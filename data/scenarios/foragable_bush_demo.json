@@ -1,0 +1,112 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "foragable_bush_demo",
+    "title": "採取できるベリー — 環境 → アイテム の最小デモ",
+    "description": "森のベリーの茂みは available=true の間だけプレイヤーが harvest できる。harvest すると berry を 1 個入手し、茂みは available=false に切り替わって last_harvest_tick が記録される。reactive binding が 8 tick 経過後に再び available=true へ戻すので、待てば再採取できる。Phase 1-β: 環境からアイテムが供給される単方向の作用が、新 primitive ゼロ (OBJECT_STATE precondition + GIVE_ITEM + CHANGE_OBJECT_STATE + RECORD_OBJECT_STATE_TICK + ReactiveObjectStateBinding) で書けることを実証する。",
+    "theme": "foraging",
+    "difficulty": "easy",
+    "estimated_ticks": 30,
+    "author": "demo",
+    "tags": ["foraging", "item_environment_interaction", "phase1_baseline"]
+  },
+  "item_specs": [
+    {
+      "id": "wild_berry",
+      "name": "野いちご",
+      "description": "酸味のある野いちご。生でも食べられるが日持ちはしない。",
+      "category": "FOOD"
+    }
+  ],
+  "environment": {
+    "weather": {
+      "enabled": false,
+      "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+      "update_interval_ticks": 100,
+      "announce_changes": false
+    }
+  },
+  "spots": [
+    {
+      "id": "forest_clearing",
+      "name": "森の開けた場所",
+      "description": "木陰に野いちごの茂みが一つ。実が成っていれば採取できる。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "BRIGHT", "temperature": "NORMAL"},
+      "interior": {
+        "objects": [
+          {
+            "id": "berry_bush",
+            "name": "ベリーの茂み",
+            "description": "野いちごの茂み。",
+            "object_type": "OTHER",
+            "state": {"available": true, "last_harvest_tick": -100},
+            "interactions": [
+              {
+                "action_name": "harvest",
+                "display_label": "ベリーを採る",
+                "preconditions": [
+                  {
+                    "condition_type": "OBJECT_STATE",
+                    "target_object": "berry_bush",
+                    "required_state": {"available": true},
+                    "failure_message": "茂みに実は残っていない。しばらく待てば再びなるだろう。"
+                  }
+                ],
+                "effects": [
+                  {
+                    "effect_type": "GIVE_ITEM",
+                    "parameters": {"item_spec": "wild_berry"}
+                  },
+                  {
+                    "effect_type": "CHANGE_OBJECT_STATE",
+                    "parameters": {
+                      "target_object": "berry_bush",
+                      "state_updates": {"available": false}
+                    }
+                  },
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {
+                      "target_object": "berry_bush",
+                      "state_key": "last_harvest_tick"
+                    }
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "茂みから赤く熟した野いちごをひとつもいだ。"}
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "connections": [],
+  "players": [
+    {"id": "player_a", "name": "採集者", "spawn_spot": "forest_clearing", "initial_items": []}
+  ],
+  "game_end_conditions": {
+    "win": [],
+    "lose": [{"type": "TICK_LIMIT", "tick_limit": 100}]
+  },
+  "initial_flags": [],
+  "scenario_events": [],
+  "reactive_bindings": {
+    "objects": [
+      {
+        "target": "berry_bush",
+        "predicate": {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "berry_bush",
+          "state_key": "last_harvest_tick",
+          "ticks_offset": 8
+        },
+        "on_true_state_updates": {"available": true},
+        "on_false_state_updates": {"available": false}
+      }
+    ]
+  }
+}
