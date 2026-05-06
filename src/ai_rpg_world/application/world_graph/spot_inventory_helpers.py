@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import FrozenSet
+from collections import Counter
+from typing import FrozenSet, Mapping
 
 from ai_rpg_world.domain.item.aggregate.item_aggregate import ItemAggregate
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
@@ -35,6 +36,39 @@ def collect_owned_item_spec_ids_from_inventory(
         if agg is not None:
             out.add(agg.item_spec.item_spec_id)
     return frozenset(out)
+
+
+def count_owned_item_instances_by_spec(
+    inventory: PlayerInventoryAggregate,
+    item_repository: ItemRepository,
+) -> Mapping[ItemSpecId, int]:
+    """インベントリ内のアイテム instance を ItemSpecId 別に重複保持数で数える。
+
+    `collect_owned_item_spec_ids_from_inventory` が frozenset を返して
+    重複を潰すのに対し、こちらは「berry を 3 個持っている」を 3 として
+    返す。HAS_ITEM precondition の数量チェックや REMOVE_ITEM の
+    複数消費判定で利用する。
+
+    instance.quantity（同一 instance 内の stack 数）は加算しない。
+    1 instance = 1 個として数える Phase 2-A の方針に従う。
+    """
+    counts: Counter[ItemSpecId] = Counter()
+    for i in range(inventory.max_slots):
+        sid = SlotId(i)
+        iid = inventory.get_item_instance_id_by_slot(sid)
+        if iid is None:
+            continue
+        agg = item_repository.find_by_id(iid)
+        if agg is not None:
+            counts[agg.item_spec.item_spec_id] += 1
+    for est in EquipmentSlotType:
+        iid = inventory.get_item_instance_id_by_equipment_slot(est)
+        if iid is None:
+            continue
+        agg = item_repository.find_by_id(iid)
+        if agg is not None:
+            counts[agg.item_spec.item_spec_id] += 1
+    return dict(counts)
 
 
 def remove_one_item_of_spec_from_inventory(

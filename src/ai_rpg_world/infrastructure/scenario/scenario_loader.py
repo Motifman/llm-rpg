@@ -386,6 +386,7 @@ class ScenarioLoader:
             prepared_action_id=raw.get("prepared_action_id"),
             puzzle_input_key=raw.get("puzzle_input_key"),
             required_item_spec_ids=required_item_spec_ids,
+            required_quantity=int(raw.get("required_quantity", 1)),
         )
 
     def _parse_interaction_effect(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> InteractionEffect:
