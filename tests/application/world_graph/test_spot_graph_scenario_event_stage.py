@@ -255,6 +255,35 @@ class TestCompositeConditionEvaluation:
         stage.run(WorldTick(1))
         assert "ev1_done" not in flags.as_frozen_set()
 
+    def test_empty_and_is_vacuously_true(self) -> None:
+        """AND の children が空なら vacuous truth で発火する（数学慣習）。"""
+        scn = _scenario_with_composite_condition({
+            "condition_type": "AND",
+            "children": [],
+        })
+        stage, flags, _ = _make_stage_for_scenario(scn)
+        stage.run(WorldTick(1))
+        assert "ev1_done" in flags.as_frozen_set()
+
+    def test_empty_or_is_false(self) -> None:
+        """OR の children が空なら発火しない（数学慣習）。"""
+        scn = _scenario_with_composite_condition({
+            "condition_type": "OR",
+            "children": [],
+        })
+        stage, flags, _ = _make_stage_for_scenario(scn)
+        stage.run(WorldTick(1))
+        assert "ev1_done" not in flags.as_frozen_set()
+
+    def test_unknown_condition_type_is_false(self) -> None:
+        """未知の condition_type は False 扱いで発火しない。"""
+        scn = _scenario_with_composite_condition({
+            "condition_type": "TOTALLY_UNKNOWN_TYPE",
+        })
+        stage, flags, _ = _make_stage_for_scenario(scn)
+        stage.run(WorldTick(1))
+        assert "ev1_done" not in flags.as_frozen_set()
+
     def test_nested_composite_de_morgan(self) -> None:
         """NOT(OR(A,B)) と AND(NOT(A), NOT(B)) が同じ評価結果になる。"""
         scn = _scenario_with_composite_condition({

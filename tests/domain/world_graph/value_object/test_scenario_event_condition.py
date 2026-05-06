@@ -56,6 +56,23 @@ class TestAndOrCondition:
         assert and_cond.children[0].children[0].flag_name == "x"
 
 
+class TestChildrenTupleInvariant:
+    """children が tuple 以外なら拒否する（frozen dataclass の hash 不変条件）。"""
+
+    def test_list_children_rejected(self) -> None:
+        """children に list を渡すと ValidationException を投げる。"""
+        flag = ScenarioEventCondition(condition_type="FLAG_SET", flag_name="x")
+        with pytest.raises(ScenarioEventConditionValidationException, match="tuple"):
+            ScenarioEventCondition(condition_type="NOT", children=[flag])  # type: ignore[arg-type]
+
+    def test_tuple_children_is_hashable(self) -> None:
+        """tuple children を持つ条件は hash() 可能で frozen の不変条件を保つ。"""
+        flag = ScenarioEventCondition(condition_type="FLAG_SET", flag_name="x")
+        cond = ScenarioEventCondition(condition_type="NOT", children=(flag,))
+        # set に入れられれば hash() が動いている
+        assert {cond} == {cond}
+
+
 class TestLeafCondition:
     """leaf 条件と children の整合性検証。"""
 

@@ -12,6 +12,9 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
 )
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
+    SpotGraphAggregate,
+)
 from ai_rpg_world.domain.player.repository.player_inventory_repository import (
     PlayerInventoryRepository,
 )
@@ -129,8 +132,8 @@ class SpotGraphScenarioEventStageService:
         self,
         cond: ScenarioEventCondition,
         current_tick: WorldTick,
-        world_flags,
-        graph,
+        world_flags: frozenset[str],
+        graph: SpotGraphAggregate,
     ) -> bool:
         """1 つの条件（leaf or 合成）を再帰的に評価する。"""
         ctype = cond.condition_type

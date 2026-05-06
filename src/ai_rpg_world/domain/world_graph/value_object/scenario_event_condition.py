@@ -49,13 +49,15 @@ class ScenarioEventCondition:
     children: Tuple["ScenarioEventCondition", ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
+        # children は frozen dataclass の hash 不変条件を保つため必ず tuple。
+        # list 等の mutable な型を許すと dataclass の hash() が壊れる。
+        if not isinstance(self.children, tuple):
+            raise ScenarioEventConditionValidationException(
+                f"children must be a tuple, got {type(self.children).__name__}"
+            )
         if self.condition_type == "NOT" and len(self.children) != 1:
             raise ScenarioEventConditionValidationException(
                 f"NOT condition requires exactly 1 child, got {len(self.children)}"
-            )
-        if self.condition_type in {"AND", "OR"} and not isinstance(self.children, tuple):
-            raise ScenarioEventConditionValidationException(
-                f"{self.condition_type} condition.children must be a tuple"
             )
         if self.condition_type not in COMPOSITE_CONDITION_TYPES and self.children:
             raise ScenarioEventConditionValidationException(
