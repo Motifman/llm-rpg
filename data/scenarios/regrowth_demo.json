@@ -1,0 +1,91 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "regrowth_demo",
+    "title": "資源回復 — 木の実が再生する最小デモ",
+    "description": "森のベリー bush は採取されると 10 tick の間 available=false になり、それを過ぎると自動で available=true に戻る。tick 5 にスケジュールされた scenario_event が「野生動物が食い荒らした」想定で last_harvest_tick を記録する。reactive_object_state_binding が OBJECT_STATE_TICK_AT_LEAST predicate で再生タイミングを判定する。",
+    "theme": "environment",
+    "difficulty": "easy",
+    "estimated_ticks": 30,
+    "author": "demo",
+    "tags": ["environment", "regrowth", "reactive_binding", "tick_record"]
+  },
+  "item_specs": [],
+  "environment": {
+    "weather": {
+      "enabled": false,
+      "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+      "update_interval_ticks": 100,
+      "announce_changes": false
+    }
+  },
+  "spots": [
+    {
+      "id": "forest_clearing",
+      "name": "森の開けた場所",
+      "description": "木陰にベリーの茂みが一つ。実が成っていれば採取できる。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "BRIGHT", "temperature": "NORMAL"},
+      "interior": {
+        "objects": [
+          {
+            "id": "berry_bush",
+            "name": "ベリーの茂み",
+            "description": "野いちごの茂み。実が無い時は数日待つと再生する。",
+            "object_type": "OTHER",
+            "state": {"available": true, "last_harvest_tick": -100},
+            "interactions": []
+          }
+        ]
+      }
+    }
+  ],
+  "connections": [],
+  "players": [
+    {"id": "player_a", "name": "採集者", "spawn_spot": "forest_clearing", "initial_items": []}
+  ],
+  "game_end_conditions": {
+    "win": [],
+    "lose": [{"type": "TICK_LIMIT", "tick_limit": 100}]
+  },
+  "initial_flags": [],
+  "scenario_events": [
+    {
+      "id": "wildlife_harvest",
+      "trigger": "ON_TICK",
+      "once": true,
+      "conditions": [
+        {"condition_type": "TICK_AT_LEAST", "tick": 5}
+      ],
+      "effects": [
+        {
+          "effect_type": "RECORD_OBJECT_STATE_TICK",
+          "parameters": {"target_object": "berry_bush", "state_key": "last_harvest_tick"}
+        },
+        {
+          "effect_type": "CHANGE_OBJECT_STATE",
+          "parameters": {"target_object": "berry_bush", "state_updates": {"available": false}}
+        },
+        {
+          "effect_type": "SHOW_MESSAGE",
+          "parameters": {"message": "野生動物が通りかかり、ベリーを食い荒らしていった。"}
+        }
+      ]
+    }
+  ],
+  "reactive_bindings": {
+    "objects": [
+      {
+        "target": "berry_bush",
+        "predicate": {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "berry_bush",
+          "state_key": "last_harvest_tick",
+          "ticks_offset": 10
+        },
+        "on_true_state_updates": {"available": true},
+        "on_false_state_updates": {"available": false}
+      }
+    ]
+  }
+}
