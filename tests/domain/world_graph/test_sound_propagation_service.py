@@ -12,6 +12,7 @@ from ai_rpg_world.domain.world_graph.service.sound_propagation_service import (
 )
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
+from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
 
 
@@ -34,7 +35,7 @@ def _conn(cid: int, a: int, b: int, *, perm: float = 1.0) -> SpotConnection:
         description="",
         travel_ticks=1,
         is_bidirectional=False,
-        sound_permeability=perm,
+        passage=Passage.open(sound_permeability=perm),
     )
 
 
@@ -97,6 +98,7 @@ class TestSoundPropagationService:
         g = SpotGraphAggregate.empty(SpotGraphId.create(1))
         g.add_spot(_node(1))
         g.add_spot(_node(2))
+        from ai_rpg_world.domain.world_graph.enum.passage_kind import DoorStateEnum
         closed = SpotConnection(
             connection_id=ConnectionId.create(1),
             from_spot_id=SpotId.create(1),
@@ -105,8 +107,7 @@ class TestSoundPropagationService:
             description="",
             travel_ticks=1,
             is_bidirectional=False,
-            sound_permeability=0.6,
-            is_passable=False,
+            passage=Passage.door(DoorStateEnum.LOCKED, sound_permeability=0.6),
         )
         g.add_connection(closed)
         g.place_entity(EntityId.create(1), SpotId.create(1))

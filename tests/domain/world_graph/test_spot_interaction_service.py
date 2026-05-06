@@ -127,8 +127,8 @@ class TestSpotInteractionService:
                             parameters={"flag_name": "power_on"},
                         ),
                         InteractionEffect(
-                            effect_type=InteractionEffectTypeEnum.CHANGE_CONNECTION_STATE,
-                            parameters={"connection_id": 5, "is_passable": True},
+                            effect_type=InteractionEffectTypeEnum.CHANGE_PASSAGE_STATE,
+                            parameters={"connection_id": 5, "new_state": "OPEN"},
                         ),
                     ),
                 ),
@@ -144,7 +144,10 @@ class TestSpotInteractionService:
             frozenset(),
         )
         assert "power_on" in r.new_flags
-        assert r.connection_passability_updates == ((ConnectionId.create(5), True),)
+        assert len(r.passage_state_updates) == 1
+        spec = r.passage_state_updates[0]
+        assert spec.connection_id == 5
+        assert spec.new_state == "OPEN"
 
     def test_change_object_state_can_target_other_object(self):
         switch = SpotObject(

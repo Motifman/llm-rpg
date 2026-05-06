@@ -15,6 +15,7 @@ from ai_rpg_world.domain.world_graph.value_object.spot_graph_actor_rule import (
     SpotGraphActorRule,
 )
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
+from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import (
     InMemorySpotGraphRepository,
 )
@@ -52,8 +53,7 @@ def _build_graph() -> SpotGraphAggregate:
             travel_ticks=1,
             is_bidirectional=True,
             passage_conditions=(),
-            sound_permeability=1.0,
-            is_passable=True,
+            passage=Passage.open(sound_permeability=1.0),
         ),
         reverse_connection_id=ConnectionId.create(2),
     )

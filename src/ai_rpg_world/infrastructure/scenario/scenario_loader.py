@@ -27,13 +27,6 @@ from ai_rpg_world.domain.world_graph.enum.interaction_condition_type import Inte
 from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import InteractionEffectTypeEnum
 from ai_rpg_world.domain.world_graph.enum.lighting_enum import LightingEnum
 from ai_rpg_world.domain.world_graph.enum.passage_condition_type import PassageConditionTypeEnum
-from ai_rpg_world.domain.world_graph.enum.passage_kind import (
-    BarrierStateEnum,
-    DoorStateEnum,
-    OpenStateEnum,
-    PassageKindEnum,
-    WallStateEnum,
-)
 from ai_rpg_world.domain.world_graph.enum.spot_object_type import SpotObjectTypeEnum
 from ai_rpg_world.domain.world_graph.enum.temperature_enum import TemperatureEnum
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
@@ -487,60 +480,6 @@ class ScenarioLoader:
             flag_name=raw.get("flag_name"),
         )
 
-    def _parse_passage(self, raw: Optional[Dict[str, Any]]) -> Optional[Passage]:
-        """シナリオJSON の `passage` ブロックを Passage 値オブジェクトに変換する。
-
-        スキーマ例:
-            {"kind": "WALL", "state": "INTACT",
-             "sound_permeability": 0.2, "traversable": false}
-
-        kind は必須。state は省略可（kind ごとのデフォルトを使う）。
-        sound_permeability / traversable は kind+state のデフォルトを上書き。
-        """
-        if raw is None:
-            return None
-        kind_str = raw.get("kind")
-        if kind_str is None:
-            raise ScenarioLoadError("passage.kind is required")
-        try:
-            kind = PassageKindEnum(kind_str)
-        except ValueError as exc:
-            raise ScenarioLoadError(f"Unknown passage.kind: {kind_str}") from exc
-
-        traversable_override = raw.get("traversable")
-        sound_override = raw.get("sound_permeability")
-        sound_value: Optional[float] = (
-            float(sound_override) if sound_override is not None else None
-        )
-
-        if kind is PassageKindEnum.OPEN:
-            return Passage.open(
-                traversable=traversable_override,
-                sound_permeability=sound_value,
-            )
-        if kind is PassageKindEnum.WALL:
-            state = WallStateEnum(raw.get("state", WallStateEnum.INTACT.value))
-            return Passage.wall(
-                state,
-                traversable=traversable_override,
-                sound_permeability=sound_value,
-            )
-        if kind is PassageKindEnum.DOOR:
-            state = DoorStateEnum(raw.get("state", DoorStateEnum.CLOSED.value))
-            return Passage.door(
-                state,
-                traversable=traversable_override,
-                sound_permeability=sound_value,
-            )
-        if kind is PassageKindEnum.BARRIER:
-            state = BarrierStateEnum(raw.get("state", BarrierStateEnum.ACTIVE.value))
-            return Passage.barrier(
-                state,
-                traversable=traversable_override,
-                sound_permeability=sound_value,
-            )
-        raise ScenarioLoadError(f"Unhandled passage kind: {kind}")
-
     def _parse_passage_condition(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> PassageCondition:
         item_sid = raw.get("required_item")
         item_spec_id = ItemSpecId.create(mapper.get_int("item_spec", item_sid)) if item_sid else None
@@ -561,9 +500,18 @@ class ScenarioLoader:
             to_sid = mapper.get_int("spot", c["to"])
             conditions = [self._parse_passage_condition(p, mapper) for p in c.get("passage_conditions", [])]
             is_bidir = bool(c.get("is_bidirectional", True))
-            passage = self._parse_passage(c.get("passage"))
+            # passage が無いシナリオは「開口部 (OPEN)」扱い。`initially_passable` /
+            # 接続レベルの `sound_permeability` は廃止された旧スキーマのキーで、
+            # 万一残っていれば作家への明示エラーにする。
+            for legacy_key in ("initially_passable", "sound_permeability"):
+                if legacy_key in c:
+                    raise ScenarioLoadError(
+                        f"Connection '{c['id']}' uses obsolete key '{legacy_key}'. "
+                        f"Use `passage` block instead."
+                    )
+            passage = Passage.from_dict(c.get("passage"))
 
-            conn_kwargs: Dict[str, Any] = dict(
+            conn = SpotConnection(
                 connection_id=ConnectionId.create(cid),
                 from_spot_id=SpotId.create(from_sid),
                 to_spot_id=SpotId.create(to_sid),
@@ -572,14 +520,8 @@ class ScenarioLoader:
                 travel_ticks=int(c.get("travel_ticks", 1)),
                 is_bidirectional=is_bidir,
                 passage_conditions=conditions,
+                passage=passage,
             )
-            if passage is not None:
-                # passage が指定されたら is_passable / sound_permeability は同期される
-                conn_kwargs["passage"] = passage
-            else:
-                conn_kwargs["sound_permeability"] = float(c.get("sound_permeability", 1.0))
-                conn_kwargs["is_passable"] = bool(c.get("initially_passable", True))
-            conn = SpotConnection(**conn_kwargs)
 
             reverse_id: Optional[ConnectionId] = None
             if is_bidir:

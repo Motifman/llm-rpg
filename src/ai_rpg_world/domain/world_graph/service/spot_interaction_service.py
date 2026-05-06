@@ -162,7 +162,6 @@ class SpotInteractionService:
             messages=effect_result.messages,
             item_spec_ids_to_grant=effect_result.item_spec_ids_to_grant,
             item_spec_ids_to_remove=effect_result.item_spec_ids_to_remove,
-            connection_passability_updates=effect_result.connection_passability_updates,
             damage_specs=effect_result.damage_specs,
             status_effect_specs=effect_result.status_effect_specs,
             teleport_specs=effect_result.teleport_specs,
