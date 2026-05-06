@@ -45,17 +45,26 @@ class SpotInteractionService:
         interaction_parameters: Optional[dict] = None,
         owned_item_spec_counts: Optional[Mapping[ItemSpecId, int]] = None,
     ) -> Tuple[bool, Optional[str]]:
-        # 数量チェックが必要な precondition のために counts を導出。
-        # 呼び出し側が渡してこない場合は frozenset から「各 1 個」と
-        # みなしてフォールバックする（required_quantity=1 の既存挙動と互換）。
-        counts = (
-            dict(owned_item_spec_counts)
-            if owned_item_spec_counts is not None
-            else {sid: 1 for sid in owned_item_spec_ids}
-        )
+        # `owned_item_spec_counts` が渡されない場合は「frozenset から各 1 個」
+        # でフォールバックする（required_quantity=1 の既存挙動と互換）。
+        # ただし precondition のいずれかが required_quantity > 1 を要求する
+        # のに counts が無いと silent wrong answer になるので、その場合は
+        # 早期に明示的なエラーで弾く（pre-release のため後方互換は不要）。
+        if owned_item_spec_counts is None:
+            needs_counts = any(
+                c.required_quantity > 1 for c in interaction.preconditions
+            )
+            if needs_counts:
+                raise ValueError(
+                    "owned_item_spec_counts is required when any precondition has "
+                    "required_quantity > 1; pass count_owned_item_instances_by_spec(...)"
+                )
+            counts: Mapping[ItemSpecId, int] = {sid: 1 for sid in owned_item_spec_ids}
+        else:
+            counts = owned_item_spec_counts
         for cond in interaction.preconditions:
             ok, msg = self._evaluate_condition(
-                cond, spot_object, owned_item_spec_ids, world_flags,
+                cond, spot_object, world_flags,
                 spot_presence_count=spot_presence_count,
                 interaction_parameters=interaction_parameters,
                 owned_item_spec_counts=counts,
@@ -68,7 +77,6 @@ class SpotInteractionService:
         self,
         cond: InteractionCondition,
         spot_object: SpotObject,
-        owned_item_spec_ids: FrozenSet[ItemSpecId],
         world_flags: FrozenSet[str],
         *,
         spot_presence_count: int = 1,

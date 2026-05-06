@@ -146,10 +146,21 @@ class SpotInteractionApplicationService:
 
         inv2 = self._player_inventory_repository.find_by_id(player_id)
         if inv2 is not None:
+            # REMOVE_ITEM 効果で消費するアイテムが見つからない場合、
+            # 黙ってスキップすると「precondition は通ったのに消費されない」
+            # という invariant 違反になる（Phase 2-A レビュー HIGH #3）。
+            # precondition で count を確認している前提なので、ここで
+            # 失敗するのは何かが致命的に壊れている状態。明示的に raise する。
             for spec_id in result.item_spec_ids_to_remove:
-                remove_one_item_of_spec_from_inventory(
+                removed = remove_one_item_of_spec_from_inventory(
                     inv2, spec_id, self._item_repository
                 )
+                if not removed:
+                    raise ApplicationException(
+                        "REMOVE_ITEM effect could not consume item "
+                        f"(spec_id={spec_id.value}); precondition / count mismatch",
+                        player_id=int(player_id),
+                    )
             self._player_inventory_repository.save(inv2)
 
         for spec in result.destroy_connection_specs:

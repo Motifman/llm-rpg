@@ -269,3 +269,107 @@ class TestQuantityIntegration:
         )
         counts = _counts(inventory_repo, item_repo)
         assert counts == {ORE_SPEC_ID: 3, COAL_SPEC_ID: 1}
+
+    def test_count_helper_excludes_equipment_slots(self) -> None:
+        """装備スロットのアイテムは「消費可能 count」に含めない (REMOVE と semantics 整合)。"""
+        from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
+            count_owned_item_instances_by_spec,
+        )
+        from ai_rpg_world.domain.player.enum.equipment_slot_type import EquipmentSlotType
+        from ai_rpg_world.domain.player.value_object.slot_id import SlotId
+
+        _, inventory_repo, item_repo = _build_app(
+            initial_items=(ORE_SPEC_ID, ORE_SPEC_ID),
+        )
+        inv = inventory_repo.find_by_id(PlayerId(PLAYER_ID))
+        # slot 0 の鉱石を装備スロット (例: WEAPON) に移す
+        # （現実には鉱石は装備しないが、装備スロットが count から除外
+        # されていることをテストするための人工状況）
+        slot0_iid = inv.get_item_instance_id_by_slot(SlotId(0))
+        assert slot0_iid is not None
+        inv.drop_item(SlotId(0))
+        inv._equipment_slots[EquipmentSlotType.WEAPON] = slot0_iid
+        inventory_repo.save(inv)
+
+        counts = count_owned_item_instances_by_spec(inv, item_repo)
+        # 装備中の 1 個は除外され、bag に残る 1 個だけがカウントされる
+        assert counts.get(ORE_SPEC_ID) == 1
+
+    def test_remove_item_raises_when_count_insufficient_at_runtime(self) -> None:
+        """precondition バリデーション後に REMOVE 対象が無い不整合は ApplicationException で明示する。
+
+        通常 precondition で弾かれるため発生しないが、たとえば
+        precondition と effect の quantity が一致しない作家ミスを早期検出
+        するための invariant guard。ここでは effect の quantity を
+        手動で precondition より大きくしたケースをシミュレートする。
+        """
+        from ai_rpg_world.application.common.exceptions import ApplicationException
+
+        # 鉱石 1 個しか持たないプレイヤーで、precondition は緩い (required=1)
+        # だが effect 側で 2 個 REMOVE しようとする scenario を直接構築する。
+        forge_recipe = InteractionDef(
+            action_name="bad_recipe",
+            display_label="壊れたレシピ",
+            preconditions=(
+                InteractionCondition(
+                    condition_type=InteractionConditionTypeEnum.HAS_ITEM,
+                    target_item_spec_id=ORE_SPEC_ID,
+                    required_quantity=1,
+                ),
+            ),
+            effects=(
+                InteractionEffect(
+                    effect_type=InteractionEffectTypeEnum.REMOVE_ITEM,
+                    parameters={"item_spec_id": ORE_SPEC_ID.value, "quantity": 2},
+                ),
+            ),
+        )
+        forge = SpotObject(
+            object_id=SpotObjectId.create(FORGE_OBJECT_ID),
+            name="forge", description="d",
+            object_type=SpotObjectTypeEnum.OTHER,
+            state={}, interactions=(forge_recipe,),
+        )
+        spot = SpotNode(
+            spot_id=SpotId.create(SPOT_ID), name="smithy", description="d",
+            category=SpotCategoryEnum.OTHER, parent_id=None,
+        )
+        graph = SpotGraphAggregate.empty(SpotGraphId.create(1))
+        graph.add_spot(spot)
+        graph.place_entity(EntityId.create(PLAYER_ID), SpotId.create(SPOT_ID))
+        graph.clear_events()
+
+        spot_graph_repo = InMemorySpotGraphRepository(graph)
+        interior_repo = InMemorySpotInteriorRepository()
+        interior_repo.save(SpotId.create(SPOT_ID), SpotInterior((), (forge,), (), ()))
+        data_store = InMemoryDataStore()
+        status_repo = InMemoryPlayerStatusRepository(data_store)
+        inventory_repo = InMemoryPlayerInventoryRepository(data_store)
+        item_repo = InMemoryItemRepository(data_store)
+        item_spec_repo = InMemoryItemSpecRepository()
+        item_spec_repo.save(ItemSpecReadModel(
+            item_spec_id=ORE_SPEC_ID, name="鉄鉱石",
+            item_type=ItemType.MATERIAL, rarity=Rarity.COMMON,
+            description="d", max_stack_size=MaxStackSize(99),
+        ))
+        inventory_repo.save(PlayerInventoryAggregate(player_id=PlayerId(PLAYER_ID)))
+        grant_item_specs_to_inventory(
+            PlayerId(PLAYER_ID), (ORE_SPEC_ID,),  # 鉱石 1 個だけ
+            item_repo, item_spec_repo, inventory_repo,
+        )
+        flags = MutableWorldFlagState()
+        app = SpotInteractionApplicationService(
+            spot_graph_repository=spot_graph_repo,
+            spot_interior_repository=interior_repo,
+            player_inventory_repository=inventory_repo,
+            item_repository=item_repo,
+            item_spec_repository=item_spec_repo,
+            world_flag_state=flags,
+            player_status_repository=status_repo,
+        )
+        with pytest.raises(ApplicationException, match="REMOVE_ITEM"):
+            app.execute_interaction(
+                PlayerId(PLAYER_ID),
+                SpotObjectId.create(FORGE_OBJECT_ID),
+                "bad_recipe",
+            )
