@@ -384,12 +384,15 @@ def _spot_object_from_dict(d: dict[str, Any]) -> SpotObject:
 
 
 def _interaction_def_to_dict(i: InteractionDef) -> dict[str, Any]:
-    return {
+    out: dict[str, Any] = {
         "action_name": i.action_name,
         "display_label": i.display_label,
         "preconditions": [_interaction_condition_to_dict(p) for p in i.preconditions],
         "effects": [_interaction_effect_to_dict(e) for e in i.effects],
     }
+    if i.on_failure_observation is not None:
+        out["on_failure_observation"] = i.on_failure_observation
+    return out
 
 
 def _interaction_def_from_dict(d: dict[str, Any]) -> InteractionDef:
@@ -398,6 +401,7 @@ def _interaction_def_from_dict(d: dict[str, Any]) -> InteractionDef:
         display_label=d["display_label"],
         preconditions=tuple(_interaction_condition_from_dict(x) for x in d["preconditions"]),
         effects=tuple(_interaction_effect_from_dict(x) for x in d["effects"]),
+        on_failure_observation=d.get("on_failure_observation"),
     )
 
 

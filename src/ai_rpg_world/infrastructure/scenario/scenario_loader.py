@@ -338,11 +338,13 @@ class ScenarioLoader:
         effects = tuple(
             self._parse_interaction_effect(e, mapper) for e in raw.get("effects", [])
         )
+        on_failure_observation = raw.get("on_failure_observation")
         return InteractionDef(
             action_name=raw["action_name"],
             display_label=raw["display_label"],
             preconditions=preconds,
             effects=effects,
+            on_failure_observation=on_failure_observation,
         )
 
     def _parse_interaction_condition(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> InteractionCondition:
@@ -350,6 +352,13 @@ class ScenarioLoader:
         item_spec_id = ItemSpecId.create(mapper.get_int("item_spec", item_sid)) if item_sid else None
         obj_sid = raw.get("target_object")
         obj_id = SpotObjectId.create(mapper.get_int("object", obj_sid)) if obj_sid else None
+        # 脱出ゲーム拡張フィールド
+        required_items_raw = raw.get("required_items")
+        required_item_spec_ids = None
+        if required_items_raw:
+            required_item_spec_ids = tuple(
+                ItemSpecId.create(mapper.get_int("item_spec", s)) for s in required_items_raw
+            )
         return InteractionCondition(
             condition_type=InteractionConditionTypeEnum[raw["condition_type"]],
             target_item_spec_id=item_spec_id,
@@ -357,6 +366,10 @@ class ScenarioLoader:
             required_state=raw.get("required_state"),
             flag_name=raw.get("flag_name"),
             failure_message=raw.get("failure_message", ""),
+            required_player_count=raw.get("required_player_count"),
+            prepared_action_id=raw.get("prepared_action_id"),
+            puzzle_input_key=raw.get("puzzle_input_key"),
+            required_item_spec_ids=required_item_spec_ids,
         )
 
     def _parse_interaction_effect(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> InteractionEffect:

@@ -72,6 +72,22 @@ class SpotObjectInteractedEvent(BaseDomainEvent[SpotGraphId, str]):
 
 
 @dataclass(frozen=True)
+class SpotObjectInteractionFailedEvent(BaseDomainEvent[SpotGraphId, str]):
+    """エンティティがオブジェクト操作を試みたが前提条件で失敗した。
+
+    観測としては「アクター本人ではない、同じスポットの他プレイヤー」に
+    `observation_message` として配信される。アクター本人には別途ツール
+    結果として `failure_message` が返る（重複しないようにここでは除外）。
+    """
+
+    entity_id: EntityId
+    spot_id: SpotId
+    object_id: SpotObjectId
+    action_name: str
+    observation_message: str
+
+
+@dataclass(frozen=True)
 class SpotExploredEvent(BaseDomainEvent[SpotGraphId, str]):
     """スポットが探索された"""
 
