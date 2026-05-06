@@ -418,6 +418,19 @@ class ScenarioLoader:
         raw: Dict[str, Any],
         mapper: ScenarioIdMapper,
     ) -> ScenarioEventCondition:
+        ctype = str(raw["condition_type"])
+        # 合成条件 (NOT / AND / OR): children を再帰パース
+        if ctype in {"NOT", "AND", "OR"}:
+            children_raw = raw.get("children", [])
+            if not isinstance(children_raw, list):
+                raise ScenarioLoadError(
+                    f"{ctype} condition.children must be a list"
+                )
+            children = tuple(
+                self._parse_scenario_event_condition(c, mapper) for c in children_raw
+            )
+            return ScenarioEventCondition(condition_type=ctype, children=children)
+        # leaf 条件
         spot_id = None
         if raw.get("target_spot"):
             spot_id = mapper.get_int("spot", raw["target_spot"])
@@ -428,7 +441,7 @@ class ScenarioLoader:
         if raw.get("required_item"):
             item_spec_id = mapper.get_int("item_spec", raw["required_item"])
         return ScenarioEventCondition(
-            condition_type=str(raw["condition_type"]),
+            condition_type=ctype,
             tick=raw.get("tick"),
             tick_start=raw.get("tick_start"),
             tick_end=raw.get("tick_end"),
