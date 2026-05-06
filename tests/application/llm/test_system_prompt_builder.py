@@ -39,11 +39,18 @@ class TestDefaultSystemPromptBuilder:
         assert "human" in text
         assert "fire" in text
 
-    def test_build_includes_rules_section(self, builder, player_info):
-        """【ルール】セクションが含まれる"""
+    def test_build_includes_action_stance_and_protocol_sections(self, builder, player_info):
+        """【行動の構え】と【世界とのやり取りの規約】セクションが含まれる"""
         text = builder.build(player_info)
-        assert "【ルール】" in text
+        assert "【行動の構え】" in text
+        assert "【世界とのやり取りの規約】" in text
         assert "ツール" in text
+
+    def test_build_frames_relevant_memories_as_subjective(self, builder, player_info):
+        """「関連する記憶」が主観的記憶として読むよう誘導されている"""
+        text = builder.build(player_info)
+        assert "関連する記憶" in text
+        assert "主観的な記憶" in text
 
     def test_build_empty_game_description_ok(self, builder):
         """game_description が空でも生成される"""
