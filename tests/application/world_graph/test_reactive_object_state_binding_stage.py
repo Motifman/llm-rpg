@@ -217,6 +217,40 @@ class TestReactiveObjectStateBindingStage:
         stage.run(WorldTick(2))
         assert interior_repo.find_by_spot_id(SpotId.create(1)).objects[0].state["phase"] == "ready"
 
+    def test_asymmetric_disjoint_keys_only_touch_their_side(self) -> None:
+        """on_true / on_false が完全に異なるキーを書く場合、各側は自分のキーだけを書き換える。
+
+        旧 same-key-set 制約撤廃後の核心ケース: 「条件 True で a だけ書く、
+        False で b だけ書く」が正しく動き、相手側のキーには触らない
+        （部分マージ semantics の保証）。
+        """
+        repo, interior_repo, flags, evaluator = _build_world_with_object(
+            {"a": 0, "b": 0}
+        )
+        binding = ReactiveObjectStateBinding(
+            target_object_id=SpotObjectId.create(7),
+            predicate=ScenarioEventCondition(condition_type="FLAG_SET", flag_name="signal"),
+            on_true_state_updates=(("a", 1),),
+            on_false_state_updates=(("b", 1),),
+        )
+        stage = ReactiveObjectStateBindingStageService(
+            bindings=(binding,),
+            spot_graph_repository=repo,
+            spot_interior_repository=interior_repo,
+            condition_evaluator=evaluator,
+        )
+        # 1 周目: predicate False → b=1, a は変わらない
+        stage.run(WorldTick(1))
+        s1 = interior_repo.find_by_spot_id(SpotId.create(1)).objects[0].state
+        assert s1["a"] == 0
+        assert s1["b"] == 1
+        # 2 周目: predicate True → a=1, b は前回値を保持
+        flags.add("signal")
+        stage.run(WorldTick(2))
+        s2 = interior_repo.find_by_spot_id(SpotId.create(1)).objects[0].state
+        assert s2["a"] == 1
+        assert s2["b"] == 1
+
     def test_asymmetric_no_save_when_updates_empty(self) -> None:
         """空辞書 updates_for は save をトリガーしない（spurious write を避ける）。"""
         repo, interior_repo, flags, evaluator = _build_world_with_object(

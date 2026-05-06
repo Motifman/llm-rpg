@@ -73,14 +73,27 @@ class TestReactiveObjectStateBindingValidation:
         assert b.updates_for(False) == {"b": 2}
         assert set(b.managed_state_keys) == {"a", "b"}
 
-    def test_duplicate_key_within_one_side_rejected(self) -> None:
-        """同じ side 内でキーが重複している場合は作家ミスとして拒否。"""
+    def test_duplicate_key_within_on_true_rejected(self) -> None:
+        """on_true_state_updates 内で同一キーが重複している場合は拒否。"""
         with pytest.raises(ReactiveObjectStateBindingValidationException, match="duplicate key"):
             ReactiveObjectStateBinding(
                 target_object_id=SpotObjectId.create(1),
                 predicate=_flag_pred(),
                 on_true_state_updates=(("a", 1), ("a", 2)),
                 on_false_state_updates=(("a", 0),),
+            )
+
+    def test_duplicate_key_within_on_false_rejected(self) -> None:
+        """on_false_state_updates 内で同一キーが重複している場合も同じく拒否（対称チェック）。"""
+        with pytest.raises(
+            ReactiveObjectStateBindingValidationException,
+            match="duplicate key.*on_false_state_updates",
+        ):
+            ReactiveObjectStateBinding(
+                target_object_id=SpotObjectId.create(1),
+                predicate=_flag_pred(),
+                on_true_state_updates=(("a", 1),),
+                on_false_state_updates=(("a", 0), ("a", 9)),
             )
 
     def test_updates_for_returns_correct_dict(self) -> None:

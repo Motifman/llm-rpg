@@ -81,7 +81,10 @@ class ReactiveObjectStateBindingStageService:
             binding.predicate, current_tick, graph,
         )
         updates = binding.updates_for(predicate_value)
-        # 既に同じ値が入っていれば save 不要
+        # 既に同じ値が入っていれば save 不要。
+        # asymmetric binding (Phase 2-B) で `updates={}` (片側が空 tuple)
+        # のケースもここで自然に early return する: `all([])` は True なので
+        # state を一切 touch せず save を発火しない。
         if all(target.state.get(k) == v for k, v in updates.items()):
             return
         new_state = dict(target.state)
