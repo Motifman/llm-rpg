@@ -9,7 +9,31 @@ from ai_rpg_world.domain.item.exception import (
     DurabilityValidationException,
     StackSizeExceededException,
     InsufficientQuantityException,
+    ItemInstanceStateValidationException,
 )
+
+
+# state 値として許容する型: JSON プリミティブのみ。
+# datetime / domain 型 / bytes 等を直接入れると永続化時に
+# `json.dumps` が失敗する。boundary（VO の入口）で弾くことで、
+# 「保存しようとしたら infrastructure 層で TypeError」という遅い失敗を防ぐ。
+_ALLOWED_STATE_VALUE_TYPES = (str, int, float, bool, type(None))
+
+
+def _validate_state_dict(state: Mapping[str, Any]) -> None:
+    """ItemInstance.state に入る dict が JSON シリアライズ可能であることを確認する。"""
+    for key, value in state.items():
+        if not isinstance(key, str):
+            raise ItemInstanceStateValidationException(
+                f"state key must be str, got {type(key).__name__}: {key!r}"
+            )
+        # bool は int の subclass。`isinstance(True, int)` が True なので
+        # tuple に bool を含めれば bool も通るが、明示している。
+        if not isinstance(value, _ALLOWED_STATE_VALUE_TYPES):
+            raise ItemInstanceStateValidationException(
+                f"state[{key!r}] value type {type(value).__name__} is not "
+                f"JSON-serializable; allowed: str / int / float / bool / None"
+            )
 
 
 class ItemInstance:
@@ -31,7 +55,12 @@ class ItemInstance:
         # 違う値（charges_remaining / lit / enchantment 等）を持たせるため。
         # SpotObject.state と semantics を揃える: 部分マージ可能な flat dict。
         # 内部で防御的コピーを取り、外部からの直接参照で破壊されないようにする。
-        self._state: Dict[str, Any] = dict(state) if state else {}
+        # 値型は JSON プリミティブに制限（永続化のため、boundary で validate）。
+        if state:
+            _validate_state_dict(state)
+            self._state: Dict[str, Any] = dict(state)
+        else:
+            self._state = {}
 
         self._validate()
 
@@ -103,15 +132,17 @@ class ItemInstance:
         return dict(self._state)
 
     def replace_state(self, new_state: Mapping[str, Any]) -> None:
-        """state 全体を置き換える。"""
+        """state 全体を置き換える。値型は JSON プリミティブに制限。"""
+        _validate_state_dict(new_state)
         self._state = dict(new_state)
 
     def merge_state(self, updates: Mapping[str, Any]) -> None:
         """state にキー/値をマージする (部分上書き)。
 
         SpotObject.state と同じく flat dict 想定。同名キーは上書き、
-        新規キーは追加される。
+        新規キーは追加される。値型は JSON プリミティブに制限。
         """
+        _validate_state_dict(updates)
         for k, v in updates.items():
             self._state[k] = v
 
