@@ -20,6 +20,10 @@ from ai_rpg_world.domain.player.value_object.agent_need import NeedType
 from ai_rpg_world.domain.player.value_object.player_id import PlayerId
 from ai_rpg_world.domain.world_graph.entity.spot_connection import SpotConnection
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import ISpotGraphRepository
+from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
+    SpotGraphAggregate,
+)
+from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.repository.spot_interior_repository import ISpotInteriorRepository
 from ai_rpg_world.domain.world_graph.service.spot_interaction_service import SpotInteractionService
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
@@ -200,12 +204,12 @@ class SpotInteractionApplicationService:
 
     def _maybe_emit_failure_observation(
         self,
-        interior,
+        interior: SpotInterior,
         object_id: SpotObjectId,
         action_name: str,
         entity_id: EntityId,
         spot_id: SpotId,
-        graph,
+        graph: SpotGraphAggregate,
     ) -> None:
         """InteractionDef.on_failure_observation が設定されていれば
         SpotObjectInteractionFailedEvent を publish する。"""
