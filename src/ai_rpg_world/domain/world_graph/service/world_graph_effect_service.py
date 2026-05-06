@@ -280,6 +280,15 @@ class WorldGraphEffectService:
             to_sid = int(p.get("to_spot_id", 0))
             conn_name = str(p.get("connection_name", ""))
             if from_sid > 0 and to_sid > 0 and conn_name:
+                if "passage" not in p:
+                    # 作家が passage ブロックを書き忘れた場合のフォールバック。
+                    # 黙って OPEN にすると意図しない接続種別になりうるので警告する。
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "CREATE_CONNECTION effect for '%s' is missing 'passage' "
+                        "block; defaulting to Passage.open()",
+                        conn_name,
+                    )
                 create_connection_specs.append(CreateConnectionSpec(
                     from_spot_id=from_sid,
                     to_spot_id=to_sid,
