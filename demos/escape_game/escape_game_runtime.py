@@ -921,6 +921,14 @@ def create_escape_game_runtime(
         travel_context=travel_context,
     )
     scenario_event_progress = InMemorySpotGraphScenarioEventProgressStore()
+    # 評価器は scenario_event_stage と reactive_binding_stage で共有する。
+    condition_evaluator = ScenarioConditionEvaluator(
+        world_flag_state=world_flag_state,
+        spot_interior_repository=spot_interior_repo,
+        player_status_repository=player_status_repo,
+        player_inventory_repository=player_inventory_repo,
+        item_repository=item_repo,
+    )
     scenario_event_stage = SpotGraphScenarioEventStageService(
         scenario_events=scenario.scenario_events,
         spot_graph_repository=spot_graph_repo,
@@ -931,18 +939,12 @@ def create_escape_game_runtime(
         item_spec_repository=item_spec_repo,
         world_flag_state=world_flag_state,
         progress_store=scenario_event_progress,
-    )
-    reactive_binding_evaluator = ScenarioConditionEvaluator(
-        world_flag_state=world_flag_state,
-        spot_interior_repository=spot_interior_repo,
-        player_status_repository=player_status_repo,
-        player_inventory_repository=player_inventory_repo,
-        item_repository=item_repo,
+        condition_evaluator=condition_evaluator,
     )
     reactive_binding_stage = ReactivePassageBindingStageService(
         bindings=scenario.reactive_passage_bindings,
         spot_graph_repository=spot_graph_repo,
-        condition_evaluator=reactive_binding_evaluator,
+        condition_evaluator=condition_evaluator,
     )
     environment_stage = SpotGraphEnvironmentStageService(
         weather_state_provider=lambda: weather_holder["state"],

@@ -192,6 +192,27 @@ class TestReactivePassageBindingStage:
         stage.run(WorldTick(1))
         assert save_count["n"] == 0
 
+    def test_composite_predicate_with_not_inverts_state(self) -> None:
+        """NOT(PLAYER_AT_SPOT(control_room)) を述語にすると、誰も居ないとき OPEN になる。"""
+        graph = _build_relay_graph()
+        # 誰も control_room には居ない
+        not_at_control = ScenarioEventCondition(
+            condition_type="NOT",
+            children=(
+                ScenarioEventCondition(condition_type="PLAYER_AT_SPOT", spot_id=1),
+            ),
+        )
+        binding = ReactivePassageBinding(
+            target_connection_id=ConnectionId.create(10),
+            predicate=not_at_control,
+            on_true_state="OPEN",
+            on_false_state="LOCKED",
+        )
+        stage, repo, _ = _build_stage(graph, bindings=(binding,))
+        stage.run(WorldTick(1))
+        # 誰も居ない → NOT True → on_true=OPEN
+        assert repo.find_graph().get_connection(ConnectionId.create(10)).passage.state == "OPEN"
+
     def test_multiple_bindings_evaluated_independently(self) -> None:
         """複数 binding はそれぞれ独立に評価され、対象接続だけが影響を受ける。"""
         graph = _build_relay_graph()

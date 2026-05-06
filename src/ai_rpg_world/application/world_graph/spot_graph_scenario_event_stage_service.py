@@ -13,6 +13,10 @@ from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
 from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
     ScenarioConditionEvaluator,
 )
+from ai_rpg_world.application.world_graph.spot_object_lookup import (
+    find_object_in_graph,
+    find_owner_spot_id,
+)
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
@@ -57,6 +61,7 @@ class SpotGraphScenarioEventStageService:
         progress_store: Optional[InMemorySpotGraphScenarioEventProgressStore] = None,
         effect_service: Optional[WorldGraphEffectService] = None,
         on_message: Optional[Callable[[ScenarioEventDef, str], None]] = None,
+        condition_evaluator: Optional[ScenarioConditionEvaluator] = None,
     ) -> None:
         self._scenario_events = tuple(scenario_events)
         self._spot_graph_repository = spot_graph_repository
@@ -69,7 +74,9 @@ class SpotGraphScenarioEventStageService:
         self._progress_store = progress_store or InMemorySpotGraphScenarioEventProgressStore()
         self._effect_service = effect_service or WorldGraphEffectService()
         self._on_message = on_message
-        self._condition_evaluator = ScenarioConditionEvaluator(
+        # 評価器は外部注入を許容（reactive_binding_stage と共有するため）。
+        # 渡されなければ自前で生成。
+        self._condition_evaluator = condition_evaluator or ScenarioConditionEvaluator(
             world_flag_state=world_flag_state,
             spot_interior_repository=spot_interior_repository,
             player_status_repository=player_status_repository,
@@ -223,13 +230,7 @@ class SpotGraphScenarioEventStageService:
 
     def _find_owner_spot_id(self, object_id: SpotObjectId) -> Optional[SpotId]:
         graph = self._spot_graph_repository.find_graph()
-        for node in graph.iter_spot_nodes():
-            interior = self._spot_interior_repository.find_by_spot_id(node.spot_id)
-            if interior is None:
-                continue
-            if interior.get_object(object_id) is not None:
-                return node.spot_id
-        return None
+        return find_owner_spot_id(object_id, graph, self._spot_interior_repository)
 
     def _interior_for_object(self, object_id: SpotObjectId):
         owner_spot = self._find_owner_spot_id(object_id)
@@ -241,10 +242,5 @@ class SpotGraphScenarioEventStageService:
         return interior
 
     def _find_object(self, object_id: SpotObjectId):
-        owner_spot = self._find_owner_spot_id(object_id)
-        if owner_spot is None:
-            return None
-        interior = self._spot_interior_repository.find_by_spot_id(owner_spot)
-        if interior is None:
-            return None
-        return interior.get_object(object_id)
+        graph = self._spot_graph_repository.find_graph()
+        return find_object_in_graph(object_id, graph, self._spot_interior_repository)
