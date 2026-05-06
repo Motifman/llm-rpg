@@ -9,11 +9,18 @@
 
 prepare 観測（誰かが prepare したことの通知）はこのステージではなく、
 prepare_action ツール側で即時に publish される。
+
+サポート effect:
+on_complete / on_timeout で実用的に動くのは SET_FLAG /
+CHANGE_PASSAGE_STATE / SHOW_MESSAGE。CHANGE_OBJECT_STATE /
+GIVE_ITEM 等は interior が必要だが、resolver は特定のスポットに
+紐付かないため non-functional（warning ログのみ）。
 """
 
 from __future__ import annotations
 
-from typing import Iterable, List, Set
+import logging
+from typing import Iterable, List, Literal, Set, Tuple
 
 from ai_rpg_world.application.world_graph.spot_object_lookup import find_object_in_graph
 from ai_rpg_world.application.world_graph.synchronized_action_registry import (
@@ -35,9 +42,23 @@ from ai_rpg_world.domain.world_graph.service.world_graph_effect_service import (
     WorldGraphEffectService,
 )
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
+from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
+    InteractionEffect,
+)
 from ai_rpg_world.domain.world_graph.value_object.synchronized_action_group import (
     SynchronizedActionGroup,
 )
+
+
+_logger = logging.getLogger(__name__)
+
+
+_SUPPORTED_EFFECT_TYPES = frozenset({
+    "SET_FLAG", "CHANGE_PASSAGE_STATE", "SHOW_MESSAGE",
+})
+
+
+_GroupOutcome = Literal["completed", "timed_out", "pending", "idle"]
 
 
 class SynchronizedActionResolverStageService:
@@ -77,12 +98,8 @@ class SynchronizedActionResolverStageService:
         group: SynchronizedActionGroup,
         current_tick: WorldTick,
         graph: SpotGraphAggregate,
-    ) -> str:
-        """1 group を解決する。
-
-        Returns:
-            "completed" | "timed_out" | "pending" | "idle"
-        """
+    ) -> _GroupOutcome:
+        """1 group を解決する。"""
         # 各 required action の最古 prepare を取得
         per_action: dict[str, SyncPrepareEntry | None] = {
             aid: self._registry.find_oldest_for_action(aid)
@@ -114,12 +131,25 @@ class SynchronizedActionResolverStageService:
         # まだ窓内、かつ揃っていない
         return "pending"
 
-    def _apply_effects(self, effects, graph: SpotGraphAggregate) -> None:
+    def _apply_effects(
+        self,
+        effects: Tuple[InteractionEffect, ...],
+        graph: SpotGraphAggregate,
+    ) -> None:
         """effect tuple を WorldGraphEffectService で適用し、結果を graph に反映する。"""
         # acting_object は無いので None。interior は使わない effect が前提
         # （CHANGE_PASSAGE_STATE / SET_FLAG / SHOW_MESSAGE 等）。OBJECT 系は
-        # 単純化のため未対応（必要なら後追いで拡張）。
+        # 単純化のため未対応で、ここで warn する。
         from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
+
+        for eff in effects:
+            if eff.effect_type.value not in _SUPPORTED_EFFECT_TYPES:
+                _logger.warning(
+                    "SynchronizedActionResolverStage: effect_type %s is not "
+                    "supported (interior が無いため). 対応 effect: %s",
+                    eff.effect_type.value,
+                    sorted(_SUPPORTED_EFFECT_TYPES),
+                )
 
         # 空の interior（このステージは特定スポットに紐付かないグローバル
         # 解決なので、effect は world-flag / passage / message 系を想定）。
