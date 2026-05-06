@@ -164,12 +164,28 @@ class TestShorthandValidation:
                 "all_of": {"condition_type": "FLAG_SET", "flag_name": "a"},  # dict は不可
             }))
 
+    def test_all_of_non_dict_item_rejected_with_path(self) -> None:
+        """list 内に dict 以外（null や文字列）が混じった場合、path 付きで早期拒否。"""
+        with pytest.raises(ScenarioLoadError, match=r"all_of\[1\] must be a condition object"):
+            ScenarioLoader().load_from_dict(_scenario_with_event_condition({
+                "all_of": [
+                    {"condition_type": "FLAG_SET", "flag_name": "a"},
+                    None,  # 不正
+                ],
+            }))
+
+    def test_any_of_empty_list_yields_or_with_no_children(self) -> None:
+        """空 `any_of: []` も children=() の OR になる（評価器は False を返す約束）。"""
+        cond = _loaded_root_condition({"any_of": []})
+        assert cond.condition_type == "OR"
+        assert cond.children == ()
+
 
 class TestEquivalenceWithVerboseForm:
     """糖衣 ↔ 旧記法が AST レベルで同値であることを保証する。"""
 
     def test_all_of_equivalent_to_explicit_and(self) -> None:
-        """`all_of` 版と explicit AND 版で children 構造が一致する。"""
+        """`all_of` 版と explicit AND 版で AST が完全に一致する (dataclass __eq__ 使用)。"""
         explicit = _loaded_root_condition({
             "condition_type": "AND",
             "children": [
@@ -183,9 +199,6 @@ class TestEquivalenceWithVerboseForm:
                 {"condition_type": "FLAG_SET", "flag_name": "ready"},
             ],
         })
-        assert explicit.condition_type == sugary.condition_type
-        assert len(explicit.children) == len(sugary.children)
-        for a, b in zip(explicit.children, sugary.children):
-            assert a.condition_type == b.condition_type
-            assert a.tick == b.tick
-            assert a.flag_name == b.flag_name
+        # ScenarioEventCondition は frozen dataclass なので __eq__ 自動生成。
+        # 全フィールド比較で「将来フィールドが追加されても test が網羅性を保つ」。
+        assert explicit == sugary
