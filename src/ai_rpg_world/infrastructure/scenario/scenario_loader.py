@@ -40,6 +40,9 @@ from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 from ai_rpg_world.domain.world_graph.value_object.reactive_passage_binding import (
     ReactivePassageBinding,
 )
+from ai_rpg_world.domain.world_graph.value_object.synchronized_action_group import (
+    SynchronizedActionGroup,
+)
 from ai_rpg_world.domain.world_graph.value_object.passage_condition import PassageCondition
 from ai_rpg_world.domain.world_graph.value_object.object_description_variant import (
     ObjectDescriptionVariant,
@@ -121,6 +124,7 @@ class ScenarioLoadResult:
     scenario_events: Tuple[ScenarioEventDef, ...] = ()
     weather_config: Optional[ScenarioWeatherConfig] = None
     reactive_passage_bindings: Tuple[ReactivePassageBinding, ...] = ()
+    synchronized_action_groups: Tuple[SynchronizedActionGroup, ...] = ()
 
 
 class ScenarioLoader:
@@ -155,6 +159,9 @@ class ScenarioLoader:
         reactive_bindings = self._parse_reactive_passage_bindings(
             raw.get("reactive_bindings", {}), mapper,
         )
+        sync_groups = self._parse_synchronized_action_groups(
+            raw.get("synchronized_action_groups", []), mapper,
+        )
 
         return ScenarioLoadResult(
             graph=graph,
@@ -169,6 +176,7 @@ class ScenarioLoader:
             scenario_events=scenario_events,
             weather_config=weather_config,
             reactive_passage_bindings=reactive_bindings,
+            synchronized_action_groups=sync_groups,
         )
 
     def _parse_metadata(self, raw: Dict[str, Any]) -> ScenarioMetadata:
@@ -374,9 +382,16 @@ class ScenarioLoader:
 
     def _parse_interaction_effect(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> InteractionEffect:
         params = dict(raw.get("parameters", {}))
+        effect_type_str = raw.get("effect_type", "")
         # CHANGE_OBJECT_STATE は state_updates を正式名とする。
         # 過去シナリオ互換で new_state が来た場合は正規化して受け入れる。
-        if "state_updates" not in params and "new_state" in params:
+        # 他の effect (CHANGE_PASSAGE_STATE 等) では new_state は別の意味で
+        # 使われるため、CHANGE_OBJECT_STATE 限定で正規化する。
+        if (
+            effect_type_str == "CHANGE_OBJECT_STATE"
+            and "state_updates" not in params
+            and "new_state" in params
+        ):
             params["state_updates"] = params.pop("new_state")
         if "item_spec" in params:
             params["item_spec_id"] = mapper.get_int("item_spec", params.pop("item_spec"))
@@ -559,6 +574,62 @@ class ScenarioLoader:
                     )
                 )
         return tuple(bindings)
+
+    def _parse_synchronized_action_groups(
+        self, raw: Any, mapper: ScenarioIdMapper,
+    ) -> Tuple[SynchronizedActionGroup, ...]:
+        """`synchronized_action_groups` を SynchronizedActionGroup 値オブジェクト
+        の tuple にパースする。
+
+        スキーマ:
+          [
+            {
+              "id": "vault_unlock",
+              "required_action_ids": ["pull_lever_left", "pull_lever_right"],
+              "window_ticks": 2,
+              "on_complete": [<InteractionEffect>...],
+              "on_timeout": [<InteractionEffect>...],
+              "on_prepare_observation_message": "..."
+            }
+          ]
+        """
+        if not isinstance(raw, list):
+            return ()
+        out: list[SynchronizedActionGroup] = []
+        for i, g in enumerate(raw):
+            if not isinstance(g, dict):
+                raise ScenarioLoadError(
+                    f"synchronized_action_groups[{i}] must be an object"
+                )
+            gid = g.get("id")
+            if not gid:
+                raise ScenarioLoadError(
+                    f"synchronized_action_groups[{i}].id is required"
+                )
+            req = g.get("required_action_ids", [])
+            if not isinstance(req, list):
+                raise ScenarioLoadError(
+                    f"synchronized_action_groups[{i}].required_action_ids must be a list"
+                )
+            on_complete = tuple(
+                self._parse_interaction_effect(e, mapper)
+                for e in g.get("on_complete", [])
+            )
+            on_timeout = tuple(
+                self._parse_interaction_effect(e, mapper)
+                for e in g.get("on_timeout", [])
+            )
+            out.append(
+                SynchronizedActionGroup(
+                    group_id=str(gid),
+                    required_action_ids=tuple(str(x) for x in req),
+                    window_ticks=int(g.get("window_ticks", 1)),
+                    on_complete=on_complete,
+                    on_timeout=on_timeout,
+                    on_prepare_observation_message=g.get("on_prepare_observation_message"),
+                )
+            )
+        return tuple(out)
 
     def _parse_weather_config(self, raw: Dict[str, Any]) -> Optional[ScenarioWeatherConfig]:
         weather = raw.get("weather") if isinstance(raw, dict) else None

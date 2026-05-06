@@ -88,6 +88,23 @@ class SpotObjectInteractionFailedEvent(BaseDomainEvent[SpotGraphId, str]):
 
 
 @dataclass(frozen=True)
+class SpotPlayerPreparedActionEvent(BaseDomainEvent[SpotGraphId, str]):
+    """エンティティが prepare_action で同期アクションの準備をした。
+
+    協力ギミック #13 の sync group に属する action_id が prepare された
+    際に、同じスポットの他プレイヤーへ「相方が準備している」を観測として
+    配信するためのイベント。`observation_message` はシナリオ作家が
+    `SynchronizedActionGroup.on_prepare_observation_message` で指定。
+    """
+
+    entity_id: EntityId
+    spot_id: SpotId
+    action_id: str
+    group_id: str
+    observation_message: str
+
+
+@dataclass(frozen=True)
 class SpotExploredEvent(BaseDomainEvent[SpotGraphId, str]):
     """スポットが探索された"""
 

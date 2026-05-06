@@ -30,6 +30,7 @@ class SpotGraphSimulationApplicationService:
         travel_stage: Optional[SpotGraphTravelStageService] = None,
         scenario_event_stage: Optional["_SpotGraphTickStage"] = None,
         reactive_binding_stage: Optional["_SpotGraphTickStage"] = None,
+        sync_action_resolver_stage: Optional["_SpotGraphTickStage"] = None,
         environment_stage: Optional["_SpotGraphTickStage"] = None,
         needs_decay_stage: Optional["_SpotGraphTickStage"] = None,
         llm_turn_trigger: Optional["ILlmTurnTrigger"] = None,
@@ -39,6 +40,7 @@ class SpotGraphSimulationApplicationService:
         self._travel_stage = travel_stage
         self._scenario_event_stage = scenario_event_stage
         self._reactive_binding_stage = reactive_binding_stage
+        self._sync_action_resolver_stage = sync_action_resolver_stage
         self._environment_stage = environment_stage
         self._needs_decay_stage = needs_decay_stage
         self._llm_turn_trigger = llm_turn_trigger
@@ -68,6 +70,12 @@ class SpotGraphSimulationApplicationService:
                 # scenario_event の flag 更新を同 tick で反映するため、
                 # scenario_event_stage の後に走らせる。
                 self._reactive_binding_stage.run(current_tick)
+            if self._sync_action_resolver_stage is not None:
+                # sync group の判定はその tick の prepare（ツール実行で
+                # 既に flag 化されている）を見るため、reactive 反映の
+                # 後で走らせる。完成 / タイムアウトに伴う on_complete /
+                # on_timeout 効果は次ステージ以降に伝搬する。
+                self._sync_action_resolver_stage.run(current_tick)
             if self._environment_stage is not None:
                 self._environment_stage.run(current_tick)
             if self._needs_decay_stage is not None:

@@ -134,6 +134,7 @@ from ai_rpg_world.domain.world_graph.event.spot_graph_event import (
     SpotObjectInteractedEvent,
     SpotObjectInteractionFailedEvent,
     SpotObjectStateChangedEvent,
+    SpotPlayerPreparedActionEvent,
 )
 
 
@@ -293,6 +294,7 @@ def _build_event_to_strategy_mapping() -> Dict[Type[Any], str]:
         EntityLeftSpotEvent,
         SpotObjectInteractedEvent,
         SpotObjectInteractionFailedEvent,
+        SpotPlayerPreparedActionEvent,
         SpotExploredEvent,
         ConnectionStateChangedEvent,
         SpotObjectStateChangedEvent,
