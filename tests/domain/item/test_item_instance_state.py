@@ -177,6 +177,88 @@ class TestStackingForbidsStatefulInstances:
         assert a.can_stack_with(b) is False
 
 
+class TestStateValueTypeValidation:
+    """state 値型は JSON プリミティブに制限される（永続化境界の早期 fail）。"""
+
+    def test_non_primitive_value_in_constructor_rejected(self) -> None:
+        """constructor 経由で datetime 等を入れると ItemInstanceStateValidationException。"""
+        from datetime import datetime
+
+        from ai_rpg_world.domain.item.exception import (
+            ItemInstanceStateValidationException,
+        )
+
+        with pytest.raises(
+            ItemInstanceStateValidationException, match="not JSON-serializable"
+        ):
+            ItemInstance(
+                item_instance_id=ItemInstanceId(1),
+                item_spec=_spec(),
+                state={"created_at": datetime(2026, 1, 1)},
+            )
+
+    def test_non_primitive_value_in_replace_state_rejected(self) -> None:
+        """replace_state でも検証されてエラーになる。"""
+        from ai_rpg_world.domain.item.exception import (
+            ItemInstanceStateValidationException,
+        )
+
+        inst = ItemInstance(item_instance_id=ItemInstanceId(1), item_spec=_spec())
+        with pytest.raises(ItemInstanceStateValidationException):
+            inst.replace_state({"obj": object()})
+
+    def test_non_primitive_value_in_merge_state_rejected(self) -> None:
+        """merge_state でも検証されてエラーになる。state は変化しない。"""
+        from ai_rpg_world.domain.item.exception import (
+            ItemInstanceStateValidationException,
+        )
+
+        inst = ItemInstance(
+            item_instance_id=ItemInstanceId(1), item_spec=_spec(),
+            state={"lit": True},
+        )
+        with pytest.raises(ItemInstanceStateValidationException):
+            inst.merge_state({"bad": [1, 2, 3]})  # list は非対応
+        # 失敗時に state は元のまま (atomicity)
+        assert inst.state == {"lit": True}
+
+    def test_non_str_key_rejected(self) -> None:
+        """state のキーは str のみ。int キー等は拒否。"""
+        from ai_rpg_world.domain.item.exception import (
+            ItemInstanceStateValidationException,
+        )
+
+        inst = ItemInstance(item_instance_id=ItemInstanceId(1), item_spec=_spec())
+        with pytest.raises(ItemInstanceStateValidationException, match="state key must be str"):
+            inst.merge_state({1: "a"})
+
+    def test_all_primitive_types_accepted(self) -> None:
+        """str / int / float / bool / None は全て通る。"""
+        inst = ItemInstance(item_instance_id=ItemInstanceId(1), item_spec=_spec())
+        inst.merge_state({
+            "s": "x", "i": 42, "f": 1.5, "b": True, "n": None,
+        })
+        assert inst.state == {"s": "x", "i": 42, "f": 1.5, "b": True, "n": None}
+
+
+class TestStateClearedReenablesStacking:
+    """state を空にすればスタック対象に戻る (clearing 経路)。"""
+
+    def test_replace_state_with_empty_dict_makes_stackable_again(self) -> None:
+        """`replace_state({})` で state が空に戻れば、空 state 同士はスタック可能になる。"""
+        a = ItemInstance(
+            item_instance_id=ItemInstanceId(1), item_spec=_spec(),
+            state={"lit": True},
+        )
+        b = ItemInstance(item_instance_id=ItemInstanceId(2), item_spec=_spec())
+        # state あり → スタック不可
+        assert a.can_stack_with(b) is False
+        # state を空に戻す
+        a.replace_state({})
+        # 両方とも空 state なのでスタック可能
+        assert a.can_stack_with(b) is True
+
+
 class TestStateWithDurabilityCoexistence:
     """state と durability は独立して併存できる。"""
 
