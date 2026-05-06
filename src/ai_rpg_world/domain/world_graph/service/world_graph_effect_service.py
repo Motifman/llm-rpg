@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Iterable, List, Tuple
+import logging
+from typing import Any, Iterable, List, Optional, Tuple
 
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
@@ -29,6 +31,9 @@ from ai_rpg_world.domain.world_graph.value_object.world_graph_effect_result impo
 )
 
 
+_logger = logging.getLogger(__name__)
+
+
 class WorldGraphEffectService:
     """Interaction / Scenario Event 共通の effect 適用サービス。"""
 
@@ -39,6 +44,7 @@ class WorldGraphEffectService:
         acting_object: SpotObject | None,
         effects: Iterable[InteractionEffect],
         world_flags: frozenset[str],
+        current_tick: Optional[WorldTick] = None,
     ) -> WorldGraphEffectResult:
         flags: set[str] = set(world_flags)
         messages: List[str] = []
@@ -90,6 +96,7 @@ class WorldGraphEffectService:
                 destroy_connection_specs=destroy_connection_specs,
                 satisfy_need_specs=satisfy_need_specs,
                 passage_specs=passage_specs,
+                current_tick=current_tick,
             )
 
         return WorldGraphEffectResult(
@@ -129,6 +136,7 @@ class WorldGraphEffectService:
         destroy_connection_specs: List[DestroyConnectionSpec],
         satisfy_need_specs: List[SatisfyNeedSpec],
         passage_specs: List[PassageStateUpdateSpec],
+        current_tick: Optional[WorldTick] = None,
     ) -> Tuple[
         SpotInterior,
         SpotObject | None,
@@ -311,6 +319,45 @@ class WorldGraphEffectService:
             amount = int(p.get("amount", 0))
             if need_type_name and amount > 0:
                 satisfy_need_specs.append(SatisfyNeedSpec(need_type_name=need_type_name, amount=amount))
+            return _all
+
+        if et == InteractionEffectTypeEnum.RECORD_OBJECT_STATE_TICK:
+            # current_tick を target object の state[state_key] に書き込む。
+            # 経時劣化 (#10) や資源回復 (#12) の reactive binding が
+            # OBJECT_STATE_TICK_AT_LEAST predicate で経過 tick を判定するための
+            # 「いつ起きたか」を記録するための effect。
+            # current_tick が None（caller が tick を渡さなかった）の場合は
+            # 黙って書き込まずに警告ログを出して継続する。
+            state_key = p.get("state_key")
+            if not isinstance(state_key, str) or not state_key:
+                _logger.warning(
+                    "RECORD_OBJECT_STATE_TICK: state_key is required (got %r)",
+                    state_key,
+                )
+                return _all
+            if current_tick is None:
+                _logger.warning(
+                    "RECORD_OBJECT_STATE_TICK: caller did not provide current_tick; "
+                    "skipping write to state[%r]",
+                    state_key,
+                )
+                return _all
+            target = self._resolve_target_object(interior, acting_object, p)
+            if target is None:
+                return _all
+            new_state = dict(target.state)
+            new_state[state_key] = int(current_tick.value)
+            updated_target = target.with_state(new_state)
+            interior = interior.replace_object(updated_target)
+            if (
+                acting_object is not None
+                and updated_target.object_id == acting_object.object_id
+            ):
+                acting_object = updated_target
+            _all = (
+                interior, acting_object, flags, grant, remove, messages,
+                damage_specs, status_effect_specs, teleport_specs, atmosphere_update_specs, create_connection_specs, destroy_connection_specs, satisfy_need_specs, passage_specs,
+            )
             return _all
 
         if et == InteractionEffectTypeEnum.CHANGE_PASSAGE_STATE:

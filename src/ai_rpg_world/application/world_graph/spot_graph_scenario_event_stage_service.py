@@ -103,7 +103,7 @@ class SpotGraphScenarioEventStageService:
                 continue
             if not self._matches_conditions(event.conditions, current_tick):
                 continue
-            self._apply_event(event)
+            self._apply_event(event, current_tick)
             if event.once:
                 self._progress_store.mark_fired(event.event_id)
             self._schedule_next_if_chained(event, current_tick)
@@ -116,7 +116,7 @@ class SpotGraphScenarioEventStageService:
                 continue
             if chained.once and self._progress_store.is_fired(due_id):
                 continue
-            self._apply_event(chained)
+            self._apply_event(chained, current_tick)
             if chained.once:
                 self._progress_store.mark_fired(due_id)
             self._schedule_next_if_chained(chained, current_tick)
@@ -141,7 +141,7 @@ class SpotGraphScenarioEventStageService:
         graph = self._spot_graph_repository.find_graph()
         return self._condition_evaluator.evaluate_all(conditions, current_tick, graph)
 
-    def _apply_event(self, event: ScenarioEventDef) -> None:
+    def _apply_event(self, event: ScenarioEventDef, current_tick: WorldTick) -> None:
         acting_object = self._resolve_acting_object(event)
         graph = self._spot_graph_repository.find_graph()
         if acting_object is None:
@@ -157,6 +157,7 @@ class SpotGraphScenarioEventStageService:
             acting_object=acting_object,
             effects=event.effects,
             world_flags=self._world_flag_state.as_frozen_set(),
+            current_tick=current_tick,
         )
         self._world_flag_state.replace_from_interaction(effect_result.new_flags)
 

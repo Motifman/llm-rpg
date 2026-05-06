@@ -21,3 +21,5 @@ class InteractionEffectTypeEnum(Enum):
     CHANGE_PASSAGE_STATE = "CHANGE_PASSAGE_STATE"
     # 欲求操作
     SATISFY_NEED = "SATISFY_NEED"
+    # 動的世界 — 経時劣化/再生で使う「effect 発火時の tick を object.state に記録」
+    RECORD_OBJECT_STATE_TICK = "RECORD_OBJECT_STATE_TICK"
