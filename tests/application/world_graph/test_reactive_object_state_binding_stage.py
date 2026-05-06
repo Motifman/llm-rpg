@@ -188,6 +188,99 @@ class TestReactiveObjectStateBindingStage:
         obj = interior_repo.find_by_spot_id(SpotId.create(1)).objects[0]
         assert obj.state == {"available": True, "color": "red", "size": 3}
 
+    def test_asymmetric_one_way_write_only_when_predicate_true(self) -> None:
+        """on_false_state_updates=() の binding は predicate=True のときだけ state を書き、False では何もしない。
+
+        Phase 2-B: 一方向 lifecycle（例: 「条件成立で phase=ready に推移、
+        不成立では phase は触らず作家管理に任せる」）の主要ユースケース。
+        """
+        repo, interior_repo, flags, evaluator = _build_world_with_object(
+            {"phase": "smelting"}
+        )
+        binding = ReactiveObjectStateBinding(
+            target_object_id=SpotObjectId.create(7),
+            predicate=ScenarioEventCondition(condition_type="FLAG_SET", flag_name="ready_signal"),
+            on_true_state_updates=(("phase", "ready"),),
+            on_false_state_updates=(),  # 触らない
+        )
+        stage = ReactiveObjectStateBindingStageService(
+            bindings=(binding,),
+            spot_graph_repository=repo,
+            spot_interior_repository=interior_repo,
+            condition_evaluator=evaluator,
+        )
+        # predicate False: phase は smelting のまま
+        stage.run(WorldTick(1))
+        assert interior_repo.find_by_spot_id(SpotId.create(1)).objects[0].state["phase"] == "smelting"
+        # predicate True に変える
+        flags.add("ready_signal")
+        stage.run(WorldTick(2))
+        assert interior_repo.find_by_spot_id(SpotId.create(1)).objects[0].state["phase"] == "ready"
+
+    def test_asymmetric_disjoint_keys_only_touch_their_side(self) -> None:
+        """on_true / on_false が完全に異なるキーを書く場合、各側は自分のキーだけを書き換える。
+
+        旧 same-key-set 制約撤廃後の核心ケース: 「条件 True で a だけ書く、
+        False で b だけ書く」が正しく動き、相手側のキーには触らない
+        （部分マージ semantics の保証）。
+        """
+        repo, interior_repo, flags, evaluator = _build_world_with_object(
+            {"a": 0, "b": 0}
+        )
+        binding = ReactiveObjectStateBinding(
+            target_object_id=SpotObjectId.create(7),
+            predicate=ScenarioEventCondition(condition_type="FLAG_SET", flag_name="signal"),
+            on_true_state_updates=(("a", 1),),
+            on_false_state_updates=(("b", 1),),
+        )
+        stage = ReactiveObjectStateBindingStageService(
+            bindings=(binding,),
+            spot_graph_repository=repo,
+            spot_interior_repository=interior_repo,
+            condition_evaluator=evaluator,
+        )
+        # 1 周目: predicate False → b=1, a は変わらない
+        stage.run(WorldTick(1))
+        s1 = interior_repo.find_by_spot_id(SpotId.create(1)).objects[0].state
+        assert s1["a"] == 0
+        assert s1["b"] == 1
+        # 2 周目: predicate True → a=1, b は前回値を保持
+        flags.add("signal")
+        stage.run(WorldTick(2))
+        s2 = interior_repo.find_by_spot_id(SpotId.create(1)).objects[0].state
+        assert s2["a"] == 1
+        assert s2["b"] == 1
+
+    def test_asymmetric_no_save_when_updates_empty(self) -> None:
+        """空辞書 updates_for は save をトリガーしない（spurious write を避ける）。"""
+        repo, interior_repo, flags, evaluator = _build_world_with_object(
+            {"phase": "smelting"}
+        )
+        save_count = {"n": 0}
+        original_save = interior_repo.save
+
+        def counting_save(sid, interior):
+            save_count["n"] += 1
+            return original_save(sid, interior)
+
+        interior_repo.save = counting_save  # type: ignore[assignment]
+
+        binding = ReactiveObjectStateBinding(
+            target_object_id=SpotObjectId.create(7),
+            predicate=ScenarioEventCondition(condition_type="FLAG_SET", flag_name="x"),
+            on_true_state_updates=(("phase", "ready"),),
+            on_false_state_updates=(),  # False 時は触らない
+        )
+        stage = ReactiveObjectStateBindingStageService(
+            bindings=(binding,),
+            spot_graph_repository=repo,
+            spot_interior_repository=interior_repo,
+            condition_evaluator=evaluator,
+        )
+        # predicate False (flag が立っていない) → 触らないので save 0 回
+        stage.run(WorldTick(1))
+        assert save_count["n"] == 0
+
     def test_missing_target_object_logs_warning_and_continues(self, caplog) -> None:
         """対象 object が見つからない binding は警告ログを出して他に影響しない。"""
         repo, interior_repo, _, evaluator = _build_world_with_object({"available": False})
