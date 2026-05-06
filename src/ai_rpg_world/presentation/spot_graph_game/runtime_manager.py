@@ -812,7 +812,7 @@ class GameRuntimeManager:
                 target_spot_id=_safe_get_str(runtime.id_mapper, "spot", conn.to_spot_id.value),
                 target_spot_name=target_node.name,
                 name=conn.name,
-                is_passable=conn.is_passable,
+                is_passable=conn.passage.traversable,
             ))
 
         spot_str = _safe_get_str(runtime.id_mapper, "spot", target_spot_id.value)

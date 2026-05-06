@@ -174,7 +174,7 @@ class TestConnectionStateChanged:
             connection_id=CONN_1,
             from_spot_id=SPOT_A,
             to_spot_id=SPOT_B,
-            is_passable=True,
+            traversable=True,
         )
         recipients = strategy.resolve(event)
         ids = {r.value for r in recipients}
@@ -190,7 +190,7 @@ class TestConnectionStateChanged:
             connection_id=CONN_1,
             from_spot_id=SPOT_A,
             to_spot_id=SPOT_A,
-            is_passable=True,
+            traversable=True,
         )
         recipients = strategy.resolve(event)
         assert len(recipients) == 2

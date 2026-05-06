@@ -1,4 +1,4 @@
-"""SpotConnection エンティティのバリデーションと passage 同期挙動の単体テスト。"""
+"""SpotConnection エンティティのバリデーションと passage 連動挙動の単体テスト。"""
 
 from __future__ import annotations
 
@@ -39,42 +39,25 @@ class TestSpotConnectionValidation:
         with pytest.raises(SpotConnectionValidationException, match="travel_ticks"):
             _make_conn(travel_ticks=-1)
 
-    @pytest.mark.parametrize("perm", [-0.1, 1.1])
-    def test_sound_permeability_out_of_range_rejected(self, perm: float) -> None:
-        """sound_permeability が [0.0, 1.0] の範囲外なら ValidationException を投げる。"""
-        with pytest.raises(SpotConnectionValidationException, match="sound_permeability"):
-            _make_conn(sound_permeability=perm)
 
+class TestSpotConnectionPassage:
+    """passage フィールドの挙動（traversable / sound_permeability は passage 経由）。"""
 
-class TestSpotConnectionPassageSync:
-    """passage を指定したときの is_passable / sound_permeability 同期挙動。"""
+    def test_default_passage_is_open(self) -> None:
+        """passage 未指定なら OPEN（通行可・音透過率1.0）になる。"""
+        conn = _make_conn()
+        assert conn.passage.kind.value == "OPEN"
+        assert conn.passage.traversable is True
+        assert conn.passage.sound_permeability == pytest.approx(1.0)
 
     def test_wall_intact_passage_makes_connection_impassable(self) -> None:
-        """INTACT 壁の passage を指定すると is_passable=False / 音透過率0.1になる。"""
+        """INTACT 壁の passage を指定すると passage.traversable=False / 音透過率0.1。"""
         conn = _make_conn(passage=Passage.wall(WallStateEnum.INTACT))
-        assert conn.is_passable is False
-        assert conn.sound_permeability == pytest.approx(0.1)
+        assert conn.passage.traversable is False
+        assert conn.passage.sound_permeability == pytest.approx(0.1)
 
     def test_door_open_passage_makes_connection_passable_with_full_sound(self) -> None:
-        """OPEN 扉の passage を指定すると通行可・音透過率1.0になる。"""
+        """OPEN 扉の passage を指定すると通行可・音透過率1.0。"""
         conn = _make_conn(passage=Passage.door(DoorStateEnum.OPEN))
-        assert conn.is_passable is True
-        assert conn.sound_permeability == pytest.approx(1.0)
-
-    def test_passage_overrides_explicit_legacy_fields(self) -> None:
-        """passage が指定されていれば、明示的な is_passable/sound_permeability より passage が優先される。"""
-        conn = _make_conn(
-            is_passable=True,
-            sound_permeability=0.99,
-            passage=Passage.wall(WallStateEnum.INTACT),
-        )
-        # passage の値で上書きされる
-        assert conn.is_passable is False
-        assert conn.sound_permeability == pytest.approx(0.1)
-
-    def test_legacy_connection_without_passage_uses_explicit_fields(self) -> None:
-        """passage 未指定なら従来通り is_passable / sound_permeability を直接保持する。"""
-        conn = _make_conn(is_passable=False, sound_permeability=0.3)
-        assert conn.passage is None
-        assert conn.is_passable is False
-        assert conn.sound_permeability == pytest.approx(0.3)
+        assert conn.passage.traversable is True
+        assert conn.passage.sound_permeability == pytest.approx(1.0)

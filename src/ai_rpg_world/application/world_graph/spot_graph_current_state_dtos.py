@@ -16,7 +16,12 @@ class SpotGraphInteractionEntry:
 
 @dataclass(frozen=True)
 class SpotGraphConnectionEntry:
-    """接続先1件の構造化データ。"""
+    """接続先1件の構造化データ。
+
+    注: フィールド名 `is_passable` は LLM プロンプト・WebSocket/REST レスポンスで
+    使われている外部互換のフィールド名なので、ドメイン側の `passage.traversable`
+    とは意図的に名前を分けている（リネームすると外部契約が壊れるため温存）。
+    """
     destination_spot_id: int
     connection_name: str
     destination_spot_name: str

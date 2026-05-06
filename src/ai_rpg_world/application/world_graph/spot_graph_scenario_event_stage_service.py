@@ -204,9 +204,6 @@ class SpotGraphScenarioEventStageService:
 
         if owner_spot is not None:
             self._spot_interior_repository.save(owner_spot, effect_result.new_interior)
-        for cid, is_passable in effect_result.connection_passability_updates:
-            graph.set_connection_passable(cid, is_passable)
-
         for spec in effect_result.passage_state_updates:
             graph.set_connection_passage_state(
                 ConnectionId.create(spec.connection_id),
@@ -229,7 +226,7 @@ class SpotGraphScenarioEventStageService:
                 description=spec.description,
                 travel_ticks=spec.travel_ticks,
                 is_bidirectional=spec.is_bidirectional,
-                sound_permeability=spec.sound_permeability,
+                passage=spec.passage,
             )
             rev_id = ConnectionId.create(max_id + 2) if spec.is_bidirectional else None
             graph.add_connection_dynamic(new_conn, reverse_connection_id=rev_id)

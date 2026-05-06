@@ -324,7 +324,7 @@ class InteractionCondition:
 class InteractionEffect:
     """操作の結果"""
     effect_type: InteractionEffectTypeEnum
-    # GIVE_ITEM, REMOVE_ITEM, CHANGE_OBJECT_STATE, CHANGE_CONNECTION_STATE,
+    # GIVE_ITEM, REMOVE_ITEM, CHANGE_OBJECT_STATE, CHANGE_PASSAGE_STATE,
     # REVEAL_OBJECT, REVEAL_SUB_LOCATION, SET_FLAG, SHOW_MESSAGE,
     # MOVE_TO_SPOT, TRIGGER_EVENT
     parameters: Dict[str, Any]  # 効果の具体的なパラメータ
@@ -427,7 +427,7 @@ class ConnectionStateChangedEvent(DomainEvent):
     connection_id: ConnectionId
     from_spot_id: SpotId
     to_spot_id: SpotId
-    is_passable: bool
+    traversable: bool
 
 class ItemDiscoveredEvent(DomainEvent):
     """探索によってアイテムが発見された"""

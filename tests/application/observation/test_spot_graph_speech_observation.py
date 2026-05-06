@@ -24,6 +24,7 @@ from ai_rpg_world.infrastructure.repository.in_memory_data_store import InMemory
 from ai_rpg_world.infrastructure.repository.in_memory_player_status_repository import (
     InMemoryPlayerStatusRepository,
 )
+from ai_rpg_world.domain.world_graph.value_object.passage import Passage
 from ai_rpg_world.infrastructure.repository.in_memory_spot_graph_repository import (
     InMemorySpotGraphRepository,
 )
@@ -55,7 +56,7 @@ def _build_two_spot_graph(*, perm: float = 0.5) -> SpotGraphAggregate:
             description="",
             travel_ticks=1,
             is_bidirectional=False,
-            sound_permeability=perm,
+            passage=Passage.open(sound_permeability=perm),
         )
     )
     g.place_entity(EntityId.create(1), SpotId.create(1))

@@ -108,7 +108,6 @@ def _build_graph() -> SpotGraphAggregate:
         to_spot_id=SPOT_B,
         name="長い廊下",
         description="",
-        is_passable=True,
         travel_ticks=3,
         is_bidirectional=False,
     ))
@@ -262,7 +261,7 @@ class TestPipelineConnectionChanged:
             connection_id=CONN_AB,
             from_spot_id=SPOT_A,
             to_spot_id=SPOT_B,
-            is_passable=True,
+            traversable=True,
         )
         results = pipeline.run(event)
         recipient_ids = {pid.value for pid, _ in results}

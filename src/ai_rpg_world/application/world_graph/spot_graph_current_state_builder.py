@@ -91,8 +91,9 @@ class SpotGraphCurrentStateBuilder:
         connection_lines: list[str] = []
         for conn in graph.iter_outgoing_connections_from(spot_id):
             dest = graph.get_spot(conn.to_spot_id)
+            traversable = conn.passage.traversable
             condition_text: str | None = None
-            if not conn.is_passable:
+            if not traversable:
                 if conn.passage_conditions:
                     msgs = [pc.failure_message for pc in conn.passage_conditions if pc.failure_message]
                     condition_text = "；".join(msgs) if msgs else None
@@ -102,10 +103,10 @@ class SpotGraphCurrentStateBuilder:
                 destination_spot_id=conn.to_spot_id.value,
                 connection_name=conn.name,
                 destination_spot_name=dest.name,
-                is_passable=conn.is_passable,
+                is_passable=traversable,
                 passage_condition_text=condition_text,
             ))
-            status = "通行可" if conn.is_passable else "通行不可（音は届く可能性あり）"
+            status = "通行可" if traversable else "通行不可（音は届く可能性あり）"
             connection_lines.append(f"- {conn.name} → {dest.name}（{status}）")
 
         objects: list[SpotGraphObjectEntry] = []

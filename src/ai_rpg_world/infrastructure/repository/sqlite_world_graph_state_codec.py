@@ -44,6 +44,7 @@ from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceI
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.infrastructure.repository.spot_graph_persistence_exceptions import (
     SpotGraphConnectionRecordInvariantError,
+    SpotGraphStateDecodeError,
     UnsupportedSpotGraphAggregateSchemaError,
     UnsupportedSpotInteriorSchemaError,
 )
@@ -240,7 +241,7 @@ def _spot_atmosphere_from_dict(d: dict[str, Any]) -> SpotAtmosphere:
 
 
 def _spot_connection_to_dict(conn: SpotConnection) -> dict[str, Any]:
-    out: dict[str, Any] = {
+    return {
         "connection_id": int(conn.connection_id.value),
         "from_spot_id": int(conn.from_spot_id.value),
         "to_spot_id": int(conn.to_spot_id.value),
@@ -249,18 +250,12 @@ def _spot_connection_to_dict(conn: SpotConnection) -> dict[str, Any]:
         "travel_ticks": conn.travel_ticks,
         "is_bidirectional": conn.is_bidirectional,
         "passage_conditions": [_passage_condition_to_dict(p) for p in conn.passage_conditions],
-        "sound_permeability": conn.sound_permeability,
-        "is_passable": conn.is_passable,
+        "passage": _passage_to_dict(conn.passage),
     }
-    if conn.passage is not None:
-        out["passage"] = _passage_to_dict(conn.passage)
-    return out
 
 
 def _spot_connection_from_dict(d: dict[str, Any]) -> SpotConnection:
-    passage_raw = d.get("passage")
-    passage = _passage_from_dict(passage_raw) if passage_raw else None
-    kwargs: dict[str, Any] = dict(
+    return SpotConnection(
         connection_id=ConnectionId.create(int(d["connection_id"])),
         from_spot_id=SpotId.create(int(d["from_spot_id"])),
         to_spot_id=SpotId.create(int(d["to_spot_id"])),
@@ -269,13 +264,8 @@ def _spot_connection_from_dict(d: dict[str, Any]) -> SpotConnection:
         travel_ticks=int(d["travel_ticks"]),
         is_bidirectional=bool(d["is_bidirectional"]),
         passage_conditions=[_passage_condition_from_dict(x) for x in d.get("passage_conditions", [])],
+        passage=_passage_from_dict(d["passage"]),
     )
-    if passage is not None:
-        kwargs["passage"] = passage
-    else:
-        kwargs["sound_permeability"] = float(d.get("sound_permeability", 1.0))
-        kwargs["is_passable"] = bool(d["is_passable"])
-    return SpotConnection(**kwargs)
 
 
 def _passage_to_dict(passage: Passage) -> dict[str, Any]:
@@ -288,12 +278,22 @@ def _passage_to_dict(passage: Passage) -> dict[str, Any]:
 
 
 def _passage_from_dict(d: dict[str, Any]) -> Passage:
-    return Passage(
-        kind=PassageKindEnum(d["kind"]),
-        state=str(d["state"]),
-        traversable=bool(d["traversable"]),
-        sound_permeability=float(d["sound_permeability"]),
-    )
+    try:
+        return Passage(
+            kind=PassageKindEnum(d["kind"]),
+            state=str(d["state"]),
+            traversable=bool(d["traversable"]),
+            sound_permeability=float(d["sound_permeability"]),
+        )
+    except KeyError as exc:
+        # legacy フィールド (is_passable / sound_permeability) しか持たない旧スキーマ
+        # の DB を読み込んだ場合などに発生する。pre-release のため、再生成を促す
+        # メッセージで早期に気づけるようにする。
+        raise SpotGraphStateDecodeError(
+            f"接続の passage フィールドが欠落しています (missing key: {exc}). "
+            f"旧スキーマの DB の可能性があります。再生成してください: "
+            f"`make web-demo-db-reset`"
+        ) from exc
 
 
 def _passage_condition_to_dict(p: PassageCondition) -> dict[str, Any]:

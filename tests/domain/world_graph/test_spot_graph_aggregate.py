@@ -28,6 +28,8 @@ from ai_rpg_world.domain.world_graph.value_object.connection_id import Connectio
 from ai_rpg_world.domain.world_graph.value_object.entity_id import EntityId
 from ai_rpg_world.domain.world_graph.value_object.passage_condition import PassageCondition
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
+from ai_rpg_world.domain.world_graph.value_object.passage import Passage
+from ai_rpg_world.domain.world_graph.enum.passage_kind import DoorStateEnum
 
 
 def _node(i: int) -> SpotNode:
@@ -282,17 +284,18 @@ class TestConnectionState:
                 description="",
                 travel_ticks=0,
                 is_bidirectional=False,
-                is_passable=False,
+            passage=Passage.door(DoorStateEnum.LOCKED),
             )
         )
         g.clear_events()
-        g.set_connection_passable(ConnectionId.create(1), True)
+        g.set_connection_passage_state(ConnectionId.create(1), "OPEN")
         evs = g.get_events()
         assert len(evs) == 1
         assert isinstance(evs[0], ConnectionStateChangedEvent)
-        assert evs[0].is_passable is True
+        assert evs[0].traversable is True
 
     def test_set_passable_same_no_event(self):
+        """既に通行可な接続を OPEN へ遷移しても通行可否は変わらずイベントは出ない。"""
         g = SpotGraphAggregate.empty(SpotGraphId.create(1))
         g.add_spot(_node(1))
         g.add_spot(_node(2))
@@ -305,17 +308,18 @@ class TestConnectionState:
                 description="",
                 travel_ticks=0,
                 is_bidirectional=False,
-                is_passable=True,
+                passage=Passage.door(DoorStateEnum.OPEN),
             )
         )
         g.clear_events()
-        g.set_connection_passable(ConnectionId.create(1), True)
+        # 既に OPEN なので OPEN への遷移は通行可否を変えない
+        g.set_connection_passage_state(ConnectionId.create(1), "OPEN")
         assert g.get_events() == []
 
     def test_unknown_connection_raises(self):
         g = SpotGraphAggregate.empty(SpotGraphId.create(1))
         with pytest.raises(UnknownConnectionException):
-            g.set_connection_passable(ConnectionId.create(99), True)
+            g.set_connection_passage_state(ConnectionId.create(99), "OPEN")
 
 
 class TestConnectionRecords:
@@ -344,7 +348,7 @@ class TestConnectionRecords:
                 description="",
                 travel_ticks=1,
                 is_bidirectional=False,
-                is_passable=False,
+            passage=Passage.door(DoorStateEnum.LOCKED),
             )
         )
         g.add_connection(

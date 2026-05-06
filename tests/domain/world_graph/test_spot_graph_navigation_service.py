@@ -13,6 +13,8 @@ from ai_rpg_world.domain.world_graph.service.spot_graph_navigation_service impor
 from ai_rpg_world.domain.world_graph.value_object.connection_id import ConnectionId
 from ai_rpg_world.domain.world_graph.value_object.passage_condition import PassageCondition
 from ai_rpg_world.domain.world_graph.value_object.spot_graph_id import SpotGraphId
+from ai_rpg_world.domain.world_graph.value_object.passage import Passage
+from ai_rpg_world.domain.world_graph.enum.passage_kind import DoorStateEnum
 
 
 def _three_spot_line_graph() -> SpotGraphAggregate:
@@ -37,8 +39,7 @@ def _three_spot_line_graph() -> SpotGraphAggregate:
             travel_ticks=1,
             is_bidirectional=False,
             passage_conditions=[],
-            sound_permeability=1.0,
-            is_passable=True,
+            passage=Passage.open(sound_permeability=1.0),
         )
     )
     g.add_connection(
@@ -51,8 +52,7 @@ def _three_spot_line_graph() -> SpotGraphAggregate:
             travel_ticks=1,
             is_bidirectional=False,
             passage_conditions=[],
-            sound_permeability=1.0,
-            is_passable=True,
+            passage=Passage.open(sound_permeability=1.0),
         )
     )
     return g
@@ -121,8 +121,7 @@ class TestSpotGraphNavigationServiceRoute:
                 travel_ticks=0,
                 is_bidirectional=False,
                 passage_conditions=[],
-                sound_permeability=1.0,
-                is_passable=False,
+            passage=Passage.door(DoorStateEnum.LOCKED, sound_permeability=1.0),
             )
         )
         nav = SpotGraphNavigationService()
@@ -139,7 +138,7 @@ class TestSpotGraphNavigationServiceCanPass:
             description="",
             travel_ticks=0,
             is_bidirectional=False,
-            is_passable=False,
+            passage=Passage.door(DoorStateEnum.LOCKED),
         )
         nav = SpotGraphNavigationService()
         ok, msg = nav.can_pass(c, frozenset(), frozenset())
