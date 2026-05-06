@@ -1,0 +1,84 @@
+{
+  "scenario_format_version": "1.0",
+  "metadata": {
+    "id": "decay_demo",
+    "title": "経時劣化 — 剣が錆びていく最小デモ",
+    "description": "プレイヤーの剣は最後に手入れしてから 10 tick 経過すると rust_level が clean → rusty に劣化する。手入れインタラクションが last_cleaned_tick を記録するため、経過 tick がリセットされ rust_level も clean に戻る。初期 last_cleaned_tick は 0（= 世界生成時刻）として、放置すると tick 10 で初回劣化が起きる挙動になっている。新 primitive はゼロ — RECORD_OBJECT_STATE_TICK effect と OBJECT_STATE_TICK_AT_LEAST predicate の組み合わせだけで実装。",
+    "theme": "environment",
+    "difficulty": "easy",
+    "estimated_ticks": 50,
+    "author": "demo",
+    "tags": ["environment", "decay", "reactive_binding", "tick_record"]
+  },
+  "item_specs": [],
+  "environment": {
+    "weather": {
+      "enabled": false,
+      "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+      "update_interval_ticks": 100,
+      "announce_changes": false
+    }
+  },
+  "spots": [
+    {
+      "id": "armory",
+      "name": "武器庫",
+      "description": "古い剣が架台に立てかけられている。手入れを怠ると錆びる。",
+      "category": "OTHER",
+      "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+      "interior": {
+        "objects": [
+          {
+            "id": "iron_sword",
+            "name": "鉄の剣",
+            "description": "鈍い光を放つ鉄の剣。",
+            "object_type": "OTHER",
+            "state": {"rust_level": "clean", "last_cleaned_tick": 0},
+            "interactions": [
+              {
+                "action_name": "clean",
+                "display_label": "手入れする",
+                "preconditions": [],
+                "effects": [
+                  {
+                    "effect_type": "RECORD_OBJECT_STATE_TICK",
+                    "parameters": {"target_object": "iron_sword", "state_key": "last_cleaned_tick"}
+                  },
+                  {
+                    "effect_type": "SHOW_MESSAGE",
+                    "parameters": {"message": "剣を布で丹念に磨いた。輝きが戻った。"}
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "connections": [],
+  "players": [
+    {"id": "player_a", "name": "鍛冶見習い", "spawn_spot": "armory", "initial_items": []}
+  ],
+  "game_end_conditions": {
+    "win": [],
+    "lose": [{"type": "TICK_LIMIT", "tick_limit": 100}]
+  },
+  "initial_flags": [],
+  "scenario_events": [],
+  "reactive_bindings": {
+    "objects": [
+      {
+        "target": "iron_sword",
+        "predicate": {
+          "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+          "target_object": "iron_sword",
+          "state_key": "last_cleaned_tick",
+          "ticks_offset": 10
+        },
+        "on_true_state_updates": {"rust_level": "rusty"},
+        "on_false_state_updates": {"rust_level": "clean"}
+      }
+    ]
+  }
+}
