@@ -156,6 +156,77 @@ class TestNullTickTreatAsPassed:
         assert evaluator.evaluate(cond, WorldTick(60), graph) is True
 
 
+class TestObjectNotFoundFallback:
+    """object 自体が graph に存在しない場合は flag に関係なく False。"""
+
+    def test_object_not_found_with_flag_true_still_returns_false(self) -> None:
+        """treat_missing_as_passed=True でも object_id が graph に無ければ False。
+
+        flag は「object は存在するが state[key] が未記録」のときのみ意味を
+        持つ。「object が見つからない」は別の失敗モードであり、混同しない。
+        """
+        graph, evaluator = _build_world_with_object({"last_harvest_tick": None})
+        cond = ScenarioEventCondition(
+            condition_type="OBJECT_STATE_TICK_AT_LEAST",
+            object_id=999,  # 存在しない object
+            state_key="last_harvest_tick",
+            ticks_offset=10,
+            treat_missing_as_passed=True,
+        )
+        assert evaluator.evaluate(cond, WorldTick(0), graph) is False
+
+
+class TestNonStrictBooleanRejection:
+    """scenario_loader が `treat_missing_as_passed` の暗黙 coercion を拒否する。"""
+
+    def test_loader_treats_truthy_string_as_false(self) -> None:
+        """JSON の `"true"` (文字列) は厳格 boolean ではないので False に倒す。
+
+        `bool(...)` で coerce すると非空文字列が True になってしまうが、
+        `is True` 判定で「JSON 真偽値以外は default の False」を保つ。
+        """
+        from ai_rpg_world.infrastructure.scenario.scenario_loader import ScenarioLoader
+
+        scenario = {
+            "scenario_format_version": "1.0",
+            "metadata": {
+                "id": "x", "title": "x", "description": "x",
+                "theme": "x", "difficulty": "easy", "estimated_ticks": 1,
+                "author": "x", "tags": [],
+            },
+            "item_specs": [],
+            "environment": {
+                "weather": {"enabled": False, "initial": {"weather_type": "CLEAR", "intensity": 0.0},
+                            "update_interval_ticks": 100, "announce_changes": False},
+            },
+            "spots": [{
+                "id": "s", "name": "S", "description": "d", "category": "OTHER",
+                "atmosphere": {"lighting": "DIM", "temperature": "NORMAL"},
+                "interior": {"objects": [{
+                    "id": "bush", "name": "bush", "description": "d", "object_type": "OTHER",
+                    "state": {}, "interactions": [],
+                }]},
+            }],
+            "connections": [],
+            "players": [{"id": "p", "name": "P", "spawn_spot": "s", "initial_items": []}],
+            "game_end_conditions": {"win": [], "lose": []},
+            "scenario_events": [{
+                "id": "ev", "trigger": "ON_TICK", "once": True,
+                "conditions": [{
+                    "condition_type": "OBJECT_STATE_TICK_AT_LEAST",
+                    "target_object": "bush",
+                    "state_key": "last_harvest_tick",
+                    "ticks_offset": 10,
+                    "treat_missing_as_passed": "true",  # 文字列 (作家ミス)
+                }],
+                "effects": [],
+            }],
+        }
+        cond = ScenarioLoader().load_from_dict(scenario).scenario_events[0].conditions[0]
+        # 厳格 boolean ではないので default の False に倒れる
+        assert cond.treat_missing_as_passed is False
+
+
 class TestNonIntNonNullValue:
     """int でも None でもない値（文字列など）は警告 + False のまま。"""
 
