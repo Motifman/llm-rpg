@@ -37,6 +37,9 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_condition import I
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import InteractionEffect
 from ai_rpg_world.domain.world_graph.value_object.passage import Passage
+from ai_rpg_world.domain.world_graph.value_object.reactive_object_state_binding import (
+    ReactiveObjectStateBinding,
+)
 from ai_rpg_world.domain.world_graph.value_object.reactive_passage_binding import (
     ReactivePassageBinding,
 )
@@ -124,6 +127,7 @@ class ScenarioLoadResult:
     scenario_events: Tuple[ScenarioEventDef, ...] = ()
     weather_config: Optional[ScenarioWeatherConfig] = None
     reactive_passage_bindings: Tuple[ReactivePassageBinding, ...] = ()
+    reactive_object_state_bindings: Tuple[ReactiveObjectStateBinding, ...] = ()
     synchronized_action_groups: Tuple[SynchronizedActionGroup, ...] = ()
 
 
@@ -159,6 +163,9 @@ class ScenarioLoader:
         reactive_bindings = self._parse_reactive_passage_bindings(
             raw.get("reactive_bindings", {}), mapper,
         )
+        reactive_object_bindings = self._parse_reactive_object_state_bindings(
+            raw.get("reactive_bindings", {}), mapper,
+        )
         sync_groups = self._parse_synchronized_action_groups(
             raw.get("synchronized_action_groups", []), mapper,
         )
@@ -176,6 +183,7 @@ class ScenarioLoader:
             scenario_events=scenario_events,
             weather_config=weather_config,
             reactive_passage_bindings=reactive_bindings,
+            reactive_object_state_bindings=reactive_object_bindings,
             synchronized_action_groups=sync_groups,
         )
 
@@ -497,6 +505,9 @@ class ScenarioLoader:
             item_spec_id=item_spec_id,
             tick_modulo=raw.get("tick_modulo"),
             tick_phase=raw.get("tick_phase"),
+            weather_type=raw.get("weather_type"),
+            state_key=raw.get("state_key"),
+            ticks_offset=raw.get("ticks_offset"),
         )
 
     def _parse_reactive_passage_bindings(
@@ -574,6 +585,64 @@ class ScenarioLoader:
                     )
                 )
         return tuple(bindings)
+
+    def _parse_reactive_object_state_bindings(
+        self, raw: Dict[str, Any], mapper: ScenarioIdMapper,
+    ) -> Tuple[ReactiveObjectStateBinding, ...]:
+        """`reactive_bindings.objects` を ReactiveObjectStateBinding にパース。
+
+        スキーマ:
+          "reactive_bindings": {
+            "objects": [
+              {
+                "target": "<object_string_id>",
+                "predicate": <ScenarioEventCondition tree>,
+                "on_true_state_updates": {"k": v, ...},
+                "on_false_state_updates": {"k": v, ...}
+              }
+            ]
+          }
+        """
+        if not isinstance(raw, dict):
+            return ()
+        objects_raw = raw.get("objects", [])
+        if not isinstance(objects_raw, list):
+            raise ScenarioLoadError(
+                f"reactive_bindings.objects must be a list "
+                f"(got {type(objects_raw).__name__})"
+            )
+        out: list[ReactiveObjectStateBinding] = []
+        for i, b in enumerate(objects_raw):
+            target = b.get("target")
+            if not target:
+                raise ScenarioLoadError(
+                    f"reactive_bindings.objects[{i}].target is required"
+                )
+            oid = mapper.get_int("object", target)
+            predicate_raw = b.get("predicate")
+            if not isinstance(predicate_raw, dict):
+                raise ScenarioLoadError(
+                    f"reactive_bindings.objects[{i}].predicate must be an object"
+                )
+            predicate = self._parse_scenario_event_condition(
+                predicate_raw, mapper,
+                path=f"reactive_bindings.objects[{i}].predicate",
+            )
+            on_true = b.get("on_true_state_updates", {})
+            on_false = b.get("on_false_state_updates", {})
+            if not isinstance(on_true, dict) or not isinstance(on_false, dict):
+                raise ScenarioLoadError(
+                    f"reactive_bindings.objects[{i}].on_true/false_state_updates must be objects"
+                )
+            out.append(
+                ReactiveObjectStateBinding(
+                    target_object_id=SpotObjectId.create(oid),
+                    predicate=predicate,
+                    on_true_state_updates=tuple((k, v) for k, v in on_true.items()),
+                    on_false_state_updates=tuple((k, v) for k, v in on_false.items()),
+                )
+            )
+        return tuple(out)
 
     def _parse_synchronized_action_groups(
         self, raw: Any, mapper: ScenarioIdMapper,

@@ -30,6 +30,7 @@ class SpotGraphSimulationApplicationService:
         travel_stage: Optional[SpotGraphTravelStageService] = None,
         scenario_event_stage: Optional["_SpotGraphTickStage"] = None,
         reactive_binding_stage: Optional["_SpotGraphTickStage"] = None,
+        reactive_object_state_stage: Optional["_SpotGraphTickStage"] = None,
         sync_action_resolver_stage: Optional["_SpotGraphTickStage"] = None,
         environment_stage: Optional["_SpotGraphTickStage"] = None,
         needs_decay_stage: Optional["_SpotGraphTickStage"] = None,
@@ -40,6 +41,7 @@ class SpotGraphSimulationApplicationService:
         self._travel_stage = travel_stage
         self._scenario_event_stage = scenario_event_stage
         self._reactive_binding_stage = reactive_binding_stage
+        self._reactive_object_state_stage = reactive_object_state_stage
         self._sync_action_resolver_stage = sync_action_resolver_stage
         self._environment_stage = environment_stage
         self._needs_decay_stage = needs_decay_stage
@@ -70,6 +72,10 @@ class SpotGraphSimulationApplicationService:
                 # scenario_event の flag 更新を同 tick で反映するため、
                 # scenario_event_stage の後に走らせる。
                 self._reactive_binding_stage.run(current_tick)
+            if self._reactive_object_state_stage is not None:
+                # object 状態の reactive 評価。passage と同じく scenario_event
+                # 後の flag/state を読みたいので reactive_binding_stage の後。
+                self._reactive_object_state_stage.run(current_tick)
             if self._sync_action_resolver_stage is not None:
                 # sync group の判定はその tick の prepare（ツール実行で
                 # 既に flag 化されている）を見るため、reactive 反映の
