@@ -531,6 +531,7 @@ class ScenarioLoader:
             weather_type=raw.get("weather_type"),
             state_key=raw.get("state_key"),
             ticks_offset=raw.get("ticks_offset"),
+            treat_missing_as_passed=bool(raw.get("treat_missing_as_passed", False)),
         )
 
     def _parse_reactive_passage_bindings(

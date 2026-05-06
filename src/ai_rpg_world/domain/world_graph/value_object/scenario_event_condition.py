@@ -49,6 +49,12 @@ class ScenarioEventCondition:
     weather_type: Optional[str] = None  # WEATHER_IS 用 ("RAIN" / "STORM" 等)
     state_key: Optional[str] = None  # OBJECT_STATE_TICK_AT_LEAST の対象 state キー
     ticks_offset: Optional[int] = None  # OBJECT_STATE_TICK_AT_LEAST の経過 tick
+    # OBJECT_STATE_TICK_AT_LEAST で state[state_key] が None / 不在の時の解釈。
+    # default False: 「まだ起きていない → 経過判定不能 → predicate False」
+    # （安全側、たとえば「採取してから N tick 経った」を判定する用途では妥当）。
+    # True にすると「起きていない = 過去無限 → predicate True」として扱う
+    # （「初期は ripe / clean」を sentinel マジックナンバー無しで表現できる）。
+    treat_missing_as_passed: bool = False
     # 合成条件用の子条件ツリー
     children: Tuple["ScenarioEventCondition", ...] = field(default_factory=tuple)
 
