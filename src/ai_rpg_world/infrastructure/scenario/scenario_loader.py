@@ -386,7 +386,30 @@ class ScenarioLoader:
             prepared_action_id=raw.get("prepared_action_id"),
             puzzle_input_key=raw.get("puzzle_input_key"),
             required_item_spec_ids=required_item_spec_ids,
+            required_quantity=self._parse_required_quantity(raw),
         )
+
+    @staticmethod
+    def _parse_required_quantity(raw: Dict[str, Any]) -> int:
+        """`required_quantity` を読みつつ `<= 0` は明確に拒否する。
+
+        domain 側で max(1, ...) する設計だが、scenario 作家が `0` を
+        書いた場合に「条件無し」と勘違いするのを防ぐため、loader 側で
+        早期に弾く。
+        """
+        if "required_quantity" not in raw:
+            return 1
+        try:
+            value = int(raw["required_quantity"])
+        except (TypeError, ValueError) as exc:
+            raise ScenarioLoadError(
+                f"required_quantity must be a positive integer (got {raw['required_quantity']!r})"
+            ) from exc
+        if value <= 0:
+            raise ScenarioLoadError(
+                f"required_quantity must be >= 1 (got {value})"
+            )
+        return value
 
     def _parse_interaction_effect(self, raw: Dict[str, Any], mapper: ScenarioIdMapper) -> InteractionEffect:
         params = dict(raw.get("parameters", {}))
