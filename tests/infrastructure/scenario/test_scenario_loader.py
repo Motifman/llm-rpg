@@ -405,3 +405,80 @@ class TestScenarioLoaderPassageBlock:
         ]
         with pytest.raises(ScenarioLoadError, match="sound_permeability"):
             ScenarioLoader().load_from_dict(scn)
+
+
+class TestScenarioLoaderReactiveBindings:
+    """`reactive_bindings.passages` のパース挙動。"""
+
+    def _scenario_with_binding(self, binding: dict) -> dict:
+        scn = _minimal_scenario()
+        scn["connections"] = [
+            {
+                "id": "c1",
+                "from": "room_a",
+                "to": "room_b",
+                "name": "扉",
+                "travel_ticks": 1,
+                "is_bidirectional": False,
+                "passage": {"kind": "DOOR", "state": "LOCKED"},
+            }
+        ]
+        scn["reactive_bindings"] = {"passages": [binding]}
+        return scn
+
+    def test_parses_minimal_binding(self) -> None:
+        """最小構成 (target/predicate/on_true/on_false) で binding が読まれる。"""
+        scn = self._scenario_with_binding({
+            "target": "c1",
+            "predicate": {"condition_type": "PLAYER_AT_SPOT", "target_spot": "room_a"},
+            "on_true_state": "OPEN",
+            "on_false_state": "LOCKED",
+        })
+        result = ScenarioLoader().load_from_dict(scn)
+        assert len(result.reactive_passage_bindings) == 1
+        b = result.reactive_passage_bindings[0]
+        assert b.on_true_state == "OPEN"
+        assert b.on_false_state == "LOCKED"
+        assert b.predicate.condition_type == "PLAYER_AT_SPOT"
+
+    def test_missing_target_raises(self) -> None:
+        """target が無いとシナリオエラー。"""
+        scn = self._scenario_with_binding({
+            "predicate": {"condition_type": "FLAG_SET", "flag_name": "x"},
+            "on_true_state": "OPEN",
+            "on_false_state": "LOCKED",
+        })
+        with pytest.raises(ScenarioLoadError, match="target"):
+            ScenarioLoader().load_from_dict(scn)
+
+    def test_predicate_must_be_dict(self) -> None:
+        """predicate が辞書でなければシナリオエラー。"""
+        scn = self._scenario_with_binding({
+            "target": "c1",
+            "predicate": "not_a_dict",
+            "on_true_state": "OPEN",
+            "on_false_state": "LOCKED",
+        })
+        with pytest.raises(ScenarioLoadError, match="predicate"):
+            ScenarioLoader().load_from_dict(scn)
+
+    def test_composite_predicate_is_parsed_recursively(self) -> None:
+        """predicate に NOT/AND を入れ子で書ける。"""
+        scn = self._scenario_with_binding({
+            "target": "c1",
+            "predicate": {
+                "condition_type": "AND",
+                "children": [
+                    {"condition_type": "PLAYER_AT_SPOT", "target_spot": "room_a"},
+                    {"condition_type": "NOT", "children": [
+                        {"condition_type": "FLAG_SET", "flag_name": "blocked"},
+                    ]},
+                ],
+            },
+            "on_true_state": "OPEN",
+            "on_false_state": "LOCKED",
+        })
+        result = ScenarioLoader().load_from_dict(scn)
+        b = result.reactive_passage_bindings[0]
+        assert b.predicate.condition_type == "AND"
+        assert b.predicate.children[1].condition_type == "NOT"

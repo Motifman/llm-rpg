@@ -37,6 +37,9 @@ from ai_rpg_world.domain.world_graph.value_object.interaction_condition import I
 from ai_rpg_world.domain.world_graph.value_object.interaction_def import InteractionDef
 from ai_rpg_world.domain.world_graph.value_object.interaction_effect import InteractionEffect
 from ai_rpg_world.domain.world_graph.value_object.passage import Passage
+from ai_rpg_world.domain.world_graph.value_object.reactive_passage_binding import (
+    ReactivePassageBinding,
+)
 from ai_rpg_world.domain.world_graph.value_object.passage_condition import PassageCondition
 from ai_rpg_world.domain.world_graph.value_object.object_description_variant import (
     ObjectDescriptionVariant,
@@ -117,6 +120,7 @@ class ScenarioLoadResult:
     initial_flags: Tuple[str, ...]
     scenario_events: Tuple[ScenarioEventDef, ...] = ()
     weather_config: Optional[ScenarioWeatherConfig] = None
+    reactive_passage_bindings: Tuple[ReactivePassageBinding, ...] = ()
 
 
 class ScenarioLoader:
@@ -148,6 +152,9 @@ class ScenarioLoader:
         initial_flags = tuple(raw.get("initial_flags", []))
         scenario_events = self._parse_scenario_events(raw.get("scenario_events", []), mapper)
         weather_config = self._parse_weather_config(raw.get("environment", {}))
+        reactive_bindings = self._parse_reactive_passage_bindings(
+            raw.get("reactive_bindings", {}), mapper,
+        )
 
         return ScenarioLoadResult(
             graph=graph,
@@ -161,6 +168,7 @@ class ScenarioLoader:
             initial_flags=initial_flags,
             scenario_events=scenario_events,
             weather_config=weather_config,
+            reactive_passage_bindings=reactive_bindings,
         )
 
     def _parse_metadata(self, raw: Dict[str, Any]) -> ScenarioMetadata:
@@ -462,6 +470,68 @@ class ScenarioLoader:
             tick_modulo=raw.get("tick_modulo"),
             tick_phase=raw.get("tick_phase"),
         )
+
+    def _parse_reactive_passage_bindings(
+        self, raw: Dict[str, Any], mapper: ScenarioIdMapper,
+    ) -> Tuple[ReactivePassageBinding, ...]:
+        """`reactive_bindings.passages` を Passage 用 binding にパースする。
+
+        スキーマ:
+          "reactive_bindings": {
+            "passages": [
+              {
+                "target": "<connection_string_id>",
+                "predicate": <ScenarioEventCondition tree>,
+                "on_true_state": "OPEN",
+                "on_false_state": "LOCKED"
+              }
+            ]
+          }
+        """
+        if not isinstance(raw, dict):
+            return ()
+        passages_raw = raw.get("passages", [])
+        if not isinstance(passages_raw, list):
+            raise ScenarioLoadError(
+                f"reactive_bindings.passages must be a list "
+                f"(got {type(passages_raw).__name__})"
+            )
+        bindings: list[ReactivePassageBinding] = []
+        for i, b in enumerate(passages_raw):
+            target = b.get("target")
+            if not target:
+                raise ScenarioLoadError(
+                    f"reactive_bindings.passages[{i}].target is required"
+                )
+            cid = mapper.get_int("connection", target)
+            predicate_raw = b.get("predicate")
+            if not isinstance(predicate_raw, dict):
+                raise ScenarioLoadError(
+                    f"reactive_bindings.passages[{i}].predicate must be an object"
+                )
+            predicate = self._parse_scenario_event_condition(
+                predicate_raw, mapper,
+                path=f"reactive_bindings.passages[{i}].predicate",
+            )
+            on_true = b.get("on_true_state")
+            on_false = b.get("on_false_state")
+            if not on_true:
+                raise ScenarioLoadError(
+                    f"reactive_bindings.passages[{i}].on_true_state is required"
+                )
+            if not on_false:
+                raise ScenarioLoadError(
+                    f"reactive_bindings.passages[{i}].on_false_state is required"
+                )
+            bindings.append(
+                ReactivePassageBinding(
+                    target_connection_id=ConnectionId.create(cid),
+                    predicate=predicate,
+                    on_true_state=str(on_true),
+                    on_false_state=str(on_false),
+                )
+            )
+        return tuple(bindings)
 
     def _parse_weather_config(self, raw: Dict[str, Any]) -> Optional[ScenarioWeatherConfig]:
         weather = raw.get("weather") if isinstance(raw, dict) else None
