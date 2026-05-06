@@ -382,9 +382,12 @@ class ScenarioLoader:
             observation = raw.get("observation", {})
             if not isinstance(observation, dict):
                 observation = {}
+            event_id = raw.get("id", "<unnamed>")
             conditions = tuple(
-                self._parse_scenario_event_condition(c, mapper)
-                for c in raw.get("conditions", [])
+                self._parse_scenario_event_condition(
+                    c, mapper, path=f"scenario_event[{event_id}].conditions[{i}]",
+                )
+                for i, c in enumerate(raw.get("conditions", []))
             )
             effects = tuple(
                 self._parse_interaction_effect(e, mapper)
@@ -417,6 +420,8 @@ class ScenarioLoader:
         self,
         raw: Dict[str, Any],
         mapper: ScenarioIdMapper,
+        *,
+        path: str = "condition",
     ) -> ScenarioEventCondition:
         ctype = str(raw["condition_type"])
         # 合成条件 (NOT / AND / OR): children を再帰パース
@@ -424,10 +429,14 @@ class ScenarioLoader:
             children_raw = raw.get("children", [])
             if not isinstance(children_raw, list):
                 raise ScenarioLoadError(
-                    f"{ctype} condition.children must be a list"
+                    f"{path}: {ctype} condition.children must be a list "
+                    f"(got {type(children_raw).__name__})"
                 )
             children = tuple(
-                self._parse_scenario_event_condition(c, mapper) for c in children_raw
+                self._parse_scenario_event_condition(
+                    c, mapper, path=f"{path}.children[{i}]",
+                )
+                for i, c in enumerate(children_raw)
             )
             return ScenarioEventCondition(condition_type=ctype, children=children)
         # leaf 条件
