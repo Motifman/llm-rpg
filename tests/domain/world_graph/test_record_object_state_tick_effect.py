@@ -101,6 +101,48 @@ class TestRecordObjectStateTickEffect:
         assert "last_harvest_tick" not in result.new_interior.objects[0].state
         assert any("current_tick" in r.message for r in caplog.records)
 
+    def test_propagates_through_spot_interaction_service(self) -> None:
+        """SpotInteractionService.execute_interaction 経由でも current_tick が伝搬し state[state_key] が書き込まれる。"""
+        from ai_rpg_world.domain.world_graph.service.spot_interaction_service import (
+            SpotInteractionService,
+        )
+        from ai_rpg_world.domain.world_graph.value_object.interaction_def import (
+            InteractionDef,
+        )
+
+        bush = SpotObject(
+            object_id=SpotObjectId.create(7),
+            name="berry_bush",
+            description="d",
+            object_type=SpotObjectTypeEnum.OTHER,
+            state={"available": True},
+            interactions=(
+                InteractionDef(
+                    action_name="harvest",
+                    display_label="採取",
+                    preconditions=(),
+                    effects=(
+                        InteractionEffect(
+                            effect_type=InteractionEffectTypeEnum.RECORD_OBJECT_STATE_TICK,
+                            parameters={"state_key": "last_harvest_tick"},
+                        ),
+                    ),
+                ),
+            ),
+        )
+        interior = _interior_with(bush)
+        svc = SpotInteractionService()
+        result = svc.execute_interaction(
+            interior,
+            SpotObjectId.create(7),
+            "harvest",
+            frozenset(),
+            frozenset(),
+            current_tick=WorldTick(99),
+        )
+        new_obj = result.new_interior.objects[0]
+        assert new_obj.state["last_harvest_tick"] == 99
+
     def test_no_op_when_state_key_missing(self, caplog) -> None:
         """state_key が無ければ警告を出してスキップ。"""
         svc = WorldGraphEffectService()

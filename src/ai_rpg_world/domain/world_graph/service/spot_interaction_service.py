@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import FrozenSet, Optional, Tuple
 
+from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.value_object.item_spec_id import ItemSpecId
 from ai_rpg_world.domain.world_graph.entity.spot_interior import SpotInterior
 from ai_rpg_world.domain.world_graph.entity.spot_object import SpotObject
@@ -135,6 +136,7 @@ class SpotInteractionService:
         *,
         spot_presence_count: int = 1,
         interaction_parameters: Optional[dict] = None,
+        current_tick: Optional[WorldTick] = None,
     ) -> InteractionExecutionResult:
         obj = interior.get_object(object_id)
         if obj is None:
@@ -155,6 +157,7 @@ class SpotInteractionService:
             acting_object=obj,
             effects=idef.effects,
             world_flags=world_flags,
+            current_tick=current_tick,
         )
         return InteractionExecutionResult(
             new_interior=effect_result.new_interior,
