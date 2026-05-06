@@ -382,9 +382,12 @@ class ScenarioLoader:
             observation = raw.get("observation", {})
             if not isinstance(observation, dict):
                 observation = {}
+            event_id = raw.get("id", "<unnamed>")
             conditions = tuple(
-                self._parse_scenario_event_condition(c, mapper)
-                for c in raw.get("conditions", [])
+                self._parse_scenario_event_condition(
+                    c, mapper, path=f"scenario_event[{event_id}].conditions[{i}]",
+                )
+                for i, c in enumerate(raw.get("conditions", []))
             )
             effects = tuple(
                 self._parse_interaction_effect(e, mapper)
@@ -417,7 +420,26 @@ class ScenarioLoader:
         self,
         raw: Dict[str, Any],
         mapper: ScenarioIdMapper,
+        *,
+        path: str = "condition",
     ) -> ScenarioEventCondition:
+        ctype = str(raw["condition_type"])
+        # 合成条件 (NOT / AND / OR): children を再帰パース
+        if ctype in {"NOT", "AND", "OR"}:
+            children_raw = raw.get("children", [])
+            if not isinstance(children_raw, list):
+                raise ScenarioLoadError(
+                    f"{path}: {ctype} condition.children must be a list "
+                    f"(got {type(children_raw).__name__})"
+                )
+            children = tuple(
+                self._parse_scenario_event_condition(
+                    c, mapper, path=f"{path}.children[{i}]",
+                )
+                for i, c in enumerate(children_raw)
+            )
+            return ScenarioEventCondition(condition_type=ctype, children=children)
+        # leaf 条件
         spot_id = None
         if raw.get("target_spot"):
             spot_id = mapper.get_int("spot", raw["target_spot"])
@@ -428,7 +450,7 @@ class ScenarioLoader:
         if raw.get("required_item"):
             item_spec_id = mapper.get_int("item_spec", raw["required_item"])
         return ScenarioEventCondition(
-            condition_type=str(raw["condition_type"]),
+            condition_type=ctype,
             tick=raw.get("tick"),
             tick_start=raw.get("tick_start"),
             tick_end=raw.get("tick_end"),
