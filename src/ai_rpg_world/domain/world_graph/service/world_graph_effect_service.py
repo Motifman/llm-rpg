@@ -175,12 +175,16 @@ class WorldGraphEffectService:
 
         if et == InteractionEffectTypeEnum.GIVE_ITEM:
             sid = self._item_spec_from_param(p.get("item_spec_id"))
-            grant.append(sid)
+            quantity = self._read_quantity(p)
+            for _ in range(quantity):
+                grant.append(sid)
             return _all
 
         if et == InteractionEffectTypeEnum.REMOVE_ITEM:
             sid = self._item_spec_from_param(p.get("item_spec_id"))
-            remove.append(sid)
+            quantity = self._read_quantity(p)
+            for _ in range(quantity):
+                remove.append(sid)
             return _all
 
         if et == InteractionEffectTypeEnum.CHANGE_OBJECT_STATE:
@@ -390,6 +394,21 @@ class WorldGraphEffectService:
         target_id = WorldGraphEffectService._spot_object_id_from_param(target_raw)
         target = interior.get_object(target_id)
         return target or acting_object
+
+    @staticmethod
+    def _read_quantity(params: dict[str, Any]) -> int:
+        """effect parameters から quantity を読む。default=1、負値は 0 にクランプ。
+
+        Phase 2-A の数量セマンティクス。GIVE_ITEM / REMOVE_ITEM が 1 effect で
+        複数 instance を扱えるようにするため。シナリオが quantity を書かない
+        場合は既存挙動 (1 個) を維持する。
+        """
+        raw = params.get("quantity", 1)
+        try:
+            n = int(raw)
+        except (TypeError, ValueError):
+            return 1
+        return max(0, n)
 
     @staticmethod
     def _item_spec_from_param(val: Any) -> ItemSpecId:

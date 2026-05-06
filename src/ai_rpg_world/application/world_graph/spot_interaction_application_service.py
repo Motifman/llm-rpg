@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional, Tuple
 from ai_rpg_world.application.common.exceptions import ApplicationException
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
+    count_owned_item_instances_by_spec,
     grant_item_specs_to_inventory,
     remove_one_item_of_spec_from_inventory,
 )
@@ -98,6 +99,7 @@ class SpotInteractionApplicationService:
             )
 
         owned = collect_owned_item_spec_ids_from_inventory(inv, self._item_repository)
+        owned_counts = count_owned_item_instances_by_spec(inv, self._item_repository)
         world_flags = self._world_flag_state.as_frozen_set()
 
         try:
@@ -109,6 +111,7 @@ class SpotInteractionApplicationService:
                 world_flags,
                 interaction_parameters=interaction_parameters,
                 current_tick=current_tick,
+                owned_item_spec_counts=owned_counts,
             )
         except InteractionNotAllowedException:
             # 前提条件で拒否された。InteractionDef.on_failure_observation が

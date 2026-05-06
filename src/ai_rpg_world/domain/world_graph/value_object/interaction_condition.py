@@ -21,3 +21,8 @@ class InteractionCondition:
     prepared_action_id: Optional[str] = None
     puzzle_input_key: Optional[str] = None
     required_item_spec_ids: Optional[Tuple[ItemSpecId, ...]] = None
+    # 数量セマンティクス (Phase 2-A)
+    # HAS_ITEM の最低必要個数。default 1 で既存挙動と互換。
+    # HAS_ITEMS は「各 spec を quantity 個ずつ」とし、種ごとに別 quantity を
+    # 表現したい場合は HAS_ITEM を複数列挙する想定。
+    required_quantity: int = 1
