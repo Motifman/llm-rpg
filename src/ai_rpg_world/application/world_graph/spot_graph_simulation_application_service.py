@@ -29,6 +29,7 @@ class SpotGraphSimulationApplicationService:
         unit_of_work: UnitOfWork,
         travel_stage: Optional[SpotGraphTravelStageService] = None,
         scenario_event_stage: Optional["_SpotGraphTickStage"] = None,
+        reactive_binding_stage: Optional["_SpotGraphTickStage"] = None,
         environment_stage: Optional["_SpotGraphTickStage"] = None,
         needs_decay_stage: Optional["_SpotGraphTickStage"] = None,
         llm_turn_trigger: Optional["ILlmTurnTrigger"] = None,
@@ -37,6 +38,7 @@ class SpotGraphSimulationApplicationService:
         self._unit_of_work = unit_of_work
         self._travel_stage = travel_stage
         self._scenario_event_stage = scenario_event_stage
+        self._reactive_binding_stage = reactive_binding_stage
         self._environment_stage = environment_stage
         self._needs_decay_stage = needs_decay_stage
         self._llm_turn_trigger = llm_turn_trigger
@@ -62,6 +64,10 @@ class SpotGraphSimulationApplicationService:
                 self._travel_stage.run(current_tick)
             if self._scenario_event_stage is not None:
                 self._scenario_event_stage.run(current_tick)
+            if self._reactive_binding_stage is not None:
+                # scenario_event の flag 更新を同 tick で反映するため、
+                # scenario_event_stage の後に走らせる。
+                self._reactive_binding_stage.run(current_tick)
             if self._environment_stage is not None:
                 self._environment_stage.run(current_tick)
             if self._needs_decay_stage is not None:
