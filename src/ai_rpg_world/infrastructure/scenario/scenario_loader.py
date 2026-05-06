@@ -513,12 +513,22 @@ class ScenarioLoader:
                 predicate_raw, mapper,
                 path=f"reactive_bindings.passages[{i}].predicate",
             )
+            on_true = b.get("on_true_state")
+            on_false = b.get("on_false_state")
+            if not on_true:
+                raise ScenarioLoadError(
+                    f"reactive_bindings.passages[{i}].on_true_state is required"
+                )
+            if not on_false:
+                raise ScenarioLoadError(
+                    f"reactive_bindings.passages[{i}].on_false_state is required"
+                )
             bindings.append(
                 ReactivePassageBinding(
                     target_connection_id=ConnectionId.create(cid),
                     predicate=predicate,
-                    on_true_state=str(b.get("on_true_state", "")),
-                    on_false_state=str(b.get("on_false_state", "")),
+                    on_true_state=str(on_true),
+                    on_false_state=str(on_false),
                 )
             )
         return tuple(bindings)

@@ -13,6 +13,9 @@ from ai_rpg_world.application.world_graph.scenario_condition_evaluator import (
     ScenarioConditionEvaluator,
 )
 from ai_rpg_world.domain.common.value_object import WorldTick
+from ai_rpg_world.domain.world_graph.aggregate.spot_graph_aggregate import (
+    SpotGraphAggregate,
+)
 from ai_rpg_world.domain.world_graph.repository.spot_graph_repository import (
     ISpotGraphRepository,
 )
@@ -60,7 +63,7 @@ class ReactivePassageBindingStageService:
         self,
         binding: ReactivePassageBinding,
         current_tick: WorldTick,
-        graph,
+        graph: SpotGraphAggregate,
     ) -> str:
         predicate_true = self._condition_evaluator.evaluate(
             binding.predicate, current_tick, graph,

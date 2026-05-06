@@ -10,6 +10,7 @@ from __future__ import annotations
 from ai_rpg_world.application.world_graph.spot_inventory_helpers import (
     collect_owned_item_spec_ids_from_inventory,
 )
+from ai_rpg_world.application.world_graph.spot_object_lookup import find_object_in_graph
 from ai_rpg_world.application.world_graph.world_flag_state import MutableWorldFlagState
 from ai_rpg_world.domain.common.value_object import WorldTick
 from ai_rpg_world.domain.item.repository.item_repository import ItemRepository
@@ -101,6 +102,8 @@ class ScenarioConditionEvaluator:
         if ctype == "FLAG_NOT_SET":
             return bool(cond.flag_name) and cond.flag_name not in world_flags
         if ctype == "PLAYER_AT_SPOT":
+            # TODO(#15): 現状は「誰かが居る」判定。「特定 entity だけ居る」を
+            # 表現するには ScenarioEventCondition.entity_id 等の拡張が必要。
             if cond.spot_id is None:
                 return False
             spot_id = SpotId.create(cond.spot_id)
@@ -109,7 +112,9 @@ class ScenarioConditionEvaluator:
         if ctype == "OBJECT_STATE":
             if cond.object_id is None or cond.required_state is None:
                 return False
-            obj = self._find_object(SpotObjectId.create(cond.object_id), graph)
+            obj = find_object_in_graph(
+                SpotObjectId.create(cond.object_id), graph, self._spot_interior_repository,
+            )
             if obj is None:
                 return False
             return all(obj.state.get(k) == v for k, v in cond.required_state.items())
@@ -133,12 +138,3 @@ class ScenarioConditionEvaluator:
         # 未知の condition_type は False（既存挙動を維持）
         return False
 
-    def _find_object(self, object_id: SpotObjectId, graph: SpotGraphAggregate):
-        for node in graph.iter_spot_nodes():
-            interior = self._spot_interior_repository.find_by_spot_id(node.spot_id)
-            if interior is None:
-                continue
-            obj = interior.get_object(object_id)
-            if obj is not None:
-                return obj
-        return None
