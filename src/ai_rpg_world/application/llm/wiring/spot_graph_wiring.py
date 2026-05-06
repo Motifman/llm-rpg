@@ -151,6 +151,7 @@ def create_spot_graph_wiring(
     llm_client: Optional[ILLMClient] = None,
     game_time_provider: Optional[Any] = None,
     synchronized_action_groups: tuple = (),
+    sync_action_registry: Optional[Any] = None,
     world_time_config_service: Optional[Any] = None,
     action_result_store: Optional[IActionResultStore] = None,
     sliding_window_memory: Optional[ISlidingWindowMemory] = None,
@@ -347,6 +348,7 @@ def create_spot_graph_wiring(
         sync_action_groups=synchronized_action_groups,
         time_provider=game_time_provider,
         spot_graph_repository=spot_graph_repository,
+        sync_action_registry=sync_action_registry,
     )
     no_op_movement = SpotGraphNoOpMovementService()
 

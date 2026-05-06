@@ -61,6 +61,7 @@ class SpotGraphToolExecutor:
         sync_action_groups: tuple[SynchronizedActionGroup, ...] = (),
         time_provider: GameTimeProvider | None = None,
         spot_graph_repository: ISpotGraphRepository | None = None,
+        sync_action_registry: SynchronizedActionRegistry | None = None,
     ) -> None:
         if spot_graph_world_services.movement is None:
             raise TypeError("SpotGraphWorldServices.movement が必要です")
@@ -74,6 +75,13 @@ class SpotGraphToolExecutor:
         self._sync_action_groups = sync_action_groups
         self._time_provider = time_provider
         self._spot_graph_repository = spot_graph_repository
+        # resolver stage と同一 instance を共有することで、将来 registry に
+        # 状態（キャッシュ等）が増えても乖離しない。渡されない場合は
+        # 既定で world_flags を使う独立 instance を生成（後方互換）。
+        self._sync_action_registry = (
+            sync_action_registry
+            or SynchronizedActionRegistry(spot_graph_world_services.world_flags)
+        )
 
     def get_handlers(self) -> Dict[str, Callable[[int, Dict[str, Any]], LlmCommandResultDto]]:
         return {
@@ -266,12 +274,20 @@ class SpotGraphToolExecutor:
         if not matching:
             return
         current_tick = self._time_provider.get_current_tick()
-        sync_registry = SynchronizedActionRegistry(self._svc.world_flags)
+        sync_registry = self._sync_action_registry
+        # MEDIUM-2: 同 player+action_id が既に登録済みなら観測の重複を避ける。
+        # （tick だけ更新する形で prepare し直し、観測は出さない。）
+        already_prepared_by_same_player = any(
+            e.player_id == player_id
+            for e in sync_registry.entries_for(action_id)
+        )
         sync_registry.prepare(
             action_id=action_id,
             player_id=player_id,
             current_tick=current_tick.value,
         )
+        if already_prepared_by_same_player:
+            return
         # 観測発火: 各 group の on_prepare_observation_message を持つもののみ
         if self._event_publisher is None or self._spot_graph_repository is None:
             return

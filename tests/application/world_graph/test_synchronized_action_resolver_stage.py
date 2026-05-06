@@ -200,3 +200,68 @@ class TestResolverPending:
         assert "done" not in flags.as_frozen_set()
         # prepare は残っている
         assert len(registry.entries_for("a")) == 1
+
+
+class TestResolverBoundary:
+    """境界値: window_ticks=1（同 tick のみ）と窓ぴったり tick 差。"""
+
+    def test_window_one_requires_same_tick(self) -> None:
+        """window_ticks=1 で 1 tick 差ならタイムアウト扱い。"""
+        group = SynchronizedActionGroup(
+            group_id="g",
+            required_action_ids=("a", "b"),
+            window_ticks=1,
+            on_complete=(_set_flag("done"),),
+            on_timeout=(_set_flag("timed_out"),),
+        )
+        stage, registry, _, flags = _build_stage(group)
+        registry.prepare(action_id="a", player_id=1, current_tick=5)
+        registry.prepare(action_id="b", player_id=2, current_tick=6)
+
+        stage.run(WorldTick(6))
+        # oldest=5, current=6 → 1 < 1 = False → timeout
+        assert "done" not in flags.as_frozen_set()
+        assert "timed_out" in flags.as_frozen_set()
+
+    def test_window_one_same_tick_completes(self) -> None:
+        """window_ticks=1 で同 tick 完成は OK。"""
+        group = SynchronizedActionGroup(
+            group_id="g",
+            required_action_ids=("a", "b"),
+            window_ticks=1,
+            on_complete=(_set_flag("done"),),
+        )
+        stage, registry, _, flags = _build_stage(group)
+        registry.prepare(action_id="a", player_id=1, current_tick=5)
+        registry.prepare(action_id="b", player_id=2, current_tick=5)
+
+        stage.run(WorldTick(5))
+        assert "done" in flags.as_frozen_set()
+
+    def test_unsupported_effect_logs_warning(self, caplog) -> None:
+        """on_complete に CHANGE_OBJECT_STATE のような非対応 effect があれば warning ログ。"""
+        from ai_rpg_world.domain.world_graph.enum.interaction_effect_type import (
+            InteractionEffectTypeEnum,
+        )
+        from ai_rpg_world.domain.world_graph.value_object.interaction_effect import (
+            InteractionEffect,
+        )
+        unsupported = InteractionEffect(
+            effect_type=InteractionEffectTypeEnum.CHANGE_OBJECT_STATE,
+            parameters={"state_updates": {}},
+        )
+        group = SynchronizedActionGroup(
+            group_id="g",
+            required_action_ids=("a", "b"),
+            window_ticks=2,
+            on_complete=(unsupported, _set_flag("done")),
+        )
+        stage, registry, _, flags = _build_stage(group)
+        registry.prepare(action_id="a", player_id=1, current_tick=3)
+        registry.prepare(action_id="b", player_id=2, current_tick=3)
+
+        with caplog.at_level("WARNING"):
+            stage.run(WorldTick(3))
+        # SET_FLAG は走り、CHANGE_OBJECT_STATE は warning が出る
+        assert "done" in flags.as_frozen_set()
+        assert any("CHANGE_OBJECT_STATE" in r.message for r in caplog.records)
