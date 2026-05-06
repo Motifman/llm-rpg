@@ -3,7 +3,7 @@
   "metadata": {
     "id": "relay_puzzle_demo",
     "title": "役割分担リレー — 最小デモ",
-    "description": "プレイヤー A が制御室の電源スイッチを ON にしている間だけ、廊下の奥の鍵付き扉が開く。A が離れた瞬間に扉は再ロックされる。B はその間に金庫室まで到達せよ。",
+    "description": "いずれかのプレイヤーが制御室に居る間だけ、廊下の奥の鍵付き扉が開く。誰もいなくなった瞬間に扉は再ロックされる。役割分担して協力すること（A が制御室に残り、B が金庫室まで進むのが基本戦略）。",
     "theme": "co-op",
     "difficulty": "easy",
     "estimated_ticks": 30,
@@ -81,15 +81,6 @@
     "passages": [
       {
         "target": "corridor_to_vault",
-        "predicate": {
-          "condition_type": "PLAYER_AT_SPOT",
-          "target_spot": "control_room"
-        },
-        "on_true_state": "OPEN",
-        "on_false_state": "LOCKED"
-      },
-      {
-        "target": "corridor_to_vault__reverse",
         "predicate": {
           "condition_type": "PLAYER_AT_SPOT",
           "target_spot": "control_room"

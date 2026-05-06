@@ -523,6 +523,7 @@ class ScenarioLoader:
                 raise ScenarioLoadError(
                     f"reactive_bindings.passages[{i}].on_false_state is required"
                 )
+            apply_to_reverse = bool(b.get("apply_to_reverse", True))
             bindings.append(
                 ReactivePassageBinding(
                     target_connection_id=ConnectionId.create(cid),
@@ -531,6 +532,19 @@ class ScenarioLoader:
                     on_false_state=str(on_false),
                 )
             )
+            # bidirectional 接続には自動で逆方向 binding を生やす（既定）。
+            # 一方通行で良い場合は apply_to_reverse=false を明示する。
+            reverse_str = f"{target}__reverse"
+            if apply_to_reverse and mapper.contains("connection", reverse_str):
+                rev_cid = mapper.get_int("connection", reverse_str)
+                bindings.append(
+                    ReactivePassageBinding(
+                        target_connection_id=ConnectionId.create(rev_cid),
+                        predicate=predicate,
+                        on_true_state=str(on_true),
+                        on_false_state=str(on_false),
+                    )
+                )
         return tuple(bindings)
 
     def _parse_weather_config(self, raw: Dict[str, Any]) -> Optional[ScenarioWeatherConfig]:
