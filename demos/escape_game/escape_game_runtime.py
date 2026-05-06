@@ -61,6 +61,9 @@ from ai_rpg_world.application.world_graph.spot_graph_environment_stage_service i
 from ai_rpg_world.application.world_graph.spot_graph_scenario_event_progress_store import (
     InMemorySpotGraphScenarioEventProgressStore,
 )
+from ai_rpg_world.application.world_graph.reactive_object_state_binding_stage_service import (
+    ReactiveObjectStateBindingStageService,
+)
 from ai_rpg_world.application.world_graph.reactive_passage_binding_stage_service import (
     ReactivePassageBindingStageService,
 )
@@ -928,12 +931,14 @@ def create_escape_game_runtime(
     )
     scenario_event_progress = InMemorySpotGraphScenarioEventProgressStore()
     # 評価器は scenario_event_stage と reactive_binding_stage で共有する。
+    # weather_state_provider を渡すことで WEATHER_IS 条件が解ける。
     condition_evaluator = ScenarioConditionEvaluator(
         world_flag_state=world_flag_state,
         spot_interior_repository=spot_interior_repo,
         player_status_repository=player_status_repo,
         player_inventory_repository=player_inventory_repo,
         item_repository=item_repo,
+        weather_state_provider=lambda: weather_holder["state"],
     )
     scenario_event_stage = SpotGraphScenarioEventStageService(
         scenario_events=scenario.scenario_events,
@@ -950,6 +955,12 @@ def create_escape_game_runtime(
     reactive_binding_stage = ReactivePassageBindingStageService(
         bindings=scenario.reactive_passage_bindings,
         spot_graph_repository=spot_graph_repo,
+        condition_evaluator=condition_evaluator,
+    )
+    reactive_object_state_stage = ReactiveObjectStateBindingStageService(
+        bindings=scenario.reactive_object_state_bindings,
+        spot_graph_repository=spot_graph_repo,
+        spot_interior_repository=spot_interior_repo,
         condition_evaluator=condition_evaluator,
     )
     sync_action_registry = SynchronizedActionRegistry(world_flag_state)
@@ -982,6 +993,7 @@ def create_escape_game_runtime(
         travel_stage=travel_stage,
         scenario_event_stage=scenario_event_stage,
         reactive_binding_stage=reactive_binding_stage,
+        reactive_object_state_stage=reactive_object_state_stage,
         sync_action_resolver_stage=sync_resolver_stage,
         environment_stage=environment_stage,
         llm_turn_trigger=sim_llm_trigger,
