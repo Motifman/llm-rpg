@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Mapping, Optional
 from ai_rpg_world.domain.common.aggregate_root import AggregateRoot
 from ai_rpg_world.domain.item.entity.item_instance import ItemInstance
 from ai_rpg_world.domain.item.value_object.item_instance_id import ItemInstanceId
@@ -27,7 +27,8 @@ class ItemAggregate(AggregateRoot):
         item_instance_id: ItemInstanceId,
         item_spec: ItemSpec,
         durability: Optional[Durability] = None,
-        quantity: int = 1
+        quantity: int = 1,
+        state: Optional[Mapping[str, Any]] = None,
     ) -> "ItemAggregate":
         """新しいアイテム集約を作成"""
         # ビジネスルール: durability_maxがない場合にdurabilityを指定することはできない
@@ -41,7 +42,8 @@ class ItemAggregate(AggregateRoot):
             item_instance_id=item_instance_id,
             item_spec=item_spec,
             durability=durability,
-            quantity=quantity
+            quantity=quantity,
+            state=state,
         )
         return cls(item_instance)
 
@@ -104,6 +106,24 @@ class ItemAggregate(AggregateRoot):
     def quantity(self) -> int:
         """現在の数量"""
         return self._item_instance.quantity
+
+    @property
+    def state(self) -> Mapping[str, Any]:
+        """instance ごとの可変 state（read-only view）。
+
+        Phase 4-A: per-instance lifecycle (charges_remaining / lit / 個別
+        enchantment 等) を表現するための flat dict。同 spec でも instance
+        ごとに別の値を持てる。書き込みは `replace_state` / `merge_state`。
+        """
+        return self._item_instance.state
+
+    def replace_state(self, new_state: Mapping[str, Any]) -> None:
+        """instance state を全置換する。"""
+        self._item_instance.replace_state(new_state)
+
+    def merge_state(self, updates: Mapping[str, Any]) -> None:
+        """instance state にキー/値をマージする (部分上書き)。"""
+        self._item_instance.merge_state(updates)
 
     @property
     def is_broken(self) -> bool:
@@ -192,5 +212,6 @@ class ItemAggregate(AggregateRoot):
             "durability_max": self.item_spec.durability_max,
             "quantity": self.quantity,
             "current_durability": self.durability.current if self.durability else None,
-            "is_broken": self.is_broken
+            "is_broken": self.is_broken,
+            "state": dict(self.state),
         }

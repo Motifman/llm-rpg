@@ -1758,6 +1758,18 @@ def _migration_v21(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migration_v22(connection: sqlite3.Connection) -> None:
+    """Phase 4-A: item instance ごとの自由 state 列を game_items に追加。
+
+    state は非空 dict のとき JSON 文字列でシリアライズし、空 dict のときは
+    storage 節約のため NULL に保存する。読み出し時に NULL は空 dict として
+    復元される（旧 schema 由来の row も同じパスで処理される）。
+    """
+    connection.execute(
+        "ALTER TABLE game_items ADD COLUMN state_json TEXT"
+    )
+
+
 _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=1, apply=_migration_v1),
     SqliteMigration(version=2, apply=_migration_v2),
@@ -1780,6 +1792,7 @@ _GAME_WRITE_MIGRATIONS = (
     SqliteMigration(version=19, apply=_migration_v19),
     SqliteMigration(version=20, apply=_migration_v20),
     SqliteMigration(version=21, apply=_migration_v21),
+    SqliteMigration(version=22, apply=_migration_v22),
 )
 
 

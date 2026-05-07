@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import sqlite3
 from typing import Any, List, Optional
 
@@ -85,12 +86,21 @@ class SqliteItemWriteRepository(ItemRepository):
         durability = None
         if row["durability_current"] is not None and spec.durability_max is not None:
             durability = Durability(current=int(row["durability_current"]), max_value=int(spec.durability_max))
+        # Phase 4-A: state_json (NULL or JSON 文字列) を dict に復元する。
+        # 旧 schema 由来の row には state_json が存在しないので keys() で防御。
+        state_json = (
+            row["state_json"]
+            if "state_json" in row.keys() and row["state_json"] is not None
+            else None
+        )
+        state_dict = json.loads(state_json) if state_json else {}
         return ItemAggregate.create_from_instance(
             ItemInstance(
                 item_instance_id=ItemInstanceId(int(row["item_instance_id"])),
                 item_spec=spec,
                 durability=durability,
                 quantity=int(row["quantity"]),
+                state=state_dict,
             )
         )
 
@@ -126,20 +136,28 @@ class SqliteItemWriteRepository(ItemRepository):
             began_local_transaction = True
         try:
             SqliteItemSpecWriter.for_shared_unit_of_work(self._conn).replace_spec(aggregate.item_spec)
+            # Phase 4-A: state は空 dict なら NULL に戻して storage を節約。
+            state_json_value = (
+                json.dumps(dict(aggregate.state), ensure_ascii=False, sort_keys=True)
+                if aggregate.state
+                else None
+            )
             self._conn.execute(
                 """
-                INSERT INTO game_items (item_instance_id, item_spec_id, quantity, durability_current)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO game_items (item_instance_id, item_spec_id, quantity, durability_current, state_json)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(item_instance_id) DO UPDATE SET
                     item_spec_id = excluded.item_spec_id,
                     quantity = excluded.quantity,
-                    durability_current = excluded.durability_current
+                    durability_current = excluded.durability_current,
+                    state_json = excluded.state_json
                 """,
                 (
                     int(aggregate.item_instance_id),
                     int(aggregate.item_spec.item_spec_id),
                     int(aggregate.quantity),
                     None if aggregate.durability is None else int(aggregate.durability.current),
+                    state_json_value,
                 ),
             )
             if began_local_transaction:
