@@ -98,6 +98,16 @@ class LootTableIdValidationException(ItemDomainException, ValidationException):
     error_code = "ITEM.LOOT_TABLE_ID_VALIDATION"
 
 
+class ItemInstanceStateValidationException(ItemDomainException, ValidationException):
+    """ItemInstance.state に許容外の値型が混入した例外。
+
+    state は永続化（JSON シリアライズ）対象なので、JSON プリミティブ
+    （str / int / float / bool / None）のみを許容する。datetime や
+    domain 型を直接入れたい場合は、文字列に変換するなど呼び出し側で
+    serialize 可能な形に揃える。"""
+    error_code = "ITEM.INSTANCE_STATE_VALIDATION"
+
+
 class LootTableValidationException(ItemDomainException, ValidationException):
     """ドロップテーブルのバリデーション例外"""
     error_code = "ITEM.LOOT_TABLE_VALIDATION"

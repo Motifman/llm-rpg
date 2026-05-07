@@ -18,6 +18,7 @@ from .item_exception import (
     ItemEffectValidationException,
     StackSizeExceededException,
     InsufficientQuantityException,
+    ItemInstanceStateValidationException,
 )
 
 __all__ = [
@@ -40,4 +41,5 @@ __all__ = [
     "ItemEffectValidationException",
     "StackSizeExceededException",
     "InsufficientQuantityException",
+    "ItemInstanceStateValidationException",
 ]
