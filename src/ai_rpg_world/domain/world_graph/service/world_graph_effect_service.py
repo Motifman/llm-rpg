@@ -47,6 +47,7 @@ class WorldGraphEffectService:
         world_flags: frozenset[str],
         current_tick: Optional[WorldTick] = None,
         acting_item_aggregate: Optional["ItemAggregate"] = None,
+        target_item_aggregate: Optional["ItemAggregate"] = None,
     ) -> WorldGraphEffectResult:
         flags: set[str] = set(world_flags)
         messages: List[str] = []
@@ -71,6 +72,10 @@ class WorldGraphEffectService:
         # _apply_effect の戻り値を拡張するか、専用 spec を追加する。
         initial_item_state = (
             dict(acting_item_aggregate.state) if acting_item_aggregate is not None else None
+        )
+        # Phase 4-B: target_item_aggregate も同じく snapshot diff で変更検知。
+        initial_target_item_state = (
+            dict(target_item_aggregate.state) if target_item_aggregate is not None else None
         )
 
         for effect in effects:
@@ -109,11 +114,16 @@ class WorldGraphEffectService:
                 passage_specs=passage_specs,
                 current_tick=current_tick,
                 acting_item_aggregate=acting_item_aggregate,
+                target_item_aggregate=target_item_aggregate,
             )
 
         item_instance_state_changed = (
             acting_item_aggregate is not None
             and dict(acting_item_aggregate.state) != initial_item_state
+        )
+        target_item_instance_state_changed = (
+            target_item_aggregate is not None
+            and dict(target_item_aggregate.state) != initial_target_item_state
         )
 
         return WorldGraphEffectResult(
@@ -133,6 +143,7 @@ class WorldGraphEffectService:
             satisfy_need_specs=tuple(satisfy_need_specs),
             passage_state_updates=tuple(passage_specs),
             item_instance_state_changed=item_instance_state_changed,
+            target_item_instance_state_changed=target_item_instance_state_changed,
         )
 
     def _apply_effect(
@@ -156,6 +167,7 @@ class WorldGraphEffectService:
         passage_specs: List[PassageStateUpdateSpec],
         current_tick: Optional[WorldTick] = None,
         acting_item_aggregate: Optional[ItemAggregate] = None,
+        target_item_aggregate: Optional[ItemAggregate] = None,
     ) -> Tuple[
         SpotInterior,
         SpotObject | None,
@@ -391,6 +403,51 @@ class WorldGraphEffectService:
                 )
                 return _all
             acting_item_aggregate.merge_state({state_key: int(current_tick.value)})
+            return _all
+
+        if et == InteractionEffectTypeEnum.CHANGE_TARGET_ITEM_INSTANCE_STATE:
+            # Phase 4-B: target_item_instance の state を部分マージ更新する。
+            # acting 版と semantics は同一で、対象 aggregate が違うだけ。
+            updates = p.get("state_updates")
+            if not isinstance(updates, dict):
+                _logger.warning(
+                    "CHANGE_TARGET_ITEM_INSTANCE_STATE: parameters.state_updates must be dict (got %s)",
+                    type(updates).__name__,
+                )
+                return _all
+            if target_item_aggregate is None:
+                _logger.warning(
+                    "CHANGE_TARGET_ITEM_INSTANCE_STATE: caller did not provide target_item_aggregate; "
+                    "skipping state merge"
+                )
+                return _all
+            target_item_aggregate.merge_state(updates)
+            return _all
+
+        if et == InteractionEffectTypeEnum.RECORD_TARGET_ITEM_INSTANCE_STATE_TICK:
+            # Phase 4-B: current_tick.value を target item の state[state_key] に書き込む。
+            state_key = p.get("state_key")
+            if not isinstance(state_key, str) or not state_key:
+                _logger.warning(
+                    "RECORD_TARGET_ITEM_INSTANCE_STATE_TICK: state_key is required (got %r)",
+                    state_key,
+                )
+                return _all
+            if current_tick is None:
+                _logger.warning(
+                    "RECORD_TARGET_ITEM_INSTANCE_STATE_TICK: caller did not provide current_tick; "
+                    "skipping write to state[%r]",
+                    state_key,
+                )
+                return _all
+            if target_item_aggregate is None:
+                _logger.warning(
+                    "RECORD_TARGET_ITEM_INSTANCE_STATE_TICK: caller did not provide "
+                    "target_item_aggregate; skipping write to state[%r]",
+                    state_key,
+                )
+                return _all
+            target_item_aggregate.merge_state({state_key: int(current_tick.value)})
             return _all
 
         if et == InteractionEffectTypeEnum.RECORD_OBJECT_STATE_TICK:
