@@ -48,6 +48,16 @@ class SpotInteractionService:
         acting_item_aggregate: Optional["ItemAggregate"] = None,
         target_item_aggregate: Optional["ItemAggregate"] = None,
     ) -> Tuple[bool, Optional[str]]:
+        # Phase 4-B: 同一 instance を acting / target 両方として渡すのは
+        # wiring バグ。precondition 段階で弾く（apply_effects と同じガード）。
+        if (
+            acting_item_aggregate is not None
+            and acting_item_aggregate is target_item_aggregate
+        ):
+            raise ValueError(
+                "acting_item_aggregate and target_item_aggregate must be distinct "
+                "instances; passing the same aggregate as both indicates a wiring bug"
+            )
         # `owned_item_spec_counts` が渡されない場合は「frozenset から各 1 個」
         # でフォールバックする（required_quantity=1 の既存挙動と互換）。
         # ただし precondition のいずれかが required_quantity > 1 を要求する

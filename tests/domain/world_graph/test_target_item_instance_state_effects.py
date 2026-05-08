@@ -295,6 +295,48 @@ class TestTargetItemInstanceStatePrecondition:
         assert ok is False
 
 
+class TestSameInstanceGuard:
+    """同一 instance を acting / target 両方に渡す wiring バグを早期に弾く。"""
+
+    def test_apply_effects_rejects_same_instance_for_acting_and_target(self) -> None:
+        """同じ aggregate を両側に渡すと ValueError で即座に拒否される。"""
+        svc = WorldGraphEffectService()
+        agg = _item_aggregate(initial_state={"x": 1})
+        with pytest.raises(
+            ValueError, match="must be distinct instances"
+        ):
+            svc.apply_effects(
+                interior=_empty_interior(), acting_object=None,
+                effects=[],
+                world_flags=frozenset(),
+                acting_item_aggregate=agg,
+                target_item_aggregate=agg,  # 同じ参照
+            )
+
+    def test_can_interact_rejects_same_instance_for_acting_and_target(self) -> None:
+        """precondition 段階でも同じく ValueError で拒否。"""
+        svc = SpotInteractionService()
+        agg = _item_aggregate(initial_state={"x": 1})
+        spot_object = SpotObject(
+            object_id=SpotObjectId.create(1),
+            name="o", description="d",
+            object_type=SpotObjectTypeEnum.OTHER,
+            state={}, interactions=(),
+        )
+        idef = InteractionDef(
+            action_name="x", display_label="X",
+            preconditions=(), effects=(),
+        )
+        with pytest.raises(ValueError, match="must be distinct instances"):
+            svc.can_interact(
+                idef, spot_object,
+                owned_item_spec_ids=frozenset(),
+                world_flags=frozenset(),
+                acting_item_aggregate=agg,
+                target_item_aggregate=agg,
+            )
+
+
 class TestCombinedActingAndTargetEffects:
     """acting / target 両方を変更する interaction の積分挙動。"""
 

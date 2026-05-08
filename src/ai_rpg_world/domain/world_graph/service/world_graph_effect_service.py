@@ -49,6 +49,19 @@ class WorldGraphEffectService:
         acting_item_aggregate: Optional["ItemAggregate"] = None,
         target_item_aggregate: Optional["ItemAggregate"] = None,
     ) -> WorldGraphEffectResult:
+        # Phase 4-B: 同一 instance を acting と target の両方として渡すのは
+        # 作家ミスかコール元の wiring バグ。両側に同じ参照を入れると
+        # CHANGE_ITEM_INSTANCE_STATE と CHANGE_TARGET_ITEM_INSTANCE_STATE が
+        # 同じ aggregate を二重に変更し、save も二重発火する潜在バグになる。
+        # boundary で明示的に拒否する。
+        if (
+            acting_item_aggregate is not None
+            and acting_item_aggregate is target_item_aggregate
+        ):
+            raise ValueError(
+                "acting_item_aggregate and target_item_aggregate must be distinct "
+                "instances; passing the same aggregate as both indicates a wiring bug"
+            )
         flags: set[str] = set(world_flags)
         messages: List[str] = []
         grant: List[ItemSpecId] = []
