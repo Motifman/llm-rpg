@@ -35,3 +35,6 @@ class InteractionExecutionResult:
     destroy_connection_specs: Tuple[DestroyConnectionSpec, ...] = ()
     satisfy_need_specs: Tuple[SatisfyNeedSpec, ...] = ()
     passage_state_updates: Tuple[PassageStateUpdateSpec, ...] = ()
+    # Phase 4-A: acting item instance の state が変更されたか。True のとき
+    # caller (SpotInteractionApplicationService 等) は item_aggregate を save する。
+    item_instance_state_changed: bool = False
