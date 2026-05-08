@@ -23,3 +23,7 @@ class InteractionEffectTypeEnum(Enum):
     SATISFY_NEED = "SATISFY_NEED"
     # 動的世界 — 経時劣化/再生で使う「effect 発火時の tick を object.state に記録」
     RECORD_OBJECT_STATE_TICK = "RECORD_OBJECT_STATE_TICK"
+    # Phase 4-A: per-instance item state を操作する effect。
+    # acting item instance (use_item の対象 instance) を target にする。
+    CHANGE_ITEM_INSTANCE_STATE = "CHANGE_ITEM_INSTANCE_STATE"
+    RECORD_ITEM_INSTANCE_STATE_TICK = "RECORD_ITEM_INSTANCE_STATE_TICK"
